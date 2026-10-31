@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.catalyst.trees.AlwaysProcess
+import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, TreeNodeTag}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
@@ -2260,6 +2260,21 @@ object InferFiltersFromGenerate extends Rule[LogicalPlan] {
 object InferFiltersFromConstraints extends Rule[LogicalPlan]
   with PredicateHelper with ConstraintHelper {
 
+  /**
+   * Marks a predicate that this rule infers, as opposed to one written in the query. An inferred
+   * `IsNotNull` check is implied by the conjunct it was inferred from, so the whole-stage codegen
+   * of a filter keeps generating it lazily, before the first conjunct that references its column,
+   * while it generates a check written in the query at its position, see `FilterExec`.
+   */
+  val INFERRED = TreeNodeTag[Unit]("inferred")
+
+  private def markInferred(predicates: Iterable[Expression]): Seq[Expression] = {
+    predicates.toSeq.map { p =>
+      p.setTagValue(INFERRED, ())
+      p
+    }
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = {
     if (conf.constraintPropagationEnabled) {
       inferFilters(plan)
@@ -2274,7 +2289,7 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
       val newFilters = filter.constraints --
         (child.constraints ++ splitConjunctivePredicates(condition))
       if (newFilters.nonEmpty) {
-        Filter(And(newFilters.reduce(And), condition), child)
+        Filter(And(markInferred(newFilters).reduce(And), condition), child)
       } else {
         filter
       }
@@ -2325,7 +2340,7 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
     if (newPredicates.isEmpty) {
       plan
     } else {
-      Filter(newPredicates.reduce(And), plan)
+      Filter(markInferred(newPredicates).reduce(And), plan)
     }
   }
 }

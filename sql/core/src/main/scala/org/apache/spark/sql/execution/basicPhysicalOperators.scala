@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.optimizer.CollapseProject
+import org.apache.spark.sql.catalyst.optimizer.{CollapseProject, InferFiltersFromConstraints}
 import org.apache.spark.sql.catalyst.plans.logical.Sample
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
@@ -230,17 +230,24 @@ trait GeneratePredicateHelper extends PredicateHelper {
   }
 
   /**
-   * Returns the checks of `notNullPreds` that precede the k-th other conjunct `conjunct` in the
-   * condition and are not generated yet, and marks them generated, when `afterNullable` is set
-   * and the conjunct or one of these checks `mayRaise`, or Nil.
+   * Returns the indexes in `notNullPreds` of the checks that precede the k-th other conjunct
+   * `conjunct` in the condition, are not generated yet, and are to be generated before it, and
+   * marks them generated. The checks are otherwise generated lazily, before the first conjunct
+   * that references their column, or after all conjuncts, so that a column is not loaded until
+   * a conjunct needs it. `And.eval` evaluates the condition in its order instead, so a check
+   * is generated at its position when the difference is observable:
    *
-   * With the NULL-conjunct flag, a NULL conjunct no longer drops the row, so the conjuncts after
-   * it are evaluated in the order of the condition, as `And.eval` does: a FALSE IsNotNull check
-   * drops the row before an error a later conjunct raises on it (SPARK-60315). `afterNullable`
-   * is set once a conjunct that can be NULL has been generated. The conjuncts before it are
-   * never reached after a NULL conjunct, so the checks before them keep the lazy placement. So
-   * do the checks before a conjunct when neither it nor one of them can raise: their order is
-   * not observable, and the checks are still generated before the next conjunct that can raise.
+   *  - Before a conjunct that `mayRaise`, the checks written in the query that cannot raise
+   *    (SPARK-60329). Such a check only drops a row before an error the conjunct raises on it,
+   *    as `And.eval` does. A check that `InferFiltersFromConstraints` inferred is implied by the
+   *    conjunct it was inferred from, so it keeps the lazy placement, which does not load its
+   *    column before that conjunct; so does a check on an expression that can raise itself,
+   *    past a conjunct that may reject the row (SPARK-56032). Both unless the flag applies.
+   *  - With the NULL-conjunct flag, a NULL conjunct no longer drops the row, so the conjuncts
+   *    after it are evaluated in the order of the condition (SPARK-60315): once a conjunct that
+   *    can be NULL has been generated (`afterNullable`), all the pending checks before a
+   *    conjunct are generated when it or one of them `mayRaise`. The conjuncts before the first
+   *    one that can be NULL are never reached after a NULL conjunct.
    *
    * The exception to the order is a check on a column, or on an expression over the column, that
    * a later conjunct references: the check on the column is generated before the first such
@@ -256,21 +263,24 @@ trait GeneratePredicateHelper extends PredicateHelper {
       k: Int,
       conjunct: Expression,
       afterNullable: Boolean,
-      generated: Array[Boolean]): Seq[Expression] = {
-    if (afterNullable) {
-      val pending = notNullPreds.take(precedingNotNulls(k)).zipWithIndex.filterNot {
-        case (_, idx) => generated(idx)
-      }
-      if (pending.nonEmpty && (mayRaise(conjunct) || pending.exists(p => mayRaise(p._1)))) {
-        pending.map { case (p, idx) =>
-          generated(idx) = true
-          p
-        }
-      } else {
-        Nil
+      generated: Array[Boolean]): Seq[Int] = {
+    val pending = notNullPreds.take(precedingNotNulls(k)).zipWithIndex.filterNot {
+      case (_, idx) => generated(idx)
+    }
+    val conjunctMayRaise = mayRaise(conjunct)
+    val positioned = if (afterNullable &&
+        (conjunctMayRaise || pending.exists(p => mayRaise(p._1)))) {
+      pending
+    } else if (conjunctMayRaise) {
+      pending.filter { case (p, _) =>
+        !mayRaise(p) && p.getTagValue(InferFiltersFromConstraints.INFERRED).isEmpty
       }
     } else {
       Nil
+    }
+    positioned.map { case (_, idx) =>
+      generated(idx) = true
+      idx
     }
   }
 
@@ -321,10 +331,12 @@ trait GeneratePredicateHelper extends PredicateHelper {
     // This has the property of not doing redundant IsNotNull checks and taking better advantage of
     // short-circuiting, not loading attributes until they are needed.
     // This is very perf sensitive.
-    // With the NULL-conjunct flag, once a predicate that can be NULL is generated, the IsNotNull
-    // checks that precede a later predicate in the condition are generated before it, see
-    // `precedingNotNullChecks`, and a check on an expression that is written after the predicate
-    // is not generated before it, see the nested checks below.
+    // Before a predicate that can raise an error, the IsNotNull checks written in the query that
+    // precede it in the condition and cannot raise are generated before it, and with the
+    // NULL-conjunct flag, once a predicate that can be NULL is generated, all the IsNotNull
+    // checks that precede a later predicate are, see `precedingNotNullChecks`; a check on an
+    // expression that is written after the predicate is then not generated before it, see the
+    // nested checks below.
     // NOTE: `FilterExec.doConsume`'s CSE branch inlines the same interleaving so it can
     // emit CSE state precomputes between the IsNotNull checks and each otherPred body.
     // Any change to this algorithm must be mirrored there (and vice versa).
@@ -335,8 +347,8 @@ trait GeneratePredicateHelper extends PredicateHelper {
     val generated = otherPreds.zip(boundOtherPreds).zipWithIndex.map { case ((c, bound), k) =>
       val afterNullable = nullFlag.isDefined && nullableSeen
       val precedingChecks = precedingNotNullChecks(
-        notNullPreds, precedingNotNulls, k, c, afterNullable,
-        generatedIsNotNullChecks).map(genNotNull).mkString("\n").trim
+        notNullPreds, precedingNotNulls, k, c, afterNullable, generatedIsNotNullChecks)
+        .map(i => genNotNull(notNullPreds(i))).mkString("\n").trim
       nullableSeen ||= bound.nullable
 
       val nullChecks = c.references.map { r =>
@@ -348,12 +360,10 @@ trait GeneratePredicateHelper extends PredicateHelper {
           generatedIsNotNullChecks(idx) = true
           // Use the child's output. The nullability is what the child produced.
           genNotNull(notNullPreds(idx))
-        } else if ((idx == -1 || !afterNullable) && nonNullAttrExprIds.contains(r.exprId) &&
+        } else if (idx == -1 && nonNullAttrExprIds.contains(r.exprId) &&
             !extraIsNotNullAttrs.contains(r)) {
-          // A synthetic check for a column covered only by a check on an expression, or, before
-          // the flag applies, for a column whose check was generated before an earlier predicate.
-          // After a predicate that can be NULL, the check generated by `precedingNotNullChecks`
-          // already covers the column.
+          // A synthetic check for a column covered only by a check on an expression. A direct
+          // check that is generated already precedes this predicate in the generated code.
           extraIsNotNullAttrs += r
           genNotNull(IsNotNull(r))
         } else {
@@ -474,7 +484,8 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     //       got synthetic coverage) emit after all otherPreds. With the NULL-conjunct
     //       flag, once an otherPred that can be NULL is emitted, the notNullPreds that
     //       precede a later otherPred in the condition are emitted before it first, when it
-    //       or one of them can raise (`precedingNotNullChecks`), and a complex
+    //       or one of them can raise, and the plain-column ones are before an otherPred that
+    //       can raise in any case (`precedingNotNullChecks`, SPARK-60329), and a complex
     //       `IsNotNull(expr)` written after the otherPred is left to the remaining
     //       notNullPreds, so it does not raise on a row the otherPred rejects, as in the
     //       non-CSE branch (SPARK-60315).
@@ -582,8 +593,8 @@ case class FilterExec(condition: Expression, child: SparkPlan)
                 val afterNullable = nullFlag.isDefined && nullableSeen
                 precedingNotNullChecks(
                     notNullPreds, precedingNotNulls, idx, orig, afterNullable,
-                    generatedIsNotNullChecks).foreach { p =>
-                  parts.append(genNotNullWithoutCSE(p))
+                    generatedIsNotNullChecks).foreach { i =>
+                  parts.append(genNotNullWithoutCSE(notNullPreds(i)))
                   parts.append('\n')
                 }
                 nullableSeen ||= bound.nullable
@@ -596,10 +607,10 @@ case class FilterExec(condition: Expression, child: SparkPlan)
                     generatedIsNotNullChecks(ni) = true
                     parts.append(genNotNull(notNullPreds(ni)))
                     parts.append('\n')
-                  } else if ((ni == -1 || !afterNullable) && notNullAttributes.contains(r.exprId) &&
+                  } else if (ni == -1 && notNullAttributes.contains(r.exprId) &&
                       !extraIsNotNullAttrs.contains(r)) {
-                    // As in `generatePredicateCode`: after a nullable otherPred, a check
-                    // generated by `precedingNotNullChecks` already covers the column.
+                    // As in `generatePredicateCode`: a direct check that is generated already
+                    // precedes this otherPred.
                     extraIsNotNullAttrs += r
                     parts.append(genNotNull(IsNotNull(r)))
                     parts.append('\n')
