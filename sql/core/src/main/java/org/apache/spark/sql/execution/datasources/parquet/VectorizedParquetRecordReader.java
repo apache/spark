@@ -49,7 +49,6 @@ import org.apache.spark.sql.execution.vectorized.ConstantColumnVector;
 import org.apache.spark.sql.execution.vectorized.OffHeapColumnVector;
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
-import org.apache.spark.sql.internal.SQLConf$;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.vectorized.ColumnVector;
 import org.apache.spark.sql.vectorized.ColumnarBatch;
@@ -271,10 +270,8 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       MemoryMode memMode,
       StructType partitionColumns,
       InternalRow partitionValues) {
-    boolean returnNullStructIfAllFieldsMissing = configuration.getBoolean(
-      SQLConf$.MODULE$.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING().key(),
-      (boolean) SQLConf$.MODULE$.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING()
-        .defaultValue().get());
+    boolean returnNullStructIfAllFieldsMissing =
+      ParquetReadSupport$.MODULE$.returnNullStructIfAllFieldsMissing(configuration);
     StructType batchSchema = returnNullStructIfAllFieldsMissing
       ? new StructType(sparkSchema.fields())
       // Truncate to match requested schema to make sure extra struct field that we read for

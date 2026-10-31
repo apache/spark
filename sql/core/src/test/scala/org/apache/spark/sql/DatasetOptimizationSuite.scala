@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical.SerializeFromObject
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{MetadataBuilder, StructType}
 
 class DatasetOptimizationSuite extends SharedSparkSession {
   import testImplicits._
@@ -129,6 +129,34 @@ class DatasetOptimizationSuite extends SharedSparkSession {
       val df3 = mapDs.select(expr("map_values(_1)._2[0]"))
       testSerializer(df3, Seq(Seq("_2")))
       checkAnswer(df3, Seq(Row(11), Row(22), Row(33)))
+    }
+  }
+
+  test("dynamic map lookup uses the fields emitted by the serializer") {
+    val ds = spark.range(1).map { _ =>
+      ((Map("k" -> ("map-a", "map-b")), ("other-a", "other-b")), "k")
+    }
+    val mapValue = ds.selectExpr("_1._1[_2]._2")
+    testSerializer(mapValue, Seq(Seq("_1"), Seq("_2")))
+    checkAnswer(mapValue, Row("map-b"))
+
+    // When the sibling is also requested, the serializer can keep its original type.
+    checkAnswer(ds.selectExpr("_1._1[_2]._2", "_1._2._1"), Row("map-b", "other-a"))
+  }
+
+  test("dynamic array lookups use serializer field names under case-insensitive analysis") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val input = Seq((Seq(("unused", "first", "second")), 0)).toDF("Items", "Idx")
+      val ds = input.map(row => row)(ExpressionEncoder(input.schema))
+      val metadata = new MetadataBuilder().putString("source", "items").build()
+      val query = ds.select(
+        expr("items[idx]._2").as("First", metadata),
+        expr("element_at(ITEMS, Idx + 1)._3").as("Second"),
+        $"iDx")
+      checkAnswer(query, Row("first", "second", 0))
+      val output = query.queryExecution.optimizedPlan.output
+      assert(output.map(_.name) == Seq("First", "Second", "iDx"))
+      assert(output.head.metadata == metadata)
     }
   }
 

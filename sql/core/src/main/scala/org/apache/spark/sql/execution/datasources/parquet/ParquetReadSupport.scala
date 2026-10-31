@@ -106,10 +106,45 @@ class ParquetReadSupport(
     new ParquetRecordMaterializer(
       parquetRequestedSchema,
       ParquetReadSupport.expandUDT(catalystRequestedSchema),
-      new ParquetToSparkSchemaConverter(conf),
+      new ParquetReadSchemaConverter(conf, parquetRequestedSchema, fileSchema),
       convertTz,
       datetimeRebaseSpec,
       int96RebaseSpec)
+  }
+}
+
+/**
+ * Interpret LISTs using the file schema. Clipping a repeated group to one field can make a
+ * two-level LIST indistinguishable from a three-level LIST in the requested schema.
+ */
+private[parquet] class ParquetReadSchemaConverter(
+    conf: Configuration,
+    requestedSchema: MessageType,
+    fileSchema: MessageType) extends ParquetToSparkSchemaConverter(conf) {
+
+  private lazy val fileRepeatedTypes = {
+    // Equal requested types at different paths can have different layouts in the file.
+    val types = new util.IdentityHashMap[Type, Type]()
+    def visit(requested: GroupType, file: GroupType): Unit = {
+      if (file.getLogicalTypeAnnotation.isInstanceOf[ListLogicalTypeAnnotation] &&
+          requested.getFieldCount == 1 && file.getFieldCount == 1) {
+        types.put(requested.getType(0), file.getType(0))
+      }
+      requested.getFields.asScala.foreach {
+        case group: GroupType if file.containsField(group.getName) =>
+          file.getType(group.getName) match {
+            case fileGroup: GroupType => visit(group, fileGroup)
+            case _ =>
+          }
+        case _ =>
+      }
+    }
+    visit(requestedSchema, fileSchema)
+    types
+  }
+
+  override private[parquet] def isElementType(repeatedType: Type, parentName: String): Boolean = {
+    super.isElementType(fileRepeatedTypes.getOrDefault(repeatedType, repeatedType), parentName)
   }
 }
 
@@ -119,6 +154,12 @@ object ParquetReadSupport extends Logging {
   val SPARK_METADATA_KEY = "org.apache.spark.sql.parquet.row.metadata"
 
   def generateFakeColumnName: String = s"_fake_name_${UUID.randomUUID()}"
+
+  // In legacy mode, pruning all physical children can also lose the enclosing array length.
+  def returnNullStructIfAllFieldsMissing(conf: Configuration): Boolean = {
+    val setting = SQLConf.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING
+    conf.getBoolean(setting.key, setting.defaultValue.get)
+  }
 
   def getRequestedSchema(
       parquetFileSchema: MessageType,
@@ -133,9 +174,6 @@ object ParquetReadSupport extends Logging {
       SQLConf.PARQUET_FIELD_ID_READ_ENABLED.defaultValue.get)
     val ignoreMissingIds = conf.getBoolean(SQLConf.IGNORE_MISSING_PARQUET_FIELD_ID.key,
       SQLConf.IGNORE_MISSING_PARQUET_FIELD_ID.defaultValue.get)
-    val returnNullStructIfAllFieldsMissing = conf.getBoolean(
-      SQLConf.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING.key,
-      SQLConf.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING.defaultValue.get)
 
     if (!ignoreMissingIds &&
         !containsFieldIds(parquetFileSchema) &&
@@ -154,7 +192,7 @@ object ParquetReadSupport extends Logging {
            |""".stripMargin)
     }
     val parquetClippedSchema = ParquetReadSupport.clipParquetSchema(parquetFileSchema,
-      catalystRequestedSchema, caseSensitive, useFieldId, returnNullStructIfAllFieldsMissing)
+      catalystRequestedSchema, caseSensitive, useFieldId, returnNullStructIfAllFieldsMissing(conf))
 
     // We pass two schema to ParquetRecordMaterializer:
     // - parquetRequestedSchema: the schema of the file data we want to read
