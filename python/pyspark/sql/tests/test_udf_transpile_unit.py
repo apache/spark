@@ -27,6 +27,7 @@ property-based suite lives in ``test_udf_transpile_hypothesis.py``.
 import unittest
 
 from pyspark.sql import Row
+from pyspark.sql.transpile import CatalystTranspiler, _get_transpilers
 from pyspark.sql.types import (
     BinaryType,
     BooleanType,
@@ -178,6 +179,27 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 "expected transpilation to produce a Catalyst expression "
                 "when both transpilePyUDFs and ANSI mode are enabled",
             )
+
+    def test_get_transpilers_warns_on_unknown_names(self):
+        import warnings
+
+        for names, expected, unknown in [
+            ("catalyst", [CatalystTranspiler], None),
+            ("catalyst,catalist", [CatalystTranspiler], "catalist"),
+            ("catalist", [], "catalist"),
+        ]:
+            with self.subTest(names=names):
+                with self.sql_conf({"spark.sql.experimental.optimizer.pyTranspilers": names}):
+                    with warnings.catch_warnings(record=True) as caught:
+                        warnings.simplefilter("always")
+                        transpilers = _get_transpilers(self.spark)
+                self.assertEqual([type(t) for t in transpilers], expected)
+                messages = [str(w.message) for w in caught if "pyTranspilers" in str(w.message)]
+                if unknown is None:
+                    self.assertEqual(messages, [])
+                else:
+                    self.assertEqual(len(messages), 1)
+                    self.assertIn(repr(unknown), messages[0])
 
     def test_udf_transpile_does_not_mask_char_varchar_ddl(self):
         # DDL CHAR/VARCHAR is parsed via ``returnType`` inside the optional
