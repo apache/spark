@@ -169,6 +169,62 @@ class ConnectErrorsTest(unittest.TestCase):
         self.assertIn("Root error message", exception.getMessage())
         self.assertIn("Caused by", exception.getMessage())
 
+    def test_convert_exception_with_malformed_cause_chain(self):
+        """SPARK-59119: a cyclic or out-of-range cause_idx in the error details
+        should not crash the conversion."""
+        from google.rpc.error_details_pb2 import ErrorInfo
+
+        from pyspark.sql.connect.proto import FetchErrorDetailsResponse as pb2
+
+        info = ErrorInfo(
+            reason="org.apache.spark.SparkException",
+            metadata={"classes": '["org.apache.spark.SparkException"]'},
+        )
+
+        def make_resp(root_cause_idx, second_cause_idx=None):
+            root = pb2.Error(
+                message="Root error message",
+                error_type_hierarchy=["org.apache.spark.SparkException"],
+                cause_idx=root_cause_idx,
+            )
+            second = pb2.Error(
+                message="Cause error message",
+                error_type_hierarchy=["java.lang.RuntimeException"],
+            )
+            if second_cause_idx is not None:
+                second.cause_idx = second_cause_idx
+            return pb2(root_error_idx=0, errors=[root, second])
+
+        # Two errors pointing at each other; each one is formatted exactly once.
+        exception = convert_exception(
+            info=info,
+            truncated_message="Root error message",
+            resp=make_resp(1, 0),
+            display_server_stacktrace=True,
+        )
+        self.assertIsInstance(exception, SparkConnectGrpcException)
+        self.assertEqual(exception.getMessage().count("Caused by"), 1)
+
+        # An error listed as its own cause.
+        exception = convert_exception(
+            info=info,
+            truncated_message="Root error message",
+            resp=make_resp(0),
+            display_server_stacktrace=True,
+        )
+        self.assertIsInstance(exception, SparkConnectGrpcException)
+        self.assertEqual(exception.getMessage().count("Caused by"), 0)
+
+        # A cause_idx outside the error list.
+        exception = convert_exception(
+            info=info,
+            truncated_message="Root error message",
+            resp=make_resp(5),
+            display_server_stacktrace=True,
+        )
+        self.assertIsInstance(exception, SparkConnectGrpcException)
+        self.assertIn("Root error message", exception.getMessage())
+
     def test_convert_exception_fallback(self):
         # Mock ErrorInfo with missing class information
         from google.rpc.error_details_pb2 import ErrorInfo
