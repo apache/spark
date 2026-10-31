@@ -22,11 +22,12 @@ import java.util.Locale
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.expressions.variant.{ParseJson, VariantGet}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DecimalType, IntegerType, StringType, VariantType}
+import org.apache.spark.sql.types.{DecimalType, IntegerType, StringType, StructType, VariantType}
 import org.apache.spark.unsafe.types.VariantVal
 
 class ScalaUDFSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -120,5 +121,22 @@ class ScalaUDFSuite extends SparkFunSuite with ExpressionEvalHelper {
         Option(resolvedEncoder[java.math.BigDecimal]()) :: Nil)
       checkEvaluation(udf, null)
     }
+  }
+
+  test("SPARK-60762: The text of a UDF's error is not in the generated code") {
+    val udf = ScalaUDF(
+      (_: Any) => throw new IllegalStateException("harmless"),
+      new StructType().add("outputName\"\\q", IntegerType),
+      Literal.create(InternalRow(1), new StructType().add("fieldName\"\\q", IntegerType)) :: Nil,
+      None :: Nil,
+      udfName = Some("udfName\"\\q"))
+    val generated = intercept[SparkException] {
+      checkEvaluationWithUnsafeProjection(udf, null)
+    }
+    assert(generated.getCondition == "FAILED_EXECUTE_UDF")
+    val interpreted = intercept[SparkException](udf.eval())
+    assert(generated.getMessageParameters == interpreted.getMessageParameters)
+    val code = udf.genCode(new CodegenContext).code.toString
+    assert(!code.contains("fieldName") && !code.contains("udfName") && !code.contains("outputName"))
   }
 }
