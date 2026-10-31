@@ -2977,11 +2977,10 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self._vals(eq_strlit, BooleanType(), "a long", [(5,), (3,)], require_lowered=False),
             [False, False],
         )
-        # Chained comparisons inherit the same NaN divergence one link at a time --
-        # no new mechanism, just easier to hit. Spark orders NaN above every value
-        # (Python's `b < nan` is False) and treats `NaN = NaN` as true (Python's
-        # `nan == nan` is False). These assertions pin the CURRENT divergent
-        # behavior so a change is visible; SPARK-58781 decides what to do about it.
+        # Chained comparisons inherit the NaN ordering divergence one link at a
+        # time: Spark orders NaN above every value (Python's `b < nan` is False).
+        # Pinned so a change is visible; SPARK-58781 decides what to do about it.
+        # Equality agrees with Python since SPARK-59091's NaN guard.
         nan_chain = lambda a, b, c: a < b < c  # noqa: E731
         nan_eq_chain = lambda a, b, c: a == b == c  # noqa: E731
         nan = float("nan")
@@ -2994,8 +2993,8 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self._vals(
                 nan_eq_chain, BooleanType(), "a double, b double, c double", [(nan, nan, nan)]
             ),
-            [True],
-            "Spark treats NaN = NaN as true; Python would return False",
+            [False],
+            "NaN == NaN is False, as in Python",
         )
 
     def test_udf_transpile_overflow_and_modulo_zero_raise(self):
