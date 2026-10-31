@@ -702,16 +702,28 @@ spark
 </div>
 
 Records that pass deduplication are emitted as they are processed. Watermarks advance at Real-time
-Mode batch boundaries, and state eviction also runs at batch end by default. Setting
-`spark.sql.streaming.statefulOperator.incrementalCleanupFactor` to a positive value spreads eviction
-across input-record processing, with any remaining eligible state removed at batch end. Incremental
-cleanup uses the late-events watermark, which can trail the batch-end eviction watermark by one
-batch, so the trigger duration still determines when more state becomes eligible for removal.
+Mode batch boundaries. Real-time Mode defaults
+`spark.sql.streaming.statefulOperator.incrementalCleanupFactor` to `2` unless it is explicitly set.
+A positive value spreads eviction across input-record processing, removing up to that many eligible
+state entries per input record, with any remaining eligible state removed at batch end. Set it to
+`0` to use batch-end-only cleanup.
+
+For `dropDuplicatesWithinWatermark`, a positive factor uses the late-events watermark for all cleanup,
+including the batch-end drain and no-data batches. With the default watermark propagator, this
+watermark can trail the batch-end eviction watermark by one batch. Entries whose expiration
+timestamps fall between these watermarks remain longer than with factor `0`, which can increase
+state-store and checkpoint size. If the stream becomes idle and no further batch is scheduled,
+these entries can remain until execution resumes. The trigger duration still determines when more
+state becomes eligible for removal.
 
 Incremental cleanup preserves duplicate suppression within the guaranteed watermark-delay interval.
 For records with the same key outside that interval, whether the old entry still suppresses a record
-can depend on cleanup progress and state-store iteration order. Leave the cleanup factor at its
-default of `0` to retain the batch-end-only behavior.
+can depend on cleanup progress and state-store iteration order. Set the cleanup factor to `0` to
+retain the batch-end-only behavior. This setting also controls incremental cleanup for streamline
+aggregation and regular `dropDuplicates` in the query. It is not pinned in the checkpoint's offset
+log, so a restart can change the cleanup policy without migrating state. In micro-batch mode,
+`dropDuplicatesWithinWatermark` always retains batch-end-only cleanup, even when a positive shared
+factor is configured for another operator; those other operators keep their existing behavior.
 
 ### Streaming aggregation
 

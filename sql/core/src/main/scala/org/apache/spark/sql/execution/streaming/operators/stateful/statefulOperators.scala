@@ -1659,11 +1659,15 @@ case class StreamingDeduplicateWithinWatermarkExec(
     child: SparkPlan,
     stateInfo: Option[StatefulOperatorStateInfo] = None,
     eventTimeWatermarkForLateEvents: Option[Long] = None,
-    eventTimeWatermarkForEviction: Option[Long] = None)
+    eventTimeWatermarkForEviction: Option[Long] = None,
+    isRealTimeMode: Boolean = false)
   extends BaseStreamingDeduplicateExec {
 
+  // Mid-batch eviction can change output outside the guaranteed watermark-delay interval. Keep
+  // existing micro-batch behavior even when the shared factor is set for another operator; only
+  // real-time mode trades that behavior for spreading cleanup across its long-running batches.
   override protected val incrementalCleanupFactor: Long =
-    conf.getConf(SQLConf.STREAMING_STATE_INCREMENTAL_CLEANUP_FACTOR)
+    if (isRealTimeMode) conf.getConf(SQLConf.STREAMING_STATE_INCREMENTAL_CLEANUP_FACTOR) else 0L
 
   protected val schemaForValueRow: StructType = StructType(
     Array(StructField("expiresAtMicros", LongType, nullable = false)))

@@ -602,7 +602,7 @@ class StreamRealTimeModeWithManualClockSuite extends StreamRealTimeModeManualClo
     }
   }
 
-  test("pipelined shuffle: dedup within watermark runs in Real-Time Mode") {
+  test("pipelined shuffle: dedup within watermark supports batch-end-only cleanup") {
     val inputData = LowLatencyMemoryStream.singlePartition[(String, Int)]
     val result = inputData.toDF()
       .withColumn("eventTime", timestamp_seconds($"_2"))
@@ -615,7 +615,8 @@ class StreamRealTimeModeWithManualClockSuite extends StreamRealTimeModeManualClo
       // watermark to 20 seconds after that batch completes.
       AddData(inputData,
         ("expired", 1), ("dup", 15), ("dup", 16), ("high", 30)),
-      StartStream(),
+      StartStream(additionalConfs = Map(
+        SQLConf.STREAMING_STATE_INCREMENTAL_CLEANUP_FACTOR.key -> "0")),
       CheckAnswerWithTimeout(60000, "expired", "dup", "high"),
       Execute { q =>
         val plan = q.lastExecution.executedPlan
