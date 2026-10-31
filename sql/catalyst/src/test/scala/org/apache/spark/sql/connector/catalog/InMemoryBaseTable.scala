@@ -1543,6 +1543,7 @@ case class Commit(id: Long, writeSummary: Option[WriteSummary] = None)
 
 sealed trait Operation
 case object Write extends Operation
+case object WriteColumnUpdate extends Operation
 case object Delete extends Operation
 case object Update extends Operation
 case object Reinsert extends Operation

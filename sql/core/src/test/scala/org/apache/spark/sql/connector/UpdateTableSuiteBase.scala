@@ -24,8 +24,8 @@ import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.plans.logical.{ReplaceData, WriteDelta}
 import org.apache.spark.sql.catalyst.trees.TreePattern.WITH_EXPRESSION
-import org.apache.spark.sql.connector.catalog.{Aborted, Column, ColumnDefaultValue, Committed, InMemoryTable, TableChange, TableInfo}
-import org.apache.spark.sql.connector.expressions.{GeneralScalarExpression, LiteralValue}
+import org.apache.spark.sql.connector.catalog.{Aborted, Column, ColumnDefaultValue, Committed, InMemoryTable, TableChange}
+import org.apache.spark.sql.connector.expressions.{GeneralScalarExpression, LiteralValue, Transform}
 import org.apache.spark.sql.connector.write.UpdateSummary
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation}
 import org.apache.spark.sql.internal.SQLConf
@@ -94,11 +94,10 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
 
   test("update table with expression-based default values") {
     val columns = Array(
-      Column.create("pk", IntegerType),
+      Column.create("pk", IntegerType, false),
       Column.create("salary", IntegerType),
       Column.create("dep", StringType))
-    val tableInfo = new TableInfo.Builder().withColumns(columns).build()
-    catalog.createTable(ident, tableInfo)
+    createTable(columns, Array.empty[Transform])
 
     append("pk INT, salary INT, dep STRING",
       """{ "pk": 1, "salary": 100, "dep": "hr" }
@@ -908,7 +907,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
 
   test("update with current_timestamp default value using DEFAULT keyword") {
     sql(s"""CREATE TABLE $tableNameAsString
-      | (pk INT NOT NULL, current_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""".stripMargin)
+      | (pk INT NOT NULL, current_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP)
+      |$extraTablePropertiesClause""".stripMargin)
     append("pk INT NOT NULL, current_timestamp TIMESTAMP",
       """{ "pk": 1, "i": false, "current_timestamp": "2023-01-01 10:00:00" }
         |{ "pk": 2, "i": true, "current_timestamp": "2023-01-01 11:00:00" }

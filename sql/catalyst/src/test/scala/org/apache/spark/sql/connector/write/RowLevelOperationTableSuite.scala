@@ -42,7 +42,8 @@ class RowLevelOperationTableSuite extends SparkFunSuite {
       }
     }
 
-    val table = RowLevelOperationTable(wrapped, mock(classOf[RowLevelOperation]))
+    val table = RowLevelOperationTable(wrapped, mock(classOf[RowLevelOperation]))(
+      mock(classOf[RowLevelOperationInfo]))
 
     assert(table.writeDistributionMode() === WriteDistributionMode.RANGE)
     assert(table.writeOrdering().toSeq === declaredOrdering.toSeq)

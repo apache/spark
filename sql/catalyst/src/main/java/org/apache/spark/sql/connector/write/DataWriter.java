@@ -20,7 +20,9 @@ package org.apache.spark.sql.connector.write;
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.Iterator;
+import java.util.Map;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.metric.CustomTaskMetric;
 
@@ -68,8 +70,11 @@ public interface DataWriter<T> extends Closeable {
    * Writes one record with metadata.
    * <p>
    * This method is used by group-based row-level operations to pass back metadata for records
-   * that are updated or copied. New records added during a MERGE operation are written using
-   * {@link #write(Object)} as there is no metadata associated with those records.
+   * that are updated or copied. When {@link LogicalWriteInfo#columnUpdateSchema()} is present for
+   * an operation that does not mix in {@link SupportsDelta}, Spark passes these records to
+   * {@link #writeColumnUpdate(Object, Object)} instead. New records added during a MERGE operation
+   * are written using {@link #write(Object)} as there is no metadata associated with those
+   * records.
    * <p>
    * If this method fails (by throwing an exception), {@link #abort()} will be called and this
    * data writer is considered to have been failed.
@@ -83,7 +88,65 @@ public interface DataWriter<T> extends Closeable {
   }
 
   /**
+   * Writes one updated or copied record with metadata in the column update layout.
+   * <p>
+   * When {@link LogicalWriteInfo#columnUpdateSchema()} is present for a row-level operation that
+   * does not mix in {@link SupportsDelta}, Spark passes updated and copied records to this method
+   * instead of {@link #write(Object, Object)} if the operation returns a non-empty
+   * {@link RowLevelOperation#requiredMetadataAttributes()}, and to
+   * {@link #writeColumnUpdate(Object)} otherwise. The record follows
+   * {@link LogicalWriteInfo#columnUpdateSchema()} and the metadata follows
+   * {@link LogicalWriteInfo#metadataSchema()}. Operations that mix in {@link SupportsDelta} receive
+   * such rows through {@link DeltaWriter#update} and {@link DeltaWriter#reinsert} instead.
+   * <p>
+   * By default, delegates to {@link #writeColumnUpdate(Object)} and drops the metadata.
+   * <p>
+   * If this method fails (by throwing an exception), {@link #abort()} will be called and this
+   * data writer is considered to have been failed.
+   *
+   * @throws IOException if failure happens during disk/network IO like writing files.
+   * @throws SparkUnsupportedOperationException if neither this method nor
+   *         {@link #writeColumnUpdate(Object)} is overridden.
+   *
+   * @since 4.4.0
+   */
+  default void writeColumnUpdate(T metadata, T record) throws IOException {
+    writeColumnUpdate(record);
+  }
+
+  /**
+   * Writes one updated or copied record without metadata in the column update layout.
+   * <p>
+   * When {@link LogicalWriteInfo#columnUpdateSchema()} is present for a row-level operation that
+   * does not mix in {@link SupportsDelta}, Spark passes updated and copied records to this method
+   * instead of {@link #write(Object)} if the operation returns no
+   * {@link RowLevelOperation#requiredMetadataAttributes()}. The record follows
+   * {@link LogicalWriteInfo#columnUpdateSchema()}.
+   * <p>
+   * A writer for such an operation must override this method, unless the operation returns a
+   * non-empty {@link RowLevelOperation#requiredMetadataAttributes()} and the writer overrides
+   * {@link #writeColumnUpdate(Object, Object)}.
+   * <p>
+   * If this method fails (by throwing an exception), {@link #abort()} will be called and this
+   * data writer is considered to have been failed.
+   *
+   * @throws IOException if failure happens during disk/network IO like writing files.
+   * @throws SparkUnsupportedOperationException if this method is not overridden.
+   *
+   * @since 4.4.0
+   */
+  default void writeColumnUpdate(T record) throws IOException {
+    throw new SparkUnsupportedOperationException(
+      "DATA_SOURCE_WRITE_COLUMN_UPDATE_NOT_IMPLEMENTED",
+      Map.of("class", getClass().getName()));
+  }
+
+  /**
    * Writes one record.
+   * <p>
+   * When {@link LogicalWriteInfo#columnUpdateSchema()} is present for a row-level operation that
+   * does not mix in {@link SupportsDelta}, Spark passes updated and copied records to
+   * {@link #writeColumnUpdate(Object)} or {@link #writeColumnUpdate(Object, Object)} instead.
    * <p>
    * If this method fails (by throwing an exception), {@link #abort()} will be called and this
    * data writer is considered to have been failed.
