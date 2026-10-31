@@ -16,6 +16,8 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
+import scala.jdk.CollectionConverters._
+
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.api.model.apps.StatefulSet
 import io.fabric8.kubernetes.client.KubernetesClient
@@ -141,6 +143,27 @@ class StatefulSetAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       confWithPublishNotReady, secMgr, executorBuilder, kubernetesClient, snapshotsStore, null)
     podsAllocator.start(TEST_SPARK_APP_ID, schedulerBackend)
     verify(driverPodOperations, never()).waitUntilReady(any(), any())
+  }
+
+  test("SPARK-58322: driver instance ID reaches statefulset executor template") {
+    val driverConf = conf.clone()
+      .set(CONTAINER_IMAGE, "executor-image")
+      .set(KUBERNETES_ALLOCATION_PODS_ALLOCATOR, "statefulset")
+      .set("spark.driver.instanceId", "58322000-0000-4000-8000-000000000001")
+    val podsAllocator = new StatefulSetPodsAllocator(
+      driverConf, secMgr, new KubernetesExecutorBuilder(), kubernetesClient,
+      snapshotsStore, snapshotsStore.clock)
+    podsAllocator.start(TEST_SPARK_APP_ID, schedulerBackend)
+    podsAllocator.setTotalExpectedExecutors(Map(defaultProfile -> 1))
+
+    val captor = ArgumentCaptor.forClass(classOf[StatefulSet])
+    verify(statefulSetNamespaced).resource(captor.capture())
+    val javaOpts = captor.getValue.getSpec.getTemplate.getSpec.getContainers.asScala
+      .flatMap(_.getEnv.asScala)
+      .filter(_.getName.startsWith("SPARK_JAVA_OPT_"))
+      .map(_.getValue)
+    assert(javaOpts.contains(
+      "-Dspark.driver.instanceId=58322000-0000-4000-8000-000000000001"))
   }
 
   test("Validate initial statefulSet creation & cleanup with two resource profiles") {

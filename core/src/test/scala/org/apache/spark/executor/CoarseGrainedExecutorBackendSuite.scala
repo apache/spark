@@ -24,6 +24,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.concurrent.TrieMap
+import scala.concurrent.Promise
 import scala.concurrent.duration._
 
 import org.json4s.{DefaultFormats, Extraction, Formats}
@@ -37,13 +38,14 @@ import org.scalatestplus.mockito.MockitoSugar
 import org.apache.spark._
 import org.apache.spark.TestUtils._
 import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext, SparkPlugin}
-import org.apache.spark.internal.config.{EXECUTOR_MEMORY, PLUGINS}
+import org.apache.spark.executor.CoarseGrainedExecutorBackend.RegisteredExecutor
+import org.apache.spark.internal.config.{DRIVER_INSTANCE_ID, EXECUTOR_MEMORY, PLUGINS}
 import org.apache.spark.resource._
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
-import org.apache.spark.rpc.RpcEnv
+import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEnv}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerExecutorAdded, SparkListenerExecutorRemoved, TaskDescription}
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{KillTask, LaunchTask}
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{KillTask, LaunchTask, RegisterExecutor}
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.util.{SerializableBuffer, SslTestUtils, ThreadUtils, Utils}
 
@@ -612,6 +614,68 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       }
     } finally {
       sc.removeSparkListener(listener)
+    }
+  }
+
+  test("SPARK-58322: onStart emits RegisterExecutor carrying the driver instance ID") {
+    val testInstanceId = "test-driver-instance-id-12345"
+    val conf = createSparkConf()
+      .set(DRIVER_INSTANCE_ID, testInstanceId)
+      .set(EXECUTOR_MEMORY.key, "512m")
+    val serializer = new JavaSerializer(conf)
+
+    val driverRpcEnv = RpcEnv.create("test-driver", "localhost", 0, conf,
+      new SecurityManager(conf), clientMode = false)
+    val captured = new java.util.concurrent.atomic.AtomicReference[RegisterExecutor]()
+    val registration = Promise[Unit]()
+    try {
+      driverRpcEnv.setupEndpoint("CoarseGrainedScheduler", new RpcEndpoint {
+        override val rpcEnv: RpcEnv = driverRpcEnv
+        override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+          case msg: RegisterExecutor =>
+            captured.set(msg)
+            context.reply(true)
+        }
+      })
+
+      val executorRpcEnv = RpcEnv.create("test-executor", "localhost", 0, conf,
+        new SecurityManager(conf), clientMode = true)
+      try {
+        val env = createMockEnv(conf, serializer, Some(executorRpcEnv))
+        val backend = new CoarseGrainedExecutorBackend(
+          executorRpcEnv,
+          s"spark://CoarseGrainedScheduler@localhost:${driverRpcEnv.address.port}",
+          "1", "localhost", "localhost", 1, env, None,
+          ResourceProfile.getOrCreateDefaultProfile(conf)) {
+          override def receive: PartialFunction[Any, Unit] = {
+            // Exercise onStart without constructing an Executor against the mock SparkEnv.
+            case RegisteredExecutor => registration.trySuccess(())
+          }
+
+          override protected def exitExecutor(
+              code: Int,
+              reason: String,
+              throwable: Throwable,
+              notifyDriver: Boolean): Unit = {
+            registration.tryFailure(new SparkException(s"Executor exited with code $code: $reason",
+              throwable))
+          }
+        }
+        executorRpcEnv.setupEndpoint("Executor", backend)
+
+        ThreadUtils.awaitResult(registration.future, 30.seconds)
+        assert(captured.get() != null, "RegisterExecutor was not sent by onStart")
+        val attrs = captured.get().attributes
+        assert(attrs.get(DRIVER_INSTANCE_ID.key).contains(testInstanceId),
+          s"RegisterExecutor should carry ${DRIVER_INSTANCE_ID.key}=$testInstanceId, got: $attrs")
+      } finally {
+        executorRpcEnv.shutdown()
+        executorRpcEnv.awaitTermination()
+      }
+    } finally {
+      driverRpcEnv.shutdown()
+      driverRpcEnv.awaitTermination()
+      SparkEnv.set(null)
     }
   }
 
