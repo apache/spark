@@ -477,6 +477,12 @@ object NativeWriterCommitMessage {
  * for it and keep the task from completing. That [[next]] then returns false, or throws the error
  * of its read. A [[next]] called once the reader is closed returns false without calling the
  * library.
+ *
+ * Such a thread also reads the rows of the batch that [[next]] returned to it after [[next]]
+ * returns, and the column vectors read the buffers of the batch at their addresses. So a
+ * [[close]] on a thread other than the one that called [[next]] last leaves the release to the
+ * next call of that thread to [[next]], unless that thread has ended. A thread that stops reading
+ * without calling [[next]] again, and does not end, keeps the resources of the reader allocated.
  */
 class NativePartitionReader(
     location: NativeLibraryLocation,
@@ -505,6 +511,12 @@ class NativePartitionReader(
   // under the lock.
   @GuardedBy("this")
   private var reading = false
+  // The thread that called next last, which may still read the batch that next returned to it.
+  @GuardedBy("this")
+  private var consumer: Thread = _
+  // Whether the stream and the vectors were released.
+  @GuardedBy("this")
+  private var released = false
 
   // Synchronized so that a close on another thread sees the task and the vectors.
   synchronized {
@@ -696,6 +708,14 @@ class NativePartitionReader(
   }
 
   private def startReading(): Boolean = synchronized {
+    if (closed) {
+      // A close on another thread may have left the release to the thread that read last.
+      if (consumerDone) {
+        releaseClosed()
+      }
+    } else {
+      consumer = Thread.currentThread()
+    }
     reading = !closed
     reading
   }
@@ -703,7 +723,20 @@ class NativePartitionReader(
   private def stopReading(): Unit = synchronized {
     reading = false
     if (closed) {
-      // The reader was closed by another thread, which no longer gets a failure from here.
+      releaseClosed()
+    }
+  }
+
+  /** Whether the thread that called next last, if any, no longer reads the batch. */
+  private def consumerDone: Boolean = synchronized {
+    consumer == null || consumer == Thread.currentThread() || !consumer.isAlive
+  }
+
+  /** Releases the resources of a reader that another thread closed, once. */
+  private def releaseClosed(): Unit = synchronized {
+    if (!released) {
+      released = true
+      // The thread that closed the reader no longer gets a failure from here.
       Utils.tryLogNonFatalError(closeResources())
     }
   }
@@ -863,7 +896,9 @@ class NativePartitionReader(
   override def close(): Unit = synchronized {
     if (!closed) {
       closed = true
-      if (!reading) {
+      // Another thread may be in next, or still read the batch that next returned to it.
+      if (!reading && consumerDone) {
+        released = true
         closeResources()
       }
     }

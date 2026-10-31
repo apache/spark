@@ -27,12 +27,12 @@ import org.apache.arrow.vector._
 import org.apache.arrow.vector.complex.StructVector
 import org.apache.arrow.vector.types.pojo.{ArrowType, FieldType}
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkArithmeticException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
-import org.apache.spark.sql.execution.vectorized.ReusedArrowColumnVector
+import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, ReusedArrowColumnVector}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.Decimal
+import org.apache.spark.sql.types.{Decimal, DecimalType}
 import org.apache.spark.sql.vectorized.ArrowColumnVector
 
 /**
@@ -135,14 +135,17 @@ class NativeColumnVectorSuite extends SparkFunSuite {
     val (acute, grave) = (0xe9.toChar.toString, 0xe8.toChar.toString)
     val short = Seq(Some(""), Some("a"), None, Some("twelve bytes"), Some(acute + grave), None)
     val long = Seq(Some("thirteen byte"), None, Some(acute * 40), Some("a long value " * 20))
+    // Values that do not fit in one data buffer of a view vector, which holds them in several.
+    val spread = Seq(Some("a" * 100000), None, Some(acute * 50000), Some("c" * 100000))
     withAllocator { allocator =>
       def check(vector: FieldVector)(set: (Int, Array[Byte]) => Unit, setNull: Int => Unit)
           : Unit = {
         Using.resource(vector) { vector =>
           val column = NativeColumnVector.create(vector)
           assert(column.getClass !== classOf[NativeColumnVector], vector.getClass.getName)
-          // Batches without and with data buffers, and with values of both kinds.
-          Seq(short, long, short ++ long).foreach { values =>
+          // Batches without and with data buffers, with values of both kinds, and with values in
+          // several data buffers.
+          Seq(short, long, short ++ long, spread).foreach { values =>
             vector.clear()
             vector.allocateNew()
             values.zipWithIndex.foreach {
@@ -150,6 +153,11 @@ class NativeColumnVectorSuite extends SparkFunSuite {
               case (None, row) => setNull(row)
             }
             vector.setValueCount(values.size)
+            vector match {
+              case views: ViewVarCharVector if values eq spread =>
+                assert(views.getDataBuffers.size > 1)
+              case _ =>
+            }
             column.refresh()
             checkSame(vector, column)(_.getUTF8String(_))
             assert(column.getUTF8String(values.indexOf(None)) === null)
@@ -171,7 +179,10 @@ class NativeColumnVectorSuite extends SparkFunSuite {
 
   /**
    * Checks that `column` returns the decimal of a row that `expected`, an [[ArrowColumnVector]] of
-   * the same vector, returns, as Spark uses it, or fails as it does.
+   * the same vector, returns, as Spark uses it, or fails as it does. Its integral conversions are
+   * those of the decimal of Spark's own column vectors, which hold the decimals that a long holds,
+   * of a scale from 0 to their precision, as longs, while ArrowColumnVector holds BigDecimals,
+   * which Decimal rounds to bytes, shorts and ints through doubles.
    */
   private def checkDecimal(
       expected: ArrowColumnVector,
@@ -184,9 +195,22 @@ class NativeColumnVectorSuite extends SparkFunSuite {
       writer.write(0, decimal, precision, scale)
       (decimal.toJavaBigDecimal, decimal.precision, decimal.scale, decimal.toLong, writer.getRow)
     }
+    def rounded(decimal: Decimal): Seq[Either[String, Long]] = {
+      Seq[Decimal => Long](_.roundToByte(), _.roundToShort(), _.roundToInt(), _.roundToLong())
+        .map(round => Try(round(decimal)).toEither.left.map(e => s"${e.getClass}: ${e.getMessage}"))
+    }
+    def own(decimal: Decimal): Decimal = {
+      if (0 <= scale && scale <= precision && precision <= Decimal.MAX_LONG_DIGITS) {
+        Decimal.createUnsafe(decimal.toUnscaledLong, precision, scale)
+      } else {
+        decimal
+      }
+    }
     Try(result(expected.getDecimal(row, precision, scale))) match {
       case Success(value) =>
-        assert(result(column.getDecimal(row, precision, scale)) === value)
+        val decimal = column.getDecimal(row, precision, scale)
+        assert(result(decimal) === value)
+        assert(rounded(decimal) === rounded(own(expected.getDecimal(row, precision, scale))))
       case Failure(error) =>
         val actual = intercept[Exception](result(column.getDecimal(row, precision, scale)))
         assert(actual.getClass === error.getClass)
@@ -239,6 +263,36 @@ class NativeColumnVectorSuite extends SparkFunSuite {
         conf.setConfString(key, "false")
         checkDecimal(expected, column, 0, 5, -2)
       }
+    }
+  }
+
+  test("decimals that a long holds round to integers as those of Spark's own column vectors") {
+    // The decimals of Spark's own column vectors and of the native one, of OnHeapColumnVector and
+    // NativeColumnVector, hold longs, which Decimal rounds exactly, and those of ArrowColumnVector
+    // BigDecimals, which it rounds through doubles.
+    def decimals(value: String, scale: Int)(f: (Decimal, Decimal, Decimal) => Unit): Unit = {
+      val precision = Decimal.MAX_LONG_DIGITS
+      withDecimalVector(precision, scale) { vector =>
+        vector.allocateNew(1)
+        vector.set(0, new JavaBigDecimal(value))
+        vector.setValueCount(1)
+        Using.resource(new OnHeapColumnVector(1, DecimalType(precision, scale))) { own =>
+          own.putDecimal(0, Decimal(value), precision)
+          f(own.getDecimal(0, precision, scale), native(vector).getDecimal(0, precision, scale),
+            new ArrowColumnVector(vector).getDecimal(0, precision, scale))
+        }
+      }
+    }
+    decimals("123456789.999999999", 9) { (own, column, arrow) =>
+      assert(own.roundToInt() === 123456789)
+      assert(column.roundToInt() === 123456789)
+      assert(arrow.roundToInt() === 123456790)
+    }
+    decimals("127.999999999999999", 15) { (own, column, arrow) =>
+      assert(own.roundToByte() === 127.toByte)
+      assert(column.roundToByte() === 127.toByte)
+      assert(intercept[SparkArithmeticException](arrow.roundToByte()).getCondition ===
+        "CAST_OVERFLOW")
     }
   }
 

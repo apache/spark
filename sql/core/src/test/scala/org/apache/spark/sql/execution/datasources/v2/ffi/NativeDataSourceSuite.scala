@@ -1256,6 +1256,37 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  nativeTest("close a reader while another thread reads the batch that it returned") {
+    val session = newSession(defaultPackage)
+    val pool = ThreadUtils.newDaemonSingleThreadExecutor("native-reader")
+    val marker = new File(Utils.createTempDir(), "released")
+    // get_next does not wait: the file .continue exists.
+    new File(marker.getPath + ".continue").createNewFile()
+    val df = range(session, "end" -> "10", "partitions" -> "1", "slow_read" -> marker.getPath)
+    val batch = scan(df.select("id")).toBatch
+    val reader = batch.createReaderFactory().createColumnarReader(batch.planInputPartitions().head)
+    try {
+      def onPool[T](f: => T): T = pool.submit(new Callable[T] {
+        override def call(): T = f
+      }).get(1, TimeUnit.MINUTES)
+      assert(onPool(reader.next()))
+      // The other thread may still read the batch, whose buffers the reader keeps until that
+      // thread calls next again.
+      reader.close()
+      assert(!marker.isFile, "The stream was released.")
+      val rows = onPool((0 until reader.get().numRows()).map(reader.get().column(0).getLong))
+      assert(rows === (0L until 10L))
+      assert(!onPool(reader.next()))
+      assert(Files.readString(marker.toPath) == "after get_next")
+      assert(!reader.next())
+    } finally {
+      // Once the other thread ends, a close that the test did not reach releases the reader.
+      pool.shutdown()
+      pool.awaitTermination(1, TimeUnit.MINUTES)
+      Utils.tryLogNonFatalError(reader.close())
+    }
+  }
+
   nativeTest("load libraries that export the same functions side by side") {
     val session = newSession(
       defaultPackage, createPackage(negatingLibrary, dataSources("b_")))
