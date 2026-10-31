@@ -459,12 +459,14 @@ class TimeType(AnyTimeType):
 
     def toInternal(self, t: datetime.time) -> int:
         if t is not None:
-            return (
+            nanos = (
                 t.hour * 3_600_000_000_000
                 + t.minute * 60_000_000_000
                 + t.second * 1_000_000_000
                 + t.microsecond * 1_000
             )
+            factor = 10 ** (9 - self.precision)
+            return nanos // factor * factor
 
     def fromInternal(self, nano: int) -> datetime.time:
         if nano is not None:
