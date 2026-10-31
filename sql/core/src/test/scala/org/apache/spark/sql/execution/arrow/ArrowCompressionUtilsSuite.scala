@@ -169,8 +169,9 @@ class ArrowCompressionUtilsSuite extends SparkFunSuite {
       }
       // Control: these inputs do trigger the overrun in Arrow's own codec, so the checks above
       // can fail. This depends on how zstd compresses literals. If it starts failing after an
-      // Arrow upgrade, Arrow has fixed the codec and BoundedZstdCompressionCodec can be removed;
-      // if it starts failing after a zstd-jni upgrade, pick inputs that still overrun instead.
+      // Arrow upgrade, Arrow has fixed the codec and BoundedZstdCompressionCodec.doCompress can be
+      // removed; if it starts failing after a zstd-jni upgrade, pick inputs that still overrun
+      // instead.
       assert(inputs.exists(writesPastEnd(stock.compressRaw, _)),
         s"no input of size $n made Arrow's ZstdCompressionCodec write past its output buffer")
     }
@@ -299,6 +300,61 @@ class ArrowCompressionUtilsSuite extends SparkFunSuite {
       // Closing the allocator fails if a buffer is left behind.
       root.close()
       allocator.close()
+    }
+  }
+
+  // Both an input of this size and zstd's output buffer for it take this much from the allocator.
+  private val inputSize = 100000
+  private val allocatedSize = 128 * 1024
+  private val compressibleInput = Array.tabulate[Byte](inputSize)(i => (i % 7).toByte)
+
+  // Compresses `data` with the codec of the write paths the way VectorUnloader does, that is,
+  // while the caller keeps its own reference to the input, and checks the allocator and the output.
+  private def withZstdOutput(data: Array[Byte], memoryLimit: Long = Long.MaxValue)(
+      check: (BufferAllocator, ArrowBuf) => Unit): Unit = {
+    val allocator =
+      ArrowUtils.rootAllocator.newChildAllocator(this.getClass.getSimpleName, 0, memoryLimit)
+    val codec = ArrowCompressionUtils.createCompressionCodec("zstd", 3)
+    Utils.tryWithSafeFinally {
+      val input = allocator.buffer(data.length)
+      Utils.tryWithSafeFinally {
+        input.setBytes(0, data)
+        input.writerIndex(data.length)
+        input.getReferenceManager.retain()
+        val output = codec.compress(allocator, input)
+        Utils.tryWithSafeFinally {
+          check(allocator, output)
+          assert(output.nioBuffer(0, 8).order(ByteOrder.LITTLE_ENDIAN).getLong(0) === data.length)
+        } {
+          output.close()
+        }
+      } {
+        input.close()
+      }
+    } {
+      allocator.close()
+    }
+  }
+
+  test("SPARK-60779: zstd codec moves a much smaller output out of its compressBound buffer") {
+    withZstdOutput(compressibleInput) { (allocator, output) =>
+      assert(output.capacity() === allocator.getRoundingPolicy.getRoundedSize(output.writerIndex()))
+      assert(output.capacity() < allocatedSize / 2)
+      assert(allocator.getAllocatedMemory === allocatedSize + output.capacity())
+    }
+  }
+
+  test("SPARK-60779: zstd codec does not copy an output that would not at least halve its buffer") {
+    val input = new Random(3).nextBytes(inputSize * 3 / 4) ++ new Array[Byte](inputSize / 4)
+    withZstdOutput(input) { (allocator, output) =>
+      assert(output.capacity() === allocatedSize)
+      assert(allocator.getPeakMemoryAllocation === 2 * allocatedSize)
+    }
+  }
+
+  test("SPARK-60779: zstd codec keeps its output buffer when there is no memory to shrink it") {
+    withZstdOutput(compressibleInput, memoryLimit = 2 * allocatedSize) { (_, output) =>
+      assert(output.capacity() === allocatedSize)
     }
   }
 }
