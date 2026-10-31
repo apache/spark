@@ -346,6 +346,17 @@ Security options for the Spark History Server are covered more detail in the
     <td>2.4.0</td>
   </tr>
   <tr>
+    <td>spark.history.fs.skipCompletedRollingLogListing.enabled</td>
+    <td>true</td>
+    <td>
+      Whether to avoid listing the rolling event log directory of a completed application on
+      every scan, as long as the modification time of the directory hasn't changed. This reduces
+      the number of list calls on storage when many applications are retained. The directory is
+      always listed if the file system doesn't report that time.
+    </td>
+    <td>4.4.0</td>
+  </tr>
+  <tr>
     <td>spark.history.fs.driverlog.cleaner.enabled</td>
     <td><code>spark.history.fs.cleaner.enabled</code></td>
     <td>
