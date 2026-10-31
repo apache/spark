@@ -1105,10 +1105,12 @@ Apart from these, the following properties are also available, and may be useful
     For <code>spark.jars.packages</code>, additional repositories from
     <code>spark.jars.repositories</code> will also be included.
     The <code>spark-submit --repositories</code> option applies to submission-time resolution.
-    In Spark Connect, Ivy URIs with a <code>repos</code> query parameter or sent to a server without
-    server-side Maven resolution are resolved by the client and do not use this setting. Other Ivy
-    URIs are resolved by the server, so Maven and Ivy repositories local to the client, such as
-    <code>~/.m2/repository</code> and <code>~/.ivy2.5.2/local</code>, are not searched.
+    In Spark Connect, Ivy URIs are resolved by the server only when
+    <code>spark.connect.session.serverSideMavenResolution.enabled</code> is true, the server supports
+    server-side Maven resolution, and the URI has no <code>repos</code> query parameter. Otherwise,
+    they are resolved by the client and do not use this setting. Server-side resolution does not
+    search Maven or Ivy repositories local to the client, such as <code>~/.m2/repository</code> and
+    <code>~/.ivy2.5.2/local</code>.
     Useful for allowing Spark to resolve artifacts from behind a firewall e.g. via an in-house
     artifact server like Artifactory. Details on the settings file format can be
     found at <a href="http://ant.apache.org/ivy/history/latest-milestone/settings.html">Settings Files</a>.
@@ -3895,6 +3897,14 @@ Command types in proto.</td>
   </td>
   <td>The interval at which the progress of a query is reported to the client. If the value is set to a negative value the progress reports will be disabled.</td>
   <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.connect.session.serverSideMavenResolution.enabled</code></td>
+  <td>
+    false
+  </td>
+  <td>When true, the Spark Connect JVM client resolves eligible Maven dependencies on the server when it advertises support. Dependencies that specify repositories are always resolved on the client. When false, the JVM client resolves all Maven dependencies locally. This is a client routing preference, not a server-side enforcement setting.</td>
+  <td>4.4.0</td>
 </tr>
 </table>
 

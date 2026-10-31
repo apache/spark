@@ -563,10 +563,11 @@ abstract class SparkSession extends Serializable with Closeable {
    *
    * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs. Ivy
    * URIs are resolved using `spark.jars.ivySettings` when it is configured. When using Spark
-   * Connect, Ivy URIs with repositories in the `repos` query parameter, or sent to servers that
-   * do not support server-side Maven resolution, are resolved by the client without the server's
-   * Ivy settings. Otherwise, Ivy URIs are resolved by the server, which does not search Maven or
-   * Ivy repositories local to the client.
+   * Connect, Ivy URIs are resolved by the server only when
+   * `spark.connect.session.serverSideMavenResolution.enabled` is true, the server supports it,
+   * and the URI has no repositories in the `repos` query parameter. Otherwise, they are resolved
+   * by the client without the server's Ivy settings. Server-side resolution does not search Maven
+   * or Ivy repositories local to the client.
    *
    * Since 4.4.0, it also supports native data source packages: local files with the extension
    * .sparkpkg, which make the native data sources that they contain available to the session.
@@ -581,10 +582,11 @@ abstract class SparkSession extends Serializable with Closeable {
    *
    * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs. Ivy
    * URIs are resolved using `spark.jars.ivySettings` when it is configured. When using Spark
-   * Connect, Ivy URIs with repositories in the `repos` query parameter, or sent to servers that
-   * do not support server-side Maven resolution, are resolved by the client without the server's
-   * Ivy settings. Otherwise, Ivy URIs are resolved by the server, which does not search Maven or
-   * Ivy repositories local to the client.
+   * Connect, Ivy URIs are resolved by the server only when
+   * `spark.connect.session.serverSideMavenResolution.enabled` is true, the server supports it,
+   * and the URI has no repositories in the `repos` query parameter. Otherwise, they are resolved
+   * by the client without the server's Ivy settings. Server-side resolution does not search Maven
+   * or Ivy repositories local to the client.
    *
    * Since 4.4.0, it also supports native data source packages: local files with the extension
    * .sparkpkg, which make the native data sources that they contain available to the session.
@@ -644,10 +646,11 @@ abstract class SparkSession extends Serializable with Closeable {
    *
    * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs. Ivy
    * URIs are resolved using `spark.jars.ivySettings` when it is configured. When using Spark
-   * Connect, Ivy URIs with repositories in the `repos` query parameter, or sent to servers that
-   * do not support server-side Maven resolution, are resolved by the client without the server's
-   * Ivy settings. Otherwise, Ivy URIs are resolved by the server, which does not search Maven or
-   * Ivy repositories local to the client.
+   * Connect, Ivy URIs are resolved by the server only when
+   * `spark.connect.session.serverSideMavenResolution.enabled` is true, the server supports it,
+   * and the URI has no repositories in the `repos` query parameter. Otherwise, they are resolved
+   * by the client without the server's Ivy settings. Server-side resolution does not search Maven
+   * or Ivy repositories local to the client.
    *
    * Since 4.4.0, it also supports native data source packages: local files with the extension
    * .sparkpkg, which make the native data sources that they contain available to the session.

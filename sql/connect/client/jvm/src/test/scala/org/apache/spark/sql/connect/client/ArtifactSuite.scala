@@ -33,6 +33,7 @@ import org.apache.spark.connect.proto.AddArtifactsRequest
 import org.apache.spark.network.util.JavaUtils.sha256Hex
 import org.apache.spark.sql.Artifact
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
+import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.connect.test.ConnectFunSuite
 import org.apache.spark.util.{IvyTestUtils, SparkFileUtils}
 import org.apache.spark.util.MavenUtils.MavenCoordinate
@@ -314,8 +315,9 @@ class ArtifactSuite extends ConnectFunSuite {
     }
   }
 
-  test("Spark Connect uses server-side Maven resolution when advertised") {
+  test("Spark Connect uses server-side Maven resolution when enabled and advertised") {
     service.serverCapabilities = Seq(SparkConnectClient.SERVER_SIDE_MAVEN_ARTIFACTS_CAPABILITY)
+    service.setSparkConfig(ConnectCommon.CONNECT_SERVER_SIDE_MAVEN_RESOLUTION_ENABLED, "true")
     client = new SparkConnectClient(Configuration(), channel)
     val ivyUri = URI.create("ivy://my.artifactsuite.lib:mylib:0.1")
 
@@ -325,6 +327,67 @@ class ArtifactSuite extends ConnectFunSuite {
     assert(requests.size == 1)
     assert(requests.head.getBatch.getEntriesCount == 1)
     assert(requests.head.getBatch.getEntries(0).getMavenDependency.getUri == ivyUri.toString)
+    val configRequests = service.getAndClearLatestConfigRequests()
+    assert(configRequests.size == 1)
+    assert(
+      configRequests.head.getOperation.getGetOption.getKeysList.asScala ==
+        Seq(ConnectCommon.CONNECT_SERVER_SIDE_MAVEN_RESOLUTION_ENABLED))
+  }
+
+  test("Spark Connect defaults to client-side Maven resolution") {
+    val main = new MavenCoordinate("my.artifactsuite.defaultclient", "mylib", "0.1")
+    IvyTestUtils.withRepository(
+      main,
+      dependencies = None,
+      rootDir = Some(ivyHome.resolve("local").toFile),
+      useIvyLayout = true) { _ =>
+      service.serverCapabilities = Seq(SparkConnectClient.SERVER_SIDE_MAVEN_ARTIFACTS_CAPABILITY)
+      client = new SparkConnectClient(Configuration(), channel)
+
+      client.addArtifact(URI.create(s"ivy://${main.toString}"))
+
+      val requests = service.getAndClearLatestAddArtifactRequests()
+      assert(requests.nonEmpty)
+      assert(requests.forall(_.getBatch.getEntriesCount == 0))
+      assert(requests.flatMap(_.getBatch.getArtifactsList.asScala).exists { artifact =>
+        artifact.getName.contains("my.artifactsuite.defaultclient_mylib-0.1")
+      })
+      assert(service.getAndClearLatestConfigRequests().size == 1)
+    }
+  }
+
+  test("Spark Connect server-side Maven resolution follows the session configuration") {
+    val main = new MavenCoordinate("my.artifactsuite.sessionconfig", "mylib", "0.1")
+    IvyTestUtils.withRepository(
+      main,
+      dependencies = None,
+      rootDir = Some(ivyHome.resolve("local").toFile),
+      useIvyLayout = true) { _ =>
+      service.serverCapabilities = Seq(SparkConnectClient.SERVER_SIDE_MAVEN_ARTIFACTS_CAPABILITY)
+      service.setSparkConfig(ConnectCommon.CONNECT_SERVER_SIDE_MAVEN_RESOLUTION_ENABLED, "false")
+      client = new SparkConnectClient(Configuration(), channel)
+      val ivyUri = URI.create(s"ivy://${main.toString}")
+
+      client.addArtifact(ivyUri)
+
+      val clientRequests = service.getAndClearLatestAddArtifactRequests()
+      assert(clientRequests.nonEmpty)
+      assert(clientRequests.forall(_.getBatch.getEntriesCount == 0))
+      assert(clientRequests.flatMap(_.getBatch.getArtifactsList.asScala).exists { artifact =>
+        artifact.getName.contains("my.artifactsuite.sessionconfig_mylib-0.1")
+      })
+      assert(service.getAndClearLatestConfigRequests().size == 1)
+
+      service.setSparkConfig(ConnectCommon.CONNECT_SERVER_SIDE_MAVEN_RESOLUTION_ENABLED, "true")
+      client.addArtifact(ivyUri)
+
+      val serverRequests = service.getAndClearLatestAddArtifactRequests()
+      assert(serverRequests.size == 1)
+      assert(serverRequests.head.getBatch.getEntriesCount == 1)
+      assert(
+        serverRequests.head.getBatch.getEntries(0).getMavenDependency.getUri == ivyUri.toString)
+      assert(service.getAndClearLatestConfigRequests().size == 1)
+    }
   }
 
   test("Spark Connect resolves requested Maven repositories on the client") {
@@ -342,6 +405,7 @@ class ArtifactSuite extends ConnectFunSuite {
       assert(batch.getArtifactsCount == 1)
       assert(
         batch.getArtifacts(0).getName.contains("my.artifactsuite.clientcapability_mylib-0.1"))
+      assert(service.getAndClearLatestConfigRequests().isEmpty)
     }
   }
 
@@ -358,12 +422,17 @@ class ArtifactSuite extends ConnectFunSuite {
     assert(requests(1).getBatch.getEntries(0).getMavenDependency.getUri == otherUri.toString)
   }
 
-  test("Spark Connect falls back only when the Maven capability is absent") {
+  test("Spark Connect resolves Maven dependencies on the client without the capability") {
     val main = new MavenCoordinate("my.artifactsuite.fallback", "mylib", "0.1")
-    IvyTestUtils.withRepository(main, None, None) { repo =>
+    IvyTestUtils.withRepository(
+      main,
+      dependencies = None,
+      rootDir = Some(ivyHome.resolve("local").toFile),
+      useIvyLayout = true) { _ =>
+      service.setSparkConfig(ConnectCommon.CONNECT_SERVER_SIDE_MAVEN_RESOLUTION_ENABLED, "true")
       client = new SparkConnectClient(Configuration(), channel)
 
-      client.addArtifact(URI.create(s"ivy://${main.toString}?repos=$repo"))
+      client.addArtifact(URI.create(s"ivy://${main.toString}"))
 
       val requests = service.getAndClearLatestAddArtifactRequests()
       assert(requests.nonEmpty)
@@ -371,6 +440,7 @@ class ArtifactSuite extends ConnectFunSuite {
       assert(requests.flatMap(_.getBatch.getArtifactsList.asScala).exists { artifact =>
         artifact.getName.contains("my.artifactsuite.fallback_mylib-0.1")
       })
+      assert(service.getAndClearLatestConfigRequests().isEmpty)
     }
 
     service.errorToThrowOnAnalyze = Some(Status.UNAVAILABLE.asRuntimeException())

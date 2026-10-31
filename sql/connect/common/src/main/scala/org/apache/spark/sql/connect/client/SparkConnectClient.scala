@@ -104,6 +104,11 @@ private[sql] class SparkConnectClient(
   private def supportsServerSideMavenArtifacts: Boolean =
     serverCapabilities.contains(SparkConnectClient.SERVER_SIDE_MAVEN_ARTIFACTS_CAPABILITY)
 
+  private def serverSideMavenResolutionEnabled: Boolean =
+    conf
+      .getOption(ConnectCommon.CONNECT_SERVER_SIDE_MAVEN_RESOLUTION_ENABLED)
+      .exists(_.toBoolean)
+
   // Cached plan compression options.
   private var _planCompressionOptions: Option[Option[PlanCompressionOptions]] = None
 
@@ -615,7 +620,8 @@ private[sql] class SparkConnectClient(
    */
   def addArtifact(uri: URI): Unit = {
     val serverSide = artifactManager.isServerSideMavenCandidate(uri) &&
-      supportsServerSideMavenArtifacts
+      supportsServerSideMavenArtifacts &&
+      serverSideMavenResolutionEnabled
     artifactManager.addArtifact(uri, serverSide)
   }
 
@@ -663,7 +669,8 @@ private[sql] class SparkConnectClient(
    */
   def addArtifacts(uri: Seq[URI]): Unit = {
     val serverSide = uri.exists(artifactManager.isServerSideMavenCandidate) &&
-      supportsServerSideMavenArtifacts
+      supportsServerSideMavenArtifacts &&
+      serverSideMavenResolutionEnabled
     artifactManager.addArtifacts(uri, serverSide)
   }
 
