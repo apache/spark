@@ -1745,7 +1745,7 @@ object SQLConf {
   val SUBEXPRESSION_ELIMINATION_SKIP_FOR_SHORTCUT_EXPR =
     buildConf("spark.sql.subexpressionElimination.skipForShortcutExpr")
       .internal()
-      .doc("When true, shortcut eliminate subexpression with `AND`, `OR`. " +
+      .doc("When true, shortcut eliminate subexpression with `AND`, `OR`, `IN`. " +
         "The subexpression may not need to eval even if it appears more than once. " +
         "e.g., `if(or(a, and(b, b)))`, the expression `b` would be skipped if `a` is true.")
       .version("3.5.0")
