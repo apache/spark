@@ -20,7 +20,6 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkEnv
-import org.apache.spark.internal.config.ConfigBindingPolicy
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.internal.SQLConf.buildConf
@@ -343,18 +342,6 @@ object Connect {
       .version("4.0.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("2s")
-
-  val CONNECT_SERVER_SIDE_MAVEN_RESOLUTION_ENABLED =
-    buildConf("spark.connect.session.serverSideMavenResolution.enabled")
-      .doc("When true, Spark Connect advertises support for resolving eligible Maven " +
-        "dependencies on the server. Dependencies that specify repositories are always resolved " +
-        "on the client. When false, clients resolve all Maven dependencies locally. The value is " +
-        "captured when a client first checks the server capabilities for its session.")
-      .version("4.4.0")
-      .internal()
-      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
-      .booleanConf
-      .createWithDefault(false)
 
   val CONNECT_SESSION_PLAN_CACHE_SIZE =
     buildStaticConf("spark.connect.session.planCache.maxSize")

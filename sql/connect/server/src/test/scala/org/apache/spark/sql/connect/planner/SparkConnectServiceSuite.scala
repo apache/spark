@@ -76,23 +76,16 @@ class SparkConnectServiceSuite
   private def sparkSessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
   private def DEFAULT_UUID = UUID.fromString("89ea6117-1f45-4c03-ae27-f47c6aded093")
 
-  test("Spark version advertises server-side Maven resolution when enabled") {
+  test("Spark version advertises server-side Maven resolution") {
     val request = proto.AnalyzePlanRequest
       .newBuilder()
       .setSparkVersion(proto.AnalyzePlanRequest.SparkVersion.newBuilder())
       .build()
-    val sessionHolder = sparkSessionHolder
+    val response = new SparkConnectAnalyzeHandler(null).process(request, sparkSessionHolder)
 
-    def capabilities = new SparkConnectAnalyzeHandler(null)
-      .process(request, sessionHolder)
-      .getSparkVersion
-      .getCapabilitiesList
-      .asScala
-
-    assert(!capabilities.contains(SparkConnectClient.SERVER_SIDE_MAVEN_ARTIFACTS_CAPABILITY))
-    withSQLConf(Connect.CONNECT_SERVER_SIDE_MAVEN_RESOLUTION_ENABLED.key -> "true") {
-      assert(capabilities.contains(SparkConnectClient.SERVER_SIDE_MAVEN_ARTIFACTS_CAPABILITY))
-    }
+    assert(
+      response.getSparkVersion.getCapabilitiesList.asScala
+        .contains(SparkConnectClient.SERVER_SIDE_MAVEN_ARTIFACTS_CAPABILITY))
   }
 
   test("Test schema in analyze response") {

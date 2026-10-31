@@ -1439,10 +1439,6 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
     errorToThrowOnConfig = errorToThrowOnConfig + (key -> error)
   }
 
-  private[sql] def setSparkConfig(key: String, value: String): Unit = synchronized {
-    sparkConfigs.put(key, value)
-  }
-
   private[sql] def getAndClearLatestInputPlan(): proto.Plan = synchronized {
     val plan = inputPlan
     inputPlan = null

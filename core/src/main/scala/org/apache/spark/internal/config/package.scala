@@ -3090,8 +3090,7 @@ package object config {
         "SparkSession.addArtifact reads this setting from the session configuration. " +
         "For spark.jars.packages, additional repositories from spark.jars.repositories will " +
         "also be included. " +
-        "Client-resolved Spark Connect Ivy URIs use this setting only when the settings file is " +
-        "readable on the client. " +
+        "Client-resolved Spark Connect Ivy URIs do not use this setting. " +
         "The spark-submit --repositories option applies to submission-time resolution. " +
         "Useful for allowing Spark to resolve artifacts from behind a firewall " +
         "e.g. via an in-house artifact server like Artifactory. " +

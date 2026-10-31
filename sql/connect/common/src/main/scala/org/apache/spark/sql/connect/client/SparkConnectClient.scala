@@ -19,7 +19,6 @@ package org.apache.spark.sql.connect.client
 
 import java.net.URI
 import java.nio.charset.StandardCharsets.UTF_8
-import java.nio.file.{Files, Paths}
 import java.util.{Base64, Locale, UUID}
 import java.util.concurrent.{Executor, TimeUnit}
 
@@ -40,12 +39,11 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.UserContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{ERROR, RATIO, SIZE, TIME}
-import org.apache.spark.internal.config.ConfigReader
 import org.apache.spark.sql.connect.RuntimeConfig
 import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.util.CloseableIterator
-import org.apache.spark.util.{MavenUtils, SparkFileUtils, SparkSystemUtils}
+import org.apache.spark.util.{SparkFileUtils, SparkSystemUtils}
 
 /**
  * Conceptually the remote spark session that communicates with the server.
@@ -603,33 +601,6 @@ private[sql] class SparkConnectClient(
    */
   def preferredArrowChunkSize: Option[Int] = configuration.preferredArrowChunkSize
 
-  private lazy val localIvySettingsPath: Option[String] =
-    new ConfigReader((key: String) => conf.getOption(key))
-      .get(MavenUtils.JAR_IVY_SETTING_PATH_KEY)
-      .flatMap { settingsPath =>
-        try {
-          val settingsUri = SparkFileUtils.resolveURI(settingsPath)
-          if (settingsUri.getScheme == "file") {
-            val path = Paths.get(settingsUri)
-            Option.when(Files.isRegularFile(path) && Files.isReadable(path))(settingsUri.toString)
-          } else {
-            None
-          }
-        } catch {
-          case NonFatal(_) => None
-        }
-      }
-
-  private def ivySettingsPathForClientResolution(
-      uris: Seq[URI],
-      serverSideMavenArtifacts: Boolean): Option[String] = {
-    val resolvesIvyOnClient = uris.exists { uri =>
-      uri.getScheme == "ivy" &&
-      (!serverSideMavenArtifacts || !artifactManager.isServerSideMavenCandidate(uri))
-    }
-    if (resolvesIvyOnClient) localIvySettingsPath else None
-  }
-
   /**
    * Add a single artifact to the client session.
    *
@@ -645,8 +616,7 @@ private[sql] class SparkConnectClient(
   def addArtifact(uri: URI): Unit = {
     val serverSide = artifactManager.isServerSideMavenCandidate(uri) &&
       supportsServerSideMavenArtifacts
-    val ivySettingsPath = ivySettingsPathForClientResolution(Seq(uri), serverSide)
-    artifactManager.addArtifact(uri, serverSide, ivySettingsPath)
+    artifactManager.addArtifact(uri, serverSide)
   }
 
   /**
@@ -694,8 +664,7 @@ private[sql] class SparkConnectClient(
   def addArtifacts(uri: Seq[URI]): Unit = {
     val serverSide = uri.exists(artifactManager.isServerSideMavenCandidate) &&
       supportsServerSideMavenArtifacts
-    val ivySettingsPath = ivySettingsPathForClientResolution(uri, serverSide)
-    artifactManager.addArtifacts(uri, serverSide, ivySettingsPath)
+    artifactManager.addArtifacts(uri, serverSide)
   }
 
   /**

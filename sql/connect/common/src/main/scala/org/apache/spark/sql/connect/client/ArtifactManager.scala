@@ -96,7 +96,7 @@ class ArtifactManager(
     addArtifact(SparkFileUtils.resolveURI(path))
   }
 
-  private def parseArtifacts(uri: URI, ivySettingsPath: Option[String]): Seq[Artifact] = {
+  private def parseArtifacts(uri: URI): Seq[Artifact] = {
     // Currently only local files with extensions .jar and .class are supported.
     uri.getScheme match {
       case "file" =>
@@ -108,7 +108,7 @@ class ArtifactManager(
         Seq[Artifact](artifact)
 
       case "ivy" =>
-        newIvyArtifacts(uri, ivySettingsPath)
+        newIvyArtifacts(uri)
 
       case other =>
         throw new UnsupportedOperationException(s"Unsupported scheme: $other")
@@ -128,17 +128,10 @@ class ArtifactManager(
    *
    * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs
    */
-  def addArtifact(uri: URI): Unit =
-    addArtifact(uri, serverSideMavenArtifacts = false, ivySettingsPath = None)
+  def addArtifact(uri: URI): Unit = addArtifact(uri, serverSideMavenArtifacts = false)
 
   private[client] def addArtifact(uri: URI, serverSideMavenArtifacts: Boolean): Unit =
-    addArtifact(uri, serverSideMavenArtifacts, ivySettingsPath = None)
-
-  private[client] def addArtifact(
-      uri: URI,
-      serverSideMavenArtifacts: Boolean,
-      ivySettingsPath: Option[String]): Unit =
-    addArtifacts(Seq(uri), serverSideMavenArtifacts, ivySettingsPath)
+    addArtifacts(Seq(uri), serverSideMavenArtifacts)
 
   /**
    * Add a single in-memory artifact to the session while preserving the directory structure
@@ -195,29 +188,21 @@ class ArtifactManager(
    * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs
    */
   def addArtifacts(uris: Seq[URI]): Unit =
-    addArtifacts(uris, serverSideMavenArtifacts = false, ivySettingsPath = None)
+    addArtifacts(uris, serverSideMavenArtifacts = false)
 
-  private[client] def addArtifacts(
-      uris: Seq[URI],
-      serverSideMavenArtifacts: Boolean): Unit =
-    addArtifacts(uris, serverSideMavenArtifacts, ivySettingsPath = None)
-
-  private[client] def addArtifacts(
-      uris: Seq[URI],
-      serverSideMavenArtifacts: Boolean,
-      ivySettingsPath: Option[String]): Unit = {
+  private[client] def addArtifacts(uris: Seq[URI], serverSideMavenArtifacts: Boolean): Unit = {
     if (serverSideMavenArtifacts) {
       val entries = uris.flatMap { uri =>
         uri.getScheme match {
           // Resolve explicit repositories on the client so arbitrary repositories are never
           // accessed from the server.
           case "ivy" if !hasRequestedRepositories(uri) => MavenDependency(uri) :: Nil
-          case _ => parseArtifacts(uri, ivySettingsPath).map(UploadedArtifact)
+          case _ => parseArtifacts(uri).map(UploadedArtifact)
         }
       }
       addArtifactEntries(entries, useOrderedEntries = true)
     } else {
-      addArtifacts(uris.flatMap(uri => parseArtifacts(uri, ivySettingsPath)))
+      addArtifacts(uris.flatMap(parseArtifacts))
     }
   }
 

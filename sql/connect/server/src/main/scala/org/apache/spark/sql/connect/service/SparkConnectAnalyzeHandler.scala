@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.classic.{DataFrame, Dataset}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, StorageLevelProtoConverter}
-import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.utils.PipelineAnalysisContextUtils
 import org.apache.spark.sql.execution.{CodegenMode, CommandExecutionMode, CostMode, ExtendedMode, FormattedMode, SimpleMode}
@@ -166,13 +165,12 @@ private[connect] class SparkConnectAnalyzeHandler(
             .build())
 
       case proto.AnalyzePlanRequest.AnalyzeCase.SPARK_VERSION =>
-        val sparkVersion = proto.AnalyzePlanResponse.SparkVersion
-          .newBuilder()
-          .setVersion(session.version)
-        if (session.conf.get(Connect.CONNECT_SERVER_SIDE_MAVEN_RESOLUTION_ENABLED)) {
-          sparkVersion.addCapabilities("serverSideMavenArtifacts.v1")
-        }
-        builder.setSparkVersion(sparkVersion.build())
+        builder.setSparkVersion(
+          proto.AnalyzePlanResponse.SparkVersion
+            .newBuilder()
+            .setVersion(session.version)
+            .addCapabilities("serverSideMavenArtifacts.v1")
+            .build())
 
       case proto.AnalyzePlanRequest.AnalyzeCase.DDL_PARSE =>
         val schema = planner.parseDatatypeString(request.getDdlParse.getDdlString)
