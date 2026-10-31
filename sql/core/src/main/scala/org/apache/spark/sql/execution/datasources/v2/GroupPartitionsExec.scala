@@ -691,7 +691,11 @@ private[sql] object GroupPartitionsExec {
                   // with this one on the other side has it too (`argumentShape` admits no
                   // other); otherwise the two sides of one reduce stop sharing a key space.
                   val argument = expr match {
-                    case t: TransformExpression => t.columnSlots.head
+                    case t: TransformExpression => t.columnSlots match {
+                      case Seq(slot) => slot
+                      case slots => throw SparkException.internalError(
+                        s"Expected one column argument in $t, got ${slots.length}")
+                    }
                     case e => e
                   }
                   reduced.rewriteColumnSlots(_ => argument).copy(reducedWith =
