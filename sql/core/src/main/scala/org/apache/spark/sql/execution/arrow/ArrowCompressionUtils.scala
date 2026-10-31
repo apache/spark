@@ -17,10 +17,16 @@
 
 package org.apache.spark.sql.execution.arrow
 
+import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
+
 import com.github.luben.zstd.Zstd
 import org.apache.arrow.compression.{Lz4CompressionCodec, ZstdCompressionCodec}
 import org.apache.arrow.memory.{ArrowBuf, BufferAllocator}
+import org.apache.arrow.util.AutoCloseables
+import org.apache.arrow.vector.{VectorSchemaRoot, VectorUnloader}
 import org.apache.arrow.vector.compression.{CompressionCodec, CompressionUtil, NoCompressionCodec}
+import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
 
 import org.apache.spark.SparkException
 
@@ -50,6 +56,23 @@ private[sql] object ArrowCompressionUtils {
       case other =>
         throw SparkException.internalError(
           s"Unsupported Arrow compression codec: $other. Supported values: none, zstd, lz4")
+    }
+  }
+
+  /**
+   * Creates the [[VectorUnloader]] that turns `root` into record batches compressed with `codec`,
+   * with null counts and aligned buffers.
+   *
+   * With a compressing codec, the unloader releases what it holds for a batch when compressing
+   * the batch fails, e.g. on a direct memory OOM. Arrow Java before 20.0.0 leaks the buffer being
+   * compressed and the buffers already compressed for the batch (apache/arrow-java#1234), and
+   * they stay allocated until the JVM exits.
+   */
+  def createVectorUnloader(root: VectorSchemaRoot, codec: CompressionCodec): VectorUnloader = {
+    if (codec.getCodecType == CompressionUtil.CodecType.NO_COMPRESSION) {
+      new VectorUnloader(root, true, codec, true)
+    } else {
+      new ReleasingVectorUnloader(root, new TrackingCompressionCodec(codec))
     }
   }
 }
@@ -82,4 +105,44 @@ private[sql] class BoundedZstdCompressionCodec(compressionLevel: Int)
     compressedBuffer.writerIndex(CompressionUtil.SIZE_OF_UNCOMPRESSED_LENGTH + bytesWritten)
     compressedBuffer
   }
+}
+
+/**
+ * A [[VectorUnloader]] that releases the buffers it holds for a batch it fails to unload. Remove
+ * once on Arrow 20.0.0, which releases them itself, so they would be released twice
+ * (apache/arrow-java#1290).
+ */
+private class ReleasingVectorUnloader(root: VectorSchemaRoot, codec: TrackingCompressionCodec)
+  extends VectorUnloader(root, true, codec, true) {
+
+  override def getRecordBatch(): ArrowRecordBatch = {
+    try {
+      super.getRecordBatch()
+    } catch {
+      case t: Throwable =>
+        AutoCloseables.close(t, codec.heldBuffers.asJava)
+        throw t
+    } finally {
+      // A returned batch owns the buffers now.
+      codec.heldBuffers.clear()
+    }
+  }
+}
+
+/** Delegates to `codec` and keeps, for each call, the buffer that the batch holds afterwards. */
+private class TrackingCompressionCodec(codec: CompressionCodec) extends CompressionCodec {
+  val heldBuffers = new ArrayBuffer[ArrowBuf]
+
+  override def compress(allocator: BufferAllocator, input: ArrowBuf): ArrowBuf = {
+    // The unloader retained `input` for `codec`, which releases it only when it succeeds.
+    heldBuffers += input
+    val output = codec.compress(allocator, input)
+    heldBuffers(heldBuffers.length - 1) = output
+    output
+  }
+
+  override def decompress(allocator: BufferAllocator, input: ArrowBuf): ArrowBuf =
+    codec.decompress(allocator, input)
+
+  override def getCodecType: CompressionUtil.CodecType = codec.getCodecType
 }

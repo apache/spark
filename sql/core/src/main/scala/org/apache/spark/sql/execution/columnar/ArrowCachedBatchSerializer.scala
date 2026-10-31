@@ -24,7 +24,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.arrow.flatbuf.{RecordBatch => FlatBufRecordBatch}
 import org.apache.arrow.memory.BufferAllocator
-import org.apache.arrow.vector.{TypeLayout, VectorLoader, VectorSchemaRoot, VectorUnloader}
+import org.apache.arrow.vector.{TypeLayout, VectorLoader, VectorSchemaRoot}
 import org.apache.arrow.vector.compression.NoCompressionCodec
 import org.apache.arrow.vector.ipc.{ReadChannel, WriteChannel}
 import org.apache.arrow.vector.ipc.message.{ArrowBodyCompression, ArrowFieldNode}
@@ -998,7 +998,7 @@ private class InternalRowToArrowCachedBatchIterator(
     sparkSchema, timeZoneId, false, false, losslessInternalTypes = true)
   private val root = VectorSchemaRoot.create(arrowSchema, allocator)
   private val arrowWriter = ArrowWriter.create(root)
-  private val unloader = new VectorUnloader(root, true, compressionCodec, true)
+  private val unloader = ArrowCompressionUtils.createVectorUnloader(root, compressionCodec)
 
   // Create statistics collectors for each column
   private val statsCollectors: Array[ColumnStats] = schema.map { attr =>
@@ -1177,7 +1177,7 @@ private class ColumnarBatchToArrowCachedBatchIterator(
 
     Utils.tryWithSafeFinally {
       // Use VectorUnloader to create compressed RecordBatch
-      val unloader = new VectorUnloader(root, true, compressionCodec, true)
+      val unloader = ArrowCompressionUtils.createVectorUnloader(root, compressionCodec)
       val recordBatch = unloader.getRecordBatch()
 
       Utils.tryWithSafeFinally {
@@ -1204,7 +1204,7 @@ private class ColumnarBatchToArrowCachedBatchIterator(
     // Convert columnar batch to rows, then to Arrow
     val root = VectorSchemaRoot.create(arrowSchema, allocator)
     val arrowWriter = ArrowWriter.create(root)
-    val unloader = new VectorUnloader(root, true, compressionCodec, true)
+    val unloader = ArrowCompressionUtils.createVectorUnloader(root, compressionCodec)
 
     Utils.tryWithSafeFinally {
       val rowIterator = batch.rowIterator().asScala
