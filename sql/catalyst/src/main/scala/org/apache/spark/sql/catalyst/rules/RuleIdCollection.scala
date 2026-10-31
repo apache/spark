@@ -175,6 +175,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.RemoveLiteralFromGroupExpressions" ::
       "org.apache.spark.sql.catalyst.optimizer.RemoveNoopOperators" ::
       "org.apache.spark.sql.catalyst.optimizer.RemoveRedundantAggregates" ::
+      "org.apache.spark.sql.catalyst.optimizer.RemoveRedundantGenerate" ::
       "org.apache.spark.sql.catalyst.optimizer.RemoveRepetitionFromGroupExpressions" ::
       "org.apache.spark.sql.catalyst.optimizer.ReorderAssociativeOperator" ::
       "org.apache.spark.sql.catalyst.optimizer.ReorderJoin" ::
