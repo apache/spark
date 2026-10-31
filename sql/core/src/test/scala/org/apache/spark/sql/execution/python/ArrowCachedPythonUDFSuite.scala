@@ -49,12 +49,14 @@ class ArrowCachedPythonUDFSuite extends SharedSparkSession {
     }
   }
 
-  test("Arrow Python UDFs over the Arrow cache with the default configuration") {
+  test("Arrow Python UDFs over the Arrow cache with columnar input disabled") {
     assume(shouldTestPandasUDFs)
     // The scan of the Arrow cache also returns rows, so no ColumnarToRowExec is added below
     // ArrowEvalPythonExec, whose child still supports columnar: it must still read rows when
-    // columnar input is disabled, as it is by default.
-    withSQLConf(SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> "1000") {
+    // columnar input is disabled.
+    withSQLConf(
+        SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> "1000",
+        SQLConf.ARROW_PYSPARK_UDF_COLUMNAR_INPUT_ENABLED.key -> "false") {
       val pandasUDF = TestScalarPandasUDF(
         name = "cached_str_udf", returnType = Some(StringType))
       registerTestUDF(pandasUDF, spark)
