@@ -31,7 +31,7 @@ import org.apache.spark.paths.SparkPath.{fromUrlString => sp}
 import org.apache.spark.sql.{execution, DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionSet}
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionSet, StringRegexExpression}
 import org.apache.spark.sql.catalyst.util
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.execution.{DataSourceScanExec, FileSourceScanExec, SparkPlan}
@@ -602,6 +602,37 @@ class FileSourceStrategySuite extends SharedSparkSession {
       assert(partitions.size == 1, "when checking partitions")
     }
     checkDataFilters(Set.empty)
+  }
+
+  test("SPARK-60632: Filters on an aliased LIKE/RLIKE column are pushed into the file scan") {
+    withTempPath { path =>
+      spark.range(20)
+        .selectExpr("CAST(id AS STRING) AS name", "CONCAT('v', id % 4) AS part")
+        .write.partitionBy("part").parquet(path.getCanonicalPath)
+      val table = spark.read.parquet(path.getCanonicalPath)
+
+      def scanOf(df: DataFrame): FileSourceScanExec =
+        df.queryExecution.sparkPlan.collectFirst { case s: FileSourceScanExec => s }.get
+      def hasRegex(filters: Seq[Expression]): Boolean =
+        filters.exists(_.exists(_.isInstanceOf[StringRegexExpression]))
+
+      Seq(
+        "part RLIKE '^v1'" -> 1,
+        "part RLIKE 'v[12].*'" -> 2,
+        "part LIKE '_1' OR part = 'v2'" -> 2).foreach { case (pred, numPartitions) =>
+        withClue(pred) {
+          val df = table.selectExpr("name", s"$pred AS p").where("p")
+          val scan = scanOf(df)
+          assert(hasRegex(scan.partitionFilters))
+          assert(scan.selectedPartitions.partitionCount == numPartitions)
+          checkAnswer(df, table.where(pred).selectExpr("name", "true AS p"))
+        }
+      }
+
+      val df = table.selectExpr("part", "name RLIKE '^1' AS p").where("p")
+      assert(hasRegex(scanOf(df).dataFilters))
+      checkAnswer(df, table.where("name RLIKE '^1'").selectExpr("part", "true AS p"))
+    }
   }
 
   test(s"SPARK-44021: Test ${SQLConf.FILES_MAX_PARTITION_NUM.key} works as expected") {
