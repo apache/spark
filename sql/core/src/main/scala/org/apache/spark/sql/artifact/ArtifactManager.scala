@@ -33,7 +33,7 @@ import org.apache.hadoop.fs.{LocalFileSystem, Path => FSPath}
 
 import org.apache.spark.{JobArtifactSet, JobArtifactState, SparkContext, SparkEnv, SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.{Logging, LogKeys}
-import org.apache.spark.internal.config.{CONNECT_SCALA_UDF_STUB_PREFIXES, EXECUTOR_USER_CLASS_PATH_FIRST, JAR_IVY_CONNECT_TIMEOUT, JAR_IVY_READ_TIMEOUT, JAR_IVY_REPO_PATH, JAR_IVY_SETTING_PATH}
+import org.apache.spark.internal.config.{ConfigReader, CONNECT_SCALA_UDF_STUB_PREFIXES, EXECUTOR_USER_CLASS_PATH_FIRST, JAR_IVY_CONNECT_TIMEOUT, JAR_IVY_READ_TIMEOUT, JAR_IVY_REPO_PATH, JAR_IVY_SETTING_PATH, SparkConfigProvider}
 import org.apache.spark.sql.Artifact
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution.datasources.v2.ffi.NativeDataSourcePackage
@@ -76,9 +76,10 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
 
   private lazy val runtimeDependencyResolver = {
     val sparkConf = session.sparkContext.getConf
+    val configReader = new ConfigReader(new SparkConfigProvider(session.conf.getAllAsJava))
     val ivyPath = Files.createDirectories(ivyCachePath).toString
     new RuntimeDependencyResolver(
-      ivySettingsPath = sparkConf.get(JAR_IVY_SETTING_PATH),
+      ivySettingsPath = JAR_IVY_SETTING_PATH.readFrom(configReader),
       ivyPath = Some(ivyPath),
       localIvyPath = sparkConf.getOption(JAR_IVY_REPO_PATH.key))
   }
