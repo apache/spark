@@ -27,6 +27,7 @@ property-based suite lives in ``test_udf_transpile_hypothesis.py``.
 import unittest
 
 from pyspark.sql import Row
+from pyspark.sql.transpile import CatalystTranspiler, _get_transpilers
 from pyspark.sql.types import (
     BinaryType,
     BooleanType,
@@ -193,6 +194,27 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 "when both transpilePyUDFs and ANSI mode are enabled",
             )
 
+    def test_get_transpilers_warns_on_unknown_names(self):
+        import warnings
+
+        for names, expected, unknown in [
+            ("catalyst", [CatalystTranspiler], None),
+            ("catalyst,catalist", [CatalystTranspiler], "catalist"),
+            ("catalist", [], "catalist"),
+        ]:
+            with self.subTest(names=names):
+                with self.sql_conf({"spark.sql.experimental.optimizer.pyTranspilers": names}):
+                    with warnings.catch_warnings(record=True) as caught:
+                        warnings.simplefilter("always")
+                        transpilers = _get_transpilers(self.spark)
+                self.assertEqual([type(t) for t in transpilers], expected)
+                messages = [str(w.message) for w in caught if "pyTranspilers" in str(w.message)]
+                if unknown is None:
+                    self.assertEqual(messages, [])
+                else:
+                    self.assertEqual(len(messages), 1)
+                    self.assertIn(repr(unknown), messages[0])
+
     def test_udf_transpile_does_not_mask_char_varchar_ddl(self):
         # DDL CHAR/VARCHAR is parsed via ``returnType`` inside the optional
         # transpilation try. That structured error must not become a
@@ -260,7 +282,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             if x is not None:
                 return x << 1
 
-        def multi_statement(x):  # > 1 top-level statement, not handled.
+        def multi_statement(x):  # First stmt is an assignment, not an if-guard.
             y = 1
             return x + y if x is not None else 0
 
@@ -3279,6 +3301,148 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # Three combos for a single untyped param: integer / float / string.
         self.assertEqual(len(combos_u), 3)
         self.assertEqual({c[0] for c in combos_u}, {"integer", "float", "string"})
+
+    def test_udf_transpile_null_narrowing_skips_null_guard(self):
+        # When a parameter is guarded by `x is not None` in an
+        # if/ternary test, the transpiler should skip the raise_error null guard
+        # for ordering comparisons on that parameter within the guarded branch.
+        def if_guard_gt(x):
+            return (x > 0) if x is not None else None
+
+        def if_guard_and_lt(a, b):
+            return (a < b) if a is not None and b is not None else None
+
+        def ternary_guard_ge(x):
+            return (x >= 0) if x is not None else None
+
+        def is_none_ternary(x):
+            return None if x is None else x > 0
+
+        cases_if = [
+            # if/else with `is not None` guard
+            ("if_guard_gt", if_guard_gt),
+            # if/else with `is not None` and-chain (two params)
+            ("if_guard_and_lt", if_guard_and_lt),
+            # ternary with `is not None` guard
+            ("ternary_guard_ge", ternary_guard_ge),
+            # `is None` guard: non-null in the else branch
+            ("is_none_ternary", is_none_ternary),
+        ]
+        with self.sql_conf(_TRANSPILE_ON):
+            for name, func in cases_if:
+                with self.subTest(func=name):
+                    u, warnings_text = self._udf_and_warnings(func, BooleanType())
+                    self.assertTrue(u.transpiled, f"{name} did not transpile: {warnings_text}")
+                    arity = func.__code__.co_argcount
+                    if arity == 1:
+                        df = self.spark.createDataFrame([(1,), (-1,), (None,)], "a long")
+                        plan = self._optimized_plan(df.select(u("a")))
+                        self.assertNotIn("raise_error", plan, f"{name}: plan had raise_error")
+                        self.assertEqual(
+                            [True, False, None],
+                            [r[0] for r in df.select(u("a")).collect()],
+                            name,
+                        )
+                    else:
+                        df = self.spark.createDataFrame(
+                            [(1, 2), (2, 1), (None, 1)], "a long, b long"
+                        )
+                        plan = self._optimized_plan(df.select(u("a", "b")))
+                        self.assertNotIn("raise_error", plan, f"{name}: plan had raise_error")
+                        self.assertEqual(
+                            [True, False, None],
+                            [r[0] for r in df.select(u("a", "b")).collect()],
+                            name,
+                        )
+
+    def test_udf_transpile_early_return_null_guard(self):
+        # A 2-statement early-return pattern
+        # `if x is None: return y\nreturn body` is normalized to a single
+        # if/else so null narrowing applies to the main body.
+        def early_return_gt(x):
+            if x is None:
+                return None
+            return x > 0
+
+        def early_return_lt_default(x):
+            if x is None:
+                return False
+            return x < 10
+
+        with self.sql_conf(_TRANSPILE_ON):
+            for name, func, rt, rows, expected in [
+                (
+                    "early_return_gt",
+                    early_return_gt,
+                    BooleanType(),
+                    [(1,), (-1,), (None,)],
+                    [True, False, None],
+                ),
+                (
+                    "early_return_lt_default",
+                    early_return_lt_default,
+                    BooleanType(),
+                    [(5,), (15,), (None,)],
+                    [True, False, False],
+                ),
+            ]:
+                with self.subTest(func=name):
+                    u, warnings_text = self._udf_and_warnings(func, rt)
+                    self.assertTrue(u.transpiled, f"{name} did not transpile: {warnings_text}")
+                    df = self.spark.createDataFrame(rows, "a long")
+                    plan = self._optimized_plan(df.select(u("a")))
+                    self.assertNotIn("raise_error", plan, f"{name}: plan had raise_error")
+                    self.assertEqual(
+                        expected,
+                        [r[0] for r in df.select(u("a")).collect()],
+                        name,
+                    )
+
+    def test_udf_transpile_null_guard_warning(self):
+        # When the transpiler still emits a null guard (because
+        # non-null cannot be proven), it emits a UserWarning at construction time.
+        import warnings
+
+        def unguarded_gt(x):
+            return x > 0
+
+        with self.sql_conf(_TRANSPILE_ON):
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                u = UserDefinedFunction(unguarded_gt, BooleanType())
+            null_guard_warnings = [w for w in caught if "NULL guard" in str(w.message)]
+            self.assertTrue(u.transpiled, "unguarded_gt should transpile (under strict or loose)")
+            self.assertTrue(null_guard_warnings, "Expected a UserWarning about NULL guard")
+            self.assertIn("NULL guard", str(null_guard_warnings[0].message))
+
+    def test_udf_transpile_null_narrowing_len(self):
+        # A guarded len() call should skip the raise_error null guard.
+        def len_guarded(x):
+            if x is not None:
+                return len(x) > 3
+            return None
+
+        def len_early_return(x):
+            if x is None:
+                return None
+            return len(x) > 3
+
+        with self.sql_conf(_TRANSPILE_ON):
+            for name, func in [
+                ("len_guarded", len_guarded),
+                ("len_early_return", len_early_return),
+            ]:
+                with self.subTest(func=name):
+                    u, warnings_text = self._udf_and_warnings(func, BooleanType())
+                    self.assertTrue(u.transpiled, f"{name} did not transpile: {warnings_text}")
+                    df = self.spark.createDataFrame([("hi",), ("hello",), (None,)], "a string")
+                    plan = self._optimized_plan(df.select(u("a")))
+                    self.assertNotIn("raise_error", plan, f"{name}: plan had raise_error")
+                    self.assertEqual(
+                        [False, True, None],
+                        [r[0] for r in df.select(u("a")).collect()],
+                        name,
+                    )
 
 
 if __name__ == "__main__":

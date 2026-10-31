@@ -266,11 +266,22 @@ class JDBCOptions(
       .map(_.toBoolean)
       .getOrElse(false)
 
+  private lazy val dialectTimestampNTZAsWallClock: Boolean =
+    JdbcDialects.get(url).timestampNTZAsWallClock
+
+  // Reads and writes TimestampNTZType values as java.time.LocalDateTime.
   val timestampNTZAsWallClock: Boolean =
     parameters
       .get(JDBC_TIMESTAMP_NTZ_WALL_CLOCK)
       .map(_.toBoolean)
-      .getOrElse(JdbcDialects.get(url).timestampNTZAsWallClock)
+      .getOrElse(dialectTimestampNTZAsWallClock)
+
+  // Infers zoneless timestamp types as TimestampNTZType. Only honored by OracleDialect for now.
+  val zonelessTimestampAsNTZ: Boolean =
+    parameters
+      .get(JDBC_ZONELESS_TIMESTAMP_AS_NTZ)
+      .map(_.toBoolean)
+      .getOrElse(dialectTimestampNTZAsWallClock)
 
   val hint = parameters.get(JDBC_HINT_STRING).map(value => {
     require(value.matches("(?s)^/\\*\\+ .* \\*/$"),
@@ -386,5 +397,6 @@ object JDBCOptions {
   val JDBC_PREFER_TIMESTAMP_NTZ = newOption("preferTimestampNTZ")
   val JDBC_PREFER_TIMESTAMP_NANOS = newOption("preferTimestampNanos")
   val JDBC_HINT_STRING = newOption("hint")
-  val JDBC_TIMESTAMP_NTZ_WALL_CLOCK = newOption("__timestampNTZAsWallClock")
+  val JDBC_TIMESTAMP_NTZ_WALL_CLOCK = newOption("timestampNTZAsWallClock")
+  val JDBC_ZONELESS_TIMESTAMP_AS_NTZ = newOption("zonelessTimestampAsNTZ")
 }

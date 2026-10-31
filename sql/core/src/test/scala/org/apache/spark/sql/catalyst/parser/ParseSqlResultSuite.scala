@@ -35,6 +35,13 @@ class ParseSqlResultSuite extends SparkFunSuite {
       case other => fail(s"expected JSON array, got: $other")
     }
 
+  /** Slice `s` using 1-based Unicode code-point start and length. */
+  private def sliceByCodePoints(s: String, start: Int, length: Int): String = {
+    val begin = s.offsetByCodePoints(0, start - 1)
+    val end = s.offsetByCodePoints(begin, length)
+    s.substring(begin, end)
+  }
+
   private def obj(sql: String): JObject = objs(sql) match {
     case value :: Nil => value
     case other => fail(s"expected one statement, got ${other.size}: $other")
@@ -103,9 +110,9 @@ class ParseSqlResultSuite extends SparkFunSuite {
       val JInt(length) = statement \ "length"
       (start.toInt, length.toInt)
     }
-    assert(spans === Seq((1, 13), (16, 8)))
+    assert(spans === Seq((1, 11), (14, 8)))
     assert(spans.map { case (start, length) =>
-      unicodeSql.substring(start - 1, start - 1 + length)
+      sliceByCodePoints(unicodeSql, start, length)
     } === Seq(s"SELECT '$emoji$emoji'", "SELECT 2"))
 
     val nbsp = 0xA0.toChar
@@ -245,5 +252,51 @@ class ParseSqlResultSuite extends SparkFunSuite {
     val j = obj("SELEC FROM t")
     assert(j \ "parse_success" === JBool(false))
     assert(j \ "error" \ "errorClass" === JString("PARSE_SYNTAX_ERROR"))
+  }
+
+  test("error queryContext indexes are Unicode code points") {
+    val emoji = new String(Character.toChars(0x1F600))
+    val sql = s"SELECT '$emoji' FRUM t"
+    val j = obj(sql)
+    assert(j \ "parse_success" === JBool(false))
+    val ctx = (j \ "error" \ "queryContext")(0)
+    val JString(fragment) = ctx \ "fragment"
+    val JInt(start) = ctx \ "startIndex"
+    val JInt(stop) = ctx \ "stopIndex"
+    val JInt(position) = j \ "error" \ "position"
+    assert(fragment === sql)
+    assert(start.toInt === 1)
+    assert(stop.toInt === sql.codePointCount(0, sql.length))
+    assert(sliceByCodePoints(sql, start.toInt, stop.toInt - start.toInt + 1) === fragment)
+    // ANTLR column is already a 0-based code-point offset on the line.
+    assert(position.toInt === sql.codePointCount(0, sql.lastIndexOf('t')))
+
+    val literalSql = s"SELECT '$emoji' AS e, DATE 'bad'"
+    val literal = obj(literalSql)
+    assert(literal \ "error" \ "errorClass" === JString("INVALID_TYPED_LITERAL"))
+    val literalCtx = (literal \ "error" \ "queryContext")(0)
+    val JInt(literalStart) = literalCtx \ "startIndex"
+    val JInt(literalStop) = literalCtx \ "stopIndex"
+    assert(literalCtx \ "fragment" === JString("DATE 'bad'"))
+    assert(literalStart.toInt === literalSql.codePointCount(0, literalSql.indexOf("DATE")) + 1)
+    assert(literalStop.toInt === literalSql.codePointCount(0, literalSql.length))
+
+    val failedAfterEmoji = s"SELECT '$emoji'; SELECT '$emoji' FRUM t"
+    val failed = objs(failedAfterEmoji)
+    assert(failed.map(_ \ "parse_success") === Seq(JBool(true), JBool(false)))
+    val JInt(failedStart) = failed(1) \ "start"
+    val JInt(failedLength) = failed(1) \ "length"
+    assert((failedStart.toInt, failedLength.toInt) === (13, 17))
+    assert(sliceByCodePoints(failedAfterEmoji, failedStart.toInt, failedLength.toInt) ===
+      s"SELECT '$emoji' FRUM t")
+
+    val scriptSql = s"BEGIN SELECT '$emoji'; lbl_begin: BEGIN SELECT 1; END lbl_end; END"
+    val script = obj(scriptSql)
+    assert(script \ "error" \ "errorClass" === JString("LABELS_MISMATCH"))
+    val scriptCtx = (script \ "error" \ "queryContext")(0)
+    val JInt(scriptStart) = scriptCtx \ "startIndex"
+    val JInt(scriptStop) = scriptCtx \ "stopIndex"
+    assert(scriptCtx \ "fragment" === JString("lbl_begin:"))
+    assert((scriptStart.toInt, scriptStop.toInt) === (19, 28))
   }
 }
