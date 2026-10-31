@@ -19,13 +19,13 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.{Collections, Optional, OptionalLong}
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, AttributeSet, Expression, SortOrder, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, AttributeReference, AttributeSeq, AttributeSet, Expression, ExpressionSet, Literal, ProjectionOverSchema, SortOrder, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
-import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.{EstimationUtils, FilterEstimation}
 import org.apache.spark.sql.catalyst.streaming.{StreamingSourceIdentifyingName, Unassigned}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{DATA_SOURCE_V2_RELATION, DATA_SOURCE_V2_SCAN_RELATION, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.{fromAttributes, toAttributes}
@@ -33,10 +33,11 @@ import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, truncatedStri
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, Table, TableCapability, TableCatalog, V2TableUtil}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
-import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics, SupportsRuntimeV2Filtering}
+import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics, SupportsRuntimeV2Filtering, SupportsStorageFilters}
 import org.apache.spark.sql.connector.read.colstats.{ColumnStatistics, Histogram => V2Histogram, HistogramBin => V2HistogramBin}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.{SupportsRuntimeCatalystFiltering, V2StatisticsUtils}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -136,7 +137,9 @@ case class DataSourceV2Relation(
   def withMetadataColumns(): DataSourceV2Relation = {
     val newMetadata = metadataOutput.filterNot(outputSet.contains)
     if (newMetadata.nonEmpty) {
-      copy(output = output ++ newMetadata)
+      val newRelation = copy(output = output ++ newMetadata)
+      newRelation.copyTagsFrom(this)
+      newRelation
     } else {
       this
     }
@@ -170,6 +173,12 @@ case class DataSourceV2Relation(
  *                      complete set is what lets `PlanMerger` soundly compare and re-enforce a
  *                      scan's filters when fusing two scans via a Spark-side scan merge
  *                      (`TableCapability.SCAN_MERGING`).
+ * @param inferredFilters Source-guaranteed Catalyst expressions inferred from pushed query
+ *                        filters. Spark may add matching logical Filters for statistics adjustment.
+ *                        Scans that opt into `useInferredFilterEstimation` keep them as metadata
+ *                        and take the smaller estimate from the original and inferred predicates.
+ *                        They are discarded by join, aggregate, or variant extraction pushdown,
+ *                        and do not duplicate `pushedFilters`.
  * @param mergeableScan whether this scan may be fused with an equivalent scan by a Spark-side scan
  *                      merge (see `TableCapability.SCAN_MERGING`).
  *                      Default false (not mergeable): only the plain column-pruning + filter
@@ -179,6 +188,13 @@ case class DataSourceV2Relation(
  *                      offset, top-N, sample) or by any other rule stays not-mergeable by default,
  *                      so merging is safe by construction -- a new scan-relation build site need
  *                      not opt out.
+ * @param onlyRowWisePushdowns whether every operation pushed into the scan works on each row by
+ *                             itself, as filters, column pruning and variant extraction do. A
+ *                             reader may then evaluate a predicate on the rows the scan returns
+ *                             ahead of those operations, see [[SupportsStorageFilters]]. Default
+ *                             false: a pushed limit, offset, top-N, sample, aggregate or join
+ *                             decides which rows the scan returns, and a build site that does not
+ *                             set it keeps storage filters away from its scan.
  */
 case class DataSourceV2ScanRelation(
     relation: DataSourceV2Relation,
@@ -187,7 +203,9 @@ case class DataSourceV2ScanRelation(
     keyGroupedPartitioning: Option[Seq[Expression]] = None,
     ordering: Option[Seq[SortOrder]] = None,
     pushedFilters: Seq[Expression] = Seq.empty,
-    mergeableScan: Boolean = false) extends LeafNode with NamedRelation {
+    inferredFilters: Seq[Expression] = Seq.empty,
+    mergeableScan: Boolean = false,
+    onlyRowWisePushdowns: Boolean = false) extends LeafNode with NamedRelation {
 
   // TODO: Override validConstraints to return ExpressionSet(pushedFilters) so that pushed
   // filters participate in constraint propagation (InferFiltersFromConstraints, PruneFilters).
@@ -256,6 +274,22 @@ case class DataSourceV2ScanRelation(
       filterAttrs, output, method, scan.getClass.getName)
   }
 
+  /**
+   * The output columns the scan declares for storage filtering via
+   * [[SupportsStorageFilters.storageFilterAttributes]], matched by name. Only top-level
+   * declarations count, and a declared column the scan does not read is left out, since no offered
+   * filter can reference it. Empty when the scan does not implement that interface. Unlike runtime
+   * filtering, there is no "fully pushed" set, since a storage filter always stays in the plan
+   * above the scan.
+   */
+  lazy val storageFilterAttrs: AttributeSet = scan match {
+    case s: SupportsStorageFilters =>
+      val declared = s.storageFilterAttributes().map(_.fieldNames).collect { case Array(n) => n }
+      val resolver = SQLConf.get.resolver
+      AttributeSet(output.filter(a => declared.exists(resolver(a.name, _))))
+    case _ => AttributeSet.empty
+  }
+
   override val nodePatterns: Seq[TreePattern] = Seq(DATA_SOURCE_V2_SCAN_RELATION)
 
   override def name: String = relation.name
@@ -285,7 +319,58 @@ case class DataSourceV2ScanRelation(
     }
   }
 
+  // Keep the complete pushedFilters for scan merging, but estimate only expressions whose
+  // columns and nested fields survive pruning. A pruned nested field cannot be remapped.
+  private[sql] lazy val outputBoundPushedFilters: Seq[Expression] = {
+    val projection = ProjectionOverSchema(output.toStructType, outputSet)
+    pushedFilters.flatMap { filter =>
+      try {
+        val remapped = filter.transformDown {
+          case projection(expr) => expr
+        }
+        Option.when(remapped.references.subsetOf(outputSet))(remapped)
+      } catch {
+        case e: SparkIllegalArgumentException if e.getCondition == "FIELD_NOT_FOUND" => None
+      }
+    }
+  }
+
+  private[sql] def shouldEstimateInferredFilters: Boolean = {
+    inferredFilters.nonEmpty && (scan match {
+      case s: SupportsReportStatistics =>
+        !s.reflectsFullyPushedDownFilters() && s.useInferredFilterEstimation()
+      case _ => false
+    })
+  }
+
+  /**
+   * Include residual filters in the original predicate group before comparing it with the
+   * inferred group. Re-read the unadjusted scan statistics instead of filtering this node's
+   * already adjusted stats, which would count the inferred selectivity a second time.
+   */
+  private[sql] def estimateStatsWithFilters(filters: Seq[Expression]): Option[Statistics] = {
+    estimateStatsWithFilters(computeScanStats(), filters)
+  }
+
+  private def estimateStatsWithFilters(
+      scanStats: Statistics,
+      filters: Seq[Expression]): Option[Statistics] = {
+    val originalCondition = ExpressionSet(outputBoundPushedFilters ++ filters).toSeq
+      .reduceLeftOption(And).getOrElse(Literal.TrueLiteral)
+    FilterEstimation(originalCondition, scanStats, output, childIsLeaf = true)
+      .estimateWithInferredCondition(inferredFilters.reduceLeft(And))
+  }
+
   private def computeFullStats(): Statistics = {
+    val scanStats = computeScanStats()
+    if (conf.cboEnabled && shouldEstimateInferredFilters) {
+      estimateStatsWithFilters(scanStats, Nil).getOrElse(scanStats)
+    } else {
+      scanStats
+    }
+  }
+
+  private def computeScanStats(): Statistics = {
     V2StatisticsUtils.computeStats(scan) match {
       case Some(v2Stats) =>
         DataSourceV2Relation.transformV2Stats(v2Stats, conf.defaultSizeInBytes, output)
@@ -360,8 +445,10 @@ case class DataSourceV2ScanRelation(
           .map(o => o.copy(child = QueryPlan.normalizeExpressions(o.child, output)))
       ),
       // pushedFilters may reference columns pruned out of `output` (see the field doc), so they are
-      // normalized against the relation's full output rather than `output`.
-      pushedFilters = pushedFilters.map(QueryPlan.normalizeExpressions(_, relation.output))
+      // normalized against the relation's full output rather than `output`. inferredFilters only
+      // reference `output` (pruneColumns drops the rest), so the same normalization is safe.
+      pushedFilters = pushedFilters.map(QueryPlan.normalizeExpressions(_, relation.output)),
+      inferredFilters = inferredFilters.map(QueryPlan.normalizeExpressions(_, relation.output))
     )
   }
 }
@@ -573,12 +660,14 @@ object DataSourceV2Relation {
     }
 
     var colStats: Seq[(Attribute, ColumnStat)] = Seq.empty[(Attribute, ColumnStat)]
+    val resolver = SQLConf.get.resolver
     // columnStats() may be null even when numRows/sizeInBytes are present, so normalize it to an
     // empty map before conversion to avoid an NPE.
     val v2ColumnStats = Option(v2Statistics.columnStats()).getOrElse(EMPTY_V2_COLUMN_STATS)
     if (!v2ColumnStats.isEmpty) {
       val keys = v2ColumnStats.keySet()
-
+      val outputAttrs = AttributeSeq.fromNormalOutput(output)
+      var keyed = Seq.empty[(Attribute, String, ColumnStat)]
       keys.forEach(key => {
         val colStat = v2ColumnStats.get(key)
         val distinct: Option[BigInt] =
@@ -602,12 +691,32 @@ object DataSourceV2Relation {
 
         val catalystColStat = ColumnStat(distinct, min, max, nullCount, avgLen, maxLen, histogram)
 
-        output.foreach(attribute => {
-          if (attribute.name.equals(key.describe())) {
-            colStats = colStats :+ (attribute -> catalystColStat)
+        // Catalyst column statistics only support top-level attributes. Prefer a unique exact name
+        // when the configured resolver matches multiple output attributes.
+        val fieldNames = key.fieldNames
+        if (fieldNames.length == 1) {
+          val fieldName = fieldNames.head
+          val exprIds = outputAttrs
+            .getCandidatesForResolution(Seq(fieldName), resolver)._1
+            .map(_.exprId).toSet
+          output.filter(attr => exprIds.contains(attr.exprId)) match {
+            case Seq(single) => keyed = keyed :+ ((single, fieldName, catalystColStat))
+            case multiple => multiple.filter(_.name == fieldName) match {
+              case Seq(exact) => keyed = keyed :+ ((exact, fieldName, catalystColStat))
+              case _ =>
+            }
           }
-        })
+        }
       })
+      // Several keys can resolve to one attribute (e.g. "id" and "ID" when case-insensitive); keep
+      // a unique match, preferring an exact-name key, so the result is deterministic.
+      colStats = keyed.groupBy(_._1.exprId).values.toSeq.flatMap {
+        case Seq((attribute, _, stat)) => Some(attribute -> stat)
+        case many => many.filter { case (attr, fieldName, _) => fieldName == attr.name } match {
+          case Seq((attribute, _, stat)) => Some(attribute -> stat)
+          case _ => None
+        }
+      }
     }
     val attributeStats = AttributeMap(colStats)
     // Prefer the source-reported size. Otherwise infer a projection-aware size from the row count

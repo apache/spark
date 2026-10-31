@@ -33,6 +33,12 @@ private[hive] trait RawHiveTable {
 
   /** Get hive table properties. */
   def hiveTableProps(): Map[String, String]
+
+  /**
+   * Get hive partition column names, including the Hive incompatible partition columns which
+   * `toCatalogTable` does not contain.
+   */
+  def hivePartitionColumnNames(): Seq[String]
 }
 
 /**
@@ -131,6 +137,12 @@ private[hive] trait HiveClient {
 
   /** Creates a table with the given metadata. */
   def createTable(table: CatalogTable, ignoreIfExists: Boolean): Unit
+
+  /**
+   * Runs the checks that [[createTable]] runs on the given table before calling Hive metastore,
+   * e.g., the SerDe initialization with the table columns, without creating the table.
+   */
+  def validateTable(table: CatalogTable): Unit
 
   /** Drop the specified table. */
   def dropTable(dbName: String, tableName: String, ignoreIfNotExists: Boolean, purge: Boolean): Unit

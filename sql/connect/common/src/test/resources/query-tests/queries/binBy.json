@@ -1,0 +1,179 @@
+{
+  "common": {
+    "planId": "2"
+  },
+  "binBy": {
+    "input": {
+      "common": {
+        "planId": "1"
+      },
+      "project": {
+        "input": {
+          "common": {
+            "planId": "0"
+          },
+          "range": {
+            "start": "0",
+            "end": "1",
+            "step": "1"
+          }
+        },
+        "expressions": [{
+          "expressionString": {
+            "expression": "TIMESTAMP_NTZ \u00272024-01-01 00:00:00\u0027 AS start"
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.connect.Dataset",
+                  "methodName": "selectExpr",
+                  "fileName": "Dataset.scala"
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                  "methodName": "~~trimmed~anonfun~~",
+                  "fileName": "PlanGenerationTestSuite.scala"
+                }]
+              }
+            }
+          }
+        }, {
+          "expressionString": {
+            "expression": "TIMESTAMP_NTZ \u00272024-01-01 00:10:00\u0027 AS end"
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.connect.Dataset",
+                  "methodName": "selectExpr",
+                  "fileName": "Dataset.scala"
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                  "methodName": "~~trimmed~anonfun~~",
+                  "fileName": "PlanGenerationTestSuite.scala"
+                }]
+              }
+            }
+          }
+        }, {
+          "expressionString": {
+            "expression": "100.0D AS value"
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.connect.Dataset",
+                  "methodName": "selectExpr",
+                  "fileName": "Dataset.scala"
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                  "methodName": "~~trimmed~anonfun~~",
+                  "fileName": "PlanGenerationTestSuite.scala"
+                }]
+              }
+            }
+          }
+        }]
+      }
+    },
+    "rangeStart": {
+      "unresolvedAttribute": {
+        "unparsedIdentifier": "start",
+        "planId": "1"
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.Dataset",
+              "methodName": "apply",
+              "fileName": "Dataset.scala"
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "~~trimmed~anonfun~~",
+              "fileName": "PlanGenerationTestSuite.scala"
+            }]
+          }
+        }
+      }
+    },
+    "rangeEnd": {
+      "unresolvedAttribute": {
+        "unparsedIdentifier": "end",
+        "planId": "1"
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.Dataset",
+              "methodName": "apply",
+              "fileName": "Dataset.scala"
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "~~trimmed~anonfun~~",
+              "fileName": "PlanGenerationTestSuite.scala"
+            }]
+          }
+        }
+      }
+    },
+    "binWidth": {
+      "expressionString": {
+        "expression": "INTERVAL 5 MINUTES"
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "expr",
+              "fileName": "functions.scala"
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "~~trimmed~anonfun~~",
+              "fileName": "PlanGenerationTestSuite.scala"
+            }]
+          }
+        }
+      }
+    },
+    "distributeUniform": [{
+      "unresolvedAttribute": {
+        "unparsedIdentifier": "value",
+        "planId": "1"
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.Dataset",
+              "methodName": "apply",
+              "fileName": "Dataset.scala"
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "~~trimmed~anonfun~~",
+              "fileName": "PlanGenerationTestSuite.scala"
+            }]
+          }
+        }
+      }
+    }]
+  }
+}

@@ -598,6 +598,27 @@ class SqlScriptingInterpreterSuite
     verifySqlScriptResult(commands, expected)
   }
 
+  test("IF non-boolean condition after a supplementary character") {
+    val emoji = new String(Character.toChars(0x1F600))
+    val commands =
+      s"""
+         |BEGIN
+         |  SELECT '$emoji';
+         |  IF 1 THEN
+         |    SELECT 1;
+         |  END IF;
+         |END
+         |""".stripMargin
+
+    checkError(
+      exception = intercept[SqlScriptingException] (
+        runSqlScript(commands)
+      ),
+      condition = "INVALID_BOOLEAN_STATEMENT",
+      parameters = Map("invalidStatement" -> "1")
+    )
+  }
+
   test("searched case with non boolean condition - constant") {
     val commands =
       """

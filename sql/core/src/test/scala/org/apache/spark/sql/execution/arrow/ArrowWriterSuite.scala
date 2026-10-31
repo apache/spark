@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.execution.arrow
 
+import java.io.{DataOutputStream, IOException, OutputStream}
+
 import scala.jdk.CollectionConverters._
 
-import org.apache.arrow.vector.{VectorSchemaRoot, ViewVarBinaryVector, ViewVarCharVector}
+import org.apache.arrow.vector.{TimeStampVector, VectorSchemaRoot, ViewVarBinaryVector, ViewVarCharVector}
 import org.apache.arrow.vector.complex.ListViewVector
 import org.apache.arrow.vector.types.pojo.{ArrowType, FieldType}
 
-import org.apache.spark.{SparkArithmeticException, SparkFunSuite, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkArithmeticException, SparkFunSuite, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.YearUDT
 import org.apache.spark.sql.catalyst.InternalRow
@@ -191,9 +193,12 @@ class ArrowWriterSuite extends SparkFunSuite {
       TimestampNanosVal.fromParts(-1234567L, 13.toShort),
       // large positive/negative epoch-nanoseconds within the representable range
       fromEpochNanos(9000000000000000000L),
-      fromEpochNanos(-9000000000000000000L))
+      fromEpochNanos(-9000000000000000000L),
+      // the Arrow limits: the int64 minimum itself is NaT in pandas (see the test below)
+      fromEpochNanos(Long.MaxValue),
+      fromEpochNanos(Long.MinValue + 1))
 
-    def check(dt: DataType, timeZoneId: String): Unit = {
+    def check(dt: DataType, timeZoneId: String, grid: Int): Unit = {
       val schema = new StructType().add("value", dt, nullable = true)
       val writer = ArrowWriter.create(schema, timeZoneId)
       assert(writer.schema === schema)
@@ -203,26 +208,51 @@ class ArrowWriterSuite extends SparkFunSuite {
       }
       writer.finish()
 
-      val reader = new ArrowColumnVector(writer.root.getFieldVectors().get(0))
+      val vector = writer.root.getFieldVectors().get(0).asInstanceOf[TimeStampVector]
+      val reader = new ArrowColumnVector(vector)
       values.zipWithIndex.foreach { case (v, rowId) =>
+        assert(vector.get(rowId) === v.epochMicros * 1000L + v.nanosWithinMicro)
         val got = dt match {
           case _: TimestampNTZNanosType => reader.getTimestampNTZNanos(rowId)
           case _: TimestampLTZNanosType => reader.getTimestampLTZNanos(rowId)
         }
         assert(got.epochMicros === v.epochMicros)
-        assert(got.nanosWithinMicro === v.nanosWithinMicro)
+        assert(got.nanosWithinMicro === v.nanosWithinMicro / grid * grid)
       }
       assert(reader.isNullAt(values.length))
       writer.root.close()
     }
 
-    check(TimestampNTZNanosType(9), null)
-    check(TimestampLTZNanosType(9), "UTC")
-    // The value path packs the full nanosecond value regardless of the column precision (precision
-    // is carried in the Arrow field metadata, not the value), so p=7 round-trips identically to
-    // p=9; exercising it guards the value path against a future precision-enforcing change.
-    check(TimestampNTZNanosType(7), null)
-    check(TimestampLTZNanosType(7), "UTC")
+    check(TimestampNTZNanosType(9), null, grid = 1)
+    check(TimestampLTZNanosType(9), "UTC", grid = 1)
+    // The writer packs the full value regardless of precision; the reader floors it.
+    check(TimestampNTZNanosType(7), null, grid = 100)
+    check(TimestampLTZNanosType(7), "UTC", grid = 100)
+  }
+
+  test("timestamp nanos array elements and map keys / values are floored on read") {
+    def ts(nanosWithinMicro: Int): TimestampNanosVal =
+      TimestampNanosVal.fromParts(123456L, nanosWithinMicro.toShort)
+    val schema = new StructType()
+      .add("arr", ArrayType(TimestampNTZNanosType(7)))
+      .add("map", MapType(TimestampNTZNanosType(7), TimestampLTZNanosType(8)))
+    val writer = ArrowWriter.create(schema, "UTC")
+    writer.write(InternalRow(
+      new GenericArrayData(Array[Any](ts(789), null)),
+      new ArrayBasedMapData(
+        new GenericArrayData(Array[Any](ts(789), ts(812))),
+        new GenericArrayData(Array[Any](ts(789), null)))))
+    writer.finish()
+
+    val arr = new ArrowColumnVector(writer.root.getFieldVectors().get(0)).getArray(0)
+    assert(arr.getTimestampNTZNanos(0) === ts(700))
+    assert(arr.isNullAt(1))
+    val map = new ArrowColumnVector(writer.root.getFieldVectors().get(1)).getMap(0)
+    assert(map.keyArray().getTimestampNTZNanos(0) === ts(700))
+    assert(map.keyArray().getTimestampNTZNanos(1) === ts(800))
+    assert(map.valueArray().getTimestampLTZNanos(0) === ts(780))
+    assert(map.valueArray().isNullAt(1))
+    writer.root.close()
   }
 
   test("timestamp nanos out of range raises DATETIME_OVERFLOW") {
@@ -230,13 +260,32 @@ class ArrowWriterSuite extends SparkFunSuite {
       val schema = new StructType().add("value", dt, nullable = true)
       val writer = ArrowWriter.create(schema, timeZoneId)
       // epochMicros past the int64 epoch-nanosecond range overflows when packed, but still
-      // renders as a valid Instant/LocalDateTime in the error message.
-      val tooLarge = TimestampNanosVal.fromParts(Long.MaxValue / 1000L + 1L, 0.toShort)
-      val e = intercept[SparkArithmeticException] {
-        writer.write(InternalRow(tooLarge))
+      // renders as a valid Instant/LocalDateTime in the error message. One nanosecond past either
+      // limit overflows too.
+      Seq(
+        TimestampNanosVal.fromParts(Long.MaxValue / 1000L + 1L, 0.toShort),
+        TimestampNanosVal.fromParts(Long.MaxValue / 1000L, 808.toShort),
+        TimestampNanosVal.fromParts(Long.MinValue / 1000L - 1L, 191.toShort)).foreach { v =>
+        val e = intercept[SparkArithmeticException] {
+          writer.write(InternalRow(v))
+        }
+        assert(e.getCondition === "DATETIME_OVERFLOW")
+        assert(e.getMessage.contains("Arrow INT64"))
       }
-      assert(e.getCondition === "DATETIME_OVERFLOW")
-      assert(e.getMessage.contains("Arrow INT64"))
+      // The int64 minimum is rejected too: pandas/numpy read it as NaT.
+      val int64Min = TimestampNanosVal.fromParts(Long.MinValue / 1000L - 1L, 192.toShort)
+      val rendered = dt match {
+        case _: TimestampNTZNanosType => "1677-09-21T00:12:43.145224192"
+        case _ => "1677-09-21T00:12:43.145224192Z"
+      }
+      checkError(
+        exception = intercept[SparkArithmeticException] {
+          writer.write(InternalRow(int64Min))
+        },
+        condition = "DATETIME_OVERFLOW",
+        parameters = Map("operation" ->
+          (s"write the timestamp value $rendered as Arrow INT64 epoch-nanoseconds " +
+            "(supported range: 1677-09-21T00:12:43.145224193Z to 2262-04-11T23:47:16.854775807Z)")))
       writer.root.close()
     }
 
@@ -1252,5 +1301,23 @@ class ArrowWriterSuite extends SparkFunSuite {
     assert(array0.numElements() === 0)
 
     writer.root.close()
+  }
+
+  test("SPARK-60737: ArrowWriterWrapper closes its allocator on task completion if starting the " +
+      "stream fails") {
+    val failingOut = new DataOutputStream(new OutputStream {
+      override def write(b: Int): Unit = throw new IOException("write failure")
+    })
+    val context = TaskContext.empty()
+    try {
+      intercept[IOException] {
+        ArrowWriterWrapper.createAndStartArrowWriter(new StructType().add("s", StringType),
+          "UTC", "ArrowWriterSuite", largeVarTypes = false, failingOut, context)
+      }
+    } finally {
+      context.markTaskCompleted(None)
+    }
+    assert(!ArrowUtils.rootAllocator.getChildAllocators.asScala
+      .exists(_.getName == "stdout writer for ArrowWriterSuite"))
   }
 }

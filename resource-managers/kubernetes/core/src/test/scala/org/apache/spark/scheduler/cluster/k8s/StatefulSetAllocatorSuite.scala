@@ -119,7 +119,7 @@ class StatefulSetAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     when(podsWithNamespace.resource(any())).thenReturn(podResource)
     when(driverPodOperations.get).thenReturn(driverPod)
     when(driverPodOperations.waitUntilReady(any(), any())).thenReturn(driverPod)
-    when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]), meq(secMgr),
+    when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]),
       meq(kubernetesClient), any(classOf[ResourceProfile]))).thenAnswer(executorPodAnswer())
     snapshotsStore = new DeterministicExecutorPodsSnapshotsStore()
     podsAllocatorUnderTest = new StatefulSetPodsAllocator(

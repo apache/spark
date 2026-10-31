@@ -21,7 +21,9 @@ import org.apache.spark.SparkRuntimeException
 import org.apache.spark.internal.config
 import org.apache.spark.sql.{sources, AnalysisException, Row}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
+import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.plans.logical.{ReplaceData, WriteDelta}
+import org.apache.spark.sql.catalyst.trees.TreePattern.WITH_EXPRESSION
 import org.apache.spark.sql.connector.catalog.{Aborted, Column, ColumnDefaultValue, Committed, InMemoryTable, TableChange, TableInfo}
 import org.apache.spark.sql.connector.expressions.{GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.connector.write.UpdateSummary
@@ -177,6 +179,39 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       Row(1, 100, "invalid") :: Row(2, 200, "software") :: Row(3, 300, "hr") :: Nil)
 
     checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 1)
+  }
+
+  test("SPARK-59962: update with a condition reading a computed value twice") {
+    // BETWEEN reads `salary + pk` twice. The condition keeps no `With`, and the group filter
+    // condition, only evaluated in the runtime group filter, keeps it for that filter to
+    // memoize; with the filter, a group-based update copies none of the `hr` rows. One that
+    // gains nothing from memoizing is still inlined there, so a condition that folds to true
+    // leaves a true group filter condition.
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |{ "pk": 3, "salary": 300, "dep": "hr" }
+        |""".stripMargin)
+
+    val (cond, groupFilterCond) = executeAndKeepConditions {
+      sql(s"UPDATE $tableNameAsString SET dep = 'x' WHERE (salary + pk) BETWEEN 150 AND 250")
+    }
+    assert(!cond.containsPattern(WITH_EXPRESSION), s"condition: $cond")
+    assert(groupFilterCond.exists(_.containsPattern(WITH_EXPRESSION)),
+      s"group filter condition: $groupFilterCond")
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, 100, "hr") :: Row(2, 200, "x") :: Row(3, 300, "hr") :: Nil)
+    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 0)
+
+    val (_, constantGroupFilterCond) = executeAndKeepConditions {
+      sql(s"UPDATE $tableNameAsString SET dep = 'y' WHERE 1 BETWEEN 0 AND 2")
+    }
+    assert(constantGroupFilterCond.contains(TrueLiteral),
+      s"group filter condition: $constantGroupFilterCond")
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, 100, "y") :: Row(2, 200, "y") :: Row(3, 300, "y") :: Nil)
   }
 
   test("update with aliases") {
@@ -486,6 +521,67 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       Row(1, -1, Row(300, "v1"), "hr") :: Row(2, 200, Row(200, "v2"), "software") :: Nil)
 
     checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 0)
+  }
+
+  test("SPARK-60673: update with metadata columns in the condition and assignments") {
+    // the metadata columns must be read even if the operation does not require them
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "hr" }
+        |{ "pk": 3, "id": 1, "dep": "software" }
+        |""".stripMargin)
+
+    sql(s"UPDATE $tableNameAsString SET id = -1 WHERE _partition = 'hr' AND id < 2")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, "hr") :: Row(2, 2, "hr") :: Row(3, 1, "software") :: Nil)
+    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 1)
+
+    sql(s"UPDATE $tableNameAsString t SET t.id = t.index + 10 WHERE t.pk = 3")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, "hr") :: Row(2, 2, "hr") :: Row(3, 10, "software") :: Nil)
+    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 0)
+  }
+
+  test("SPARK-60721: update with assignments to metadata columns") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "software" }
+        |""".stripMargin)
+
+    Seq(
+      s"UPDATE $tableNameAsString SET index = 5 WHERE pk = 1" -> "index",
+      s"UPDATE $tableNameAsString t SET t.id = -1, t._partition = 'x' WHERE t.pk = 1" ->
+        "_partition",
+      // the implicit cast in the condition resolves the command in a later analyzer iteration
+      s"UPDATE $tableNameAsString SET index = 5 WHERE id < 1.5" -> "index"
+    ).foreach { case (updateStmt, metadataCol) =>
+      val e = intercept[AnalysisException](sql(updateStmt))
+      assert(e.getCondition == "DATATYPE_MISMATCH.INVALID_ROW_LEVEL_OPERATION_ASSIGNMENTS")
+      assert(e.getMessage.contains(s"Cannot assign to metadata column '$metadataCol'"))
+    }
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, 1, "hr") :: Row(2, 2, "software") :: Nil)
+  }
+
+  test("SPARK-60721: update ignores assignments to metadata columns in legacy mode") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "software" }
+        |""".stripMargin)
+
+    withSQLConf(SQLConf.LEGACY_IGNORE_METADATA_COLUMN_ASSIGNMENTS.key -> "true") {
+      sql(s"UPDATE $tableNameAsString SET id = -1, index = 5 WHERE pk = 1")
+    }
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, "hr") :: Row(2, 2, "software") :: Nil)
   }
 
   test("update with IN subqueries") {
@@ -855,6 +951,50 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
         Row(3, Row("x  ", "y"), "hr") :: Nil)
 
     checkUpdateMetrics(numUpdatedRows = 2, numCopiedRows = 0)
+  }
+
+  test("SPARK-60708: update char/varchar table with metadata columns") {
+    createTable("pk INT NOT NULL, id INT, dep STRING, name VARCHAR(10)")
+
+    append("pk INT NOT NULL, id INT, dep STRING, name STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr", "name": "a" }
+        |{ "pk": 2, "id": 2, "dep": "software", "name": "b" }
+        |{ "pk": 3, "id": 3, "dep": "hr", "name": "c" }
+        |""".stripMargin)
+
+    sql(s"UPDATE $tableNameAsString SET id = -1 WHERE id IN (1, 2) AND _partition = 'hr'")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, "hr", "a") :: Row(2, 2, "software", "b") :: Row(3, 3, "hr", "c") :: Nil)
+    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 1)
+
+    sql(s"UPDATE $tableNameAsString t SET t.id = t.index + 10 WHERE t.pk = 2")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, "hr", "a") :: Row(2, 10, "software", "b") :: Row(3, 3, "hr", "c") :: Nil)
+    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 0)
+  }
+
+  test("SPARK-60708: update char/varchar table with an outer metadata reference") {
+    createTable("pk INT NOT NULL, id INT, dep STRING, name VARCHAR(10)")
+
+    append("pk INT NOT NULL, id INT, dep STRING, name STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr", "name": "a" }
+        |{ "pk": 2, "id": 2, "dep": "software", "name": "b" }
+        |{ "pk": 3, "id": 3, "dep": "hr", "name": "c" }
+        |""".stripMargin)
+
+    withTempView("deps") {
+      Seq("hr").toDF("d").createOrReplaceTempView("deps")
+      sql(s"UPDATE $tableNameAsString t SET id = -1 " +
+        "WHERE id IN (1, 2) AND EXISTS (SELECT 1 FROM deps WHERE deps.d = t._partition)")
+    }
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, "hr", "a") :: Row(2, 2, "software", "b") :: Row(3, 3, "hr", "c") :: Nil)
   }
 
   test("update with NOT NULL checks") {
@@ -1370,4 +1510,39 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, -1, "hr") :: Row(2, 200, "software") :: Row(3, -1, "hr") :: Nil)
   }
+
+  test("update with a SQL variable in the condition") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |""".stripMargin)
+
+    withSessionVariable("target_dep") {
+      sql("DECLARE VARIABLE target_dep STRING DEFAULT 'hr'")
+      sql(s"UPDATE $tableNameAsString SET salary = 999 WHERE dep = target_dep")
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(1, 999, "hr") :: Row(2, 200, "software") :: Nil)
+    }
+  }
+
+  test("update with a SQL scripting local variable in the condition") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |""".stripMargin)
+
+    sql(
+      s"""BEGIN
+         |  DECLARE local_dep STRING DEFAULT 'hr';
+         |  UPDATE $tableNameAsString SET salary = 999 WHERE dep = local_dep;
+         |END
+         |""".stripMargin)
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, 999, "hr") :: Row(2, 200, "software") :: Nil)
+  }
+
 }

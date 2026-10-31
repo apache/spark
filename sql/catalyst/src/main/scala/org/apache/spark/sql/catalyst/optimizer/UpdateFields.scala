@@ -21,10 +21,10 @@ import java.util.Locale
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{Expression, UpdateFields, WithField}
+import org.apache.spark.sql.catalyst.expressions.{CommonExpressionRef, Expression, StructFieldsOperation, UpdateFields, UpdateNestedField, With, WithField}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.UPDATE_FIELDS
+import org.apache.spark.sql.catalyst.trees.TreePattern.{UPDATE_FIELDS, WITH_EXPRESSION}
 
 
 /**
@@ -39,37 +39,69 @@ object OptimizeUpdateFields extends Rule[LogicalPlan] {
     }
   }
 
+  private def optimizeFieldOps(
+      fieldOps: Seq[StructFieldsOperation]): Seq[StructFieldsOperation] = {
+    val operations = fieldOps.map {
+      case nested: UpdateNestedField =>
+        nested.copy(fieldOps = optimizeFieldOps(nested.fieldOps))
+      case other => other
+    }
+    if (!operations.forall {
+        case _: WithField | _: UpdateNestedField => true
+        case _ => false
+      }) {
+      operations
+    } else {
+      val combined = mutable.LinkedHashMap.empty[String, StructFieldsOperation]
+      val nestedChunks =
+        mutable.Map.empty[String, mutable.ArrayBuffer[Seq[StructFieldsOperation]]]
+      operations.foreach { operation =>
+        val name = operation match {
+          case WithField(name, _) => name
+          case UpdateNestedField(name, _) => name
+        }
+        val key = if (conf.caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
+        val updated = operation match {
+          case nested: UpdateNestedField => combined.get(key) match {
+            case Some(previous: UpdateNestedField) =>
+              nestedChunks.getOrElseUpdate(key,
+                mutable.ArrayBuffer(previous.fieldOps)) += nested.fieldOps
+              nested
+            case Some(WithField(_, value)) =>
+              WithField(name, UpdateFields(value, nested.fieldOps))
+            case _ => nested
+          }
+          case other =>
+            nestedChunks.remove(key)
+            other
+        }
+        combined.update(key, updated)
+      }
+      combined.iterator.map {
+        case (key, nested: UpdateNestedField) if nestedChunks.contains(key) =>
+          val (prefix, tail) = nestedChunks(key).span(_.forall {
+            case _: WithField | _: UpdateNestedField => true
+            case _ => false
+          })
+          nested.copy(fieldOps =
+            optimizeFieldOps(prefix.iterator.flatten.toVector) ++ tail.iterator.flatten.toVector)
+        case (_, operation) => operation
+      }.toSeq
+    }
+  }
+
   val optimizeUpdateFields: PartialFunction[Expression, Expression] = {
     case UpdateFields(structExpr, fieldOps)
       if fieldOps.forall(_.isInstanceOf[WithField]) &&
         canOptimize(fieldOps.map(_.asInstanceOf[WithField].name)) =>
-      val caseSensitive = conf.caseSensitiveAnalysis
-
-      val withFields = fieldOps.map(_.asInstanceOf[WithField])
-      val names = withFields.map(_.name)
-      val values = withFields.map(_.valExpr)
-
-      val newNames = mutable.ArrayBuffer.empty[String]
-      val newValues = mutable.HashMap.empty[String, Expression]
-      // Used to remember the casing of the last instance
-      val nameMap = mutable.HashMap.empty[String, String]
-
-      names.zip(values).foreach { case (name, value) =>
-        val normalizedName = if (caseSensitive) name else name.toLowerCase(Locale.ROOT)
-        if (nameMap.contains(normalizedName)) {
-          newValues += normalizedName -> value
-        } else {
-          newNames += normalizedName
-          newValues += normalizedName -> value
-        }
-        nameMap += normalizedName -> name
-      }
-
-      val newWithFields = newNames.map(n => WithField(nameMap(n), newValues(n)))
-      UpdateFields(structExpr, newWithFields.toSeq)
+      UpdateFields(structExpr, optimizeFieldOps(fieldOps))
 
     case UpdateFields(UpdateFields(struct, fieldOps1), fieldOps2) =>
       UpdateFields(struct, fieldOps1 ++ fieldOps2)
+
+    case UpdateFields(struct, fieldOps)
+        if fieldOps.exists(_.isInstanceOf[UpdateNestedField]) =>
+      UpdateFields(struct, optimizeFieldOps(fieldOps))
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressionsWithPruning(
@@ -80,8 +112,17 @@ object OptimizeUpdateFields extends Rule[LogicalPlan] {
  * Replaces [[UpdateFields]] expression with an evaluable expression.
  */
 object ReplaceUpdateFieldsExpression extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
-    _.containsPattern(UPDATE_FIELDS)) {
-    case u: UpdateFields => u.evalExpr
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    val replaced = plan.transformAllExpressionsWithPruning(_.containsPattern(UPDATE_FIELDS)) {
+      case u: UpdateFields => u.evalExpr
+    }
+    // Lowering nested replacements can remove every reference to their struct input.
+    replaced.transformWithPruning(_.containsPattern(WITH_EXPRESSION)) {
+      case p => p.transformExpressionsUpWithPruning(_.containsPattern(WITH_EXPRESSION)) {
+        case w @ With(child, defs) =>
+          val referencedIds = child.collect { case ref: CommonExpressionRef => ref.id }.toSet
+          if (defs.forall(d => !referencedIds.contains(d.id))) child else w
+      }
+    }
   }
 }

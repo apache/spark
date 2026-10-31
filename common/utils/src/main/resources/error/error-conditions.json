@@ -176,7 +176,7 @@
   },
   "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE" : {
     "message" : [
-      "Each operand of the MATCH_CONDITION comparison must reference only columns of one join input. Got: <refs1> and <refs2>."
+      "Each operand of the MATCH_CONDITION comparison must reference exactly one join input, and the two operands must reference different inputs. Got: <refs1> and <refs2>."
     ],
     "sqlState" : "42K0E"
   },
@@ -191,6 +191,16 @@
       "Invalid as-of join."
     ],
     "subClass" : {
+      "INVALID_KEY_EXPRESSION" : {
+        "message" : [
+          "The as-of join key contains an invalid expression: <expr>. Use keys without subqueries, aggregate functions, window functions, generator functions, or non-deterministic functions."
+        ]
+      },
+      "KEY_REFERENCE" : {
+        "message" : [
+          "Each as-of join key must reference exactly one join input, and the two keys must reference different inputs. Got: <refs1> and <refs2>."
+        ]
+      },
       "TOLERANCE_IS_NON_NEGATIVE" : {
         "message" : [
           "The input argument `tolerance` must be non-negative."
@@ -204,6 +214,21 @@
       "UNSUPPORTED_DIRECTION" : {
         "message" : [
           "Unsupported as-of join direction '<direction>'. Supported as-of join direction include: <supported>."
+        ]
+      },
+      "UNSUPPORTED_KEY_TYPE" : {
+        "message" : [
+          "The as-of join keys must be of an orderable, mutually comparable type. Got: <type1> and <type2>."
+        ]
+      },
+      "UNSUPPORTED_NEAREST_KEY_TYPE" : {
+        "message" : [
+          "Nearest as-of joins do not support <dataType> keys. Cast the keys to a numeric or datetime type."
+        ]
+      },
+      "UNSUPPORTED_TOLERANCE_KEY_TYPE" : {
+        "message" : [
+          "Sort-merge as-of joins with a tolerance do not support <dataType> keys. Cast the keys to a numeric or datetime type."
         ]
       }
     },
@@ -232,6 +257,12 @@
       "Using <caseSensitivity> column name comparison, the following columns are not present in the <schemaName> schema: <missingColumns>. Available columns: <availableColumns>."
     ],
     "sqlState" : "42703"
+  },
+  "AUTOCDC_CONFLICTING_IGNORE_NULL_UPDATES_OPTIONS" : {
+    "message" : [
+      "AutoCDC flow specifies more than one of `ignore_null_updates`, `ignore_null_updates_column_list`, and `ignore_null_updates_except_column_list`; at most one may be provided."
+    ],
+    "sqlState" : "42613"
   },
   "AUTOCDC_EMPTY_KEYS" : {
     "message" : [
@@ -975,6 +1006,12 @@
     ],
     "sqlState" : "42000"
   },
+  "CANNOT_USE_RESERVED_DATABASE_AS_CURRENT" : {
+    "message" : [
+      "Cannot use <database> as the current database because the name is reserved for system use. To access global temporary views, use a qualified name, e.g. SELECT * FROM <database>.viewName."
+    ],
+    "sqlState" : "42939"
+  },
   "CANNOT_WRITE_STATE_STORE" : {
     "message" : [
       "Error writing state store files for provider <providerClass>."
@@ -1034,6 +1071,12 @@
       }
     },
     "sqlState" : "XX000"
+  },
+  "CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON" : {
+    "message" : [
+      "CHAR/VARCHAR is not supported in <feature>. Use STRING in the declaration. Data type: <data_type>."
+    ],
+    "sqlState" : "0A000"
   },
   "CHECKPOINT_DIRECTORY_NOT_SET" : {
     "message" : [
@@ -1403,9 +1446,19 @@
           "To disable plan compression, set 'spark.connect.session.planCompression.threshold' to -1."
         ]
       },
+      "CHECKPOINT_RELATION_ID_EMPTY" : {
+        "message" : [
+          "The checkpoint relation ID must not be empty."
+        ]
+      },
       "CHUNKED_CACHED_LOCAL_RELATION_WITHOUT_DATA" : {
         "message" : [
           "ChunkedCachedLocalRelation should contain data."
+        ]
+      },
+      "DATAFRAME_ALREADY_EXISTS" : {
+        "message" : [
+          "A DataFrame with id <dfId> already exists in the session <sessionId>."
         ]
       },
       "DATAFRAME_NOT_FOUND" : {
@@ -1638,6 +1691,11 @@
       "STRUCT_LITERAL_NOT_SET" : {
         "message" : [
           "Struct literal is not set."
+        ]
+      },
+      "SUBQUERY_PLAN_NOT_ATTACHED" : {
+        "message" : [
+          "The subquery plan referenced by plan id <planId> is not attached to the request."
         ]
       },
       "UDT_TYPE_FIELD_INVALID" : {
@@ -2288,6 +2346,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "DATA_SOURCE_CONTINUOUS_WRITE_NOT_SUPPORTED" : {
+    "message" : [
+      "<description>: Continuous write is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
   "DATA_SOURCE_DELTA_BATCH_WRITE_NOT_SUPPORTED" : {
     "message" : [
       "<description>: Delta batch write is not supported."
@@ -2356,6 +2420,18 @@
   "DATA_SOURCE_ROW_ID_SCHEMA_NOT_IMPLEMENTED" : {
     "message" : [
       "<class> does not implement rowIdSchema."
+    ],
+    "sqlState" : "0A000"
+  },
+  "DATA_SOURCE_STORAGE_FILTER_CHECKED_COLUMN_MISSING" : {
+    "message" : [
+      "A reader of <class> was asked for the column that marks the rows a storage filter checked, right after the <numScanColumns> columns of the scan's read schema. That column is missing, not a boolean, or not the last one. The reader returned <numColumns> columns."
+    ],
+    "sqlState" : "KD000"
+  },
+  "DATA_SOURCE_STORAGE_FILTER_READER_NOT_SUPPORTED" : {
+    "message" : [
+      "<class> cannot create a reader that applies a storage filter."
     ],
     "sqlState" : "0A000"
   },
@@ -3087,6 +3163,12 @@
     ],
     "sqlState" : "42822"
   },
+  "HIVE_THRIFT_SERVER_INEFFECTIVE_DOAS" : {
+    "message" : [
+      "<doAsConf> is set to true, but the Spark Thrift Server impersonates the connecting user only on the driver, for Hive metastore calls and driver-side file system access: executor-side data access still runs as the server's own service identity, so storage permissions are checked against the service principal rather than the connecting user (SPARK-5159). That can expose data the connecting user is not authorized to read. To start anyway, set <allowIneffectiveDoAsConf> to true; it is a static conf, so it must be set before the SparkSession is created. Setting <doAsConf> to false also starts the server, but note that it stops impersonating metastore calls too, so it is not a no-op (and unsetting it does not help -- Hive's own default is true)."
+    ],
+    "sqlState" : "42616"
+  },
   "HLL_INVALID_INPUT_SKETCH_BUFFER" : {
     "message" : [
       "Invalid call to <function>; only valid HLL sketch buffers are supported as inputs (such as those produced by the `hll_sketch_agg` function)."
@@ -3313,6 +3395,11 @@
       "Detected incompatible changes to table <tableName> after DataFrame/Dataset has been resolved and analyzed, meaning the underlying plan is out of sync. Please, re-create DataFrame/Dataset before attempting to execute the query again."
     ],
     "subClass" : {
+      "CHANGELOG_METADATA_MISMATCH" : {
+        "message" : [
+          "Changelog metadata used for post-processing has changed: <changedProperties>."
+        ]
+      },
       "COLUMNS_MISMATCH" : {
         "message" : [
           "Data columns have changed:",
@@ -3862,6 +3949,29 @@
       }
     },
     "sqlState" : "42K03"
+  },
+  "INVALID_CHAR_VARCHAR_COLLATION_METADATA" : {
+    "message" : [
+      "Invalid CHAR/VARCHAR collation metadata."
+    ],
+    "subClass" : {
+      "INVALID_VALUE" : {
+        "message" : [
+          "The value <value> must be a provider-qualified, non-empty collation name."
+        ]
+      },
+      "RESERVED_METADATA_KEY" : {
+        "message" : [
+          "The metadata key <metadataKey> is reserved and cannot be provided by callers."
+        ]
+      },
+      "UNRECOGNIZED_PATH" : {
+        "message" : [
+          "The field path <fieldPath> does not identify an uncollated CHAR/VARCHAR type."
+        ]
+      }
+    },
+    "sqlState" : "2203G"
   },
   "INVALID_CHECKPOINT_DIRECTORY" : {
     "message" : [
@@ -4554,6 +4664,12 @@
     ],
     "sqlState" : "46121"
   },
+  "INVALID_JDBC_PARTITION_BOUND" : {
+    "message" : [
+      "Cannot parse the value <value> for JDBC data source option <option> as <dataType>."
+    ],
+    "sqlState" : "42616"
+  },
   "INVALID_JOIN_TYPE_FOR_JOINWITH" : {
     "message" : [
       "Invalid join type in joinWith: <joinType>."
@@ -4746,6 +4862,57 @@
     ],
     "sqlState" : "42000"
   },
+  "INVALID_NATIVE_DATA_SOURCE_LIBRARY" : {
+    "message" : [
+      "Invalid native data source library <path>:"
+    ],
+    "subClass" : {
+      "CANNOT_LOAD" : {
+        "message" : [
+          "<reason>"
+        ]
+      },
+      "REPLACED" : {
+        "message" : [
+          "The library was replaced after Spark loaded it: Spark loaded the build with the SHA-256 checksum <loadedChecksum>, but the file now has the checksum <checksum>. A JVM cannot load another build of a library from the same path, so restart the Spark application to use the new build."
+        ]
+      },
+      "UNSUPPORTED_ABI_VERSION" : {
+        "message" : [
+          "It requires version <version> of the native data source interface, but Spark supports version <supported>."
+        ]
+      }
+    },
+    "sqlState" : "22023"
+  },
+  "INVALID_NATIVE_DATA_SOURCE_PACKAGE" : {
+    "message" : [
+      "Invalid native data source package <path>:"
+    ],
+    "subClass" : {
+      "INVALID_LIBRARY" : {
+        "message" : [
+          "Cannot load the library <library>: <reason>"
+        ]
+      },
+      "INVALID_MANIFEST" : {
+        "message" : [
+          "<reason>"
+        ]
+      },
+      "UNSUPPORTED_ABI_VERSION" : {
+        "message" : [
+          "It requires version <version> of the native data source interface, but Spark supports version <supported>."
+        ]
+      },
+      "UNSUPPORTED_PLATFORM" : {
+        "message" : [
+          "It has no library for the platform <platform>. It has libraries for: <platforms>."
+        ]
+      }
+    },
+    "sqlState" : "22023"
+  },
   "INVALID_NON_DETERMINISTIC_EXPRESSIONS" : {
     "message" : [
       "The operator expects a deterministic expression, but the actual expression is <sqlExprs>."
@@ -4882,7 +5049,7 @@
       },
       "EXTENSION" : {
         "message" : [
-          "Invalid extension: <invalidValue>. Extension is limited to exactly 3 letters (e.g. csv, tsv, etc...)"
+          "Invalid extension: <invalidValue>. Extension must be non-empty and contain only letters."
         ]
       },
       "HMAC_ALGORITHM" : {
@@ -5181,6 +5348,11 @@
           "<sparkSubmitDeployModeKey> can only be \"cluster\" or \"client\"."
         ]
       },
+      "MISSING_IN_PROCESS_PYTHON_PLUGIN" : {
+        "message" : [
+          "In-process Python UDFs require <plugin>, or a subclass of it, in spark.plugins. Install JEP and Arrow CDI on executors and configure the plugin before starting Spark."
+        ]
+      },
       "NETWORK_AUTH_MUST_BE_ENABLED" : {
         "message" : [
           "<networkAuthEnabledConf> must be enabled when enabling encryption."
@@ -5199,6 +5371,11 @@
       "RESERVED_PYTHON_WORKER_ENV_VAR_NAME" : {
         "message" : [
           "The environment variable name <name>, set under <prefix>, is reserved for Spark. Names beginning with <reservedPrefixes>, and the names <reservedNames>, are set by Spark for its own Python workers and cannot be set by a session."
+        ]
+      },
+      "UNSUPPORTED_IN_PROCESS_PYTHON_UDF" : {
+        "message" : [
+          "In-process Python UDFs do not support <config>. Unset this configuration or use Python worker UDFs."
         ]
       }
     },
@@ -5741,7 +5918,7 @@
   },
   "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR" : {
     "message" : [
-      "JDBC external engine syntax error. The error was caused by the query <jdbcQuery>. <externalEngineError>."
+      "JDBC external engine syntax error. The error was caused by the query <jdbcQuery>. External engine SQLSTATE: <externalEngineSqlState>. <externalEngineError>."
     ],
     "subClass" : {
       "DURING_OUTPUT_SCHEMA_RESOLUTION" : {
@@ -5774,6 +5951,12 @@
       "<functionName> could not evaluate the path <path>: the input is not valid JSON. This error was requested by the ERROR ON ERROR clause."
     ],
     "sqlState" : "2203G"
+  },
+  "JSON_OBJECT_NULL_KEY" : {
+    "message" : [
+      "JSON_OBJECT key must be a non-null string, but got a null key."
+    ],
+    "sqlState" : "22004"
   },
   "JSON_QUERY_ON_ERROR" : {
     "message" : [
@@ -6213,6 +6396,42 @@
       "Cannot call function <functionName> because named argument references are not enabled here.",
       "In this case, the named argument reference was <argument>.",
       "Set \"spark.sql.allowNamedFunctionArguments\" to \"true\" to turn on feature."
+    ],
+    "sqlState" : "0A000"
+  },
+  "NATIVE_DATA_SOURCE_ERROR" : {
+    "message" : [
+      "Failed to <action> native data source <name>: <msg>"
+    ],
+    "sqlState" : "38000"
+  },
+  "NATIVE_DATA_SOURCE_LIBRARY_NOT_FOUND" : {
+    "message" : [
+      "Cannot find the native data source library <fileName> with the SHA-256 checksum <checksum>, which is installed at <path> on the driver. Install the same build of the library on every node, at the same path or in the native library path."
+    ],
+    "sqlState" : "42K02"
+  },
+  "NATIVE_DATA_SOURCE_PACKAGE_CONFLICT" : {
+    "message" : [
+      "More than one native data source package under `spark.sql.dataSource.native.paths` provides the data source <name>: <packages>. Remove all but one of them."
+    ],
+    "sqlState" : "42710"
+  },
+  "NATIVE_DATA_SOURCE_PACKAGE_NOT_FOUND" : {
+    "message" : [
+      "Cannot find the native data source package <fileName> with the SHA-256 checksum <checksum>. Add the package with `spark.addArtifact`, or install the same package under `spark.sql.dataSource.native.paths` on every node."
+    ],
+    "sqlState" : "42K02"
+  },
+  "NATIVE_DATA_SOURCE_UNSUPPORTED_JAVA_VERSION" : {
+    "message" : [
+      "Native data sources require Java <required> or later, but Spark runs on Java <current>."
+    ],
+    "sqlState" : "0A000"
+  },
+  "NATIVE_DATA_SOURCE_UNSUPPORTED_PLATFORM" : {
+    "message" : [
+      "Native data sources are not supported on the platform <platform>: the JNI library of the C data interface of Arrow Java, with which Spark exchanges their data, failed to load: <reason>"
     ],
     "sqlState" : "0A000"
   },
@@ -6679,6 +6898,12 @@
     },
     "sqlState" : "42846"
   },
+  "PARQUET_FIELD_REQUESTED_MORE_THAN_ONCE" : {
+    "message" : [
+      "Requested fields <requestedFields> resolve to the same Parquet field <parquetField>, which can be read only once. When <fieldIdReadConf> is enabled, a requested field with a field ID is resolved by ID and any other requested field by name. Request the Parquet field only once, and refer to the resulting column more than once in the query instead."
+    ],
+    "sqlState" : "KD000"
+  },
   "PARQUET_TYPE_ILLEGAL" : {
     "message" : [
       "Illegal Parquet type: <parquetType>."
@@ -7053,6 +7278,12 @@
     ],
     "sqlState" : "42939"
   },
+  "RESULT_ROWS_MISMATCH" : {
+    "message" : [
+      "External UDF output row count was <output_length>; expected <input_length>. An external UDF must produce exactly one row for each input row."
+    ],
+    "sqlState" : "21000"
+  },
   "ROUTINE_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create the <newRoutineType> <routineName> because a <existingRoutineType> of that name already exists.",
@@ -7292,9 +7523,23 @@
     ],
     "sqlState" : "42908"
   },
+  "SPECIFY_CLUSTER_BY_WITH_DISTRIBUTED_BY_PARTITION_IS_NOT_ALLOWED" : {
+    "message" : [
+      "Cannot specify both CLUSTER BY and DISTRIBUTED BY PARTITION.",
+      "Please replace CLUSTER BY with PARTITIONED BY or CLUSTERED BY ... INTO ... BUCKETS, or drop DISTRIBUTED BY PARTITION."
+    ],
+    "sqlState" : "42908"
+  },
   "SPECIFY_CLUSTER_BY_WITH_PARTITIONED_BY_IS_NOT_ALLOWED" : {
     "message" : [
       "Cannot specify both CLUSTER BY and PARTITIONED BY."
+    ],
+    "sqlState" : "42908"
+  },
+  "SPECIFY_DISTRIBUTED_BY_PARTITION_WITHOUT_PARTITIONING_IS_NOT_ALLOWED" : {
+    "message" : [
+      "Cannot specify DISTRIBUTED BY PARTITION for a table that has no partitioning.",
+      "Please add PARTITIONED BY or CLUSTERED BY ... INTO ... BUCKETS, or drop the clause. A cluster_by(...) transform in PARTITIONED BY is clustering, not partitioning. A statement that defines no schema (no column list, no typed partition columns, and no AS SELECT) cannot declare partitioning, so it cannot use DISTRIBUTED BY PARTITION."
     ],
     "sqlState" : "42908"
   },
@@ -7303,6 +7548,13 @@
       "A CREATE TABLE without explicit column list cannot specify PARTITIONED BY.",
       "Please use the form with explicit column list and specify PARTITIONED BY.",
       "Alternatively, allow partitioning to be inferred by omitting the PARTITION BY clause."
+    ],
+    "sqlState" : "42601"
+  },
+  "SPECIFY_WRITE_ORDERING_IS_NOT_ALLOWED" : {
+    "message" : [
+      "A CREATE or REPLACE TABLE that defines no schema (no column list, no typed partition columns, and no AS SELECT) cannot specify ORDERED BY, because there is no schema to resolve the ordering against.",
+      "Please add a column list, or use the AS SELECT form."
     ],
     "sqlState" : "42601"
   },
@@ -7834,6 +8086,12 @@
     ],
     "sqlState" : "42601"
   },
+  "STORAGE_FILTER_NOT_APPLIED" : {
+    "message" : [
+      "A storage filter could not be evaluated. The data source's reader should have read the rows without it instead of failing."
+    ],
+    "sqlState" : "KD000"
+  },
   "STORAGE_PARTITION_JOIN_INCOMPATIBLE_REDUCED_TYPES" : {
     "message" : [
       "Storage-partition join partition transforms produced incompatible reduced types,",
@@ -7871,6 +8129,12 @@
       "Checkpoint location <checkpointLocation> is in an inconsistent state: the metadata file is missing but offset and/or commit logs contain data. Please restore the metadata file or create a new checkpoint directory."
     ],
     "sqlState" : "42K03"
+  },
+  "STREAMING_FILE_SINK_PARTITIONING_MISMATCH" : {
+    "message" : [
+      "The streaming sink of the table <tableName> writes with the partition columns [<expectedPartCols>], but the files that the sink already committed to it have the partition columns [<recordedPartCols>]. Appending files in another layout hides the committed files from reads. Write to a new table location with a new checkpoint location, or rewrite the committed files with the partition columns of the table."
+    ],
+    "sqlState" : "55019"
   },
   "STREAMING_OUTPUT_MODE" : {
     "message" : [
@@ -8074,6 +8338,12 @@
       "Query [id = <id>, runId = <runId>] terminated with exception: <message>"
     ],
     "sqlState" : "XXKST"
+  },
+  "STREAM_STREAM_JOIN_INCOMPATIBLE_STATE_STORE_CONFIGS" : {
+    "message" : [
+      "The configuration values `<stateFormatVersionConfig>=<stateFormatVersion>` and `<mergeOperatorVersionConfig>=<mergeOperatorVersion>` are incompatible. Stream-stream join state format version <stateFormatVersion> requires RocksDB merge operator version <requiredMergeOperatorVersion>. Start a new query with `<mergeOperatorVersionConfig>` set to <requiredMergeOperatorVersion> and a new checkpoint."
+    ],
+    "sqlState" : "42K06"
   },
   "STREAM_STREAM_JOIN_INCONSISTENT_STATE" : {
     "message" : [
@@ -8322,6 +8592,19 @@
       "Due to Scala's limited support of tuple, tuples with more than 22 elements are not supported."
     ],
     "sqlState" : "54011"
+  },
+  "UDF_LIMITS" : {
+    "message" : [
+      "A UDF resource limit was exceeded."
+    ],
+    "subClass" : {
+      "ROW_SIZE" : {
+        "message" : [
+          "The projected input row size <actualRowSize> bytes exceeds the maximum allowed size <maxRowSize> bytes."
+        ]
+      }
+    },
+    "sqlState" : "54000"
   },
   "UDTF_ALIAS_NUMBER_MISMATCH" : {
     "message" : [
@@ -8702,6 +8985,13 @@
     },
     "sqlState" : "42000"
   },
+  "UNSUPPORTED_AVRO_CHAR_VARCHAR_MAP_KEY" : {
+    "message" : [
+      "The Avro map key <key> is not a valid key for the map key type <dataType>.",
+      "A CHAR key must match the declared length exactly and a VARCHAR key must not exceed it; keys are never padded or trimmed. Use a STRING map key to accept any name."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_BUILT_IN_JDBC_DIALECT" : {
     "message" : [
       "`<name>` is not a supported built-in JDBC dialect. Supported dialects are: <supportedNames>."
@@ -9034,6 +9324,11 @@
           "External UDF expressions are disabled. Set <config> to true to enable planning."
         ]
       },
+      "EXTERNAL_UDF_IN_BARRIER_TASK" : {
+        "message" : [
+          "External UDF execution in a barrier task without callback transport."
+        ]
+      },
       "EXTERNAL_UDF_IN_ON_CLAUSE" : {
         "message" : [
           "External UDF in the ON clause of a <joinType> JOIN. In case of an INNER JOIN consider rewriting to a CROSS JOIN with a WHERE clause."
@@ -9124,6 +9419,21 @@
       "LITERAL_TYPE" : {
         "message" : [
           "Literal for '<value>' of <type>."
+        ]
+      },
+      "MATERIALIZED_CTE_ALWAYS_INLINED" : {
+        "message" : [
+          "MATERIALIZED CTE <cteName> in a statement that always inlines its CTEs."
+        ]
+      },
+      "MATERIALIZED_CTE_IN_CORRELATED_SUBQUERY" : {
+        "message" : [
+          "MATERIALIZED CTE <cteName> in a correlated subquery."
+        ]
+      },
+      "MATERIALIZED_CTE_WITH_OUTER_REFERENCE" : {
+        "message" : [
+          "MATERIALIZED CTE referencing the outer query column <colName>."
         ]
       },
       "MULTIPLE_BUCKET_TRANSFORMS" : {
@@ -9348,6 +9658,11 @@
           "Temporary views cannot be created with the WITH SCHEMA clause. Recreate the temporary view when the underlying schema changes, or use a persisted view."
         ]
       },
+      "TIMESTAMP_NANOS_SUBTRACTION" : {
+        "message" : [
+          "Subtracting nanosecond-precision timestamps (TIMESTAMP_LTZ/TIMESTAMP_NTZ with precision in [7, 9]) in <sqlExpr>. The interval result has microsecond precision. Cast both operands to TIMESTAMP_LTZ or TIMESTAMP_NTZ to subtract at microsecond precision, or cast them to TIMESTAMP_LTZ(9) or TIMESTAMP_NTZ(9) and use `unix_nanos(end) - unix_nanos(start)` for the elapsed time in nanoseconds."
+        ]
+      },
       "TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER" : {
         "message" : [
           "Parsing or formatting nanosecond-precision timestamps (TIMESTAMP_LTZ/TIMESTAMP_NTZ with precision in [7, 9]) under the LEGACY time parser policy. Set <config> to CORRECTED."
@@ -9378,6 +9693,11 @@
           "TRANSFORM with SERDE is only supported in hive mode."
         ]
       },
+      "TRANSFORM_WITHOUT_SERDE_TYPE" : {
+        "message" : [
+          "TRANSFORM without SERDE does not support the output data type <dataType>."
+        ]
+      },
       "TRIM_COLLATION" : {
         "message" : [
           "TRIM specifier in the collation."
@@ -9394,6 +9714,12 @@
         ]
       }
     },
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_FILE_TYPE" : {
+    "message" : [
+      "The data type FILE is not supported."
+    ],
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_GENERATOR" : {
@@ -9515,6 +9841,13 @@
     ],
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_JSON_CHAR_VARCHAR_MAP_KEY" : {
+    "message" : [
+      "The JSON object name <key> is not a valid key for the map key type <dataType>.",
+      "A CHAR key must match the declared length exactly and a VARCHAR key must not exceed it; keys are never padded or trimmed. Use a STRING map key to accept any name."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_MERGE_CONDITION" : {
     "message" : [
       "MERGE operation contains unsupported <condName> condition."
@@ -9571,6 +9904,12 @@
   "UNSUPPORTED_PIPELINE_SPARK_SQL_COMMAND" : {
     "message" : [
       "'<command>' is not supported in spark.sql(\"...\") API in Spark Declarative Pipeline."
+    ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_RESOURCE_TYPE_FOR_FUNCTION" : {
+    "message" : [
+      "Unsupported resource type '<resourceType>' for a function."
     ],
     "sqlState" : "0A000"
   },
@@ -9800,6 +10139,13 @@
     ],
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_XML_CHAR_VARCHAR_MAP_KEY" : {
+    "message" : [
+      "The XML name <key> is not a valid key for the map key type <dataType>.",
+      "A CHAR key must match the declared length exactly and a VARCHAR key must not exceed it; keys are never padded or trimmed. Use a STRING map key to accept any name."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNTYPED_SCALA_UDF" : {
     "message" : [
       "You're using untyped Scala UDF, which does not have the input type information. Spark may blindly pass null to the Scala closure with primitive-type argument, and the closure will see the default value of the Java type for the null argument, e.g. `udf((x: Int) => x, IntegerType)`, the result is 0 for null input. To get rid of this error, you could:",
@@ -10009,6 +10355,12 @@
     ],
     "sqlState" : "42601"
   },
+  "WINDOW_FUNCTION_PARTITION_SIZE_EXCEEDS_LIMIT" : {
+    "message" : [
+      "Cannot evaluate the window function because the window partition has <numRows> rows, which exceeds the maximum of 2,147,483,647 (2^31 - 1) rows that at least one of its window functions supports per partition. Reduce the partition size, for example by adding more expressions to the PARTITION BY clause."
+    ],
+    "sqlState" : "54000"
+  },
   "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE" : {
     "message" : [
       "Window function <funcName> requires an OVER clause."
@@ -10020,6 +10372,12 @@
       "Error parsing WKB: <parseError> at position <pos>"
     ],
     "sqlState" : "22023"
+  },
+  "WRITE_ORDERING_WITH_UNKNOWN_COLUMN" : {
+    "message" : [
+      "Invalid write ordering: cannot resolve <cols> against the columns of the table."
+    ],
+    "sqlState" : "42703"
   },
   "WRITE_STREAM_NOT_ALLOWED" : {
     "message" : [
@@ -10311,11 +10669,6 @@
       "<command> does not support nested column: <column>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1068" : {
-    "message" : [
-      "<database> is a system preserved database, you cannot use it as current database. To access global temporary views, you should use qualified name with the GLOBAL_TEMP_DATABASE, e.g. SELECT * FROM <database>.viewName."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1071" : {
     "message" : [
       "Some existing schema fields (<nonExistentColumnNames>) are not present in the new schema. We don't support dropping columns yet."
@@ -10324,11 +10677,6 @@
   "_LEGACY_ERROR_TEMP_1072" : {
     "message" : [
       "Only the tables/views belong to the same database can be retrieved. Querying tables/views are <qualifiedTableNames>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1079" : {
-    "message" : [
-      "Resource Type '<resourceType>' is not supported."
     ]
   },
   "_LEGACY_ERROR_TEMP_1080" : {
@@ -10950,11 +11298,6 @@
   "_LEGACY_ERROR_TEMP_1338" : {
     "message" : [
       "Sinks cannot request distribution and ordering in continuous execution mode."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2017" : {
-    "message" : [
-      "not resolved."
     ]
   },
   "_LEGACY_ERROR_TEMP_2026" : {
@@ -11675,11 +12018,6 @@
   "_LEGACY_ERROR_TEMP_2264" : {
     "message" : [
       "Subprocess exited with status <exitCode>. Error: <stderrBuffer>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2265" : {
-    "message" : [
-      "<nodeName> without serde does not support <dt> as output data type."
     ]
   },
   "_LEGACY_ERROR_TEMP_2266" : {

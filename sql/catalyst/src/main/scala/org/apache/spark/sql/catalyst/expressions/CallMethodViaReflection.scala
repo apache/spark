@@ -216,6 +216,11 @@ case class CallMethodViaReflection(
   /** A temporary buffer used to hold intermediate results returned by children. */
   @transient private lazy val buffer = new Array[Object](argExprs.length)
 
+  // Stateful because of the reusable `buffer` holding the reflection arguments: it is filled by
+  // `evalInternal` and then handed to the call, so two evaluations sharing one instance would
+  // overwrite each other's arguments. Fresh copies give every evaluation its own buffer.
+  override def stateful: Boolean = true
+
   override protected def withNewChildrenInternal(
     newChildren: IndexedSeq[Expression]): CallMethodViaReflection = copy(children = newChildren)
 }

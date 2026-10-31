@@ -105,6 +105,14 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(GetArrayItem(array, Literal(1)).nullable)
     assert(!GetArrayItem(array, Subtract(Literal(2), Literal(2))).nullable)
     assert(GetArrayItem(array, AttributeReference("ordinal", IntegerType)()).nullable)
+    // A null ordinal returns null even when neither the array nor its elements can be null.
+    val nonNullArray = CreateArray(a :: Nil)
+    val nullableOrdinal = AttributeReference("ordinal", IntegerType)()
+    val nonNullOrdinal = AttributeReference("ordinal", IntegerType, nullable = false)()
+    Seq(true, false).foreach { failOnError =>
+      assert(GetArrayItem(nonNullArray, nullableOrdinal, failOnError).nullable)
+      assert(GetArrayItem(nonNullArray, nonNullOrdinal, failOnError).nullable == !failOnError)
+    }
 
     // GetArrayStructFields case
     val f1 = StructField("a", IntegerType, nullable = false)
@@ -127,6 +135,27 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     val stArray4 = GetArrayStructFields(inputArray2, f2, 1, 2, inputArray2ContainsNull)
     assert(GetArrayItem(stArray4, Literal(0)).nullable)
     assert(GetArrayItem(stArray4, Literal(1)).nullable)
+  }
+
+  test("SPARK-60755: GetArrayItem on CreateArray generates code when the result is not nullable") {
+    val a = BoundReference(0, StringType, nullable = false)
+    val b = BoundReference(1, StringType, nullable = true)
+    val input = create_row("x", null)
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        // The array can contain NULL, but the selected element cannot.
+        checkEvaluation(GetArrayItem(CreateArray(Seq(a, b)), Literal(0)), "x", input)
+        // No element can be NULL.
+        checkEvaluation(GetArrayItem(CreateArray(Seq(a)), Literal(0)), "x", input)
+        // The index is invalid in every row.
+        if (ansiEnabled) {
+          checkExceptionInExpression[Exception](
+            GetArrayItem(CreateArray(Seq(b)), Literal(5)), input, "out of bounds")
+        } else {
+          checkEvaluation(GetArrayItem(CreateArray(Seq(b)), Literal(5)), null, input)
+        }
+      }
+    }
   }
 
   Seq((Int.MaxValue, "Linear Lookup"), (0, "Hash Lookup")).foreach { case (threshold, name) =>

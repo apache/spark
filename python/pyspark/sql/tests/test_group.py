@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import datetime
+import decimal
 import unittest
 
 from pyspark.errors import AnalysisException
@@ -191,6 +193,26 @@ class GroupTestsMixin:
 
             with self.assertRaises(IndexError):
                 df.orderBy(-3)
+
+    def test_pivot_values_with_null_date_and_decimal(self):
+        # SPARK-60279: pivot values can be None, date or Decimal
+        df = self.spark.createDataFrame(
+            [(1, "a", datetime.date(2020, 1, 1), 10), (2, None, datetime.date(2020, 1, 2), 20)],
+            "k int, s string, d date, v int",
+        ).withColumn("dec", sf.col("v").cast("decimal(10,1)"))
+
+        values = [r.s for r in df.select("s").distinct().sort("s").collect()]
+        res = df.groupBy("k").pivot("s", values).sum("v")
+        self.assertEqual(res.columns, ["k", "null", "a"])
+        assertDataFrameEqual(res, [Row(k=1, null=None, a=10), Row(k=2, null=20, a=None)])
+
+        res = df.groupBy("k").pivot("d", [datetime.date(2020, 1, 1)]).sum("v")
+        self.assertEqual(res.columns, ["k", "2020-01-01"])
+        assertDataFrameEqual(res, [Row(1, 10), Row(2, None)])
+
+        res = df.groupBy("k").pivot("dec", [decimal.Decimal("10.0")]).sum("v")
+        self.assertEqual(res.columns, ["k", "10.0"])
+        assertDataFrameEqual(res, [Row(1, 10), Row(2, None)])
 
     def test_pivot_exceed_max_values(self):
         with self.assertRaises(AnalysisException):

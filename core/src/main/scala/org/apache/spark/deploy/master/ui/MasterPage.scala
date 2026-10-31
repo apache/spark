@@ -193,8 +193,8 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
                 {state.completedDrivers.count(_.state == DriverState.RELAUNCHING)} Relaunching)
               </li>
               <li><strong>Status:</strong> {state.status}
-                (<a href={"/environment/"}>Environment</a>,
-                <a href={"/logPage/?self&logType=out"}>Log</a>)
+                (<a href={UIUtils.prependBaseUri(request, "/environment/")}>Environment</a>,
+                <a href={UIUtils.prependBaseUri(request, "/logPage/?self&logType=out")}>Log</a>)
               </li>
             </ul>
           </div>
@@ -338,6 +338,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       <form action="app/kill/" method="POST" class="d-inline float-end">
         <input type="hidden" name="id" value={app.id}/>
         <input type="hidden" name="terminate" value="true"/>
+        <input type="hidden" name="csrfToken" value={parent.csrfToken}/>
         <button type="submit"
                 data-kill-message={s"Are you sure you want to kill application ${app.id} ?"}
                 class="btn btn-sm btn-outline-danger kill-link">Kill</button>
@@ -358,6 +359,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       val label = action.capitalize
       <form action={s"app/$action/"} method="POST" class="d-inline float-end">
         <input type="hidden" name="id" value={app.id}/>
+        <input type="hidden" name="csrfToken" value={parent.csrfToken}/>
         <button type="submit" data-confirm-message={message}
                 class="btn btn-sm btn-outline-secondary confirm-link">{label}</button>
       </form>
@@ -407,6 +409,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       <form action="driver/kill/" method="POST" class="d-inline float-end">
         <input type="hidden" name="id" value={driver.id}/>
         <input type="hidden" name="terminate" value="true"/>
+        <input type="hidden" name="csrfToken" value={parent.csrfToken}/>
         <button type="submit"
                 data-kill-message={s"Are you sure you want to kill driver ${driver.id} ?"}
                 class="btn btn-sm btn-outline-danger kill-link">Kill</button>

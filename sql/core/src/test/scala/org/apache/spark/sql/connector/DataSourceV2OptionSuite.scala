@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.analysis.{
   RelationCache,
   RelationResolution,
   UnresolvedRelation,
-  V2TableReference}
+  V2Reference}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.catalog.{
@@ -346,7 +346,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       checkAnswer(df, Seq(Row(1, "a"), Row(2, "b")))
 
       collected = df.queryExecution.executedPlan.collect {
-        case BatchScanExec(_, scan: InMemoryBaseTable#InMemoryBatchScan, _, _, _, _) =>
+        case BatchScanExec(_, scan: InMemoryBaseTable#InMemoryBatchScan, _, _, _, _, _, _) =>
           assert(scan.options.get("split-size") === "5")
       }
       assert (collected.size == 1)
@@ -381,7 +381,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       checkAnswer(df, Seq(Row(1, "a"), Row(2, "b")))
 
       collected = df.queryExecution.executedPlan.collect {
-        case BatchScanExec(_, scan: InMemoryBaseTable#InMemoryBatchScan, _, _, _, _) =>
+        case BatchScanExec(_, scan: InMemoryBaseTable#InMemoryBatchScan, _, _, _, _, _, _) =>
           assert(scan.options.get("split-size") === "5")
       }
       assert (collected.size == 1)
@@ -1634,11 +1634,11 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
         .analyzed
         .collectFirst { case r: DataSourceV2Relation => r }
         .getOrElse(fail("expected a v2 relation"))
-      val readRef = V2TableReference.createForTransaction(original)
-      val otherReadRef = V2TableReference.createForTransaction(original.copy(
+      val readRef = V2Reference.createForTransaction(original)
+      val otherReadRef = V2Reference.createForTransaction(original.copy(
         options = new CaseInsensitiveStringMap(
           java.util.Map.of("snapshot", "s1", "split-size", "9"))))
-      val writeRef = V2TableReference.createForWriteTarget(original)
+      val writeRef = V2Reference.createForWriteTarget(original)
       var sharedRelationCacheLookups = 0
       val sharedRelationCache: RelationCache = (_, _, _, _, _) => {
         sharedRelationCacheLookups += 1
@@ -1710,8 +1710,8 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
         .analyzed
         .collectFirst { case r: DataSourceV2Relation => r }
         .getOrElse(fail("expected a v2 relation"))
-      val initialRef = V2TableReference.createForTempView(cached, Seq("state_view"))
-      val otherOptionsRef = V2TableReference.createForTempView(
+      val initialRef = V2Reference.createForTempView(cached, Seq("state_view"))
+      val otherOptionsRef = V2Reference.createForTempView(
         cached.copy(options = new CaseInsensitiveStringMap(
           java.util.Map.of("snapshot", "s1", "split-size", "9"))),
         Seq("state_view"))
