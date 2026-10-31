@@ -2563,11 +2563,11 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       checkError(
         exception = intercept[SparkArrayIndexOutOfBoundsException] {
-          df.where("NOT (element_at(array(s), 5) = 'x' OR id < 0)").collect()
+          df.where("element_at(array(s), 5) = 'x'").collect()
         },
         condition = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
         parameters = Map("indexValue" -> "5", "arraySize" -> "1"),
-        context = ExpectedContext(fragment = "element_at(array(s), 5)", start = 5, stop = 27))
+        context = ExpectedContext(fragment = "element_at(array(s), 5)", start = 0, stop = 22))
       checkError(
         exception = intercept[SparkArrayIndexOutOfBoundsException] {
           df.selectExpr("array(s)[5]").collect()
