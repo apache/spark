@@ -3202,10 +3202,10 @@ FROM variant_explode(parse_json('{"a": {"b": [1, 2, 3]}}')) AS t,
 Project [key#x, pos#x, to_json(value#x, Some(America/Los_Angeles)) AS value#x]
 +- LateralJoin lateral-subquery#x [value#x], Inner
    :  +- SubqueryAlias u
-   :     +- Generate variant_explode(variant_get(outer(value#x), $.b, VariantType, true, Some(America/Los_Angeles), false)), false, [pos#x, key#x, value#x]
+   :     +- Generate variant_explode(variant_get(outer(value#x), $.b, VariantType, true, Some(America/Los_Angeles), false), false), false, [pos#x, key#x, value#x]
    :        +- OneRowRelation
    +- SubqueryAlias t
-      +- Generate variant_explode(parse_json({"a": {"b": [1, 2, 3]}}, true)), false, [pos#x, key#x, value#x]
+      +- Generate variant_explode(parse_json({"a": {"b": [1, 2, 3]}}, true), false), false, [pos#x, key#x, value#x]
          +- OneRowRelation
 
 
@@ -3217,10 +3217,10 @@ FROM variant_explode(parse_json('{"a": {"b": [1, 2, 3]}}')) AS t,
 Project [key#x, pos#x, to_json(value#x, Some(America/Los_Angeles)) AS value#x]
 +- LateralJoin lateral-subquery#x [value#x], Inner
    :  +- SubqueryAlias u
-   :     +- Generate variant_explode(variant_get(outer(value#x), $.b, VariantType, true, Some(America/Los_Angeles), false)), true, [pos#x, key#x, value#x]
+   :     +- Generate variant_explode(variant_get(outer(value#x), $.b, VariantType, true, Some(America/Los_Angeles), false), false), true, [pos#x, key#x, value#x]
    :        +- OneRowRelation
    +- SubqueryAlias t
-      +- Generate variant_explode(parse_json({"a": {"b": [1, 2, 3]}}, true)), false, [pos#x, key#x, value#x]
+      +- Generate variant_explode(parse_json({"a": {"b": [1, 2, 3]}}, true), false), false, [pos#x, key#x, value#x]
          +- OneRowRelation
 
 
@@ -3232,10 +3232,10 @@ FROM variant_explode(parse_json('{"a": {"b": [1, 2, 3]}}')) AS t,
 Project [key#x, pos#x, to_json(value#x, Some(America/Los_Angeles)) AS value#x]
 +- LateralJoin lateral-subquery#x [value#x], Inner
    :  +- SubqueryAlias u
-   :     +- Generate variant_explode(variant_get(outer(value#x), $.missing, VariantType, true, Some(America/Los_Angeles), false)), true, [pos#x, key#x, value#x]
+   :     +- Generate variant_explode(variant_get(outer(value#x), $.missing, VariantType, true, Some(America/Los_Angeles), false), false), true, [pos#x, key#x, value#x]
    :        +- OneRowRelation
    +- SubqueryAlias t
-      +- Generate variant_explode(parse_json({"a": {"b": [1, 2, 3]}}, true)), false, [pos#x, key#x, value#x]
+      +- Generate variant_explode(parse_json({"a": {"b": [1, 2, 3]}}, true), false), false, [pos#x, key#x, value#x]
          +- OneRowRelation
 
 
@@ -3247,10 +3247,10 @@ FROM variant_explode(parse_json('{"a": {"b": {"c": [1, 2]}}}')) AS t,
 Project [key#x, pos#x, to_json(value#x, Some(America/Los_Angeles)) AS value#x]
 +- LateralJoin lateral-subquery#x [value#x], Inner
    :  +- SubqueryAlias u
-   :     +- Generate variant_explode(variant_get(outer(value#x), $.b.c, VariantType, true, Some(America/Los_Angeles), false)), false, [pos#x, key#x, value#x]
+   :     +- Generate variant_explode(variant_get(outer(value#x), $.b.c, VariantType, true, Some(America/Los_Angeles), false), false), false, [pos#x, key#x, value#x]
    :        +- OneRowRelation
    +- SubqueryAlias t
-      +- Generate variant_explode(parse_json({"a": {"b": {"c": [1, 2]}}}, true)), false, [pos#x, key#x, value#x]
+      +- Generate variant_explode(parse_json({"a": {"b": {"c": [1, 2]}}}, true), false), false, [pos#x, key#x, value#x]
          +- OneRowRelation
 
 
@@ -3262,10 +3262,10 @@ FROM variant_explode(parse_json('{"a": {"b": [1, 2, 3]}}')) AS t,
 Project [key#x, pos#x, to_json(value#x, Some(America/Los_Angeles)) AS value#x]
 +- LateralJoin lateral-subquery#x [value#x], Inner
    :  +- SubqueryAlias u
-   :     +- Generate variant_explode(variant_get(outer(value#x), $['b'], VariantType, true, Some(America/Los_Angeles), false)), false, [pos#x, key#x, value#x]
+   :     +- Generate variant_explode(variant_get(outer(value#x), $['b'], VariantType, true, Some(America/Los_Angeles), false), false), false, [pos#x, key#x, value#x]
    :        +- OneRowRelation
    +- SubqueryAlias t
-      +- Generate variant_explode(parse_json({"a": {"b": [1, 2, 3]}}, true)), false, [pos#x, key#x, value#x]
+      +- Generate variant_explode(parse_json({"a": {"b": [1, 2, 3]}}, true), false), false, [pos#x, key#x, value#x]
          +- OneRowRelation
 
 
@@ -3278,10 +3278,10 @@ Project [key#x, p#x, to_json(v#x, Some(America/Los_Angeles)) AS v#x]
 +- LateralJoin lateral-subquery#x [value#x], Inner
    :  +- SubqueryAlias u
    :     +- Project [pos#x AS p#x, key#x AS k#x, value#x AS v#x]
-   :        +- Generate variant_explode(variant_get(outer(value#x), $.b, VariantType, true, Some(America/Los_Angeles), false)), false, [pos#x, key#x, value#x]
+   :        +- Generate variant_explode(variant_get(outer(value#x), $.b, VariantType, true, Some(America/Los_Angeles), false), false), false, [pos#x, key#x, value#x]
    :           +- OneRowRelation
    +- SubqueryAlias t
-      +- Generate variant_explode(parse_json({"a": {"b": [1, 2, 3]}}, true)), false, [pos#x, key#x, value#x]
+      +- Generate variant_explode(parse_json({"a": {"b": [1, 2, 3]}}, true), false), false, [pos#x, key#x, value#x]
          +- OneRowRelation
 
 
