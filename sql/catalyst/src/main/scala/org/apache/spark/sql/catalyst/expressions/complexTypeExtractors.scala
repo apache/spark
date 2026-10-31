@@ -285,7 +285,10 @@ case class GetArrayItem(
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       val index = ctx.freshName("index")
       val childArrayElementNullable = child.dataType.asInstanceOf[ArrayType].containsNull
-      val nullCheck = if (childArrayElementNullable) {
+      // `ev.isNull` is declared only for a nullable expression. Otherwise the index selects an
+      // element that cannot be NULL, so neither this branch nor the out-of-bounds branch below
+      // is taken.
+      val nullCheck = if (nullable && childArrayElementNullable) {
         s"""else if ($eval1.isNullAt($index)) {
                ${ev.isNull} = true;
             }
@@ -299,8 +302,10 @@ case class GetArrayItem(
         // scalastyle:off line.size.limit
         s"throw QueryExecutionErrors.invalidArrayIndexError($index, $eval1.numElements(), $errorContext);"
         // scalastyle:on line.size.limit
-      } else {
+      } else if (nullable) {
         s"${ev.isNull} = true;"
+      } else {
+        ""
       }
 
       s"""
