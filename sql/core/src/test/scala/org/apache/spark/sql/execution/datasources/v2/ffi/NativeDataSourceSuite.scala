@@ -1324,9 +1324,8 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       endingPool.shutdown()
     }
     eventually(timeout(1.minute)) {
-      assert(marker.isFile)
+      assert(marker.isFile && Files.readString(marker.toPath) == "after get_next")
     }
-    assert(Files.readString(marker.toPath) == "after get_next")
   }
 
   nativeTest("load libraries that export the same functions side by side") {
