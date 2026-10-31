@@ -200,7 +200,9 @@ class AbstractTranspiler(object):
         returns ``(Column, list[str])`` instead -- one category per public param
         (``"integer"`` / ``"float"`` / ``"numeric"`` / ``"string"`` / ``"bool"`` /
         ``"binary"`` / ``"timestamp"`` / ``"map"`` / ``"array"``) describing the option it
-        built, which the caller uses in place of the combo.
+        built, which the caller uses in place of the combo. The hook is called
+        once per ``param_categories`` combo; identical categories from one variety
+        are collapsed to a single option.
 
         Decline with plain ``None``, not a tuple; a malformed return is refused
         so the UDF falls back to interpreted Python rather than breaking at
@@ -1437,6 +1439,12 @@ def _get_function_from_ast(body: ast.AST, held_code: Any) -> Tuple[Optional[ast.
     )
 
 
+# The input categories a variety may report; mirrors ``optionMatchesTypes`` on the JVM.
+_VARIETY_CATEGORIES = frozenset(
+    ("integer", "float", "numeric", "string", "bool", "binary", "timestamp", "map", "array")
+)
+
+
 def _variety_option(result: Any, combo: dict, num_params: int) -> Tuple[Column, List[str]]:
     """Return the ``(column, categories)`` option for one ``_transpile_from_ast`` result.
 
@@ -1473,6 +1481,13 @@ def _variety_option(result: Any, combo: dict, num_params: int) -> Tuple[Column, 
                 f"transpiler returned {len(categories)} input categories for "
                 f"{num_params} parameters"
             )
+        # The JVM silently drops an option whose category it does not know.
+        bad = [c for c in categories if not isinstance(c, str) or c not in _VARIETY_CATEGORIES]
+        if bad:
+            raise UnsupportedOperationException(
+                f"transpiler returned unknown input categories {bad!r}; "
+                f"expected strings from {sorted(_VARIETY_CATEGORIES)}"
+            )
         return column, list(categories)
     raise UnsupportedOperationException(
         f"transpiler returned an unsupported result of type {type(result).__name__}; "
@@ -1496,9 +1511,10 @@ def _transpile_func(
     method or callable instance) -- needed so the caller can resolve named-argument
     invocations to positional order at call time, since the ``_udf_param_N``
     substitution in :class:`UserDefinedPythonFunction` is positional.
-    list of per-option input-type categories (``"numeric"`` / ``"string"`` per
-    public param) -- the JVM picks the option whose categories match the bound
-    column types, or falls back to the Python UDF when none match.
+    list of per-option input-type categories (one per public param, from the
+    vocabulary on ``AbstractTranspiler._transpile_from_ast``) -- the JVM picks the
+    option whose categories match the bound column types, or falls back to the
+    Python UDF when none match.
     list of the public parameter names Python forbids calling by keyword
     (positional-only) -- the caller must NOT resolve a kwarg matching one of these
     to a position, since Python itself rejects that call.
@@ -1568,6 +1584,8 @@ def _transpile_func(
                 function_ast, extraction_error = _get_function_from_ast(ast_info, held_code)
                 if function_ast is None:
                     errors.append(extraction_error)
+                    # Rejected source is not trustworthy either; hand varieties None.
+                    src, ast_info = None, None
         if function_ast is None and held_code is None:
             return (
                 [],
@@ -1685,6 +1703,9 @@ def _transpile_func(
         # Maybe multiple transpilers (think CUDA, etc.).
         transpilers = _get_transpilers(session)
         for transpiler in transpilers:
+            # A self-typing variety returns the same categories for every combo;
+            # one option per distinct category list is enough.
+            seen: set = set()
             for combo in combos:
                 try:
                     result = transpiler._transpile_from_ast(
@@ -1692,8 +1713,10 @@ def _transpile_func(
                     )
                     if result is not None:
                         column, categories = _variety_option(result, combo, len(public_params))
-                        transpiled.append(column)
-                        input_categories.append(categories)
+                        if tuple(categories) not in seen:
+                            seen.add(tuple(categories))
+                            transpiled.append(column)
+                            input_categories.append(categories)
                 except Exception as e:
                     errors.append(str(e))
         return (
