@@ -46,7 +46,7 @@ import org.apache.spark.sql.execution.columnar.{InMemoryTableScanExec, InMemoryT
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ENSURE_REQUIREMENTS, EnsureRequirements, Exchange, REPARTITION_BY_COL, REPARTITION_BY_NUM, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ENSURE_REQUIREMENTS, EnsureRequirements, Exchange, REPARTITION_BY_COL, REPARTITION_BY_NUM, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin, ValidateRequirements}
 import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, HashedRelationBroadcastMode, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLShuffleReadMetricsReporter
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
@@ -1899,6 +1899,155 @@ class AdaptiveQueryExecSuite
           "SELECT key1 FROM skewData1 JOIN skewData2 ON key1 = key2 GROUP BY key1", false)
       }
     }
+  }
+
+  test("SPARK-60458: skip only the skewed join whose split the plan cannot take") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "100",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100") {
+      withTempView("skewData1", "skewData2") {
+        spark
+          .range(0, 1000, 1, 10)
+          .selectExpr("id % 3 as key1", "id as value1")
+          .createOrReplaceTempView("skewData1")
+        spark
+          .range(0, 1000, 1, 10)
+          .selectExpr("id % 1 as key2", "id as value2")
+          .createOrReplaceTempView("skewData2")
+
+        val query =
+          """
+            |SELECT key1, count(*) FROM skewData1 JOIN skewData2 ON key1 = key2 GROUP BY key1
+            |UNION ALL
+            |SELECT key1, 1 FROM skewData1 JOIN skewData2 ON key1 = key2
+            |""".stripMargin
+
+        // The aggregate above the first join needs its input on `key1`, which the split breaks.
+        // The second join feeds the union directly, so its split breaks nothing: it is kept.
+        val (_, adaptivePlan) = runAdaptiveAndVerifyResult(query)
+
+        // key2 is always 0, so only the 334 rows of key1 = 0 join, each against all 1000 rows of
+        // the other side: the aggregated branch collapses them into one row, the other keeps one
+        // row per joined row.
+        val rows = sql(query).collect()
+        assert(rows.length == 334001)
+        assert(rows.count(_ == Row(0L, 334000L)) == 1)
+        assert(rows.count(_ == Row(0L, 1L)) == 334000)
+
+        val rejectedJoins = collect(adaptivePlan) {
+          case agg: BaseAggregateExec => findTopLevelSortMergeJoin(agg)
+        }.flatten.distinct
+        assert(rejectedJoins.size == 1, adaptivePlan.toString)
+        val rejected = rejectedJoins.head
+        assert(!rejected.isSkewJoin)
+        // The rejected join does not lose partition coalescing to the kept split.
+        val rejectedReads = collect(rejected) { case r: AQEShuffleReadExec => r }
+        assert(rejectedReads.size == 2 && rejectedReads.forall(_.hasCoalescedPartition),
+          adaptivePlan.toString)
+
+        val keptJoins = findTopLevelSortMergeJoin(adaptivePlan).filterNot(_ eq rejected)
+        assert(keptJoins.size == 1, adaptivePlan.toString)
+        assert(keptJoins.head.isSkewJoin)
+        assert(collect(keptJoins.head) {
+          case r: AQEShuffleReadExec => r
+        }.exists(_.hasSkewedPartition))
+        assert(ValidateRequirements.validate(adaptivePlan))
+
+        // Turning the fallback off gives the plan back to the all-or-nothing path.
+        withSQLConf(SQLConf.SKEW_JOIN_PER_JOIN_FALLBACK_ENABLED.key -> "false") {
+          val (_, withoutFallback) = runAdaptiveAndVerifyResult(query)
+          val joins = findTopLevelSortMergeJoin(withoutFallback)
+          assert(joins.size == 2 && joins.forall(!_.isSkewJoin), withoutFallback.toString)
+        }
+      }
+    }
+  }
+
+  test("SPARK-60458: keep the layout a union passes through") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "100",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100") {
+      withTempView("skewData1", "skewData2") {
+        spark
+          .range(0, 1000, 1, 10)
+          .selectExpr("id % 3 as key1", "id as value1")
+          .createOrReplaceTempView("skewData1")
+        spark
+          .range(0, 1000, 1, 10)
+          .selectExpr("id % 1 as key2", "id as value2")
+          .createOrReplaceTempView("skewData2")
+
+        def splitJoins(query: String): Seq[SortMergeJoinExec] = {
+          val (_, adaptivePlan) = runAdaptiveAndVerifyResult(query)
+          assert(ValidateRequirements.validate(adaptivePlan))
+          val joins = findTopLevelSortMergeJoin(adaptivePlan)
+          assert(joins.size == 2, adaptivePlan.toString)
+          joins
+        }
+
+        val union =
+          """
+            |SELECT key1 AS k, value1 AS v FROM skewData1 JOIN skewData2 ON key1 = key2
+            |UNION ALL
+            |SELECT key1 AS k, value1 AS v FROM skewData1 JOIN skewData2 ON key1 = key2
+            |""".stripMargin
+        val windowedQuery =
+          s"SELECT k, rank() OVER (PARTITION BY k ORDER BY v) FROM ($union) u"
+
+        // Both branches report the join's hash layout, so the union claims it and the window above
+        // depends on it: a split takes the claim away from both branches. The all-at-once attempt
+        // rejects this plan too; this arm pins that the per-join fallback keeps no split the claim
+        // cannot take, and the arm below that the same splits are kept when nothing reads the
+        // claim.
+        val windowed = splitJoins(windowedQuery)
+        assert(windowed.forall(j => !j.isSkewJoin))
+        // Each branch holds the 334000 joined rows of key1 = 0, so across the union every v of
+        // 0, 3, ..., 999 appears 2000 times and shares its rank with its duplicates.
+        val windowedRows = sql(windowedQuery).collect()
+        assert(windowedRows.length == 668000)
+        assert(windowedRows.forall(_.getLong(0) == 0L))
+        assert(windowedRows.groupBy(_.getInt(1)).view.mapValues(_.length).toMap ==
+          (1 to 666001 by 2000).map(_ -> 2000).toMap)
+
+        // Nothing above reads the union's layout, so the same splits break nothing and are kept.
+        val plain = splitJoins(union)
+        assert(plain.forall(_.isSkewJoin))
+        val plainRows = sql(union).collect()
+        assert(plainRows.length == 668000)
+        assert(plainRows.groupBy(_.getLong(1)).view.mapValues(_.length).toMap ==
+          (0L until 1000L by 3).map(_ -> 2000).toMap)
+      }
+    }
+  }
+
+  test("SPARK-60458: split a join nested in a broadcast join's build side") {
+    // A broadcast-hash join constrains only its streamed side, so another candidate can sit in
+    // its build side. Replacing the outer join must keep the inner split instead of dropping the
+    // outer one and carrying the original build subtree.
+    val k1 = AttributeReference("k1", IntegerType)()
+    val k2 = AttributeReference("k2", IntegerType)()
+    val innerJoin = SortMergeJoinExec(
+      Seq(k1), Seq(k2), Inner, None,
+      LocalTableScanExec(Seq(k1), Nil, None),
+      LocalTableScanExec(Seq(k2), Nil, None))
+    val bhj = BroadcastHashJoinExec(
+      Seq(k2), Seq(k2), Inner, BuildRight, None,
+      LocalTableScanExec(Seq(k2), Nil, None),
+      BroadcastExchangeExec(HashedRelationBroadcastMode(Seq(k2)), innerJoin))
+    val rule = OptimizeSkewedJoin(EnsureRequirements())
+
+    val result = rule.applySkewJoins(bhj, Seq(
+      SkewJoinCandidate(innerJoin, innerJoin.copy(isSkewJoin = true)),
+      SkewJoinCandidate(bhj, bhj.copy(isSkewJoin = true))))
+
+    assert(result.isInstanceOf[BroadcastHashJoinExec])
+    assert(result.asInstanceOf[BroadcastHashJoinExec].isSkewJoin)
+    val innerJoins = findTopLevelSortMergeJoin(result)
+    assert(innerJoins.size == 1 && innerJoins.head.isSkewJoin)
   }
 
   test("SPARK-58099: Remove local sort dangling below the shuffle added by skew join") {
@@ -4741,11 +4890,11 @@ class AdaptiveQueryExecSuite
             "UNION ALL SELECT key2 FROM skewData2 GROUP BY key2", 1, 1)
 
         // skewJoin1 union (skewJoin2 join aggregate)
-        // skewJoin2 will lead to extra shuffles, but skew1 cannot be optimized
-         checkSkewJoin(
+        // skewJoin2's split would break the join above it, so only skewJoin2 is skipped
+        checkSkewJoin(
           "SELECT key1 FROM skewData1 JOIN skewData2 ON key1 = key2 UNION ALL " +
             "SELECT key1 from (SELECT key1 FROM skewData1 JOIN skewData2 ON key1 = key2) tmp1 " +
-            "JOIN (SELECT key2 FROM skewData2 GROUP BY key2) tmp2 ON key1 = key2", 3, 0)
+            "JOIN (SELECT key2 FROM skewData2 GROUP BY key2) tmp2 ON key1 = key2", 3, 1)
       }
     }
   }
