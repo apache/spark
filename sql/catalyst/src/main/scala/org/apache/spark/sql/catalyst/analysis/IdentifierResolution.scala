@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{AliasHelper, EvalHelper, Expression}
+import org.apache.spark.sql.catalyst.expressions.{AliasHelper, EvalHelper, Expression, SubqueryExpression, VariableReference}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.types.StringType
 
 object IdentifierResolution extends AliasHelper with EvalHelper {
@@ -47,5 +48,21 @@ object IdentifierResolution extends AliasHelper with EvalHelper {
             CatalystSqlParser.parseMultipartIdentifier(other.toString)
         }
     }
+  }
+
+  /** Collects distinct session variable names from a plan, including its subqueries. */
+  def collectTemporaryVariablesInLogicalPlan(plan: LogicalPlan): Seq[Seq[String]] = {
+    plan.flatMap { operator =>
+      operator.expressions.flatMap(collectTemporaryVariablesInExpressionTree)
+    }.distinct
+  }
+
+  /** Collects distinct session variable names from an expression, including the root. */
+  def collectTemporaryVariablesInExpressionTree(expression: Expression): Seq[Seq[String]] = {
+    expression.flatMap {
+      case subquery: SubqueryExpression => collectTemporaryVariablesInLogicalPlan(subquery.plan)
+      case variable: VariableReference => Seq(variable.originalNameParts)
+      case _ => Seq.empty
+    }.distinct
   }
 }
