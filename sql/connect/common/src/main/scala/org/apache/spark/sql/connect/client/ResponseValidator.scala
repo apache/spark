@@ -53,7 +53,8 @@ class ResponseValidator extends Logging {
   }
 
   /**
-   * Returns true if the session is valid on both the client and the server.
+   * Returns the locally tracked session validity without contacting the server. A true result
+   * does not guarantee that the server-side session is still available.
    */
   private[sql] def isSessionValid: Boolean = {
     // An active session is considered valid.

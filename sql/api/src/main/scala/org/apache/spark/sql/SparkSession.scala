@@ -820,7 +820,8 @@ abstract class SparkSession extends Serializable with Closeable {
    * Check to see if the session is still usable.
    *
    * In Classic this means that the underlying `SparkContext` is still active. In Connect this
-   * means the connection to the server is usable.
+   * checks the locally tracked session validity without contacting the server, so a true result
+   * does not guarantee that the server-side session is still available.
    */
   private[sql] def isUsable: Boolean
 
