@@ -41,6 +41,7 @@ import org.apache.spark.util.SparkClassUtils
  *   - `ParquetVectorUpdaterFactory` (constructor)
  *   - `VectorizedDeltaByteArrayReader` (no-arg constructor)
  *   - `VectorizedDeltaLengthByteArrayReader` (no-arg constructor)
+ *   - `VectorizedParquetRecordReader.columnVectors` (field).
  */
 object ParquetTestAccess {
 
@@ -196,6 +197,18 @@ object ParquetTestAccess {
   def newDeltaLengthByteArrayReader(): VectorizedDeltaLengthByteArrayReader =
     try { deltaLengthByteArrayCtor.newInstance() }
     catch { case e: ReflectiveOperationException => throw rethrow(e) }
+
+  // -------- VectorizedParquetRecordReader --------
+
+  private lazy val columnVectorsField = {
+    val f = classOf[VectorizedParquetRecordReader].getDeclaredField("columnVectors")
+    f.setAccessible(true)
+    f
+  }
+
+  def columnVectors(reader: VectorizedParquetRecordReader): Array[AnyRef] = {
+    columnVectorsField.get(reader).asInstanceOf[Array[AnyRef]]
+  }
 
   // -------- shared helper --------
 
