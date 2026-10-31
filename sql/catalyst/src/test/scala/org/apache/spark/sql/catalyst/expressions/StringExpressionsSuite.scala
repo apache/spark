@@ -628,6 +628,15 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("Levenshtein distance threshold") {
     checkEvaluation(Levenshtein(Literal("kitten"), Literal("sitting"), Some(Literal(2))), -1)
 
+    // null inputs, including a null threshold, yield null rather than a distance
+    checkEvaluation(
+      Levenshtein(Literal.create(null, StringType), Literal("sitting"), Some(Literal(2))), null)
+    checkEvaluation(
+      Levenshtein(Literal("kitten"), Literal.create(null, StringType), Some(Literal(2))), null)
+    checkEvaluation(
+      Levenshtein(Literal("kitten"), Literal("sitting"), Some(Literal.create(null, IntegerType))),
+      null)
+
     checkEvaluation(Levenshtein(Literal(""), Literal(""), Some(Literal(0))), 0)
     checkEvaluation(Levenshtein(Literal("aaapppp"), Literal(""), Some(Literal(8))), 7)
     checkEvaluation(Levenshtein(Literal("aaapppp"), Literal(""), Some(Literal(7))), 7)
