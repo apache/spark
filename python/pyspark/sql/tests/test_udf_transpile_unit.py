@@ -246,7 +246,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             if x is not None:
                 return x << 1
 
-        def multi_statement(x):  # > 1 top-level statement, not handled.
+        def multi_statement(x):  # First stmt is an assignment, not an if-guard.
             y = 1
             return x + y if x is not None else 0
 
@@ -1640,12 +1640,12 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             # unresolved and ResolveRandomSeed then gives each spliced copy its OWN seed. Both have
             # to end up sharing one evaluation, or `x == x` compares two independent draws.
             #
-            # Sharing leaves `col = col`, which SimplifyBinaryComparison folds to true and column
-            # pruning then drops the draw entirely -- so zero draws in the plan is the proof that
-            # both sides became the same column. Two independent draws would leave both.
+            # The NaN guard for the untyped (numeric) parameter keeps one `isnan` reference to the
+            # shared arg, so one draw remains in the plan after SimplifyBinaryComparison folds
+            # `col == col` to true. Two independent draws would leave both.
             for arg in (rand(), expr("rand()")):
                 eq_df = rows.select(eq_udf(arg).alias("v"))
-                self.assertEqual(0, self._draw_count(eq_df))
+                self.assertEqual(1, self._draw_count(eq_df))
                 self.assertTrue(all(r[0] for r in eq_df.collect()))
 
             clamped = rows.select(clamp_udf(rand()).alias("v"))
@@ -2636,16 +2636,261 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
     def test_param_category_combos_caps_preserve_typed_pins(self):
         # With more than three untyped params the cap collapses the untyped ones
-        # to numeric/string but keeps each typed param pinned (here a: str).
+        # to integer/float/string but keeps each typed param pinned (here a: str).
         import ast as _ast
 
         from pyspark.sql.transpile import _param_category_combos
 
         fn = _ast.parse("def f(a: str, b, c, d, e): return a").body[0]
         combos = _param_category_combos(fn, ["a", "b", "c", "d", "e"])
-        self.assertEqual(len(combos), 2)
+        # Three fill values: integer / float / string -> 3 combos.
+        self.assertEqual(len(combos), 3)
         for combo in combos:
             self.assertEqual(combo[0], "string")
+
+    def test_udf_transpile_integer_eq_no_nan_guard(self):
+        # `a == b` on BIGINT columns must NOT emit a NaN guard. Integers can never
+        # be NaN, so emitting `isnan(cast(bigint as double))` is unnecessary dead
+        # code. Verify via the logical plan: neither "isnan" nor an implicit double
+        # cast should appear for the integer equality variant.
+        from pyspark.sql.types import StructField, StructType
+
+        def x_eq_y(x: int, y: int) -> bool:
+            return x == y
+
+        schema = StructType(
+            [
+                StructField("a", LongType(), nullable=True),
+                StructField("b", LongType(), nullable=True),
+            ]
+        )
+        with self.sql_conf(_TRANSPILE_ON):
+            pudf = UserDefinedFunction(x_eq_y, BooleanType())
+            self.assertTrue(pudf.transpiled, "annotated int == int should transpile")
+            df = self.spark.createDataFrame([(1, 1), (1, 2), (None, None)], schema=schema)
+            projected = df.select(pudf("a", "b").alias("r"))
+            # Verify no Python eval node (plan was rewritten to Catalyst).
+            self.assertEqual(0, self._eval_python_count(projected))
+            # Verify isnan is NOT in the logical plan.
+            logical_plan = projected._jdf.queryExecution().analyzed().toString()
+            self.assertNotIn("isnan", logical_plan.lower(), "integer == must not emit NaN guard")
+            # Verify correct results: (1==1, 1==2, None==None in Python == True).
+            results = [r[0] for r in projected.collect()]
+            self.assertEqual(results, [True, False, True])
+
+    def test_udf_transpile_float_eq_nan_semantics(self):
+        # `a == b` on DOUBLE columns must correctly implement Python's NaN semantics:
+        # IEEE 754 says NaN != NaN (Python returns False), while Spark's EqualTo
+        # returns True for NaN = NaN. The NaN guard fixes this for float columns.
+        from pyspark.sql.types import DoubleType, StructField, StructType
+
+        def x_eq_y(x: float, y: float) -> bool:
+            return x == y
+
+        def x_neq_y(x: float, y: float) -> bool:
+            return x != y
+
+        schema = StructType(
+            [
+                StructField("a", DoubleType(), nullable=True),
+                StructField("b", DoubleType(), nullable=True),
+            ]
+        )
+        nan = float("nan")
+        with self.sql_conf(_TRANSPILE_ON):
+            pudf_eq = UserDefinedFunction(x_eq_y, BooleanType())
+            pudf_neq = UserDefinedFunction(x_neq_y, BooleanType())
+            self.assertTrue(pudf_eq.transpiled, "annotated float == float should transpile")
+            self.assertTrue(pudf_neq.transpiled, "annotated float != float should transpile")
+            # Verify isnan IS present in the logical plan (NaN guard was emitted).
+            df = self.spark.createDataFrame([(1.0, 1.0)], schema=schema)
+            projected_eq = df.select(pudf_eq("a", "b").alias("r"))
+            logical_plan = projected_eq._jdf.queryExecution().analyzed().toString()
+            self.assertIn("isnan", logical_plan.lower(), "float == must emit NaN guard")
+            # Verify semantics: NaN == NaN -> False (Python), None == None -> True.
+            rows = [
+                (nan, nan),  # NaN == NaN -> False in Python
+                (nan, 1.0),  # NaN == 1.0 -> False in Python
+                (1.0, 1.0),  # 1.0 == 1.0 -> True
+                (1.0, 2.0),  # 1.0 == 2.0 -> False
+                (None, None),  # None == None -> True (Python semantics)
+                (None, 1.0),  # None == 1.0 -> False
+            ]
+            df = self.spark.createDataFrame(rows, schema=schema)
+            eq_results = [r[0] for r in df.select(pudf_eq("a", "b")).collect()]
+            neq_results = [r[0] for r in df.select(pudf_neq("a", "b")).collect()]
+            self.assertEqual(eq_results, [False, False, True, False, True, False])
+            self.assertEqual(neq_results, [True, True, False, True, False, True])
+
+    def test_udf_transpile_int_float_annotation_categories(self):
+        # `int` annotation -> "integer" category; `float` annotation -> "float"
+        # category. For mixed-numeric comparisons the wider category is used.
+        import ast as _ast
+
+        from pyspark.sql.transpile import _annotation_category, _param_category_combos
+
+        # _annotation_category: int -> "integer", float -> "float".
+        fn_ann = _ast.parse("def f(x: int, y: float): pass").body[0]
+        int_ann = fn_ann.args.args[0].annotation
+        flt_ann = fn_ann.args.args[1].annotation
+        self.assertEqual(_annotation_category(int_ann), "integer")
+        self.assertEqual(_annotation_category(flt_ann), "float")
+
+        # _param_category_combos pins typed params and tries all three for untyped.
+        fn_typed = _ast.parse("def f(a: int, b: float): return a + b").body[0]
+        combos = _param_category_combos(fn_typed, ["a", "b"])
+        # One combo: both typed -> single variant {0: "integer", 1: "float"}.
+        self.assertEqual(len(combos), 1)
+        self.assertEqual(combos[0][0], "integer")
+        self.assertEqual(combos[0][1], "float")
+
+        fn_untyped = _ast.parse("def f(a): return a").body[0]
+        combos_u = _param_category_combos(fn_untyped, ["a"])
+        # Three combos for a single untyped param: integer / float / string.
+        self.assertEqual(len(combos_u), 3)
+        self.assertEqual({c[0] for c in combos_u}, {"integer", "float", "string"})
+
+    def test_udf_transpile_null_narrowing_skips_null_guard(self):
+        # When a parameter is guarded by `x is not None` in an
+        # if/ternary test, the transpiler should skip the raise_error null guard
+        # for ordering comparisons on that parameter within the guarded branch.
+        def if_guard_gt(x):
+            return (x > 0) if x is not None else None
+
+        def if_guard_and_lt(a, b):
+            return (a < b) if a is not None and b is not None else None
+
+        def ternary_guard_ge(x):
+            return (x >= 0) if x is not None else None
+
+        def is_none_ternary(x):
+            return None if x is None else x > 0
+
+        cases_if = [
+            # if/else with `is not None` guard
+            ("if_guard_gt", if_guard_gt),
+            # if/else with `is not None` and-chain (two params)
+            ("if_guard_and_lt", if_guard_and_lt),
+            # ternary with `is not None` guard
+            ("ternary_guard_ge", ternary_guard_ge),
+            # `is None` guard: non-null in the else branch
+            ("is_none_ternary", is_none_ternary),
+        ]
+        with self.sql_conf(_TRANSPILE_ON):
+            for name, func in cases_if:
+                with self.subTest(func=name):
+                    u, warnings_text = self._udf_and_warnings(func, BooleanType())
+                    self.assertTrue(u.transpiled, f"{name} did not transpile: {warnings_text}")
+                    arity = func.__code__.co_argcount
+                    if arity == 1:
+                        df = self.spark.createDataFrame([(1,), (-1,), (None,)], "a long")
+                        plan = self._optimized_plan(df.select(u("a")))
+                        self.assertNotIn("raise_error", plan, f"{name}: plan had raise_error")
+                        self.assertEqual(
+                            [True, False, None],
+                            [r[0] for r in df.select(u("a")).collect()],
+                            name,
+                        )
+                    else:
+                        df = self.spark.createDataFrame(
+                            [(1, 2), (2, 1), (None, 1)], "a long, b long"
+                        )
+                        plan = self._optimized_plan(df.select(u("a", "b")))
+                        self.assertNotIn("raise_error", plan, f"{name}: plan had raise_error")
+                        self.assertEqual(
+                            [True, False, None],
+                            [r[0] for r in df.select(u("a", "b")).collect()],
+                            name,
+                        )
+
+    def test_udf_transpile_early_return_null_guard(self):
+        # A 2-statement early-return pattern
+        # `if x is None: return y\nreturn body` is normalized to a single
+        # if/else so null narrowing applies to the main body.
+        def early_return_gt(x):
+            if x is None:
+                return None
+            return x > 0
+
+        def early_return_lt_default(x):
+            if x is None:
+                return False
+            return x < 10
+
+        with self.sql_conf(_TRANSPILE_ON):
+            for name, func, rt, rows, expected in [
+                (
+                    "early_return_gt",
+                    early_return_gt,
+                    BooleanType(),
+                    [(1,), (-1,), (None,)],
+                    [True, False, None],
+                ),
+                (
+                    "early_return_lt_default",
+                    early_return_lt_default,
+                    BooleanType(),
+                    [(5,), (15,), (None,)],
+                    [True, False, False],
+                ),
+            ]:
+                with self.subTest(func=name):
+                    u, warnings_text = self._udf_and_warnings(func, rt)
+                    self.assertTrue(u.transpiled, f"{name} did not transpile: {warnings_text}")
+                    df = self.spark.createDataFrame(rows, "a long")
+                    plan = self._optimized_plan(df.select(u("a")))
+                    self.assertNotIn("raise_error", plan, f"{name}: plan had raise_error")
+                    self.assertEqual(
+                        expected,
+                        [r[0] for r in df.select(u("a")).collect()],
+                        name,
+                    )
+
+    def test_udf_transpile_null_guard_warning(self):
+        # When the transpiler still emits a null guard (because
+        # non-null cannot be proven), it emits a UserWarning at construction time.
+        import warnings
+
+        def unguarded_gt(x):
+            return x > 0
+
+        with self.sql_conf(_TRANSPILE_ON):
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                u = UserDefinedFunction(unguarded_gt, BooleanType())
+            null_guard_warnings = [w for w in caught if "NULL guard" in str(w.message)]
+            self.assertTrue(u.transpiled, "unguarded_gt should transpile (under strict or loose)")
+            self.assertTrue(null_guard_warnings, "Expected a UserWarning about NULL guard")
+            self.assertIn("NULL guard", str(null_guard_warnings[0].message))
+
+    def test_udf_transpile_null_narrowing_len(self):
+        # A guarded len() call should skip the raise_error null guard.
+        def len_guarded(x):
+            if x is not None:
+                return len(x) > 3
+            return None
+
+        def len_early_return(x):
+            if x is None:
+                return None
+            return len(x) > 3
+
+        with self.sql_conf(_TRANSPILE_ON):
+            for name, func in [
+                ("len_guarded", len_guarded),
+                ("len_early_return", len_early_return),
+            ]:
+                with self.subTest(func=name):
+                    u, warnings_text = self._udf_and_warnings(func, BooleanType())
+                    self.assertTrue(u.transpiled, f"{name} did not transpile: {warnings_text}")
+                    df = self.spark.createDataFrame([("hi",), ("hello",), (None,)], "a string")
+                    plan = self._optimized_plan(df.select(u("a")))
+                    self.assertNotIn("raise_error", plan, f"{name}: plan had raise_error")
+                    self.assertEqual(
+                        [False, True, None],
+                        [r[0] for r in df.select(u("a")).collect()],
+                        name,
+                    )
 
 
 if __name__ == "__main__":

@@ -18,12 +18,15 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.expressions.{Literal => CatalystLiteral}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, Literal, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter._
 import org.apache.spark.sql.execution.datasources.v2.V2PredicateSuite.ref
 import org.apache.spark.sql.internal.connector.PredicateUtils
 import org.apache.spark.sql.sources.{AlwaysFalse => V1AlwaysFalse, AlwaysTrue => V1AlwaysTrue, And => V1And, EqualNullSafe, EqualTo, GreaterThan, GreaterThanOrEqual, In, IsNotNull, IsNull, LessThan, LessThanOrEqual, Not => V1Not, Or => V1Or, StringContains, StringEndsWith, StringStartsWith}
-import org.apache.spark.sql.types.{IntegerType, StringType}
+import org.apache.spark.sql.types.{BooleanType, IntegerType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
 class V2PredicateSuite extends SparkFunSuite {
@@ -102,6 +105,52 @@ class V2PredicateSuite extends SparkFunSuite {
     assert(PredicateUtils.toV1(predicate1).get.toV2 == predicate1)
   }
 
+  for ((left, right, leftSql, rightSql) <- Seq(
+      (new Not(new Predicate("BOOLEAN_EXPRESSION", Array[Expression](ref("a")))),
+        ref("b"), "(NOT (a))", "b"),
+      (ref("a"), new Not(new Predicate("BOOLEAN_EXPRESSION", Array[Expression](ref("b")))),
+        "a", "(NOT (b))"),
+      (new Not(new Predicate("BOOLEAN_EXPRESSION", Array[Expression](ref("a")))),
+        new Not(new Predicate("BOOLEAN_EXPRESSION", Array[Expression](ref("b")))),
+        "(NOT (a))", "(NOT (b))"))) {
+    test(s"comparisons preserve NOT operand precedence: $leftSql, $rightSql") {
+      val comparison = new Predicate("<=>", Array[Expression](left, right))
+      assert(comparison.describe() ==
+        s"(($leftSql IS NOT NULL AND $rightSql IS NOT NULL AND $leftSql = $rightSql) " +
+          s"OR ($leftSql IS NULL AND $rightSql IS NULL))")
+      assert(new Predicate("=", Array[Expression](left, right)).describe() ==
+        s"$leftSql = $rightSql")
+    }
+  }
+
+  test("comparisons with NOT preserve three-valued logic") {
+    def evaluate(sql: String, a: java.lang.Boolean, b: java.lang.Boolean): Any = {
+      CatalystSqlParser.parseExpression(sql).transform {
+        case attr: UnresolvedAttribute =>
+          CatalystLiteral.create(if (attr.name == "a") a else b, BooleanType)
+      }.eval()
+    }
+
+    val values = Seq[java.lang.Boolean](true, false, null)
+    val notA = new Not(new Predicate("BOOLEAN_EXPRESSION", Array[Expression](ref("a"))))
+    val notB = new Not(new Predicate("BOOLEAN_EXPRESSION", Array[Expression](ref("b"))))
+    for {
+      (left, right, leftSql, rightSql) <- Seq(
+        (notA, ref("b"), "(NOT a)", "b"),
+        (ref("a"), notB, "a", "(NOT b)"),
+        (notA, notB, "(NOT a)", "(NOT b)"))
+      operator <- Seq("<=>", "=", "<>", "<", "<=", ">", ">=")
+      a <- values
+      b <- values
+    } {
+      val predicate = new Predicate(operator, Array[Expression](left, right))
+      val expected = s"$leftSql $operator $rightSql"
+      withClue(s"${predicate.describe()}, a=$a, b=$b: ") {
+        assert(evaluate(predicate.describe(), a, b) == evaluate(expected, a, b))
+      }
+    }
+  }
+
   test("EqualNullSafe") {
     val predicate1 = new Predicate("<=>", Array[Expression](ref("a"), LiteralValue(1, IntegerType)))
     val predicate2 = new Predicate("<=>", Array[Expression](ref("a"), LiteralValue(1, IntegerType)))
@@ -171,6 +220,52 @@ class V2PredicateSuite extends SparkFunSuite {
     assert(PredicateUtils.toV1(predicate1).get == v1Filter)
     assert(PredicateUtils.toV1(v1Filter.toV2).get == v1Filter)
     assert(PredicateUtils.toV1(predicate1).get.toV2 == predicate1)
+  }
+
+  for ((operand, expected) <- Seq(
+      (new Predicate("OR", Array[Expression](ref("a"), ref("b"))),
+        "((a) OR (b)) IN (true, false)"),
+      (new Predicate("NOT", Array[Expression](ref("a"))), "(NOT (a)) IN (true, false)"),
+      (new Predicate("=", Array[Expression](ref("a"), ref("b"))), "(a = b) IN (true, false)"))) {
+    test(s"IN preserves value operand precedence: ${operand.name()}") {
+      val predicate = new Predicate("IN", Array[Expression](
+        operand, LiteralValue(true, BooleanType), LiteralValue(false, BooleanType)))
+      assert(predicate.describe() == expected)
+      val empty = new Predicate("IN", Array[Expression](operand))
+      val groupedOperand = expected.stripSuffix(" IN (true, false)")
+      assert(empty.describe() == s"CASE WHEN $groupedOperand IS NULL THEN NULL ELSE FALSE END")
+    }
+  }
+
+  test("IN preserves three-valued logic for compound operands") {
+    def evaluate(sql: String, a: java.lang.Boolean, b: java.lang.Boolean): Any = {
+      CatalystSqlParser.parseExpression(sql).transform {
+        case attr: UnresolvedAttribute =>
+          CatalystLiteral.create(if (attr.name == "a") a else b, BooleanType)
+      }.eval()
+    }
+
+    val values = Seq[java.lang.Boolean](true, false, null)
+    for {
+      (operand, expectedOperand) <- Seq(
+        (new Predicate("OR", Array[Expression](ref("a"), ref("b"))), "(a OR b)"),
+        (new Predicate("NOT", Array[Expression](ref("a"))), "(NOT a)"),
+        (new Predicate("=", Array[Expression](ref("a"), ref("b"))), "(a = b)"))
+      a <- values
+      b <- values
+      list <- Seq(Seq.empty, Seq(true), Seq(false), Seq(true, false))
+    } {
+      val predicate = new Predicate("IN", Array[Expression](operand) ++
+        list.map(value => LiteralValue(value, BooleanType)))
+      val expected = if (list.isEmpty) {
+        s"CASE WHEN $expectedOperand IS NULL THEN NULL ELSE FALSE END"
+      } else {
+        s"$expectedOperand IN (${list.mkString(", ")})"
+      }
+      withClue(s"${predicate.describe()}, a=$a, b=$b: ") {
+        assert(evaluate(predicate.describe(), a, b) == evaluate(expected, a, b))
+      }
+    }
   }
 
   test("In") {
@@ -306,6 +401,22 @@ class V2PredicateSuite extends SparkFunSuite {
       new Predicate("=", Array[Expression](LiteralValue(1, IntegerType))),
       new Predicate("=", Array[Expression](LiteralValue(1, IntegerType))))
     assert(PredicateUtils.toV1(predicate4) == None)
+  }
+
+  Seq("STARTS_WITH", "ENDS_WITH", "CONTAINS").foreach { predicateName =>
+    test(s"$predicateName descriptions preserve collated string literals") {
+      for {
+        collation <- Seq("UTF8_LCASE", "UNICODE_CI")
+        value <- Seq("", "a", "abc", "it's", "a%b_c", "a\\b")
+      } {
+        val string = UTF8String.fromString(value)
+        val predicate = new Predicate(predicateName,
+          Array[Expression](ref("a"), LiteralValue(string, StringType(collation))))
+        val binaryPredicate = new Predicate(predicateName,
+          Array[Expression](ref("a"), LiteralValue(string, StringType)))
+        assert(predicate.describe() == binaryPredicate.describe())
+      }
+    }
   }
 
   test("StringStartsWith") {

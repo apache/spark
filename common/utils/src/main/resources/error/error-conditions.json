@@ -191,6 +191,16 @@
       "Invalid as-of join."
     ],
     "subClass" : {
+      "INVALID_KEY_EXPRESSION" : {
+        "message" : [
+          "The as-of join key contains an invalid expression: <expr>. Use keys without subqueries, aggregate functions, window functions, generator functions, or non-deterministic functions."
+        ]
+      },
+      "KEY_REFERENCE" : {
+        "message" : [
+          "Each as-of join key must reference exactly one join input, and the two keys must reference different inputs. Got: <refs1> and <refs2>."
+        ]
+      },
       "TOLERANCE_IS_NON_NEGATIVE" : {
         "message" : [
           "The input argument `tolerance` must be non-negative."
@@ -206,9 +216,19 @@
           "Unsupported as-of join direction '<direction>'. Supported as-of join direction include: <supported>."
         ]
       },
+      "UNSUPPORTED_KEY_TYPE" : {
+        "message" : [
+          "The as-of join keys must be of an orderable, mutually comparable type. Got: <type1> and <type2>."
+        ]
+      },
       "UNSUPPORTED_NEAREST_KEY_TYPE" : {
         "message" : [
-          "Nearest sort-merge as-of joins do not support <dataType> keys. Cast the keys to a numeric or datetime type."
+          "Nearest as-of joins do not support <dataType> keys. Cast the keys to a numeric or datetime type."
+        ]
+      },
+      "UNSUPPORTED_TOLERANCE_KEY_TYPE" : {
+        "message" : [
+          "Sort-merge as-of joins with a tolerance do not support <dataType> keys. Cast the keys to a numeric or datetime type."
         ]
       }
     },
@@ -2331,6 +2351,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "DATA_SOURCE_CONTINUOUS_WRITE_NOT_SUPPORTED" : {
+    "message" : [
+      "<description>: Continuous write is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
   "DATA_SOURCE_DELTA_BATCH_WRITE_NOT_SUPPORTED" : {
     "message" : [
       "<description>: Delta batch write is not supported."
@@ -2399,6 +2425,18 @@
   "DATA_SOURCE_ROW_ID_SCHEMA_NOT_IMPLEMENTED" : {
     "message" : [
       "<class> does not implement rowIdSchema."
+    ],
+    "sqlState" : "0A000"
+  },
+  "DATA_SOURCE_STORAGE_FILTER_CHECKED_COLUMN_MISSING" : {
+    "message" : [
+      "A reader of <class> was asked for the column that marks the rows a storage filter checked, right after the <numScanColumns> columns of the scan's read schema. That column is missing, not a boolean, or not the last one. The reader returned <numColumns> columns."
+    ],
+    "sqlState" : "KD000"
+  },
+  "DATA_SOURCE_STORAGE_FILTER_READER_NOT_SUPPORTED" : {
+    "message" : [
+      "<class> cannot create a reader that applies a storage filter."
     ],
     "sqlState" : "0A000"
   },
@@ -4859,6 +4897,57 @@
     ],
     "sqlState" : "42000"
   },
+  "INVALID_NATIVE_DATA_SOURCE_LIBRARY" : {
+    "message" : [
+      "Invalid native data source library <path>:"
+    ],
+    "subClass" : {
+      "CANNOT_LOAD" : {
+        "message" : [
+          "<reason>"
+        ]
+      },
+      "REPLACED" : {
+        "message" : [
+          "The library was replaced after Spark loaded it: Spark loaded the build with the SHA-256 checksum <loadedChecksum>, but the file now has the checksum <checksum>. A JVM cannot load another build of a library from the same path, so restart the Spark application to use the new build."
+        ]
+      },
+      "UNSUPPORTED_ABI_VERSION" : {
+        "message" : [
+          "It requires version <version> of the native data source interface, but Spark supports version <supported>."
+        ]
+      }
+    },
+    "sqlState" : "22023"
+  },
+  "INVALID_NATIVE_DATA_SOURCE_PACKAGE" : {
+    "message" : [
+      "Invalid native data source package <path>:"
+    ],
+    "subClass" : {
+      "INVALID_LIBRARY" : {
+        "message" : [
+          "Cannot load the library <library>: <reason>"
+        ]
+      },
+      "INVALID_MANIFEST" : {
+        "message" : [
+          "<reason>"
+        ]
+      },
+      "UNSUPPORTED_ABI_VERSION" : {
+        "message" : [
+          "It requires version <version> of the native data source interface, but Spark supports version <supported>."
+        ]
+      },
+      "UNSUPPORTED_PLATFORM" : {
+        "message" : [
+          "It has no library for the platform <platform>. It has libraries for: <platforms>."
+        ]
+      }
+    },
+    "sqlState" : "22023"
+  },
   "INVALID_NON_DETERMINISTIC_EXPRESSIONS" : {
     "message" : [
       "The operator expects a deterministic expression, but the actual expression is <sqlExprs>."
@@ -6345,6 +6434,42 @@
     ],
     "sqlState" : "0A000"
   },
+  "NATIVE_DATA_SOURCE_ERROR" : {
+    "message" : [
+      "Failed to <action> native data source <name>: <msg>"
+    ],
+    "sqlState" : "38000"
+  },
+  "NATIVE_DATA_SOURCE_LIBRARY_NOT_FOUND" : {
+    "message" : [
+      "Cannot find the native data source library <fileName> with the SHA-256 checksum <checksum>, which is installed at <path> on the driver. Install the same build of the library on every node, at the same path or in the native library path."
+    ],
+    "sqlState" : "42K02"
+  },
+  "NATIVE_DATA_SOURCE_PACKAGE_CONFLICT" : {
+    "message" : [
+      "More than one native data source package under `spark.sql.dataSource.native.paths` provides the data source <name>: <packages>. Remove all but one of them."
+    ],
+    "sqlState" : "42710"
+  },
+  "NATIVE_DATA_SOURCE_PACKAGE_NOT_FOUND" : {
+    "message" : [
+      "Cannot find the native data source package <fileName> with the SHA-256 checksum <checksum>. Add the package with `spark.addArtifact`, or install the same package under `spark.sql.dataSource.native.paths` on every node."
+    ],
+    "sqlState" : "42K02"
+  },
+  "NATIVE_DATA_SOURCE_UNSUPPORTED_JAVA_VERSION" : {
+    "message" : [
+      "Native data sources require Java <required> or later, but Spark runs on Java <current>."
+    ],
+    "sqlState" : "0A000"
+  },
+  "NATIVE_DATA_SOURCE_UNSUPPORTED_PLATFORM" : {
+    "message" : [
+      "Native data sources are not supported on the platform <platform>: the JNI library of the C data interface of Arrow Java, with which Spark exchanges their data, failed to load: <reason>"
+    ],
+    "sqlState" : "0A000"
+  },
   "NEAREST_BY_JOIN" : {
     "message" : [
       "Invalid nearest-by join."
@@ -7433,9 +7558,23 @@
     ],
     "sqlState" : "42908"
   },
+  "SPECIFY_CLUSTER_BY_WITH_DISTRIBUTED_BY_PARTITION_IS_NOT_ALLOWED" : {
+    "message" : [
+      "Cannot specify both CLUSTER BY and DISTRIBUTED BY PARTITION.",
+      "Please replace CLUSTER BY with PARTITIONED BY or CLUSTERED BY ... INTO ... BUCKETS, or drop DISTRIBUTED BY PARTITION."
+    ],
+    "sqlState" : "42908"
+  },
   "SPECIFY_CLUSTER_BY_WITH_PARTITIONED_BY_IS_NOT_ALLOWED" : {
     "message" : [
       "Cannot specify both CLUSTER BY and PARTITIONED BY."
+    ],
+    "sqlState" : "42908"
+  },
+  "SPECIFY_DISTRIBUTED_BY_PARTITION_WITHOUT_PARTITIONING_IS_NOT_ALLOWED" : {
+    "message" : [
+      "Cannot specify DISTRIBUTED BY PARTITION for a table that has no partitioning.",
+      "Please add PARTITIONED BY or CLUSTERED BY ... INTO ... BUCKETS, or drop the clause. A cluster_by(...) transform in PARTITIONED BY is clustering, not partitioning. A statement that defines no schema (no column list, no typed partition columns, and no AS SELECT) cannot declare partitioning, so it cannot use DISTRIBUTED BY PARTITION."
     ],
     "sqlState" : "42908"
   },
@@ -7444,6 +7583,13 @@
       "A CREATE TABLE without explicit column list cannot specify PARTITIONED BY.",
       "Please use the form with explicit column list and specify PARTITIONED BY.",
       "Alternatively, allow partitioning to be inferred by omitting the PARTITION BY clause."
+    ],
+    "sqlState" : "42601"
+  },
+  "SPECIFY_WRITE_ORDERING_IS_NOT_ALLOWED" : {
+    "message" : [
+      "A CREATE or REPLACE TABLE that defines no schema (no column list, no typed partition columns, and no AS SELECT) cannot specify ORDERED BY, because there is no schema to resolve the ordering against.",
+      "Please add a column list, or use the AS SELECT form."
     ],
     "sqlState" : "42601"
   },
@@ -7975,6 +8121,12 @@
     ],
     "sqlState" : "42601"
   },
+  "STORAGE_FILTER_NOT_APPLIED" : {
+    "message" : [
+      "A storage filter could not be evaluated. The data source's reader should have read the rows without it instead of failing."
+    ],
+    "sqlState" : "KD000"
+  },
   "STORAGE_PARTITION_JOIN_INCOMPATIBLE_REDUCED_TYPES" : {
     "message" : [
       "Storage-partition join partition transforms produced incompatible reduced types,",
@@ -8012,6 +8164,12 @@
       "Checkpoint location <checkpointLocation> is in an inconsistent state: the metadata file is missing but offset and/or commit logs contain data. Please restore the metadata file or create a new checkpoint directory."
     ],
     "sqlState" : "42K03"
+  },
+  "STREAMING_FILE_SINK_PARTITIONING_MISMATCH" : {
+    "message" : [
+      "The streaming sink of the table <tableName> writes with the partition columns [<expectedPartCols>], but the files that the sink already committed to it have the partition columns [<recordedPartCols>]. Appending files in another layout hides the committed files from reads. Write to a new table location with a new checkpoint location, or rewrite the committed files with the partition columns of the table."
+    ],
+    "sqlState" : "55019"
   },
   "STREAMING_OUTPUT_MODE" : {
     "message" : [
@@ -9545,6 +9703,11 @@
           "Temporary views cannot be created with the WITH SCHEMA clause. Recreate the temporary view when the underlying schema changes, or use a persisted view."
         ]
       },
+      "TIMESTAMP_NANOS_SUBTRACTION" : {
+        "message" : [
+          "Subtracting nanosecond-precision timestamps (TIMESTAMP_LTZ/TIMESTAMP_NTZ with precision in [7, 9]) in <sqlExpr>. The interval result has microsecond precision. Cast both operands to TIMESTAMP_LTZ or TIMESTAMP_NTZ to subtract at microsecond precision, or cast them to TIMESTAMP_LTZ(9) or TIMESTAMP_NTZ(9) and use `unix_nanos(end) - unix_nanos(start)` for the elapsed time in nanoseconds."
+        ]
+      },
       "TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER" : {
         "message" : [
           "Parsing or formatting nanosecond-precision timestamps (TIMESTAMP_LTZ/TIMESTAMP_NTZ with precision in [7, 9]) under the LEGACY time parser policy. Set <config> to CORRECTED."
@@ -10254,6 +10417,12 @@
       "Error parsing WKB: <parseError> at position <pos>"
     ],
     "sqlState" : "22023"
+  },
+  "WRITE_ORDERING_WITH_UNKNOWN_COLUMN" : {
+    "message" : [
+      "Invalid write ordering: cannot resolve <cols> against the columns of the table."
+    ],
+    "sqlState" : "42703"
   },
   "WRITE_STREAM_NOT_ALLOWED" : {
     "message" : [

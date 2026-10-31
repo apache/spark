@@ -26,6 +26,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.expressions.{Expression, Extract, Literal}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
@@ -46,7 +47,9 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
   // scalastyle:on line.size.limit
   private val supportedAggregateFunctions =
     Set("MAX", "MIN", "SUM", "COUNT", "AVG") ++ distinctUnsupportedAggregateFunctions
-  private val supportedFunctions = supportedAggregateFunctions ++ Set("TRUNC")
+  private val supportedFunctions =
+    supportedAggregateFunctions ++
+      Set("TRUNC", CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING)
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
@@ -118,6 +121,29 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
         super.visitAggregateFunction(funcName, isDistinct, inputs)
       }
 
+    override def visitIn(v: String, list: java.util.List[String]): String = {
+      if (list.size() <= 1000) {
+        super.visitIn(v, list)
+      } else {
+        val chunks = new java.util.ArrayList[String]()
+        var i = 0
+        while (i < list.size()) {
+          val end = Math.min(i + 1000, list.size())
+          val ins = new java.lang.StringBuilder(v).append(" IN (")
+          var j = i
+          while (j < end) {
+            if (j > i) ins.append(", ")
+            ins.append(list.get(j))
+            j += 1
+          }
+          ins.append(")")
+          chunks.add(ins.toString)
+          i = end
+        }
+        chunks.toArray.mkString("(", " OR ", ")")
+      }
+    }
+
     override def visitBinaryComparison(name: String, le: Expression, re: Expression): String = {
       (le, re) match {
         case (lit: Literal[_], _) if lit.dataType == BinaryType =>
@@ -187,8 +213,9 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
       case BINARY_DOUBLE => Some(DoubleType) // Value for OracleTypes.BINARY_DOUBLE
       case INTERVAL_YM => Some(YearMonthIntervalType())
       case INTERVAL_DS => Some(DayTimeIntervalType())
-      case TIMESTAMP if !conf.legacyOracleTimestampNTZMappingEnabled && typeName != null &&
-          typeName.toUpperCase(Locale.ROOT).matches("DATE|TIMESTAMP") =>
+      case TIMESTAMP if typeName != null &&
+          typeName.toUpperCase(Locale.ROOT).matches("DATE|TIMESTAMP") &&
+          zonelessTimestampAsNTZ(md) =>
         val metadata = if (md != null) md.build() else Metadata.empty
         // Absent scale metadata: Oracle TIMESTAMP defaults to TIMESTAMP(6).
         val scale = if (metadata.contains("scale")) metadata.getLong("scale").toInt else 6
@@ -198,6 +225,16 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
           isTimestampNTZ = true, scale = scale, preferTimestampNanos = preferNanos)
         Some(resolved)
       case _ => None
+    }
+  }
+
+  // JdbcUtils.getSchema passes the zonelessTimestampAsNTZ option through the column metadata.
+  private def zonelessTimestampAsNTZ(md: MetadataBuilder): Boolean = {
+    val metadata = if (md != null) md.build() else Metadata.empty
+    if (metadata.contains(JDBCOptions.JDBC_ZONELESS_TIMESTAMP_AS_NTZ)) {
+      metadata.getBoolean(JDBCOptions.JDBC_ZONELESS_TIMESTAMP_AS_NTZ)
+    } else {
+      timestampNTZAsWallClock
     }
   }
 

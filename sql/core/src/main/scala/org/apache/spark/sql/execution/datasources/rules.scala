@@ -32,8 +32,9 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.TypeUtils._
+import org.apache.spark.sql.catalyst.util.WriteDistributionAndOrdering
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.connector.expressions.{FieldReference, RewritableTransform}
+import org.apache.spark.sql.connector.expressions.{FieldReference, LogicalExpressions, NamedReference, RewritableTransform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
@@ -327,9 +328,16 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
       SchemaUtils.checkTransformDuplication(
         partitioning, "in the partitioning", isCaseSensitive)
 
+      // The write ordering has no duplicate check: a repeated sort key is redundant, and
+      // `bucket(4, id), bucket(8, id)` are distinct keys.
+
       if (schema.isEmpty) {
         if (partitioning.nonEmpty) {
           throw QueryCompilationErrors.specifyPartitionNotAllowedWhenTableSchemaNotDefinedError()
+        }
+        if (create.writeOrdering.nonEmpty) {
+          throw QueryCompilationErrors
+            .specifyWriteOrderingNotAllowedWhenTableSchemaNotDefinedError(create.origin)
         }
 
         create
@@ -348,7 +356,28 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
           case other => other
         }
 
-        create.withPartitioning(normalizedPartitions)
+        // Unlike the partitioning, an ordering reference to a missing column, including a path
+        // through a non-struct field, is kept as is for CheckAnalysis to report, and each
+        // reference is normalized independently.
+        def normalizeResolvable(ref: NamedReference): NamedReference = {
+          WriteDistributionAndOrdering
+            .findColumn(schema, ref.fieldNames().toImmutableArraySeq, resolver)
+            .map { case (path, field) => FieldReference(path :+ field.name) }
+            .getOrElse(ref)
+        }
+
+        val normalizedOrdering = create.writeOrdering.map { sortOrder =>
+          val key = sortOrder.expression() match {
+            case ref: NamedReference => normalizeResolvable(ref)
+            case transform: RewritableTransform =>
+              transform.withReferences(
+                transform.references().map(normalizeResolvable).toImmutableArraySeq)
+            case other => other
+          }
+          LogicalExpressions.sort(key, sortOrder.direction(), sortOrder.nullOrdering())
+        }
+
+        create.withPartitioning(normalizedPartitions).withWriteOrdering(normalizedOrdering)
       }
   }
 

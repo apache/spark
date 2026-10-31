@@ -833,6 +833,18 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter {
     }
   }
 
+  test("SPARK-60565: Write collated strings to a Hive serde directory") {
+    withTempDir { dir =>
+      sql(
+        s"""
+           |INSERT OVERWRITE LOCAL DIRECTORY '${dir.toURI.getPath}'
+           |ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' COLLECTION ITEMS TERMINATED BY ':'
+           |SELECT 'a' COLLATE UNICODE_CI AS c1, ARRAY('b' COLLATE UNICODE_CI, 'c') AS c2
+         """.stripMargin)
+      checkAnswer(spark.read.text(dir.getCanonicalPath), Row("a,b:c"))
+    }
+  }
+
   test("insert overwrite to dir from temp table") {
     withTempView("test_insert_table") {
       spark.range(10).selectExpr("id", "id AS str").createOrReplaceTempView("test_insert_table")

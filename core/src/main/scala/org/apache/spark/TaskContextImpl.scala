@@ -23,6 +23,7 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
+import scala.util.control.NonFatal
 
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.{config, Logging}
@@ -268,7 +269,14 @@ private[spark] class TaskContextImpl(
           case t: Throwable => e.addSuppressed(t)
         }
         listenerExceptions += e
-        logError(log"Error in ${MDC(LISTENER, "TaskPreCompletionListener")}", e)
+        // Best effort: a failure to log, e.g. from an appender that does not ignore exceptions,
+        // must not end the loop in `markTaskCompleted()` before it sets `completed`, or the
+        // completion listeners would never run. It is reported with `e` instead.
+        try {
+          logError(log"Error in ${MDC(LISTENER, "TaskPreCompletionListener")}", e)
+        } catch {
+          case t: Throwable => e.addSuppressed(t)
+        }
     }
   }
 
@@ -320,7 +328,14 @@ private[spark] class TaskContextImpl(
       } catch {
         case e: Throwable =>
           listenerExceptions += e
-          logError(log"Error in TaskInterruptListener", e)
+          // Best effort: a failure to log, e.g. from an appender that does not ignore exceptions,
+          // must not end the loop, or the remaining listeners would not run. It is reported with
+          // `e` instead.
+          try {
+            logError(log"Error in TaskInterruptListener", e)
+          } catch {
+            case t: Throwable => e.addSuppressed(t)
+          }
       }
     }
     if (listenerExceptions.nonEmpty) {
@@ -424,7 +439,14 @@ private[spark] class TaskContextImpl(
             }
           }
           listenerExceptions += e
-          logError(log"Error in ${MDC(LISTENER, name)}", e)
+          // Best effort: a failure to log, e.g. from an appender that does not ignore exceptions,
+          // must not end the loop, or the remaining listeners would not run and this thread would
+          // stay registered as the listener invocation thread. It is reported with `e` instead.
+          try {
+            logError(log"Error in ${MDC(LISTENER, name)}", e)
+          } catch {
+            case t: Throwable => e.addSuppressed(t)
+          }
       }
     }
     if (listenerExceptions.nonEmpty) {
@@ -443,7 +465,15 @@ private[spark] class TaskContextImpl(
       case e: TaskCompletionListenerException =>
         // SPARK-56330: Do not propagate to the executor kill / RPC thread; record the aggregate
         // failure for the task (not the first listener exception only).
-        logError(log"Exception(s) in TaskInterruptListener(s) after task was interrupted", e)
+        //
+        // Logging is best effort: a failure to log, e.g. from an appender that does not ignore
+        // exceptions, must not skip `markTaskFailed(e)` below or escape. It is reported with `e`
+        // instead.
+        try {
+          logError(log"Exception(s) in TaskInterruptListener(s) after task was interrupted", e)
+        } catch {
+          case NonFatal(t) => e.addSuppressed(t)
+        }
         try {
           markTaskFailed(e)
         } catch {

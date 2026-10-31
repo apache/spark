@@ -24,6 +24,9 @@ import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
+import org.apache.logging.log4j.core.LogEvent
+import org.apache.logging.log4j.core.appender.AbstractAppender
+import org.apache.logging.log4j.core.config.Property
 import org.mockito.ArgumentMatchers.{any, eq => mockitoEq}
 import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfter
@@ -243,6 +246,112 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     try {
       assert(taskStarted.await(10, TimeUnit.SECONDS))
       task.kill(interruptThread = true, "test kill")
+      assert(threadInterrupted.await(10, TimeUnit.SECONDS))
+      assert(task.context.isInterrupted())
+      assert(task.context.isFailed())
+    } finally {
+      taskThread.interrupt()
+      taskThread.join(10000)
+    }
+  }
+
+  test("SPARK-60567: all TaskInterruptListeners should be called even if logging a failure " +
+    "fails") {
+    val context = TaskContext.empty()
+    val listener = mock(classOf[TaskInterruptListener])
+    val first = new Exception("exception in listener1")
+    context.addTaskInterruptListener(listener)
+    // Added last, so it runs first.
+    context.addTaskInterruptListener(new TaskInterruptListener {
+      override def onTaskInterrupted(context: TaskContext, reason: String): Unit = throw first
+    })
+
+    val logFailure = new IllegalStateException("log failure")
+    withLogAppender(new FailingAppender("Error in TaskInterruptListener", logFailure)) {
+      context.markInterrupted("test interrupt")
+    }
+    verify(listener, times(1)).onTaskInterrupted(any(), mockitoEq("test interrupt"))
+    assert(context.isFailed())
+    val taskFailure = context.getTaskFailure.get
+    assert(taskFailure.isInstanceOf[TaskCompletionListenerException])
+    assert(taskFailure.getSuppressed.toSeq === Seq(first))
+    // The failure to log is reported with the failure it was logging.
+    assert(first.getSuppressed.length === 1)
+    val causes = Iterator.iterate[Throwable](first.getSuppressed.head)(_.getCause)
+    assert(causes.takeWhile(_ != null).contains(logFailure))
+  }
+
+  test("SPARK-60567: markInterrupted marks the task failed even if logging the listener " +
+    "failures fails") {
+    val context = TaskContext.empty()
+    val failureListenerCalls = new AtomicInteger(0)
+    val first = new Exception("exception in interrupt listener")
+    context.addTaskInterruptListener(new TaskInterruptListener {
+      override def onTaskInterrupted(context: TaskContext, reason: String): Unit = throw first
+    })
+    context.addTaskFailureListener(new TaskFailureListener {
+      override def onTaskFailure(context: TaskContext, error: Throwable): Unit =
+        failureListenerCalls.incrementAndGet()
+    })
+
+    val logFailure = new IllegalStateException("log failure")
+    withLogAppender(new FailingAppender("Exception(s) in TaskInterruptListener(s)", logFailure)) {
+      // The failure to log must not be thrown from `markInterrupted` (kill / RPC thread must not
+      // see it).
+      context.markInterrupted("test interrupt")
+    }
+    assert(context.isInterrupted())
+    assert(context.isFailed())
+    assert(failureListenerCalls.get() == 1)
+
+    // The task failure is the aggregate failure of the interrupt listeners and reports the failure
+    // to log it.
+    val taskFailure = context.getTaskFailure.get
+    assert(taskFailure.isInstanceOf[TaskCompletionListenerException])
+    assert(taskFailure.getMessage.contains("exception in interrupt listener"))
+    assert(taskFailure.getSuppressed.contains(first))
+    assert(taskFailure.getSuppressed.exists { t =>
+      Iterator.iterate[Throwable](t)(_.getCause).takeWhile(_ != null).contains(logFailure)
+    })
+  }
+
+  test("SPARK-60567: Task.kill interrupts the task thread even if logging the listener " +
+    "failures fails") {
+    sc = new SparkContext("local", "test")
+    val taskStarted = new CountDownLatch(1)
+    val threadInterrupted = new CountDownLatch(1)
+    val serializedTaskMetrics =
+      SparkEnv.get.closureSerializer.newInstance().serialize(TaskMetrics.registered).array()
+    val task = new Task[Int](0, 0, 0, 1, JobArtifactSet.emptyJobArtifactSet,
+      serializedTaskMetrics = serializedTaskMetrics) {
+      override def runTask(context: TaskContext): Int = {
+        // Both listeners fail, so both the per-listener and the aggregate failure are logged.
+        (1 to 2).foreach { i =>
+          context.addTaskInterruptListener(new TaskInterruptListener {
+            override def onTaskInterrupted(context: TaskContext, reason: String): Unit =
+              throw new Exception(s"exception in interrupt listener $i")
+          })
+        }
+        taskStarted.countDown()
+        try {
+          // Block until `Task.kill` interrupts this thread.
+          new CountDownLatch(1).await(10, TimeUnit.SECONDS)
+        } catch {
+          case _: InterruptedException => threadInterrupted.countDown()
+        }
+        0
+      }
+    }
+    val taskThread = new Thread(
+      () => Utils.tryLogNonFatalError { task.run(0, 0, null, 1, null, Option.empty) },
+      "task-kill-test")
+    taskThread.start()
+    try {
+      assert(taskStarted.await(10, TimeUnit.SECONDS))
+      withLogAppender(
+        new FailingAppender("TaskInterruptListener", new IllegalStateException("log failure"))) {
+        task.kill(interruptThread = true, "test kill")
+      }
       assert(threadInterrupted.await(10, TimeUnit.SECONDS))
       assert(task.context.isInterrupted())
       assert(task.context.isFailed())
@@ -966,6 +1075,88 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     }
   }
 
+  test("SPARK-60556: listeners still run if logging a pre-completion listener's failure fails") {
+    val context = TaskContext.empty()
+    val invocationOrder = ArrayBuffer.empty[String]
+
+    def makeLoggingListener(id: String): TaskCompletionListener = new TaskCompletionListener {
+      override def onTaskCompletion(context: TaskContext): Unit = {
+        invocationOrder += id
+      }
+    }
+    val pre = new Exception("pre")
+    context.addTaskCompletionListener(makeLoggingListener("A"))
+    context.addTaskPreCompletionListener(makeLoggingListener("P2"))
+    // Added last, so it runs first.
+    context.addTaskPreCompletionListener(new TaskCompletionListener {
+      override def onTaskCompletion(context: TaskContext): Unit = throw pre
+    })
+
+    val logFailure = new IllegalStateException("log failure")
+    withLogAppender(new FailingAppender("Error in TaskPreCompletionListener", logFailure)) {
+      val e = intercept[TaskCompletionListenerException] {
+        context.markTaskCompleted(None)
+      }
+      assert(e.getSuppressed.toSeq === Seq(pre))
+      // The failure to log is reported with the failure it was logging.
+      assert(pre.getSuppressed.length === 1)
+      val causes = Iterator.iterate[Throwable](pre.getSuppressed.head)(_.getCause)
+      assert(causes.takeWhile(_ != null).contains(logFailure))
+    }
+    // The pre-completion listener after the failing one still runs, and before the completion one.
+    assert(invocationOrder === Seq("P2", "A"))
+    assert(context.isCompleted())
+  }
+
+  test("SPARK-60556: completion listeners still run if logging a listener's failure fails") {
+    val context = TaskContext.empty()
+    val invocations = new ConcurrentLinkedQueue[(String, Thread)]()
+    val first = new Exception("first")
+    context.addTaskCompletionListener(loggingListener(invocations, "B"))
+    // Added last, so it runs first.
+    context.addTaskCompletionListener(new TaskCompletionListener {
+      override def onTaskCompletion(context: TaskContext): Unit = throw first
+    })
+
+    val logFailure = new IllegalStateException("log failure")
+    withLogAppender(new FailingAppender("Error in TaskCompletionListener", logFailure)) {
+      val e = intercept[TaskCompletionListenerException] {
+        context.markTaskCompleted(None)
+      }
+      assert(e.getSuppressed.toSeq === Seq(first))
+      // The failure to log is reported with the failure it was logging.
+      assert(first.getSuppressed.length === 1)
+    }
+    assert(invocations.asScala.map(_._1).toSeq === Seq("B"))
+    // This thread no longer counts as the one invoking listeners: a listener added now runs
+    // right away.
+    context.addTaskCompletionListener(loggingListener(invocations, "C"))
+    assert(invocations.asScala.map(_._1).toSeq === Seq("B", "C"))
+  }
+
+  test("SPARK-60556: completion listeners run if logging a failure listener's failure fails") {
+    val context = TaskContext.empty()
+    val invocations = new ConcurrentLinkedQueue[(String, Thread)]()
+    context.addTaskCompletionListener(loggingListener(invocations, "A"))
+    context.addTaskFailureListener(new TaskFailureListener {
+      override def onTaskFailure(context: TaskContext, error: Throwable): Unit =
+        throw new Exception("failure listener")
+    })
+    // Its failure runs the failure listener, which fails too.
+    context.addTaskPreCompletionListener(new TaskCompletionListener {
+      override def onTaskCompletion(context: TaskContext): Unit = throw new Exception("pre")
+    })
+
+    val logFailure = new IllegalStateException("log failure")
+    withLogAppender(new FailingAppender("Error in TaskFailureListener", logFailure)) {
+      intercept[TaskCompletionListenerException] {
+        context.markTaskCompleted(None)
+      }
+    }
+    assert(invocations.asScala.map(_._1).toSeq === Seq("A"))
+    assert(context.isCompleted())
+  }
+
   /** A completion listener that records its id and the thread it runs on in `invocations`. */
   private def loggingListener(
       invocations: ConcurrentLinkedQueue[(String, Thread)],
@@ -1002,6 +1193,19 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     completion.join(TimeUnit.MINUTES.toMillis(1))
     assert(!completion.isAlive)
     completion
+  }
+
+  /**
+   * An appender that throws `failure` for every event whose message contains `trigger`. Unlike
+   * `LogAppender`, it does not ignore exceptions, so log4j throws them from the logging call.
+   */
+  private class FailingAppender(trigger: String, failure: RuntimeException)
+    extends AbstractAppender("failingAppender", null, null, false, Property.EMPTY_ARRAY) {
+    override def append(event: LogEvent): Unit = {
+      if (event.getMessage.getFormattedMessage.contains(trigger)) {
+        throw failure
+      }
+    }
   }
 
   test("SPARK-46480: Add isFailed in TaskContext") {

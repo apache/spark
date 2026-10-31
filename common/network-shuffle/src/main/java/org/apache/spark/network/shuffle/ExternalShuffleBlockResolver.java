@@ -95,8 +95,10 @@ public class ExternalShuffleBlockResolver {
   private final boolean verifyBlockPathsAtRead;
 
   // Canonical forms of registered executor local dirs, cached because they are checked on
-  // every block open. Keyed by the raw registered path string.
-  private final ConcurrentMap<String, Path> canonicalLocalDirs = new ConcurrentHashMap<>();
+  // every block open. Keyed by the raw registered path string. Entries are evicted when the
+  // last registered executor referencing the dir is removed in applicationRemoved().
+  @VisibleForTesting
+  final ConcurrentMap<String, Path> canonicalLocalDirs = new ConcurrentHashMap<>();
 
   @VisibleForTesting
   final File registeredExecutorFile;
@@ -243,6 +245,7 @@ public class ExternalShuffleBlockResolver {
     logger.info("Application {} removed, cleanupLocalDirs = {}",
       MDC.of(LogKeys.APP_ID, appId),
       MDC.of(LogKeys.CLEANUP_LOCAL_DIRS, cleanupLocalDirs));
+    Set<String> removedLocalDirs = new HashSet<>();
     Iterator<Map.Entry<AppExecId, ExecutorShuffleInfo>> it = executors.entrySet().iterator();
     while (it.hasNext()) {
       Map.Entry<AppExecId, ExecutorShuffleInfo> entry = it.next();
@@ -252,6 +255,9 @@ public class ExternalShuffleBlockResolver {
       // Only touch executors associated with the appId that was removed.
       if (appId.equals(fullId.appId)) {
         it.remove();
+        if (executor.localDirs != null) {
+          removedLocalDirs.addAll(Arrays.asList(executor.localDirs));
+        }
         if (db != null && AppsWithRecoveryDisabled.isRecoveryEnabledForApp(fullId.appId)) {
           try {
             db.delete(dbAppExecKey(fullId));
@@ -271,6 +277,25 @@ public class ExternalShuffleBlockResolver {
         }
       }
     }
+    evictCanonicalLocalDirs(removedLocalDirs);
+  }
+
+  /**
+   * Drops the cached canonical forms of the given local dirs, except those still referenced by
+   * a registered executor. Without this, the cache would grow with every application served.
+   */
+  private void evictCanonicalLocalDirs(Set<String> localDirs) {
+    if (localDirs.isEmpty() || canonicalLocalDirs.isEmpty()) {
+      return;
+    }
+    for (ExecutorShuffleInfo executor : executors.values()) {
+      if (executor.localDirs != null) {
+        for (String localDir : executor.localDirs) {
+          localDirs.remove(localDir);
+        }
+      }
+    }
+    canonicalLocalDirs.keySet().removeAll(localDirs);
   }
 
   /**
@@ -378,11 +403,19 @@ public class ExternalShuffleBlockResolver {
    */
   private ManagedBuffer getSortBasedShuffleBlockData(
     ExecutorShuffleInfo executor, int shuffleId, long mapId, int startReduceId, int endReduceId) {
-    String indexFilePath = getVerifiedFile(
-      executor, "shuffle_" + shuffleId + "_" + mapId + "_0.index").getPath();
+    String indexFileName = "shuffle_" + shuffleId + "_" + mapId + "_0.index";
+    String indexFilePath = ExecutorDiskUtils.getFilePath(
+      executor.localDirs, executor.subDirsPerLocalDir, indexFileName);
 
     try {
-      ShuffleIndexInformation shuffleIndexInformation = shuffleIndexCache.get(indexFilePath);
+      // The index file is only read when it is loaded into the cache, so verify its path only
+      // on a cache miss. The data file is opened on every fetch and is verified every time.
+      ShuffleIndexInformation shuffleIndexInformation =
+        shuffleIndexCache.getIfPresent(indexFilePath);
+      if (shuffleIndexInformation == null) {
+        getVerifiedFile(executor, indexFileName);
+        shuffleIndexInformation = shuffleIndexCache.get(indexFilePath);
+      }
       ShuffleIndexRecord shuffleIndexRecord = shuffleIndexInformation.getIndex(
         startReduceId, endReduceId);
       return new FileSegmentManagedBuffer(
