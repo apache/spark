@@ -184,6 +184,14 @@ private[sql] object InputPolicy {
     onlyNames = true,
     fieldsNeedNoArgument = true,
     checkParamLength = false)
+
+  /**
+   * The method an operator's output is split into under whole stage codegen; see
+   * `CodegenContext.generateOutputsWithWholeStageSplit`. It is `wholeStageSplit`, but walked
+   * before the output's code is generated, so it takes the inputs not evaluated yet out of
+   * `currentVars`, for the caller to evaluate ahead of the call.
+   */
+  val wholeStageOutput: InputPolicy = wholeStageSplit.copy(hoistDeferredInputs = true)
 }
 
 /**
@@ -1524,9 +1532,12 @@ class CodegenContext extends Logging {
    */
   private[sql] var wholeStageBlocksSplit: Int = 0
 
-  /** The key of the next expression [[splitExpressionsWithSources]] meets, from its pieces. */
-  private def nextWholeStageSplitKey(pieces: Seq[(String, Seq[Expression])]): WholeStageSplitKey = {
-    val sources = pieces.map(_._2.map(CodeGenerator.withoutLambdaValues))
+  /**
+   * The key of the next expression a whole stage split meets, from the sources of its pieces: the
+   * expressions each piece of its code was generated from.
+   */
+  private def nextWholeStageSplitKey(pieceSources: Seq[Seq[Expression]]): WholeStageSplitKey = {
+    val sources = pieceSources.map(_.map(CodeGenerator.withoutLambdaValues))
     val occurrence = wholeStageSplitOccurrences.getOrElse(sources, 0)
     wholeStageSplitOccurrences(sources) = occurrence + 1
     WholeStageSplitKey(sources, occurrence)
@@ -1589,7 +1600,7 @@ class CodegenContext extends Logging {
     } else if (wholeStageSplit == WholeStageSplit.Off) {
       codes.mkString("\n")
     } else {
-      val key = nextWholeStageSplitKey(pieces)
+      val key = nextWholeStageSplitKey(pieces.map(_._2))
       wholeStageSplit match {
         case WholeStageSplit.Record if wholeStageSplitPossible(pieces) =>
           val marker = CodeGenerator.wholeStageSplitMarker(wholeStageSplitsRecorded.length)
@@ -1675,6 +1686,106 @@ class CodegenContext extends Logging {
   }
 
   /**
+   * The code of an operator's outputs, such as a `ProjectExec`'s, which whole stage codegen can
+   * split into a method per output. Each output is generated in the operator's method, where the
+   * outputs of a wide projection add up past the 8000 bytes HotSpot compiles even when no one of
+   * them is large. A split output's method stores its value in fields, as a subexpression's
+   * function does, and its code becomes the call, which the operator consuming it still evaluates
+   * where it would evaluate the output; a method per output, rather than a block of them, keeps
+   * each output evaluated no earlier than without the split.
+   *
+   * Outside whole stage codegen, where `wholeStageSplit` is off or splits other expressions, and
+   * where fewer than two outputs do more than pass on an input or a literal, the outputs are
+   * generated as they are; where it records, they are marked, and where it splits them, each
+   * output is split unless it only passes on an input or a literal, or no method can take what its
+   * code reads. Its method takes the locals its code reads (`collectInputs`, under
+   * `InputPolicy.wholeStageOutput`). The inputs it reads that are not evaluated yet are evaluated
+   * ahead of the call instead of inside the output's code; no other output reads them, since an
+   * operator defers only the inputs one output reads (see `ProjectExec.usedInputs`).
+   */
+  private[sql] def generateOutputsWithWholeStageSplit(outputs: Seq[Expression]): Seq[ExprCode] = {
+    if (currentVars == null || wholeStageSplit == WholeStageSplit.Off) {
+      outputs.map(_.genCode(this))
+    } else {
+      val key = nextWholeStageSplitKey(outputs.map(Seq(_)))
+      // One output moved into a method takes the code past the limit along with it; a large
+      // expression is split within itself instead.
+      val splittable = outputs.count(!passesOn(_)) > 1
+      wholeStageSplit match {
+        case WholeStageSplit.Record if splittable =>
+          val evs = outputs.map(_.genCode(this))
+          if (evs.iterator.map(_.code.length.toLong).sum > SQLConf.get.methodSplitThreshold) {
+            val marker = CodeGenerator.wholeStageSplitMarker(wholeStageSplitsRecorded.length)
+            wholeStageSplitsRecorded += key
+            outputs.zip(evs).map { case (e, ev) =>
+              if (passesOn(e) || ev.code == EmptyBlock) {
+                ev
+              } else {
+                ev.copy(code = code"$marker${ev.code}")
+              }
+            }
+          } else {
+            evs
+          }
+        case WholeStageSplit.Split(only) if splittable && only.forall(_.contains(key)) =>
+          outputs.map(splitOutput)
+        case _ =>
+          outputs.map(_.genCode(this))
+      }
+    }
+  }
+
+  /** Whether the code of output `e` only passes on an input or a literal, with nothing to split. */
+  private def passesOn(e: Expression): Boolean = e match {
+    case a: Alias => passesOn(a.child)
+    case _: BoundReference | _: Literal => true
+    case _ => false
+  }
+
+  /** The code of output `e`, split into a method of its own; see the caller. */
+  private def splitOutput(e: Expression): ExprCode = {
+    if (passesOn(e)) {
+      e.genCode(this)
+    } else {
+      // A walk that refuses has taken the code of the inputs it met first; it is put back.
+      val deferred = currentVars.map(v => if (v == null) null else v.code)
+      collectInputs(Seq(e), InputPolicy.wholeStageOutput, subExprEliminationExprs) match {
+        case None =>
+          currentVars.zip(deferred).foreach { case (v, c) => if (v != null) v.code = c }
+          e.genCode(this)
+        case Some(in) =>
+          val inputs = in.inputsToEvaluate.map(_.code).mkString("\n")
+          val ev = e.genCode(this)
+          val arguments = Option.when(ev.code != EmptyBlock)(ev.code.toString)
+            .flatMap(code => wholeStageSplitArguments(in, code))
+          arguments match {
+            case Some(args) =>
+              val value = addMutableState(javaType(e.dataType), "outputValue")
+              val (isNull, setIsNull) = ev.isNull match {
+                case TrueLiteral | FalseLiteral => (ev.isNull, "")
+                case _ =>
+                  val v = addMutableState(JAVA_BOOLEAN, "outputIsNull")
+                  (JavaCode.isNullGlobal(v), s"$v = ${ev.isNull};")
+              }
+              val name = freshName("output")
+              assertSplitCallsWithin(ev.code.toString, args.map(_._2), name)
+              val body =
+                s"""
+                   |${ev.code}
+                   |$setIsNull
+                   |$value = ${ev.value};
+                 """.stripMargin
+              val call = splitCall(name, args, "void", body, audited = true).call
+              wholeStageBlocksSplit += 1
+              ExprCode(code"$inputs\n$call;", isNull, JavaCode.global(value, e.dataType))
+            case None =>
+              ev.copy(code = code"$inputs\n" + ev.code)
+          }
+      }
+    }
+  }
+
+  /**
    * The arguments of a function split out of whole stage generated code so that the code generated
    * for `sources` compiles inside it; None where that code reads a local no function could take,
    * or the arguments would pass the JVM's limit.
@@ -1686,16 +1797,22 @@ class CodegenContext extends Logging {
   private def wholeStageSplitArguments(
       sources: Seq[Expression],
       code: String): Option[Seq[(String, String)]] = {
-    collectInputs(sources, InputPolicy.wholeStageSplit, subExprEliminationExprs).flatMap { in =>
-      val readsRow = in.readsRow || callsFunctionTakingRow(code)
-      val locals = if (!readsRow || mutableStateNames.contains(INPUT_ROW)) {
-        Some(in.arguments)
-      } else {
-        Option(INPUT_ROW).map(row => in.arguments :+ JavaCode.variable(row, classOf[InternalRow]))
-      }
-      locals.filter(values => isValidParamLength(calculateParamLengthFromExprValues(values)))
-        .map(_.map(v => typeName(v.javaType) -> v.variableName))
+    collectInputs(sources, InputPolicy.wholeStageSplit, subExprEliminationExprs)
+      .flatMap(wholeStageSplitArguments(_, code))
+  }
+
+  /** `wholeStageSplitArguments`, from inputs already collected for `code`. */
+  private def wholeStageSplitArguments(
+      in: CollectedInputs,
+      code: String): Option[Seq[(String, String)]] = {
+    val readsRow = in.readsRow || callsFunctionTakingRow(code)
+    val locals = if (!readsRow || mutableStateNames.contains(INPUT_ROW)) {
+      Some(in.arguments)
+    } else {
+      Option(INPUT_ROW).map(row => in.arguments :+ JavaCode.variable(row, classOf[InternalRow]))
     }
+    locals.filter(values => isValidParamLength(calculateParamLengthFromExprValues(values)))
+      .map(_.map(v => typeName(v.javaType) -> v.variableName))
   }
 
   /**
