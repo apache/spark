@@ -30,11 +30,15 @@ from pyspark.sql.datasource import (
     SimpleDataSourceStreamReader,
     WriterCommitMessage,
 )
+from pyspark.sql.datasource_internal import ReadLimitRegistry
 from pyspark.sql.streaming import StreamingQueryException
 from pyspark.sql.streaming.datasource import (
     ReadAllAvailable,
     ReadLimit,
+    ReadMaxBytes,
+    ReadMaxFiles,
     ReadMaxRows,
+    ReadMinRows,
     SupportsTriggerAvailableNow,
 )
 from pyspark.sql.types import Row
@@ -805,6 +809,38 @@ class BasePythonStreamingDataSourceTestsMixin:
 
 class PythonStreamingDataSourceTests(BasePythonStreamingDataSourceTestsMixin, ReusedSQLTestCase):
     pass
+
+
+class ReadLimitRegistryTests(unittest.TestCase):
+    def test_read_limit_registry_builds_all_builtin_types(self):
+        """ReadLimitRegistry.get rebuilds each builtin ReadLimit from its dict form."""
+
+        registry = ReadLimitRegistry()
+        cases = [
+            ({"_type": "ReadAllAvailable"}, ReadAllAvailable()),
+            ({"_type": "ReadMinRows", "min_rows": 10}, ReadMinRows(10)),
+            ({"_type": "ReadMaxRows", "max_rows": 20}, ReadMaxRows(20)),
+            ({"_type": "ReadMaxFiles", "max_files": 30}, ReadMaxFiles(30)),
+            ({"_type": "ReadMaxBytes", "max_bytes": 4096}, ReadMaxBytes(4096)),
+        ]
+
+        for params, expected in cases:
+            with self.subTest(read_limit=params["_type"]):
+                actual = registry.get(params)
+                self.assertEqual(actual, expected)
+
+    def test_get_rejects_missing_or_unregistered_type(self):
+        """ReadLimitRegistry.get raises PySparkException for a missing or unknown type."""
+        registry = ReadLimitRegistry()
+        cases = [
+            ({"_type": None}, "ReadLimit type name is missing."),
+            ({"_type": "NoSuchLimit"}, "name 'NoSuchLimit' is not registered."),
+        ]
+        for params, message in cases:
+            with self.subTest(params=params):
+                with self.assertRaises(PySparkException) as ctx:
+                    registry.get(params)
+                self.assertIn(message, str(ctx.exception))
 
 
 if __name__ == "__main__":
