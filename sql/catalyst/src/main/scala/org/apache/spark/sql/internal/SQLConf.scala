@@ -1165,8 +1165,10 @@ object SQLConf {
   val SORT_MERGE_AS_OF_JOIN_ENABLED =
     buildConf("spark.sql.join.sortMergeAsOfJoin.enabled")
       .internal()
-      .doc("When true, use a dedicated sort-merge physical operator for AS-OF joins " +
-        "instead of rewriting to a correlated subquery. The sort-merge operator evaluates " +
+      .doc("When true, use a dedicated sort-merge physical operator for DataFrame AS-OF joins " +
+        "instead of rewriting to a correlated subquery. The strategy is selected during " +
+        "analysis; later changes to this setting do not affect already analyzed joins. " +
+        "SQL AS-OF joins always use sort-merge. The sort-merge operator evaluates " +
         "AS-OF joins in O(N log N) by co-sorting both sides on the as-of key and scanning " +
         "in a single pass.")
       .version("4.3.0")
@@ -4685,8 +4687,12 @@ object SQLConf {
       .doc("The number of rows between periodic compaction-ratio evaluations by adaptive partial " +
         s"aggregation (see '${ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key}'). The ratio is also " +
         "evaluated when the aggregation map is about to spill, but only once the current map " +
-        "has processed at least this many rows. Setting this to 0 disables the periodic " +
-        "evaluation, leaving only the evaluation when the map is about to spill.")
+        "has processed at least this many rows, and over the rows since the periodic " +
+        "evaluation before last, so this also sets how many recent rows that evaluation " +
+        "measures: at least this many and fewer than twice that, or the whole map epoch when " +
+        "the map fills before its second periodic evaluation. Setting this to 0 disables the " +
+        "periodic evaluation, leaving only the evaluation when the map is about to spill, " +
+        "which then measures all rows and keys of the current map epoch.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .longConf
@@ -4698,15 +4704,41 @@ object SQLConf {
       .doc("The minimum compaction ratio required to keep the pre-shuffle partial aggregation " +
         s"(see '${ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key}'). The compaction ratio is the " +
         "number of processed rows divided by the number of keys held in the aggregation maps, " +
-        "so a ratio of 10 means the partial aggregation collapses ten rows into one. When an " +
-        "evaluation finds the ratio below this value, the partial aggregation is bypassed for " +
-        "the rest of the input. A larger value bypasses more aggressively.")
+        "so a ratio of 10 means the partial aggregation collapses ten rows into one. When the " +
+        "periodic evaluation finds the ratio below this value, the partial aggregation is " +
+        "bypassed for the rest of the input. A larger value bypasses more aggressively. The " +
+        "evaluation when the map is about to spill demands at least this value too, see " +
+        "'spark.sql.execution.aggregate.adaptivePartialAggregation.minCompactionToSpill'.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .doubleConf
       .checkValue(v => v >= 1.0 && v.isFinite,
         "The minimum compaction ratio must be a finite value of at least 1.0.")
       .createWithDefault(1.05)
+
+  val ADAPTIVE_PARTIAL_AGGREGATION_MIN_COMPACTION_TO_SPILL =
+    buildConf("spark.sql.execution.aggregate.adaptivePartialAggregation.minCompactionToSpill")
+      .doc("The minimum compaction ratio required to keep the pre-shuffle partial aggregation " +
+        "when its map is about to spill (see " +
+        s"'${ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key}'). Keeping the aggregation then means " +
+        "aggregating the rest of the input through spills, which pays off only if that input " +
+        "keeps repeating keys, so this evaluation measures the recent rows: those processed " +
+        "since the periodic evaluation before last, against the keys they added, or the whole " +
+        "map epoch before the map's second periodic evaluation. When keys repeat across the " +
+        "input, that ratio climbs as the map fills; with keys spread evenly over the task it " +
+        "reflects how much of the task's distinct keys the map holds rather than how often " +
+        "each key repeats, so at the default the aggregation is kept only when the map holds " +
+        "about half of them or more. When the ratio is below the larger of this value and " +
+        s"'${ADAPTIVE_PARTIAL_AGGREGATION_MIN_COMPACTION.key}', the map is not spilled and the " +
+        "rest of the input is passed through. Like the periodic evaluation, it only runs once " +
+        "the current map has processed " +
+        s"'${ADAPTIVE_PARTIAL_AGGREGATION_MIN_ROWS.key}' rows.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .doubleConf
+      .checkValue(v => v >= 1.0 && v.isFinite,
+        "The minimum compaction ratio must be a finite value of at least 1.0.")
+      .createWithDefault(2.0)
 
   val JSON_GENERATOR_IGNORE_NULL_FIELDS =
     buildConf("spark.sql.jsonGenerator.ignoreNullFields")
@@ -5582,8 +5614,10 @@ object SQLConf {
         "the columnar-based operator implemented by third-party libraries. Spark will try to " +
         "create batches with the size equal or less than this value. Normally it should not " +
         "happen, but if in extreme case that even one record is still larger than this value, " +
-        "Spark will create a batch with one record. applyInPandasWithState, Arrow Python " +
-        "UDTFs and Arrow Python UDFs that take columnar input directly ignore this config.")
+        "Spark will create a batch with one record. A batch that Arrow cannot slice, e.g. one " +
+        "with a fixed-width column of 2 GiB or more, is sent as a whole. " +
+        "applyInPandasWithState, Arrow Python UDTFs and Arrow Python UDFs that " +
+        "take columnar input directly ignore this config.")
       .version("4.1.0")
       .internal()
       .bytesConf(ByteUnit.BYTE)
@@ -9024,6 +9058,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_IGNORE_METADATA_COLUMN_ASSIGNMENTS =
+    buildConf("spark.sql.legacy.ignoreMetadataColumnAssignments")
+      .internal()
+      .doc("When true, UPDATE and MERGE on a Data Source V2 table do not reject assignments to " +
+        "metadata columns of the table, as in Spark 4.3 and earlier, where such assignments " +
+        "passed analysis and were usually ignored. When false, such assignments fail analysis, " +
+        "because the values of metadata columns are produced by the data source.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val TIME_TYPE_ENABLED =
     buildConf("spark.sql.timeType.enabled")
       .internal()
@@ -9788,14 +9834,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def sqlAsOfJoinEnabled: Boolean = getConf(SQL_ASOF_JOIN_ENABLED)
 
-  /**
-   * Whether to keep [[AsOfJoin]] for the sort-merge physical operator instead of the
-   * correlated-subquery rewrite. SQL ASOF JOIN always requires sort-merge; the DataFrame
-   * API is gated separately on [[sortMergeAsOfJoinEnabled]].
-   */
-  def useSortMergeAsOfJoinOperator(requiresSortMergeAsOfJoin: Boolean): Boolean =
-    sortMergeAsOfJoinEnabled || requiresSortMergeAsOfJoin
-
   def enableRadixSort: Boolean = getConf(RADIX_SORT_ENABLED)
 
   def isParquetSchemaMergingEnabled: Boolean = getConf(PARQUET_SCHEMA_MERGING_ENABLED)
@@ -9917,6 +9955,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def adaptivePartialAggregationMinCompaction: Double =
     getConf(ADAPTIVE_PARTIAL_AGGREGATION_MIN_COMPACTION)
+
+  def adaptivePartialAggregationMinCompactionToSpill: Double =
+    getConf(ADAPTIVE_PARTIAL_AGGREGATION_MIN_COMPACTION_TO_SPILL)
 
   def objectAggSortBasedFallbackThreshold: Int = getConf(OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD)
 
@@ -10114,7 +10155,10 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def arrowMaxRecordsPerOutputBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_OUTPUT_BATCH)
 
-  def arrowMaxBytesPerOutputBatch: Long = getConf(ARROW_EXECUTION_MAX_BYTES_PER_OUTPUT_BATCH)
+  // Zero or negative means no limit; clamp it so that a value below Int.MinValue does not wrap
+  // around to a positive limit when narrowed to an int.
+  def arrowMaxBytesPerOutputBatch: Long =
+    math.max(getConf(ARROW_EXECUTION_MAX_BYTES_PER_OUTPUT_BATCH), 0L)
 
   def arrowMaxBytesPerBatch: Long = getConf(ARROW_EXECUTION_MAX_BYTES_PER_BATCH)
 

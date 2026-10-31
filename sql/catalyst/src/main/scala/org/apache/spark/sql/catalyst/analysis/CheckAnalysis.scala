@@ -778,8 +778,8 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 "joinCondition" -> toSQLExpr(condition),
                 "conditionType" -> toSQLType(condition.dataType)))
 
-          case j @ AsOfJoin(_, _, _, Some(condition), _, _, _, _, _, _, _, _, _, _, _)
-              if condition.dataType != BooleanType =>
+          case j: AsOfJoin if j.condition.exists(_.dataType != BooleanType) =>
+            val condition = j.condition.get
             j.failAnalysis(
               errorClass = "JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE",
               messageParameters = Map(
@@ -787,20 +787,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 "conditionType" -> toSQLType(condition.dataType)))
 
           case j: AsOfJoin =>
-            j.toleranceAssertion.foreach { toleranceAssertion =>
-              if (!toleranceAssertion.foldable) {
-                j.failAnalysis(
-                  errorClass = "AS_OF_JOIN.TOLERANCE_IS_UNFOLDABLE",
-                  messageParameters = Map.empty)
-              }
-              if (!toleranceAssertion.eval().asInstanceOf[Boolean]) {
-                j.failAnalysis(
-                  errorClass = "AS_OF_JOIN.TOLERANCE_IS_NON_NEGATIVE",
-                  messageParameters = Map.empty)
-              }
-            }
-
-            AsOfJoinValidation.validateKeyTypes(j)
+            AsOfJoinValidation.validateTolerance(j)
 
           // Reject streaming inputs early. The optimizer rewrite is built around an
           // unconditioned cross-product fed into a global `Aggregate` keyed by a per-row

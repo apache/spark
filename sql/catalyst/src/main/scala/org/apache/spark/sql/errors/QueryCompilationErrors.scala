@@ -1038,6 +1038,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("dt" -> dt.toString))
   }
 
+  def duplicateAssignmentsError(nameList: String): Throwable = {
+    new AnalysisException(
+      errorClass = "DUPLICATE_ASSIGNMENTS",
+      messageParameters = Map("nameList" -> nameList))
+  }
+
   def unresolvedVariableError(
       name: Seq[String],
       pathEntries: Seq[Seq[String]],
@@ -2216,6 +2222,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "tableName" -> tableName,
         "specifiedPartCols" -> specifiedPartCols.mkString(", "),
         "existingPartCols" -> existingPartCols))
+  }
+
+  def fileStreamSinkPartitioningMismatchError(
+      tableName: String,
+      expectedPartCols: Seq[String],
+      recordedPartCols: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "STREAMING_FILE_SINK_PARTITIONING_MISMATCH",
+      messageParameters = Map(
+        "tableName" -> tableName,
+        "expectedPartCols" -> expectedPartCols.mkString(", "),
+        "recordedPartCols" -> recordedPartCols.mkString(", ")))
   }
 
   def mismatchedTableBucketingError(
@@ -5205,6 +5223,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       expr2: Expression): Throwable = {
     new AnalysisException(
       errorClass = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
+      messageParameters = Map(
+        "refs1" -> toSQLExpr(expr1),
+        "refs2" -> toSQLExpr(expr2)))
+  }
+
+  def asOfJoinKeyReferenceError(expr1: Expression, expr2: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "AS_OF_JOIN.KEY_REFERENCE",
       messageParameters = Map(
         "refs1" -> toSQLExpr(expr1),
         "refs2" -> toSQLExpr(expr2)))

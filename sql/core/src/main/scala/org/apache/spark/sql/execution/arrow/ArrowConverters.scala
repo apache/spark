@@ -221,12 +221,14 @@ private[sql] object ArrowConverters extends Logging {
         }
         arrowWriter.finish()
         val batch = unloader.getRecordBatch()
-        MessageSerializer.serialize(writeChannel, batch)
+        try {
+          MessageSerializer.serialize(writeChannel, batch)
 
-        // Always write the Ipc options at the end.
-        ArrowStreamWriter.writeEndOfStream(writeChannel, IpcOption.DEFAULT)
-
-        batch.close()
+          // Always write the Ipc options at the end.
+          ArrowStreamWriter.writeEndOfStream(writeChannel, IpcOption.DEFAULT)
+        } finally {
+          batch.close()
+        }
       } {
         arrowWriter.reset()
       }
