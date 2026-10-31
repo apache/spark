@@ -38,6 +38,9 @@ object MimaExcludes {
 
   // Exclude rules for 4.4.x from 4.3.0 (add 4.4-specific filters below as needed).
   lazy val v44excludes: Seq[Problem => Boolean] = v43excludes ++ Seq(
+    // [SPARK-57500][SQL] The private MySQLDialect no longer overrides this method.
+    ProblemFilters.exclude[InaccessibleMethodProblem](
+      "org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder.escapeStringLiteralForLikePattern"),
     // [SPARK-58896] Decision tree leaf counts moved behind NodeStats. The old package-private
     // numLeave accessors are removed from concrete models.
     ProblemFilters.exclude[DirectMissingMethodProblem](
