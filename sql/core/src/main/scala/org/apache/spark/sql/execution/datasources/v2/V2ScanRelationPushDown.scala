@@ -25,6 +25,7 @@ import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.internal.LogKeys.{AGGREGATE_FUNCTIONS, COLUMN_NAME, COLUMN_NAMES, EXPR, GROUP_BY_EXPRS, JOIN_CONDITION, JOIN_TYPE, POST_SCAN_FILTERS, PUSHED_FILTERS, RELATION_NAME, RELATION_OUTPUT}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, BoundReference, Cast, Expression, ExpressionSet, ExprId, GetArrayStructFields, GetStructField, IntegerLiteral, LateralColumnAliasReference, Literal, NamedExpression, OuterReference, OuterScopeReference, PredicateHelper, ProjectionOverSchema, RuntimeReplaceable, SortOrder, SubqueryExpression, Unevaluable, UserDefinedExpression}
+import org.apache.spark.sql.catalyst.expressions.SchemaPruning.RootField
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.{CollapseGroupedSumOfCount, CollapseProject}
 import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, ScanOperation}
@@ -36,7 +37,8 @@ import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, ScanContext, Statistics => V2Statistics, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownJoin, SupportsPushDownRequiredColumns, SupportsPushDownV2Filters, SupportsPushDownVariantExtractions, SupportsReportStatistics, V1Scan, VariantExtraction}
-import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, VariantInRelation, VariantMetadata}
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, SchemaPruning, VariantInRelation, VariantMetadata}
+import org.apache.spark.sql.execution.datasources.v2.orc.OrcTable
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.{SupportsPushDownCatalystFilters, VariantExtractionImpl}
 import org.apache.spark.sql.sources
@@ -66,7 +68,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       buildScanWithPushedAggregate,
       buildScanWithPushedJoin,
       buildScanWithPushedVariants,
-      pruneColumns)
+      pruneColumns(_, isSubquery))
 
     pushdownRules.foldLeft(plan) { (newPlan, pushDownRule) =>
       pushDownRule(newPlan)
@@ -1015,8 +1017,60 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       Project(rewrittenProjectList, withFilter)
   }
 
-  def pruneColumns(plan: LogicalPlan): LogicalPlan = plan.transform {
+  def pruneColumns(plan: LogicalPlan, isSubquery: Boolean): LogicalPlan = plan.transform {
+    case op @ SchemaPruning.GeneratorsOverScan(segments, generators, sHolder: ScanBuilderHolder)
+        if !hasBlockingPushdown(sHolder) && !sHolder.relation.table.isInstanceOf[OrcTable] =>
+      // ORC is not pruned through generators yet, see `SchemaPruning.GeneratorsOverScan`.
+      // Fields read from the generators' elements above them narrow the scan below them. This
+      // prunes and builds the holder's builder before the plan above is re-resolved. If that is
+      // then rejected, the builder must not be pruned again with a wider schema (a builder may
+      // only narrow, e.g. Iceberg's), so the plain scan is built from a fresh builder instead, as
+      // scan merging does, and the lower generators of the chain do not try again.
+      var builderUsed = false
+      SchemaPruning.pruneThroughGenerators(op, sHolder) { (scan, otherProjects, inputRootFields) =>
+        builderUsed = true
+        Some(pruneScan(scan.projects, scan.filtersStayUp, scan.filtersPushDown, sHolder,
+          Some(otherProjects), inputRootFields))
+      }.getOrElse {
+        if (builderUsed) {
+          val bottom = generators.last.child
+          val rebuilt = rebuildWithoutGenerators(segments.last, sHolder, isSubquery)
+          op.transformDown { case p if p eq bottom => rebuilt }
+        } else {
+          op
+        }
+      }
+
     case ScanOperation(project, filtersStayUp, filtersPushDown, sHolder: ScanBuilderHolder) =>
+      pruneScan(project, filtersStayUp, filtersPushDown, sHolder, None, Nil)
+  }
+
+  /**
+   * Plans `scan`, the projects and filters over `sHolder` below a chain of generators, from a
+   * fresh `ScanBuilder` of the same relation, like [[rebuildScan]]: the filters pushed to
+   * `sHolder` and the pushable ones of `scan` are offered to the new builder together, directly
+   * over the relation. Only valid when `sHolder` has no pushdown such a rebuild cannot reproduce.
+   */
+  private def rebuildWithoutGenerators(
+      scan: SchemaPruning.Segment,
+      sHolder: ScanBuilderHolder,
+      isSubquery: Boolean): LogicalPlan = {
+    val relation = sHolder.relation
+    val pushable = (sHolder.pushedFilterExpressions ++ scan.filtersPushDown).reduceOption(And)
+      .map(Filter(_, relation)).getOrElse(relation)
+    // one Filter per condition, in order: combining them could evaluate a condition that an
+    // earlier one would have skipped (e.g. a cast that fails under ANSI)
+    val filtered = scan.filtersStayUp.foldLeft(pushable)((plan, cond) => Filter(cond, plan))
+    applyWithContext(Project(scan.projects, filtered), isSubquery)
+  }
+
+  private def pruneScan(
+      project: Seq[NamedExpression],
+      filtersStayUp: Seq[Expression],
+      filtersPushDown: Seq[Expression],
+      sHolder: ScanBuilderHolder,
+      rootFieldProjects: Option[Seq[NamedExpression]],
+      extraRootFields: Seq[RootField]): LogicalPlan = {
       // column pruning
       val normalizedProjects = DataSourceStrategy
         .normalizeExprs(project, sHolder.output)
@@ -1026,8 +1080,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       // recorded on the scan below.
       val allFilters = filtersPushDown.reduceOption(And).toSeq ++ filtersStayUp
       val normalizedFilters = DataSourceStrategy.normalizeExprs(allFilters, sHolder.output)
+      val normalizedRootFieldProjects = rootFieldProjects.map(DataSourceStrategy
+        .normalizeExprs(_, sHolder.output).asInstanceOf[Seq[NamedExpression]])
       val (scan, output) = PushDownUtils.pruneColumns(
-        sHolder.builder, sHolder.relation, normalizedProjects, normalizedFilters)
+        sHolder.builder, sHolder.relation, normalizedProjects, normalizedFilters,
+        normalizedRootFieldProjects, extraRootFields)
 
       logInfo(
         log"""
