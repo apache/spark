@@ -199,4 +199,16 @@ class ResolveTranspiledPythonUDFOptionsSuite extends PlanTest {
     assert(pruned.transpiledOptions.isEmpty)
     assert(pruned.optionInputCategories.isEmpty)
   }
+
+  test("map and array options are dropped against the wrong container or a scalar") {
+    val m = Symbol("m").map(MapType(StringType, StringType))
+    val arr = $"arr".array(StringType)
+    val l = $"l".long
+    Seq(
+      ("map", arr), ("map", l), ("array", m), ("array", l)).foreach { case (cat, a) =>
+      val node = TranspiledPythonUDF("udf", pyUDF(Seq(a)), List(a), List(List(cat)))
+      val pruned = prune(node, LocalRelation(a))
+      assert(pruned.transpiledOptions.isEmpty, s"$cat kept over ${a.dataType}")
+    }
+  }
 }
