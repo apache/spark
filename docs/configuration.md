@@ -1104,12 +1104,14 @@ Apart from these, the following properties are also available, and may be useful
     <code>SparkSession.addArtifact</code> instead of the built-in defaults, such as maven central.
     For <code>spark.jars.packages</code>, additional repositories from
     <code>spark.jars.repositories</code> will also be included.
+    Client-resolved Spark Connect Ivy URIs use this setting only when the settings file is
+    readable on the client.
     The <code>spark-submit --repositories</code> option applies to submission-time resolution.
     In Spark Connect, Ivy URIs are resolved by the server only when
     <code>spark.connect.session.serverSideMavenResolution.enabled</code> is true, the server supports
     server-side Maven resolution, and the URI has no <code>repos</code> query parameter. Otherwise,
-    they are resolved by the client and do not use this setting. Server-side resolution does not
-    search Maven or Ivy repositories local to the client, such as <code>~/.m2/repository</code> and
+    they are resolved by the client. Server-side resolution does not search Maven or Ivy
+    repositories local to the client, such as <code>~/.m2/repository</code> and
     <code>~/.ivy2.5.2/local</code>.
     Useful for allowing Spark to resolve artifacts from behind a firewall e.g. via an in-house
     artifact server like Artifactory. Details on the settings file format can be

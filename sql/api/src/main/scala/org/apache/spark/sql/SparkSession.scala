@@ -566,8 +566,9 @@ abstract class SparkSession extends Serializable with Closeable {
    * Connect, Ivy URIs are resolved by the server only when
    * `spark.connect.session.serverSideMavenResolution.enabled` is true, the server supports it,
    * and the URI has no repositories in the `repos` query parameter. Otherwise, they are resolved
-   * by the client without the server's Ivy settings. Server-side resolution does not search Maven
-   * or Ivy repositories local to the client.
+   * by the client. Client-side resolution uses `spark.jars.ivySettings` only when it names a
+   * locally readable file. Server-side resolution does not search Maven or Ivy repositories local
+   * to the client.
    *
    * Since 4.4.0, it also supports native data source packages: local files with the extension
    * .sparkpkg, which make the native data sources that they contain available to the session.
@@ -585,8 +586,9 @@ abstract class SparkSession extends Serializable with Closeable {
    * Connect, Ivy URIs are resolved by the server only when
    * `spark.connect.session.serverSideMavenResolution.enabled` is true, the server supports it,
    * and the URI has no repositories in the `repos` query parameter. Otherwise, they are resolved
-   * by the client without the server's Ivy settings. Server-side resolution does not search Maven
-   * or Ivy repositories local to the client.
+   * by the client. Client-side resolution uses `spark.jars.ivySettings` only when it names a
+   * locally readable file. Server-side resolution does not search Maven or Ivy repositories local
+   * to the client.
    *
    * Since 4.4.0, it also supports native data source packages: local files with the extension
    * .sparkpkg, which make the native data sources that they contain available to the session.
@@ -649,8 +651,9 @@ abstract class SparkSession extends Serializable with Closeable {
    * Connect, Ivy URIs are resolved by the server only when
    * `spark.connect.session.serverSideMavenResolution.enabled` is true, the server supports it,
    * and the URI has no repositories in the `repos` query parameter. Otherwise, they are resolved
-   * by the client without the server's Ivy settings. Server-side resolution does not search Maven
-   * or Ivy repositories local to the client.
+   * by the client. Client-side resolution uses `spark.jars.ivySettings` only when it names a
+   * locally readable file. Server-side resolution does not search Maven or Ivy repositories local
+   * to the client.
    *
    * Since 4.4.0, it also supports native data source packages: local files with the extension
    * .sparkpkg, which make the native data sources that they contain available to the session.
