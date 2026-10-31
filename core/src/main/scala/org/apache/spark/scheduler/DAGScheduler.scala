@@ -1489,9 +1489,8 @@ private[spark] class DAGScheduler(
     }
     // Reject a reliable checkpoint anywhere in a pipelined-group MEMBER's within-stage chain.
     // Keyed on checkpointData being ReliableRDDCheckpointData, not isCheckpointed, since the
-    // write has not happened yet. Cache / .persist() / local checkpoint are whole-partition and
-    // ephemeral and are not rejected. A reliably-checkpointed RDD `cp` is inside a member stage
-    // iff:
+    // write has not happened yet. Persistence is checked separately before gang admission.
+    // A reliably-checkpointed RDD `cp` is inside a member stage iff:
     //  - PRODUCER side: cp is within some producer root's own within-stage chain (walk parents from
     //    the producer root, stopping at shuffle boundaries), OR
     //  - CONSUMER side: cp's OWN within-stage chain reads a pipelined shuffle (walk parents from
@@ -1520,13 +1519,39 @@ private[spark] class DAGScheduler(
     checkPipelinedStageCreation(finalRDD, partitions, jobId)
   }
 
+  /** Reject persistence that could bypass a native pipelined shuffle reader. */
+  private def checkPipelinedCacheSupported(finalRDD: RDD[_]): Unit = {
+    val persisted = new ListBuffer[RDD[_]]
+    traverseRDDGraph(finalRDD) { (rdd, enqueue) =>
+      if (rdd.getStorageLevel != StorageLevel.NONE || rdd.isLocallyCheckpointed) {
+        persisted += rdd
+      }
+      rdd.dependencies.foreach {
+        case pd: PipelinedShuffleDependency[_, _, _] => enqueue(pd.rdd)
+        case _: ShuffleDependency[_, _, _] =>
+          // Shape validation excludes pipelined readers below a regular boundary.
+        case dep => enqueue(dep.rdd)
+      }
+    }
+    // Cache locations cannot establish a stable cut: eviction can revive an upstream producer,
+    // and a partial cache hit skips a reader whose producer still needs its termination ACK.
+    // Check storage intent instead, including pending local checkpoints and narrow descendants.
+    val visited = new HashSet[RDD[_]]
+    persisted.find(rdd => rddChainReadsPipelinedShuffle(rdd, visited)).foreach { rdd =>
+      throw pipelinedUnsupportedError(
+        s"cache/persist/localCheckpoint on RDD $rdd in a pipelined consumer's within-stage chain " +
+          "(unpersist this RDD or rebuild it without localCheckpoint before submitting the job; " +
+          "persist only RDDs that do not read a pipelined shuffle within their stage)")
+    }
+  }
+
   /**
    * Count potential reads of each transient shuffle partition through narrow dependencies. Only
    * RDDs downstream of a pipelined reader are relevant; a materialized prefix is not expanded.
    * Each (RDD, partition) is propagated at most twice, since two reads already violate the
    * single-reader contract. Work is linear in the reachable partition-dependency graph, without
    * enumerating paths through shared ancestry. This runs only for native pipelined jobs.
-   * A cache declaration is not a boundary: evicted or unstored partitions still compute lineage.
+   * Consumer persistence is rejected separately by checkPipelinedCacheSupported.
    */
   private def checkPipelinedShuffleRepeatedReads(
       finalRDD: RDD[_],
@@ -2669,27 +2694,18 @@ private[spark] class DAGScheduler(
       return
     }
 
-    // Gang admission for a pipelined job: the runnable stage graph is one pipelined group (a
-    // materialized prefix's stages never run), so check up front (before any stage is created)
-    // that the cluster can run the entire group concurrently. If it cannot fit, fail the job now
-    // -- no partial scheduler state, and no member ever left running while a sibling waits on
-    // slots (true all-or-nothing gang admission). Inert for a regular job (no pipelined
-    // dependency).
-    if (hasPipelined && rejectUnadmittablePipelinedGroup(jobId, finalRDD, partitions, listener)) {
-      // Clear the slot-check retry count an earlier deferral may have left.
-      barrierJobIdToNumTasksCheckFailures.remove(jobId)
-      return
-    }
     var finalStage: ResultStage = null
     try {
-      // Reject unsupported pipelined idioms and cross-job reuse from the RDD graph, before
-      // any stage is created, so a rejection leaves no partial scheduler state. Gated on
-      // hasPipelined: every idiom this checks concerns a pipelined group, so it must not run for a
-      // job with no pipelined dependency (the resource-profile check in particular is not keyed on
-      // a pipelined dependency and would otherwise reject an ordinary job that merely uses a
-      // non-default profile via RDD.withResources). Inside this try so any incidental exception
-      // from the graph walk is handled by the same listener.jobFailed path as stage creation.
       if (hasPipelined) {
+        // Validate cache semantics before counting tasks: a cached consumer could suppress
+        // producers included in the demand, or skip readers needed by a running producer.
+        checkPipelinedCacheSupported(finalRDD)
+        if (rejectUnadmittablePipelinedGroup(jobId, finalRDD, partitions, listener)) {
+          // Clear the slot-check retry count an earlier deferral may have left.
+          barrierJobIdToNumTasksCheckFailures.remove(jobId)
+          return
+        }
+        // Keep group restrictions, including resource profiles, specific to pipelined jobs.
         checkPipelinedJobSupported(finalRDD, partitions, jobId)
       }
       // New stage creation may throw an exception if, for example, jobs are run on a
@@ -2733,10 +2749,10 @@ private[spark] class DAGScheduler(
         }
 
       case e: PipelinedShuffleUnsupportedException =>
-        // An up-front idiom rejection (checkPipelinedJobSupported / a producer-side
-        // check in createShuffleMapStage), not a stage-creation failure. Log it as such (the
+        // An up-front idiom rejection (checkPipelinedJobSupported, checkPipelinedCacheSupported,
+        // or a producer-side check in createShuffleMapStage), not a stage-creation failure (the
         // generic "Creating new stage failed" message below would be misleading). Matched by TYPE,
-        // not by the error-condition string, so a rename or a wrapped cause cannot misroute it.
+        // not by the error-condition string, so renaming the condition cannot misroute it.
         logWarning(log"Rejecting job ${MDC(JOB_ID, jobId)}: unsupported pipelined-shuffle idiom", e)
         // Clear the slot-check retry count an earlier deferral may have left.
         barrierJobIdToNumTasksCheckFailures.remove(jobId)
@@ -5572,12 +5588,14 @@ private[spark] object DAGScheduler {
 private[spark] case class CancelledJobInfo(jobId: Int, properties: Properties)
 
 /**
- * Thrown when a job uses a pipelined-shuffle idiom that is not supported (fan-out, a barrier /
- * indeterminate / checksum-retry / push-merge producer, a reliable checkpoint in a member's chain,
- * or a non-default resource profile on a member). `handleJobSubmitted` matches on this
+ * Thrown for unsupported pipelined-shuffle idioms: fan-out, repeated consumption, a map-stage
+ * job with pipelined ancestry, a barrier / indeterminate / checksum-retry / push-merge producer,
+ * a reliable checkpoint in a member's chain, cache/persist/localCheckpoint in a consumer's
+ * within-stage chain, or a non-default resource profile on a member.
+ * `handleJobSubmitted` matches on this
  * TYPE to distinguish an up-front idiom rejection from an ordinary stage-creation failure, not on
- * the error-condition string (which a rename or a wrapped cause would silently break). Carries the
- * `PIPELINED_SHUFFLE_UNSUPPORTED` error class so the user-facing message is unchanged.
+ * the error-condition string, so renaming the condition does not change the routing. Carries the
+ * `PIPELINED_SHUFFLE_UNSUPPORTED` error class.
  */
 private[scheduler] class PipelinedShuffleUnsupportedException(reason: String)
   extends SparkException(

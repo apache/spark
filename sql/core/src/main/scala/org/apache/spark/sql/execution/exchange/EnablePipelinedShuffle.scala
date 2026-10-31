@@ -49,10 +49,11 @@ import org.apache.spark.sql.execution.SparkPlan
  *   - reuse: a pipelined producer with more than one consumer (fan-out) is rejected, so if any
  *     exchange in the plan is reused the rule bails out.
  *   - an UNSUPPORTED CONSUMER reading a shuffle (see [[readsShuffleThroughUnsupportedConsumer]]):
- *     an operator that would drain a shuffle in a way the channel transport cannot serve, or that
- *     builds its own hidden regular shuffle. If such an operator sits above any shuffle the rule
- *     leaves the WHOLE plan regular (leaving only that one exchange regular would put a pipelined
- *     exchange below a regular boundary, which the scheduler rejects -- so it is all-or-nothing).
+ *     an operator that drains a shuffle in a way the channel transport cannot serve, builds its
+ *     own hidden regular shuffle, or can persist a channel reader. If such an operator sits above
+ *     any shuffle the rule leaves the WHOLE plan regular (leaving only that exchange regular would
+ *     put a pipelined exchange below a regular boundary, which the scheduler rejects -- so it is
+ *     all-or-nothing).
  *     The query runs correctly, just not pipelined. The unsupported consumers are:
  *       - `CoalesceExec` (user `.coalesce(n)`): its `CoalescedRDD` makes ONE reduce task drain
  *         SEVERAL reduce partitions sequentially. The single-threaded writer parks on a full
@@ -72,6 +73,10 @@ import org.apache.spark.sql.execution.SparkPlan
  *         submission (`classifyJobShuffleShape`'s pipelined-below-regular rejection). (`.collect()`
  *         on a limit takes `executeTake` and never hits `doExecute`; `.write` / `.toLocalIterator`
  *         / a non-root position do.)
+ *       - `AttachDistributedSequenceExec(cache = true)`: distributed-sequence index construction
+ *         can persist or locally checkpoint its child RDD before its counting job. Keep child
+ *         shuffles regular because persistence can skip channel readers.
+ *         Uncached indexing and cached shuffle-free inputs feeding a shuffle remain supported.
  */
 object EnablePipelinedShuffle extends Rule[SparkPlan] {
 
@@ -104,13 +109,13 @@ object EnablePipelinedShuffle extends Rule[SparkPlan] {
       return plan
     }
 
-    // An operator that would read a shuffle in a way the channel transport cannot serve, or that
-    // builds its own hidden regular shuffle, forces the whole plan regular (see class doc). Like
-    // the reuse fallback this is a normal, expected outcome, so log at DEBUG rather than WARN.
+    // An operator that drains a shuffle in a way the channel transport cannot serve, builds its
+    // own hidden regular shuffle, or can persist a channel reader forces the whole plan regular
+    // (see class doc). Like the reuse fallback this is an expected outcome, so log at DEBUG.
     if (readsShuffleThroughUnsupportedConsumer(plan)) {
       logDebug("EnablePipelinedShuffle: a shuffle is read through an operator the channel " +
         "transport cannot serve (coalesce / cartesian product / a limit operator that builds a " +
-        "hidden shuffle); leaving the plan regular.")
+        "hidden shuffle / cached distributed sequence); leaving the plan regular.")
       return plan
     }
 
@@ -127,24 +132,19 @@ object EnablePipelinedShuffle extends Rule[SparkPlan] {
    * True if any [[ShuffleExchangeExec]] in `plan` is read by an operator the channel transport
    * cannot serve. The unsupported operators (see class doc for why each is fatal) are
    * `CoalesceExec`, `CartesianProductExec`, and the limit operators `CollectLimitExec` /
-   * `CollectTailExec` / `TakeOrderedAndProjectExec`. For each such operator anywhere in the plan,
-   * check whether a shuffle is reachable below it.
-   *
-   * The reachability walk descends through EVERY child of a non-exchange node -- not only unary
-   * children -- so a shuffle behind a `UnionExec`/join (a `BinaryExecNode`) beneath the operator
-   * is still found. It stops at the FIRST [[ShuffleExchangeExec]] on each path: a shuffle deeper
-   * than that first one is not read by this operator (the intervening exchange's own reader reads
-   * one reduce partition per task), so it is not this operator's concern.
+   * `CollectTailExec` / `TakeOrderedAndProjectExec`, plus cached `AttachDistributedSequenceExec`.
+   * A shuffle above an unsupported operator with shuffle-free input does not disqualify the plan.
    */
-  private def readsShuffleThroughUnsupportedConsumer(plan: SparkPlan): Boolean = {
-    def reachesShuffle(p: SparkPlan): Boolean = p match {
-      case _: ShuffleExchangeExec => true
-      case other => other.children.exists(reachesShuffle)
+  private[exchange] def readsShuffleThroughUnsupportedConsumer(plan: SparkPlan): Boolean = {
+    def visit(p: SparkPlan, unsupportedAncestor: Boolean): Boolean = {
+      if (unsupportedAncestor && p.isInstanceOf[ShuffleExchangeExec]) {
+        true
+      } else {
+        val unsupported = unsupportedAncestor ||
+          PipelinedShuffleEligibility.isUnsupportedConsumer(p)
+        p.children.exists(visit(_, unsupported))
+      }
     }
-    plan.exists {
-      case p if PipelinedShuffleEligibility.isUnsupportedConsumer(p) =>
-        p.children.exists(reachesShuffle)
-      case _ => false
-    }
+    visit(plan, unsupportedAncestor = false)
   }
 }
