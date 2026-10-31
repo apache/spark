@@ -2553,10 +2553,9 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
     def test_udf_transpile_string_methods(self):
         # SPARK-59816: upper/lower/startswith/endswith lower to Catalyst and match
-        # Python, including full Unicode case mappings (sharp s, final sigma), and
-        # startswith/endswith work under `if`, `not`, and `and`. A NULL receiver or
-        # argument raises like CPython, a proven-non-null branch returns None, and a
-        # non-string column falls back to Python.
+        # Python, including full Unicode case mappings (sharp s, final sigma). A NULL
+        # receiver or argument raises like CPython, a proven-non-null branch skips
+        # the guard, and a non-string column or a start index falls back to Python.
         S, B = StringType(), BooleanType()
         up = lambda s: s.upper()  # noqa: E731
         low = lambda s: s.lower()  # noqa: E731
@@ -2589,6 +2588,9 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         self._raises(up, "s long", [(5,)], needle="", return_type=S)
         with self.sql_conf(_TRANSPILE_ON):
             self._fallback_reason(starts_at, B)
+            u, _ = self._udf_and_warnings(up_guarded, S)
+            df = self.spark.createDataFrame([("a",)], "s string")
+            self.assertNotIn("raise_error", self._optimized_plan(df.select(u("s"))))
 
     def test_udf_transpile_string_operands_fall_back(self):
         # Operand/type combos with no valid string lowering for the bound column

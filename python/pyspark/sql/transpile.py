@@ -314,8 +314,7 @@ def _null_narrowed(params: List[str], test_node: ast.AST) -> Tuple[frozenset, fr
     return frozenset(), frozenset()
 
 
-# ``str`` method -> (Catalyst function, argument count, result category). The
-# receiver and every argument must be strings (SPARK-59816).
+# ``str`` method -> (Catalyst function, argument count, result category).
 _STRING_METHODS: dict[str, Tuple[Callable[..., Column], int, str]] = {
     "upper": (upper, 0, "string"),
     "lower": (lower, 0, "string"),
@@ -1035,7 +1034,11 @@ class CatalystTranspiler(AbstractTranspiler):
                 # SPARK-59816: Python raises on a ``None`` receiver or argument,
                 # while the Catalyst function returns NULL, so guard like ``len``.
                 self._category(params, body)  # raises for a non-string operand
-                cols = [self._convert_chunk(params, n) for n in [receiver, *args]]
+                operands = [receiver, *args]
+                cols = [self._convert_chunk(params, n) for n in operands]
+                func = _STRING_METHODS[method][0]
+                if all(self._is_nonnull_node(params, n) for n in operands):
+                    return func(*cols)
                 null_guard = cols[0].isNull()
                 for c in cols[1:]:
                     null_guard = null_guard | c.isNull()
@@ -1045,9 +1048,7 @@ class CatalystTranspiler(AbstractTranspiler):
                     "or filter NULLs upstream."
                 )
                 self._null_guard_emitted = True
-                return when(null_guard, raise_error(err)).otherwise(
-                    _STRING_METHODS[method][0](*cols)
-                )
+                return when(null_guard, raise_error(err)).otherwise(func(*cols))
             case _:
                 raise UnsupportedOperationException(
                     f"AST node {type(body).__name__} is not supported by the "
