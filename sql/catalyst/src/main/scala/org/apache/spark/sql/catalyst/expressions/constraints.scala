@@ -19,13 +19,17 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.UUID
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisErrorAt, SQLFunctionExpression, TypeCheckResult, UnresolvedException}
+import org.apache.spark.sql.catalyst.expressions.aggregate.V2Aggregator
 import org.apache.spark.sql.catalyst.expressions.codegen.{Block, CodegenContext, ExprCode, FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
+import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
+import org.apache.spark.sql.connector.catalog.functions.ScalarFunction
 import org.apache.spark.sql.connector.expressions.FieldReference
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{AbstractDataType, BooleanType, DataType}
@@ -127,6 +131,27 @@ case class CheckConstraint(
 // scalastyle:on line.size.limit
 
   override def inputTypes: Seq[AbstractDataType] = Seq(BooleanType)
+
+  /**
+   * Fails the analysis if the condition calls a user-defined function. A write can read `condition`
+   * again and resolve the name of the function in its own session, where the name can refer to
+   * another function or to none, so the constraint would not enforce what this DDL declares.
+   */
+  def failIfCallsUserDefinedFunction(): Unit = {
+    child.collectFirst {
+      case f: SQLFunctionExpression => (f, toSQLId(f.function.name.nameParts))
+      case f: UserDefinedExpression => (f, toSQLId(Seq(f.name)))
+      case i: StaticInvoke if i.scalarFunction.isDefined =>
+        (i, toSQLId(Seq(i.scalarFunction.get.name)))
+      case i @ Invoke(Literal(f: ScalarFunction[_], _), _, _, _, _, _, _, _) =>
+        (i, toSQLId(Seq(f.name)))
+      case a: V2Aggregator[_, _] => (a, toSQLId(Seq(a.aggrFunc.name)))
+    }.foreach { case (call, functionName) =>
+      call.failAnalysis(
+        errorClass = "USER_DEFINED_FUNCTION_IN_CHECK_CONSTRAINT",
+        messageParameters = Map("checkCondition" -> condition, "functionName" -> functionName))
+    }
+  }
 
   def toV2Constraint: Constraint = {
     val predicate = new V2ExpressionBuilder(child, true).buildPredicate().orNull
