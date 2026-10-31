@@ -38,7 +38,7 @@ import org.apache.spark.sql.execution.python.FlatMapCoGroupsInPandasExec
 import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, LongType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StructField, StructType}
 
 class EnsureRequirementsSuite extends SharedSparkSession {
   private val exprA = AttributeReference("a", IntegerType)()
@@ -1596,6 +1596,80 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       assert(EnsureRequirements.apply(sameSpace).collect {
         case s: ShuffleExchangeExec => s
       }.isEmpty, "two sides holding one key space must still be read as they stand")
+    }
+  }
+
+  test("SPARK-60522: a cogroup over a transform Spark cannot evaluate still pairs as it stands") {
+    // `pickCoPartitionTarget` decides both which layout the other children are shuffled onto and
+    // which a child is read against as it stands. Only the first evaluates the transform, so a
+    // transform Spark cannot evaluate is refused only for that. A cogroup has only this path,
+    // since `checkKeyGroupCompatible` declines for anything that is not a `ShuffledJoin`. So two
+    // sides on the same such transform and keys, which nothing has to evaluate, keep their
+    // layout, while a plain side is not shuffled onto it.
+    val nonScalar = new BoundFunction {
+      override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "bucket"
+      override def canonicalName(): String = "bucket"
+    }
+    val idL = AttributeReference("idL", LongType)()
+    val idR = AttributeReference("idR", LongType)()
+    val keys = Seq(InternalRow(0), InternalRow(1), InternalRow(2), InternalRow(3))
+    val left = DummySparkPlan(outputPartitioning = KeyedPartitioning(
+      Seq(TransformExpression(nonScalar, Seq(idL), Some(4))), keys))
+    val right = DummySparkPlan(outputPartitioning = KeyedPartitioning(
+      Seq(TransformExpression(nonScalar, Seq(idR), Some(4))), keys))
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("value", IntegerType))),
+      Seq.empty,
+      PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+      true)
+    val cogroup = FlatMapCoGroupsInPandasExec(Seq(idL), Seq(idR), pythonUdf,
+      AttributeReference("value", IntegerType)() :: Nil, left, right)
+
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      assert(EnsureRequirements.apply(cogroup).collect {
+        case s: ShuffleExchangeExec => s
+      }.isEmpty, "the two sides are read as they stand")
+      val plain = cogroup.copy(right = DummySparkPlan(outputPartitioning = UnknownPartitioning(0)))
+      assert(!EnsureRequirements.apply(plain).collect {
+        case s: ShuffleExchangeExec => s.outputPartitioning
+      }.exists(_.isInstanceOf[KeyedPartitioning]), "a plain side is not shuffled onto it")
+      // A sort-merge join over the same children is paired by `checkKeyGroupCompatible` first.
+      val join = SortMergeJoinExec(Seq(idL), Seq(idR), Inner, None, left, right)
+      assert(EnsureRequirements.apply(join).collect {
+        case s: ShuffleExchangeExec => s
+      }.isEmpty, "a join still pairs them as they stand")
+    }
+  }
+
+  test("SPARK-60522: a layout Spark cannot evaluate does not lower the shuffle parallelism") {
+    // Only a member that can serve as the layout keeps its child from being re-shuffled, so the
+    // parallelism guard treats a keyed side whose transform Spark cannot evaluate, and which the
+    // other side does not pair with, as one to re-shuffle. With both sides re-shuffled, an existing
+    // shuffle with fewer partitions than `spark.sql.shuffle.partitions` is not the layout.
+    val nonScalar = new BoundFunction {
+      override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "bucket"
+      override def canonicalName(): String = "bucket"
+    }
+    val idL = AttributeReference("idL", LongType)()
+    val idR = AttributeReference("idR", LongType)()
+    val left = DummySparkPlan(outputPartitioning = KeyedPartitioning(
+      Seq(TransformExpression(nonScalar, Seq(idL), Some(4))), (0 until 4).map(InternalRow(_))))
+    val right = ShuffleExchangeExec(HashPartitioning(Seq(idR), 5), DummySparkPlan())
+    val join = SortMergeJoinExec(Seq(idL), Seq(idR), Inner, None, left, right)
+    withSQLConf(
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "200") {
+      val partitionings = EnsureRequirements.apply(join).collect {
+        case s: ShuffleExchangeExec => s.outputPartitioning
+      }
+      assert(partitionings.size == 2 && partitionings.forall {
+        case h: HashPartitioning => h.numPartitions == 200
+        case _ => false
+      }, s"both sides at spark.sql.shuffle.partitions, got $partitionings")
     }
   }
 

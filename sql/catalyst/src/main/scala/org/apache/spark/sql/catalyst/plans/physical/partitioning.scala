@@ -24,7 +24,6 @@ import scala.collection.immutable.BitSet
 import scala.collection.mutable
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
@@ -1852,10 +1851,12 @@ sealed trait ShuffleSpec {
   def isCompatibleWith(other: ShuffleSpec): Boolean
 
   /**
-   * Whether this shuffle spec can be used to create partitionings for the other children. A
-   * [[ShuffleSpecCollection]] can when any of its members can. Building the partitioning is
+   * Whether this shuffle spec can serve as the layout the children are lined up on: read as it
+   * stands by a child that pairs with it, or used to create partitionings for the other children.
+   * A [[ShuffleSpecCollection]] can when any of its members can. Building the partitioning is
    * [[LeafShuffleSpec.createPartitioning]], and that is always one member's job, so the planner
-   * builds it from a member that can.
+   * builds it from a member that can. Shuffling a child onto the layout also needs Spark to
+   * evaluate the partitioning, which is [[LeafShuffleSpec.canEvaluatePartitioning]], not this.
    */
   def canCreatePartitioning: Boolean
 
@@ -1883,6 +1884,15 @@ trait LeafShuffleSpec extends ShuffleSpec {
    */
   def createPartitioning(clustering: Seq[Expression]): Partitioning =
     throw SparkUnsupportedOperationException()
+
+  /**
+   * Whether Spark can evaluate the partitioning [[createPartitioning]] builds, to place the rows
+   * of a child shuffled onto this layout. [[canCreatePartitioning]] does not ask it, since a child
+   * that pairs with this layout as it stands evaluates nothing. A caller that shuffles a child onto
+   * this layout has to ask it too. Only a [[KeyedShuffleSpec]] can answer false, and its
+   * [[createPartitioning]] asserts it, so a caller that does not ask fails while planning.
+   */
+  def canEvaluatePartitioning: Boolean = true
 
   override final def flatten: Seq[LeafShuffleSpec] = Seq(this)
 }
@@ -2390,7 +2400,7 @@ case class KeyedShuffleSpec(
         case (left: TransformExpression, right: TransformExpression) =>
           if (allowReduce && canReduceKeys) left.isCompatible(right)
           else left.isSameFunction(right)
-        // The reduce evaluates `t` on the identity side's partition keys, see `reducersBothWays`.
+        // The reduce evaluates `t` rebuilt over the identity side's column, see `canEvaluate`.
         case (_: AttributeReference, t: TransformExpression) =>
           allowReduce && canReduceKeys && canEvaluate(t)
         case (t: TransformExpression, _: AttributeReference) =>
@@ -2420,21 +2430,21 @@ case class KeyedShuffleSpec(
     transform.children.forall(_.isInstanceOf[Attribute])
 
   /**
-   * Whether Spark can evaluate `transform` itself. An identity reduce evaluates it on the identity
-   * side's partition keys, and a one-side shuffle on each row of the side it shuffles. Only a
-   * `ScalarFunction` can be evaluated (see `TransformExpression.resolvedFunction`), while a
-   * connector may bind its transform to any `BoundFunction`. Rebuilding the transform over
-   * another key keeps its function, so asking this of the reported transform answers it for the
-   * rebuilt one too.
+   * Whether Spark can evaluate `transform`, see `TransformExpression.evaluableFunction`. An
+   * identity reduce evaluates it on the identity side's partition keys, and a one-side shuffle on
+   * each row of the side it shuffles, both after rebuilding it over the other side's key. A join
+   * pairs two keys only when they have the same type apart from nullability and the case of field
+   * names (`DataTypeUtils.sameType`), which `evaluableFunction` does not tell apart either. So
+   * asking this of the reported transform answers it for the rebuilt one, and the reported one
+   * keeps the answer.
    *
-   * Resolving a `ScalarFunction` throws when Spark finds no method to call on it, e.g. one that
-   * inherits `produceResult` from a base class. That counts as cannot evaluate, not as a failure:
-   * the gates ask this of every candidate, including ones that end up not being chosen.
+   * A Scala class or object that extends `ScalarFunction` directly gets a mixin forwarder to the
+   * default `produceResult`, which the lookup finds, so this is true even when the connector
+   * implements neither `produceResult` nor `invoke`. Evaluating it then throws
+   * `SCALAR_FUNCTION_NOT_COMPATIBLE`. Reflection cannot tell the forwarder from an override.
    */
   private def canEvaluate(transform: TransformExpression): Boolean =
-    try transform.resolvedFunction.isDefined catch {
-      case _: AnalysisException => false
-    }
+    transform.evaluableFunction.isDefined
 
   /**
    * `transform`, whose arguments are bare columns, with each replaced by `key`, which may be any
@@ -2544,10 +2554,10 @@ case class KeyedShuffleSpec(
 
       // Identity transform on this side, arbitrary transform on the other side: create a reducer
       // that applies the other's transform to the raw identity values. `areKeysCompatible` admitted
-      // this pair, so `t`'s argument is one bare column and Spark can evaluate `t`.
-      // `isExpressionCompatible` refuses any other argument or function here, and `keyPositions`
-      // maps an expression with more references to no position. `IdentityReducer` binds `a` to
-      // ordinal 0.
+      // this pair, so `t`'s argument is one bare column, and Spark can evaluate `t`, as far as
+      // `canEvaluate` can tell. `isExpressionCompatible` refuses any other argument or function
+      // here, and `keyPositions` maps an expression with more references to no position.
+      // `IdentityReducer` binds `a` to ordinal 0.
       case (a: AttributeReference, t: TransformExpression) =>
         (Some(KeyReducer(IdentityReducer(rebuiltOver(t, a)), t)), None)
 
@@ -2592,17 +2602,27 @@ case class KeyedShuffleSpec(
         // `createPartitioning` replaces a transform's argument with the other child's cluster key,
         // which drops whatever surrounds the key, e.g. the `+ 1` of `bucket(4, b + 1)` or the `.a`
         // of `bucket(4, s.a)`. Such a spec's own child would then be laid out differently from the
-        // children shuffled onto it. Those children are routed by evaluating it, too.
-        case t: TransformExpression => argumentsAreColumns(t) && canEvaluate(t)
+        // children shuffled onto it. Whether Spark can evaluate it is `canEvaluatePartitioning`.
+        case t: TransformExpression => argumentsAreColumns(t)
         case _ => false
       } &&
       // Shuffling another child onto these keys evaluates the partition expressions per row to
       // decide where each row goes, and reduced keys are not what those expressions compute.
       partitioning.expressionsDescribeKeys
 
+  /** Whether Spark can evaluate each transform of this layout, see `canEvaluate`. */
+  override lazy val canEvaluatePartitioning: Boolean = partitioning.expressions.forall {
+    case t: TransformExpression => canEvaluate(t)
+    case _ => true
+  }
+
   override def createPartitioning(clustering: Seq[Expression]): Partitioning = {
     assert(clustering.size == distribution.clustering.size,
       "Required distributions of join legs should be the same size.")
+    // A child shuffled onto this layout is placed by evaluating it, which would fail on an
+    // executor. A caller has to ask `canEvaluatePartitioning` first, so fail here, while planning.
+    assert(canEvaluatePartitioning,
+      s"Cannot shuffle a child onto a layout Spark cannot evaluate: ${partitioning.expressions}")
 
     val newExpressions = partitioning.expressions.zip(keyPositions).map {
       case (te: TransformExpression, positionSet) =>
@@ -2675,6 +2695,8 @@ case class ShufflePartitionIdPassThroughSpec(
  * A choice between several layouts, produced by [[PartitioningCollection.createShuffleSpec]].
  *
  * `specs` can hold a nested collection, since a [[PartitioningCollection]] can hold a nested one.
+ * A collection has no `canEvaluatePartitioning` of its own: a child is shuffled onto one member,
+ * so the planner asks it of that member, see [[ShuffleSpec.flatten]].
  */
 case class ShuffleSpecCollection(specs: Seq[ShuffleSpec]) extends ShuffleSpec {
   require(specs.nonEmpty, "expected specs to be non-empty")
