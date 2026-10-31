@@ -225,7 +225,7 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
           }
         }
       } catch {
-        case e: SparkRuntimeException if e.getCondition == "ARTIFACT_ALREADY_EXISTS" =>
+        case e: SparkRuntimeException if ArtifactManager.isRejectedArtifact(e) =>
           failedArtifactExceptions += e
       }
       artifact.summary()

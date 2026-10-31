@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.connect
 
+import java.io.File
 import java.nio.file.Files
 import java.util.UUID
 
@@ -89,6 +90,40 @@ class NativeDataSourceConnectSuite extends SparkConnectServerTest {
         other.read.format("native_range").load().collect()
       }
       assert(e.getCondition == "DATA_SOURCE_NOT_FOUND")
+    }
+  }
+
+  nativeTest("reject a package that Spark cannot use when a session adds it") {
+    val invalid = new File(Utils.createTempDir(), "native_range.sparkpkg")
+    Files.writeString(invalid.toPath, "not a zip")
+    withNewSession { session =>
+      // The client gets the error of the server in the message of a SparkException.
+      val e = intercept[SparkException](session.addArtifact(invalid.getPath))
+      assert(e.getMessage.contains("[INVALID_NATIVE_DATA_SOURCE_PACKAGE.INVALID_MANIFEST]"), e)
+      // It names the artifact, rather than the file in which the server staged it.
+      assert(e.getMessage.contains(s"package files${File.separator}native_range.sparkpkg:"), e)
+      // A package whose version Spark does not support is named after the artifact too.
+      val newer = createPackage(library, dataSources(""), abiVersion = 2)
+      val unsupported = intercept[SparkException](session.addArtifact(newer.getPath))
+      assert(
+        unsupported.getMessage.contains(
+          "[INVALID_NATIVE_DATA_SOURCE_PACKAGE.UNSUPPORTED_ABI_VERSION]"),
+        unsupported)
+      assert(
+        unsupported.getMessage.contains(s"package files${File.separator}${newer.getName}:"),
+        unsupported)
+      // A call that adds several artifacts adds the others: the stream sends them all.
+      val valid = createPackage(library, dataSources(""), fileName = invalid.getName)
+      val other = new File(Utils.createTempDir(), "other.sparkpkg")
+      Files.writeString(other.toPath, "not a zip")
+      val rejected = intercept[SparkException] {
+        session.addArtifacts(other.toURI, valid.toURI)
+      }
+      assert(
+        rejected.getMessage.contains("[INVALID_NATIVE_DATA_SOURCE_PACKAGE.INVALID_MANIFEST]"))
+      // The valid package has the file name of the rejected one, which the session can add then.
+      val df = session.read.format("native_range").option("end", "3").load()
+      assert(df.select("id").collect().map(_.getLong(0)).sorted.toSeq == Seq(0L, 1L, 2L))
     }
   }
 

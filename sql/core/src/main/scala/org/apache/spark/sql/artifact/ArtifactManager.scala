@@ -27,6 +27,7 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 import scala.collection.mutable.ListBuffer
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
+import scala.util.Try
 
 import org.apache.commons.io.FilenameUtils
 import org.apache.hadoop.fs.{LocalFileSystem, Path => FSPath}
@@ -40,7 +41,7 @@ import org.apache.spark.sql.execution.datasources.v2.ffi.NativeDataSourcePackage
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.util.ArtifactUtils
 import org.apache.spark.storage.{BlockManager, CacheId, StorageLevel}
-import org.apache.spark.util.{ChildFirstURLClassLoader, RuntimeDependencyResolver, StubClassLoader, Utils}
+import org.apache.spark.util.{ChildFirstURLClassLoader, RuntimeDependencyResolver, ShutdownHookManager, StubClassLoader, Utils}
 import org.apache.spark.util.RuntimeDependencyResolver.{AllowRequestedRepositories, RepositoryPolicy}
 
 /**
@@ -160,11 +161,16 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
    */
   private[sql] def getNativeDataSourcePackages: (Seq[File], Option[String]) = {
     val packages = sparkContextRelativePaths.asScala.collect {
-      case (SparkContextResourceType.FILE, path, _)
-          if path.toString.endsWith(Artifact.NATIVE_DATA_SOURCE_PACKAGE_EXTENSION) =>
+      case (SparkContextResourceType.FILE, path, _) if isNativeDataSourcePackage(path) =>
         artifactPath.resolve(path).toFile
     }.toSeq
     (packages, Option(state).map(_.uuid))
+  }
+
+  /** Whether an artifact at the given normalized path is a native data source package. */
+  private def isNativeDataSourcePackage(path: Path): Boolean = {
+    path.startsWith(s"files${File.separator}") &&
+      path.toString.endsWith(Artifact.NATIVE_DATA_SOURCE_PACKAGE_EXTENSION)
   }
 
   /** Returns whether a file with the given name was added to this session as a file artifact. */
@@ -204,6 +210,96 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
     // Convert the normalized string back to a Path object
     Paths.get(normalizedPathString).normalize()
   }
+
+  /**
+   * Returns true if a file artifact with the same content is at `target` already, which makes
+   * adding it idempotent, and fails if another file is there: an artifact is not overwritten.
+   */
+  private def artifactExists(
+      normalizedRemoteRelativePath: Path,
+      serverLocalStagingPath: Path,
+      target: Path): Boolean = {
+    if (Files.exists(target)) {
+      if (Utils.contentEquals(target.toFile, serverLocalStagingPath.toFile)) {
+        return true
+      }
+      throw artifactAlreadyExistsError(normalizedRemoteRelativePath)
+    }
+    false
+  }
+
+  private def artifactAlreadyExistsError(normalizedRemoteRelativePath: Path): Throwable = {
+    new SparkRuntimeException(
+      "ARTIFACT_ALREADY_EXISTS",
+      Map("normalizedRemoteRelativePath" -> normalizedRemoteRelativePath.toString)
+    )
+  }
+
+  /**
+   * Transfers a native data source package to `target` if Spark can use it, see
+   * [[NativeDataSourcePackage.checkAdded]], so that it never is at the path of an artifact
+   * otherwise. Returns false if the session has the same file already. A file of the user is
+   * compared with the artifact first, so that adding the same file again does not copy it. It is
+   * then copied to a temporary directory, outside of the artifacts, which the file server serves
+   * and a clone of the session copies, and the copy is checked and then moved, so that the session
+   * gets the bytes that are checked. Errors name the file of the user, or the artifact if Spark
+   * staged the file for it, such as for a Spark Connect client.
+   */
+  private def addNativeDataSourcePackage(
+      normalizedRemoteRelativePath: Path,
+      serverLocalStagingPath: Path,
+      target: Path,
+      deleteStagedFile: Boolean,
+      sourceName: Option[String]): Boolean = {
+    def exists(source: Path): Boolean = {
+      // Utils.contentEquals fails for a directory, which cannot be the same as a package anyway,
+      // so a directory with the name of an artifact, or an artifact that is a directory, such
+      // as files/x.sparkpkg after files/x.sparkpkg/y was added, fails as an existing artifact.
+      if (Files.exists(target) && (Files.isDirectory(source) || Files.isDirectory(target))) {
+        throw artifactAlreadyExistsError(normalizedRemoteRelativePath)
+      }
+      artifactExists(normalizedRemoteRelativePath, source, target)
+    }
+    if (!deleteStagedFile && exists(serverLocalStagingPath)) {
+      return false
+    }
+    val copyDir = if (deleteStagedFile) None else Some(Utils.createTempDir())
+    Utils.tryWithSafeFinally {
+      val staged = copyDir.map { dir =>
+        // Fails as for the other artifacts if the file does not exist or cannot be read.
+        val copy = dir.toPath.resolve(normalizedRemoteRelativePath.getFileName)
+        Files.copy(serverLocalStagingPath, copy)
+      }.getOrElse(serverLocalStagingPath)
+      // The package is checked before the comparison below, which then runs right before the
+      // transfer, but its error is reported after it.
+      val check = Try(NativeDataSourcePackage.checkAdded(
+        staged.toFile, sourceName.getOrElse(normalizedRemoteRelativePath.toString)))
+      if (exists(staged)) {
+        false
+      } else {
+        check.get
+        transferFile(staged, target, deleteSource = true)
+        true
+      }
+    } {
+      copyDir.foreach(deleteTemporaryDirectory)
+    }
+  }
+
+  /**
+   * Deletes a temporary directory of an add without throwing, so that neither a failure nor an
+   * interrupt, which Utils.deleteRecursively rethrows, replaces the result or the error of the
+   * add: the artifact may already be at its path. The interrupt status is kept.
+   */
+  private def deleteTemporaryDirectory(dir: File): Unit = {
+    Utils.deleteQuietly(dir)
+    if (dir.exists()) {
+      logWarning(log"Failed to delete the temporary directory ${MDC(LogKeys.PATH, dir)}.")
+    } else {
+      ShutdownHookManager.removeShutdownDeleteDir(dir)
+    }
+  }
+
   /**
    * Add and prepare a staged artifact (i.e an artifact that has been rebuilt locally from bytes
    * over the wire) for use.
@@ -218,6 +314,21 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
       serverLocalStagingPath: Path,
       fragment: Option[String],
       deleteStagedFile: Boolean = true
+  ): Unit = {
+    addArtifact(remoteRelativePath, serverLocalStagingPath, fragment, deleteStagedFile, None)
+  }
+
+  /**
+   * Adds an artifact, as [[addArtifact]] above. `sourceName` is the name of the file that the
+   * user added, if `serverLocalStagingPath` is that file, which errors then give instead of the
+   * artifact, rather than a file in which Spark staged the artifact.
+   */
+  private def addArtifact(
+      remoteRelativePath: Path,
+      serverLocalStagingPath: Path,
+      fragment: Option[String],
+      deleteStagedFile: Boolean,
+      sourceName: Option[String]
   ): Unit = JobArtifactSet.withActiveJobArtifactState(state) {
     require(!remoteRelativePath.isAbsolute)
     val normalizedRemoteRelativePath = normalizePath(remoteRelativePath)
@@ -273,19 +384,20 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
       cachedClassLoader = None
     } else {
       val target = ArtifactUtils.concatenatePaths(artifactPath, normalizedRemoteRelativePath)
-      // Disallow overwriting with modified version
-      if (Files.exists(target)) {
-        // makes the query idempotent
-        if (Utils.contentEquals(target.toFile, serverLocalStagingPath.toFile)) {
+      val isPackage = isNativeDataSourcePackage(normalizedRemoteRelativePath) &&
+        session.conf.get(StaticSQLConf.NATIVE_DATA_SOURCE_ENABLED)
+      if (isPackage) {
+        if (!addNativeDataSourcePackage(normalizedRemoteRelativePath, serverLocalStagingPath,
+            target, deleteStagedFile, sourceName)) {
           return
         }
-
-        throw new SparkRuntimeException(
-          "ARTIFACT_ALREADY_EXISTS",
-          Map("normalizedRemoteRelativePath" -> normalizedRemoteRelativePath.toString)
-        )
+      } else {
+        // Disallow overwriting with modified version
+        if (artifactExists(normalizedRemoteRelativePath, serverLocalStagingPath, target)) {
+          return
+        }
+        transferFile(serverLocalStagingPath, target, deleteSource = deleteStagedFile)
       }
-      transferFile(serverLocalStagingPath, target, deleteSource = deleteStagedFile)
 
       // This URI is for Spark file server that starts with "spark://".
       val uri = s"$artifactURI/${Utils.encodeRelativeUnixPathToURIRawPath(
@@ -339,7 +451,8 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
               artifact.path,
               d.path,
               fragment = None,
-              deleteStagedFile = false)
+              deleteStagedFile = false,
+              sourceName = Some(d.path.toString))
           case d: Artifact.InMemory =>
             val tempDir = Utils.createTempDir().toPath
             val tempFile = tempDir.resolve(artifact.path.getFileName)
@@ -348,13 +461,14 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
               d.stream.transferTo(outStream)
               addArtifact(artifact.path, tempFile, fragment = None)
             }(finallyBlock = {
-              outStream.close()
+              // addArtifact moves the file only when it adds the artifact, so delete what is left.
+              Utils.tryWithSafeFinally(outStream.close())(deleteTemporaryDirectory(tempDir.toFile))
             })
           case _ =>
             throw SparkException.internalError(s"Unsupported artifact storage: ${artifact.storage}")
         }
       } catch {
-        case e: SparkRuntimeException if e.getCondition == "ARTIFACT_ALREADY_EXISTS" =>
+        case e: SparkRuntimeException if ArtifactManager.isRejectedArtifact(e) =>
           failedArtifactExceptions += e
       }
     }
@@ -606,6 +720,15 @@ object ArtifactManager extends Logging {
   private[artifact] object SparkContextResourceType extends Enumeration {
     type ResourceType = Value
     val JAR, FILE, ARCHIVE = Value
+  }
+
+  /**
+   * Whether an error of adding an artifact only rejects that artifact, so that the call that adds
+   * several artifacts adds the others, and then reports all such errors.
+   */
+  private[sql] def isRejectedArtifact(e: SparkRuntimeException): Boolean = {
+    e.getCondition == "ARTIFACT_ALREADY_EXISTS" ||
+      Option(e.getCondition).exists(_.startsWith("INVALID_NATIVE_DATA_SOURCE_PACKAGE."))
   }
 
   private class StateCleanupRunner(cleanupState: ArtifactStateForCleanup) extends Runnable {
