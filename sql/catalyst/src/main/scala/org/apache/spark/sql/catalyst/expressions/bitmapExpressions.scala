@@ -428,7 +428,7 @@ case class BitmapContains(left: Expression, right: Expression)
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
           "paramIndex" -> ordinalNumber(1),
-          "requiredType" -> toSQLType(LongType),
+          "requiredType" -> toSQLType(NumericType),
           "inputSql" -> toSQLExpr(right),
           "inputType" -> toSQLType(right.dataType)
         )
@@ -445,13 +445,22 @@ case class BitmapContains(left: Expression, right: Expression)
   override lazy val replacement: Expression = {
     // StaticInvoke needs an exact BinaryType child, including for a bare NULL literal.
     val bitmap = if (left.dataType == NullType) Cast(left, BinaryType) else left
-    StaticInvoke(
-      classOf[BitmapExpressionUtils],
-      BooleanType,
-      "bitmapContains",
-      Seq(bitmap, Cast(right, LongType)),
-      Seq(BinaryType, LongType),
-      returnNullable = false)
+    def invoke(bitmap: Expression): Expression = StaticInvoke(
+        classOf[BitmapExpressionUtils],
+        BooleanType,
+        "bitmapContains",
+        Seq(bitmap, Cast(right, LongType)),
+        Seq(BinaryType, LongType),
+        returnNullable = false)
+
+    if (bitmap.nullable) {
+      // Make the cast conditional for constant folding and subexpression elimination as well.
+      With(bitmap) { case Seq(ref) =>
+        If(IsNull(ref), Literal.create(null, BooleanType), invoke(ref))
+      }
+    } else {
+      invoke(bitmap)
+    }
   }
 
   override protected def withNewChildrenInternal(

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.objects
 
 import java.lang.reflect.{Method, Modifier}
+import java.util.Arrays
 
 import scala.collection.immutable
 import scala.collection.mutable
@@ -190,6 +191,7 @@ trait InvokeLike extends Expression with NonSQLExpression with ImplicitCastInput
       i += 1
     }
     if (needNullCheck && resultNull) {
+      Arrays.fill(evaluatedArgs, i, len, null)
       // return null if one of arguments is null
       null
     } else {
@@ -663,6 +665,7 @@ case class NewInstance(
       i += 1
     }
     if (needNullCheck && resultNull) {
+      Arrays.fill(evaluatedArgs, i, len, null)
       // return null if one of arguments is null
       null
     } else {

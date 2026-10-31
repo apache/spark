@@ -302,19 +302,44 @@ class BitmapExpressionsQuerySuite extends SharedSparkSession {
         |FROM range(1)
         |""".stripMargin
 
-    Seq("CODEGEN_ONLY" -> "true", "NO_CODEGEN" -> "false").foreach {
-      case (codegenMode, wholeStageCodegenEnabled) =>
-        withSQLConf(
-          SQLConf.ANSI_ENABLED.key -> "true",
-          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStageCodegenEnabled,
-          SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
-          checkAnswer(spark.sql(query), Seq(Row(null), Row(true), Row(true)))
+    val sharedPositionQuery =
+      """
+        |WITH inputs AS (
+        |  SELECT IF(id = 0, NULL, X'01') AS b1, IF(id = 0, NULL, X'02') AS b2,
+        |    IF(id = 0, 18446744073709551617BD, 0BD) AS p
+        |  FROM range(2)
+        |)
+        |SELECT bitmap_contains(b1, p), bitmap_contains(b2, p) FROM inputs
+        |""".stripMargin
+    val constantPositionQuery =
+      """
+        |SELECT bitmap_contains(IF(id = 0, NULL, X'01'), 18446744073709551617BD)
+        |FROM range(1)
+        |""".stripMargin
 
-          val error = intercept[SparkArithmeticException] {
-            spark.sql(overflowQuery).collect()
-          }
-          assert(error.getCondition == "CAST_OVERFLOW")
+    for {
+      (codegenMode, wholeStageCodegenEnabled) <-
+        Seq("CODEGEN_ONLY" -> "true", "NO_CODEGEN" -> "false")
+      subexpressionElimination <- Seq("true", "false")
+    } {
+      withSQLConf(
+        SQLConf.ANSI_ENABLED.key -> "true",
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStageCodegenEnabled,
+        SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode,
+        SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> subexpressionElimination) {
+        checkAnswer(spark.sql(query), Seq(Row(null), Row(true), Row(true)))
+        checkAnswer(spark.sql(sharedPositionQuery), Seq(Row(null, null), Row(true, false)))
+        checkAnswer(spark.sql(constantPositionQuery), Seq(Row(null)))
+        withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+            "org.apache.spark.sql.catalyst.optimizer.ConstantFolding") {
+          checkAnswer(spark.sql(constantPositionQuery), Seq(Row(null)))
         }
+
+        val error = intercept[SparkArithmeticException] {
+          spark.sql(overflowQuery).collect()
+        }
+        assert(error.getCondition == "CAST_OVERFLOW")
+      }
     }
 
     checkAnswer(
@@ -723,7 +748,7 @@ class BitmapExpressionsQuerySuite extends SharedSparkSession {
       parameters = Map(
         "sqlExpr" -> "\"bitmap_contains(X'01', 0)\"",
         "paramIndex" -> "second",
-        "requiredType" -> "\"BIGINT\"",
+        "requiredType" -> "\"NUMERIC\"",
         "inputSql" -> "\"0\"",
         "inputType" -> "\"STRING\""
       ),
