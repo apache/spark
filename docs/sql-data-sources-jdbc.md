@@ -370,7 +370,10 @@ logging into the data sources.
     <td>
       When the option is set to <code>true</code>, TIMESTAMP WITHOUT TIME ZONE type is inferred as Spark's TimestampNTZ type.
       Otherwise, it is interpreted as Spark's Timestamp type(equivalent to TIMESTAMP WITH LOCAL TIME ZONE).
+      If unset, this option follows <code>spark.sql.timestampType</code>.
       This setting specifically affects only the inference of TIMESTAMP WITHOUT TIME ZONE data type. Both TIMESTAMP WITH LOCAL TIME ZONE and TIMESTAMP WITH TIME ZONE data types are consistently interpreted as Spark's Timestamp type regardless of this setting.
+      For Oracle, <code>zonelessTimestampAsNTZ</code> defaults to <code>true</code> and overrides this option for TIMESTAMP and DATE exposed by the driver as TIMESTAMP.
+      Set <code>zonelessTimestampAsNTZ=false</code> to apply <code>preferTimestampNTZ</code> to those columns.
     </td>
     <td>read</td>
   </tr>
@@ -1287,8 +1290,8 @@ as the activated JDBC Driver.
     </tr>
     <tr>
       <td>DATE</td>
-      <td>TimestampType</td>
-      <td>When oracle.jdbc.mapDateToTimestamp=true, it follows TIMESTAMP's behavior below</td>
+      <td>TimestampNTZType</td>
+      <td>By default, oracle.jdbc.mapDateToTimestamp=true; it follows TIMESTAMP's behavior below</td>
     </tr>
     <tr>
       <td>DATE</td>
@@ -1297,13 +1300,13 @@ as the activated JDBC Driver.
     </tr>
     <tr>
       <td>TIMESTAMP</td>
-      <td>TimestampType</td>
-      <td>(Default)preferTimestampNTZ=false or spark.sql.timestampType=TIMESTAMP_LTZ</td>
+      <td>TimestampNTZType</td>
+      <td>(Default)zonelessTimestampAsNTZ=true, regardless of preferTimestampNTZ; also when zonelessTimestampAsNTZ=false and preferTimestampNTZ=true</td>
     </tr>
     <tr>
       <td>TIMESTAMP</td>
-      <td>TimestampNTZType</td>
-      <td>preferTimestampNTZ=true or spark.sql.timestampType=TIMESTAMP_NTZ</td>
+      <td>TimestampType</td>
+      <td>zonelessTimestampAsNTZ=false and preferTimestampNTZ=false</td>
     </tr>
     <tr>
       <td>TIMESTAMP WITH TIME ZONE</td>
