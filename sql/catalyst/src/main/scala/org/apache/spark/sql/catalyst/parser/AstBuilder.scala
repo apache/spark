@@ -3413,11 +3413,11 @@ class AstBuilder extends DataTypeAstBuilder
         // Streaming CDC: wrap in RelationChanges and NamedStreamingRelation
         val options = resolveOptions(Option(ctx.optionsClause))
         val changelogContext = buildStreamChangelogContext(changesCtx, options)
-        val result = RelationChanges(relation, changelogContext)
-        val table = mayApplyAliasPlan(ctx.tableAlias, result)
-        val tableWithWatermark = table.optionalMap(ctx.watermarkClause)(withWatermark)
         val sourceNameOpt = extractSourceName(ctx.identifiedByClause)
-        NamedStreamingRelation.withUserProvidedName(tableWithWatermark, sourceNameOpt)
+        val namedChanges = NamedStreamingRelation.withUserProvidedName(
+          RelationChanges(relation, changelogContext), sourceNameOpt)
+        val table = mayApplyAliasPlan(ctx.tableAlias, namedChanges)
+        table.optionalMap(ctx.watermarkClause)(withWatermark)
       case None =>
         // Regular streaming relation
         val table = mayApplyAliasPlan(ctx.tableAlias, relation)

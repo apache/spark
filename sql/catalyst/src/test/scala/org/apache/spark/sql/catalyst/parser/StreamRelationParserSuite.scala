@@ -642,6 +642,34 @@ class StreamRelationParserSuite extends AnalysisTest {
     assert(relationChanges.size == 1)
   }
 
+  test("SPARK-60525: STREAM t CHANGES wraps RelationChanges directly in NamedStreamingRelation") {
+    val wm = "WATERMARK col DELAY OF INTERVAL 1 MINUTE"
+    val testCases = Seq(
+      // (trailing clauses, expectedSourceName)
+      ("", Unassigned),
+      ("AS tbl", Unassigned),
+      (wm, Unassigned),
+      (s"$wm AS tbl", Unassigned),
+      ("IDENTIFIED BY src1", UserProvided("src1")),
+      ("IDENTIFIED BY src1 AS tbl", UserProvided("src1")),
+      (s"IDENTIFIED BY src1 $wm", UserProvided("src1")),
+      (s"IDENTIFIED BY src1 $wm AS tbl", UserProvided("src1"))
+    )
+
+    testCases.foreach { case (clauses, expectedSourceName) =>
+      val query = s"SELECT * FROM STREAM t CHANGES FROM VERSION 1 $clauses"
+      val namedStreamingRelations = parsePlan(query).collect {
+        case n: NamedStreamingRelation => n
+      }
+      assert(namedStreamingRelations.size == 1,
+        s"Expected 1 NamedStreamingRelation node in: $query")
+      assert(namedStreamingRelations.head.sourceIdentifyingName == expectedSourceName,
+        s"Expected source name $expectedSourceName in: $query")
+      assert(namedStreamingRelations.head.child.isInstanceOf[RelationChanges],
+        s"Expected NamedStreamingRelation to directly wrap RelationChanges in: $query")
+    }
+  }
+
   test("STREAM t CHANGES with WITH options") {
     val plan = parsePlan(
       "SELECT * FROM STREAM t CHANGES FROM VERSION 1 " +
