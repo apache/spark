@@ -1836,14 +1836,15 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             u = self._transpiled_udf(ident, LongType())
             self.assertIsNone(seen["function_ast"])
             self.assertIs(ident.__code__, seen["held_code"])
-            # One untyped param from the code object: integer, float, and string combos.
-            self.assertEqual([["numeric"]] * 3, u._transpiled_input_categories)
+            # The variety reports the same categories for every combo: one option.
+            self.assertEqual([["numeric"]], u._transpiled_input_categories)
             from pyspark.sql.types import StructField, StructType
 
             long_schema = StructType([StructField("a", LongType(), nullable=True)])
             df = self.spark.createDataFrame([Row(a=41)], schema=long_schema)
-            [result] = df.select(u("a")).collect()
-            self.assertEqual(result[0], 41)
+            projected = df.select(u("a"))
+            self.assertEqual(0, self._eval_python_count(projected))
+            self.assertEqual(projected.collect()[0][0], 41)
 
     def test_udf_transpile_bytecode_variety_handles_wraps_decorated(self):
         # A functools.wraps-decorated UDF's visible source is the WRAPPED
@@ -1920,6 +1921,110 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         with self._with_variety(EagerTranspiler):
             _, reasons = self._fallback_reason(ns["add"], LongType())
             self.assertIn("default", reasons)
+
+    def _eager_variety(self):
+        from pyspark.sql.functions import col
+        from pyspark.sql.transpile import AbstractTranspiler
+
+        class EagerTranspiler(AbstractTranspiler):
+            variety = "eager_55213"
+
+            def _transpile_from_ast(
+                self,
+                src,
+                ast_info,
+                function_ast,
+                params,
+                returnType,
+                param_categories=None,
+                held_code=None,
+            ):
+                return (col("_udf_param_0").cast(returnType), ["numeric"] * len(params))
+
+        return EagerTranspiler
+
+    def test_udf_transpile_repl_function_with_kwonly_falls_back(self):
+        ns: dict = {}
+        exec("def f(a, *, b):\n    return a", ns)
+        with self._with_variety(self._eager_variety()):
+            _, reasons = self._fallback_reason(ns["f"], LongType())
+            self.assertIn("keyword-only", reasons)
+
+    def test_udf_transpile_repl_positional_only_kwarg_call_raises_like_python(self):
+        ns: dict = {}
+        exec("def f(a, /):\n    return a", ns)
+        with self._with_variety(self._eager_variety()):
+            with self.sql_conf(_TRANSPILE_ON):
+                pudf = UserDefinedFunction(ns["f"], LongType())
+                df = self.spark.createDataFrame([(2,)], "a long")
+                with self.assertRaisesRegex(Exception, "positional-only arguments"):
+                    df.select(pudf(a=df.a)).collect()
+
+    def test_udf_transpile_variety_rejects_unknown_category_values(self):
+        from pyspark.sql.functions import col
+        from pyspark.sql.transpile import AbstractTranspiler
+
+        for bad in (LongType(), "Numeric", None):
+
+            class BadCategoryTranspiler(AbstractTranspiler):
+                variety = "bad_category_55213"
+
+                def _transpile_from_ast(
+                    self,
+                    src,
+                    ast_info,
+                    function_ast,
+                    params,
+                    returnType,
+                    param_categories=None,
+                    held_code=None,
+                    bad=bad,
+                ):
+                    return (col("_udf_param_0").cast(returnType), [bad])
+
+            def ident(a: int):
+                return a
+
+            with self._with_variety(BadCategoryTranspiler):
+                u, reasons = self._fallback_reason(ident, LongType())
+                self.assertIn("unknown input categories", reasons)
+
+    def test_udf_transpile_self_typing_variety_adds_one_option(self):
+        ns: dict = {}
+        exec("def add(a, b, c):\n    return a", ns)
+        with self._with_variety(self._eager_variety()):
+            u = self._transpiled_udf(ns["add"], LongType())
+            self.assertEqual([["numeric"] * 3], u._transpiled_input_categories)
+
+    def test_udf_transpile_variety_gets_no_rejected_source(self):
+        # A lambda returned by another lambda on one line is rejected as
+        # ambiguous; the rejected source must not reach a variety.
+        from pyspark.sql.functions import col
+        from pyspark.sql.transpile import AbstractTranspiler
+
+        seen = {}
+
+        class RecordingTranspiler(AbstractTranspiler):
+            variety = "recording_55213"
+
+            def _transpile_from_ast(
+                self,
+                src,
+                ast_info,
+                function_ast,
+                params,
+                returnType,
+                param_categories=None,
+                held_code=None,
+            ):
+                seen.update(src=src, ast_info=ast_info, function_ast=function_ast)
+                return (col("_udf_param_0").cast(returnType), ["numeric"] * len(params))
+
+        make_adder = lambda n: lambda x: x + n  # noqa: E731
+        add_three = make_adder(3)
+        with self._with_variety(RecordingTranspiler):
+            self._transpiled_udf(add_three, LongType())
+        self.assertEqual({"src": None, "ast_info": None, "function_ast": None}, seen)
 
     # ------------------------------------------------------------------
     # Edge cases (SPARK-55206 follow-up). Helpers build a UDF with
