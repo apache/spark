@@ -33,6 +33,10 @@ provenance lines after it. The footer is therefore the signal that identifies bo
 and its backports -- `git ... --contains <merge_hash>` cannot, because a cherry-pick is a
 new commit that no other branch contains.
 
+Merging a backport PR (#M, opened by the script for #N) keeps #N's message and footer and
+adds a `Backport-PR: #M` trailer to its final paragraph, so the commit counts as a merge of
+both: `merge_footer_pr` still names #N, and `has_merge_footer` is true for #N and #M.
+
 Two properties make reading it reliable, and both are easy to get wrong:
 
 - A PR body is passed through as its own `git commit -m` paragraph, so it may quote another
@@ -62,18 +66,28 @@ _MERGE_FOOTER_RE = re.compile(
     r"^Closes #(\d+) from \S+\s*$\n\n(?:Lead-authored-by|Authored-by):",
     re.MULTILINE,
 )
+_BACKPORT_PR_RE = re.compile(r"^Backport-PR: #(\d+)\s*$", re.MULTILINE)
 
 
 def merge_footer_trailer(pr_num):
     """The literal fragment to pass to `git log --fixed-strings --grep`.
 
     Only a prefilter to narrow the walk: it matches anywhere in a message, so callers
-    validate each candidate with `has_merge_footer`.
+    validate each candidate with `has_merge_footer`. See `backport_pr_trailer` too.
 
     >>> merge_footer_trailer(1)
     'Closes #1 from '
     """
     return "Closes #%s from " % pr_num
+
+
+def backport_pr_trailer(pr_num):
+    """`merge_footer_trailer`'s counterpart for a merged backport PR.
+
+    >>> backport_pr_trailer(9)
+    'Backport-PR: #9'
+    """
+    return "Backport-PR: #%s" % pr_num
 
 
 def merge_footer_pr(message):
@@ -108,8 +122,27 @@ def merge_footer_pr(message):
     return int(matches[-1]) if matches else None
 
 
+def backport_pr(message):
+    """The backport PR merged by `message`, or None: a `Backport-PR` trailer in the final
+    paragraph, after the generated footer, so one quoted in a body does not count.
+
+    >>> footer = "Closes #7 from a/b.\\n\\nAuthored-by: A <a@e.org>\\nSigned-off-by: C <c@e.org>"
+    >>> backport_pr("Fix\\n\\n%s\\nBackport-PR: #9\\nSigned-off-by: M <m@e.org>" % footer)
+    9
+    >>> backport_pr("Fix\\n\\nBackport-PR: #9\\n\\n" + footer) is None
+    True
+    >>> backport_pr("Fix\\n\\nBackport-PR: #9") is None
+    True
+    """
+    matches = list(_MERGE_FOOTER_RE.finditer(message))
+    if not matches:
+        return None
+    found = _BACKPORT_PR_RE.findall(message[matches[-1].start() :].split("\n\n")[-1])
+    return int(found[-1]) if found else None
+
+
 def has_merge_footer(message, pr_num):
-    """Whether `message`'s generated merge footer closes `pr_num`. See `merge_footer_pr`.
+    """Whether `message` merges `pr_num`: its footer's PR, or the backport PR it merged.
 
     `pr_num` may be an int or a string of digits: callers get the PR number from argv or from
     the GitHub API, and comparing those two forms directly would silently never match.
@@ -130,8 +163,14 @@ def has_merge_footer(message, pr_num):
     False
     >>> has_merge_footer(later, 2)
     True
+
+    A merged backport PR counts for itself and for the original:
+
+    >>> backport = "[SPARK-1][4.2][SQL] Title\\n\\n" + footer + "\\nBackport-PR: #9"
+    >>> [has_merge_footer(backport, pr) for pr in (1, 9, 2)]
+    [True, True, False]
     """
-    return merge_footer_pr(message) == int(pr_num)
+    return int(pr_num) in (merge_footer_pr(message), backport_pr(message))
 
 
 def parse_commit_records(out):
@@ -193,6 +232,8 @@ def branches_with_merge_footer(pr_num, remote, run_git):
             "--fixed-strings",
             "--grep",
             merge_footer_trailer(pr_num),
+            "--grep",
+            backport_pr_trailer(pr_num),
             "--format=%H %B%x00",
         ]
     )
