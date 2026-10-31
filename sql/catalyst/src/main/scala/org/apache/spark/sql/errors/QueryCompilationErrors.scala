@@ -488,8 +488,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def legacyStoreAssignmentPolicyError(): Throwable = {
     val configKey = SQLConf.STORE_ASSIGNMENT_POLICY.key
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1000",
-      messageParameters = Map("configKey" -> configKey))
+      errorClass = "UNSUPPORTED_STORE_ASSIGNMENT_POLICY",
+      messageParameters = Map("configKey" -> toSQLConf(configKey)))
   }
 
   def namedArgumentsNotEnabledError(functionName: String, argumentName: String): Throwable = {
