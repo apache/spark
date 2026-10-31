@@ -78,6 +78,49 @@ class SubquerySuite extends SharedSparkSession
     assert(joins.size == numJoins)
   }
 
+  test("preserve sorted LIMIT and OFFSET with projected subqueries") {
+    withTempView("p", "k") {
+      Seq((1, "a", 30), (2, "b", 20), (3, "c", 40),
+        (4, "d", 60), (5, "e", 10), (6, "f", 50))
+        .toDF("id", "name", "age").createOrReplaceTempView("p")
+      Seq((1, 2), (1, 3), (1, 5), (2, 3))
+        .toDF("a", "b").createOrReplaceTempView("k")
+
+      withSQLConf(
+          "spark.sql.adaptive.enabled" -> "false",
+          "spark.sql.autoBroadcastJoinThreshold" -> "-1") {
+        val cases = Seq(
+          ("LIMIT 3",
+            Seq(Row("c", 0L), Row("d", 0L), Row("f", 0L)),
+            Seq(Row("c", false), Row("d", false), Row("f", false)),
+            Seq(Row("c", false), Row("d", false), Row("f", false))),
+          ("OFFSET 3",
+            Seq(Row("a", 3L), Row("b", 1L), Row("e", 0L)),
+            Seq(Row("a", true), Row("b", true), Row("e", false)),
+            Seq(Row("a", true), Row("b", true), Row("e", false))))
+
+        cases.foreach { case (slice, counts, exists, inResults) =>
+          val cte = s"WITH s AS (SELECT id, name FROM p ORDER BY age DESC $slice)"
+          checkAnswer(
+            sql(s"""$cte
+                   |SELECT name, (SELECT count(*) FROM k WHERE k.a = s.id) AS c
+                   |FROM s""".stripMargin).orderBy("name"),
+            counts)
+          checkAnswer(
+            sql(s"""$cte
+                   |SELECT name, EXISTS(SELECT 1 FROM k WHERE k.a = s.id) AS e
+                   |FROM s""".stripMargin).orderBy("name"),
+            exists)
+          checkAnswer(
+            sql(s"""$cte
+                   |SELECT name, s.id IN (SELECT a FROM k) AS in_k
+                   |FROM s""".stripMargin).orderBy("name"),
+            inResults)
+        }
+      }
+    }
+  }
+
   test("SPARK-18854 numberedTreeString for subquery") {
     val df = sql("select * from range(10) where id not in " +
       "(select id from range(2) union all select id from range(2))")
