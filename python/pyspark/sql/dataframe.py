@@ -670,6 +670,21 @@ class DataFrame:
         """
         ...
 
+    def debugCodegen(self) -> None:
+        """Print generated code for each WholeStageCodegen subtree to the console.
+
+        This is equivalent to ``explain(mode="codegen")`` and supports Spark Connect.
+
+        .. versionadded:: 4.4.0
+
+        Examples
+        --------
+        >>> spark.range(10).debugCodegen()  # doctest: +SKIP
+        Found 1 WholeStageCodegen subtrees.
+        ...
+        """
+        self.explain(mode="codegen")
+
     @dispatch_df_method
     def explain(
         self, extended: Optional[Union[bool, str]] = None, mode: Optional[str] = None
