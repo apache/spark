@@ -399,6 +399,8 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                         )
                     )
 
+                elif aggfunc == "size":
+                    reordered.append(F.expr("count(1) as `{0}`".format(data_col)))
                 else:
                     reordered.append(
                         F.expr("{1}(`{0}`) as `{2}`".format(col_name, aggfunc, data_col))
