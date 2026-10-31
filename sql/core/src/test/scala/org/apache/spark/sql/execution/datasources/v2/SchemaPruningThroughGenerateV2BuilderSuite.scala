@@ -119,8 +119,9 @@ class SchemaPruningThroughGenerateV2BuilderSuite extends QueryTest with SharedSp
             withTempView("t") {
               // the nondeterministic lower filter is NULL for s = 'bad', so the cast above it
               // must never see that row: `And` of the two would still evaluate the cast
+              // (`monotonically_increasing_id`, unlike `rand() >= 0`, is not folded away)
               spark.read.parquet(path)
-                .where("rand() >= 0 and nullif(s, 'bad') = s")
+                .where("monotonically_increasing_id() >= 0 and nullif(s, 'bad') = s")
                 .where("cast(s as int) = 7")
                 .createOrReplaceTempView("t")
               checkAnswer(
