@@ -3811,6 +3811,9 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
              |JOIN testcat.ns.b6 ON b4.id = b6.id
              |""".stripMargin)
         checkAnswer(df, expected)
+        // Only the skewed branch shuffles: both sides of its join, and its aggregate.
+        assert(collectAllShuffles(df.queryExecution.executedPlan).size == 3,
+          "the re-run should keep the nested SPJ's pairing")
       }
     }
   }
@@ -3838,7 +3841,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       val expected = sql(skewQuery).collect().toSeq ++ (0L until 72L).map(i => Row(i, 1L))
 
       // The re-run's inner join must not derive the hours-to-days reducer again and chain it after
-      // the one it pushed the first time, since floorDiv(h, 24) applied twice is wrong.
+      // the one it pushed the first time, since h / 24 applied twice is wrong.
       withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
         SQLConf.ADAPTIVE_OPTIMIZE_SKEWS_IN_REBALANCE_PARTITIONS_ENABLED.key -> "false",
@@ -3977,6 +3980,36 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
         }
       }
     }
+
+    // pa is reduced at b only. lx.id is equated to both pa.a and pa.b, so whichever equality
+    // comes last, the build key has no single position to trace back to.
+    val abCols = Array(Column.create("a", LongType), Column.create("b", LongType))
+    createTable("pa", abCols, Array(bucket(12, "a"), bucket(12, "b")))
+    createTable("pb", abCols, Array(bucket(12, "a"), bucket(4, "b")))
+    createTable("q12", longCols, Array(bucket(12, "id")))
+    Seq("pa", "pb").foreach(t => sql(s"INSERT INTO testcat.ns.$t SELECT id, id FROM range(24)"))
+    sql("INSERT INTO testcat.ns.q12 SELECT id FROM range(24)")
+    Seq("lx.id = pa.b AND lx.id = pa.a", "lx.id = pa.a AND lx.id = pa.b").foreach { on =>
+      Seq(true, false).foreach { aqe =>
+        withSQLConf(
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+          SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true",
+          SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+          SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false") {
+          val df = sql(
+            s"""
+               |SELECT /*+ MERGE(pa, pb), BROADCAST(lx), MERGE(q12) */ pa.a, lx.id, q12.id
+               |FROM testcat.ns.pa JOIN testcat.ns.pb ON pa.a = pb.a AND pa.b = pb.b
+               |JOIN testcat.ns.lx ON $on
+               |JOIN testcat.ns.q12 ON lx.id = q12.id
+               |""".stripMargin)
+          assert(collectAllShuffles(df.queryExecution.executedPlan).size == 2,
+            s"the outer join should fall back to shuffling both sides with ON $on")
+          checkAnswer(df, longRows)
+        }
+      }
+    }
   }
 
   test("SPARK-60232: nested SPJ keeps SPJ on an unreduced column with the same transform") {
@@ -4042,7 +4075,41 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     }
   }
 
-  test("SPARK-60232: SPJ does not push common values below a shuffle") {
+  test("SPARK-60232: ordering ignores a one-side shuffle inside a broadcast build side") {
+    val deptCol = Array(Column.create("dept", IntegerType))
+    Seq("sa", "ba").foreach { t =>
+      createTable(t, deptCol, Array(identity("dept")))
+      sql(s"INSERT INTO testcat.ns.$t VALUES (1), (2), (3)")
+    }
+    createTable("bb", Array(Column.create("dept", IntegerType), Column.create("v", StringType)),
+      Array.empty)
+    sql("INSERT INTO testcat.ns.bb VALUES (1, 'v1'), (2, 'v2'), (3, 'v3')")
+
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_SORTING_ENABLED.key -> "true") {
+        // The sorted push stops at the broadcast, so bb's shuffle onto ba's layout is not left
+        // behind, and the DESC reorder needs no range shuffle.
+        val df = sql(
+          """
+            |SELECT /*+ BROADCAST(b) */ sa.dept, b.v
+            |FROM testcat.ns.sa LEFT JOIN (
+            |  SELECT /*+ MERGE(ba, bb) */ ba.dept, bb.v
+            |  FROM testcat.ns.ba JOIN testcat.ns.bb ON ba.dept = bb.dept) b
+            |ON sa.dept = b.dept
+            |ORDER BY sa.dept DESC
+            |""".stripMargin)
+        checkAnswer(df, Seq(Row(3, "v3"), Row(2, "v2"), Row(1, "v1")))
+        assert(collectAllShuffles(df.queryExecution.executedPlan).size == 1,
+          "only bb should be shuffled")
+      }
+    }
+  }
+
+  test("SPARK-60552: SPJ does not push common values below a shuffle") {
     createTable("sa7", Array(Column.create("dept", IntegerType)), Array(identity("dept")))
     sql("INSERT INTO testcat.ns.sa7 VALUES (1), (2), (3)")
 

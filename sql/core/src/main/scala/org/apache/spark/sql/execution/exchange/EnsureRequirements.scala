@@ -23,17 +23,14 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.internal.{LogKeys}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
 import org.apache.spark.sql.connector.catalog.functions.Reducer
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.adaptive.ShuffleQueryStageExec
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
-import org.apache.spark.sql.execution.joins.{
-  BroadcastHashJoinExec, ShuffledHashJoinExec, SortMergeJoinExec, StoragePartitionJoinParams}
+import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -147,17 +144,7 @@ case class EnsureRequirements(
             // To choose a KeyGroupedShuffleSpec, we must be able to push down SPJ parameters into
             // the scan (for join key positions). If these parameters can't be pushed down, this
             // spec can't be used to shuffle other children.
-            case (idx, s: KeyGroupedShuffleSpec) =>
-              canPushDownSPJParamsToScan(children(idx)) &&
-                !isBuiltFromReducedScan(children(idx), s) &&
-                !hasReducedScanOutsideJoin(children(idx))
-            // A nested join reports a collection, and any of its members can end up as the best
-            // member the other side is shuffled onto.
-            case (idx, s: ShuffleSpecCollection) =>
-              flattenSpec(s).forall {
-                case k: KeyGroupedShuffleSpec => !isBuiltFromReducedScan(children(idx), k)
-                case _ => true
-              }
+            case (idx, _: KeyGroupedShuffleSpec) => canPushDownSPJParamsToScan(children(idx))
             case _ => true
           }
           .filter(p => !shouldConsiderMinParallelism ||
@@ -212,14 +199,8 @@ case class EnsureRequirements(
       // from one member, otherwise the sides end up grouped on different keys, or on a key set the
       // child does not even have. Pick that member once, preferring the finest when several
       // qualify. Only the branch that shuffles a child reads these, hence `lazy`.
-      // A child with a member built from a reduced scan only looks compatible on the transform
-      // the scan still reports, so it is shuffled onto the best spec instead.
       lazy val matchedIndexes = bestSpecOpt.toSeq.flatMap { best =>
-        childrenIndexes.filter(i => best.isCompatibleWith(specs(i)) &&
-          !flattenSpec(specs(i)).exists {
-            case k: KeyGroupedShuffleSpec => isBuiltFromReducedScan(children(i), k)
-            case _ => false
-          })
+        childrenIndexes.filter(i => best.isCompatibleWith(specs(i)))
       }
       lazy val bestMemberOpt = bestSpecOpt.flatMap { best =>
         val matchedMembers = matchedIndexes.map(i => flattenSpec(specs(i)))
@@ -248,8 +229,7 @@ case class EnsureRequirements(
               // partitioned side's BatchScanExec is grouped by join keys to match,
               // and we do that by pushing down the join keys
               case Some(KeyGroupedShuffleSpec(_, _, Some(joinKeyPositions))) =>
-                populateSpjParams(
-                  child, commonPartitionValues = None, joinKeyPositions = Some(joinKeyPositions))
+                populateJoinKeyPositions(child, Some(joinKeyPositions))
               case _ => child
             }
           } else {
@@ -365,25 +345,10 @@ case class EnsureRequirements(
           },
           Nil)
         // Sort 'commonPartitionValues' and use this mechanism to ensure BatchScan's
-        // output partitions are ordered. A join below may already have pushed key positions and
-        // reducers that these values are expressed in, so keep them rather than reset them.
+        // output partitions are ordered
         val sorted = partitionValues.sorted(partitionOrdering)
-        // A one-side shuffle below routed its other child into the current order of the values.
-        // Sorting only the scans would leave that child behind, so fall back to a range shuffle.
-        val hasKeyGroupedShuffle = plan.exists {
-          case s @ (_: ShuffleExchangeLike | _: ShuffleQueryStageExec) =>
-            s.outputPartitioning.isInstanceOf[KeyGroupedPartitioning]
-          case _ => false
-        }
-        val reorders = partitionValues.zip(sorted).exists { case (a, b) =>
-          partitionOrdering.compare(a, b) != 0
-        }
-        if (hasKeyGroupedShuffle && reorders) {
-          ShuffleExchangeExec(d.createPartitioning(conf.numShufflePartitions), plan)
-        } else {
-          populateSpjParams(plan, commonPartitionValues = Some(sorted.map((_, 1))),
-            joinKeyPositions = None)
-        }
+        populateCommonPartitionInfo(plan, sorted.map((_, 1)),
+          None, None, applyPartialClustering = false, replicatePartitions = false)
       case _ => plan
       }
   }
@@ -536,15 +501,6 @@ case class EnsureRequirements(
       val specOpt = createKeyGroupedShuffleSpec(p.outputPartitioning, cd)
       if (specOpt.isEmpty) return None
       specOpt.get
-    }
-    if (Seq(left, right).zip(specs).exists { case (p, s) => isBuiltFromReducedScan(p, s) }) {
-      return None
-    }
-    // A scan that carries reducers with no join above it in a child was planned by an earlier
-    // run of this rule, which already pushed this join's pairing into both sides. Keep that
-    // pairing rather than derive the reducers again.
-    if (Seq(left, right).exists(hasReducedScanOutsideJoin)) {
-      return Some(Seq(left, right))
     }
 
     val leftSpec = specs.head
@@ -703,15 +659,11 @@ case class EnsureRequirements(
           }
         }
 
-        // Now we need to push-down the common partition information to the scan in each child.
-        newLeft = populateSpjParams(
-          left, commonPartitionValues = Some(mergedPartValues),
-          joinKeyPositions = leftSpec.joinKeyPositions, reducers = leftReducers,
-          applyPartialClustering = applyPartialClustering, replicatePartitions = replicateLeftSide)
-        newRight = populateSpjParams(
-          right, commonPartitionValues = Some(mergedPartValues),
-          joinKeyPositions = rightSpec.joinKeyPositions, reducers = rightReducers,
-          applyPartialClustering = applyPartialClustering, replicatePartitions = replicateRightSide)
+        // Now we need to push-down the common partition information to the scan in each child
+        newLeft = populateCommonPartitionInfo(left, mergedPartValues, leftSpec.joinKeyPositions,
+          leftReducers, applyPartialClustering, replicateLeftSide)
+        newRight = populateCommonPartitionInfo(right, mergedPartValues, rightSpec.joinKeyPositions,
+          rightReducers, applyPartialClustering, replicateRightSide)
       }
     }
 
@@ -746,198 +698,42 @@ case class EnsureRequirements(
         joinType == LeftAnti || joinType == LeftOuter
   }
 
-  /**
-   * Compose join-key positions from an outer SPJ with positions already pushed by an inner SPJ.
-   * Outer positions index the layout the outer join sees; inner positions index the scan's raw
-   * partition expressions, so they are composed rather than replaced.
-   */
-  private def composeJoinKeyPositions(
-      existing: Option[Seq[Int]],
-      newPositions: Option[Seq[Int]]): Option[Seq[Int]] = {
-    (existing, newPositions) match {
-      case (Some(old), Some(newPos)) => Some(newPos.map(old))
-      case (_, None) => existing
-      case (None, Some(newPos)) => Some(newPos)
-    }
-  }
-
-  /**
-   * Project common partition values onto `projectionPositions` of the layout `expressions`
-   * describes and deduplicate. Values that collapse to the same key are read as one group, so
-   * they become one partition.
-   *
-   * The keys keep the order in which they first appear, as `KeyGroupedPartitioning.apply` does.
-   * A one-side shuffle routes the other child into that order, so partition i of both sides must
-   * hold the same key.
-   */
-  private def projectAndDedupeCommonPartitionValues(
-      values: Seq[(InternalRow, Int)],
-      expressions: Seq[Expression],
-      projectionPositions: Seq[Int]): Seq[(InternalRow, Int)] = {
-    val projectedExpressions = projectionPositions.map(expressions(_))
-    val projected = values.map { case (partValue, _) =>
-      val row = KeyGroupedPartitioning.project(expressions, projectionPositions, partValue)
-      InternalRowComparableWrapper(row, projectedExpressions)
-    }
-    projected.distinct.map(wrapper => (wrapper.row, 1))
-  }
-
-  /**
-   * The partition expressions a scan currently reports, i.e. its own partition expressions
-   * projected onto the join-key positions pushed so far.
-   */
-  private def reportedLayout(params: StoragePartitionJoinParams): Option[Seq[Expression]] =
-    params.keyGroupedPartitioning.map { expressions =>
-      params.joinKeyPositions.map(_.map(expressions)).getOrElse(expressions)
-    }
-
-  /**
-   * Common partition values for a scan after a push. Values pushed by this join are the merge with
-   * the other side and already sit in the layout `newPositions` select, so they win. Otherwise the
-   * values an inner join pushed sit in the scan's reported layout, and are projected onto
-   * `newPositions`, which index that layout.
-   */
-  private def finalizeCommonPartitionValues(
-      existing: StoragePartitionJoinParams,
-      pushedValues: Option[Seq[(InternalRow, Int)]],
-      newPositions: Option[Seq[Int]]): Option[Seq[(InternalRow, Int)]] = {
-    (pushedValues, existing.commonPartitionValues, newPositions, reportedLayout(existing)) match {
-      case (Some(values), _, _, _) => Some(values)
-      case (None, Some(values), Some(positions), Some(layout)) if positions != layout.indices =>
-        assert(values.forall(_._1.numFields == layout.length),
-          "common partition values must sit in the scan's reported layout")
-        Some(projectAndDedupeCommonPartitionValues(values, layout, positions))
-      case (None, values, _, _) => values
-    }
-  }
-
-  /**
-   * Reducers for a scan after a push. The reducers an inner join pushed index the scan's reported
-   * layout, so they are first projected onto `newPositions`. A reducer this join pushes for a
-   * position applies to values the inner reducer already produced, so the two are chained.
-   */
-  private def composeReducers(
-      existing: Option[Seq[Option[Reducer[_, _]]]],
-      newPositions: Option[Seq[Int]],
-      pushed: Option[Seq[Option[Reducer[_, _]]]]): Option[Seq[Option[Reducer[_, _]]]] = {
-    val projectedExisting = (existing, newPositions) match {
-      case (Some(rs), Some(positions)) => Some(positions.map(rs))
-      case _ => existing
-    }
-    (projectedExisting, pushed) match {
-      case (Some(inner), Some(outer)) =>
-        assert(inner.length == outer.length,
-          "pushed reducers must index the same layout as the composed join-key positions")
-        Some(inner.zip(outer).map {
-          case (Some(i), Some(o)) => Some(ChainedReducer(i, o))
-          case (i, o) => o.orElse(i)
-        })
-      case (inner, outer) => outer.orElse(inner)
-    }
-  }
-
-  /**
-   * Whether `spec` may be built on a partition expression of a scan below `plan` whose splits an
-   * inner join already reduced at that position. Such a scan reports its own partition transform
-   * there but values of the reduced transform, so a spec built on that position describes a layout
-   * the scan does not have. Positions without a reducer still hold the scan's own values and are
-   * sound. A spec expression that cannot be traced to one of those is treated as unsound.
-   */
-  private def isBuiltFromReducedScan(plan: SparkPlan, spec: KeyGroupedShuffleSpec): Boolean = {
-    // Each position of the scans that decide the layout above `plan`, with whether an inner join
-    // reduced it. An exchange re-partitions its input, so a scan below it no longer decides that
-    // layout. Only a nested join can hand a reduced scan's layout to a later join, which also keeps
-    // a re-run of this rule from matching the scans directly below an already planned join.
-    // `hasReducedScanOutsideJoin` covers those.
-    def positions(p: SparkPlan, belowJoin: Boolean): Seq[(Expression, Boolean)] = p match {
-      case _: ShuffleExchangeLike | _: BroadcastExchangeLike => Nil
-      case scan: BatchScanExec =>
-        reportedLayout(scan.spjParams).toSeq.flatMap { layout =>
-          val reducers = scan.spjParams.reducers.getOrElse(Seq.fill(layout.length)(None))
-          layout.zip(reducers).map { case (e, r) => (e, belowJoin && r.isDefined) }
-        }
-      case join @ (_: SortMergeJoinExec | _: ShuffledHashJoinExec) =>
-        join.children.flatMap(positions(_, belowJoin = true))
-      case other => other.children.flatMap(positions(_, belowJoin))
-    }
-    val scanPositions = positions(plan, belowJoin = false)
-    if (!scanPositions.exists(_._2)) return false
-
-    // A `Project` between the joins can rename the column under the transform, so map the spec's
-    // columns back through the aliases below `plan` before comparing them with the scan's. A
-    // broadcast hash join also reports the streamed side's partitioning on its build keys, so map
-    // those back to the streamed keys too.
-    val broadcastKeys = plan.flatMap {
-      case j: BroadcastHashJoinExec =>
-        val (buildKeys, streamedKeys) = j.buildSide match {
-          case BuildLeft => (j.leftKeys, j.rightKeys)
-          case BuildRight => (j.rightKeys, j.leftKeys)
-        }
-        buildKeys.zip(streamedKeys).collect { case (b: Attribute, s: Attribute) => b -> s }
-      case _ => Nil
-    }
-    val aliases = AttributeMap(plan.flatMap(_.expressions).flatMap(_.collect {
-      case a @ Alias(child: Attribute, _) => a.toAttribute -> child
-    }) ++ broadcastKeys)
-    def unalias(e: Expression): Expression = e.transformUp {
-      case a: Attribute if aliases.contains(a) => unalias(aliases(a))
-    }
-    // Trust a spec expression only when it maps to a position no inner join reduced. One the
-    // mapping above cannot follow, e.g. a cast build key, falls back to a shuffle.
-    spec.partitioning.expressions.map(unalias).exists { e =>
-      !scanPositions.exists { case (p, reduced) => !reduced && p.semanticEquals(e) }
-    }
-  }
-
-  // A scan that carries reducers without a join above it in `plan` got them from an earlier run
-  // of this rule, so it reports its own transform over reduced values.
-  private def hasReducedScanOutsideJoin(plan: SparkPlan): Boolean = plan match {
-    case _: SortMergeJoinExec | _: ShuffledHashJoinExec => false
-    case _: ShuffleExchangeLike | _: BroadcastExchangeLike => false
-    case scan: BatchScanExec => scan.spjParams.reducers.exists(_.exists(_.isDefined))
-    case other => other.children.exists(hasReducedScanOutsideJoin)
-  }
-
-  /**
-   * Push SPJ parameters down to every scan below `plan`, composing join-key positions with any
-   * already pushed by an inner join instead of replacing them.
-   */
-  private def populateSpjParams(
+  // Populate the common partition information down to the scan nodes
+  private def populateCommonPartitionInfo(
       plan: SparkPlan,
-      commonPartitionValues: Option[Seq[(InternalRow, Int)]],
+      values: Seq[(InternalRow, Int)],
       joinKeyPositions: Option[Seq[Int]],
-      reducers: Option[Seq[Option[Reducer[_, _]]]] = None,
-      applyPartialClustering: Boolean = false,
-      replicatePartitions: Boolean = false): SparkPlan = plan match {
+      reducers: Option[Seq[Option[Reducer[_, _]]]],
+      applyPartialClustering: Boolean,
+      replicatePartitions: Boolean): SparkPlan = plan match {
     case scan: BatchScanExec =>
-      val existing = scan.spjParams
-      val composedPositions = composeJoinKeyPositions(
-        existing.joinKeyPositions, joinKeyPositions)
       scan.copy(
-        spjParams = existing.copy(
-          commonPartitionValues = finalizeCommonPartitionValues(
-            existing, commonPartitionValues, joinKeyPositions),
-          joinKeyPositions = composedPositions,
-          reducers = composeReducers(existing.reducers, joinKeyPositions, reducers),
-          applyPartialClustering = commonPartitionValues match {
-            case Some(_) => applyPartialClustering
-            case _ => existing.applyPartialClustering
-          },
-          replicatePartitions = commonPartitionValues match {
-            case Some(_) => replicatePartitions
-            case _ => existing.replicatePartitions
-          }
+        spjParams = scan.spjParams.copy(
+          commonPartitionValues = Some(values),
+          joinKeyPositions = joinKeyPositions,
+          reducers = reducers,
+          applyPartialClustering = applyPartialClustering,
+          replicatePartitions = replicatePartitions
         )
       )
-    // A broadcast build side does not feed this join's partitioning.
-    case b: BroadcastExchangeLike => b
-    // Nor does the input of a shuffle.
-    case s: ShuffleExchangeLike => s
     case node =>
-      // Recurse through every child down to the scans.
-      node.mapChildren(child => populateSpjParams(
-        child, commonPartitionValues, joinKeyPositions, reducers,
-        applyPartialClustering, replicatePartitions))
+      node.mapChildren(child => populateCommonPartitionInfo(
+        child, values, joinKeyPositions, reducers, applyPartialClustering, replicatePartitions))
+  }
+
+
+  private def populateJoinKeyPositions(
+      plan: SparkPlan,
+      joinKeyPositions: Option[Seq[Int]]): SparkPlan = plan match {
+    case scan: BatchScanExec =>
+      scan.copy(
+        spjParams = scan.spjParams.copy(
+          joinKeyPositions = joinKeyPositions
+        )
+      )
+    case node =>
+      node.mapChildren(child => populateJoinKeyPositions(
+        child, joinKeyPositions))
   }
 
   private def reducePartValues(
@@ -1082,11 +878,4 @@ case class EnsureRequirements(
       newPlan
     }
   }
-}
-
-/** Applies `first`, then `second`, to reduce a partition value across two nested joins. */
-private case class ChainedReducer(first: Reducer[_, _], second: Reducer[_, _])
-  extends Reducer[Any, Any] {
-  override def reduce(arg: Any): Any = second.asInstanceOf[Reducer[Any, Any]].reduce(
-    first.asInstanceOf[Reducer[Any, Any]].reduce(arg))
 }
