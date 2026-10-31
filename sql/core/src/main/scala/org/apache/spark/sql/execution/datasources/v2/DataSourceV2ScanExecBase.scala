@@ -17,16 +17,20 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, ExpressionSet, SortOrder, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeMap, AttributeReference, Expression, ExpressionSet, GetArrayStructFields, ProjectionOverSchema, SortOrder, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition, PartitionReaderFactory, Scan}
 import org.apache.spark.sql.execution.{ExplainUtils, LeafExecNode, SafeForKWayMerge}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.connector.SupportsMetadata
+import org.apache.spark.sql.types.{ArrayType, StructType}
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.Utils
 
@@ -152,7 +156,7 @@ trait DataSourceV2ScanExecBase
    * A kept sort order wins over the derived ordering, since ordering is prefix-based. Putting the
    * keys in front would stop a kept `[data]` from satisfying a required `[data]`. So the result
    * can depend on the columns a query reads. A report `[s]` derives the key ordering only when `s`
-   * is pruned.
+   * is pruned, or narrowed by nested schema pruning.
    *
    * In both the reported and the derived ordering, a sort order that holds a partition transform
    * is dropped, even on a partition key. In a reported ordering it also ends the leading run, like
@@ -176,17 +180,59 @@ trait DataSourceV2ScanExecBase
    */
   @transient private lazy val keptOrdering: Seq[SortOrder] = {
     val (prefix, rest) = ordering.getOrElse(Nil)
-      .span(order => order.references.subsetOf(outputSet) && !holdsTransform(order.child))
+      .map(order => bindToOutput(order.child).map(child => order.copy(child = child)))
+      .span(_.exists(order => !holdsTransform(order.child)))
     val keyExprs = ExpressionSet(derivedOrdering.map(_.child))
-    prefix ++ rest.filter(order => keyExprs.contains(order.child))
+    prefix.flatten ++ rest.flatten.filter(order => keyExprs.contains(order.child))
   }
 
-  /** The ordering over the partition keys that `outputOrdering` can derive. */
+  /**
+   * The ordering over the partition keys that `outputOrdering` can derive. The keys are bound to
+   * the output like the reported ordering, see `bindToOutput`, while `outputPartitioning` keeps
+   * them as reported for the full-width `HasPartitionKey` rows.
+   */
   @transient private lazy val derivedOrdering: Seq[SortOrder] = outputPartitioning match {
     case k: KeyedPartitioning =>
-      k.expressions.filterNot(holdsTransform).map(SortOrder(_, Ascending))
+      k.expressions.filterNot(holdsTransform).flatMap(bindToOutput).map(SortOrder(_, Ascending))
     case _ => Nil
   }
+
+  /**
+   * `e` bound to this scan's output, or None when it reads a column or nested field the scan does
+   * not output, or when pruning narrows its value: rows sorted by a struct are not necessarily
+   * sorted by a narrower one. Nested schema pruning keeps an attribute's exprId but narrows its
+   * type, so field ordinals are recomputed. Attribute names are first normalized to the output's,
+   * since `ProjectionOverSchema` matches them by name and a source may report a key in another
+   * case. Like `DataSourceV2ScanRelation.outputBoundPushedFilters`, but it also normalizes the
+   * names, drops a narrowed value and drops any failure.
+   */
+  private def bindToOutput(e: Expression): Option[Expression] = {
+    try {
+      val bound = e
+        .transform { case a: AttributeReference => a.withName(outputNames.getOrElse(a, a.name)) }
+        .transformDown { case outputProjection(projected) => projected }
+        .transform {
+          // `ProjectionOverSchema` keeps the reported spelling of an array field, which, unlike
+          // that of a struct field, takes part in `semanticEquals`. Take the output's.
+          case g: GetArrayStructFields => g.child.dataType match {
+            case ArrayType(struct: StructType, _) =>
+              g.copy(field = g.field.copy(name = struct(g.ordinal).name))
+            case _ => g
+          }
+        }
+      Option.when(bound.references.subsetOf(outputSet) &&
+          DataTypeUtils.sameType(bound.dataType, e.dataType))(bound)
+    } catch {
+      // `FIELD_NOT_FOUND` for a nested field that pruning removed is the expected failure. Any
+      // other comes from a source whose `readSchema()` changes a column's type. An ordering is only
+      // an optimization, so it is dropped either way.
+      case NonFatal(_) => None
+    }
+  }
+
+  // Built only when a sort order or a partition key is bound, which most scans do not have.
+  @transient private lazy val outputNames = AttributeMap(output.map(a => a -> a.name))
+  @transient private lazy val outputProjection = ProjectionOverSchema(schema, outputSet)
 
   private def holdsTransform(e: Expression): Boolean = e.exists(_.isInstanceOf[TransformExpression])
 
