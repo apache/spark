@@ -108,8 +108,8 @@ class SchemaPruningThroughGenerateV2BuilderSuite extends QueryTest with SharedSp
   test("SPARK-47230: a rejected rewrite keeps the filters above the scan apart") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      sql("select id as n, if(id = 7, '7', 'bad') as s, " +
-        "array(named_struct('a', id, 'b', id * 2, 'c', id * 3)) as items from range(7, 9)")
+      sql("select id as n, if(id = 7, true, null) as k, if(id = 7, '1', 'bad') as s, " +
+        "array(named_struct('a', id, 'b', id * 2, 'c', id * 3)) as items from range(10)")
         .write.parquet(path)
       withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "", SQLConf.ANSI_ENABLED.key -> "true") {
         Seq(false, true).foreach { reject =>
@@ -117,15 +117,15 @@ class SchemaPruningThroughGenerateV2BuilderSuite extends QueryTest with SharedSp
               SQLConf.NESTED_SCHEMA_PRUNING_THROUGH_GENERATE_REJECT_FOR_TESTING.key ->
                 reject.toString) {
             withTempView("t") {
-              // the nondeterministic lower filter is NULL for s = 'bad', so the cast above it
-              // must never see that row: `And` of the two would still evaluate the cast
-              // (`monotonically_increasing_id`, unlike `rand() >= 0`, is not folded away)
+              // the nondeterministic middle filter is NULL for s = 'bad', so the cast above it
+              // must never see those rows: `And` of the two would still evaluate the cast
               spark.read.parquet(path)
-                .where("monotonically_increasing_id() >= 0 and nullif(s, 'bad') = s")
-                .where("cast(s as int) = 7")
+                .where("rand(3) > 0")
+                .where("k or rand(7) < 0.000001")
+                .where("cast(s as int) > 0")
                 .createOrReplaceTempView("t")
               checkAnswer(
-                sql("select item.a, item.c from t lateral view explode(items) e as item"),
+                sql("select item.a, item.c from t lateral view outer explode(items) e as item"),
                 Row(7, 21) :: Nil)
             }
           }
