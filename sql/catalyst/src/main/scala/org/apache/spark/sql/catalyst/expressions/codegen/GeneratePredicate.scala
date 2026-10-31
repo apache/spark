@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions._
 /**
  * Generates bytecode that evaluates a boolean [[Expression]] on a given input [[InternalRow]].
  */
-object GeneratePredicate extends CodeGenerator[Expression, BasePredicate] {
+object GeneratePredicate extends CodeGenerator[Expression, BasePredicate] with PredicateHelper {
 
   protected def canonicalize(in: Expression): Expression = ExpressionCanonicalizer.execute(in)
 
@@ -38,8 +38,49 @@ object GeneratePredicate extends CodeGenerator[Expression, BasePredicate] {
     val ctx = newCodeGenContext()
 
     // Do sub-expression elimination for predicates.
-    val eval = ctx.generateExpressions(Seq(predicate), useSubexprElimination).head
-    val evalSubexpr = ctx.subexprFunctionsCode
+    val conjuncts = splitConjunctivePredicates(predicate)
+    // With a subexpression common to several top-level conjuncts, or within one of them, the
+    // conjuncts are generated one by one, and the subexpression is evaluated just before the
+    // first conjunct that references it, not before the whole condition, so that a FALSE
+    // conjunct before them stops the evaluation, as `And.eval` and the whole-stage codegen of a
+    // filter do (SPARK-60332). The conjuncts are evaluated like `And.eval`: a FALSE one stops
+    // the evaluation, a NULL one does not, and the condition is TRUE only if all of them are.
+    // Otherwise the condition is generated as a whole, as before.
+    val conjunctCodes = if (useSubexprElimination && conjuncts.length > 1) {
+      ctx.generateExpressionsWithSubexprCodes(conjuncts)
+    } else {
+      None
+    }
+    val evalCode = conjunctCodes match {
+      case Some(codes) =>
+        val nullConjunct = ctx.freshName("nullConjunct")
+        val checks = codes.map { case (subexprs, ev) =>
+          s"""
+             |$subexprs
+             |${ev.code}
+             |if (${ev.isNull}) {
+             |  $nullConjunct = true;
+             |} else if (!${ev.value}) {
+             |  return false;
+             |}
+           """.stripMargin
+        }
+        s"""
+           |boolean $nullConjunct = false;
+           |${checks.mkString("\n")}
+           |return !$nullConjunct;
+         """.stripMargin
+      case None =>
+        // The conjuncts have no common subexpression when they were looked at, so the elimination
+        // is not run again on them.
+        val eliminate = useSubexprElimination && conjuncts.length <= 1
+        val eval = ctx.generateExpressions(Seq(predicate), eliminate).head
+        s"""
+           |${ctx.subexprFunctionsCode}
+           |${eval.code}
+           |return !${eval.isNull} && ${eval.value};
+         """.stripMargin
+    }
 
     val codeBody = s"""
       public SpecificPredicate generate(Object[] references) {
@@ -60,9 +101,7 @@ object GeneratePredicate extends CodeGenerator[Expression, BasePredicate] {
         }
 
         public boolean eval(InternalRow ${ctx.INPUT_ROW}) {
-          $evalSubexpr
-          ${eval.code}
-          return !${eval.isNull} && ${eval.value};
+          $evalCode
         }
 
         ${ctx.declareAddedFunctions()}

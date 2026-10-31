@@ -2270,16 +2270,18 @@ class CodegenContext extends Logging {
   /**
    * Checks and sets up the state and codegen for subexpression elimination. This finds the
    * common subexpressions, generates the functions that evaluate those expressions and populates
-   * the mapping of common subexpressions to the generated functions.
+   * the mapping of common subexpressions to the generated functions. Returns each common
+   * subexpression with the call of its function, in an order that evaluates a subexpression
+   * before the subexpressions that reference it.
    */
-  private def subexpressionElimination(expressions: Seq[Expression]): Unit = {
+  private def subexpressionElimination(expressions: Seq[Expression]): Seq[(Expression, String)] = {
     // Add each expression tree and compute the common subexpressions.
     expressions.foreach(equivalentExpressions.addExprTree(_))
 
     // Get all the expressions that appear at least twice and set up the state for subexpression
     // elimination.
     val commonExprs = equivalentExpressions.getCommonSubexpressions
-    commonExprs.foreach { expr =>
+    commonExprs.map { expr =>
       val fnName = freshName("subExpr")
       val isNull = addMutableState(JAVA_BOOLEAN, "subExprIsNull")
       val value = addMutableState(javaType(expr.dataType), "subExprValue")
@@ -2310,12 +2312,12 @@ class CodegenContext extends Logging {
       // at least two nodes) as the cost of doing it is expected to be low.
 
       val subExprCode = s"${addNewFunction(fnName, fn)}($INPUT_ROW);"
-      subexprFunctions += subExprCode
       val state = SubExprEliminationState(
         ExprCode(code"$subExprCode",
           JavaCode.isNullGlobal(isNull),
           JavaCode.global(value, expr.dataType)))
       subExprEliminationExprs += ExpressionEquals(expr) -> state
+      expr -> subExprCode
     }
   }
 
@@ -2330,8 +2332,62 @@ class CodegenContext extends Logging {
     // We need to make sure that we do not reuse stateful expressions. This is needed for codegen
     // as well because some expressions may implement `CodegenFallback`.
     val cleanedExpressions = expressions.map(_.freshCopyIfContainsStatefulExpression())
-    if (doSubexpressionElimination) subexpressionElimination(cleanedExpressions)
+    if (doSubexpressionElimination) {
+      subexprFunctions ++= subexpressionElimination(cleanedExpressions).map(_._2)
+    }
     cleanedExpressions.map(e => e.genCode(this))
+  }
+
+  /**
+   * Returns the index of the first of `expressions` that references the common subexpression
+   * `subexpr`, or -1. When the expressions are evaluated in order and one of them can stop the
+   * evaluation, such as a FALSE conjunct of a predicate, the subexpression is evaluated right
+   * before that expression instead of before all of them (SPARK-56032, SPARK-60332). An
+   * occurrence in a conditionally evaluated part of an expression, such as a branch of CASE WHEN,
+   * counts as a reference, so the subexpression is still evaluated before such an expression.
+   */
+  def firstReferencingExpression(expressions: Seq[Expression], subexpr: ExpressionEquals): Int = {
+    expressions.indexWhere(_.exists(e => ExpressionEquals(e) == subexpr))
+  }
+
+  /**
+   * Generates code for expressions with subexpression elimination, as `generateExpressions`
+   * does, but instead of adding the evaluation of the common subexpressions to
+   * `subexprFunctionsCode`, to be put before all the expressions, returns it per expression: the
+   * code that evaluates the subexpressions the expression is the first to reference, to be put
+   * right before the code of the expression. The expressions are assumed to be evaluated in the
+   * `expressions` order, so a subexpression is still evaluated before the expressions that
+   * reference it, but not before an expression that stops the evaluation, such as a FALSE
+   * conjunct of a predicate before the ones that share the subexpression (SPARK-60332).
+   *
+   * Returns None, and generates nothing, when the expressions have no common subexpression. The
+   * caller can then generate them without subexpression elimination. This must be the only
+   * subexpression elimination on this context, so that the common subexpressions are all found
+   * in `expressions`.
+   */
+  def generateExpressionsWithSubexprCodes(
+      expressions: Seq[Expression]): Option[Seq[(String, ExprCode)]] = {
+    val cleanedExpressions = expressions.map(_.freshCopyIfContainsStatefulExpression())
+    val subexprCodes = subexpressionElimination(cleanedExpressions)
+    if (subexprCodes.isEmpty) {
+      None
+    } else {
+      val codes = cleanedExpressions.map(e => e.genCode(this))
+      val firstUses = subexprCodes.map { case (subexpr, code) =>
+        val first = firstReferencingExpression(cleanedExpressions, ExpressionEquals(subexpr))
+        assert(first >= 0, s"The common subexpression $subexpr is not in the expressions")
+        (first, code)
+      }
+      Some(codes.zipWithIndex.map { case (code, k) =>
+        val calls = firstUses.collect { case (`k`, call) => call }
+        val subexprs = if (calls.isEmpty) {
+          ""
+        } else {
+          splitExpressions(calls, "subexprFunc_split", Seq("InternalRow" -> INPUT_ROW))
+        }
+        (subexprs, code)
+      })
+    }
   }
 
   /**
