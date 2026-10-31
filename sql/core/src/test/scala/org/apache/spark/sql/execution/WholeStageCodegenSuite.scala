@@ -2856,8 +2856,8 @@ class WholeStageCodegenSuite extends SharedSparkSession
   // row's file by its statistics.
   private def withNullConjunctTable(y: Int)(f: => Unit): Unit = {
     withTable("t") {
-      sql("CREATE TABLE t USING parquet AS " +
-        s"SELECT * FROM VALUES (NULL, 1, $y, NULL, 'x'), (0, 1, 0, 1, '1') AS v(a, b, y, x, s)")
+      sql("CREATE TABLE t USING parquet AS SELECT *, named_struct('x', x) AS st " +
+        s"FROM VALUES (NULL, 1, $y, NULL, 'x'), (0, 1, 0, 1, '1') AS v(a, b, y, x, s)")
       f
     }
   }
@@ -3159,11 +3159,13 @@ class WholeStageCodegenSuite extends SharedSparkSession
   test("SPARK-60329: a filter checks a column IS NOT NULL before a conjunct that can raise") {
     withNullConjunctTable(Int.MaxValue) {
       // `x` is NULL on the first row and `y + 1` overflows on it. With codegen off, the FALSE
-      // `isnotnull(x)` drops the row before the conjunct after it is evaluated. With codegen
+      // `x IS NOT NULL` drops the row before the conjunct after it is evaluated. With codegen
       // on, the check was generated just before the first conjunct that references `x`, or
-      // after all of them, so the overflow was raised. The check on a column is now generated
-      // before a conjunct that can raise, as with the NULL-conjunct flag, whatever the legacy
-      // config, since it is independent of a NULL conjunct.
+      // after all of them, so the overflow was raised. A check written in the query that cannot
+      // raise is now generated before a conjunct that can raise, as with the NULL-conjunct flag,
+      // whatever the legacy config, since it is independent of a NULL conjunct. A check that the
+      // optimizer inferred keeps the lazy placement, so that its column is not loaded before the
+      // conjunct it was inferred from.
       //
       // The common `b * 2` takes the CSE path of FilterExec.
       val cseQuery = "SELECT a FROM t WHERE x IS NOT NULL AND y + 1 > 0 AND " +
@@ -3182,15 +3184,33 @@ class WholeStageCodegenSuite extends SharedSparkSession
         withNullConjunctConfs(
             SQLConf.ANSI_ENABLED.key -> "true",
             SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> filterExecCSE) { _ =>
-          // `isnotnull(x)` is inferred from `x > 0`, and precedes the overflowing conjunct.
-          checkAnswer(sql("SELECT a FROM t WHERE y + 1 > 0 AND x > 0"), Row(0))
-          // A user-written check, with and without a later conjunct that references `x`.
+          // A check written in the query, with and without a later conjunct that references `x`.
           checkAnswer(sql("SELECT a FROM t WHERE x IS NOT NULL AND y + 1 > 0 AND x > 0"), Row(0))
           checkAnswer(sql("SELECT a FROM t WHERE x IS NOT NULL AND y + 1 > 0"), Row(0))
           // The same with a common subexpression.
           checkAnswer(sql(cseQuery), Row(0))
+          // A check on an expression that cannot raise is generated at its position too, while
+          // one that can raise, `cast(s AS INT) IS NOT NULL`, keeps the lazy placement and is
+          // evaluated after the overflowing conjunct, on the second row only, where it holds.
+          checkAnswer(sql("SELECT a FROM t WHERE st.x IS NOT NULL AND y + 1 > 0"), Row(0))
+          checkAnswer(
+            sql("SELECT a FROM t WHERE x IS NOT NULL AND cast(s AS INT) IS NOT NULL AND " +
+              "y + 1 > 0"),
+            Row(0))
           // A check written after the overflowing conjunct stays after it, so the query raises.
           checkArithmeticOverflow("SELECT a FROM t WHERE y + 1 > 0 AND x IS NOT NULL")
+        }
+      }
+      // `isnotnull(x)` inferred from `x > 0` is implied by it and keeps the lazy placement, just
+      // before `x > 0`, so that `x` is not loaded before `y + 1 > 0` rejects a row: the query
+      // raises with codegen on, and drops the first row with codegen off.
+      Seq(true, false).foreach { codegen =>
+        withSQLConf(
+            SQLConf.ANSI_ENABLED.key -> "true",
+            SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "false",
+            SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString) {
+          val inferred = "SELECT a FROM t WHERE y + 1 > 0 AND x > 0"
+          if (codegen) checkArithmeticOverflow(inferred) else checkAnswer(sql(inferred), Row(0))
         }
       }
       // The aggregate FILTER clause goes through the same code generation.
