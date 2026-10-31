@@ -1499,6 +1499,103 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(IsValidVariant(Literal.create(null, VariantType)), null)
   }
 
+  test("canonicalize_variant") {
+    val expression = CanonicalizeVariant(BoundReference(0, VariantType, nullable = true))
+    val inputs = Seq(
+      "42" -> "42",
+      "1.00" -> "1",
+      "1.2300" -> "1.23",
+      """{"a":1,"b":2}""" -> """{"a":1,"b":2}""",
+      """{"b":2,"a":1}""" -> """{"a":1,"b":2}""",
+      // scalastyle:off nonascii
+      "{\"\u00e9\":1,\"e\":2}" -> "{\"e\":2,\"\u00e9\":1}",
+      // scalastyle:on nonascii
+      """{"b":[{"d":2.00,"c":1.0},null],"a":[3.00,2,1]}""" ->
+        """{"a":[3,2,1],"b":[{"c":1,"d":2},null]}""")
+
+    inputs.foreach { case (input, expected) =>
+      checkEvaluation(expression, parseJson(expected), InternalRow(parseJson(input)))
+    }
+
+    val literalExpression = CanonicalizeVariant(Literal(parseJson("""{"b":2,"a":1}""")))
+    assert(literalExpression.foldable)
+    checkEvaluation(literalExpression, parseJson("""{"a":1,"b":2}"""))
+  }
+
+  test("canonicalize_variant SQL null and Variant null") {
+    val expression = CanonicalizeVariant(BoundReference(0, VariantType, nullable = true))
+    checkEvaluation(expression, null, InternalRow(null))
+    checkEvaluation(expression, parseJson("null"), InternalRow(parseJson("null")))
+    checkEvaluation(CanonicalizeVariant(Literal.create(null, VariantType)), null)
+  }
+
+  test("canonicalize_variant preserves invalid UTF-8 string and key bytes") {
+    val expression = CanonicalizeVariant(BoundReference(0, VariantType, nullable = true))
+    val metadata = Array[Byte](VERSION, 2, 0, 1, 2, 0xff.toByte, 0xfe.toByte)
+    val value = Array[Byte](objectHeader(false, 1, 1), 2, 1, 0, 6, 0, 12,
+      primitiveHeader(LONG_STR), 1, 0, 0, 0, 0xff.toByte,
+      primitiveHeader(LONG_STR), 1, 0, 0, 0, 0xfe.toByte)
+    val expected = new VariantVal(
+      Array[Byte](objectHeader(false, 1, 1), 2, 0, 1, 0, 2, 4,
+        shortStrHeader(1), 0xfe.toByte, shortStrHeader(1), 0xff.toByte),
+      Array[Byte](VERSION, 2, 0, 1, 2, 0xfe.toByte, 0xff.toByte))
+    checkEvaluation(expression, expected, InternalRow(new VariantVal(value, metadata)))
+    checkEvaluation(expression, expected, InternalRow(expected))
+  }
+
+  test("canonicalize_variant input types and nullability") {
+    Seq(true, false).foreach { nullable =>
+      val expression = CanonicalizeVariant(BoundReference(0, VariantType, nullable))
+      assert(expression.checkInputDataTypes().isSuccess)
+      assert(expression.dataType === VariantType)
+      assert(expression.nullable === nullable)
+      assert(expression.nullIntolerant)
+    }
+
+    Seq(IntegerType, StringType, ArrayType(VariantType)).foreach { dataType =>
+      val expression = CanonicalizeVariant(BoundReference(0, dataType, nullable = true))
+      assert(expression.checkInputDataTypes().isFailure)
+    }
+  }
+
+  test("canonicalize_variant malformed input") {
+    val inputs = Seq(
+      new VariantVal(Array(primitiveHeader(INT8), 1), Array[Byte](VERSION, 0, 0)),
+      new VariantVal(Array(primitiveHeader(TRUE)), Array[Byte](VERSION, 1, 0)))
+
+    inputs.foreach { input =>
+      checkErrorInExpression[SparkRuntimeException](
+        CanonicalizeVariant(BoundReference(0, VariantType, nullable = true)),
+        InternalRow(input),
+        "MALFORMED_VARIANT")
+    }
+  }
+
+  test("canonicalize_variant duplicate keys") {
+    // Both fields reference the dictionary key "a".
+    val input = new VariantVal(
+      Array[Byte](objectHeader(false, 1, 1), 2, 0, 0, 0, 2, 4,
+        primitiveHeader(INT1), 1, primitiveHeader(INT1), 2),
+      Array[Byte](VERSION, 1, 0, 1, 'a'.toByte))
+    checkErrorInExpression[SparkRuntimeException](
+      CanonicalizeVariant(BoundReference(0, VariantType, nullable = true)),
+      InternalRow(input),
+      "VARIANT_DUPLICATE_KEY",
+      Map("key" -> "a"))
+  }
+
+  test("canonicalize_variant size limit") {
+    // Three elements share a 6 MiB string; writing each payload exceeds the 16 MiB limit.
+    val payload = Array[Byte](primitiveHeader(LONG_STR), 0, 0, 0x60, 0) ++
+      Array.fill[Byte](0x600000)('a'.toByte)
+    val value = Array[Byte](arrayHeader(false, 4), 3) ++ Array.fill[Byte](12)(0) ++
+      Array[Byte](5, 0, 0x60, 0) ++ payload
+    checkErrorInExpression[SparkRuntimeException](
+      CanonicalizeVariant(BoundReference(0, VariantType, nullable = true)),
+      InternalRow(new VariantVal(value, Array[Byte](VERSION, 0, 0))),
+      "VARIANT_CONSTRUCTOR_SIZE_LIMIT")
+  }
+
   test("variant_delete") {
     def checkDelete(input: String, paths: Seq[String], expected: String): Unit = {
       val pathLits: Seq[Expression] = paths.map(p => Literal.create(p, StringType))

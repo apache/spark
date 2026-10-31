@@ -183,6 +183,11 @@ public class VariantUtil {
         ((offsetSize - 1) << BASIC_TYPE_BITS) | ARRAY);
   }
 
+  // Build a metadata header byte for an offset size of 1 to 4 bytes, with `sorted_strings` unset.
+  static byte metadataHeader(int offsetSize) {
+    return (byte) (VERSION | ((offsetSize - 1) << 6));
+  }
+
   // An exception indicating that the variant value or metadata doesn't
   static SparkRuntimeException malformedVariant() {
     return new SparkRuntimeException("MALFORMED_VARIANT",
@@ -698,25 +703,58 @@ public class VariantUtil {
     return Arrays.compareUnsigned(left, right);
   }
 
+  // Read the byte width of the dictionary size and offsets from the metadata header.
+  static int getMetadataOffsetSize(byte[] metadata) {
+    checkIndex(0, metadata.length);
+    // The highest 2 bits hold `offset_size - 1`. Mask after the shift because bytes are signed.
+    return ((metadata[0] >> 6) & 0x3) + 1;
+  }
+
+  // Read the dictionary size, stored right after the header byte in `offsetSize` bytes.
+  static int getMetadataNumKeys(byte[] metadata, int offsetSize) {
+    return readUnsigned(metadata, 1, offsetSize);
+  }
+
+  // Return where the dictionary strings start: after the header byte, the dictionary size, and
+  // `numKeys + 1` offsets. Throw `MALFORMED_VARIANT` if that is past the end of the metadata, so
+  // on return all offsets are in bounds.
+  static int getMetadataStringStart(byte[] metadata, int numKeys, int offsetSize) {
+    long stringStart = 1L + (numKeys + 2L) * offsetSize;
+    if (stringStart > metadata.length) throw malformedVariant();
+    return (int) stringStart;
+  }
+
   // Get a key at `id` in the variant metadata.
   // Throw `MALFORMED_VARIANT` if the variant is malformed. An out-of-bound `id` is also considered
   // a malformed variant because it is read from the corresponding variant value.
   public static String getMetadataKey(byte[] metadata, int id) {
-    checkIndex(0, metadata.length);
-    // Extracts the highest 2 bits in the metadata header to determine the integer size of the
-    // offset list.
-    int offsetSize = ((metadata[0] >> 6) & 0x3) + 1;
-    int dictSize = readUnsigned(metadata, 1, offsetSize);
+    // Dictionary keys are UTF-8 encoded (see `VariantBuilder.addKey`). Decode with UTF-8
+    // explicitly rather than relying on the platform-dependent JVM default charset.
+    return handleMetadataKey(metadata, id, (bytes, start, length) ->
+        new String(bytes, start, length, StandardCharsets.UTF_8));
+  }
+
+  // Read the original dictionary key bytes without UTF-8 decoding or replacement.
+  static byte[] getMetadataKeyBytes(byte[] metadata, int id) {
+    return handleMetadataKey(metadata, id, (bytes, start, length) ->
+        Arrays.copyOfRange(bytes, start, start + length));
+  }
+
+  private interface MetadataKeyHandler<T> {
+    T apply(byte[] metadata, int start, int length);
+  }
+
+  // Read and validate a dictionary key range before passing it to `handler`.
+  private static <T> T handleMetadataKey(
+      byte[] metadata, int id, MetadataKeyHandler<T> handler) {
+    int offsetSize = getMetadataOffsetSize(metadata);
+    int dictSize = getMetadataNumKeys(metadata, offsetSize);
     if (id >= dictSize) throw malformedVariant();
-    // There are a header byte, a `dictSize` with `offsetSize` bytes, and `(dictSize + 1)` offsets
-    // before the string data.
-    int stringStart = 1 + (dictSize + 2) * offsetSize;
+    int stringStart = getMetadataStringStart(metadata, dictSize, offsetSize);
     int offset = readUnsigned(metadata, 1 + (id + 1) * offsetSize, offsetSize);
     int nextOffset = readUnsigned(metadata, 1 + (id + 2) * offsetSize, offsetSize);
     if (offset > nextOffset) throw malformedVariant();
     checkIndex(stringStart + nextOffset - 1, metadata.length);
-    // Dictionary keys are UTF-8 encoded (see `VariantBuilder.addKey`). Decode with UTF-8
-    // explicitly rather than relying on the platform-dependent JVM default charset.
-    return new String(metadata, stringStart + offset, nextOffset - offset, StandardCharsets.UTF_8);
+    return handler.apply(metadata, stringStart + offset, nextOffset - offset);
   }
 }
