@@ -363,10 +363,12 @@ object TransformExpression extends Logging {
    *  - two structs, arrays or maps whose fields, elements, keys and values are stored alike, by
    *    position. Field names and nullability do not change how a value is stored. A function
    *    declaring a non-nullable field gets the values a nullable one holds;
-   *  - two decimals of one scale, `to` with no less precision, so that the unscaled digits a
-   *    function reads are the same. A decimal is read as an object at the top level, but nested in
-   *    an unsafe row it is stored as a `long` up to `Decimal.MAX_LONG_DIGITS` digits and as bytes
-   *    above, so there both have to be on one side of that.
+   *  - two decimals of one scale, so that the unscaled digits a function reads are the same. At the
+   *    top level the function gets the `Decimal` itself, whatever precision it declares, e.g. a
+   *    `DECIMAL(12,2)` key of a cogroup against a function declaring `DECIMAL(10,2)`, which a
+   *    cogroup does not coerce. Nested in an unsafe row, a decimal is read at the declared
+   *    precision: it is stored as a `long` up to `Decimal.MAX_LONG_DIGITS` digits and as bytes
+   *    above, so there `to` needs no less precision, and both on one side of that.
    */
   private def storedAlike(from: DataType, to: DataType, nested: Boolean): Boolean =
     (from, to) match {
@@ -382,9 +384,8 @@ object TransformExpression extends Logging {
         storedAlike(f.keyType, t.keyType, nested = true) &&
           storedAlike(f.valueType, t.valueType, nested = true)
       case (f: DecimalType, t: DecimalType) =>
-        f.scale == t.scale && f.precision <= t.precision &&
-          (!nested ||
-            DecimalType.isByteArrayDecimalType(f) == DecimalType.isByteArrayDecimalType(t))
+        f.scale == t.scale && (!nested || (f.precision <= t.precision &&
+          DecimalType.isByteArrayDecimalType(f) == DecimalType.isByteArrayDecimalType(t)))
       case _ =>
         val physical = PhysicalDataType(from)
         physical != UninitializedPhysicalType && physical == PhysicalDataType(to)

@@ -2432,11 +2432,14 @@ case class KeyedShuffleSpec(
   /**
    * Whether Spark can evaluate `transform`, see `TransformExpression.evaluableFunction`. An
    * identity reduce evaluates it on the identity side's partition keys, and a one-side shuffle on
-   * each row of the side it shuffles, both after rebuilding it over the other side's key. A join
-   * pairs two keys only when they have the same type apart from nullability and the case of field
-   * names (`DataTypeUtils.sameType`), which `evaluableFunction` does not tell apart either. So
-   * asking this of the reported transform answers it for the rebuilt one, and the reported one
-   * keeps the answer.
+   * each row of the side it shuffles, both after rebuilding it over the other side's key. An
+   * equi-join pairs two keys only when their types are equal apart from nullability and field
+   * names (`BinaryComparison.sameType`), which `evaluableFunction` does not tell apart either. So
+   * for a join, asking this of the reported transform answers it for the rebuilt one, and the
+   * reported one keeps the answer. A cogroup does not coerce its keys, so a key of another type,
+   * e.g. a `BIGINT` against a transform over an `INT` column that declares `INT`, can still fail
+   * where its rows are placed, as it did before this check. A decimal key of the column's scale
+   * passes, since its precision does not change what the function reads.
    *
    * A Scala class or object that extends `ScalarFunction` directly gets a mixin forwarder to the
    * default `produceResult`, which the lookup finds, so this is true even when the connector
@@ -2620,7 +2623,8 @@ case class KeyedShuffleSpec(
     assert(clustering.size == distribution.clustering.size,
       "Required distributions of join legs should be the same size.")
     // A child shuffled onto this layout is placed by evaluating it, which would fail on an
-    // executor. A caller has to ask `canEvaluatePartitioning` first, so fail here, while planning.
+    // executor. A caller has to ask `canEvaluatePartitioning` first, so a caller that does not
+    // fails here, while planning. It is asked of this layout's own keys, see `canEvaluate`.
     assert(canEvaluatePartitioning,
       s"Cannot shuffle a child onto a layout Spark cannot evaluate: ${partitioning.expressions}")
 

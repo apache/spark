@@ -229,6 +229,16 @@ class TransformExpressionSuite extends SparkFunSuite with SQLHelper {
         new StructType().add("d", DecimalType(10, 2)),
         new StructType().add("d", DecimalType(38, 2)),
         InternalRow(Decimal(BigDecimal("0.05"), 10, 2)), structField, false, false),
+      // At the top level the function gets the `Decimal` itself, so a key of the declared scale
+      // with more precision, e.g. a cogroup's, is taken. Nested, it would be read at the
+      // declared precision, so it is not.
+      ("a decimal with more precision at the declared scale",
+        DecimalType(12, 2), DecimalType(10, 2), Decimal(BigDecimal("123.45"), 12, 2),
+        (row: InternalRow) => row.getDecimal(1, 10, 2).toUnscaledLong.toInt, false, true),
+      ("a nested decimal with more precision than declared",
+        new StructType().add("d", DecimalType(12, 2)),
+        new StructType().add("d", DecimalType(10, 2)),
+        InternalRow(Decimal(BigDecimal("0.05"), 12, 2)), structField, false, false),
       ("a field of another physical type", new StructType().add("d", DateType),
         new StructType().add("d", LongType), InternalRow(5), structField, false, false),
       ("a struct with another number of fields", new StructType().add("a", IntegerType),

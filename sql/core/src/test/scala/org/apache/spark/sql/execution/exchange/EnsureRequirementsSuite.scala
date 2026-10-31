@@ -38,7 +38,7 @@ import org.apache.spark.sql.execution.python.FlatMapCoGroupsInPandasExec
 import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, Decimal, DecimalType, IntegerType, LongType, StructField, StructType}
 
 class EnsureRequirementsSuite extends SharedSparkSession {
   private val exprA = AttributeReference("a", IntegerType)()
@@ -1670,6 +1670,45 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         case h: HashPartitioning => h.numPartitions == 200
         case _ => false
       }, s"both sides at spark.sql.shuffle.partitions, got $partitionings")
+    }
+  }
+
+  test("SPARK-60027: a cogroup shuffled onto a decimal bucket places a key of more precision") {
+    // A cogroup does not coerce its keys, so the side shuffled onto a bucket over a `DECIMAL(10,2)`
+    // column can be keyed on a `DECIMAL(12,2)`. The function gets the `Decimal` itself and reads
+    // its unscaled digits, as Iceberg's does, so each row lands where the keyed side put its value.
+    val decimalBucket = new ScalarFunction[Int] {
+      override def inputTypes(): Array[DataType] = Array(IntegerType, DecimalType(10, 2))
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "bucket"
+      override def canonicalName(): String = "bucket"
+      def invoke(numBuckets: Int, value: Decimal): Int =
+        Math.floorMod(value.toJavaBigDecimal.unscaledValue.hashCode, numBuckets)
+    }
+    val cL = AttributeReference("cL", DecimalType(10, 2))()
+    val cR = AttributeReference("cR", DecimalType(12, 2))()
+    val left = DummySparkPlan(outputPartitioning = KeyedPartitioning(
+      Seq(TransformExpression(decimalBucket, Seq(cL), Some(4))), (0 until 4).map(InternalRow(_))))
+    val right = DummySparkPlan(outputPartitioning = UnknownPartitioning(0))
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("value", IntegerType))),
+      Seq.empty,
+      PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+      true)
+    val cogroup = FlatMapCoGroupsInPandasExec(Seq(cL), Seq(cR), pythonUdf,
+      AttributeReference("value", IntegerType)() :: Nil, left, right)
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      val keyed = EnsureRequirements.apply(cogroup).collect {
+        case s: ShuffleExchangeExec => s.outputPartitioning
+      }.collect { case k: KeyedPartitioning => k }
+      assert(keyed.size == 1, "the right side is shuffled onto the bucket layout")
+      val placed = BindReferences.bindReference(keyed.head.expressions.head, Seq(cR))
+      Seq("123.45", "0.07", "-9.99").foreach { v =>
+        val stored = TransformExpression(decimalBucket,
+          Seq(Literal(Decimal(BigDecimal(v), 10, 2), DecimalType(10, 2))), Some(4))
+        assert(placed.eval(InternalRow(Decimal(BigDecimal(v), 12, 2))) ==
+          stored.eval(InternalRow.empty), v)
+      }
     }
   }
 
