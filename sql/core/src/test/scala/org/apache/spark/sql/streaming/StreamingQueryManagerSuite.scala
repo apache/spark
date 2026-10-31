@@ -32,6 +32,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Dataset, Encoders}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, Project}
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2ScanRelation
 import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, OffsetSeq, OffsetSeqLog,
   OffsetSeqMetadata, OffsetSeqMetadataV2}
@@ -165,6 +166,37 @@ class StreamingQueryManagerSuite extends StreamTest {
           "Except on a streaming DataFrame/Dataset on the left is not supported"))
         assert(spark.conf.get(SQLConf.ALLOW_EXCEPT_ON_STREAMING_DATAFRAME))
       }
+    }
+  }
+
+  test("SPARK-60632: regex pattern cost estimate version 0 for old checkpoints") {
+    withTempDir { checkpointDir =>
+      val input = MemoryStream[String]
+      // `NOT` caches whether its child is expensive, and both queries share this plan.
+      val result = input.toDF().select($"value", !$"value".rlike("^1") as "p").where($"p")
+
+      def run(data: String): Boolean = {
+        val query = result.writeStream
+          .format("noop")
+          .option("checkpointLocation", checkpointDir.getCanonicalPath)
+          .start()
+        try {
+          input.addData(data)
+          query.processAllAvailable()
+          // Whether the filter stays above the projection.
+          query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.optimizedPlan
+            .exists {
+              case Filter(_, _: Project) => true
+              case _ => false
+            }
+        } finally {
+          query.stop()
+        }
+      }
+
+      assert(!run("a"))
+      rewriteOffsetLogConf(checkpointDir)(_ - SQLConf.REGEX_PATTERN_COST_ESTIMATE_VERSION.key)
+      assert(run("b"))
     }
   }
 
