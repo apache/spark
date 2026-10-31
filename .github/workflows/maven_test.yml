@@ -132,7 +132,7 @@ jobs:
           - hive2.3
         modules:
           - >-
-            core,launcher,common#unsafe,common#kvstore,common#network-common,common#network-shuffle,common#sketch,common#utils,common#utils-java,common#config,common#variant
+            core,launcher,common#unsafe,common#kvstore,common#network-common,common#network-shuffle,common#sketch,common#utils,common#utils-java,common#config,common#variant,udf#worker#core,udf#worker#grpc
           - >-
             graphx,streaming,hadoop-cloud
           - >-
@@ -285,6 +285,11 @@ jobs:
             ./build/mvn $MAVEN_CLI_OPTS -Djava.version=${JAVA_VERSION/-ea} -pl sql/connect/client/jvm,sql/connect/common,sql/connect/server test -fae
           elif [[ "$MODULES_TO_TEST" == "connect" ]]; then
             ./build/mvn $MAVEN_CLI_OPTS -Djava.version=${JAVA_VERSION/-ea} -pl sql/connect/client/jdbc,sql/connect/client/jvm,sql/connect/common,sql/connect/server test -fae
+            # Only this entry builds the assembly, which the packaged UDF worker
+            # runtime suite needs. Older branches do not have the suite.
+            if [ -f sql/core/src/test/scala/org/apache/spark/sql/execution/externalUDF/UdfWorkerRuntimeSparkSubmitSuite.scala ]; then
+              ./build/mvn $MAVEN_CLI_OPTS -pl sql/core -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Pcredential-aws -Djava.version=${JAVA_VERSION/-ea} -Dtest=none -DwildcardSuites=org.apache.spark.sql.execution.externalUDF.UdfWorkerRuntimeSparkSubmitSuite test
+            fi
           elif [[ "$EXCLUDED_TAGS" != "" ]]; then
             ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Pcredential-aws -Djava.version=${JAVA_VERSION/-ea} -Dtest.exclude.tags="$EXCLUDED_TAGS" test -fae
           elif [[ "$MODULES_TO_TEST" == *"sql#hive-thriftserver"* ]]; then

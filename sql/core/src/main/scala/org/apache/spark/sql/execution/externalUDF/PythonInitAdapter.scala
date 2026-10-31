@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.externalUDF
 
 import scala.jdk.CollectionConverters._
 
-import com.google.protobuf.ByteString
 import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
@@ -30,7 +29,8 @@ import org.apache.spark.sql.catalyst.expressions.ExternalUserDefinedFunction
 import org.apache.spark.sql.execution.python.ArrowPythonRunner
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.udf.worker.{Init, UdfPayload, UDFWorkerDataFormat, UDFWorkerSpecification}
+import org.apache.spark.udf.worker.{Init, UDFWorkerDataFormat, UDFWorkerSpecification}
+import org.apache.spark.udf.worker.core.WorkerMessages
 
 /**
  * Builds the temporary Python-specific Init message for scalar external UDF execution.
@@ -60,21 +60,17 @@ private[externalUDF] object PythonInitAdapter {
       outputSchema: Array[Byte],
       timeZoneId: String,
       pythonSessionConf: Map[String, String]): PreparedInit = {
-    val udfBuilder = UdfPayload.newBuilder()
-      .setPayload(ByteString.copyFrom(udf.payload))
-      .setFormat(PYSPARK_UDF_PAYLOAD_FORMAT)
-      .setEvalType(PythonEvalType.SQL_ARROW_BATCHED_UDF.toString)
-    udf.name.foreach(udfBuilder.setName)
-
-    PreparedInit(Init.newBuilder()
-      .setProtocolVersion(1)
-      .setDataFormat(UDFWorkerDataFormat.ARROW)
-      .setUdf(udfBuilder)
-      .setInputSchema(ByteString.copyFrom(inputSchema))
-      .setOutputSchema(ByteString.copyFrom(outputSchema))
-      .setTimezone(timeZoneId)
-      .putAllSessionConf(pythonSessionConf.asJava)
-      .build())
+    PreparedInit(WorkerMessages.init(
+      udf = WorkerMessages.udfPayload(
+        payload = udf.payload,
+        format = PYSPARK_UDF_PAYLOAD_FORMAT,
+        evalType = PythonEvalType.SQL_ARROW_BATCHED_UDF.toString,
+        name = udf.name),
+      dataFormat = UDFWorkerDataFormat.ARROW,
+      inputSchema = inputSchema,
+      outputSchema = outputSchema,
+      timezone = timeZoneId,
+      sessionConf = pythonSessionConf))
   }
 
   def build(prepared: PreparedInit, context: TaskContext): Init = {
