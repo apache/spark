@@ -28,6 +28,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -42,6 +43,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.zip.Checksum;
 
 
 import com.fasterxml.jackson.annotation.JsonCreator;
@@ -73,6 +75,8 @@ import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.StreamCallbackWithID;
 import org.apache.spark.network.server.BlockPushNonFatalFailure;
 import org.apache.spark.network.server.BlockPushNonFatalFailure.ReturnCode;
+import org.apache.spark.network.shuffle.checksum.Cause;
+import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper;
 import org.apache.spark.network.shuffle.protocol.BlockPushReturnCode;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.shuffle.protocol.FinalizeShuffleMerge;
@@ -105,6 +109,11 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   public static final String MERGE_DIR_KEY = "mergeDir";
   public static final String ATTEMPT_ID_KEY = "attemptId";
   private static final int UNDEFINED_ATTEMPT_ID = -1;
+
+  /**
+   * Marks the running checksum of a chunk as no longer describing a prefix of that chunk.
+   */
+  private static final long INVALID_CHECKSUM_POS = -1L;
 
   /**
    * The flag for deleting all merged shuffle data.
@@ -149,6 +158,11 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   private final int minChunkSize;
   private final int ioExceptionsThresholdDuringMerge;
 
+  // Whether a checksum is calculated for every chunk of a merged shuffle partition while the
+  // pushed blocks are merged. This is disabled when the configured algorithm is not supported.
+  private final boolean checksumEnabled;
+  private final String checksumAlgorithm;
+
   @SuppressWarnings("UnstableApiUsage")
   private final LoadingCache<String, ShuffleIndexInformation> indexCache;
 
@@ -170,6 +184,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     this.cleanerShutdownTimeout = conf.mergedShuffleCleanerShutdownTimeout();
     this.minChunkSize = conf.minChunkSizeInMergedShuffleFile();
     this.ioExceptionsThresholdDuringMerge = conf.ioExceptionsThresholdDuringMerge();
+    this.checksumAlgorithm = conf.mergedShuffleChecksumAlgorithm();
+    this.checksumEnabled = conf.mergedShuffleChecksumEnabled() &&
+      isSupportedChecksumAlgorithm(this.checksumAlgorithm);
     CacheLoader<String, ShuffleIndexInformation> indexCacheLoader =
       new CacheLoader<String, ShuffleIndexInformation>() {
         @Override
@@ -194,6 +211,22 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       reloadAndCleanUpAppShuffleInfo(db);
     }
     this.pushMergeMetrics = new PushMergeMetrics();
+  }
+
+  /**
+   * Merging the pushed blocks should not fail because of an unusable checksum algorithm, so an
+   * unsupported one only disables the checksum calculation.
+   */
+  private static boolean isSupportedChecksumAlgorithm(String algorithm) {
+    try {
+      ShuffleChecksumHelper.getChecksumByAlgorithm(algorithm);
+      return true;
+    } catch (UnsupportedOperationException e) {
+      logger.warn("Checksums of the merged shuffle chunks are not calculated because {} is not " +
+        "a supported shuffle checksum algorithm",
+        MDC.of(LogKeys.CHECKSUM_ALGORITHM, algorithm));
+      return false;
+    }
   }
 
   @VisibleForTesting
@@ -319,9 +352,15 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       File dataFile,
       File indexFile,
       File metaFile) throws IOException {
+    MergeShuffleFile checksumFile = null;
+    if (checksumEnabled) {
+      checksumFile = new MergeShuffleFile(appShuffleInfo.getMergedShuffleChecksumFile(
+        shuffleId, shuffleMergeId, reduceId, checksumAlgorithm));
+    }
     return new AppShufflePartitionInfo(new AppAttemptShuffleMergeId(
         appShuffleInfo.appId, appShuffleInfo.attemptId, shuffleId, shuffleMergeId),
-        reduceId, dataFile, new MergeShuffleFile(indexFile), new MergeShuffleFile(metaFile));
+        reduceId, dataFile, new MergeShuffleFile(indexFile), new MergeShuffleFile(metaFile),
+        checksumFile, checksumAlgorithm);
   }
 
   @Override
@@ -393,6 +432,56 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     } catch (ExecutionException e) {
       throw new RuntimeException(String.format(
         "Failed to open merged shuffle index file %s", indexFilePath), e);
+    }
+  }
+
+  @Override
+  public Cause diagnoseShuffleChunkCorruption(
+      String appId,
+      int shuffleId,
+      int shuffleMergeId,
+      int reduceId,
+      int chunkId,
+      long checksumByReader,
+      String algorithm) {
+    if (!checksumEnabled) {
+      logger.warn("Cannot diagnose the corruption of shuffle chunk {} of shuffle {} " +
+        "shuffleMerge {} reduceId {} because the checksums of the merged shuffle chunks are " +
+        "not calculated",
+        MDC.of(LogKeys.CHUNK_ID, chunkId),
+        MDC.of(LogKeys.SHUFFLE_ID, shuffleId),
+        MDC.of(LogKeys.SHUFFLE_MERGE_ID, shuffleMergeId),
+        MDC.of(LogKeys.REDUCE_ID, reduceId));
+      return Cause.UNKNOWN_ISSUE;
+    }
+    if (!checksumAlgorithm.equals(algorithm)) {
+      // Both algorithms may well be supported on their own, but the checksum of the chunk cannot
+      // be compared against the one the reducer calculated with a different algorithm.
+      logger.warn("Cannot diagnose the corruption of a shuffle chunk calculated with {} because " +
+        "the merged shuffle chunks are checksummed with {}. Set " +
+        "spark.shuffle.checksum.algorithm of the application and " +
+        "spark.shuffle.push.server.mergedShuffleChecksum.algorithm of this shuffle service to " +
+        "the same algorithm",
+        MDC.of(LogKeys.CHECKSUM_ALGORITHM, algorithm),
+        MDC.of(LogKeys.MERGED_SHUFFLE_CHECKSUM_ALGORITHM, checksumAlgorithm));
+      return Cause.UNSUPPORTED_CHECKSUM_ALGORITHM;
+    }
+    try {
+      AppShuffleInfo appShuffleInfo = validateAndGetAppShuffleInfo(appId);
+      File checksumFile = appShuffleInfo.getMergedShuffleChecksumFile(
+        shuffleId, shuffleMergeId, reduceId, algorithm);
+      ManagedBuffer chunkData =
+        getMergedBlockData(appId, shuffleId, shuffleMergeId, reduceId, chunkId);
+      return ShuffleChecksumHelper.diagnoseCorruption(
+        algorithm, checksumFile, chunkId, chunkData, checksumByReader);
+    } catch (Exception e) {
+      logger.warn("Unable to diagnose the corruption of shuffle chunk {} of shuffle {} " +
+        "shuffleMerge {} reduceId {}", e,
+        MDC.of(LogKeys.CHUNK_ID, chunkId),
+        MDC.of(LogKeys.SHUFFLE_ID, shuffleId),
+        MDC.of(LogKeys.SHUFFLE_MERGE_ID, shuffleMergeId),
+        MDC.of(LogKeys.REDUCE_ID, reduceId));
+      return Cause.UNKNOWN_ISSUE;
     }
   }
 
@@ -577,6 +666,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     int dataFilesDeleteCnt = 0;
     int indexFilesDeleteCnt = 0;
     int metaFilesDeleteCnt = 0;
+    int checksumFilesDeleteCnt = 0;
     for (int reduceId : reduceIds) {
       File dataFile =
           appShuffleInfo.getMergedShuffleDataFile(shuffleId, shuffleMergeId, reduceId);
@@ -593,11 +683,19 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       if (metaFile.delete()) {
         metaFilesDeleteCnt++;
       }
+      if (checksumEnabled) {
+        File checksumFile = appShuffleInfo.getMergedShuffleChecksumFile(
+            shuffleId, shuffleMergeId, reduceId, checksumAlgorithm);
+        if (checksumFile.delete()) {
+          checksumFilesDeleteCnt++;
+        }
+      }
     }
-    logger.info("Delete {} data files, {} index files, {} meta files for {}",
+    logger.info("Delete {} data files, {} index files, {} meta files, {} checksum files for {}",
       MDC.of(LogKeys.NUM_DATA_FILES, dataFilesDeleteCnt),
       MDC.of(LogKeys.NUM_INDEX_FILES, indexFilesDeleteCnt),
       MDC.of(LogKeys.NUM_META_FILES, metaFilesDeleteCnt),
+      MDC.of(LogKeys.NUM_CHECKSUM_FILE, checksumFilesDeleteCnt),
       MDC.of(LogKeys.APP_ATTEMPT_SHUFFLE_MERGE_ID, appAttemptShuffleMergeId));
   }
 
@@ -1314,6 +1412,11 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
      * block.
      */
     private void writeBuf(ByteBuffer buf) throws IOException {
+      // The running checksum is updated only once the whole buffer has been written. A buffer
+      // that is only partially written leaves the checksum behind the data that reached the file,
+      // which invalidates it at the next write instead of corrupting it.
+      long writePos = partitionInfo.getDataFilePos() + length;
+      ByteBuffer checksumBuf = partitionInfo.isChecksumEnabled() ? buf.duplicate() : null;
       while (buf.hasRemaining()) {
         long updatedPos = partitionInfo.getDataFilePos() + length;
         logger.debug("{} current pos {} updated pos {}", partitionInfo,
@@ -1321,6 +1424,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         int bytesWritten = partitionInfo.dataChannel.write(buf, updatedPos);
         length += bytesWritten;
         mergeManager.pushMergeMetrics.blockBytesWritten.mark(bytesWritten);
+      }
+      if (checksumBuf != null) {
+        partitionInfo.updateChunkChecksum(writePos, checksumBuf);
       }
     }
 
@@ -1781,6 +1887,19 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     // The meta file for a particular merged shuffle contains all the map indices that belong to
     // every chunk. The entry per chunk is a serialized bitmap.
     private final MergeShuffleFile metaFile;
+    // The checksum file for a particular merged shuffle contains the checksum of every chunk,
+    // one long per chunk. It is null when the checksum calculation is disabled. Unlike the index
+    // file, it has no leading entry, so it holds one entry less than the index file.
+    private final MergeShuffleFile checksumFile;
+    // The checksum of the chunk that is currently being merged, null when checksumFile is null.
+    private final Checksum chunkChecksum;
+    // The offset in the data file up to which chunkChecksum has consumed the merged data, or
+    // INVALID_CHECKSUM_POS when chunkChecksum no longer describes a prefix of the current chunk.
+    private long checksumPos;
+    // Whether the checksum file still holds the checksum of every chunk of this partition. It is
+    // unset when the checksums cannot be kept up to date, which only disables the diagnosis of a
+    // corrupted chunk of this partition and never fails the merge itself.
+    private boolean checksumUsable;
     private final Cleaner.Cleanable cleanable;
     // Location offset of the last successfully merged block for this shuffle partition
     private long dataFilePos;
@@ -1801,7 +1920,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         int reduceId,
         File dataFile,
         MergeShuffleFile indexFile,
-        MergeShuffleFile metaFile) throws IOException {
+        MergeShuffleFile metaFile,
+        MergeShuffleFile checksumFile,
+        String checksumAlgorithm) throws IOException {
       this.appAttemptShuffleMergeId = appAttemptShuffleMergeId;
       this.reduceId = reduceId;
       // Create FileOutputStream with append mode set to false by default.
@@ -1812,6 +1933,11 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       this.dataFile = dataFile;
       this.indexFile = indexFile;
       this.metaFile = metaFile;
+      this.checksumFile = checksumFile;
+      this.chunkChecksum = checksumFile == null ? null :
+        ShuffleChecksumHelper.getChecksumByAlgorithm(checksumAlgorithm);
+      this.checksumPos = 0;
+      this.checksumUsable = checksumFile != null;
       this.currentMapIndex = -1;
       // Writing 0 offset so that we can reuse ShuffleIndexInformation.getIndex()
       updateChunkInfo(0L, -1);
@@ -1819,7 +1945,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       this.mapTracker = new RoaringBitmap();
       this.chunkTracker = new RoaringBitmap();
       this.cleanable = CLEANER.register(this, new ResourceCleaner(dataChannel, indexFile,
-        metaFile, appAttemptShuffleMergeId, reduceId));
+        metaFile, checksumFile, appAttemptShuffleMergeId, reduceId));
     }
 
     public long getDataFilePos() {
@@ -1856,12 +1982,15 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     }
 
     /**
-     * Appends the chunk offset to the index file and adds the map index to the chunk tracker.
+     * Appends the chunk offset to the index file, the chunk checksum to the checksum file and
+     * adds the map index to the chunk tracker.
      *
      * @param chunkOffset the offset of the chunk in the data file.
      * @param mapIndex the map index to be added to chunk tracker.
      */
     void updateChunkInfo(long chunkOffset, int mapIndex) throws IOException {
+      boolean chunkSealed = chunkOffset > lastChunkOffset;
+      boolean checksumWritten = false;
       try {
         logger.trace("{} index current {} updated {}", this, this.lastChunkOffset,
           chunkOffset);
@@ -1869,12 +1998,23 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           indexFile.getChannel().position(indexFile.getPos());
         }
         indexFile.getDos().writeLong(chunkOffset);
+        // The checksum is written before the chunk bitmap for the same reason the bitmap is
+        // written after the offset: nothing that can throw may run once the meta file position
+        // has been advanced, otherwise a retry would append a second bitmap for this chunk.
+        if (chunkSealed) {
+          checksumWritten = writeChunkChecksum(chunkOffset);
+        }
         // Chunk bitmap should be written to the meta file after the index file because if there are
         // any exceptions during writing the offset to the index file, meta file should not be
         // updated. If the update to the index file is successful but the update to meta file isn't
         // then the index file position is not updated.
         writeChunkTracker(mapIndex);
         indexFile.updatePos(8);
+        if (checksumWritten) {
+          checksumFile.updatePos(8);
+          chunkChecksum.reset();
+          checksumPos = chunkOffset;
+        }
         this.lastChunkOffset = chunkOffset;
         indexMetaUpdateFailed = false;
       } catch (IOException ioe) {
@@ -1886,6 +2026,91 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         // abort or not.
         throw ioe;
       }
+    }
+
+    /**
+     * Appends the checksum of the chunk that ends at chunkOffset to the checksum file. The
+     * running checksum is recomputed from the merged data file first if it does not describe
+     * exactly the data of this chunk, which happens when a block that was partially written is
+     * abandoned, or when a block is still being written while the shuffle merge is finalized.
+     *
+     * @return whether the checksum of the chunk was appended. The checksums are only used to
+     *         diagnose a corrupted chunk, so a failure here gives up on the checksums of this
+     *         partition rather than propagating to the merge of the block.
+     */
+    private boolean writeChunkChecksum(long chunkOffset) {
+      if (!isChecksumEnabled()) {
+        return false;
+      }
+      try {
+        if (checksumPos != chunkOffset) {
+          recomputeChunkChecksum(chunkOffset);
+        }
+        if (indexMetaUpdateFailed) {
+          checksumFile.getChannel().position(checksumFile.getPos());
+        }
+        checksumFile.getDos().writeLong(chunkChecksum.getValue());
+        return true;
+      } catch (IOException ioe) {
+        logger.warn("{} reduceId {} failed to update the checksums of the merged chunks, the " +
+          "corruption of a chunk of this shuffle partition cannot be diagnosed", ioe,
+          MDC.of(LogKeys.APP_ATTEMPT_SHUFFLE_MERGE_ID, appAttemptShuffleMergeId),
+          MDC.of(LogKeys.REDUCE_ID, reduceId));
+        checksumUsable = false;
+        return false;
+      }
+    }
+
+    /**
+     * Recalculates the running checksum over the data of the current chunk, which is the range
+     * [lastChunkOffset, chunkOffset) of the merged shuffle data file. The data file is reopened
+     * for reading because dataChannel is write-only.
+     */
+    private void recomputeChunkChecksum(long chunkOffset) throws IOException {
+      logger.debug("{} reduceId {} recomputing the checksum of the chunk [{}, {})",
+        appAttemptShuffleMergeId, reduceId, lastChunkOffset, chunkOffset);
+      chunkChecksum.reset();
+      try (FileChannel readChannel = FileChannel.open(dataFile.toPath(), StandardOpenOption.READ)) {
+        ByteBuffer buffer =
+          ByteBuffer.allocate(ShuffleChecksumHelper.CHECKSUM_CALCULATION_BUFFER);
+        long pos = lastChunkOffset;
+        while (pos < chunkOffset) {
+          buffer.clear();
+          buffer.limit((int) Math.min(buffer.capacity(), chunkOffset - pos));
+          int bytesRead = readChannel.read(buffer, pos);
+          if (bytesRead <= 0) {
+            throw new IOException(String.format(
+              "Cannot read the merged shuffle data file %s at position %d",
+              dataFile.getAbsolutePath(), pos));
+          }
+          pos += bytesRead;
+          buffer.flip();
+          chunkChecksum.update(buffer);
+        }
+      }
+      checksumPos = chunkOffset;
+    }
+
+    boolean isChecksumEnabled() {
+      return chunkChecksum != null && checksumUsable;
+    }
+
+    /**
+     * Feeds the data of a block that has just been written to the merged shuffle data file to the
+     * running checksum of the current chunk. The running checksum is invalidated when the data is
+     * not written right where the checksum stopped, which happens when the partial data of an
+     * abandoned block is overwritten. It is then recomputed when the chunk gets sealed.
+     */
+    void updateChunkChecksum(long writePos, ByteBuffer data) {
+      if (!isChecksumEnabled()) {
+        return;
+      }
+      if (checksumPos != writePos) {
+        checksumPos = INVALID_CHECKSUM_POS;
+        return;
+      }
+      checksumPos += data.remaining();
+      chunkChecksum.update(data);
     }
 
     private void writeChunkTracker(int mapIndex) throws IOException {
@@ -1927,6 +2152,29 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       dataChannel.truncate(lastChunkOffset);
       indexFile.getChannel().truncate(indexFile.getPos());
       metaFile.getChannel().truncate(metaFile.getPos());
+      finalizeChecksumFile();
+    }
+
+    /**
+     * Discards any checksum that does not describe a chunk of the finalized partition. The
+     * checksums are only used to diagnose a corrupted chunk, so the checksum file is deleted
+     * instead of failing the finalization of an otherwise correctly merged partition.
+     */
+    private void finalizeChecksumFile() {
+      if (checksumFile == null) {
+        return;
+      }
+      if (checksumUsable) {
+        try {
+          checksumFile.getChannel().truncate(checksumFile.getPos());
+          return;
+        } catch (IOException ioe) {
+          logger.warn("{} reduceId {} failed to truncate the checksum file",
+            MDC.of(LogKeys.APP_ATTEMPT_SHUFFLE_MERGE_ID, appAttemptShuffleMergeId),
+            MDC.of(LogKeys.REDUCE_ID, reduceId));
+        }
+      }
+      checksumFile.delete();
     }
 
     private void deleteAllFiles() {
@@ -1937,6 +2185,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       }
       metaFile.delete();
       indexFile.delete();
+      if (checksumFile != null) {
+        checksumFile.delete();
+      }
     }
 
     @Override
@@ -1955,6 +2206,11 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     @VisibleForTesting
     MergeShuffleFile getMetaFile() {
       return metaFile;
+    }
+
+    @VisibleForTesting
+    MergeShuffleFile getChecksumFile() {
+      return checksumFile;
     }
 
     @VisibleForTesting
@@ -1981,12 +2237,13 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         FileChannel dataChannel,
         MergeShuffleFile indexFile,
         MergeShuffleFile metaFile,
+        MergeShuffleFile checksumFile,
         AppAttemptShuffleMergeId appAttemptShuffleMergeId,
         int reduceId) implements Runnable {
 
       @Override
       public void run() {
-        closeAllFiles(dataChannel, indexFile, metaFile, appAttemptShuffleMergeId,
+        closeAllFiles(dataChannel, indexFile, metaFile, checksumFile, appAttemptShuffleMergeId,
           reduceId);
       }
 
@@ -1994,6 +2251,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           FileChannel dataChannel,
           MergeShuffleFile indexFile,
           MergeShuffleFile metaFile,
+          MergeShuffleFile checksumFile,
           AppAttemptShuffleMergeId appAttemptShuffleMergeId,
           int reduceId) {
         try {
@@ -2016,6 +2274,15 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           indexFile.close();
         } catch (IOException ioe) {
           logger.warn("Error closing index file for {} reduceId {}",
+            MDC.of(LogKeys.APP_ATTEMPT_SHUFFLE_MERGE_ID, appAttemptShuffleMergeId),
+            MDC.of(LogKeys.REDUCE_ID, reduceId));
+        }
+        try {
+          if (checksumFile != null) {
+            checksumFile.close();
+          }
+        } catch (IOException ioe) {
+          logger.warn("Error closing checksum file for {} reduceId {}",
             MDC.of(LogKeys.APP_ATTEMPT_SHUFFLE_MERGE_ID, appAttemptShuffleMergeId),
             MDC.of(LogKeys.REDUCE_ID, reduceId));
         }
@@ -2185,6 +2452,22 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       String metaName = String.format("%s.meta", generateFileName(appId, shuffleId,
         shuffleMergeId, reduceId));
       return new File(getFilePath(metaName));
+    }
+
+    /**
+     * The checksum algorithm is part of the file name, like it is for the checksum file of a
+     * non-merged shuffle block, so that the checksums are never compared against those of a
+     * different algorithm after the shuffle server is reconfigured.
+     */
+    public File getMergedShuffleChecksumFile(
+        int shuffleId,
+        int shuffleMergeId,
+        int reduceId,
+        String algorithm) {
+      String checksumName = ShuffleChecksumHelper.getChecksumFileName(
+        String.format("%s.checksum", generateFileName(appId, shuffleId, shuffleMergeId, reduceId)),
+        algorithm);
+      return new File(getFilePath(checksumName));
     }
   }
 
