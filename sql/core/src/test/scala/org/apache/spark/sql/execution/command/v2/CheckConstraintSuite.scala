@@ -721,6 +721,62 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     }
   }
 
+  test("SPARK-60764: Check constraint violation on table insert - " +
+    "special characters in the condition") {
+    Seq(
+      """id > 0 OR s = "x"""",
+      """id > 0 OR s = 'x"y'""",
+      "id > 0 OR\n s = 'xy'",
+      """id > 0 OR s = 'x\\y'""",
+      """id > 0 OR s = 'x\qy'"""
+    ).foreach { condition =>
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        sql(s"CREATE TABLE $t (id INT, s STRING) $defaultUsing")
+        sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK ($condition)")
+        // Read from `range` so that the check runs in whole-stage codegen.
+        sql(s"INSERT INTO $t SELECT id + 1, 'ok' FROM range(2)")
+        val error = intercept[SparkRuntimeException] {
+          sql(s"INSERT INTO $t SELECT id, 'ok' FROM range(2)")
+        }
+        checkError(
+          exception = error,
+          condition = "CHECK_CONSTRAINT_VIOLATION",
+          sqlState = "23001",
+          parameters = Map(
+            "constraintName" -> "c1",
+            "expression" -> condition,
+            "values" -> " - id : 0\n - s : ok"
+          )
+        )
+      }
+    }
+  }
+
+  test("SPARK-60764: Check constraint violation on table insert - " +
+    "special characters in the names") {
+    Seq("a\"b", "a\nb", "a\\b").foreach { name =>
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        sql(s"CREATE TABLE $t (id INT, `$name` STRING) $defaultUsing")
+        sql(s"ALTER TABLE $t ADD CONSTRAINT `$name` CHECK (id > 0 OR `$name` = 'x')")
+        // Read from `range` so that the check runs in whole-stage codegen.
+        sql(s"INSERT INTO $t SELECT id + 1, 'ok' FROM range(2)")
+        val error = intercept[SparkRuntimeException] {
+          sql(s"INSERT INTO $t SELECT id, 'ok' FROM range(2)")
+        }
+        checkError(
+          exception = error,
+          condition = "CHECK_CONSTRAINT_VIOLATION",
+          sqlState = "23001",
+          parameters = Map(
+            "constraintName" -> name,
+            "expression" -> s"id > 0 OR `$name` = 'x'",
+            "values" -> s" - $name : ok\n - id : 0"
+          )
+        )
+      }
+    }
+  }
+
   test("Check constraint violation on table update - top level column") {
     withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { t =>
       sql(s"CREATE TABLE $t (id INT, value INT," +
