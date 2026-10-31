@@ -250,6 +250,7 @@ __all__ = [  # noqa: F405
     "session_window",
     "time_bucket",
     "time_diff",
+    "time_format",
     "time_from_micros",
     "time_from_millis",
     "time_from_seconds",
