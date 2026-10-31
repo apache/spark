@@ -172,6 +172,70 @@ SELECT /*+ SHUFFLE_REPLICATE_NL(t1) */ * FROM t1 INNER JOIN t2 ON t1.key = t2.ke
 SELECT /*+ BROADCAST(t1), MERGE(t1, t2) */ * FROM t1 INNER JOIN t2 ON t1.key = t2.key;
 ```
 
+### Runtime Filter Hints
+
+Runtime filter hints allow users to suggest which side of a join Spark should build a runtime
+filter from, to prune the other side. Spark decides on its own whether a runtime filter is worth
+building, based on statistics; the hint overrides that decision, but not the requirements that make
+the filter correct, so Spark is not guaranteed to follow it and issues a warning when it cannot.
+Spark may also decline the hint because of configured limits on runtime filters; the warning names
+the reason. When Spark declines the hint, it does not build a filter in the other direction instead.
+
+#### Runtime Filter Hints Types
+
+* **RUNTIME_FILTER**
+
+    Suggests that Spark build a runtime filter from the hinted relation and use it to prune the
+    other side of the join. Use it when the hinted side matches only a small fraction of the other
+    side but Spark does not choose a runtime filter on its own, e.g. because table statistics are
+    missing or misleading. The hinted side must produce the same set of rows, with the same join key
+    values, whenever it is evaluated; its other columns may differ. `RUNTIME_FILTER` can be combined
+    with a join strategy hint.
+
+    For a Bloom filter, the hint overrides
+    `spark.sql.optimizer.runtime.bloomFilter.creationSideThreshold`,
+    `spark.sql.optimizer.runtime.bloomFilter.applicationSideScanSizeThreshold`, and the requirements
+    that the hinted side have a selective predicate and that the join involve a shuffle. It still
+    obeys `spark.sql.optimizer.runtime.bloomFilter.enabled` and
+    `spark.sql.optimizer.runtimeFilter.number.threshold`, requires simple join keys, and the filter
+    stays capped by `spark.sql.optimizer.runtime.bloomFilter.maxNumItems` and
+    `spark.sql.optimizer.runtime.bloomFilter.maxNumBits`. For dynamic partition pruning, the hint
+    overrides the pruning benefit estimate and
+    `spark.sql.optimizer.dynamicPartitionPruning.reuseBroadcastOnly`; it still obeys
+    `spark.sql.optimizer.dynamicPartitionPruning.enabled` and requires the pruned side to scan a
+    table that supports pruning on the join key.
+
+    Like a join strategy hint, `RUNTIME_FILTER` fixes the join order around the hinted relation:
+    Spark does not reorder a join that carries it. Place the hinted relation where it joins the
+    side to prune on the join key.
+
+    The hinted side is evaluated again to build the filter, so its cost is paid twice. A Bloom
+    filter is merged in a single task from one partial filter per task that reads the hinted side,
+    and it prunes well only while the hinted side's distinct keys fit its capacity:
+    `spark.sql.optimizer.runtime.bloomFilter.expectedNumItems` when Spark has no row count for the
+    hinted side, otherwise the row count capped by
+    `spark.sql.optimizer.runtime.bloomFilter.maxNumItems`. For dynamic partition pruning without a
+    broadcast to reuse, the hinted side's distinct join keys are collected to the driver and count
+    toward `spark.driver.maxResultSize`. Hint a side whose size and distinct key count stay within
+    these limits.
+
+#### Examples
+
+```sql
+-- Build a runtime filter from t2 and use it to prune t1.
+SELECT /*+ RUNTIME_FILTER(t2) */ * FROM t1 INNER JOIN t2 ON t1.key = t2.key;
+
+-- The hinted side may be any relation or subquery, not only a table.
+SELECT /*+ RUNTIME_FILTER(t2) */ *
+FROM t1 INNER JOIN (SELECT DISTINCT key FROM t3) t2 ON t1.key = t2.key;
+
+-- A runtime filter hint can be combined with a join strategy hint.
+SELECT /*+ MERGE(t1, t2), RUNTIME_FILTER(t2) */ * FROM t1 INNER JOIN t2 ON t1.key = t2.key;
+
+-- Hinting both sides is ambiguous, so Spark issues a warning and ignores the hint.
+SELECT /*+ RUNTIME_FILTER(t1, t2) */ * FROM t1 INNER JOIN t2 ON t1.key = t2.key;
+```
+
 ### Related Statements
 
 * [JOIN](sql-ref-syntax-qry-select-join.html)

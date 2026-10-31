@@ -25,12 +25,14 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
+import org.apache.logging.log4j.Level
 import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen.JavaStrLenStaticMagic
 
 import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, IndexAlreadyExistsException, NoSuchIndexException}
+import org.apache.spark.sql.catalyst.expressions.{BloomFilterMightContain, DynamicPruningSubquery}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, LocalLimit, Offset, Sort}
 import org.apache.spark.sql.connector.{IntegralAverage, StrLen}
 import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalog}
@@ -3395,6 +3397,61 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     checkAnswer(df, Seq(Row("keep", 1), Row(null, 2)))
   }
 
+  test("RUNTIME_FILTER hint rejects a scan that absorbed a LIMIT or an aggregate") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "0",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTable("dpp_fact") {
+        spark.range(10).selectExpr("id AS v", "CAST(id % 3 AS INT) AS p")
+          .write.partitionBy("p").saveAsTable("dpp_fact")
+        withTempView("bf_fact") {
+          spark.range(10).selectExpr("CAST(id AS INT) AS k").createOrReplaceTempView("bf_fact")
+          def warnings(query: String): Seq[String] = {
+            val logAppender = new LogAppender("runtime filter hint")
+            withLogAppender(logAppender, level = Some(Level.WARN)) {
+              sql(query).queryExecution.optimizedPlan
+            }
+            logAppender.loggingEvents.map(_.getMessage.getFormattedMessage).toSeq
+          }
+          def hasRuntimeFilter(query: String): Boolean = {
+            sql(query).queryExecution.optimizedPlan.exists {
+              case Filter(condition, _) => condition.exists {
+                case _: BloomFilterMightContain | _: DynamicPruningSubquery => true
+                case _ => false
+              }
+              case _ => false
+            }
+          }
+          // A Bloom filter on `bf_fact`, and a DPP filter on the partitioned `dpp_fact`.
+          Seq("bf_fact f JOIN %s d ON f.k = d.dept", "dpp_fact f JOIN %s d ON f.p = d.dept")
+            .foreach { join =>
+              // The database returns whichever rows come first to the filter subquery and to the
+              // join, possibly different ones.
+              val limited = "SELECT /*+ RUNTIME_FILTER(d) */ * FROM " +
+                join.format("(SELECT dept FROM h2.test.employee LIMIT 2)")
+              checkLimitRemoved(sql(limited))
+              // The database computes the aggregate, which is not trusted to return the same
+              // rows again.
+              val aggregated = "SELECT /*+ RUNTIME_FILTER(d) */ * FROM " +
+                join.format("(SELECT dept, max(salary) m FROM h2.test.employee GROUP BY dept)")
+              checkAggregateRemoved(sql(aggregated))
+              Seq(limited, aggregated).foreach { query =>
+                assert(!hasRuntimeFilter(query))
+                assert(warnings(query).exists(_.contains("is not supported in the query: the " +
+                  "hinted side reads h2.test.employee with an aggregate, limit, offset, top-N or " +
+                  "sample pushed into the source")))
+              }
+              // A scan that absorbed only a filter returns the same rows again.
+              val filtered = "SELECT /*+ RUNTIME_FILTER(d) */ * FROM " +
+                join.format("(SELECT dept FROM h2.test.employee WHERE dept > 1)")
+              assert(hasRuntimeFilter(filtered))
+              assert(!warnings(filtered).exists(_.contains("is not supported")))
+              checkAnswer(sql(filtered),
+                sql(filtered.replace("/*+ RUNTIME_FILTER(d) */", "")).collect().toSeq)
+            }
+        }
+      }
+    }
+  }
 }
 
 private object ConnectionTrackingH2Dialect extends JdbcDialect {
