@@ -715,7 +715,7 @@ class Analyzer(
       ResolveWindowFrame ::
       ResolveNaturalAndUsingJoin ::
       ResolveOutputRelation ::
-      new ResolveTableConstraints(catalogManager) ::
+      new ResolveTableConstraints(catalogManager, plan => execute(plan)) ::
       new ResolveSetVariable(catalogManager) ::
       new ResolveFetchCursor(catalogManager) ::
       new ResolveCursors() ::
@@ -4153,6 +4153,8 @@ class Analyzer(
         SQLConf.withExistingConf(StoredExpressionText.conf(conf)) {
           execute(Project(filled, LocalRelation(child.output)))
         } match {
+          // A text these settings cannot resolve stays unresolved here, and the analysis of the
+          // write finishes it under the session that writes.
           case Project(analyzedCols, _: LocalRelation) =>
             val byName = analyzedCols.map(c => c.name -> c).toMap
             p.copy(projectList = projectList.map(c => byName.getOrElse(c.name, c)))
