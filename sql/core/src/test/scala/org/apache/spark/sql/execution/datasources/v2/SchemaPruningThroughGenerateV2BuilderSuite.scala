@@ -104,6 +104,34 @@ class SchemaPruningThroughGenerateV2BuilderSuite extends QueryTest with SharedSp
       }
     }
   }
+
+  test("SPARK-47230: a rejected rewrite keeps the filters above the scan apart") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      sql("select id as n, if(id = 7, '7', 'bad') as s, " +
+        "array(named_struct('a', id, 'b', id * 2, 'c', id * 3)) as items from range(7, 9)")
+        .write.parquet(path)
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "", SQLConf.ANSI_ENABLED.key -> "true") {
+        Seq(false, true).foreach { reject =>
+          withSQLConf(
+              SQLConf.NESTED_SCHEMA_PRUNING_THROUGH_GENERATE_REJECT_FOR_TESTING.key ->
+                reject.toString) {
+            withTempView("t") {
+              // the nondeterministic lower filter is NULL for s = 'bad', so the cast above it
+              // must never see that row: `And` of the two would still evaluate the cast
+              spark.read.parquet(path)
+                .where("rand() >= 0 and nullif(s, 'bad') = s")
+                .where("cast(s as int) = 7")
+                .createOrReplaceTempView("t")
+              checkAnswer(
+                sql("select item.a, item.c from t lateral view explode(items) e as item"),
+                Row(7, 21) :: Nil)
+            }
+          }
+        }
+      }
+    }
+  }
 }
 
 /** Parquet through DataSource V2, with a scan builder whose `pruneColumns` only narrows. */

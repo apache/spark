@@ -225,7 +225,8 @@ abstract class NestedSchemaPruningBenchmark extends SqlBasedBenchmark {
         repartitionByExprBenchmark(N, numIters)
         sampleBenchmark(N, numIters)
         sortBenchmark(N, numIters)
-        explodeBenchmark(N, numIters)
+        // ORC is not pruned through generators yet, see `SchemaPruning`
+        if (dataSourceName != "orc") explodeBenchmark(N, numIters)
       }
     }
   }
