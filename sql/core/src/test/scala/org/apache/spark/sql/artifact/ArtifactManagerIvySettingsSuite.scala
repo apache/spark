@@ -20,7 +20,7 @@ import java.net.URI
 import java.nio.file.Files
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.config.{JAR_IVY_CONNECT_TIMEOUT, JAR_IVY_READ_TIMEOUT}
+import org.apache.spark.internal.config.{JAR_IVY_CONNECT_TIMEOUT, JAR_IVY_READ_TIMEOUT, JAR_IVY_REPO_PATH}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.{IvyTestUtils, MavenUtils, Utils}
 import org.apache.spark.util.MavenUtils.MavenCoordinate
@@ -45,7 +45,10 @@ class ArtifactManagerIvySettingsSuite extends SharedSparkSession {
 
   override protected def sparkConf: SparkConf = {
     super.sparkConf
-      .set(MavenUtils.JAR_IVY_SETTING_PATH_KEY, ivySettings.toString)
+      .set("spark.test.artifact.ivySettingsDir", ivySettingsDir.toString)
+      .set(
+        MavenUtils.JAR_IVY_SETTING_PATH_KEY,
+        "${spark.test.artifact.ivySettingsDir}/ivysettings.xml")
       .set(JAR_IVY_CONNECT_TIMEOUT, 7000L)
       .set(JAR_IVY_READ_TIMEOUT, 11000L)
   }
@@ -62,6 +65,46 @@ class ArtifactManagerIvySettingsSuite extends SharedSparkSession {
     val conf = new SparkConf(loadDefaults = false)
     assert(conf.get(JAR_IVY_CONNECT_TIMEOUT) == 30000L)
     assert(conf.get(JAR_IVY_READ_TIMEOUT) == 300000L)
+  }
+
+  test("Ivy timeouts use session configuration and retain defaults") {
+    val session = spark.newSession()
+    val defaultSession = spark.newSession()
+    try {
+      session.sessionState.conf.setConfString(JAR_IVY_CONNECT_TIMEOUT.key, "2s")
+      session.sessionState.conf.setConfString(JAR_IVY_READ_TIMEOUT.key, "3m")
+      defaultSession.sessionState.conf.unsetConf(JAR_IVY_CONNECT_TIMEOUT.key)
+      defaultSession.sessionState.conf.unsetConf(JAR_IVY_READ_TIMEOUT.key)
+
+      assert(session.artifactManager.ivyConnectTimeoutMs == 2000)
+      assert(session.artifactManager.ivyReadTimeoutMs == 180000)
+      assert(defaultSession.artifactManager.ivyConnectTimeoutMs == 30000)
+      assert(defaultSession.artifactManager.ivyReadTimeoutMs == 300000)
+    } finally {
+      session.artifactManager.cleanUpResourcesForTesting()
+      defaultSession.artifactManager.cleanUpResourcesForTesting()
+    }
+  }
+
+  test("Ivy timeouts validate session configuration") {
+    for {
+      entry <- Seq(JAR_IVY_CONNECT_TIMEOUT, JAR_IVY_READ_TIMEOUT)
+      value <- Seq("0ms", "-1ms", "2147483648ms")
+    } {
+      val session = spark.newSession()
+      try {
+        session.sessionState.conf.setConfString(entry.key, value)
+        intercept[IllegalArgumentException] {
+          if (entry == JAR_IVY_CONNECT_TIMEOUT) {
+            session.artifactManager.ivyConnectTimeoutMs
+          } else {
+            session.artifactManager.ivyReadTimeoutMs
+          }
+        }
+      } finally {
+        session.artifactManager.cleanUpResourcesForTesting()
+      }
+    }
   }
 
   test("SparkSession artifact APIs use spark.jars.ivySettings") {
@@ -83,6 +126,71 @@ class ArtifactManagerIvySettingsSuite extends SharedSparkSession {
         otherSession.artifactManager.artifactPath.resolve(".ivy-cache"))
     assert(spark.artifactManager.ivyConnectTimeoutMs == 7000)
     assert(spark.artifactManager.ivyReadTimeoutMs == 11000)
+  }
+
+  test("SparkSession artifact APIs use session Ivy settings") {
+    withTempDir { dir =>
+      val sessionCoordinate = MavenCoordinate("my.session.lib", "mylib", "0.1")
+      val sessionRepository = IvyTestUtils.createLocalRepositoryForTests(
+        sessionCoordinate,
+        dependencies = None,
+        rootDir = Some(dir.toPath.resolve("repository").toFile))
+      val sessionIvySettings = dir.toPath.resolve("session-ivysettings.xml")
+      Files.writeString(
+        sessionIvySettings,
+        s"""<ivysettings>
+           |  <settings defaultResolver="session"/>
+           |  <resolvers>
+           |    <ibiblio name="session" m2compatible="true" root="${sessionRepository.toURI}"/>
+           |  </resolvers>
+           |</ivysettings>""".stripMargin)
+      val session = spark.newSession()
+      try {
+        session.sessionState.conf.setConfString(
+          "spark.test.artifact.ivySettingsDir", dir.toString)
+        session.sessionState.conf.setConfString(
+          MavenUtils.JAR_IVY_SETTING_PATH_KEY,
+          "${spark.test.artifact.ivySettingsDir}/session-ivysettings.xml")
+        session.addArtifact(URI.create(s"ivy://$sessionCoordinate"))
+        val jarName =
+          s"${sessionCoordinate.groupId}_${sessionCoordinate.artifactId}-" +
+            s"${sessionCoordinate.version}.jar"
+        assert(Files.exists(session.artifactManager.artifactPath.resolve("jars").resolve(jarName)))
+        assert(spark.conf.get("spark.test.artifact.ivySettingsDir") == ivySettingsDir.toString)
+      } finally {
+        session.artifactManager.cleanUpResourcesForTesting()
+      }
+    }
+  }
+
+  test("SparkSession artifacts use the session Ivy repository with an isolated cache") {
+    withTempDir { dir =>
+      val sessionCoordinate = MavenCoordinate("my.session.local", "mylib", "0.1")
+      val localIvyHome = dir.toPath.resolve("ivy")
+      IvyTestUtils.createLocalRepositoryForTests(
+        sessionCoordinate,
+        dependencies = None,
+        rootDir = Some(localIvyHome.resolve("local").toFile),
+        useIvyLayout = true)
+      val session = spark.newSession()
+      try {
+        session.sessionState.conf.setConfString(MavenUtils.JAR_IVY_SETTING_PATH_KEY, "")
+        session.sessionState.conf.setConfString(JAR_IVY_REPO_PATH.key, localIvyHome.toString)
+
+        session.addArtifact(URI.create(s"ivy://$sessionCoordinate"))
+
+        val jarName =
+          s"${sessionCoordinate.groupId}_${sessionCoordinate.artifactId}-" +
+            s"${sessionCoordinate.version}.jar"
+        val artifactPath = session.artifactManager.artifactPath
+        assert(Files.exists(artifactPath.resolve("jars").resolve(jarName)))
+        assert(Files.exists(artifactPath.resolve(".ivy-cache").resolve("jars").resolve(jarName)))
+        assert(!Files.exists(localIvyHome.resolve("cache")))
+        assert(!Files.exists(localIvyHome.resolve("jars")))
+      } finally {
+        session.artifactManager.cleanUpResourcesForTesting()
+      }
+    }
   }
 
   test("SPARK-60012: cloning skips the Ivy cache and creates a fresh cache on resolution") {

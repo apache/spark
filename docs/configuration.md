@@ -1092,6 +1092,8 @@ Apart from these, the following properties are also available, and may be useful
     Path to specify the Ivy user directory, used for the local Ivy cache and package files from
     <code>spark.jars.packages</code>. This will override the Ivy property <code>ivy.default.ivy.user.dir</code>
     which defaults to ~/.ivy2.
+    <code>SparkSession.addArtifact</code> reads the local repository search path from the session
+    configuration. Its runtime cache and downloaded jars remain session-local.
   </td>
   <td>1.3.0</td>
 </tr>
@@ -1102,6 +1104,7 @@ Apart from these, the following properties are also available, and may be useful
     Path to an Ivy settings file to customize resolution of jars specified using
     <code>spark.jars.packages</code> or <code>ivy://</code> URIs passed to
     <code>SparkSession.addArtifact</code> instead of the built-in defaults, such as maven central.
+    <code>SparkSession.addArtifact</code> reads this setting from the session configuration.
     For <code>spark.jars.packages</code>, additional repositories from
     <code>spark.jars.repositories</code> will also be included.
     The <code>spark-submit --repositories</code> option applies to submission-time resolution.
@@ -1127,7 +1130,7 @@ Apart from these, the following properties are also available, and may be useful
     Connection timeout for Ivy repository requests made by
     <code>SparkSession.addArtifact</code>.
     Client-resolved Spark Connect Ivy URIs do not use this setting.
-    This must be set before the SparkContext starts.
+    The session configuration value is captured on first use of the artifact APIs.
   </td>
   <td>4.4.0</td>
 </tr>
@@ -1137,7 +1140,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Read timeout for Ivy repository requests made by <code>SparkSession.addArtifact</code>.
     Client-resolved Spark Connect Ivy URIs do not use this setting.
-    This must be set before the SparkContext starts.
+    The session configuration value is captured on first use of the artifact APIs.
   </td>
   <td>4.4.0</td>
 </tr>
