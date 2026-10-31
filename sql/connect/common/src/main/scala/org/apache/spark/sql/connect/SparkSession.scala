@@ -872,6 +872,31 @@ object SparkSession extends SparkSessionCompanion with Logging {
   }
 
   /**
+   * Returns whether 'withLocalConnectServer' should spawn an embedded local Spark Connect
+   * server for the given resolved remote string.
+   *
+   * This is true in two cases:
+   *  1. The remote is the local convenience master (eg "local" or "local[*]" or "local[4]").
+   *  2. spark.api.mode=connect (or SPARK_CONNECT_MODE=1) is set and the remote is some other
+   *     classic master (eg yarn, spark://host:port, k8s://...) rather than an already-explicit
+   *     Spark Connect endpoint. This lets an existing classic application switch to Connect
+   *     just by setting spark.api.mode=connect, without changing its master: a bridging local
+   *     Connect server is started with that same '--master'.
+   *
+   * In particular a fully-specified 'sc://host:port' remote explicitly requested via
+   * '--remote', 'spark.remote', or SPARK_REMOTE must never be treated as a request to start
+   * (and then silently redirect the session to) a local server, regardless of
+   * 'isAPIModeConnect' -- that is the bug this method guards against.
+   */
+  private[sql] def shouldStartLocalConnectServer(
+      remoteString: Option[String],
+      isAPIModeConnect: Boolean): Boolean =
+    remoteString.exists(_.startsWith("local")) ||
+      (remoteString.isDefined &&
+       isAPIModeConnect &&
+       !remoteString.exists(_.startsWith("sc://")))
+
+  /**
    * Create a new Spark Connect server to connect locally.
    */
   private[sql] def withLocalConnectServer[T](f: => T): T = {
@@ -895,8 +920,7 @@ object SparkSession extends SparkSessionCompanion with Logging {
 
     server.synchronized {
       if (server.isEmpty &&
-        (remoteString.exists(_.startsWith("local")) ||
-          (remoteString.isDefined && isAPIModeConnect)) &&
+        shouldStartLocalConnectServer(remoteString, isAPIModeConnect) &&
         maybeConnectStartScript.exists(Files.exists(_))) {
         val token = java.util.UUID.randomUUID().toString()
         server = Some {
