@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Date, DriverManager, Timestamp}
+import java.sql.{Date, DriverManager, SQLException, Timestamp}
 import java.time.{Instant, LocalDate}
 import java.util.Properties
 
@@ -26,7 +26,7 @@ import scala.jdk.CollectionConverters._
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -570,10 +570,20 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
   }
 
   test("SPARK-19726: INSERT null to a NOT NULL column") {
-    val e = intercept[SparkException] {
-      sql("INSERT INTO PEOPLE1 values (null, null)")
-    }.getMessage
-    assert(e.contains("NULL not allowed for column \"NAME\""))
+    val e = intercept[SparkRuntimeException] {
+      sql("INSERT INTO PEOPLE1 values (null, 1)")
+    }
+    checkError(
+      exception = e,
+      condition = "FAILED_JDBC.WRITE",
+      sqlState = Some("HV000"),
+      parameters = Map(
+        "url" -> JDBCOptions.redactUrl(url1, SQLConf.get.stringRedactionPattern),
+        "tableName" -> "TEST.PEOPLE1"))
+    assert(e.getCause.isInstanceOf[SQLException])
+    val cause = e.getCause.asInstanceOf[SQLException]
+    assert(cause.getSQLState == "23502")
+    assert(cause.getMessage.contains("NULL not allowed for column \"NAME\""))
   }
 
   ignore("SPARK-23856 Spark jdbc setQueryTimeout option") {

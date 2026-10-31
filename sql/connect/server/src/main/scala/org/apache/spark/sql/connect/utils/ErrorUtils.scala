@@ -46,6 +46,21 @@ import org.apache.spark.util.Utils
 
 private[connect] object ErrorUtils extends Logging {
 
+  private def compatibleErrorClass(error: SparkThrowable): (String, Map[String, String]) = {
+    val parameters = Option(error.getMessageParameters)
+      .map(_.asScala.toMap)
+      .getOrElse(Map.empty[String, String])
+    if (error.getCondition == "FAILED_JDBC.WRITE") {
+      // Connect clients have no negotiated error-catalog capability. Keep the URL supplied
+      // by the WRITE error; it has already been redacted by JDBCOptions.
+      ("FAILED_JDBC.UNCLASSIFIED", Map(
+        "url" -> parameters.getOrElse("url", "jdbc:"),
+        "message" -> s"Write rows to the table ${parameters.getOrElse("tableName", "")}."))
+    } else {
+      (error.getCondition, parameters)
+    }
+  }
+
   private def allClasses(cl: Class[_]): Seq[Class[_]] = {
     val classes = ArrayBuffer.empty[Class[_]]
     if (cl != null && !cl.equals(classOf[java.lang.Object])) {
@@ -113,8 +128,9 @@ private[connect] object ErrorUtils extends Logging {
         case sparkThrowable: SparkThrowable =>
           val sparkThrowableBuilder = FetchErrorDetailsResponse.SparkThrowable
             .newBuilder()
-          if (sparkThrowable.getCondition != null) {
-            sparkThrowableBuilder.setErrorClass(sparkThrowable.getCondition)
+          val (errorClass, parameters) = compatibleErrorClass(sparkThrowable)
+          if (errorClass != null) {
+            sparkThrowableBuilder.setErrorClass(errorClass)
           }
           for (queryCtx <- sparkThrowable.getQueryContext) {
             val builder = FetchErrorDetailsResponse.QueryContext
@@ -166,7 +182,7 @@ private[connect] object ErrorUtils extends Logging {
           // FetchErrorDetails RPC doesn't crash with a NullPointerException.
           val messageParameters = sparkThrowable.getMessageParameters
           if (messageParameters != null) {
-            sparkThrowableBuilder.putAllMessageParameters(messageParameters)
+            sparkThrowableBuilder.putAllMessageParameters(parameters.asJava)
           }
           builder.setSparkThrowable(sparkThrowableBuilder.build())
         case _ =>
@@ -237,10 +253,11 @@ private[connect] object ErrorUtils extends Logging {
         }
         val errorClass = e.getCondition
         if (errorClass != null && errorClass.nonEmpty) {
+          val (compatibleClass, compatibleParameters) = compatibleErrorClass(e)
           val messageParameters = JsonMethods.compact(
-            JsonMethods.render(map2jvalue(e.getMessageParameters.asScala.toMap)))
+            JsonMethods.render(map2jvalue(compatibleParameters)))
           if (messageParameters.length <= maxMetadataSize) {
-            errorInfo.putMetadata("errorClass", errorClass)
+            errorInfo.putMetadata("errorClass", compatibleClass)
             errorInfo.putMetadata("messageParameters", messageParameters)
           }
         }
