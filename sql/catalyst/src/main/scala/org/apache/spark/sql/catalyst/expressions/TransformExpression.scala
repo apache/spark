@@ -160,8 +160,8 @@ case class TransformExpression(
    * The comparison is of [[functionId]], which is per position rather than a set of literal
    * values. Comparing only the values would make `truncate(id, 2)` and `truncate(2, store_id)` the
    * same function; `isCompatible` short-circuits on this method, so `sameArgumentLayout` -- which
-   * guards exactly that, but only inside `reducer` -- would never run, and the pair would be paired
-   * as-is with no reduce. `hasSameReducedKeys` compares the same identity, so the two never
+   * guards exactly that, but only inside `reducers` -- would never run, and the pair would be
+   * paired as-is with no reduce. `hasSameReducedKeys` compares the same identity, so the two never
    * disagree about which transforms are the same.
    *
    * @param other the transform expression to compare to
@@ -192,11 +192,9 @@ case class TransformExpression(
    *
    * Since literal parameters (the bucket count, the truncate width) live in `children` rather than
    * in a field of their own, any path that rewrites a transform's children has to skip them. A
-   * parameter is not an aliasable value: substituting it changes what the transform computes, drops
-   * it out of `functionId`, adds a second entry to `references` (tripping
-   * `KeyedShuffleSpec.keyPositions`' single-reference assert), and makes
-   * `KeyedPartitioning.supportsExpressions` reject the partitioning outright -- so SPJ is silently
-   * lost. Use it for any retargeting of a partition transform.
+   * parameter is not an aliasable value: substituting it changes what the transform computes, and
+   * gives the transform a second reference, so `KeyedShuffleSpec.keyPositions` maps it to no
+   * cluster key and SPJ is silently lost. Use it for any retargeting of a partition transform.
    *
    * Callers: `KeyedShuffleSpec.rebuiltOver`, which rebuilds a transform over the other side's key,
    * and `GroupPartitionsExec`, which rebuilds a reduced expression over each member's argument.

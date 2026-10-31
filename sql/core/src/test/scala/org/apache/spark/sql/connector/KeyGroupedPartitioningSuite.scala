@@ -7842,7 +7842,7 @@ class KeyGroupedPartitioningSuite
     // truncate(col, w), whose column slots align) reaches the connector reducer with
     // mismatched-length param arrays. The bundled reducers model the documented contract by
     // length-checking before indexing -- returning null rather than throwing ArrayIndexOutOfBounds
-    // (which attempt()'s Try would swallow into a silent missed SPJ + a misleading warning).
+    // (which probe's Try would swallow into a silent missed SPJ + a misleading warning).
     val empty = Array.empty[org.apache.spark.sql.connector.expressions.Literal[_]]
     val one = Array[org.apache.spark.sql.connector.expressions.Literal[_]](literal(3))
     assert(BucketFunction.reducer(empty, BucketFunction, one) == null)
@@ -7986,10 +7986,11 @@ class KeyGroupedPartitioningSuite
       "(identity-vs-transform, exact-typed literal)") {
     // Models a cross-side join `a = b` on ShortType keys: left is identity(a), right is
     // truncate(b, 4). The literal slot matches the declared input type exactly, but the column does
-    // not -- identityReducer evals the transform (with the identity column substituted in), feeding
-    // it through SpecificInternalRow(inputTypes), so a ShortType column at an IntegerType-declared
-    // position would ClassCastException. argsMatchInputTypes checks the column too, so the pair is
-    // not reducible (shuffle). IntegerTruncateFunction declares (IntegerType, IntegerType).
+    // not -- the identity reduce evals the transform (with the identity column substituted in),
+    // feeding it through SpecificInternalRow(inputTypes), so a ShortType column at an
+    // IntegerType-declared position would ClassCastException. argsMatchInputTypes checks the column
+    // too, so the pair is not reducible (shuffle). IntegerTruncateFunction declares
+    // (IntegerType, IntegerType).
     val a = AttributeReference("a", ShortType)()   // left, identity side
     val b = AttributeReference("b", ShortType)()   // right, transform's value column
     val identity = physical.KeyedPartitioning(Seq(a), Seq.empty)
@@ -8008,13 +8009,13 @@ class KeyGroupedPartitioningSuite
     }
   }
 
-  test("SPARK-50593: identityReducer validates the substituted identity column, not the " +
+  test("SPARK-50593: retargetForIdentity validates the substituted identity column, not the " +
       "transform's own column") {
     // The transform's own column matches its declared input type, but the identity column actually
-    // evaluated (substituted in) does not. identityReducer must reject based on the substituted
+    // evaluated (substituted in) does not. retargetForIdentity must reject based on the substituted
     // column -- what it evals -- else it builds a reducer that ClassCastExceptions at eval. (The
     // planner's keyPositions normally forces the two columns to share a type; this builds the specs
-    // directly to pin identityReducer's own correctness.)
+    // directly to pin retargetForIdentity's own correctness.)
     val idCol = AttributeReference("a", ShortType)()   // evaluated column: ShortType
     val tCol = AttributeReference("b", StringType)()   // transform's column: matches declared type
     val identity = physical.KeyedPartitioning(Seq(idCol), Seq.empty)
@@ -8036,7 +8037,7 @@ class KeyGroupedPartitioningSuite
   test("SPARK-50593: an arity-flexible transform (children > declared inputTypes) is not " +
       "reducible via the identity-vs-transform eval path") {
     // ZeroOrOneParamFunction declares inputTypes() of length 1 but admits transforms with 2
-    // children (col + one literal). The eval path (identityReducer) feeds every child through
+    // children (col + one literal). The eval path (retargetForIdentity) feeds every child through
     // ApplyFunctionExpression's SpecificInternalRow(inputTypes()) -- sized 1 -- so evaluating a
     // 2-child transform would ArrayIndexOutOfBoundsException at reduce time. argsMatchInputTypes'
     // exact-arity check rejects it, so the pair is not reducible (shuffle) instead of crashing.

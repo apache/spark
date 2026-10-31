@@ -863,7 +863,8 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
 
   test("areKeysCompatible: unknown partition keys require the same partition functions") {
     // A stand-in for a connector partition function such as `bucket`: only the canonical name
-    // matters here, since `TransformExpression.isSameFunction` compares names and bucket counts.
+    // matters here, since `TransformExpression.isSameFunction` compares the canonical name and the
+    // argument shapes, literal parameters included.
     val bucketFn = new ScalarFunction[Int] {
       override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
       override def resultType(): DataType = IntegerType
