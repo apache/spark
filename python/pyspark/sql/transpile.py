@@ -155,7 +155,15 @@ def _wider_numeric(lc: str, rc: str) -> str:
 
 
 class AbstractTranspiler(object):
-    """Base class for transpilers. All experimental."""
+    """Base class for transpilers. All experimental.
+
+    Everything here, this contract included, is experimental and can change in any
+    release. ``_transpile_from_ast`` runs synchronously on the driver while the
+    ``UserDefinedFunction`` is constructed, once per input-type variant, and never
+    under Spark Connect. A side effect in it, such as registering a Java UDF,
+    therefore happens before the UDF object is returned. Code that depends on this
+    timing breaks if transpilation becomes lazy or moves to Spark Connect.
+    """
 
     varieties: dict[str, type["AbstractTranspiler"]] = {}
     # Specify the "friendly" name a user can add to spark.sql.experimental.optimizer.pyTranspilers
