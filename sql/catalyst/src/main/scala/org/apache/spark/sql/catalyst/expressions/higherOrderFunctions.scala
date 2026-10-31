@@ -309,7 +309,7 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
       elementVar: NamedLambdaVariable,
       index: String): String = {
     val elementType = elementVar.dataType
-    val elementAtomic = ctx.addReferenceObj(elementVar.name, elementVar.value)
+    val elementAtomic = ctx.addReferenceObj("lambdaElement", elementVar.value)
     val extractElement = CodeGenerator.getValue(arrayName, elementType, index)
     val atomicAssign = assignAtomic(elementAtomic, elementCode.value,
       elementCode.isNull, elementVar.nullable)
@@ -333,7 +333,7 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
       indexCode: ExprCode,
       indexVar: NamedLambdaVariable,
       index: String): String = {
-    val indexAtomic = ctx.addReferenceObj(indexVar.name, indexVar.value)
+    val indexAtomic = ctx.addReferenceObj("lambdaIndex", indexVar.value)
     s"""
       ${indexCode.value} = $index;
       ${assignAtomic(indexAtomic, indexCode.value)}
@@ -1325,10 +1325,8 @@ case class ArrayAggregate(
         val finishCode = finishForCodegen.genCode(ctx)
 
         val elementAssignment = assignArrayElement(ctx, arg, elementCode, elementVar, i)
-        val mergeAtomic = ctx.addReferenceObj(accForMergeVar.name,
-          accForMergeVar.value)
-        val finishAtomic = ctx.addReferenceObj(accForFinishVar.name,
-          accForFinishVar.value)
+        val mergeAtomic = ctx.addReferenceObj("lambdaAccForMerge", accForMergeVar.value)
+        val finishAtomic = ctx.addReferenceObj("lambdaAccForFinish", accForFinishVar.value)
 
         val mergeJavaType = CodeGenerator.javaType(accForMergeVar.dataType)
         val finishJavaType = CodeGenerator.javaType(accForFinishVar.dataType)

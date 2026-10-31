@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback}
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -1011,6 +1011,25 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
       "freshCopyIfContainsStatefulExpression should return a new instance for NamedLambdaVariable")
     assert(copy.asInstanceOf[NamedLambdaVariable].value ne lv.value,
       "fresh copy should have an independent AtomicReference value")
+  }
+
+  test("SPARK-60760: The generated code does not hold the names of lambda variables") {
+    val name = "lambdaName*/b"
+    def v(): NamedLambdaVariable = NamedLambdaVariable(name, IntegerType, nullable = false)
+    val array = Literal.create(Seq(1, 2), ArrayType(IntegerType, containsNull = false))
+    val (e1, i1, e2, i2, e3, e4, e5, acc1, acc2) = (v(), v(), v(), v(), v(), v(), v(), v(), v())
+    Seq[(Expression, Any)](
+      ArrayTransform(array, LambdaFunction(e1 + i1, Seq(e1, i1))) -> Seq(1, 3),
+      ArrayFilter(array, LambdaFunction(e2 > i2, Seq(e2, i2))) -> Seq(1, 2),
+      ArrayExists(array, LambdaFunction(e3 > 1, Seq(e3))) -> true,
+      ArrayForAll(array, LambdaFunction(e4 > 0, Seq(e4))) -> true,
+      ArrayAggregate(array, Literal(0), LambdaFunction(acc1 + e5, Seq(acc1, e5)),
+        LambdaFunction(acc2, Seq(acc2))) -> 3
+    ).foreach { case (expr, expected) =>
+      checkEvaluation(expr, expected)
+      val code = expr.genCode(new CodegenContext).code.toString
+      assert(!code.contains("lambdaName"))
+    }
   }
 }
 

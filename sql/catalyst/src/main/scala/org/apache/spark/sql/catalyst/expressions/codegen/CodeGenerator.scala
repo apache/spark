@@ -140,6 +140,9 @@ class CodegenContext extends Logging {
    *
    * This does not to store the object into field but refer it from the references field at the
    * time of use because number of fields in class is limited so we should reduce it.
+   *
+   * `objName` labels the reference in a comment of the generated source, so it must be a
+   * constant, never text that comes from a query.
    */
   def addReferenceObj(objName: String, obj: Any, className: String = null): String = {
     val idx = references.length

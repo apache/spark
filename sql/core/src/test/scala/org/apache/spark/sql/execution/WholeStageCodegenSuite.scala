@@ -1658,4 +1658,36 @@ class WholeStageCodegenSuite extends SharedSparkSession
       checkAnswer(df, expected)
     }
   }
+
+  test("SPARK-60760: Lambda variable names are not in the generated code") {
+    val name = "lambdaName*/b"
+    withTempView("t") {
+      spark.range(3).selectExpr("array(id, id + 1) AS a").createOrReplaceTempView("t")
+      Seq(
+        s"transform(a, (e, `$name`) -> e + `$name`)" ->
+          Seq(Row(Seq(0, 2)), Row(Seq(1, 3)), Row(Seq(2, 4))),
+        s"filter(a, `$name` -> `$name` > 0)" ->
+          Seq(Row(Seq(1)), Row(Seq(1, 2)), Row(Seq(2, 3))),
+        s"aggregate(a, 0L, (`$name`, e) -> `$name` + e, acc -> acc)" ->
+          Seq(Row(1), Row(3), Row(5)),
+        s"aggregate(a, 0L, (acc, e) -> acc + e, `$name` -> `$name`)" ->
+          Seq(Row(1), Row(3), Row(5))
+      ).foreach { case (expr, expected) =>
+        val df = sql(s"SELECT $expr AS r FROM t")
+        genCode(df).foreach(code => assert(!code.body.contains("lambdaName")))
+        checkAnswer(df, expected)
+      }
+    }
+  }
+
+  test("SPARK-60760: A new lambda variable name does not compile a generated class again") {
+    withTempView("t") {
+      spark.range(3).selectExpr("array(id, id + 1) AS a").createOrReplaceTempView("t")
+      val query = () => spark.table("t").select(transform($"a", x => x + 98765))
+      query().collect()
+      val compiles = CodegenMetrics.METRIC_COMPILATION_TIME.getCount
+      query().collect()
+      assert(CodegenMetrics.METRIC_COMPILATION_TIME.getCount == compiles)
+    }
+  }
 }
