@@ -1422,15 +1422,33 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 2)
   }
 
-  test("Parallel allocation respects the maximum executor pod ID") {
-    startParallelAllocator(conf.clone.set(KUBERNETES_ALLOCATION_MAXIMUM, 2))
-    mockPodCreation(identity)
-    val error = intercept[SparkException] {
-      podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 3))
+  Seq(2, 7).foreach { maximum =>
+    test(s"Parallel allocation submits valid pods before reporting the ID limit: $maximum") {
+      startParallelAllocator(conf.clone.set(KUBERNETES_ALLOCATION_MAXIMUM, maximum))
+      mockPodCreation(identity)
+      podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 0))
+      val request = PrivateMethod[Unit](Symbol("requestNewExecutors"))
+      if (maximum > podAllocationSize) {
+        podsAllocatorUnderTest.invokePrivate(request(podAllocationSize, TEST_SPARK_APP_ID,
+          defaultProfile.id, Set.empty[String]))
+      }
+      val error = intercept[SparkException] {
+        podsAllocatorUnderTest.invokePrivate(request(podAllocationSize, TEST_SPARK_APP_ID,
+          defaultProfile.id, Set.empty[String]))
+      }
+      assert(error.getMessage.contains(s"Exceed the pod creation limit: $maximum"))
+      verify(podResource, times(maximum - 1)).create()
+      val created = PrivateMethod[mutable.LinkedHashMap[Long, (Int, Long)]](
+        Symbol("newlyCreatedExecutors"))()
+      assert(podsAllocatorUnderTest.invokePrivate(created).keySet ==
+        (1L until maximum.toLong).toSet)
+      intercept[SparkException] {
+        podsAllocatorUnderTest.invokePrivate(request(1, TEST_SPARK_APP_ID,
+          defaultProfile.id, Set.empty[String]))
+      }
+      verify(podResource, times(maximum - 1)).create()
+      verify(lifecycleManager, never()).registerExecutorFailure()
     }
-    assert(error.getMessage.contains("Exceed the pod creation limit: 2"))
-    verify(podResource, never()).create()
-    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 0)
   }
 
   test("Parallel allocation does not submit a partially built batch") {

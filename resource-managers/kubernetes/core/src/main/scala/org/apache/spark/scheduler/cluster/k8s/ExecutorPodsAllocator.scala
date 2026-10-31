@@ -678,10 +678,14 @@ class ExecutorPodsAllocator(
     val podSpecs = mutable.ArrayBuffer.empty[(Long, Pod, Seq[HasMetadata])]
     var reservedPVCs = PVC_COUNTER.get().toLong
     var canAllocate = true
+    var allocationLimitReached = false
     // Build the complete batch before submitting it so a feature-step failure cannot leave
     // already-submitted pods untracked. Reserve PVC capacity without counting it as created.
     while (podSpecs.size < numExecutorsToAllocate && canAllocate && !stopped) {
       if (reusablePVCs.isEmpty && podAllocOnPVC && maxPVCs <= reservedPVCs) {
+        canAllocate = false
+      } else if (EXECUTOR_ID_COUNTER.get().toLong + 1 >= podAllocationMaximum) {
+        allocationLimitReached = true
         canAllocate = false
       } else {
         val spec = buildExecutorPod(applicationId, resourceProfileId, reusablePVCs)
@@ -691,7 +695,7 @@ class ExecutorPodsAllocator(
         reservedPVCs += spec._3.count(_.getKind == "PersistentVolumeClaim")
       }
     }
-    if (!canAllocate) {
+    if (!canAllocate && !allocationLimitReached) {
       logInfo(log"Wait to reuse PVCs: ${MDC(LogKeys.COUNT, PVC_COUNTER.get())} created, " +
         log"${MDC(LogKeys.TOTAL, reservedPVCs)} including this batch.")
     }
@@ -732,6 +736,10 @@ class ExecutorPodsAllocator(
       log"succeeded=${MDC(LogKeys.TOTAL, succeeded)}, " +
       log"podBuildTotalMs=${MDC(LogKeys.DURATION, podBuildTotalMs)}, " +
       log"batchTotalMs=${MDC(LogKeys.TOTAL_TIME, clock.getTimeMillis() - batchStartTime)}")
+    if (allocationLimitReached && !stopped) {
+      EXECUTOR_ID_COUNTER.incrementAndGet()
+      throw new SparkException(s"Exceed the pod creation limit: $podAllocationMaximum")
+    }
   }
 
   private def awaitPodCreation(future: Future[Option[Long]]): Option[Long] = {
