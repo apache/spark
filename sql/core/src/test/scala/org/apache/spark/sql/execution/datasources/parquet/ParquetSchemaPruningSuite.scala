@@ -164,6 +164,33 @@ abstract class ParquetSchemaPruningSuite extends SchemaPruningSuite with Adaptiv
     }
   }
 
+  test("dynamic lookups preserve complex column defaults") {
+    withTempPath { dir =>
+      withTable("t") {
+        val path = dir.getCanonicalPath
+        sql("CREATE TABLE t (idx INT, k STRING, side STRUCT<a: INT, b: INT> DEFAULT NULL) " +
+          s"USING parquet LOCATION '$path'")
+        sql("INSERT INTO t VALUES (0, 'k', named_struct('a', 5, 'b', 6))")
+        sql(
+          """ALTER TABLE t ADD COLUMNS (
+            |  arr ARRAY<STRUCT<a: INT, b: INT>> DEFAULT array(named_struct('a', 11, 'b', 22)),
+            |  m MAP<STRING, STRUCT<a: INT, b: INT>>
+            |    DEFAULT map('k', named_struct('a', 33, 'b', 44))
+            |)""".stripMargin)
+
+        val data = spark.read.schema(spark.table("t").schema).parquet(path)
+        Seq("true", "false").foreach { vectorized =>
+          withSQLConf(vectorizedReaderEnabledKey -> vectorized) {
+            val query = data.selectExpr("arr[idx].b", "m[k].b", "side.b")
+            checkAnswer(query, Row(22, 44, 6))
+            checkScanSchemata(query, "struct<idx:int,k:string,side:struct<b:int>," +
+              "arr:array<struct<a:int,b:int>>,m:map<string,struct<a:int,b:int>>>")
+          }
+        }
+      }
+    }
+  }
+
   test("dynamic array selection preserves bounds in legacy missing-field mode") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
