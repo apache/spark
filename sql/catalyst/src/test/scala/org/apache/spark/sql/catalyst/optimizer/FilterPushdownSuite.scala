@@ -70,6 +70,10 @@ class FilterPushdownSuite extends PlanTest {
       && (("x.a".attr > 3) && ("y.a".attr > 13) || ("x.a".attr > 1) && ("y.a".attr > 11)))).analyze
   }
 
+  // Stands in for an expensive expression: a regex whose pattern is not a constant is compiled
+  // for every row.
+  private def expensiveRLike(tag: String): Expression = $"e".rlike(Concat(Seq($"e", Literal(tag))))
+
   // This test already passes.
   test("eliminate subqueries") {
     val originalQuery =
@@ -173,15 +177,15 @@ class FilterPushdownSuite extends PlanTest {
   test("SPARK-47672: Do double evaluation when configured") {
     withSQLConf(SQLConf.AVOID_DOUBLE_FILTER_EVAL.key -> "false") {
       val originalQuery = testStringRelation
-        .select($"a", $"e".rlike("magic") as "f", $"e".rlike("notmagic") as "j", $"b")
+        .select($"a", expensiveRLike("magic") as "f", expensiveRLike("notmagic") as "j", $"b")
         .where($"a" > 5 && $"f")
         .analyze
 
       val optimized = Optimize.execute(originalQuery)
 
       val correctAnswer = testStringRelation
-        .where($"a" > 5 && $"e".rlike("magic"))
-        .select($"a", $"e".rlike("magic") as "f", $"e".rlike("notmagic") as "j", $"b")
+        .where($"a" > 5 && expensiveRLike("magic"))
+        .select($"a", expensiveRLike("magic") as "f", expensiveRLike("notmagic") as "j", $"b")
         .analyze
 
       comparePlans(optimized, correctAnswer)
@@ -190,7 +194,7 @@ class FilterPushdownSuite extends PlanTest {
 
   test("SPARK-47672: Make sure that we handle the case where everything is expensive") {
     val originalQuery = testStringRelation
-      .select($"e".rlike("magic") as "f")
+      .select(expensiveRLike("magic") as "f")
       .where($"f")
       .analyze
 
@@ -205,7 +209,7 @@ class FilterPushdownSuite extends PlanTest {
   // Case 1: Multiple filters that don't reference any projection aliases - all should be pushed
   test("SPARK-47672: Case 1 - multiple filters not referencing projection aliases") {
     val originalQuery = testStringRelation
-      .select($"a" as "c", $"e".rlike("magic") as "f", $"b" as "d", $"a", $"b")
+      .select($"a" as "c", expensiveRLike("magic") as "f", $"b" as "d", $"a", $"b")
       .where($"a" > 5 && $"b" < 10)
       .analyze
 
@@ -215,7 +219,7 @@ class FilterPushdownSuite extends PlanTest {
     // simple aliases (c->a, d->b) which are inexpensive
     val correctAnswer = testStringRelation
       .where($"a" > 5 && $"b" < 10)
-      .select($"a" as "c", $"e".rlike("magic") as "f", $"b" as "d", $"a", $"b")
+      .select($"a" as "c", expensiveRLike("magic") as "f", $"b" as "d", $"a", $"b")
       .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -224,7 +228,7 @@ class FilterPushdownSuite extends PlanTest {
   // Case 2: Multiple filters with inexpensive references - all should be pushed
   test("SPARK-47672: Case 2 - multiple filters with inexpensive alias references") {
     val originalQuery = testStringRelation
-      .select($"a" + $"b" as "sum", $"a" - $"b" as "diff", $"e".rlike("magic") as "f")
+      .select($"a" + $"b" as "sum", $"a" - $"b" as "diff", expensiveRLike("magic") as "f")
       .where($"sum" > 10 && $"diff" < 5)
       .analyze
 
@@ -233,7 +237,7 @@ class FilterPushdownSuite extends PlanTest {
     // Both sum and diff are inexpensive (arithmetic), so both filters should be pushed
     val correctAnswer = testStringRelation
       .where($"a" + $"b" > 10 && $"a" - $"b" < 5)
-      .select($"a" + $"b" as "sum", $"a" - $"b" as "diff", $"e".rlike("magic") as "f")
+      .select($"a" + $"b" as "sum", $"a" - $"b" as "diff", expensiveRLike("magic") as "f")
       .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -242,7 +246,7 @@ class FilterPushdownSuite extends PlanTest {
   // Case 3: Filter references expensive to compute references.
   test("SPARK-47672: Avoid double evaluation with projections can't push past certain items") {
     val originalQuery = testStringRelation
-      .select($"a", $"e".rlike("magic") as "f")
+      .select($"a", expensiveRLike("magic") as "f")
       .where($"a" > 5 || $"f")
       .analyze
 
@@ -254,7 +258,7 @@ class FilterPushdownSuite extends PlanTest {
   // Combined case 1, 2, and 3 filter pushdown
   test("SPARK-47672: Case 1, 2, and 3 make sure we leave up and push down correctly.") {
     val originalQuery = testStringRelation
-      .select($"a" + $"b" as "sum", $"a" - $"b" as "diff", $"e".rlike("magic") as "f")
+      .select($"a" + $"b" as "sum", $"a" - $"b" as "diff", expensiveRLike("magic") as "f")
       .where($"sum" > 10 && $"diff" < 5 && $"f")
       .analyze
 
@@ -264,17 +268,67 @@ class FilterPushdownSuite extends PlanTest {
     // rlike magic is expensive so not pushed.
     val correctAnswer = testStringRelation
       .where($"a" + $"b" > 10 && $"a" - $"b" < 5)
-      .select($"a" + $"b" as "sum", $"a" - $"b" as "diff", $"e".rlike("magic") as "f")
+      .select($"a" + $"b" as "sum", $"a" - $"b" as "diff", expensiveRLike("magic") as "f")
       .where($"f")
       .analyze
 
     comparePlans(optimized, correctAnswer)
   }
 
+  test("SPARK-60632: Push a filter on a LIKE/RLIKE alias with a cheap constant pattern") {
+    Seq(
+      $"e".rlike("^1"),
+      $"e".rlike("magic"),
+      $"e".rlike("^a.*b"),
+      $"e".like("1_"),
+      $"e".like("%magic%"),
+      // ILIKE, as the optimizer sees it after `ReplaceExpressions`.
+      Like(Lower($"e"), Lower(Literal("%Magic%")), '\\')).foreach { pred =>
+      val originalQuery = testStringRelation
+        .select($"a", pred as "f")
+        .where($"f")
+        .analyze
+
+      val correctAnswer = testStringRelation
+        .where(pred)
+        .select($"a", pred as "f")
+        .analyze
+
+      comparePlans(Optimize.execute(originalQuery), correctAnswer)
+    }
+  }
+
+  test("SPARK-60632: Do not push a filter on a LIKE/RLIKE alias with a backtracking pattern") {
+    Seq($"e".rlike("(a+)+b"), $"e".rlike(".*a.*b"), $"e".like("%a%b%c")).foreach { pred =>
+      val originalQuery = testStringRelation
+        .select($"a", pred as "f")
+        .where($"f")
+        .analyze
+
+      comparePlans(Optimize.execute(originalQuery), originalQuery)
+    }
+  }
+
+  test("SPARK-60632: Do not push a filter on a LIKE/RLIKE alias with version 0 of the estimate") {
+    Seq($"e".rlike("^1"), $"e".like("1_"), !$"e".rlike("^1")).foreach { pred =>
+      val originalQuery = testStringRelation
+        .select($"a", pred as "f")
+        .where($"f")
+        .analyze
+
+      // A parent expression caches whether its child is expensive, so optimize the same plan
+      // with version 1 first.
+      Optimize.execute(originalQuery)
+      withSQLConf(SQLConf.REGEX_PATTERN_COST_ESTIMATE_VERSION.key -> "0") {
+        comparePlans(Optimize.execute(originalQuery), originalQuery)
+      }
+    }
+  }
+
   test("SPARK-60602: a cheap throwable condition is not pushed ahead of an expensive one") {
     val raiseError = IsNull(RaiseError(Literal("boom")))
     val originalQuery = testStringRelation
-      .select($"a", $"e".rlike("magic") as "f", $"b")
+      .select($"a", expensiveRLike("magic") as "f", $"b")
       .where($"f" && ($"a" > 5 || raiseError) && $"b" > 1)
       .analyze
 
@@ -283,7 +337,7 @@ class FilterPushdownSuite extends PlanTest {
     // Only the non-throwable cheap condition moves below the expensive one.
     val correctAnswer = testStringRelation
       .where($"b" > 1)
-      .select($"a", $"e".rlike("magic") as "f", $"b")
+      .select($"a", expensiveRLike("magic") as "f", $"b")
       .where($"f" && ($"a" > 5 || raiseError))
       .analyze
 
@@ -291,13 +345,13 @@ class FilterPushdownSuite extends PlanTest {
 
     // Written ahead of every expensive condition, it is pushed as usual.
     val throwableFirst = testStringRelation
-      .select($"a", $"e".rlike("magic") as "f", $"b")
+      .select($"a", expensiveRLike("magic") as "f", $"b")
       .where(($"a" > 5 || raiseError) && $"f")
       .analyze
 
     val throwableFirstAnswer = testStringRelation
       .where($"a" > 5 || raiseError)
-      .select($"a", $"e".rlike("magic") as "f", $"b")
+      .select($"a", expensiveRLike("magic") as "f", $"b")
       .where($"f")
       .analyze
 
@@ -308,7 +362,7 @@ class FilterPushdownSuite extends PlanTest {
     "expensive one") {
     val raiseError = IsNull(RaiseError(Literal("boom")))
     val originalQuery = testStringRelation
-      .select($"a", $"e".rlike("magic") as "f", If($"a" > 5, Literal(true), raiseError) as "t",
+      .select($"a", expensiveRLike("magic") as "f", If($"a" > 5, Literal(true), raiseError) as "t",
         $"b")
       .where($"f" && $"t" && $"b" > 1)
       .analyze
@@ -318,7 +372,7 @@ class FilterPushdownSuite extends PlanTest {
     // `t` is cheap, but reading it evaluates the throwable expression behind it.
     val correctAnswer = testStringRelation
       .where($"b" > 1)
-      .select($"a", $"e".rlike("magic") as "f", If($"a" > 5, Literal(true), raiseError) as "t",
+      .select($"a", expensiveRLike("magic") as "f", If($"a" > 5, Literal(true), raiseError) as "t",
         $"b")
       .where($"f" && $"t")
       .analyze

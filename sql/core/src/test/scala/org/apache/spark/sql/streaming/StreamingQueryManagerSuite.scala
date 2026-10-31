@@ -24,13 +24,17 @@ import scala.concurrent.Future
 import scala.util.Random
 import scala.util.control.NonFatal
 
+import org.apache.hadoop.fs.Path
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{Dataset, Encoders}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, Project}
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2ScanRelation
+import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, OffsetSeq, OffsetSeqLog,
+  OffsetSeqMetadata, OffsetSeqMetadataV2}
 import org.apache.spark.sql.execution.streaming.runtime._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.BlockingSource
@@ -45,6 +49,29 @@ class StreamingQueryManagerSuite extends StreamTest {
 
   override val streamingTimeout = 20.seconds
 
+  private def rewriteOffsetLogConf(
+      checkpoint: File)(f: Map[String, String] => Map[String, String]): Unit = {
+    val offsetsPath = new File(checkpoint, "offsets").getCanonicalPath
+    val offsetLog = new OffsetSeqLog(spark, offsetsPath)
+    val (batchId, offsetSeq) = offsetLog.getLatest().getOrElse {
+      fail("Missing offset log entry")
+    }
+    val updatedMetadata = offsetSeq.metadataOpt.map {
+      case m: OffsetSeqMetadata => m.copy(conf = f(m.conf))
+      case m: OffsetSeqMetadataV2 => m.copy(conf = f(m.conf))
+    }
+    val updatedOffsetSeq = offsetSeq match {
+      case o: OffsetSeq =>
+        o.copy(metadataOpt = updatedMetadata.map(_.asInstanceOf[OffsetSeqMetadata]))
+      case o: OffsetMap =>
+        o.copy(metadata = updatedMetadata.map(_.asInstanceOf[OffsetSeqMetadataV2]).get)
+    }
+    val hadoopConf = spark.sessionState.newHadoopConf()
+    val batchFile = new Path(offsetsPath, batchId.toString)
+    assert(batchFile.getFileSystem(hadoopConf).delete(batchFile, false))
+    assert(offsetLog.add(batchId, updatedOffsetSeq))
+  }
+
   override def beforeEach(): Unit = {
     super.beforeEach()
     assert(spark.streams.active.isEmpty)
@@ -57,6 +84,37 @@ class StreamingQueryManagerSuite extends StreamTest {
       spark.streams.resetTerminated()
     } finally {
       super.afterEach()
+    }
+  }
+
+  test("SPARK-60632: regex pattern cost estimate version 0 for old checkpoints") {
+    withTempDir { checkpointDir =>
+      val input = MemoryStream[String]
+      // `NOT` caches whether its child is expensive, and both queries share this plan.
+      val result = input.toDF().select($"value", !$"value".rlike("^1") as "p").where($"p")
+
+      def run(data: String): Boolean = {
+        val query = result.writeStream
+          .format("noop")
+          .option("checkpointLocation", checkpointDir.getCanonicalPath)
+          .start()
+        try {
+          input.addData(data)
+          query.processAllAvailable()
+          // Whether the filter stays above the projection.
+          query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.optimizedPlan
+            .exists {
+              case Filter(_, _: Project) => true
+              case _ => false
+            }
+        } finally {
+          query.stop()
+        }
+      }
+
+      assert(!run("a"))
+      rewriteOffsetLogConf(checkpointDir)(_ - SQLConf.REGEX_PATTERN_COST_ESTIMATE_VERSION.key)
+      assert(run("b"))
     }
   }
 
