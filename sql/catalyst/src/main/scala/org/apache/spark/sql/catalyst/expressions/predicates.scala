@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import scala.collection.immutable
 import scala.collection.immutable.TreeSet
 
-import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedPlanId}
@@ -704,6 +704,28 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
       TreeSet.empty(TypeUtils.getInterpretedOrdering(child.dataType)) ++ (hset - null)
   }
 
+  // A sorted primitive array (long[] or int[]) used only by genCodeWithPrimitiveSet, built once on
+  // the driver from hset. The generated code probes it with a boxing-free, allocation-free
+  // java.util.Arrays.binarySearch. null is skipped (hasNull tracks it separately) and Byte/Short
+  // are widened to Int to match the probe. Returned as AnyRef; addReferenceObj embeds the backing
+  // Java long[]/int[] and the probe casts to it.
+  @transient private[this] lazy val specializedSortedArray: AnyRef = child.dataType match {
+    case LongType | TimestampType | TimestampNTZType =>
+      val arr = hset.iterator.filter(_ != null).map(_.asInstanceOf[Long]).toArray
+      java.util.Arrays.sort(arr)
+      arr
+    case IntegerType | DateType =>
+      val arr = hset.iterator.filter(_ != null).map(_.asInstanceOf[Int]).toArray
+      java.util.Arrays.sort(arr)
+      arr
+    case ByteType | ShortType =>
+      val arr = hset.iterator.filter(_ != null).map(_.asInstanceOf[Number].intValue).toArray
+      java.util.Arrays.sort(arr)
+      arr
+    case other =>
+      throw SparkException.internalError(s"InSet has no specialized array for data type $other")
+  }
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     if (hset.isEmpty && !legacyNullInEmptyBehavior) {
       // IN (empty list) is always false under current behavior.
@@ -716,6 +738,8 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
       )
     } else if (canBeComputedUsingSwitch && hset.size <= SQLConf.get.optimizerInSetSwitchThreshold) {
       genCodeWithSwitch(ctx, ev)
+    } else if (SQLConf.get.optimizerInSetBinarySearchEnabled && specializedSetSpec.isDefined) {
+      genCodeWithPrimitiveSet(ctx, ev)
     } else {
       genCodeWithSet(ctx, ev)
     }
@@ -724,6 +748,19 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   private def canBeComputedUsingSwitch: Boolean = child.dataType match {
     case ByteType | ShortType | IntegerType | DateType => true
     case _ => false
+  }
+
+  // For integral/temporal types whose Catalyst internal representation is a primitive int or long,
+  // the membership check can probe a sorted primitive array (see specializedSortedArray) with a
+  // boxing-free java.util.Arrays.binarySearch instead of the boxed Set. Returns the backing Java
+  // array type and the value cast to apply in the generated probe, or None for types that keep the
+  // boxed Set path. Float/Double are intentionally excluded: their NaN and -0.0/+0.0 SQL equality
+  // semantics require handling the boxed path already provides. See the genCodeWithSet NaN branch.
+  private def specializedSetSpec: Option[(String, String)] = child.dataType match {
+    case LongType | TimestampType | TimestampNTZType => Some(("long[]", ""))
+    case IntegerType | DateType => Some(("int[]", ""))
+    case ByteType | ShortType => Some(("int[]", "(int) "))
+    case _ => None
   }
 
   private def genCodeWithSet(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -757,6 +794,29 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
            |$setIsNull
          """.stripMargin
       }
+    })
+  }
+
+  // Boxing-free variant of genCodeWithSet for the integral/temporal types reported by
+  // specializedSetSpec. The subject stays a primitive and we probe a sorted primitive array with
+  // java.util.Arrays.binarySearch (a primitive overload: no autoboxing, no allocation), instead of
+  // the boxed Set[Any].contains(Object). There is no NaN branch: the eligible types have no NaN.
+  // The 3VL structure matches genCodeWithSet.
+  private def genCodeWithPrimitiveSet(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val (arrayType, valueCast) = specializedSetSpec.get
+    nullSafeCodeGen(ctx, ev, c => {
+      val arrTerm = ctx.addReferenceObj("inSetArray", specializedSortedArray, arrayType)
+
+      val setIsNull = if (hasNull) {
+        s"${ev.isNull} = !${ev.value};"
+      } else {
+        ""
+      }
+
+      s"""
+         |${ev.value} = java.util.Arrays.binarySearch($arrTerm, $valueCast$c) >= 0;
+         |$setIsNull
+       """.stripMargin
     })
   }
 
