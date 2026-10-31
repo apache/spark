@@ -106,10 +106,45 @@ class ParquetReadSupport(
     new ParquetRecordMaterializer(
       parquetRequestedSchema,
       ParquetReadSupport.expandUDT(catalystRequestedSchema),
-      new ParquetToSparkSchemaConverter(conf),
+      new ParquetReadSchemaConverter(conf, parquetRequestedSchema, fileSchema),
       convertTz,
       datetimeRebaseSpec,
       int96RebaseSpec)
+  }
+}
+
+/**
+ * Interpret LISTs using the file schema. Clipping a repeated group to one field can make a
+ * two-level LIST indistinguishable from a three-level LIST in the requested schema.
+ */
+private[parquet] class ParquetReadSchemaConverter(
+    conf: Configuration,
+    requestedSchema: MessageType,
+    fileSchema: MessageType) extends ParquetToSparkSchemaConverter(conf) {
+
+  private lazy val fileRepeatedTypes = {
+    // Equal requested types at different paths can have different layouts in the file.
+    val types = new util.IdentityHashMap[Type, Type]()
+    def visit(requested: GroupType, file: GroupType): Unit = {
+      if (file.getLogicalTypeAnnotation.isInstanceOf[ListLogicalTypeAnnotation] &&
+          requested.getFieldCount == 1 && file.getFieldCount == 1) {
+        types.put(requested.getType(0), file.getType(0))
+      }
+      requested.getFields.asScala.foreach {
+        case group: GroupType if file.containsField(group.getName) =>
+          file.getType(group.getName) match {
+            case fileGroup: GroupType => visit(group, fileGroup)
+            case _ =>
+          }
+        case _ =>
+      }
+    }
+    visit(requestedSchema, fileSchema)
+    types
+  }
+
+  override private[parquet] def isElementType(repeatedType: Type, parentName: String): Boolean = {
+    super.isElementType(fileRepeatedTypes.getOrDefault(repeatedType, repeatedType), parentName)
   }
 }
 
