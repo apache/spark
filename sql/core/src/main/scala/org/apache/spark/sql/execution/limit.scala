@@ -28,7 +28,6 @@ import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.metric.{SQLShuffleReadMetricsReporter, SQLShuffleWriteMetricsReporter}
 import org.apache.spark.sql.execution.python.HybridRowQueue
-import org.apache.spark.util.collection.Utils
 
 /**
  * The operator takes limited number of elements from its child operator.
@@ -324,7 +323,9 @@ case class TakeOrderedAndProjectExec(
     val limited = if (orderingSatisfies) {
       child.execute().mapPartitionsInternal(_.map(_.copy()).take(limit)).takeOrdered(limit)(ord)
     } else {
-      child.execute().mapPartitionsInternal(_.map(_.copy())).takeOrdered(limit)(ord)
+      child.execute().mapPartitionsInternal { iter =>
+        TakeOrderedAndProjectExec.takeOrderedByCopyOnRetain(iter, limit, ord)
+      }.takeOrdered(limit)(ord)
     }
     val data = if (offset > 0) limited.drop(offset) else limited
     if (projectList != child.output) {
@@ -358,7 +359,7 @@ case class TakeOrderedAndProjectExec(
           childRDD.mapPartitionsInternal(_.map(_.copy()).take(limit))
         } else {
           childRDD.mapPartitionsInternal { iter =>
-            Utils.takeOrdered(iter.map(_.copy()), limit)(ord)
+            TakeOrderedAndProjectExec.takeOrderedByCopyOnRetain(iter, limit, ord)
           }
         }
 
@@ -372,7 +373,7 @@ case class TakeOrderedAndProjectExec(
           readMetrics)
       }
       singlePartitionRDD.mapPartitionsWithIndexInternal { (idx, iter) =>
-        val limited = Utils.takeOrdered(iter.map(_.copy()), limit)(ord)
+        val limited = TakeOrderedAndProjectExec.takeOrderedByCopyOnRetain(iter, limit, ord)
         val topK = if (offset > 0) limited.drop(offset) else limited
         if (projectList != child.output) {
           val proj = UnsafeProjection.create(projectList, child.output)
@@ -408,4 +409,43 @@ case class TakeOrderedAndProjectExec(
 
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
     copy(child = newChild)
+}
+
+object TakeOrderedAndProjectExec {
+  /**
+   * Returns the `num` smallest rows of `input` by `ord`, in ascending order. Unlike
+   * `Utils.takeOrdered(input.map(_.copy()), num)`, this copies a row only when it is actually
+   * retained in the bounded top-K, rather than copying every input row up front. This matters
+   * because `input` typically yields a single reused `UnsafeRow`, so only the retained rows need
+   * a detached copy.
+   */
+  private[execution] def takeOrderedByCopyOnRetain(
+      input: Iterator[InternalRow],
+      num: Int,
+      ord: Ordering[InternalRow]): Iterator[InternalRow] = {
+    if (num <= 0) {
+      return Iterator.empty
+    }
+    // Max-heap by `ord` (via ord.reverse): the head is the largest of the retained rows, i.e. the
+    // eviction threshold. A row is copied only when it enters the heap.
+    val heap =
+      new java.util.PriorityQueue[InternalRow](math.max(1, math.min(num, 1024)), ord.reverse)
+    while (input.hasNext) {
+      val row = input.next()
+      if (heap.size < num) {
+        heap.add(row.copy())
+      } else if (ord.compare(row, heap.peek()) < 0) {
+        heap.poll()
+        heap.add(row.copy())
+      }
+    }
+    // Drain into ascending order: poll yields the largest remaining row first under ord.reverse.
+    val result = new Array[InternalRow](heap.size)
+    var i = result.length
+    while (i > 0) {
+      i -= 1
+      result(i) = heap.poll()
+    }
+    result.iterator
+  }
 }
