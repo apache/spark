@@ -21,6 +21,7 @@ import java.io.ByteArrayOutputStream
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.channels.Channels
 
+import scala.jdk.CollectionConverters._
 import scala.util.Random
 
 import org.apache.arrow.compression.ZstdCompressionCodec
@@ -256,6 +257,44 @@ class ArrowCompressionUtilsSuite extends SparkFunSuite {
         writer.reset()
       }
     } {
+      root.close()
+      allocator.close()
+    }
+  }
+
+  test("SPARK-60776: unloader releases the buffers of a batch it fails to unload") {
+    var calls = 0
+    val codec = new BoundedZstdCompressionCodec(3) {
+      override protected def doCompress(allocator: BufferAllocator, input: ArrowBuf): ArrowBuf = {
+        calls += 1
+        if (calls == 4) throw new IllegalStateException("compression failed")
+        super.doCompress(allocator, input)
+      }
+    }
+    val arrowSchema = ArrowUtils.toArrowSchema(
+      StructType(Seq(StructField("c", LongType))), "UTC", true, false)
+    val allocator =
+      ArrowUtils.rootAllocator.newChildAllocator(this.getClass.getSimpleName, 0, Long.MaxValue)
+    val root = VectorSchemaRoot.create(arrowSchema, allocator)
+    val writer = ArrowWriter.create(root)
+    val unloader = ArrowCompressionUtils.createVectorUnloader(root, codec)
+    Utils.tryWithSafeFinally {
+      writer.write(InternalRow(1L))
+      writer.finish()
+      // A batch compresses a validity buffer and a data buffer, so the first batch succeeds and the
+      // second fails holding its compressed validity buffer and its retained data buffer.
+      val batch = unloader.getRecordBatch()
+      Utils.tryWithSafeFinally {
+        val e = intercept[IllegalStateException](unloader.getRecordBatch())
+        assert(e.getMessage === "compression failed")
+        assert(batch.getBuffers.asScala.forall(_.refCnt() == 1))
+      } {
+        batch.close()
+      }
+    } {
+      // Closing the allocator fails if a buffer is left behind. If closing the root fails after an
+      // Arrow upgrade because a reference count went negative, Arrow releases these buffers itself
+      // and ReleasingVectorUnloader must be removed.
       root.close()
       allocator.close()
     }
