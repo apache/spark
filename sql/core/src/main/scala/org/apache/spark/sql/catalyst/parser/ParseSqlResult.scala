@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 
 import scala.collection.mutable
-import scala.util.control.NonFatal
 
 import org.json4s._
 import org.json4s.jackson.JsonMethods.{compact, parse => parseJson, render}
@@ -28,26 +27,35 @@ import org.json4s.jackson.JsonMethods.{compact, parse => parseJson, render}
 import org.apache.spark.{ErrorMessageFormat, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SqlScriptingContextManager, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, SQLQueryContext}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.{SparkSession => ClassicSparkSession}
-import org.apache.spark.sql.connector.catalog.{CatalogManager, PathElement}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.execution.{CommandExecutionMode, SparkSqlParser}
 import org.apache.spark.sql.execution.command.{
   CreateDataSourceTableAsSelectCommand,
+  CreateDataSourceTableCommand,
+  CreateTableCommand,
   CreateViewCommand,
   DataWritingCommand,
   DescribeQueryCommand,
   DescribeRelationJsonCommand,
+  DropTableCommand,
+  DropTempViewCommand,
   ExplainCommand,
   LeafRunnableCommand
 }
-import org.apache.spark.sql.execution.datasources.{CreateTempViewUsing, InsertIntoDataSourceCommand}
+import org.apache.spark.sql.execution.datasources.{
+  CreateTempViewUsing, HadoopFsRelation, InsertIntoDataSourceCommand, LogicalRelation
+}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.StaticSQLConf
 
 /**
  * Mode for [[ParseSqlResult.fromSql]]. `PARSE` is unresolved. `ANALYZE` types
@@ -65,27 +73,11 @@ object ParseSqlMode {
 }
 
 /**
- * Optional ANALYZE-mode catalog context for [[ParseSqlResult.fromSql]].
- * `None` on a field means inherit the invoker session value.
- */
-case class ParseSqlAnalyzeContext(
-    catalog: Option[String] = None,
-    schema: Option[String] = None,
-    path: Option[String] = None) {
-  def isEmpty: Boolean = catalog.isEmpty && schema.isEmpty && path.isEmpty
-}
-
-object ParseSqlAnalyzeContext {
-  val empty: ParseSqlAnalyzeContext = ParseSqlAnalyzeContext()
-}
-
-/**
  * Parses a SQL batch string and returns a compact JSON array describing its
  * statements. `PARSE` mode is unresolved (no catalog resolution). `ANALYZE`
  * mode also types selected columns and fully qualifies relation / routine
  * names using the active session catalog. ANALYZE inherits the invoker's
- * current catalog, schema, and SQL path unless [[ParseSqlAnalyzeContext]]
- * overrides them.
+ * current catalog, schema, and SQL path and does not change them.
  *
  * Uses a stock [[SparkSqlParser]] (ThreadLocal) so statement coverage matches
  * the default production parser (EXPLAIN / SET / ADD JAR / temp views / etc.).
@@ -113,7 +105,7 @@ object ParseSqlAnalyzeContext {
  * their own text; `start` is relative to the original batch. An empty or
  * closed-comment-only batch produces an empty array. PARSE converts
  * [[ParseException]] / [[SqlScriptingException]] to JSON.
- * ANALYZE also reports non-internal analysis and context errors as JSON;
+ * ANALYZE also reports non-internal analysis errors as JSON;
  * unexpected / internal failures propagate so the function fails.
  */
 object ParseSqlResult {
@@ -124,13 +116,12 @@ object ParseSqlResult {
   /** Parse `sql` as a batch and render the JSON result array. */
   def fromSql(
       sql: String,
-      mode: String = ParseSqlMode.Parse,
-      context: ParseSqlAnalyzeContext = ParseSqlAnalyzeContext.empty): String = {
+      mode: String = ParseSqlMode.Parse): String = {
     val split = parser.get().splitStatementsWithPositions(sql)
     val statements = split.completeStatements ++ split.partialStatement
     val spans = statementSpans(sql, statements)
     val json = if (mode == ParseSqlMode.Analyze) {
-      analyzeBatch(sql, statements, spans, context)
+      analyzeBatch(statements, spans)
     } else {
       JArray(statements.zip(spans).map { case (segment, span) =>
         parsePlanOrError(segment, span) match {
@@ -149,18 +140,13 @@ object ParseSqlResult {
   private case class ParseFailed(errorObj: JObject) extends ParsedStatement
 
   /**
-   * Parse every statement, then analyze each with optional context overrides.
-   * Statements are analyzed against the session as it is, without being
-   * executed, so one does not see the effect of an earlier one.
-   * Analysis / context failures stay JSON (`analyze_success` false).
-   * After a context override failure, references stay unqualified parse names
-   * rather than the invoker or the attempted context.
+   * Parse every statement, then analyze each against the invoker session.
+   * Statements are not executed, so one does not see the effect of an earlier
+   * one. Analysis failures stay JSON (`analyze_success` false) per statement.
    */
   private def analyzeBatch(
-      batch: String,
       statements: Seq[PositionedSqlStatement],
-      spans: Seq[StatementSpan],
-      context: ParseSqlAnalyzeContext): JArray = {
+      spans: Seq[StatementSpan]): JArray = {
     val parsed = statements.zip(spans).map { case (segment, span) =>
       parsePlanOrError(segment, span)
     }
@@ -170,23 +156,12 @@ object ParseSqlResult {
     // not lend it its locals, and CALL is not run.
     SqlScriptingContextManager.create(null).runWith {
       InvokeProcedures.withoutInvocation {
-        try {
-          withAnalyzeContext(session, context) {
-            JArray(parsed.zip(spans).map {
-              case (ParseFailed(errorObj), _) => errorObj
-              case (Parsed(_, plan), span) =>
-                val (analyzed, error) = analyze(session, plan)
-                successJson(plan, analyzed, error, Some(session), span)
-            }.toList)
-          }
-        } catch {
-          case e: SparkThrowable with Throwable if !isInternalError(e) =>
-            JArray(parsed.zip(spans).map {
-              case (ParseFailed(errorObj), _) => errorObj
-              case (Parsed(_, plan), span) =>
-                successJson(plan, None, Some(e), Some(session), span, qualify = false)
-            }.toList)
-        }
+        JArray(parsed.zip(spans).map {
+          case (ParseFailed(errorObj), _) => errorObj
+          case (Parsed(_, plan), span) =>
+            val (analyzed, error) = analyze(session, plan)
+            successJson(plan, analyzed, error, Some(session), span)
+        }.toList)
       }
     }
   }
@@ -256,117 +231,19 @@ object ParseSqlResult {
         (None, Some(QueryExecutionErrors.parseSqlAnalyzeUnsupportedScript()))
       case _ =>
         try {
+          val toAnalyze = plan match {
+            case s: SupervisingCommand =>
+              s.withTransformedSupervisedPlan { inner =>
+                session.sessionState.executePlan(inner, CommandExecutionMode.SKIP).analyzed
+              }
+            case other => other
+          }
           val analyzed =
-            session.sessionState.executePlan(plan, CommandExecutionMode.SKIP).analyzed
+            session.sessionState.executePlan(toAnalyze, CommandExecutionMode.SKIP).analyzed
           (Some(analyzed), None)
         } catch {
           case e: SparkThrowable with Throwable if !isInternalError(e) => (None, Some(e))
         }
-    }
-  }
-
-  /**
-   * Run `f` with optional catalog / schema / SQL path overrides, then restore
-   * the invoker session. `None` on a field keeps the current value.
-   * Restore writes back the stored catalog name, namespace and PATH flag
-   * without re-validating, and unsets PATH when it was unset.
-   */
-  private def withAnalyzeContext[T](
-      session: ClassicSparkSession,
-      context: ParseSqlAnalyzeContext)(f: => T): T = {
-    if (context.isEmpty) {
-      f
-    } else {
-      val mgr = session.sessionState.catalogManager
-      val conf = session.sessionState.conf
-      val prevCatalog = mgr.storedCurrentCatalogName
-      val prevNamespace = mgr.storedCurrentNamespace
-      val prevPath = mgr.storedSessionPathEntries
-      val pathEnabledWasSet = conf.contains(SQLConf.PATH_ENABLED.key)
-      val prevPathEnabled =
-        if (pathEnabledWasSet) Some(conf.getConf(SQLConf.PATH_ENABLED)) else None
-      try {
-        context.catalog.foreach { catalog =>
-          asContextError("current_catalog", catalog) {
-            if (catalog.trim.isEmpty) {
-              throw QueryExecutionErrors.invalidParseSqlContext("current_catalog", catalog)
-            }
-            mgr.setCurrentCatalog(catalog)
-          }
-        }
-        context.schema.foreach { schema =>
-          asContextError("current_schema", schema) {
-            val parts = try {
-              parser.get().parseMultipartIdentifier(schema)
-            } catch {
-              case _: ParseException =>
-                throw QueryExecutionErrors.invalidParseSqlContext("current_schema", schema)
-            }
-            if (parts.isEmpty) {
-              throw QueryExecutionErrors.invalidParseSqlContext("current_schema", schema)
-            }
-            mgr.setCurrentNamespace(parts.toArray)
-          }
-        }
-        context.path.foreach { path =>
-          asContextError("current_path", path) {
-            if (!conf.getConf(SQLConf.PATH_ENABLED)) {
-              conf.setConf(SQLConf.PATH_ENABLED, true)
-            }
-            applyPathOverride(mgr, conf, path)
-          }
-        }
-        f
-      } finally {
-        try {
-          mgr.restoreStoredCurrentCatalogName(prevCatalog)
-          mgr.restoreStoredCurrentNamespace(prevNamespace)
-        } finally {
-          prevPath match {
-            case Some(entries) => mgr.setSessionPath(entries)
-            case None => mgr.clearSessionPath()
-          }
-          prevPathEnabled match {
-            case Some(value) => conf.setConf(SQLConf.PATH_ENABLED, value)
-            case None => conf.unsetConf(SQLConf.PATH_ENABLED)
-          }
-        }
-      }
-    }
-  }
-
-  private def asContextError(parameter: String, value: String)(f: => Unit): Unit = {
-    try {
-      f
-    } catch {
-      case e: SparkThrowable with Throwable
-          if !isInternalError(e) &&
-            !Option(e.getCondition).exists(_.endsWith("PARSE_SQL_CONTEXT")) =>
-        throw QueryExecutionErrors.invalidParseSqlContext(parameter, value, e)
-    }
-  }
-
-  private def applyPathOverride(
-      mgr: CatalogManager,
-      conf: SQLConf,
-      path: String): Unit = {
-    if (path.trim.isEmpty) {
-      mgr.clearSessionPath()
-    } else {
-      val elements = try {
-        parser.get().parsePathElements(path)
-      } catch {
-        case _: ParseException =>
-          throw QueryExecutionErrors.invalidParseSqlContext("current_path", path)
-      }
-      val expanded = PathElement.validateNoStaticDuplicates(
-        PathElement.expand(elements, conf, mgr),
-        conf.caseSensitiveAnalysis)
-      if (expanded.isEmpty) {
-        mgr.clearSessionPath()
-      } else {
-        mgr.setSessionPath(expanded)
-      }
     }
   }
 
@@ -376,8 +253,7 @@ object ParseSqlResult {
       analyzed: Option[LogicalPlan],
       analyzeError: Option[SparkThrowable with Throwable],
       session: Option[ClassicSparkSession],
-      span: StatementSpan,
-      qualify: Boolean = true): JObject = {
+      span: StatementSpan): JObject = {
     val classification = SqlStatementCodes.classify(plan)
     val fields = mutable.ListBuffer.empty[JField]
     fields += "start" -> JInt(span.start)
@@ -389,21 +265,27 @@ object ParseSqlResult {
       fields += "analyze_success" -> JBool(analyzed.isDefined)
     }
     // Omit unused collections / markers so consumers can treat absence as empty.
-    val refs = collectPlanReferences(plan)
-    val dmlTarget = plan match {
-      case _: InsertIntoStatement | _: UnresolvedInsert | _: UpdateTable | _: DeleteFromTable |
-          _: MergeIntoTable => true
-      case _ => false
-    }
-    val targetTables = session.filter(_ => qualify).map { s =>
-      uniqueIdentities(refs.targetTables.map(qualifyTarget(_, plan, s, dmlTarget)), s)
-    }.getOrElse(refs.targetTables)
-    val sourceTables = session.filter(_ => qualify).map { s =>
-      uniqueIdentities(refs.sourceTables.map(qualifyRelation(_, s)), s)
-    }.getOrElse(refs.sourceTables)
-    val functions = session.filter(_ => qualify).map { s =>
-      uniqueIdentities(refs.functions.map(qualifyRoutine(_, s)), s)
-    }.getOrElse(refs.functions)
+    // Functions and parameter markers always come from the parse tree. Relation
+    // identities come from the analyzed plan when analysis succeeded.
+    val parseRefs = collectPlanReferences(plan)
+    val tableRefs = analyzed.map(collectPlanReferences).getOrElse(parseRefs)
+    val targetTables = session.map { s =>
+      if (analyzed.isDefined) {
+        uniqueIdentities(tableRefs.targetTables, s)
+      } else {
+        uniqueIdentities(parseRefs.targetTables.map(qualifyTarget(_, plan, s)), s)
+      }
+    }.getOrElse(parseRefs.targetTables)
+    val sourceTables = session.map { s =>
+      if (analyzed.isDefined) {
+        uniqueIdentities(tableRefs.sourceTables, s)
+      } else {
+        uniqueIdentities(parseRefs.sourceTables.map(qualifyWithCurrentNamespace(_, s)), s)
+      }
+    }.getOrElse(parseRefs.sourceTables)
+    val functions = session.map { s =>
+      uniqueIdentities(parseRefs.functions.map(qualifyRoutine(_, s)), s)
+    }.getOrElse(parseRefs.functions)
     if (targetTables.nonEmpty) {
       fields += "target_table_references" ->
         JArray(targetTables.map(partsToJArray).toList)
@@ -420,7 +302,7 @@ object ParseSqlResult {
     if (selectList.nonEmpty) {
       fields += "select_list" -> JArray(selectList.toList)
     }
-    refs.parameterMarkers.foreach(markers => fields += "parameter_markers" -> markers)
+    parseRefs.parameterMarkers.foreach(markers => fields += "parameter_markers" -> markers)
     analyzeError.foreach { e =>
       fields += "error" -> errorObject(e)
     }
@@ -573,6 +455,14 @@ object ParseSqlResult {
         visitPlan(cts.plan, nextScope, TableRefRole.Source)(f)
       case _: CacheTable =>
         // Name is taken from multipartIdentifier or the non-child `table` slot.
+      case _: View =>
+        // The view identity is the view; do not collect tables from its body.
+      case w: V2WriteCommand =>
+        visitPlan(w.table, scope, TableRefRole.Target)(f)
+        visitPlan(w.query, nextScope, TableRefRole.Source)(f)
+      case w: WithCTE =>
+        w.cteDefs.foreach(d => visitPlan(d, nextScope, TableRefRole.Source)(f))
+        visitPlan(w.plan, nextScope, role)(f)
       case SubqueryAlias(_, child) =>
         visitPlan(child, nextScope, role)(f)
       case _ =>
@@ -622,6 +512,15 @@ object ParseSqlResult {
 
   private def tableIdentifierParts(id: TableIdentifier): Seq[String] =
     id.catalog.toSeq ++ id.database.toSeq :+ id.table
+
+  private def persistedTableParts(id: TableIdentifier): Seq[String] = {
+    val parts = tableIdentifierParts(id)
+    if (id.catalog.isDefined) {
+      parts
+    } else {
+      CatalogManager.SESSION_CATALOG_NAME +: parts
+    }
+  }
 
   private final case class PlanReferences(
       targetTables: Seq[Seq[String]],
@@ -683,11 +582,52 @@ object ParseSqlResult {
         case u: UnresolvedView => add(u.multipartIdentifier)
         case u: UnresolvedTableOrView => add(u.multipartIdentifier)
         case u: UnresolvedIdentifier if role == TableRefRole.Target => add(u.nameParts)
-        case c: CreateViewCommand => addTarget(tableIdentifierParts(c.name))
-        case c: CreateTempViewUsing => addTarget(tableIdentifierParts(c.tableIdent))
+        case c: CreateViewCommand =>
+          addTarget(c.viewType match {
+            case LocalTempView => sessionIdent(c.name.table)
+            case GlobalTempView =>
+              Seq(
+                CatalogManager.SESSION_CATALOG_NAME,
+                SQLConf.get.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE),
+                c.name.table)
+            case _ => tableIdentifierParts(c.name)
+          })
+        case c: CreateTempViewUsing => addTarget(sessionIdent(c.tableIdent.table))
+        case c: CreateDataSourceTableCommand =>
+          addTarget(persistedTableParts(c.table.identifier))
+        case c: CreateTableCommand =>
+          addTarget(persistedTableParts(c.table.identifier))
+        case c: DropTableCommand =>
+          addTarget(
+            if (c.isView && c.tableName.database.isEmpty) {
+              sessionIdent(c.tableName.table)
+            } else {
+              persistedTableParts(c.tableName)
+            })
+        case c: DropTempViewCommand =>
+          addTarget(tempViewParts(c.ident))
         case c: CacheTable if c.multipartIdentifier.nonEmpty =>
           addTarget(c.multipartIdentifier)
         case u: UnresolvedTableValuedFunction => addFunction(u.name)
+        case _: CTERelationRef =>
+        case r: DataSourceV2Relation =>
+          v2RelationParts(r).foreach(add)
+        case r: LogicalRelation =>
+          logicalRelationParts(r).foreach(add)
+        case h: HiveTableRelation =>
+          add(tableIdentifierParts(h.tableMeta.identifier))
+        case v: View =>
+          add(viewParts(v))
+        case r: ResolvedTable =>
+          add(catalogIdentParts(r.catalog.name(), r.identifier))
+        case r: ResolvedPersistentView =>
+          add(catalogIdentParts(r.catalog.name(), r.identifier))
+        case r: ResolvedTempView =>
+          add(tempViewParts(r.identifier))
+        case r: ResolvedIdentifier if role == TableRefRole.Target =>
+          add(catalogIdentParts(r.catalog.name(), r.identifier))
+        case _: Range =>
+          addFunction(FunctionRegistry.builtinFunctionIdentifier("range").nameParts)
         case _ =>
       }
     }
@@ -751,6 +691,58 @@ object ParseSqlResult {
   private def sessionIdent(name: String): Seq[String] =
     Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_NAMESPACE, name)
 
+  private def catalogIdentParts(catalog: String, ident: Identifier): Seq[String] =
+    Seq(catalog) ++ ident.namespace() :+ ident.name()
+
+  private def v2RelationParts(r: DataSourceV2Relation): Option[Seq[String]] =
+    (r.catalog, r.identifier) match {
+      case (Some(catalog), Some(ident)) => Some(catalogIdentParts(catalog.name(), ident))
+      case _ => None
+    }
+
+  private def logicalRelationParts(r: LogicalRelation): Option[Seq[String]] =
+    r.catalogTable.map { t =>
+      val id = t.identifier
+      if (id.catalog.isEmpty && id.database.isDefined) {
+        CatalogManager.SESSION_CATALOG_NAME +: tableIdentifierParts(id)
+      } else {
+        tableIdentifierParts(id)
+      }
+    }.orElse {
+      r.relation match {
+        case fs: HadoopFsRelation =>
+          fs.location.rootPaths.headOption.map(p => Seq(p.toString))
+        case _ => None
+      }
+    }
+
+  private def viewParts(v: View): Seq[String] = {
+    val id = v.desc.identifier
+    if (v.isTempView) {
+      val globalTemp = SQLConf.get.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+      if (id.database.exists(_.equalsIgnoreCase(globalTemp))) {
+        Seq(id.catalog.getOrElse(CatalogManager.SESSION_CATALOG_NAME)) ++
+          id.database.toSeq :+ id.table
+      } else {
+        sessionIdent(id.table)
+      }
+    } else {
+      tableIdentifierParts(id)
+    }
+  }
+
+  private def tempViewParts(ident: Identifier): Seq[String] = {
+    val ns = ident.namespace()
+    val globalTemp = SQLConf.get.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+    if (ns.length == 1 && ns.head.equalsIgnoreCase(globalTemp)) {
+      Seq(CatalogManager.SESSION_CATALOG_NAME, ns.head, ident.name())
+    } else if (ns.isEmpty) {
+      sessionIdent(ident.name())
+    } else {
+      catalogIdentParts(CatalogManager.SESSION_CATALOG_NAME, ident)
+    }
+  }
+
   private def isTempViewCreate(plan: LogicalPlan): Boolean = plan match {
     case c: CreateViewCommand =>
       c.viewType == LocalTempView || c.viewType == GlobalTempView
@@ -761,54 +753,11 @@ object ParseSqlResult {
   private def qualifyTarget(
       parts: Seq[String],
       plan: LogicalPlan,
-      session: ClassicSparkSession,
-      dml: Boolean): Seq[String] = {
+      session: ClassicSparkSession): Seq[String] = {
     if (isTempViewCreate(plan)) {
       sessionIdent(parts.last)
-    } else if (dml) {
-      qualifyRelation(parts, session)
     } else {
       qualifyWithCurrentNamespace(parts, session)
-    }
-  }
-
-  private def qualifyRelation(
-      parts: Seq[String],
-      session: ClassicSparkSession): Seq[String] = {
-    val catalog = session.sessionState.catalog
-    if (CatalogManager.isSessionQualifiedViewName(parts) && catalog.isTempView(parts)) {
-      sessionIdent(parts.last)
-    } else {
-      resolvedRelationIdentity(parts, session)
-        .getOrElse(qualifyWithCurrentNamespace(parts, session))
-    }
-  }
-
-  /**
-   * Identity of the relation `parts` resolves to, so a name found through the
-   * path is reported where it was found. None when it does not resolve.
-   */
-  private def resolvedRelationIdentity(
-      parts: Seq[String],
-      session: ClassicSparkSession): Option[Seq[String]] = {
-    try {
-      val catalog = session.sessionState.catalog
-      session.sessionState.analyzer.execute(UnresolvedRelation(parts)) match {
-        case s: SubqueryAlias =>
-          val name = s.identifier.name
-          val qualifier = s.identifier.qualifier
-          if (catalog.isTempView(qualifier :+ name) ||
-              (parts.size == 1 && catalog.getRawTempView(name).isDefined)) {
-            Some(sessionIdent(name))
-          } else if (qualifier.nonEmpty) {
-            Some(qualifier :+ name)
-          } else {
-            None
-          }
-        case _ => None
-      }
-    } catch {
-      case NonFatal(_) => None
     }
   }
 
@@ -825,12 +774,18 @@ object ParseSqlResult {
       FunctionRegistry.builtin.functionExists(id) ||
         TableFunctionRegistry.builtin.functionExists(id)
     }
+    def isSessionBuiltin(name: String): Boolean = {
+      val id = FunctionIdentifier(name)
+      !isTemp(name) && !isBuiltin(name) &&
+        (session.sessionState.functionRegistry.functionExists(id) ||
+          session.sessionState.tableFunctionRegistry.functionExists(id))
+    }
     def builtinIdent(name: String): Seq[String] =
       FunctionRegistry.builtinFunctionIdentifier(name).nameParts
     parts match {
       case Seq(name) if tempFirst && isTemp(name) =>
         sessionIdent(name)
-      case Seq(name) if isBuiltin(name) =>
+      case Seq(name) if isBuiltin(name) || isSessionBuiltin(name) =>
         builtinIdent(name)
       case Seq(name) if isTemp(name) =>
         sessionIdent(name)
@@ -869,6 +824,7 @@ object ParseSqlResult {
       primaryQueryPlan(query)
     case i: InsertIntoStatement => primaryQueryPlan(i.query)
     case d: DataWritingCommand => primaryQueryPlan(d.query)
+    case w: V2WriteCommand => primaryQueryPlan(w.query)
     case c: CreateDataSourceTableAsSelectCommand => primaryQueryPlan(c.query)
     case i: InsertIntoDataSourceCommand => primaryQueryPlan(i.query)
     case c: CreateTableAsSelect => primaryQueryPlan(c.query)

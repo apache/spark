@@ -79,20 +79,6 @@ private[sql] trait CatalogManager extends SQLConfHelper with Logging {
   // ---- Namespace ----
   def currentNamespace: Array[String]
   def setCurrentNamespace(namespace: Array[String]): Unit
-  /**
-   * Explicit current catalog name, or `None` if the session still follows
-   * `spark.sql.defaultCatalog`. Used to restore ANALYZE overrides without
-   * materializing the implicit default as a stored catalog.
-   */
-  private[sql] def storedCurrentCatalogName: Option[String]
-  private[sql] def restoreStoredCurrentCatalogName(name: Option[String]): Unit
-  /**
-   * Explicit current namespace, or `None` if the session still uses the
-   * catalog default. Restore skips existence checks so a v2 default
-   * namespace that does not `namespaceExists` can still be put back.
-   */
-  private[sql] def storedCurrentNamespace: Option[Array[String]]
-  private[sql] def restoreStoredCurrentNamespace(namespace: Option[Array[String]]): Unit
 
   // ---- Session path ----
   def sessionPathEntries: Option[Seq[SessionPathEntry]]
@@ -241,32 +227,6 @@ private[sql] class DefaultCatalogManager(
     }
     synchronized {
       _currentNamespace = Some(namespace)
-    }
-  }
-
-  override private[sql] def storedCurrentCatalogName: Option[String] =
-    synchronized(_currentCatalogName)
-
-  override private[sql] def restoreStoredCurrentCatalogName(name: Option[String]): Unit =
-    synchronized {
-      _currentCatalogName = name
-    }
-
-  override private[sql] def storedCurrentNamespace: Option[Array[String]] =
-    synchronized(_currentNamespace.map(_.clone()))
-
-  override private[sql] def restoreStoredCurrentNamespace(
-      namespace: Option[Array[String]]): Unit = {
-    val isSession = synchronized(isSessionCatalog(currentCatalog))
-    namespace match {
-      case Some(ns) if isSession && ns.length == 1 =>
-        v1SessionCatalog.setCurrentDatabase(ns.head)
-      case None if isSession =>
-        v1SessionCatalog.setCurrentDatabase(conf.defaultDatabase)
-      case _ =>
-    }
-    synchronized {
-      _currentNamespace = namespace.map(_.clone())
     }
   }
 

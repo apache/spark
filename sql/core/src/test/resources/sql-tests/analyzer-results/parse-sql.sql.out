@@ -2,42 +2,42 @@
 -- !query
 SELECT parse_sql(NULL)
 -- !query analysis
-Project [parse_sql(cast(null as string), PARSE, null, null, null) AS parse_sql(NULL, PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(cast(null as string), PARSE) AS parse_sql(NULL, PARSE)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT parse_sql('SELECT a, b FROM t')
 -- !query analysis
-Project [parse_sql(SELECT a, b FROM t, PARSE, null, null, null) AS parse_sql(SELECT a, b FROM t, PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(SELECT a, b FROM t, PARSE) AS parse_sql(SELECT a, b FROM t, PARSE)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT parse_sql('SELECT db.my_func(a), count(b) FROM cat.ns.t1 JOIN t2')
 -- !query analysis
-Project [parse_sql(SELECT db.my_func(a), count(b) FROM cat.ns.t1 JOIN t2, PARSE, null, null, null) AS parse_sql(SELECT db.my_func(a), count(b) FROM cat.ns.t1 JOIN t2, PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(SELECT db.my_func(a), count(b) FROM cat.ns.t1 JOIN t2, PARSE) AS parse_sql(SELECT db.my_func(a), count(b) FROM cat.ns.t1 JOIN t2, PARSE)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT parse_sql('select 1; select 2')
 -- !query analysis
-Project [parse_sql(select 1; select 2, PARSE, null, null, null) AS parse_sql(select 1; select 2, PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(select 1; select 2, PARSE) AS parse_sql(select 1; select 2, PARSE)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT parse_sql('select 1; select 2;')
 -- !query analysis
-Project [parse_sql(select 1; select 2;, PARSE, null, null, null) AS parse_sql(select 1; select 2;, PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(select 1; select 2;, PARSE) AS parse_sql(select 1; select 2;, PARSE)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT parse_sql('SELECT 1; SELEC 2; SELECT 3')
 -- !query analysis
-Project [parse_sql(SELECT 1; SELEC 2; SELECT 3, PARSE, null, null, null) AS parse_sql(SELECT 1; SELEC 2; SELECT 3, PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(SELECT 1; SELEC 2; SELECT 3, PARSE) AS parse_sql(SELECT 1; SELEC 2; SELECT 3, PARSE)#x]
 +- OneRowRelation
 
 
@@ -50,126 +50,126 @@ FROM (SELECT parse_sql('SELECT a, b FROM t') AS result)
 -- !query analysis
 Project [get_json_object(result#x, $[0].statement_identifier) AS statement_identifier#x, get_json_object(result#x, $[0].source_table_references[0][0]) AS first_table#x, get_json_object(result#x, $[0].select_list[1].name[0]) AS second_column#x]
 +- SubqueryAlias __auto_generated_subquery_name
-   +- Project [parse_sql(SELECT a, b FROM t, PARSE, null, null, null) AS result#x]
+   +- Project [parse_sql(SELECT a, b FROM t, PARSE) AS result#x]
       +- OneRowRelation
 
 
 -- !query
 SELECT parse_sql('INSERT INTO t SELECT 1')
 -- !query analysis
-Project [parse_sql(INSERT INTO t SELECT 1, PARSE, null, null, null) AS parse_sql(INSERT INTO t SELECT 1, PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(INSERT INTO t SELECT 1, PARSE) AS parse_sql(INSERT INTO t SELECT 1, PARSE)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT parse_sql('DELETE FROM t WHERE a = 1')
 -- !query analysis
-Project [parse_sql(DELETE FROM t WHERE a = 1, PARSE, null, null, null) AS parse_sql(DELETE FROM t WHERE a = 1, PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(DELETE FROM t WHERE a = 1, PARSE) AS parse_sql(DELETE FROM t WHERE a = 1, PARSE)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT parse_sql('UPDATE t SET a = 1 WHERE b = 2')
 -- !query analysis
-Project [parse_sql(UPDATE t SET a = 1 WHERE b = 2, PARSE, null, null, null) AS parse_sql(UPDATE t SET a = 1 WHERE b = 2, PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(UPDATE t SET a = 1 WHERE b = 2, PARSE) AS parse_sql(UPDATE t SET a = 1 WHERE b = 2, PARSE)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT parse_sql('MERGE INTO t USING s ON t.id = s.id WHEN MATCHED THEN DELETE')
 -- !query analysis
-Project [parse_sql(MERGE INTO t USING s ON t.id = s.id WHEN MATCHED THEN DELETE, PARSE, null, null, null) AS parse_sql(MERGE INTO t USING s ON t.id = s.id WHEN MATCHED THEN DELETE, PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(MERGE INTO t USING s ON t.id = s.id WHEN MATCHED THEN DELETE, PARSE) AS parse_sql(MERGE INTO t USING s ON t.id = s.id WHEN MATCHED THEN DELETE, PARSE)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT parse_sql('CREATE TABLE t (a INT)')
 -- !query analysis
-Project [parse_sql(CREATE TABLE t (a INT), PARSE, null, null, null) AS parse_sql(CREATE TABLE t (a INT), PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(CREATE TABLE t (a INT), PARSE) AS parse_sql(CREATE TABLE t (a INT), PARSE)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT parse_sql('CREATE TABLE t AS SELECT 1 AS a')
 -- !query analysis
-Project [parse_sql(CREATE TABLE t AS SELECT 1 AS a, PARSE, null, null, null) AS parse_sql(CREATE TABLE t AS SELECT 1 AS a, PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(CREATE TABLE t AS SELECT 1 AS a, PARSE) AS parse_sql(CREATE TABLE t AS SELECT 1 AS a, PARSE)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT parse_sql('DROP TABLE t')
 -- !query analysis
-Project [parse_sql(DROP TABLE t, PARSE, null, null, null) AS parse_sql(DROP TABLE t, PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(DROP TABLE t, PARSE) AS parse_sql(DROP TABLE t, PARSE)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT parse_sql('CACHE TABLE t')
 -- !query analysis
-Project [parse_sql(CACHE TABLE t, PARSE, null, null, null) AS parse_sql(CACHE TABLE t, PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(CACHE TABLE t, PARSE) AS parse_sql(CACHE TABLE t, PARSE)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT parse_sql('TABLE t')
 -- !query analysis
-Project [parse_sql(TABLE t, PARSE, null, null, null) AS parse_sql(TABLE t, PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(TABLE t, PARSE) AS parse_sql(TABLE t, PARSE)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT parse_sql('VALUES (1), (2)')
 -- !query analysis
-Project [parse_sql(VALUES (1), (2), PARSE, null, null, null) AS parse_sql(VALUES (1), (2), PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(VALUES (1), (2), PARSE) AS parse_sql(VALUES (1), (2), PARSE)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT parse_sql('CREATE FUNCTION f AS ''x'' USING JAR ''y.jar''')
 -- !query analysis
-Project [parse_sql(CREATE FUNCTION f AS 'x' USING JAR 'y.jar', PARSE, null, null, null) AS parse_sql(CREATE FUNCTION f AS 'x' USING JAR 'y.jar', PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(CREATE FUNCTION f AS 'x' USING JAR 'y.jar', PARSE) AS parse_sql(CREATE FUNCTION f AS 'x' USING JAR 'y.jar', PARSE)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT parse_sql('DECLARE VARIABLE x INT')
 -- !query analysis
-Project [parse_sql(DECLARE VARIABLE x INT, PARSE, null, null, null) AS parse_sql(DECLARE VARIABLE x INT, PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(DECLARE VARIABLE x INT, PARSE) AS parse_sql(DECLARE VARIABLE x INT, PARSE)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT parse_sql('SELECT * FROM t WHERE a = :foo AND b = ?')
 -- !query analysis
-Project [parse_sql(SELECT * FROM t WHERE a = :foo AND b = ?, PARSE, null, null, null) AS parse_sql(SELECT * FROM t WHERE a = :foo AND b = ?, PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(SELECT * FROM t WHERE a = :foo AND b = ?, PARSE) AS parse_sql(SELECT * FROM t WHERE a = :foo AND b = ?, PARSE)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT parse_sql('WITH cte AS (SELECT a FROM hidden_base) SELECT a FROM cte')
 -- !query analysis
-Project [parse_sql(WITH cte AS (SELECT a FROM hidden_base) SELECT a FROM cte, PARSE, null, null, null) AS parse_sql(WITH cte AS (SELECT a FROM hidden_base) SELECT a FROM cte, PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(WITH cte AS (SELECT a FROM hidden_base) SELECT a FROM cte, PARSE) AS parse_sql(WITH cte AS (SELECT a FROM hidden_base) SELECT a FROM cte, PARSE)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT parse_sql('SELECT * FROM real_t WHERE EXISTS (WITH real_t AS (SELECT * FROM inner_base) SELECT * FROM real_t)')
 -- !query analysis
-Project [parse_sql(SELECT * FROM real_t WHERE EXISTS (WITH real_t AS (SELECT * FROM inner_base) SELECT * FROM real_t), PARSE, null, null, null) AS parse_sql(SELECT * FROM real_t WHERE EXISTS (WITH real_t AS (SELECT * FROM inner_base) SELECT * FROM real_t), PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(SELECT * FROM real_t WHERE EXISTS (WITH real_t AS (SELECT * FROM inner_base) SELECT * FROM real_t), PARSE) AS parse_sql(SELECT * FROM real_t WHERE EXISTS (WITH real_t AS (SELECT * FROM inner_base) SELECT * FROM real_t), PARSE)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT parse_sql('WITH a AS (SELECT * FROM b), b AS (SELECT 1 AS x) SELECT * FROM a')
 -- !query analysis
-Project [parse_sql(WITH a AS (SELECT * FROM b), b AS (SELECT 1 AS x) SELECT * FROM a, PARSE, null, null, null) AS parse_sql(WITH a AS (SELECT * FROM b), b AS (SELECT 1 AS x) SELECT * FROM a, PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(WITH a AS (SELECT * FROM b), b AS (SELECT 1 AS x) SELECT * FROM a, PARSE) AS parse_sql(WITH a AS (SELECT * FROM b), b AS (SELECT 1 AS x) SELECT * FROM a, PARSE)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT parse_sql('SELECT (SELECT max(v) FROM scalar_src) AS m, t.a FROM outer_t t WHERE EXISTS (SELECT 1 FROM exists_src e WHERE e.id = t.id)')
 -- !query analysis
-Project [parse_sql(SELECT (SELECT max(v) FROM scalar_src) AS m, t.a FROM outer_t t WHERE EXISTS (SELECT 1 FROM exists_src e WHERE e.id = t.id), PARSE, null, null, null) AS parse_sql(SELECT (SELECT max(v) FROM scalar_src) AS m, t.a FROM outer_t t WHERE EXISTS (SELECT 1 FROM exists_src e WHERE e.id = t.id), PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(SELECT (SELECT max(v) FROM scalar_src) AS m, t.a FROM outer_t t WHERE EXISTS (SELECT 1 FROM exists_src e WHERE e.id = t.id), PARSE) AS parse_sql(SELECT (SELECT max(v) FROM scalar_src) AS m, t.a FROM outer_t t WHERE EXISTS (SELECT 1 FROM exists_src e WHERE e.id = t.id), PARSE)#x]
 +- OneRowRelation
 
 
@@ -195,7 +195,7 @@ Project [parse_sql(SELECT coalesce(t.a, 0), sum(abs(t.b)) OVER (
    AND EXISTS (SELECT max(s.v) FROM scalar_t s WHERE s.id = t.id)
  GROUP BY coalesce(t.a, 0), t.b, t.c, t.d
  HAVING count_if(t.b > 0) > 0
- ORDER BY greatest(t.a, 1), PARSE, null, null, null) AS parse_sql(SELECT coalesce(t.a, 0), sum(abs(t.b)) OVER (
+ ORDER BY greatest(t.a, 1), PARSE) AS parse_sql(SELECT coalesce(t.a, 0), sum(abs(t.b)) OVER (
    PARTITION BY lower(t.c) ORDER BY length(t.d))
  FROM left_t t
  JOIN right_t r ON hash(t.id) = hash(r.id)
@@ -204,7 +204,7 @@ Project [parse_sql(SELECT coalesce(t.a, 0), sum(abs(t.b)) OVER (
    AND EXISTS (SELECT max(s.v) FROM scalar_t s WHERE s.id = t.id)
  GROUP BY coalesce(t.a, 0), t.b, t.c, t.d
  HAVING count_if(t.b > 0) > 0
- ORDER BY greatest(t.a, 1), PARSE, NULL, NULL, NULL)#x]
+ ORDER BY greatest(t.a, 1), PARSE)#x]
 +- OneRowRelation
 
 
@@ -232,7 +232,7 @@ Project [parse_sql(MERGE INTO target t
  WHEN MATCHED AND should_update(t.name, s.name) THEN
    UPDATE SET name = coalesce(s.name, upper(t.name))
  WHEN NOT MATCHED THEN
-   INSERT (id, name) VALUES (s.id, lower(s.name)), PARSE, null, null, null) AS parse_sql(MERGE INTO target t
+   INSERT (id, name) VALUES (s.id, lower(s.name)), PARSE) AS parse_sql(MERGE INTO target t
  USING (
    SELECT id, normalize_name(name) AS name
    FROM source
@@ -242,7 +242,7 @@ Project [parse_sql(MERGE INTO target t
  WHEN MATCHED AND should_update(t.name, s.name) THEN
    UPDATE SET name = coalesce(s.name, upper(t.name))
  WHEN NOT MATCHED THEN
-   INSERT (id, name) VALUES (s.id, lower(s.name)), PARSE, NULL, NULL, NULL)#x]
+   INSERT (id, name) VALUES (s.id, lower(s.name)), PARSE)#x]
 +- OneRowRelation
 
 
@@ -256,17 +256,17 @@ SELECT parse_sql(
 Project [parse_sql(CREATE TABLE defaults (
    created DATE DEFAULT current_date(),
    normalized STRING DEFAULT upper('x')
- ), PARSE, null, null, null) AS parse_sql(CREATE TABLE defaults (
+ ), PARSE) AS parse_sql(CREATE TABLE defaults (
    created DATE DEFAULT current_date(),
    normalized STRING DEFAULT upper('x')
- ), PARSE, NULL, NULL, NULL)#x]
+ ), PARSE)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT parse_sql('SELEC FROM t')
 -- !query analysis
-Project [parse_sql(SELEC FROM t, PARSE, null, null, null) AS parse_sql(SELEC FROM t, PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(SELEC FROM t, PARSE) AS parse_sql(SELEC FROM t, PARSE)#x]
 +- OneRowRelation
 
 
@@ -279,7 +279,7 @@ FROM (SELECT parse_sql('SELEC FROM t') AS result)
 -- !query analysis
 Project [get_json_object(result#x, $[0].parse_success) AS parse_success#x, get_json_object(result#x, $[0].error.errorClass) AS error_class#x, get_json_object(result#x, $[0].error.queryContext[0].fragment) AS fragment#x]
 +- SubqueryAlias __auto_generated_subquery_name
-   +- Project [parse_sql(SELEC FROM t, PARSE, null, null, null) AS result#x]
+   +- Project [parse_sql(SELEC FROM t, PARSE) AS result#x]
       +- OneRowRelation
 
 
@@ -293,10 +293,10 @@ SELECT parse_sql(
 Project [parse_sql(SELECT *
  FROM t
  ORDER BY a
- CLUSTER BY b, PARSE, null, null, null) AS parse_sql(SELECT *
+ CLUSTER BY b, PARSE) AS parse_sql(SELECT *
  FROM t
  ORDER BY a
- CLUSTER BY b, PARSE, NULL, NULL, NULL)#x]
+ CLUSTER BY b, PARSE)#x]
 +- OneRowRelation
 
 
@@ -319,77 +319,77 @@ Project [get_json_object(result#x, $[0].error.errorClass) AS error_class#x, get_
    +- Project [parse_sql(SELECT *
  FROM t
  ORDER BY a
- CLUSTER BY b, PARSE, null, null, null) AS result#x]
+ CLUSTER BY b, PARSE) AS result#x]
       +- OneRowRelation
 
 
 -- !query
 SELECT parse_sql('')
 -- !query analysis
-Project [parse_sql(, PARSE, null, null, null) AS parse_sql(, PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(, PARSE) AS parse_sql(, PARSE)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT parse_sql('USE bad-name')
 -- !query analysis
-Project [parse_sql(USE bad-name, PARSE, null, null, null) AS parse_sql(USE bad-name, PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(USE bad-name, PARSE) AS parse_sql(USE bad-name, PARSE)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT parse_sql('WITH c AS (SELECT 1), c AS (SELECT 2) SELECT * FROM c')
 -- !query analysis
-Project [parse_sql(WITH c AS (SELECT 1), c AS (SELECT 2) SELECT * FROM c, PARSE, null, null, null) AS parse_sql(WITH c AS (SELECT 1), c AS (SELECT 2) SELECT * FROM c, PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(WITH c AS (SELECT 1), c AS (SELECT 2) SELECT * FROM c, PARSE) AS parse_sql(WITH c AS (SELECT 1), c AS (SELECT 2) SELECT * FROM c, PARSE)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT parse_sql('MERGE INTO target USING source ON target.id = source.id')
 -- !query analysis
-Project [parse_sql(MERGE INTO target USING source ON target.id = source.id, PARSE, null, null, null) AS parse_sql(MERGE INTO target USING source ON target.id = source.id, PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(MERGE INTO target USING source ON target.id = source.id, PARSE) AS parse_sql(MERGE INTO target USING source ON target.id = source.id, PARSE)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT parse_sql('EXPLAIN SELECT 1')
 -- !query analysis
-Project [parse_sql(EXPLAIN SELECT 1, PARSE, null, null, null) AS parse_sql(EXPLAIN SELECT 1, PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(EXPLAIN SELECT 1, PARSE) AS parse_sql(EXPLAIN SELECT 1, PARSE)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT parse_sql('SET spark.sql.adaptive.enabled=true')
 -- !query analysis
-Project [parse_sql(SET spark.sql.adaptive.enabled=true, PARSE, null, null, null) AS parse_sql(SET spark.sql.adaptive.enabled=true, PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(SET spark.sql.adaptive.enabled=true, PARSE) AS parse_sql(SET spark.sql.adaptive.enabled=true, PARSE)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT parse_sql('ADD JAR /tmp/x.jar')
 -- !query analysis
-Project [parse_sql(ADD JAR /tmp/x.jar, PARSE, null, null, null) AS parse_sql(ADD JAR /tmp/x.jar, PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(ADD JAR /tmp/x.jar, PARSE) AS parse_sql(ADD JAR /tmp/x.jar, PARSE)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT parse_sql('CREATE VIEW v AS SELECT a, b FROM t')
 -- !query analysis
-Project [parse_sql(CREATE VIEW v AS SELECT a, b FROM t, PARSE, null, null, null) AS parse_sql(CREATE VIEW v AS SELECT a, b FROM t, PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(CREATE VIEW v AS SELECT a, b FROM t, PARSE) AS parse_sql(CREATE VIEW v AS SELECT a, b FROM t, PARSE)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT parse_sql('SELECT 1 AS IDENTIFIER(''alias.field'')')
 -- !query analysis
-Project [parse_sql(SELECT 1 AS IDENTIFIER('alias.field'), PARSE, null, null, null) AS parse_sql(SELECT 1 AS IDENTIFIER('alias.field'), PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(SELECT 1 AS IDENTIFIER('alias.field'), PARSE) AS parse_sql(SELECT 1 AS IDENTIFIER('alias.field'), PARSE)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT parse_sql('SELECT DATE ''not-a-date''')
 -- !query analysis
-Project [parse_sql(SELECT DATE 'not-a-date', PARSE, null, null, null) AS parse_sql(SELECT DATE 'not-a-date', PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(SELECT DATE 'not-a-date', PARSE) AS parse_sql(SELECT DATE 'not-a-date', PARSE)#x]
 +- OneRowRelation
 
 
@@ -403,10 +403,10 @@ SELECT parse_sql(
 Project [parse_sql(BEGIN
    SELECT 1;
    SELEC 2;
- END, PARSE, null, null, null) AS parse_sql(BEGIN
+ END, PARSE) AS parse_sql(BEGIN
    SELECT 1;
    SELEC 2;
- END, PARSE, NULL, NULL, NULL)#x]
+ END, PARSE)#x]
 +- OneRowRelation
 
 
@@ -431,7 +431,7 @@ Project [get_json_object(result#x, $[1].start) AS start#x, get_json_object(resul
    +- Project [parse_sql(BEGIN
    SELECT 1;
    SELEC 2;
- END, PARSE, null, null, null) AS result#x]
+ END, PARSE) AS result#x]
       +- OneRowRelation
 
 
@@ -447,11 +447,11 @@ Project [parse_sql(BEGIN
    lbl_begin: BEGIN
      SELECT 1;
    END lbl_end;
- END, PARSE, null, null, null) AS parse_sql(BEGIN
+ END, PARSE) AS parse_sql(BEGIN
    lbl_begin: BEGIN
      SELECT 1;
    END lbl_end;
- END, PARSE, NULL, NULL, NULL)#x]
+ END, PARSE)#x]
 +- OneRowRelation
 
 
@@ -476,7 +476,7 @@ Project [get_json_object(result#x, $[0].error.errorClass) AS error_class#x, get_
    lbl_begin: BEGIN
      SELECT 1;
    END lbl_end;
- END, PARSE, null, null, null) AS result#x]
+ END, PARSE) AS result#x]
       +- OneRowRelation
 
 
@@ -487,7 +487,7 @@ SELECT sql_text, parse_sql(sql_text) FROM VALUES
   ('CACHE TABLE t')
 AS t(sql_text)
 -- !query analysis
-Project [sql_text#x, parse_sql(sql_text#x, PARSE, null, null, null) AS parse_sql(sql_text, PARSE, NULL, NULL, NULL)#x]
+Project [sql_text#x, parse_sql(sql_text#x, PARSE) AS parse_sql(sql_text, PARSE)#x]
 +- SubqueryAlias t
    +- LocalRelation [sql_text#x]
 
@@ -495,35 +495,35 @@ Project [sql_text#x, parse_sql(sql_text#x, PARSE, null, null, null) AS parse_sql
 -- !query
 SELECT parse_sql('BEGIN SELECT 1; END')
 -- !query analysis
-Project [parse_sql(BEGIN SELECT 1; END, PARSE, null, null, null) AS parse_sql(BEGIN SELECT 1; END, PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(BEGIN SELECT 1; END, PARSE) AS parse_sql(BEGIN SELECT 1; END, PARSE)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT parse_sql('BEGIN SELECT count(a) FROM script_t WHERE c = :p; END')
 -- !query analysis
-Project [parse_sql(BEGIN SELECT count(a) FROM script_t WHERE c = :p; END, PARSE, null, null, null) AS parse_sql(BEGIN SELECT count(a) FROM script_t WHERE c = :p; END, PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(BEGIN SELECT count(a) FROM script_t WHERE c = :p; END, PARSE) AS parse_sql(BEGIN SELECT count(a) FROM script_t WHERE c = :p; END, PARSE)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT parse_sql('BEGIN SELECT * FROM t WHERE a = ?; END')
 -- !query analysis
-Project [parse_sql(BEGIN SELECT * FROM t WHERE a = ?; END, PARSE, null, null, null) AS parse_sql(BEGIN SELECT * FROM t WHERE a = ?; END, PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(BEGIN SELECT * FROM t WHERE a = ?; END, PARSE) AS parse_sql(BEGIN SELECT * FROM t WHERE a = ?; END, PARSE)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT parse_sql('BEGIN IF (SELECT flag FROM gate) THEN INSERT INTO dest SELECT * FROM src_if; ELSE DELETE FROM src_else; END IF; END')
 -- !query analysis
-Project [parse_sql(BEGIN IF (SELECT flag FROM gate) THEN INSERT INTO dest SELECT * FROM src_if; ELSE DELETE FROM src_else; END IF; END, PARSE, null, null, null) AS parse_sql(BEGIN IF (SELECT flag FROM gate) THEN INSERT INTO dest SELECT * FROM src_if; ELSE DELETE FROM src_else; END IF; END, PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(BEGIN IF (SELECT flag FROM gate) THEN INSERT INTO dest SELECT * FROM src_if; ELSE DELETE FROM src_else; END IF; END, PARSE) AS parse_sql(BEGIN IF (SELECT flag FROM gate) THEN INSERT INTO dest SELECT * FROM src_if; ELSE DELETE FROM src_else; END IF; END, PARSE)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT parse_sql('BEGIN DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN INSERT INTO err_log SELECT * FROM failing_row; END; SELECT a FROM main_t; END')
 -- !query analysis
-Project [parse_sql(BEGIN DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN INSERT INTO err_log SELECT * FROM failing_row; END; SELECT a FROM main_t; END, PARSE, null, null, null) AS parse_sql(BEGIN DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN INSERT INTO err_log SELECT * FROM failing_row; END; SELECT a FROM main_t; END, PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(BEGIN DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN INSERT INTO err_log SELECT * FROM failing_row; END; SELECT a FROM main_t; END, PARSE) AS parse_sql(BEGIN DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN INSERT INTO err_log SELECT * FROM failing_row; END; SELECT a FROM main_t; END, PARSE)#x]
 +- OneRowRelation
 
 
@@ -589,7 +589,7 @@ Project [parse_sql(BEGIN
    DO
      SELECT audit(row.id), count(*) FROM loop_body;
    END FOR;
- END, PARSE, null, null, null) AS parse_sql(BEGIN
+ END, PARSE) AS parse_sql(BEGIN
    DECLARE EXIT HANDLER FOR SQLEXCEPTION
    BEGIN
      INSERT INTO error_log
@@ -618,5 +618,5 @@ Project [parse_sql(BEGIN
    DO
      SELECT audit(row.id), count(*) FROM loop_body;
    END FOR;
- END, PARSE, NULL, NULL, NULL)#x]
+ END, PARSE)#x]
 +- OneRowRelation
