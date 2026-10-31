@@ -44,11 +44,8 @@ object SchemaPruning extends SQLConfHelper {
     val mergedSchema = requestedRootFields
       .map { root: RootField => StructType(Array(root.field)) }
       .reduceLeft(_ merge _)
-    val mergedDataSchema = StructType(schema.map {
-      // Resolve stored defaults against the declared type. A bare NULL fits any pruned type.
-      case field if field.getExistenceDefaultValue().exists(!_.equalsIgnoreCase("NULL")) => field
-      case field => mergedSchema.find(m => resolver(m.name, field.name)).getOrElse(field)
-    })
+    val mergedDataSchema =
+      StructType(schema.map(d => mergedSchema.find(m => resolver(m.name, d.name)).getOrElse(d)))
     // Sort the fields of mergedDataSchema according to their order in dataSchema,
     // recursively. This makes mergedDataSchema a pruned schema of dataSchema
     sortLeftFieldsByRight(mergedDataSchema, schema).asInstanceOf[StructType]

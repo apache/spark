@@ -81,16 +81,21 @@ object SelectedField {
    * Convert an expression into the parts of the schema (the field) it accesses.
    */
   @scala.annotation.tailrec
-  private def selectField(expr: Expression, dataTypeOpt: Option[DataType]): Option[StructField] = {
+  private def selectField(
+      expr: Expression,
+      dataTypeOpt: Option[DataType],
+      hasDynamicLookup: Boolean = false): Option[StructField] = {
     expr match {
       case a: Attribute =>
+        // Readers evaluate stored defaults against the requested type. Keep the previous
+        // projection for these columns when a dynamic lookup would narrow it.
         dataTypeOpt.map { dt =>
           StructField(a.name, dt, a.nullable, a.metadata)
-        }
+        }.filterNot(field => hasDynamicLookup && field.hasExistenceDefaultValue)
       case c: GetStructField =>
         val field = c.childSchema(c.ordinal)
         val newField = field.copy(dataType = dataTypeOpt.getOrElse(field.dataType))
-        selectField(c.child, Option(struct(newField)))
+        selectField(c.child, Option(struct(newField)), hasDynamicLookup)
       case GetArrayStructFields(child, _, ordinal, _, containsNull) =>
         // For case-sensitivity aware field resolution, we should take `ordinal` which
         // points to correct struct field.
@@ -110,14 +115,14 @@ object SelectedField {
             throw QueryCompilationErrors.dataTypeUnsupportedByClassError(x, "GetArrayStructFields")
         }
         val newField = StructField(field.name, newFieldDataType, field.nullable, field.metadata)
-        selectField(child, Option(ArrayType(struct(newField), containsNull)))
-      case GetMapValue(child, _) =>
+        selectField(child, Option(ArrayType(struct(newField), containsNull)), hasDynamicLookup)
+      case GetMapValue(child, key) =>
         // GetMapValue does not select a field from a struct (i.e. prune the struct) so it can't be
         // the top-level extractor. However it can be part of an extractor chain.
         // SchemaPruning separately collects the fields used by the lookup key.
         val MapType(keyType, _, valueContainsNull) = child.dataType
         val opt = dataTypeOpt.map(dt => MapType(keyType, dt, valueContainsNull))
-        selectField(child, opt)
+        selectField(child, opt, hasDynamicLookup || !key.foldable)
       case MapValues(child) =>
         val MapType(keyType, _, valueContainsNull) = child.dataType
         // MapValues does not select a field from a struct (i.e. prune the struct) so it can't be
@@ -128,7 +133,7 @@ object SelectedField {
             // This should not happen.
             throw QueryCompilationErrors.dataTypeUnsupportedByClassError(x, "MapValues")
         }
-        selectField(child, opt)
+        selectField(child, opt, hasDynamicLookup)
       case MapKeys(child) =>
         val MapType(_, valueType, valueContainsNull) = child.dataType
         // MapKeys does not select a field from a struct (i.e. prune the struct) so it can't be
@@ -139,15 +144,15 @@ object SelectedField {
             // This should not happen.
             throw QueryCompilationErrors.dataTypeUnsupportedByClassError(x, "MapKeys")
         }
-        selectField(child, opt)
-      case GetArrayItem(child, _, _) =>
+        selectField(child, opt, hasDynamicLookup)
+      case GetArrayItem(child, index, _) =>
         // GetArrayItem does not select a field from a struct (i.e. prune the struct) so it can't be
         // the top-level extractor. However it can be part of an extractor chain.
         // SchemaPruning separately collects the fields used by the index.
         val ArrayType(_, containsNull) = child.dataType
         val opt = dataTypeOpt.map(dt => ArrayType(dt, containsNull))
-        selectField(child, opt)
-      case ElementAt(left, _, _, _) =>
+        selectField(child, opt, hasDynamicLookup || !index.foldable)
+      case ElementAt(left, selector, _, _) =>
         // ElementAt does not select a field from a struct (i.e. prune the struct) so it can't be
         // the top-level extractor. However it can be part of an extractor chain.
         // For example:
@@ -157,21 +162,21 @@ object SelectedField {
         left.dataType match {
           case ArrayType(_, containsNull) =>
             val opt = dataTypeOpt.map(dt => ArrayType(dt, containsNull))
-            selectField(left, opt)
+            selectField(left, opt, hasDynamicLookup || !selector.foldable)
           case MapType(keyType, _, valueContainsNull) =>
             val opt = dataTypeOpt.map(dt => MapType(keyType, dt, valueContainsNull))
-            selectField(left, opt)
+            selectField(left, opt, hasDynamicLookup || !selector.foldable)
         }
       case ArrayFilter(argument, _: LambdaFunction) =>
-        selectField(argument, dataTypeOpt)
+        selectField(argument, dataTypeOpt, hasDynamicLookup)
       case ArraySort(argument, _: LambdaFunction, _) =>
-        selectField(argument, dataTypeOpt)
+        selectField(argument, dataTypeOpt, hasDynamicLookup)
       case Reverse(child) =>
-        selectField(child, dataTypeOpt)
+        selectField(child, dataTypeOpt, hasDynamicLookup)
       case Shuffle(child, _) =>
-        selectField(child, dataTypeOpt)
+        selectField(child, dataTypeOpt, hasDynamicLookup)
       case Slice(x, start, length) if start.foldable && length.foldable =>
-        selectField(x, dataTypeOpt)
+        selectField(x, dataTypeOpt, hasDynamicLookup)
       case KnownNotContainsNull(child) =>
         val ArrayType(_, containsNull) = child.dataType
         val opt = dataTypeOpt.map {
@@ -181,7 +186,7 @@ object SelectedField {
             throw QueryCompilationErrors.dataTypeUnsupportedByClassError(
               x, "KnownNotContainsNull")
         }
-        selectField(child, opt)
+        selectField(child, opt, hasDynamicLookup)
       case _ =>
         None
     }
