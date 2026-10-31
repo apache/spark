@@ -28,7 +28,7 @@ import io.fabric8.kubernetes.client.dsl.base.PatchContext
 import org.jmock.lib.concurrent.DeterministicScheduler
 import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
 import org.mockito.ArgumentMatchers.{any, anyBoolean, eq => mockitoEq}
-import org.mockito.Mockito.{atLeastOnce, inOrder, mock, never, spy, times, verify, when}
+import org.mockito.Mockito.{atLeastOnce, doAnswer, inOrder, mock, never, spy, times, verify, when}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkException, SparkFunSuite}
@@ -233,6 +233,48 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     verify(podAllocator).stop(TEST_SPARK_APP_ID)
     verify(labeledConfigMaps).delete()
     verify(kubernetesClient).close()
+  }
+
+  Seq(false, true).foreach { deleteExecutors =>
+    test(s"Stop allocation before closing the client: deleteExecutors=$deleteExecutors") {
+      val conf = sparkConf.clone.set(KUBERNETES_DELETE_EXECUTORS, deleteExecutors)
+      when(sc.conf).thenReturn(conf)
+      val backend = new KubernetesClusterSchedulerBackend(taskScheduler, sc, kubernetesClient,
+        schedulerExecutorService, eventQueue, podAllocator, lifecycleManager,
+        watchEvents, pollEvents)
+      backend.stop()
+      val order = inOrder(podAllocator, eventQueue, kubernetesClient)
+      order.verify(podAllocator).stopAllocation()
+      order.verify(eventQueue).stop()
+      if (deleteExecutors) {
+        order.verify(podAllocator).stop(TEST_SPARK_APP_ID)
+      } else {
+        verify(podAllocator, never()).stop(any())
+      }
+      order.verify(kubernetesClient).close()
+    }
+  }
+
+  test("Interrupted allocation shutdown still cleans resources and restores interruption") {
+    doAnswer((_: org.mockito.invocation.InvocationOnMock) => {
+      Thread.currentThread().interrupt()
+      // Model an interrupted awaitTermination, which clears the flag before throwing.
+      assert(Thread.interrupted())
+      throw new InterruptedException("allocation shutdown interrupted")
+    }).when(podAllocator).stopAllocation()
+    doAnswer((_: org.mockito.invocation.InvocationOnMock) => {
+      assert(!Thread.currentThread().isInterrupted)
+      null
+    }).when(eventQueue).stop()
+    try {
+      schedulerBackendUnderTest.stop()
+      verify(eventQueue).stop()
+      verify(podAllocator).stop(TEST_SPARK_APP_ID)
+      verify(kubernetesClient).close()
+      assert(Thread.currentThread().isInterrupted)
+    } finally {
+      Thread.interrupted()
+    }
   }
 
   test("Remove executor") {

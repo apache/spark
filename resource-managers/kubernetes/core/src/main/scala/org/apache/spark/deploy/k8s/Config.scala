@@ -645,6 +645,41 @@ private[spark] object Config extends Logging {
       .checkValue(value => value > 0, "Allocation maximum should be a positive integer")
       .createWithDefault(Int.MaxValue)
 
+  val KUBERNETES_ALLOCATION_PARALLEL_ENABLED =
+    ConfigBuilder("spark.kubernetes.allocation.batch.parallel.enabled")
+      .doc("When true, executor pods are created in parallel using a thread pool sized by " +
+        "spark.kubernetes.allocation.batch.concurrency. This can speed up executor allocation " +
+        "when Kubernetes API latency is high. When false, pods are created serially. " +
+        "Only applies when spark.kubernetes.allocation.pods.allocator is direct.")
+      .version("4.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val KUBERNETES_ALLOCATION_BATCH_CONCURRENCY =
+    ConfigBuilder("spark.kubernetes.allocation.batch.concurrency")
+      .doc("Number of concurrent threads used to create executor pods in each allocation batch. " +
+        "Only takes effect when spark.kubernetes.allocation.pods.allocator is direct and " +
+        "spark.kubernetes.allocation.batch.parallel.enabled is true. " +
+        "The number of pods requested is still limited by spark.kubernetes.allocation.batch.size " +
+        "and spark.kubernetes.allocation.maxPendingPods.")
+      .version("4.4.0")
+      .intConf
+      .checkValue(value => value > 0,
+        "Allocation batch concurrency should be a positive integer")
+      .createWithDefault(5)
+
+  val KUBERNETES_ALLOCATION_SHUTDOWN_TIMEOUT =
+    ConfigBuilder("spark.kubernetes.allocation.shutdownTimeout")
+      .doc("Maximum time to wait for in-flight parallel executor pod creation during shutdown. " +
+        "Queued requests are cancelled. After this timeout, application cleanup proceeds and " +
+        "late API responses may not be cleaned up by the allocator. This wait is separate from " +
+        "the snapshot subscriber shutdown timeout and only applies to parallel allocation " +
+        "when spark.kubernetes.allocation.pods.allocator is direct.")
+      .version("4.4.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(value => value >= 0, "Allocation shutdown timeout must not be negative")
+      .createWithDefaultString("20s")
+
   val KUBERNETES_ALLOCATION_DRIVER_READINESS_TIMEOUT =
     ConfigBuilder("spark.kubernetes.allocation.driver.readinessTimeout")
       .doc("Time to wait for driver pod to get ready before creating executor pods. This wait " +

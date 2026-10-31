@@ -88,6 +88,16 @@ abstract class AbstractPodsAllocator {
   def start(applicationId: String, schedulerBackend: KubernetesClusterSchedulerBackend): Unit
 
   /**
+   * Stop allocating executors before application resource cleanup, including when pods are
+   * retained.
+   * Implementations must respect the pod retention setting when handling in-flight requests.
+   *
+   * @since 4.4.0
+   */
+  @Since("4.4.0")
+  def stopAllocation(): Unit = {}
+
+  /**
    * Stop hook
    *
    * @since 3.3.0
