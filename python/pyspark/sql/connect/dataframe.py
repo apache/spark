@@ -49,7 +49,6 @@ from pyspark import _NoValue
 from pyspark._globals import _NoValueType
 from pyspark.errors import (
     PySparkAttributeError,
-    PySparkNotImplementedError,
     PySparkRuntimeError,
     PySparkTypeError,
     PySparkValueError,
@@ -1937,7 +1936,7 @@ class DataFrame(ParentDataFrame):
         return self.columns
 
     def __getattr__(self, name: str) -> "Column":
-        if name in ["_jseq", "_jdf", "_jmap", "_jcols", "rdd"]:
+        if name in ["_jseq", "_jdf", "_jmap", "_jcols"]:
             raise PySparkAttributeError(
                 errorClass="JVM_ATTRIBUTE_NOT_SUPPORTED", messageParameters={"attr_name": name}
             )
@@ -2311,6 +2310,7 @@ class DataFrame(ParentDataFrame):
         binary_as_bytes = self._get_binary_as_bytes()
 
         schema: Optional[StructType] = None
+
         for schema_or_table in self._session.client.to_table_as_iterator(
             query, self._plan.observations
         ):
@@ -2347,7 +2347,7 @@ class DataFrame(ParentDataFrame):
 
     def _map_partitions(
         self,
-        func: "PandasMapIterFunction",
+        func: "Union[PandasMapIterFunction, ArrowMapIterFunction]",
         schema: Union[StructType, str],
         evalType: int,
         barrier: bool,
@@ -2523,14 +2523,11 @@ class DataFrame(ParentDataFrame):
     def toJSON(self) -> ParentDataFrame:
         return self.select(F.to_json(F.struct(F.col("*"))).alias("value"))
 
-    if not is_remote_only():
+    @property
+    def rdd(self) -> "RDD[Row]":
+        from pyspark.core.connect.rdd import RDD as ConnectRDD
 
-        @property
-        def rdd(self) -> "RDD[Row]":
-            raise PySparkNotImplementedError(
-                errorClass="NOT_IMPLEMENTED",
-                messageParameters={"feature": "rdd"},
-            )
+        return cast("RDD[Row]", ConnectRDD._from_dataframe(self))
 
     @property
     def executionInfo(self) -> Optional["ExecutionInfo"]:
@@ -2613,7 +2610,6 @@ def _test() -> None:
     import pyspark.sql.dataframe
     from pyspark.sql import SparkSession as PySparkSession
     from pyspark.testing.utils import have_pandas, have_pyarrow
-    from pyspark.util import is_remote_only
 
     # It inherits docstrings but doctests cannot detect them so we run
     # the parent classe's doctests here directly.

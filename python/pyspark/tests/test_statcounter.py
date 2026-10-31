@@ -20,7 +20,7 @@ from pyspark.statcounter import StatCounter
 from pyspark.testing.utils import ReusedPySparkTestCase
 
 
-class StatCounterTests(ReusedPySparkTestCase):
+class StatCounterTestsMixin:
     def test_base(self):
         stats = self.sc.parallelize([1.0, 2.0, 3.0, 4.0]).stats()
         self.assertEqual(stats.count(), 4)
@@ -116,6 +116,10 @@ class StatCounterTests(ReusedPySparkTestCase):
         self.assertEqual(stats.sum(), 20.0)
         self.assertAlmostEqual(stats.variance(), 1.25)
         self.assertAlmostEqual(stats.sampleVariance(), 1.4285714285714286)
+
+
+class StatCounterTests(StatCounterTestsMixin, ReusedPySparkTestCase):
+    pass
 
 
 if __name__ == "__main__":

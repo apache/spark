@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import unittest
+
 from pyspark.sql.tests.test_collection import DataFrameCollectionTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
@@ -23,6 +25,13 @@ class DataFrameCollectionParityTests(
     DataFrameCollectionTestsMixin,
     ReusedConnectTestCase,
 ):
+    @unittest.skip(
+        "Spark Connect DataFrames do not accept ``prefetchPartitions`` "
+        "on ``toLocalIterator`` (covered by classic ``sql.tests.test_collection``)."
+    )
+    def test_to_local_iterator_prefetch(self):
+        super().test_to_local_iterator_prefetch()
+
     def test_to_pandas_for_array_of_struct(self):
         # Spark Connect's implementation is based on Arrow.
         super().check_to_pandas_for_array_of_struct(True)

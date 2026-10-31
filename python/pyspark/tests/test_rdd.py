@@ -17,6 +17,7 @@
 import hashlib
 import os
 import random
+import sys
 import tempfile
 import time
 import unittest
@@ -36,13 +37,14 @@ from pyspark.serializers import (
     UTF8Deserializer,
 )
 from pyspark.sql import SparkSession
+from pyspark.storagelevel import StorageLevel
 from pyspark.testing.sqlutils import SPARK_HOME
 from pyspark.testing.utils import QuietTest, ReusedPySparkTestCase, have_numpy, have_pandas
 
 global_func = lambda: "Hi"  # noqa: E731
 
 
-class RDDTests(ReusedPySparkTestCase):
+class RDDTestsMixin:
     def test_range(self):
         self.assertEqual(self.sc.range(1, 1).count(), 0)
         self.assertEqual(self.sc.range(1, 0, -1).count(), 1)
@@ -500,6 +502,54 @@ class RDDTests(ReusedPySparkTestCase):
 
         self.assertRaises(ValueError, lambda: rdd.countApproxDistinct(0.00000001))
 
+    def test_count_approx(self):
+        rdd = self.sc.parallelize(range(1000), 10)
+        self.assertEqual(1000, rdd.countApprox(1000, 1.0))
+
+    def test_sum_approx(self):
+        rdd = self.sc.parallelize(range(1000), 10)
+        expected = sum(range(1000))
+        self.assertLess(abs(rdd.sumApprox(1000) - expected) / expected, 0.05)
+
+    def test_mean_approx(self):
+        rdd = self.sc.parallelize(range(1000), 10)
+        expected = sum(range(1000)) / 1000.0
+        self.assertLess(abs(rdd.meanApprox(1000) - expected) / expected, 0.05)
+
+    def test_lookup(self):
+        lst = range(1000)
+        rdd = self.sc.parallelize(zip(lst, lst), 10)
+        self.assertEqual([42], rdd.lookup(42))
+        self.assertEqual([], rdd.lookup(1024))
+        sorted_rdd = rdd.sortByKey()
+        self.assertEqual([42], sorted_rdd.lookup(42))
+        rdd2 = self.sc.parallelize([(("a", "b"), "c")]).groupByKey()
+        self.assertEqual(["c"], list(rdd2.lookup(("a", "b"))[0]))
+
+    def test_lookup_after_partition_by(self):
+        data = [(i % 11, i) for i in range(220)]
+        rdd = self.sc.parallelize(data, 14).partitionBy(9)
+        for k in range(11):
+            want = sorted(x for hk, x in data if hk == k)
+            self.assertEqual(want, sorted(rdd.lookup(k)))
+
+    def test_sample_by_key(self):
+        fractions = {"a": 0.2, "b": 0.1}
+        rdd = self.sc.parallelize(fractions.keys()).cartesian(self.sc.parallelize(range(0, 1000)))
+        sample = dict(rdd.sampleByKey(False, fractions, 2).groupByKey().collect())
+        self.assertTrue(100 < len(sample["a"]) < 300 and 50 < len(sample["b"]) < 150)
+        self.assertTrue(max(sample["a"]) <= 999 and min(sample["a"]) >= 0)
+        self.assertTrue(max(sample["b"]) <= 999 and min(sample["b"]) >= 0)
+
+    def test_map_partitions_with_split(self):
+        rdd = self.sc.parallelize([1, 2, 3, 4], 4)
+
+        def f(splitIndex, iterator):
+            yield splitIndex
+
+        with self.assertWarns(FutureWarning):
+            self.assertEqual(6, rdd.mapPartitionsWithSplit(f).sum())
+
     def test_histogram(self):
         # empty
         rdd = self.sc.parallelize([])
@@ -953,6 +1003,171 @@ class RDDTests(ReusedPySparkTestCase):
             self.assertFalse(
                 is_job_cancelled[i], "Thread {i}: Job in group B did not succeeded.".format(i=i)
             )
+
+    def test_glom_keeps_empty_partitions(self):
+        self.assertEqual(self.sc.parallelize([1], 3).glom().collect(), [[], [], [1]])
+
+    def test_zip_with_index_with_empty_partitions(self):
+        rdd = self.sc.parallelize([1, 2, 3], 5)
+        self.assertEqual(rdd.zipWithIndex().collect(), [(1, 0), (2, 1), (3, 2)])
+
+    def test_subtract_keeps_duplicates(self):
+        rdd = self.sc.parallelize([1, 1, 2, 3], 2)
+        self.assertEqual(sorted(rdd.subtract(self.sc.parallelize([2], 1)).collect()), [1, 1, 3])
+
+    def test_distinct_uses_python_equality(self):
+        # 1, 1.0 and True are equal in Python, although they pickle differently.
+        self.assertEqual(self.sc.parallelize([1, 1.0, True, 2], 3).distinct().count(), 2)
+
+    def test_pipe_large_input(self):
+        # More data than a pipe buffer holds, in both directions.
+        self.assertEqual(self.sc.parallelize(range(200000), 1).pipe("cat").count(), 200000)
+
+    def test_repartition_and_sort_within_partitions_by_key_only(self):
+        # Values are not compared, so they do not need to be comparable.
+        rdd = self.sc.parallelize([(1, {"b": 2}), (0, {}), (1, {"a": 1})], 2)
+        result = rdd.repartitionAndSortWithinPartitions(1, lambda k: 0).collect()
+        self.assertEqual([k for k, _ in result], [0, 1, 1])
+
+    def test_coalesce_keeps_partition_index(self):
+        rdd = self.sc.parallelize(range(4), 4).mapPartitionsWithIndex(lambda i, it: [i])
+        self.assertEqual(sorted(rdd.coalesce(2).collect()), [0, 1, 2, 3])
+
+    def test_union_keeps_partition_index(self):
+        a = self.sc.parallelize([1, 2], 2)
+        b = self.sc.parallelize([3, 4], 2).mapPartitionsWithIndex(
+            lambda i, it: [(i, x) for x in it]
+        )
+        self.assertEqual(a.union(b).collect(), [1, 2, (0, 3), (1, 4)])
+        self.assertEqual(a.union(b).getNumPartitions(), 4)
+
+    def test_cartesian_keeps_partition_index(self):
+        a = self.sc.parallelize([1, 2], 2).mapPartitionsWithIndex(
+            lambda i, it: [(i, x) for x in it]
+        )
+        b = self.sc.parallelize(["x", "y"], 2)
+        self.assertEqual(
+            sorted(a.cartesian(b).collect()),
+            [((0, 1), "x"), ((0, 1), "y"), ((1, 2), "x"), ((1, 2), "y")],
+        )
+
+    def test_save_as_text_file_fails_if_exists(self):
+        with tempfile.TemporaryDirectory() as path:
+            with QuietTest(self.sc):
+                self.assertRaises(
+                    Exception, lambda: self.sc.parallelize(["a"]).saveAsTextFile(path)
+                )
+
+    def test_save_as_text_file_with_bytes(self):
+        tempFile = tempfile.NamedTemporaryFile(delete=True)
+        tempFile.close()
+        self.sc.parallelize([b"\xc3\xa9 \xff raw", "text"], 1).saveAsTextFile(tempFile.name)
+        raw = b"".join(open(p, "rb").read() for p in sorted(glob(tempFile.name + "/part-0000*")))
+        # bytes elements are decoded as UTF-8, with malformed bytes replaced by U+FFFD.
+        self.assertEqual(raw.splitlines(), [b"\xc3\xa9 \xef\xbf\xbd raw", b"text"])
+
+    def test_pickle_file_round_trip(self):
+        tempFile = tempfile.NamedTemporaryFile(delete=True)
+        tempFile.close()
+        data = [(1, {"a": [1, 2]}), None, "x"]
+        self.sc.parallelize(data, 2).saveAsPickleFile(tempFile.name)
+        self.assertEqual(
+            sorted(map(repr, self.sc.pickleFile(tempFile.name).collect())),
+            sorted(map(repr, data)),
+        )
+
+    def test_binary_records(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "records.bin")
+            with open(path, "wb") as f:
+                f.write(b"aabbccdd")
+            records = self.sc.binaryRecords(path, 2).collect()
+            self.assertEqual(sorted(records), [b"aa", b"bb", b"cc", b"dd"])
+
+    def test_local_checkpoint(self):
+        rdd = self.sc.parallelize(range(10), 3).map(lambda x: x * 2)
+        rdd.localCheckpoint()
+        self.assertEqual(rdd.collect(), list(range(0, 20, 2)))
+        self.assertTrue(rdd.isCheckpointed())
+        self.assertTrue(rdd.isLocallyCheckpointed())
+        self.assertEqual(rdd.getNumPartitions(), 3)
+
+    def test_name(self):
+        rdd = self.sc.parallelize([1])
+        self.assertIsNone(rdd.name())
+        self.assertIs(rdd.setName("my rdd"), rdd)
+        self.assertEqual(rdd.name(), "my rdd")
+
+    def test_to_debug_string(self):
+        self.assertIsInstance(self.sc.parallelize([1]).map(lambda x: x).toDebugString(), bytes)
+
+    def test_run_job(self):
+        rdd = self.sc.parallelize(range(6), 3)
+        self.assertEqual(self.sc.runJob(rdd, lambda it: [sum(it)], [2, 0]), [9, 1])
+        self.assertEqual(self.sc.runJob(rdd, lambda it: [sum(it)]), [1, 5, 9])
+
+    def test_top_and_take_ordered(self):
+        rdd = self.sc.parallelize(range(100), 4)
+        self.assertEqual(rdd.top(3), [99, 98, 97])
+        self.assertEqual(rdd.takeOrdered(3, key=lambda x: -x), [99, 98, 97])
+
+    def test_is_instance_of_rdd(self):
+        self.assertIsInstance(self.sc.parallelize([1]), RDD)
+
+    def test_context_attributes(self):
+        self.assertEqual(self.sc.pythonVer, "%d.%d" % sys.version_info[:2])
+        self.assertIsInstance(self.sc.appName, str)
+        self.assertIsInstance(self.sc.master, str)
+
+    def test_parallelize_slices_batches(self):
+        # The batches of 6 elements, not the elements, are sliced over the 3 partitions.
+        self.assertEqual(
+            self.sc.parallelize(list(range(20)), 3).glom().collect(),
+            [list(range(6)), list(range(6, 12)), list(range(12, 20))],
+        )
+
+    def test_coalesce_to_more_partitions_than_the_input_has(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "lines.txt")
+            with open(path, "w") as f:
+                f.write("0\n1")
+            coalesced = self.sc.textFile(path).coalesce(10)
+            self.assertEqual(coalesced.getNumPartitions(), len(coalesced.glom().collect()))
+            indexed = self.sc.parallelize([2, 3], 2).mapPartitionsWithIndex(
+                lambda i, it: [(i, x) for x in it]
+            )
+            self.assertEqual(coalesced.union(indexed).collect(), ["0", "1", (0, 2), (1, 3)])
+
+    def test_text_file_with_min_partitions_keeps_order(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "lines.txt")
+            lines = ["line%d" % i for i in range(100)]
+            with open(path, "w") as f:
+                f.write("\n".join(lines))
+            rdd = self.sc.textFile(path, 4)
+            self.assertGreaterEqual(rdd.getNumPartitions(), 4)
+            self.assertEqual(rdd.collect(), lines)
+            self.assertEqual(rdd.zipWithIndex().values().collect(), list(range(100)))
+
+    def test_storage_level_of_rdd_derived_from_cached_rdd(self):
+        cached = self.sc.parallelize([1, 2], 2).cache()
+        try:
+            self.assertEqual(cached.map(lambda x: x).getStorageLevel(), StorageLevel.NONE)
+        finally:
+            cached.unpersist()
+
+    def test_text_file_with_comma_separated_paths(self):
+        with tempfile.TemporaryDirectory() as d:
+            a, b = os.path.join(d, "a.txt"), os.path.join(d, "b.txt")
+            with open(a, "w") as f:
+                f.write("a0\na1")
+            with open(b, "w") as f:
+                f.write("b0")
+            self.assertEqual(sorted(self.sc.textFile(a + "," + b).collect()), ["a0", "a1", "b0"])
+
+
+class RDDTests(RDDTestsMixin, ReusedPySparkTestCase):
+    pass
 
 
 if __name__ == "__main__":

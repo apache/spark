@@ -273,6 +273,8 @@ try:
         packages=[
             "pyspark",
             "pyspark.core",
+            "pyspark.core.classic",
+            "pyspark.core.connect",
             "pyspark.cloudpickle",
             "pyspark.inprocess",
             "pyspark.eval_handlers",

@@ -2269,6 +2269,13 @@ class SparkConnectClient(object):
         # (see SparkSession.removeTag), matching the Classic behavior.
         self.thread_local.tags.discard(tag)
 
+    def _remove_tag_allow_missing(self, tag: str) -> None:
+        """Remove a thread-local tag if present (used by Connect SparkContext job-group helpers)."""
+        self._throw_if_invalid_tag(tag)
+        if not hasattr(self.thread_local, "tags"):
+            self.thread_local.tags = set()
+        self.thread_local.tags.discard(tag)
+
     def get_tags(self) -> Set[str]:
         if not hasattr(self.thread_local, "tags"):
             self.thread_local.tags = set()
