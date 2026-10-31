@@ -3534,6 +3534,13 @@
     ],
     "sqlState" : "42704"
   },
+  "INNER_CLASS_ENCODER_UNSUPPORTED" : {
+    "message" : [
+      "Unable to generate an encoder for inner class `<className>` without access to the scope that this class was defined in.",
+      "Try moving this class out of its parent class."
+    ],
+    "sqlState" : "0A000"
+  },
   "INSERT_COLUMN_ARITY_MISMATCH" : {
     "message" : [
       "Cannot write to <tableName>, the reason is"
@@ -10548,12 +10555,6 @@
   "_LEGACY_ERROR_TEMP_1000" : {
     "message" : [
       "LEGACY store assignment policy is disallowed in Spark data source V2. Please set the configuration <configKey> to other values."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1002" : {
-    "message" : [
-      "Unable to generate an encoder for inner class `<className>` without access to the scope that this class was defined in.",
-      "Try moving this class out of its parent class."
     ]
   },
   "_LEGACY_ERROR_TEMP_1005" : {

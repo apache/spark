@@ -624,7 +624,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def outerScopeFailureForNewInstanceError(className: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1002",
+      errorClass = "INNER_CLASS_ENCODER_UNSUPPORTED",
       messageParameters = Map("className" -> className))
   }
 
