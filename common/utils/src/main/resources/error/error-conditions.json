@@ -294,6 +294,34 @@
     ],
     "sqlState" : "22023"
   },
+  "AUTOCDC_INVALID_RESERVED_SCHEMA" : {
+    "message" : [
+      "The declared schema for AutoCDC target table <tableName> shapes a reserved metadata column in a way AutoCDC cannot honor:"
+    ],
+    "subClass" : {
+      "DUPLICATE_COLUMN" : {
+        "message" : [
+          "The columns <columnNames> all resolve to the engine-owned reserved AutoCDC column `<engineColumnName>`. Declare the reserved column at most once."
+        ]
+      },
+      "DUPLICATE_NESTED_FIELD" : {
+        "message" : [
+          "Under reserved column `<reservedColumnName>`, the nested fields <fieldNames> all resolve to the engine-owned field `<engineFieldName>`. Declare each nested field at most once."
+        ]
+      },
+      "UNKNOWN_COLUMN" : {
+        "message" : [
+          "The column `<columnName>` uses the reserved AutoCDC column name prefix `<reservedColumnNamePrefix>` but is not a column AutoCDC produces. Remove it, or declare only the engine-owned reserved column(s)."
+        ]
+      },
+      "UNKNOWN_NESTED_FIELD" : {
+        "message" : [
+          "Reserved column `<reservedColumnName>` declares a nested field `<fieldName>` that AutoCDC does not produce. Declare only the engine-owned nested field(s), or omit the reserved column so AutoCDC appends its own."
+        ]
+      }
+    },
+    "sqlState" : "42000"
+  },
   "AUTOCDC_INVALID_STATE" : {
     "message" : [
       "Detected an invalid AutoCDC state for target table <tableName>:"
@@ -317,6 +345,11 @@
       "KEY_SCHEMA_DRIFT" : {
         "message" : [
           "One or more AutoCDC flows writing to the target use key columns <expectedKeySchema>, which are inconsistent with the keys recorded for it (recorded <recordedKeySchema>). AutoCDC does not support changing key columns or their types across incremental pipeline runs. Correct the conflicting flow(s) or perform a full refresh of the target table."
+        ]
+      },
+      "RESERVED_METADATA_COLUMN_CASING_DRIFT" : {
+        "message" : [
+          "The target table already has the reserved AutoCDC metadata column `<existingColumnName>`, but the current table definition resolves it to `<resolvedColumnName>`. AutoCDC does not support changing the casing of a reserved metadata column or its nested fields across incremental pipeline runs: the target keeps its existing spelling while downstream consumers are planned against the new one, so a case-sensitive read of the target could fail to match them. Declare the metadata column so its reserved name and nested field names match the target's existing spelling (here `<existingColumnName>`), or perform a full refresh of the target table."
         ]
       },
       "SCD_TYPE_DRIFT" : {
