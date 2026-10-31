@@ -31,16 +31,16 @@ jobs:
     if: github.repository == 'apache/spark'
     steps:
     - name: Download winutils Hadoop binary
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
       with:
         repository: cdarlint/winutils
     - name: Move Hadoop winutil into home directory
       run: |
         Move-Item -Path hadoop-3.3.6 -Destination ~\
     - name: Checkout Spark repository
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
     - name: Cache Maven local repository
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: ~/.m2/repository
         key: build-sparkr-windows-maven-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}

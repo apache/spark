@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.ttl
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -161,22 +163,18 @@ class ListStateImplWithTTL[S](
   override def clearExpiredValues(elementKey: UnsafeRow): ValueExpirationResult = {
     var numValuesExpired = 0L
     val unsafeRowValuesIterator = store.valuesIterator(elementKey, stateName)
-    // We clear the list, and use the iterator to put back all of the non-expired values
+    // We clear the list, and put back all of the non-expired values with a single write.
     store.remove(elementKey, stateName)
 
     var newMinExpirationMsOpt: Option[Long] = None
-    var isFirst = true
+    val unexpiredValues = new ArrayBuffer[UnsafeRow]()
     unsafeRowValuesIterator.foreach { encodedValue =>
       if (!stateTypesEncoder.isExpired(encodedValue, currentTimestampMs())) {
-        if (isFirst) {
-          isFirst = false
-          store.put(elementKey, encodedValue, stateName)
-        } else {
-          store.merge(elementKey, encodedValue, stateName)
-        }
+        // The iterator may reuse the row, so copy it before buffering.
+        unexpiredValues += encodedValue.copy()
 
-        // If it is not expired, it needs to be reinserted (either via put or merge), but
-        // it also has an expiration time that might be the new minimum.
+        // If it is not expired, it needs to be reinserted, but it also has an expiration
+        // time that might be the new minimum.
         val currentExpirationMs = stateTypesEncoder.decodeTtlExpirationMs(encodedValue)
 
         newMinExpirationMsOpt = newMinExpirationMsOpt match {
@@ -188,6 +186,9 @@ class ListStateImplWithTTL[S](
       } else {
         numValuesExpired += 1
       }
+    }
+    if (unexpiredValues.nonEmpty) {
+      store.putList(elementKey, unexpiredValues.toArray, stateName)
     }
 
     ValueExpirationResult(numValuesExpired, newMinExpirationMsOpt)

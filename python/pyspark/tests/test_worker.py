@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import io
+import json
 import os
 import signal
 import sys
@@ -21,6 +23,8 @@ import tempfile
 import threading
 import time
 import unittest
+from typing import Any, Optional
+from unittest.mock import patch
 
 has_resource_module = True
 try:
@@ -31,7 +35,382 @@ except ImportError:
 from py4j.protocol import Py4JJavaError
 
 from pyspark import SparkConf, SparkContext
-from pyspark.testing.utils import PySparkTestCase, QuietTest, ReusedPySparkTestCase, eventually
+from pyspark.accumulators import _accumulatorRegistry
+from pyspark.core.files import SparkFiles
+from pyspark.serializers import (
+    CloudPickleSerializer,
+    CPickleSerializer,
+    SpecialLengths,
+    read_int,
+    write_int,
+    write_long,
+    write_with_length,
+)
+from pyspark.sql.types import LongType, StructField, StructType
+from pyspark.taskcontext import TaskContext
+from pyspark.testing.utils import QuietTest, ReusedPySparkTestCase, eventually
+from pyspark.util import PythonEvalType
+from pyspark.worker_metrics import WorkerMetrics
+
+with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
+    from pyspark.worker import main as worker_main
+
+
+class WorkerMetricsTests(unittest.TestCase):
+    def setUp(self):
+        metrics = WorkerMetrics()
+        metrics.reset()
+        self.addCleanup(metrics.reset)
+
+    def test_constructor_reuses_collector_without_reset(self):
+        metrics = WorkerMetrics()
+        metrics.set("bootTimestampMs", 123)
+        metrics.increment("rows", 2)
+        self.assertIs(WorkerMetrics(), metrics)
+        self.assertEqual(WorkerMetrics().to_dict(), {"bootTimestampMs": 123, "rows": 2})
+
+    def test_reset_isolates_new_task_from_existing_timer(self):
+        metrics = WorkerMetrics()
+        metrics.set("previousTaskRows", 10)
+        previous_timer = metrics.measure("previousTaskDuration")
+        with patch(
+            "pyspark.worker_metrics.time.perf_counter_ns",
+            side_effect=[0, 5_000_000, 10_000_000, 12_000_000],
+        ):
+            with previous_timer:
+                metrics.reset()
+                metrics.increment("currentTaskRows")
+            with metrics.measure("currentTaskDuration"):
+                pass
+        previous_timer.add_duration_ns(3_000_000)
+        self.assertIs(WorkerMetrics(), metrics)
+        self.assertEqual(metrics.to_dict(), {"currentTaskRows": 1, "currentTaskDuration": 2})
+
+    def test_set_current_timestamp_uses_epoch_milliseconds(self):
+        metrics = WorkerMetrics()
+        with patch("pyspark.worker_metrics.time.time_ns", return_value=1_700_000_000_123_456_789):
+            metrics.set_current_timestamp("bootTimestampMs")
+        self.assertEqual(metrics.to_dict(), {"bootTimestampMs": 1_700_000_000_123})
+
+    def test_accumulate_before_converting_to_milliseconds(self):
+        metrics = WorkerMetrics()
+        # Control the clock to retain fractional milliseconds and exclude gaps between blocks.
+        with patch(
+            "pyspark.worker_metrics.time.perf_counter_ns",
+            side_effect=[10_000_000, 10_600_000, 100_000_000, 100_700_000],
+        ):
+            with metrics.measure("duration"):
+                pass
+            self.assertEqual(metrics.to_dict(), {"duration": 0})
+            with metrics.measure("duration"):
+                pass
+        self.assertEqual(metrics.to_dict(), {"duration": 1})
+
+    def test_nested_timings_are_inclusive(self):
+        metrics = WorkerMetrics()
+        with patch(
+            "pyspark.worker_metrics.time.perf_counter_ns",
+            side_effect=[0, 1_000_000, 3_000_000, 5_000_000],
+        ):
+            with metrics.measure("outer"):
+                with metrics.measure("inner"):
+                    pass
+        self.assertEqual(metrics.to_dict(), {"outer": 5, "inner": 2})
+
+    def test_reuse_timer_scope(self):
+        metrics = WorkerMetrics()
+        timer = metrics.measure("duration")
+        with patch(
+            "pyspark.worker_metrics.time.perf_counter_ns",
+            side_effect=[0, 2_000_000, 3_000_000, 4_000_000],
+        ):
+            with timer:
+                with self.assertRaisesRegex(RuntimeError, "already running"):
+                    with timer:
+                        pass
+            with timer:
+                pass
+        self.assertEqual(metrics.to_dict(), {"duration": 3})
+
+    def test_accumulate_and_propagate_exception(self):
+        metrics = WorkerMetrics()
+        with patch(
+            "pyspark.worker_metrics.time.perf_counter_ns",
+            side_effect=[0, 2_000_000, 3_000_000, 4_000_000],
+        ):
+            with self.assertRaisesRegex(ValueError, "worker failure"):
+                with metrics.measure("duration"):
+                    raise ValueError("worker failure")
+            with metrics.measure("duration"):
+                pass
+        self.assertEqual(metrics.to_dict(), {"duration": 3})
+
+
+class WorkerInitResponseTests(unittest.TestCase):
+    """Tests for the init response the worker sends before any output, run without a JVM."""
+
+    def setUp(self):
+        # The worker runs in this process and sets up process-wide state as a worker would.
+        saved_files = (SparkFiles._root_directory, SparkFiles._is_running_on_worker)
+        saved_path = list(sys.path)
+        saved_accumulators = dict(_accumulatorRegistry)
+
+        def restore():
+            TaskContext._setTaskContext(None)
+            SparkFiles._root_directory, SparkFiles._is_running_on_worker = saved_files
+            sys.path[:] = saved_path
+            _accumulatorRegistry.clear()
+            _accumulatorRegistry.update(saved_accumulators)
+
+        self.addCleanup(restore)
+
+    @staticmethod
+    def _framed(payload: bytes) -> bytes:
+        buf = io.BytesIO()
+        write_with_length(payload, buf)
+        return buf.getvalue()
+
+    @staticmethod
+    def _worker_input(
+        udf_info: bytes,
+        items: list,
+        python_version: Optional[str] = None,
+        eval_type: int = PythonEvalType.NON_UDF,
+    ) -> bytes:
+        """Build the socket input of a task of ``eval_type`` whose init message ends with
+        ``udf_info``, followed by ``items`` as pickled input."""
+        init = io.BytesIO()
+        write_int(0, init)  # split_index
+        write_with_length((python_version or "%d.%d" % sys.version_info[:2]).encode(), init)
+        task_context = {
+            "isBarrier": False,
+            "connInfo": None,
+            "secret": None,
+            "stageId": 0,
+            "partitionId": 0,
+            "attemptNumber": 0,
+            "taskAttemptId": 0,
+            "cpus": 1,
+            "cpuAmount": "1",
+            "resources": {},
+            "localProperties": {},
+        }
+        write_with_length(json.dumps(task_context).encode(), init)
+        write_with_length(tempfile.gettempdir().encode(), init)  # spark_files_dir
+        write_int(0, init)  # num_python_includes
+        init.write(b"\x00")  # needs_broadcast_decryption_server
+        write_int(0, init)  # num_broadcast_variables
+        write_int(eval_type, init)
+        write_int(0, init)  # runner conf
+        write_int(0, init)  # eval conf
+        init.write(udf_info)
+
+        buf = io.BytesIO()
+        write_int(SpecialLengths.START_OF_INIT_MESSAGE, buf)
+        write_with_length(init.getvalue(), buf)
+        CPickleSerializer().dump_stream(iter(items), buf)
+        write_int(SpecialLengths.END_OF_DATA_SECTION, buf)
+        write_int(SpecialLengths.END_OF_STREAM, buf)
+        return buf.getvalue()
+
+    @classmethod
+    def _command(cls, func: Any) -> bytes:
+        """The udf_info of a classic RDD (NON_UDF) task running ``func``."""
+        ser = CPickleSerializer()
+        return cls._framed(CloudPickleSerializer().dumps((func, None, ser, ser)))
+
+    @staticmethod
+    def _udf_info(func: Any, command: Optional[bytes] = None) -> bytes:
+        """The udf_info of a task running one single-argument UDF ``func``, or the pickled
+        ``command`` in its place."""
+        if command is None:
+            command = CloudPickleSerializer().dumps((func, LongType()))
+        buf = io.BytesIO()
+        write_int(1, buf)  # num_udfs
+        write_int(1, buf)  # num_args
+        write_int(0, buf)  # arg offset
+        buf.write(b"\x00")  # is_kwarg
+        write_int(1, buf)  # num_chained
+        write_with_length(command, buf)
+        write_long(0, buf)  # result_id
+        return buf.getvalue()
+
+    @staticmethod
+    def _udtf_info(udtf_cls: type, return_type: str) -> bytes:
+        """The udf_info of a task running ``udtf_cls`` on one argument with ``return_type``."""
+        buf = io.BytesIO()
+        write_int(1, buf)  # num_args
+        write_int(0, buf)  # arg offset
+        buf.write(b"\x00")  # is_kwarg
+        write_int(0, buf)  # num_partition_child_indexes
+        buf.write(b"\x00")  # has_pickled_analyze_result
+        write_with_length(CloudPickleSerializer().dumps(udtf_cls), buf)
+        write_with_length(return_type.encode(), buf)
+        write_with_length(b"test_udtf", buf)  # name
+        return buf.getvalue()
+
+    @classmethod
+    def _raising_payload(cls, error: BaseException) -> bytes:
+        """A NON_UDF payload whose unpickling raises ``error`` from ``fail_on_unpickle``."""
+
+        def fail_on_unpickle():
+            raise error
+
+        class RaisesOnUnpickle:
+            def __reduce__(self):
+                return fail_on_unpickle, ()
+
+        return cls._framed(CloudPickleSerializer().dumps(RaisesOnUnpickle()))
+
+    def _run(self, worker_input: bytes, expect_exit: bool = False) -> io.BytesIO:
+        outfile = io.BytesIO()
+        if expect_exit:
+            with self.assertRaises(SystemExit):
+                worker_main(io.BytesIO(worker_input), outfile)
+        else:
+            worker_main(io.BytesIO(worker_input), outfile)
+        outfile.seek(0)
+        return outfile
+
+    def _read_init_response(self, outfile: io.BytesIO) -> dict:
+        self.assertEqual(read_int(outfile), SpecialLengths.START_OF_INIT_RESPONSE)
+        return json.loads(outfile.read(read_int(outfile)).decode("utf-8"))
+
+    def test_init_response_precedes_output(self):
+        worker_input = self._worker_input(self._command(lambda _, it: (x * 2 for x in it)), [1, 2])
+        outfile = self._run(worker_input)
+        self.assertEqual(self._read_init_response(outfile), {})
+        ser = CPickleSerializer()
+        self.assertEqual([ser._read_with_length(outfile) for _ in range(2)], [2, 4])
+        self.assertEqual(read_int(outfile), SpecialLengths.METRICS_DATA)
+
+    def test_payload_error_is_reported_in_init_response(self):
+        worker_input = self._worker_input(self._framed(b"not a pickle"), [1])
+        outfile = self._run(worker_input, expect_exit=True)
+        error = self._read_init_response(outfile)["error"]
+        self.assertTrue(error["isPayloadError"])
+        self.assertEqual(error["errorClass"], "UnpicklingError")
+        self.assertIn("UnpicklingError", error["traceback"])
+        self.assertTrue(error["message"])
+        # No output follows an init error.
+        self.assertEqual(outfile.read(), b"")
+
+    def test_payload_error_with_unprintable_exception(self):
+        class UnprintableError(Exception):
+            def __str__(self):
+                raise RuntimeError("str() failed")
+
+        worker_input = self._worker_input(self._raising_payload(UnprintableError()), [1])
+        outfile = self._run(worker_input, expect_exit=True)
+        error = self._read_init_response(outfile)["error"]
+        self.assertEqual(
+            error,
+            {
+                "message": "<exception str() failed>",
+                "traceback": error["traceback"],
+                "errorClass": "UnprintableError",
+                "isPayloadError": True,
+            },
+        )
+        self.assertIn("UnprintableError", error["traceback"])
+        self.assertEqual(outfile.read(), b"")
+
+    def test_init_error_traceback_follows_worker_settings(self):
+        worker_input = self._worker_input(self._raising_payload(ValueError("bad payload")), [1])
+        no_traceback_settings = {
+            "SPARK_HIDE_TRACEBACK": "",
+            "SPARK_SIMPLIFIED_TRACEBACK": "",
+            "SPARK_TRACEBACK_WITH_LOCALS": "",
+        }
+        # By default the traceback keeps the frames of the handled exception.
+        with patch.dict(os.environ, no_traceback_settings):
+            outfile = self._run(worker_input, expect_exit=True)
+        tb = self._read_init_response(outfile)["error"]["traceback"]
+        self.assertTrue(tb.startswith("Traceback (most recent call last):"))
+        self.assertIn("in fail_on_unpickle", tb)
+        self.assertTrue(tb.endswith("ValueError: bad payload\n"))
+
+        with patch.dict(os.environ, {**no_traceback_settings, "SPARK_HIDE_TRACEBACK": "1"}):
+            outfile = self._run(worker_input, expect_exit=True)
+        error = self._read_init_response(outfile)["error"]
+        self.assertEqual(error["traceback"], "ValueError: bad payload\n")
+
+    def test_setup_error_is_reported_in_init_response(self):
+        worker_input = self._worker_input(
+            self._command(lambda _, it: it), [1], python_version="2.0"
+        )
+        outfile = self._run(worker_input, expect_exit=True)
+        error = self._read_init_response(outfile)["error"]
+        self.assertFalse(error["isPayloadError"])
+        self.assertEqual(error["errorClass"], "PySparkRuntimeError")
+        self.assertIn("PYTHON_VERSION_MISMATCH", error["traceback"])
+        self.assertEqual(outfile.read(), b"")
+
+    def test_handler_construction_error_is_not_a_payload_error(self):
+        class FailingHandler:
+            def __init__(self, **kwargs):
+                raise ImportError("pyarrow is not installed")
+
+        worker_input = self._worker_input(
+            self._udf_info(lambda x: x), [1], eval_type=PythonEvalType.SQL_BATCHED_UDF
+        )
+        with patch("pyspark.worker.get_eval_type_handler", return_value=FailingHandler):
+            outfile = self._run(worker_input, expect_exit=True)
+        error = self._read_init_response(outfile)["error"]
+        self.assertFalse(error["isPayloadError"])
+        self.assertEqual(error["errorClass"], "ImportError")
+        self.assertEqual(error["message"], "pyarrow is not installed")
+        self.assertEqual(outfile.read(), b"")
+
+    def test_payload_window_of_each_payload_kind(self):
+        class TwoArgUDTF:
+            def eval(self, a, b):
+                yield (a,)
+
+        struct_type = StructType([StructField("x", LongType())]).json()
+        cases = [
+            # A UDF whose function does not unpickle.
+            (
+                PythonEvalType.SQL_BATCHED_UDF,
+                self._udf_info(None, command=b"not a pickle"),
+                "UnpicklingError",
+                True,
+            ),
+            # A UDTF that declares a non-struct return type.
+            (
+                PythonEvalType.SQL_TABLE_UDF,
+                self._udtf_info(TwoArgUDTF, '"long"'),
+                "must be a struct type",
+                True,
+            ),
+            # A UDTF whose 'eval' signature does not match the call, checked by its handler.
+            (
+                PythonEvalType.SQL_TABLE_UDF,
+                self._udtf_info(TwoArgUDTF, struct_type),
+                "UDTF_EVAL_METHOD_ARGUMENTS_DO_NOT_MATCH_SIGNATURE",
+                False,
+            ),
+        ]
+        for eval_type, udf_info, expected_error, is_payload_error in cases:
+            with self.subTest(expected_error=expected_error):
+                outfile = self._run(
+                    self._worker_input(udf_info, [1], eval_type=eval_type), expect_exit=True
+                )
+                error = self._read_init_response(outfile)["error"]
+                self.assertIn(expected_error, error["traceback"])
+                self.assertEqual(error["isPayloadError"], is_payload_error)
+                self.assertEqual(outfile.read(), b"")
+
+    def test_data_error_is_reported_after_init_response(self):
+        def fail(_, it):
+            for _x in it:
+                raise ValueError("data error")
+            yield
+
+        outfile = self._run(self._worker_input(self._command(fail), [1]), expect_exit=True)
+        self.assertEqual(self._read_init_response(outfile), {})
+        self.assertEqual(read_int(outfile), SpecialLengths.PYTHON_EXCEPTION_THROWN)
+        self.assertIn("data error", outfile.read(read_int(outfile)).decode("utf-8"))
 
 
 class WorkerTests(ReusedPySparkTestCase):
@@ -145,6 +524,26 @@ class WorkerTests(ReusedPySparkTestCase):
         self.assertEqual(sum(range(100)), acc2.value)
         self.assertEqual(sum(range(100)), acc1.value)
 
+    def test_worker_metrics_include_spills(self):
+        accumulator = self.sc.accumulator(0)
+
+        def increment(value):
+            from pyspark import TaskContext, shuffle
+
+            # Supply known spill totals to check their transport into JVM task metrics.
+            shuffle.MemoryBytesSpilled += 7
+            shuffle.DiskBytesSpilled += 9
+            accumulator.add(1)
+            return TaskContext.get().stageId(), value + 1
+
+        result = self.sc.parallelize([1, 2], 1).map(increment).collect()
+        self.assertEqual([value for _, value in result], [2, 3])
+        self.assertEqual(accumulator.value, 2)
+        self.sc._jsc.sc().listenerBus().waitUntilEmpty(10000)
+        stage = self.sc._jsc.sc().statusStore().lastStageAttempt(result[0][0])
+        self.assertEqual(stage.memoryBytesSpilled(), 14)
+        self.assertEqual(stage.diskBytesSpilled(), 18)
+
     def test_reuse_worker_after_take(self):
         rdd = self.sc.parallelize(range(100000), 1)
         self.assertEqual(0, rdd.first())
@@ -185,7 +584,19 @@ class WorkerTests(ReusedPySparkTestCase):
             self.assertRegex(str(e), "exception with 中")
 
 
-class WorkerReuseTest(PySparkTestCase):
+class WorkerReuseTest(ReusedPySparkTestCase):
+    @classmethod
+    def conf(cls):
+        # Pin spark.python.use.daemon=true. Worker reuse (hence stable worker PIDs) only
+        # happens on the daemon path; the simple-worker path spawns a fresh process per
+        # task. Sibling suites here run with use.daemon=false and, because all suites in
+        # this file share one gateway JVM, whichever launches it first leaks its conf into
+        # the JVM system properties (SPARK-59885). Pinning it keeps this reuse assertion
+        # independent of test ordering.
+        conf = super().conf()
+        conf.set("spark.python.use.daemon", "true")
+        return conf
+
     @eventually(catch_assertions=True)
     def test_reuse_worker_of_parallelize_range(self):
         rdd = self.sc.parallelize(range(20), 8)
@@ -204,6 +615,9 @@ class WorkerMemoryTest(unittest.TestCase):
     def setUp(self):
         class_name = self.__class__.__name__
         conf = SparkConf().set("spark.executor.pyspark.memory", "2g")
+        # Pin spark.task.cpus so a fractional value leaked from another suite via JVM system
+        # properties (shared gateway JVM) cannot split the worker memory limit and flake this.
+        conf = conf.set("spark.task.cpus", "1")
         self.sc = SparkContext("local[4]", class_name, conf=conf)
 
     def test_memory_limit(self):
@@ -284,7 +698,15 @@ class WorkerSegfaultNonDaemonTest(WorkerSegfaultTest):
         return _conf
 
 
-class WorkerPoolCrashTest(PySparkTestCase):
+class WorkerPoolCrashTest(ReusedPySparkTestCase):
+    @classmethod
+    def conf(cls):
+        # Pin daemon so worker reuse (stable PIDs) is independent of test ordering; see
+        # WorkerReuseTest.conf for the shared-gateway leak rationale (SPARK-59885).
+        conf = super().conf()
+        conf.set("spark.python.use.daemon", "true")
+        return conf
+
     def test_worker_crash(self):
         # SPARK-47565: Kill a worker that is currently idling
         rdd = self.sc.parallelize(range(20), 4)

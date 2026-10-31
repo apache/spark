@@ -1035,7 +1035,8 @@ private[spark] class TaskSchedulerImpl(
       }
     }
     ThreadUtils.shutdown(starvationTimer)
-    ThreadUtils.shutdown(abortTimer)
+    // Discard pending abort tasks, delayed by `UNSCHEDULABLE_TASKSET_TIMEOUT`, without waiting.
+    abortTimer.shutdownNow()
   }
 
   override def defaultParallelism(): Int = backend.defaultParallelism()
@@ -1059,8 +1060,11 @@ private[spark] class TaskSchedulerImpl(
         executorsPendingDecommission(executorId) =
           ExecutorDecommissionState(clock.getTimeMillis(), decommissionInfo.workerHost)
       }
+      // This reaches TaskSetManager.recomputeLocality(), and TaskSetManagers are not thread
+      // safe, so it must be called while holding the lock, like rootPool.executorLost() is.
+      rootPool.executorDecommission(executorId)
     }
-    rootPool.executorDecommission(executorId)
+    // Call backend.reviveOffers() without holding the lock on this to prevent deadlock
     backend.reviveOffers()
   }
 

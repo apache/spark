@@ -20,6 +20,7 @@ package org.apache.spark.sql.pipelines.autocdc
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{functions => F, AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.classic.{DataFrame, Dataset}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -86,6 +87,15 @@ class Scd2ForeachBatchHandlerSuite
     resolvedSequencingType = LongType
   )
 
+  private val ignoreNullProcessor = processor.copy(
+    changeArgs = processor.changeArgs.copy(
+      ignoreNullSelection = Some(ColumnSelection.IncludeColumns(
+        Seq(UnqualifiedColumnName("value")))))
+  )
+  private val emptyVersionMap = Map.empty[String, Boolean]
+  private val unauthoredValueVersionMap =
+    Map(QuotingUtils.quoteNameParts(Seq("value")) -> false)
+
   private def createAuxTable(seedRows: Row*): Unit =
     createTable(defaultAuxIdent, defaultAuxTableIdentifier, auxSchema, seedRows: _*)
 
@@ -120,8 +130,9 @@ class Scd2ForeachBatchHandlerSuite
       value: String,
       startAt: java.lang.Long,
       endAt: java.lang.Long,
-      recordStartAt: Long): Row =
-    Row(id, value, startAt, endAt, meta(recordStartAt))
+      recordStartAt: Long,
+      versionMap: Any = null): Row =
+    Row(id, value, startAt, endAt, meta(recordStartAt, versionMap))
 
   /** A canonical aux row `(id, value, startAt, endAt, meta(recordStartAt), deletedByBatchId)`. */
   private def auxRow(
@@ -130,12 +141,17 @@ class Scd2ForeachBatchHandlerSuite
       startAt: java.lang.Long,
       endAt: java.lang.Long,
       recordStartAt: Long,
-      deletedByBatchId: java.lang.Long): Row =
-    Row(id, value, startAt, endAt, meta(recordStartAt), deletedByBatchId)
+      deletedByBatchId: java.lang.Long,
+      versionMap: Any = null): Row =
+    Row(id, value, startAt, endAt, meta(recordStartAt, versionMap), deletedByBatchId)
 
   /** Run a microbatch of source rows through the default handler. */
   private def runBatch(batchId: Long)(rows: Row*): Unit =
     exec.execute(microbatchOf(sourceSchema)(rows: _*), batchId)
+
+  /** Run a microbatch with ignore-null enabled for `value`. */
+  private def runIgnoreNullBatch(batchId: Long)(rows: Row*): Unit =
+    execWith(ignoreNullProcessor).execute(microbatchOf(sourceSchema)(rows: _*), batchId)
 
   /**
    * Run `rows` as batch `batchId`, capture both tables, then replay the identical batch under the
@@ -159,11 +175,15 @@ class Scd2ForeachBatchHandlerSuite
    * updated. On recovery Structured Streaming reruns the same `batchId`, which
    * [[Scd2BatchProcessor.deletedByBatchIdColName]] is designed to make idempotent.
    */
-  private def runBatchAuxMergeOnly(batchId: Long)(rows: Row*): Unit = {
+  private def runBatchAuxMergeOnly(
+      batchId: Long,
+      p: Scd2BatchProcessor = processor)(rows: Row*): Unit = {
     // Reuse the handler's own reconciliation chain so this helper cannot drift from execute(),
     // then run only the aux merge (skipping the target merge) to model the mid-batch crash.
-    val reconciled = exec.reconcileMicrobatch(microbatchOf(sourceSchema)(rows: _*), batchId)
-    processor.mergeRowsIntoAuxiliaryTable(
+    val reconciled = execWith(p).reconcileMicrobatch(
+      microbatchOf(sourceSchema)(rows: _*),
+      batchId)
+    p.mergeRowsIntoAuxiliaryTable(
       reconciledDfWithAuxRowsTagged = reconciled.reconciledAndRoutedDf,
       originalAffectedRowsFromAuxiliaryTable = reconciled.affectedRowsFromAuxiliaryTable,
       auxiliaryTableIdentifier = defaultAuxTableIdentifier,
@@ -689,6 +709,74 @@ class Scd2ForeachBatchHandlerSuite
 
     checkAnswer(targetTable, targetRow(1, "a", 10L, null, 20L))
     checkAnswer(auxTable, auxRow(1, "a", 10L, null, 10L, null))
+  }
+
+  test("recovering after a crash between merges converges with ignore-null coalescing") {
+    // The null event inherits "a", making both events one run. The first event is therefore
+    // written to aux before the crash, while the inherited tail and its unauthored map have not
+    // reached the target. Replaying the same batch must reproduce the clean single-run result.
+    createAuxTable()
+    createTargetTable()
+
+    val rows = Seq(upsert(1, "a", 10L), upsert(1, null, 20L))
+    runBatchAuxMergeOnly(1L, ignoreNullProcessor)(rows: _*)
+
+    checkAnswer(
+      auxTable,
+      auxRow(
+        1, "a", 10L, null, 10L, deletedByBatchId = null, versionMap = emptyVersionMap))
+    assert(targetTable.collect().isEmpty)
+
+    runIgnoreNullBatch(1L)(rows: _*)
+
+    checkAnswer(targetTable, targetRow(1, "a", 10L, null, 20L, unauthoredValueVersionMap))
+    checkAnswer(
+      auxTable,
+      auxRow(
+        1, "a", 10L, null, 10L, deletedByBatchId = null, versionMap = emptyVersionMap))
+  }
+
+  test("retry after an aux-only merge reuses a previously coalesced ignore-null carry-in") {
+    // Batch 1 establishes a coalesced run. Batch 2 then crashes after demoting its visible tail
+    // into aux but before advancing the target. The retry sees that row in both tables; it must
+    // deduplicate the copies, use the coalesced value as carry-in, and advance the run exactly
+    // once.
+    createAuxTable()
+    createTargetTable()
+
+    runIgnoreNullBatch(1L)(upsert(1, "a", 10L), upsert(1, null, 20L))
+    checkAnswer(targetTable, targetRow(1, "a", 10L, null, 20L, unauthoredValueVersionMap))
+    checkAnswer(
+      auxTable,
+      auxRow(
+        1, "a", 10L, null, 10L, deletedByBatchId = null, versionMap = emptyVersionMap))
+
+    runBatchAuxMergeOnly(2L, ignoreNullProcessor)(upsert(1, null, 30L))
+    checkAnswer(targetTable, targetRow(1, "a", 10L, null, 20L, unauthoredValueVersionMap))
+    checkAnswer(
+      auxTable,
+      Seq(
+        auxRow(
+          1, "a", 10L, null, 10L, deletedByBatchId = null, versionMap = emptyVersionMap),
+        auxRow(
+          1, "a", 10L, null, 20L,
+          deletedByBatchId = null, versionMap = unauthoredValueVersionMap)
+      )
+    )
+
+    runIgnoreNullBatch(2L)(upsert(1, null, 30L))
+
+    checkAnswer(targetTable, targetRow(1, "a", 10L, null, 30L, unauthoredValueVersionMap))
+    checkAnswer(
+      auxTable,
+      Seq(
+        auxRow(
+          1, "a", 10L, null, 10L, deletedByBatchId = null, versionMap = emptyVersionMap),
+        auxRow(
+          1, "a", 10L, null, 20L,
+          deletedByBatchId = null, versionMap = unauthoredValueVersionMap)
+      )
+    )
   }
 
   test("recovering after a crash that logically deleted a pre-existing aux row converges") {

@@ -19,6 +19,7 @@ package org.apache.spark.sql.pipelines.autocdc
 
 import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.{functions => F, AnalysisException, Column, QueryTest, Row}
+import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -870,6 +871,223 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
         expectedAnswer = Row(1, Row(2, null), null, 10L, null, Row(10L, null))
       )
     }
+  }
+
+  gridTest("preprocessMicrobatch leaves delete-representing rows with a null version map")(
+    Seq(
+      // Delete condition is specified; all non-matching rows should be treated as upsert.
+      Some(F.col("is_delete")),
+      // Delete condition is unspecified; all microbatch rows should be treated as upsert.
+      None
+    )
+  ) { case (deleteCondition) =>
+    val schema = new StructType()
+      .add("id", IntegerType)
+      .add("value", StringType)
+      .add("seq", LongType)
+      .add("is_delete", BooleanType)
+
+    val batch = microbatchOf(schema)(
+      Row(1, null, 10L, false), // upsert with null value
+      Row(1, "a", 20L, false), // upsert with non-null value
+      Row(1, null, 30L, true) // delete iff deleteCondition is set
+    )
+
+    val processor = Scd2BatchProcessor(
+      changeArgs = ChangeArgs(
+        keys = Seq(UnqualifiedColumnName("id")),
+        sequencing = F.col("seq"),
+        storedAsScdType = ScdType.Type2,
+        deleteCondition = deleteCondition,
+        // Even if we drop `is_delete` from the output schema, delete-row detection should still
+        // work and the row should still receive a null version map.
+        columnSelection = Some(ColumnSelection.ExcludeColumns(
+          Seq(UnqualifiedColumnName("is_delete")))),
+        ignoreNullSelection =
+          Some(ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("value"))))
+      ),
+      resolvedSequencingType = LongType
+    )
+
+    val result = preprocessMicrobatch(processor, batch)
+
+    val versionMaps = result.select(
+      F.col("seq"),
+      Scd2BatchProcessor.versionMapOf(
+        F.col(AutoCdcReservedNames.cdcMetadataColName)
+      ).as("vm")
+    )
+
+    // Upsert rows always get a populated version map. The third row is a delete (null
+    // version map) only when deleteCondition is set; otherwise it is an upsert too.
+    val valueVersionMapKey = QuotingUtils.quoteNameParts(Seq("value"))
+    val expectedDeleteRowMap: Any =
+      if (deleteCondition.isDefined) null else Map(valueVersionMapKey -> false)
+
+    checkAnswer(
+      df = versionMaps,
+      expectedAnswer = Seq(
+        Row(10L, Map(valueVersionMapKey -> false)),
+        Row(20L, Map.empty[String, Boolean]),
+        Row(30L, expectedDeleteRowMap)
+      )
+    )
+  }
+
+  gridTest("preprocessMicrobatch applies ignore-null selection to reductively removed columns")(
+    Seq(
+      // Include only value: removed is outside ignore-null and its padded null is authored.
+      (ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("value"))), true),
+      // Exclude value: the upsert event leaves removed's padded null unauthored.
+      (ColumnSelection.ExcludeColumns(Seq(UnqualifiedColumnName("value"))), false)
+    )
+  ) { case (ignoreNullSelection, expectedAuthorship) =>
+    val batchSchema = new StructType()
+      .add("id", IntegerType)
+      .add("value", StringType)
+      .add("seq", LongType)
+    val targetUserSchema = new StructType()
+      .add("id", IntegerType)
+      .add("value", StringType)
+      .add("removed", StringType)
+    val batch = microbatchOf(batchSchema)(Row(1, "a", 10L))
+    val processor = Scd2BatchProcessor(
+      changeArgs = ChangeArgs(
+        keys = Seq(UnqualifiedColumnName("id")),
+        sequencing = F.col("seq"),
+        storedAsScdType = ScdType.Type2,
+        columnSelection = Some(ColumnSelection.ExcludeColumns(
+          Seq(UnqualifiedColumnName("seq")))),
+        ignoreNullSelection = Some(ignoreNullSelection)
+      ),
+      resolvedSequencingType = LongType
+    )
+
+    val result = preprocessMicrobatch(processor, batch, Some(targetUserSchema))
+    checkAnswer(
+      df = result.select(
+        F.col("removed"),
+        Scd2BatchProcessor.versionMapOf(
+          F.col(AutoCdcReservedNames.cdcMetadataColName)).as("vm")),
+      expectedAnswer = Row(
+        null,
+        Map(QuotingUtils.quoteNameParts(Seq("removed")) -> expectedAuthorship))
+    )
+  }
+
+  test("preprocessMicrobatch applies ignore-null to a reductively removed nested field") {
+    val batchSchema = new StructType()
+      .add("id", IntegerType)
+      .add("value", new StructType().add("a", IntegerType))
+      .add("seq", LongType)
+    val targetUserSchema = new StructType()
+      .add("id", IntegerType)
+      .add("value", new StructType()
+        .add("a", IntegerType)
+        .add("removed", StringType))
+    val batch = microbatchOf(batchSchema)(Row(1, Row(1), 10L))
+    val processor = Scd2BatchProcessor(
+      changeArgs = ChangeArgs(
+        keys = Seq(UnqualifiedColumnName("id")),
+        sequencing = F.col("seq"),
+        storedAsScdType = ScdType.Type2,
+        columnSelection = Some(ColumnSelection.ExcludeColumns(
+          Seq(UnqualifiedColumnName("seq")))),
+        ignoreNullSelection =
+          Some(ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("value"))))
+      ),
+      resolvedSequencingType = LongType
+    )
+
+    val result = preprocessMicrobatch(processor, batch, Some(targetUserSchema))
+    checkAnswer(
+      df = result.select(
+        F.col("value"),
+        Scd2BatchProcessor.versionMapOf(
+          F.col(AutoCdcReservedNames.cdcMetadataColName)).as("vm")),
+      expectedAnswer = Row(
+        Row(1, null),
+        Map(QuotingUtils.quoteNameParts(Seq("value", "removed")) -> false))
+    )
+  }
+
+  test("version-map key spelling matches the preprocessed microbatch and target") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val batchSchema = new StructType()
+        .add("id", IntegerType)
+        .add("Value", StringType)
+        .add("seq", LongType)
+      val targetUserSchema = new StructType()
+        .add("id", IntegerType)
+        .add("value", StringType)
+      val batch = microbatchOf(batchSchema)(Row(1, null, 10L))
+      val processor = Scd2BatchProcessor(
+        changeArgs = ChangeArgs(
+          keys = Seq(UnqualifiedColumnName("id")),
+          sequencing = F.col("seq"),
+          storedAsScdType = ScdType.Type2,
+          columnSelection = Some(ColumnSelection.ExcludeColumns(
+            Seq(UnqualifiedColumnName("seq")))),
+          ignoreNullSelection =
+            Some(ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("Value"))))
+        ),
+        resolvedSequencingType = LongType
+      )
+
+      val result = preprocessMicrobatch(processor, batch, Some(targetUserSchema))
+      val sourceValueName = batchSchema.fields(1).name
+      val preprocessedValueName = result.schema.fields(1).name
+      val targetValueName = targetUserSchema.fields(1).name
+      assert(sourceValueName == "Value")
+      assert(preprocessedValueName == targetValueName)
+      assert(preprocessedValueName == "value")
+
+      val expectedVersionMapKey = QuotingUtils.quoteNameParts(Seq(preprocessedValueName))
+      checkAnswer(
+        df = result.select(Scd2BatchProcessor.versionMapOf(
+          F.col(AutoCdcReservedNames.cdcMetadataColName)).as("vm")),
+        expectedAnswer = Row(Map(expectedVersionMapKey -> false))
+      )
+    }
+  }
+
+  test("preprocessMicrobatch leaves version map null for all rows when ignore null is off") {
+    val schema = new StructType()
+      .add("id", IntegerType)
+      .add("value", StringType)
+      .add("seq", LongType)
+      .add("is_delete", BooleanType)
+
+    val batch = microbatchOf(schema)(
+      Row(1, null, 10L, false),
+      Row(1, null, 20L, true)
+    )
+
+    val processor = Scd2BatchProcessor(
+      changeArgs = ChangeArgs(
+        keys = Seq(UnqualifiedColumnName("id")),
+        sequencing = F.col("seq"),
+        storedAsScdType = ScdType.Type2,
+        deleteCondition = Some(F.col("is_delete")),
+        // None ignore-null selection should be treated as ignore-null off.
+        ignoreNullSelection = None
+      ),
+      resolvedSequencingType = LongType
+    )
+
+    val result = preprocessMicrobatch(processor, batch)
+
+    val versionMaps = result.select(
+      Scd2BatchProcessor.versionMapOf(
+        F.col(AutoCdcReservedNames.cdcMetadataColName)
+      ).as("vm")
+    )
+
+    // ignoreNullSelection is None -> version map is null on every row.
+    checkAnswer(
+      df = versionMaps,
+      expectedAnswer = Seq(Row(null), Row(null))
+    )
   }
 
   // =============== computeMinimumSequencePerKey tests ===============

@@ -244,24 +244,40 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
 
   override lazy val canonicalized: Expression = {
     var currExprId = -1
-    // Number the lambda variables of this higher-order function, but only those not already
-    // canonicalized. A canonical `NamedLambdaVariable` carries `value = null` (see the rename
-    // below); an original one carries an `AtomicReference`. When this HOF is nested inside another,
-    // the enclosing HOF's `canonicalized` renames every variable in the whole subtree first, then
-    // canonicalizes the children - which re-enters this method on the nested HOF. Re-numbering the
-    // already-renamed variables here would give a reference to an *enclosing* lambda's variable a
-    // different id than its binding, leaking it into `references`; skipping them keeps a variable
-    // and its references in agreement across nesting levels.
+    // Number the lambda variables bound in this higher-order function: the arguments of its lambda
+    // functions, including those of nested higher-order functions. A free variable, bound by an
+    // enclosing lambda function, keeps its exprId. Otherwise `filter(ys, y -> y > x1)` and
+    // `filter(ys, y -> y > x2)` would be semantically equal whenever `x1` and `x2` have the same
+    // data type and nullability.
+    //
+    // Only variables not already renamed are numbered or renamed. A renamed `NamedLambdaVariable`
+    // carries `value = null` (see the rename below); any other one carries an `AtomicReference`.
+    // When this HOF is nested inside another, the enclosing HOF's `canonicalized` renames the
+    // variables bound in its whole subtree first, then canonicalizes the children - which re-enters
+    // this method on the nested HOF. Its variables are then already numbered uniquely across the
+    // nesting levels, and numbering them again here could make them collide with the variables of
+    // the enclosing lambda functions.
+    val boundExprIds = functions.flatMap(_.collect {
+      case f: LambdaFunction => f.arguments.collect {
+        case l: NamedLambdaVariable if l.value != null => l.exprId
+      }
+    }.flatten).toSet
     val argumentMap = functions.flatMap(_.collect {
-      case l: NamedLambdaVariable if l.value != null =>
+      case l: NamedLambdaVariable if l.value != null && boundExprIds.contains(l.exprId) =>
         currExprId += 1
         l.exprId -> currExprId
     }).toMap
 
     val cleaned = this.transformUp {
-      case l: NamedLambdaVariable if argumentMap.contains(l.exprId) =>
+      case l: NamedLambdaVariable if l.value != null && argumentMap.contains(l.exprId) =>
         val newExprId = argumentMap(l.exprId)
         NamedLambdaVariable("none", l.dataType, l.nullable, exprId = ExprId(newExprId), null)
+      // A free variable gets one shared value in place of its own. The optimizer works on a fresh
+      // copy of the plan, where every occurrence of a lambda variable has its own value, and the
+      // value takes part in the equality. The shared value is not null, so a free variable never
+      // equals a renamed bound variable.
+      case l: NamedLambdaVariable if l.value != null =>
+        l.copy(value = HigherOrderFunction.FreeVariableValue)
     }
     val canonicalizedChildren = cleaned.children.map(_.canonicalized)
     withNewChildren(canonicalizedChildren)
@@ -293,7 +309,7 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
       elementVar: NamedLambdaVariable,
       index: String): String = {
     val elementType = elementVar.dataType
-    val elementAtomic = ctx.addReferenceObj(elementVar.name, elementVar.value)
+    val elementAtomic = ctx.addReferenceObj("lambdaElement", elementVar.value)
     val extractElement = CodeGenerator.getValue(arrayName, elementType, index)
     val atomicAssign = assignAtomic(elementAtomic, elementCode.value,
       elementCode.isNull, elementVar.nullable)
@@ -317,12 +333,17 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
       indexCode: ExprCode,
       indexVar: NamedLambdaVariable,
       index: String): String = {
-    val indexAtomic = ctx.addReferenceObj(indexVar.name, indexVar.value)
+    val indexAtomic = ctx.addReferenceObj("lambdaIndex", indexVar.value)
     s"""
       ${indexCode.value} = $index;
       ${assignAtomic(indexAtomic, indexCode.value)}
     """
   }
+}
+
+object HigherOrderFunction {
+  // The value of every free lambda variable in a canonicalized higher-order function.
+  private val FreeVariableValue = new AtomicReference[Any]()
 }
 
 /**
@@ -1322,10 +1343,8 @@ case class ArrayAggregate(
         val finishCode = finishForCodegen.genCode(ctx)
 
         val elementAssignment = assignArrayElement(ctx, arg, elementCode, elementVar, i)
-        val mergeAtomic = ctx.addReferenceObj(accForMergeVar.name,
-          accForMergeVar.value)
-        val finishAtomic = ctx.addReferenceObj(accForFinishVar.name,
-          accForFinishVar.value)
+        val mergeAtomic = ctx.addReferenceObj("lambdaAccForMerge", accForMergeVar.value)
+        val finishAtomic = ctx.addReferenceObj("lambdaAccForFinish", accForFinishVar.value)
 
         val mergeJavaType = CodeGenerator.javaType(accForMergeVar.dataType)
         val finishJavaType = CodeGenerator.javaType(accForFinishVar.dataType)

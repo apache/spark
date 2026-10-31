@@ -62,6 +62,17 @@ abstract class WindowFunctionFrame {
    * This should be called after the current row is updated via `write`.
    */
   def currentUpperBound(): Int
+
+  /**
+   * Whether this frame produces correct results for a partition with more than `Int.MaxValue`
+   * rows. The window driver rejects such a partition unless every frame returns `true` (see
+   * `WindowEvaluatorFactoryBase.checkPartitionSizeLimit`).
+   *
+   * A frame may return `true` only if it does not read the `index` passed to `write` or the
+   * window bounds, which are `Int`s, and tracks any position within the partition as a `Long`.
+   * Defaults to `false`, so a new frame is rejected for such partitions until shown to be safe.
+   */
+  def supportsLargePartition: Boolean = false
 }
 
 object WindowFunctionFrame {
@@ -100,8 +111,11 @@ abstract class OffsetWindowFunctionFrameBase(
    */
   protected var inputIterator: Iterator[UnsafeRow] = _
 
-  /** Index of the input row currently used for output. */
-  protected var inputIndex = 0
+  /**
+   * Index of the input row currently used for output. This is a `Long` so that the frames that
+   * support partitions with more than `Int.MaxValue` rows do not overflow it.
+   */
+  protected var inputIndex: Long = 0
 
   /** Attributes of the input row currently used for output. */
   protected val inputAttrs = inputSchema.map(_.withNullability(true))
@@ -321,6 +335,10 @@ class FrameLessOffsetWindowFunctionFrame(
       inputIndex += 1
   }
 
+  // `write` ignores the driver row index and the cursor is a `Long`, so partitions with more
+  // than `Int.MaxValue` rows are supported.
+  override def supportsLargePartition: Boolean = true
+
   override def write(index: Int, current: InternalRow): Unit = {
     if (absOffset > input.length) {
       if (!onlyLiterals) {
@@ -370,6 +388,10 @@ class UnboundedOffsetWindowFunctionFrame(
     super.prepareForRespectNulls()
     projection(nextSelectedRow)
   }
+
+  // The result is computed once in `prepare`, whose cursor is a `Long`, and `write` ignores the
+  // driver row index, so partitions with more than `Int.MaxValue` rows are supported.
+  override def supportsLargePartition: Boolean = true
 
   override def write(index: Int, current: InternalRow): Unit = {
     // The results are the same for each row in the partition, and have been evaluated in prepare.
@@ -489,7 +511,10 @@ final class SlidingWindowFunctionFrame(
 
     // Only recalculate and update when the buffer changes.
     if (processor != null && bufferUpdated) {
-      processor.initialize(input.length)
+      // The window driver rejects partitions larger than Int.MaxValue rows before any frame runs
+      // (see WindowEvaluatorFactoryBase.checkPartitionSizeLimit); toIntExact is a defensive
+      // backstop that fails loudly rather than silently truncating if that guard is bypassed.
+      processor.initialize(Math.toIntExact(input.length))
       val iter = buffer.iterator()
       while (iter.hasNext) {
         processor.update(iter.next())
@@ -524,8 +549,12 @@ final class UnboundedWindowFunctionFrame(
 
   /** Prepare the frame for calculating a new partition. Process all rows eagerly. */
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
+    // The window driver rejects partitions larger than Int.MaxValue rows before any frame runs
+    // (see WindowEvaluatorFactoryBase.checkPartitionSizeLimit); toIntExact is a defensive
+    // backstop that fails loudly rather than silently truncating if that guard is bypassed.
+    val numRows = Math.toIntExact(rows.length)
     if (processor != null) {
-      processor.initialize(rows.length)
+      processor.initialize(numRows)
       val iterator = rows.generateIterator()
       while (iterator.hasNext) {
         processor.update(iterator.next())
@@ -534,7 +563,7 @@ final class UnboundedWindowFunctionFrame(
       processor.evaluate(target)
     }
 
-    upperBound = rows.length
+    upperBound = numRows
   }
 
   /** Write the frame columns for the current row to the given target row. */
@@ -595,7 +624,10 @@ final class UnboundedPrecedingWindowFunctionFrame(
     }
 
     if (processor != null) {
-      processor.initialize(input.length)
+      // The window driver rejects partitions larger than Int.MaxValue rows before any frame runs
+      // (see WindowEvaluatorFactoryBase.checkPartitionSizeLimit); toIntExact is a defensive
+      // backstop that fails loudly rather than silently truncating if that guard is bypassed.
+      processor.initialize(Math.toIntExact(input.length))
     }
   }
 
@@ -679,7 +711,10 @@ final class UnboundedFollowingWindowFunctionFrame(
 
     // Only recalculate and update when the buffer changes.
     if (processor != null && bufferUpdated) {
-      processor.initialize(input.length)
+      // The window driver rejects partitions larger than Int.MaxValue rows before any frame runs
+      // (see WindowEvaluatorFactoryBase.checkPartitionSizeLimit); toIntExact is a defensive
+      // backstop that fails loudly rather than silently truncating if that guard is bypassed.
+      processor.initialize(Math.toIntExact(input.length))
       if (nextRow != null) {
         processor.update(nextRow)
       }
@@ -692,5 +727,5 @@ final class UnboundedFollowingWindowFunctionFrame(
 
   override def currentLowerBound(): Int = inputIndex
 
-  override def currentUpperBound(): Int = input.length
+  override def currentUpperBound(): Int = Math.toIntExact(input.length)
 }

@@ -307,6 +307,10 @@ SET VARIABLE var1 = 'hello3';
 SET VARIABLE var1 = DEFAULT, var2 = DEFAULT, var3 = DEFAULT;
 SELECT var1 AS `default1`, var2 AS `default2`, var3 AS `default3`;
 
+SET VARIABLE var1 = 'changed1', var2 = 'changed2', var3 = 'changed3';
+SET VARIABLE (var1, var2, var3) = (VALUES(DEFAULT, DEFAULT, DEFAULT));
+SELECT var1 AS `default1`, var2 AS `default2`, var3 AS `default3`;
+
 SET VARIABLE var1 = 'hello';
 SET VARIABLE (var1) = (SELECT DEFAULT FROM VALUES(1) AS T(c1));
 SELECT var1 AS `default`;
@@ -328,6 +332,41 @@ SET VARIABLE (var1) = (SELECT DEFAULT FROM VALUES(1),(2),(3) AS T(c1) OFFSET 1);
 SELECT var1 AS `default`;
 
 SET VARIABLE var1 = 'hello';
+SET VARIABLE (var1) =
+  (SELECT DEFAULT FROM VALUES(2),(1) AS T(c1) ORDER BY c1 LIMIT 1);
+SELECT var1 AS `default`;
+
+SET VARIABLE var1 = 'hello';
+SET VARIABLE (var1) = (SELECT * FROM VALUES(DEFAULT) AS T(c1));
+SELECT var1 AS `default`;
+
+SET VARIABLE var1 = 'hello';
+SET VARIABLE (var1) = (SELECT max(c1) FROM VALUES(DEFAULT) AS T(c1));
+SELECT var1 AS `default`;
+
+SET VARIABLE (var1) =
+  (SELECT * FROM VALUES(DEFAULT) AS T(c1) ORDER BY c1);
+
+SET VARIABLE (var1) = (SELECT (SELECT DEFAULT));
+
+SET VARIABLE var1 = 'hello';
+SET VARIABLE (var1) =
+  (SELECT (SELECT DEFAULT) FROM VALUES('outer-value') AS T(default));
+SELECT var1 AS `outer-value`;
+
+DECLARE OR REPLACE VARIABLE default STRING DEFAULT 'variable-value';
+
+SET VARIABLE var1 = default;
+SELECT var1 AS `variable-value`;
+
+SET VARIABLE var1 = session.default;
+SELECT var1 AS `qualified-variable-value`;
+
+DROP TEMPORARY VARIABLE default;
+
+SET VARIABLE (var1) = (SELECT DEFAULT, 1);
+
+SET VARIABLE var1 = 'hello';
 SET VARIABLE (var1) = (WITH v1(c1) AS (VALUES(1) AS T(c1)) SELECT DEFAULT FROM VALUES(1),(2),(3) AS T(c1));
 SELECT var1 AS `default`;
 
@@ -335,6 +374,12 @@ SELECT var1 AS `default`;
 SET VARIABLE var1 = 'Hello' || DEFAULT;
 
 SET VARIABLE (var1) = (VALUES(DEFAULT));
+
+DECLARE OR REPLACE VARIABLE default_int INT DEFAULT 7;
+SET VARIABLE (default_int) = (VALUES(DEFAULT + 1));
+DROP TEMPORARY VARIABLE default_int;
+
+SET VARIABLE (var1) = (VALUES(DEFAULT, 1));
 
 SET VARIABLE (var1) = (WITH v1(c1) AS (VALUES(1) AS T(c1)) SELECT DEFAULT + 1 FROM VALUES(1),(2),(3) AS T(c1));
 

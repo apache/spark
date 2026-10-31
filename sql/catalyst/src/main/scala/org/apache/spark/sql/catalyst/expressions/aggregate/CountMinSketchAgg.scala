@@ -171,7 +171,11 @@ case class CountMinSketchAgg(
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   override def inputTypes: Seq[AbstractDataType] = {
-    Seq(TypeCollection(IntegralType, StringType, BinaryType), DoubleType, DoubleType,
+    // TIME joins the accepted value types. It is physically a long of nanos-of-day, so it is
+    // sketched through the same addLong path as an integral column (see `update`). This expression
+    // is `ExpectsInputTypes` (not `ImplicitCastInputTypes`), so inputs are checked but not coerced:
+    // a DATE/TIMESTAMP is an analysis error, and the member order below does not affect that.
+    Seq(TypeCollection(IntegralType, StringType, BinaryType, AnyTimeType), DoubleType, DoubleType,
       TypeCollection(IntegerType, LongType))
   }
 
@@ -201,14 +205,16 @@ case class CountMinSketchAgg(
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(col, eps, confidence, seed) - Returns a count-min sketch of a column with the given esp,
-      confidence and seed. The result is an array of bytes, which can be deserialized to a
-      `CountMinSketch` before usage. Count-min sketch is a probabilistic data structure used for
-      cardinality estimation using sub-linear space.
+    _FUNC_(col, eps, confidence, seed) - Returns a count-min sketch of an integral, string, binary,
+      or TIME column with the given eps, confidence and seed. The result is an array of bytes, which
+      can be deserialized to a `CountMinSketch` before usage. Count-min sketch is a probabilistic
+      data structure used for cardinality estimation using sub-linear space.
   """,
   arguments = """
     Arguments:
-      * col - The column to build the count-min sketch from.
+      * col - The column to build the count-min sketch from. It can be an integral, string, binary,
+          or TIME column. A TIME column is counted by its nanoseconds-of-day, so look a value up in
+          the resulting sketch by that number (for example, `LocalTime.toNanoOfDay`).
       * eps - A double literal for the relative error of the sketch.
       * confidence - A double literal for the confidence of the sketch.
       * seed - An integer literal used as the random seed.
