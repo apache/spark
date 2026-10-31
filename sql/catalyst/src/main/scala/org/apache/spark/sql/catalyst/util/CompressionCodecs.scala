@@ -35,10 +35,12 @@ object CompressionCodecs {
 
   // Read-side short names extend the write-side set with Zstandard, which file-format writers do
   // not support yet (see the TODO in `HadoopCompressionCodec`) but readers do, via Spark's
-  // built-in Zstandard codec when Hadoop lacks native support (see `HadoopCodecStreams`).
+  // built-in Zstandard codec when Hadoop lacks native support (see `HadoopCodecStreams`). `zst`,
+  // the most common Zstandard file suffix, is accepted as well.
   private val readShortCompressionCodecNames = shortCompressionCodecNames ++ Map(
     "zstd" -> classOf[ZStandardCodec].getName,
-    "zstandard" -> classOf[ZStandardCodec].getName)
+    "zstandard" -> classOf[ZStandardCodec].getName,
+    "zst" -> classOf[ZStandardCodec].getName)
 
   /**
    * Return the full version of the given codec class.

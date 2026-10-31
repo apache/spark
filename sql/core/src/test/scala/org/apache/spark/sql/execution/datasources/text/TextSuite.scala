@@ -355,7 +355,8 @@ abstract class TextSuite extends SharedSparkSession with CommonFileDataSourceSui
     val os = new FileOutputStream(file)
     val out = codec match {
       case "" => os
-      case "zstd" | "zstandard" => new ZStdCompressionCodec(sparkConf).compressedOutputStream(os)
+      case "zstd" | "zstandard" | "zst" =>
+        new ZStdCompressionCodec(sparkConf).compressedOutputStream(os)
       case name => codecFactory.getCodecByName(name).createOutputStream(os)
     }
     out.write(data.getBytes(StandardCharsets.UTF_8))
@@ -365,10 +366,10 @@ abstract class TextSuite extends SharedSparkSession with CommonFileDataSourceSui
   test("SPARK-60217 decompression option overrides file name extension") {
     val numRecord = 100
     val data = (1 to numRecord).map(i => s"$i, value_$i")
-    // Every read-supported codec, including zstd/zstandard which the writers do not support.
+    // Every read-supported codec, including zstd/zstandard/zst which the writers do not support.
     val codecs = HadoopCompressionCodec.values().map(_.lowerCaseName())
       .filterNot(c => c == NONE.lowerCaseName() || c == UNCOMPRESSED.lowerCaseName()) ++
-      Seq("zstd", "zstandard")
+      Seq("zstd", "zstandard", "zst")
     for (wholeText <- Seq(true, false); codec <- codecs) {
       withTempDir { dir =>
         // Misleading `.txt` name (no codec suffix): extension-based detection would read it as
@@ -407,7 +408,7 @@ abstract class TextSuite extends SharedSparkSession with CommonFileDataSourceSui
     withTempPath { dir =>
       Seq("value").toDF().write.text(dir.getCanonicalPath)
       // The suggested codec list is built from a Map, so its order is not asserted here; the read
-      // set additionally includes zstd/zstandard on top of the write-supported codecs.
+      // set additionally includes zstd/zstandard/zst on top of the write-supported codecs.
       checkErrorMatchPVals(
         exception = intercept[SparkIllegalArgumentException] {
           spark.read.option("decompression", "illegal").text(dir.getCanonicalPath).collect()

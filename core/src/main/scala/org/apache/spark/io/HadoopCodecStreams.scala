@@ -64,17 +64,17 @@ object HadoopCodecStreams {
     config: Configuration,
     file: Path): Option[CompressionCodec] = {
     Option(config.get(DECOMPRESSION_CODEC_CONF)) match {
-      case Some(codecClassName) if codecClassName.nonEmpty =>
+      case Some("") =>
+        // The read option was explicitly set to `none`/`uncompressed`, which is stored as an empty
+        // string: read the file as-is, ignoring any compression-related file name extension.
+        None
+      case Some(codecClassName) =>
         // The compression codec was explicitly specified via the read option, so use it instead of
         // inferring from the file name extension. Resolve it the same way the write path does
         // (see CodecStreams.getCompressionCodec): load the class and instantiate it, so any
         // loadable CompressionCodec is supported, not just those registered with the factory.
         val codecClass = config.getClassByName(codecClassName)
         Some(ReflectionUtils.newInstance(codecClass, config).asInstanceOf[CompressionCodec])
-      case Some(_) =>
-        // The read option was explicitly set to `none`/`uncompressed`: read the file as-is,
-        // ignoring any compression-related file name extension.
-        None
       case None =>
         // No explicit compression option: infer the codec from the file name extension.
         getDecompressionCodecFromExtension(config, file)
@@ -99,12 +99,6 @@ object HadoopCodecStreams {
   }
 
   def createZstdInputStream(
-    file: Path,
-    inputStream: InputStream): Option[InputStream] = {
-    createZstdInputStream(new Configuration(false), file, inputStream)
-  }
-
-  def createZstdInputStream(
     config: Configuration,
     file: Path,
     inputStream: InputStream): Option[InputStream] = {
@@ -114,6 +108,9 @@ object HadoopCodecStreams {
     // Use Spark's Zstandard codec when the read option explicitly requested a Zstandard codec (in
     // which case the extension may not match), or, when no codec was forced, when the file name has
     // a Zstandard extension. A forced non-Zstandard codec is never replaced based on the extension.
+    // The conf always holds a resolved codec class name: short names such as `zstd`, `zstandard`
+    // and `zst` are mapped to `ZStandardCodec` when the option is parsed (see
+    // `CompressionCodecs.getReadCodecClassName`), so comparing class names covers all of them.
     val useZstd = Option(config.get(DECOMPRESSION_CODEC_CONF)) match {
       case Some(codecClassName) => codecClassName == classOf[ZStandardCodec].getName
       case None => ZSTD_EXTENSIONS.exists(fileName.endsWith)

@@ -109,7 +109,7 @@ class FileSourceOptions(
    * Read-only codec used to decompress the input files instead of inferring it from their file
    * name extension, as a codec class name (`null` for `none`/`uncompressed`, read as-is), or
    * `None` when the option is absent. Accepts the `compression` short names plus
-   * `zstd`/`zstandard`, which readers support even though writers do not.
+   * `zstd`/`zstandard`/`zst`, which readers support even though writers do not.
    *
    * Honored by the text-based file sources (CSV, JSON, XML and text, which document it, plus other
    * `TextBasedFileFormat` sources such as libsvm). Lazy so that the other file formats, which

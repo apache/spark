@@ -3794,7 +3794,8 @@ class XmlSuite
     val os = new FileOutputStream(file)
     val out = codec match {
       case "" => os
-      case "zstd" | "zstandard" => new ZStdCompressionCodec(sparkConf).compressedOutputStream(os)
+      case "zstd" | "zstandard" | "zst" =>
+        new ZStdCompressionCodec(sparkConf).compressedOutputStream(os)
       case name => codecFactory.getCodecByName(name).createOutputStream(os)
     }
     out.write(data.getBytes(StandardCharsets.UTF_8))
@@ -3809,10 +3810,10 @@ class XmlSuite
   test("SPARK-60217 decompression option overrides file name extension") {
     val numRecord = 100
     val records = (1 to numRecord).map(i => (i, s"value_$i"))
-    // Every read-supported codec, including zstd/zstandard which the writers do not support.
+    // Every read-supported codec, including zstd/zstandard/zst which the writers do not support.
     val codecs = HadoopCompressionCodec.values().map(_.lowerCaseName())
       .filterNot(c => c == HadoopCompressionCodec.NONE.lowerCaseName() ||
-        c == HadoopCompressionCodec.UNCOMPRESSED.lowerCaseName()) ++ Seq("zstd", "zstandard")
+        c == HadoopCompressionCodec.UNCOMPRESSED.lowerCaseName()) ++ Seq("zstd", "zstandard", "zst")
     codecs.foreach { codec =>
       withTempDir { dir =>
         // Misleading `.xml` name (no codec suffix): extension-based detection would read it as
