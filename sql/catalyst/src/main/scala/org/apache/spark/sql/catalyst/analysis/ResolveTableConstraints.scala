@@ -18,6 +18,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
+import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions.{And, CheckInvariant, EqualNullSafe, Expression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, V2WriteCommand, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -76,7 +77,20 @@ class ResolveTableConstraints(val catalogManager: CatalogManager) extends Rule[L
   private def buildCatalystExpression(c: Check): Expression = {
     Option(c.predicate())
       .flatMap(V2ExpressionUtils.toCatalyst)
-      .getOrElse(catalogManager.v1SessionCatalog.parser.parseExpression(c.predicateSql()))
+      .getOrElse(qualifyBuiltinFunctions(
+        catalogManager.v1SessionCatalog.parser.parseExpression(c.predicateSql())))
+  }
+
+  /**
+   * Qualifies the built-in functions a parsed check condition calls, so that a temporary function
+   * or the SQL path of the session of the write cannot shadow them. Any other name is left as is:
+   * a user-defined function in a constraint that the DDL no longer accepts still resolves here.
+   */
+  private def qualifyBuiltinFunctions(condition: Expression): Expression = condition.transform {
+    case f @ UnresolvedFunction(Seq(name), _, _, _, _, _, _, _)
+        if FunctionRegistry.builtin.functionExists(FunctionIdentifier(name)) =>
+      f.copy(nameParts =
+        Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.BUILTIN_NAMESPACE, name))
   }
 
   /**

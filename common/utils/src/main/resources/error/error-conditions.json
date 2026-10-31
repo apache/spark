@@ -10196,6 +10196,12 @@
     },
     "sqlState" : "42601"
   },
+  "USER_DEFINED_FUNCTION_IN_CHECK_CONSTRAINT" : {
+    "message" : [
+      "The check constraint `<checkCondition>` calls the user-defined function <functionName>. Check constraints can only call built-in functions."
+    ],
+    "sqlState" : "42621"
+  },
   "USER_RAISED_EXCEPTION" : {
     "message" : [
       "<errorMessage>"
