@@ -282,7 +282,13 @@ trait KeyGroupedPartitioningRuntimeFilterTests extends KeyGroupedPartitioningSui
             val shuffles = collectShuffles(df.queryExecution.executedPlan)
             val scans = collectScans(df.queryExecution.executedPlan)
             val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
-            assert(scans.map(_.outputPartitioning.numPartitions) === Seq(14, 6))
+            if (conf.getConf(V2_SCAN_PARTITION_PACKING_ENABLED) && !pushDownValues) {
+              assert(scans.forall(_.partitionPacking.isDefined))
+              assert(scans.forall(_.outputPartitioning == physical.UnknownPartitioning(0)))
+            } else {
+              assert(scans.map(_.outputPartitioning.numPartitions) === Seq(14, 6))
+              assert(scans.forall(_.partitionPacking.isEmpty))
+            }
             if (pushDownValues) {
               // Filtering only narrows the pushed-down key groups, so it never brings a shuffle
               // back to either leg.
@@ -3964,8 +3970,11 @@ class KeyGroupedPartitioningSuite
 
     // The positions, in the reported ordering, of the sort orders each scan keeps.
     Seq(table1 -> Seq(0, 1), table2 -> Seq(0), table3 -> Seq(1)).foreach { case (table, kept) =>
-      val scan = collectScans(sql(s"SELECT id, data FROM testcat.ns.$table")
+      val planned = collectScans(sql(s"SELECT id, data FROM testcat.ns.$table")
         .queryExecution.executedPlan).head
+      if (planned.partitionPacking.isDefined) assert(planned.outputOrdering.isEmpty)
+      // Inspect the raw source report and construct its grouping consumer explicitly below.
+      val scan = planned.copy(partitionPacking = None)
       val reported = scan.ordering.get
       assert(reported.exists(!_.references.subsetOf(scan.outputSet)),
         s"test setup: the ordering of $table is on `ts`, which is pruned out of the scan")
@@ -6011,7 +6020,9 @@ class KeyGroupedPartitioningSuite
 
     val df = sql(s"SELECT * FROM testcat.ns.$items")
     val scans = collectScans(df.queryExecution.executedPlan)
-    assert(scans(0).inputRDD.partitions.length === 3,
+    assert(scans(0).inputPartitions.size === 3)
+    assert(scans(0).inputRDD.partitions.length ===
+      (if (scans(0).partitionPacking.isDefined) 1 else 3),
       "items scan should not group partitions")
 
     Seq((true, 1), (false, 2)).foreach { case (bucketingShuffle, expectedShuffleCount) =>
@@ -6022,9 +6033,13 @@ class KeyGroupedPartitioningSuite
         assert(shuffles.size == expectedShuffleCount)
 
         val scans = collectScans(df.queryExecution.executedPlan)
-        assert(scans(0).inputRDD.partitions.length === 3,
+        assert(scans(0).inputPartitions.size === 3)
+        assert(scans(0).inputRDD.partitions.length ===
+          (if (scans(0).partitionPacking.isDefined) 1 else 3),
           "items scan should not group partitions")
-        assert(scans(1).inputRDD.partitions.length === 2,
+        assert(scans(1).inputPartitions.size === 2)
+        assert(scans(1).inputRDD.partitions.length ===
+          (if (scans(1).partitionPacking.isDefined) 1 else 2),
           "purchases scan should not group partitions")
 
         checkAnswer(df, Seq(Row(1, "aa", 40.0, 42.0)))
@@ -6534,7 +6549,9 @@ class KeyGroupedPartitioningSuite
     assert(scans.size === 1)
     // The scan derives an ascending sort on the partition key `id`. identity transforms are
     // unwrapped to AttributeReferences by V2ExpressionUtils.
-    val ordering = scans.head.outputOrdering
+    if (scans.head.partitionPacking.isDefined) assert(scans.head.outputOrdering.isEmpty)
+    val source = scans.head.copy(partitionPacking = None)
+    val ordering = source.outputOrdering
     assert(ordering.length === 1)
     assert(ordering.head.direction === Ascending)
     val keyExpr = ordering.head.child
@@ -6542,7 +6559,7 @@ class KeyGroupedPartitioningSuite
     assert(keyExpr.asInstanceOf[AttributeReference].name === "id")
     // With the config disabled, ordering derivation is suppressed.
     withSQLConf(SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "false") {
-      assert(scans.head.outputOrdering.isEmpty)
+      assert(source.outputOrdering.isEmpty)
     }
   }
 
@@ -8703,7 +8720,11 @@ class KeyGroupedPartitioningSuite
         val df = sql(query)
         val plan = df.queryExecution.executedPlan
 
-        val collapsed = keyedPartitioningsOf(collect(plan) { case p: ProjectExec => p })
+        // Verify the source's projected layout before optional task sizing withdraws its claim.
+        val sourcePlan = plan.transformUp {
+          case scan: BatchScanExec => scan.copy(partitionPacking = None)
+        }
+        val collapsed = keyedPartitioningsOf(collect(sourcePlan) { case p: ProjectExec => p })
           .filter(_.isCollapsed)
         assert(collapsed.exists(!_.isGrouped),
           "this test needs a collapsed, ungrouped partitioning to be meaningful")
@@ -10897,6 +10918,8 @@ class KeyGroupedPartitioningSuite
     // by key while neither holds a key's whole group: consuming them as an aligned pair would zip
     // split i against split i and drop every match that crosses mappers. Validation has to refuse
     // the pair so that AQE keeps the full shuffle read instead.
+    // With compatibility scan coalescing enabled, the pre-shuffle pipeline instead reports no
+    // keyed layout. That must also preserve every match and never expose a keyed local read.
     val idCols = Array(Column.create("id", IntegerType), Column.create("data", StringType))
     createTable("lrt", idCols, Array(identity("id")))
     createTable("lrs1", idCols, Array.empty[Transform])
@@ -10949,10 +10972,14 @@ class KeyGroupedPartitioningSuite
       // keeps its own, read whole as its broadcast's build input.
       assert(shuffles.size == 3,
         s"one shared wide-side shuffle and one per narrow side:\n${plan.treeString}")
-      val splitScans = shuffles
-        .flatMap(s => keyedPartitioningsOf(Seq(s.child))).filter(!_.isGrouped)
-      assert(splitScans.nonEmpty,
-        s"test setup: a shuffled scan reports a key across splits:\n${plan.treeString}")
+      val preShuffleLayouts = shuffles.flatMap(s => keyedPartitioningsOf(Seq(s.child)))
+      if (conf.getConf(V2_SCAN_PARTITION_PACKING_ENABLED)) {
+        assert(preShuffleLayouts.isEmpty, "packing must withdraw the keyed input claim")
+        assert(shuffles.flatMap(s => collectScans(s.child)).exists(_.partitionPacking.isDefined))
+      } else {
+        assert(preShuffleLayouts.exists(!_.isGrouped),
+          "without scan packing, the original split layout must remain exposed")
+      }
       assert(collect(plan) { case j: BroadcastHashJoinExec => j }.size == 2,
         s"test setup: both lower joins broadcast at runtime:\n${plan.treeString}")
 

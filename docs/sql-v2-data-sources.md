@@ -353,7 +353,7 @@ representation of a batch read. It has two methods:
 
 | Method | Description |
 |--------|-------------|
-| `planInputPartitions()` | Returns an array of `InputPartition` objects; each partition maps to one Spark task |
+| `planInputPartitions()` | Returns an array of `InputPartition` objects; Spark may group multiple inputs into one task |
 | `createReaderFactory()` | Returns a `PartitionReaderFactory` that is serialized and sent to executors |
 
 ### InputPartition and PartitionReader
@@ -361,6 +361,17 @@ representation of a batch read. It has two methods:
 [`InputPartition`](api/java/org/apache/spark/sql/connector/read/InputPartition.html) is a
 serializable handle representing a data split. It may optionally declare `preferredLocations()`
 for data locality.
+
+Inputs can also implement
+[`HasPartitionStatistics`](api/java/org/apache/spark/sql/connector/read/HasPartitionStatistics.html)
+to report their estimated `sizeInBytes()`. With
+`spark.sql.sources.v2.scanPartitionPacking.enabled`, Spark can pack adjacent inputs by size when
+the physical plan does not need the scan's partitioning or ordering. This applies to keyed and
+unkeyed batch scans and is disabled by default. Return `OptionalLong.empty()` when the size is
+unknown; Spark leaves such inputs unchanged unless a count fallback is explicitly configured.
+See [DataSource V2 Scan Task Sizing](sql-performance-tuning.html#datasource-v2-scan-task-sizing)
+for size limits, opening costs and parallelism settings. Packing uses the existing inputs and
+reader factory; the connector does not need to implement a separate packed scan.
 
 [`PartitionReaderFactory`](api/java/org/apache/spark/sql/connector/read/PartitionReaderFactory.html)
 is serialized to executors and creates a
@@ -571,7 +582,8 @@ public class JavaSimpleDataSourceV2 implements TestingV2Source {
 }
 {% endhighlight %}
 
-`planInputPartitions()` runs once on the driver and returns one `InputPartition` per task. Each
+`planInputPartitions()` runs on the driver. In this example, each `InputPartition` normally runs
+in its own task; keyed grouping or optional scan packing can combine inputs into fewer tasks. Each
 partition is serialized to an executor, so it should hold only what identifies the split (here a
 range of integers; for a file source, a path and a byte range). The `PartitionReaderFactory` is
 serialized the same way and creates a `PartitionReader` on the executor. The reader is a cursor:

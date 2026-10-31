@@ -2660,6 +2660,61 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val V2_SCAN_PARTITION_PACKING_ENABLED =
+    buildConf("spark.sql.sources.v2.scanPartitionPacking.enabled")
+      .doc("When enabled, pack batch DataSource V2 inputs inside eligible scans when no " +
+        "consumer relies on their partitioning or ordering. Uses reported sizeInBytes and an " +
+        "opening cost; an explicit maxPartitionNum provides a fallback when sizes are missing " +
+        "or invalid. Independent of V2 bucketing. Default off because packing can reduce " +
+        "useful parallelism and the map-output boundaries available for AQE skew splitting.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
+  val V2_SCAN_PARTITION_PACKING_MAX_PARTITION_BYTES =
+    buildConf("spark.sql.sources.v2.scanPartitionPacking.maxPartitionBytes")
+      .doc("Maximum estimated bytes per packed V2 scan task, including opening costs. " +
+        "An individual input larger than this limit remains a separate task; Spark does " +
+        "not split connector inputs.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(_ > 0, "The maximum partition size must be positive.")
+      .createWithDefaultString("128MB")
+
+  val V2_SCAN_PARTITION_PACKING_OPEN_COST_IN_BYTES =
+    buildConf("spark.sql.sources.v2.scanPartitionPacking.openCostInBytes")
+      .doc("Estimated cost of opening one V2 input, expressed as equivalent scanned bytes. " +
+        "Added to each input's reported size when scan partition packing is enabled.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(_ >= 0, "The opening cost must be non-negative.")
+      .createWithDefaultString("4MB")
+
+  val V2_SCAN_PARTITION_PACKING_MIN_PARTITION_NUM =
+    buildConf("spark.sql.sources.v2.scanPartitionPacking.minPartitionNum")
+      .doc("Suggested minimum number of size-packed V2 scan tasks. Defaults to " +
+        "spark.sql.leafNodeDefaultParallelism. Input boundaries, size limits and opening " +
+        "costs mean the resulting count is not guaranteed.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .checkValue(_ > 0, "The minimum partition count must be positive.")
+      .createOptional
+
+  val V2_SCAN_PARTITION_PACKING_MAX_PARTITION_NUM =
+    buildConf("spark.sql.sources.v2.scanPartitionPacking.maxPartitionNum")
+      .doc("Maximum V2 scan task count used only when any input lacks valid size statistics. " +
+        "Unset by default, leaving such inputs unchanged. This fallback balances input counts " +
+        "and cannot bound task bytes. It does not override size limits when all sizes are known.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .checkValue(_ > 0, "The maximum partition count must be positive.")
+      .createOptional
+
   val V2_BUCKETING_PUSH_PART_VALUES_ENABLED =
     buildConf("spark.sql.sources.v2.bucketing.pushPartValues.enabled")
       .doc(s"Whether to pushdown common partition values when ${V2_BUCKETING_ENABLED.key} is " +
@@ -9470,6 +9525,20 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def filesMinPartitionNum: Option[Int] = getConf(FILES_MIN_PARTITION_NUM)
 
   def filesMaxPartitionNum: Option[Int] = getConf(FILES_MAX_PARTITION_NUM)
+
+  def v2ScanPartitionPackingEnabled: Boolean = getConf(V2_SCAN_PARTITION_PACKING_ENABLED)
+
+  def v2ScanPartitionPackingMaxPartitionBytes: Long =
+    getConf(V2_SCAN_PARTITION_PACKING_MAX_PARTITION_BYTES)
+
+  def v2ScanPartitionPackingOpenCostInBytes: Long =
+    getConf(V2_SCAN_PARTITION_PACKING_OPEN_COST_IN_BYTES)
+
+  def v2ScanPartitionPackingMinPartitionNum: Option[Int] =
+    getConf(V2_SCAN_PARTITION_PACKING_MIN_PARTITION_NUM)
+
+  def v2ScanPartitionPackingMaxPartitionNum: Option[Int] =
+    getConf(V2_SCAN_PARTITION_PACKING_MAX_PARTITION_NUM)
 
   def ignoreCorruptFiles: Boolean = getConf(IGNORE_CORRUPT_FILES)
 

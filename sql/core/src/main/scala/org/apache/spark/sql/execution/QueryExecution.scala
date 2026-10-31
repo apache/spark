@@ -28,6 +28,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.internal.LogKeys.EXTENDED_EXPLAIN_GENERATOR
+import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
@@ -47,7 +48,7 @@ import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, Adapti
 import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
 import org.apache.spark.sql.execution.datasources.v2.{TransactionalExec, V2TableRefreshUtil}
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
-import org.apache.spark.sql.execution.exchange.{EnablePipelinedShuffle, EnsureRequirements, PipelinedShuffleEligibility, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange.{EnablePipelinedShuffle, EnsureRequirements, PackV2ScanPartitions, PipelinedShuffleEligibility, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
 import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqMetadata
 import org.apache.spark.sql.execution.streaming.runtime.{IncrementalExecution, WatermarkPropagator}
@@ -425,15 +426,35 @@ class QueryExecution(
         !hasShuffle(executedPlan)) {
       this
     } else {
-      val session = SparkSession.getOrCloneSessionWithConfigsOff(
-        sparkSession, Seq(SQLConf.LOCAL_PIPELINED_SHUFFLE_ENABLED))
-      new QueryExecution(session, commandExecuted, mode = mode,
-        shuffleCleanupModeOpt = shuffleCleanupModeOpt,
-        refreshPhaseEnabled = refreshPhaseEnabled, analyzerOpt = Some(analyzer))
+      withConfigsOff(Seq(SQLConf.LOCAL_PIPELINED_SHUFFLE_ENABLED))
     }
   }
 
   private[sql] def withRegularShuffle: QueryExecution = lazyRegularShuffle.get
+
+  /**
+   * A checkpoint reports its plan's output partitioning to the queries that read it later. Its
+   * root has no consumer when it is planned, so scan packing would withdraw a keyed partitioning
+   * those queries could use. Plan it with packing off, as well as with regular shuffles.
+   */
+  private val lazyForCheckpoint = LazyTry {
+    if (!sparkSession.sessionState.conf.v2ScanPartitionPackingEnabled) {
+      withRegularShuffle
+    } else {
+      withConfigsOff(
+        Seq(SQLConf.LOCAL_PIPELINED_SHUFFLE_ENABLED, SQLConf.V2_SCAN_PARTITION_PACKING_ENABLED))
+    }
+  }
+
+  private[sql] def forCheckpoint: QueryExecution = lazyForCheckpoint.get
+
+  /** A separate execution of the same plan, planned with `configs` turned off. */
+  private def withConfigsOff(configs: Seq[ConfigEntry[Boolean]]): QueryExecution = {
+    val session = SparkSession.getOrCloneSessionWithConfigsOff(sparkSession, configs)
+    new QueryExecution(session, commandExecuted, mode = mode,
+      shuffleCleanupModeOpt = shuffleCleanupModeOpt,
+      refreshPhaseEnabled = refreshPhaseEnabled, analyzerOpt = Some(analyzer))
+  }
 
   val lazyToRdd = LazyTry {
     new SQLExecutionRDD(
@@ -849,6 +870,9 @@ object QueryExecution {
       // Must run after `EnsureRequirements`: it fixes each `UnionExec`'s partitioning decision, and
       // the answer to fix is the one the exchanges around it were planned against.
       new StampUnionDecisions(unionConf),
+      // Must run after `EnsureRequirements`, which plans the exchanges that decide whether a V2
+      // scan's partitioning and ordering are used, and before the rules below read scan ordering.
+      PackV2ScanPartitions(),
       // This rule must be run after `EnsureRequirements`.
       InsertSortForLimitAndOffset,
       // `PushDownLocalSort` pushes a wider local sort down onto a narrower one below it, so a
