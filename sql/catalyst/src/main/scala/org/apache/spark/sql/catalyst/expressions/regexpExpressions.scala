@@ -139,7 +139,7 @@ private[catalyst] object StringRegexExpression {
   private val commentsFlag = Pattern.compile("""\(\?[a-zA-Z]*x""")
 
   // The product of the choices of the uncounted ranges that makes them count as one quantifier.
-  private val smallRangesLimit = 100
+  private val smallRangesLimit = 32
 
   /**
    * Counts the repeating quantifiers (`*`, `+`, `?` and `{n,m}`) in a regex that can backtrack,
@@ -152,7 +152,7 @@ private[catalyst] object StringRegexExpression {
    *    which a failed match never backtracks into;
    *  - `?` and a `{n,m}` that spans fewer than 10, which add a small factor. The choices of such
    *    quantifiers, and of groups that hold a `|`, multiply, so they count as one quantifier each
-   *    time their product reaches 100.
+   *    time their product reaches 32.
    * A repetition of at least 100, which adds its length to every attempt even when it cannot
    * backtrack, and a backreference, which compares as many characters as its group holds, count
    * as one quantifier each, unless they end the regex or an alternative of it.

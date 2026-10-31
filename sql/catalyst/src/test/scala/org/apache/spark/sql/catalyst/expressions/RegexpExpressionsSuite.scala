@@ -755,7 +755,7 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       "foo.*bar|baz.*qux", "colou?r.*x", "(.*)\\1", ".*.{1000}",
       // Groups that hold a `|`, a long fixed repetition and a backreference on their own.
       ".*(k1|k2|k3|k4|k5|k6|k7|k8).*", ".{1000}x", "\\d{4}-\\d{2}-\\d{2}.*", "(\\w)\\1x",
-      "^(\\w+)\\s\\1.*",
+      "^(\\w+)\\s\\1.*", ".*" + "(a|aa)" * 4 + "x",
       // Anchored.
       "^.*a.*b", "\\A.*a.*b", "(?i)^.*a.*b", "^v[0-9]+_.*", "^(a|b).*c.*").foreach { p =>
       assert(!RLike(str, Literal(p)).expensive, p)
@@ -765,6 +765,7 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       "a?" * 24 + "b", "(a.*b.*)c", "x|a.*b.*c",
       // Groups that hold a `|`, which multiply like `?`.
       "(a|a)" * 24 + "b", "(a|)" * 24 + "b", "(?:a|aa)" * 24 + "b", "(\\w|\\d)" * 24 + "x",
+      ".*" + "(a|aa)" * 5 + "x", ".*" + "a?" * 5 + "x",
       // An anchor that a quantifier makes optional.
       "^?.*a.*b", "\\A?.*a.*b", "^{0,1}.*a.*b",
       // A backreference, and a long repetition next to a quantifier.
