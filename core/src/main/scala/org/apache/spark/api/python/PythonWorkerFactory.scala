@@ -446,6 +446,21 @@ private[spark] class PythonWorkerFactory(
     envVars.get("PYSPARK_SPARK_SESSION_UUID").map(new PythonWorkerLogCapture(_))
 
   /**
+   * Number of end-of-logs sentinels processed so far for the given worker, or 0 when worker
+   * logging is not enabled. See [[PythonWorkerLogCapture.sentinelCount]].
+   */
+  private[spark] def logSentinelCount(workerId: String): Long =
+    workerLogCapture.map(_.sentinelCount(workerId)).getOrElse(0L)
+
+  /**
+   * Waits for the given worker's log blocks for the task that ran after `baseline` to be saved.
+   * Returns true (no wait needed) when worker logging is not enabled. See
+   * [[PythonWorkerLogCapture.awaitLogsFlushed]].
+   */
+  private[spark] def awaitLogsFlushed(workerId: String, baseline: Long, timeoutMs: Long): Boolean =
+    workerLogCapture.map(_.awaitLogsFlushed(workerId, baseline, timeoutMs)).getOrElse(true)
+
+  /**
    * Redirect the given streams to our stderr in separate threads.
    */
   private def redirectStreamsToStderr(stdout: InputStream, stderr: InputStream): Unit = {
