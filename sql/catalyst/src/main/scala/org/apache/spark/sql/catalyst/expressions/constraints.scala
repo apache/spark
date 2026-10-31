@@ -139,13 +139,15 @@ case class CheckConstraint(
    */
   def failIfCallsUserDefinedFunction(): Unit = {
     child.collectFirst {
-      case f: SQLFunctionExpression => toSQLId(f.function.name.nameParts)
-      case f: UserDefinedExpression => toSQLId(Seq(f.name))
-      case i: StaticInvoke if i.scalarFunction.isDefined => toSQLId(Seq(i.scalarFunction.get.name))
-      case Invoke(Literal(f: ScalarFunction[_], _), _, _, _, _, _, _, _) => toSQLId(Seq(f.name))
-      case a: V2Aggregator[_, _] => toSQLId(Seq(a.aggrFunc.name))
-    }.foreach { functionName =>
-      child.failAnalysis(
+      case f: SQLFunctionExpression => (f, toSQLId(f.function.name.nameParts))
+      case f: UserDefinedExpression => (f, toSQLId(Seq(f.name)))
+      case i: StaticInvoke if i.scalarFunction.isDefined =>
+        (i, toSQLId(Seq(i.scalarFunction.get.name)))
+      case i @ Invoke(Literal(f: ScalarFunction[_], _), _, _, _, _, _, _, _) =>
+        (i, toSQLId(Seq(f.name)))
+      case a: V2Aggregator[_, _] => (a, toSQLId(Seq(a.aggrFunc.name)))
+    }.foreach { case (call, functionName) =>
+      call.failAnalysis(
         errorClass = "USER_DEFINED_FUNCTION_IN_CHECK_CONSTRAINT",
         messageParameters = Map("checkCondition" -> condition, "functionName" -> functionName))
     }

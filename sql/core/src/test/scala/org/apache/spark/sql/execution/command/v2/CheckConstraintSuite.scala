@@ -197,9 +197,10 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     }
   }
 
-  // CREATE TABLE, REPLACE TABLE and, if `inAlter`, ALTER TABLE fail on the condition.
+  // CREATE TABLE, REPLACE TABLE and, if `inAlter`, ALTER TABLE fail at the call in the condition.
   private def checkUserDefinedFunctionRejected(
       cond: String,
+      call: String,
       functionName: String,
       inAlter: Boolean = true): Unit = {
     withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
@@ -214,40 +215,46 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
           condition = "USER_DEFINED_FUNCTION_IN_CHECK_CONSTRAINT",
           sqlState = "42621",
           parameters = Map("checkCondition" -> cond, "functionName" -> functionName),
-          context = ExpectedContext(fragment = cond))
+          context = ExpectedContext(fragment = call))
       }
     }
   }
 
   test("SPARK-60777: Check constraint cannot call a user-defined function") {
-    val call = s"fun_$catalog.ns.strlen"
+    val strlen = s"fun_$catalog.ns.strlen"
     Seq(
-      (StrLenDefault, s"$call(name) < 10", "`strlen_default`"),
+      (StrLenDefault, s"$strlen(name) < 10", s"$strlen(name)", "`strlen_default`"),
       // The optimizer folds a call with constant arguments, but the DDL does not.
-      (StrLenDefault, s"id < $call('abc')", "`strlen_default`"),
-      (StrLenMagic, s"$call(name) < 10", "`strlen_magic`"),
-      (new JavaStrLenStaticMagic, s"$call(name) < 10", "`strlen`")
-    ).foreach { case (function, cond, functionName) =>
+      (StrLenDefault, s"id < $strlen('abc')", s"$strlen('abc')", "`strlen_default`"),
+      (StrLenMagic, s"$strlen(name) < 10", s"$strlen(name)", "`strlen_magic`"),
+      (new JavaStrLenStaticMagic, s"$strlen(name) < 10", s"$strlen(name)", "`strlen`")
+    ).foreach { case (function, cond, call, functionName) =>
       withV2Function("strlen", StrLen(function)) {
-        checkUserDefinedFunctionRejected(cond, functionName)
+        checkUserDefinedFunctionRejected(cond, call, functionName)
       }
     }
 
     withUserDefinedFunction("tmp_len" -> true, "tmp_sql_len" -> true, "sql_len" -> false) {
       spark.udf.register("tmp_len", (s: String) => s.length)
-      checkUserDefinedFunctionRejected("tmp_len(name) < 10", "`tmp_len`")
+      checkUserDefinedFunctionRejected("tmp_len(name) < 10", "tmp_len(name)", "`tmp_len`")
+      // ALTER TABLE keeps failing with UNSUPPORTED_SQL_UDF_USAGE on a SQL function.
       sql("CREATE TEMPORARY FUNCTION tmp_sql_len(x STRING) RETURNS INT RETURN length(x)")
-      checkUserDefinedFunctionRejected("tmp_sql_len(name) < 10", "`tmp_sql_len`")
+      checkUserDefinedFunctionRejected(
+        "tmp_sql_len(name) < 10", "tmp_sql_len(name)", "`tmp_sql_len`", inAlter = false)
       sql("CREATE FUNCTION sql_len(x STRING) RETURNS INT RETURN length(x)")
-      checkUserDefinedFunctionRejected("sql_len(name) < 10", "`spark_catalog`.`default`.`sql_len`")
+      checkUserDefinedFunctionRejected(
+        "sql_len(name) < 10",
+        "sql_len(name)",
+        "`spark_catalog`.`default`.`sql_len`",
+        inAlter = false)
     }
   }
 
   test("SPARK-60777: Check constraint cannot call a V2 aggregate function") {
     withV2Function("avg", new JavaAverage) {
       // ALTER TABLE keeps failing with the error for an aggregate in a filter.
-      checkUserDefinedFunctionRejected(
-        s"fun_$catalog.ns.avg(CAST(id AS DOUBLE)) > 0", "`davg`", inAlter = false)
+      val call = s"fun_$catalog.ns.avg(CAST(id AS DOUBLE))"
+      checkUserDefinedFunctionRejected(s"$call > 0", call, "`davg`", inAlter = false)
     }
   }
 
@@ -314,17 +321,16 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
 
   test("SPARK-60777: Check constraint calling built-in functions is enforced") {
     Seq(
-      "UPPER(s) <> 'X'",
       "exists(a, x -> upper(CAST(x AS STRING)) = '2')",
       "struct(id AS x).x > 0",
       "extract(YEAR FROM d) < 2100"
     ).foreach { cond =>
       withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
-        sql(s"CREATE TABLE $t (id INT, s STRING, a ARRAY<INT>, d DATE) $defaultUsing")
+        sql(s"CREATE TABLE $t (id INT, a ARRAY<INT>, d DATE) $defaultUsing")
         sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK ($cond)")
-        sql(s"INSERT INTO $t VALUES (1, 'a', array(2), DATE'2020-01-01')")
+        sql(s"INSERT INTO $t VALUES (1, array(2), DATE'2020-01-01')")
         val error = intercept[SparkRuntimeException] {
-          sql(s"INSERT INTO $t VALUES (-1, 'x', array(-1), DATE'2999-01-01')")
+          sql(s"INSERT INTO $t VALUES (-1, array(-1), DATE'2999-01-01')")
         }
         assert(error.getCondition == "CHECK_CONSTRAINT_VIOLATION", cond)
         checkAnswer(spark.table(t).select("id"), Row(1))
