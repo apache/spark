@@ -22,17 +22,16 @@ import java.nio.channels.Channels
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.arrow.compression.{Lz4CompressionCodec, ZstdCompressionCodec}
 import org.apache.arrow.flatbuf.{RecordBatch => FlatBufRecordBatch}
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.{TypeLayout, VectorLoader, VectorSchemaRoot, VectorUnloader}
-import org.apache.arrow.vector.compression.{CompressionCodec, NoCompressionCodec}
+import org.apache.arrow.vector.compression.NoCompressionCodec
 import org.apache.arrow.vector.ipc.{ReadChannel, WriteChannel}
 import org.apache.arrow.vector.ipc.message.{ArrowBodyCompression, ArrowFieldNode}
 import org.apache.arrow.vector.ipc.message.{ArrowRecordBatch, MessageSerializer}
 import org.apache.arrow.vector.types.pojo.Field
 
-import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -40,7 +39,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.columnar.{CachedBatch, SimpleMetricsCachedBatchSerializer}
 import org.apache.spark.sql.errors.ExecutionErrors
-import org.apache.spark.sql.execution.arrow.ArrowWriter
+import org.apache.spark.sql.execution.arrow.{ArrowCompressionUtils, ArrowWriter}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
@@ -262,25 +261,6 @@ private object ArrowCachedBatchSerializer {
       throw ExecutionErrors.unsupportedDataTypeError(attr.dataType)
     }
   }
-
-  // scalastyle:off caselocale
-  def createCompressionCodec(
-      codecName: String,
-      compressionLevel: Int): CompressionCodec = {
-    codecName.toLowerCase match {
-      case "none" => NoCompressionCodec.INSTANCE
-      // The codec instance must be constructed directly so that compressionLevel is honored:
-      // CompressionCodec.Factory.createCodec(codecType) ignores the level and builds a codec at
-      // the default level. The level only matters on the write side; the read side looks up the
-      // codec by the type recorded in the IPC message.
-      case "zstd" => new ZstdCompressionCodec(compressionLevel)
-      case "lz4" => new Lz4CompressionCodec()
-      case other =>
-        throw SparkException.internalError(
-          s"Unsupported Arrow compression codec: $other. Supported values: none, zstd, lz4")
-    }
-  }
-  // scalastyle:on caselocale
 
   def serializeBatch(batch: ArrowRecordBatch): Array[Byte] = {
     val out = new ByteArrayOutputStream()
@@ -1005,7 +985,7 @@ private class InternalRowToArrowCachedBatchIterator(
     compressionCodecName: String,
     compressionLevel: Int) extends Iterator[ArrowCachedBatch] {
 
-  private val compressionCodec = ArrowCachedBatchSerializer.createCompressionCodec(
+  private val compressionCodec = ArrowCompressionUtils.createCompressionCodec(
     compressionCodecName,
     compressionLevel)
 
@@ -1112,7 +1092,7 @@ private class ColumnarBatchToArrowCachedBatchIterator(
     compressionCodecName: String,
     compressionLevel: Int) extends Iterator[ArrowCachedBatch] {
 
-  private val compressionCodec = ArrowCachedBatchSerializer.createCompressionCodec(
+  private val compressionCodec = ArrowCompressionUtils.createCompressionCodec(
     compressionCodecName,
     compressionLevel)
 
