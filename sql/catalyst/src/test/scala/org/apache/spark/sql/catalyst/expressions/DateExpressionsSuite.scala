@@ -1599,6 +1599,67 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-60743: make_timestamp rejects out-of-range seconds instead of wrapping them") {
+    // The seconds input is DecimalType(16, 6), so its unscaled micros can exceed an int.
+    // Each value below must fail like 61 seconds does instead of wrapping modulo 2^32. The
+    // error shows the seconds given, truncated towards zero, as make_time reports them, or in
+    // full for a value between -1 and 0, which the truncation would show as the valid 0.
+    def secondOfMinute(shown: String): String =
+      s"Invalid value for SecondOfMinute (valid values 0 - 59): $shown"
+    val monthOfYear = "Invalid value for MonthOfYear (valid values 1 - 12): 13"
+    val outOfRangeSeconds = Seq(
+      // (year, month, day, hour, min, sec, the range message of the error)
+      // The largest micros that fit an int, and the first that do not.
+      (2020, 1, 1, 0, 0, "2147.483647", secondOfMinute("2147")),
+      (2020, 1, 1, 0, 0, "2147.483648", secondOfMinute("2147")),
+      // 4324967296 - 2^32 = 30000000 micros, which would read as 30 seconds.
+      (2020, 1, 1, 0, 0, "4324.967296", secondOfMinute("4324")),
+      // 4354967296 - 2^32 = 60000000 micros, which would roll over to the next minute.
+      (2019, 6, 30, 23, 59, "4354.967296", secondOfMinute("4354")),
+      // 4354967297 - 2^32 = 60000001 micros, which raised INVALID_FRACTION_OF_SECOND.
+      (2019, 6, 30, 23, 59, "4354.967297", secondOfMinute("4354")),
+      // 3000000000 micros would wrap to a negative int.
+      (2020, 1, 1, 0, 0, "3000", secondOfMinute("3000")),
+      // A negative value whose micros would wrap to 30 seconds.
+      (2020, 1, 1, 0, 0, "-4264.967296", secondOfMinute("-4264")),
+      // Values between -1 and 0, shown in full.
+      (2020, 1, 1, 0, 0, "-0.5", secondOfMinute("-0.5")),
+      (2020, 1, 1, 0, 0, "-0.000001", secondOfMinute("-0.000001")),
+      // The largest and the smallest DecimalType(16, 6) values: even their whole seconds do
+      // not fit an int.
+      (2020, 1, 1, 0, 0, "9999999999.999999", secondOfMinute("9999999999")),
+      (2020, 1, 1, 0, 0, "-9999999999.999999", secondOfMinute("-9999999999")),
+      // A small out-of-range value, for comparison.
+      (2020, 1, 1, 0, 0, "61", secondOfMinute("61")),
+      // With an invalid month: a negative value, or one above Int.MaxValue, is reported before
+      // the month, as make_time does, and any other out-of-range value after it.
+      (2020, 13, 1, 0, 0, "-1", secondOfMinute("-1")),
+      (2020, 13, 1, 0, 0, "61", monthOfYear),
+      (2020, 13, 1, 0, 0, "2147483647", monthOfYear),
+      (2020, 13, 1, 0, 0, "2147483648", secondOfMinute("2147483648")))
+    for {
+      dataType <- Seq(TimestampType, TimestampNTZType)
+      // The seven-argument form, with a time zone, for make_timestamp and make_timestamp_ltz.
+      timezone <- if (dataType == TimestampType) Seq(None, Some(Literal("UTC"))) else Seq(None)
+      ansi <- Seq(true, false)
+      (year, month, day, hour, min, sec, rangeMessage) <- outOfRangeSeconds
+    } {
+      val expr = MakeTimestamp(Literal(year), Literal(month), Literal(day), Literal(hour),
+        Literal(min), Literal(Decimal(BigDecimal(sec), 16, 6)), timezone = timezone,
+        timeZoneId = Some("UTC"), failOnError = ansi, dataType = dataType)
+      withClue(s"$dataType, timezone = $timezone, ansi = $ansi, sec = $sec: ") {
+        if (ansi) {
+          checkErrorInExpression[SparkDateTimeException](
+            expr,
+            condition = "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
+            parameters = Map("rangeMessage" -> rangeMessage))
+        } else {
+          checkEvaluation(expr, null)
+        }
+      }
+    }
+  }
+
   test("ISO 8601 week-numbering year") {
     checkEvaluation(YearOfWeek(MakeDate(Literal(2006), Literal(1), Literal(1))), 2005)
     checkEvaluation(YearOfWeek(MakeDate(Literal(2006), Literal(1), Literal(2))), 2006)

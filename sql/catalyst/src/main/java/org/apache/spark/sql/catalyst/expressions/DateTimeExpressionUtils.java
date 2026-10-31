@@ -24,7 +24,6 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 
 import org.apache.spark.SparkDateTimeException;
-import org.apache.spark.sql.catalyst.util.DateTimeConstants;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.catalyst.util.IntervalUtils;
 import org.apache.spark.sql.catalyst.util.TimestampFormatter;
@@ -88,20 +87,21 @@ public final class DateTimeExpressionUtils {
    *
    * <p>This is the shared, exception-raising core used by both the eval and
    * codegen paths. It throws {@link SparkDateTimeException} for an invalid
-   * fraction-of-second and {@link DateTimeException} for an invalid
-   * year/month/day/hour/min combination; callers decide how to translate those.
+   * fraction-of-second, and {@link DateTimeException} for seconds that are
+   * negative or above {@code Integer.MAX_VALUE}, before the other fields are
+   * checked, or for an invalid year/month/day/hour/min/second combination
+   * otherwise, 61 seconds included; callers decide how to translate those.
    */
   public static long makeTimestampMicros(
       int year, int month, int day, int hour, int min,
       Decimal secAndMicros, ZoneId zoneId, boolean timestampNTZ) {
-    assert secAndMicros.scale() == 6 :
-      "Seconds fraction must have 6 digits for microseconds but got " + secAndMicros.scale();
-    // 8 digits cannot overflow Int.
-    int totalMicros = (int) secAndMicros.toUnscaledLong();
-    int microsPerSecond = (int) DateTimeConstants.MICROS_PER_SECOND;
-    int nanosPerMicros = (int) DateTimeConstants.NANOS_PER_MICROS;
-    int seconds = Math.floorDiv(totalMicros, microsPerSecond);
-    int nanos = Math.floorMod(totalMicros, microsPerSecond) * nanosPerMicros;
+    // The seconds are DecimalType(16, 6), so their whole seconds can exceed an int. The split
+    // rejects such seconds, and negative ones, before narrowing, as make_time does; see
+    // DateTimeUtils.splitSecsAndMicros for the error message, the order of the checks and the
+    // packing of the seconds and the nanos.
+    long secs = DateTimeUtils.splitSecsAndMicros(secAndMicros);
+    int seconds = (int) (secs >> 32);
+    int nanos = (int) secs;
     LocalDateTime ldt;
     if (seconds == 60) {
       if (nanos == 0) {
