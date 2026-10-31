@@ -92,6 +92,9 @@ object OptimizeExpand extends Rule[LogicalPlan] {
    *     expressions like `col1 + col2` fan out into more leaf
    *     attributes, inflating the Cartesian product and making
    *     pre-aggregation counterproductive.
+   *  4. The pre-aggregate's group-by is non-empty, so that it
+   *     de-duplicates rows instead of collapsing an empty input
+   *     into a single row.
    */
   private def canOptimize(
       innerAgg: Aggregate,
@@ -112,7 +115,13 @@ object OptimizeExpand extends Rule[LogicalPlan] {
     // pre-aggregate's Cartesian product too large for effective dedup.
     val preAggSize = expand.child.output.count(expand.references.contains)
     val innerGroupBySize = innerAgg.groupingExpressions.size - 1 // minus gid
-    preAggSize <= innerGroupBySize
+    if (preAggSize > innerGroupBySize) return false
+
+    // Check 4: an empty grouping would make the pre-aggregate a global
+    // Aggregate, which emits one row even for an empty input instead of
+    // de-duplicating rows. That happens when every distinct argument is
+    // foldable, e.g. COUNT(DISTINCT 1), COUNT(DISTINCT 2).
+    preAggSize > 0
   }
 
   /**
