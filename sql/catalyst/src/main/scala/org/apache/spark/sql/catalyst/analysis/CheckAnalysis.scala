@@ -1043,7 +1043,8 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               case _ =>
                 TypeUtils.checkFileTypeHasQualifier(create.tableSchema)
             }
-            // FILE has no defined ordering, so it cannot be a partition or clustering column.
+            // FILE has no defined ordering, so it cannot be a partition, clustering or
+            // write-ordering column.
             create.partitioning.foreach { transform =>
               val usage = transform match {
                 case _: ClusterByTransform => "CLUSTERING_COLUMN"
@@ -1053,6 +1054,12 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 create.tableSchema.findNestedField(ref.fieldNames.toImmutableArraySeq).foreach {
                   case (_, field) => TypeUtils.checkNoFileTypeInColumnUsage(field, usage)
                 }
+              }
+            }
+            create.writeOrdering.flatMap(_.expression.references).foreach { ref =>
+              create.tableSchema.findNestedField(ref.fieldNames.toImmutableArraySeq).foreach {
+                case (_, field) =>
+                  TypeUtils.checkNoFileTypeInColumnUsage(field, "WRITE_ORDERING_COLUMN")
               }
             }
 
@@ -1085,8 +1092,10 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               }
             }
 
-          // A view can hold a FILE without a qualifier, which a table cannot store. A V1 target
-          // is checked by `CreateTableLikeCommand`, as the V1 command carries no resolved source.
+          // A view can hold a FILE without a qualifier, which a table cannot store. When the
+          // target and source are both in the session catalog, `ResolveSessionCatalog` has
+          // already rewritten this into `CreateTableLikeCommand`, which checks the source when
+          // it runs.
           case CreateTableLike(_: ResolvedIdentifier, source, _, _, _, _, _) =>
             source match {
               case ResolvedTable(_, _, table, _) =>

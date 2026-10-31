@@ -3104,6 +3104,11 @@
         "message" : [
           "It cannot be a partition column."
         ]
+      },
+      "WRITE_ORDERING_COLUMN" : {
+        "message" : [
+          "It cannot be a write-ordering column."
+        ]
       }
     },
     "sqlState" : "0A000"

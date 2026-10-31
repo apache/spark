@@ -23,7 +23,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.api.java.UDF1
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
-import org.apache.spark.sql.connector.catalog.InMemoryCatalog
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, InMemoryCatalog, TableInfo}
 import org.apache.spark.sql.execution.python.{UserDefinedPythonFunction, UserDefinedPythonTableFunction}
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
 import org.apache.spark.sql.functions.{col, udf}
@@ -48,6 +48,10 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
     "STRUCT<f1: INT, f2: STRUCT<f3: ARRAY<FILE>>>")
 
   private val externalFile = "SELECT CAST(NULL AS FILE EXTERNAL) AS f"
+
+  /** Analyzes `query` without running it. */
+  private def analyze(query: String): Unit =
+    spark.sessionState.executePlan(spark.sessionState.sqlParser.parsePlan(query)).assertAnalyzed()
 
   test("a table column definition requires FILE EXTERNAL") {
     Seq("testcat.t", "t").foreach { table =>
@@ -107,6 +111,15 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
           },
           condition = "FILE_TYPE_UNKNOWN_WRITE",
           parameters = Map("colNames" -> "[`f`]"))
+        // IF NOT EXISTS does not skip the check when the table exists.
+        sql(s"CREATE TABLE $table (id INT) $provider")
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"CREATE TABLE IF NOT EXISTS $table $provider AS " +
+              "SELECT 1 AS id, CAST(NULL AS FILE) AS f")
+          },
+          condition = "FILE_TYPE_UNKNOWN_WRITE",
+          parameters = Map("colNames" -> "[`f`]"))
       }
     }
   }
@@ -135,7 +148,7 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("CREATE TABLE LIKE cannot copy a FILE without a qualifier from a view") {
+  test("CREATE TABLE LIKE cannot copy a FILE without a qualifier") {
     withTempView("v") {
       withView("pv") {
         sql("CREATE TEMPORARY VIEW v AS SELECT 1 AS id, CAST(NULL AS FILE) AS f")
@@ -149,7 +162,7 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
               condition = "FILE_TYPE_UNKNOWN_WRITE",
               parameters = Map("colNames" -> "[`f`]"))
             assert(!spark.catalog.tableExists(target))
-            // As for CREATE TABLE AS SELECT, IF NOT EXISTS does not skip the check when the
+            // As with CREATE TABLE AS SELECT, IF NOT EXISTS does not skip the check when the
             // table exists.
             sql(s"CREATE TABLE $target (id INT)")
             checkError(
@@ -160,8 +173,65 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
               parameters = Map("colNames" -> "[`f`]"))
           }
         }
+        // A V2 target is checked at analysis.
+        checkError(
+          exception = intercept[AnalysisException](analyze("CREATE TABLE testcat.t LIKE v")),
+          condition = "FILE_TYPE_UNKNOWN_WRITE",
+          parameters = Map("colNames" -> "[`f`]"))
       }
     }
+    // A table source, which only a catalog can create with a FILE without a qualifier. A target
+    // in the session catalog is also checked at analysis, as the source is not.
+    withTable("testcat.src") {
+      spark.sessionState.catalogManager.catalog("testcat").asInstanceOf[InMemoryCatalog]
+        .createTable(
+          Identifier.of(Array.empty, "src"),
+          new TableInfo.Builder()
+            .withColumns(CatalogV2Util.structTypeToV2Columns(
+              new StructType().add("id", IntegerType).add("f", FileType())))
+            .build())
+      Seq("testcat.t", "t").foreach { target =>
+        withTable(target) {
+          checkError(
+            exception = intercept[AnalysisException] {
+              analyze(s"CREATE TABLE $target LIKE testcat.src")
+            },
+            condition = "FILE_TYPE_UNKNOWN_WRITE",
+            parameters = Map("colNames" -> "[`f`]"))
+        }
+      }
+    }
+    // A FILE EXTERNAL can be copied.
+    withTempView("v") {
+      withTable("testcat.t") {
+        sql("CREATE TEMPORARY VIEW v AS SELECT 1 AS id, CAST(NULL AS FILE EXTERNAL) AS f")
+        sql("CREATE TABLE testcat.t LIKE v")
+        assert(spark.table("testcat.t").schema ===
+          new StructType().add("id", IntegerType, nullable = false).add("f", FileType.external))
+      }
+    }
+  }
+
+  test("a FILE column cannot be a write-ordering column") {
+    val columns = "(id INT, f FILE EXTERNAL)"
+    val query = "AS SELECT 1 AS id, CAST(NULL AS FILE EXTERNAL) AS f"
+    val file = ("`f`", "\"FILE EXTERNAL\"")
+    Seq(
+      s"CREATE TABLE testcat.t $columns ORDERED BY f" -> file,
+      s"CREATE TABLE testcat.t $columns LOCALLY ORDERED BY bucket(4, f)" -> file,
+      "CREATE TABLE testcat.t (id INT, s STRUCT<f: FILE EXTERNAL>) ORDERED BY s" ->
+        ("`s`", "\"STRUCT<f: FILE EXTERNAL>\""),
+      s"REPLACE TABLE testcat.t $columns ORDERED BY f" -> file,
+      s"CREATE TABLE testcat.t ORDERED BY f $query" -> file,
+      s"REPLACE TABLE testcat.t ORDERED BY f $query" -> file
+    ).foreach { case (statement, (colName, dataType)) =>
+      checkError(
+        exception = intercept[AnalysisException](analyze(statement)),
+        condition = "FILE_TYPE_UNSUPPORTED_COLUMN_USAGE.WRITE_ORDERING_COLUMN",
+        parameters = Map("colName" -> colName, "dataType" -> dataType))
+    }
+    // Ordering by a column that is not a FILE passes analysis.
+    analyze("CREATE TABLE testcat.t (id INT, f FILE EXTERNAL) ORDERED BY id")
   }
 
   test("a FILE column cannot be a partition or clustering column") {
@@ -212,7 +282,7 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("a column cannot be altered to or from a FILE") {
+  test("ALTER COLUMN requires FILE EXTERNAL and cannot change the type of a FILE column") {
     withTable("testcat.t") {
       sql("CREATE TABLE testcat.t (id INT, s STRING, f FILE EXTERNAL, v VOID)")
       Seq("s", "f", "v").foreach { column =>
@@ -485,7 +555,8 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("a Python UDF and UDTF declare a plain FILE in their return type") {
-    // Neither registration nor analysis runs Python, so the function body is never used.
+    // Registering these functions and analyzing a call to the UDF do not run Python, so the
+    // function body is never used.
     val func = SimplePythonFunction(
       command = Seq.empty[Byte],
       envVars = new java.util.HashMap[String, String](),
