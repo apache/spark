@@ -34,7 +34,7 @@ import org.apache.spark.network.util.JavaUtils.sha256Hex
 import org.apache.spark.sql.Artifact
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.test.ConnectFunSuite
-import org.apache.spark.util.{IvyTestUtils, SparkFileUtils}
+import org.apache.spark.util.{IvyTestUtils, MavenUtils, SparkFileUtils}
 import org.apache.spark.util.MavenUtils.MavenCoordinate
 
 class ArtifactSuite extends ConnectFunSuite {
@@ -325,12 +325,53 @@ class ArtifactSuite extends ConnectFunSuite {
     assert(requests.size == 1)
     assert(requests.head.getBatch.getEntriesCount == 1)
     assert(requests.head.getBatch.getEntries(0).getMavenDependency.getUri == ivyUri.toString)
+    assert(service.getAndClearLatestConfigRequests().isEmpty)
+  }
+
+  test("Spark Connect client resolution uses locally readable Ivy settings") {
+    withTempDir { dir =>
+      val main = new MavenCoordinate("my.artifactsuite.clientsettings", "mylib", "0.1")
+      val repo = IvyTestUtils.createLocalRepositoryForTests(
+        main,
+        dependencies = None,
+        rootDir = Some(dir.toPath.resolve("repository").toFile))
+      val ivySettings = dir.toPath.resolve("ivysettings.xml")
+      Files.writeString(
+        ivySettings,
+        s"""<ivysettings>
+           |  <settings defaultResolver="client"/>
+           |  <resolvers>
+           |    <ibiblio name="client" m2compatible="true" root="${repo.toURI}"/>
+           |  </resolvers>
+           |</ivysettings>""".stripMargin)
+      val settingsDirKey = "spark.test.artifact.clientIvySettingsDir"
+      service.setSparkConfig(settingsDirKey, dir.toString)
+      service.setSparkConfig(
+        MavenUtils.JAR_IVY_SETTING_PATH_KEY,
+        s"$${$settingsDirKey}/ivysettings.xml")
+      client = new SparkConnectClient(Configuration(), channel)
+
+      client.addArtifact(URI.create(s"ivy://${main.toString}"))
+
+      val requests = service.getAndClearLatestAddArtifactRequests()
+      assert(requests.nonEmpty)
+      assert(requests.flatMap(_.getBatch.getArtifactsList.asScala).exists { artifact =>
+        artifact.getName.contains("my.artifactsuite.clientsettings_mylib-0.1")
+      })
+      val configRequests = service.getAndClearLatestConfigRequests()
+      assert(
+        configRequests.flatMap(_.getOperation.getGetOption.getKeysList.asScala) ==
+          Seq(MavenUtils.JAR_IVY_SETTING_PATH_KEY, settingsDirKey))
+    }
   }
 
   test("Spark Connect resolves requested Maven repositories on the client") {
     val main = new MavenCoordinate("my.artifactsuite.clientcapability", "mylib", "0.1")
     IvyTestUtils.withRepository(main, None, None) { repo =>
       service.errorToThrowOnAnalyze = Some(Status.UNAVAILABLE.asRuntimeException())
+      service.setSparkConfig(
+        MavenUtils.JAR_IVY_SETTING_PATH_KEY,
+        ivyHome.resolve("missing-ivysettings.xml").toString)
       client = new SparkConnectClient(Configuration(), channel)
 
       client.addArtifact(URI.create(s"ivy://${main.toString}?repos=$repo"))
@@ -342,6 +383,7 @@ class ArtifactSuite extends ConnectFunSuite {
       assert(batch.getArtifactsCount == 1)
       assert(
         batch.getArtifacts(0).getName.contains("my.artifactsuite.clientcapability_mylib-0.1"))
+      assert(service.getAndClearLatestConfigRequests().size == 1)
     }
   }
 
