@@ -389,6 +389,106 @@ trait KeyGroupedPartitioningRuntimeFilterTests extends KeyGroupedPartitioningSui
       checkAnswer(df, Seq(Row(1L, 42.0f), Row(1L, 44.0f)))
     }
   }
+
+  test("SPARK-60260: a storage-partitioned join keeps the planned keyed layout when v2 bucketing " +
+    "is disabled after planning") {
+    // reportedKeyedPartitioning used to read spark.sql.sources.v2.bucketing.enabled at execution,
+    // so turning it off between planning and execution dropped the keyed layout on the scan that
+    // PlanAdaptiveDynamicPruningFilters rebuilds at stage creation, and the sort-merge join then
+    // lined partitions up wrong. The decision is frozen at planning now. Covered across three
+    // shapes, each planned with bucketing on and then executed with it off, AQE on.
+    val letters = Seq("a", "b", "c", "d", "e", "f", "g")
+
+    // Plan under bucketing on (so the keyed layout and DPP are decided here), assert the shape,
+    // then execute with bucketing off and check both the rows and that the rebuilt keyed scan kept
+    // its KeyedPartitioning. checkToRDD = false runs only the committed plan, not a new one.
+    def check(filter: String, expected: Seq[Row], groupPartitions: Boolean, shuffle: Boolean)
+      : Unit = {
+      val df = sql(s"SELECT i.id, i.name, p.price FROM testcat.ns.$items i " +
+        s"JOIN testcat.ns.$purchases p ON i.id = p.item_id WHERE $filter")
+      val plan = df.queryExecution.executedPlan
+      assert(collect(plan) { case j: SortMergeJoinExec => j }.nonEmpty,
+        s"expected a sort-merge join:\n$plan")
+      assert(collectScans(plan).exists(_.runtimeFilters.nonEmpty),
+        s"expected dynamic partition pruning on the keyed scan:\n$plan")
+      assert(collectGroupPartitions(plan).nonEmpty == groupPartitions,
+        s"expected GroupPartitionsExec present == $groupPartitions:\n$plan")
+      assert(collectShuffles(plan).nonEmpty == shuffle,
+        s"expected a shuffle present == $shuffle:\n$plan")
+
+      withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "false") {
+        // Without checkToRDD, so only the committed plan runs, not a newly planned one.
+        QueryTest.checkAnswer(df, expected, checkToRDD = false)
+        // Re-collected, because under AQE executedPlan only reaches the rebuilt scans once the
+        // query has run. Without this fix the rebuilt keyed scan reports UnknownPartitioning here.
+        val executed = df.queryExecution.executedPlan
+        // The scan with the DPP filter is the one PlanAdaptiveDynamicPruningFilters rebuilds.
+        val rebuilt = collectScans(executed).filter(_.runtimeFilters.nonEmpty)
+        assert(rebuilt.nonEmpty &&
+          rebuilt.forall(_.outputPartitioning.isInstanceOf[KeyedPartitioning]),
+          s"expected the rebuilt scan to keep its keyed layout:\n$executed")
+      }
+    }
+
+    withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "10") {
+
+      // Shape 1: one split per key on both sides, no GroupPartitionsExec above the join. Without
+      // this fix it returns 2 of the 7 rows, and fails with "Can't zip RDDs" once a filter prunes.
+      withTable(s"testcat.ns.$items", s"testcat.ns.$purchases") {
+        createTable(items, itemsColumns, Array(identity("id")))
+        sql(s"INSERT INTO testcat.ns.$items VALUES " + (1 to 7).map(i =>
+          s"($i, '${letters(i - 1)}', 10.0, cast('2020-01-01' as timestamp))").mkString(", "))
+        createTable(purchases, purchasesColumns, Array(identity("item_id")))
+        sql(s"INSERT INTO testcat.ns.$purchases VALUES " + (1 to 7).map(i =>
+          s"($i, $i.0, cast('2020-01-01' as timestamp))").mkString(", "))
+        check("p.price > 0.0", (1 to 7).map(i => Row(i.toLong, letters(i - 1), i.toFloat)),
+          groupPartitions = false, shuffle = false)
+        check("p.price > 5.0", Seq(6, 7).map(i => Row(i.toLong, letters(i - 1), i.toFloat)),
+          groupPartitions = false, shuffle = false)
+      }
+
+      // Shape 2: two rows per id on items, so a GroupPartitionsExec sits above the pruned scan.
+      // Without this fix it fails with INTERNAL_ERROR (the node's child no longer reports the
+      // partitioning it was planned over).
+      withTable(s"testcat.ns.$items", s"testcat.ns.$purchases") {
+        createTable(items, itemsColumns, Array(identity("id")))
+        sql(s"INSERT INTO testcat.ns.$items VALUES " + (1 to 7).flatMap(i => Seq(
+          s"($i, '${letters(i - 1)}', 10.0, cast('2020-01-01' as timestamp))",
+          s"($i, '${letters(i - 1)}', 11.0, cast('2020-01-02' as timestamp))")).mkString(", "))
+        createTable(purchases, purchasesColumns, Array(identity("item_id")))
+        sql(s"INSERT INTO testcat.ns.$purchases VALUES " + (1 to 7).map(i =>
+          s"($i, $i.0, cast('2020-01-01' as timestamp))").mkString(", "))
+        check("p.price > 0.0",
+          (1 to 7).flatMap(i => Seq.fill(2)(Row(i.toLong, letters(i - 1), i.toFloat))),
+          groupPartitions = true, shuffle = false)
+        check("p.price > 5.0",
+          Seq(6, 7).flatMap(i => Seq.fill(2)(Row(i.toLong, letters(i - 1), i.toFloat))),
+          groupPartitions = true, shuffle = false)
+      }
+
+      // Shape 3: purchases is not partitioned and the SPJ shuffle is on, so it is shuffled onto the
+      // keyed items scan. Without this fix it returns 2 of 7, or fails to zip once a filter prunes.
+      withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+        withTable(s"testcat.ns.$items", s"testcat.ns.$purchases") {
+          createTable(items, itemsColumns, Array(identity("id")))
+          sql(s"INSERT INTO testcat.ns.$items VALUES " + (1 to 7).map(i =>
+            s"($i, '${letters(i - 1)}', 10.0, cast('2020-01-01' as timestamp))").mkString(", "))
+          createTable(purchases, purchasesColumns, Array.empty[Transform])
+          sql(s"INSERT INTO testcat.ns.$purchases VALUES " + (1 to 7).map(i =>
+            s"($i, $i.0, cast('2020-01-01' as timestamp))").mkString(", "))
+          check("p.price > 0.0", (1 to 7).map(i => Row(i.toLong, letters(i - 1), i.toFloat)),
+            groupPartitions = false, shuffle = true)
+          check("p.price > 5.0", Seq(6, 7).map(i => Row(i.toLong, letters(i - 1), i.toFloat)),
+            groupPartitions = false, shuffle = true)
+        }
+      }
+    }
+  }
 }
 
 @ExtendedSQLTest
