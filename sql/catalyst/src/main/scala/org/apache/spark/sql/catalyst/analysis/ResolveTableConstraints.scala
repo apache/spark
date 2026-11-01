@@ -155,7 +155,7 @@ class ResolveTableConstraints(val catalogManager: CatalogManager) extends Rule[L
       // or a variable, is not a value of the row.
       case u: UnresolvedAttribute =>
         val resolver = catalogManager.v1SessionCatalog.conf.resolver
-        if (query.resolve(u.nameParts, resolver).isDefined) {
+        if (withPosition(u)(query.resolve(u.nameParts, resolver)).isDefined) {
           columnExtractors(u.name) = u
         }
       case other =>

@@ -7195,7 +7195,8 @@ class AstBuilder extends DataTypeAstBuilder
         condition = condition,
         keepPredicate = child.containsAnyPattern(PARAMETER, UNRESOLVED_IDENTIFIER) ||
           child.exists {
-            case u: UnresolvedAttribute => u.nameParts.length > 1
+            case u: UnresolvedAttribute =>
+              u.nameParts.length > 1 || LiteralFunctionResolution.resolve(u.nameParts).isDefined
             case _ => false
           })
     }

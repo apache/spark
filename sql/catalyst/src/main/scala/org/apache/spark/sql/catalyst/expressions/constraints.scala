@@ -18,8 +18,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.UUID
 
-import scala.util.control.NonFatal
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{AnalysisErrorAt, SQLFunctionExpression, TypeCheckResult, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.aggregate.V2Aggregator
@@ -36,8 +34,7 @@ import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction
 import org.apache.spark.sql.connector.expressions.FieldReference
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{AbstractDataType, BooleanType, CharType, DataType, StringType, TimestampLTZNanosType, TimestampType}
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.sql.types.{AbstractDataType, BooleanType, CharType, DataType, TimestampLTZNanosType, TimestampType}
 
 trait TableConstraint extends Expression with Unevaluable {
   /** Convert to a data source v2 constraint */
@@ -168,11 +165,12 @@ case class CheckConstraint(
 
   // A write parses `condition` again. It cannot bind a parameter marker that the legacy parameter
   // substitution leaves there, resolves an IDENTIFIER clause in its own session, and does not
-  // resolve a column qualified by the table name the way ALTER TABLE does. None of them can be
-  // told apart after analysis, so the parser sets `keepPredicate` for them, and for any name with
-  // more than one part, since it cannot tell a table qualifier from a struct column. Such a
-  // condition, or one that `resolvesDifferentlyOnWrite`, keeps the predicate built from the
-  // optimized plan, as before.
+  // resolve a column qualified by the table name the way ALTER TABLE does. By default, it also
+  // resolves a `current_date` or `user` without parentheses to a column of that name added later.
+  // None of them can be told apart after analysis, so the parser sets `keepPredicate` for them,
+  // and for any name with more than one part, since it cannot tell a table qualifier from a struct
+  // column. Such a condition, or one that `resolvesDifferentlyOnWrite`, keeps the predicate built
+  // from the optimized plan, as before.
   override def markAsAnalyzed(): CheckConstraint = copy(omitPredicate =
     !keepPredicate && !CheckConstraint.resolvesDifferentlyOnWrite(child) &&
       CheckConstraint.readsCurrentContext(child))
@@ -257,36 +255,29 @@ object CheckConstraint {
    * constant string at the top level counts, not one into an array, map or struct of timestamps,
    * from a VARIANT, or of a string that only the optimizer makes constant.
    */
-  private def castReadsCurrentDate(cast: Cast): Boolean = cast match {
-    case c if SpecialDatetimeValues.readsCurrentDate(c) => true
-    case Cast(s, TimestampType | _: TimestampLTZNanosType, _, _)
-        if s.foldable && s.dataType.isInstanceOf[StringType] =>
-      try {
-        val v = s.eval()
-        v != null && DateTimeUtils.isTimeOnlyTimestamp(v.asInstanceOf[UTF8String])
-      } catch {
-        case NonFatal(_) => false
+  private def castReadsCurrentDate(cast: Cast): Boolean = {
+    val completesTime = cast.dataType match {
+      case TimestampType | _: TimestampLTZNanosType => true
+      case _ => false
+    }
+    (completesTime || SpecialDatetimeValues.rewrites(cast.dataType)) &&
+      SpecialDatetimeValues.constantString(cast).exists { s =>
+        SpecialDatetimeValues.readsCurrentDate(s, cast.dataType) ||
+          (completesTime && DateTimeUtils.isTimeOnlyTimestamp(s))
       }
-    case _ => false
   }
 
   /**
-   * Whether a write that parses the condition resolves `e` differently: `e` reads a variable or
-   * calls a user-defined function, which the write looks up in its own session, or reads a column
-   * whose type is or contains CHAR, which the write reads without the CHAR type that pads the
-   * literals compared with it.
+   * Whether a write that parses the condition resolves `e` differently: `e` reads a variable, which
+   * the write looks up in its own session, or a column whose type is or contains CHAR, which the
+   * write reads without the CHAR type that pads the literals compared with it. A user-defined
+   * function is rejected by `failIfCallsUserDefinedFunction`.
    */
   private def resolvesDifferentlyOnWrite(e: Expression): Boolean = {
     e.containsPattern(VARIABLE_REFERENCE) ||
       e.references.exists { a =>
         val rawType = CharVarcharUtils.getRawType(a.metadata)
         rawType.exists(_.existsRecursively(_.isInstanceOf[CharType]))
-      } ||
-      e.exists {
-        case _: UserDefinedExpression => true
-        case i: StaticInvoke => i.scalarFunction.isDefined
-        case Invoke(Literal(_: ScalarFunction[_], _), _, _, _, _, _, _, _) => true
-        case _ => false
       }
   }
 }

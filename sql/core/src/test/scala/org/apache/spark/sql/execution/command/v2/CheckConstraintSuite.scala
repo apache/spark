@@ -189,18 +189,21 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
   test("SPARK-60032: Check constraint added by ALTER TABLE reading the current time") {
     // The check compares with the time of the write, not the time of the ALTER TABLE. 'now' is
     // read after the snapshot `current_timestamp()` takes, so only `<=` holds for a row written
-    // with `current_timestamp()`.
+    // with `current_timestamp()`. A string with only a time part and 'today' read the date after
+    // that snapshot too, so their rows step two days ahead in case the date changes in between.
     Seq(
       ("TIMESTAMP", "current_timestamp()", "current_timestamp()", "INTERVAL 1 DAY"),
       ("TIMESTAMP", "CAST('now' AS TIMESTAMP)", "current_timestamp()", "INTERVAL 1 DAY"),
       ("TIMESTAMP", "to_timestamp('now')", "current_timestamp()", "INTERVAL 1 DAY"),
       ("TIMESTAMP", "CAST('23:59:59.999999' AS TIMESTAMP)", "current_timestamp()",
-        "INTERVAL 1 DAY"),
+        "INTERVAL 2 DAYS"),
+      ("TIMESTAMP_LTZ(9)", "CAST('23:59:59.999999' AS TIMESTAMP_LTZ(9))", "current_timestamp()",
+        "INTERVAL 2 DAYS"),
       ("TIMESTAMP", "CAST(TIME '23:59:59.999999' AS TIMESTAMP)", "current_timestamp()",
         "INTERVAL 1 DAY"),
       ("TIMESTAMP_NTZ", "CAST('now' AS TIMESTAMP_NTZ)", "localtimestamp()", "INTERVAL 1 DAY"),
       ("DATE", "current_date()", "current_date()", "1"),
-      ("DATE", "CAST('today' AS DATE)", "current_date()", "1")
+      ("DATE", "CAST('today' AS DATE)", "current_date()", "2")
     ).foreach { case (dataType, now, current, step) =>
       withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
         sql(s"CREATE TABLE $t (id INT, created $dataType) $defaultUsing")
@@ -415,29 +418,54 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     }
   }
 
+  test("SPARK-60032: Check constraint added by ALTER TABLE with a function without parentheses") {
+    // A write that parses `predicateSql` resolves `user` or `current_date` to a column of that name
+    // added later, so such a condition keeps the predicate built from the optimized plan.
+    Seq(
+      ("owner STRING", "owner = user", "user STRING", "'', ''"),
+      ("d DATE", "d <= current_date", "current_date DATE", "DATE'2999-01-01', DATE'2999-12-31'")
+    ).foreach { case (column, cond, added, values) =>
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        sql(s"CREATE TABLE $t (id INT, $column) $defaultUsing")
+        sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK ($cond)")
+        assert(getCheckConstraint(loadTable(nonPartitionCatalog, "ns", "tbl")).predicate() != null,
+          cond)
+        sql(s"ALTER TABLE $t ADD COLUMN $added")
+        val error = intercept[SparkRuntimeException](sql(s"INSERT INTO $t VALUES (1, $values)"))
+        assert(error.getCondition == "CHECK_CONSTRAINT_VIOLATION", cond)
+      }
+    }
+  }
+
   test("SPARK-60032: Check constraint violation lists only the columns it reads") {
     // `current_user` without parentheses parses as a name, which a write that parses
     // `predicateSql` resolves to the function, not to a column.
-    Seq(true, false).foreach { inCreate =>
-      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
-        if (inCreate) {
-          sql(s"CREATE TABLE $t (id INT, owner STRING, " +
-            s"CONSTRAINT c1 CHECK (owner = current_user)) $defaultUsing")
-        } else {
-          sql(s"CREATE TABLE $t (id INT, owner STRING) $defaultUsing")
-          sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK (owner = current_user)")
-        }
-        checkError(
-          exception = intercept[SparkRuntimeException] {
-            sql(s"INSERT INTO $t VALUES (1, 'nobody')")
-          },
-          condition = "CHECK_CONSTRAINT_VIOLATION",
-          sqlState = "23001",
-          parameters = Map(
-            "constraintName" -> "c1",
-            "expression" -> "owner = current_user",
-            "values" -> " - owner : nobody"))
-      }
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT, owner STRING, " +
+        s"CONSTRAINT c1 CHECK (owner = current_user)) $defaultUsing")
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          sql(s"INSERT INTO $t VALUES (1, 'nobody')")
+        },
+        condition = "CHECK_CONSTRAINT_VIOLATION",
+        sqlState = "23001",
+        parameters = Map(
+          "constraintName" -> "c1",
+          "expression" -> "owner = current_user",
+          "values" -> " - owner : nobody"))
+    }
+    // An error while looking up a name points at the name in the condition.
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT, s STRUCT<j: STRING, k: INT>, " +
+        s"CONSTRAINT c1 CHECK (nullif(s.j, 'x') IS NOT NULL)) $defaultUsing")
+      sql(s"ALTER TABLE $t DROP COLUMN s.j")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"INSERT INTO $t VALUES (1, named_struct('k', 1))")
+        },
+        condition = "FIELD_NOT_FOUND",
+        parameters = Map("fieldName" -> "`j`", "fields" -> "`k`"),
+        context = ExpectedContext(fragment = "s.j", start = 7, stop = 9))
     }
   }
 
