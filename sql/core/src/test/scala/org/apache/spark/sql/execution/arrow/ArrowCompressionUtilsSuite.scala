@@ -345,10 +345,23 @@ class ArrowCompressionUtilsSuite extends SparkFunSuite {
   }
 
   test("SPARK-60779: zstd codec does not copy an output that would not at least halve its buffer") {
-    val input = new Random(3).nextBytes(inputSize * 3 / 4) ++ new Array[Byte](inputSize / 4)
+    // The allocator does not round up from 16 MiB, so this output saves memory without halving
+    // its buffer. Below that, an output that does not halve its buffer saves nothing.
+    val size = 20 * 1024 * 1024
+    val input = new Random(3).nextBytes(size * 3 / 4) ++ new Array[Byte](size / 4)
     withZstdOutput(input) { (allocator, output) =>
-      assert(output.capacity() === allocatedSize)
-      assert(allocator.getPeakMemoryAllocation === 2 * allocatedSize)
+      val rounded = allocator.getRoundingPolicy.getRoundedSize(output.writerIndex())
+      assert(rounded > output.capacity() / 2)
+      assert(output.capacity() - rounded >= BoundedZstdCompressionCodec.MIN_SHRINK_SAVING_BYTES)
+      assert(allocator.getPeakMemoryAllocation === size + output.capacity())
+    }
+  }
+
+  test("SPARK-60779: zstd codec does not copy an output when that would save little memory") {
+    withZstdOutput(compressibleInput.take(800)) { (_, output) =>
+      // The buffer for this input is 1 KiB, so the output would halve it but save too little.
+      assert(output.writerIndex() <= 512)
+      assert(output.capacity() === 1024)
     }
   }
 

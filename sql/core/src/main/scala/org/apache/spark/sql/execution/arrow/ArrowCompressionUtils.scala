@@ -93,6 +93,7 @@ private[sql] object ArrowCompressionUtils {
  */
 private[sql] class BoundedZstdCompressionCodec(compressionLevel: Int)
   extends ZstdCompressionCodec(compressionLevel) {
+  import BoundedZstdCompressionCodec._
 
   override protected def doCompress(
       allocator: BufferAllocator,
@@ -117,9 +118,11 @@ private[sql] class BoundedZstdCompressionCodec(compressionLevel: Int)
   override def compress(allocator: BufferAllocator, uncompressedBuffer: ArrowBuf): ArrowBuf = {
     val compressed = super.compress(allocator, uncompressedBuffer)
     val length = compressed.writerIndex()
+    val roundedLength = allocator.getRoundingPolicy.getRoundedSize(length)
     // Requiring at least half of the buffer back also limits the extra memory that the copy needs
     // while both buffers are alive. Empty and raw outputs are already in a buffer of their size.
-    if (allocator.getRoundingPolicy.getRoundedSize(length) > compressed.capacity() / 2) {
+    if (roundedLength > compressed.capacity() / 2 ||
+        compressed.capacity() - roundedLength < MIN_SHRINK_SAVING_BYTES) {
       compressed
     } else {
       try {
@@ -135,6 +138,12 @@ private[sql] class BoundedZstdCompressionCodec(compressionLevel: Int)
       }
     }
   }
+}
+
+private object BoundedZstdCompressionCodec {
+  // A smaller saving does not pay for another allocation, copy and release, which a small batch,
+  // e.g. a group of a grouped Python UDF, would do for each of its buffers.
+  val MIN_SHRINK_SAVING_BYTES = 4 * 1024
 }
 
 /**
