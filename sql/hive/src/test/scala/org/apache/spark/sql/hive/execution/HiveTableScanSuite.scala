@@ -254,6 +254,24 @@ class HiveTableScanSuite extends HiveComparisonTest with QueryTest with TestHive
     }
   }
 
+  test("SPARK-60801: Read the default partition name as null") {
+    withSQLConf(
+      SQLConf.ANSI_ENABLED.key -> "true",
+      "hive.exec.dynamic.partition.mode" -> "nonstrict") {
+      withTable("t1", "t2") {
+        // The name fails the ANSI cast to a non-string partition column.
+        sql("CREATE TABLE t1 (a INT) USING hive PARTITIONED BY (p INT)")
+        sql("INSERT INTO t1 PARTITION (p) VALUES (10, NULL), (11, 5)")
+        checkAnswer(sql("SELECT a, p FROM t1"), Seq(Row(10, null), Row(11, 5)))
+
+        // The name survives the cast to a string partition column.
+        sql("CREATE TABLE t2 (a INT) USING hive PARTITIONED BY (p STRING)")
+        sql("INSERT INTO t2 PARTITION (p) VALUES (10, NULL), (11, 'x')")
+        checkAnswer(sql("SELECT a, p FROM t2"), Seq(Row(10, null), Row(11, "x")))
+      }
+    }
+  }
+
   test("SPARK-32069: Improve error message on reading unexpected directory") {
     withTable("t") {
       withTempDir { f =>
