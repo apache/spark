@@ -140,7 +140,7 @@ private[spark] class StreamingShuffleOutputTrackerMasterEndpoint(
   }
 }
 
-case class ShuffleLocationResponse(
+private[spark] case class ShuffleLocationResponse(
   shuffleTaskLocations: Map[Long, StreamingShuffleTaskLocation],
   numShuffleWriterTasks: Int)
 

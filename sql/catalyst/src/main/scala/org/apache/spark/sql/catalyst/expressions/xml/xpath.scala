@@ -67,6 +67,12 @@ abstract class XPathExtract
 
   protected def evaluator: XPathEvaluator
 
+  // Stateful because of the `evaluator`, whose `UDFXPathUtil` reuses one parser and reader
+  // across calls and is documented as one-per-instance. The fresh-copy site on the analyzed plan
+  // sees this expression before `ReplaceExpressions` runs, and `replacement` reads the copy's own
+  // lazy `evaluator`, so a fresh copy gives each concurrent evaluation its own `UDFXPathUtil`.
+  override def stateful: Boolean = true
+
   override def replacement: Expression = Invoke(
     Literal.create(evaluator, ObjectType(classOf[XPathEvaluator])),
     "evaluate",

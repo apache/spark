@@ -294,6 +294,10 @@ private[deploy] object DeployMessages {
     def restUri: Option[String] = restPort.map { p => "spark://" + host + ":" + p }
   }
 
+  // Reply to RequestApplicationHold when it is asked, as the REST server does, telling whether
+  // the request was forwarded to the driver.
+  case class ApplicationHoldResponse(success: Boolean, message: String)
+
   //  WorkerWebUI to Worker
 
   case object RequestWorkerState

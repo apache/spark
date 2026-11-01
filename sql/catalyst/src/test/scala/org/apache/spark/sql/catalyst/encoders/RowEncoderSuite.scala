@@ -24,6 +24,7 @@ import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, GenericArrayData, IntervalUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -253,6 +254,17 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     assert(encoder.serializer.head.nullable == false)
   }
 
+  test("SPARK-60528: RowEncoder should support nested empty structs") {
+    val schema = new StructType().add(
+      "s",
+      new StructType().add("a", new StructType(), nullable = false),
+      nullable = false)
+    val encoder = ExpressionEncoder(schema).resolveAndBind()
+    assert(encoder.schema === schema)
+    val row = Row(Row(Row()))
+    assert(roundTrip(encoder, row) === row)
+  }
+
   test("RowEncoder should support primitive arrays") {
     val schema = new StructType()
       .add("booleanPrimitiveArray", ArrayType(BooleanType, false))
@@ -336,6 +348,16 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     }
     assert(e4.getCause.getMessage.contains("The external type java.lang.String is not valid " +
       "for the type \"TIMESTAMP\""))
+  }
+
+  test("SPARK-60528: RowEncoder should validate the input of empty structs") {
+    val schema = new StructType().add("s", new StructType(), nullable = false)
+    val encoder = ExpressionEncoder(schema)
+    val e1 = intercept[RuntimeException](toRow(encoder, Row(null)))
+    assert(e1.getCause.getMessage.contains("The 0th field 's' of input row cannot be null."))
+    val e2 = intercept[RuntimeException](toRow(encoder, Row("a")))
+    assert(e2.getCause.getMessage.contains("The external type java.lang.String is not valid " +
+      "for the type \"STRUCT<>\""))
   }
 
   private def roundTripArray[T](dt: DataType, nullable: Boolean, data: Array[T]): Unit = {
@@ -471,6 +493,19 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     assert(row.getLong(0) === DateTimeUtils.localTimeToNanos(localTime))
     val readback = fromRow(encoder, row)
     assert(readback.get(0).equals(localTime))
+  }
+
+  test("SPARK-60346: encoding/decoding an array of TimeType(p) to/from java.time.LocalTime") {
+    val nanos = DateTimeUtils.localTimeToNanos(java.time.LocalTime.parse("20:38:45.123456789"))
+    (TimeType.MIN_PRECISION to TimeType.MAX_PRECISION).foreach { p =>
+      val schema = new StructType().add("a", ArrayType(TimeType(p)))
+      // Bind to the declared schema, as `Dataset.collect` binds to the plan output.
+      val encoder = ExpressionEncoder(schema).resolveAndBind(toAttributes(schema))
+      assert(encoder.schema === schema)
+      val time = DateTimeUtils.nanosToLocalTime(DateTimeUtils.truncateTimeToPrecision(nanos, p))
+      val row = Row(Seq(time))
+      assert(roundTrip(encoder, row) === row)
+    }
   }
 
   test("SPARK-34605: encoding/decoding DayTimeIntervalType to/from java.time.Duration") {

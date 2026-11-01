@@ -1031,6 +1031,18 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(errorClass = "SPECIFY_CLUSTER_BY_WITH_BUCKETING_IS_NOT_ALLOWED", ctx)
   }
 
+  def clusterByWithDistributedByPartition(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "SPECIFY_CLUSTER_BY_WITH_DISTRIBUTED_BY_PARTITION_IS_NOT_ALLOWED",
+      ctx)
+  }
+
+  def distributedByPartitionWithoutPartitioningError(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "SPECIFY_DISTRIBUTED_BY_PARTITION_WITHOUT_PARTITIONING_IS_NOT_ALLOWED",
+      ctx)
+  }
+
   def invalidConstraintCharacteristics(
       ctx: ParserRuleContext,
       characteristics: String): Throwable = {

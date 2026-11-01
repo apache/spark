@@ -495,9 +495,9 @@ BEGIN
     END;
 END
 -- !query schema
-struct<col1:string>
+struct<>
 -- !query output
-Orders processing error
+
 
 
 -- !query
@@ -914,9 +914,9 @@ BEGIN
     END FOR supplier_loop;
 END
 -- !query schema
-struct<>
+struct<col1:string>
 -- !query output
-
+Supplier contact management error
 
 
 -- !query
@@ -1024,9 +1024,9 @@ BEGIN
     END L4;
 END
 -- !query schema
-struct<col1:string>
+struct<>
 -- !query output
-Customer order calculation error
+
 
 
 -- !query
@@ -1323,9 +1323,9 @@ BEGIN
     END L0;
 END
 -- !query schema
-struct<col1:string>
+struct<>
 -- !query output
-Tenure analysis error
+
 
 
 -- !query
@@ -1412,9 +1412,9 @@ BEGIN
     END;
 END
 -- !query schema
-struct<col1:string>
+struct<>
 -- !query output
-Order source analysis error
+
 
 
 -- !query
@@ -1707,9 +1707,9 @@ BEGIN
     END L0;
 END
 -- !query schema
-struct<col1:string>
+struct<>
 -- !query output
-Employee demographics error
+
 
 
 -- !query
@@ -2339,9 +2339,9 @@ BEGIN
     END L0;
 END
 -- !query schema
-struct<col1:string>
+struct<>
 -- !query output
-City shipping error
+
 
 
 -- !query
@@ -2417,9 +2417,9 @@ BEGIN
     END L0;
 END
 -- !query schema
-struct<col1:string>
+struct<>
 -- !query output
-Employee hierarchy error
+
 
 
 -- !query
@@ -2668,9 +2668,9 @@ BEGIN
     END L0;
 END
 -- !query schema
-struct<col1:string>
+struct<>
 -- !query output
-Product price error
+
 
 
 -- !query
@@ -2748,9 +2748,9 @@ BEGIN
     END L2;
 END
 -- !query schema
-struct<col1:string>
+struct<>
 -- !query output
-Employee diversity error
+
 
 
 -- !query
@@ -2845,9 +2845,9 @@ BEGIN
     END L0;
 END
 -- !query schema
-struct<col1:string>
+struct<>
 -- !query output
-Channel analysis error
+
 
 
 -- !query
@@ -3300,9 +3300,9 @@ BEGIN
     END L0;
 END
 -- !query schema
-struct<col1:string>
+struct<>
 -- !query output
-Order status error
+
 
 
 -- !query
@@ -3410,9 +3410,9 @@ BEGIN
     END L0;
 END
 -- !query schema
-struct<col1:string>
+struct<>
 -- !query output
-Department diversity error
+
 
 
 -- !query
@@ -3652,9 +3652,9 @@ BEGIN
     END L0;
 END
 -- !query schema
-struct<col1:string>
+struct<>
 -- !query output
-Product margin error
+
 
 
 -- !query
@@ -3971,9 +3971,9 @@ BEGIN
     END;
 END
 -- !query schema
-struct<col1:string>
+struct<>
 -- !query output
-Color diversity error
+
 
 
 -- !query
@@ -4261,9 +4261,9 @@ BEGIN
     END L0;
 END
 -- !query schema
-struct<col1:string>
+struct<>
 -- !query output
-Product size error
+
 
 
 -- !query
@@ -4770,9 +4770,9 @@ BEGIN
     END L0;
 END
 -- !query schema
-struct<>
+struct<col1:string>
 -- !query output
-
+Order item status error
 
 
 -- !query
@@ -5047,9 +5047,9 @@ BEGIN
     END L0;
 END
 -- !query schema
-struct<col1:string>
+struct<>
 -- !query output
-Order-item linkage error
+
 
 
 -- !query
@@ -5155,9 +5155,9 @@ BEGIN
     END L0;
 END
 -- !query schema
-struct<col1:string>
+struct<>
 -- !query output
-Inventory movement error
+
 
 
 -- !query
@@ -5298,9 +5298,9 @@ BEGIN
     END L0;
 END
 -- !query schema
-struct<col1:string>
+struct<>
 -- !query output
-Tenure salary error
+
 
 
 -- !query
@@ -5593,9 +5593,9 @@ BEGIN
     END L0;
 END
 -- !query schema
-struct<col1:string>
+struct<>
 -- !query output
-Type order diversity error
+
 
 
 -- !query
@@ -5628,9 +5628,9 @@ BEGIN
     END L0;
 END
 -- !query schema
-struct<>
+struct<col1:string>
 -- !query output
-
+Offer code error
 
 
 -- !query
@@ -5687,9 +5687,9 @@ BEGIN
     END L0;
 END
 -- !query schema
-struct<col1:string>
+struct<>
 -- !query output
-Dept stagnation error
+
 
 
 -- !query
@@ -5806,9 +5806,9 @@ BEGIN
     END L0;
 END
 -- !query schema
-struct<col1:string>
+struct<>
 -- !query output
-Discount balancing error
+
 
 
 -- !query
@@ -5915,9 +5915,9 @@ BEGIN
     END L0;
 END
 -- !query schema
-struct<col1:string>
+struct<>
 -- !query output
-Order value error
+
 
 
 -- !query
@@ -6162,9 +6162,9 @@ BEGIN
     END L0;
 END
 -- !query schema
-struct<col1:string>
+struct<>
 -- !query output
-Bulk item error
+
 
 
 -- !query
@@ -6666,9 +6666,9 @@ BEGIN
     END L0;
 END
 -- !query schema
-struct<col1:string>
+struct<>
 -- !query output
-Status workflow error
+
 
 
 -- !query
@@ -6898,9 +6898,9 @@ BEGIN
     END L0;
 END
 -- !query schema
-struct<col1:string>
+struct<>
 -- !query output
-Bundle error
+
 
 
 -- !query

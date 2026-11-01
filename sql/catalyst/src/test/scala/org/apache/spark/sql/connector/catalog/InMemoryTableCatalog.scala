@@ -32,6 +32,7 @@ import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, Proced
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
 import org.apache.spark.sql.connector.read.{LocalScan, Scan}
+import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig
 import org.apache.spark.sql.types.{DataTypes, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -219,11 +220,13 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       advisoryPartitionSize: Option[Long],
       distributionStrictlyRequired: Boolean,
       numRowsPerSplit: Int,
-      id: String): InMemoryBaseTable = {
+      id: String,
+      schemaAlignmentConfig: SchemaAlignmentConfig = SchemaAlignmentConfig.DEFAULT
+  ): InMemoryBaseTable = {
     // scalastyle:on argcount
     new InMemoryTable(name, columns, partitioning, properties, constraints, distribution,
       ordering, requiredNumPartitions, advisoryPartitionSize, distributionStrictlyRequired,
-      numRowsPerSplit, id)
+      numRowsPerSplit, id, schemaAlignmentConfig)
   }
 
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
@@ -260,7 +263,6 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     }
 
     table.increaseVersion()
-    val currentVersion = table.version()
     val columnsWithIds = InMemoryBaseTable.assignMissingIds(
       CatalogV2Util.structTypeToV2Columns(schema))
     val reconstructedId = Option(table.id()).getOrElse(util.UUID.randomUUID().toString)
@@ -275,7 +277,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
         throw new UnsupportedOperationException(
           s"Unsupported InMemoryBaseTable subclass: ${other.getClass.getName}")
     }
-    newTable.setVersion(currentVersion)
+    newTable.copyTableStateFrom(table)
     changes.foreach {
       case a: TableChange.AddConstraint =>
         newTable.setValidatedVersion(a.validatedTableVersion())
