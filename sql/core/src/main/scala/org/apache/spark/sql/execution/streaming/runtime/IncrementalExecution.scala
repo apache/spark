@@ -788,7 +788,7 @@ class IncrementalExecution(
    * Fan-out -- one shuffle read by more than one consumer -- is a limitation that marking a shuffle
    * here introduces, not one that was already there. A regular materialized shuffle serves any
    * number of consumers; a pipelined one is transient and read once, so the DAGScheduler rejects
-   * fan-out for a PipelinedShuffleDependency specifically (checkPipelinedGroupsSupportedInRDDGraph,
+   * fan-out for a PipelinedShuffleDependency specifically (checkPipelinedJobSupported,
    * inert for a regular ShuffleDependency). So a fan-out query that runs fine unmarked is rejected
    * once this rule marks it. The check runs in handleJobSubmitted, so it rejects the batch's job
    * rather than the query: such a query fails the same way on every batch instead of failing once

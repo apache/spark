@@ -41,9 +41,6 @@ class InMemoryTableMetricSuite extends SharedSparkSession with BeforeAndAfter {
 
   private def testMetricOnDSv2(func: String => Unit, checker: Map[String, String] => Unit): Unit = {
     withTable("testcat.table_name") {
-      val statusStore = spark.sharedState.statusStore
-      val oldCount = statusStore.executionsList().size
-
       val testCatalog = spark.sessionState.catalogManager.catalog("testcat").asTableCatalog
 
       testCatalog.createTable(

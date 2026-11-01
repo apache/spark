@@ -88,11 +88,12 @@ __all__ = [
 class SpecialLengths:
     END_OF_DATA_SECTION = -1
     PYTHON_EXCEPTION_THROWN = -2
-    TIMING_DATA = -3
+    METRICS_DATA = -3
     END_OF_STREAM = -4
     NULL = -5
     START_ARROW_STREAM = -6
     START_OF_INIT_MESSAGE = -8
+    START_OF_INIT_RESPONSE = -9
 
 
 class Serializer:

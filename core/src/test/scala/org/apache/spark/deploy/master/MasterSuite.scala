@@ -28,6 +28,7 @@ import org.apache.spark.deploy._
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Deploy._
+import org.apache.spark.internal.config.UI.UI_HOLD_ENABLED
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.{RpcAddress, RpcEndpoint, RpcEnv}
 
@@ -282,6 +283,16 @@ class MasterSuite extends MasterSuiteBase {
     appInfo.markFinished(ApplicationState.FINISHED)
     assert(!appInfo.isHeld)
     assert(appInfo.numDrainingExecutors === 0)
+  }
+
+  test("SPARK-59916: Reject the hold and resume requests when the Master disables holding") {
+    val master = makeAliveMaster(new SparkConf().set(UI_HOLD_ENABLED, false))
+    Seq(true, false).foreach { hold =>
+      val response = master.self.askSync[ApplicationHoldResponse](
+        RequestApplicationHold("app-1", hold))
+      assert(!response.success)
+      assert(response.message.contains(s"${UI_HOLD_ENABLED.key} is disabled on the Master"))
+    }
   }
 
   test("SPARK-57451: Allows REST server and spark.authenticate.secret to be enabled together") {

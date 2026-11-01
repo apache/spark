@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.internal.connector
 
+import org.apache.spark.sql.connector.expressions.Expression
+import org.apache.spark.sql.connector.expressions.GeneralScalarExpression
 import org.apache.spark.sql.connector.expressions.GetArrayItem
 import org.apache.spark.sql.connector.expressions.VariantGet
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
@@ -49,5 +51,13 @@ class ToStringSQLBuilder extends V2ExpressionSQLBuilder with Serializable {
     val typ = variantGet.targetType().catalogString
     val tz = Option(variantGet.timeZoneId()).map(z => s", tz=$z").getOrElse("")
     s"$funcName($col, '$path', $typ$tz)"
+  }
+
+  // `super.visitUnexpectedExpr` builds its error message from `expr.toString`, which calls back
+  // into `ToStringSQLBuilder` for a `GeneralScalarExpression`, so an unknown name would recurse
+  // until StackOverflowError. Render it as a function call instead.
+  override protected def visitUnexpectedExpr(expr: Expression): String = expr match {
+    case e: GeneralScalarExpression => visitSQLFunction(e.name(), e.children())
+    case _ => super.visitUnexpectedExpr(expr)
   }
 }

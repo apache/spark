@@ -1297,7 +1297,7 @@ Project [spark_catalog.default.foo9n(a#x) AS spark_catalog.default.foo9n(array(1
 SELECT foo9n(from_json('[1, 2, 3]', 'array<int>'))
 -- !query analysis
 Project [spark_catalog.default.foo9n(a#x) AS spark_catalog.default.foo9n(from_json([1, 2, 3]))#x]
-+- Project [cast(from_json(ArrayType(IntegerType,true), [1, 2, 3], Some(America/Los_Angeles), false) as array<int>) AS a#x]
++- Project [cast(from_json(ArrayType(IntegerType,true), [1, 2, 3], Some(America/Los_Angeles), false, false) as array<int>) AS a#x]
    +- OneRowRelation
 
 
@@ -1319,7 +1319,7 @@ Project [spark_catalog.default.foo9o(a#x) AS spark_catalog.default.foo9o(map(hel
 SELECT foo9o(from_json('{"hello":1, "world":2}', 'map<string,int>'))
 -- !query analysis
 Project [spark_catalog.default.foo9o(a#x) AS spark_catalog.default.foo9o(entries)#x]
-+- Project [cast(from_json(MapType(StringType,IntegerType,true), {"hello":1, "world":2}, Some(America/Los_Angeles), false) as map<string,int>) AS a#x]
++- Project [cast(from_json(MapType(StringType,IntegerType,true), {"hello":1, "world":2}, Some(America/Los_Angeles), false, false) as map<string,int>) AS a#x]
    +- OneRowRelation
 
 
@@ -1341,7 +1341,7 @@ Project [spark_catalog.default.foo9p(a#x) AS spark_catalog.default.foo9p(struct(
 SELECT foo9p(from_json('{1:"hello"}', 'struct<a1:int, a2:string>'))
 -- !query analysis
 Project [spark_catalog.default.foo9p(a#x) AS spark_catalog.default.foo9p(from_json({1:"hello"}))#x]
-+- Project [cast(from_json(StructField(a1,IntegerType,true), StructField(a2,StringType,true), {1:"hello"}, Some(America/Los_Angeles), false) as struct<a1:int,a2:string>) AS a#x]
++- Project [cast(from_json(StructField(a1,IntegerType,true), StructField(a2,StringType,true), {1:"hello"}, Some(America/Los_Angeles), false, false) as struct<a1:int,a2:string>) AS a#x]
    +- OneRowRelation
 
 
@@ -1371,7 +1371,7 @@ Project [spark_catalog.default.foo9q(a#x) AS spark_catalog.default.foo9q(array(n
 SELECT foo9q(from_json('[{1:"hello"}, {2:"world"}]', 'array<struct<a1:int,a2:string>>'))
 -- !query analysis
 Project [spark_catalog.default.foo9q(a#x) AS spark_catalog.default.foo9q(from_json([{1:"hello"}, {2:"world"}]))#x]
-+- Project [cast(from_json(ArrayType(StructType(StructField(a1,IntegerType,true),StructField(a2,StringType,true)),true), [{1:"hello"}, {2:"world"}], Some(America/Los_Angeles), false) as array<struct<a1:int,a2:string>>) AS a#x]
++- Project [cast(from_json(ArrayType(StructType(StructField(a1,IntegerType,true),StructField(a2,StringType,true)),true), [{1:"hello"}, {2:"world"}], Some(America/Los_Angeles), false, false) as array<struct<a1:int,a2:string>>) AS a#x]
    +- OneRowRelation
 
 
@@ -1393,7 +1393,7 @@ Project [spark_catalog.default.foo9r(a#x) AS spark_catalog.default.foo9r(array(m
 SELECT foo9r(from_json('[{"hello":1}, {"world":2}]', 'array<map<string,int>>'))
 -- !query analysis
 Project [spark_catalog.default.foo9r(a#x) AS spark_catalog.default.foo9r(from_json([{"hello":1}, {"world":2}]))#x]
-+- Project [cast(from_json(ArrayType(MapType(StringType,IntegerType,true),true), [{"hello":1}, {"world":2}], Some(America/Los_Angeles), false) as array<map<string,int>>) AS a#x]
++- Project [cast(from_json(ArrayType(MapType(StringType,IntegerType,true),true), [{"hello":1}, {"world":2}], Some(America/Los_Angeles), false, false) as array<map<string,int>>) AS a#x]
    +- OneRowRelation
 
 

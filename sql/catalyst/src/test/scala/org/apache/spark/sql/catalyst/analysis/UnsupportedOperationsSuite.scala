@@ -106,7 +106,10 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       excludeColumns = None,
       storedAsScdType = 1,
       trackHistoryColumns = None,
-      trackHistoryExceptColumns = None))
+      trackHistoryExceptColumns = None,
+      ignoreNullUpdates = false,
+      ignoreNullUpdatesColumns = None,
+      ignoreNullUpdatesExceptColumns = None))
 
   /*
     =======================================================================================
@@ -403,8 +406,11 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       left.output.head >= right.output.head,
       condition = None,
       joinType = Inner,
-      orderExpression = left.output.head - right.output.head,
-      toleranceAssertion = None)
+      tolerance = None,
+      direction = Backward,
+      leftSortExprs = Seq(left.output.head),
+      rightSortExprs = Seq(right.output.head),
+      orderExpression = Some(left.output.head - right.output.head))
   }
 
   assertSupportedInStreamingPlan(
