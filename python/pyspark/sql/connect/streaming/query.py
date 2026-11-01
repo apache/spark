@@ -278,7 +278,13 @@ class StreamingQueryListenerBus:
         self._sqm = sqm
         self._listener_bus: List[StreamingQueryListener] = []
         self._execution_thread: Optional[Thread] = None
-        self._lock = Lock()
+        # _thread_lock serializes listener lifecycle ops (append/remove) so at most one
+        # event-handling thread exists at a time. It is held across the thread join in
+        # remove(), so the handler thread must never acquire it.
+        self._thread_lock = Lock()
+        # _bus_lock guards _listener_bus and is acquired by the handler thread in
+        # post_to_all(); it must stay free while remove() joins, to avoid deadlock.
+        self._bus_lock = Lock()
 
     def close(self) -> None:
         for listener in self._listener_bus:
@@ -290,10 +296,12 @@ class StreamingQueryListenerBus:
         the first listener, request the server to create the server side listener
         and start a thread to handle query events.
         """
-        with self._lock:
-            self._listener_bus.append(listener)
+        with self._thread_lock:
+            with self._bus_lock:
+                self._listener_bus.append(listener)
+                is_first_listener = len(self._listener_bus) == 1
 
-            if len(self._listener_bus) == 1:
+            if is_first_listener:
                 assert self._execution_thread is None
                 try:
                     result_iter = self._register_server_side_listener()
@@ -302,7 +310,8 @@ class StreamingQueryListenerBus:
                         f"Failed to add the listener because of exception: {e}\n"
                         f"The listener is not added, please add it again."
                     )
-                    self._listener_bus.remove(listener)
+                    with self._bus_lock:
+                        self._listener_bus.remove(listener)
                     return
                 self._execution_thread = Thread(
                     target=self._query_event_handler, args=(result_iter,)
@@ -321,11 +330,13 @@ class StreamingQueryListenerBus:
         will return after processing remaining listener events. This function blocks until
         all events are processed.
         """
-        with self._lock:
-            if listener not in self._listener_bus:
-                return
+        with self._thread_lock:
+            with self._bus_lock:
+                if listener not in self._listener_bus:
+                    return
+                is_last_listener = len(self._listener_bus) == 1
 
-            if len(self._listener_bus) == 1:
+            if is_last_listener:
                 cmd = pb2.StreamingQueryListenerBusCommand()
                 cmd.remove_listener_bus_listener = True
                 exec_cmd = pb2.Command()
@@ -338,11 +349,20 @@ class StreamingQueryListenerBus:
                         f"The listener is not removed, please remove it again."
                     )
                     return
-                if self._execution_thread is not None:
-                    self._execution_thread.join()
+                # Join without holding _bus_lock so the handler thread can keep
+                # acquiring it in post_to_all() to drain remaining events and exit.
+                # _thread_lock still blocks a concurrent append() from starting a
+                # second handler thread. Snapshot the reference first, since the
+                # handler's error path may clear it concurrently.
+                execution_thread = self._execution_thread
+                if execution_thread is not None:
+                    execution_thread.join()
                     self._execution_thread = None
 
-            self._listener_bus.remove(listener)
+            with self._bus_lock:
+                # The handler's error path may have cleared the bus while we joined.
+                if listener in self._listener_bus:
+                    self._listener_bus.remove(listener)
 
     @staticmethod
     def _iter_listener_events(
@@ -400,7 +420,7 @@ class StreamingQueryListenerBus:
                 "StreamingQueryListenerBus Handler thread received exception, all client side "
                 f"listeners are removed and handler thread is terminated. The error is: {e}"
             )
-            with self._lock:
+            with self._bus_lock:
                 self._execution_thread = None
                 self._listener_bus.clear()
             return
@@ -431,7 +451,7 @@ class StreamingQueryListenerBus:
         Post listener events to all active listeners, note that if one listener throws,
         it should not affect other listeners.
         """
-        with self._lock:
+        with self._bus_lock:
             for listener in self._listener_bus:
                 try:
                     if isinstance(event, QueryStartedEvent):

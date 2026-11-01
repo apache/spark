@@ -44,6 +44,7 @@ import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils, QuotingUtils}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{PartitioningUtils, SourceOptions}
 import org.apache.spark.sql.hive.client.HiveClient
@@ -132,6 +133,34 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
   private[hive] def getRawTablesByNames(db: String, tables: Seq[String]): Seq[CatalogTable] = {
     client.getTablesByName(db, tables)
+  }
+
+  /**
+   * Get the raw table metadata with all the partition columns in Hive metastore. The raw table
+   * metadata does not contain the Hive incompatible partition columns, which are stored in Hive
+   * metastore with a placeholder type (see `HiveClientImpl.toHiveTable`). Here we restore them
+   * from the table properties, so that we can write the raw table metadata back to Hive
+   * metastore, which does not allow changing the partition columns. Note that data source tables
+   * created by Spark 2.0 or prior have the partition columns only in the table properties.
+   */
+  private def getRawTableWithAllPartitionColumns(db: String, table: String): CatalogTable = {
+    val rawHiveTable = client.getRawHiveTable(db, table)
+    val rawTable = rawHiveTable.toCatalogTable
+    val partitionColumnNames = rawHiveTable.hivePartitionColumnNames()
+    if (partitionColumnNames.length > rawTable.partitionColumnNames.length) {
+      val partitionSchema =
+        rawTable.partitionSchema ++ restoreTableMetadata(rawTable).partitionSchema
+      val partitionFields = partitionColumnNames.flatMap { name =>
+        // Hive metastore is not case preserving and keeps partition columns with lower cased
+        // names, while the table properties keep the original names.
+        partitionSchema.find(_.name.equalsIgnoreCase(name)).map(_.copy(name = name))
+      }
+      rawTable.copy(
+        schema = StructType(rawTable.dataSchema ++ partitionFields),
+        partitionColumnNames = partitionFields.map(_.name))
+    } else {
+      rawTable
+    }
   }
 
   /**
@@ -270,6 +299,10 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         hiveTable.withNewStorage(locationUri = tableLocation),
         ignoreIfExists)
     } else {
+      verifyHiveSerdePartitionColumnTypes(tableDefinition)
+      if (!tableDefinition.isViewLike) {
+        verifyHiveSerdeDataColumnTypes(tableDefinition)
+      }
       val hiveCompatibleSchema = schemaWithNoCollation match {
         // Spark-created views do not have to be Hive compatible. If the data type is not
         // Hive compatible, we can set schema to empty so that Spark can still read this
@@ -304,6 +337,16 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
             ignoreIfExists)
       }
     }
+  }
+
+  /**
+   * Runs the checks that Hive runs on a new Hive serde table before creating it in Hive
+   * metastore, e.g., the SerDe initialization with the table columns, without creating it.
+   * A command that replaces an existing table calls this before dropping the existing table.
+   */
+  private[hive] def validateHiveSerdeTable(tableDefinition: CatalogTable): Unit = withClient {
+    // Like `createTable`, remove the collations, which Hive doesn't support.
+    client.validateTable(tableDefinition.copy(schema = removeCollation(tableDefinition.schema)))
   }
 
   private def createDataSourceTable(table: CatalogTable, ignoreIfExists: Boolean): Unit = {
@@ -549,7 +592,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       db: String,
       oldName: String,
       newName: String): Unit = withClient {
-    val rawTable = getRawTable(db, oldName)
+    val rawTable = getRawTableWithAllPartitionColumns(db, oldName)
 
     // Note that Hive serde tables don't use path option in storage properties to store the value
     // of table location, but use `locationUri` field to store it directly. And `locationUri` field
@@ -625,7 +668,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           client.alterTable(newTable.copy(schema = EMPTY_DATA_SCHEMA))
       }
     } else {
-      val oldTableDef = getRawTable(db, tableDefinition.identifier.table)
+      val oldTableDef = getRawTableWithAllPartitionColumns(db, tableDefinition.identifier.table)
 
       val newStorage = if (DDLUtils.isHiveTable(tableDefinition)) {
         tableDefinition.storage
@@ -693,19 +736,12 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       val newTableProps =
         propsFromOldTable ++ tableDefinition.properties + partitionProviderProp ++ newFormatIfExists
 
-      val (newSchema, partitionColumnNames) = if (oldTableDef.schema == EMPTY_DATA_SCHEMA) {
-        val restoredOldTable = restoreTableMetadata(oldTableDef)
-        (StructType(EMPTY_DATA_SCHEMA ++ restoredOldTable.partitionSchema),
-          restoredOldTable.partitionColumnNames)
-      } else {
-        (oldTableDef.schema, oldTableDef.partitionColumnNames)
-      }
       // // Add old table's owner if we need to restore
       val owner = Option(tableDefinition.owner).filter(_.nonEmpty).getOrElse(oldTableDef.owner)
       val newDef = tableDefinition.copy(
         storage = newStorage,
-        schema = newSchema,
-        partitionColumnNames = partitionColumnNames,
+        schema = oldTableDef.schema,
+        partitionColumnNames = oldTableDef.partitionColumnNames,
         bucketSpec = oldTableDef.bucketSpec,
         properties = newTableProps,
         owner = owner)
@@ -790,6 +826,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           client.alterTableDataSchema(db, table, EMPTY_DATA_SCHEMA, schemaProps)
       }
     } else {
+      verifyHiveSerdeDataColumnTypes(oldTable.copy(schema = newSchema))
       client.alterTableDataSchema(db, table, hiveSchema, schemaProps)
     }
   }
@@ -1542,7 +1579,9 @@ object HiveExternalCatalog {
     case _: AnsiIntervalType => false
     case _: TimestampNTZType => false
     case _: AnyTimestampNanoType => false
+    case _: TimeType => false
     case _: VariantType => false
+    case _: GeometryType | _: GeographyType => false
     case s: StructType =>
       s.forall { f =>
         // Because HMS thrift API passes StructType's catalog string in a whole, we can not
@@ -1557,5 +1596,33 @@ object HiveExternalCatalog {
       isHiveCompatibleDataType(m.keyType) && isHiveCompatibleDataType(m.valueType)
     case st: StringType => st.isUTF8BinaryCollation
     case _ => true
+  }
+
+  /**
+   * Hive incompatible partition column types are stored with a placeholder type in Hive
+   * metastore (see `HiveClientImpl.toHiveTable`), which only data source tables can restore.
+   * So, this throws an error if the given Hive serde table has such a partition column.
+   */
+  private[hive] def verifyHiveSerdePartitionColumnTypes(table: CatalogTable): Unit = {
+    // Like `createTable`, ignore the collations, which Hive metastore doesn't store.
+    SchemaUtils.replaceCollatedStringWithString(table.schema).asInstanceOf[StructType]
+      .filter(f => table.partitionColumnNames.contains(f.name))
+      .find(f => !isHiveCompatibleDataType(f.dataType))
+      .foreach { f =>
+        throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError("Hive", f)
+      }
+  }
+
+  /**
+   * Hive has no TIMESTAMP_NTZ type. So, this throws an error if the given Hive serde table has a
+   * TIMESTAMP_NTZ data column, including the nested types.
+   */
+  private[hive] def verifyHiveSerdeDataColumnTypes(table: CatalogTable): Unit = {
+    table.schema
+      .filterNot(f => table.partitionColumnNames.contains(f.name))
+      .find(_.dataType.existsRecursively(_.isInstanceOf[TimestampNTZType]))
+      .foreach { f =>
+        throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError("Hive", f)
+      }
   }
 }
