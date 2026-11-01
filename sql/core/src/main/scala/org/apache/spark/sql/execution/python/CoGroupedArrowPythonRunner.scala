@@ -94,7 +94,7 @@ class CoGroupedArrowPythonRunner(
   private def createUnloader(root: VectorSchemaRoot): VectorUnloader = {
     val codec = ArrowCompressionUtils.createCompressionCodec(
       compressionCodecName, SQLConf.get.arrowZstdCompressionLevel)
-    new VectorUnloader(root, true, codec, true)
+    ArrowCompressionUtils.createVectorUnloader(root, codec)
   }
 
   protected def newWriter(

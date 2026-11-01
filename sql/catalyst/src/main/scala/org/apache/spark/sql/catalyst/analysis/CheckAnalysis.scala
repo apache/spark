@@ -1052,6 +1052,9 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               messageParameters = Map("checkCondition" -> a.checkConstraint.condition)
             )
 
+          case a: AddCheckConstraint =>
+            a.checkConstraint.failIfCallsUserDefinedFunction()
+
           case alter: AlterTableCommand =>
             checkAlterTableCommand(alter)
 

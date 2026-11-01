@@ -362,6 +362,29 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
+  test("SPARK-60764: INSERT by name with a double quote in the generation expression") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  a STRING,
+             |  b STRING GENERATED ALWAYS AS (concat(a, '"'))
+             |) USING foo""".stripMargin)
+      // Read from `range` so that the check runs in whole-stage codegen.
+      sql(s"""INSERT INTO testcat.$tblName(a, b) SELECT 'p', concat('p', '"') FROM range(2)""")
+      val ex = intercept[SparkRuntimeException] {
+        sql(s"INSERT INTO testcat.$tblName(a, b) SELECT 'p', 'q' FROM range(2)")
+      }
+      checkError(
+        exception = ex,
+        condition = "CHECK_CONSTRAINT_VIOLATION",
+        sqlState = "23001",
+        parameters = Map(
+          "constraintName" -> "Generated Column",
+          "expression" -> """b <=> concat(a, '"')""",
+          "values" -> " - b : q"))
+    }
+  }
+
   test("INSERT by position does not auto-fill trailing generated column") {
     val tblName = "my_tab"
     withTable(s"testcat.$tblName") {
