@@ -27,10 +27,10 @@ import org.scalatest.matchers.must.Matchers.the
 import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
 
 import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
-import org.apache.spark.sql.catalyst.plans.logical.Expand
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand}
 import org.apache.spark.sql.catalyst.util.AUTO_GENERATED_ALIAS
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
-import org.apache.spark.sql.execution.WholeStageCodegenExec
+import org.apache.spark.sql.execution.{FileSourceScanExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
@@ -1269,6 +1269,148 @@ class DataFrameAggregateSuite extends SharedSparkSession
       df.groupBy("arr", "stru", "arrOfStru").count(),
       Row(Seq(0.0f, 0.0f), Row(0.0d, Double.NaN), Seq(Row(0.0d, Double.NaN)), 2)
     )
+  }
+
+  test("SPARK-60150: filter above an aggregate sees normalized float/double grouping keys") {
+    // Two rows, so that OptimizeOneRowPlan does not remove the aggregate.
+    val df = Seq(-0.0d, -0.0d).toDF("x")
+    val isNegZero = col("x").cast("string") === "-0.0"
+
+    // The aggregate outputs -0.0 as 0.0, for which the predicate is false.
+    checkAnswer(df.distinct().where(isNegZero), Nil)
+    checkAnswer(df.groupBy("x").count().where(isNegZero), Nil)
+    checkAnswer(df.dropDuplicates().where(isNegZero), Nil)
+    checkAnswer(df.intersectAll(df).where(isNegZero), Nil)
+    checkAnswer(df.except(Seq(1.0d).toDF("x")).where(isNegZero), Nil)
+    checkAnswer(Seq(-0.0f, -0.0f).toDF("x").distinct().where(isNegZero), Nil)
+    checkAnswer(
+      df.select(struct(col("x")).as("s")).distinct().where(col("s.x").cast("string") === "-0.0"),
+      Nil)
+
+    withTempView("t") {
+      df.createOrReplaceTempView("t")
+      checkAnswer(
+        sql("SELECT * FROM (SELECT DISTINCT x FROM t) WHERE cast(x AS STRING) = '-0.0'"),
+        Nil)
+      // An alias computed from the key is also evaluated on the normalized value.
+      checkAnswer(
+        sql("SELECT * FROM (SELECT cast(x AS STRING) AS s FROM t GROUP BY x) WHERE s = '-0.0'"),
+        Nil)
+    }
+
+    // Reading the raw key below the aggregate would split the group and change the count.
+    val zeros = Seq(-0.0d, 0.0d).toDF("x")
+    checkAnswer(
+      zeros.groupBy("x").count().where(col("x").cast("string") === "0.0"),
+      Row(0.0d, 2))
+    // Comparisons treat -0.0 and 0.0 as equal, so they are pushed down without normalization.
+    checkAnswer(zeros.groupBy("x").count().where(col("x") === 0.0d), Row(0.0d, 2))
+  }
+
+  test("SPARK-60150: IN and NOT IN subqueries on a float/double grouping key") {
+    withTempView("t", "u") {
+      // Two rows, so that OptimizeOneRowPlan does not remove the aggregate. Nullable columns, so
+      // that NOT IN is planned as a null-aware anti join.
+      Seq(Some(0.0d), Some(0.0d)).toDF("x").createOrReplaceTempView("t")
+      Seq(Some(-0.0d)).toDF("y").createOrReplaceTempView("u")
+
+      // A float/double key is pushed unnormalized, and the join normalizes both sides.
+      checkAnswer(
+        sql("SELECT * FROM (SELECT DISTINCT x FROM t) WHERE x IN (SELECT y FROM u)"),
+        Row(0.0d))
+      checkAnswer(
+        sql("SELECT * FROM (SELECT DISTINCT x FROM t) WHERE x NOT IN (SELECT y FROM u)"),
+        Nil)
+      // A struct key is pushed normalized, so the subquery side of the join must be normalized too,
+      // so that 0.0 matches -0.0. The structs are nullable, like the columns above.
+      def struct(c: String): String = s"IF($c IS NULL, NULL, named_struct('a', $c))"
+      val structs = s"SELECT * FROM (SELECT DISTINCT ${struct("x")} AS s FROM t)"
+      val structY = s"(SELECT ${struct("y")} FROM u)"
+      checkAnswer(sql(s"$structs WHERE s IN $structY"), Row(Row(0.0d)))
+      checkAnswer(sql(s"$structs WHERE s NOT IN $structY"), Nil)
+    }
+  }
+
+  test("SPARK-60150: filter above a group only aggregate over at most one row or under LIMIT 1") {
+    withTempView("t") {
+      Seq(-0.0d).toDF("x").createOrReplaceTempView("t")
+      // The child has at most one row (OptimizeOneRowPlan). The aggregate outputs 0.0.
+      val oneRow =
+        "SELECT cast(x AS STRING) FROM (SELECT DISTINCT x FROM (SELECT x FROM t LIMIT 1))"
+      checkAnswer(sql(s"$oneRow WHERE cast(x AS STRING) = '0.0'"), Row("0.0"))
+      checkAnswer(sql(s"$oneRow WHERE cast(x AS STRING) = '-0.0'"), Nil)
+    }
+
+    // LIMIT 1 above the aggregate (LimitPushDown).
+    val distinct = Seq(-0.0d, -0.0d).toDF("x").distinct()
+    val isZero = col("x").cast("string") === "0.0"
+    checkAnswer(distinct.where(isZero).limit(1).select(col("x").cast("string")), Row("0.0"))
+    assert(distinct.where(col("x").cast("string") === "-0.0").limit(1).collect().isEmpty)
+    val first = distinct.where(isZero).first().getDouble(0)
+    assert(first == 0.0d && 1.0d / first > 0, s"$first is not 0.0")
+  }
+
+  test("SPARK-60150: filter pushed below a DISTINCT that an upper aggregate makes redundant") {
+    withTempView("t") {
+      Seq(-0.0d, -0.0d).toDF("x").createOrReplaceTempView("t")
+      // The DISTINCT outputs 0.0, which the filter keeps and the upper aggregate groups as '0.0'.
+      checkAnswer(
+        sql("SELECT cast(x AS STRING) AS k FROM (SELECT DISTINCT x FROM t) " +
+          "WHERE cast(x AS STRING) = '0.0' GROUP BY 1"),
+        Row("0.0"))
+      // Without a filter too (SPARK-60093): the upper aggregate reads the DISTINCT's 0.0.
+      checkAnswer(
+        sql("SELECT cast(x AS STRING) AS k, max(x) AS m FROM " +
+          "(SELECT DISTINCT x FROM VALUES (-0.0D), (0.0D) t(x)) GROUP BY 1"),
+        Row("0.0", 0.0d))
+    }
+
+    withTempView("u") {
+      Seq((-0.0d, 1), (0.0d, 2)).toDF("d", "a").createOrReplaceTempView("u")
+      // The upper aggregate groups by the key directly and normalizes it itself, so the DISTINCT
+      // is removed, with and without a filter pushed below it.
+      val distinct = "(SELECT DISTINCT d, a FROM u)"
+      val grouped = sql(s"SELECT cast(d AS STRING), max(a) FROM $distinct GROUP BY d")
+      checkAnswer(grouped, Row("0.0", 2))
+      assert(grouped.queryExecution.optimizedPlan.collect { case a: Aggregate => a }.size == 1)
+      // The filter reads the DISTINCT's normalized 0.0, so it keeps both rows for '0.0' and none
+      // for '-0.0'.
+      checkAnswer(
+        sql(s"SELECT cast(d AS STRING), max(a) FROM $distinct " +
+          "WHERE cast(d AS STRING) = '0.0' GROUP BY d"),
+        Row("0.0", 2))
+      checkAnswer(
+        sql(s"SELECT cast(d AS STRING), max(a) FROM $distinct " +
+          "WHERE cast(d AS STRING) = '-0.0' GROUP BY d"),
+        Nil)
+    }
+  }
+
+  test("SPARK-60150: filter pushed through two aggregates whose upper key is computed") {
+    withTempView("t") {
+      Seq(-0.0d, -0.0d).toDF("x").createOrReplaceTempView("t")
+      // The lower aggregate computes pow on the normalized key 0.0, so k is Infinity.
+      checkAnswer(
+        sql("SELECT * FROM (SELECT k, count(*) AS c FROM " +
+          "(SELECT pow(x, -1) AS k FROM t GROUP BY x) GROUP BY k) " +
+          "WHERE cast(k AS STRING) = 'Infinity'"),
+        Row(Double.PositiveInfinity, 1L))
+    }
+  }
+
+  test("SPARK-60150: comparisons on a FLOAT grouping key are pushed to the data source") {
+    withTempPath { path =>
+      Seq(-0.0f, 1.0f, 2.0f).toDF("f").write.parquet(path.getCanonicalPath)
+      val df = spark.read.parquet(path.getCanonicalPath)
+        .groupBy("f").count().where(col("f") > 1.5)
+      checkAnswer(df, Row(2.0f, 1L))
+      // The FLOAT key is compared with a DOUBLE value through a widening cast. That comparison is
+      // pushed below the aggregate without normalizing the key, so the scan can still use it.
+      val pushedFilters = df.queryExecution.sparkPlan.collectFirst {
+        case scan: FileSourceScanExec => scan.metadata("PushedFilters")
+      }
+      assert(pushedFilters.exists(_.contains("GreaterThan(f,1.5)")), pushedFilters)
+    }
   }
 
   test("SPARK-57329: mode normalizes -0.0/0.0 in the frequency buffer") {

@@ -1871,7 +1871,7 @@ def median(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
-        A column that evaluates to a numeric, interval, or time.
+        A column that evaluates to a numeric, interval, time, or nanosecond-precision timestamp.
 
     Returns
     -------

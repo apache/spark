@@ -1222,6 +1222,37 @@ class ArrowEncoderSuite extends ConnectFunSuite {
           DayTimeIntervalType.DEFAULT.startField,
           DayTimeIntervalType.DEFAULT.endField)
       })
+
+  for (micros <- Seq(Long.MinValue, Long.MaxValue, -1L, 0L, 1L, 10000000000000000L)) {
+    test(s"day-time intervals retain full microsecond range: $micros") {
+      val duration = Duration.of(micros, ChronoUnit.MICROS)
+      val values = Seq(duration, null, Duration.ZERO)
+      val result = roundTrip(DayTimeIntervalEncoder, values.iterator)
+      try {
+        assert(result.toSeq == values)
+      } finally {
+        result.close()
+      }
+      val strings =
+        roundTripWithDifferentIOEncoders(DayTimeIntervalEncoder, StringEncoder, values.iterator)
+      try {
+        assert(strings.toSeq == values.map { value =>
+          if (value == null) {
+            null
+          } else {
+            toDayTimeIntervalString(
+              durationToMicros(value),
+              ANSI_STYLE,
+              DayTimeIntervalType.DEFAULT.startField,
+              DayTimeIntervalType.DEFAULT.endField)
+          }
+        })
+      } finally {
+        strings.close()
+      }
+    }
+  }
+
   UpCastTestCase(YearMonthIntervalEncoder, i => Period.ofMonths(i))
     .test(
       StringEncoder,
