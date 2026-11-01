@@ -1478,7 +1478,7 @@ private[spark] class MapOutputTrackerMaster(
   private[spark] def getMapOutputLocations(shuffleId: Int): Seq[(BlockManagerId, Long)] = {
     shuffleStatuses.get(shuffleId).map { shuffleStatus =>
       shuffleStatus.withMapStatuses { statuses =>
-        statuses.filter(_ != null).map(status => (status.location, status.mapId)).toSeq
+        statuses.iterator.filter(_ != null).map(status => (status.location, status.mapId)).toSeq
       }
     }.getOrElse(Seq.empty)
   }
