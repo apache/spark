@@ -302,6 +302,12 @@ class SparkSession private[sql] (
     throw ConnectClientUnsupportedErrors.baseRelationToDataFrame()
 
   /** @inheritdoc */
+  override def getOrCreate(
+      path: String,
+      create: () => org.apache.spark.sql.DataFrame): DataFrame =
+    throw ConnectClientUnsupportedErrors.getOrCreate()
+
+  /** @inheritdoc */
   override def executeCommand(
       runner: String,
       command: String,

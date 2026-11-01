@@ -16,6 +16,7 @@
 #
 
 import os
+import tempfile
 import unittest
 import unittest.mock
 from io import StringIO
@@ -26,6 +27,7 @@ from pyspark.errors.exceptions.captured import SparkNoSuchElementException
 from pyspark.sql import Row, SparkSession, SQLContext
 from pyspark.sql.functions import col
 from pyspark.sql.profiler import Profile
+from pyspark.sql.session import _GET_OR_CREATE_MARKER
 from pyspark.testing.connectutils import (
     connect_requirement_message,
     should_test_connect,
@@ -260,6 +262,38 @@ class SparkSessionTests4(ReusedSQLTestCase):
         finally:
             if session2 is not None:
                 session2.stop()
+
+
+class SparkSessionGetOrCreateTests(ReusedSQLTestCase):
+    def test_computes_and_stores_the_dataset_on_the_first_call(self):
+        with tempfile.TemporaryDirectory(prefix="get_or_create") as d:
+            path = os.path.join(d, "ids")
+            df = self.spark.getOrCreate(path, lambda: self.spark.range(3))
+
+            self.assertEqual(df.count(), 3)
+            self.assertTrue(os.path.exists(os.path.join(path, _GET_OR_CREATE_MARKER)))
+            self.assertEqual(self.spark.read.parquet(path).count(), 3)
+
+    def test_loads_existing_dataset_instead_of_recomputing(self):
+        with tempfile.TemporaryDirectory(prefix="get_or_create") as d:
+            path = os.path.join(d, "ids")
+            calls = []
+
+            def create():
+                calls.append(1)
+                return self.spark.range(3)
+
+            self.assertEqual(self.spark.getOrCreate(path, create).count(), 3)
+            self.assertEqual(self.spark.getOrCreate(path, create).count(), 3)
+            self.assertEqual(len(calls), 1)
+
+    def test_recomputes_when_the_stored_dataset_has_no_marker(self):
+        with tempfile.TemporaryDirectory(prefix="get_or_create") as d:
+            path = os.path.join(d, "ids")
+            self.spark.range(100).write.parquet(path)
+
+            df = self.spark.getOrCreate(path, lambda: self.spark.range(3))
+            self.assertEqual(df.count(), 3)
 
 
 class SparkSessionTests5(unittest.TestCase):

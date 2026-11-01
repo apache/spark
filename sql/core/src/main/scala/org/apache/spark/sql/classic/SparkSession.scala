@@ -28,6 +28,8 @@ import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext, SparkException, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
@@ -37,7 +39,7 @@ import org.apache.spark.internal.config.{ConfigEntry, EXECUTOR_ALLOW_SPARK_CONTE
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql
-import org.apache.spark.sql.{AnalysisException, Artifact, DataSourceRegistration, Encoder, Encoders, ExperimentalMethods, Row, SparkSessionBuilder, SparkSessionCompanion, SparkSessionExtensions, SparkSessionExtensionsProvider, UDTFRegistration}
+import org.apache.spark.sql.{AnalysisException, Artifact, DataSourceRegistration, Encoder, Encoders, ExperimentalMethods, Row, SaveMode, SparkSessionBuilder, SparkSessionCompanion, SparkSessionExtensions, SparkSessionExtensionsProvider, UDTFRegistration}
 import org.apache.spark.sql.api.python.PythonSQLUtils
 import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.catalyst._
@@ -419,6 +421,22 @@ class SparkSession private(
   /** @inheritdoc */
   def range(start: Long, end: Long, step: Long, numPartitions: Int): Dataset[java.lang.Long] = {
     new Dataset(self, Range(start, end, step, numPartitions), Encoders.LONG)
+  }
+
+  /** @inheritdoc */
+  override def getOrCreate(
+      path: String,
+      create: () => org.apache.spark.sql.DataFrame): DataFrame = {
+    val markerPath = new Path(path, SparkSession.GET_OR_CREATE_MARKER)
+    val fs = markerPath.getFileSystem(sessionState.newHadoopConf())
+    if (!fs.exists(markerPath)) {
+      // Overwrite instead of failing, so that a partial dataset left by an interrupted write is
+      // replaced instead of blocking every later run.
+      create().write.mode(SaveMode.Overwrite).parquet(path)
+      // Written last, so that the marker is only there once the data is complete.
+      fs.create(markerPath, true).close()
+    }
+    read.parquet(path)
   }
 
   /**
@@ -942,6 +960,12 @@ class SparkSession private(
 @Stable
 object SparkSession extends SparkSessionCompanion with Logging {
   override private[sql] type Session = SparkSession
+
+  /**
+   * Name of the file that marks a dataset written by `SparkSession.getOrCreate` as complete.
+   * It starts with an underscore so that it is ignored when the dataset is read back.
+   */
+  private[sql] val GET_OR_CREATE_MARKER = "_spark_getorcreate_success"
 
   /**
    * Builder for [[SparkSession]].
