@@ -244,12 +244,14 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
   /**
    * Transfers a native data source package to `target` if Spark can use it, see
    * [[NativeDataSourcePackage.checkAdded]], so that it never is at the path of an artifact
-   * otherwise. Returns false if the session has the same file already. The file is compared with
-   * the artifact first, so that adding the same file again neither copies nor checks it. A file
-   * of the user is then copied to a temporary directory, outside of the artifacts, which the file
-   * server serves and a clone of the session copies, and the copy is checked and then moved, so
-   * that the session gets the bytes that are checked. Errors name the file of the user, or the
-   * artifact if Spark staged the file for it, such as for a Spark Connect client.
+   * otherwise. Returns false if the session has the same file already, and fails with
+   * ARTIFACT_ALREADY_EXISTS if it has another one, as artifactAlreadyAdded does, or with the error
+   * of the check. The file is compared with the artifact first, so that adding the same file again
+   * neither copies nor checks it. A file of the user is then copied to a temporary directory,
+   * outside of the artifacts, which the file server serves and a clone of the session copies, and
+   * the copy is checked and then moved, so that the session gets the bytes that are checked. Errors
+   * name the file of the user, or the artifact if Spark staged the file for it, such as for a Spark
+   * Connect client.
    */
   private def addNativeDataSourcePackage(
       normalizedRemoteRelativePath: Path,
@@ -392,12 +394,13 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
     } else {
       val target = ArtifactUtils.concatenatePaths(artifactPath, normalizedRemoteRelativePath)
       if (isCheckedPackage(normalizedRemoteRelativePath)) {
+        // Fails if another file is the artifact, or if Spark cannot use the package.
         if (!addNativeDataSourcePackage(normalizedRemoteRelativePath, serverLocalStagingPath,
             target, deleteStagedFile, sourceName)) {
           return
         }
       } else {
-        // Disallow overwriting with modified version
+        // Disallow overwriting with modified version: fails if another file is the artifact.
         if (artifactAlreadyAdded(normalizedRemoteRelativePath, serverLocalStagingPath, target)) {
           return
         }
