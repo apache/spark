@@ -46,12 +46,16 @@ afterwards.
 
 The reader returns strings and binary values as Arrow views, which refer to the values in the pages
 that arrow-rs decompresses, or in their dictionaries, rather than copying each value into a buffer
-of its batch; short values are in the views themselves. The coalescer copies the values of the rows
-that pass when their pages hold mostly the values of other rows, so that a batch does not keep the
-pages of the rows that the predicates dropped. The library allocates with [mimalloc][mimalloc],
-which reuses the memory of each thread whatever the malloc settings of the JVM's process: with a
-fixed mmap threshold, as `MALLOC_TRIM_THRESHOLD_` and other settings make it, glibc maps the buffer
-of each page and batch, and unmaps it when it is freed.
+of its batch; short values are in the views themselves. A value of at most 12 bytes is in its view,
+followed by zeros, so `=`, `<>`, `<=>`, and `IN` with such values compare the views of a column as
+128-bit integers, without reading the bytes of the column. The coalescer copies the values of the
+rows that pass when their pages hold mostly the values of other rows, so that a batch does not keep
+the pages of the rows that the predicates dropped. The reader decodes the decimal columns that
+Parquet stores as INT32 or INT64 as 64-bit decimals, which the predicates compare and the filter
+copies, and widens only the rows that it returns to the 128 bits that Spark reads. The library
+allocates with [mimalloc][mimalloc], which reuses the memory of each thread whatever the malloc
+settings of the JVM's process: with a fixed mmap threshold, as `MALLOC_TRIM_THRESHOLD_` and other
+settings make it, glibc maps the buffer of each page and batch, and unmaps it when it is freed.
 
 Before it decodes, the reader skips the row groups and pages in which, by their statistics, no row
 passes the predicates, as Spark's reader does with the statistics of row groups and the column
@@ -68,7 +72,8 @@ The reader evaluates these predicates on top-level columns, with literals of the
 column:
 
 - `=`, `<>`, `<=>`, `<`, `<=`, `>`, `>=`, and `IN`, on boolean, integer, floating-point, string,
-  binary, date, timestamp, and decimal columns, the latter with literals of the same scale;
+  binary, date, timestamp, and decimal columns, the latter with literals of the same scale, whose
+  unscaled values fit in 64 bits for columns of up to 18 digits;
 - `STARTS_WITH`, `ENDS_WITH`, and `CONTAINS`, on string columns, which Spark pushes for some
   `LIKE` patterns;
 - `IS_NULL` and `IS_NOT_NULL`, on any column;

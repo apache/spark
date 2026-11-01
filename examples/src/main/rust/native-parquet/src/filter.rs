@@ -22,11 +22,12 @@ use arrow_array::cast::AsArray;
 use arrow_array::types::{Float32Type, Float64Type};
 use arrow_array::{
     ArrayRef, BinaryArray, BinaryViewArray, BooleanArray, Date32Array, Decimal128Array,
-    Float32Array, Float64Array, Int16Array, Int32Array, Int64Array, Int8Array, RecordBatch, Scalar,
-    StringArray, StringViewArray, TimestampMicrosecondArray,
+    Decimal64Array, Float32Array, Float64Array, Int16Array, Int32Array, Int64Array, Int8Array,
+    RecordBatch, Scalar, StringArray, StringViewArray, TimestampMicrosecondArray,
 };
+use arrow_buffer::{BooleanBuffer, Buffer};
 use arrow_ord::cmp;
-use arrow_schema::{ArrowError, DataType, Schema, TimeUnit};
+use arrow_schema::{ArrowError, DataType, Schema, TimeUnit, DECIMAL64_MAX_PRECISION};
 use arrow_string::like;
 use spark_native_source::{LiteralValue, Predicate};
 
@@ -169,6 +170,21 @@ impl Filter {
                         _ => BooleanArray::new_null(array.len()),
                     });
                 };
+                let equality = matches!(
+                    op,
+                    Comparison::Equal | Comparison::NotEqual | Comparison::NullSafeEqual
+                );
+                if let Some(equal) = equality.then(|| equal_views(array, &[value])).flatten() {
+                    let nulls = array.nulls().cloned();
+                    return Ok(match (op, nulls) {
+                        (Comparison::NotEqual, nulls) => BooleanArray::new(!&equal, nulls),
+                        // A null is never equal to the value.
+                        (Comparison::NullSafeEqual, Some(nulls)) => {
+                            BooleanArray::new(&equal & nulls.inner(), None)
+                        }
+                        (_, nulls) => BooleanArray::new(equal, nulls),
+                    });
+                }
                 let value = Scalar::new(value);
                 match op {
                     Comparison::Equal => cmp::eq(array, &value),
@@ -192,6 +208,13 @@ impl Filter {
                 // The disjunction of the equalities: null when no value matches, and the column
                 // or a value is null.
                 let array = &spark_ordered(column_of(batch, column)?);
+                let literals = values
+                    .iter()
+                    .map(Option::as_ref)
+                    .collect::<Option<Vec<_>>>();
+                if let Some(matches) = literals.and_then(|literals| equal_views(array, &literals)) {
+                    return Ok(BooleanArray::new(matches, array.nulls().cloned()));
+                }
                 let mut result: Option<BooleanArray> = None;
                 for value in values {
                     let matches = match value {
@@ -264,8 +287,9 @@ fn column<'a>(predicate: &Predicate, schema: &'a Schema) -> Option<(String, &'a 
 }
 
 /// A top-level column of a type that Arrow compares as Spark does, in the schema that Spark
-/// reads or in the one that the reader reads, which has views of strings and binary values.
-/// Floats compare as Spark compares them once [`spark_ordered`] changes their zeros and NaNs.
+/// reads or in the one that the reader reads, which has views of strings and binary values, and
+/// 64-bit decimals. Floats compare as Spark compares them once [`spark_ordered`] changes their
+/// zeros and NaNs.
 fn comparable_column<'a>(
     predicate: &Predicate,
     schema: &'a Schema,
@@ -284,6 +308,7 @@ fn comparable_column<'a>(
         | DataType::Binary
         | DataType::BinaryView
         | DataType::Date32
+        | DataType::Decimal64(_, _)
         | DataType::Decimal128(_, _)
         | DataType::Timestamp(TimeUnit::Microsecond, _) => Some((name, data_type)),
         _ => None,
@@ -334,7 +359,10 @@ fn literal(predicate: &Predicate, data_type: &DataType) -> Option<Option<ArrayRe
         (DataType::Timestamp(TimeUnit::Microsecond, None), LiteralValue::TimestampNtz(value)) => {
             Arc::new(TimestampMicrosecondArray::from(vec![value]))
         }
-        // Equal scales compare as their unscaled values.
+        // Equal scales compare as their unscaled values. A file may store the decimals of up to 18
+        // digits as integers, which the reader reads as 64-bit decimals, so that the literal for
+        // such a column of the schema that Spark reads must fit 64 bits too: the scan checks the
+        // predicates on that schema, and the reader on the schema of each file.
         (
             DataType::Decimal128(precision, scale),
             LiteralValue::Decimal {
@@ -342,8 +370,24 @@ fn literal(predicate: &Predicate, data_type: &DataType) -> Option<Option<ArrayRe
                 scale: literal_scale,
                 ..
             },
+        ) if literal_scale == *scale
+            && (*precision > DECIMAL64_MAX_PRECISION || i64::try_from(unscaled).is_ok()) =>
+        {
+            Arc::new(
+                Decimal128Array::from(vec![unscaled])
+                    .with_precision_and_scale(*precision, *scale)
+                    .ok()?,
+            )
+        }
+        (
+            DataType::Decimal64(precision, scale),
+            LiteralValue::Decimal {
+                unscaled,
+                scale: literal_scale,
+                ..
+            },
         ) if literal_scale == *scale => Arc::new(
-            Decimal128Array::from(vec![unscaled])
+            Decimal64Array::from(vec![i64::try_from(unscaled).ok()?])
                 .with_precision_and_scale(*precision, *scale)
                 .ok()?,
         ),
@@ -392,6 +436,43 @@ fn spark_f64(value: f64) -> f64 {
     } else {
         value
     }
+}
+
+/// Whether each value of a column of string or binary views equals one of `values`, or `None`
+/// unless each of these has at most 12 bytes. Such a value is in its view, after its length, and
+/// Arrow pads the rest of the view with zeros, so a view of the column is that of the value
+/// exactly when its value is, and a longer value has another length: the views compare without
+/// the bytes of the column, or a branch on their lengths. The bits of the null rows are arbitrary.
+fn equal_views(array: &ArrayRef, values: &[&ArrayRef]) -> Option<BooleanBuffer> {
+    let views = |array: &ArrayRef| match array.data_type() {
+        DataType::Utf8View => Some(array.as_string_view().views().clone()),
+        DataType::BinaryView => Some(array.as_binary_view().views().clone()),
+        _ => None,
+    };
+    let column = views(array)?;
+    let values = values
+        .iter()
+        .map(|value| views(value)?.first().copied())
+        .collect::<Option<Vec<u128>>>()?;
+    if values.iter().any(|&view| view as u32 > 12) {
+        return None;
+    }
+    Some(match values.as_slice() {
+        [value] => pack(&column, |view| view == *value),
+        values => pack(&column, |view| values.contains(&view)),
+    })
+}
+
+/// The bits of `f` for each view, 64 at a time, which the compiler can vectorize.
+fn pack(views: &[u128], f: impl Fn(u128) -> bool) -> BooleanBuffer {
+    let words: Vec<u64> = views
+        .chunks(64)
+        .map(|chunk| {
+            let bits = chunk.iter().enumerate();
+            bits.fold(0, |word, (bit, &view)| word | (u64::from(f(view)) << bit))
+        })
+        .collect();
+    BooleanBuffer::new(Buffer::from_vec(words), 0, views.len())
 }
 
 fn column_of<'a>(batch: &'a RecordBatch, name: &str) -> Result<&'a ArrayRef, ArrowError> {
@@ -545,6 +626,79 @@ mod tests {
     }
 
     #[test]
+    fn views_equal_values_as_strings_and_binary_values_do() {
+        // Values in their views and longer ones, of 12 bytes, empty, ending with NUL, and null.
+        let values = [
+            Some("AIR"),
+            Some("REG AIR"),
+            None,
+            Some(""),
+            Some("AIR FREIGHT, LONG"),
+            Some("AIRMAIL12345"),
+            Some("AIR\0"),
+        ];
+        let bytes: Vec<Option<&[u8]>> = values.iter().map(|v| v.map(str::as_bytes)).collect();
+        let columns: [ArrayRef; 3] = [
+            Arc::new(StringArray::from(values.to_vec())),
+            Arc::new(StringViewArray::from(values.to_vec())),
+            Arc::new(BinaryViewArray::from(bytes)),
+        ];
+        let rows = |column: &ArrayRef, predicate: Value| {
+            let batch = RecordBatch::try_from_iter([("s", column.clone())]).unwrap();
+            let filter = Filter::new(&self::predicate(predicate), &batch.schema()).unwrap();
+            let result = filter.evaluate(&batch).unwrap();
+            (0..result.len())
+                .map(|row| result.is_valid(row).then(|| result.value(row)))
+                .collect::<Vec<_>>()
+        };
+        // Each value, with its base64 for the binary column; the last one is not in its view.
+        let literals = [
+            ("AIR", "QUlS"),
+            ("", ""),
+            ("REG AIR", "UkVHIEFJUg=="),
+            ("AIRMAIL12345", "QUlSTUFJTDEyMzQ1"),
+            ("AIR\0", "QUlSAA=="),
+            ("AIR FREIGHT, LONG", "QUlSIEZSRUlHSFQsIExPTkc="),
+        ];
+        let literal = |column: &ArrayRef, (text, base64): (&str, &str)| match column.data_type() {
+            DataType::BinaryView => literal("binary", json!(base64)),
+            _ => literal("string", json!(text)),
+        };
+        for op in ["=", "<>", "<=>"] {
+            for value in literals {
+                let compare = |column: &ArrayRef| {
+                    rows(
+                        column,
+                        function(op, vec![self::column("s"), literal(column, value)]),
+                    )
+                };
+                // Each value is in one row.
+                let expected = compare(&columns[0]);
+                let equal = expected
+                    .iter()
+                    .filter(|&&row| row == Some(op != "<>"))
+                    .count();
+                assert_eq!(equal, 1, "{op} {value:?}");
+                for column in &columns[1..] {
+                    assert_eq!(compare(column), expected, "{op} {value:?}");
+                }
+            }
+        }
+        let (t, f, n) = (Some(true), Some(false), None);
+        let in_list = |column: &ArrayRef, values: &[(&str, &str)]| {
+            let mut children = vec![self::column("s")];
+            children.extend(values.iter().map(|&value| literal(column, value)));
+            rows(column, function("IN", children))
+        };
+        for column in &columns {
+            let short = in_list(column, &literals[..4]);
+            assert_eq!(short, [t, t, n, t, f, t, f], "{column:?}");
+            let long = in_list(column, &[literals[0], literals[5]]);
+            assert_eq!(long, [t, f, n, f, t, f, f], "{column:?}");
+        }
+    }
+
+    #[test]
     fn literals_take_the_type_of_their_column() {
         let schema = Schema::new(vec![
             Field::new("flag", DataType::Boolean, true),
@@ -562,6 +716,8 @@ mod tests {
                 true,
             ),
             Field::new("amount", DataType::Decimal128(10, 2), true),
+            Field::new("cents", DataType::Decimal64(10, 2), true),
+            Field::new("wide", DataType::Decimal128(20, 2), true),
         ]);
         let supported = |name: &str, data_type: &str, value: Value| {
             let compare = function("=", vec![column(name), literal(data_type, value)]);
@@ -582,6 +738,29 @@ mod tests {
         assert!(supported("amount", "decimal(10,2)", json!("12.34")));
         assert!(supported("amount", "decimal(12,2)", json!("12.34")));
         assert!(!supported("amount", "decimal(10,3)", json!("12.345")));
+        // The reader reads decimals of up to 18 digits as 64-bit decimals, which wider literals
+        // may not fit.
+        assert!(supported("cents", "decimal(10,2)", json!("12.34")));
+        assert!(supported(
+            "cents",
+            "decimal(19,2)",
+            json!("92233720368547758.07")
+        ));
+        assert!(!supported(
+            "cents",
+            "decimal(19,2)",
+            json!("92233720368547758.08")
+        ));
+        assert!(!supported(
+            "amount",
+            "decimal(19,2)",
+            json!("92233720368547758.08")
+        ));
+        assert!(supported(
+            "wide",
+            "decimal(20,2)",
+            json!("92233720368547758.08")
+        ));
         assert!(!supported("day", "string", json!("2022-01-08")));
     }
 

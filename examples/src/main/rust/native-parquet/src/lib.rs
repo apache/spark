@@ -338,6 +338,7 @@ impl ParquetReaderFactory {
         }
         let reader = builder.build().map_err(|error| in_file(error.into()))?;
         let schema = Arc::new(reader.schema().project(&output)?);
+        let spark_schema = schema::spark_batch_schema(&schema);
         // Batches of more than half the batch size pass through the coalescer, without a copy.
         let coalescer = BatchCoalescer::new(schema, self.batch_size)
             .with_biggest_coalesce_batch_size(Some(self.batch_size / 2));
@@ -348,6 +349,7 @@ impl ParquetReaderFactory {
                 .reduce(|left, right| Filter::And(Box::new(left), Box::new(right))),
             output,
             coalescer,
+            spark_schema,
             finished: false,
             task,
         };
@@ -362,7 +364,8 @@ impl ParquetReaderFactory {
 /// that a source returns against the pushed predicates again, so it also reads their columns,
 /// which a `RowFilter` decodes twice; and when the rows that pass are scattered over the pages,
 /// the selections of rows that it builds, with millions of ranges, cost more than decoding every
-/// row. The coalescer gathers the rows that pass into batches of the batch size.
+/// row. The coalescer gathers the rows that pass into batches of the batch size, whose 64-bit
+/// decimals are widened to the 128 bits that Spark reads.
 struct Batches<'task> {
     reader: ParquetRecordBatchReader,
     // The conjunction of the pushed predicates.
@@ -370,6 +373,8 @@ struct Batches<'task> {
     // The positions of the columns that Spark reads in the batches of the reader.
     output: Vec<usize>,
     coalescer: BatchCoalescer,
+    // The schema of the batches that Spark gets, if the reader decodes 64-bit decimals.
+    spark_schema: Option<SchemaRef>,
     finished: bool,
     // Checked before the reader decodes each batch: when few rows pass the filter, the reader may
     // decode many batches for each batch that it returns.
@@ -389,7 +394,10 @@ impl Batches<'_> {
     fn next_batch(&mut self) -> std::result::Result<Option<RecordBatch>, ArrowError> {
         loop {
             if let Some(batch) = self.coalescer.next_completed_batch() {
-                return Ok(Some(batch));
+                return match &self.spark_schema {
+                    Some(schema) => schema::spark_batch(&batch, schema).map(Some),
+                    None => Ok(Some(batch)),
+                };
             }
             if self.finished {
                 return Ok(None);
@@ -919,6 +927,115 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn reads_and_filters_the_decimals_that_parquet_stores_as_integers() {
+        let directory = TempDirectory::new();
+        let path = directory.join("decimals.parquet");
+        // Decimals of `id - 500` times a factor, null for multiples of 11, which Parquet stores
+        // as INT32, INT64, and fixed-length byte arrays.
+        let decimals = |precision: u8, factor: i128| -> ArrayRef {
+            let values = (0..1000_i128).map(|id| (id % 11 != 0).then_some((id - 500) * factor));
+            let array = Decimal128Array::from_iter(values);
+            Arc::new(array.with_precision_and_scale(precision, 2).unwrap())
+        };
+        let batch = RecordBatch::try_from_iter([
+            (
+                "id",
+                Arc::new(Int64Array::from_iter_values(0..1000)) as ArrayRef,
+            ),
+            ("small", decimals(5, 1)),
+            ("medium", decimals(15, 1_000_000)),
+            ("wide", decimals(20, 1_000_000_000_000)),
+        ])
+        .unwrap();
+        write(&path, std::slice::from_ref(&batch), 100);
+        let metadata = load(&path).unwrap();
+        let physical: Vec<_> = metadata
+            .parquet_schema()
+            .columns()
+            .iter()
+            .map(|column| column.physical_type())
+            .collect();
+        use parquet::basic::Type;
+        assert_eq!(
+            physical,
+            [
+                Type::INT64,
+                Type::INT32,
+                Type::INT64,
+                Type::FIXED_LEN_BYTE_ARRAY
+            ]
+        );
+        // The reader decodes the integers as 64-bit decimals.
+        let decoded = schema::load(&File::open(&path).unwrap(), false).unwrap();
+        let types: Vec<_> = decoded
+            .schema()
+            .fields()
+            .iter()
+            .map(|f| f.data_type())
+            .collect();
+        assert_eq!(
+            types,
+            [
+                &DataType::Int64,
+                &DataType::Decimal64(5, 2),
+                &DataType::Decimal64(15, 2),
+                &DataType::Decimal128(20, 2)
+            ]
+        );
+
+        // Spark reads 128-bit decimals, which the reader returns.
+        let source = source(&path, &[]);
+        let schema = source.schema().unwrap();
+        for (index, precision) in [(1, 5), (2, 15), (3, 20)] {
+            let expected = DataType::Decimal128(precision, 2);
+            assert_eq!(schema.field(index).data_type(), &expected);
+        }
+        let read_all = read(&source, None, &[], None).unwrap();
+        let batches: Vec<_> = read_all.batches().cloned().collect();
+        let all = arrow_select::concat::concat_batches(&schema, &batches).unwrap();
+        // The columns that Spark reads are nullable, as the written ones need not be.
+        assert_eq!(all.columns(), batch.columns());
+
+        let decimal = |name: &str, op: &str, precision: u8, value: &str| {
+            let data_type = format!("decimal({precision},2)");
+            function(op, vec![column(name), literal(&data_type, json!(value))])
+        };
+        let filtered = |predicates: &[Value]| {
+            let read = read(&source, Some(&["id"]), predicates, None).unwrap();
+            assert!(read.support.iter().all(|s| *s == FilterSupport::Exact));
+            read.ids()
+        };
+        let valid = |id: &i64| id % 11 != 0;
+        // The statistics of the row groups skip all but the first.
+        let small = decimal("small", "<", 5, "-4.00");
+        assert_eq!(
+            filtered(&[small]),
+            (0..100).filter(valid).collect::<Vec<_>>()
+        );
+        let medium = decimal("medium", "=", 15, "2770000.00");
+        assert_eq!(filtered(&[medium]), [777]);
+        let wide = function(
+            "IN",
+            vec![
+                column("wide"),
+                literal("decimal(20,2)", json!("-4970000000000.00")),
+                literal("decimal(20,2)", json!("4970000000000.00")),
+            ],
+        );
+        assert_eq!(filtered(&[wide]), [3, 997]);
+        let nulls = function("IS_NULL", vec![column("medium")]);
+        assert_eq!(
+            filtered(&[nulls]),
+            (0..1000).filter(|id| !valid(id)).collect::<Vec<_>>()
+        );
+        // A literal outside the 64 bits of the decimals of 18 digits or fewer remains for Spark.
+        let huge = decimal("medium", "<", 30, "100000000000000000000.00");
+        let unsupported = read(&source, Some(&["id"]), &[huge], None).unwrap();
+        assert_eq!(unsupported.support, [FilterSupport::Unsupported]);
+        assert_eq!(unsupported.ids().len(), 1000);
     }
 
     #[test]

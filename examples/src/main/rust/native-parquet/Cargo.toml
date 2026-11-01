@@ -30,6 +30,7 @@ crate-type = ["cdylib", "rlib"]
 spark-native-source = { path = "../../../../../sql/native/rust" }
 arrow-arith = "58"
 arrow-array.workspace = true
+arrow-buffer = "58"
 arrow-ord = "58"
 arrow-schema.workspace = true
 arrow-select = "58"

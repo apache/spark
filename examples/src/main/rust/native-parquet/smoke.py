@@ -72,11 +72,17 @@ QUERIES = [
     "SELECT id FROM t WHERE NOT (k IN (1, NULL))",
     "SELECT id FROM t WHERE NOT (k IN (1, 2) OR label = 'row-5')",
     "SELECT id FROM t WHERE label <=> 'row-8'",
+    "SELECT id FROM t WHERE label <> 'row-17' AND id < 100",
+    "SELECT id FROM t WHERE label IN ('row-3', 'row-40')",
+    # A string longer than the 12 bytes that an Arrow view holds.
+    "SELECT id FROM t WHERE label IN ('row-3', 'row-12345678901234')",
     "SELECT id FROM t WHERE flag",
     "SELECT id FROM t WHERE NOT flag",
     "SELECT id, price FROM t WHERE price <= -50.25",
     "SELECT id, amount FROM t WHERE amount > 50.25",
     "SELECT id, big FROM t WHERE big < -100",
+    "SELECT id, price, amount FROM t WHERE price IN (-50.25, 12.34) OR amount = 50.26",
+    "SELECT id FROM t WHERE amount <=> 1.5 OR bytes <> X'6233'",
     "SELECT id, day FROM t WHERE day BETWEEN date'2000-01-01' AND date'2000-12-31'",
     "SELECT id, ts FROM t WHERE ts >= timestamp'1970-01-01 00:00:00' "
     "AND ts < timestamp'1970-06-01 00:00:00'",

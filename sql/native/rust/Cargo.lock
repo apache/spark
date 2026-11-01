@@ -767,6 +767,7 @@ version = "0.1.0"
 dependencies = [
  "arrow-arith",
  "arrow-array",
+ "arrow-buffer",
  "arrow-ord",
  "arrow-schema",
  "arrow-select",
