@@ -631,6 +631,16 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
     assert(optOutRow.getTimestamp(0) === Timestamp.valueOf("1991-11-09 00:00:00"))
     assert(optOutRow.getTimestamp(1) === Timestamp.valueOf("1996-01-01 01:23:45"))
 
+    withTable("datetime_ltz") {
+      sql(s"CREATE TABLE datetime_ltz USING jdbc OPTIONS (url '$jdbcUrl', " +
+        "dbtable 'datetime', zonelessTimestampAsNTZ 'false', timestampNTZAsWallClock 'false')")
+      val tableDf = sql("SELECT D, T FROM datetime_ltz")
+      assert(tableDf.schema("D").dataType === TimestampType)
+      assert(tableDf.schema("T").dataType === TimestampType)
+      checkAnswer(tableDf, Row(
+        Timestamp.valueOf("1991-11-09 00:00:00"), Timestamp.valueOf("1996-01-01 01:23:45")))
+    }
+
     // Conversion off keeps the NTZ mapping but reads through a JVM-zone java.sql.Timestamp;
     // LA is UTC-08:00 on this date, so 01:23:45 reads back as 09:23:45.
     withDefaultTimeZone(LA) {
@@ -645,10 +655,13 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
       assert(optInDf.schema("T").dataType === TimestampNTZType)
       checkAnswer(optInDf.select("D", "T"), ntzRow)
       withTable("datetime_ntz") {
-        sql(s"CREATE TABLE datetime_ntz USING org.apache.spark.sql.jdbc OPTIONS (url " +
-          s"'$jdbcUrl', dbtable 'datetime', zonelessTimestampAsNTZ 'true', " +
-          "timestampNTZAsWallClock 'true')")
-        checkAnswer(sql("SELECT D, T FROM datetime_ntz"), ntzRow)
+        sql(s"CREATE TABLE datetime_ntz USING jdbc OPTIONS (url '$jdbcUrl', " +
+          "dbtable 'datetime', zonelessTimestampAsNTZ 'true', timestampNTZAsWallClock 'false')")
+        val tableDf = sql("SELECT D, T FROM datetime_ntz")
+        assert(tableDf.schema("D").dataType === TimestampNTZType)
+        assert(tableDf.schema("T").dataType === TimestampNTZType)
+        checkAnswer(tableDf, Row(
+          LocalDateTime.of(1991, 11, 9, 8, 0, 0), LocalDateTime.of(1996, 1, 1, 9, 23, 45)))
       }
     }
   }

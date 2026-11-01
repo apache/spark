@@ -1785,6 +1785,7 @@ class JDBCSuite extends SharedSparkSession {
     dialects.foreach(d => assert(d.timestampNTZAsWallClock, s"dialect=$d"))
     // Dialects that don't opt in keep the java.sql.Timestamp conversion.
     assert(!NoopDialect.timestampNTZAsWallClock)
+    assert(!new AggregatedDialect(List(custom, NoopDialect)).timestampNTZAsWallClock)
   }
 
   test("SPARK-58876: Oracle NTZ mapping, preferTimestampNTZ and zonelessTimestampAsNTZ") {
