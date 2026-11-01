@@ -1792,6 +1792,39 @@ class KeyGroupedPartitioningSuite
     }
   }
 
+  /**
+   * Joins `testcat.ns.<keyed>` on `key` with `ident`, under the identity reduce, and with `plain`
+   * on `plainKey`, under the one-side shuffle, and checks the rows and the shuffles of each.
+   * `clue` names the case in a failure, of `checkAnswer` too.
+   */
+  private def checkReduceAndOneSideShuffle(
+      clue: String,
+      keyed: String,
+      key: String,
+      plainKey: String,
+      expected: Seq[Row],
+      reduceShuffles: Int,
+      oneSideShuffles: Int): Unit = {
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+      withClue(s"identity reduce, $clue: ") {
+        val df = sql(
+          s"SELECT k.$key FROM testcat.ns.$keyed k JOIN testcat.ns.ident i ON k.$key = i.$key")
+        checkAnswer(df, expected)
+        assert(collectAllShuffles(df.queryExecution.executedPlan).size == reduceShuffles)
+      }
+    }
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      withClue(s"one-side shuffle, $clue: ") {
+        val df = sql(
+          s"SELECT k.$key FROM testcat.ns.$keyed k JOIN testcat.ns.plain p ON k.$key = p.$plainKey")
+        checkAnswer(df, expected)
+        assert(collectAllShuffles(df.queryExecution.executedPlan).size == oneSideShuffles)
+      }
+    }
+  }
+
   test("SPARK-60522: a transform Spark cannot evaluate is not reduced onto or shuffled onto") {
     // With `UnboundBucketFunction`, the first join reduces `ident` onto `bucket(4, id)`, and the
     // second shuffles `plain` onto it, both by evaluating `bucket`. A connector may bind `bucket`
@@ -1807,24 +1840,8 @@ class KeyGroupedPartitioningSuite
           createBucketedIdTable("bucket4", 4, numIds = 8)
           createIdentityIdTable()
           createPlainTable()
-
-          withSQLConf(
-              SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
-              SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
-            val df = sql(
-              "SELECT k.id FROM testcat.ns.bucket4 k JOIN testcat.ns.ident i ON k.id = i.id")
-            checkAnswer(df, (0 until 8).map(i => Row(i.toLong)))
-            assert(collectAllShuffles(df.queryExecution.executedPlan).size == reduceShuffles,
-              fn.name())
-          }
-
-          withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
-            val df = sql(
-              "SELECT k.id FROM testcat.ns.bucket4 k JOIN testcat.ns.plain p ON k.id = p.b")
-            checkAnswer(df, (0 until 8).map(i => Row(i.toLong)))
-            assert(collectAllShuffles(df.queryExecution.executedPlan).size == oneSideShuffles,
-              fn.name())
-          }
+          checkReduceAndOneSideShuffle(fn.getClass.getSimpleName, "bucket4", "id", "b",
+            (0 until 8).map(i => Row(i.toLong)), reduceShuffles, oneSideShuffles)
           catalog.clearTables()
         }
     }
@@ -1901,28 +1918,17 @@ class KeyGroupedPartitioningSuite
       // so a `SMALLINT` is widened and the join keeps its plan.
       (UnboundIntBucketFunction, ShortType, 0, 1),
       (UnboundIntBucketFunction, IntegerType, 0, 1),
+      // `DoubleBucketFunction` declares `DOUBLE`, and Java widened an `INT` into its `invoke`
+      // before the check, so the `INT` is cast and the join keeps its plan.
+      (UnboundDoubleBucketFunction, IntegerType, 0, 1),
       // A `BIGINT` would be narrowed, so it is refused. Without the check it failed with
       // `INTERNAL_ERROR`, as no `invoke(int, long)` exists.
       (UnboundIntBucketFunction, LongType, 2, 2)
     ).foreach { case (fn, dataType, reduceShuffles, oneSideShuffles) =>
       withFunction(fn) {
         createIdTables(dataType)
-        withSQLConf(
-            SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
-            SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
-          val df = sql(
-            "SELECT k.id FROM testcat.ns.bucket4 k JOIN testcat.ns.ident i ON k.id = i.id")
-          checkAnswer(df, ids(dataType))
-          assert(collectAllShuffles(df.queryExecution.executedPlan).size == reduceShuffles,
-            s"identity reduce, ${fn.name()} over $dataType")
-        }
-        withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
-          val df = sql(
-            "SELECT k.id FROM testcat.ns.bucket4 k JOIN testcat.ns.plain p ON k.id = p.b")
-          checkAnswer(df, ids(dataType))
-          assert(collectAllShuffles(df.queryExecution.executedPlan).size == oneSideShuffles,
-            s"one-side shuffle, ${fn.name()} over $dataType")
-        }
+        checkReduceAndOneSideShuffle(s"${fn.getClass.getSimpleName} over $dataType", "bucket4",
+          "id", "b", ids(dataType), reduceShuffles, oneSideShuffles)
         catalog.clearTables()
       }
     }
@@ -1944,21 +1950,8 @@ class KeyGroupedPartitioningSuite
         Seq("yearly", "ident", "plain").foreach { t =>
           sql(s"INSERT INTO testcat.ns.$t VALUES " + dates.map(d => s"(DATE'$d')").mkString(", "))
         }
-        val expected = dates.map(d => Row(java.sql.Date.valueOf(d)))
-        withSQLConf(
-            SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
-            SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
-          val df = sql("SELECT y.d FROM testcat.ns.yearly y JOIN testcat.ns.ident i ON y.d = i.d")
-          checkAnswer(df, expected)
-          assert(collectAllShuffles(df.queryExecution.executedPlan).size == reduceShuffles,
-            s"identity reduce, ${fn.getClass.getSimpleName}")
-        }
-        withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
-          val df = sql("SELECT y.d FROM testcat.ns.yearly y JOIN testcat.ns.plain p ON y.d = p.d")
-          checkAnswer(df, expected)
-          assert(collectAllShuffles(df.queryExecution.executedPlan).size == oneSideShuffles,
-            s"one-side shuffle, ${fn.getClass.getSimpleName}")
-        }
+        checkReduceAndOneSideShuffle(fn.getClass.getSimpleName, "yearly", "d", "d",
+          dates.map(d => Row(java.sql.Date.valueOf(d))), reduceShuffles, oneSideShuffles)
         catalog.clearTables()
       }
     }
@@ -1970,7 +1963,7 @@ class KeyGroupedPartitioningSuite
     Seq(
       (new UnboundPhysicalDaysFunction(IntDaysFunction), DateType, "DATE'2021-06-0%d'"),
       (new UnboundPhysicalDaysFunction(LongDaysFunction), TimestampType,
-        "TIMESTAMP'2021-06-0%d 10:00:00'")
+        "TIMESTAMP'1969-12-0%d 10:00:00'")
     ).foreach { case (fn, dataType, literal) =>
       withFunction(fn) {
         createTable("daily", Array(Column.create("t", dataType)), Array(days("t")))
@@ -1980,21 +1973,8 @@ class KeyGroupedPartitioningSuite
         Seq("daily", "ident", "plain").foreach { t =>
           sql(s"INSERT INTO testcat.ns.$t VALUES $values")
         }
-        val expected = sql("SELECT t FROM testcat.ns.plain").collect().toSeq
-        withSQLConf(
-            SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
-            SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
-          val df = sql("SELECT d.t FROM testcat.ns.daily d JOIN testcat.ns.ident i ON d.t = i.t")
-          checkAnswer(df, expected)
-          assert(collectAllShuffles(df.queryExecution.executedPlan).isEmpty,
-            s"identity reduce over $dataType")
-        }
-        withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
-          val df = sql("SELECT d.t FROM testcat.ns.daily d JOIN testcat.ns.plain p ON d.t = p.t")
-          checkAnswer(df, expected)
-          assert(collectAllShuffles(df.queryExecution.executedPlan).size == 1,
-            s"one-side shuffle over $dataType")
-        }
+        checkReduceAndOneSideShuffle(s"${fn.getClass.getSimpleName} over $dataType", "daily",
+          "t", "t", sql("SELECT t FROM testcat.ns.plain").collect().toSeq, 0, 1)
         catalog.clearTables()
       }
     }
@@ -2015,22 +1995,8 @@ class KeyGroupedPartitioningSuite
           Seq("bucket4", "ident", "plain").foreach { t =>
             sql(s"INSERT INTO testcat.ns.$t VALUES " + values.map(v => s"('$v')").mkString(", "))
           }
-          withSQLConf(
-              SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
-              SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
-            val df = sql(
-              "SELECT k.s FROM testcat.ns.bucket4 k JOIN testcat.ns.ident i ON k.s = i.s")
-            checkAnswer(df, values.map(Row(_)))
-            assert(collectAllShuffles(df.queryExecution.executedPlan).isEmpty,
-              s"identity reduce, preserveCharVarcharTypeInfo=$preserve")
-          }
-          withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
-            val df = sql(
-              "SELECT k.s FROM testcat.ns.bucket4 k JOIN testcat.ns.plain p ON k.s = p.s")
-            checkAnswer(df, values.map(Row(_)))
-            assert(collectAllShuffles(df.queryExecution.executedPlan).size == 1,
-              s"one-side shuffle, preserveCharVarcharTypeInfo=$preserve")
-          }
+          checkReduceAndOneSideShuffle(s"preserveCharVarcharTypeInfo=$preserve", "bucket4", "s",
+            "s", values.map(Row(_)), 0, 1)
           catalog.clearTables()
         }
       }

@@ -1452,6 +1452,15 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     TransformExpression(DaysFunction, Seq(expr))
   }
 
+  /** A `years` that declares the `INT` it is applied to here, so that Spark can evaluate it. */
+  private object IntYearsFunction extends ScalarFunction[Int] {
+    override def inputTypes(): Array[DataType] = Array(IntegerType)
+    override def resultType(): DataType = IntegerType
+    override def name(): String = "years"
+    override def canonicalName(): String = name()
+    override def produceResult(input: InternalRow): Int = input.getInt(0)
+  }
+
   test("SPARK-59080: the re-shuffled side lands on the member the keyed side was matched on") {
     val id = AttributeReference("id", IntegerType)()
     val t1 = AttributeReference("t1", IntegerType)()
@@ -1606,12 +1615,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     // since `checkKeyGroupCompatible` declines for anything that is not a `ShuffledJoin`. So two
     // sides on the same such transform and keys, which nothing has to evaluate, keep their
     // layout, while a plain side is not shuffled onto it.
-    val nonScalar = new BoundFunction {
-      override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
-      override def resultType(): DataType = IntegerType
-      override def name(): String = "bucket"
-      override def canonicalName(): String = "bucket"
-    }
+    val nonScalar = NonScalarBucketFunction
     val idL = AttributeReference("idL", LongType)()
     val idR = AttributeReference("idR", LongType)()
     val keys = Seq(InternalRow(0), InternalRow(1), InternalRow(2), InternalRow(3))
@@ -1648,12 +1652,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     // parallelism guard treats a keyed side whose transform Spark cannot evaluate, and which the
     // other side does not pair with, as one to re-shuffle. With both sides re-shuffled, an existing
     // shuffle with fewer partitions than `spark.sql.shuffle.partitions` is not the layout.
-    val nonScalar = new BoundFunction {
-      override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
-      override def resultType(): DataType = IntegerType
-      override def name(): String = "bucket"
-      override def canonicalName(): String = "bucket"
-    }
+    val nonScalar = NonScalarBucketFunction
     val idL = AttributeReference("idL", LongType)()
     val idR = AttributeReference("idR", LongType)()
     val left = DummySparkPlan(outputPartitioning = KeyedPartitioning(
@@ -2963,10 +2962,13 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         "312" -> Seq(InternalRow(3), InternalRow(1), InternalRow(2)),
         // Duplicate keys separated by another key force regrouping on either side of the join.
         "121-interleaved" -> Seq(InternalRow(1), InternalRow(2), InternalRow(1)))
+      // `years` over an `INT` attribute through a function that declares `INT`, so that Spark can
+      // evaluate it and a child can be shuffled onto it. The test catalog's `years` declares a
+      // `TIMESTAMP`, which an `INT` attribute is not stored as.
       val exprSets = Seq(
         "id" -> Seq[Expression](a),
         "bucket4" -> Seq[Expression](bucket(4, a)),
-        "years" -> Seq[Expression](years(a)))
+        "years" -> Seq[Expression](TransformExpression(IntYearsFunction, Seq(a))))
       for {
         (keyName, keys) <- keySets
         (exprName, exprs) <- exprSets

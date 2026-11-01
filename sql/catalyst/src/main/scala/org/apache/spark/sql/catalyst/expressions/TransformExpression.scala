@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCo
 import org.apache.spark.sql.catalyst.types.{PhysicalDataType, UninitializedPhysicalType}
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, Reducer, ReducibleFunction, ScalarFunction}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{ArrayType, DataType, DecimalType, IntegralType, MapType, StructType, UpCastRule, UserDefinedType}
+import org.apache.spark.sql.types.{ArrayType, DataType, DecimalType, MapType, StructType, UpCastRule, UserDefinedType}
 
 /**
  * The identity of a partition transform function. It holds the two values
@@ -201,52 +201,44 @@ case class TransformExpression(
 
   /**
    * The call `eval` runs: [[resolvedFunction]], with each argument at the type the function
-   * declares for it in `inputTypes()`. Nothing casts the arguments after analysis, so the call
-   * gets the values as the argument holds them. Most arguments go as they are, when they are held
-   * the way the declared type is, which is what a function read before this check. One kind is
-   * cast: an integral argument narrower than declared is widened with a [[Cast]], which keeps its
-   * value and needs no time zone. A function bound to a `SMALLINT` column but declaring `INT`
-   * stays evaluable that way. Any other mismatch, or a different number of arguments, gives
-   * `None`, as does everything `resolvedFunction` is `None` for. See `atDeclaredType`. A mismatch
-   * is logged at info level once per function class and argument types, since it makes a
-   * storage-partitioned join shuffle where it would not otherwise.
-   *
-   * Resolving the call can throw, e.g. when Spark finds no method to call on a `ScalarFunction`
-   * that inherits `produceResult` from a base class, or when connector code it calls throws. That
-   * gives `None` too, and `eval` rethrows it. So does a `LinkageError`, e.g. a connector class
-   * whose dependency is missing, which the planner would otherwise hit for a layout it does not
-   * pick. The planner asks this of such layouts on every query, so a failure is logged as a
-   * warning once per function class and kind of failure, and with its stack trace at debug level.
-   * Not serialized, so an executor resolves it again rather than receiving the call (or the
-   * failure) the driver resolved while planning.
+   * declares for it in `inputTypes()`, see `atDeclaredType` for which arguments suit. `None` when
+   * an argument does not, when there is another number of arguments, when the call fails to
+   * resolve, and wherever `resolvedFunction` is `None`. `eval` rethrows a failure to resolve. A
+   * storage-partitioned join shuffles instead of evaluating such a transform, so each case is
+   * logged, see `logArgumentsMismatch` and `logCannotResolve`.
    */
-  def evaluableFunction: Option[Expression] = evaluableFunctionAttempt.toOption.flatten
+  def evaluableFunction: Option[Expression] = evaluableFunctionAttempt match {
+    case Success(call) => call
+    case _ => None
+  }
 
   /**
-   * The call, or why it failed to resolve, computed and logged once, since a `lazy val` whose
-   * initializer throws runs it again on each access.
+   * The call, or why it failed to resolve, e.g. a `ScalarFunction` that inherits `produceResult`
+   * from a base class, connector code that throws, or a `LinkageError` for a connector class whose
+   * dependency is missing, which the planner would otherwise hit for a layout it does not pick.
+   * Computed and logged once, since a `lazy val` whose initializer throws runs it again on each
+   * access. Not serialized, so an executor resolves it again rather than receiving the call (or
+   * the failure) the driver resolved while planning.
    */
-  @transient private lazy val evaluableFunctionAttempt: Try[Option[Expression]] = {
-    val attempt = try Success(resolveEvaluableFunction()) catch {
-      case NonFatal(e) => Failure(e)
-      case e: LinkageError => Failure(e)
+  @transient private lazy val evaluableFunctionAttempt: Try[Option[Expression]] =
+    try Success(resolveEvaluableFunction()) catch {
+      case NonFatal(e) => cannotResolve(e)
+      case e: LinkageError => cannotResolve(e)
     }
-    attempt.failed.foreach(TransformExpression.logCannotResolve(function, _))
-    attempt
+
+  private def cannotResolve(e: Throwable): Try[Option[Expression]] = {
+    TransformExpression.logCannotResolve(function, e)
+    Failure(e)
   }
 
   private def resolveEvaluableFunction(): Option[Expression] =
     scalarFunction.flatMap { scalarFunc =>
       val arguments = callArguments
       val declaredTypes = scalarFunc.inputTypes().toSeq
-      val typed = if (arguments.length == declaredTypes.length) {
-        arguments.zip(declaredTypes).map { case (argument, declaredType) =>
-          TransformExpression.atDeclaredType(argument, declaredType)
-        }
-      } else {
-        Seq(None)
+      val typed = arguments.zip(declaredTypes).map { case (argument, declaredType) =>
+        TransformExpression.atDeclaredType(argument, declaredType)
       }
-      if (typed.forall(_.isDefined)) {
+      if (arguments.length == declaredTypes.length && typed.forall(_.isDefined)) {
         Some(V2ExpressionUtils.resolveScalarFunction(scalarFunc, typed.flatten))
       } else {
         TransformExpression.logArgumentsMismatch(scalarFunc, arguments.map(_.dataType),
@@ -255,11 +247,10 @@ case class TransformExpression(
       }
     }
 
-  override def eval(input: InternalRow): Any = evaluableFunction match {
-    case Some(fn) => fn.eval(input)
-    case None =>
-      evaluableFunctionAttempt.failed.foreach(e => throw e)
-      throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
+  override def eval(input: InternalRow): Any = evaluableFunctionAttempt match {
+    case Success(Some(call)) => call.eval(input)
+    case Failure(e) => throw e
+    case _ => throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
@@ -339,16 +330,17 @@ object TransformExpression extends Logging {
    * [[TransformExpression.evaluableFunction]].
    *
    * An argument goes as it is when it is stored the way the declared type is (`storedAlike`),
-   * which is how a function read it before this check. A narrower integral argument is held as
-   * another JVM type, so it is cast. Anything else is refused, a `DATE` against a `TIMESTAMP` in
-   * particular, whose cast takes the session time zone.
+   * which is how a function read it before this check. A numeric argument narrower than declared
+   * (`UpCastRule.legalNumericPrecedence`), e.g. a `SMALLINT` against an `INT` or an `INT` against a
+   * `DOUBLE`, is held as another JVM type, so it is cast, which gives the value a magic `invoke`
+   * got from Java's widening before this check, and needs no time zone. Anything else is refused,
+   * a `DATE` against a `TIMESTAMP` in particular, whose cast takes the session time zone.
    */
   private def atDeclaredType(argument: Expression, declaredType: DataType): Option[Expression] =
     (argument.dataType, declaredType) match {
       case (argumentType, _) if storedAlike(argumentType, declaredType, nested = false) =>
         Some(argument)
-      case (argumentType: IntegralType, declared: IntegralType)
-          if UpCastRule.legalNumericPrecedence(argumentType, declared) =>
+      case (argumentType, _) if UpCastRule.legalNumericPrecedence(argumentType, declaredType) =>
         Some(Cast(argument, declaredType))
       case _ =>
         None

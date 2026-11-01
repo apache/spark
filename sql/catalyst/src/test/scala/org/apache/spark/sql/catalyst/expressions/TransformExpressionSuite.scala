@@ -21,13 +21,12 @@ import org.apache.logging.log4j.Level
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ScalarFunction}
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, DateType, Decimal, DecimalType, IntegerType, LongType, StringType, StructType, UserDefinedType, VarcharType}
+import org.apache.spark.sql.types.{ArrayType, DataType, DateType, Decimal, DecimalType, DoubleType, IntegerType, LongType, MapType, StringType, StructType, UserDefinedType, VarcharType}
 import org.apache.spark.unsafe.types.UTF8String
 
-class TransformExpressionSuite extends SparkFunSuite with SQLHelper {
+class TransformExpressionSuite extends SparkFunSuite {
 
   /**
    * A bound function with a stable canonical name and no `equals` of its own. A plain class, NOT a
@@ -119,7 +118,7 @@ class TransformExpressionSuite extends SparkFunSuite with SQLHelper {
     assert(!b12.hasSameReducedKeys(b8), "nor do two unreduced ones")
   }
 
-  test("SPARK-60027: eval casts only a narrower integral argument to the function's input type") {
+  test("SPARK-60027: eval casts only a narrower numeric argument to the function's input type") {
     // Reads the value at the declared `BIGINT`, so it fails on an `INT` that is not cast.
     val longBucket = new ScalarFunction[Int] {
       override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
@@ -131,6 +130,20 @@ class TransformExpressionSuite extends SparkFunSuite with SQLHelper {
     }
     Seq(Literal(7), Literal(7L), Literal(7.toShort)).foreach { value =>
       val transform = bucket(longBucket, value)
+      assert(transform.evaluableFunction.isDefined, value.dataType)
+      assert(transform.eval(InternalRow.empty) == 3, value.dataType)
+    }
+    // A wider floating-point type too, as a magic `invoke` got it from Java's widening.
+    val doubleBucket = new ScalarFunction[Int] {
+      override def inputTypes(): Array[DataType] = Array(IntegerType, DoubleType)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "bucket"
+      override def canonicalName(): String = "test.bucket"
+      override def produceResult(input: InternalRow): Int =
+        Math.floorMod(input.getDouble(1).toLong, input.getInt(0).toLong).toInt
+    }
+    Seq(Literal(7), Literal(7L), Literal(7.0f)).foreach { value =>
+      val transform = bucket(doubleBucket, value)
       assert(transform.evaluableFunction.isDefined, value.dataType)
       assert(transform.eval(InternalRow.empty) == 3, value.dataType)
     }
@@ -189,7 +202,9 @@ class TransformExpressionSuite extends SparkFunSuite with SQLHelper {
 
   test("SPARK-60027: an argument is taken as it is when it is stored as the declared type is") {
     // A function declaring `declared` reads a value of `argumentType` as it is, field by field and
-    // by position, when the two are stored alike, as it did before the input type check.
+    // by position, when the two are stored alike, as it did before the input type check. The
+    // value is read from an unsafe row, as a one-side shuffle reads it, since that is where a
+    // nested decimal is stored by its precision.
     class IntUDT extends UserDefinedType[Integer] {
       override def sqlType: DataType = IntegerType
       override def serialize(obj: Integer): Any = obj
@@ -205,51 +220,65 @@ class TransformExpressionSuite extends SparkFunSuite with SQLHelper {
         override def produceResult(input: InternalRow): Int =
           Math.floorMod(read(input), input.getInt(0))
       }
+    def struct(field: String, dataType: DataType): StructType =
+      new StructType().add(field, dataType)
     val structField = (row: InternalRow) => row.getStruct(1, 1).getInt(0)
+    val fiveCents = Decimal(BigDecimal("0.05"), 10, 2)
+    def unscaled(decimal: InternalRow => Decimal): InternalRow => Int =
+      row => decimal(row).toUnscaledLong.toInt
     // (what, the argument's type, the declared type, the value, how the function reads it,
-    //  `spark.sql.caseSensitive`, whether it is taken)
+    //  whether it is taken)
     Seq(
-      ("a field name in another case", new StructType().add("a", IntegerType),
-        new StructType().add("A", IntegerType), InternalRow(5), structField, true, true),
-      ("a renamed field", new StructType().add("x", IntegerType),
-        new StructType().add("y", IntegerType), InternalRow(5), structField, false, true),
-      ("a DATE field against an INT one", new StructType().add("d", DateType),
-        new StructType().add("d", IntegerType), InternalRow(5), structField, false, true),
-      ("a nested decimal with more precision on the long side",
-        new StructType().add("d", DecimalType(10, 2)),
-        new StructType().add("d", DecimalType(18, 2)),
-        InternalRow(Decimal(BigDecimal("0.05"), 10, 2)),
-        (row: InternalRow) => row.getStruct(1, 1).getDecimal(0, 18, 2).toUnscaledLong.toInt,
-        false, true),
+      ("a field name in another case", struct("a", IntegerType), struct("A", IntegerType),
+        InternalRow(5), structField, true),
+      ("a renamed field", struct("x", IntegerType), struct("y", IntegerType), InternalRow(5),
+        structField, true),
+      ("a DATE field against an INT one", struct("d", DateType), struct("d", IntegerType),
+        InternalRow(5), structField, true),
       ("a user-defined type against its sqlType", new IntUDT, IntegerType, 5,
-        (row: InternalRow) => row.getInt(1), false, true),
-      // An unsafe row stores a decimal of up to 18 digits as a `long`, and a wider one as bytes,
-      // so a function reading the field at the other precision would read it wrongly.
-      ("a nested decimal across the long and the bytes storage",
-        new StructType().add("d", DecimalType(10, 2)),
-        new StructType().add("d", DecimalType(38, 2)),
-        InternalRow(Decimal(BigDecimal("0.05"), 10, 2)), structField, false, false),
+        (row: InternalRow) => row.getInt(1), true),
       // At the top level the function gets the `Decimal` itself, so a key of the declared scale
-      // with more precision, e.g. a cogroup's, is taken. Nested, it would be read at the
-      // declared precision, so it is not.
+      // with more precision, e.g. a cogroup's, is taken.
       ("a decimal with more precision at the declared scale",
         DecimalType(12, 2), DecimalType(10, 2), Decimal(BigDecimal("123.45"), 12, 2),
-        (row: InternalRow) => row.getDecimal(1, 10, 2).toUnscaledLong.toInt, false, true),
+        unscaled(_.getDecimal(1, 10, 2)), true),
+      // Nested in an unsafe row, a decimal of up to 18 digits is a `long`, and a wider one bytes,
+      // and it is read at the declared precision. So it is taken only with no more precision than
+      // declared, and on the same side of 18 digits.
+      ("a nested decimal with more precision on the long side",
+        struct("d", DecimalType(10, 2)), struct("d", DecimalType(18, 2)), InternalRow(fiveCents),
+        unscaled(_.getStruct(1, 1).getDecimal(0, 18, 2)), true),
+      ("an array element decimal with more precision on the long side",
+        ArrayType(DecimalType(10, 2)), ArrayType(DecimalType(18, 2)),
+        new GenericArrayData(Array[Any](fiveCents)),
+        unscaled(_.getArray(1).getDecimal(0, 18, 2)), true),
+      ("a map value decimal with more precision on the long side",
+        MapType(IntegerType, DecimalType(10, 2)), MapType(IntegerType, DecimalType(18, 2)),
+        ArrayBasedMapData(Map(1 -> fiveCents)),
+        unscaled(_.getMap(1).valueArray().getDecimal(0, 18, 2)), true),
+      ("a nested decimal across the long and the bytes storage",
+        struct("d", DecimalType(10, 2)), struct("d", DecimalType(38, 2)), InternalRow(fiveCents),
+        structField, false),
+      ("an array element decimal across the long and the bytes storage",
+        ArrayType(DecimalType(10, 2)), ArrayType(DecimalType(38, 2)),
+        new GenericArrayData(Array[Any](fiveCents)), structField, false),
+      ("a map value decimal across the long and the bytes storage",
+        MapType(IntegerType, DecimalType(10, 2)), MapType(IntegerType, DecimalType(38, 2)),
+        ArrayBasedMapData(Map(1 -> fiveCents)), structField, false),
       ("a nested decimal with more precision than declared",
-        new StructType().add("d", DecimalType(12, 2)),
-        new StructType().add("d", DecimalType(10, 2)),
-        InternalRow(Decimal(BigDecimal("0.05"), 12, 2)), structField, false, false),
-      ("a field of another physical type", new StructType().add("d", DateType),
-        new StructType().add("d", LongType), InternalRow(5), structField, false, false),
-      ("a struct with another number of fields", new StructType().add("a", IntegerType),
-        new StructType().add("a", IntegerType).add("b", IntegerType), InternalRow(5), structField,
-        false, false)
-    ).foreach { case (what, argumentType, declared, value, read, caseSensitive, taken) =>
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-        val transform = TransformExpression(function(declared)(read),
-          Seq(BoundReference(0, argumentType, nullable = true)), Some(4))
-        assert(transform.evaluableFunction.isDefined == taken, what)
-        if (taken) assert(transform.eval(InternalRow(value)) == 1, what)
+        struct("d", DecimalType(12, 2)), struct("d", DecimalType(10, 2)),
+        InternalRow(Decimal(BigDecimal("0.05"), 12, 2)), structField, false),
+      ("a field of another physical type", struct("d", DateType), struct("d", LongType),
+        InternalRow(5), structField, false),
+      ("a struct with another number of fields", struct("a", IntegerType),
+        struct("a", IntegerType).add("b", IntegerType), InternalRow(5), structField, false)
+    ).foreach { case (what, argumentType, declared, value, read, taken) =>
+      val argument = BoundReference(0, argumentType, nullable = true)
+      val transform = TransformExpression(function(declared)(read), Seq(argument), Some(4))
+      assert(transform.evaluableFunction.isDefined == taken, what)
+      if (taken) {
+        val unsafe = UnsafeProjection.create(Seq(argument)).apply(InternalRow(value))
+        assert(transform.eval(unsafe) == 1, what)
       }
     }
   }

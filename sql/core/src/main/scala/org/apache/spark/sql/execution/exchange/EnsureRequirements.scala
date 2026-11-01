@@ -396,17 +396,17 @@ case class EnsureRequirements(
     val pairings: Seq[Seq[Pairing]] = childMembers.zipWithIndex.map { case (members, index) =>
       members.map(new Pairing(_, index))
     }
-    val shouldConsiderMinParallelism = children.zipWithIndex.forall { case (child, index) =>
-      !pairings(index).exists(_.canServe) || child.isInstanceOf[ShuffleExchangeLike]
+    val shouldConsiderMinParallelism = children.zip(pairings).forall { case (child, members) =>
+      !members.exists(_.canServe) || child.isInstanceOf[ShuffleExchangeLike]
     }
     // Choose all the children whose spec can be used to shuffle other children, each with the
     // members that can serve as the layout. Any other member would build a partitioning its own
     // child is not laid out on, or is turned away by a co-partition key requirement to avoid skew,
     // or cannot place the rows of a child shuffled onto it.
-    val candidateSpecs = children.zip(specs).zipWithIndex.flatMap {
-      case ((child, Some(_)), index) if !shouldConsiderMinParallelism ||
+    val candidateSpecs = children.zip(pairings).flatMap {
+      case (child, childPairings) if !shouldConsiderMinParallelism ||
           child.outputPartitioning.numPartitions >= conf.defaultNumShufflePartitions =>
-        val members = pairings(index).filter(_.canServe)
+        val members = childPairings.filter(_.canServe)
         if (members.nonEmpty) Some(child -> members) else None
       case _ => None
     }

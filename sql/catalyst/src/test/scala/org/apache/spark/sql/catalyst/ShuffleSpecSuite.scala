@@ -23,9 +23,9 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Attribut
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
-import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, FlipLowBitFunction, Reducer, ReducibleFunction, ScalarFunction}
+import org.apache.spark.sql.connector.catalog.functions.{FlipLowBitFunction, NonScalarBucketFunction, Reducer, ReducibleFunction, ScalarFunction}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, CharType, DataType, DateType, Decimal, DecimalType, IntegerType, LongType, MapType, ShortType, StringType, StructType, TimestampNTZType, TimestampType, VarcharType}
+import org.apache.spark.sql.types.{ArrayType, CharType, DataType, DateType, Decimal, DecimalType, DoubleType, IntegerType, LongType, MapType, ShortType, StringType, StructType, TimestampNTZType, TimestampType, VarcharType}
 import org.apache.spark.unsafe.types.UTF8String
 
 class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
@@ -719,12 +719,7 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     // resolving it does not find. `TransformExpression.eval` cannot run either, so an identity
     // side is not reduced onto it and no other child is shuffled onto it. The gates answer that
     // without throwing, since they are asked of candidates that may not be chosen.
-    val nonScalarBucket = new BoundFunction {
-      override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
-      override def resultType(): DataType = IntegerType
-      override def name(): String = "bucket"
-      override def canonicalName(): String = "test.bucket"
-    }
+    val nonScalarBucket = NonScalarBucketFunction
     abstract class BucketBase extends ScalarFunction[Int] {
       override def produceResult(input: InternalRow): Int = input.getInt(1)
     }
@@ -782,6 +777,10 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
       (Seq(IntegerType, LongType), LongType, true),
       (Seq(IntegerType, LongType), IntegerType, true),
       (Seq(IntegerType, LongType), ShortType, true),
+      // A wider floating-point type too, which a magic `invoke` got from Java's widening.
+      (Seq(IntegerType, DoubleType), IntegerType, true),
+      (Seq(IntegerType, DoubleType), LongType, true),
+      (Seq(IntegerType, IntegerType), DoubleType, false),
       (Seq(IntegerType, IntegerType), LongType, false),
       (Seq(IntegerType, StringType), IntegerType, false),
       (Seq(LongType, LongType), LongType, true),
@@ -812,6 +811,7 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
         TransformExpression(bucketFunction(declared: _*), Seq(column), Some(4)), InternalRow(1))
       val identityKey = columnType match {
         case LongType | TimestampType => InternalRow(1L)
+        case DoubleType => InternalRow(1.0)
         case _: StringType => InternalRow(UTF8String.fromString("a"))
         case _: DecimalType => InternalRow(Decimal(1))
         case _ => InternalRow(1)
@@ -860,12 +860,7 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     // `canCreatePartitioning` answers for a layout read as it stands, which evaluates nothing, so
     // a caller that shuffles a child onto the layout has to ask `canEvaluatePartitioning` too.
     // One that does not fails while planning, not on an executor.
-    val nonScalar = new BoundFunction {
-      override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
-      override def resultType(): DataType = IntegerType
-      override def name(): String = "bucket"
-      override def canonicalName(): String = "test.bucket"
-    }
+    val nonScalar = NonScalarBucketFunction
     val a = $"a".int
     val spec = KeyedShuffleSpec(KeyedPartitioning(
       Seq(TransformExpression(nonScalar, Seq(a), Some(4))), Seq(InternalRow(1))),
@@ -918,11 +913,12 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("SPARK-60027: the identity reduce asks of the transform over the identity column") {
-    // A join compares two structs that differ only in nullability without a cast, so they pair.
-    // The reduce evaluates the transform over the identity side's column, whose type is then not
-    // the transform's own. It is taken either way, as it was before the input type check: a
-    // function declaring a non-nullable field gets the values a nullable one holds.
+  test("SPARK-60027: an identity side whose struct differs only in nullability is reduced") {
+    // A join compares two structs that differ only in nullability without a cast, so they pair,
+    // and the reduce evaluates the transform over the identity side's column. It is taken in
+    // either direction of nullability, and with the identity side on either side of the pair, as
+    // it was before the input type check: a function declaring a non-nullable field gets the
+    // values a nullable one holds.
     val notNull = new StructType().add("x", IntegerType, nullable = false)
     val nullable = new StructType().add("x", IntegerType, nullable = true)
     def structBucket(declared: DataType): ScalarFunction[Int] = new ScalarFunction[Int] {
@@ -933,26 +929,26 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
       override def produceResult(input: InternalRow): Int =
         Math.floorMod(input.getStruct(1, 1).getInt(0), input.getInt(0))
     }
-    Seq((notNull, nullable, true), (nullable, notNull, true)).foreach {
-      case (transformType, identityType, reduced) =>
-        val k = AttributeReference("k", transformType)()
-        val a = AttributeReference("a", identityType)()
-        val bucket = KeyedShuffleSpec(KeyedPartitioning(
-          Seq(TransformExpression(structBucket(transformType), Seq(k), Some(4))),
-          Seq(InternalRow(1))), ClusteredDistribution(Seq(k)))
-        val identity = KeyedShuffleSpec(KeyedPartitioning(Seq(a), Seq(InternalRow(InternalRow(5)))),
-          ClusteredDistribution(Seq(a)))
-        val name = s"transform over $transformType, identity $identityType"
-        withSQLConf(
-            SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
-            SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
-            SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
-          assert(identity.areKeysCompatible(bucket, allowReduce = true) == reduced, name)
-          if (reduced) {
-            val reducer = identity.reducersBothWays(bucket)._1.get.head.get.reducer
-            assert(reducer.asInstanceOf[Reducer[Any, Any]].reduce(InternalRow(5)) == 1, name)
-          }
-        }
+    def reduce(reducer: Option[Seq[Option[KeyReducer]]]): Any =
+      reducer.get.head.get.reducer.asInstanceOf[Reducer[Any, Any]].reduce(InternalRow(5))
+    Seq(notNull -> nullable, nullable -> notNull).foreach { case (transformType, identityType) =>
+      val k = AttributeReference("k", transformType)()
+      val a = AttributeReference("a", identityType)()
+      val bucket = KeyedShuffleSpec(KeyedPartitioning(
+        Seq(TransformExpression(structBucket(transformType), Seq(k), Some(4))),
+        Seq(InternalRow(1))), ClusteredDistribution(Seq(k)))
+      val identity = KeyedShuffleSpec(KeyedPartitioning(Seq(a), Seq(InternalRow(InternalRow(5)))),
+        ClusteredDistribution(Seq(a)))
+      val name = s"transform over $transformType, identity $identityType"
+      withSQLConf(
+          SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
+          SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        assert(identity.areKeysCompatible(bucket, allowReduce = true), name)
+        assert(bucket.areKeysCompatible(identity, allowReduce = true), name)
+        assert(reduce(identity.reducersBothWays(bucket)._1) == 1, name)
+        assert(reduce(bucket.reducersBothWays(identity)._2) == 1, name)
+      }
     }
   }
 
