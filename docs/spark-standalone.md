@@ -506,8 +506,9 @@ SPARK_WORKER_OPTS supports the following system properties:
   <td>false</td>
   <td>
     When true, the external shuffle service only accepts executor registrations whose local
-    directories end in <code>spark-*/executor-*/&lt;url-encoded-appId&gt;</code> under one of
-    the service's configured local directory roots. This guards against mis-registration
+    directories are <code>spark-*/executor-*/&lt;url-encoded-appId&gt;</code>, optionally
+    followed by <code>blockmgr-*</code>, under one of the service's configured local directory
+    roots. This guards against mis-registration
     (e.g. a bug or race mixing up application directories); it is not an isolation boundary
     against malicious applications, because the application id is supplied by the client and
     standalone authentication does not bind a registration to a particular application id.

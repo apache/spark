@@ -83,10 +83,12 @@ public class LocalDirValidatorSuite {
     File root = Files.createTempDirectory("ess-nm-local").toFile();
     try {
       File ownDir = new File(root, "spark-random/executor-random/app0");
-      assertTrue(ownDir.mkdirs(), "precondition: directory created");
+      File blockMgrDir = new File(ownDir, "blockmgr-random");
+      assertTrue(blockMgrDir.mkdirs(), "precondition: directory created");
       LocalDirValidator validator = new LocalDirValidator(new String[] { root.getPath() }, true);
-      // Must not throw.
+      // Both the app dir and the blockmgr dir below it must be accepted.
       validator.validate(new String[] { ownDir.getPath() }, "app0");
+      validator.validate(new String[] { blockMgrDir.getPath() }, "app0");
     } finally {
       JavaUtils.deleteRecursively(root);
     }
