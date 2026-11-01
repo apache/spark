@@ -20,6 +20,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions.{And, CheckInvariant, EqualNullSafe, Expression, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, V2WriteCommand, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
@@ -131,41 +132,47 @@ class ResolveTableConstraints(
           val colRef = UnresolvedAttribute.quoted(col.name)
           val columnExtractors = Seq(col.name -> colRef)
           val genExprSql = Option(genExpr.getSql()).getOrElse(catalystExpr.sql)
-          analyzeGeneratedColumnCheck(
-            CheckInvariant(
-              EqualNullSafe(colRef, catalystExpr),
-              columnExtractors,
-              "Generated Column",
-              s"${col.name} <=> $genExprSql"),
-            v2Write.query)
+          def check(expr: Expression): Expression = CheckInvariant(
+            EqualNullSafe(colRef, expr),
+            columnExtractors,
+            "Generated Column",
+            s"${col.name} <=> $genExprSql")
+          analyzeGeneratedColumnCheck(check(catalystExpr), v2Write.query).getOrElse {
+            // The analysis of the write resolves it under the session that writes.
+            check(Option(genExpr.getSql).map(CatalystSqlParser.parseExpression)
+              .getOrElse(catalystExpr))
+          }
         }
     }.toSeq
   }
 
   /**
    * Analyzes the check of a provided value under the settings an auto-filled value is analyzed
-   * under, so that a row Spark auto-filled passes the check when a later write carries it. What
-   * those settings cannot resolve is left to the analysis of the write, as for an auto-filled
-   * value.
+   * under, so that a row Spark auto-filled passes the check when a later write carries it.
+   *
+   * @return the analyzed check, or None if these settings cannot resolve it. A catalog can also
+   *         store a text that analyzes to another plan.
    */
-  private def analyzeGeneratedColumnCheck(check: Expression, query: LogicalPlan): Expression = {
+  private def analyzeGeneratedColumnCheck(
+      check: Expression,
+      query: LogicalPlan): Option[Expression] = {
     SQLConf.withExistingConf(StoredExpressionText.conf(conf)) {
       analyze(Filter(check, LocalRelation(query.output)))
     } match {
-      case Filter(analyzed, _: LocalRelation) => analyzed
-      // A catalog can store a text that analyzes to another plan. The write analyzes it as is.
-      case _ => check
+      case Filter(analyzed, _: LocalRelation) if analyzed.resolved => Some(analyzed)
+      case _ => None
     }
   }
 
   /**
-   * Convert a V2 GenerationExpression to a Catalyst expression.
-   * Try the V2 expression first, fall back to parsing the SQL string.
+   * Convert a V2 GenerationExpression to a Catalyst expression. Read the SQL string first, as an
+   * auto-filled value does, and fall back to the V2 expression.
    */
   private def buildGenerationCatalystExpression(genExpr: GenerationExpression): Expression = {
-    Option(genExpr.getExpression)
-      .flatMap(V2ExpressionUtils.toCatalyst)
-      .getOrElse(StoredExpressionText.parse(catalogManager.v1SessionCatalog.parser, genExpr.getSql))
+    Option(genExpr.getSql)
+      .map(StoredExpressionText.parse)
+      .orElse(Option(genExpr.getExpression).flatMap(V2ExpressionUtils.toCatalyst))
+      .get
   }
 
   private def buildColumnExtractors(

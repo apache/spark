@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{AnalysisAwareExpression, AttributeReference, Cast, Expression, UnaryExpression, Unevaluable}
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.trees.TreePattern.{ANALYSIS_AWARE_EXPRESSION, PLAN_EXPRESSION, TreePattern, VARIABLE_REFERENCE}
 import org.apache.spark.sql.catalyst.util.{StoredExpressionText, V2ExpressionBuilder}
 import org.apache.spark.sql.connector.catalog.GenerationExpression
@@ -129,7 +128,7 @@ case class GeneratedColumnExpression(
 
     // A write reads the stored text under fixed settings, so that a value does not depend on the
     // session that writes it. The text has to read the same there.
-    if (!StoredExpressionText.readsAsInSession(CatalystSqlParser, originalSQL)) {
+    if (!StoredExpressionText.readsAsInSession(originalSQL)) {
       throw unsupportedExpressionError(
         "generation expression reads differently under the settings of this session " +
           "than under the settings a write reads it with")

@@ -19,19 +19,20 @@ package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, ExpressionWithUnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, ExprId}
-import org.apache.spark.sql.catalyst.parser.{ParseException, ParserInterface}
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Reads the SQL text of an expression stored with a table, such as a CHECK condition or a
- * generation expression, independently of the settings of the session that reads it.
+ * Reads the SQL text of a generation expression stored with a table, independently of the
+ * settings of the session that reads it.
  */
 object StoredExpressionText {
 
   /**
-   * The settings a stored text is read under. The session time zone and case sensitivity stay with
-   * the given session, because the settings of the DDL are not known here and pinning them would
-   * silently change existing tables of a non-UTC or a case-sensitive deployment.
+   * The settings a stored text is read under. The session time zone, case sensitivity, timestamp
+   * type and decimal precision loss stay with the given session, because the settings of the DDL
+   * are not known here and pinning them would silently change existing tables of a deployment that
+   * sets them.
    */
   def conf(session: SQLConf): SQLConf = {
     val c = new SQLConf
@@ -39,13 +40,16 @@ object StoredExpressionText {
     c.setConfString(SQLConf.ANSI_ENABLED.key, "true")
     c.setConfString(SQLConf.SESSION_LOCAL_TIMEZONE.key, session.sessionLocalTimeZone)
     c.setConfString(SQLConf.CASE_SENSITIVE.key, session.caseSensitiveAnalysis.toString)
+    c.setConf(SQLConf.TIMESTAMP_TYPE, session.getConf(SQLConf.TIMESTAMP_TYPE))
+    c.setConf(
+      SQLConf.DECIMAL_OPERATIONS_ALLOW_PREC_LOSS, session.decimalOperationsAllowPrecisionLoss)
     c
   }
 
   /** Parses `text` under [[conf]]. */
-  def parse(parser: ParserInterface, text: String): Expression = {
+  def parse(text: String): Expression = {
     SQLConf.withExistingConf(conf(SQLConf.get)) {
-      parser.parseExpression(text)
+      CatalystSqlParser.parseExpression(text)
     }
   }
 
@@ -53,14 +57,14 @@ object StoredExpressionText {
    * Whether `text` reads the same under [[conf]] as it does in the active session. The comparison
    * uses the ANSI value of the session, so that it is about how the text reads.
    */
-  def readsAsInSession(parser: ParserInterface, text: String): Boolean = {
+  def readsAsInSession(text: String): Boolean = {
     val session = SQLConf.get
     val fixed = conf(session)
     fixed.setConfString(SQLConf.ANSI_ENABLED.key, session.ansiEnabled.toString)
-    val parsedInSession = parser.parseExpression(text)
+    val parsedInSession = CatalystSqlParser.parseExpression(text)
     try {
       val parsed = SQLConf.withExistingConf(fixed) {
-        parser.parseExpression(text)
+        CatalystSqlParser.parseExpression(text)
       }
       normalize(parsed) == normalize(parsedInSession)
     } catch {

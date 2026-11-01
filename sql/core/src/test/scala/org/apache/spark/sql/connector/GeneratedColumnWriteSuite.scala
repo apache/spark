@@ -1586,21 +1586,19 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
 
   test("SPARK-60757: CREATE and REPLACE TABLE reject a generation expression the session reads " +
     "differently") {
-    val ntz = SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString
     val tblName = "my_tab"
     for {
-      (confs, dataType, genExpr) <- Seq(
-        (Seq(SQLConf.ESCAPED_STRING_LITERALS.key -> "true"), "STRING", "concat(a, 'x\\\\y')"),
-        (Seq(SQLConf.TIMESTAMP_TYPE.key -> ntz), "TIMESTAMP", "CAST(a AS TIMESTAMP)"),
+      (confs, genExpr) <- Seq(
+        (Seq(SQLConf.ESCAPED_STRING_LITERALS.key -> "true"), "concat(a, 'x\\\\y')"),
         (Seq(SQLConf.ANSI_ENABLED.key -> "true", SQLConf.DOUBLE_QUOTED_IDENTIFIERS.key -> "true"),
-          "STRING", "concat(\"a\", 'x')"))
+          "concat(\"a\", 'x')"))
       create <- Seq("CREATE TABLE", "CREATE OR REPLACE TABLE")
     } withSQLConf(confs: _*) {
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"""$create testcat.$tblName(
                  |  a STRING,
-                 |  b $dataType GENERATED ALWAYS AS ($genExpr)
+                 |  b STRING GENERATED ALWAYS AS ($genExpr)
                  |) USING foo""".stripMargin)
         },
         condition = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
@@ -1663,6 +1661,111 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
         sql(s"INSERT INTO testcat.$tblName(a) VALUES ('v')")
       }
       checkAnswer(spark.table(s"testcat.$tblName"), Row("v", "vxy"))
+    }
+  }
+
+  test("SPARK-60757: the validation of a provided value reads the text of a table with a V2 form") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+        // The V2 form is COALESCE(s, '1'), with the implicit cast of a non-ANSI session.
+        sql(s"""CREATE TABLE testcat.$tblName(
+               |  s STRING,
+               |  b STRING GENERATED ALWAYS AS (coalesce(s, 1))
+               |) USING foo""".stripMargin)
+        val table = catalog("testcat").asTableCatalog.loadTable(Identifier.of(Array(), tblName))
+        val genExpr = table.columns().find(_.name == "b").get.columnGenerationExpression()
+        assert(genExpr.getExpression != null)
+        sql(s"INSERT INTO testcat.$tblName VALUES ('007', '7')")
+        sql(s"INSERT INTO testcat.$tblName(s) VALUES ('008')")
+        checkAnswer(spark.table(s"testcat.$tblName"), Seq(Row("007", "7"), Row("008", "8")))
+      }
+    }
+  }
+
+  test("SPARK-60757: the validation of a provided value does not substitute a variable") {
+    val tblName = "my_tab"
+    val variable = s"$${system:java.version}"
+    withTable(s"testcat.$tblName") {
+      withSQLConf(SQLConf.VARIABLE_SUBSTITUTE_ENABLED.key -> "false") {
+        sql(s"""CREATE TABLE testcat.$tblName(
+               |  a STRING,
+               |  b STRING GENERATED ALWAYS AS (concat(a, '$variable'))
+               |) USING foo""".stripMargin)
+        sql(s"INSERT INTO testcat.$tblName VALUES ('w', 'w$variable')")
+        checkAnswer(spark.table(s"testcat.$tblName"), Row("w", s"w$variable"))
+      }
+    }
+  }
+
+  test("SPARK-60757: a text the fixed settings cannot resolve is read under the session") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+        sql(s"""CREATE TABLE testcat.$tblName(
+               |  d DATE,
+               |  s STRING,
+               |  b BOOLEAN GENERATED ALWAYS AS (CAST(d AS BOOLEAN)),
+               |  c INT GENERATED ALWAYS AS (CAST(s AS INT))
+               |) USING foo""".stripMargin)
+        sql(s"INSERT INTO testcat.$tblName(d, s) VALUES (DATE'2024-01-01', '1')")
+        sql(s"INSERT INTO testcat.$tblName VALUES (DATE'2024-01-02', '2', NULL, 2)")
+        checkAnswer(
+          spark.table(s"testcat.$tblName"),
+          Seq(
+            Row(sqlDate("2024-01-01"), "1", null, 1),
+            Row(sqlDate("2024-01-02"), "2", null, 2)))
+        // The other column of the same write stays with the fixed settings.
+        assertWriteFails("CAST_INVALID_INPUT") {
+          sql(s"INSERT INTO testcat.$tblName(d, s) VALUES (DATE'2024-01-03', 'abc')")
+        }
+      }
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        assertWriteFails("DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION") {
+          sql(s"INSERT INTO testcat.$tblName(d, s) VALUES (DATE'2024-01-04', '4')")
+        }
+      }
+    }
+  }
+
+  test("SPARK-60757: a generation expression reads the timestamp type of the session") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      withSQLConf(
+          SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles",
+          SQLConf.TIMESTAMP_TYPE.key -> SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString) {
+        sql(s"""CREATE TABLE testcat.$tblName(
+               |  a STRING,
+               |  b TIMESTAMP_NTZ GENERATED ALWAYS AS (to_timestamp(a))
+               |) USING foo""".stripMargin)
+        // This time does not exist in the time zone, so a TIMESTAMP_LTZ value would read 03:30.
+        sql(s"INSERT INTO testcat.$tblName(a) VALUES ('2024-03-10 02:30:00')")
+        checkAnswer(
+          spark.table(s"testcat.$tblName"),
+          Row("2024-03-10 02:30:00", java.time.LocalDateTime.parse("2024-03-10T02:30:00")))
+        assertWriteFails("CHECK_CONSTRAINT_VIOLATION") {
+          sql(s"INSERT INTO testcat.$tblName VALUES " +
+            "('2024-03-10 02:30:00', TIMESTAMP_NTZ'2024-03-10 03:30:00')")
+        }
+      }
+    }
+  }
+
+  test("SPARK-60757: a generation expression reads the decimal precision loss of the session") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      withSQLConf(SQLConf.DECIMAL_OPERATIONS_ALLOW_PREC_LOSS.key -> "false") {
+        // Without the precision loss a * a is DECIMAL(38, 20), and with it DECIMAL(38, 17).
+        sql(s"""CREATE TABLE testcat.$tblName(
+               |  a DECIMAL(20, 10),
+               |  b DECIMAL(38, 20) GENERATED ALWAYS AS (a * a)
+               |) USING foo""".stripMargin)
+        sql(s"INSERT INTO testcat.$tblName(a) VALUES (1.1234567891)")
+        checkAnswer(
+          spark.table(s"testcat.$tblName"),
+          Row(new java.math.BigDecimal("1.1234567891"),
+            new java.math.BigDecimal("1.26215515697488187881")))
+      }
     }
   }
 }

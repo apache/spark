@@ -41,6 +41,7 @@ import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.optimizer.OptimizeUpdateFields
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -4118,10 +4119,12 @@ class Analyzer(
             table.schemaAlignmentConfig()
           case _ => SchemaAlignmentConfig.DEFAULT
         }
-        val (projection, autoFilledGenCols) =
+        def resolveOutput(readGenerationExpr: String => Expression) =
           TableOutputResolver.resolveOutputColumnsWithGeneratedInfo(
             v2Write.table.name, expected, v2Write.query, v2Write.isByName, conf,
-            defaultValueFillMode, schemaAlignmentConfig.ansiStoreAssignmentCastCheck())
+            defaultValueFillMode, schemaAlignmentConfig.ansiStoreAssignmentCastCheck(),
+            readGenerationExpr)
+        val (projection, autoFilledGenCols) = resolveOutput(StoredExpressionText.parse)
         if (projection != v2Write.query) {
           val cleanedTable = v2Write.table match {
             case r: DataSourceV2Relation =>
@@ -4133,7 +4136,8 @@ class Analyzer(
             case other => other
           }
           v2Write
-            .withNewQuery(analyzeAutoFilledGeneratedColumns(projection, autoFilledGenCols))
+            .withNewQuery(analyzeAutoFilledGeneratedColumns(
+              projection, autoFilledGenCols, resolveOutput(CatalystSqlParser.parseExpression)._1))
             .withNewTable(cleanedTable)
         } else {
           v2Write
@@ -4144,23 +4148,29 @@ class Analyzer(
      * Analyzes the auto-filled generated columns of a write under the settings their stored text
      * is read under, so that the implicit casts and the functions of a generation expression do
      * not follow the session that writes.
+     *
+     * A column these settings cannot resolve comes from `readInSession`, where the session reads
+     * its text, and the analysis of the write resolves it under the session. So does a text a
+     * catalog stores that analyzes to another plan.
      */
     private def analyzeAutoFilledGeneratedColumns(
         projection: LogicalPlan,
-        autoFilled: Set[String]): LogicalPlan = projection match {
+        autoFilled: Set[String],
+        readInSession: => LogicalPlan): LogicalPlan = projection match {
       case p @ Project(projectList, child) if autoFilled.nonEmpty =>
-        val filled = projectList.filter(c => autoFilled.contains(c.name))
-        SQLConf.withExistingConf(StoredExpressionText.conf(conf)) {
-          execute(Project(filled, LocalRelation(child.output)))
-        } match {
-          // A text these settings cannot resolve stays unresolved here, and the analysis of the
-          // write finishes it under the session that writes.
-          case Project(analyzedCols, _: LocalRelation) =>
-            val byName = analyzedCols.map(c => c.name -> c).toMap
-            p.copy(projectList = projectList.map(c => byName.getOrElse(c.name, c)))
-          // A catalog can store a text that is not scalar. The write analyzes it as is.
-          case _ => p
-        }
+        lazy val sessionCols = readInSession.expressions.collect {
+          case c: NamedExpression => c.name -> c
+        }.toMap
+        p.copy(projectList = projectList.map {
+          case c if autoFilled.contains(c.name) =>
+            SQLConf.withExistingConf(StoredExpressionText.conf(conf)) {
+              execute(Project(Seq(c), LocalRelation(child.output)))
+            } match {
+              case Project(Seq(analyzed), _: LocalRelation) if analyzed.resolved => analyzed
+              case _ => sessionCols(c.name)
+            }
+          case c => c
+        })
       case other => other
     }
   }
