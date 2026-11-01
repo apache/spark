@@ -85,7 +85,7 @@ trait TruncateTableSuiteBase extends command.TruncateTableSuiteBase {
           }
           val aclEntries = fs.getAclStatus(tablePath).getEntries()
           if (ignore) {
-            assert(aclEntries.size() == 0)
+            assert(aclEntries.isEmpty)
           } else {
             assert(aclEntries.size() == 4)
             assert(aclEntries.get(0) == customAcl.get(0))

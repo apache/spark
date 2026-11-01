@@ -21,6 +21,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
+import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming.{ProjectAggregationBufferExec, StatefulStreamlineAggregateExec}
 import org.apache.spark.sql.execution.streaming.operators.stateful._
@@ -76,8 +77,12 @@ object AggUtils {
       initialInputBufferOffset: Int = 0,
       resultExpressions: Seq[NamedExpression] = Nil,
       child: SparkPlan): SparkPlan = {
-    val useHash = child.conf.useHashAggregation && Aggregate.supportsHashAggregate(
-      aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes), groupingExpressions)
+    val supportsStreamingGroupingKeys = !isStreaming ||
+      groupingExpressions.forall(e => UnsafeRowUtils.isBinaryStable(e.dataType))
+    val useHash = child.conf.useHashAggregation && supportsStreamingGroupingKeys &&
+      Aggregate.supportsHashAggregate(
+        aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes),
+        groupingExpressions)
 
     val forceObjHashAggregate = forceApplyObjectHashAggregate(child.conf)
 
@@ -94,8 +99,8 @@ object AggUtils {
         child = child)
     } else {
       val objectHashEnabled = child.conf.useObjectHashAggregation
-      val useObjectHash = Aggregate.supportsObjectHashAggregate(
-        aggregateExpressions, groupingExpressions)
+      val useObjectHash = supportsStreamingGroupingKeys &&
+        Aggregate.supportsObjectHashAggregate(aggregateExpressions, groupingExpressions)
 
       if (forceObjHashAggregate || (objectHashEnabled && useObjectHash)) {
         ObjectHashAggregateExec(
@@ -436,7 +441,8 @@ object AggUtils {
    *    - For each input, do the following
    *      - Read the previous value for grouping key in state store
    *      - Merge the input and previous value (if any)
-   *      - Store the new value to the state store
+   *      - Hold the new value in a bounded dirty-write cache, which is flushed to the state
+   *        store on cache eviction or when the input iterator completes
    *  - Complete (output the current result of the aggregation)
    *
    * The concept is to aggregate only between input and the state store, enabling an output to

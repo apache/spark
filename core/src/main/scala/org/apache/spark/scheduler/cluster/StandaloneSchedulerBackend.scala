@@ -21,7 +21,7 @@ import java.util.Locale
 import java.util.concurrent.{RejectedExecutionException, Semaphore, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.{ApplicationDescription, Command}
@@ -68,6 +68,13 @@ private[spark] class StandaloneSchedulerBackend(
   private val executorDelayRemoveThread =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-executor-delay-remove-thread")
   private val _executorRemoveDelay = conf.get(EXECUTOR_REMOVE_DELAY)
+
+  // Serves the Master's hold and resume requests off the RPC endpoint threads: they drain the
+  // executors and talk to the Master, and may block up to the RPC ask timeout. A single thread
+  // also serializes concurrent requests. The pool creates its thread on the first request, so an
+  // application that is never held does not pay for one.
+  private val holdRequestContext = ExecutionContext.fromExecutorService(
+    ThreadUtils.newDaemonSingleThreadExecutor("standalone-hold-resume"))
 
   override def start(): Unit = {
     super.start()
@@ -131,7 +138,8 @@ private[spark] class StandaloneSchedulerBackend(
         None
       }
     val appDesc = ApplicationDescription(sc.appName, maxCores, command,
-      webUrl, defaultProfile = defaultProf, sc.eventLogDir, sc.eventLogCodec, initialExecutorLimit)
+      webUrl, defaultProfile = defaultProf, sc.eventLogDir, sc.eventLogCodec, initialExecutorLimit,
+      holdEnabled = conf.get(config.UI.UI_HOLD_ENABLED))
     client = new StandaloneAppClient(sc.env.rpcEnv, masters, appDesc, this, conf)
     client.start()
     launcherBackend.setState(SparkAppHandle.State.SUBMITTED)
@@ -220,6 +228,21 @@ private[spark] class StandaloneSchedulerBackend(
     removeWorker(workerId, host, message)
   }
 
+  override def holdApplication(hold: Boolean): Future[Boolean] = {
+    if (!holdControlEnabled) {
+      // The Master offers the controls only for an application reported as holdable, so this is
+      // a stale or hand-crafted request. Reject it rather than acting on it.
+      logWarning(log"Ignoring the hold request from the Master because " +
+        log"${MDC(LogKeys.CONFIG, config.UI.UI_HOLD_ENABLED.key)} is disabled or the " +
+        log"deployment does not support holding.")
+      Future.successful(false)
+    } else {
+      Future {
+        if (hold) sc.holdExecutors() else sc.resumeExecutors()
+      }(holdRequestContext)
+    }
+  }
+
   override def sufficientResourcesRegistered(): Boolean = {
     totalCoreCount.get() >= totalExpectedCores * minRegisteredRatio
   }
@@ -253,6 +276,18 @@ private[spark] class StandaloneSchedulerBackend(
   private[spark] override def supportsExecutorHold: Boolean = true
 
   /**
+   * Whether the Master may hold this application. `spark.ui.holdEnabled` gates the controls on
+   * the driver UI, and it gates the Master UI's controls the same way: an application that opted
+   * out of being held should not be holdable from either page.
+   */
+  private def holdControlEnabled: Boolean =
+    sc.executorHoldSupported && conf.get(config.UI.UI_HOLD_ENABLED)
+
+  private[spark] override def reportExecutorHoldStatus(supported: Boolean, held: Boolean): Unit = {
+    Option(client).foreach(_.reportHoldStatus(supported, held))
+  }
+
+  /**
    * Kill the given list of executors through the Master.
    * @return whether the kill request is acknowledged.
    */
@@ -284,6 +319,7 @@ private[spark] class StandaloneSchedulerBackend(
     if (stopping.compareAndSet(false, true)) {
       try {
         executorDelayRemoveThread.shutdownNow()
+        holdRequestContext.shutdownNow()
         super.stop()
         if (client != null) {
           client.stop()

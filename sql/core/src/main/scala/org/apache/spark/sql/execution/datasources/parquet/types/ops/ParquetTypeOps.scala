@@ -308,6 +308,7 @@ private[parquet] object ParquetTypeOps {
    */
   private val filterOpsList: Seq[ParquetFilterOps] = Seq(
     TimeTypeParquetOps.filterOps,
+    TimeTypeParquetOps.filterOpsAdjustedToUtc,
     TimestampNanosParquetOps.ltzFilterOps,
     TimestampNanosParquetOps.ntzFilterOps)
 }

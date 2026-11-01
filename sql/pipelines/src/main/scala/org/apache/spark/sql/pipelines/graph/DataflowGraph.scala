@@ -249,6 +249,7 @@ case class DataflowGraph(
     validateEveryDatasetHasFlow()
     validateTablesAreResettable()
     validateFlowStreamingness()
+    validateNoAutoCdcIgnoreNullSelection()
   }.failed
 
   /**

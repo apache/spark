@@ -41,7 +41,10 @@ private[spark] class ShuffledRDDPartition(val idx: Int) extends Partition {
 class ShuffledRDD[K: ClassTag, V: ClassTag, C: ClassTag](
     @transient var prev: RDD[_ <: Product2[K, V]],
     part: Partitioner)
-  extends RDD[(K, C)](prev.context, Nil) {
+  extends RDD[(K, C)](prev.context, Nil) with ShuffleReducePartitionMapping {
+
+  // One partition per reduce partition, in order (see getPartitions), so the mapping is identity.
+  override def reducePartitionIndex(partitionIndex: Int): Option[Int] = Some(partitionIndex)
 
   private var userSpecifiedSerializer: Option[Serializer] = None
 

@@ -1,0 +1,349 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+"""Base classes and registry for the eval type handlers.
+
+This leaf module imports only ``_typing``, the serializers and ``pyspark.util``, so the
+package ``__init__`` and the concrete-handler submodules can both import it.
+"""
+
+import functools
+from abc import ABCMeta, abstractmethod
+from collections.abc import Iterator
+from typing import TYPE_CHECKING, Any, Callable, ClassVar, Generic, Optional
+
+from pyspark.errors import PySparkRuntimeError
+from pyspark.eval_handlers._typing import (
+    UDF,
+    UDTF,
+    CoGroupedBatch,
+    GroupedBatch,
+    InputBatch,
+    OutputBatch,
+)
+from pyspark.serializers import Serializer
+from pyspark.sql.pandas.serializers import (
+    ArrowStreamCoGroupSerializer,
+    ArrowStreamGroupSerializer,
+    ArrowStreamSerializer,
+)
+from pyspark.util import PythonEvalType, fail_on_stopiteration
+
+if TYPE_CHECKING:
+    import pyarrow as pa  # noqa: F401  # only in the batch category's forward-ref subscript
+
+    from pyspark.worker_util import EvalConf, RunnerConf
+
+# eval type -> (variant_conf or None, {variant_value: handler class}), populated by
+# _EvalTypeHandlerMeta at class definition. Handlers that declare no variant_conf register
+# under the conf name None and the value None.
+_eval_type_handlers: "dict[int, tuple[Optional[str], dict[Any, type[EvalTypeHandler]]]]" = {}
+
+
+def get_eval_type_handler(
+    eval_type: int, runner_conf: "RunnerConf"
+) -> "Optional[type[EvalTypeHandler]]":
+    """Return the handler class registered for ``eval_type``, or ``None``.
+
+    When the eval type's handlers declare a ``variant_conf``, the variant is selected by the
+    value of that ``RunnerConf`` property. This happens per lookup rather than at import, as
+    the conf is per task and Python workers are reused across tasks.
+    """
+    entry = _eval_type_handlers.get(eval_type)
+    if entry is None:
+        return None
+    conf_name, variants = entry
+    key = getattr(runner_conf, conf_name) if conf_name is not None else None
+    handler_cls = variants.get(key)
+    if handler_cls is None:
+        raise RuntimeError(
+            "No eval type handler for {} with {}={!r}; registered values: {}".format(
+                eval_type, conf_name, key, sorted(map(repr, variants))
+            )
+        )
+    return handler_cls
+
+
+class _EvalTypeHandlerMeta(ABCMeta):
+    """Registers a concrete handler under its ``eval_type`` (and ``variant_value``, if it
+    declares a ``variant_conf``) at class definition.
+
+    Runs after ``ABCMeta`` sets ``__abstractmethods__``, so a class that declares
+    an ``eval_type`` while leaving ``run``/``serializer`` abstract is rejected at
+    definition.
+    """
+
+    def __new__(mcs, name: str, bases: tuple, namespace: dict, **kwargs: Any) -> type:
+        cls = super().__new__(mcs, name, bases, namespace, **kwargs)
+        eval_type = namespace.get("eval_type")
+        if eval_type is not None:
+            assert issubclass(cls, EvalTypeHandler)
+            assert not cls.__abstractmethods__, (
+                "Handler {} declares eval_type {} but is abstract: {}".format(
+                    name, eval_type, sorted(cls.__abstractmethods__)
+                )
+            )
+            conf_name = namespace.get("variant_conf")
+            assert conf_name is not None or "variant_value" not in namespace, (
+                "Handler {} declares variant_value without variant_conf".format(name)
+            )
+            assert conf_name is None or "variant_value" in namespace, (
+                "Handler {} declares variant_conf {} without variant_value".format(name, conf_name)
+            )
+            value = namespace.get("variant_value")
+            registered_conf_name, variants = _eval_type_handlers.get(eval_type, (conf_name, {}))
+            assert registered_conf_name == conf_name, (
+                "Handlers for eval type {} must share one variant_conf: {} keys on {}, "
+                "but {} keys on {}".format(
+                    eval_type,
+                    next(iter(variants.values())).__name__,
+                    registered_conf_name,
+                    name,
+                    conf_name,
+                )
+            )
+            assert value not in variants, (
+                "Duplicate eval type handler for {} with {}={!r}: {} and {}".format(
+                    eval_type, conf_name, value, variants[value].__name__, name
+                )
+            )
+            variants[value] = cls
+            _eval_type_handlers[eval_type] = (conf_name, variants)
+        return cls
+
+    _iter_based: bool
+
+    @property
+    def is_iter_based(cls) -> bool:
+        """Whether the handler's UDFs return an iterator."""
+        return cls._iter_based
+
+
+class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandlerMeta):
+    """Base class for the UDF execution model.
+
+    A handler declares the ``serializer`` for the input/output streams and
+    implements ``run``, which consumes the input stream and yields the output
+    stream. Arrow handlers subclass a typed category base
+    (``BatchEvalTypeHandler``, ``GroupedEvalTypeHandler``,
+    ``CoGroupedEvalTypeHandler``), which fixes the input type and serializer;
+    the pickled-row handlers subclass this class directly.
+    """
+
+    # PythonEvalType this handler serves; None on the abstract bases.
+    eval_type: ClassVar[Optional[int]] = None
+    # Name of the RunnerConf property that selects between the handlers of one eval type, and
+    # the value of it this handler serves; None when the eval type has a single handler.
+    variant_conf: ClassVar[Optional[str]] = None
+    variant_value: ClassVar[Any] = None
+    # Whether the handler's UDFs return an iterator.
+    _iter_based: ClassVar[bool] = False
+    # Whether __init__ wraps the UDF in fail_on_stopiteration, so a StopIteration raised by
+    # the UDF call fails with STOP_ITERATION_OCCURRED instead of PEP 479's generic RuntimeError.
+    _fail_on_stopiteration: ClassVar[bool] = True
+    # Whether the handler takes any number of UDFs. Otherwise it takes exactly one UDF or UDTF:
+    # __init__ exposes a UDF as _udf_desc and its functions as _raw_func and _func, and
+    # UDTFHandlerBase exposes a UDTF as _udtf_desc.
+    _multi_udf: ClassVar[bool] = False
+
+    def __init__(
+        self, udf_descs: "list[UDF] | list[UDTF]", runner_conf: "RunnerConf", eval_conf: "EvalConf"
+    ) -> None:
+        if not self._multi_udf and len(udf_descs) != 1:
+            raise PySparkRuntimeError(
+                "One {} expected, but got {}.".format(self._expected_udf(), len(udf_descs))
+            )
+        self._udf_descs: list[Any] = udf_descs
+        self._runner_conf = runner_conf
+        self._eval_conf = eval_conf
+        # Each UDF's functions chained into one before any wrapping, at the indexes of _udf_descs: a
+        # single function is the pickled object itself (an incremental Aggregator) with its
+        # signature. Empty for a UDTF.
+        self._raw_funcs: list[Any] = []
+        # Each raw function wrapped for profiling and, unless _fail_on_stopiteration is False,
+        # in fail_on_stopiteration, at the indexes of _udf_descs; empty for a UDTF.
+        self._funcs: list[Callable[..., Any]] = []
+        for udf in udf_descs:
+            if isinstance(udf, UDF):
+                raw_func = functools.reduce(lambda f, g: lambda *a: g(f(*a)), udf.funcs)
+                self._raw_funcs.append(raw_func)
+                profiling_func = self._with_profiler(raw_func, udf.result_id)
+                self._funcs.append(
+                    fail_on_stopiteration(profiling_func)
+                    if self._fail_on_stopiteration
+                    else profiling_func
+                )
+        if not self._multi_udf and isinstance(udf_descs[0], UDF):
+            self._udf_desc: UDF = udf_descs[0]
+            self._raw_func: Any = self._raw_funcs[0]
+            self._func: Callable[..., Any] = self._funcs[0]
+
+    def _expected_udf(self) -> str:
+        """What a single-UDF handler takes, as named when it is given another number of UDFs:
+        its eval type without the ``SQL_`` prefix and ``_UDF`` suffix, e.g. ``MAP_ARROW_ITER
+        UDF``."""
+        name = next(
+            (
+                k
+                for k, v in vars(PythonEvalType).items()
+                if k.startswith("SQL_") and v == self.eval_type
+            ),
+            type(self).__name__,
+        )
+        return "{} UDF".format(name.removeprefix("SQL_").removesuffix("_UDF"))
+
+    def _with_profiler(self, f: Callable[..., Any], result_id: int) -> Callable[..., Any]:
+        """Return ``f`` profiled by the profiler its config selects, or ``f`` itself when none is
+        set."""
+        # If f is from pyspark.sql.worker, it is to read/write data source.
+        # In this case, we check the data_source_profiler config.
+        module = getattr(f, "__module__", "")
+        if isinstance(module, str) and module.startswith("pyspark.sql.worker."):
+            profiler = self._runner_conf.data_source_profiler
+        else:
+            profiler = self._runner_conf.udf_profiler
+        if profiler == "perf":
+            return self._with_perf_profiler(f, result_id)
+        elif profiler == "memory":
+            return self._with_memory_profiler(f, result_id)
+        else:
+            return f
+
+    def _with_perf_profiler(self, f: Callable[..., Any], result_id: int) -> Callable[..., Any]:
+        from pyspark.accumulators import SpecialAccumulatorIds, _deserialize_accumulator
+        from pyspark.sql.profiler import (
+            ProfileResultsParam,
+            ProfileResultsParamV2,
+            WorkerPerfProfiler,
+        )
+
+        accumulator = _deserialize_accumulator(
+            SpecialAccumulatorIds.SQL_UDF_PROFIER, None, ProfileResultsParam
+        )
+        accumulator_v2 = _deserialize_accumulator(
+            SpecialAccumulatorIds.SQL_UDF_PROFIER_V2, {}, ProfileResultsParamV2
+        )
+
+        if self._iter_based:
+
+            def profiling_func(*args: Any, **kwargs: Any) -> Any:
+                # Call f eagerly, as the unprofiled path does, so fail_on_stopiteration sees a
+                # StopIteration raised by the call; profile each next() lazily.
+                iterator = iter(f(*args, **kwargs))
+
+                def profiled() -> Iterator[Any]:
+                    while True:
+                        try:
+                            with WorkerPerfProfiler(accumulator, accumulator_v2, result_id):
+                                item = next(iterator)
+                            yield item
+                        except StopIteration:
+                            break
+
+                return profiled()
+
+        else:
+
+            def profiling_func(*args: Any, **kwargs: Any) -> Any:
+                with WorkerPerfProfiler(accumulator, accumulator_v2, result_id):
+                    ret = f(*args, **kwargs)
+                return ret
+
+        return profiling_func
+
+    def _with_memory_profiler(self, f: Callable[..., Any], result_id: int) -> Callable[..., Any]:
+        import pyspark.memory_profiler_ext
+        from pyspark.accumulators import SpecialAccumulatorIds, _deserialize_accumulator
+        from pyspark.sql.profiler import (
+            ProfileResultsParam,
+            ProfileResultsParamV2,
+            WorkerMemoryProfiler,
+        )
+
+        if not pyspark.memory_profiler_ext.has_memory_profiler:
+            return f
+
+        accumulator = _deserialize_accumulator(
+            SpecialAccumulatorIds.SQL_UDF_PROFIER, None, ProfileResultsParam
+        )
+
+        accumulator_v2 = _deserialize_accumulator(
+            SpecialAccumulatorIds.SQL_UDF_PROFIER_V2, {}, ProfileResultsParamV2
+        )
+
+        if self._iter_based:
+
+            def profiling_func(*args: Any, **kwargs: Any) -> Any:
+                # Call f eagerly, as in the perf profiler.
+                g = f(*args, **kwargs)
+                iterator = iter(g)
+
+                def profiled() -> Iterator[Any]:
+                    while True:
+                        try:
+                            with WorkerMemoryProfiler(
+                                accumulator, accumulator_v2, result_id, g.gi_code
+                            ):
+                                item = next(iterator)
+                            yield item
+                        except StopIteration:
+                            break
+
+                return profiled()
+
+        else:
+
+            def profiling_func(*args: Any, **kwargs: Any) -> Any:
+                with WorkerMemoryProfiler(accumulator, accumulator_v2, result_id, f):
+                    ret = f(*args, **kwargs)
+                return ret
+
+        return profiling_func
+
+    @property
+    @abstractmethod
+    def serializer(self) -> Serializer:
+        """Serializer for both the input and output streams."""
+
+    @abstractmethod
+    def run(self, split_index: int, data: Iterator[InputBatch]) -> Iterator[OutputBatch]:
+        """Consume the input stream and yield the output stream; the worker calls it as
+        ``func(split_index, data)``."""
+
+
+class BatchEvalTypeHandler(EvalTypeHandler["pa.RecordBatch", OutputBatch]):
+    """Handler category whose input stream is ``Iterator[pa.RecordBatch]``."""
+
+    @property
+    def serializer(self) -> Serializer:
+        return ArrowStreamSerializer(write_start_stream=True)
+
+
+class GroupedEvalTypeHandler(EvalTypeHandler[GroupedBatch, OutputBatch]):
+    """Handler category whose input stream is ``Iterator[GroupedBatch]``."""
+
+    @property
+    def serializer(self) -> Serializer:
+        return ArrowStreamGroupSerializer(write_start_stream=True)
+
+
+class CoGroupedEvalTypeHandler(EvalTypeHandler[CoGroupedBatch, OutputBatch]):
+    """Handler category whose input stream is ``Iterator[CoGroupedBatch]``."""
+
+    @property
+    def serializer(self) -> Serializer:
+        return ArrowStreamCoGroupSerializer(write_start_stream=True)

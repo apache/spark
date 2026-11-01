@@ -125,7 +125,7 @@ class ParquetEncryptionSuite extends QueryTest with TestHiveSingleton {
    */
   private def verifyParquetEncrypted(parquetDir: String): Unit = {
     val parquetPartitionFiles = getListOfParquetFiles(new File(parquetDir))
-    assert(parquetPartitionFiles.size >= 1)
+    assert(parquetPartitionFiles.nonEmpty)
     parquetPartitionFiles.foreach { parquetFile =>
       val magicString = "PARE"
       val magicStringLength = magicString.length()

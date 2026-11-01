@@ -18,8 +18,10 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.internal.SQLConf
 
-class SqlStatementSplitterSuite extends SparkFunSuite {
+class SqlStatementSplitterSuite extends SparkFunSuite with SQLHelper {
 
   private def split(sql: String): SqlStatementSplitResult = SqlStatementSplitter.split(sql)
 
@@ -69,6 +71,48 @@ class SqlStatementSplitterSuite extends SparkFunSuite {
       statement("select * from  foo"),
       statement("select * from t")))
     assert(result.partialStatement == "select * from")
+  }
+
+  test("source positions skip comments attached to empty statements") {
+    val sql = "  select 1 ; /* select 2 */; select 2"
+    val result = SqlStatementSplitter.splitWithPositions(sql, identity)
+    val complete = result.completeStatements.head
+    assert(complete.statement == "select 1")
+    assert(complete.start == 2)
+    assert(complete.length == 8)
+
+    val partial = result.partialStatement.get
+    assert(partial.statement == "select 2")
+    assert(partial.start == sql.lastIndexOf("select 2"))
+    assert(partial.length == 8)
+  }
+
+  test("source positions use UTF-16 offsets for supplementary characters") {
+    val emoji = new String(Character.toChars(0x1F600))
+    val sql = s"SELECT '$emoji$emoji'; SELECT 2;"
+    val result = SqlStatementSplitter.splitWithPositions(sql, identity)
+
+    assert(result.completeStatements.map(_.statement) ==
+      Seq(s"SELECT '$emoji$emoji'", "SELECT 2"))
+    assert(result.completeStatements.map(_.start) == Seq(0, 15))
+    assert(result.completeStatements.map(_.length) == Seq(13, 8))
+    result.completeStatements.foreach { statement =>
+      assert(sql.substring(statement.start, statement.start + statement.length) ==
+        statement.statement)
+    }
+    assert(result.partialStatement.isEmpty)
+  }
+
+  test("source positions trim Spark SQL Unicode whitespace") {
+    val nbsp = 0xA0.toChar
+    val sql = s"${nbsp}SELECT 1$nbsp;"
+    val result = SqlStatementSplitter.splitWithPositions(sql, identity)
+    val complete = result.completeStatements.head
+    assert(complete.statement == "SELECT 1")
+    assert(complete.start == 1)
+    assert(complete.length == 8)
+    assert(sql.substring(complete.start, complete.start + complete.length) ==
+      complete.statement)
   }
 
   // ----------------------------------------------------------------------------------
@@ -187,6 +231,24 @@ class SqlStatementSplitterSuite extends SparkFunSuite {
     assert(result.partialStatement.isEmpty)
   }
 
+  test("SPARK-59536: nested bracketed comment containing a hint-shaped comment") {
+    val result = split("SELECT 1; /* outer /*+ inner; */ outer tail */; SELECT 2;")
+    assert(result.completeStatements == Seq(statement("SELECT 1"), statement("SELECT 2")))
+    assert(result.partialStatement.isEmpty)
+  }
+
+  test("SPARK-59536: unclosed outer comment containing a hint-shaped comment") {
+    val sql = "/* SELECT /*+ HINT() 4; */ SELECT 1;"
+    assert(split(sql) == SqlStatementSplitResult(Nil, sql, hasUnclosedComment = true))
+    assert(split(s"SELECT 1; $sql") == SqlStatementSplitResult(
+      Seq(statement("SELECT 1")), sql, hasUnclosedComment = true))
+  }
+
+  test("SPARK-59536: EOF inside an unclosed hint-shaped nested comment") {
+    val sql = "SELECT 1 /* outer /*+ inner"
+    assert(split(sql) == SqlStatementSplitResult(Nil, sql, hasUnclosedComment = true))
+  }
+
   test("statement ending with bracketed comment retained") {
     val result = split("SELECT 1; SELECT 2 /* trailer */")
     assert(result.completeStatements == Seq(statement("SELECT 1")))
@@ -208,6 +270,15 @@ class SqlStatementSplitterSuite extends SparkFunSuite {
     val result = split(block + ";")
     assert(result.completeStatements == Seq(statement(block)))
     assert(result.partialStatement.isEmpty)
+  }
+
+  test("BEGIN..END block that declares a FILE column is a single statement") {
+    val block = "BEGIN CREATE TABLE t (f FILE EXTERNAL); SELECT 1; END"
+    withSQLConf(SQLConf.FILE_TYPE_ENABLED.key -> "true") {
+      val result = split(block + ";")
+      assert(result.completeStatements == Seq(statement(block)))
+      assert(result.partialStatement.isEmpty)
+    }
   }
 
   test("BEGIN..END block followed by another statement") {

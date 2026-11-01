@@ -143,7 +143,7 @@ class DirectWorkerProcess(
     }
   }
 
-  /** Returns true if the OS process is running and the connection is usable. */
+  /** Returns true if the OS process is running and the connection is open or recoverable. */
   def isAlive: Boolean = process.isAlive && connection.isActive
 
   /**

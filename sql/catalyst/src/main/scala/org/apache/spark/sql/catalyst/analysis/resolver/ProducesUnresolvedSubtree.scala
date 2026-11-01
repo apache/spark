@@ -31,10 +31,10 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
  * should return identity instead of trying to resolve it.
  *
  * Note: [[Literal]] children are excluded from tagging to drastically reduce the chance of a data
- * race (see ES-1725904). Unlike other expression nodes, literals are not reallocated during
- * resolution (resolved and unresolved literals are physically the same object), so mutating their
- * tags can cause a data race when the same literal is used concurrently across threads. Since
- * literals are leaf nodes, the boundary tag is unnecessary for them anyway.
+ * race. Unlike other expression nodes, literals are not reallocated during resolution (resolved
+ * and unresolved literals are physically the same object), so mutating their tags can cause a
+ * data race when the same literal is used concurrently across threads. Since literals are leaf
+ * nodes, the boundary tag is unnecessary for them anyway.
  */
 trait ProducesUnresolvedSubtree extends ResolvesExpressionChildren {
 

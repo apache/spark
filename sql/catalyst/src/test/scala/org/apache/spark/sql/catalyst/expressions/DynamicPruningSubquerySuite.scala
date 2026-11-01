@@ -23,7 +23,8 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.optimizer.ReusableBroadcastValueProjection
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{Join, JoinHint, LocalRelation, Project}
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{CharType, IntegerType, TimestampType, VarcharType}
+import org.apache.spark.unsafe.types.UTF8String
 
 class DynamicPruningSubquerySuite extends SparkFunSuite {
   private val pruningKeyExpression = Literal(1)
@@ -185,5 +186,45 @@ class DynamicPruningSubquerySuite extends SparkFunSuite {
     val nullSafeJoin = Join(
       left, right, Inner, Some(And(EqualNullSafe(leftKey, rightKey), residual)), JoinHint.NONE)
     assert(ReusableBroadcastValueProjection.find(leftValue, nullSafeJoin, excluded).isEmpty)
+  }
+
+  test("SPARK-59112: extract broadcast values from CHAR/VARCHAR attributes") {
+    Seq(CharType(4), VarcharType(4)).foreach { stringType =>
+      val leftKey = AttributeReference("left_key", IntegerType)()
+      val leftValue = AttributeReference("left_value", stringType)()
+      val rightKey = AttributeReference("right_key", IntegerType)()
+      val rightValue = AttributeReference("right_value", stringType)()
+      val left = LocalRelation(leftKey, leftValue)
+      val right = LocalRelation(rightKey, rightValue)
+      val excluded = LocalRelation(AttributeReference("excluded", IntegerType)())
+      val join = Join(
+        left,
+        right,
+        Inner,
+        Some(And(EqualTo(leftKey, rightKey), LessThanOrEqual(leftValue, rightValue))),
+        JoinHint.NONE)
+
+      assert(ReusableBroadcastValueProjection.find(leftValue, join, excluded).contains(
+        BroadcastValueProjection(left, Seq(leftKey), leftValue)))
+      assert(ReusableBroadcastValueProjection.find(rightValue, join, excluded).contains(
+        BroadcastValueProjection(right, Seq(rightKey), rightValue)))
+    }
+  }
+
+  test("SPARK-59112: extract date formats with CHAR/VARCHAR format literals") {
+    Seq(CharType(4), VarcharType(4)).foreach { stringType =>
+      val leftKey = AttributeReference("left_key", IntegerType)()
+      val timestamp = AttributeReference("timestamp", TimestampType)()
+      val rightKey = AttributeReference("right_key", IntegerType)()
+      val left = LocalRelation(leftKey, timestamp)
+      val right = LocalRelation(rightKey)
+      val excluded = LocalRelation(AttributeReference("excluded", IntegerType)())
+      val join = Join(left, right, Inner, Some(EqualTo(leftKey, rightKey)), JoinHint.NONE)
+      val format = Literal.create(UTF8String.fromString("yyyy"), stringType)
+      val value = DateFormatClass(timestamp, format, Some("UTC"))
+
+      assert(ReusableBroadcastValueProjection.find(value, join, excluded).contains(
+        BroadcastValueProjection(left, Seq(leftKey), value)))
+    }
   }
 }

@@ -275,15 +275,15 @@ object NestedColumnAliasing {
         // Remove redundant [[ExtractValue]]s if they share the same parent nest field.
         // For example, when `a.b` and `a.b.c` are in project list, we only need to alias `a.b`.
         // Because `a.b` requires all of the inner fields of `b`, we cannot prune `a.b.c`.
-        val dedupNestedFields = nestedFields.filter {
+        val distinctNestedFields = nestedFields.distinct
+        val nestedFieldSet = ExpressionSet(distinctNestedFields)
+        val dedupNestedFields = distinctNestedFields.filter {
           // See [[collectExtractValue]]: we only need to deal with [[GetArrayStructFields]] and
           // [[GetStructField]]
           case e @ (_: GetStructField | _: GetArrayStructFields) =>
-            val child = e.children.head
-            nestedFields.forall(f => !child.exists(_.semanticEquals(f)))
+            !e.children.head.exists(p => p.deterministic && nestedFieldSet.contains(p))
           case _ => true
         }
-          .distinct
           // Discard [[ExtractValue]]s that contain aggregate functions.
           .filterNot(containsAggregateFunction)
 

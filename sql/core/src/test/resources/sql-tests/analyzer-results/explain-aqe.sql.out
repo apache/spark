@@ -159,6 +159,21 @@ ExplainCommand CTE [cte1], FormattedMode
 
 -- !query
 EXPLAIN FORMATTED
+  WITH cte1 AS MATERIALIZED (
+    SELECT key, max(val)
+    FROM explain_temp1
+    WHERE key > 10
+    GROUP BY key
+  )
+  SELECT * FROM cte1 a WHERE a.key > 20
+  UNION ALL
+  SELECT * FROM cte1 b WHERE b.key < 15
+-- !query analysis
+ExplainCommand CTE [cte1], FormattedMode
+
+
+-- !query
+EXPLAIN FORMATTED
   WITH RECURSIVE r(level) AS (
     VALUES 0
     UNION ALL

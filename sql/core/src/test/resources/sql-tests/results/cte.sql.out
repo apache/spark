@@ -805,6 +805,313 @@ struct<id:int,COLNAME:string,colname:string,id:int,COLNAME:string,colname:string
 
 
 -- !query
+WITH t AS MATERIALIZED (SELECT 1 AS x)
+SELECT * FROM t, t AS t2
+-- !query schema
+struct<x:int,x:int>
+-- !query output
+1	1
+
+
+-- !query
+WITH t AS NOT MATERIALIZED (SELECT 1 AS x)
+SELECT * FROM t, t AS t2
+-- !query schema
+struct<x:int,x:int>
+-- !query output
+1	1
+
+
+-- !query
+WITH t(x) MATERIALIZED (SELECT 1)
+SELECT * FROM t
+-- !query schema
+struct<x:int>
+-- !query output
+1
+
+
+-- !query
+WITH materialized AS (SELECT 1 AS x)
+SELECT * FROM materialized
+-- !query schema
+struct<x:int>
+-- !query output
+1
+
+
+-- !query
+SELECT * FROM t WHERE EXISTS (
+  WITH s AS NOT MATERIALIZED (SELECT 1 FROM t2 WHERE t2.id = t.id)
+  SELECT * FROM s
+)
+-- !query schema
+struct<id:int>
+-- !query output
+0
+1
+
+
+-- !query
+SELECT * FROM t WHERE EXISTS (
+  WITH s AS MATERIALIZED (SELECT 1 FROM t2 WHERE t2.id = t.id)
+  SELECT * FROM s
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_WITH_OUTER_REFERENCE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "colName" : "`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 89,
+    "stopIndex" : 92,
+    "fragment" : "t.id"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM t WHERE EXISTS (
+  WITH s AS MATERIALIZED (SELECT 1 FROM t2 WHERE t2.id = t.id)
+  SELECT 1
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_WITH_OUTER_REFERENCE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "colName" : "`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 89,
+    "stopIndex" : 92,
+    "fragment" : "t.id"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM t o WHERE EXISTS (
+  WITH v AS MATERIALIZED (SELECT id FROM t2)
+  SELECT * FROM v WHERE v.id = o.id
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_IN_CORRELATED_SUBQUERY",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "cteName" : "`v`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 41,
+    "stopIndex" : 77,
+    "fragment" : "v AS MATERIALIZED (SELECT id FROM t2)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM t o WHERE EXISTS (
+  SELECT * FROM (WITH v AS MATERIALIZED (SELECT id FROM t2) SELECT * FROM v) x WHERE x.id = o.id
+)
+-- !query schema
+struct<id:int>
+-- !query output
+0
+1
+
+
+-- !query
+SELECT * FROM t WHERE EXISTS (
+  WITH s AS (SELECT 1 FROM t2 WHERE t2.id = t.id),
+       s2 AS MATERIALIZED (SELECT * FROM s)
+  SELECT * FROM s2
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_WITH_OUTER_REFERENCE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "colName" : "`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 76,
+    "stopIndex" : 79,
+    "fragment" : "t.id"
+  } ]
+}
+
+
+-- !query
+WITH v AS MATERIALIZED (
+  SELECT t.id, (WITH s AS (SELECT count(*) c FROM t2 WHERE t2.id = t.id) SELECT c FROM s) AS c
+  FROM t
+)
+SELECT * FROM v
+-- !query schema
+struct<id:int,c:bigint>
+-- !query output
+0	1
+1	1
+2	0
+
+
+-- !query
+WITH v AS MATERIALIZED (
+  SELECT t.id, l.c
+  FROM t, LATERAL (WITH s AS (SELECT count(*) c FROM t2 WHERE t2.id = t.id) SELECT c FROM s) l
+)
+SELECT * FROM v
+-- !query schema
+struct<id:int,c:bigint>
+-- !query output
+0	1
+1	1
+2	0
+
+
+-- !query
+WITH v1 AS (
+  SELECT t.id, (WITH s AS (SELECT count(*) c FROM t2 WHERE t2.id = t.id) SELECT c FROM s) AS c
+  FROM t
+),
+v2 AS MATERIALIZED (SELECT * FROM v1)
+SELECT * FROM v2
+-- !query schema
+struct<id:int,c:bigint>
+-- !query output
+0	1
+1	1
+2	0
+
+
+-- !query
+WITH s AS (SELECT id FROM t)
+SELECT * FROM s o WHERE EXISTS (
+  WITH v AS MATERIALIZED (SELECT i.id FROM s i WHERE i.id = o.id)
+  SELECT * FROM v
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_WITH_OUTER_REFERENCE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "colName" : "`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 123,
+    "stopIndex" : 126,
+    "fragment" : "o.id"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM t o WHERE EXISTS (
+  WITH s AS (SELECT i.id FROM t2 i WHERE i.id = o.id),
+       v AS MATERIALIZED (SELECT t.id, (SELECT count(*) FROM s) AS n FROM t)
+  SELECT * FROM v
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_WITH_OUTER_REFERENCE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "colName" : "`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 82,
+    "stopIndex" : 85,
+    "fragment" : "o.id"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM t o WHERE EXISTS (
+  WITH s AS (SELECT i.id FROM t2 i WHERE i.id = o.id),
+       v AS MATERIALIZED (SELECT t.id, l.n FROM t, LATERAL (SELECT count(*) n FROM s) l)
+  SELECT * FROM v
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_WITH_OUTER_REFERENCE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "colName" : "`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 82,
+    "stopIndex" : 85,
+    "fragment" : "o.id"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM t o WHERE EXISTS (
+  WITH s AS (SELECT i.id FROM t2 i WHERE i.id = o.id),
+       v AS MATERIALIZED (SELECT t.id FROM t WHERE t.id IN (SELECT id FROM s))
+  SELECT * FROM v
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_WITH_OUTER_REFERENCE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "colName" : "`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 82,
+    "stopIndex" : 85,
+    "fragment" : "o.id"
+  } ]
+}
+
+
+-- !query
 DROP VIEW IF EXISTS t
 -- !query schema
 struct<>

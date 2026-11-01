@@ -30,7 +30,7 @@ import org.apache.spark.sql.types._
  * v2 table. These tests require a v2 catalog that supports row-level operations
  * (set up by [[AutoCdcCatalogExecutionTestBase]]) and run actual writes through Catalyst's
  * row-level-operations machinery, so they are kept separate from the pure-DataFrame-transform
- * tests in [[Scd1BatchProcessorSuite]].
+ * tests in [[Scd1RowLevelReconciliationSuite]].
  */
 class Scd1BatchProcessorMergeSuite
     extends QueryTest

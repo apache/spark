@@ -28,6 +28,7 @@ import org.apache.spark.deploy._
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Deploy._
+import org.apache.spark.internal.config.UI.UI_HOLD_ENABLED
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.{RpcAddress, RpcEndpoint, RpcEnv}
 
@@ -248,6 +249,50 @@ class MasterSuite extends MasterSuiteBase {
         eventLogDir = None,
         eventLogCodec = None)
     assert(master.invokePrivate(_createApplication(desc, null)).id === "spark-45756")
+  }
+
+  test("SPARK-59055: The executors of a held application are counted as draining") {
+    val appInfo = makeAppInfo(1024)
+    val worker = DeployTestUtils.createWorkerInfo()
+    appInfo.addExecutor(worker, 1, 1024, Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    appInfo.addExecutor(worker, 1, 1024, Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+
+    // The executors of an application that is not held are not draining.
+    assert(appInfo.numDrainingExecutors === 0)
+
+    // A hold that the driver did not report as supported is not treated as held.
+    appInfo.held = true
+    assert(appInfo.numDrainingExecutors === 0)
+
+    // While held, an executor that has not exited yet is still draining its running tasks.
+    appInfo.holdSupported = true
+    assert(appInfo.numDrainingExecutors === 2)
+
+    // The hold is complete once the last executor is gone.
+    appInfo.executors.values.toSeq.foreach(appInfo.removeExecutor)
+    assert(appInfo.numDrainingExecutors === 0)
+    assert(appInfo.isHeld)
+    assert(appInfo.stateText === "WAITING (held)")
+
+    // A single draining executor is reported in the singular.
+    appInfo.addExecutor(worker, 1, 1024, Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    assert(appInfo.stateText === "WAITING (held, draining 1 executor)")
+
+    // A finished application is never held, even though the Master keeps its executors for the
+    // UI: its driver is gone, so the last reported hold is stale.
+    appInfo.markFinished(ApplicationState.FINISHED)
+    assert(!appInfo.isHeld)
+    assert(appInfo.numDrainingExecutors === 0)
+  }
+
+  test("SPARK-59916: Reject the hold and resume requests when the Master disables holding") {
+    val master = makeAliveMaster(new SparkConf().set(UI_HOLD_ENABLED, false))
+    Seq(true, false).foreach { hold =>
+      val response = master.self.askSync[ApplicationHoldResponse](
+        RequestApplicationHold("app-1", hold))
+      assert(!response.success)
+      assert(response.message.contains(s"${UI_HOLD_ENABLED.key} is disabled on the Master"))
+    }
   }
 
   test("SPARK-57451: Allows REST server and spark.authenticate.secret to be enabled together") {

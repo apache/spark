@@ -979,7 +979,7 @@ public class CollationAwareUTF8String {
     return index;
   }
 
-  private static int findIndexReverse(final StringSearch stringSearch, int count) {
+  private static int findIndexReverse(final StringSearch stringSearch, long count) {
     assert(count >= 0);
     int index = 0;
     while (count > 0) {
@@ -1026,7 +1026,8 @@ public class CollationAwareUTF8String {
       }
     } else {
       // If the count is negative, we search for the count-th delimiter from the right.
-      int searchIndex = findIndexReverse(stringSearch, -count);
+      // The count is widened to a long because negating it overflows for Integer.MIN_VALUE.
+      int searchIndex = findIndexReverse(stringSearch, -(long) count);
       if (searchIndex == MATCH_NOT_FOUND) {
           return string;
       } else if (searchIndex == str.length()) {
@@ -1057,10 +1058,11 @@ public class CollationAwareUTF8String {
     } else {
       // Search right to left (note: the end code point is exclusive).
       int matchLength = string.numChars() + 1;
-      count = -count;
-      while (count > 0) {
+      // `remaining` is a long because negating `count` overflows for Integer.MIN_VALUE.
+      long remaining = -(long) count;
+      while (remaining > 0) {
         matchLength = lowercaseRFind(string, lowercaseDelimiter, matchLength - 1);
-        if (matchLength > MATCH_NOT_FOUND) --count; // Found a delimiter.
+        if (matchLength > MATCH_NOT_FOUND) --remaining; // Found a delimiter.
         else return string; // Cannot find enough delimiters in the string.
       }
       return string.substring(matchLength, string.numChars());

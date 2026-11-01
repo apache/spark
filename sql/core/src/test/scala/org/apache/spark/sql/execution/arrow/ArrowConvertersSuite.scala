@@ -61,7 +61,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
     val arrowRecordBatches = arrowBatches.map(ArrowConverters.loadBatch(_, allocator))
     val rowCount = arrowRecordBatches.map(_.getLength).sum
     assert(rowCount === indexData.count())
-    arrowRecordBatches.foreach(batch => assert(batch.getNodes.size() > 0))
+    arrowRecordBatches.foreach(batch => assert(!batch.getNodes.isEmpty))
     arrowRecordBatches.foreach(_.close())
     allocator.close()
   }
@@ -1472,6 +1472,41 @@ class ArrowConvertersSuite extends SharedSparkSession {
           count += 1
         }
         assert(count === inputRows.length)
+      }
+    }
+  }
+
+  test("nanosecond timestamps read with a declared lower precision are floored") {
+    // Mirrors createDataFrame from pandas: timestamp[ns] batches read at a lower precision.
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      Seq(7, 8).foreach { p =>
+        Seq[(DataType, DataType, String)](
+          (TimestampNTZNanosType(9), TimestampNTZNanosType(p), null),
+          (TimestampLTZNanosType(9), TimestampLTZNanosType(p), "UTC")).foreach {
+          case (writeType, readType, timeZoneId) =>
+            val grid = if (p == 7) 100 else 10
+            val values = Seq(
+              TimestampNanosVal.fromParts(1234567L, 789.toShort),
+              TimestampNanosVal.fromParts(1234567L, 712.toShort),
+              TimestampNanosVal.fromParts(-1234567L, 999.toShort))
+            val ctx = TaskContext.empty()
+            // A trailing null exercises the null path.
+            val batchIter = ArrowConverters.toBatchIterator(
+              (values.map(v => InternalRow(v)) :+ InternalRow(null)).iterator,
+              StructType(Seq(StructField("value", writeType))), 5, timeZoneId, true, false, ctx)
+            val got = ArrowConverters.fromBatchIterator(
+              batchIter, StructType(Seq(StructField("value", readType))), timeZoneId, true, false,
+              ctx).map { row =>
+              if (row.isNullAt(0)) null else readType match {
+                case _: TimestampNTZNanosType => row.getTimestampNTZNanos(0)
+                case _: TimestampLTZNanosType => row.getTimestampLTZNanos(0)
+              }
+            }.toSeq
+            assert(got === values.map { v =>
+              TimestampNanosVal.fromParts(
+                v.epochMicros, (v.nanosWithinMicro / grid * grid).toShort)
+            } :+ null)
+        }
       }
     }
   }

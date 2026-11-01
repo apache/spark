@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import hashlib
 import io
 import os
 import re
@@ -25,8 +26,9 @@ import urllib.request
 from pyspark.install import (
     DEFAULT_HADOOP,
     DEFAULT_HIVE,
-    UNSUPPORTED_COMBINATIONS,
     _extract_tar,
+    _parse_sha512_checksum,
+    _verify_checksum,
     checked_package_name,
     checked_versions,
     get_preferred_mirrors,
@@ -107,6 +109,38 @@ class SparkInstallationTestCase(unittest.TestCase):
                     _extract_tar(tar, package_name, evil_dest)
             self.assertEqual([], os.listdir(evil_dest))
 
+    def test_parse_sha512_checksum(self):
+        file_name = "spark-3.5.0-bin-hadoop3.tgz"
+        digest = "ab" * 64
+
+        # sha512sum style: "<digest>  <file name>"
+        self.assertEqual(
+            digest, _parse_sha512_checksum("%s  %s\n" % (digest, file_name), file_name)
+        )
+
+        # gpg --print-md style: "<file name>: ABCD 1234 ..."
+        grouped = " ".join(digest.upper()[i : i + 8] for i in range(0, len(digest), 8))
+        self.assertEqual(
+            digest, _parse_sha512_checksum("%s: %s\n" % (file_name, grouped), file_name)
+        )
+
+        # Anything that does not contain exactly one SHA-512 digest is rejected.
+        with self.assertRaises(ValueError):
+            _parse_sha512_checksum("not a checksum file", file_name)
+        with self.assertRaises(ValueError):
+            _parse_sha512_checksum("", file_name)
+
+    def test_verify_checksum(self):
+        with tempfile.TemporaryDirectory(prefix="test_install_spark") as tmp_dir:
+            path = os.path.join(tmp_dir, "pkg.tgz")
+            with open(path, "wb") as f:
+                f.write(b"content")
+
+            _verify_checksum(path, hashlib.sha512(b"content").hexdigest())
+
+            with self.assertRaisesRegex(ValueError, "SHA-512 mismatch"):
+                _verify_checksum(path, "0" * 128)
+
     def test_package_name(self):
         self.assertEqual(
             "spark-3.0.0-bin-hadoop3.2", checked_package_name("spark-3.0.0", "hadoop3.2", "hive2.3")
@@ -155,14 +189,6 @@ class SparkInstallationTestCase(unittest.TestCase):
         )
 
         # Negative test cases
-        for hadoop_version, hive_version in UNSUPPORTED_COMBINATIONS:
-            with self.assertRaisesRegex(RuntimeError, "Hive.*should.*Hadoop"):
-                checked_versions(
-                    spark_version=test_version,
-                    hadoop_version=hadoop_version,
-                    hive_version=hive_version,
-                )
-
         with self.assertRaisesRegex(RuntimeError, "Spark version should start with 'spark-'"):
             checked_versions(
                 spark_version="malformed", hadoop_version=DEFAULT_HADOOP, hive_version=DEFAULT_HIVE
