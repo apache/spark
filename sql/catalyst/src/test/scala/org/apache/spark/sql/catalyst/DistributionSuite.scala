@@ -516,9 +516,9 @@ class DistributionSuite extends SparkFunSuite with SQLHelper {
     val a = AttributeReference("a", IntegerType)()
     val ordered = OrderedDistribution(Seq(SortOrder(a, Ascending)))
     val markedOne = KeyedPartitioning(Seq(a), Seq(InternalRow(1)))
-      .withLayout(_.copy(mayContainUnknownPartitionKeys = true))
+      .withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
     val markedTwo = KeyedPartitioning(Seq(a), Seq(InternalRow(1), InternalRow(2)))
-      .withLayout(_.copy(mayContainUnknownPartitionKeys = true))
+      .withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
     withSQLConf(SQLConf.V2_BUCKETING_SORTING_ENABLED.key -> "true") {
       checkSatisfied(markedOne, ordered, true)
       checkSatisfied(markedTwo, ordered, false)
@@ -529,14 +529,23 @@ class DistributionSuite extends SparkFunSuite with SQLHelper {
     val x = AttributeReference("x", IntegerType)()
     val y = AttributeReference("y", IntegerType)()
     val marked = KeyedPartitioning(Seq(x), Seq(InternalRow(1), InternalRow(2)))
-      .withLayout(_.copy(mayContainUnknownPartitionKeys = true))
+      .withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
     val plain = KeyedPartitioning(Seq(y), Seq(InternalRow(1), InternalRow(2)))
     val combined = PartitioningCollection.fromPartitionings(Seq(marked, plain))
-    // The conservative direction: an unmarked member must never excuse marked data, because
-    // the OR'd-on marker only costs a shuffle while the AND'd-off one could cost correctness.
+    // The conservative direction: an unmarked member must never excuse marked data, because a
+    // merged marker only costs a shuffle while dropping one could cost correctness.
     val members = combined.partitionings.map(_.asInstanceOf[KeyedPartitioning])
     assert(members.forall(_.mayContainUnknownPartitionKeys), members.toString)
     assert(members.last.layout eq members.head.layout)
+
+    // A member that lost the routing makes the joint layout lose it as well.
+    val lost = KeyedPartitioning(Seq(x), Seq(InternalRow(1), InternalRow(2)))
+      .withLayout(_.copy(unknownKeysOrigin = Some(ROUTING_LOST)))
+    val withLost = PartitioningCollection.fromPartitionings(Seq(lost, plain))
+    val lostMembers = withLost.partitionings.map(_.asInstanceOf[KeyedPartitioning])
+    assert(lostMembers.forall(_.mayContainUnknownPartitionKeys), lostMembers.toString)
+    assert(lostMembers.forall(!_.unknownKeysRouted), lostMembers.toString)
+    assert(lostMembers.last.layout eq lostMembers.head.layout)
   }
 
   test("SPARK-59050: PartitioningCollection requires members to agree on the marker") {
@@ -544,11 +553,11 @@ class DistributionSuite extends SparkFunSuite with SQLHelper {
     val y = AttributeReference("y", IntegerType)()
     val keys = Seq(InternalRow(1), InternalRow(2))
     val base = KeyedPartitioning(Seq(x), keys)
-    val marked = base.withLayout(_.copy(mayContainUnknownPartitionKeys = true))
+    val marked = base.withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
     // The marker lives on the layout, so two members that disagree on it hold two layouts, and the
     // one `eq` on the layout refuses them. There is no clause of its own to reach.
     val disagree =
-      KeyedPartitioning(Seq(y), marked.layout.copy(mayContainUnknownPartitionKeys = false))
+      KeyedPartitioning(Seq(y), marked.layout.copy(unknownKeysOrigin = None))
     val err = intercept[IllegalArgumentException] {
       PartitioningCollection(Seq(marked, disagree))
     }
@@ -559,8 +568,8 @@ class DistributionSuite extends SparkFunSuite with SQLHelper {
     val x = AttributeReference("x", IntegerType)()
     val y = AttributeReference("y", IntegerType)()
     val keys = Seq(InternalRow(1), InternalRow(2))
-    val marked =
-      KeyedPartitioning(Seq(x), keys).withLayout(_.copy(mayContainUnknownPartitionKeys = true))
+    val marked = KeyedPartitioning(Seq(x), keys)
+      .withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
     val plainNested = PartitioningCollection.fromPartitionings(
       Seq(KeyedPartitioning(Seq(y), keys)))
     val combined = PartitioningCollection.fromPartitionings(Seq(marked, plainNested))
@@ -581,7 +590,7 @@ class DistributionSuite extends SparkFunSuite with SQLHelper {
     val keys = Seq(InternalRow(1), InternalRow(2))
     val base = KeyedPartitioning(Seq(x), keys)
     val markedNested = PartitioningCollection.fromPartitionings(Seq(
-      base.withLayout(_.copy(mayContainUnknownPartitionKeys = true))))
+      base.withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))))
     val plain = base.copy(expressions = Seq(y))
     // The nested collection is internally uniform, so its own construction passes. The outer
     // constructor must still catch its representative against the unmarked sibling, and the marker

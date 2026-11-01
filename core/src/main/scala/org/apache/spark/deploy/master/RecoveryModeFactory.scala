@@ -58,7 +58,9 @@ private[master] class FileSystemRecoveryModeFactory(conf: SparkConf, serializer:
 
   def createPersistenceEngine(): PersistenceEngine = {
     logInfo(log"Persisting recovery state to directory: ${MDC(LogKeys.PATH, recoveryDir)}")
-    val codec = conf.get(RECOVERY_COMPRESSION_CODEC).map(c => CompressionCodec.createCodec(conf, c))
+    val codec = conf.get(RECOVERY_COMPRESSION_CODEC)
+      .filterNot(_.equalsIgnoreCase("none"))
+      .map(c => CompressionCodec.createCodec(conf, c))
     new FileSystemPersistenceEngine(recoveryDir, serializer, codec)
   }
 

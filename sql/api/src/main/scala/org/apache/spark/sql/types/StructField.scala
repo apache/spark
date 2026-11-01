@@ -77,7 +77,9 @@ case class StructField(
   }
 
   private[sql] def dataTypeJsonValue: JValue = {
-    if (stringCollationMetadata.isEmpty && charVarcharCollationMetadata.isEmpty) {
+    val hasCollations = stringCollationMetadata.nonEmpty || charVarcharCollationMetadata.nonEmpty
+    val hasFile = dataType.existsRecursively(_.isInstanceOf[FileType])
+    if (!hasCollations && !hasFile) {
       return dataType.jsonValue
     }
 
@@ -92,9 +94,26 @@ case class StructField(
       case _ => dt
     }
 
+    // An external file in a field is the plain "file", the form of a schema written without a
+    // mode, so that a schema which carries other engine-specific metadata for it is written back
+    // as it was read. Only array and map types are visited, as in `removeCollations`.
+    def fileTypeJson(dt: DataType): JValue = dt match {
+      case at: ArrayType =>
+        ("type" -> at.typeName) ~
+          ("elementType" -> fileTypeJson(at.elementType)) ~
+          ("containsNull" -> at.containsNull)
+      case mt: MapType =>
+        ("type" -> mt.typeName) ~
+          ("keyType" -> fileTypeJson(mt.keyType)) ~
+          ("valueType" -> fileTypeJson(mt.valueType)) ~
+          ("valueContainsNull" -> mt.valueContainsNull)
+      case FileType(FileTypeMode.EXTERNAL) => JString("file")
+      case _ => dt.jsonValue
+    }
+
     // As we want to be backwards compatible we should remove all collations information from the
     // json and only keep that information in the metadata.
-    removeCollations(dataType).jsonValue
+    fileTypeJson(if (hasCollations) removeCollations(dataType) else dataType)
   }
 
   private def metadataJson: JValue = {

@@ -101,7 +101,7 @@ These are combined with a base above rather than used on their own:
 
 ## Build and Test
 
-Build and tests can take a long time. If the user explicitly asked to run tests, run them. Otherwise (you are running tests on your own to verify a change), first ask the user if they have more changes to make.
+Build and tests can take a long time, so prefer the narrowest relevant build or test command.
 
 For build and test setup, including how to run tests and troubleshoot common
 local failures, see `docs/building-spark.md`.
@@ -205,7 +205,7 @@ It lists `master` and the latest major's release branches the commit reached (e.
 
 ## Pull Request Workflow
 
-PR title format is `[SPARK-xxxx][COMPONENT] Title`. Draft, WIP, MINOR, and TRIVIAL PRs may omit the JIRA ID. The component tag is derived from the JIRA component name: take the last word and uppercase it (e.g. `Project Infra` → `[INFRA]`, `Spark Core` → `[CORE]`, `Structured Streaming` → `[STREAMING]`, `SQL` → `[SQL]`).
+PR title format is `[SPARK-xxxx][COMPONENT] Title`. Draft, WIP, MINOR, and TRIVIAL PRs may omit the JIRA ID. The component tag comes from the `COMPONENTS` registry in `dev/merge_spark_pr.py`, the source of truth: each entry pairs a PR-title tag with its canonical JIRA component name and accepted aliases (e.g. `Documentation` → `[DOC]`, `Pandas API on Spark` → `[PS]`, `SQL` → `[SQL]`). Read that registry to pick the right tag.
 
 Use `[FOLLOWUP]` only for small PRs that directly modify or correct unreleased earlier PRs. For separately planned work, non-trivial changes, or work outside the earlier JIRA's scope, create a separate JIRA ticket for each PR and use the normal title format without `[FOLLOWUP]`.
 
