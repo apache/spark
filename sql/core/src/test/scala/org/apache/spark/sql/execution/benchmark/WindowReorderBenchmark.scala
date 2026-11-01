@@ -126,9 +126,8 @@ object WindowReorderBenchmark extends SqlBasedBenchmark {
        |FROM $table""".stripMargin
 
   /**
-   * Fewer users than the serving table, so each COLLECT_LIST partition holds enough
-   * events for the wide-output shuffle cost to be observable. The user modulus is prime
-   * for the same reason as in `prepareServingTable`.
+   * Fewer users than the serving table, so each COLLECT_LIST partition holds more
+   * events. The user modulus is prime for the same reason as in `prepareServingTable`.
    */
   private def prepareSessionTable(name: String, n: Long): Unit = {
     spark.range(n)
@@ -143,11 +142,11 @@ object WindowReorderBenchmark extends SqlBasedBenchmark {
   }
 
   /**
-   * Narrow ranking windows beside a wide collect_list: (user_id, is_primary) and
-   * (model) are the minimal specs, and the collect_list on (user_id, is_primary,
-   * priority) rides the first one's exchange. With the flag off the collect_list
-   * stays on top over three exchanges; with it on, the wide group must rank last
-   * over two exchanges rather than crossing the (model) shuffle.
+   * Narrow ranking windows beside a wide collect_list. Both arms leave the array
+   * above the (model) exchange. The pairwise path cannot swap these specs, so the
+   * disabled plan keeps the SELECT order and three exchanges. The enabled plan
+   * rides the collect_list on the (user_id, is_primary) exchange and ranks that
+   * group last, which is two exchanges of the still-narrow rows.
    */
   private def wideWindowedSelect(table: String): String =
     s"""SELECT

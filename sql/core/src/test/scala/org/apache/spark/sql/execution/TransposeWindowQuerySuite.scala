@@ -164,6 +164,15 @@ class TransposeWindowQuerySuite extends QueryTest with SharedSparkSession
           assert(numSorts(df) == 2)
           planned(df)
         }
+        // Both windows already sit adjacent on one spec, so the counts above are
+        // EnsureRequirements reuse alone, not the reorder's doing: pin them against a
+        // reorder regression by requiring the same counts with the config disabled.
+        withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "false") {
+          val df = sql(query)
+          assert(numWindows(df) == 2)
+          assert(numExchanges(df) == 1)
+          assert(numSorts(df) == 2)
+        }
         val expected = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "false") {
           sql(query).collect()
         }
@@ -397,8 +406,8 @@ class TransposeWindowQuerySuite extends QueryTest with SharedSparkSession
 
   test("rank filter over a reordered chain still gets a window group limit") {
     // All three windows ride the single minimal spec [k1, k2], so the unpinned reorder
-    // (f1, p1, rn bottom-to-top) already keeps rn on top riding f1's exchange: no pin
-    // is needed. The reorder inserts a pass-through restoring project at the chain top,
+    // (p1, f1, rn bottom-to-top) already keeps rn on top riding f1's exchange: no pin
+    // reorder inserts a pass-through restoring project at the chain top,
     // and PushDownPredicates moves the filter below it, restoring the Filter-over-Window
     // shape InferWindowGroupLimit needs.
     val query =
@@ -469,6 +478,51 @@ class TransposeWindowQuerySuite extends QueryTest with SharedSparkSession
         assert(actualExchanges == expectedExchanges)
         // A window appends its columns, so the reorder must not change the query's column
         // order: checkAnswer compares rows positionally.
+        checkAnswer(actualDf, expectedDf)
+      }
+    }
+  }
+
+  test("qualified renamed rank filter below other windows gets a window group limit") {
+    // The subquery qualifier makes the filter's r attribute differ from the alias's unqualified
+    // toAttribute even though their exprIds match. Alias peeling must use exprId semantics to
+    // find rn below f1; otherwise the reorder buries rn and loses the group limit that the
+    // disabled rule retains at the same exchange count.
+    val query =
+      """
+        |SELECT * FROM (
+        |  SELECT *, sum(v) OVER (PARTITION BY k1, k2 ORDER BY k1) AS f1
+        |  FROM (
+        |    SELECT k1, k2, k3, v, f2, rn AS r
+        |    FROM (
+        |      SELECT *, row_number() OVER (PARTITION BY k1, k2, k3 ORDER BY v) AS rn
+        |      FROM (
+        |        SELECT *, sum(v) OVER (PARTITION BY k1 ORDER BY k1) AS f2 FROM t
+        |      )
+        |    )
+        |  )
+        |) s WHERE r <= 1
+      """.stripMargin
+
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withInput {
+        val (actualDf, actualExchanges, actualGroupLimits) =
+          withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+            val df = sql(query)
+            (planned(df), numExchanges(df), collect(df.queryExecution.executedPlan) {
+              case _: WindowGroupLimitExec => ()
+            }.size)
+          }
+        val (expectedDf, expectedExchanges, expectedGroupLimits) =
+          withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "false") {
+            val df = sql(query)
+            (planned(df), numExchanges(df), collect(df.queryExecution.executedPlan) {
+              case _: WindowGroupLimitExec => ()
+            }.size)
+          }
+        assert(expectedGroupLimits == 1)
+        assert(actualGroupLimits == 1)
+        assert(actualExchanges == expectedExchanges)
         checkAnswer(actualDf, expectedDf)
       }
     }
@@ -616,13 +670,11 @@ class TransposeWindowQuerySuite extends QueryTest with SharedSparkSession
     }
   }
 
-  test("rank filter still pins across a derived-alias cut") {
+  test("rank filter does not pin across a derived-alias cut when it costs an exchange") {
     // The middle project's derived alias cuts the chain, so the rank window is a lone
-    // window above the cut. Both orders the pin check compares are that one window, so
-    // the check cannot see the swap the disabled rule makes across the cut, and the pin
-    // is kept: rn pays an exchange of its own on top of s's -- 2 exchanges against the
-    // disabled rule's 1 -- and keeps the group limit. This is the trade the conf doc
-    // warns about; if the check learns to price cross-cut swaps, this test flips.
+    // window above the cut. The legacy swap moves rn below s, whose wider partition spec
+    // rides rn's exchange. That saves the pinned plan's second exchange, so the cheaper
+    // legacy plan wins even though moving rn away from the filter loses the group limit.
     val query =
       """
         |SELECT * FROM (
@@ -637,10 +689,10 @@ class TransposeWindowQuerySuite extends QueryTest with SharedSparkSession
       withInput {
         val actualDf = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
           val df = sql(query)
-          assert(numExchanges(df) == 2)
+          assert(numExchanges(df) == 1)
           assert(df.queryExecution.executedPlan.collect {
             case _: WindowGroupLimitExec => ()
-          }.nonEmpty)
+          }.isEmpty)
           planned(df)
         }
         val expected = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "false") {
@@ -648,6 +700,45 @@ class TransposeWindowQuerySuite extends QueryTest with SharedSparkSession
           assert(numExchanges(df) == 1)
           df.collect()
         }
+        checkAnswer(actualDf, expected)
+      }
+    }
+  }
+
+  test("rank filter does not pin a rejected chain when it costs an exchange") {
+    // The running sum's relative frame with no ORDER BY rejects stack reordering. The
+    // legacy pass swaps rn below the wider sum, avoiding the extra exchange and sort the
+    // pin would pay to keep WindowGroupLimit.
+    val query =
+      """
+        |SELECT * FROM (
+        |  SELECT *, rank() OVER (PARTITION BY k1, k2 ORDER BY v) AS rn
+        |  FROM (
+        |    SELECT *, sum(v) OVER (PARTITION BY k1, k2, k3 ORDER BY v) AS s
+        |    FROM (
+        |      SELECT *, sum(v) OVER (
+        |        PARTITION BY k4 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        |      ) AS running_sum FROM t))
+        |) WHERE rn <= 1
+      """.stripMargin
+
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withInput {
+        val (actualDf, actualExchanges) =
+          withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+            val df = sql(query)
+            assert(df.queryExecution.executedPlan.collect {
+              case _: WindowGroupLimitExec => ()
+            }.isEmpty)
+            (planned(df), numExchanges(df))
+          }
+        val (expected, expectedExchanges) =
+          withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "false") {
+            val df = sql(query)
+            (df.collect(), numExchanges(df))
+          }
+        assert(expectedExchanges == 2)
+        assert(actualExchanges == expectedExchanges)
         checkAnswer(actualDf, expected)
       }
     }
@@ -675,6 +766,9 @@ class TransposeWindowQuerySuite extends QueryTest with SharedSparkSession
         val actualDf = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
           val df = sql(query)
           assert(numExchanges(df) == 1)
+          assert(df.queryExecution.executedPlan.collect {
+            case _: WindowGroupLimitExec => ()
+          }.isEmpty)
           planned(df)
         }
         val expected = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "false") {
@@ -1017,11 +1111,11 @@ class TransposeWindowQuerySuite extends QueryTest with SharedSparkSession
     }
   }
 
-  test("a stack the pin would reorder to a riding order reorders once") {
+  test("a stack the pin would reorder to a riding order is emitted unpinned") {
     // sum m and rank rn share [k1, k2] with different orderings, and the x sum's longer
     // (k1, v) ordering separates them from the incomparable [k3] sum. The pinned order puts
-    // rn on top of x's exchange, so pinning buys no lower-exchange plan: the rule emits that
-    // stack's own order instead, reaching its final plan in one application. That order
+    // rn on top of x's exchange, so pinning buys no lower-exchange plan: the rule
+    // emits that stack's own order instead of pinning. That order
     // packs m directly under rn, so CollapseWindow merges the two and the merged window's
     // RANGE-frame sum keeps InferWindowGroupLimit from firing -- the trade the skip makes:
     // one window and one exchange fewer, no group limit, and the un-reordered answers.
