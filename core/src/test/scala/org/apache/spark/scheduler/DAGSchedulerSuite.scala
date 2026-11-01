@@ -1402,6 +1402,34 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(scheduler.reliableShuffleFileLostEpochSize === 0)
   }
 
+  for (reliable <- Seq(true, false)) {
+    test(s"SPARK-59138: a FetchFailed that aborts the job leaves no fence entry " +
+      s"(reliable=$reliable)") {
+      // The abort tears the map stage down (retiring its fences) before the FetchFailed handler
+      // unregisters outputs, so the handler must not re-create a fence for the retired shuffle.
+      conf.set(config.STAGE_MAX_CONSECUTIVE_ATTEMPTS, 1)
+      conf.set(config.SHUFFLE_SERVICE_ENABLED.key, "false")
+      val shuffleMapRdd = new MyRDD(sc, 2, Nil)
+      val partitioner = new HashPartitioner(2)
+      val shuffleDep = if (reliable) {
+        new ReliablyStoredShuffleDependency(shuffleMapRdd, partitioner)
+      } else {
+        new ShuffleDependency(shuffleMapRdd, partitioner)
+      }
+      val reduceRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
+      submit(reduceRdd, Array(0, 1))
+      completeShuffleMapStageSuccessfully(0, 0, 2)
+
+      runEvent(makeCompletionEvent(taskSets(1).tasks(0),
+        FetchFailed(makeBlockManagerId("hostA"), shuffleDep.shuffleId, 0L, 0, 0, "ignored"),
+        null))
+
+      assert(failure != null && failure.getMessage.contains("maximum allowable"))
+      assert(!scheduler.shuffleIdToMapStage.contains(shuffleDep.shuffleId))
+      assert(scheduler.reliableShuffleFileLostEpochSize === 0)
+    }
+  }
+
   test("SPARK-59138: a merged-chunk FetchFailed for a reliable shuffle keeps its reliable map " +
     "output") {
     // A merged-chunk failure (mapIndex == -1) says nothing about the reliable original map output,

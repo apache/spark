@@ -4712,12 +4712,14 @@ private[spark] class DAGScheduler(
         // A genuine executor-wide cleanup advances the executor fence (monotonically) to dedup
         // same-epoch duplicates. A bypass-only admission must not move it (it did not clean the
         // executor); it only records the per-shuffle fence so that shuffle's own duplicates are
-        // deduped. Both stamps are monotonic. Match prior behavior: skip under ignore.
+        // deduped. Both stamps are monotonic. Match prior behavior: skip under ignore. Skip the
+        // per-shuffle stamp once the map stage is gone (e.g. this FetchFailed aborted the job):
+        // stage cleanup already retired its fences and nothing would retire a new one.
         if (!ignoreShuffleFileLostEpoch) {
           if (passesExecutorFence) {
             shuffleFileLostEpoch(execId) = currentEpoch
           }
-          failedShuffleId.foreach { id =>
+          failedShuffleId.filter(shuffleIdToMapStage.contains).foreach { id =>
             val key = (execId, id)
             val prev = reliableShuffleFileLostEpoch.getOrElse(key, Long.MinValue)
             reliableShuffleFileLostEpoch(key) = math.max(prev, currentEpoch)
