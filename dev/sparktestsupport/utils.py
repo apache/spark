@@ -165,11 +165,21 @@ def determine_shell_script_test_goals(
     Goals are returned in the order determined by the modules passed in,
     preserving each module's declaration order. Each goal is returned only once:
 
-    >>> from pathlib import Path
+    >>> from types import SimpleNamespace as Stub
+    >>> a, b, c = (modules.ShellScriptTestGoal(f"dev/{n}") for n in "abc")
     >>> goals = determine_shell_script_test_goals(
-    ...     [modules.build, modules.root], modules.TestStage.PRE_BUILD)
-    >>> [g.path for g in goals].count(Path("dev/test-dependencies.sh"))
-    1
+    ...     [Stub(shell_script_test_goals=[b, a]), Stub(shell_script_test_goals=[c, b])],
+    ...     modules.TestStage.PRE_BUILD)
+    >>> [str(g.path) for g in goals]
+    ['dev/b', 'dev/a', 'dev/c']
+
+    The root module includes the test-dependencies script:
+
+    >>> from pathlib import Path
+    >>> Path("dev/test-dependencies.sh") in [
+    ...     g.path for g in determine_shell_script_test_goals(
+    ...         [modules.root], modules.TestStage.PRE_BUILD)]
+    True
     """
     declared_goals = itertools.chain.from_iterable(m.shell_script_test_goals for m in test_modules)
     stage_goals = (goal for goal in declared_goals if goal.stage == stage)

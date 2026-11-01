@@ -24,6 +24,7 @@ import subprocess
 import sys
 import tempfile
 from argparse import ArgumentParser
+from collections.abc import Sequence
 from contextlib import contextmanager
 
 import sparktestsupport.modules as modules
@@ -381,14 +382,16 @@ def run_python_packaging_tests():
     run_cmd(command)
 
 
-def run_shell_script_tests(test_modules, stage):
+def run_shell_script_tests(
+    test_modules: Sequence[modules.Module], stage: modules.TestStage
+) -> None:
     """
     Run the selected shell script goals for the given stage.
 
     All declared scripts must exist and be executable before the build:
 
     >>> from sparktestsupport.shellutils import is_exe
-    >>> [str(g.path) for g in modules.root.shell_script_test_goals
+    >>> [str(g.path) for m in modules.all_modules for g in m.shell_script_test_goals
     ...  if not is_exe(os.path.join(SPARK_HOME, g.path))]
     []
     """

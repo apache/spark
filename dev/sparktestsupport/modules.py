@@ -148,6 +148,10 @@ class ShellScriptTestGoal:
     Traceback (most recent call last):
         ...
     ValueError: Shell script path must be relative to repo root: '/tmp/example'
+    >>> ShellScriptTestGoal("")
+    Traceback (most recent call last):
+        ...
+    ValueError: Shell script path must be relative to repo root: ''
     >>> ShellScriptTestGoal("  ")
     Traceback (most recent call last):
         ...
@@ -155,15 +159,18 @@ class ShellScriptTestGoal:
     """
 
     path: Path
-    stage: TestStage = TestStage.PRE_BUILD
+    stage: TestStage
 
     def __init__(self, path: str | Path, stage: TestStage = TestStage.PRE_BUILD) -> None:
         if not isinstance(stage, TestStage):
             raise TypeError(f"Unsupported test stage: {stage!r}")
+        original_path = path
         # `Path` rejects non-path types and normalizes spellings like "./dev//x".
         path = Path(path)
         if not str(path).strip() or path == Path() or path.is_absolute() or ".." in path.parts:
-            raise ValueError(f"Shell script path must be relative to repo root: {str(path)!r}")
+            raise ValueError(
+                f"Shell script path must be relative to repo root: {str(original_path)!r}"
+            )
         # We have to call `object.__setattr__` because the class is frozen.
         object.__setattr__(self, "path", path)
         object.__setattr__(self, "stage", stage)
@@ -208,8 +215,8 @@ class Module(object):
             module are changed.
         :param sbt_test_goals: A set of SBT test goals for testing this module.
         :param python_test_goals: A set of Python test goals for testing this module.
-        :param shell_script_test_goals: A sequence (e.g., a list or tuple) of shell script test goals
-            for testing this module.
+        :param shell_script_test_goals: A sequence (e.g., a list or tuple) of shell script test
+            goals for testing this module.
         :param excluded_python_implementations: A set of Python implementations that are not
             supported by this module's Python components. The values in this set should match
             strings returned by Python's `platform.python_implementation()`.
