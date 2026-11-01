@@ -87,16 +87,17 @@ trait AutoCdcCatalogExecutionTestBase {
    * `Long` sequencing.
    */
   protected def cdcMetadataColSchemaType(sequencingType: DataType = LongType): StructType =
-    new StructType()
-      .add(Scd1BatchProcessor.cdcDeleteSequenceFieldName, sequencingType)
-      .add(Scd1BatchProcessor.cdcUpsertSequenceFieldName, sequencingType)
+    Scd1BatchProcessor.cdcMetadataColSchema(sequencingType)
 
   /**
-   * Build a [[Row]] matching the [[AutoCdcReservedNames.cdcMetadataColName]] struct's two fields,
+   * Build a [[Row]] matching the [[AutoCdcReservedNames.cdcMetadataColName]] struct's three fields,
    * in the order produced by [[Scd1BatchProcessor.constructCdcMetadataCol]]:
    */
-  protected def cdcMetadataRow[T](deleteSeq: Option[T], upsertSeq: Option[T]): Row =
-    Row(deleteSeq.getOrElse(null), upsertSeq.getOrElse(null))
+  protected def cdcMetadataRow[T](
+      deleteSeq: Option[T],
+      upsertSeq: Option[T],
+      versionMap: Map[String, T] = null): Row =
+    Row(deleteSeq.getOrElse(null), upsertSeq.getOrElse(null), versionMap)
 
   /**
    * Create a table in the test catalog under the given DSv2 [[Identifier]] using `schema`,
