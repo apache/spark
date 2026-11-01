@@ -224,12 +224,14 @@ object ObjectSerializerPruning extends Rule[LogicalPlan] {
 
       // Resolved references can use the spelling from the query. Both pruning and rebuilding
       // field accesses need the names from the serializer, including when a root is used twice.
-      val namesById = s.output.map(a => a.exprId -> a.name).toMap
-      val normalizedProjects = p.transformExpressions {
-        case a: AttributeReference if namesById.contains(a.exprId) =>
-          a.withName(namesById(a.exprId))
-      }.projectList
-      val rootFields = SchemaPruning.identifyRootFields(normalizedProjects, Seq.empty)
+      lazy val normalizedProjects = {
+        val namesById = s.output.map(a => a.exprId -> a.name).toMap
+        p.transformExpressions {
+          case a: AttributeReference if namesById.contains(a.exprId) =>
+            a.withName(namesById(a.exprId))
+        }.projectList
+      }
+      lazy val rootFields = SchemaPruning.identifyRootFields(normalizedProjects, Seq.empty)
 
       if (conf.serializerNestedSchemaPruningEnabled && rootFields.nonEmpty) {
         // Prunes nested fields in serializers.
