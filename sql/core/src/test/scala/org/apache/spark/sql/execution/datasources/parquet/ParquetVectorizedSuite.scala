@@ -17,23 +17,30 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.io.IOException
+import java.io.{File, IOException}
 import java.util.{Optional, PrimitiveIterator}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
+import scala.util.control.NonFatal
 
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.mapred.FileSplit
+import org.apache.hadoop.mapreduce.TaskAttemptID
+import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.apache.parquet.bytes.BytesInput
 import org.apache.parquet.column.{ColumnDescriptor, Encoding, ParquetProperties}
 import org.apache.parquet.column.impl.ColumnWriteStoreV1
 import org.apache.parquet.column.page._
 import org.apache.parquet.column.page.mem.MemPageStore
 import org.apache.parquet.column.statistics.Statistics
+import org.apache.parquet.hadoop.ParquetInputFormat
 import org.apache.parquet.io.ParquetDecodingException
 import org.apache.parquet.io.api.Binary
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 
+import org.apache.spark.TestUtils
 import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
@@ -41,8 +48,10 @@ import org.apache.spark.sql.catalyst.expressions.{RowOrdering, SpecificInternalR
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.parquet.SpecificParquetRecordReaderBase.ParquetRowGroupReader
 import org.apache.spark.sql.execution.vectorized.ColumnVectorUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.types.variant.VariantBuilder
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.Utils.createArray
 
@@ -801,6 +810,81 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
       .add("_2", IntegerType)
   )
 
+  test("SPARK-60098: Vectorized reader closes column vectors when missing all struct fields") {
+    withTempPath { dir =>
+      val data = Seq(
+        Tuple1((1, "a")),
+        Tuple1((2, null)),
+        Tuple1(null)
+      )
+      spark.createDataFrame(data).coalesce(1).write.parquet(dir.getCanonicalPath)
+
+      Seq(true, false).foreach { offheapEnabled =>
+        val readSchema = new StructType().add("_1",
+          new StructType()
+            .add("_3", IntegerType, nullable = true)
+            .add("_4", LongType, nullable = true),
+          nullable = true
+        )
+        val file = TestUtils.listDirectory(dir).head
+        val reader = createVectorizedReader(file, readSchema, offheapEnabled)
+        try {
+          while (reader.nextKeyValue()) {}
+        } finally {
+          reader.close()
+          checkColumnVectorsAreClosed(reader)
+        }
+      }
+    }
+  }
+
+  test("SPARK-60098: Vectorized reader closes variant type column vectors") {
+    withTempPath { dir =>
+      val scalarTypes = Array(IntegerType, StringType)
+      val variantBuilder = new VariantBuilder(false)
+      scalarTypes.indices.map(_.toString).foreach(variantBuilder.addKey)
+      val rows = Seq(
+        Row(
+          Row(
+            variantBuilder.result().getMetadata,
+            null,
+            Row.fromSeq(Seq[Any](3, "str10").map(Row(null, _)))
+          )
+        )
+      )
+      val writeSchema =
+        StructType(
+          Array(
+            StructField(
+              "v",
+              SparkShreddingUtils.variantShreddingSchema(
+                StructType(
+                  scalarTypes.zipWithIndex.map { case (t, i) => StructField(i.toString, t) }
+                )
+              )
+            )
+          )
+        )
+
+      spark
+        .createDataFrame(spark.sparkContext.parallelize(rows, numSlices = 1), writeSchema)
+        .write
+        .parquet(dir.getCanonicalPath)
+
+      Seq(true, false).foreach { offheapEnabled =>
+        val readSchema = new StructType().add("v", VariantType, nullable = true)
+        val file = TestUtils.listDirectory(dir).head
+        val reader = createVectorizedReader(file, readSchema, offheapEnabled)
+        try {
+          while (reader.nextKeyValue()) {}
+        } finally {
+          reader.close()
+          checkColumnVectorsAreClosed(reader)
+        }
+      }
+    }
+  }
+
   private def truncateTypeTest(
     testName: String,
     readType: DataType,
@@ -1015,6 +1099,10 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
       })
       i += 1
     }
+
+    // SPARK-60098: Verify correct closure.
+    recordReader.close()
+    checkColumnVectorsAreClosed(recordReader)
   }
 
   private def toDebugString(schema: StructType, row: InternalRow): String = {
@@ -1038,6 +1126,67 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
       }
       fieldStrings.mkString(", ")
     }
+  }
+
+  private def createVectorizedReader(
+      file: String,
+      readSchema: StructType,
+      offheapEnabled: Boolean): VectorizedParquetRecordReader = {
+    val conf = spark.sessionState.conf
+    val hadoopConf = spark.sessionState.newHadoopConf()
+    hadoopConf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[ParquetReadSupport].getName)
+    hadoopConf.set(ParquetReadSupport.SPARK_ROW_REQUESTED_SCHEMA, readSchema.json)
+    Seq(
+      SQLConf.CASE_SENSITIVE,
+      SQLConf.PARQUET_BINARY_AS_STRING,
+      SQLConf.PARQUET_INT96_AS_TIMESTAMP,
+      SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED,
+      SQLConf.LEGACY_PARQUET_NANOS_AS_LONG
+    ).foreach { entry =>
+      hadoopConf.set(entry.key, conf.getConfString(entry.key))
+    }
+
+    val split = new FileSplit(new Path(file), 0, new File(file).length(), Array.empty[String])
+    val context = new TaskAttemptContextImpl(hadoopConf, new TaskAttemptID())
+    val reader = new VectorizedParquetRecordReader(
+      offheapEnabled,
+      conf.parquetVectorizedReaderBatchSize
+    )
+
+    try {
+      reader.enableReturningBatches()
+      reader.initialize(split, context)
+    } catch {
+      case NonFatal(e) =>
+        reader.close()
+        throw e
+    }
+
+    reader
+  }
+
+  private def checkColumnVectorsAreClosed(reader: VectorizedParquetRecordReader): Unit = {
+    val columnVectors = ParquetTestAccess.columnVectors(reader)
+    if (columnVectors != null) {
+      columnVectors.foreach(v => checkIsClosed(v.asInstanceOf[ParquetColumnVector]))
+    }
+  }
+
+  private def checkIsClosed(parquetColumnVector: ParquetColumnVector): Unit = {
+    val vector = parquetColumnVector.getValueVector
+    assert(vector.isFree)
+
+    val definitionsVector = parquetColumnVector.getDefinitionLevelVector
+    if (definitionsVector != null) {
+      assert(definitionsVector.isFree)
+    }
+
+    val repetitionsVector = parquetColumnVector.getRepetitionLevelVector
+    if (repetitionsVector != null) {
+      assert(repetitionsVector.isFree)
+    }
+
+    parquetColumnVector.getChildren.forEach(checkIsClosed)
   }
 
   case class TestParquetRowGroupReader(groups: Seq[PageReadStore]) extends ParquetRowGroupReader {

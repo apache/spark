@@ -23,6 +23,7 @@ import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException;
+import org.apache.spark.sql.catalyst.util.WriteDistributionAndOrdering;
 import org.apache.spark.sql.errors.QueryCompilationErrors;
 import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.types.StructType;
@@ -365,6 +366,13 @@ public interface TableCatalog extends CatalogPlugin {
 
   /**
    * Create a table in the catalog.
+   * <p>
+   * The default implementation rejects a requested write distribution or ordering; see
+   * {@link TableCatalogCapability#SUPPORTS_CREATE_TABLE_WITH_WRITE_DISTRIBUTION_AND_ORDERING}.
+   * A catalog that is not a {@link StagingTableCatalog} sees a {@code REPLACE TABLE} or
+   * {@code CREATE OR REPLACE TABLE} here only after Spark has dropped the existing table; a
+   * {@link StagingTableCatalog} gets {@code stageReplace} or {@code stageCreateOrReplace}
+   * instead, before anything is dropped.
    *
    * @param ident a table identifier
    * @param tableInfo information about the table
@@ -375,12 +383,14 @@ public interface TableCatalog extends CatalogPlugin {
    *         privileges.
    *
    * @throws TableAlreadyExistsException If a table already exists for the identifier
-   * @throws UnsupportedOperationException If a requested partition transform is not supported
+   * @throws UnsupportedOperationException If a requested partition transform, write distribution
+   *         or write ordering is not supported
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
    * @since 4.1.0
    */
   default Table createTable(Identifier ident, TableInfo tableInfo)
       throws TableAlreadyExistsException, NoSuchNamespaceException {
+    WriteDistributionAndOrdering.rejectRequested(this, ident, tableInfo);
     return createTable(ident, tableInfo.columns(), tableInfo.partitions(), tableInfo.properties());
   }
 
@@ -395,13 +405,17 @@ public interface TableCatalog extends CatalogPlugin {
    * excluded from {@code tableInfo}; connectors may read {@code sourceTable.properties()} to
    * clone additional format-specific or custom state as appropriate for their implementation.
    * <p>
+   * The source table's write distribution and ordering are not copied either:
+   * {@code tableInfo.writeDistributionMode()} is null and {@code tableInfo.writeOrdering()} is
+   * empty. Connectors that want to carry them forward may read them from {@code sourceTable}.
+   * <p>
    * The default implementation throws {@link UnsupportedOperationException}. Connectors that
    * support {@code CREATE TABLE ... LIKE ...} must override this method.
    *
    * @param ident a table identifier for the new table
    * @param tableInfo complete description of the new table: columns, partitioning, constraints,
    *                  explicit properties (user overrides + owner); source table properties
-   *                  are NOT included
+   *                  and the source's write distribution and ordering are NOT included
    * @param sourceTable the resolved source table; connectors may read format-specific properties
    *                    or other custom state from this object to clone additional metadata
    * @return metadata for the new table

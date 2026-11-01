@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{DeduplicateKeySpec, LeafNode, LogicalPlan, SupportsSubquery, UnaryNode}
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
@@ -131,7 +132,17 @@ case class ExpressionWithUnresolvedIdentifier(
 case class UnresolvedInsertTarget(
     multipartIdentifier: Seq[String],
     options: CaseInsensitiveStringMap,
-    writePrivileges: Set[TableWritePrivilege]) extends UnresolvedLeafNode
+    writePrivileges: Set[TableWritePrivilege]) extends UnresolvedLeafNode {
+
+  /** Converts this target to an [[UnresolvedRelation]] that keeps its origin and tags. */
+  def toUnresolvedRelation: UnresolvedRelation = {
+    val relation = CurrentOrigin.withOrigin(origin) {
+      UnresolvedRelation(multipartIdentifier, options).requireWritePrivileges(writePrivileges)
+    }
+    relation.copyTagsFrom(this)
+    relation
+  }
+}
 
 /**
  * Holds the name of a relation that has yet to be looked up in a catalog.
