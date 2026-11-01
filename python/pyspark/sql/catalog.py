@@ -393,6 +393,12 @@ class Catalog:
         dict
             Map of property key to value.
 
+        Notes
+        -----
+        For V2 tables, the returned dict also includes display-only properties, which may be
+        transient. These entries are excluded from the table DDL returned by
+        :meth:`getCreateTableString`.
+
         Examples
         --------
         >>> _ = spark.sql("DROP TABLE IF EXISTS tbl_props_doc")

@@ -450,6 +450,17 @@ of the most common options to set are:
   <td>3.5.0</td>
 </tr>
 <tr>
+  <td><code>spark.log.level.&lt;logger&gt;</code></td>
+  <td>(none)</td>
+  <td>
+    When set, overrides the level of the named logger on the driver and the executors, for example
+    <code>spark.log.level.org.apache.spark.sql.execution=DEBUG</code>. Applied after
+    <code>spark.log.level</code>, which sets the root logger, so it wins for that logger. Valid log
+    levels include: "ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN".
+  </td>
+  <td>5.0.0</td>
+</tr>
+<tr>
   <td><code>spark.driver.supervise</code></td>
   <td>false</td>
   <td>
@@ -1560,6 +1571,17 @@ Apart from these, the following properties are also available, and may be useful
     <code>spark.dynamicAllocation.executorIdleTimeout</code> and will be released accordingly.
   </td>
   <td>3.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.service.verifyBlockPathsAtRead</code></td>
+  <td>true</td>
+  <td>
+    Whether the ExternalShuffleService re-resolves the path of a shuffle or RDD block file when
+    serving it, and refuses the file if the resolved path is no longer under the executor's
+    registered local directories. Disabling it skips the path canonicalization done on each
+    block fetch.
+  </td>
+  <td>4.1.4</td>
 </tr>
 <tr>
   <td><code>spark.shuffle.service.db.enabled</code></td>
