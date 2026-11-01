@@ -449,8 +449,8 @@ streaming write across restarts.
 
 The [Parquet guide][parquet] uses the same packager with `--source rust_sdk_parquet`. Its smoke
 script checks that queries over files that Spark writes return what Spark's own Parquet reader
-returns, with and without the arrow-rs `RowFilter` that evaluates the pushed predicates, and its
-benchmark script compares the two readers.
+returns, with and without its row filter, which evaluates the pushed predicates on the batches
+that it decodes, and its benchmark script compares the two readers.
 
 ## Scope and limitations
 
