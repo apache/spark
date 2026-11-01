@@ -148,6 +148,23 @@ abstract class TaskContext extends Serializable {
   }
 
   /**
+   * Adds a listener to be executed on task completion before every listener added with
+   * `addTaskCompletionListener`, from any thread and even if that listener was added later, as
+   * long as this listener is added before the task completes. The thread that marks the task
+   * completed runs these listeners first, in reverse order of registration, and only then marks
+   * the task completed (`isCompleted()` becomes true) and runs the completion listeners. While
+   * these listeners run, a completion listener added from another thread is only queued. A
+   * listener added after the task completes, including while the completion listeners run, is
+   * handled like one added with `addTaskCompletionListener` at that point: it runs after the
+   * completion listeners that have already run.
+   *
+   * This is for stopping helper threads that read task resources owned by completion
+   * listeners: the helper thread itself can add such listeners lazily (e.g. when it first
+   * pulls from an upstream iterator), and those would otherwise run first.
+   */
+  private[spark] def addTaskPreCompletionListener(listener: TaskCompletionListener): TaskContext
+
+  /**
    * Adds a listener to be executed on task failure (which includes completion listener failure, if
    * the task body did not already fail). Adding a listener to an already failed task will result in
    * that listener being called immediately.

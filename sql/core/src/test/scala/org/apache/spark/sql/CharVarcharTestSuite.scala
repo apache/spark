@@ -17,7 +17,11 @@
 
 package org.apache.spark.sql
 
+import java.util.concurrent.atomic.AtomicBoolean
+
 import scala.util.Try
+
+import org.apache.logging.log4j.Level
 
 import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkThrowable}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
@@ -35,7 +39,7 @@ import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connector.SchemaRequiredDataSource
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, InMemoryPartitionTableCatalog}
-import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.datasources.{ApplyCharTypePadding, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.{
   DataSourceV2Relation, DataSourceV2ScanRelation, PushDownUtils
 }
@@ -1167,6 +1171,14 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         condition = "EXCEED_LIMIT_LENGTH",
         parameters = Map("limit" -> "4")
       )
+
+      // CAST CHAR to VARCHAR keeps the pad; CAST VARCHAR to CHAR pads to the target.
+      checkAnswer(
+        sql("SELECT concat('<', CAST(CAST('a' AS CHAR(2)) AS VARCHAR(2)), '>')"),
+        Row("<a >"))
+      checkAnswer(
+        sql("SELECT concat('<', CAST(CAST('a' AS VARCHAR(2)) AS CHAR(4)), '>')"),
+        Row("<a   >"))
     }
   }
 
@@ -1834,6 +1846,30 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           fragment = "SELECT cast('a' AS CHAR(:n))",
           start = 0,
           stop = 27))
+    }
+  }
+
+  test("SPARK-58942: CHAR column vs string literal under standardSemantics") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      withTable("contacts", "contacts_by_code") {
+        sql("CREATE TABLE contacts (code CHAR(4), name VARCHAR(10)) USING parquet")
+        sql("INSERT INTO contacts VALUES ('ab', 'Ada')")
+        // A predicate on a CHAR partition column goes through partition pruning instead of a
+        // scan filter, so check the same predicates against a table partitioned by the column.
+        sql("CREATE TABLE contacts_by_code (name VARCHAR(10), code CHAR(4)) USING parquet " +
+          "PARTITIONED BY (code)")
+        sql("INSERT INTO contacts_by_code VALUES ('Ada', 'ab')")
+        Seq("contacts", "contacts_by_code").foreach { t =>
+          checkAnswer(sql(s"SELECT name FROM $t WHERE code = 'ab'"), Seq.empty)
+          checkAnswer(sql(s"SELECT name FROM $t WHERE code = 'ab  '"), Row("Ada"))
+          checkAnswer(sql(s"SELECT name FROM $t WHERE code IN ('ab', 'cd')"), Seq.empty)
+          checkAnswer(sql(s"SELECT name FROM $t WHERE code IN ('ab  ', 'cd')"), Row("Ada"))
+        }
+        checkAnswer(
+          sql("SELECT name FROM contacts WHERE code COLLATE UTF8_BINARY_RTRIM = " +
+            "'ab' COLLATE UTF8_BINARY_RTRIM"),
+          Row("Ada"))
+      }
     }
   }
 
@@ -2836,6 +2872,19 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           assert(df.schema.head.dataType === VarcharType(5))
           checkAnswer(df, Row("cd"))
         }
+        // Oversize non-blank text values fail on scan, matching parquet/orc/avro.
+        Seq("CHAR", "VARCHAR").foreach { typ =>
+          withTempPath { dir =>
+            val path = dir.getCanonicalPath
+            sql("SELECT 'abcdef' AS value").write.mode("overwrite").text(path)
+            checkError(
+              exception = intercept[SparkRuntimeException] {
+                spark.read.schema(s"value $typ(2)").text(path).collect()
+              },
+              condition = "EXCEED_LIMIT_LENGTH",
+              parameters = Map("limit" -> "2"))
+          }
+        }
       }
     }
   }
@@ -3178,6 +3227,17 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           |  map('mode', 'FAILFAST'))""".stripMargin,
         key = "abcd",
         dataTypeSql = "VARCHAR(3)")
+
+      // A name longer than the 128-character echo cap is truncated with a trailing "..." in the
+      // error, as for JSON object names.
+      val longName = "a" * 200
+      assertUnsupportedXmlMapKey(
+        s"""SELECT from_xml(
+          |  '<ROW><m><$longName>1</$longName></m></ROW>',
+          |  'm MAP<CHAR(2), INT>',
+          |  map('mode', 'FAILFAST'))""".stripMargin,
+        key = "a" * 128 + "...",
+        dataTypeSql = "CHAR(2)")
 
       checkAnswer(
         sql("""SELECT from_xml(
@@ -3899,6 +3959,99 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         Row(Map("ab" -> 1, "AB" -> 2)))
     }
   }
+
+  test("SPARK-60243: charAsVarchar still rewrites DDL under standardSemantics") {
+    // charAsVarchar is a CREATE/ALTER rewrite; standardSemantics does not disable it.
+    // CAST remains first-class CHAR even when both flags are on.
+    withSQLConf(
+        SQLConf.CHAR_AS_VARCHAR.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val castDf = sql("SELECT CAST('ab' AS CHAR(5)) AS c")
+      assert(castDf.schema.head.dataType === CharType(5))
+      checkAnswer(castDf.selectExpr("concat('<', c, '>')"), Row("<ab   >"))
+
+      withTable("std_char_as_varchar") {
+        sql("CREATE TABLE std_char_as_varchar (c CHAR(5)) USING parquet")
+        assert(spark.table("std_char_as_varchar").schema.head.dataType === VarcharType(5))
+        sql("INSERT INTO std_char_as_varchar VALUES ('ab')")
+        checkAnswer(spark.table("std_char_as_varchar"), Row("ab"))
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            sql("INSERT INTO std_char_as_varchar VALUES ('abcdef')")
+          },
+          condition = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "5"))
+      }
+    }
+  }
+
+  test("SPARK-60243: standardSemantics ignores readSideCharPadding=false") {
+    // The override warning is once-per-JVM (AtomicBoolean). Reset immediately before
+    // the padded scan so setup statements do not consume it.
+    val warned = readSidePaddingOverrideWarned()
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        sql("SELECT 'ab' AS c").write.mode("overwrite").parquet(path)
+        withTable("std_read_pad_override") {
+          sql(s"CREATE TABLE std_read_pad_override (c CHAR(4)) USING parquet LOCATION '$path'")
+          warned.set(false)
+          val logAppender = new LogAppender("readSideCharPadding override warning")
+          withLogAppender(logAppender) {
+            checkAnswer(
+              sql("SELECT concat('<', c, '>') FROM std_read_pad_override"),
+              Row("<ab  >"))
+          }
+          assert(logAppender.loggingEvents.exists { e =>
+            val msg = e.getMessage.getFormattedMessage
+            e.getLevel == Level.WARN &&
+              msg.contains(SQLConf.READ_SIDE_CHAR_PADDING.key) &&
+              msg.contains(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key)
+          })
+        }
+      }
+    }
+  }
+
+  test("SPARK-60243: deep nested CHAR/VARCHAR file round-trips under standardSemantics") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val nestedTypes = Seq(
+        ("CHAR(4)", CharType(4), "c", "<ab  >", "<xy  >"),
+        ("VARCHAR(4)", VarcharType(4), "v", "<ab>", "<xy>"))
+      Seq("parquet", "orc").foreach { fmt =>
+        nestedTypes.foreach { case (ddl, dt, field, arrExpected, structExpected) =>
+          withTempPath { dir =>
+            val path = dir.getCanonicalPath
+            sql(s"SELECT array(array(cast('ab' AS $ddl))) AS a")
+              .write.mode("overwrite").format(fmt).save(path)
+            val df = spark.read.format(fmt).load(path)
+            assert(df.schema.head.dataType === ArrayType(ArrayType(dt)), s"$fmt $ddl array")
+            checkAnswer(df.selectExpr("concat('<', a[0][0], '>')"), Row(arrExpected))
+          }
+          withTempPath { dir =>
+            val path = dir.getCanonicalPath
+            sql(s"SELECT array(named_struct('$field', cast('xy' AS $ddl))) AS a")
+              .write.mode("overwrite").format(fmt).save(path)
+            val df = spark.read.format(fmt).load(path)
+            assert(df.schema.head.dataType ===
+              ArrayType(StructType(Seq(StructField(field, dt, nullable = true)))),
+              s"$fmt $ddl struct")
+            checkAnswer(
+              df.selectExpr(s"concat('<', a[0].$field, '>')"),
+              Row(structExpected))
+          }
+        }
+      }
+    }
+  }
+
+  private def readSidePaddingOverrideWarned(): AtomicBoolean = {
+    val field = ApplyCharTypePadding.getClass.getDeclaredField("readSidePaddingOverrideWarned")
+    field.setAccessible(true)
+    field.get(ApplyCharTypePadding).asInstanceOf[AtomicBoolean]
+  }
 }
 
 class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSparkSession {
@@ -3924,6 +4077,29 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
           sql("SELECT '123456' as col").write.format(format).save(dir.toString)
           sql(s"CREATE TABLE t (col $typ(2)) using $format LOCATION '$dir'")
           checkAnswer(sql("select * from t"), Row("123456"))
+        }
+      }
+    }
+  }
+
+  test("SPARK-60243: read-side overflow on pre-existing CHAR/VARCHAR partitions") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      Seq("CHAR", "VARCHAR").foreach { typ =>
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          sql("SELECT 1 AS id, 'abcdef' AS p")
+            .write.mode("overwrite").partitionBy("p").format(format).save(path)
+          withTable("std_part_oversize") {
+            sql(
+              s"""CREATE TABLE std_part_oversize (id INT, p $typ(2))
+                 |USING $format LOCATION '$path'""".stripMargin)
+            checkError(
+              exception = intercept[SparkRuntimeException] {
+                sql("SELECT * FROM std_part_oversize").collect()
+              },
+              condition = "EXCEED_LIMIT_LENGTH",
+              parameters = Map("limit" -> "2"))
+          }
         }
       }
     }

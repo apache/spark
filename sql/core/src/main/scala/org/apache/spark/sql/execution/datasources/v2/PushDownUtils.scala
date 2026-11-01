@@ -506,7 +506,7 @@ object PushDownUtils extends Logging {
         None
       case DynamicPruningExpression(e) => Some(e)
       case _: DynamicPruning => None
-      case f => Some(f.transform { case s: ExecScalarSubquery => s.toLiteral })
+      case f => Some(ExecScalarSubquery.replaceWithLiterals(f))
     }
 
   /**
