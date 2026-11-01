@@ -786,7 +786,11 @@ private[deploy] class Worker(
           concurrent.Future {
             logInfo(log"Cleaning up local directories for application ${MDC(APP_ID, id)}")
             dirList.foreach { dir =>
-              Utils.deleteRecursively(new File(dir))
+              val appDir = new File(dir)
+              Utils.deleteRecursively(appDir)
+              // Remove the executor directory only when it is empty; unrelated content
+              // keeps it (and File.delete() returns false) untouched.
+              appDir.getParentFile.delete()
             }
           }(cleanupThreadExecutor).failed.foreach(e =>
             logError(log"Clean up app dir ${MDC(PATHS, dirList)} failed", e)
