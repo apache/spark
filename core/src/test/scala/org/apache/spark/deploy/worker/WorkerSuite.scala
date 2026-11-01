@@ -452,6 +452,9 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter with P
     val appId = "app:20260922000000/0001"
     val appDir = new File(worker.createExecutorLocalDirs(appId).head)
     val executorDir = appDir.getParentFile
+    val secondAppId = "app-empty-parent"
+    val secondAppDir = new File(worker.createExecutorLocalDirs(secondAppId).head)
+    val secondExecutorDir = secondAppDir.getParentFile
     try {
       // Exercise the production helper rather than hand-building the directory layout.
       assert(appDir.getName === "app%3A20260922000000%2F0001")
@@ -467,8 +470,17 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter with P
         assert(!appDir.exists())
       }
       assert(sibling.exists())
+
+      worker.appDirectories(secondAppId) = Seq(secondAppDir.getAbsolutePath)
+      worker.finishedApps += secondAppId
+      worker.handleExecutorStateChanged(
+        ExecutorStateChanged(secondAppId, 0, ExecutorState.EXITED, None, None))
+      eventually(timeout(1.second), interval(10.milliseconds)) {
+        assert(!secondExecutorDir.exists())
+      }
     } finally {
       Utils.deleteRecursively(executorDir)
+      Utils.deleteRecursively(secondExecutorDir)
     }
   }
 }
