@@ -2287,6 +2287,7 @@ package object config {
         "as seconds when no unit is given, and must be at least 10 minutes. Must be set before " +
         "starting the SparkContext.")
       .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .timeConf(TimeUnit.SECONDS)
       .checkValue(_ >= CLEANER_TTL_MINIMUM_SECONDS,
         "The RDD block TTL must be at least 10 minutes.")
@@ -2299,6 +2300,7 @@ package object config {
         "as seconds when no unit is given, and must be at least 10 minutes. Must be set before " +
         "starting the SparkContext.")
       .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .timeConf(TimeUnit.SECONDS)
       .checkValue(_ >= CLEANER_TTL_MINIMUM_SECONDS,
         "The shuffle block TTL must be at least 10 minutes.")
