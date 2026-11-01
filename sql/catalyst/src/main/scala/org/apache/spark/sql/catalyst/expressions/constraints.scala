@@ -153,6 +153,15 @@ case class CheckConstraint(
     }
   }
 
+  /** Fails the analysis if the condition contains a subquery, which `Check` does not allow. */
+  def failIfContainsSubquery(): Unit = {
+    if (SubqueryExpression.hasSubquery(child)) {
+      child.failAnalysis(
+        errorClass = "SUBQUERY_IN_CHECK_CONSTRAINT",
+        messageParameters = Map("checkCondition" -> condition))
+    }
+  }
+
   def toV2Constraint: Constraint = {
     val predicate = new V2ExpressionBuilder(child, true).buildPredicate().orNull
     val enforced = userProvidedCharacteristic.enforced.getOrElse(true)
@@ -165,15 +174,6 @@ case class CheckConstraint(
       .enforced(enforced)
       .validationStatus(Constraint.ValidationStatus.VALID)
       .build()
-  }
-
-  /** Fails the analysis if the condition contains a subquery, which `Check` does not allow. */
-  def failIfContainsSubquery(): Unit = {
-    if (SubqueryExpression.hasSubquery(child)) {
-      child.failAnalysis(
-        errorClass = "SUBQUERY_IN_CHECK_CONSTRAINT",
-        messageParameters = Map("checkCondition" -> condition))
-    }
   }
 
   override protected def withNewChildInternal(newChild: Expression): Expression =

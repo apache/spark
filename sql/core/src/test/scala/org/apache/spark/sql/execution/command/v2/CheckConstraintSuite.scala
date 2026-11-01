@@ -162,6 +162,15 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         checkSubqueryError(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK ($c)", c)
       }
       assert(loadTable(nonPartitionCatalog, "ns", "tbl").constraints.isEmpty)
+      // A missing table is reported first.
+      val missing = s"$nonPartitionCatalog.ns.missing"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $missing ADD CONSTRAINT c1 CHECK (id > (SELECT 0))")
+        },
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relationName" -> s"`$nonPartitionCatalog`.`ns`.`missing`"),
+        context = ExpectedContext(fragment = missing))
     }
   }
 
