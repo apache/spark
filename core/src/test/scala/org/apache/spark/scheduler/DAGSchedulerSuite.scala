@@ -10495,7 +10495,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     verify(scheduler, never()).createShuffleMapStage(
       any[ShuffleDependency[Int, Int, Int]](), any[Int]())
     verify(mapOutputTracker, never())
-      .registerShuffle(any[Int](), any[Int](), any[Int](), any[Int]())
+      .registerShuffle(any[Int](), any[Int](), any[Int](), any[Int](), any[Boolean]())
     val tracker = sc.env.streamingShuffleOutputTracker.get
       .asInstanceOf[StreamingShuffleOutputTrackerMaster]
     shuffleIds.foreach { shuffleId =>
