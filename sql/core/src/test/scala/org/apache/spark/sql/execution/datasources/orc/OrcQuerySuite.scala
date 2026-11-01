@@ -947,6 +947,28 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-59740: ORC round-trips a NULL nanosecond timestamp") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      foreachNanosPrecision { precision =>
+        Seq(TimestampNTZNanosType(precision), TimestampLTZNanosType(precision)).foreach {
+          nanosType =>
+            val schema = new StructType().add("ts", nanosType)
+            val inputDf = spark.createDataFrame(
+              spark.sparkContext.parallelize(Seq(Row(null))), schema)
+            withTempPath { dir =>
+              val path = dir.getCanonicalPath
+              inputDf.write.mode("overwrite").orc(path)
+              Seq(true, false).foreach { vectorized =>
+                withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+                  checkAnswer(spark.read.schema(schema).orc(path), Row(null))
+                }
+              }
+            }
+        }
+      }
+    }
+  }
+
   test("SPARK-57455: nanos timestamps survive a time-zone change across ORC write/read") {
     // The NTZ wall clock stays zone-independent and the LTZ instant is preserved even when the
     // writer's and reader's JVM default time zones differ: NTZ goes through an ORC TIMESTAMP
@@ -1119,6 +1141,48 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
                   read.where(keepBeforeGapBoundary(read)),
                   inputDf.where(keepBeforeGapBoundary(inputDf)))
               }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60436: ORC predicate pushdown on timestamps with sub-millisecond digits") {
+    // Each value is written to its own file, so a pushed down predicate that skips a file with a
+    // matching row changes the result. `00:00:00.123` is `value` truncated to milliseconds.
+    val types = TimestampType +:
+      (TimestampNTZNanosType.MIN_PRECISION to TimestampNTZNanosType.MAX_PRECISION).flatMap { p =>
+        Seq(TimestampNTZNanosType(p), TimestampLTZNanosType(p))
+      }
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      types.foreach { dataType =>
+        def ts(time: String): String = s"CAST('2020-01-01 $time' AS ${dataType.sql})"
+        val value = ts("00:00:00.123456789")
+        val input = sql(s"SELECT ${ts("00:00:00.123")} AS ts UNION ALL SELECT $value " +
+          s"UNION ALL SELECT ${ts("00:00:01")}")
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          input.coalesce(1).write.option("maxRecordsPerFile", 1).orc(path)
+          Seq(true, false).foreach { vectorized =>
+            withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+              val df = spark.read.schema(input.schema).orc(path)
+              Seq(
+                s"ts = $value",
+                s"ts <=> $value",
+                s"ts IN ($value, ${ts("00:00:01")})",
+                s"ts < $value",
+                s"ts <= $value",
+                s"ts > $value",
+                s"ts >= $value",
+                s"ts != $value",
+                s"ts NOT IN ($value, ${ts("00:00:01")})"
+              ).foreach { condition =>
+                checkAnswer(df.where(condition), input.where(condition))
+              }
+              // The pushed down value keeps its sub-millisecond digits and skips the other files.
+              checkAnswer(
+                stripSparkFilter(df.where(s"ts = $value")), input.where(s"ts = $value"))
             }
           }
         }

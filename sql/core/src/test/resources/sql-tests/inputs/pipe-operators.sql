@@ -1136,6 +1136,41 @@ select 3 as x, 4 as y
 select 3 as x, 4 as y
 |> aggregate sum(y) group by 0;
 
+-- An integer-literal ordinal in the AGGREGATE GROUP BY clause cannot be aliased.
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 2 as grp;
+
+select 3 as x, 4 as y
+|> aggregate sum(y) group by x, 2 grp;
+
+select 3 as x, 4 as y
+|> aggregate sum(y) group by (2) as grp;
+
+select 3 as x, 4 as y
+|> aggregate sum(y) group by -1 as grp;
+
+-- Aliases are allowed on grouping expressions other than integer literals.
+select 3 as x, 4 as y
+|> aggregate sum(y) group by x as grp;
+
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 1 + 1 as grp;
+
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 2L as grp;
+
+-- The legacy config restores grouping by an aliased integer literal as a constant.
+set spark.sql.legacy.allowAliasedPipeAggregateOrdinals=true;
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 2 as grp;
+set spark.sql.legacy.allowAliasedPipeAggregateOrdinals=false;
+
+-- An aliased integer literal is a constant grouping key when GROUP BY ordinals are disabled.
+set spark.sql.groupByOrdinal=false;
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 2 as grp;
+set spark.sql.groupByOrdinal=true;
+
 -- GROUP BY ROLLUP is not supported yet.
 table courseSales
 |> aggregate sum(earnings) group by rollup(course, `year`)

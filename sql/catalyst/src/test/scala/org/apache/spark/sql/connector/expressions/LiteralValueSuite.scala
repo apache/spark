@@ -18,7 +18,8 @@
 package org.apache.spark.sql.connector.expressions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.types.{BinaryType, BooleanType, IntegerType, StringType}
+import org.apache.spark.sql.types.{BinaryType, BooleanType, CharType, IntegerType, StringType, VarcharType}
+import org.apache.spark.unsafe.types.UTF8String
 
 class LiteralValueSuite extends SparkFunSuite {
 
@@ -33,6 +34,19 @@ class LiteralValueSuite extends SparkFunSuite {
     assert(LiteralValue("test", StringType).toString === "'test'")
     assert(LiteralValue("", StringType).toString === "''")
     assert(LiteralValue("it's", StringType).toString === "'it''s'")
+  }
+
+  for (dataType <- Seq(
+      StringType, StringType("UTF8_LCASE"), StringType("UNICODE_CI"),
+      CharType(8), VarcharType(8))) {
+    test(s"collated and constrained string literals should be quoted: $dataType") {
+      for ((value, expected) <- Seq(
+          "" -> "''", "a" -> "'a'", "abc" -> "'abc'", "null" -> "'null'",
+          "it's" -> "'it''s'", "a%b_c" -> "'a%b_c'", "a\\b" -> "'a\\b'")) {
+        assert(LiteralValue(UTF8String.fromString(value), dataType).toString === expected)
+      }
+      assert(LiteralValue(null, dataType).toString === "NULL")
+    }
   }
 
   test("non-null numeric literals should not be quoted") {

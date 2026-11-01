@@ -631,6 +631,8 @@ object PartitioningUtils extends SQLConfHelper {
     // non default collated strings should not be used as partition columns
     // as we cannot implement string collation semantic with directory names
     case st: StringType => st.supportsBinaryOrdering
+    // geospatial values cannot be cast to and from strings, which partition values are stored as
+    case _: GeometryType | _: GeographyType => false
     case a: AtomicType => !a.isInstanceOf[VariantType]
     case _ => false
   }

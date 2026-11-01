@@ -345,6 +345,8 @@ trait CeilFloorExpressionBuilderBase extends ExpressionBuilder {
         An expression that evaluates to a numeric.
       * scale - The number of decimal places to round to.
         An expression that evaluates to an integer. Must be a constant.
+        When `scale` is specified the result is a decimal, whatever the type of `expr`.
+        When it is omitted the result is a long, or a decimal if `expr` is a decimal.
   """,
   examples = """
     Examples:
@@ -646,6 +648,8 @@ case class Floor(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabl
         An expression that evaluates to a numeric.
       * scale - The number of decimal places to round to.
         An expression that evaluates to an integer. Must be a constant.
+        When `scale` is specified the result is a decimal, whatever the type of `expr`.
+        When it is omitted the result is a long, or a decimal if `expr` is a decimal.
   """,
   examples = """
     Examples:
