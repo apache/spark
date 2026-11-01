@@ -1653,7 +1653,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     val missing = new File(Utils.createTempDir(), "range-2.0.sparkpkg")
     val existingMissing = intercept[SparkRuntimeException](session.addArtifact(missing.getPath))
     assert(existingMissing.getCondition == "ARTIFACT_ALREADY_EXISTS")
-    // Also for a package that Spark staged, which it checks before, but reports after.
+    // Also for a package that Spark staged, which is compared with the artifact before the check.
     val existingStaged = intercept[SparkRuntimeException] {
       session.addArtifact("not a zip".getBytes(UTF_8), "range-2.0.sparkpkg")
     }
