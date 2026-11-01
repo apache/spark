@@ -1205,7 +1205,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     verify(podResource, times(2)).create()
   }
 
-  test("Parallel allocation tracks late successes across wait polling intervals") {
+  test("Parallel allocation waits for and tracks delayed successes") {
     startParallelAllocator(conf.clone.set(KUBERNETES_ALLOCATION_BATCH_CONCURRENCY, 2))
     val caller = ThreadUtils.newDaemonSingleThreadExecutor("test-slow-pod-allocation")
     val started = new CountDownLatch(2)
@@ -1230,7 +1230,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       })
       assert(started.await(10, TimeUnit.SECONDS))
       assert(!finished.await(1500, TimeUnit.MILLISECONDS),
-        "Allocation discarded a live request after a wait polling interval")
+        "Allocation returned before the live request completed")
       release.countDown()
       ThreadUtils.awaitResult(allocation, Duration(10, TimeUnit.SECONDS))
       assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 2)
@@ -1320,7 +1320,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     verify(podResource, times(4)).create()
   }
 
-  test("An API timeout fails only its executor instead of restarting the wait loop") {
+  test("An API timeout fails only its executor") {
     startParallelAllocator()
     val caller = ThreadUtils.newDaemonSingleThreadExecutor("test-api-timeout")
     mockPodCreation { pod =>
@@ -1378,7 +1378,13 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
           .thenReturn(persistentVolumeClaim("pvc-0", "gp3", "200Gi"))
       }
       val counter = PrivateMethod[AtomicInteger](Symbol("PVC_COUNTER"))()
-      podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 3))
+      if (failPVC) {
+        intercept[KubernetesClientException] {
+          podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 3))
+        }
+      } else {
+        podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 3))
+      }
       verify(podResource, times(1)).create()
       verify(pvcResource, times(1)).create()
       verify(lifecycleManager, times(if (failPVC) 1 else 0)).registerExecutorFailure()
@@ -1396,6 +1402,34 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
         snapshotsStore.notifySubscribers()
         verify(podResource, times(1)).create()
       }
+    }
+  }
+
+  Seq(1, 2).foreach { concurrency =>
+    test(s"A persistent PVC failure skips queued requests: concurrency=$concurrency") {
+      startParallelAllocator(conf.clone
+        .set(KUBERNETES_ALLOCATION_BATCH_SIZE, 20)
+        .set(KUBERNETES_ALLOCATION_BATCH_CONCURRENCY, concurrency))
+      mockExecutorWithPVC()
+      val started = new CountDownLatch(concurrency)
+      mockPodCreation { pod =>
+        started.countDown()
+        assert(started.await(10, TimeUnit.SECONDS))
+        pod
+      }
+      val pvcAttempts = new AtomicInteger()
+      when(pvcResource.create()).thenAnswer((_: InvocationOnMock) => {
+        pvcAttempts.incrementAndGet()
+        throw new KubernetesClientException("PVC quota exhausted")
+      })
+      val failure = intercept[KubernetesClientException] {
+        podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 20))
+      }
+      assert(failure.getMessage == "PVC quota exhausted")
+      verify(podResource, times(concurrency)).create()
+      verify(podResource, times(concurrency)).delete()
+      assert(pvcAttempts.get() >= 1 && pvcAttempts.get() <= concurrency)
+      verify(lifecycleManager, times(pvcAttempts.get())).registerExecutorFailure()
     }
   }
 
@@ -1540,11 +1574,17 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     assert(pool.isShutdown, "Pod creation pool is still alive after backend stop")
   }
 
-  for (deleteExecutors <- Seq(false, true); waitingForPVC <- Seq(false, true)) {
-    test(s"Stopping drains API responses: delete=$deleteExecutors, waitingForPVC=$waitingForPVC") {
+  for {
+    deleteExecutors <- Seq(false, true)
+    (waitingForPVC, withPVC) <- Seq((false, false), (false, true), (true, true))
+  } {
+    test(s"Stopping drains responses: delete=$deleteExecutors, " +
+        s"waitingForPVC=$waitingForPVC, withPVC=$withPVC") {
       startParallelAllocator(conf.clone
         .set(KUBERNETES_ALLOCATION_BATCH_CONCURRENCY, 1)
-        .set(KUBERNETES_DELETE_EXECUTORS, deleteExecutors))
+        .set(KUBERNETES_DELETE_EXECUTORS, deleteExecutors)
+        .set(KUBERNETES_DRIVER_OWN_PVC, false))
+      if (withPVC) mockExecutorWithPVC()
       val caller = ThreadUtils.newDaemonSingleThreadExecutor("test-allocation-drain")
       val stopper = ThreadUtils.newDaemonSingleThreadExecutor("test-allocation-stop")
       val started = new CountDownLatch(1)
@@ -1599,7 +1639,8 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
         ThreadUtils.awaitResult(stopping, Duration(10, TimeUnit.SECONDS))
         ThreadUtils.awaitResult(allocation, Duration(10, TimeUnit.SECONDS))
         verify(podResource, times(1)).create()
-        verify(podResource, times(if (deleteExecutors) 1 else 0)).delete()
+        val shouldDelete = deleteExecutors || (withPVC && !waitingForPVC)
+        verify(podResource, times(if (shouldDelete) 1 else 0)).delete()
         verify(pvcResource, times(if (waitingForPVC) 1 else 0)).create()
         val counter = PrivateMethod[AtomicInteger](Symbol("PVC_COUNTER"))()
         assert(podsAllocatorUnderTest.invokePrivate(counter).get() ==
@@ -1611,6 +1652,29 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
         stopper.shutdownNow()
       }
     }
+  }
+
+  test("Stopping with only some PVCs created deletes a pod even when retention is enabled") {
+    startParallelAllocator(conf.clone
+      .set(KUBERNETES_DELETE_EXECUTORS, false)
+      .set(KUBERNETES_DRIVER_OWN_PVC, false))
+    when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]),
+      meq(kubernetesClient), any(classOf[ResourceProfile])))
+      .thenAnswer((invocation: InvocationOnMock) => {
+        val spec = executorPodAnswer().answer(invocation)
+        spec.copy(executorKubernetesResources = Seq(
+          persistentVolumeClaim("first", "gp3", "200Gi"),
+          persistentVolumeClaim("second", "gp3", "200Gi")))
+      })
+    mockPodCreation(identity)
+    when(pvcResource.create()).thenAnswer((_: InvocationOnMock) => {
+      podsAllocatorUnderTest.stopAllocation()
+      persistentVolumeClaim("first", "gp3", "200Gi")
+    })
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 1))
+    verify(pvcResource, times(1)).create()
+    verify(podResource, times(1)).delete()
+    verify(lifecycleManager, never()).registerExecutorFailure()
   }
 
   Seq(1L, 2L).foreach { gracePeriod =>

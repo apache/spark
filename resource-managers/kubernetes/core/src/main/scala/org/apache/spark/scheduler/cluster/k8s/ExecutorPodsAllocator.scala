@@ -18,7 +18,7 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.time.Instant
 import java.util.concurrent.{Callable, ConcurrentHashMap, Future, RejectedExecutionException, TimeUnit}
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
 
 import scala.collection.mutable
 import scala.concurrent.duration.Duration
@@ -633,34 +633,46 @@ class ExecutorPodsAllocator(
   }
 
   // Only the Kubernetes calls run on worker threads; allocator maps are updated by the caller.
-  private def createExecutorPod(pod: Pod, resources: Seq[HasMetadata]): Boolean = {
-    if (stopped) return false
+  private def createExecutorPod(
+      pod: Pod,
+      resources: Seq[HasMetadata],
+      resourceFailure: AtomicReference[Throwable]): Boolean = {
+    if (stopped || resourceFailure.get() != null) return false
     val createdExecutorPod =
       kubernetesClient.pods().inNamespace(namespace).resource(pod).create()
+    val claims = resources.iterator.filter(_.getKind == "PersistentVolumeClaim")
+    var resourcesCreated = !claims.hasNext
     var succeeded = false
     var failed = true
     try {
       if (!stopped) {
         addOwnerReference(createdExecutorPod, resources)
-        resources.iterator.filter(_.getKind == "PersistentVolumeClaim").takeWhile(_ => !stopped)
-          .foreach { resource =>
-            if (conf.get(KUBERNETES_DRIVER_OWN_PVC) && driverPod.nonEmpty) {
-              addOwnerReference(driverPod.get, Seq(resource))
-            }
-            val pvc = resource.asInstanceOf[PersistentVolumeClaim]
-            logInfo(log"Trying to create PersistentVolumeClaim " +
-              log"${MDC(LogKeys.PVC_METADATA_NAME, pvc.getMetadata.getName)} with " +
-              log"StorageClass ${MDC(LogKeys.CLASS_NAME, pvc.getSpec.getStorageClassName)}")
-            kubernetesClient.persistentVolumeClaims().inNamespace(namespace).resource(pvc).create()
-            PVC_COUNTER.incrementAndGet()
+        while (claims.hasNext && !stopped && resourceFailure.get() == null) {
+          val resource = claims.next()
+          if (conf.get(KUBERNETES_DRIVER_OWN_PVC) && driverPod.nonEmpty) {
+            addOwnerReference(driverPod.get, Seq(resource))
           }
-        succeeded = !stopped
+          val pvc = resource.asInstanceOf[PersistentVolumeClaim]
+          logInfo(log"Trying to create PersistentVolumeClaim " +
+            log"${MDC(LogKeys.PVC_METADATA_NAME, pvc.getMetadata.getName)} with " +
+            log"StorageClass ${MDC(LogKeys.CLASS_NAME, pvc.getSpec.getStorageClassName)}")
+          kubernetesClient.persistentVolumeClaims().inNamespace(namespace).resource(pvc).create()
+          PVC_COUNTER.incrementAndGet()
+        }
+        resourcesCreated = !claims.hasNext
+        succeeded = resourcesCreated && !stopped
       }
       failed = false
       succeeded
+    } catch {
+      case NonFatal(e) =>
+        // As in serial allocation, a resource failure ends this allocation round. Requests
+        // already in flight may finish, but queued requests must not amplify a persistent error.
+        resourceFailure.compareAndSet(null, e)
+        throw e
     } finally {
-      // Clean up failed creations and, unless pods should be retained, requests finishing at stop.
-      if (failed || (!succeeded && shouldDeleteExecutors)) {
+      // Retention applies only to complete pods, never to pods missing required PVCs.
+      if (failed || !resourcesCreated || (!succeeded && shouldDeleteExecutors)) {
         Utils.tryLogNonFatalError {
           kubernetesClient.pods().inNamespace(namespace).resource(createdExecutorPod).delete()
         }
@@ -701,12 +713,17 @@ class ExecutorPodsAllocator(
     }
 
     val podBuildTotalMs = clock.getTimeMillis() - batchStartTime
+    val resourceFailure = new AtomicReference[Throwable]()
     val futures = podSpecs.iterator.takeWhile(_ => !stopped).flatMap {
       case (executorId, pod, resources) =>
         try {
           val future = podCreationThreadPool.get.submit(new Callable[Option[Long]] {
             override def call(): Option[Long] = {
-              if (createExecutorPod(pod, resources)) Some(clock.getTimeMillis()) else None
+              if (createExecutorPod(pod, resources, resourceFailure)) {
+                Some(clock.getTimeMillis())
+              } else {
+                None
+              }
             }
           })
           Some((executorId, future))
@@ -736,6 +753,9 @@ class ExecutorPodsAllocator(
       log"succeeded=${MDC(LogKeys.TOTAL, succeeded)}, " +
       log"podBuildTotalMs=${MDC(LogKeys.DURATION, podBuildTotalMs)}, " +
       log"batchTotalMs=${MDC(LogKeys.TOTAL_TIME, clock.getTimeMillis() - batchStartTime)}")
+    if (resourceFailure.get() != null && !stopped) {
+      throw resourceFailure.get()
+    }
     if (allocationLimitReached && !stopped) {
       EXECUTOR_ID_COUNTER.incrementAndGet()
       throw new SparkException(s"Exceed the pod creation limit: $podAllocationMaximum")
