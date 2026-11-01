@@ -2145,7 +2145,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         // uses nothing at all, or only inexpensive items. Then we can push it because it might
         // eliminate more data quickly and it may also be something which could be evaluated at
         // the storage layer. We may wish to improve this heuristic in the future.
-        def isCheap(used: AttributeMap[Alias]): Boolean = !used.exists(_._2.child.expensive)
+        def isCheap(used: AttributeMap[Alias]): Boolean = !used.exists(a => isExpensive(a._2.child))
         // Split the filter's components into cheap and expensive while keeping track of
         // what each references from the projection. The cheap components written before the
         // first expensive one are all pushed. After it, a throwable component (e.g.
@@ -2334,6 +2334,15 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       filter
     }
   }
+
+  /**
+   * Whether `e` is expensive. Version 0 of the regex pattern cost estimate treats every LIKE and
+   * RLIKE as expensive. It is checked here rather than in `StringRegexExpression.expensive`,
+   * because `hasExpensiveChild` caches the answer of a parent expression.
+   */
+  private def isExpensive(e: Expression): Boolean = e.expensive ||
+    (conf.getConf(SQLConf.REGEX_PATTERN_COST_ESTIMATE_VERSION) == 0 &&
+      e.exists(_.isInstanceOf[StringRegexExpression]))
 
   /**
    * Check if we can safely push a filter through a projection, by making sure that predicate

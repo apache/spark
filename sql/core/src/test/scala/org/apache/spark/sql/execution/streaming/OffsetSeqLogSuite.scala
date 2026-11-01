@@ -38,6 +38,20 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
 class OffsetSeqLogSuite extends SharedSparkSession {
   import testImplicits._
 
+  test("SPARK-60632: regex pattern cost estimate is version 0 for old checkpoints") {
+    val (_, offsetSeq) = readFromResource("offset-log-version-2.1.0")
+    val metadata = offsetSeq.metadataOpt.get
+    assert(!metadata.conf.contains(SQLConf.REGEX_PATTERN_COST_ESTIMATE_VERSION.key))
+    assert(OffsetSeqMetadata.readValue(
+      metadata, SQLConf.REGEX_PATTERN_COST_ESTIMATE_VERSION) == "0")
+  }
+
+  test("SPARK-60632: regex pattern cost estimate is version 1 for new checkpoints") {
+    val metadata = OffsetSeqMetadata(
+      batchWatermarkMs = 0, batchTimestampMs = 0, spark.conf)
+    assert(metadata.conf.get(SQLConf.REGEX_PATTERN_COST_ESTIMATE_VERSION.key).contains("1"))
+  }
+
   test("SPARK-59919: v1 and v2 metadata persist rebound stateful shuffle partitions") {
     withSQLConf(
       SQLConf.SHUFFLE_PARTITIONS.key -> "10",
