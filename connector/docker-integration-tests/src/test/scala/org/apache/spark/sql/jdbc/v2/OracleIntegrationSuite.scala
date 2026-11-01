@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.OracleDatabaseOnDocker
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
@@ -186,6 +187,21 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
   }
 
   override def caseConvert(tableName: String): String = tableName.toUpperCase(Locale.ROOT)
+
+  test("SPARK-60420: V2 NTZ reads retain wall-clock conversion after a legacy flag flip") {
+    val table = s"$catalogName.${namespaceOpt.get}.${caseConvert("datetime")}"
+    val legacyKey = SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key
+    withDefaultTimeZone(LA) {
+      val df = withSQLConf(legacyKey -> "false") {
+        val planned = sql(s"SELECT time1 FROM $table WHERE name = 'amy'")
+        assert(planned.schema.head.dataType === TimestampNTZType)
+        planned
+      }
+      withSQLConf(legacyKey -> "true") {
+        checkAnswer(df, Row(LocalDateTime.of(2022, 5, 19, 0, 0, 0)))
+      }
+    }
+  }
 
   test("SPARK-60420: V2 NTZ reads and writes honor per-query timestampNTZAsWallClock") {
     val table = s"$catalogName.${namespaceOpt.get}.${caseConvert("datetime")}"
