@@ -1728,6 +1728,31 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
+  test("SPARK-60757: a text the fixed settings cannot parse is read under the session") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      // A table created before the DDL rejected this text.
+      catalog("testcat").asInstanceOf[InMemoryCatalog].createTable(
+        Identifier.of(Array(), tblName),
+        Array(
+          Column.create("s", new StructType().add("f", IntegerType)),
+          Column.create("b", IntegerType, true, null, "s.\"f\"", null)),
+        Array.empty[Transform],
+        Collections.emptyMap[String, String])
+      val autoFilled = s"INSERT INTO testcat.$tblName(s) VALUES (named_struct('f', 1))"
+      val provided = s"INSERT INTO testcat.$tblName VALUES (named_struct('f', 1), 1)"
+      withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> "true",
+          SQLConf.DOUBLE_QUOTED_IDENTIFIERS.key -> "true") {
+        assert(!hasCheckInvariant(autoFilled))
+        assert(hasCheckInvariant(provided))
+      }
+      withSQLConf(SQLConf.DOUBLE_QUOTED_IDENTIFIERS.key -> "false") {
+        assertWriteFails("PARSE_SYNTAX_ERROR")(hasCheckInvariant(autoFilled))
+      }
+    }
+  }
+
   test("SPARK-60757: a generation expression reads the timestamp type of the session") {
     val tblName = "my_tab"
     withTable(s"testcat.$tblName") {

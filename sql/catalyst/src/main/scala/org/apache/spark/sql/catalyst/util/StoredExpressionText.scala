@@ -46,10 +46,17 @@ object StoredExpressionText {
     c
   }
 
-  /** Parses `text` under [[conf]]. */
+  /**
+   * Parses `text` under [[conf]]. A text these settings cannot parse is parsed under the active
+   * session, as a text they cannot resolve is analyzed under it.
+   */
   def parse(text: String): Expression = {
-    SQLConf.withExistingConf(conf(SQLConf.get)) {
-      CatalystSqlParser.parseExpression(text)
+    try {
+      SQLConf.withExistingConf(conf(SQLConf.get)) {
+        CatalystSqlParser.parseExpression(text)
+      }
+    } catch {
+      case _: ParseException => CatalystSqlParser.parseExpression(text)
     }
   }
 
