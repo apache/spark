@@ -1281,29 +1281,18 @@ object SQLConf {
 
   val BROADCAST_RANGE_JOIN_ENABLED = buildConf("spark.sql.join.broadcastRangeJoin.enabled")
     .internal()
-    .doc("When true, joins with range predicates (such as point-in-range, interval-overlap, " +
-      "or single inequalities) are planned as broadcast range joins instead of broadcast " +
-      "nested loop joins if the build side is eligible for broadcast. Supported join types " +
-      "include inner, left outer, right outer, left semi, and left anti. Broadcast range joins " +
-      "build an index on the broadcast side to significantly accelerate selective range " +
-      "probes, but planning does not consult overlap, probe size, or index-size estimates, " +
-      "so three trade-offs apply uniformly. First, a build where some, but not all, " +
-      "intervals overlap each probe can run slower than a nested loop join, and how much " +
-      "overlap triggers that depends heavily on the key family: boxed keys " +
-      "(double, float, string, binary, wide decimal) slow down at far lower overlap than " +
-      "long-specialized keys (boolean, byte, short, int, date, long, timestamp, " +
-      "timestamp_ntz, compact decimal): long keys " +
-      "stay close to parity (0.8X-1.2X) through about 10% interleaved overlap and settle " +
-      "around 0.7X-0.8X from 25% on, while boxed keys fall off much sooner, already down to " +
-      "0.5X-0.6X by 10% overlap (and on some platforms by 5%), and no worse than that through " +
-      "90%. Builds where every interval overlaps each probe run at about parity instead. Second, " +
-      "the broadcast size check charges the index's retained memory, which is larger per " +
-      "row than the raw row bytes charged to a broadcast nested loop join, so a " +
-      "BROADCAST-hinted or raised-threshold build can fail the size check where a nested " +
-      "loop join would not. Third, a hinted or size-eligible build still pays a one-time " +
-      "index build (a projection, key and row copies, a sort) regardless of how small the " +
-      "streamed side is, so a tiny streamed side against a large hinted build can run " +
-      "slower than a nested loop join. This is disabled by default.")
+    .doc("When true, a non-equi join is planned as a broadcast range join instead of a broadcast " +
+      "nested loop join when it tests whether a value falls inside a range, whether two ranges " +
+      "overlap, or compares the two sides once with `<`, `<=`, `>`, or `>=`. Each range key must " +
+      "be deterministic, of boolean, integer, floating-point, decimal, string, binary, date, or " +
+      "timestamp type, and drawn entirely from one side. The broadcast side is sorted and " +
+      "indexed once, which evaluates the range key of every broadcast row. When probing, " +
+      "each row of the other side evaluates its range key and reads only the part of the index " +
+      "that can match it. Keys are evaluated before any pair is tested, so a key expression that " +
+      "throws an error can fail a query that a nested loop join would have completed. The range " +
+      "join is much faster when that part is small, somewhat slower when it covers most of the " +
+      "broadcast side. The cost of building the index grows with the size of the broadcast side " +
+      "and can outweigh the scans the range join saves. This is disabled by default.")
     .version("4.4.0")
     .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .booleanConf

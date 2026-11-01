@@ -1116,14 +1116,15 @@ private[joins] object LongPointIndex {
 /**
  * Which side of a single-inequality range join's bound the build side holds, and
  * whether the comparison is strict - the four spellings a [[PointIndex]] /
- * [[LongPointIndex]] expose as scan methods. A `match` on this sealed hierarchy is
- * exhaustiveness-checked by the compiler, so both the interpreted probe
- * ([[BroadcastRangeJoinExec]]'s `makeCandidateFn`) and generated probe code have to
- * handle every case; it is the compiler, not a developer re-reading four string
- * literals, that notices when a fifth case gets added here. Generated code still has
- * to splice `methodName` into the Java source it emits, since codegen has no way to
- * reference a Scala method value directly; that string has to be kept in sync with
- * the method it names by hand, and a mismatch only surfaces as a Janino compile
+ * [[LongPointIndex]] expose as scan methods. The compiler's exhaustiveness check on
+ * this sealed hierarchy covers only the interpreted matches in
+ * [[BroadcastRangeJoinExec]]'s `makeCandidateFn`: it is the compiler, not a
+ * developer re-reading four string literals, that notices when a fifth case is
+ * added there. Generated probe code never matches on the hierarchy. It still has
+ * to splice `methodName` into the Java source it emits, since codegen has no way
+ * to reference a Scala method value directly; that string has to be kept in sync
+ * with the method it names by hand. The generated path never notices a new case
+ * or a stale name at compile time; a mismatch surfaces only as a Janino compile
  * failure at query-run time. RangeJoinSuite's codegen point-scan tests are what
  * actually catches that class of typo.
  */

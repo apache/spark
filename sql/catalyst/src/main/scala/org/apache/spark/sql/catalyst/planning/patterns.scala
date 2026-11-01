@@ -474,9 +474,9 @@ final case class GreaterPartialRangeJoin(override val strict: Boolean) extends P
  *  - interval overlap: a `(low, high)` key on each side.
  *  - partial range: one inequality, one expression per side.
  * [[RangePredicate]] normalizes `<`/`<=`/`>`/`>=` to `(dataType, low, high, strict)`;
- * `strict` selects the exclusive point-index scan for `partialRange` below, but
- * inclusivity otherwise, and every leftover conjunct, stay on the original condition
- * and are evaluated per candidate.
+ * `strict` only selects the exclusive point-index scan in `partialRange` below;
+ * inclusivity and every leftover conjunct stay on the original condition, which
+ * is evaluated for every candidate.
  */
 object ExtractRangeJoinKeys extends PredicateHelper {
   type ReturnType = (JoinType, Seq[Expression], Seq[Expression], RangeJoinKind)
