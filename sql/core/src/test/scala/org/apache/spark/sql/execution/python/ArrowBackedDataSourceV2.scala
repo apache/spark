@@ -141,13 +141,15 @@ private class ArrowBackedScanBuilder(options: CaseInsensitiveStringMap)
     options.getBoolean("columnar", true)
   private val reuseVectors =
     options.getBoolean("reuseVectors", false)
+  private val freshBatches =
+    options.getInt("freshBatches", 0)
   private val batchSize =
     options.getInt("batchSize", ArrowBackedDataSourceV2.BATCH_SIZE)
   private val arrowIdColumn =
     options.getBoolean("arrowIdColumn", true)
 
   override def createReaderFactory(): PartitionReaderFactory = {
-    new ArrowBackedReaderFactory(columnar, reuseVectors, batchSize, arrowIdColumn)
+    new ArrowBackedReaderFactory(columnar, reuseVectors, freshBatches, batchSize, arrowIdColumn)
   }
 }
 
@@ -162,12 +164,15 @@ private case class ArrowPartition(start: Int, end: Int)
  *   InternalRow output by iterating the ColumnarBatch row by row.
  *   This allows benchmarking the same data source with and without
  *   the columnar optimization.
+ * @param freshBatches if `reuseVectors` is true, the number of batches that the reader returns
+ *   with fresh vectors before it reuses its vectors for the rest.
  * @param arrowIdColumn if false, the `id` column of the batches is not an
  *   [[ArrowColumnVector]], so that a batch is not entirely Arrow-backed.
  */
 private class ArrowBackedReaderFactory(
     columnar: Boolean,
     reuseVectors: Boolean,
+    freshBatches: Int,
     batchSize: Int,
     arrowIdColumn: Boolean)
   extends PartitionReaderFactory {
@@ -196,7 +201,12 @@ private class ArrowBackedReaderFactory(
   override def createColumnarReader(
       partition: InputPartition): PartitionReader[ColumnarBatch] = {
     val ArrowPartition(start, end) = partition
-    if (reuseVectors) {
+    if (reuseVectors && freshBatches > 0) {
+      val reuseStart = math.min(end, start + freshBatches * batchSize)
+      new SwitchingArrowPartitionReader(
+        new ArrowBackedPartitionReader(start, reuseStart, batchSize, arrowIdColumn),
+        new ReusingArrowPartitionReader(reuseStart, end, batchSize))
+    } else if (reuseVectors) {
       new ReusingArrowPartitionReader(start, end, batchSize)
     } else {
       new ArrowBackedPartitionReader(start, end, batchSize, arrowIdColumn)
@@ -249,6 +259,28 @@ private class ReusingArrowPartitionReader(start: Int, end: Int, batchSize: Int)
   override def close(): Unit = {
     root.close()
     allocator.close()
+  }
+}
+
+/** Returns the batches of `first`, then those of `second`. */
+private class SwitchingArrowPartitionReader(
+    first: PartitionReader[ColumnarBatch],
+    second: PartitionReader[ColumnarBatch])
+  extends PartitionReader[ColumnarBatch] {
+  private var current = first
+
+  override def next(): Boolean = {
+    if (current.next()) return true
+    if (current eq second) return false
+    current = second
+    second.next()
+  }
+
+  override def get(): ColumnarBatch = current.get()
+
+  override def close(): Unit = {
+    first.close()
+    second.close()
   }
 }
 

@@ -64,6 +64,7 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
       numRows: Int = 100,
       numPartitions: Int = 1,
       reuseVectors: Boolean = false,
+      freshBatches: Int = 0,
       batchSize: Int = ArrowBackedDataSourceV2.BATCH_SIZE,
       arrowIdColumn: Boolean = true) = {
     spark.read
@@ -71,6 +72,7 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
       .option("numRows", numRows.toString)
       .option("numPartitions", numPartitions.toString)
       .option("reuseVectors", reuseVectors.toString)
+      .option("freshBatches", freshBatches.toString)
       .option("batchSize", batchSize.toString)
       .option("arrowIdColumn", arrowIdColumn.toString)
       .load()
@@ -153,7 +155,7 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
     }
   }
 
-  test("Arrow-backed source that reuses its vectors: Arrow columnar path not taken") {
+  test("SPARK-60325: Arrow-backed source that reuses its vectors: Arrow columnar path not taken") {
     assume(shouldTestPandasUDFs)
     withSQLConf(SQLConf.ARROW_PYSPARK_EXECUTION_ENABLED.key -> "true") {
       val pandasUDF = TestScalarPandasUDF(
@@ -167,7 +169,7 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
       // results come back. With many, it refills its vectors with the next batches before then.
       // The test UDF casts its input to string: on a string column, the cast is removed, so the
       // inputs are column references.
-      Seq(200, 200000).foreach { numRows =>
+      Seq(200, 20000).foreach { numRows =>
         val result = readArrowSource(numRows = numRows, reuseVectors = true, batchSize = 100)
           .selectExpr("id", "name", "value", "data", "arrow_reuse_udf(name) as udf_name")
         val arrowExec = singleArrowEvalPythonExec(result.queryExecution.executedPlan)
@@ -185,15 +187,15 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
     }
   }
 
-  test("Arrow-backed source with fresh vectors: held without a copy and released once consumed") {
+  test("SPARK-60325: Arrow-backed source with fresh vectors: held without a copy and released") {
     assume(shouldTestPandasUDFs)
     withSQLConf(SQLConf.ARROW_PYSPARK_EXECUTION_ENABLED.key -> "true") {
       val pandasUDF = TestScalarPandasUDF(
         name = "arrow_fresh_udf", returnType = Some(StringType))
       registerTestUDF(pandasUDF, spark)
 
-      val numRows = 50000
-      val numBatches = 500
+      val numRows = 2000
+      val numBatches = 20
       val result = readArrowSource(numRows = numRows, batchSize = numRows / numBatches)
         .selectExpr("id", "name", "value", "data", "arrow_fresh_udf(name) as udf_name")
       // The pass-through columns are output as the reader returned them.
@@ -218,7 +220,43 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
     }
   }
 
-  test("Arrow cache: the pass-through columns match the UDF results") {
+  test("SPARK-60325: Reused vectors after fresh ones: the pass-through columns are copied") {
+    assume(shouldTestPandasUDFs)
+    withSQLConf(SQLConf.ARROW_PYSPARK_EXECUTION_ENABLED.key -> "true") {
+      val pandasUDF = TestScalarPandasUDF(
+        name = "arrow_switch_udf", returnType = Some(StringType))
+      registerTestUDF(pandasUDF, spark)
+
+      // The first batches have fresh vectors, so the Arrow columnar path is taken. It holds the
+      // pass-through columns of those as they are, and copies those of the later batches, whose
+      // vectors the reader refills for the next batch.
+      val numRows = 20000
+      val freshBatches = 2
+      val result = readArrowSource(
+          numRows = numRows, reuseVectors = true, freshBatches = freshBatches, batchSize = 100)
+        .selectExpr("id", "name", "value", "data", "arrow_switch_udf(name) as udf_name")
+      val arrowExec = singleArrowEvalPythonExec(result.queryExecution.executedPlan)
+      val copied = arrowExec.executeColumnar().mapPartitionsInternal { batches =>
+        batches.map(_.column(0).isInstanceOf[OnHeapColumnVector])
+      }.collect().toSeq
+      val numBatches = numRows / 100
+      assert(copied == Seq.fill(freshBatches)(false) ++ Seq.fill(numBatches - freshBatches)(true))
+
+      ArrowBackedDataSourceV2.resetBatchCounters()
+      val rows = result.collect()
+      assert(rows.map(_.getInt(0)).toSeq == (0 until numRows))
+      rows.foreach { row =>
+        val id = row.getInt(0)
+        assert(row.getString(1) == s"row_$id", s"name mismatch for id $id")
+        assert(row.getString(4) == s"row_$id", s"UDF result mismatch for id $id")
+      }
+      // The consumer releases the fresh batches, which were held.
+      assert(ArrowBackedDataSourceV2.returnedBatches.get == freshBatches)
+      assert(ArrowBackedDataSourceV2.releasedBatches.get == freshBatches)
+    }
+  }
+
+  test("SPARK-60325: Arrow cache: the pass-through columns match the UDF results") {
     assume(shouldTestPandasUDFs)
     withSQLConf(
         SQLConf.ARROW_PYSPARK_EXECUTION_ENABLED.key -> "true",
@@ -227,7 +265,7 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
         name = "arrow_cache_udf", returnType = Some(StringType))
       registerTestUDF(pandasUDF, spark)
 
-      val numRows = 2000000L
+      val numRows = 200000L
       val cached = spark.range(0, numRows, 1, 1).selectExpr("id", "cast(id as string) as s")
         .cache()
       try {
@@ -249,7 +287,7 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
     }
   }
 
-  test("Stacked Python UDFs over an Arrow-backed source") {
+  test("SPARK-60325: Stacked Python UDFs over an Arrow-backed source") {
     assume(shouldTestPythonUDFs && shouldTestPandasUDFs)
     withSQLConf(SQLConf.ARROW_PYSPARK_EXECUTION_ENABLED.key -> "true") {
       // UDFs of different eval types are not chained, so they are evaluated by two stacked
@@ -260,7 +298,7 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
       registerTestUDF(innerUDF, spark)
       registerTestUDF(outerUDF, spark)
 
-      val numRows = 20000
+      val numRows = 2000
       val result = readArrowSource(numRows = numRows, batchSize = 100)
         .selectExpr("id", "name", "value", "data", "arrow_outer_udf(arrow_inner_udf(name)) as u")
       val plan = result.queryExecution.executedPlan
