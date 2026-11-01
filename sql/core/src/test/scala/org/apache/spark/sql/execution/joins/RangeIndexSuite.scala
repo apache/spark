@@ -740,6 +740,99 @@ class RangeIndexSuite extends SparkFunSuite {
     }
   }
 
+  test("restored point indexes answer multi-entry bound scans") {
+    // The round-trip fixtures above hold one point equal to the probe, so any
+    // restore that keeps that single entry answers it whatever ordering it
+    // re-derives. These indexes hold several entries: duplicated keys, keys on
+    // both sides of each probe, and - for the collated boxed family - keys
+    // that compare equal without being equal. Every bound scan the join uses
+    // answers through the restored ordering, so a restore that reverses,
+    // truncates, or desynchronizes keys and rows hands back the wrong ids.
+    // The long family has no distinct-but-equal keys; it gets the duplicates.
+    val serializers = Seq(
+      "Java" -> new org.apache.spark.serializer.JavaSerializer(
+        new org.apache.spark.SparkConf()).newInstance(),
+      "Kryo" -> {
+        val conf = new org.apache.spark.SparkConf()
+          .set(org.apache.spark.internal.config.Kryo.KRYO_REGISTRATION_REQUIRED, true)
+        new org.apache.spark.serializer.KryoSerializer(conf).newInstance()
+      },
+      // Reference tracking off duplicates any aliased object on the wire, so it
+      // also probes a restored graph that re-materialized every array entry.
+      "Kryo without references" -> {
+        val conf = new org.apache.spark.SparkConf()
+          .set(org.apache.spark.internal.config.Kryo.KRYO_REGISTRATION_REQUIRED, true)
+          .set(org.apache.spark.internal.config.Kryo.KRYO_REFERENCE_TRACKING, false)
+        new org.apache.spark.serializer.KryoSerializer(conf).newInstance()
+      })
+
+    def roundTrip[A <: AnyRef: scala.reflect.ClassTag](
+        ser: org.apache.spark.serializer.SerializerInstance, index: A): A =
+      ser.deserialize[A](ser.serialize(index))
+
+    // UNICODE_CI sorts "M" with "m", so rows 3, 4, and 5 stay in input order as
+    // one collation class, and an exclusive scan skips all of them. Probes use
+    // both spellings and two off-key bounds, so the scans must consult the
+    // restored ordering rather than remembered positions.
+    val boxed = buildPoints(StringType("UNICODE_CI"), Seq(
+      (UTF8String.fromString("a"), row(1)),
+      (UTF8String.fromString("m"), row(3)),
+      (UTF8String.fromString("M"), row(4)),
+      (UTF8String.fromString("m"), row(5)),
+      (UTF8String.fromString("z"), row(9))))
+    // (probe, upTo, upToExclusive, from, fromExclusive)
+    val boxedBounds: Seq[(UTF8String, List[Int], List[Int], List[Int], List[Int])] = Seq(
+      (UTF8String.fromString("m"), List(1, 3, 4, 5), List(1), List(3, 4, 5, 9), List(9)),
+      (UTF8String.fromString("M"), List(1, 3, 4, 5), List(1), List(3, 4, 5, 9), List(9)),
+      (UTF8String.fromString("n"), List(1, 3, 4, 5), List(1, 3, 4, 5), List(9), List(9)),
+      (UTF8String.fromString("l"), List(1), List(1), List(3, 4, 5, 9), List(3, 4, 5, 9)))
+
+    val longPoints = RangeRelationBroadcastMode(
+      Seq(BoundReference(1, IntegerType, nullable = true)), PointIndexKind)
+      .transform(Array(
+        InternalRow(1, 1), InternalRow(3, 5), InternalRow(4, 5),
+        InternalRow(5, 5), InternalRow(9, 9)))
+      .asInstanceOf[LongPointIndex]
+    val longBounds: Seq[(Long, List[Int], List[Int], List[Int], List[Int])] = Seq(
+      (5L, List(1, 3, 4, 5), List(1), List(3, 4, 5, 9), List(9)),
+      (4L, List(1), List(1), List(3, 4, 5, 9), List(3, 4, 5, 9)),
+      (6L, List(1, 3, 4, 5), List(1, 3, 4, 5), List(9), List(9)))
+
+    boxedBounds.foreach { case (probe, upTo, upToEx, from, fromEx) =>
+      assert(ids(boxed.upTo(probe)) == upTo, s"fresh boxed upTo($probe)")
+      assert(ids(boxed.upToExclusive(probe)) == upToEx, s"fresh boxed upToExclusive($probe)")
+      assert(ids(boxed.from(probe)) == from, s"fresh boxed from($probe)")
+      assert(ids(boxed.fromExclusive(probe)) == fromEx, s"fresh boxed fromExclusive($probe)")
+    }
+    longBounds.foreach { case (probe, upTo, upToEx, from, fromEx) =>
+      assert(ids(longPoints.upTo(probe)) == upTo, s"fresh long upTo($probe)")
+      assert(ids(longPoints.upToExclusive(probe)) == upToEx, s"fresh long upToExclusive($probe)")
+      assert(ids(longPoints.from(probe)) == from, s"fresh long from($probe)")
+      assert(ids(longPoints.fromExclusive(probe)) == fromEx, s"fresh long fromExclusive($probe)")
+    }
+
+    serializers.foreach { case (name, ser) =>
+      val restoredBoxed = roundTrip(ser, boxed)
+      val restoredLong = roundTrip(ser, longPoints)
+      boxedBounds.foreach { case (probe, upTo, upToEx, from, fromEx) =>
+        assert(ids(restoredBoxed.upTo(probe)) == upTo, s"boxed upTo($probe) via $name")
+        assert(ids(restoredBoxed.upToExclusive(probe)) == upToEx,
+          s"boxed upToExclusive($probe) via $name")
+        assert(ids(restoredBoxed.from(probe)) == from, s"boxed from($probe) via $name")
+        assert(ids(restoredBoxed.fromExclusive(probe)) == fromEx,
+          s"boxed fromExclusive($probe) via $name")
+      }
+      longBounds.foreach { case (probe, upTo, upToEx, from, fromEx) =>
+        assert(ids(restoredLong.upTo(probe)) == upTo, s"long upTo($probe) via $name")
+        assert(ids(restoredLong.upToExclusive(probe)) == upToEx,
+          s"long upToExclusive($probe) via $name")
+        assert(ids(restoredLong.from(probe)) == from, s"long from($probe) via $name")
+        assert(ids(restoredLong.fromExclusive(probe)) == fromEx,
+          s"long fromExclusive($probe) via $name")
+      }
+    }
+  }
+
   test("overlapping uses the common-core short cut without changing the answer") {
     // [0, 10], [5, 15], and [8, 20] share the core [8, 10] (1-D Helly). Any
     // window that reaches it overlaps every interval, so the index returns
