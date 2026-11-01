@@ -27,7 +27,7 @@ import org.apache.spark.sql.connector.catalog.index.{SupportsIndex, TableIndex}
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
 import org.apache.spark.sql.errors.DataTypeErrorsBase
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcOptionsInWrite, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCDatabaseMetadata, JDBCOptions, JdbcOptionsInWrite, JdbcUtils}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.types.StructType
@@ -37,7 +37,8 @@ case class JDBCTable(
     ident: Identifier,
     override val schema: StructType,
     jdbcOptions: JDBCOptions,
-    additionalMetrics: Map[String, SQLMetric] = Map())
+    additionalMetrics: Map[String, SQLMetric] = Map(),
+    databaseMetadata: Option[JDBCDatabaseMetadata] = None)
   extends Table
   with SupportsRead
   with SupportsWrite
@@ -61,7 +62,7 @@ case class JDBCTable(
   override def newScanBuilder(options: CaseInsensitiveStringMap): JDBCScanBuilder = {
     val mergedOptions = new JDBCOptions(
       jdbcOptions.parameters.originalMap ++ options.asCaseSensitiveMap().asScala)
-    JDBCScanBuilder(SparkSession.active, schema, mergedOptions, additionalMetrics)
+    JDBCScanBuilder(SparkSession.active, schema, mergedOptions, additionalMetrics, databaseMetadata)
   }
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {

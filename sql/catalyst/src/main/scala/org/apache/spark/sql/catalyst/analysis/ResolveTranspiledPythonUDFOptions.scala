@@ -23,7 +23,9 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.TRANSPILED_PYTHON_UDF
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BinaryType, BooleanType, ByteType, DataType, DoubleType, IntegerType, LongType, ShortType, StringType}
+import org.apache.spark.sql.types.{
+  BinaryType, BooleanType, ByteType, DataType, DoubleType, FloatType,
+  IntegerType, LongType, ShortType, StringType}
 import org.apache.spark.util.Utils
 
 /**
@@ -143,6 +145,8 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
   //   type would hide the rounding for a single operation but not for a chain of
   //   them, and not the overflow at all -- and the return type isn't visible from
   //   here anyway. Float columns therefore fall back to interpreted Python.
+  // The "integer" and "float" labels remain accepted for custom transpilers.
+  // The built-in transpiler uses the richer categories above.
   // - "string" requires the default UTF8_BINARY collation: under a non-binary
   //   collation (e.g. UTF8_LCASE) Spark's `=`/`<`/`concat` follow collation
   //   rules while Python compares codepoints, so `'abc' == 'ABC'` would return
@@ -163,6 +167,8 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
         case ("integral", ByteType | ShortType | IntegerType | LongType) => true
         case ("integral32", ByteType | ShortType | IntegerType) => true
         case ("fractional", DoubleType) => true
+        case ("integer", ByteType | ShortType | IntegerType | LongType) => true
+        case ("float", FloatType | DoubleType) => true
         case ("string", st: StringType) => st.isUTF8BinaryCollation
         case ("bool", dt) => dt.isInstanceOf[BooleanType]
         case ("binary", dt) => dt.isInstanceOf[BinaryType]

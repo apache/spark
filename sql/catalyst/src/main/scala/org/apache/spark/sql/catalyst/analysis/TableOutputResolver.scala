@@ -56,33 +56,52 @@ object TableOutputResolver extends SQLConfHelper with Logging {
   def resolveVariableOutputColumns(
       expected: Seq[VariableReference],
       query: LogicalPlan,
-      conf: SQLConf): LogicalPlan = {
+      conf: SQLConf): LogicalPlan =
+    resolveVariableOutputColumns(
+      expected = expected,
+      query = query,
+      conf = conf,
+      outputColumns = query.output,
+      newAlias = (child, name) => Alias(child, name)())
 
-    if (expected.size != query.output.size) {
+  /**
+   * Resolves variable output against explicitly supplied attributes, avoiding recursive
+   * [[LogicalPlan.output]] access.
+   *
+   * @param outputColumns The resolved output attributes of `query`, in output order.
+   * @param newAlias Factory for aliases wrapping assignment casts.
+   */
+  def resolveVariableOutputColumns(
+      expected: Seq[VariableReference],
+      query: LogicalPlan,
+      conf: SQLConf,
+      outputColumns: Seq[Attribute],
+      newAlias: (Expression, String) => Alias): LogicalPlan = {
+    if (expected.size != outputColumns.size) {
       throw new AnalysisException(
         errorClass = "ASSIGNMENT_ARITY_MISMATCH",
         messageParameters = Map(
           "numTarget" -> expected.size.toString,
-          "numExpr" -> query.output.size.toString))
+          "numExpr" -> outputColumns.size.toString))
     }
 
     val resolved: Seq[NamedExpression] = {
-      query.output.zip(expected).map { case (inputCol, expected) =>
-        if (DataTypeUtils.sameType(inputCol.dataType, expected.dataType)) {
-          inputCol
+      outputColumns.zip(expected).map { case (inputColumn, expectedVariable) =>
+        if (DataTypeUtils.sameType(inputColumn.dataType, expectedVariable.dataType)) {
+          inputColumn
         } else {
           // SET VAR always uses the ANSI store assignment policy
           val cast = Cast(
-            inputCol,
-            expected.dataType,
+            inputColumn,
+            expectedVariable.dataType,
             Option(conf.sessionLocalTimeZone),
             ansiEnabled = true)
-          Alias(cast, expected.identifier.name)()
+          newAlias(cast, expectedVariable.identifier.name)
         }
       }
     }
 
-    if (resolved == query.output) {
+    if (resolved == outputColumns) {
       query
     } else {
       Project(resolved, query)

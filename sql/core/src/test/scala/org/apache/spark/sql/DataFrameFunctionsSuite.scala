@@ -23,10 +23,10 @@ import java.sql.{Date, Timestamp}
 import scala.reflect.runtime.universe.runtimeMirror
 import scala.util.Random
 
-import org.apache.spark.{QueryContextType, SPARK_DOC_ROOT, SparkException, SparkRuntimeException}
+import org.apache.spark.{QueryContextType, SPARK_DOC_ROOT, SparkArrayIndexOutOfBoundsException, SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{ArrayExists, Expression, Literal, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
@@ -2534,6 +2534,48 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
       ),
       queryContext = Array(ExpectedContext("", "", 0, 28, "array_position(array(1), '1')"))
     )
+  }
+
+  test("SPARK-59992: coalesce over element_at with a null index is not simplified away") {
+    // Under ANSI, element_at was marked non-nullable for a non-null array regardless of the
+    // index, so the optimizer dropped the coalesce and the null index leaked through.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkAnswer(
+        sql("SELECT coalesce(element_at(array('a', 'b'), CAST(nullif(id, 0) AS INT)), 'z'), " +
+          "coalesce(array('a', 'b')[CAST(nullif(id, 0) AS INT) - 1], 'z') FROM range(2)"),
+        Seq(Row("z", "z"), Row("a", "a")))
+    }
+  }
+
+  test("SPARK-60755: element_at and array index compile when the result is not nullable") {
+    // The first element cannot be NULL, but the array can contain NULL.
+    val df = spark.range(2).selectExpr("id", "if(id = 0, 'a', NULL) AS s")
+    val notNullable = "element_at(array(coalesce(s, 'z'), s), 1)"
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        checkAnswer(df.selectExpr(notNullable), Seq(Row("a"), Row("z")))
+        checkAnswer(df.where(s"$notNullable = 'z'").select("id"), Seq(Row(1)))
+        // The ordering of `TakeOrderedAndProjectExec` has no interpreted fallback.
+        checkAnswer(df.orderBy(expr(notNullable).desc).limit(1).select("id"), Seq(Row(1)))
+      }
+    }
+    // Under ANSI, an out-of-bounds index raises an error, so the result is not nullable.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkError(
+        exception = intercept[SparkArrayIndexOutOfBoundsException] {
+          df.where("element_at(array(s), 5) = 'x'").collect()
+        },
+        condition = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
+        parameters = Map("indexValue" -> "5", "arraySize" -> "1"),
+        context = ExpectedContext(fragment = "element_at(array(s), 5)", start = 0, stop = 22))
+      checkError(
+        exception = intercept[SparkArrayIndexOutOfBoundsException] {
+          df.selectExpr("array(s)[5]").collect()
+        },
+        condition = "INVALID_ARRAY_INDEX",
+        parameters = Map("indexValue" -> "5", "arraySize" -> "1"),
+        context = ExpectedContext(fragment = "array(s)[5]", start = 0, stop = 10))
+    }
   }
 
   test("element_at function") {
@@ -6198,6 +6240,40 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
         ov1 + iv1 + ov2 + iv2))),
       Seq(Row(Map("a" -> Map("a" -> 6, "b" -> 8), "b" -> Map("a" -> 8, "b" -> 10))))
     )
+  }
+
+  test("SPARK-60508: nested higher-order functions capturing lambda variables") {
+    // A file source, because a `LocalRelation` is evaluated before the optimizer simplifies the
+    // expressions below.
+    withTable("t") {
+      sql("CREATE TABLE t USING parquet AS " +
+        "SELECT array(1, 5) AS xs1, array(3, 2) AS xs2, array(1, 2, 3, 4, 5) AS ys")
+      checkAnswer(
+        sql("SELECT zip_with(xs1, xs2, (x1, x2) -> " +
+          "IF(x1 > x2, filter(ys, y -> y > x1), filter(ys, y -> y > x2))) FROM t"),
+        Row(Seq(Seq(4, 5), Seq.empty)))
+      checkAnswer(
+        sql("SELECT zip_with(xs1, xs2, (x1, x2) -> " +
+          "CASE WHEN x1 > x2 THEN filter(ys, y -> y > x1) ELSE filter(ys, y -> y > x2) END) " +
+          "FROM t"),
+        Row(Seq(Seq(4, 5), Seq.empty)))
+      checkAnswer(
+        sql("SELECT zip_with(xs1, xs2, (x1, x2) -> " +
+          "exists(ys, y -> y > x1) OR exists(ys, y -> y > x2)) FROM t"),
+        Row(Seq(true, true)))
+      checkAnswer(
+        sql("SELECT zip_with(xs1, xs2, (x1, x2) -> " +
+          "filter(ys, y -> y > x1) <=> filter(ys, y -> y > x2)) FROM t"),
+        Row(Seq(false, false)))
+
+      // The functions capturing the same variable are still simplified into one.
+      val df = sql("SELECT transform(xs1, x -> " +
+        "exists(ys, y -> y > x) AND exists(ys, y -> y > x)) FROM t")
+      checkAnswer(df, Row(Seq(true, false)))
+      assert(df.queryExecution.optimizedPlan.expressions.flatMap(_.collect {
+        case e: ArrayExists => e
+      }).size == 1)
+    }
   }
 
   test("from_json - invalid schema string") {

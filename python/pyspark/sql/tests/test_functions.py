@@ -1026,6 +1026,16 @@ class FunctionsTestsMixin:
         self.assertAlmostEqual(sum_result[0], 4.0, places=4)
         self.assertAlmostEqual(sum_result[1], 6.0, places=4)
 
+    def test_vector_sum_double(self):
+        from pyspark.sql.types import ArrayType, DoubleType
+
+        schema = StructType([StructField("v", ArrayType(DoubleType()))])
+        data = [([16777216.0, 1.0],), ([1.0, 1e-8],)]
+        df = self.spark.createDataFrame(data, schema).repartition(2)
+        result = df.select(F.vector_sum("v"))
+        self.assertEqual(result.schema[0].dataType, ArrayType(DoubleType(), containsNull=False))
+        self.assertEqual(result.first()[0], [16777217.0, 1.00000001])
+
     def test_jaro_winkler_similarity_function(self):
         df = self.spark.createDataFrame([("MARTHA", "MARHTA")], ["l", "r"])
         result = df.select(F.jaro_winkler_similarity(df.l, df.r)).first()[0]
