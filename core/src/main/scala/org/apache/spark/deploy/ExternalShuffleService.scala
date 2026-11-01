@@ -85,10 +85,10 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
   protected def newShuffleBlockHandler(conf: TransportConf): ExternalBlockHandler = {
     // Constrain registered localDirs to the configured local directories and, when
     // spark.shuffle.service.requireAppScopedLocalDirs is enabled, to the registering
-    // application's own per-app directory (the Worker creates executor local dirs under a
-    // path containing the app id). The check is opt-in: executors launched by Workers that
-    // predate the per-app layout register unscoped paths and would be rejected, so enable it
-    // only after every Worker in the cluster is upgraded.
+    // application's own per-app directory (spark-*/executor-*/<url-encoded-appId>).
+    // The check is opt-in: executors launched by Workers that predate the per-app layout
+    // register unscoped paths and would be rejected, so enable it only after every Worker
+    // in the cluster is upgraded.
     val localDirs = Utils.getConfiguredLocalDirs(sparkConf)
     val requireAppScopedLocalDirs =
       sparkConf.get(config.SHUFFLE_SERVICE_REQUIRE_APP_SCOPED_LOCAL_DIRS)
@@ -134,6 +134,8 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
     masterMetricsSystem.registerSource(shuffleServiceSource)
     masterMetricsSystem.start()
   }
+
+  private[deploy] def boundPort: Int = server.getPort
 
   /** Clean up all shuffle files associated with an application that has exited. */
   def applicationRemoved(appId: String): Unit = {
