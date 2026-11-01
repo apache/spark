@@ -33,22 +33,16 @@ import org.apache.spark.util.ArrayImplicits._
  * @param changeArgs The CDC flow configuration.
  * @param resolvedSequencingType The post-analysis [[DataType]] of the sequencing column, derived
  *                               from the flow's resolved DataFrame at flow setup time.
- * @param reconciliationStrategy Strategy used to reconcile the microbatch. In the default AutoCDC
- *                               execution mode an event wins wholesale and all columns share its
- *                               row-level version. Modes such as ignore-null can reconcile leaves
- *                               independently because different events may author them, and
- *                               therefore require a different reconciliation strategy.
  */
 case class Scd1BatchProcessor(
     changeArgs: ChangeArgs,
-    resolvedSequencingType: DataType,
-    reconciliationStrategy: Scd1ReconciliationStrategy = Scd1RowLevelReconciliation) {
+    resolvedSequencingType: DataType) {
 
   /** Reconciles a validated CDC microbatch into the form consumed by the table merges. */
   private[autocdc] def reconcileMicrobatch(
       validatedBatchDf: DataFrame,
       auxiliaryTableDf: DataFrame): DataFrame =
-    reconciliationStrategy.reconcileMicrobatch(
+    Scd1RowLevelReconciliation.reconcileMicrobatch(
       changeArgs = changeArgs,
       resolvedSequencingType = resolvedSequencingType,
       validatedBatchDf = validatedBatchDf,
@@ -215,6 +209,7 @@ case class Scd1BatchProcessor(
 object Scd1BatchProcessor {
   private[pipelines] val cdcDeleteSequenceFieldName: String = "deleteSequence"
   private[pipelines] val cdcUpsertSequenceFieldName: String = "upsertSequence"
+  private[pipelines] val versionMapFieldName: String = "__VERSION_MAP"
 
   /** Project the delete sequence out of the CDC metadata column. */
   private[autocdc] def deleteSequenceOf(cdcMetadataCol: Column): Column =
@@ -225,7 +220,45 @@ object Scd1BatchProcessor {
     cdcMetadataCol.getField(cdcUpsertSequenceFieldName)
 
   /**
+   * When a row last authored any of the user-data leaves at `leafPaths`, according to its CDC
+   * metadata: the greatest sequence at which it authored one of them. A delete authors every leaf
+   * at its delete sequence, and an upsert without a version map authors every leaf at its upsert
+   * sequence.
+   *
+   * @param cdcMetadataCol The row's CDC metadata.
+   * @param leafPaths The name parts of the leaves, as keyed in the version map.
+   * @return The sequence at which the row last authored any of the leaves, or null if it authored
+   *         none of them. With no leaves, such as for an empty struct, this is the row's delete
+   *         sequence for a delete and its upsert sequence otherwise.
+   */
+  private[autocdc] def lastAuthoredIn(
+      cdcMetadataCol: Column,
+      leafPaths: Seq[Seq[String]]): Column = {
+    val deleteSequence = deleteSequenceOf(cdcMetadataCol)
+    val upsertSequence = upsertSequenceOf(cdcMetadataCol)
+    val versionMap = cdcMetadataCol.getField(versionMapFieldName)
+
+    val leafSequences =
+      leafPaths.map(leafPath => versionMap(Scd1VersionMap.serializeKey(leafPath)))
+    val greatestLeafSequence = leafSequences match {
+      // An empty struct has no leaves, and so no version-map entries.
+      case Seq() => upsertSequence
+      // `greatest` requires at least two arguments. If there's only sequence, trivially return it.
+      case Seq(leafSequence) => leafSequence
+      case _ => F.greatest(leafSequences: _*)
+    }
+
+    F.when(deleteSequence.isNotNull, deleteSequence)
+      .when(versionMap.isNull, upsertSequence)
+      .otherwise(greatestLeafSequence)
+  }
+
+  /**
    * Schema of the CDC metadata struct column for SCD1.
+   *
+   * The CDC metadata of every microbatch, target, and auxiliary-table row represents either a
+   * delete or an upsert, never both: exactly one of its delete and upsert sequences is non-null,
+   * and only an upsert may carry a version map.
    */
   private[pipelines] def cdcMetadataColSchema(sequencingType: DataType): StructType =
     StructType(
@@ -233,22 +266,34 @@ object Scd1BatchProcessor {
         // The sequencing of the event if it represents a delete, null otherwise.
         StructField(cdcDeleteSequenceFieldName, sequencingType, nullable = true),
         // The sequencing of the event if it represents an upsert, null otherwise.
-        StructField(cdcUpsertSequenceFieldName, sequencingType, nullable = true)
+        StructField(cdcUpsertSequenceFieldName, sequencingType, nullable = true),
+        // On target rows, a null version map indicates row-level reconciliation; a non-null map
+        // indicates per-leaf reconciliation. Delete rows, including auxiliary-table tombstones,
+        // always use a null map: a delete's sequence applies to every leaf, so a map would only
+        // repeat it.
+        StructField(
+          versionMapFieldName,
+          Scd1VersionMap.mapType(sequencingType),
+          nullable = true
+        )
       )
     )
 
   /**
    * Construct the CDC metadata struct column for SCD1, following the exact schema and field
-   * ordering defined by [[cdcMetadataColSchema]].
+   * ordering defined by [[cdcMetadataColSchema]]. Values for microbatch, target, and
+   * auxiliary-table rows must uphold its contract.
    */
   private[pipelines] def constructCdcMetadataCol(
       deleteSequence: Column,
       upsertSequence: Column,
+      versionMap: Column,
       sequencingType: DataType): Column = {
     val cdcMetadataFieldsInOrder = cdcMetadataColSchema(sequencingType).fields.map { field =>
       val value = field.name match {
         case `cdcDeleteSequenceFieldName` => deleteSequence
         case `cdcUpsertSequenceFieldName` => upsertSequence
+        case `versionMapFieldName` => versionMap
         case other =>
           throw SparkException.internalError(
             s"Unable to construct SCD1 CDC metadata column due to unknown `${other}` field."
