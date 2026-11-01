@@ -19,6 +19,8 @@ package org.apache.spark.network.shuffle;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -36,10 +38,11 @@ import org.apache.spark.internal.MDC;
  * operates on validated paths.
  *
  * Each entry must canonicalize to a path contained under one of the configured roots (YARN passes
- * {@code yarn.nodemanager.local-dirs}; standalone passes the configured local directories) and,
- * when app scoping is required, within the registering application's own directory (the
- * {@code appId} must appear as a path segment). When no roots are configured there is nothing to
- * contain the entries against and they are accepted. An empty array is always allowed.
+ * {@code yarn.nodemanager.local-dirs}; standalone passes the configured local directories). When
+ * app scoping is required in standalone mode, the entry must have the exact form
+ * {@code spark-*/executor-*/<url-encoded-appId>} below that root. When no roots are configured
+ * there is nothing to contain the entries against and they are accepted. An empty array is always
+ * allowed.
  */
 class LocalDirValidator {
   private static final SparkLogger logger = SparkLoggerFactory.getLogger(LocalDirValidator.class);
@@ -80,19 +83,19 @@ class LocalDirValidator {
         "localDirs entry is not under any of the service's local directories: " + localDir);
     }
     if (requireAppScopedLocalDirs &&
-        (appId == null || appId.isEmpty() || !pathContainsSegment(canonical, appId))) {
+        (appId == null || appId.isEmpty() || allowedLocalDirRoots.stream().noneMatch(
+          root -> isStandaloneAppDir(root, canonical, appId)))) {
       throw new IllegalArgumentException(
         "localDirs entry is not within application " + appId + "'s directory: " + localDir);
     }
   }
 
-  private static boolean pathContainsSegment(Path path, String segment) {
-    for (Path part : path) {
-      if (part.toString().equals(segment)) {
-        return true;
-      }
-    }
-    return false;
+  private static boolean isStandaloneAppDir(Path root, Path path, String appId) {
+    Path relative = root.relativize(path);
+    return relative.getNameCount() == 3 &&
+      relative.getName(0).toString().startsWith("spark-") &&
+      relative.getName(1).toString().startsWith("executor-") &&
+      relative.getName(2).toString().equals(URLEncoder.encode(appId, StandardCharsets.UTF_8));
   }
 
   private static List<Path> canonicalizeRoots(String[] allowedLocalDirs) {

@@ -26,7 +26,6 @@ import org.apache.spark.internal.config.{
   SHUFFLE_SERVICE_ENABLED,
   SHUFFLE_SERVICE_PORT,
   SHUFFLE_SERVICE_REQUIRE_APP_SCOPED_LOCAL_DIRS}
-import org.apache.spark.network.server.TransportServer
 import org.apache.spark.util.Utils
 
 class ExternalShuffleServiceLocalDirsSuite extends SparkFunSuite {
@@ -67,10 +66,11 @@ class ExternalShuffleServiceLocalDirsSuite extends SparkFunSuite {
     val root = new File(Utils.getConfiguredLocalDirs(sparkConf).head)
     val appId = s"app-${UUID.randomUUID()}"
     val otherAppId = s"app-${UUID.randomUUID()}"
-    // The layout the Worker creates: <root>/spark-<workerId>/<appId>.
-    val workerRoot = new File(root, s"spark-worker-${UUID.randomUUID()}")
-    val appScoped = new File(workerRoot, appId)
-    val otherAppScoped = new File(workerRoot, otherAppId)
+    // The layout the Worker creates: <root>/spark-*/executor-*/<appId>.
+    val workerRoot = new File(root, s"spark-${UUID.randomUUID()}")
+    val executorRoot = new File(workerRoot, s"executor-${UUID.randomUUID()}")
+    val appScoped = new File(executorRoot, appId)
+    val otherAppScoped = new File(executorRoot, otherAppId)
     // The pre-upgrade Worker layout: directly under a root, no appId segment.
     val unscoped = new File(root, s"blockmgr-${UUID.randomUUID()}")
     assert(appScoped.mkdirs() && otherAppScoped.mkdirs() && unscoped.mkdirs())
@@ -109,34 +109,29 @@ class ExternalShuffleServiceLocalDirsSuite extends SparkFunSuite {
       .set(SHUFFLE_SERVICE_PORT, 0)
       .set("spark.local.dir", root.getAbsolutePath)
     val service = new ExternalShuffleService(serviceConf, new SecurityManager(serviceConf))
-    service.start()
-    // ExternalShuffleService does not expose the bound port; read it back the same way
-    // ExternalShuffleServiceMetricsSuite reads the metrics source.
-    val serverField = classOf[ExternalShuffleService].getDeclaredField("server")
-    serverField.setAccessible(true)
-    val port = serverField.get(service).asInstanceOf[TransportServer].getPort
-
-    val conf = new SparkConf()
-      .setAppName("app-scoped-local-dirs-e2e")
-      .setMaster("local-cluster[2,1,1024]")
-      .set(SHUFFLE_SERVICE_ENABLED, true)
-      .set(SHUFFLE_SERVICE_PORT, port)
-      .set("spark.local.dir", root.getAbsolutePath)
     var sc: SparkContext = null
     try {
+      service.start()
+      val conf = new SparkConf()
+        .setAppName("app-scoped-local-dirs-e2e")
+        .setMaster("local-cluster[2,1,1024]")
+        .set(SHUFFLE_SERVICE_ENABLED, true)
+        .set(SHUFFLE_SERVICE_PORT, service.boundPort)
+        .set("spark.local.dir", root.getAbsolutePath)
       sc = new SparkContext(conf)
       val appId = sc.applicationId
-      // One core per worker, so the application's two executors land on different Workers
-      // and each Worker creates its own <root>/spark-<workerId>/<appId>. If the shuffle
-      // service rejected the registrations, the executors would never come up.
+      // One core per worker, so the application's two executors land on different Workers.
+      // If the shuffle service rejected the registrations, the executors would never come up.
       TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
       assert(sc.parallelize(1 to 100, 4).map(i => (i % 10, i)).groupByKey().count() === 10)
 
       val appDirs = root.listFiles().toSeq
         .filter(d => d.isDirectory && d.getName.startsWith("spark-"))
         .flatMap(_.listFiles())
+        .filter(d => d.isDirectory && d.getName.startsWith("executor-"))
+        .flatMap(_.listFiles())
         .filter(d => d.isDirectory && d.getName == appId)
-      // Each Worker scoped the application's local dir under its own per-worker directory.
+      // Each executor has its own random directory above the application leaf.
       assert(appDirs.length == 2)
       assert(appDirs.map(_.getParentFile.getName).distinct.length == 2)
       // The registered dirs satisfy the app-scoping check for this application only.
@@ -151,6 +146,7 @@ class ExternalShuffleServiceLocalDirsSuite extends SparkFunSuite {
         sc.stop()
       }
       service.stop()
+      Utils.deleteRecursively(root)
     }
   }
 }

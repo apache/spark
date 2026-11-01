@@ -444,21 +444,21 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter with P
     assert(getWorkDirCleanupTask(worker) == workDirCleanupTask)
   }
 
-  test("app cleanup removes only the worker's own per-application executor local dir") {
+  test("app cleanup uses the LaunchExecutor local dir layout") {
     val externalShuffleServiceSupplier = new Supplier[ExternalShuffleService] {
       override def get: ExternalShuffleService = shuffleService
     }
     val worker = makeWorker(new SparkConf(), externalShuffleServiceSupplier)
-    val root = Utils.createTempDir(namePrefix = "worker-local-root")
+    val appId = "app:20260922000000/0001"
+    val appDir = new File(worker.createExecutorLocalDirs(appId).head)
+    val executorDir = appDir.getParentFile
     try {
-      // LaunchExecutor layout: the executor local dir is <root>/spark-<workerId>/<appId>.
-      // Workers sharing a local root (local-cluster mode) each get their own
-      // spark-<workerId> directory, so application cleanup must remove only this worker's
-      // per-application directory and leave another worker's untouched.
-      val appId = "app-20260922000000-0001"
-      val appDir = new File(new File(root, "spark-worker-1"), appId)
-      val otherWorkerAppDir = new File(new File(root, "spark-worker-2"), appId)
-      assert(appDir.mkdirs() && otherWorkerAppDir.mkdirs())
+      // Exercise the production helper rather than hand-building the directory layout.
+      assert(appDir.getName === "app%3A20260922000000%2F0001")
+      assert(executorDir.getName.startsWith("executor-"))
+      assert(executorDir.getParentFile.getName.startsWith("spark-"))
+      val sibling = new File(executorDir, "sibling")
+      assert(sibling.mkdir())
       worker.appDirectories(appId) = Seq(appDir.getAbsolutePath)
       worker.finishedApps += appId
       worker.handleExecutorStateChanged(
@@ -466,9 +466,9 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter with P
       eventually(timeout(1.second), interval(10.milliseconds)) {
         assert(!appDir.exists())
       }
-      assert(otherWorkerAppDir.exists())
+      assert(sibling.exists())
     } finally {
-      Utils.deleteRecursively(root)
+      Utils.deleteRecursively(executorDir)
     }
   }
 }

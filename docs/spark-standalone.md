@@ -506,15 +506,13 @@ SPARK_WORKER_OPTS supports the following system properties:
   <td>false</td>
   <td>
     When true, the external shuffle service only accepts executor registrations whose local
-    directories lie inside the registering application's own per-application directory (the
-    application id must appear as a path segment under one of the service's configured local
-    directory roots). This guards against mis-registration (e.g. a bug or race mixing up
-    application directories); it is not an isolation boundary against malicious applications,
-    because the application id is supplied by the client and is authenticated only when
-    <code>spark.authenticate</code> is enabled, so enable both together. Workers on this
-    version always create executor local directories as
-    <code>&lt;root&gt;/spark-&lt;workerId&gt;/&lt;appId&gt;</code>, which satisfies the check; that layout
-    is additive and harmless while the check is disabled. For a rolling upgrade, first upgrade
+    directories end in <code>spark-*/executor-*/&lt;url-encoded-appId&gt;</code> under one of
+    the service's configured local directory roots. This guards against mis-registration
+    (e.g. a bug or race mixing up application directories); it is not an isolation boundary
+    against malicious applications, because the application id is supplied by the client and
+    standalone authentication does not bind a registration to a particular application id.
+    Workers on this version preserve the random root and executor directories and add the
+    URL-encoded application id as the final path segment. For a rolling upgrade, first upgrade
     every Worker, then set this to true on the shuffle service: enabling it while executors
     launched by older Workers are still registering rejects their registrations. The check
     happens only at registration: with <code>spark.shuffle.service.db.enabled</code>,
