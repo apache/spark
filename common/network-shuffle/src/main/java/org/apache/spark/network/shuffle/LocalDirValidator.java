@@ -40,8 +40,9 @@ import org.apache.spark.internal.MDC;
  * Each entry must canonicalize to a path contained under one of the configured roots (YARN passes
  * {@code yarn.nodemanager.local-dirs}; standalone passes the configured local directories). When
  * app scoping is required in standalone mode, the entry must have the exact form
- * {@code spark-&#42;/executor-&#42;/&lt;url-encoded-appId&gt;} below that root. When no roots are configured
- * there is nothing to contain the entries against and they are accepted. An empty array is always
+ * {@code spark-&#42;/executor-&#42;/&lt;url-encoded-appId&gt;}
+ * below that root. When no roots are configured there is nothing to contain the entries against
+ * and they are accepted. An empty array is always
  * allowed.
  */
 class LocalDirValidator {
