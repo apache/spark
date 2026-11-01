@@ -234,7 +234,8 @@ private[spark] object Utils
    * On POSIX filesystems this is a single `chmod` call, which is atomic: concurrent calls on
    * the same path (e.g. Workers sharing a local root dir in local-cluster mode) cannot
    * interleave into a broken permission set, unlike the `File.set*` fallback below, each call
-   * of which is a non-atomic stat-then-chmod.
+   * of which is a non-atomic stat-then-chmod. The POSIX call writes exactly the nine rwx bits,
+   * so it also clears setuid, setgid, and sticky bits; the fallback preserves them.
    *
    * @param file the file whose permissions will be modified
    * @return true if the permissions were successfully changed, false otherwise.
@@ -250,20 +251,20 @@ private[spark] object Utils
       true
     } catch {
       case _: UnsupportedOperationException =>
-        // Non-POSIX filesystem (e.g. Windows): best-effort, non-atomic fallback. Remove all
-        // permissions first so the file is locked down as early as possible, then grant the
-        // owner permissions; no intermediate state grants group/other access.
+        // Non-POSIX filesystem (e.g. Windows): best-effort, non-atomic fallback. Attempt
+        // every operation even after a failure, revoke group/other access before granting
+        // owner access where supported, and never grant group/other access.
         val succeeded =
-          file.setReadable(false, false) &&
-          file.setWritable(false, false) &&
-          file.setExecutable(false, false) &&
-          file.setReadable(true, true) &&
-          file.setWritable(true, true) &&
+          file.setReadable(false, false) &
+          file.setWritable(false, false) &
+          file.setExecutable(false, false) &
+          file.setReadable(true, true) &
+          file.setWritable(true, true) &
           file.setExecutable(true, true)
         if (!succeeded) {
           // Structural on Windows: File.setReadable(false, false) always fails there (the
-          // filesystem has no read permission to revoke), so this fires on every call.
-          logWarning(log"Failed to set permissions to 700 on ${MDC(PATH, file.getAbsolutePath)}")
+          // filesystem has no read permission to revoke), so do not warn on every call.
+          logDebug(log"Failed to set permissions to 700 on ${MDC(PATH, file.getAbsolutePath)}")
         }
         succeeded
       case NonFatal(e) =>
