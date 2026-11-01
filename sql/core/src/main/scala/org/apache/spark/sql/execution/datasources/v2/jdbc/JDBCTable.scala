@@ -64,12 +64,11 @@ case class JDBCTable(
     // Preserve case-sensitive driver properties when merging query options.
     val merged = CaseInsensitiveMap(
       jdbcOptions.parameters.originalMap ++ options.asCaseSensitiveMap().asScala)
-    // Only normalize the timestamp options, preserving the table defaults unless overridden.
+    // Keep the table's type mapping; query options can override its conversion default.
     merged +
       (JDBCOptions.JDBC_TIMESTAMP_NTZ_WALL_CLOCK -> options.getOrDefault(
         JDBCOptions.JDBC_TIMESTAMP_NTZ_WALL_CLOCK, jdbcOptions.timestampNTZAsWallClock.toString)) +
-      (JDBCOptions.JDBC_ZONELESS_TIMESTAMP_AS_NTZ -> options.getOrDefault(
-        JDBCOptions.JDBC_ZONELESS_TIMESTAMP_AS_NTZ, jdbcOptions.zonelessTimestampAsNTZ.toString))
+      (JDBCOptions.JDBC_ZONELESS_TIMESTAMP_AS_NTZ -> jdbcOptions.zonelessTimestampAsNTZ.toString)
   }
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): JDBCScanBuilder = {

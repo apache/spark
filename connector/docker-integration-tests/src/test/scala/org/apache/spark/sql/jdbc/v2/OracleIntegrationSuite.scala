@@ -244,6 +244,40 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
     }
   }
 
+  gridTest("SPARK-60420: V2 aggregates retain catalog timestamp mapping")(
+      Seq(false, true)) { zoneless =>
+    val catalog = s"oracle_aggregate_$zoneless"
+    withDefaultTimeZone(LA) {
+      withSQLConf(
+          SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "false",
+          SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC",
+          SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_LTZ",
+          s"spark.sql.catalog.$catalog" -> classOf[JDBCTableCatalog].getName,
+          s"spark.sql.catalog.$catalog.url" -> db.getJdbcUrl(dockerIp, externalPort),
+          s"spark.sql.catalog.$catalog.zonelessTimestampAsNTZ" -> zoneless.toString) {
+        val table = s"$catalog.${namespaceOpt.get}.${caseConvert("datetime")}"
+        val expectedType = if (zoneless) TimestampNTZType else TimestampType
+        val schema = spark.table(table).schema
+        Seq("date1", "time1").foreach { column =>
+          assert(schema(caseConvert(column)).dataType === expectedType)
+          Seq(
+            (s"MIN($column), MAX($column)", ""),
+            (s"$column, COUNT(*)", s" GROUP BY $column")
+          ).foreach { case (projection, groupBy) =>
+            val options = s"'zonelessTimestampAsNTZ' = '${!zoneless}'"
+            val pushed = sql(s"SELECT $projection FROM $table WITH (" +
+              s"$options, 'pushDownAggregate' = 'true')$groupBy")
+            val unpushed = sql(s"SELECT $projection FROM $table WITH (" +
+              s"$options, 'pushDownAggregate' = 'false')$groupBy")
+            checkAggregateRemoved(pushed)
+            checkAggregateRemoved(unpushed, pushed = false)
+            checkAnswer(pushed, unpushed)
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-46478: Revert SPARK-43049 to use varchar(255) for string") {
     val tableName = catalogName + ".t1"
     withTable(tableName) {

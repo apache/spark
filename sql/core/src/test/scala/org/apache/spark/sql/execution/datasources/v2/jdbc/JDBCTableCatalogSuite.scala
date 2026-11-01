@@ -108,49 +108,56 @@ class JDBCTableCatalogSuite extends SharedSparkSession {
     checkAnswer(sql("SHOW TABLES IN h2.bad_test"), Seq())
   }
 
-  test("SPARK-60420: JDBC builders preserve timestamp defaults and honor query overrides") {
+  test("SPARK-60420: JDBC builders preserve timestamp defaults and honor conversion overrides") {
     val wallClockKey = JDBCOptions.JDBC_TIMESTAMP_NTZ_WALL_CLOCK
     val zonelessKey = JDBCOptions.JDBC_ZONELESS_TIMESTAMP_AS_NTZ
     val legacyKey = SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key
     val schema = new StructType().add("t", TimestampNTZType)
+
+    def timestampOptions(
+        wallClock: Option[Boolean],
+        zoneless: Option[Boolean],
+        upperCase: Boolean): Map[String, String] = {
+      (wallClock.toSeq.map(wallClockKey -> _.toString) ++
+        zoneless.toSeq.map(zonelessKey -> _.toString)).map { case (key, value) =>
+        (if (upperCase) key.toUpperCase(Locale.ROOT) else key) -> value
+      }.toMap
+    }
+
     for {
       legacy <- Seq(false, true)
-      catalogValue <- Seq(None, Some(false), Some(true))
+      catalogWallClock <- Seq(None, Some(false), Some(true))
+      catalogZoneless <- Seq(None, Some(false), Some(true))
       catalogUpperCase <- Seq(false, true)
     } {
       val table = withSQLConf(legacyKey -> legacy.toString) {
         val parameters = Map(
           "url" -> "jdbc:oracle:thin:@//host:1521/db",
           "dbtable" -> "t",
-          "driver" -> "org.h2.Driver") ++ catalogValue.toSeq.flatMap { value =>
-          Seq(wallClockKey -> value.toString, zonelessKey -> (!value).toString)
-        }.map { case (key, value) =>
-          (if (catalogUpperCase) key.toUpperCase(Locale.ROOT) else key) -> value
-        }
+          "driver" -> "org.h2.Driver") ++
+          timestampOptions(catalogWallClock, catalogZoneless, catalogUpperCase)
         JDBCTable(Identifier.of(Array.empty, "t"), schema, new JDBCOptions(parameters))
       }
       withSQLConf(legacyKey -> (!legacy).toString) {
         for {
-          queryValue <- Seq(None, Some(false), Some(true))
-          upperCase <- Seq(false, true)
+          queryWallClock <- Seq(None, Some(false), Some(true))
+          queryZoneless <- Seq(None, Some(false), Some(true))
+          queryUpperCase <- Seq(false, true)
         } {
-          val parameters = queryValue.toSeq.flatMap { value =>
-            Seq(wallClockKey -> value.toString, zonelessKey -> (!value).toString)
-          }.map { case (key, value) =>
-            (if (upperCase) key.toUpperCase(Locale.ROOT) else key) -> value
-          }.toMap
+          val parameters = timestampOptions(queryWallClock, queryZoneless, queryUpperCase)
           val queryOptions = new CaseInsensitiveStringMap(parameters.asJava)
           val readOptions = table.newScanBuilder(queryOptions).jdbcOptions
           val writeInfo = LogicalWriteInfoImpl("query-id", schema, queryOptions)
           val writeOptions = table.newWriteBuilder(writeInfo).asInstanceOf[JDBCWriteBuilder].options
-          val clue = s"legacy=$legacy catalog=$catalogValue catalogUpperCase=$catalogUpperCase " +
-            s"query=$queryValue upperCase=$upperCase"
+          val clue = s"legacy=$legacy catalogWallClock=$catalogWallClock " +
+            s"catalogZoneless=$catalogZoneless catalogUpperCase=$catalogUpperCase " +
+            s"queryWallClock=$queryWallClock queryZoneless=$queryZoneless " +
+            s"queryUpperCase=$queryUpperCase"
           withClue(clue) {
             Seq(readOptions, writeOptions).foreach { options =>
               assert(options.timestampNTZAsWallClock ===
-                queryValue.orElse(catalogValue).getOrElse(!legacy))
-              assert(options.zonelessTimestampAsNTZ ===
-                queryValue.orElse(catalogValue).map(!_).getOrElse(!legacy))
+                queryWallClock.orElse(catalogWallClock).getOrElse(!legacy))
+              assert(options.zonelessTimestampAsNTZ === catalogZoneless.getOrElse(!legacy))
             }
           }
         }
