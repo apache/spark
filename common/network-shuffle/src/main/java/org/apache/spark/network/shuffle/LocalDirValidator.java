@@ -40,7 +40,7 @@ import org.apache.spark.internal.MDC;
  * Each entry must canonicalize to a path contained under one of the configured roots (YARN passes
  * {@code yarn.nodemanager.local-dirs}; standalone passes the configured local directories). When
  * app scoping is required in standalone mode, the entry must have the exact form
- * {@code spark-&#42;/executor-&#42;/&lt;url-encoded-appId&gt;}
+ * {@code spark-&#42;/executor-&#42;/&lt;url-encoded-appId&gt;[/blockmgr-&#42;]}
  * below that root. When no roots are configured there is nothing to contain the entries against
  * and they are accepted. An empty array is always
  * allowed.
@@ -93,10 +93,12 @@ class LocalDirValidator {
 
   private static boolean isStandaloneAppDir(Path root, Path path, String appId) {
     Path relative = root.relativize(path);
-    return relative.getNameCount() == 3 &&
+    int count = relative.getNameCount();
+    return (count == 3 || count == 4) &&
       relative.getName(0).toString().startsWith("spark-") &&
       relative.getName(1).toString().startsWith("executor-") &&
-      relative.getName(2).toString().equals(URLEncoder.encode(appId, StandardCharsets.UTF_8));
+      relative.getName(2).toString().equals(URLEncoder.encode(appId, StandardCharsets.UTF_8)) &&
+      (count == 3 || relative.getName(3).toString().startsWith("blockmgr-"));
   }
 
   private static List<Path> canonicalizeRoots(String[] allowedLocalDirs) {
