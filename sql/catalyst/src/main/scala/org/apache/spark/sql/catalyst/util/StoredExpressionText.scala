@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, ExpressionWithUnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, ExprId}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -57,6 +59,20 @@ object StoredExpressionText {
       }
     } catch {
       case _: ParseException => CatalystSqlParser.parseExpression(text)
+    }
+  }
+
+  /**
+   * Analyzes `plan` with `analyzer` under [[conf]], or returns None if a text in it cannot be
+   * analyzed under these settings, such as an identifier string that only the session can parse.
+   */
+  def analyze(plan: LogicalPlan, analyzer: LogicalPlan => LogicalPlan): Option[LogicalPlan] = {
+    try {
+      Some(SQLConf.withExistingConf(conf(SQLConf.get)) {
+        analyzer(plan)
+      })
+    } catch {
+      case _: AnalysisException => None
     }
   }
 

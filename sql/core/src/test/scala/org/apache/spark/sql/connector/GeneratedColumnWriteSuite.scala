@@ -24,9 +24,9 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.expressions.CheckInvariant
 import org.apache.spark.sql.catalyst.util.GeneratedColumn
-import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryCatalog, InMemoryRowLevelOperationTableCatalog}
+import org.apache.spark.sql.connector.catalog.{Column, GenerationExpression, Identifier, InMemoryCatalog, InMemoryRowLevelOperationTableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
-import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, GeneralScalarExpression, Transform}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType, StructType}
@@ -1427,21 +1427,44 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
   }
 
   test("SPARK-60757: a later write carries a row that a non-ANSI writer auto-filled") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+        sql(s"""CREATE TABLE testcat.$tblName(
+               |  a STRING,
+               |  b DOUBLE GENERATED ALWAYS AS (a + 1)
+               |) USING foo""".stripMargin)
+        sql(s"INSERT INTO testcat.$tblName(a) VALUES ('9007199254740993')")
+        sql(s"INSERT INTO testcat.$tblName SELECT * FROM testcat.$tblName")
+      }
+      val row = Row("9007199254740993", 9007199254740994D)
+      checkAnswer(spark.table(s"testcat.$tblName"), Seq(row, row))
+    }
+  }
+
+  test("SPARK-60757: a DELETE does not check the rows that it carries") {
     withRowLevelCatalog {
       val tblName = "my_tab"
       withTable(s"$rowLevelCat.$tblName") {
         withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+          // Without the capability, the rows go in as a non-ANSI writer stored them before.
           sql(s"""CREATE TABLE $rowLevelCat.$tblName(
                  |  id INT,
                  |  a STRING,
                  |  b DOUBLE GENERATED ALWAYS AS (a + 1)
-                 |) USING foo""".stripMargin)
-          sql(s"INSERT INTO $rowLevelCat.$tblName(id, a) VALUES (1, '9007199254740993'), (2, '2')")
+                 |) USING foo TBLPROPERTIES ('$noWriteCapProp' = 'false')""".stripMargin)
+          sql(s"INSERT INTO $rowLevelCat.$tblName VALUES " +
+            "(1, 'abc', NULL), (2, '2', 3D), (3, '3', 4D)")
+          sql(s"ALTER TABLE $rowLevelCat.$tblName SET TBLPROPERTIES ('$noWriteCapProp' = 'true')")
+          sql(s"DELETE FROM $rowLevelCat.$tblName WHERE id >= 3")
+        }
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
           sql(s"DELETE FROM $rowLevelCat.$tblName WHERE id >= 2")
         }
-        checkAnswer(
-          spark.table(s"$rowLevelCat.$tblName"),
-          Row(1, "9007199254740993", 9007199254740994D))
+        checkAnswer(spark.table(s"$rowLevelCat.$tblName"), Row(1, "abc", null))
+        assertWriteFails("CAST_INVALID_INPUT") {
+          sql(s"INSERT INTO $rowLevelCat.$tblName SELECT * FROM $rowLevelCat.$tblName")
+        }
       }
     }
   }
@@ -1750,6 +1773,46 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
       withSQLConf(SQLConf.DOUBLE_QUOTED_IDENTIFIERS.key -> "false") {
         assertWriteFails("PARSE_SYNTAX_ERROR")(hasCheckInvariant(autoFilled))
       }
+    }
+  }
+
+  test("SPARK-60757: a text the fixed settings cannot analyze is read under the session") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> "true",
+          SQLConf.DOUBLE_QUOTED_IDENTIFIERS.key -> "true") {
+        sql(s"""CREATE TABLE testcat.$tblName(
+               |  a INT,
+               |  b INT GENERATED ALWAYS AS (IDENTIFIER('"a"') + 1)
+               |) USING foo""".stripMargin)
+        assert(!hasCheckInvariant(s"INSERT INTO testcat.$tblName(a) VALUES (1)"))
+        assert(hasCheckInvariant(s"INSERT INTO testcat.$tblName VALUES (5, 6)"))
+      }
+    }
+  }
+
+  test("SPARK-60757: a V2 expression without a text that does not convert names its column") {
+    val tblName = "my_tab"
+    val genExpr = new GeneralScalarExpression("NOT_A_FUNCTION", Array.empty[V2Expression])
+    withTable(s"testcat.$tblName") {
+      catalog("testcat").asInstanceOf[InMemoryCatalog].createTable(
+        Identifier.of(Array(), tblName),
+        Array(
+          Column.create("a", IntegerType),
+          Column.builderFor("b", IntegerType)
+            .generationExpression(new GenerationExpression(genExpr)).build()),
+        Array.empty[Transform],
+        Collections.emptyMap[String, String])
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"INSERT INTO testcat.$tblName VALUES (1, 2)")
+        },
+        condition = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+        parameters = Map(
+          "fieldName" -> "b",
+          "expressionStr" -> genExpr.toString,
+          "reason" -> "Spark cannot convert the expression to check a value of the column"))
     }
   }
 

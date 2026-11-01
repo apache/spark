@@ -25,10 +25,11 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.TableOutputResolver.DefaultValueFillMode.{FILL, NONE, RECURSE}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, GeneratedColumn, StoredExpressionText}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, GeneratedColumn}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.getDefaultValueExprOrNullLit
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -118,7 +119,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
         AnsiStoreAssignmentCastCheck.DEFAULT): LogicalPlan = {
     resolveOutputColumnsInternal(
       tableName, expected, query, byName, conf, defaultValueFillMode,
-      ansiStoreAssignmentCastCheck)._1
+      ansiStoreAssignmentCastCheck, CatalystSqlParser.parseExpression)._1
   }
 
   /**
@@ -151,7 +152,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       conf: SQLConf,
       defaultValueFillMode: DefaultValueFillMode.Value,
       ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck,
-      readGenerationExpr: String => Expression = StoredExpressionText.parse
+      readGenerationExpr: String => Expression
   ): (LogicalPlan, Set[String]) = {
 
     if (expected.size < query.output.size) {
@@ -420,7 +421,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       defaultValueFillMode: DefaultValueFillMode.Value,
       enforceFullOutput: Boolean = false,
       ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck,
-      readGenerationExpr: String => Expression = StoredExpressionText.parse
+      readGenerationExpr: String => Expression = CatalystSqlParser.parseExpression
   ): (Seq[NamedExpression], Set[String]) = {
     // Names of generated columns that were auto-filled (not provided by the user). Only populated
     // for top-level columns, since generated columns cannot be nested.
@@ -524,7 +525,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       colPath: Seq[String] = Nil,
       fillDefaultValue: Boolean = false,
       ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck,
-      readGenerationExpr: String => Expression = StoredExpressionText.parse
+      readGenerationExpr: String => Expression = CatalystSqlParser.parseExpression
   ): (Seq[NamedExpression], Set[String]) = {
     // Names of generated columns that were auto-filled (not provided by the user). Only populated
     // for top-level columns, since generated columns cannot be nested.

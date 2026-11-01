@@ -4163,10 +4163,9 @@ class Analyzer(
         }.toMap
         p.copy(projectList = projectList.map {
           case c if autoFilled.contains(c.name) =>
-            SQLConf.withExistingConf(StoredExpressionText.conf(conf)) {
-              execute(Project(Seq(c), LocalRelation(child.output)))
-            } match {
-              case Project(Seq(analyzed), _: LocalRelation) if analyzed.resolved => analyzed
+            StoredExpressionText.analyze(
+                Project(Seq(c), LocalRelation(child.output)), execute) match {
+              case Some(Project(Seq(analyzed), _: LocalRelation)) if analyzed.resolved => analyzed
               case _ => sessionCols(c.name)
             }
           case c => c

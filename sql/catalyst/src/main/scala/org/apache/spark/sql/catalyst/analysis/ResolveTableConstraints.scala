@@ -18,10 +18,11 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions.{And, CheckInvariant, EqualNullSafe, Expression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, V2WriteCommand, WriteDelta}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, RowLevelWrite, V2WriteCommand, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 import org.apache.spark.sql.catalyst.util.{GeneratedColumn, StoredExpressionText}
@@ -29,10 +30,9 @@ import org.apache.spark.sql.connector.catalog.{CatalogManager, GenerationExpress
 import org.apache.spark.sql.connector.catalog.constraints.Check
 import org.apache.spark.sql.connector.write.RowLevelOperation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.internal.SQLConf
 
 /**
- * @param analyze Analyzes a plan under the active [[SQLConf]]. The check of a generated column goes
+ * @param analyze Analyzes a plan under the active SQLConf. The check of a generated column goes
  *                through it, so that the settings its stored text is read under cover its analysis
  *                without applying to the query of the write.
  */
@@ -117,6 +117,13 @@ class ResolveTableConstraints(
       return Seq.empty
     }
 
+    // A DELETE writes no new generated value, so the rows it carries have nothing to check.
+    v2Write match {
+      case w: RowLevelWrite if w.operation.command() == RowLevelOperation.Command.DELETE =>
+        return Seq.empty
+      case _ =>
+    }
+
     val resolver = catalogManager.v1SessionCatalog.conf.resolver
     val autoFilledGenCols = r.output
       .filter(GeneratedColumn.isAutoFilledGeneratedColumn)
@@ -128,7 +135,7 @@ class ResolveTableConstraints(
       Option(col.columnGenerationExpression())
         .filter(_ => !autoFilledGenCols.exists(n => resolver(n, col.name)))
         .map { genExpr =>
-          val catalystExpr = buildGenerationCatalystExpression(genExpr)
+          val catalystExpr = buildGenerationCatalystExpression(col.name, genExpr)
           val colRef = UnresolvedAttribute.quoted(col.name)
           val columnExtractors = Seq(col.name -> colRef)
           val genExprSql = Option(genExpr.getSql()).getOrElse(catalystExpr.sql)
@@ -156,10 +163,8 @@ class ResolveTableConstraints(
   private def analyzeGeneratedColumnCheck(
       check: Expression,
       query: LogicalPlan): Option[Expression] = {
-    SQLConf.withExistingConf(StoredExpressionText.conf(conf)) {
-      analyze(Filter(check, LocalRelation(query.output)))
-    } match {
-      case Filter(analyzed, _: LocalRelation) if analyzed.resolved => Some(analyzed)
+    StoredExpressionText.analyze(Filter(check, LocalRelation(query.output)), analyze) match {
+      case Some(Filter(analyzed, _: LocalRelation)) if analyzed.resolved => Some(analyzed)
       case _ => None
     }
   }
@@ -168,11 +173,18 @@ class ResolveTableConstraints(
    * Convert a V2 GenerationExpression to a Catalyst expression. Read the SQL string first, as an
    * auto-filled value does, and fall back to the V2 expression.
    */
-  private def buildGenerationCatalystExpression(genExpr: GenerationExpression): Expression = {
+  private def buildGenerationCatalystExpression(
+      colName: String,
+      genExpr: GenerationExpression): Expression = {
     Option(genExpr.getSql)
       .map(StoredExpressionText.parse)
       .orElse(Option(genExpr.getExpression).flatMap(V2ExpressionUtils.toCatalyst))
-      .get
+      .getOrElse(throw new AnalysisException(
+        errorClass = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+        messageParameters = Map(
+          "fieldName" -> colName,
+          "expressionStr" -> String.valueOf(genExpr.getExpression),
+          "reason" -> "Spark cannot convert the expression to check a value of the column")))
   }
 
   private def buildColumnExtractors(
