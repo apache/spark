@@ -18,6 +18,8 @@
 package org.apache.spark.deploy.worker
 
 import java.io.{File, IOException}
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import java.time.{Instant, ZoneId}
 import java.time.format.DateTimeFormatter
 import java.util.{Locale, UUID}
@@ -618,43 +620,7 @@ private[deploy] class Worker(
           // Create local dirs for the executor. These are passed to the executor via the
           // SPARK_EXECUTOR_DIRS environment variable, and deleted by the Worker when the
           // application finishes.
-          val appLocalDirs = appDirectories.getOrElse(appId, {
-            val localRootDirs = Utils.getConfiguredLocalDirs(conf)
-            val dirs = localRootDirs.flatMap { dir =>
-              try {
-                // Scope the executor's local dir to this Worker and the application:
-                // <root>/spark-<workerId>/<appId>. The appId segment is what
-                // spark.shuffle.service.requireAppScopedLocalDirs checks at registration.
-                // The per-worker directory keeps Workers that share local root dirs from
-                // sharing an application directory -- in local-cluster mode every Worker
-                // runs in one JVM, where Utils.getOrCreateLocalRootDirs resolves to the
-                // same spark-* dirs -- so one Worker's application cleanup cannot delete
-                // another Worker's live directory. The workerId is folded into the
-                // spark-* name rather than added as a level of its own because
-                // Kubernetes shuffle recovery walks a fixed depth from the executor's
-                // local dir. It is sanitized because it can contain characters that are
-                // significant in paths, e.g. ':' from an IPv6 host, which is also the
-                // SPARK_EXECUTOR_DIRS separator.
-                val workerDir = new File(dir, s"spark-${Utils.sanitizeDirName(workerId)}")
-                val appDir = new File(workerDir, appId)
-                if (!Utils.createDirectory(appDir)) {
-                  throw new IOException(s"Failed to create directory $appDir")
-                }
-                Utils.chmod700(workerDir)
-                Utils.chmod700(appDir)
-                Some(appDir.getAbsolutePath())
-              } catch {
-                case e: IOException =>
-                  logWarning(log"${MDC(ERROR, e.getMessage)}. Ignoring this directory.")
-                  None
-              }
-            }.toImmutableArraySeq
-            if (dirs.isEmpty) {
-              throw new IOException("No subfolder can be created in " +
-                s"${localRootDirs.mkString(",")}.")
-            }
-            dirs
-          })
+          val appLocalDirs = appDirectories.getOrElse(appId, createExecutorLocalDirs(appId))
           appDirectories(appId) = appLocalDirs
           val manager = new ExecutorRunner(
             appId,
@@ -783,6 +749,32 @@ private[deploy] class Worker(
     logError("Connection to master failed! Waiting for master to reconnect...")
     connected = false
     registerWithMaster()
+  }
+
+  private[deploy] def createExecutorLocalDirs(appId: String): Seq[String] = {
+    val localRootDirs = Utils.getOrCreateLocalRootDirs(conf)
+    val dirs = localRootDirs.flatMap { dir =>
+      try {
+        // Keep the random root and executor directories (and their shutdown-hook cleanup),
+        // adding a URL-encoded app id leaf for the shuffle service's app-scope check.
+        val executorDir = Utils.createDirectory(dir, namePrefix = "executor")
+        val appDir = new File(executorDir, URLEncoder.encode(appId, StandardCharsets.UTF_8))
+        if (!Utils.createDirectory(appDir)) {
+          throw new IOException(s"Failed to create directory $appDir")
+        }
+        Utils.chmod700(appDir)
+        Some(appDir.getAbsolutePath())
+      } catch {
+        case e: IOException =>
+          logWarning(log"${MDC(ERROR, e.getMessage)}. Ignoring this directory.")
+          None
+      }
+    }.toImmutableArraySeq
+    if (dirs.isEmpty) {
+      throw new IOException("No subfolder can be created in " +
+        s"${localRootDirs.mkString(",")}.")
+    }
+    dirs
   }
 
   private def maybeCleanupApplication(id: String): Unit = {

@@ -911,14 +911,13 @@ package object config {
   private[spark] val SHUFFLE_SERVICE_REQUIRE_APP_SCOPED_LOCAL_DIRS =
     ConfigBuilder("spark.shuffle.service.requireAppScopedLocalDirs")
       .doc("Whether the external shuffle service requires every local directory an executor " +
-        "reports at registration to lie inside the registering application's own " +
-        "per-application directory: the application id must appear as a path segment of the " +
-        "directory's canonical path, under one of the service's configured local directory " +
-        "roots. This guards against mis-registration (e.g. a bug or race mixing up " +
-        "application directories); it is not an isolation boundary against malicious " +
-        "applications, because the application id is supplied by the client and is " +
-        "authenticated only when spark.authenticate is enabled, so enable both together. " +
-        "Only affects standalone mode. Enable it only after every Worker in the cluster " +
+        "reports at registration to use the registering application's own directory: the " +
+        "path must end in spark-*/executor-*/<url-encoded-appId> under one of the service's " +
+        "configured local directory roots. This guards against mis-registration (e.g. a bug " +
+        "or race mixing up application directories); it is not an isolation boundary against " +
+        "malicious applications, because the application id is supplied by the client and " +
+        "standalone authentication does not bind a registration to a particular application " +
+        "id. Only affects standalone mode. Enable it only after every Worker in the cluster " +
         "creates per-application executor local directories (Workers on this version do); " +
         "executors launched by older Workers report unscoped paths and their registrations " +
         "are rejected while this is enabled. The check happens only at registration: with " +
