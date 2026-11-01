@@ -72,6 +72,10 @@ class FilterPushdownSuite extends PlanTest {
       && (("x.a".attr > 3) && ("y.a".attr > 13) || ("x.a".attr > 1) && ("y.a".attr > 11)))).analyze
   }
 
+  // Stands in for an expensive expression: a regex whose pattern is not a constant is compiled
+  // for every row.
+  private def expensiveRLike(tag: String): Expression = $"e".rlike(Concat(Seq($"e", Literal(tag))))
+
   // This test already passes.
   test("eliminate subqueries") {
     val originalQuery =
@@ -175,15 +179,15 @@ class FilterPushdownSuite extends PlanTest {
   test("SPARK-59693: Do double evaluation when configured") {
     withSQLConf(SQLConf.AVOID_DOUBLE_FILTER_EVAL.key -> "false") {
       val originalQuery = testStringRelation
-        .select($"a", $"e".rlike("magic") as "f", $"e".rlike("notmagic") as "j", $"b")
+        .select($"a", expensiveRLike("magic") as "f", expensiveRLike("notmagic") as "j", $"b")
         .where($"a" > 5 && $"f")
         .analyze
 
       val optimized = Optimize.execute(originalQuery)
 
       val correctAnswer = testStringRelation
-        .where($"a" > 5 && $"e".rlike("magic"))
-        .select($"a", $"e".rlike("magic") as "f", $"e".rlike("notmagic") as "j", $"b")
+        .where($"a" > 5 && expensiveRLike("magic"))
+        .select($"a", expensiveRLike("magic") as "f", expensiveRLike("notmagic") as "j", $"b")
         .analyze
 
       comparePlans(optimized, correctAnswer)
@@ -192,7 +196,7 @@ class FilterPushdownSuite extends PlanTest {
 
   test("SPARK-59693: Make sure that we handle the case where everything is expensive") {
     val originalQuery = testStringRelation
-      .select($"e".rlike("magic") as "f")
+      .select(expensiveRLike("magic") as "f")
       .where($"f")
       .analyze
 
@@ -269,7 +273,7 @@ class FilterPushdownSuite extends PlanTest {
   // Case 1: Multiple filters that don't reference any projection aliases - all should be pushed
   test("SPARK-59693: Case 1 - multiple filters not referencing projection aliases") {
     val originalQuery = testStringRelation
-      .select($"a" as "c", $"e".rlike("magic") as "f", $"b" as "d", $"a", $"b")
+      .select($"a" as "c", expensiveRLike("magic") as "f", $"b" as "d", $"a", $"b")
       .where($"a" > 5 && $"b" < 10)
       .analyze
 
@@ -279,7 +283,7 @@ class FilterPushdownSuite extends PlanTest {
     // simple aliases (c->a, d->b) which are inexpensive
     val correctAnswer = testStringRelation
       .where($"a" > 5 && $"b" < 10)
-      .select($"a" as "c", $"e".rlike("magic") as "f", $"b" as "d", $"a", $"b")
+      .select($"a" as "c", expensiveRLike("magic") as "f", $"b" as "d", $"a", $"b")
       .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -288,7 +292,7 @@ class FilterPushdownSuite extends PlanTest {
   // Case 2: Multiple filters with inexpensive references - all should be pushed
   test("SPARK-59693: Case 2 - multiple filters with inexpensive alias references") {
     val originalQuery = testStringRelation
-      .select($"a" + $"b" as "sum", $"a" - $"b" as "diff", $"e".rlike("magic") as "f")
+      .select($"a" + $"b" as "sum", $"a" - $"b" as "diff", expensiveRLike("magic") as "f")
       .where($"sum" > 10 && $"diff" < 5)
       .analyze
 
@@ -297,7 +301,7 @@ class FilterPushdownSuite extends PlanTest {
     // Both sum and diff are inexpensive (arithmetic), so both filters should be pushed
     val correctAnswer = testStringRelation
       .where($"a" + $"b" > 10 && $"a" - $"b" < 5)
-      .select($"a" + $"b" as "sum", $"a" - $"b" as "diff", $"e".rlike("magic") as "f")
+      .select($"a" + $"b" as "sum", $"a" - $"b" as "diff", expensiveRLike("magic") as "f")
       .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -306,7 +310,7 @@ class FilterPushdownSuite extends PlanTest {
   // Case 3: Filter references expensive to compute references.
   test("SPARK-59693: Avoid double evaluation with projections can't push past certain items") {
     val originalQuery = testStringRelation
-      .select($"a", $"e".rlike("magic") as "f")
+      .select($"a", expensiveRLike("magic") as "f")
       .where($"a" > 5 || $"f")
       .analyze
 
@@ -318,7 +322,7 @@ class FilterPushdownSuite extends PlanTest {
   // Combined case 1, 2, and 3 filter pushdown
   test("SPARK-59693: Case 1, 2, and 3 make sure we leave up and push down correctly.") {
     val originalQuery = testStringRelation
-      .select($"a" + $"b" as "sum", $"a" - $"b" as "diff", $"e".rlike("magic") as "f")
+      .select($"a" + $"b" as "sum", $"a" - $"b" as "diff", expensiveRLike("magic") as "f")
       .where($"sum" > 10 && $"diff" < 5 && $"f")
       .analyze
 
@@ -328,16 +332,83 @@ class FilterPushdownSuite extends PlanTest {
     // rlike magic is expensive so not pushed.
     val correctAnswer = testStringRelation
       .where($"a" + $"b" > 10 && $"a" - $"b" < 5)
-      .select($"a" + $"b" as "sum", $"a" - $"b" as "diff", $"e".rlike("magic") as "f")
+      .select($"a" + $"b" as "sum", $"a" - $"b" as "diff", expensiveRLike("magic") as "f")
       .where($"f")
       .analyze
 
     comparePlans(optimized, correctAnswer)
   }
 
+  test("SPARK-60632: Push a filter on a LIKE/RLIKE alias with a cheap constant pattern") {
+    Seq(
+      $"e".rlike("^1"),
+      $"e".rlike("magic"),
+      $"e".rlike("^a.*b"),
+      $"e".like("1_"),
+      $"e".like("%magic%"),
+      // ILIKE, as the optimizer sees it after `ReplaceExpressions`.
+      Like(Lower($"e"), Lower(Literal("%Magic%")), '\\')).foreach { pred =>
+      val originalQuery = testStringRelation
+        .select($"a", pred as "f")
+        .where($"f")
+        .analyze
+
+      val correctAnswer = testStringRelation
+        .where(pred)
+        .select($"a", pred as "f")
+        .analyze
+
+      comparePlans(Optimize.execute(originalQuery), correctAnswer)
+    }
+  }
+
+  test("SPARK-60632: Do not push a filter on a LIKE/RLIKE alias with a backtracking pattern") {
+    Seq($"e".rlike("(a+)+b"), $"e".rlike(".*a.*b"), $"e".like("%a%b%c")).foreach { pred =>
+      val originalQuery = testStringRelation
+        .select($"a", pred as "f")
+        .where($"f")
+        .analyze
+
+      comparePlans(Optimize.execute(originalQuery), originalQuery)
+    }
+  }
+
+  test("SPARK-60632: Do not push a filter on a LIKE/RLIKE alias with version 0 of the estimate") {
+    Seq($"e".rlike("^1"), $"e".like("1_"), !$"e".rlike("^1")).foreach { pred =>
+      val originalQuery = testStringRelation
+        .select($"a", pred as "f")
+        .where($"f")
+        .analyze
+
+      // A parent expression caches whether its child is expensive, so optimize the same plan
+      // with version 1 first.
+      Optimize.execute(originalQuery)
+      withSQLConf(SQLConf.REGEX_PATTERN_COST_ESTIMATE_VERSION.key -> "0") {
+        comparePlans(Optimize.execute(originalQuery), originalQuery)
+      }
+    }
+
+    // Version 0 also splits the projection between two LIKE/RLIKE aliases.
+    withSQLConf(SQLConf.REGEX_PATTERN_COST_ESTIMATE_VERSION.key -> "0") {
+      val originalQuery = testStringRelation
+        .select($"a", $"e".rlike("^1") as "f", $"e".rlike("^2") as "g", $"b")
+        .where($"f" && $"g")
+        .analyze
+
+      val correctAnswer = testStringRelation
+        .select($"a", $"b", $"e", $"e".rlike("^1") as "f")
+        .where($"f")
+        .select($"a", $"f", $"e".rlike("^2") as "g", $"b")
+        .where($"g")
+        .analyze
+
+      comparePlans(Optimize.execute(originalQuery), correctAnswer)
+    }
+  }
+
   test("SPARK-55014: split the projection so a second expensive element sees fewer rows") {
     val originalQuery = testStringRelation
-      .select($"a", $"e".rlike("magic") as "f", $"e".rlike("other") as "g", $"b")
+      .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g", $"b")
       .where($"f" && $"g")
       .analyze
 
@@ -346,9 +417,9 @@ class FilterPushdownSuite extends PlanTest {
     // Both regexes are expensive and neither condition needs both, so f is computed first and
     // 'other' only runs on the rows 'magic' matched.
     val correctAnswer = testStringRelation
-      .select($"a", $"b", $"e", $"e".rlike("magic") as "f")
+      .select($"a", $"b", $"e", expensiveRLike("magic") as "f")
       .where($"f")
-      .select($"a", $"f", $"e".rlike("other") as "g", $"b")
+      .select($"a", $"f", expensiveRLike("other") as "g", $"b")
       .where($"g")
       .analyze
 
@@ -357,7 +428,7 @@ class FilterPushdownSuite extends PlanTest {
 
   test("SPARK-55014: split the projection even for a single expensive condition") {
     val originalQuery = testStringRelation
-      .select($"a", $"e".rlike("magic") as "f", $"e".rlike("other") as "g", $"b")
+      .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g", $"b")
       .where($"f")
       .analyze
 
@@ -365,9 +436,9 @@ class FilterPushdownSuite extends PlanTest {
 
     // g is never filtered on but is still expensive, so it is worth deferring past the filter on f.
     val correctAnswer = testStringRelation
-      .select($"a", $"b", $"e", $"e".rlike("magic") as "f")
+      .select($"a", $"b", $"e", expensiveRLike("magic") as "f")
       .where($"f")
-      .select($"a", $"f", $"e".rlike("other") as "g", $"b")
+      .select($"a", $"f", expensiveRLike("other") as "g", $"b")
       .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -375,8 +446,8 @@ class FilterPushdownSuite extends PlanTest {
 
   test("SPARK-55014: split the projection once per group of expensive elements") {
     val originalQuery = testStringRelation
-      .select($"a", $"e".rlike("magic") as "f", $"e".rlike("other") as "g", $"e".rlike("third") as
-        "j")
+      .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g",
+        expensiveRLike("third") as "j")
       .where($"f" && $"g" && $"j")
       .analyze
 
@@ -384,11 +455,11 @@ class FilterPushdownSuite extends PlanTest {
 
     // One projection per condition except the last -- nothing left to defer past it.
     val correctAnswer = testStringRelation
-      .select($"a", $"b", $"e", $"e".rlike("magic") as "f")
+      .select($"a", $"b", $"e", expensiveRLike("magic") as "f")
       .where($"f")
-      .select($"a", $"b", $"e", $"f", $"e".rlike("other") as "g")
+      .select($"a", $"b", $"e", $"f", expensiveRLike("other") as "g")
       .where($"g")
-      .select($"a", $"f", $"g", $"e".rlike("third") as "j")
+      .select($"a", $"f", $"g", expensiveRLike("third") as "j")
       .where($"j")
       .analyze
 
@@ -397,7 +468,7 @@ class FilterPushdownSuite extends PlanTest {
 
   test("SPARK-55014: a condition needing every expensive element can not be split off") {
     val originalQuery = testStringRelation
-      .select($"a", $"e".rlike("magic") as "f", $"e".rlike("other") as "g", $"b")
+      .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g", $"b")
       .where($"f" || $"g")
       .analyze
 
@@ -412,8 +483,8 @@ class FilterPushdownSuite extends PlanTest {
 
   test("SPARK-55014: a condition over several expensive elements can still be split off") {
     val originalQuery = testStringRelation
-      .select($"a", $"e".rlike("magic") as "f", $"e".rlike("other") as "g", $"e".rlike("third") as
-        "j")
+      .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g",
+        expensiveRLike("third") as "j")
       .where($"f" || $"g")
       .analyze
 
@@ -422,9 +493,9 @@ class FilterPushdownSuite extends PlanTest {
     // A third expensive element to defer, so f and g compute together below the filter and j
     // waits above it.
     val correctAnswer = testStringRelation
-      .select($"a", $"b", $"e", $"e".rlike("magic") as "f", $"e".rlike("other") as "g")
+      .select($"a", $"b", $"e", expensiveRLike("magic") as "f", expensiveRLike("other") as "g")
       .where($"f" || $"g")
-      .select($"a", $"f", $"g", $"e".rlike("third") as "j")
+      .select($"a", $"f", $"g", expensiveRLike("third") as "j")
       .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -432,8 +503,8 @@ class FilterPushdownSuite extends PlanTest {
 
   test("SPARK-55014: the least demanding condition goes lowest") {
     val originalQuery = testStringRelation
-      .select($"a", $"e".rlike("magic") as "f", $"e".rlike("other") as "g", $"e".rlike("third") as
-        "j")
+      .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g",
+        expensiveRLike("third") as "j")
       .where(($"f" || $"g") && $"j")
       .analyze
 
@@ -442,9 +513,9 @@ class FilterPushdownSuite extends PlanTest {
     // j needs one alias and (f || g) needs two, so j goes first even though it is projected
     // last -- leaving two expensive elements to run on its survivors.
     val correctAnswer = testStringRelation
-      .select($"a", $"b", $"e", $"e".rlike("third") as "j")
+      .select($"a", $"b", $"e", expensiveRLike("third") as "j")
       .where($"j")
-      .select($"a", $"e".rlike("magic") as "f", $"e".rlike("other") as "g", $"j")
+      .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g", $"j")
       .where($"f" || $"g")
       .analyze
 
@@ -453,7 +524,7 @@ class FilterPushdownSuite extends PlanTest {
 
   test("SPARK-55014: split the projection while also pushing the cheap conditions") {
     val originalQuery = testStringRelation
-      .select($"a" + $"b" as "sum", $"e".rlike("magic") as "f", $"e".rlike("other") as "g")
+      .select($"a" + $"b" as "sum", expensiveRLike("magic") as "f", expensiveRLike("other") as "g")
       .where($"sum" > 10 && $"f")
       .analyze
 
@@ -462,9 +533,9 @@ class FilterPushdownSuite extends PlanTest {
     // sum is cheap (case 2, pushed down); f is expensive (split around); g deferred on top.
     val correctAnswer = testStringRelation
       .where($"a" + $"b" > 10)
-      .select($"a", $"b", $"e", $"e".rlike("magic") as "f")
+      .select($"a", $"b", $"e", expensiveRLike("magic") as "f")
       .where($"f")
-      .select($"a" + $"b" as "sum", $"f", $"e".rlike("other") as "g")
+      .select($"a" + $"b" as "sum", $"f", expensiveRLike("other") as "g")
       .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -472,7 +543,7 @@ class FilterPushdownSuite extends PlanTest {
 
   test("SPARK-55014: no split when the only elements left to defer are cheap") {
     val originalQuery = testStringRelation
-      .select($"a" + $"b" as "sum", $"e".rlike("magic") as "f")
+      .select($"a" + $"b" as "sum", expensiveRLike("magic") as "f")
       .where($"f")
       .analyze
 
@@ -486,7 +557,7 @@ class FilterPushdownSuite extends PlanTest {
 
   test("SPARK-55014: the projection on top keeps the original column ordering") {
     val originalQuery = testStringRelation
-      .select($"b", $"e".rlike("magic") as "f", $"a", $"e".rlike("other") as "g")
+      .select($"b", expensiveRLike("magic") as "f", $"a", expensiveRLike("other") as "g")
       .where($"f" && $"g")
       .analyze
 
@@ -494,9 +565,9 @@ class FilterPushdownSuite extends PlanTest {
 
     // f is computed below but must come back out in its original position.
     val correctAnswer = testStringRelation
-      .select($"a", $"b", $"e", $"e".rlike("magic") as "f")
+      .select($"a", $"b", $"e", expensiveRLike("magic") as "f")
       .where($"f")
-      .select($"b", $"f", $"a", $"e".rlike("other") as "g")
+      .select($"b", $"f", $"a", expensiveRLike("other") as "g")
       .where($"g")
       .analyze
 
@@ -527,7 +598,7 @@ class FilterPushdownSuite extends PlanTest {
 
   test("SPARK-55014: no split when the expensive work is shared between elements") {
     val originalQuery = testStringRelation
-      .select($"a", $"e".rlike("magic") as "f", Not($"e".rlike("magic")) as "g")
+      .select($"a", expensiveRLike("magic") as "f", Not(expensiveRLike("magic")) as "g")
       .where($"f" && $"g")
       .analyze
 
@@ -543,8 +614,8 @@ class FilterPushdownSuite extends PlanTest {
 
   test("SPARK-55014: elements sharing expensive work are split off together") {
     val originalQuery = testStringRelation
-      .select($"a", $"e".rlike("magic") as "f", Not($"e".rlike("magic")) as "g",
-        $"e".rlike("other") as "j")
+      .select($"a", expensiveRLike("magic") as "f", Not(expensiveRLike("magic")) as "g",
+        expensiveRLike("other") as "j")
       .where($"f" && $"j")
       .analyze
 
@@ -553,9 +624,9 @@ class FilterPushdownSuite extends PlanTest {
     // j is its own work needing one alias; f drags g along, so j splits off first and f and g
     // stay together on top.
     val correctAnswer = testStringRelation
-      .select($"a", $"b", $"e", $"e".rlike("other") as "j")
+      .select($"a", $"b", $"e", expensiveRLike("other") as "j")
       .where($"j")
-      .select($"a", $"e".rlike("magic") as "f", Not($"e".rlike("magic")) as "g", $"j")
+      .select($"a", expensiveRLike("magic") as "f", Not(expensiveRLike("magic")) as "g", $"j")
       .where($"f")
       .analyze
 
@@ -564,8 +635,8 @@ class FilterPushdownSuite extends PlanTest {
 
   test("SPARK-55014: a non-deterministic condition is not split off into a lower layer") {
     val originalQuery = testStringRelation
-      .select($"a", $"e".rlike("magic") as "f", $"e".rlike("other") as "g", $"e".rlike("third") as
-        "j")
+      .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g",
+        expensiveRLike("third") as "j")
       .where((Rand(10) > 0.5 || $"j") && ($"f" || $"g"))
       .analyze
 
@@ -575,9 +646,9 @@ class FilterPushdownSuite extends PlanTest {
     // it would go lowest and see every row. It stays in the top filter instead, and (f || g)
     // takes the layer it would have had.
     val correctAnswer = testStringRelation
-      .select($"a", $"b", $"e", $"e".rlike("magic") as "f", $"e".rlike("other") as "g")
+      .select($"a", $"b", $"e", expensiveRLike("magic") as "f", expensiveRLike("other") as "g")
       .where($"f" || $"g")
-      .select($"a", $"f", $"g", $"e".rlike("third") as "j")
+      .select($"a", $"f", $"g", expensiveRLike("third") as "j")
       .where(Rand(10) > 0.5 || $"j")
       .analyze
 
@@ -586,7 +657,7 @@ class FilterPushdownSuite extends PlanTest {
 
   test("SPARK-55014: no split when the expensive conditions are non-deterministic") {
     val originalQuery = testStringRelation
-      .select($"a", $"e".rlike("magic") as "f", $"e".rlike("other") as "g", $"b")
+      .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g", $"b")
       .where(Rand(10) > 0.5 || $"f")
       .analyze
 
@@ -599,10 +670,161 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("SPARK-60602: a throwable condition is not split off ahead of the conditions before it") {
+    val raiseError = IsNull(RaiseError(Literal("boom")))
+    val originalQuery = testStringRelation
+      .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g", $"b")
+      .where($"f" =!= $"g" && ($"g" || raiseError))
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // On cost alone (g || raiseError) would go lowest, raising on rows (f != g) filters out.
+    // It stays in the top filter instead, which leaves nothing worth splitting.
+    comparePlans(optimized, originalQuery)
+  }
+
+  test("SPARK-60602: a throwable condition does not keep later conditions from being split off") {
+    val raiseError = IsNull(RaiseError(Literal("boom")))
+    val originalQuery = testStringRelation
+      .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g", $"b")
+      .where(($"g" || raiseError) && $"f")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // Filtering on f first only leaves the throwable condition fewer rows to raise on.
+    val correctAnswer = testStringRelation
+      .select($"a", $"b", $"e", expensiveRLike("magic") as "f")
+      .where($"f")
+      .select($"a", $"f", expensiveRLike("other") as "g", $"b")
+      .where($"g" || raiseError)
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-60602: a cheap throwable condition is not pushed ahead of an expensive one") {
+    val raiseError = IsNull(RaiseError(Literal("boom")))
+    Seq(true, false).foreach { split =>
+      withSQLConf(SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> split.toString) {
+        val originalQuery = testStringRelation
+          .select($"a", expensiveRLike("magic") as "f", $"b")
+          .where($"f" && ($"a" > 5 || raiseError) && $"b" > 1)
+          .analyze
+
+        val optimized = Optimize.execute(originalQuery)
+
+        // Only the non-throwable cheap condition moves below the expensive one.
+        val correctAnswer = testStringRelation
+          .where($"b" > 1)
+          .select($"a", expensiveRLike("magic") as "f", $"b")
+          .where($"f" && ($"a" > 5 || raiseError))
+          .analyze
+
+        comparePlans(optimized, correctAnswer)
+
+        // Written ahead of every expensive condition, it is pushed as usual.
+        val throwableFirst = testStringRelation
+          .select($"a", expensiveRLike("magic") as "f", $"b")
+          .where(($"a" > 5 || raiseError) && $"f")
+          .analyze
+
+        val throwableFirstAnswer = testStringRelation
+          .where($"a" > 5 || raiseError)
+          .select($"a", expensiveRLike("magic") as "f", $"b")
+          .where($"f")
+          .analyze
+
+        comparePlans(Optimize.execute(throwableFirst), throwableFirstAnswer)
+      }
+    }
+  }
+
+  test("SPARK-60602: a cheap condition over a throwable alias is not pushed ahead of an " +
+    "expensive one") {
+    val raiseError = IsNull(RaiseError(Literal("boom")))
+    val originalQuery = testStringRelation
+      .select($"a", expensiveRLike("magic") as "f", If($"a" > 5, Literal(true), raiseError) as "t",
+        $"b")
+      .where($"f" && $"t" && $"b" > 1)
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // `t` is cheap, but reading it evaluates the throwable expression behind it.
+    val correctAnswer = testStringRelation
+      .where($"b" > 1)
+      .select($"a", expensiveRLike("magic") as "f", If($"a" > 5, Literal(true), raiseError) as "t",
+        $"b")
+      .where($"f" && $"t")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-60602: a condition over a throwable alias is not split off ahead of the " +
+    "conditions before it") {
+    val raiseError = IsNull(RaiseError(Literal("boom")))
+    val throwableAlias = If(expensiveRLike("other"), Literal(true), raiseError)
+    val originalQuery = testStringRelation
+      .select($"a", expensiveRLike("magic") as "f", expensiveRLike("third") as "h",
+        throwableAlias as "g", $"b")
+      .where($"f" =!= $"h" && $"g")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // On cost alone the condition on g would go lowest, computing g on every row. Splitting
+    // f and h off instead only leaves g fewer rows to raise on.
+    val correctAnswer = testStringRelation
+      .select($"a", $"b", $"e", expensiveRLike("magic") as "f", expensiveRLike("third") as "h")
+      .where($"f" =!= $"h")
+      .select($"a", $"f", $"h", throwableAlias as "g", $"b")
+      .where($"g")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  // `comparePlans` sorts the conjuncts of each filter, so check the top filter's order directly.
+  private def assertTopFilterConjuncts(plan: LogicalPlan, expected: Seq[Expression]): Unit = {
+    val actual = plan.collectFirst { case Filter(condition, _) => condition }
+      .map(splitConjunctivePredicates).getOrElse(Nil)
+    assert(actual.map(_.canonicalized) === expected.map(_.canonicalized),
+      s"Top filter conjuncts ${actual.mkString(", ")} are not ${expected.mkString(", ")}")
+  }
+
+  test("SPARK-60602: the conditions left above the projection keep their written order") {
+    val raiseError = IsNull(RaiseError(Literal("boom")))
+    val originalQuery = testStringRelation
+      .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g", $"b")
+      .where($"f" =!= $"g" && ($"g" || raiseError) && $"a" > 1)
+      .analyze
+    val Seq(unplaced, throwable, _) = splitConjunctivePredicates(
+      originalQuery.asInstanceOf[Filter].condition)
+
+    // a > 1 is pushed, (f != g) needs every expensive element and is left un-placed, and the
+    // throwable condition is not split. It must still come after (f != g).
+    assertTopFilterConjuncts(Optimize.execute(originalQuery), Seq(unplaced, throwable))
+  }
+
+  test("SPARK-60602: a non-deterministic condition left above the projection keeps its " +
+    "written order") {
+    val originalQuery = testStringRelation
+      .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g", $"b")
+      .where((Rand(10) > 0.5 || $"g") && $"f" =!= $"g" && $"a" > 1)
+      .analyze
+    val Seq(nonDeterministic, unplaced, _) = splitConjunctivePredicates(
+      originalQuery.asInstanceOf[Filter].condition)
+
+    assertTopFilterConjuncts(Optimize.execute(originalQuery), Seq(nonDeterministic, unplaced))
+  }
+
   test("SPARK-55014: do not split the projection when configured") {
     withSQLConf(SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> "false") {
       val originalQuery = testStringRelation
-        .select($"a", $"e".rlike("magic") as "f", $"e".rlike("other") as "g", $"b")
+        .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g", $"b")
         .where($"f" && $"g")
         .analyze
 
@@ -2197,5 +2419,236 @@ class FilterPushdownSuite extends PlanTest {
     val queryC = Filter(GreaterThan(binRatio, Literal(0.5)), binByOver(relation))
     val optimizedC = Optimize.execute(queryC)
     comparePlans(optimizedC, queryC, checkAnalysis = false)
+  }
+
+  test("SPARK-60150: push a filter on a float/double grouping key with the normalized key") {
+    val x = $"x".double
+    val relation = LocalRelation(x)
+    val normX = NormalizeFloatingNumbers.normalize(x)
+
+    // SELECT * FROM (SELECT DISTINCT x FROM t) WHERE cast(x AS STRING) = '-0.0'
+    // DISTINCT becomes Aggregate(x, x) in the optimizer, so build that shape directly.
+    val originalQuery = relation.groupBy(x)(x).where(x.cast(StringType) === "-0.0")
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    // The Aggregate normalizes -0.0 to 0.0 (NormalizeFloatingNumbers), so the pushed predicate
+    // must read the normalized key.
+    val correctAnswer = relation
+      .where(normX.cast(StringType) === "-0.0")
+      .groupBy(x)(x)
+      .analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-60150: normalize only the keys that can change a pushed filter's result") {
+    val x = $"x".double
+    val y = $"y".float
+    val relation = LocalRelation(x, y)
+    val normX = NormalizeFloatingNumbers.normalize(x)
+
+    // Within an OR, the key is normalized under the Cast but not as a direct comparison operand.
+    comparePlans(
+      Optimize.execute(
+        relation.groupBy(x, y)(x, y).where(x > 5.0 || x.cast(StringType) === "-0.0").analyze),
+      relation.where(x > 5.0 || normX.cast(StringType) === "-0.0")
+        .groupBy(x, y)(x, y).analyze)
+
+    // Across conjuncts, only the one that reads the key through a Cast changes.
+    comparePlans(
+      Optimize.execute(
+        relation.groupBy(x, y)(x, y).where(y > 1.0f && x.cast(StringType) === "-0.0").analyze),
+      relation.where(y > 1.0f && normX.cast(StringType) === "-0.0")
+        .groupBy(x, y)(x, y).analyze)
+  }
+
+  test("SPARK-60150: normalize aliases computed from a float/double key after alias expansion") {
+    val x = $"x".double
+    val relation = LocalRelation(x)
+    val normX = NormalizeFloatingNumbers.normalize(x)
+
+    // The alias is computed from the normalized key above the Aggregate, even when the alias
+    // itself is not float/double or is compared directly.
+    comparePlans(
+      Optimize.execute(
+        relation.groupBy(x)(x.cast(StringType).as("s")).where($"s" === "-0.0").analyze),
+      relation.where(normX.cast(StringType) === "-0.0")
+        .groupBy(x)(x.cast(StringType).as("s")).analyze)
+
+    comparePlans(
+      Optimize.execute(
+        relation.groupBy(x)(Length(x.cast(StringType)).as("k")).where($"k" === 4).analyze),
+      relation.where(Length(normX.cast(StringType)) === 4)
+        .groupBy(x)(Length(x.cast(StringType)).as("k")).analyze)
+
+    // A plain rename of the key compared directly is pushed down unchanged.
+    comparePlans(
+      Optimize.execute(relation.groupBy(x)(x.as("k")).where($"k" === 0.0).analyze),
+      relation.where(x === 0.0).groupBy(x)(x.as("k")).analyze)
+  }
+
+  test("SPARK-60150: push down comparisons on a float/double grouping key unchanged") {
+    val x = $"x".double
+    val y = $"y".float
+    val relation = LocalRelation(x, y, $"b".int)
+
+    // Comparisons treat -0.0/0.0 and all NaNs as equal, so they need no normalization. That
+    // includes a FLOAT key widened to DOUBLE to be compared with a DOUBLE value, and InSet.
+    val comparisons = x > 1.0 || (y === 0.0f && !IsNaN(x)) || x.in(2.0, 3.0) || x.isNull ||
+      y > 1.5 || y.in(1.5, 2.5) || InSet(x, Set(4.0, 5.0))
+    val originalQuery = relation
+      .groupBy(x, y)(x, y, count($"b").as("c"))
+      .where(comparisons)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer = relation
+      .where(comparisons)
+      .groupBy(x, y)(x, y, count($"b").as("c"))
+      .analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-60150: normalize grouping expressions and complex keys in pushed filters") {
+    val x = $"x".double
+    val s = $"s".struct(StructType(Seq(StructField("d", DoubleType))))
+    val relation = LocalRelation(x, s)
+
+    // The grouping expression, not the column it reads, is what the Aggregate normalizes.
+    val k = x * 2.0
+    comparePlans(
+      Optimize.execute(
+        relation.groupBy(k)(k.as("k")).where($"k".cast(StringType) === "-0.0").analyze),
+      relation.where(NormalizeFloatingNumbers.normalize(k).cast(StringType) === "-0.0")
+        .groupBy(k)(k.as("k")).analyze)
+
+    // A struct key is normalized field by field.
+    val field = GetStructField(s, 0)
+    comparePlans(
+      Optimize.execute(relation.groupBy(s)(s).where(field.cast(StringType) === "-0.0").analyze),
+      relation.where(GetStructField(NormalizeFloatingNumbers.normalize(s), 0)
+        .cast(StringType) === "-0.0").groupBy(s)(s).analyze)
+  }
+
+  test("SPARK-60150: don't normalize a pushed filter twice") {
+    val x = $"x".double
+    val relation = LocalRelation(x)
+    val normX = NormalizeFloatingNumbers.normalize(x)
+
+    comparePlans(
+      Optimize.execute(
+        relation.groupBy(x)(x).groupBy(x)(x).where(x.cast(StringType) === "-0.0").analyze),
+      relation.where(normX.cast(StringType) === "-0.0").groupBy(x)(x).groupBy(x)(x).analyze)
+
+    // The upper key is computed from the lower key, so the lower key inside the normalized upper
+    // key is normalized too.
+    val k = Pow(x, Literal(-1.0)).as("k")
+    val lower = relation.groupBy(x)(k)
+    val upperKey = k.toAttribute
+    comparePlans(
+      Optimize.execute(
+        lower.groupBy(upperKey)(upperKey).where(upperKey.cast(StringType) === "Infinity").analyze),
+      relation
+        .where(NormalizeFloatingNumbers.normalize(Pow(normX, Literal(-1.0))).cast(StringType) ===
+          "Infinity")
+        .groupBy(x)(k)
+        .groupBy(upperKey)(upperKey)
+        .analyze)
+  }
+
+  test("SPARK-60150: keep a normalization-sensitive filter above a pandas UDF aggregate") {
+    val x = $"x".double
+    val v = $"v".int
+    val relation = LocalRelation(x, v)
+    // Whether such an aggregate outputs normalized keys depends on which of its aggregate
+    // functions column pruning keeps later, so a conjunct that normalizing would change stays
+    // above it, while a plain comparison is still pushed below it.
+    val pandasAgg = PythonUDAF("pandasAgg", null, IntegerType, Seq(v), udfDeterministic = true)
+      .toAggregateExpression().as("p")
+    val sensitive = x.cast(StringType) === "-0.0"
+    for (aggregates <- Seq(Seq(pandasAgg), Seq(pandasAgg, count(v).as("c")))) {
+      comparePlans(
+        Optimize.execute(
+          relation.groupBy(x)(x +: aggregates: _*).where(sensitive && x > 1.0).analyze),
+        relation.where(x > 1.0).groupBy(x)(x +: aggregates: _*).where(sensitive).analyze)
+    }
+  }
+
+  test("SPARK-60150: push a filter below a streaming aggregate unnormalized, as before") {
+    val x = $"x".double
+    val streaming = LocalRelation(Seq(x, $"v".int), isStreaming = true)
+    // A streaming aggregate can still be replaced with a Project of the raw keys, and a filter kept
+    // above it could add a stateful operator.
+    val condition = x.cast(StringType) === "-0.0" && x > 1.0
+    comparePlans(
+      Optimize.execute(streaming.groupBy(x)(x, count($"v").as("c")).where(condition).analyze),
+      streaming.where(condition).groupBy(x)(x, count($"v").as("c")).analyze)
+  }
+
+  test("SPARK-60150: normalizeGroupingExpressions") {
+    val x = $"x".double
+    val f = $"f".float
+    val y = $"y".int
+    val s = $"s".struct(StructType(Seq(StructField("d", DoubleType))))
+    val normX = NormalizeFloatingNumbers.normalize(x)
+    val normS = NormalizeFloatingNumbers.normalize(s)
+    val arr = $"arr".array(DoubleType)
+    def normalize(e: Expression): Expression =
+      PushPredicateThroughNonJoin.normalizeGroupingExpressions(e, Seq(x, f, s, arr))
+    def unchanged(e: Expression): Unit = assert(normalize(e) == e)
+
+    // A grouping key on its own is normalized; other columns and literals are not.
+    assert(normalize(x) == normX)
+    unchanged(y)
+    unchanged(Literal(0.0))
+
+    // A float/double key that is a direct operand of these comparisons is left as is.
+    unchanged(x === 0.0)
+    unchanged(EqualNullSafe(x, Literal(0.0)))
+    unchanged(x < 1.0)
+    unchanged(f >= 1.0f)
+    unchanged(x === x)
+    unchanged(x.in(1.0, 2.0))
+    unchanged(InSet(x, Set(1.0, 2.0)))
+    unchanged(InSubquery(Seq(x), ListQuery(LocalRelation($"y".double))))
+    unchanged(x.isNull)
+    unchanged(x.isNotNull)
+    unchanged(IsNaN(x))
+
+    // A key under any other expression is normalized, even inside a comparison.
+    assert(normalize(x.cast(StringType) === "-0.0") == (normX.cast(StringType) === "-0.0"))
+    assert(normalize(Length(x.cast(StringType)) === 4) == (Length(normX.cast(StringType)) === 4))
+    assert(normalize((x + 0.0) > 5.0) == ((normX + 0.0) > 5.0))
+
+    // A float key widened to double is left as is too, but other casts of it are normalized.
+    unchanged(f.cast(DoubleType) > 1.5)
+    unchanged(f.cast(DoubleType).in(1.5, 2.5))
+    assert(normalize(f.cast(StringType) === "-0.0") ==
+      (NormalizeFloatingNumbers.normalize(f).cast(StringType) === "-0.0"))
+
+    // Only float/double attributes are left as is, so a struct key is normalized.
+    assert(normalize(s.isNull) == normS.isNull)
+    assert(normalize(GetStructField(s, 0) === 0.0) == (GetStructField(normS, 0) === 0.0))
+
+    // Boolean connectives are rewritten child by child.
+    unchanged(x === 0.0 || x > 5.0)
+    unchanged(!(x === 0.0))
+    assert(normalize(x > 5.0 || x.cast(StringType) === "-0.0") ==
+      (x > 5.0 || normX.cast(StringType) === "-0.0"))
+    assert(normalize(y === 1 && !(x.cast(StringType) === "-0.0")) ==
+      (y === 1 && !(normX.cast(StringType) === "-0.0")))
+
+    // An already normalized key, including an array key, is not normalized again, but a key
+    // inside another normalized expression is.
+    unchanged(normX.cast(StringType) === "-0.0")
+    unchanged(NormalizeFloatingNumbers.normalize(arr).cast(StringType) === "[0.0]")
+    assert(normalize(NormalizeFloatingNumbers.normalize(Pow(x, Literal(-1.0))) > 0.0) ==
+      (NormalizeFloatingNumbers.normalize(Pow(normX, Literal(-1.0))) > 0.0))
+
+    // Only the given grouping expressions count, matched semantically rather than by name.
+    assert(PushPredicateThroughNonJoin.normalizeGroupingExpressions(
+      x.cast(StringType), Seq.empty) == x.cast(StringType))
+    val renamed = x.withName("X").withQualifier(Seq("t")).withNullability(false)
+    assert(normalize(renamed) == NormalizeFloatingNumbers.normalize(renamed))
+    unchanged($"x".double)
   }
 }

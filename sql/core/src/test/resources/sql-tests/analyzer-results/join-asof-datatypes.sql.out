@@ -319,17 +319,70 @@ Project [d#x, ts#x AS matched_ts#x]
 
 
 -- !query
-SELECT t.ts, r.ts_ntz AS matched_ts_ntz
-FROM VALUES (TIMESTAMP '2026-06-29 10:00:00') AS t(ts) ASOF JOIN
-     VALUES (TIMESTAMP_NTZ '2026-06-29 09:00:00') AS r(ts_ntz)
-  MATCH_CONDITION (t.ts >= r.ts_ntz)
+SET spark.sql.session.timeZone=America/Los_Angeles
 -- !query analysis
-Project [ts#x, ts_ntz#x AS matched_ts_ntz#x]
-+- AsOfJoin (ts#x >= cast(ts_ntz#x as timestamp)), Inner
-   :- SubqueryAlias t
-   :  +- LocalRelation [ts#x]
+SetCommand (spark.sql.session.timeZone,Some(America/Los_Angeles))
+
+
+-- !query
+SELECT l.id, r.id
+FROM VALUES
+  (TIMESTAMP_LTZ '2024-03-10 10:05:00Z', 1),
+  (TIMESTAMP_LTZ '2024-03-10 10:55:00Z', 2) AS l(ts, id)
+LEFT ASOF JOIN VALUES
+  (TIMESTAMP_NTZ '2024-03-10 02:50:00', 1),
+  (TIMESTAMP_NTZ '2024-03-10 03:00:00', 2),
+  (TIMESTAMP_NTZ '2024-03-10 03:15:00', 3) AS r(ts, id)
+MATCH_CONDITION (l.ts <= r.ts)
+-- !query analysis
+Project [id#x, id#x]
++- AsOfJoin (ts#x <= cast(ts#x as timestamp)), LeftOuter
+   :- SubqueryAlias l
+   :  +- LocalRelation [ts#x, id#x]
    +- SubqueryAlias r
-      +- LocalRelation [ts_ntz#x]
+      +- LocalRelation [ts#x, id#x]
+
+
+-- !query
+SELECT l.id, r.id
+FROM VALUES
+  (TIMESTAMP_LTZ '2024-03-10 10:05:00Z', 1),
+  (TIMESTAMP_LTZ '2024-03-10 10:55:00Z', 2) AS l(ts, id)
+LEFT ASOF JOIN VALUES
+  (TIMESTAMP_NTZ '2024-03-10 02:50:00', 1),
+  (TIMESTAMP_NTZ '2024-03-10 03:00:00', 2),
+  (TIMESTAMP_NTZ '2024-03-10 03:15:00', 3) AS r(ts, id)
+MATCH_CONDITION (l.ts >= r.ts)
+-- !query analysis
+Project [id#x, id#x]
++- AsOfJoin (ts#x >= cast(ts#x as timestamp)), LeftOuter
+   :- SubqueryAlias l
+   :  +- LocalRelation [ts#x, id#x]
+   +- SubqueryAlias r
+      +- LocalRelation [ts#x, id#x]
+
+
+-- !query
+SELECT r.id
+FROM VALUES (TIMESTAMP_LTZ '2024-03-10 10:15:00Z', 2L) AS l(ts, n)
+LEFT ASOF JOIN VALUES
+  (TIMESTAMP_NTZ '2024-03-10 02:50:00', 1, 1),
+  (TIMESTAMP_NTZ '2024-03-10 03:15:00', 1, 2),
+  (TIMESTAMP_NTZ '2024-03-10 03:15:00', 3, 3) AS r(ts, n, id)
+MATCH_CONDITION ((l.ts, l.n) <= (r.ts, r.n))
+-- !query analysis
+Project [id#x]
++- AsOfJoin (named_struct(ts, ts#x, n, n#xL) <= cast(named_struct(ts, ts#x, n, n#x) as struct<ts:timestamp,n:bigint>)), LeftOuter
+   :- SubqueryAlias l
+   :  +- LocalRelation [ts#x, n#xL]
+   +- SubqueryAlias r
+      +- LocalRelation [ts#x, n#x, id#x]
+
+
+-- !query
+RESET spark.sql.session.timeZone
+-- !query analysis
+ResetCommand spark.sql.session.timeZone
 
 
 -- !query

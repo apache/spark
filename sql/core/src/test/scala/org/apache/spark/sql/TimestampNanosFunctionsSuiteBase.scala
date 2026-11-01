@@ -31,9 +31,9 @@ import org.apache.spark.sql.types._
  * End-to-end tests over the nanosecond-precision timestamp types `TIMESTAMP_NTZ(p)` /
  * `TIMESTAMP_LTZ(p)` (`p` in `[7, 9]`), part of the nanosecond timestamp preview (SPARK-56822).
  * Covers the datetime functions (`hour`/`minute`/`second`, `EXTRACT`/`date_part`, the date-field
- * functions) and the `MIN`/`MAX` aggregates (plus `min_by`/`max_by`/`greatest`/`least`). Most
- * tests use the SQL path (`selectExpr`); several also cross-check the Scala `Column` API. The two
- * subclasses run every test with ANSI mode on and off.
+ * functions, `date_add`/`date_sub`) and the `MIN`/`MAX` aggregates (plus `min_by`/`max_by`/
+ * `greatest`/`least`). Most tests use the SQL path (`selectExpr`); several also cross-check the
+ * Scala `Column` API. The two subclasses run every test with ANSI mode on and off.
  */
 abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
 
@@ -240,6 +240,94 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
         new StructType().add("c", TimestampNTZNanosType(p)))
       checkAnswer(
         ntz.selectExpr("year(c)", "month(c)", "day(c)", "extract(DOY FROM c)"),
+        Row(null, null, null, null))
+    }
+  }
+
+  // SPARK-60543: date_add / date_sub (and the dateadd alias) cast a nanos start to DATE like the
+  // micro types, so the precision, time-of-day and sub-microsecond digits never change the result.
+  private val dateAddSubExprs = Seq(
+    "date_add(c, 1)", "date_sub(c, 1)", "dateadd(c, -31)", "date_add(c, '2')", "date_sub(c, 366)")
+
+  test("SPARK-60543: date_add/date_sub over nanosecond TIMESTAMP_NTZ match the micro path") {
+    val ldts = Seq(
+      "2020-02-28T23:59:59.999999999",
+      "2021-01-01T00:00:00.000000001",
+      "1969-12-31T23:59:59.999999999",
+      "1960-07-15T06:07:08.123456789")
+    ldts.foreach { s =>
+      val micro = spark.createDataFrame(
+        spark.sparkContext.parallelize(Seq(Row(LocalDateTime.parse(s)))),
+        new StructType().add("c", TimestampNTZType)).selectExpr(dateAddSubExprs: _*).collect()
+      Seq(7, 8, 9).foreach { p =>
+        checkAnswer(ntzNanos(s, p).selectExpr(dateAddSubExprs: _*), micro.toSeq)
+      }
+    }
+    Seq(7, 8, 9).foreach { p =>
+      checkAnswer(
+        ntzNanos("2020-02-28T23:59:59.999999999", p).selectExpr("date_add(c, 1)", "date_sub(c, 1)"),
+        Row(java.sql.Date.valueOf("2020-02-29"), java.sql.Date.valueOf("2020-02-27")))
+    }
+  }
+
+  test("SPARK-60543: date_add/date_sub over nanosecond TIMESTAMP_LTZ match the micro path") {
+    // In America/Los_Angeles the second and third instants fall on the previous calendar day; in
+    // Asia/Tokyo the last one falls on the next day.
+    val instants = Seq(
+      "2020-02-29T12:34:56.123456789Z",
+      "2020-01-01T04:00:00.123456789Z",
+      "2020-03-01T07:59:59.999999999Z",
+      "1960-07-15T06:07:08.123456789Z",
+      "2020-02-29T20:00:00.123456789Z")
+    Seq("America/Los_Angeles", "UTC", "Asia/Tokyo").foreach { zone =>
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zone) {
+        instants.foreach { s =>
+          val micro = spark.createDataFrame(
+            spark.sparkContext.parallelize(Seq(Row(Instant.parse(s)))),
+            new StructType().add("c", TimestampType)).selectExpr(dateAddSubExprs: _*).collect()
+          Seq(7, 8, 9).foreach { p =>
+            checkAnswer(ltzNanos(s, p).selectExpr(dateAddSubExprs: _*), micro.toSeq)
+          }
+        }
+      }
+    }
+    // 2020-01-01T04:00Z is 2019-12-31 in America/Los_Angeles but 2020-01-01 in UTC, and
+    // 2020-02-29T20:00Z is 2020-03-01 in Asia/Tokyo.
+    checkAnswer(
+      ltzNanos("2020-01-01T04:00:00.123456789Z", 9).selectExpr("date_add(c, 1)"),
+      Row(java.sql.Date.valueOf("2020-01-01")))
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      checkAnswer(
+        ltzNanos("2020-01-01T04:00:00.123456789Z", 9).selectExpr("date_add(c, 1)"),
+        Row(java.sql.Date.valueOf("2020-01-02")))
+    }
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "Asia/Tokyo") {
+      checkAnswer(
+        ltzNanos("2020-02-29T20:00:00.123456789Z", 9).selectExpr("date_add(c, 1)"),
+        Row(java.sql.Date.valueOf("2020-03-02")))
+    }
+  }
+
+  test("SPARK-60543: date_add/date_sub match the functions.* Column API over nanos") {
+    val df = ntzNanos("2020-02-29T12:34:56.123456789", 9)
+    val expected = Row(
+      java.sql.Date.valueOf("2020-03-01"),
+      java.sql.Date.valueOf("2020-02-28"),
+      java.sql.Date.valueOf("2020-03-01"))
+    checkAnswer(df.selectExpr("date_add(c, 1)", "date_sub(c, 1)", "dateadd(c, 1)"), expected)
+    checkAnswer(
+      df.select(date_add(col("c"), 1), date_sub(col("c"), 1), dateadd(col("c"), lit(1))),
+      expected)
+  }
+
+  test("SPARK-60543: date_add/date_sub over NULL nanosecond timestamps") {
+    Seq(7, 8, 9).foreach { p =>
+      val df = spark.createDataFrame(
+        spark.sparkContext.parallelize(Seq(Row(null, null))),
+        new StructType().add("ntz", TimestampNTZNanosType(p)).add("ltz", TimestampLTZNanosType(p)))
+      checkAnswer(
+        df.selectExpr(
+          "date_add(ntz, 1)", "date_sub(ntz, 1)", "date_add(ltz, 1)", "date_sub(ltz, 1)"),
         Row(null, null, null, null))
     }
   }
@@ -823,6 +911,82 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
     }
   }
 
+  test("SPARK-60542: percentile family over nanosecond timestamps keeps the input type") {
+    Seq(7, 8, 9).foreach { p =>
+      val schema = new StructType()
+        .add("ntz", TimestampNTZNanosType(p))
+        .add("ltz", TimestampLTZNanosType(p))
+      // Sub-microsecond offsets that are multiples of 100ns (exact at every p) plus a NULL row,
+      // spread over several partitions so that partial buffers get merged.
+      val ldt = LocalDateTime.parse("2020-01-01T12:00:00")
+      val ins = Instant.parse("2020-01-01T12:00:00Z")
+      val data = Seq(100, 400, 1000).map(n => Row(ldt.plusNanos(n), ins.plusNanos(n))) :+
+        Row(null, null)
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(data, 3), schema)
+      val exprs = Seq(
+        "median(%s)",
+        "percentile(%s, 0.25)",
+        "percentile_cont(0.75) WITHIN GROUP (ORDER BY %s)",
+        "percentile_cont(0.25) WITHIN GROUP (ORDER BY %s DESC)",
+        "percentile_disc(0.5) WITHIN GROUP (ORDER BY %s)")
+      // The interpolated 250ns is floored to 200ns at p = 7.
+      val expectedNanos = Seq(400, if (p == 7) 200 else 250, 700, 700, 400)
+      val ntzRes = df.selectExpr(exprs.map(_.format("ntz")): _*)
+      assert(ntzRes.schema.map(_.dataType) === Seq.fill(exprs.length)(TimestampNTZNanosType(p)))
+      checkAnswer(ntzRes, Row(expectedNanos.map(ldt.plusNanos(_)): _*))
+      val ltzRes = df.selectExpr(exprs.map(_.format("ltz")): _*)
+      assert(ltzRes.schema.map(_.dataType) === Seq.fill(exprs.length)(TimestampLTZNanosType(p)))
+      checkAnswer(ltzRes, Row(expectedNanos.map(ins.plusNanos(_)): _*))
+
+      // The Scala Column API agrees, also for an array of percentages.
+      val arrayRes = df.select(
+        median(col("ntz")), percentile(col("ltz"), array(lit(0.25), lit(0.75))))
+      assert(arrayRes.schema.map(_.dataType) === Seq(
+        TimestampNTZNanosType(p), ArrayType(TimestampLTZNanosType(p), containsNull = false)))
+      checkAnswer(arrayRes,
+        Row(ldt.plusNanos(400), Seq(expectedNanos(1), 700).map(ins.plusNanos(_))))
+
+      // A non-dyadic percentage uses an exact position: 3 * 0.7 is 2.0999999999999996 as a double.
+      val df2 = spark.createDataFrame(spark.sparkContext.parallelize(
+        Seq(100, 200, 300, 1300).map(n => Row(ldt.plusNanos(n), ins.plusNanos(n)))), schema)
+      checkAnswer(
+        df2.selectExpr(
+          "percentile(ntz, 0.7)", "percentile_cont(0.3) WITHIN GROUP (ORDER BY ltz DESC)"),
+        Row(ldt.plusNanos(400), ins.plusNanos(400)))
+    }
+  }
+
+  test("SPARK-60542: percentile over nanosecond timestamps interpolates exactly") {
+    def median9(values: String*): DataFrame = spark.createDataFrame(
+      spark.sparkContext.parallelize(values.map(v => Row(LocalDateTime.parse(v)))),
+      new StructType().add("c", TimestampNTZNanosType(9))).selectExpr("median(c)")
+    // Both values map to the same double, so a double interpolation can't return .123456790.
+    checkAnswer(
+      median9("2020-01-01T12:00:00.123456789", "2020-01-01T12:00:00.123456791"),
+      Row(LocalDateTime.parse("2020-01-01T12:00:00.123456790")))
+    // Pre-epoch: the midpoint -499.5ns is floored to -500ns.
+    checkAnswer(
+      median9("1969-12-31T23:59:59.999999", "1970-01-01T00:00:00.000000001"),
+      Row(LocalDateTime.parse("1969-12-31T23:59:59.999999500")))
+    // The full 0001..9999 range overflows a long in nanoseconds.
+    checkAnswer(
+      median9("0001-01-01T00:00:00", "9999-12-31T23:59:59.999999999"),
+      Row(LocalDateTime.parse("5000-07-02T11:59:59.999999999")))
+    checkAnswer(median9("2020-01-01T12:00:00.123456789"),
+      Row(LocalDateTime.parse("2020-01-01T12:00:00.123456789")))
+    checkAnswer(median9(), Row(null))
+    // A NaN percentage passes analysis and returns the first value, as for other types.
+    val first = LocalDateTime.parse("2020-01-01T12:00:00.000000100")
+    val df = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row(first), Row(first.plusNanos(100)))),
+      new StructType().add("c", TimestampNTZNanosType(9)))
+    checkAnswer(
+      df.selectExpr(
+        "percentile(c, CAST('NaN' AS DOUBLE))",
+        "percentile_cont(CAST('NaN' AS DOUBLE)) WITHIN GROUP (ORDER BY c)"),
+      Row(first, first))
+  }
+
   test("SPARK-57816: date_format / to_char / to_varchar over nanosecond-precision timestamps") {
     // The 9-`S` pattern is a fixed-width fraction field, so it always emits 9 digits; truncating to
     // precision `p` zeros the low digits (floor); it does not drop them. The session zone is
@@ -1269,6 +1433,38 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
     // An explicit CAST still narrows.
     checkAnswer(
       df.select(toStr(col("c").cast(TimestampNTZType))), Row("2020-01-01T12:00:00.123456"))
+  }
+
+  test("subtraction with a nanosecond-precision timestamp operand is rejected") {
+    Seq[(DataType, DataType, Any, Any)](
+      (TimestampNTZNanosType(9), TimestampNTZType,
+        LocalDateTime.parse("2020-01-02T03:04:05.123456789"),
+        LocalDateTime.parse("2020-01-01T03:04:05")),
+      (TimestampLTZNanosType(9), TimestampType,
+        Instant.parse("2020-01-02T03:04:05.123456789Z"),
+        Instant.parse("2020-01-01T03:04:05Z"))).foreach { case (nanosType, microType, n, m) =>
+      val df = spark.createDataFrame(
+        spark.sparkContext.parallelize(Seq(Row(n, m, java.sql.Date.valueOf("2020-01-01")))),
+        new StructType().add("n", nanosType).add("m", microType).add("d", DateType))
+      Seq("false", "true").foreach { legacyInterval =>
+        withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> legacyInterval) {
+          checkError(
+            exception = intercept[AnalysisException](df.selectExpr("n - n")),
+            condition = "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_SUBTRACTION",
+            parameters = Map("sqlExpr" -> "\"(n - n)\""),
+            context = ExpectedContext(fragment = "n - n", start = 0, stop = 4))
+          Seq(col("n") - col("m"), col("m") - col("n"), col("n") - col("d"), col("d") - col("n"))
+            .foreach { c =>
+              val e = intercept[AnalysisException](df.select(c))
+              assert(e.getCondition == "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_SUBTRACTION")
+            }
+        }
+      }
+      // Casting to the micro type still subtracts, at microsecond precision.
+      checkAnswer(
+        df.select(col("n").cast(microType) - col("m")),
+        Row(java.time.Duration.ofDays(1).plusNanos(123456000)))
+    }
   }
 }
 

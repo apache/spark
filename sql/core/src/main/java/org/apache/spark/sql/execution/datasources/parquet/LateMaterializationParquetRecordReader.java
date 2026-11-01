@@ -52,6 +52,7 @@ import org.apache.spark.sql.execution.vectorized.OffHeapColumnVector;
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 import org.apache.spark.sql.internal.SQLConf;
+import org.apache.spark.sql.internal.connector.StorageFilterErrors;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.DecimalType;
@@ -521,7 +522,7 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
     while (nextBlockIndex < blocks.size()) {
       // A plain read checks for a task kill after every batch, and this loop can pass any number
       // of row groups without emitting one.
-      ParquetStorageFilter.throwIfKilled();
+      StorageFilterErrors.throwIfKilled();
       int blockIdx = nextBlockIndex++;
       long blockRowCount = blocks.get(blockIdx).getRowCount();
 
@@ -584,7 +585,7 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
       } catch (MissingOffsetIndexException e) {
         // Parquet turns any IOException reading an offset index into this, a kill's interrupt
         // included, which must not be taken for a missing index.
-        ParquetStorageFilter.throwIfKilled();
+        StorageFilterErrors.throwIfKilled();
         if (reportedMessages.add(OFFSET_INDEX_UNREADABLE)) {
           // The message only, since parquet has logged the stack trace.
           LOG.warn(OFFSET_INDEX_UNREADABLE, MDC.of(LogKeys.PATH, fileReader.getFile()),
@@ -731,7 +732,7 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
     BasePredicate predicate = storageFilter.preparedPredicate();
     while (remaining > 0) {
       // Per chunk, since this decodes a whole row group before its first batch.
-      ParquetStorageFilter.throwIfKilled();
+      StorageFilterErrors.throwIfKilled();
       int num = (int) Math.min((long) capacity, remaining);
       try {
         for (int i = 0; i < keyScratchVectors.length; i++) {
@@ -969,12 +970,12 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
 
   /**
    * Gives the filter up on an error, after rethrowing a task kill or a fatal error the reader must
-   * not absorb, see {@code ParquetStorageFilter.rethrowIfMustPropagate}. Every catch of
+   * not absorb, see {@code StorageFilterErrors.rethrowIfMustPropagate}. Every catch of
    * {@code Throwable} that gives the filter up goes through here. {@code fromRead} says the error
    * came from decoding the key pages.
    */
   private void giveUpOnError(Throwable t, String message, boolean fromRead) {
-    ParquetStorageFilter.rethrowIfMustPropagate(t, fromRead);
+    StorageFilterErrors.rethrowIfMustPropagate(t, fromRead);
     reportOnce(t, message);
   }
 

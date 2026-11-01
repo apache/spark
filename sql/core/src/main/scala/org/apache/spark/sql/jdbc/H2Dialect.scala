@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.analysis.{
   NoSuchNamespaceException,
   NoSuchTableException,
   TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.index.TableIndex
@@ -57,7 +58,8 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
       "POWER", "SQRT", "FLOOR", "CEIL", "ROUND", "SIN", "SINH", "COS", "COSH", "TAN",
       "TANH", "COT", "ASIN", "ACOS", "ATAN", "ATAN2", "DEGREES", "RADIANS", "SIGN",
       "PI", "SUBSTRING", "UPPER", "LOWER", "TRANSLATE", "TRIM", "MD5", "SHA1", "SHA2",
-      "BIT_LENGTH", "CHAR_LENGTH", "CONCAT", "RPAD", "LPAD")
+      "BIT_LENGTH", "CHAR_LENGTH", "CONCAT", "RPAD", "LPAD",
+      CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING)
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
