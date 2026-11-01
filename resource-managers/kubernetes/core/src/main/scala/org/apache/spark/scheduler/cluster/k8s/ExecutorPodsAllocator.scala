@@ -546,7 +546,7 @@ class ExecutorPodsAllocator(
             log"Wait to reuse one of the existing ${MDC(LogKeys.COUNT, PVC_COUNTER.get())} PVCs.")
           return
         }
-        val (newExecutorId, podWithAttachedContainer, resources) =
+        val ExecutorPodCreationSpec(newExecutorId, podWithAttachedContainer, resources, _) =
           buildExecutorPod(applicationId, resourceProfileId, reusablePVCs)
         val optCreatedExecutorPod = try {
           Some(kubernetesClient
@@ -603,11 +603,17 @@ class ExecutorPodsAllocator(
     }
   }
 
+  private case class ExecutorPodCreationSpec(
+      executorId: Long,
+      pod: Pod,
+      resources: Seq[HasMetadata],
+      recoveryMode: Boolean)
+
   // Build on the allocation thread: feature steps and PVC reuse mutate shared state.
   private def buildExecutorPod(
       applicationId: String,
       resourceProfileId: Int,
-      reusablePVCs: mutable.Buffer[PersistentVolumeClaim]): (Long, Pod, Seq[HasMetadata]) = {
+      reusablePVCs: mutable.Buffer[PersistentVolumeClaim]): ExecutorPodCreationSpec = {
     val newExecutorId = EXECUTOR_ID_COUNTER.incrementAndGet()
     if (newExecutorId >= podAllocationMaximum) {
       throw new SparkException(s"Exceed the pod creation limit: $podAllocationMaximum")
@@ -629,7 +635,8 @@ class ExecutorPodsAllocator(
       .build()
     val resources = replacePVCsIfNeeded(
       podWithAttachedContainer, resolvedExecutorSpec.executorKubernetesResources, reusablePVCs)
-    (newExecutorId.toLong, podWithAttachedContainer, resources)
+    ExecutorPodCreationSpec(newExecutorId.toLong, podWithAttachedContainer, resources,
+      executorConf.get(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED).getOrElse(false))
   }
 
   // Only the Kubernetes calls run on worker threads; allocator maps are updated by the caller.
@@ -687,7 +694,7 @@ class ExecutorPodsAllocator(
       pvcsInUse: Set[String]): Unit = {
     val batchStartTime = clock.getTimeMillis()
     val reusablePVCs = getReusablePVCs(applicationId, pvcsInUse)
-    val podSpecs = mutable.ArrayBuffer.empty[(Long, Pod, Seq[HasMetadata])]
+    val podSpecs = mutable.ArrayBuffer.empty[ExecutorPodCreationSpec]
     var reservedPVCs = PVC_COUNTER.get().toLong
     var canAllocate = true
     var allocationLimitReached = false
@@ -704,7 +711,7 @@ class ExecutorPodsAllocator(
         // As in serial allocation, admit the whole executor before counting its PVCs. One
         // executor may need multiple PVCs, so a strict per-PVC cap could prevent any progress.
         podSpecs += spec
-        reservedPVCs += spec._3.count(_.getKind == "PersistentVolumeClaim")
+        reservedPVCs += spec.resources.count(_.getKind == "PersistentVolumeClaim")
       }
     }
     if (!canAllocate && !allocationLimitReached) {
@@ -715,11 +722,16 @@ class ExecutorPodsAllocator(
     val podBuildTotalMs = clock.getTimeMillis() - batchStartTime
     val resourceFailure = new AtomicReference[Throwable]()
     val futures = podSpecs.iterator.takeWhile(_ => !stopped).flatMap {
-      case (executorId, pod, resources) =>
+      case ExecutorPodCreationSpec(executorId, pod, resources, recoveryMode) =>
         try {
           val future = podCreationThreadPool.get.submit(new Callable[Option[Long]] {
             override def call(): Option[Long] = {
-              if (createExecutorPod(pod, resources, resourceFailure)) {
+              // Recovery mode can change while this task is queued. Skip obsolete specs;
+              // a later snapshot callback builds replacements using the current mode.
+              val currentRecoveryMode =
+                conf.get(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED).getOrElse(false)
+              if (recoveryMode == currentRecoveryMode &&
+                  createExecutorPod(pod, resources, resourceFailure)) {
                 Some(clock.getTimeMillis())
               } else {
                 None

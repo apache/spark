@@ -1298,6 +1298,50 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     }
   }
 
+  Seq(false, true).foreach { initialRecoveryMode =>
+    test(s"Parallel allocation skips obsolete recovery mode specs: $initialRecoveryMode") {
+      startParallelAllocator(conf.clone.set(KUBERNETES_ALLOCATION_BATCH_CONCURRENCY, 1))
+      if (initialRecoveryMode) podsAllocatorUnderTest.setRecoveryMode()
+      when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]),
+        meq(kubernetesClient), any(classOf[ResourceProfile])))
+        .thenAnswer((invocation: InvocationOnMock) => {
+          val k8sConf = invocation.getArgument[KubernetesExecutorConf](0)
+          val spec = executorPodAnswer().answer(invocation)
+          spec.pod.pod.getMetadata.setAnnotations(Map("recovery-mode" ->
+            k8sConf.get(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED)
+              .getOrElse(false).toString).asJava)
+          spec
+        })
+      val createdModes = new java.util.concurrent.ConcurrentLinkedQueue[String]()
+      mockPodCreation { pod =>
+        createdModes.add(pod.getMetadata.getAnnotations.get("recovery-mode"))
+        if (pod.getMetadata.getLabels.get(SPARK_EXECUTOR_ID_LABEL) == "1") {
+          if (initialRecoveryMode) {
+            podsAllocatorUnderTest.unsetRecoveryMode()
+          } else {
+            podsAllocatorUnderTest.setRecoveryMode()
+          }
+        }
+        pod
+      }
+
+      podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 5))
+      verify(podResource, times(1)).create()
+      val created = PrivateMethod[mutable.LinkedHashMap[Long, (Int, Long)]](
+        Symbol("newlyCreatedExecutors"))()
+      assert(podsAllocatorUnderTest.invokePrivate(created).keySet == Set(1L))
+      assert(createdModes.asScala.toSeq == Seq(initialRecoveryMode.toString))
+
+      snapshotsStore.updatePod(runningExecutor(1))
+      snapshotsStore.notifySubscribers()
+      verify(podResource, times(5)).create()
+      assert(podsAllocatorUnderTest.invokePrivate(created).keySet == Set(6L, 7L, 8L, 9L))
+      assert(createdModes.asScala.toSeq ==
+        Seq(initialRecoveryMode.toString) ++ Seq.fill(4)((!initialRecoveryMode).toString))
+      verify(lifecycleManager, never()).registerExecutorFailure()
+    }
+  }
+
   test("Parallel allocation retains successful pods when another create fails") {
     startParallelAllocator()
     mockPodCreation { pod =>
