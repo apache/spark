@@ -676,6 +676,15 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     this.spillMergeFactor = mergeFactor;
   }
 
+  /**
+   * Registers a spill writer as if this sorter had spilled to it. Lets tests simulate spill files
+   * whose total record count exceeds Integer.MAX_VALUE without writing that many records.
+   */
+  @VisibleForTesting
+  void addSpillWriterForTesting(UnsafeSorterSpillWriter spillWriter) {
+    spillWriters.add(spillWriter);
+  }
+
   @VisibleForTesting
   int getSpillMergeRounds() {
     return boundedMerger == null ? 0 : boundedMerger.getIntermediateRoundsCompleted();
@@ -712,12 +721,13 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
 
     SpillableIterator(UnsafeSorterIterator inMemIterator) {
       this.upstream = inMemIterator;
-      this.numRecords = inMemIterator.getNumRecords();
+      // A single in-memory sorter holds at most Integer.MAX_VALUE records.
+      this.numRecords = Math.toIntExact(inMemIterator.getNumRecords());
       this.numRecordsRemaining = this.numRecords;
     }
 
     @Override
-    public int getNumRecords() {
+    public long getNumRecords() {
       return numRecords;
     }
 
@@ -879,7 +889,10 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       return iter;
     } else {
       LinkedList<UnsafeSorterIterator> queue = new LinkedList<>();
-      int i = 0;
+      // Running count of records in the spill files visited so far. This is a `long` because the
+      // spill files together can hold more than Integer.MAX_VALUE records; an `int` would wrap
+      // negative, silently skipping later spill files or overrunning the in-memory tail below.
+      long i = 0;
       for (UnsafeSorterSpillWriter spillWriter : spillWriters) {
         if (i + spillWriter.recordsSpilled() > startIndex) {
           UnsafeSorterIterator iter = spillWriter.getReader(serializerManager);
@@ -897,10 +910,10 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     }
   }
 
-  private void moveOver(UnsafeSorterIterator iter, int steps)
+  private void moveOver(UnsafeSorterIterator iter, long steps)
       throws IOException {
     if (steps > 0) {
-      for (int i = 0; i < steps; i++) {
+      for (long i = 0; i < steps; i++) {
         if (iter.hasNext()) {
           iter.loadNext();
         } else {
@@ -918,7 +931,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
 
     private final Queue<UnsafeSorterIterator> iterators;
     private UnsafeSorterIterator current;
-    private int numRecords;
+    private long numRecords;
 
     ChainedIterator(Queue<UnsafeSorterIterator> iterators) {
       assert iterators.size() > 0;
@@ -931,7 +944,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     }
 
     @Override
-    public int getNumRecords() {
+    public long getNumRecords() {
       return numRecords;
     }
 

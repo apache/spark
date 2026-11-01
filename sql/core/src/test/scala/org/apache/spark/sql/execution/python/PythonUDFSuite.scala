@@ -18,12 +18,20 @@
 package org.apache.spark.sql.execution.python
 
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, Row}
+import org.apache.arrow.memory.BufferAllocator
+
+import org.apache.spark.{SparkEnv, SparkException}
+import org.apache.spark.internal.config.Python.PYTHON_UDF_PIPELINED_EXECUTION
+import org.apache.spark.sql.{AnalysisException, DataFrame, IntegratedUDFTestUtils, Row}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.functions.{aggregate, array, avg, col, count, lit, transform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.LongType
+import org.apache.spark.sql.types.{LongType, StringType, StructType}
+import org.apache.spark.sql.util.ArrowUtils
+import org.apache.spark.unsafe.types.UTF8String
 
 class PythonUDFSuite extends SharedSparkSession {
   import testImplicits._
@@ -116,6 +124,29 @@ class PythonUDFSuite extends SharedSparkSession {
     val df = spark.range(1)
     val pandasTestUDF = TestGroupedAggPandasUDF(name = udfName)
     assert(df.agg(pandasTestUDF(df("id"))).schema.fieldNames.exists(_.startsWith(udfName)))
+  }
+
+  test("SPARK-60150: filter on a float key above a grouped-agg pandas UDF aggregate") {
+    assume(shouldTestPandasUDFs)
+    val pandasTestUDF = TestGroupedAggPandasUDF(name = "pandas_udf")
+    // The aggregate outputs the raw key -0.0, and the filter pushed below it must read it raw.
+    val grouped = Seq(-0.0d, -0.0d).toDF("x").groupBy("x").agg(pandasTestUDF(col("x")))
+    assert(grouped.where(col("x").cast("string") === "-0.0").collect().length == 1)
+    assert(grouped.where(col("x").cast("string") === "0.0").collect().isEmpty)
+
+    // Column pruning removes an aggregate function after the filter push-down, which keeps the
+    // filter above the aggregate. With count(*) pruned, the aggregate outputs the raw key -0.0,
+    // which the filter keeps.
+    val df = Seq((-0.0d, 1.0d), (-0.0d, 2.0d)).toDF("x", "v")
+    val mixed = df.groupBy("x").agg(pandasTestUDF(col("v")).as("p"), count("*").as("c"))
+      .where(col("x").cast("string") === "-0.0").select("x", "p")
+    assert(mixed.collect().length == 1)
+    // With the pandas UDF pruned, the aggregate is group-only and outputs the normalized key 0.0,
+    // which the filter then reads, pushed below it in normalized form.
+    def keys(key: String): Array[String] = df.groupBy("x").agg(pandasTestUDF(col("v")).as("p"))
+      .where(col("x").cast("string") === key).select(col("x").cast("string")).as[String].collect()
+    assert(keys("0.0").toSeq == Seq("0.0"))
+    assert(keys("-0.0").isEmpty)
   }
 
   test("SPARK-27052: Python UDF in a higher order function lambda") {
@@ -334,6 +365,46 @@ class PythonUDFSuite extends SharedSparkSession {
             s"but was $peakPickledBatchBytes")
       } finally {
         spark.sessionState.catalog.dropTempFunction(udtf.name, ignoreIfNotExists = true)
+      }
+    }
+  }
+
+  test("SPARK-60737: Close the Arrow input of a pandas UDF when the task ends before the input") {
+    assume(shouldTestPandasUDFs)
+    registerTestUDF(TestScalarPandasUDF(name = "pandas_udf", returnType = Some(StringType)), spark)
+    val payload = UTF8String.fromString("x" * 1000)
+    // More input than the socket to the Python worker can buffer, so that the input is not
+    // exhausted when the task ends. Asking for the row at `failAt` throws.
+    def input(failAt: Int): DataFrame = {
+      val rdd = spark.sparkContext.parallelize(Seq(0), 1).mapPartitions { _ =>
+        Iterator.tabulate(100000) { i =>
+          if (i == failAt) throw new IllegalStateException("input failure")
+          InternalRow(payload)
+        }
+      }
+      spark.internalCreateDataFrame(rdd, new StructType().add("s", StringType))
+    }
+    // The open allocators of the Arrow input of Python workers.
+    def inputAllocators(): Set[BufferAllocator] = ArrowUtils.rootAllocator.getChildAllocators
+      .asScala.filter(_.getName.startsWith("stdout writer for")).toSet
+
+    Seq(false, true).foreach { pipelined =>
+      SparkEnv.get.conf.set(PYTHON_UDF_PIPELINED_EXECUTION, pipelined)
+      try {
+        withSQLConf(SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> "100") {
+          val allocatorsBefore = inputAllocators()
+          // The task fails.
+          val e = intercept[SparkException] {
+            input(failAt = 1000).selectExpr("pandas_udf(s)").collect()
+          }
+          assert(e.getMessage.contains("input failure"))
+          // The task stops reading the output early. The filter keeps the limit above the UDF.
+          assert(input(failAt = -1).selectExpr("pandas_udf(s) AS u").filter("u IS NOT NULL")
+            .limit(1).collect().length == 1)
+          assert((inputAllocators() -- allocatorsBefore).isEmpty)
+        }
+      } finally {
+        SparkEnv.get.conf.remove(PYTHON_UDF_PIPELINED_EXECUTION)
       }
     }
   }

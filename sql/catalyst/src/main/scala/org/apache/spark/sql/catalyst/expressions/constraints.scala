@@ -21,7 +21,8 @@ import java.util.UUID
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisErrorAt, SQLFunctionExpression, TypeCheckResult, UnresolvedException}
+import org.apache.spark.sql.catalyst.expressions.aggregate.V2Aggregator
 import org.apache.spark.sql.catalyst.expressions.codegen.{Block, CodegenContext, ExprCode, FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
@@ -30,6 +31,7 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern.{ANALYSIS_AWARE_EXPRESSION, CURRENT_LIKE, TreePattern, VARIABLE_REFERENCE}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, V2ExpressionBuilder}
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction
 import org.apache.spark.sql.connector.expressions.FieldReference
@@ -139,6 +141,27 @@ case class CheckConstraint(
   final override val nodePatterns: Seq[TreePattern] = Seq(ANALYSIS_AWARE_EXPRESSION)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(BooleanType)
+
+  /**
+   * Fails the analysis if the condition calls a user-defined function. A write can read `condition`
+   * again and resolve the name of the function in its own session, where the name can refer to
+   * another function or to none, so the constraint would not enforce what this DDL declares.
+   */
+  def failIfCallsUserDefinedFunction(): Unit = {
+    child.collectFirst {
+      case f: SQLFunctionExpression => (f, toSQLId(f.function.name.nameParts))
+      case f: UserDefinedExpression => (f, toSQLId(Seq(f.name)))
+      case i: StaticInvoke if i.scalarFunction.isDefined =>
+        (i, toSQLId(Seq(i.scalarFunction.get.name)))
+      case i @ Invoke(Literal(f: ScalarFunction[_], _), _, _, _, _, _, _, _) =>
+        (i, toSQLId(Seq(f.name)))
+      case a: V2Aggregator[_, _] => (a, toSQLId(Seq(a.aggrFunc.name)))
+    }.foreach { case (call, functionName) =>
+      call.failAnalysis(
+        errorClass = "USER_DEFINED_FUNCTION_IN_CHECK_CONSTRAINT",
+        messageParameters = Map("checkCondition" -> condition, "functionName" -> functionName))
+    }
+  }
 
   override def stringArgs: Iterator[Any] =
     Iterator(child, condition, userProvidedName, tableName, userProvidedCharacteristic)
@@ -435,8 +458,10 @@ case class CheckInvariant(
     columnExtractors.map {
       case (name, extractor) =>
         val colValue = extractor.genCode(ctx)
+        // The name is not Java source, so pass it by reference instead of embedding it.
+        val nameRef = ctx.addReferenceObj("columnName", name)
         code"""
-              |$colList.add("$name");
+              |$colList.add($nameRef);
               |${colValue.code}
               |if (${colValue.isNull}) {
               |  $valList.add(null);
@@ -451,12 +476,15 @@ case class CheckInvariant(
     val elementValue = child.genCode(ctx)
     val colListName = ctx.freshName("colList")
     val valListName = ctx.freshName("valList")
+    // These texts are not Java source, so pass them by reference instead of embedding them.
+    val nameRef = ctx.addReferenceObj("constraintName", constraintName)
+    val sqlRef = ctx.addReferenceObj("predicateSql", predicateSql)
     val ret = code"""${elementValue.code}
           |
           |if (!${elementValue.isNull} && ${elementValue.value} == false) {
           |  ${generateColumnValuesCode(colListName, valListName, ctx)}
           |  throw org.apache.spark.sql.errors.QueryExecutionErrors.checkViolationJava(
-          |     "$constraintName", "$predicateSql", $colListName, $valListName);
+          |     $nameRef, $sqlRef, $colListName, $valListName);
           |}
      """.stripMargin
     ret

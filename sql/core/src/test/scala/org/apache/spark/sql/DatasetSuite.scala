@@ -44,7 +44,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedIntEncoder,
 import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, Expression, GenericRowWithSchema}
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.trees.DataFrameQueryContext
-import org.apache.spark.sql.catalyst.util.sideBySide
+import org.apache.spark.sql.catalyst.util.{sideBySide, DateTimeUtils}
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
@@ -2438,6 +2438,15 @@ class DatasetSuite extends SharedSparkSession
     assert(spark.range(1).map { _ => localTime }.head() === localTime)
   }
 
+  test("SPARK-60346: collect an array of TIME(p)") {
+    val nanos = DateTimeUtils.localTimeToNanos(java.time.LocalTime.parse("12:00:00.123456789"))
+    (TimeType.MIN_PRECISION to TimeType.MAX_PRECISION).foreach { p =>
+      val df = sql(s"SELECT array(CAST(TIME '12:00:00.123456789' AS TIME($p)))")
+      val time = DateTimeUtils.nanosToLocalTime(DateTimeUtils.truncateTimeToPrecision(nanos, p))
+      checkAnswer(df, Row(Seq(time)))
+    }
+  }
+
   val dotColumnTestModes = Table(
     ("caseSensitive", "colName"),
     ("true", "field.1"),
@@ -2930,6 +2939,18 @@ class DatasetSuite extends SharedSparkSession
         parameters = Map("objectName" -> "`a`", "proposal" -> "`value`"),
         context = ExpectedContext(fragment = "col", callSitePattern = callSitePattern))
       assert(exception.context.head.asInstanceOf[DataFrameQueryContext].stackTrace.length == 2)
+    }
+  }
+
+  test("SPARK-60247: UDF DataFrame query context points to the user call site") {
+    withSQLConf(SQLConf.DATA_FRAME_QUERY_CONTEXT_ENABLED.key -> "true") {
+      val myUdf = udf((i: Int) => i)
+      // Typed/UDF columns are constructed via UserDefinedFunction.apply; the captured query
+      // context should skip that internal frame and point at this test (user code) rather than
+      // at UserDefinedFunction.apply.
+      val callSite = myUdf(lit(1)).node.origin.getQueryContext.head.callSite()
+      assert(callSite.contains("DatasetSuite"), s"unexpected call site: $callSite")
+      assert(!callSite.contains("UserDefinedFunction"), s"unexpected call site: $callSite")
     }
   }
 
