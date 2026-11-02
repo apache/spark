@@ -20,7 +20,8 @@ package org.apache.spark.deploy
 import java.io.File
 import java.util.UUID
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkContext, SparkFunSuite, TestUtils}
+import org.apache.spark.{LocalRootDirsTest, SecurityManager, SparkConf, SparkContext, SparkFunSuite,
+  TestUtils}
 import org.apache.spark.internal.config.{
   SHUFFLE_SERVICE_DB_ENABLED,
   SHUFFLE_SERVICE_ENABLED,
@@ -28,7 +29,7 @@ import org.apache.spark.internal.config.{
   SHUFFLE_SERVICE_REQUIRE_APP_SCOPED_LOCAL_DIRS}
 import org.apache.spark.util.Utils
 
-class ExternalShuffleServiceLocalDirsSuite extends SparkFunSuite {
+class ExternalShuffleServiceLocalDirsSuite extends SparkFunSuite with LocalRootDirsTest {
 
   test("validateLocalDirs only accepts localDirs under the configured local directories") {
     val sparkConf = new SparkConf()
