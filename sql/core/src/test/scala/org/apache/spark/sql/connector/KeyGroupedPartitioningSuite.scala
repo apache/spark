@@ -260,7 +260,7 @@ trait KeyGroupedPartitioningRuntimeFilterTests extends KeyGroupedPartitioningSui
               s"testcat.ns.$purchases p WHERE i.id = p.item_id AND i.price > 40.0")
           checkAnswer(df, Seq(Row(131)))
 
-          // The subquery reads only the build side's key column, which is a partition key of
+          // The subquery groups only on the build side's key column, which is a partition key of
           // `items`, so its aggregate must keep the scan's keyed partitioning. These keys repeat
           // across splits, so keeping the partitioning means a `GroupPartitionsExec` coalesces
           // them, and no shuffle is needed.
@@ -280,6 +280,9 @@ trait KeyGroupedPartitioningRuntimeFilterTests extends KeyGroupedPartitioningSui
             case other =>
               fail(s"expected a SubqueryExec, got $other")
           }
+
+          // DPP keeps only the item_id = 1 splits of `purchases`.
+          assertFilteredPartitions(collectScans(plan), Seq(5, 5), Seq(0, 2))
 
           // The outer query keeps its storage-partitioned join.
           assert(collectShuffles(plan).isEmpty,
