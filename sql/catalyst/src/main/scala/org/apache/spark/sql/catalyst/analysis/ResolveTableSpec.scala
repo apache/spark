@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.ComputeCurrentTime
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -61,6 +62,14 @@ object ResolveTableSpec extends Rule[LogicalPlan] {
       input: LogicalPlan,
       tableSpec: TableSpecBase,
       withNewSpec: TableSpecBase => LogicalPlan): LogicalPlan = tableSpec match {
+    // Check this before `childrenResolved`: `ResolveSubquery` skips these commands, so the subquery
+    // may never resolve, and `toV2Constraint` below would drop one that needs no resolution.
+    case u: UnresolvedTableSpec if u.constraints.exists(SubqueryExpression.hasSubquery) =>
+      u.constraints.foreach {
+        case check: CheckConstraint => check.failIfContainsSubquery()
+        case _ =>
+      }
+      input
     case u: UnresolvedTableSpec if u.childrenResolved =>
       val newOptions: Seq[(String, String)] = u.optionExpression.options.map {
         case (key: String, null) =>
@@ -95,6 +104,16 @@ object ResolveTableSpec extends Rule[LogicalPlan] {
               messageParameters = Map("checkCondition" -> check.condition)
             )
           }
+          check.child.collectFirst {
+            case e @ (_: AggregateExpression | _: Grouping | _: GroupingID |
+                _: WindowExpression | _: WindowFunction) => e
+          }.foreach { call =>
+            call.failAnalysis(
+              errorClass = "AGGREGATE_OR_WINDOW_FUNCTION_IN_CHECK_CONSTRAINT",
+              messageParameters = Map("checkCondition" -> check.condition)
+            )
+          }
+          check.failIfCallsUserDefinedFunction()
         case _ =>
       }
 
