@@ -161,6 +161,32 @@ SELECT map('k', TIMESTAMP_LTZ '2020-01-01 12:30:15.123456789') :: map<string, da
 SELECT map(DATE '2020-01-01', 'v') :: map<timestamp_ltz(9), string>;
 SELECT named_struct('f', DATE '2020-01-01') :: struct<f: timestamp_ltz(9)>;
 
+-- SPARK-60543: date_add / date_sub (and the dateadd alias) over TIMESTAMP_LTZ(p) cast the start to
+-- DATE in the session zone like the micro type, so the sub-microsecond digits never affect the
+-- result.
+SELECT date_add(TIMESTAMP_LTZ '2020-02-28 23:59:59.999999999', 1);
+SELECT date_sub(TIMESTAMP_LTZ '2020-03-01 00:00:00.000000001', 1);
+SELECT dateadd('2020-01-31 12:00:00.1234567' :: timestamp_ltz(7), 30);
+SELECT date_sub('2020-01-01 12:00:00.12345678' :: timestamp_ltz(8), -1);
+SELECT date_add(TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789', '2');
+-- 04:00 UTC on Jan 1 is Dec 31 in the session zone (America/Los_Angeles), as for the micro type.
+SELECT date_add(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789 UTC', 1);
+SELECT date_sub(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789 UTC', 1);
+SELECT date_add(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456 UTC', 1),
+       date_sub(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456 UTC', 1);
+SET spark.sql.session.timeZone=UTC;
+SELECT date_add(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789 UTC', 1);
+SELECT date_add(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456 UTC', 1);
+SET spark.sql.session.timeZone=America/Los_Angeles;
+-- Pre-epoch value exercises the negative-epoch path.
+SELECT date_add(TIMESTAMP_LTZ '1969-12-31 23:59:59.999999999 UTC', 1);
+SELECT date_add(NULL :: timestamp_ltz(9), 1), date_sub(NULL :: timestamp_ltz(9), 1);
+SET spark.sql.ansi.enabled=false;
+SELECT date_add(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789 UTC', 1),
+       date_sub(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789 UTC', 1);
+SELECT date_add(TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789', '2');
+SET spark.sql.ansi.enabled=true;
+
 -- SPARK-57501: TIMESTAMP_LTZ(p) +/- ANSI day-time interval preserves nanos remainder.
 SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' +
   INTERVAL '2 00:03:00.000456' DAY TO SECOND;
@@ -182,28 +208,15 @@ SELECT TIMESTAMP_LTZ '1960-01-31 03:04:05.123456789 UTC' + INTERVAL '1' MONTH;
 -- legacy calendar interval is still rejected by TimestampAddInterval's type check.
 SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' + make_interval(0, 1, 0, 2, 0, 0, 0);
 
--- SPARK-57832: TIMESTAMP_LTZ(p) - TIMESTAMP_LTZ(p) yields a microsecond-grid DayTimeIntervalType.
--- Only each operand's epochMicros participates, so the sub-microsecond remainder is truncated: the
--- 789/111 sub-micro digits drop out and the difference is exactly 1 day + 0.123456 s. Like the
--- micro TIMESTAMP_LTZ case, the subtraction runs on session-zone local date-times, so a DST
--- transition between the two instants could shift the interval; there is none in the UTC span here.
+-- Subtraction with a TIMESTAMP_LTZ(p) operand is rejected: the interval result only has
+-- microsecond precision.
 SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' - TIMESTAMP_LTZ '2020-01-01 03:04:05.000000111 UTC';
--- Two values inside the same microsecond subtract to zero once the remainder is truncated.
-SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' - TIMESTAMP_LTZ '2020-01-02 03:04:05.123456001 UTC';
--- The subtraction is antisymmetric.
-SELECT TIMESTAMP_LTZ '2020-01-01 03:04:05.000000111 UTC' - TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC';
--- Mixed precision (7 vs 9) widens to the common nanos type before subtracting.
-SELECT ('2020-01-02 03:04:05.1234567 UTC' :: timestamp_ltz(7)) - ('2020-01-01 03:04:05.000000009 UTC' :: timestamp_ltz(9));
--- Mixed with a micro TIMESTAMP_LTZ operand.
 SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' - TIMESTAMP_LTZ '2020-01-02 03:04:05 UTC';
--- A DATE operand is cast to the nanos LTZ type (midnight in the session time zone); the
--- fraction below the micro grid drops. The bare LTZ literal and the DATE both read in the session
--- zone (America/Los_Angeles), so the difference is exactly 1 day.
 SELECT TIMESTAMP_LTZ '2020-01-02 00:00:00.000000789' - DATE '2020-01-01';
--- Pre-epoch operand exercises the negative-epoch path.
-SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC' - TIMESTAMP_LTZ '1960-01-01 00:00:00.000000999 UTC';
--- NULL operand propagates.
-SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' - CAST(NULL AS timestamp_ltz(9));
+-- The elapsed time in nanoseconds, and subtraction at microsecond precision after a cast.
+SELECT unix_nanos(TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC') - unix_nanos(TIMESTAMP_LTZ '2020-01-01 03:04:05.000000111 UTC');
+SELECT unix_nanos(TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC') - unix_nanos(CAST(TIMESTAMP_LTZ '2020-01-02 03:04:05 UTC' AS TIMESTAMP_LTZ(9)));
+SELECT CAST(TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' AS TIMESTAMP_LTZ) - CAST(TIMESTAMP_LTZ '2020-01-01 03:04:05.000000111 UTC' AS TIMESTAMP_LTZ);
 
 -- SPARK-57818: convert_timezone is NTZ-only, so a nanosecond LTZ(p) source is rejected rather
 -- than silently reinterpreted as NTZ (the positive TIMESTAMP_NTZ(p) path is covered in
@@ -602,3 +615,109 @@ SELECT timestampadd(NANOSECOND, -300, TIMESTAMP_LTZ '2020-01-01 00:00:00.0000001
 SELECT timestampadd(NANOSECOND, 900, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000200 UTC');
 -- NANOSECOND is rejected on a microsecond-precision timestamp (nanoseconds are unrepresentable).
 SELECT timestampadd(NANOSECOND, 1, TIMESTAMP_LTZ '2020-01-01 00:00:00 UTC');
+
+-- SPARK-57836: to_timestamp / to_timestamp_ltz / try_to_timestamp(str, fmt, p) parse up to 9
+-- fractional digits into TIMESTAMP_LTZ(p), flooring the digits beyond p; p = 6 keeps TIMESTAMP.
+-- A TIMESTAMP_LTZ(p) input keeps p.
+SELECT to_timestamp('2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 9);
+SELECT to_timestamp_ltz('2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 7);
+SELECT try_to_timestamp('2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 8);
+SELECT typeof(to_timestamp('2020-01-01 13:24:35.1', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 9)),
+  typeof(to_timestamp_ltz('2020-01-01 13:24:35.1', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 6));
+SELECT to_timestamp('2020-01-01 13:24:35.123456789 UTC', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS z', 9);
+SELECT try_to_timestamp('bad', 'yyyy', 9);
+SELECT to_timestamp('bad', 'yyyy', 9);
+SELECT to_timestamp_ltz(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789'),
+  typeof(to_timestamp_ltz(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789'));
+SELECT try_to_timestamp('2020-01-01 13:24:35.12345678' :: timestamp_ltz(8), 'yyyy'),
+  typeof(try_to_timestamp('2020-01-01 13:24:35.12345678' :: timestamp_ltz(8), 'yyyy'));
+SELECT to_timestamp(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789', 'yyyy', 7);
+SELECT to_timestamp_ntz(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789'),
+  typeof(to_timestamp_ntz(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789'));
+SELECT to_timestamp('2020', 'yyyy', 5);
+-- With a nanosecond input or result, a DATE or timestamp input ignores the format and
+-- converts like CAST.
+SELECT to_timestamp_ntz(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789', 'yyyy', 9);
+SELECT to_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456', 'yyyy', 9);
+SELECT to_timestamp_ltz(DATE '2020-01-01', 'yyyy-MM-dd', 9);
+
+-- Functions without TIMESTAMP_LTZ(p) support reject it in both ANSI modes instead of implicitly
+-- narrowing it to a microsecond timestamp, DATE or TIME. Date-valued functions still take it
+-- as DATE.
+SELECT timestampdiff(MICROSECOND, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999',
+    TIMESTAMP_LTZ '2020-01-01 00:00:00.000001001');
+SELECT months_between(TIMESTAMP_LTZ '2020-02-01 00:00:00.000000001',
+    TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001');
+SELECT window(c, '1 second')
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SELECT session_window(c, '1 second')
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SELECT approx_percentile(c, 0.5)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SELECT histogram_numeric(c, 2)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SELECT time_trunc('HOUR', c)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SELECT time_diff('SECOND', TIME '12:00:00', c)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SELECT last_day(c), next_day(c, 'MO'), datediff(c, '2019-12-31'), add_months(c, 1)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SET spark.sql.ansi.enabled=false;
+SELECT timestampdiff(MICROSECOND, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999',
+    TIMESTAMP_LTZ '2020-01-01 00:00:00.000001001');
+SELECT months_between(TIMESTAMP_LTZ '2020-02-01 00:00:00.000000001',
+    TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001');
+SELECT window(c, '1 second')
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SELECT session_window(c, '1 second')
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SELECT approx_percentile(c, 0.5)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SELECT histogram_numeric(c, 2)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SELECT time_trunc('HOUR', c)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SELECT time_diff('SECOND', TIME '12:00:00', c)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SELECT last_day(c), next_day(c, 'MO'), datediff(c, '2019-12-31'), add_months(c, 1)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SET spark.sql.ansi.enabled=true;
+
+-- percentile / median / percentile_cont / percentile_disc over TIMESTAMP_LTZ(p) keep the input
+-- type. Interpolation is exact in nanoseconds and floored to p; percentile_disc returns an input
+-- value; NULLs are ignored.
+SELECT median(c), percentile(c, 0.25), percentile_cont(0.75) WITHIN GROUP (ORDER BY c),
+       percentile_cont(0.25) WITHIN GROUP (ORDER BY c DESC),
+       percentile_disc(0.5) WITHIN GROUP (ORDER BY c)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.000000100 UTC'),
+              (TIMESTAMP_LTZ '2020-01-01 12:00:00.000000400 UTC'),
+              (TIMESTAMP_LTZ '2020-01-01 12:00:00.000001000 UTC'), (NULL) AS t(c);
+SELECT typeof(median(c)), typeof(percentile(c, array(0.25, 0.75))),
+       typeof(percentile_disc(0.5) WITHIN GROUP (ORDER BY c))
+  FROM VALUES (CAST('2020-01-01 12:00:00.0000001 UTC' AS timestamp_ltz(7))) AS t(c);
+-- A sub-microsecond midpoint that a double interpolation would lose.
+SELECT median(c) FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456789 UTC'),
+                             (TIMESTAMP_LTZ '2020-01-01 12:00:00.123456791 UTC') AS t(c);
+-- Pre-epoch: the midpoint -499.5ns is floored to -500ns.
+SELECT median(c) FROM VALUES (TIMESTAMP_LTZ '1969-12-31 23:59:59.999999000 UTC'),
+                             (TIMESTAMP_LTZ '1970-01-01 00:00:00.000000001 UTC') AS t(c);
+-- A non-dyadic percentage uses an exact position: 3 * 0.7 is 2.0999999999999996 as a double.
+SELECT percentile(c, 0.7), percentile_cont(0.3) WITHIN GROUP (ORDER BY c DESC)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.000000100 UTC'),
+              (TIMESTAMP_LTZ '2020-01-01 12:00:00.000000200 UTC'),
+              (TIMESTAMP_LTZ '2020-01-01 12:00:00.000000300 UTC'),
+              (TIMESTAMP_LTZ '2020-01-01 12:00:00.000001300 UTC') AS t(c);
+-- At p=7 the midpoint .00000025 is floored to .0000002.
+SELECT median(c), percentile(c, array(0.0, 1.0))
+  FROM VALUES (CAST('2020-01-01 12:00:00.0000001 UTC' AS timestamp_ltz(7))),
+              (CAST('2020-01-01 12:00:00.0000004 UTC' AS timestamp_ltz(7))) AS t(c);
+-- Same results with ANSI mode off.
+SET spark.sql.ansi.enabled=false;
+SELECT median(c), percentile(c, 0.25), percentile_cont(0.75) WITHIN GROUP (ORDER BY c),
+       percentile_disc(0.5) WITHIN GROUP (ORDER BY c)
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-01 12:00:00.000000100 UTC'),
+              (TIMESTAMP_LTZ '2020-01-01 12:00:00.000000400 UTC'),
+              (TIMESTAMP_LTZ '2020-01-01 12:00:00.000001000 UTC'), (NULL) AS t(c);
+SELECT typeof(median(c))
+  FROM VALUES (CAST('2020-01-01 12:00:00.0000001 UTC' AS timestamp_ltz(7))) AS t(c);
+SET spark.sql.ansi.enabled=true;

@@ -588,7 +588,9 @@ object PartitioningUtils extends SQLConfHelper {
     case LongType => JLong.parseLong(value)
     case FloatType => JDouble.parseDouble(value).toFloat
     case DoubleType => JDouble.parseDouble(value)
-    case _: DecimalType => Literal(new JBigDecimal(value)).value
+    // Cast in ANSI mode to fail on a value that the type cannot hold in any session, so that
+    // `spark.sql.sources.validatePartitionColumns` alone decides between an error and null.
+    case dt: DecimalType => Cast(Literal(value), dt, ansiEnabled = true).eval()
     case DateType =>
       Cast(Literal(value), DateType, Some(zoneId.getId)).eval()
     case tt: TimeType => Cast(Literal(unescapePathName(value)), tt).eval()
@@ -631,6 +633,8 @@ object PartitioningUtils extends SQLConfHelper {
     // non default collated strings should not be used as partition columns
     // as we cannot implement string collation semantic with directory names
     case st: StringType => st.supportsBinaryOrdering
+    // geospatial values cannot be cast to and from strings, which partition values are stored as
+    case _: GeometryType | _: GeographyType => false
     case a: AtomicType => !a.isInstanceOf[VariantType]
     case _ => false
   }

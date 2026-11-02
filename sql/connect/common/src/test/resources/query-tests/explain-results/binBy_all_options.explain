@@ -1,0 +1,3 @@
+BinBy range=[start#0: timestamp_ntz, end#0: timestamp_ntz], binWidth=INTERVAL '0 00:05:00' DAY TO SECOND, alignTo=2024-01-01 00:02:00, distribute=[value#0: double, value2#0: float], scaledDistribute=[value#0: double, value2#0: float], appends=[window_start#0: timestamp_ntz, window_end#0: timestamp_ntz, ratio#0: double]
++- Project [2024-01-01 00:00:00 AS start#0, 2024-01-01 00:10:00 AS end#0, 100.0 AS value#0, 20.0 AS value2#0]
+   +- Range (0, 1, step=1, splits=Some(2))

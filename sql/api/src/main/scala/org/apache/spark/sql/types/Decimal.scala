@@ -398,8 +398,9 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     // First, update our lv if we can, or transfer over to using a BigDecimal
     if (dv.eq(null)) {
       if (scale < _scale) {
-        // Easier case: we just need to divide our scale down
-        val diff = _scale - scale
+        // Easier case: we just need to divide our scale down. The difference is computed in
+        // Long since it can exceed the Int range when negative scales are allowed.
+        val diff = _scale.toLong - scale
         // If diff is greater than max number of digits we store in Long, then
         // value becomes 0. Otherwise we calculate new value dividing by power of 10.
         // In both cases we apply rounding after that.
@@ -411,7 +412,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
             case _ => throw DataTypeErrors.unsupportedRoundingMode(roundMode)
           }
         } else {
-          val pow10diff = POW_10(diff)
+          val pow10diff = POW_10(diff.toInt)
           // % and / always round to 0
           val droppedDigits = lv % pow10diff
           lv /= pow10diff
@@ -442,11 +443,11 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       } else if (scale > _scale) {
         // We might be able to multiply lv by a power of 10 and not overflow, but if not,
         // switch to using a BigDecimal
-        val diff = scale - _scale
-        val p = POW_10(math.max(MAX_LONG_DIGITS - diff, 0))
+        val diff = scale.toLong - _scale
+        val p = POW_10(math.max(MAX_LONG_DIGITS - diff, 0L).toInt)
         if (diff <= MAX_LONG_DIGITS && lv > -p && lv < p) {
           // Multiplying lv by POW_10(diff) will still keep it below MAX_LONG_DIGITS
-          lv *= POW_10(diff)
+          lv *= POW_10(diff.toInt)
         } else {
           // Give up on using Longs; switch to BigDecimal, which we'll modify below
           dv = BigDecimal(lv, _scale)
@@ -458,6 +459,20 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     if (dv.ne(null)) {
       // We get here if either we started with a BigDecimal, or we switched to one because we would
       // have overflowed our Long; in either case we must rescale dv to the new scale.
+      if (math.abs(dv.scale.toLong - scale) > DecimalType.MAX_PRECISION) {
+        // setScale's cost grows with the scale change, and it throws once 10^change exceeds
+        // BigInteger's range (e.g. for 1e-2147483647) or the change exceeds the Int range.
+        // Skip it when the result is known.
+        val numIntegralDigits = dv.precision.toLong - dv.scale
+        if (dv.signum != 0 && numIntegralDigits > precision.toLong - scale) {
+          return false
+        }
+        if (numIntegralDigits < -scale.toLong - 1) {
+          // |dv| is below 0.01 ulp of the new scale, so the result depends only on the sign
+          // and the rounding mode. Round a value of the same sign and 0.01 ulp instead.
+          dv = BigDecimal(dv.signum, scale + 2)
+        }
+      }
       dv = dv.setScale(scale, roundMode)
       if (dv.precision > precision) {
         return false

@@ -30,6 +30,7 @@ import org.apache.spark.sql.types.{
   ArrayType,
   BinaryType,
   DataType,
+  DoubleType,
   FloatType,
   LongType,
   StringType,
@@ -374,30 +375,94 @@ case class VectorNormalize(vector: Expression, degree: Expression)
   }
 }
 
+private[expressions] sealed abstract class VectorAggregateKernel(
+    val elementType: DataType,
+    val elementSize: Int) {
+
+  def copyElements(inputArray: ArrayData, dim: Int): Array[Byte]
+
+  // Element-wise update for non-first vectors.
+  // accBytes contains the running vector; update it in-place with inputArray.
+  def updateElements(
+      accBytes: Array[Byte],
+      inputArray: ArrayData,
+      dim: Int,
+      newCount: Long): Unit
+
+  // Element-wise merge of two non-empty buffers.
+  // accBytes contains the left running vector; update it in-place.
+  def mergeElements(
+      accBytes: Array[Byte],
+      inputBytes: Array[Byte],
+      dim: Int,
+      currentCount: Long,
+      inputCount: Long,
+      newCount: Long): Unit
+
+  final def toArrayData(accBytes: Array[Byte], dim: Int): ArrayData =
+    UnsafeArrayData.fromPrimitiveArray(accBytes, Platform.BYTE_ARRAY_OFFSET, dim, elementSize)
+}
+
+private[expressions] object VectorAggregateKernel {
+
+  abstract class FloatKernel extends VectorAggregateKernel(FloatType, 4) {
+    override def copyElements(inputArray: ArrayData, dim: Int): Array[Byte] = {
+      val bytes = new Array[Byte](dim * 4)
+      var i = 0
+      while (i < dim) {
+        Platform.putFloat(bytes, Platform.BYTE_ARRAY_OFFSET + i.toLong * 4, inputArray.getFloat(i))
+        i += 1
+      }
+      bytes
+    }
+  }
+
+  abstract class DoubleKernel extends VectorAggregateKernel(DoubleType, 8) {
+    override def copyElements(inputArray: ArrayData, dim: Int): Array[Byte] = {
+      val bytes = new Array[Byte](dim * 8)
+      var i = 0
+      while (i < dim) {
+        Platform.putDouble(bytes, Platform.BYTE_ARRAY_OFFSET + i.toLong * 8,
+          inputArray.getDouble(i))
+        i += 1
+      }
+      bytes
+    }
+  }
+}
+
 // Base trait for vector aggregate functions (vector_avg, vector_sum).
 // Provides a unified aggregate buffer schema: (acc: BINARY, count: LONG)
 // - acc: BINARY representation of the running vector (sum or average)
 // - count: number of valid vectors seen so far
-// - dimension is inferred from acc.length / 4 (4 bytes per float)
-// Subclasses only need to implement the element-wise update and merge logic.
+// - dimension is inferred from acc.length / element size (4 bytes per float, 8 per double)
+// Subclasses only need to provide the element-wise update and merge kernels.
 trait VectorAggregateBase extends ImperativeAggregate
     with UnaryLike[Expression]
     with QueryErrorsBase {
 
   override def nullable: Boolean = true
 
-  override def dataType: DataType = ArrayType(FloatType, containsNull = false)
+  override def dataType: DataType = ArrayType(kernel.elementType, containsNull = false)
+
+  protected def kernels: Seq[VectorAggregateKernel]
+
+  @transient protected lazy val kernel: VectorAggregateKernel = child.dataType match {
+    case ArrayType(et, _) => kernels.find(_.elementType == et).getOrElse(kernels.head)
+    case _ => kernels.head
+  }
 
   override def checkInputDataTypes(): TypeCheckResult = {
     child.dataType match {
-      case ArrayType(FloatType, _) =>
+      case ArrayType(et, _) if kernels.exists(_.elementType == et) =>
         TypeCheckResult.TypeCheckSuccess
       case _ =>
         DataTypeMismatch(
           errorSubClass = "UNEXPECTED_INPUT_TYPE",
           messageParameters = Map(
             "paramIndex" -> ordinalNumber(0),
-            "requiredType" -> toSQLType(ArrayType(FloatType)),
+            "requiredType" ->
+              kernels.map(k => toSQLType(ArrayType(k.elementType))).mkString(" or "),
             "inputSql" -> toSQLExpr(child),
             "inputType" -> toSQLType(child.dataType)
           )
@@ -435,26 +500,8 @@ trait VectorAggregateBase extends ImperativeAggregate
     buffer.setLong(mutableAggBufferOffset + countIndex, 0L)
   }
 
-  // Infer vector dimension from byte array length (4 bytes per float)
-  protected def getDim(bytes: Array[Byte]): Int = bytes.length / 4
-
-  // Element-wise update for non-first vectors.
-  // accBytes contains the running vector; update it in-place with inputArray.
-  protected def updateElements(
-      accBytes: Array[Byte],
-      inputArray: ArrayData,
-      dim: Int,
-      newCount: Long): Unit
-
-  // Element-wise merge of two non-empty buffers.
-  // accBytes contains the left running vector; update it in-place.
-  protected def mergeElements(
-      accBytes: Array[Byte],
-      inputBytes: Array[Byte],
-      dim: Int,
-      currentCount: Long,
-      inputCount: Long,
-      newCount: Long): Unit
+  // Infer vector dimension from byte array length (element size bytes per element)
+  protected def getDim(bytes: Array[Byte]): Int = bytes.length / kernel.elementSize
 
   override def update(buffer: InternalRow, input: InternalRow): Unit = {
     val inputValue = child.eval(input)
@@ -484,13 +531,7 @@ trait VectorAggregateBase extends ImperativeAggregate
 
     if (currentCount == 0L) {
       // First valid vector - just copy it
-      val bytes = new Array[Byte](inputLen * 4)
-      var i = 0
-      while (i < inputLen) {
-        Platform.putFloat(bytes, Platform.BYTE_ARRAY_OFFSET + i.toLong * 4, inputArray.getFloat(i))
-        i += 1
-      }
-      buffer.update(accOffset, bytes)
+      buffer.update(accOffset, kernel.copyElements(inputArray, inputLen))
       buffer.setLong(countOffset, 1L)
     } else {
       val accBytes = buffer.getBinary(accOffset)
@@ -512,7 +553,7 @@ trait VectorAggregateBase extends ImperativeAggregate
       }
 
       val newCount = currentCount + 1L
-      updateElements(accBytes, inputArray, accDim, newCount)
+      kernel.updateElements(accBytes, inputArray, accDim, newCount)
       buffer.setLong(countOffset, newCount)
     }
   }
@@ -556,7 +597,7 @@ trait VectorAggregateBase extends ImperativeAggregate
       }
 
       val newCount = currentCount + inputCount
-      mergeElements(accBytes, inputAccBytes, accDim,
+      kernel.mergeElements(accBytes, inputAccBytes, accDim,
         currentCount, inputCount, newCount)
       buffer.setLong(countOffset, newCount)
     }
@@ -568,14 +609,7 @@ trait VectorAggregateBase extends ImperativeAggregate
       null
     } else {
       val accBytes = buffer.getBinary(mutableAggBufferOffset + accIndex)
-      val dim = getDim(accBytes)
-      val result = new Array[Float](dim)
-      var i = 0
-      while (i < dim) {
-        result(i) = Platform.getFloat(accBytes, Platform.BYTE_ARRAY_OFFSET + i.toLong * 4)
-        i += 1
-      }
-      ArrayData.toArrayData(result)
+      kernel.toArrayData(accBytes, getDim(accBytes))
     }
   }
 }
@@ -614,6 +648,8 @@ case class VectorAvg(
 
   override def prettyName: String = "vector_avg"
 
+  override protected def kernels: Seq[VectorAggregateKernel] = VectorAvg.kernels
+
   override def withNewMutableAggBufferOffset(
       newMutableAggBufferOffset: Int
   ): ImperativeAggregate =
@@ -624,68 +660,79 @@ case class VectorAvg(
   ): ImperativeAggregate =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
-  override protected def updateElements(
-      accBytes: Array[Byte],
-      inputArray: ArrayData,
-      dim: Int,
-      newCount: Long): Unit = {
-    // Update running average: new_avg = old_avg + (new_value - old_avg) / new_count
-    val invCount = 1.0f / newCount
-    var i = 0
-    while (i < dim) {
-      val off = Platform.BYTE_ARRAY_OFFSET + i.toLong * 4
-      val oldAvg = Platform.getFloat(accBytes, off)
-      Platform.putFloat(accBytes, off, oldAvg + (inputArray.getFloat(i) - oldAvg) * invCount)
-      i += 1
-    }
-  }
-
-  override protected def mergeElements(
-      accBytes: Array[Byte],
-      inputBytes: Array[Byte],
-      dim: Int,
-      currentCount: Long,
-      inputCount: Long,
-      newCount: Long): Unit = {
-    // Merge running averages:
-    // combined_avg = left_avg * (left_count / total) + right_avg * (right_count / total)
-    val leftWeight = currentCount.toFloat / newCount
-    val rightWeight = inputCount.toFloat / newCount
-    var i = 0
-    while (i < dim) {
-      val off = Platform.BYTE_ARRAY_OFFSET + i.toLong * 4
-      val leftAvg = Platform.getFloat(accBytes, off)
-      val rightAvg = Platform.getFloat(inputBytes, off)
-      Platform.putFloat(accBytes, off, leftAvg * leftWeight + rightAvg * rightWeight)
-      i += 1
-    }
-  }
-
   override protected def withNewChildInternal(newChild: Expression): VectorAvg =
     copy(child = newChild)
+}
+
+object VectorAvg {
+
+  private object FloatAvg extends VectorAggregateKernel.FloatKernel {
+    override def updateElements(
+        accBytes: Array[Byte],
+        inputArray: ArrayData,
+        dim: Int,
+        newCount: Long): Unit = {
+      // Update running average: new_avg = old_avg + (new_value - old_avg) / new_count
+      val invCount = 1.0f / newCount
+      var i = 0
+      while (i < dim) {
+        val off = Platform.BYTE_ARRAY_OFFSET + i.toLong * 4
+        val oldAvg = Platform.getFloat(accBytes, off)
+        Platform.putFloat(accBytes, off, oldAvg + (inputArray.getFloat(i) - oldAvg) * invCount)
+        i += 1
+      }
+    }
+
+    override def mergeElements(
+        accBytes: Array[Byte],
+        inputBytes: Array[Byte],
+        dim: Int,
+        currentCount: Long,
+        inputCount: Long,
+        newCount: Long): Unit = {
+      // Merge running averages:
+      // combined_avg = left_avg * (left_count / total) + right_avg * (right_count / total)
+      val leftWeight = currentCount.toFloat / newCount
+      val rightWeight = inputCount.toFloat / newCount
+      var i = 0
+      while (i < dim) {
+        val off = Platform.BYTE_ARRAY_OFFSET + i.toLong * 4
+        val leftAvg = Platform.getFloat(accBytes, off)
+        val rightAvg = Platform.getFloat(inputBytes, off)
+        Platform.putFloat(accBytes, off, leftAvg * leftWeight + rightAvg * rightWeight)
+        i += 1
+      }
+    }
+  }
+
+  private val kernels: Seq[VectorAggregateKernel] = Seq(FloatAvg)
 }
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(array) - Returns the element-wise sum of float vectors in a group.
+    _FUNC_(array) - Returns the element-wise sum of float or double vectors in a group.
     All vectors must have the same dimension.
   """,
   arguments = """
     Arguments:
-      * array - An ARRAY of FLOAT values representing a vector. All vectors aggregated in the
-          group must have the same dimension.
+      * array - An ARRAY of FLOAT or DOUBLE values representing a vector. All vectors aggregated
+          in the group must have the same dimension. The result has the same element type as
+          the input.
   """,
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (array(1.0F, 2.0F)), (array(3.0F, 4.0F)) AS tab(col);
+       [4.0,6.0]
+      > SELECT _FUNC_(col) FROM VALUES (array(1.0D, 2.0D)), (array(3.0D, 4.0D)) AS tab(col);
        [4.0,6.0]
   """,
   since = "4.2.0",
   group = "vector_funcs"
 )
 // scalastyle:on line.size.limit
-// Note: This implementation uses single-precision floating-point arithmetic (Float).
+// Note: Each update or merge uses the input element type's precision:
+// single precision for ARRAY<FLOAT> and double precision for ARRAY<DOUBLE>.
 // Precision loss is expected for very large aggregates due to:
 // 1. Accumulated rounding errors when summing many values
 // 2. Loss of significance when adding small values to large accumulated sums
@@ -699,6 +746,8 @@ case class VectorSum(
 
   override def prettyName: String = "vector_sum"
 
+  override protected def kernels: Seq[VectorAggregateKernel] = VectorSum.kernels
+
   override def withNewMutableAggBufferOffset(
       newMutableAggBufferOffset: Int
   ): ImperativeAggregate =
@@ -709,37 +758,78 @@ case class VectorSum(
   ): ImperativeAggregate =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
-  override protected def updateElements(
-      accBytes: Array[Byte],
-      inputArray: ArrayData,
-      dim: Int,
-      newCount: Long): Unit = {
-    // Update sum: new_sum = old_sum + new_value
-    var i = 0
-    while (i < dim) {
-      val off = Platform.BYTE_ARRAY_OFFSET + i.toLong * 4
-      Platform.putFloat(accBytes, off, Platform.getFloat(accBytes, off) + inputArray.getFloat(i))
-      i += 1
-    }
-  }
-
-  override protected def mergeElements(
-      accBytes: Array[Byte],
-      inputBytes: Array[Byte],
-      dim: Int,
-      currentCount: Long,
-      inputCount: Long,
-      newCount: Long): Unit = {
-    // Merge sums: combined_sum = left_sum + right_sum
-    var i = 0
-    while (i < dim) {
-      val off = Platform.BYTE_ARRAY_OFFSET + i.toLong * 4
-      Platform.putFloat(accBytes, off,
-        Platform.getFloat(accBytes, off) + Platform.getFloat(inputBytes, off))
-      i += 1
-    }
-  }
-
   override protected def withNewChildInternal(newChild: Expression): VectorSum =
     copy(child = newChild)
+}
+
+object VectorSum {
+
+  private object FloatSum extends VectorAggregateKernel.FloatKernel {
+    override def updateElements(
+        accBytes: Array[Byte],
+        inputArray: ArrayData,
+        dim: Int,
+        newCount: Long): Unit = {
+      // Update sum: new_sum = old_sum + new_value
+      var i = 0
+      while (i < dim) {
+        val off = Platform.BYTE_ARRAY_OFFSET + i.toLong * 4
+        Platform.putFloat(accBytes, off, Platform.getFloat(accBytes, off) + inputArray.getFloat(i))
+        i += 1
+      }
+    }
+
+    override def mergeElements(
+        accBytes: Array[Byte],
+        inputBytes: Array[Byte],
+        dim: Int,
+        currentCount: Long,
+        inputCount: Long,
+        newCount: Long): Unit = {
+      // Merge sums: combined_sum = left_sum + right_sum
+      var i = 0
+      while (i < dim) {
+        val off = Platform.BYTE_ARRAY_OFFSET + i.toLong * 4
+        Platform.putFloat(accBytes, off,
+          Platform.getFloat(accBytes, off) + Platform.getFloat(inputBytes, off))
+        i += 1
+      }
+    }
+  }
+
+  private object DoubleSum extends VectorAggregateKernel.DoubleKernel {
+    override def updateElements(
+        accBytes: Array[Byte],
+        inputArray: ArrayData,
+        dim: Int,
+        newCount: Long): Unit = {
+      // Update sum: new_sum = old_sum + new_value
+      var i = 0
+      while (i < dim) {
+        val off = Platform.BYTE_ARRAY_OFFSET + i.toLong * 8
+        Platform.putDouble(accBytes, off,
+          Platform.getDouble(accBytes, off) + inputArray.getDouble(i))
+        i += 1
+      }
+    }
+
+    override def mergeElements(
+        accBytes: Array[Byte],
+        inputBytes: Array[Byte],
+        dim: Int,
+        currentCount: Long,
+        inputCount: Long,
+        newCount: Long): Unit = {
+      // Merge sums: combined_sum = left_sum + right_sum
+      var i = 0
+      while (i < dim) {
+        val off = Platform.BYTE_ARRAY_OFFSET + i.toLong * 8
+        Platform.putDouble(accBytes, off,
+          Platform.getDouble(accBytes, off) + Platform.getDouble(inputBytes, off))
+        i += 1
+      }
+    }
+  }
+
+  private val kernels: Seq[VectorAggregateKernel] = Seq(FloatSum, DoubleSum)
 }

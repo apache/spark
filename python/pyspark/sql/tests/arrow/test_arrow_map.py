@@ -151,7 +151,8 @@ class MapInArrowTestsMixin:
 
         df = self.spark.range(10)
         actual = df.repartition(1).mapInArrow(func, "a long").collect()
-        self.assertEqual(set((r.a for r in actual)), set(range(100)))
+        # Each input batch produces 0..99 once, in order, since there is one partition.
+        self.assertEqual([r.a for r in actual], list(range(100)) * max(1, len(actual) // 100))
 
     def test_other_than_recordbatch_iter(self):
         with self.quiet():
