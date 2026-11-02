@@ -90,19 +90,24 @@ object KubernetesLocalDiskShuffleExecutorComponents extends Logging {
   }
 
   /**
-   * Walks two levels up from a local directory to reach the volume root shared by all executor
-   * generations. Returns None for a path with fewer than three components, where `getParent`
-   * yields null.
+   * Walks up from a local directory to the volume root shared by all executor generations:
+   * two levels for Kubernetes executor directories, or three for app-scoped standalone
+   * directories. Returns None when there are not enough parent directories.
    */
   private def volumeRootOf(localDir: String): Option[File] = {
-    val root = Option(new File(localDir).getParentFile).flatMap(p => Option(p.getParentFile))
+    val parent = Option(new File(localDir).getParentFile)
+    val root = if (parent.exists(_.getName.startsWith("executor-"))) {
+      parent.flatMap(p => Option(p.getParentFile)).flatMap(p => Option(p.getParentFile))
+    } else {
+      parent.flatMap(p => Option(p.getParentFile))
+    }
     if (root.isEmpty) {
       logWarning(log"Cannot locate the volume root of local directory " +
         log"${MDC(LogKeys.PATH, localDir)}; skipping it during shuffle data recovery. Recovery " +
-        log"requires a local directory nested at least two levels below the volume root, such as " +
-        log"/data/spark-x/executor-y. Set the mount path of the spark-local-dir-* volume, or " +
-        log"${MDC(LogKeys.CONFIG, "spark.local.dir")} when no such volume is mounted, " +
-        log"accordingly.")
+        log"requires a local directory such as /data/spark-x/executor-y or " +
+        log"/data/spark-x/executor-y/app-id. Set the mount path of the spark-local-dir-* " +
+        log"volume, or ${MDC(LogKeys.CONFIG, "spark.local.dir")} when no such volume is " +
+        log"mounted, accordingly.")
     }
     root
   }
@@ -123,7 +128,14 @@ object KubernetesLocalDiskShuffleExecutorComponents extends Logging {
         }
         oldDirs
           .flatMap(listEntriesOrEmpty).filter(_.isDirectory) // executor-xxx
-          .flatMap(listEntriesOrEmpty).filter(_.isDirectory) // blockmgr-xxx
+          .flatMap { executorDir =>
+            val children = listEntriesOrEmpty(executorDir).filter(_.isDirectory)
+            // Kubernetes puts blockmgr directly below executor; standalone adds an app dir.
+            children.filter(_.getName.startsWith("blockmgr-")) ++
+              children.flatMap(listEntriesOrEmpty).filter { f =>
+                f.isDirectory && f.getName.startsWith("blockmgr-")
+              }
+          }
           .flatMap(listEntriesOrEmpty).filter(_.isDirectory) // 00
           .flatMap(listEntriesOrEmpty)
           .toImmutableArraySeq
