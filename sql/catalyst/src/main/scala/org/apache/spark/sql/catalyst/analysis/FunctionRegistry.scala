@@ -942,9 +942,10 @@ object FunctionRegistry {
   )
 
   // Built-in forms of the SQL:2016 JSON constructor and path functions. `AstBuilder` routes
-  // clause-free calls here so a same-named routine can shadow them; a nested-constructor call
-  // routes as a `RoutedJsonConstructor`. Calls with a clause or explicit FORMAT JSON, and calls
-  // written directly as another constructor's value, always mean the built-in.
+  // clause-free calls here so a same-named routine can shadow them; a call with a nested JSON
+  // producer argument routes as a `RoutedJsonConstructor`. Calls with a clause or explicit
+  // FORMAT JSON always mean the built-in, as do JSON_ARRAY, JSON_OBJECT and JSON_QUERY calls
+  // written directly as a constructor's value (JSON_VALUE and JSON_EXISTS values still route).
   private val routedSqlJsonFunctionEntries: Seq[FunctionRegistryEntry] = Seq(
     expressionBuilder("json_value", JsonValueExpressionBuilder),
     expressionBuilder("json_query", JsonQueryExpressionBuilder),

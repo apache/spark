@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.resolver.{
   Resolver,
   ResolverGuard
 }
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.{JsonArray, JsonObjectExpr, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -158,6 +158,16 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
     checkResolverGuard("""SELECT JSON_OBJECT('a' VALUE '[1]' FORMAT JSON)""")
     // A value-nested JSON_OBJECT keeps the direct wrapper before finalization.
     checkResolverGuard("""SELECT JSON_OBJECT('a' VALUE JSON_OBJECT('b' VALUE 1))""")
+    // A plan built on an analyzed query holds the resolved constructors; assert the guard admits
+    // them. They are time-zone aware, so the TimeZoneAwareExpression arm already covers them.
+    Seq(
+      "SELECT JSON_ARRAY(1 NULL ON NULL) AS j" -> classOf[JsonArray],
+      "SELECT JSON_OBJECT('a' VALUE 1 NULL ON NULL) AS j" -> classOf[JsonObjectExpr]
+    ).foreach { case (query, cls) =>
+      val analyzed = sql(query).queryExecution.analyzed
+      assert(analyzed.expressions.exists(_.exists(cls.isInstance)), query)
+      checkResolverGuard(Project(analyzed.output, analyzed), unsupportedReason = None)
+    }
   }
 
   test("Conditional expressions") {

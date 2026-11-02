@@ -4400,8 +4400,8 @@ class AstBuilder extends DataTypeAstBuilder
     if (clauseFree && !arrayValues.exists(ImplicitlyFormattedAsJson.isImplicitlyJson)) {
       UnresolvedFunction("json_array", arrayValues, isDistinct = false)
     } else if (clauseFree) {
-      // A nested constructor argument: still routed, but the wrapper keeps the splice flags for
-      // the built-in.
+      // A nested JSON producer argument: the call still routes, but the wrapper keeps the splice
+      // flags for the built-in.
       UnresolvedRoutedJsonArray(
         arrayValues, arrayValues.map(ImplicitlyFormattedAsJson.isImplicitlyJson))
     } else {
@@ -4458,8 +4458,8 @@ class AstBuilder extends DataTypeAstBuilder
       }.toSeq
     }
     val members = taggedMembers.map { case (k, v, _) => (k, v) }
-    // Freeze each value's splice decision from the lexical argument so a later optimizer rewrite
-    // that swaps the child cannot change it (see [[ImplicitlyFormattedAsJson]]):
+    // The parser's splice flags; analysis can still add a splice for a resolved qualified or
+    // routed producer (see [[StockJsonConstructor]]):
     //  - `rawJson`: spliced raw as already-JSON text -- an explicit `FORMAT JSON`, or a lexically
     //    nested JSON constructor (via `rawJsonValue`, seen through a pass-through `COLLATE` but not
     //    a `CAST(... AS STRING)`, which cancels splicing).
