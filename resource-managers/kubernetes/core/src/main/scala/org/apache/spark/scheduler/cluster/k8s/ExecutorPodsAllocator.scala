@@ -526,10 +526,10 @@ class ExecutorPodsAllocator(
           log"Wait to reuse one of the existing ${MDC(LogKeys.COUNT, PVC_COUNTER.get())} PVCs.")
         return
       }
-      val newExecutorId = EXECUTOR_ID_COUNTER.incrementAndGet()
-      if (newExecutorId >= podAllocationMaximum) {
+      if (EXECUTOR_ID_COUNTER.get() >= podAllocationMaximum) {
         throw new SparkException(s"Exceed the pod creation limit: $podAllocationMaximum")
       }
+      val newExecutorId = EXECUTOR_ID_COUNTER.incrementAndGet()
       val executorConf = KubernetesConf.createExecutorConf(
         conf,
         newExecutorId.toString,
