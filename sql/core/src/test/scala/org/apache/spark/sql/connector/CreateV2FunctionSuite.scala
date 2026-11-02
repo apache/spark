@@ -67,6 +67,7 @@ class CreateV2FunctionSuite extends QueryTest with SharedSparkSession {
     } else {
       "public Integer produceResult(InternalRow r) { return r.getUTF8String(0).numChars(); }"
     }
+    // scalastyle:off classforname
     val staticInit = requires.map { required =>
       s"""static {
          |    try {
@@ -76,6 +77,7 @@ class CreateV2FunctionSuite extends QueryTest with SharedSparkSession {
          |    }
          |  }""".stripMargin
     }.getOrElse("")
+    // scalastyle:on classforname
     val source =
       s"""package ${className.stripSuffix("." + simpleName)};
          |
