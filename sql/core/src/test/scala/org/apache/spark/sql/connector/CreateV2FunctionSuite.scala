@@ -200,6 +200,23 @@ class CreateV2FunctionSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("magic method from a runtime jar after the context classloader is reset") {
+    val className = "test.v2udf.ResetLoaderStrLen"
+    val jar = createStrLenJar(className)
+    Utils.withContextClassLoader(Utils.getSparkClassLoader) {
+      withUserDefinedFunction("default.jar_strlen" -> false) {
+        sql(s"CREATE FUNCTION jar_strlen AS '$className' USING JAR '$jar'")
+        checkAnswer(sql(jarStrLenQuery), Row(1) :: Row(2) :: Nil)
+        // Resets the context classloader, as spark-shell does after each line. Generated code
+        // cannot see the jar then.
+        // TODO(SPARK-60811): the query should succeed once generated code can see the jar.
+        Thread.currentThread().setContextClassLoader(Utils.getSparkClassLoader)
+        val e = intercept[Exception](sql(jarStrLenQuery).collect())
+        assert(e.getCause.getMessage.contains("Cannot determine simple type name"))
+      }
+    }
+  }
+
   test("DESCRIBE FUNCTION reports the V2 function description once it is loaded") {
     withUserDefinedFunction("tstrlen" -> true, "default.strlen" -> false) {
       def describe(name: String): Seq[String] =
