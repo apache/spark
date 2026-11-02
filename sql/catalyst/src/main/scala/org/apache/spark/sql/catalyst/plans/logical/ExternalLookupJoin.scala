@@ -20,12 +20,34 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftOuter}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{EXTERNAL_LOOKUP_JOIN, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{EXTERNAL_LOOKUP_HINT, EXTERNAL_LOOKUP_JOIN,
+  TreePattern}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.read.{ExternalLookupReaderFactory, Scan}
 import org.apache.spark.sql.types.{BinaryType, BooleanType, ByteType, CharType, DataType,
   DateType, DecimalType, IntegerType, LongType, ShortType, StringType, TimestampNTZType,
   TimestampType, VarcharType}
+
+/**
+ * Marks the plan below it as the lookup side that the `EXTERNAL_LOOKUP` hint asks an external
+ * lookup join to read. The external lookup join rules consume it when they form the join.
+ *
+ * Join strategy hints are [[ResolvedHint]] nodes with a [[JoinStrategyHint]]. This hint is not,
+ * because that representation cannot keep two of its guarantees:
+ *  - A strategy hint that conflicts with it must fail the query. [[HintInfo]] holds one strategy,
+ *    and `ResolveJoinStrategyHints` merges a strategy hint on an already hinted relation into the
+ *    existing [[ResolvedHint]] with `HintInfo.merge`, which keeps one strategy and only warns.
+ *  - It selects how the lookup side is read, not a physical join. `EliminateResolvedHint` moves
+ *    every [[ResolvedHint]] it can attach into `Join.hint`, for physical join selection.
+ */
+case class ExternalLookupHint(child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(EXTERNAL_LOOKUP_HINT)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): ExternalLookupHint =
+    copy(child = newChild)
+}
 
 /**
  * A lookup join retained through ordinary expression and operator optimization.

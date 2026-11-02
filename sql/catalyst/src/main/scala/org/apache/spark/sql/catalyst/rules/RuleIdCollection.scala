@@ -91,6 +91,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.ResolveEventTimeWatermark" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveExecuteImmediate" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveExpressionsWithNamePlaceholders" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveExternalLookupHint" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveGroupByAll" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveHigherOrderFunctions" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveHints$ResolveCoalesceHints" ::
