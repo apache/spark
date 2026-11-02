@@ -480,17 +480,23 @@ case class Add(
     copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    val reorderResult = buildCanonicalizedPlan(
-      { case Add(l, r, em) if em == evalContext => Seq(l, r) },
-      { case (l: Expression, r: Expression) => Add(l, r, evalContext)},
-      Some(evalContext)
-    )
-    if (resolved && reorderResult.resolved && reorderResult.dataType == dataType) {
-      reorderResult
+    if (resolved && (dataType == FloatType || dataType == DoubleType)) {
+      // SPARK-60178: Floating-point addition is commutative but not associative, so only the
+      // two direct children can be reordered.
+      orderBinaryCommutative(left, right, Add(_, _, evalContext))
     } else {
-      // SPARK-40903: Avoid reordering decimal Add for canonicalization if the result data type is
-      // changed, which may cause data checking error within ComplexTypeMergingExpression.
-      withCanonicalizedChildren
+      val reorderResult = buildCanonicalizedPlan(
+        { case Add(l, r, em) if em == evalContext => Seq(l, r) },
+        { case (l: Expression, r: Expression) => Add(l, r, evalContext)},
+        Some(evalContext)
+      )
+      if (resolved && reorderResult.resolved && reorderResult.dataType == dataType) {
+        reorderResult
+      } else {
+        // SPARK-40903: Avoid reordering decimal Add for canonicalization if the result data type
+        // is changed, which may cause data checking error within ComplexTypeMergingExpression.
+        withCanonicalizedChildren
+      }
     }
   }
 }
@@ -661,11 +667,17 @@ case class Multiply(
     newLeft: Expression, newRight: Expression): Multiply = copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    buildCanonicalizedPlan(
-      { case Multiply(l, r, ec) if ec == evalContext => Seq(l, r) },
-      { case (l: Expression, r: Expression) => Multiply(l, r, evalContext) },
-      Some(evalContext)
-    )
+    if (resolved && (dataType == FloatType || dataType == DoubleType)) {
+      // SPARK-60178: Floating-point multiplication is commutative but not associative, so only
+      // the two direct children can be reordered.
+      orderBinaryCommutative(left, right, Multiply(_, _, evalContext))
+    } else {
+      buildCanonicalizedPlan(
+        { case Multiply(l, r, ec) if ec == evalContext => Seq(l, r) },
+        { case (l: Expression, r: Expression) => Multiply(l, r, evalContext) },
+        Some(evalContext)
+      )
+    }
   }
 }
 

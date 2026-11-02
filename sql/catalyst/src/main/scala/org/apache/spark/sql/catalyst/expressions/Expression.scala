@@ -1430,6 +1430,19 @@ trait CommutativeExpression extends Expression {
     gatherCommutative(this, f).sortBy(_.hashCode())
 
   /**
+   * Reorders only the two direct children of a binary commutative operator, without flattening
+   * adjacent operators. Used when the operator is commutative but not associative, e.g.
+   * floating-point addition and multiplication.
+   */
+  protected def orderBinaryCommutative(
+      left: Expression,
+      right: Expression,
+      buildBinaryOp: (Expression, Expression) => Expression): Expression = {
+    val Seq(l, r) = Seq(left.canonicalized, right.canonicalized).sortBy(_.hashCode())
+    buildBinaryOp(l, r)
+  }
+
+  /**
    * Helper method to generated a canonicalized plan. If the number of operands are
    * greater than the MULTI_COMMUTATIVE_OP_OPT_THRESHOLD, this method creates a
    * [[MultiCommutativeOp]] as the canonicalized plan.
