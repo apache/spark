@@ -394,6 +394,13 @@ select '   ' IS JSON;
 select '{"a":1,"a":2}' IS JSON OBJECT;
 -- input beyond the parser limits raises an error, like parse_json
 select concat(repeat('[', 1001), repeat(']', 1001)) IS JSON;
+-- a shape mismatch is decided by the first token even for over-limit input: an over-long root
+-- number is neither an object nor an array, so those shapes return false instead of raising
+select repeat('9', 1001) IS JSON OBJECT, repeat('9', 1001) IS JSON ARRAY;
+-- structurally malformed containers are rejected: truncated input, trailing commas, missing
+-- values, and a mismatched closer
+select '{' IS JSON, '[1,' IS JSON, '{"a"' IS JSON;
+select '[1,]' IS JSON ARRAY, '{"a":1,}' IS JSON OBJECT, '[1,,2]' IS JSON ARRAY, '[1}' IS JSON ARRAY;
 -- input that is not valid UTF-8 is rejected (lone continuation byte, encoded surrogate)
 select cast(X'228022' AS STRING) IS JSON;
 select cast(X'22EDA08022' AS STRING) IS JSON;
@@ -405,9 +412,21 @@ select '[{"a":["\\uDC00"]}]' IS JSON ARRAY;
 select '"\\uD835\\uDC00"' IS JSON;
 -- shift operators after the ARRAY qualifier
 select '[1]' IS JSON ARRAY, 8 >> 1, 8 >>> 1;
--- collated, trim-collated, and VARCHAR operands behave like STRING
+-- collated and trim-collated operands behave like STRING
 select '{"a":1}' COLLATE UTF8_LCASE IS JSON OBJECT, '[1] ' COLLATE UTF8_LCASE_RTRIM IS JSON ARRAY;
-select 'bad' COLLATE UNICODE IS JSON, cast('[1]' AS VARCHAR(10)) IS JSON ARRAY;
+select 'bad' COLLATE UNICODE IS JSON;
+-- by default a CHAR/VARCHAR cast target is rewritten to STRING at parse time, so this case
+-- exercises a STRING operand
+select cast('[1]' AS VARCHAR(10)) IS JSON ARRAY;
+-- with first-class CHAR/VARCHAR types (preserveCharVarcharTypeInfo or standard semantics), the
+-- cast keeps its type, so IS JSON gets a real VARCHAR or CHAR operand
+SET spark.sql.preserveCharVarcharTypeInfo=true;
+select cast('[1]' AS VARCHAR(10)) IS JSON ARRAY, cast('bad' AS VARCHAR(10)) IS JSON,
+       cast('{"a":1}' AS CHAR(10)) IS JSON OBJECT;
+SET spark.sql.preserveCharVarcharTypeInfo=false;
+SET spark.sql.charVarchar.standardSemantics.enabled=true;
+select cast('[1]' AS VARCHAR(10)) IS JSON ARRAY, cast('bad' AS VARCHAR(10)) IS JSON;
+SET spark.sql.charVarchar.standardSemantics.enabled=false;
 -- an untyped NULL operand yields NULL
 select NULL IS JSON, NULL IS NOT JSON;
 -- a non-string operand is rejected
