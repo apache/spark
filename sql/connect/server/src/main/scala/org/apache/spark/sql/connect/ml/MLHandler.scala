@@ -19,6 +19,7 @@ package org.apache.spark.sql.connect.ml
 
 import java.io.{PrintWriter, StringWriter}
 import java.lang.ThreadLocal
+import java.nio.file.Files
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable
@@ -33,7 +34,8 @@ import org.apache.spark.ml.param.{ParamMap, Params}
 import org.apache.spark.ml.tree.TreeConfig
 import org.apache.spark.ml.util.{HasTrainingSummary, MLWritable, Summary}
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
+import org.apache.spark.sql.connect.common.{LiteralValueProtoConverter, ProtoUtils}
+import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.ml.Serializer.deserializeMethodArguments
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.util.Utils
@@ -258,12 +260,7 @@ private[connect] object MLHandler extends Logging {
           .build()
 
       case proto.MlCommand.CommandCase.FETCH =>
-        val summaryDataset = if (mlCommand.hasModelSummaryDataset) {
-          Some(mlCommand.getModelSummaryDataset)
-        } else {
-          None
-        }
-        val attrResult = fetchAttribute(sessionHolder, mlCommand.getFetch, summaryDataset)
+        val attrResult = fetchAttribute(sessionHolder, mlCommand.getFetch)
         attrResult match {
           case s: Summary =>
             val id = mlCache.register(s)
@@ -486,7 +483,7 @@ private[connect] object MLHandler extends Logging {
   private def fetchAttribute(
       sessionHolder: SessionHolder,
       fetch: proto.Fetch,
-      summaryDataset: Option[proto.Relation]): Any = {
+      summaryDataset: Option[proto.Relation] = None): Any = {
     val objRefId = fetch.getObjRef.getId
     val methods = fetch.getMethodsList.asScala.toArray
     val obj = sessionHolder.mlCache.get(objRefId)
@@ -496,11 +493,18 @@ private[connect] object MLHandler extends Logging {
     sessionHolder.mlCache.synchronized {
       if (obj.isInstanceOf[HasTrainingSummary[_]] && methods(0).getMethod == "summary"
         && !obj.asInstanceOf[HasTrainingSummary[_]].hasSummary) {
-        val dataset = summaryDataset.getOrElse {
-          // Older clients restore the summary with a separate CreateSummary command.
-          throw MLModelSummaryLostException(objRefId)
-        }
         val modelPath = sessionHolder.mlCache.getModelOffloadingPath(objRefId)
+        val dataset = summaryDataset.getOrElse {
+          val datasetPath = modelPath.resolve("summary_dataset")
+          if (!Files.exists(datasetPath)) {
+            throw MLModelSummaryLostException(objRefId)
+          }
+          ProtoUtils.parseWithRecursionLimit(
+            Files.readAllBytes(datasetPath),
+            proto.Relation.parser(),
+            sessionHolder.session.sparkContext.conf.get(
+              Connect.CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT))
+        }
         obj.asInstanceOf[HasTrainingSummary[_]].loadSummary(
           modelPath.resolve("summary").toString,
           MLUtils.parseRelationProto(dataset, sessionHolder))
@@ -524,6 +528,12 @@ private[connect] object MLHandler extends Logging {
         true
       } else {
         false
+      }
+      if (sessionHolder.mlCache.getMemoryControlEnabled) {
+        // Keep the dataset plan on disk so recovery survives subsequent model evictions.
+        val datasetPath = sessionHolder.mlCache.getModelOffloadingPath(refId)
+          .resolve("summary_dataset")
+        Files.write(datasetPath, createSummaryCmd.getDataset.toByteArray)
       }
       proto.MlCommandResult
         .newBuilder()

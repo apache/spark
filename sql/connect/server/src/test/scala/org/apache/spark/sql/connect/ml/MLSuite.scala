@@ -459,15 +459,21 @@ class MLSuite extends MLHelper {
     }
   }
 
-  test("fetch offloaded model summaries without retaining cache entries") {
+  gridTest("fetch offloaded model summaries")(Seq(0, 16384)) { cacheSize =>
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     sessionHolder.session.conf
       .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_ENABLED.key, "true")
-    // Evict every model immediately, including models reloaded while restoring a summary.
-    sessionHolder.session.conf
-      .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_IN_MEMORY_SIZE.key, 0)
+    // A zero limit also evicts models reloaded while restoring or fetching a summary.
+    sessionHolder.session.conf.set(
+      Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_IN_MEMORY_SIZE.key,
+      cacheSize)
     val modelId = trainLogisticRegressionModel(sessionHolder)
-    val dataset = createLocalRelationProto
+    // Use a plan deeper than the default protobuf recursion limit.
+    val dataset = (0 until 60).foldLeft(createLocalRelationProto) { (input, _) =>
+      proto.Relation.newBuilder()
+        .setLimit(proto.Limit.newBuilder().setInput(input).setLimit(4))
+        .build()
+    }
     val summaryFetch = proto.Fetch.newBuilder()
       .setObjRef(proto.ObjectRef.newBuilder().setId(modelId))
       .addMethods(proto.Fetch.Method.newBuilder().setMethod("summary"))
@@ -476,22 +482,26 @@ class MLSuite extends MLHelper {
     val command = proto.MlCommand.newBuilder().setFetch(summaryFetch).build()
 
     try {
-      // The legacy two-command recovery cannot retain the summary until the next fetch.
+      if (cacheSize == 0) {
+        intercept[MLModelSummaryLostException] {
+          MLHandler.handleMlCommand(sessionHolder, command)
+        }
+      }
       val createSummary = proto.MlCommand.newBuilder()
         .setCreateSummary(proto.MlCommand.CreateSummary.newBuilder()
           .setModelRef(proto.ObjectRef.newBuilder().setId(modelId))
           .setDataset(dataset))
         .build()
-      assert(MLHandler.handleMlCommand(sessionHolder, createSummary).getParam.getBoolean)
-      intercept[MLModelSummaryLostException] {
-        MLHandler.handleMlCommand(sessionHolder, command)
-      }
-
-      val restoredCommand = command.toBuilder.setModelSummaryDataset(dataset).build()
+      // Persist the plan even when CreateSummary finds the model already has its summary.
+      assert(MLHandler.handleMlCommand(sessionHolder, createSummary)
+        .getParam.getBoolean === (cacheSize == 0))
       for (_ <- 0 until 2) {
-        val result = MLHandler.handleMlCommand(sessionHolder, restoredCommand)
+        sessionHolder.mlCache.remove(modelId, evictOnly = true)
+        val result = MLHandler.handleMlCommand(sessionHolder, command)
         assert(result.getParam.getArray.getElementsList.asScala.map(_.getDouble) === Seq(0.0, 1.0))
-        assert(sessionHolder.mlCache.cachedModel.isEmpty)
+        if (cacheSize == 0) {
+          assert(sessionHolder.mlCache.cachedModel.isEmpty)
+        }
       }
 
       val predictions = summaryFetch.toBuilder
@@ -500,8 +510,14 @@ class MLSuite extends MLHelper {
         .setFetch(predictions)
         .setModelSummaryDataset(dataset)
         .build()
+      sessionHolder.mlCache.remove(modelId, evictOnly = true)
       assert(MLHandler.transformMLRelation(relation, sessionHolder).count() === 4)
-      assert(sessionHolder.mlCache.cachedModel.isEmpty)
+      sessionHolder.mlCache.remove(modelId, evictOnly = true)
+      assert(MLHandler.transformMLRelation(
+        relation.toBuilder.clearModelSummaryDataset().build(), sessionHolder).count() === 4)
+      if (cacheSize == 0) {
+        assert(sessionHolder.mlCache.cachedModel.isEmpty)
+      }
     } finally {
       sessionHolder.mlCache.clear()
     }
