@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connect.ml
 
 import java.io.File
+import java.lang.reflect.InvocationTargetException
 
 import org.apache.spark.connect.proto
 import org.apache.spark.ml.{Model, Transformer}
@@ -125,9 +126,11 @@ class MLClassLoadingSuite extends MLHelper {
 
   test("reject an RFormulaModel with a non-allowlisted nested stage") {
     withSavedModel(new UnregisteredModel("stageFixture")) { path =>
-      val error = intercept[MlUnsupportedException] {
+      // branch-4.0 does not unwrap InvocationTargetException in MLUtils.loadOperator.
+      val error = intercept[InvocationTargetException] {
         readModel(path)
-      }
+      }.getCause
+      assert(error.isInstanceOf[MlUnsupportedException])
       assert(error.getMessage.contains(classOf[UnregisteredModel].getName))
       assert(error.getMessage.contains("not in the allowlist"))
     }
