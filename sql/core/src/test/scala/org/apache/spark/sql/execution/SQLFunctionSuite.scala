@@ -534,4 +534,82 @@ class SQLFunctionSuite extends SharedSparkSession {
       checkAnswer(sql("SELECT * FROM tvf(null_udf(1))"), Row(null))
     }
   }
+
+  test("SPARK-60806: a temp function counts as a reference only if it owns the call") {
+    withUserDefinedFunction("perm_abs" -> false, "perm_abs_tbl" -> false) {
+      sql("CREATE TEMPORARY FUNCTION abs(x INT) RETURNS INT RETURN 42")
+      try {
+        // The built-in precedes a same-named temp function under the default resolution order.
+        sql("CREATE FUNCTION perm_abs() RETURNS INT RETURN abs(-1)")
+        checkAnswer(sql("SELECT perm_abs()"), Row(1))
+        sql("CREATE FUNCTION perm_abs_tbl() RETURNS TABLE (a INT) RETURN SELECT abs(-1)")
+        checkAnswer(sql("SELECT * FROM perm_abs_tbl()"), Row(1))
+        // With the session first in the path, the temp function owns the call.
+        withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+          try {
+            sql("SET PATH = system.session, system.builtin, spark_catalog.default")
+            checkAnswer(sql("SELECT abs(-1)"), Row(42))
+            checkError(
+              exception = intercept[AnalysisException] {
+                sql("CREATE FUNCTION perm_abs2() RETURNS INT RETURN abs(-1)")
+              },
+              condition = "INVALID_TEMP_OBJ_REFERENCE",
+              parameters = Map("obj" -> "FUNCTION", "objName" -> "`default`.`perm_abs2`",
+                "tempObj" -> "FUNCTION", "tempObjName" -> "`abs`"))
+          } finally {
+            sql("SET PATH = DEFAULT_PATH")
+          }
+        }
+      } finally {
+        sql("DROP TEMPORARY FUNCTION abs")
+      }
+    }
+  }
+
+  test("SPARK-60806: temp functions bound only during analysis are rejected") {
+    withUserDefinedFunction("temp_fn" -> true, "temp_tvf" -> true, "temp_scala" -> true) {
+      sql("CREATE TEMPORARY FUNCTION temp_fn() RETURNS INT RETURN 1")
+      sql("CREATE TEMPORARY FUNCTION temp_tvf() RETURNS TABLE (a INT) RETURN SELECT 1")
+      spark.udf.register("temp_scala", (x: Int) => x)
+      Seq(
+        "() RETURNS INT RETURN temp_fn()" -> "temp_fn",
+        "() RETURNS TABLE (a INT) RETURN SELECT temp_fn()" -> "temp_fn",
+        "() RETURNS INT RETURN temp_scala(1)" -> "temp_scala",
+        "(x INT DEFAULT temp_fn()) RETURNS INT RETURN x" -> "temp_fn",
+        "() RETURNS ARRAY<INT> RETURN transform(array(1), x -> x + temp_fn())" -> "temp_fn",
+        // The name scan used before missed these two.
+        "() RETURNS TABLE (a INT) RETURN SELECT * FROM temp_tvf()" -> "temp_tvf",
+        "() RETURNS INT RETURN IDENTIFIER('temp_fn')()" -> "temp_fn"
+      ).foreach { case (signatureAndBody, tempName) =>
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"CREATE FUNCTION perm_fn$signatureAndBody")
+          },
+          condition = "INVALID_TEMP_OBJ_REFERENCE",
+          parameters = Map("obj" -> "FUNCTION", "objName" -> "`default`.`perm_fn`",
+            "tempObj" -> "FUNCTION", "tempObjName" -> s"`$tempName`"))
+      }
+    }
+  }
+
+  test("SPARK-60806: a temp function bound in a called function's body is not a reference") {
+    withUserDefinedFunction("callee" -> false, "inner_fn" -> false, "callee_tbl" -> false,
+        "caller" -> false, "caller_tbl" -> false) {
+      sql("CREATE FUNCTION callee() RETURNS INT RETURN 1")
+      sql("CREATE FUNCTION inner_fn() RETURNS INT RETURN callee()")
+      sql("CREATE FUNCTION callee_tbl() RETURNS TABLE (a INT) RETURN SELECT callee()")
+      try {
+        // In this session the temp function shadows `callee` inside the persistent bodies, but
+        // that is their dependency, not one of the function being created.
+        sql("CREATE TEMPORARY FUNCTION callee() RETURNS INT RETURN 2")
+        sql("CREATE FUNCTION caller() RETURNS INT RETURN inner_fn()")
+        sql("CREATE FUNCTION caller_tbl() RETURNS TABLE (a INT) RETURN SELECT * FROM callee_tbl()")
+        sql("DROP TEMPORARY FUNCTION callee")
+        checkAnswer(sql("SELECT caller()"), Row(1))
+        checkAnswer(sql("SELECT * FROM caller_tbl()"), Row(1))
+      } finally {
+        sql("DROP TEMPORARY FUNCTION IF EXISTS callee")
+      }
+    }
+  }
 }

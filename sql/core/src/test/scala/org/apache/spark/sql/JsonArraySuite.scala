@@ -956,11 +956,9 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
       sql("CREATE TEMPORARY FUNCTION json_array(a STRING) RETURNS STRING RETURN 'shadowed'")
       sql("CREATE FUNCTION perm_json_fn() RETURNS STRING RETURN json_array(json_array(1))")
       checkAnswer(sql("SELECT perm_json_fn()"), Row("[[1]]"))
-      // The flat call is still rejected by name, as before.
-      val e = intercept[AnalysisException] {
-        sql("CREATE OR REPLACE FUNCTION perm_json_fn() RETURNS STRING RETURN json_array(1)")
-      }
-      assert(e.getCondition == "INVALID_TEMP_OBJ_REFERENCE")
+      // So is a flat call (SPARK-60806).
+      sql("CREATE OR REPLACE FUNCTION perm_json_fn() RETURNS STRING RETURN json_array(1)")
+      checkAnswer(sql("SELECT perm_json_fn()"), Row("[1]"))
     } finally {
       sql("DROP FUNCTION IF EXISTS perm_json_fn")
       sql("DROP TEMPORARY FUNCTION IF EXISTS json_array")
