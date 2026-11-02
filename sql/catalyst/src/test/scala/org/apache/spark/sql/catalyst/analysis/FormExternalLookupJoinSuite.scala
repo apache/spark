@@ -93,6 +93,9 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
         Map.empty[String, String]),
       (left.join(lookupOnly, RightOuter, Some(idCondition)), "JOIN_TYPE",
         Map("joinType" -> "RIGHT OUTER")),
+      // A cross join fails with its join type, with or without a later filter.
+      (left.join(lookupOnly, Cross), "JOIN_TYPE", Map("joinType" -> "CROSS")),
+      (left.join(lookupOnly, Cross).where(idCondition), "JOIN_TYPE", Map("joinType" -> "CROSS")),
       // No join strategy hint applies to an external lookup join; sort merge is named MERGE.
       (left.hint("broadcast").join(lookupOnly, Inner, Some(idCondition)),
         "CONFLICTING_JOIN_STRATEGY", Map("strategy" -> "BROADCAST")),
@@ -129,8 +132,7 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
     // into the join.
     Seq(
       left.join(lookupOnly),
-      left.join(lookupOnly).where(idCondition),
-      left.join(lookupOnly, Cross).where(idCondition)).foreach { plan =>
+      left.join(lookupOnly).where(idCondition)).foreach { plan =>
       val analyzed = analyze(plan)
       // The classic Dataset API analyzes a USING join first as a join without a condition.
       CheckExternalLookupJoin(analyzed)

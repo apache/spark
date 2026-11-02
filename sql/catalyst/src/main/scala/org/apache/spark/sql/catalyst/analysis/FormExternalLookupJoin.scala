@@ -42,12 +42,12 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
   case object NotLookupJoin extends Eligibility
   /** The join runs as an external lookup join. */
   case object Eligible extends Eligibility
-  /** The join reads a lookup-only table but has no join condition. */
+  /** The join reads a lookup-only table, with a supported join type, but has no condition. */
   case object MissingCondition extends Eligibility
   /** The join reads a lookup-only table, which no other join can read, but cannot run. */
   case class Ineligible(error: Throwable) extends Eligibility
 
-  private val SupportedJoinTypes = Seq(Inner, LeftOuter)
+  private val SUPPORTED_JOIN_TYPES = Seq(Inner, LeftOuter)
 
   def apply(join: Join): Eligibility = {
     // The lookup-only table must be on the right side; the sides are never swapped.
@@ -70,11 +70,12 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
       case Some(strategy) =>
         ineligible("CONFLICTING_JOIN_STRATEGY", table,
           Map("strategy" -> toSQLStmt(strategy.displayName)))
-      case None if join.condition.isEmpty => MissingCondition
-      case None if !SupportedJoinTypes.contains(join.joinType) =>
+      // Checked before the condition, so that a cross join fails while it is analyzed.
+      case None if !SUPPORTED_JOIN_TYPES.contains(join.joinType) =>
         ineligible("JOIN_TYPE", table, Map(
           "joinType" -> toSQLStmt(join.joinType.sql),
-          "supportedJoinTypes" -> SupportedJoinTypes.map(t => toSQLStmt(t.sql)).mkString(", ")))
+          "supportedJoinTypes" -> SUPPORTED_JOIN_TYPES.map(t => toSQLStmt(t.sql)).mkString(", ")))
+      case None if join.condition.isEmpty => MissingCondition
       case None => Eligible
     }
   }
