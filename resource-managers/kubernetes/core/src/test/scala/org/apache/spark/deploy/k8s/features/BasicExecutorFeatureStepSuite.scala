@@ -432,7 +432,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     checkEnv(executor, conf, Map(SecurityManager.ENV_AUTH_SECRET -> "my-auth-secret"))
   }
 
-  test("SSL RPC password propagation") {
+  test("SPARK-58776: SSL RPC password propagation") {
     val conf = baseConf.clone()
       .set("spark.ssl.rpc.enabled", "true")
       .set("spark.ssl.rpc.keyStorePassword", "keyStorePass")
@@ -455,7 +455,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       SSLOptions.ENV_RPC_SSL_TRUST_STORE_PASSWORD -> "trustStorePass"))
   }
 
-  test("SSL RPC passwords are escaped for Kubernetes env var expansion") {
+  test("SPARK-58776: SSL RPC passwords are escaped for Kubernetes env var expansion") {
     val conf = baseConf.clone()
       .set("spark.ssl.rpc.enabled", "true")
       .set("spark.ssl.rpc.keyStorePassword", "pa$$word$(SPARK_EXECUTOR_ID)")
@@ -478,7 +478,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       SSLOptions.ENV_RPC_SSL_TRUST_STORE_PASSWORD -> "trustStorePass"))
   }
 
-  test("SSL RPC passwords shouldn't override an explicit secretKeyRef") {
+  test("SPARK-58776: SSL RPC passwords shouldn't override an explicit secretKeyRef") {
     val conf = baseConf.clone()
       .set("spark.ssl.rpc.enabled", "true")
       .set("spark.ssl.rpc.keyStorePassword", "keyStorePass")
@@ -498,7 +498,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       SSLOptions.ENV_RPC_SSL_TRUST_STORE_PASSWORD -> "trustStorePass"))
   }
 
-  test("SSL RPC passwords shouldn't override an explicit spark.executorEnv entry") {
+  test("SPARK-58776: SSL RPC passwords shouldn't override an explicit spark.executorEnv entry") {
     val conf = baseConf.clone()
       .set("spark.ssl.rpc.enabled", "true")
       .set("spark.ssl.rpc.keyStorePassword", "keyStorePass")
@@ -518,7 +518,8 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       SSLOptions.ENV_RPC_SSL_TRUST_STORE_PASSWORD -> "trustStorePass"))
   }
 
-  test("SSL RPC passwords shouldn't override an env var predefined on the pod template") {
+  test("SPARK-58776: SSL RPC passwords shouldn't override an env var predefined on the " +
+    "pod template") {
     val conf = baseConf.clone()
       .set("spark.ssl.rpc.enabled", "true")
       .set("spark.ssl.rpc.keyStorePassword", "keyStorePass")
@@ -550,7 +551,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       SSLOptions.ENV_RPC_SSL_TRUST_STORE_PASSWORD -> "trustStorePass"))
   }
 
-  test("SSL RPC passwords aren't injected when the pod template uses envFrom") {
+  test("SPARK-58776: SSL RPC passwords aren't injected when the pod template uses envFrom") {
     BasicExecutorFeatureStep.sslRpcEnvFromWarned.set(false)
     val conf = baseConf.clone()
       .set("spark.ssl.rpc.enabled", "true")
@@ -596,7 +597,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(!warnings.head.contains("trustStorePass"))
   }
 
-  test("SSL RPC passwords inherited from the global spark.ssl.* namespace propagate") {
+  test("SPARK-58776: SSL RPC passwords inherited from the global spark.ssl.* namespace propagate") {
     val conf = baseConf.clone()
       .set("spark.ssl.enabled", "true")
       .set("spark.ssl.keyStorePassword", "globalKeyStorePass")

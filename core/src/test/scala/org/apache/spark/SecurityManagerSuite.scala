@@ -512,7 +512,7 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     }
   }
 
-  test("SSL RPC password env is empty when RPC SSL is disabled") {
+  test("SPARK-58776: SSL RPC password env is empty when RPC SSL is disabled") {
     val conf = new SparkConf()
       .set("spark.ssl.rpc.enabled", "false")
       .set("spark.ssl.rpc.keyStorePassword", "keyStorePass")
@@ -522,7 +522,8 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     assert(mgr.getEnvironmentForSslRpcPasswordsFromSparkConf.isEmpty)
   }
 
-  test("SSL RPC password env from SparkConf includes passwords set in spark.ssl.rpc.*") {
+  test("SPARK-58776: SSL RPC password env from SparkConf includes passwords set in " +
+    "spark.ssl.rpc.*") {
     val conf = new SparkConf()
       .set("spark.ssl.rpc.enabled", "true")
       .set("spark.ssl.rpc.keyStorePassword", "keyStorePass")
@@ -539,7 +540,8 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     assert(mgr.getEnvironmentForSslRpcPasswordsFromSparkConf === expected)
   }
 
-  test("SSL RPC password env from SparkConf includes passwords inherited from spark.ssl.*") {
+  test("SPARK-58776: SSL RPC password env from SparkConf includes passwords inherited " +
+    "from spark.ssl.*") {
     val conf = new SparkConf()
       .set("spark.ssl.enabled", "true")
       .set("spark.ssl.keyStorePassword", "globalKeyStorePass")
@@ -551,7 +553,8 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
       SSLOptions.ENV_RPC_SSL_TRUST_STORE_PASSWORD -> "trustStorePass"))
   }
 
-  test("SSL RPC password env from SparkConf excludes passwords resolved from the environment") {
+  test("SPARK-58776: SSL RPC password env from SparkConf excludes passwords resolved " +
+    "from the environment") {
     val conf = new SparkConfWithEnv(Map(
         SSLOptions.ENV_RPC_SSL_KEY_STORE_PASSWORD -> "envKeyStorePass",
         "TRUST_STORE_PASS" -> "substitutedTrustStorePass"))
@@ -567,7 +570,8 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
       SSLOptions.ENV_RPC_SSL_KEY_PASSWORD -> "keyPass"))
   }
 
-  test("SSL RPC password env from SparkConf excludes passwords from a credential provider") {
+  test("SPARK-58776: SSL RPC password env from SparkConf excludes passwords from a " +
+    "credential provider") {
     withTempDir { dir =>
       val providerPath = s"localjceks://file${dir.getAbsolutePath}/test.jceks"
       val hadoopConf = new Configuration()

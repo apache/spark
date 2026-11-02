@@ -454,10 +454,8 @@ private[spark] class SecurityManager(
    */
   def getEnvironmentForSslRpcPasswordsFromSparkConf: Map[String, String] = {
     getEnvironmentForSslRpcPasswords.filter { case (env, password) =>
-      SSLOptions.SPARK_RPC_SSL_PASSWORD_CONFS_BY_ENV.get(env).exists { rpcConf =>
-        Seq(rpcConf, rpcConf.replace("spark.ssl.rpc.", "spark.ssl."))
-          .exists(sparkConf.getOption(_).contains(password))
-      }
+      SSLOptions.SPARK_RPC_SSL_PASSWORD_CONFS_BY_ENV.getOrElse(env, Nil)
+        .exists(sparkConf.getOption(_).contains(password))
     }
   }
 }
