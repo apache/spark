@@ -39,11 +39,11 @@ import org.apache.spark.internal.MDC;
  *
  * Each entry must canonicalize to a path contained under one of the configured roots (YARN passes
  * {@code yarn.nodemanager.local-dirs}; standalone passes the configured local directories). When
- * app scoping is required in standalone mode, the entry must have the exact form
- * {@code spark-&#42;/executor-&#42;/&lt;url-encoded-appId&gt;[/blockmgr-&#42;]}
- * below that root. When no roots are configured there is nothing to contain the entries against
- * and they are accepted. An empty array is always
- * allowed.
+ * app scoping is required, YARN entries must be below {@code appcache/<appId>}, while standalone
+ * entries must have the exact form
+ * {@code spark-&#42;/executor-&#42;/&lt;url-encoded-appId&gt;[/blockmgr-&#42;]} below that root.
+ * When no roots are configured there is nothing to contain the entries against and they are
+ * accepted. An empty array is always allowed.
  */
 class LocalDirValidator {
   private static final SparkLogger logger = SparkLoggerFactory.getLogger(LocalDirValidator.class);
@@ -85,7 +85,8 @@ class LocalDirValidator {
     }
     if (requireAppScopedLocalDirs &&
         (appId == null || appId.isEmpty() || allowedLocalDirRoots.stream().noneMatch(
-          root -> isStandaloneAppDir(root, canonical, appId)))) {
+          root -> isStandaloneAppDir(root, canonical, appId) ||
+            isYarnAppDir(root, canonical, appId)))) {
       throw new IllegalArgumentException(
         "localDirs entry is not within application " + appId + "'s directory: " + localDir);
     }
@@ -99,6 +100,17 @@ class LocalDirValidator {
       relative.getName(1).toString().startsWith("executor-") &&
       relative.getName(2).toString().equals(URLEncoder.encode(appId, StandardCharsets.UTF_8)) &&
       (count == 3 || relative.getName(3).toString().startsWith("blockmgr-"));
+  }
+
+  private static boolean isYarnAppDir(Path root, Path path, String appId) {
+    Path relative = root.relativize(path);
+    for (int i = 0; i + 1 < relative.getNameCount(); i++) {
+      if (relative.getName(i).toString().equals("appcache") &&
+          relative.getName(i + 1).toString().equals(appId)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private static List<Path> canonicalizeRoots(String[] allowedLocalDirs) {
