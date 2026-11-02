@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.ComputeCurrentTime
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -100,6 +101,15 @@ object ResolveTableSpec extends Rule[LogicalPlan] {
           if (!check.child.deterministic) {
             check.child.failAnalysis(
               errorClass = "NON_DETERMINISTIC_CHECK_CONSTRAINT",
+              messageParameters = Map("checkCondition" -> check.condition)
+            )
+          }
+          check.child.collectFirst {
+            case e @ (_: AggregateExpression | _: Grouping | _: GroupingID |
+                _: WindowExpression | _: WindowFunction) => e
+          }.foreach { call =>
+            call.failAnalysis(
+              errorClass = "AGGREGATE_OR_WINDOW_FUNCTION_IN_CHECK_CONSTRAINT",
               messageParameters = Map("checkCondition" -> check.condition)
             )
           }

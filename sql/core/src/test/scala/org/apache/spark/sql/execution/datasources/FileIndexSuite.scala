@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{DecimalType, IntegerType, StringType, StructField, StructType}
 import org.apache.spark.util.{HadoopFSUtils, KnownSizeEstimation}
 
 class FileIndexSuite extends SharedSparkSession {
@@ -148,6 +148,40 @@ class FileIndexSuite extends SharedSparkSession {
         val partitionValues = fileIndex.partitionSpec().partitions.map(_.values)
         assert(partitionValues.length == 1 && partitionValues(0).numFields == 1 &&
           partitionValues(0).isNullAt(0))
+      }
+    }
+  }
+
+  test("SPARK-60797: validate decimal partition values regardless of ANSI mode") {
+    // These values overflow the declared precision and are not a number, respectively.
+    for (value <- Seq("1234.5", "foo"); ansiEnabled <- Seq("true", "false")) {
+      withTempDir { dir =>
+        val partitionDirectory = new File(dir, s"a=$value")
+        partitionDirectory.mkdir()
+        stringToFile(new File(partitionDirectory, "text.txt"), "text")
+        val path = new Path(dir.getCanonicalPath)
+        val schema = StructType(Seq(StructField("a", DecimalType(5, 2), false)))
+        withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> ansiEnabled,
+          SQLConf.VALIDATE_PARTITION_COLUMNS.key -> "true") {
+          val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, Some(schema))
+          checkError(
+            exception = intercept[SparkRuntimeException] {
+              fileIndex.partitionSpec()
+            },
+            condition = "INVALID_PARTITION_VALUE",
+            parameters = Map(
+              "value" -> s"'$value'",
+              "dataType" -> "\"DECIMAL(5,2)\"",
+              "columnName" -> "`a`"))
+        }
+        withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> ansiEnabled,
+          SQLConf.VALIDATE_PARTITION_COLUMNS.key -> "false") {
+          val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, Some(schema))
+          val partitionValues = fileIndex.partitionSpec().partitions.map(_.values)
+          assert(partitionValues.length == 1 && partitionValues(0).isNullAt(0))
+        }
       }
     }
   }
