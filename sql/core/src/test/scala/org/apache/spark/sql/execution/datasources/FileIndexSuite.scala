@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ByteType, DecimalType, IntegerType, ShortType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ByteType, DateType, DecimalType, IntegerType, ShortType, StringType, StructField, StructType, TimestampNTZType, TimeType}
 import org.apache.spark.util.{HadoopFSUtils, KnownSizeEstimation}
 
 class FileIndexSuite extends SharedSparkSession {
@@ -207,6 +207,45 @@ class FileIndexSuite extends SharedSparkSession {
               "columnName" -> "`a`"))
         }
         withSQLConf(SQLConf.VALIDATE_PARTITION_COLUMNS.key -> "false") {
+          val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, Some(schema))
+          val partitionValues = fileIndex.partitionSpec().partitions.map(_.values)
+          assert(partitionValues.length == 1 && partitionValues(0).isNullAt(0))
+        }
+      }
+    }
+  }
+
+  test("SPARK-60825: validate datetime partition values regardless of ANSI mode") {
+    // A TIMESTAMP_NTZ value with a valid date and an invalid time must not become the start of
+    // that day.
+    val cases = Seq(
+      DateType -> "foo",
+      TimeType(6) -> "foo",
+      TimestampNTZType -> "2020-01-01 25%3A00%3A00")
+    for ((dataType, value) <- cases; ansiEnabled <- Seq("true", "false")) {
+      withTempDir { dir =>
+        val partitionDirectory = new File(dir, s"a=$value")
+        partitionDirectory.mkdir()
+        stringToFile(new File(partitionDirectory, "text.txt"), "text")
+        val path = new Path(dir.getCanonicalPath)
+        val schema = StructType(Seq(StructField("a", dataType, false)))
+        withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> ansiEnabled,
+          SQLConf.VALIDATE_PARTITION_COLUMNS.key -> "true") {
+          val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, Some(schema))
+          checkError(
+            exception = intercept[SparkRuntimeException] {
+              fileIndex.partitionSpec()
+            },
+            condition = "INVALID_PARTITION_VALUE",
+            parameters = Map(
+              "value" -> s"'$value'",
+              "dataType" -> s"\"${dataType.sql}\"",
+              "columnName" -> "`a`"))
+        }
+        withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> ansiEnabled,
+          SQLConf.VALIDATE_PARTITION_COLUMNS.key -> "false") {
           val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, Some(schema))
           val partitionValues = fileIndex.partitionSpec().partitions.map(_.values)
           assert(partitionValues.length == 1 && partitionValues(0).isNullAt(0))
