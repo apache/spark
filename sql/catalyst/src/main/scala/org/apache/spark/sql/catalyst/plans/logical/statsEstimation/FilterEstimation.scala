@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.types._
 
 object FilterEstimation {
@@ -170,7 +171,14 @@ case class FilterEstimation(
    *         It returns None if the condition is not supported.
    */
   def calculateSingleCondition(condition: Expression, update: Boolean): Option[Double] = {
-    condition match {
+    // A predicate pushed below a read-side CHAR padding Project compares the padding expression
+    // rather than the column. The column's statistics already describe padded values (see
+    // `EstimationUtils.getAliasStats`), so estimate it as a predicate on the column itself.
+    val unpadded = condition.mapChildren {
+      case CharVarcharUtils.ReadSidePadding(attr: Attribute) => attr
+      case other => other
+    }
+    unpadded match {
       case l: Literal =>
         evaluateLiteral(l)
 

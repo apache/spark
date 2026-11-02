@@ -484,12 +484,8 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
     }
   }
 
-  private def isCharReadSidePaddingInvoke(invoke: StaticInvoke): Boolean = {
-    invoke.scalarFunction.isEmpty &&
-      invoke.staticObject == classOf[CharVarcharCodegenUtils] &&
-      invoke.functionName == CharVarcharUtils.READ_SIDE_PADDING &&
-      invoke.arguments.length == 2
-  }
+  private def isCharReadSidePaddingInvoke(invoke: StaticInvoke): Boolean =
+    CharVarcharUtils.ReadSidePadding.unapply(invoke).isDefined
 
   // Identity compile is only valid vs a literal Spark already padded to the CHAR length.
   private def charPadLength(invoke: StaticInvoke): Option[Int] = invoke.arguments(1) match {

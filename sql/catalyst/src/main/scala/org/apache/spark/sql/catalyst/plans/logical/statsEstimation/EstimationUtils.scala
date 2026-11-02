@@ -21,9 +21,8 @@ import scala.collection.mutable.ArrayBuffer
 import scala.math.BigDecimal.RoundingMode
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, EmptyRow, Expression}
-import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.{CharVarcharCodegenUtils, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.types.{DecimalType, _}
 
 object EstimationUtils {
@@ -91,9 +90,8 @@ object EstimationUtils {
         alias.toAttribute -> attributeStats(attr)
       // Read-side CHAR padding wraps each CHAR column of a scan. With padding on, ANALYZE TABLE
       // reads the table through it as well, so the statistics already describe padded values.
-      case alias @ Alias(StaticInvoke(
-          clz, _, CharVarcharUtils.READ_SIDE_PADDING, Seq(attr: Attribute, _), _, _, _, _, _), _)
-          if clz == classOf[CharVarcharCodegenUtils] && attributeStats.contains(attr) =>
+      case alias @ Alias(CharVarcharUtils.ReadSidePadding(attr: Attribute), _)
+          if attributeStats.contains(attr) =>
         alias.toAttribute -> attributeStats(attr)
       case alias @ Alias(expr: Expression, _) if expr.foldable && expr.deterministic =>
         val value = expr.eval(EmptyRow)

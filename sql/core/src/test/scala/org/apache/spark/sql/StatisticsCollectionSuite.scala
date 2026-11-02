@@ -203,21 +203,32 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   }
 
   test("SPARK-60810: CBO keeps CHAR column statistics through read-side padding") {
-    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "true",
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "true") {
       val tableName = "char_read_side_padding_stats"
       withTable(tableName) {
-        sql(s"CREATE TABLE $tableName(c CHAR(5), v INT) USING parquet")
-        sql(s"INSERT INTO $tableName SELECT CAST(id % 10 AS STRING), CAST(id AS INT) " +
-          "FROM range(1000)")
-        sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS c, v")
+        sql(s"CREATE TABLE $tableName(c CHAR(5)) USING parquet")
+        sql(s"INSERT INTO $tableName SELECT CAST(id % 10 AS STRING) FROM range(1000)")
+        sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS c")
 
-        // The scan of `c` is wrapped in a read-side padding Project; grouping by it needs the
-        // column's distinct count to estimate the aggregate.
-        val plan = sql(s"SELECT c, count(*) FROM $tableName GROUP BY c")
-          .queryExecution.optimizedPlan
-        val agg = plan.collectFirst { case a: Aggregate => a }
-          .getOrElse(fail(s"no Aggregate in\n${plan.treeString}"))
-        assert(agg.stats.rowCount.contains(BigInt(10)), plan.treeString)
+        def estimatedRows(query: String)(
+            pick: PartialFunction[LogicalPlan, LogicalPlan]): Option[BigInt] = {
+          val plan = sql(query).queryExecution.optimizedPlan
+          plan.collectFirst(pick).getOrElse(fail(s"no matching node in\n${plan.treeString}"))
+            .stats.rowCount
+        }
+        // Above the padding Project, which carries the column's statistics.
+        assert(estimatedRows(s"SELECT c, count(*) FROM $tableName GROUP BY c") {
+          case a: Aggregate => a
+        }.contains(BigInt(10)))
+        // Pushed below it, where the predicate compares the padding expression itself.
+        assert(estimatedRows(s"SELECT * FROM $tableName WHERE c = '3'") {
+          case f: Filter => f
+        }.contains(BigInt(100)))
+        assert(estimatedRows(s"SELECT * FROM $tableName WHERE c IN ('3', '4')") {
+          case f: Filter => f
+        }.contains(BigInt(200)))
       }
     }
   }

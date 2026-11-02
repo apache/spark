@@ -25,7 +25,8 @@ import org.apache.spark.sql.catalyst.plans.LeftOuter
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ColumnStatsMap
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils}
 import org.apache.spark.sql.types._
 
 /**
@@ -961,6 +962,26 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       condition,
       Seq(attrString -> colStatString),
       expectedRowCount = 10)
+  }
+
+  test("SPARK-60810: predicates on a read-side padded CHAR column use the column's stats") {
+    val padded = CharVarcharUtils.addPaddingForScan(
+      DataTypeUtils.toAttribute(CharVarcharUtils.replaceCharVarcharWithStringInSchema(
+        StructType(Seq(StructField("cstring", CharType(2))))).head).withExprId(attrString.exprId))
+    assert(padded match {
+      case CharVarcharUtils.ReadSidePadding(a: Attribute) => a.exprId == attrString.exprId
+      case _ => false
+    }, s"expected read-side padding over cstring, got $padded")
+    val child = childStatsTestPlan(Seq(attrString), tableRowCount = 10L)
+    // colStatString has 10 distinct values and no nulls over 10 rows.
+    Seq(
+      EqualTo(padded, Literal("A0")) -> 1,
+      EqualTo(Literal("A0"), padded) -> 1,
+      In(padded, Seq(Literal("A0"), Literal("A1"))) -> 2,
+      IsNull(padded) -> 0).foreach { case (condition, expectedRows) =>
+      val filter = Filter(condition, child)
+      assert(filter.stats.rowCount.contains(BigInt(expectedRows)), condition)
+    }
   }
 
   test("ColumnStatsMap tests") {
