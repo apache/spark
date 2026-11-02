@@ -197,9 +197,7 @@ class ArtifactManager(
   def addArtifacts(uris: Seq[URI]): Unit =
     addArtifacts(uris, serverSideMavenArtifacts = false, ivySettingsPath = None)
 
-  private[client] def addArtifacts(
-      uris: Seq[URI],
-      serverSideMavenArtifacts: Boolean): Unit =
+  private[client] def addArtifacts(uris: Seq[URI], serverSideMavenArtifacts: Boolean): Unit =
     addArtifacts(uris, serverSideMavenArtifacts, ivySettingsPath = None)
 
   private[client] def addArtifacts(

@@ -346,10 +346,11 @@ object Connect {
 
   val CONNECT_SERVER_SIDE_MAVEN_RESOLUTION_ENABLED =
     buildConf(ConnectCommon.CONNECT_SERVER_SIDE_MAVEN_RESOLUTION_ENABLED)
-      .doc("When true, the Spark Connect JVM client resolves eligible Maven dependencies on the " +
-        "server when it advertises support. Dependencies that specify repositories are always " +
-        "resolved on the client. When false, the JVM client resolves all Maven dependencies " +
-        "locally. This is a client routing preference, not a server-side enforcement setting.")
+      .doc(
+        "When true, the Spark Connect JVM client resolves eligible Maven dependencies on the " +
+          "server when it advertises support. Dependencies that specify repositories are always " +
+          "resolved on the client. When false, the JVM client resolves all Maven dependencies " +
+          "locally. This is a client routing preference, not a server-side enforcement setting.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf

@@ -358,8 +358,9 @@ class ArtifactSuite extends ConnectFunSuite {
     "escaped file URI" -> ((dir: Path) => dir.toUri.toString.stripSuffix("/"))).foreach {
     case (label, settingsDir) =>
       Seq("addArtifact", "addArtifacts").foreach { entryPoint =>
-        test(s"Spark Connect client resolution uses locally readable Ivy settings: " +
-          s"$label, $entryPoint") {
+        test(
+          s"Spark Connect client resolution uses locally readable Ivy settings: " +
+            s"$label, $entryPoint") {
           val main = new MavenCoordinate("my.artifactsuite.clientsettings", "mylib", "0.1")
           val dir = writeClientIvySettings(main)
           val settingsDirKey = "spark.test.artifact.clientIvySettingsDir"
@@ -378,14 +379,17 @@ class ArtifactSuite extends ConnectFunSuite {
           if (entryPoint == "addArtifact") {
             client.addArtifact(ivyUri)
           } else {
-            client.addArtifacts(Seq(
-              artifactFilePath.resolve("smallClassFile.class").toUri,
-              ivyUri,
-              artifactFilePath.resolve("smallJar.jar").toUri))
+            client.addArtifacts(
+              Seq(
+                artifactFilePath.resolve("smallClassFile.class").toUri,
+                ivyUri,
+                artifactFilePath.resolve("smallJar.jar").toUri))
           }
 
-          val names = service.getAndClearLatestAddArtifactRequests()
-            .flatMap(_.getBatch.getArtifactsList.asScala).map(_.getName)
+          val names = service
+            .getAndClearLatestAddArtifactRequests()
+            .flatMap(_.getBatch.getArtifactsList.asScala)
+            .map(_.getName)
           val ivyName = "my.artifactsuite.clientsettings_mylib-0.1"
           if (entryPoint == "addArtifact") {
             assert(names.size == 1 && names.head.contains(ivyName))
@@ -420,11 +424,12 @@ class ArtifactSuite extends ConnectFunSuite {
     client = new SparkConnectClient(Configuration(), channel)
     val serverIvyUri = URI.create("ivy://my.artifactsuite.server:mylib:0.1")
 
-    client.addArtifacts(Seq(
-      artifactFilePath.resolve("smallClassFile.class").toUri,
-      URI.create(s"ivy://${main.toString}?repos=${unrelatedRepo.toUri}"),
-      serverIvyUri,
-      artifactFilePath.resolve("smallJar.jar").toUri))
+    client.addArtifacts(
+      Seq(
+        artifactFilePath.resolve("smallClassFile.class").toUri,
+        URI.create(s"ivy://${main.toString}?repos=${unrelatedRepo.toUri}"),
+        serverIvyUri,
+        artifactFilePath.resolve("smallJar.jar").toUri))
 
     val requests = service.getAndClearLatestAddArtifactRequests()
     assert(requests.size == 1)
