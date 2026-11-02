@@ -797,6 +797,7 @@ class Analyzer(
       BindParameters ::
       typeCoercionRules() ++
       Seq(
+        ResolveStockJsonConstructors,
         ResolveWithCTE,
         ExtractDistributedSequenceID,
         ResolveAsOfJoin,
@@ -2744,7 +2745,7 @@ class Analyzer(
               stock
             } else {
               // Set the time zone now, so the parent sees a resolved child in this pass.
-              stock.toBuiltin.withTimeZone(conf.sessionLocalTimeZone)
+              ResolveStockJsonConstructors.materialize(stock)
             }
 
           case u if !u.childrenResolved => u // Skip until children are resolved.
@@ -2792,6 +2793,24 @@ class Analyzer(
             "class" -> other.getClass.getCanonicalName))
       }
     }
+  }
+
+  /**
+   * Materializes a [[StockJsonConstructor]] whose children resolved after [[ResolveFunctions]] in
+   * this iteration (e.g. in [[ResolveTimeZone]], [[ResolveSubquery]] or type coercion), so it
+   * resolves in the same iteration as its children. Routed wrappers wait for [[ResolveFunctions]].
+   */
+  object ResolveStockJsonConstructors extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+      _.containsPattern(UNRESOLVED_JSON_CONSTRUCTOR)) {
+      case q: LogicalPlan =>
+        q.transformExpressionsUpWithPruning(_.containsPattern(UNRESOLVED_JSON_CONSTRUCTOR)) {
+          case s: StockJsonConstructor if s.childrenResolved => materialize(s)
+        }
+    }
+
+    def materialize(s: StockJsonConstructor): Expression =
+      s.toBuiltin.withTimeZone(conf.sessionLocalTimeZone)
   }
 
   /**

@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   Collate,
   JsonArray,
   JsonConstructorNullBehavior,
+  JsonObjectExpr,
   JsonQuery,
   JsonQueryBehavior,
   JsonQueryQuotes,
@@ -37,13 +38,14 @@ import org.apache.spark.sql.catalyst.expressions.{
   ResolvedCollation,
   UnresolvedJsonConstructor
 }
-import org.apache.spark.sql.catalyst.plans.logical.{Project, Range}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project, Range}
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, InMemoryCatalog}
 import org.apache.spark.sql.connector.catalog.functions.{
   BoundFunction,
   ScalarFunction,
   UnboundFunction
 }
+import org.apache.spark.sql.functions.{call_function, expr}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{
@@ -737,6 +739,35 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
         assert(outer.needsValidation == Seq(false), s"singlePass=$singlePass")
       }
     }
+  }
+
+  test("SPARK-59243: a GROUP BY alias of a JSON producer splices in both analyzers") {
+    // Both analyzers must splice the alias in the grouping key (the last grouping expression).
+    def keyFlags(query: String): Seq[Boolean] =
+      sql(query).queryExecution.analyzed.collectFirst {
+        case a: Aggregate => a.groupingExpressions.last
+      }.get match {
+        case j: JsonArray => j.formatJson
+        case o: JsonObjectExpr => o.rawJson
+      }
+    val select = "SELECT json_array(x) AS a FROM VALUES (1) AS t(x) GROUP BY x"
+    val keys = Seq("json_array(a)", "builtin.json_array(a)", "json_array(a NULL ON NULL)",
+      "json_object('k', a)")
+    Seq(false, true).foreach { singlePass =>
+      withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString) {
+        keys.foreach { key =>
+          assert(keyFlags(s"$select, $key") == Seq(true), s"singlePass=$singlePass for $key")
+        }
+        // A user cast around the alias reference still quotes.
+        assert(keyFlags(s"$select, json_array(CAST(a AS STRING))") == Seq(false),
+          s"singlePass=$singlePass")
+      }
+    }
+    keys.foreach(key => checkAnswer(sql(s"$select, $key"), Row("[1]")))
+    // A DataFrame call passing an aliased nested constructor splices it too.
+    checkAnswer(
+      spark.range(1).select(call_function("json_array", expr("json_array(1)").as("x"))),
+      Row("[[1]]"))
   }
 
   test("SPARK-59243: routed JSON_ARRAY splice round-trips through canonical SQL") {
@@ -1596,23 +1627,29 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-59243: a late-resolving child adds no analyzer iteration to a JSON constructor") {
-    // `date_format` resolves late in an iteration. The constructor must still need no more
-    // iterations than an ordinary function over the same child.
-    def resolveAliasesInvocations(selectExpr: String): Long = {
-      val df = sql(s"SELECT $selectExpr FROM VALUES (TIMESTAMP'2024-01-01 00:00:00') AS t(ts)")
+    // A child can resolve after function resolution in an iteration (time zone, subquery, type
+    // coercion, lambda). The constructor must need no more iterations than a cast of that child.
+    def iterations(query: String): Long = {
+      val df = sql(query)
       df.queryExecution.analyzed
       df.queryExecution.tracker.rules.collectFirst {
         case (name, summary) if name.endsWith("ResolveAliases") => summary.numInvocations
       }.get
     }
-    val baseline = resolveAliasesInvocations("concat('d', date_format(ts, 'yyyy'))")
-    Seq(
-      "JSON_OBJECT('d' VALUE date_format(ts, 'yyyy') NULL ON NULL)",
-      "JSON_ARRAY(date_format(ts, 'yyyy') RETURNING STRING)",
-      "JSON_ARRAY(CAST(ts AS STRING) NULL ON NULL)"
-    ).foreach { e =>
-      assert(resolveAliasesInvocations(e) <= baseline, s"for $e")
-    }
+    val from = "FROM VALUES (TIMESTAMP'2024-01-01 00:00:00', array(1, 2)) AS t(ts, arr)"
+    val shapes = Seq(s"SELECT %s $from", s"SELECT %s AS j $from",
+      s"SELECT 1 AS j $from WHERE %s = 'x'")
+    val cases = for {
+      child <- Seq("date_format(ts, 'yyyy')", "CAST(ts AS STRING)", "(SELECT 1)", "1 + '1'")
+      shape <- shapes
+      ctor <- Seq(
+        s"JSON_OBJECT('d' VALUE $child NULL ON NULL)", s"JSON_ARRAY($child RETURNING STRING)")
+    } yield (shape.format(ctor), shape.format(s"CAST($child AS STRING)"))
+    val lambda = s"SELECT transform(arr, x -> %s) AS j $from"
+    (cases :+ (lambda.format("JSON_ARRAY(x NULL ON NULL)"), lambda.format("CAST(x AS STRING)")))
+      .foreach { case (query, baseline) =>
+        assert(iterations(query) <= iterations(baseline), s"for $query")
+      }
   }
 
 }

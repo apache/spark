@@ -1326,12 +1326,15 @@ object ImplicitlyFormattedAsJson {
 
   /**
    * The splice decision for a resolved argument, used by the builders and by the parser wrappers
-   * when they finalize their flags. Like [[isImplicitlyJson]], but also sees through the collation
-   * `Cast` that the analyzer adds under an object or view default collation (mixed with `Collate`
-   * in any order). A user cast, including `string(...)`, still makes the value quoted.
+   * when they finalize their flags. Like [[isImplicitlyJson]], but also sees through:
+   *  - an `Alias`, e.g. a GROUP BY alias that fixed-point analysis substitutes with the alias kept;
+   *  - the collation `Cast` that the analyzer adds under an object or view default collation,
+   *    placed directly on the producer, under any number of `Collate`s.
+   * A user cast, including `string(...)`, still makes the value quoted.
    */
   @scala.annotation.tailrec
   def splicesThroughCollationCast(e: Expression): Boolean = e match {
+    case a: Alias => splicesThroughCollationCast(a.child)
     case c: Collate => splicesThroughCollationCast(c.child)
     case c: Cast if isAnalyzerCollationCast(c) => splicesThroughCollationCast(c.child)
     case i: ImplicitlyFormattedAsJson => i.emitsImplicitJsonText
@@ -1824,7 +1827,7 @@ case class UnresolvedJsonArray(
   }
 }
 
-/** A clause-free `JSON_ARRAY(...)` with a nested constructor argument. */
+/** A clause-free `JSON_ARRAY(...)` with a nested JSON producer argument. */
 case class UnresolvedRoutedJsonArray(values: Seq[Expression], formatJson: Seq[Boolean])
   extends RoutedJsonConstructor {
   assert(values.length == formatJson.length,
