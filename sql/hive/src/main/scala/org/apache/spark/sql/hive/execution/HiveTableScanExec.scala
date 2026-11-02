@@ -33,7 +33,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.CastSupport
-import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
+import org.apache.spark.sql.catalyst.catalog.{ExternalCatalogUtils, HiveTableRelation}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.execution._
@@ -112,7 +112,8 @@ case class HiveTableScanExec(
     hadoopConf)
 
   private def castFromString(value: String, dataType: DataType) = {
-    cast(Literal(value), dataType).eval(null)
+    val partValue = if (value == ExternalCatalogUtils.DEFAULT_PARTITION_NAME) null else value
+    cast(Literal(partValue), dataType).eval(null)
   }
 
   private def addColumnMetadataToConf(hiveConf: Configuration): Unit = {
