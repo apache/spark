@@ -1546,3 +1546,30 @@ DROP VIEW aggr_double
 struct<>
 -- !query output
 
+
+
+-- !query
+SELECT
+  percentile_disc(0.28) WITHIN GROUP (ORDER BY id),
+  percentile_disc(0.28) WITHIN GROUP (ORDER BY id DESC)
+FROM range(1, 26)
+-- !query schema
+struct<percentile_disc(0.28) WITHIN GROUP (ORDER BY id):double,percentile_disc(0.28) WITHIN GROUP (ORDER BY id DESC):double>
+-- !query output
+7.0	19.0
+
+
+-- !query
+SELECT min(id) FROM (SELECT id, cume_dist() OVER (ORDER BY id) AS cd FROM range(1, 26)) WHERE cd >= 0.28
+-- !query schema
+struct<min(id):bigint>
+-- !query output
+7
+
+
+-- !query
+SELECT percentile_disc(0.56) WITHIN GROUP (ORDER BY id) FROM range(1, 51)
+-- !query schema
+struct<percentile_disc(0.56) WITHIN GROUP (ORDER BY id):double>
+-- !query output
+28.0

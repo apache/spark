@@ -249,6 +249,25 @@ class PercentileSuite extends SparkFunSuite {
     assert(evalNanos(PercentileDisc(child, Literal(0.6), reverse = true), values) === values(1))
   }
 
+  test("SPARK-60595: percentile_disc agrees with cume_dist when total * p is not exact") {
+    def evalDisc(n: Int, p: Double, reverse: Boolean = false): Any = {
+      val agg = PercentileDisc(BoundReference(0, IntegerType, nullable = true), Literal(p), reverse)
+      val buffer = agg.createAggregationBuffer()
+      (1 to n).foreach(v => agg.update(buffer, InternalRow(v)))
+      agg.eval(buffer)
+    }
+    // 25 * 0.28 is 7.000000000000001 as a double, but cume_dist() of 7 over 1..25 is 0.28.
+    assert(evalDisc(25, 0.28) === 7.0)
+    assert(evalDisc(25, 0.28, reverse = true) === 19.0)
+    assert(evalDisc(50, 0.56) === 28.0)
+    // The result is the first value whose cume_dist(), computed as k / n in double, is >= p.
+    for (n <- 1 to 100; i <- 0 to 100) {
+      val p = i / 100.0
+      val expected = (1 to n).find(k => k.toDouble / n >= p).get
+      assert(evalDisc(n, p) === expected.toDouble, s"n = $n, p = $p")
+    }
+  }
+
   test("SPARK-60542: percentile over nanosecond timestamps merges serialized buffers") {
     val child = BoundReference(0, TimestampLTZNanosType(9), nullable = true)
     val agg = new Percentile(child, Literal(0.5))

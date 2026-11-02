@@ -465,3 +465,11 @@ SELECT percentile(col1, 0.5) OVER () FROM aggr_double;
 SELECT percentile(DISTINCT col1, 0.5) FILTER (WHERE col1 > 1) FROM aggr_double;
 
 DROP VIEW aggr_double;
+
+-- SPARK-60595: percentile_disc agrees with cume_dist when n * p is not exact in double
+SELECT
+  percentile_disc(0.28) WITHIN GROUP (ORDER BY id),
+  percentile_disc(0.28) WITHIN GROUP (ORDER BY id DESC)
+FROM range(1, 26);
+SELECT min(id) FROM (SELECT id, cume_dist() OVER (ORDER BY id) AS cd FROM range(1, 26)) WHERE cd >= 0.28;
+SELECT percentile_disc(0.56) WITHIN GROUP (ORDER BY id) FROM range(1, 51);
