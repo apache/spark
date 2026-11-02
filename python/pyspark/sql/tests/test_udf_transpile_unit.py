@@ -2711,7 +2711,11 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         fn = _ast.parse("def f(a: dict, b): return b").body[0]
         self.assertEqual(
             _param_category_combos(fn, ["a", "b"]),
-            [{0: "map", 1: "numeric"}, {0: "map", 1: "string"}],
+            [
+                {0: "map", 1: "integer"},
+                {0: "map", 1: "float"},
+                {0: "map", 1: "string"},
+            ],
         )
         fn = _ast.parse("def f(a: list, b: dict): return b").body[0]
         self.assertEqual(_param_category_combos(fn, ["a", "b"]), [{0: "array", 1: "map"}])
