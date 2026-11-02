@@ -162,6 +162,7 @@ private[spark] object History {
         "on every scan, as long as the modification time of the directory hasn't changed. " +
         "The directory is always listed if the file system doesn't report that time.")
       .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(true)
 
