@@ -200,10 +200,15 @@ For example:
 `spark.kubernetes.executor.secretKeyRef._SPARK_SSL_RPC_KEY_STORE_PASSWORD=<secret-name>:<key>`.
 
 On the driver, these variables also take precedence over the passwords the UI inherits from
-`spark.ssl.*`. If the UI keystore or truststore uses a different password, set it explicitly in
-the `spark.ssl.ui` namespace, for example through variable substitution
+`spark.ssl.*`. Any UI password not set in the `spark.ssl.ui` namespace or a Hadoop credential
+provider is filled from these variables, even if `spark.ssl.*` does not set it either. With
+`_SPARK_SSL_RPC_KEY_PASSWORD` bound on the driver, `spark.ssl.ui.keyPassword` has to be set as
+well, usually to the UI keystore password, or the UI cannot recover its private key and the driver
+exits. If the UI requires client authentication, `spark.ssl.ui.trustStorePassword` has to be set
+explicitly too. Set these UI passwords, and any other that differs from the RPC one, in the
+`spark.ssl.ui` namespace, for example through variable substitution
 (`spark.ssl.ui.keyStorePassword=${env:UI_KS_PASS}` with `UI_KS_PASS` bound using
-`spark.kubernetes.driver.secretKeyRef`) or a Hadoop credential provider, to keep it out of the
+`spark.kubernetes.driver.secretKeyRef`) or a Hadoop credential provider, to keep them out of the
 driver's ConfigMap.
 
 A variable already bound on the executors, through `secretKeyRef`, `spark.executorEnv` or the
