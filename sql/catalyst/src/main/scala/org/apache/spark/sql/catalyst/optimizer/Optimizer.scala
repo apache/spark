@@ -2656,7 +2656,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         // again, so holding a condition back behind one here would gain nothing and only cost
         // the pushdown of the batches in between. What is left of the alias without its Python
         // UDFs, e.g. a Scala UDF over one, is evaluated here though. Each Python UDF is replaced
-        // with an attribute, as `ExtractPythonUDFs` does, so that `expensive` sees an input
+        // with an attribute, as `ExtractPythonUDFs` does, so that `isExpensive` sees an input
         // that is not foldable, as in the projection it leaves.
         def evaluatedHere(used: AttributeMap[Alias]): Boolean = used.exists { case (_, alias) =>
           isExpensive(alias.child) && isExpensive(alias.child.transformDown {

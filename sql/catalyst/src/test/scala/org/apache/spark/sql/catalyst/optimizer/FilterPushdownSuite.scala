@@ -1131,6 +1131,41 @@ class FilterPushdownSuite extends PlanTest {
       .where($"p" && $"a" + 1 > 6)
       .analyze
     comparePlans(Optimize.execute(patternQuery), patternQuery)
+
+    // A regex with a cheap constant pattern over a Python UDF is only expensive through the UDF,
+    // unless version 0 of the regex pattern cost estimate makes every regex expensive.
+    val cheapRegexOverPython = testStringRelation
+      .select($"a", stringUDF.rlike("^1").as("p"), $"b")
+      .where($"p" && $"a" + 1 > 6)
+      .analyze
+    val cheapRegexOverPythonAnswer = testStringRelation
+      .where($"a" + 1 > 6)
+      .select($"a", stringUDF.rlike("^1").as("p"), $"b")
+      .where($"p")
+      .analyze
+    comparePlans(Optimize.execute(cheapRegexOverPython), cheapRegexOverPythonAnswer)
+    withSQLConf(SQLConf.REGEX_PATTERN_COST_ESTIMATE_VERSION.key -> "0") {
+      comparePlans(Optimize.execute(cheapRegexOverPython), cheapRegexOverPython)
+    }
+  }
+
+  test("SPARK-60730: a regex alias holds conditions back as the regex pattern cost estimate " +
+    "decides") {
+    val originalQuery = testStringRelation
+      .select($"a", $"e".rlike("^1") as "f", $"b")
+      .where($"f" && $"a" + 1 > 6)
+      .analyze
+    // A cheap pattern makes a cheap alias, so the whole filter is pushed.
+    val cheapAnswer = testStringRelation
+      .where($"e".rlike("^1") && $"a" + 1 > 6)
+      .select($"a", $"e".rlike("^1") as "f", $"b")
+      .analyze
+    comparePlans(Optimize.execute(originalQuery), cheapAnswer)
+    // With version 0, which a streaming query restarted from an older checkpoint keeps, every
+    // regex is expensive, so `a + 1 > 6` is held back behind it.
+    withSQLConf(SQLConf.REGEX_PATTERN_COST_ESTIMATE_VERSION.key -> "0") {
+      comparePlans(Optimize.execute(originalQuery), originalQuery)
+    }
   }
 
   test("SPARK-60730: a comparison with an implicit numeric cast is still pushed") {
