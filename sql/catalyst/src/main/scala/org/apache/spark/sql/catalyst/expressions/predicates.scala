@@ -118,36 +118,44 @@ trait PredicateHelper extends AliasHelper with Logging {
    */
   def findExpressionAndTrackLineageDown(
       exp: Expression,
-      plan: LogicalPlan): Option[(Expression, LogicalPlan)] = {
-    if (exp.references.isEmpty) return None
+      plan: LogicalPlan): Option[(Expression, LogicalPlan)] =
+    findExpressionAndTrackAllLineagesDown(exp, plan).headOption
+
+  /**
+   * Like [[findExpressionAndTrackLineageDown]], but returns every lineage, not only the first one.
+   * It follows each branch of a union, and each child that has the references of exp.
+   */
+  def findExpressionAndTrackAllLineagesDown(
+      exp: Expression,
+      plan: LogicalPlan): Seq[(Expression, LogicalPlan)] = {
+    if (exp.references.isEmpty) return Nil
 
     plan match {
       case p: Project =>
         val aliases = getAliasMap(p)
-        findExpressionAndTrackLineageDown(replaceAlias(exp, aliases), p.child)
+        findExpressionAndTrackAllLineagesDown(replaceAlias(exp, aliases), p.child)
       // we can unwrap only if there are row projections, and no aggregation operation
       case a: Aggregate =>
         val aliasMap = getAliasMap(a)
-        findExpressionAndTrackLineageDown(replaceAlias(exp, aliasMap), a.child)
+        findExpressionAndTrackAllLineagesDown(replaceAlias(exp, aliasMap), a.child)
       case l: LeafNode if exp.references.subsetOf(l.outputSet) =>
-        Some((exp, l))
+        Seq((exp, l))
       case u: Union =>
         val index = u.output.indexWhere(_.semanticEquals(exp))
         if (index > -1) {
           u.children
-            .flatMap(child => findExpressionAndTrackLineageDown(child.output(index), child))
-            .headOption
+            .flatMap(child => findExpressionAndTrackAllLineagesDown(child.output(index), child))
         } else {
-          None
+          Nil
         }
       case other =>
         other.children.flatMap {
           child => if (exp.references.subsetOf(child.outputSet)) {
-            findExpressionAndTrackLineageDown(exp, child)
+            findExpressionAndTrackAllLineagesDown(exp, child)
           } else {
-            None
+            Nil
           }
-        }.headOption
+        }
     }
   }
 

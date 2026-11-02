@@ -11646,7 +11646,6 @@ class KeyGroupedPartitioningCatalystRuntimeFilterSuite
     sql("INSERT INTO testcat.ns.dim VALUES (1, 1), (2, 0), (3, 1), (5, 1), (6, 0), (9, 1)")
     Seq(true, false).foreach { adaptive =>
       withSQLConf(
-          SQLConf.V2_BUCKETING_ENABLED.key -> "true",
           SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
           SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "0",
           SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString) {
