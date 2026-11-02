@@ -8383,6 +8383,12 @@
     ],
     "sqlState" : "22023"
   },
+  "SUBQUERY_IN_CHECK_CONSTRAINT" : {
+    "message" : [
+      "The check constraint `<checkCondition>` contains a subquery. Check constraints cannot contain subqueries."
+    ],
+    "sqlState" : "42621"
+  },
   "SUM_OF_LIMIT_AND_OFFSET_EXCEEDS_MAX_INT" : {
     "message" : [
       "The sum of the LIMIT clause and the OFFSET clause must not be greater than the maximum 32-bit integer value (2,147,483,647) but found limit = <limit>, offset = <offset>."
