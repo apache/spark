@@ -6499,7 +6499,7 @@ object SQLConf {
       .internal()
       .doc(s"When true and ${NESTED_SCHEMA_PRUNING_ENABLED.key} is true, nested fields read " +
         "from the element of an explode or posexplode of an array column also prune that " +
-        "column at the scan below the generator.")
+        "column at the scan below the generator. Not applied to ORC scans yet.")
       .version("5.0.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
