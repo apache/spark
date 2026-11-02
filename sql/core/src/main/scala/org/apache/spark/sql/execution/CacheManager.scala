@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
-import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, ResolvedHint, SubqueryAlias, View}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, DeleteFromTable, LogicalPlan, ResolvedHint, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
@@ -567,7 +567,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   private[sql] def useCachedData(
       plan: LogicalPlan,
       canUse: CachedData => Boolean = _ => true): LogicalPlan = {
-    val newPlan = plan transformDown {
+    val newPlan = plan.transformDownWithPruning(!_.isInstanceOf[DeleteFromTable]) {
       case command: Command => command
 
       case currentFragment =>
