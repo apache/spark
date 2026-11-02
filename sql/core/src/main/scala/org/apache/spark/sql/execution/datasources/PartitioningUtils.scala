@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.lang.{Double => JDouble, Long => JLong}
+import java.lang.{Byte => JByte, Double => JDouble, Long => JLong, Short => JShort}
 import java.math.{BigDecimal => JBigDecimal}
 import java.time.ZoneId
 import java.util.Locale
@@ -582,8 +582,8 @@ object PartitioningUtils extends SQLConfHelper {
     case _ if value == DEFAULT_PARTITION_NAME => null
     case NullType => null
     case _: StringType => UTF8String.fromString(unescapePathName(value))
-    case ByteType => Integer.parseInt(value).toByte
-    case ShortType => Integer.parseInt(value).toShort
+    case ByteType => JByte.parseByte(value)
+    case ShortType => JShort.parseShort(value)
     case IntegerType => Integer.parseInt(value)
     case LongType => JLong.parseLong(value)
     case FloatType => JDouble.parseDouble(value).toFloat
