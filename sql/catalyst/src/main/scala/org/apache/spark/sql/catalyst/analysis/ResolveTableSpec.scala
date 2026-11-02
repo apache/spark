@@ -61,6 +61,14 @@ object ResolveTableSpec extends Rule[LogicalPlan] {
       input: LogicalPlan,
       tableSpec: TableSpecBase,
       withNewSpec: TableSpecBase => LogicalPlan): LogicalPlan = tableSpec match {
+    // Check this before `childrenResolved`: `ResolveSubquery` skips these commands, so the subquery
+    // may never resolve, and `toV2Constraint` below would drop one that needs no resolution.
+    case u: UnresolvedTableSpec if u.constraints.exists(SubqueryExpression.hasSubquery) =>
+      u.constraints.foreach {
+        case check: CheckConstraint => check.failIfContainsSubquery()
+        case _ =>
+      }
+      input
     case u: UnresolvedTableSpec if u.childrenResolved =>
       val newOptions: Seq[(String, String)] = u.optionExpression.options.map {
         case (key: String, null) =>
