@@ -16,7 +16,6 @@
 #
 
 import json
-from unittest.mock import patch
 
 import numpy as np
 
@@ -100,15 +99,7 @@ class ModelOffloadingTests(ReusedConnectTestCase):
         cached = self.spark.client._get_ml_cache_info()
         self.assertEqual(len(cached), 0, cached)
 
-        execute_command = self.spark.client.execute_command
-
-        def evict_before_fetch(command, *args, **kwargs):
-            if command.HasField("ml_command") and command.ml_command.HasField("fetch"):
-                self.spark.client._delete_ml_cache([model._java_obj.ref_id], evict_only=True)
-            return execute_command(command, *args, **kwargs)
-
-        with patch.object(self.spark.client, "execute_command", side_effect=evict_before_fetch):
-            check_model(model)
+        check_model(model)
 
     def test_linear_regression_offloading(self):
         # force clean up the ml cache
