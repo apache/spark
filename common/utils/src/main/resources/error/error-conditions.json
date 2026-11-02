@@ -11,6 +11,12 @@
     ],
     "sqlState" : "42845"
   },
+  "AGGREGATE_OR_WINDOW_FUNCTION_IN_CHECK_CONSTRAINT" : {
+    "message" : [
+      "The check constraint `<checkCondition>` calls an aggregate or window function. Check constraints apply to each row and cannot call these functions."
+    ],
+    "sqlState" : "42621"
+  },
   "AGGREGATE_OUT_OF_MEMORY" : {
     "message" : [
       "No enough memory for aggregation"
