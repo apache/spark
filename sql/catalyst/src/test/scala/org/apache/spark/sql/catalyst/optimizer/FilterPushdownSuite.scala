@@ -1111,6 +1111,22 @@ class FilterPushdownSuite extends PlanTest {
       .where($"p" > 1 && IsNotNull($"x") && $"f" && $"x" > 6)
       .analyze
     comparePlans(Optimize.execute(afterPython), afterPython)
+    // A throwable condition written after the check stays above with it, in written order,
+    // while a plain one is still pushed.
+    val raiseError = IsNull(RaiseError(Literal("boom")))
+    val throwableAfter = project
+      .where(IsNotNull($"x") && ($"b" > 1 || raiseError) && $"b" < 10 && $"f" && $"x" > 6)
+      .analyze
+    val Seq(keptCheck, throwableCond, _, expensiveCond, failableCond) =
+      splitConjunctivePredicates(throwableAfter.collectFirst { case Filter(c, _) => c }.get)
+    val throwableAfterOptimized = Optimize.execute(throwableAfter)
+    comparePlans(throwableAfterOptimized, testStringRelation
+      .where($"b" < 10)
+      .select($"a", expensiveRLike("magic") as "f", $"a" + 1 as "x", $"a" as "y", $"b")
+      .where(IsNotNull($"x") && ($"b" > 1 || raiseError) && $"f" && $"x" > 6)
+      .analyze)
+    assertTopFilterConjuncts(throwableAfterOptimized,
+      Seq(keptCheck, throwableCond, expensiveCond, failableCond))
     // The legacy config pushes it, with the conditions after `f`, as before.
     withSQLConf(SQLConf.LEGACY_PUSH_FILTER_AHEAD_OF_EXPENSIVE_CONJUNCT.key -> "true") {
       val originalQuery = project

@@ -2653,7 +2653,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         // Whether a component reads an expensive alias that this projection evaluates. A scalar
         // Python UDF is not evaluated here: `ExtractPythonUDFs` later moves it, with its
         // arguments, to an eval node below the projection, and pushes the conditions below that
-        // again, so holding a condition back behind one here would gain nothing and only cost
+        // again, except the throwable ones written after one over its output (SPARK-60633), so
+        // holding a condition back behind one here would gain nothing and only cost
         // the pushdown of the batches in between. What is left of the alias without its Python
         // UDFs, e.g. a Scala UDF over one, is evaluated here though. Each Python UDF is replaced
         // with an attribute, as `ExtractPythonUDFs` does, so that `isExpensive` sees an input
@@ -2691,9 +2692,15 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         def keepsNotNull(cond: Expression, used: AttributeMap[Alias], replaced: Expression) =
           cond.isInstanceOf[IsNotNull] && used.keys.exists(heldRefs.contains) &&
             !canPushAhead(replaced)
-        val (keptNotNull, leading) = written.partition {
-          case (cond, used, replaced) => keepsNotNull(cond, used, replaced)
+        // As in `splitPushable`, a throwable component written after a check kept above stays
+        // above too.
+        val (beforeKept, fromKept) = written.span {
+          case (cond, used, replaced) => !keepsNotNull(cond, used, replaced)
         }
+        val (keptNotNull, afterKept) = fromKept.partition {
+          case (cond, used, replaced) => keepsNotNull(cond, used, replaced) || replaced.throwable
+        }
+        val leading = beforeKept ++ afterKept
         val (cheapBefore, expensiveBefore) = beforeHeld.partition {
           case (cond, used, replaced) =>
             isCheap(used) && !replaced.throwable && !keepsNotNull(cond, used, replaced)
