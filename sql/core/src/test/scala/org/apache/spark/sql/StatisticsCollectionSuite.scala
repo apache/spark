@@ -202,6 +202,26 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
+  test("SPARK-60810: CBO keeps CHAR column statistics through read-side padding") {
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+      val tableName = "char_read_side_padding_stats"
+      withTable(tableName) {
+        sql(s"CREATE TABLE $tableName(c CHAR(5), v INT) USING parquet")
+        sql(s"INSERT INTO $tableName SELECT CAST(id % 10 AS STRING), CAST(id AS INT) " +
+          "FROM range(1000)")
+        sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS c, v")
+
+        // The scan of `c` is wrapped in a read-side padding Project; grouping by it needs the
+        // column's distinct count to estimate the aggregate.
+        val plan = sql(s"SELECT c, count(*) FROM $tableName GROUP BY c")
+          .queryExecution.optimizedPlan
+        val agg = plan.collectFirst { case a: Aggregate => a }
+          .getOrElse(fail(s"no Aggregate in\n${plan.treeString}"))
+        assert(agg.stats.rowCount.contains(BigInt(10)), plan.treeString)
+      }
+    }
+  }
+
   test("test table-level statistics for data source table") {
     val tableName = "tbl"
     withTable(tableName) {

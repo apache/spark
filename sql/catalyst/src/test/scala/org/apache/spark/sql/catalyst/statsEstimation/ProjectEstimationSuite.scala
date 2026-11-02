@@ -21,7 +21,8 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils}
 import org.apache.spark.sql.types._
 
 
@@ -161,6 +162,22 @@ class ProjectEstimationSuite extends StatsEstimationTestBase {
       rowCount = Some(2),
       attributeStats = toAttributeMap(expectedColStats2, proj2))
     assert(proj2.stats == expectedStats2)
+  }
+
+  test("SPARK-60810: column stats of a CHAR column survive read-side padding") {
+    val c = DataTypeUtils.toAttribute(CharVarcharUtils.replaceCharVarcharWithStringInSchema(
+      StructType(Seq(StructField("c", CharType(5))))).head)
+    val colStat = ColumnStat(distinctCount = Some(10), nullCount = Some(0),
+      avgLen = Some(5), maxLen = Some(5))
+    val child = StatsTestPlan(
+      outputList = Seq(c),
+      rowCount = 1000,
+      attributeStats = AttributeMap(Seq(c -> colStat)))
+
+    val padded = CharVarcharUtils.addPaddingForScan(c)
+    assert(padded != c, "expected a read-side padding expression for a CHAR column")
+    val proj = Project(Seq(Alias(padded, "c")()), child)
+    assert(proj.stats.attributeStats.get(proj.output.head).contains(colStat))
   }
 
   private def checkProjectStats(
