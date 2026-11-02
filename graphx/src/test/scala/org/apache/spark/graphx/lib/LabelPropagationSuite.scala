@@ -41,4 +41,14 @@ class LabelPropagationSuite extends SparkFunSuite with LocalSparkContext {
       assert(clique1Labels(0) != clique2Labels(0))
     }
   }
+
+  test("Label propagation breaks label ties with the highest vertex ID") {
+    withSpark { sc =>
+      val graph = Graph.fromEdges(sc.parallelize(Seq(Edge(0L, 1L, 1), Edge(0L, 2L, 1))), 1)
+
+      val labels = LabelPropagation.run(graph, 1).vertices.collect().toSet
+
+      assert(labels === Set((0L, 2L), (1L, 0L), (2L, 0L)))
+    }
+  }
 }
