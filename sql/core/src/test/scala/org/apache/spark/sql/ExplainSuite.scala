@@ -511,8 +511,8 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
   }
 
   test("Explain formatted output shows the runtime filters of a datasource V2 scan") {
-    // A scalar subquery filter over a partition column is fully pushed into a V2 file scan, so
-    // no FilterExec above the scan prints it and the scan's own details have to.
+    // A scalar subquery filter over a partition column is fully pushed into a built-in V2 file
+    // scan, so no FilterExec above the scan prints it and the scan's own details have to.
     withTempDir { dir =>
       val factPath = dir.getCanonicalPath + "/fact"
       val dimPath = dir.getCanonicalPath + "/dim"

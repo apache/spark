@@ -29,7 +29,7 @@ import org.apache.spark.sql.connector.read.InputPartition
 import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.datasources.FilePartition
-import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, FileScan}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, FileScan, RuntimePartitionPruningFileScan}
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -87,7 +87,8 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
     }.getOrElse(fail("no fact BatchScanExec found in:\n" + executedPlan.treeString))
   }
 
-  private def fileScanOf(df: DataFrame): FileScan = factScanOf(df).scan.asInstanceOf[FileScan]
+  private def fileScanOf(df: DataFrame): RuntimePartitionPruningFileScan =
+    factScanOf(df).scan.asInstanceOf[RuntimePartitionPruningFileScan]
 
   private def collectDppFilters(plan: LogicalPlan): Seq[Expression] = {
     plan.collect {
@@ -458,7 +459,7 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
   }
 
   test("scalar subquery on a partition column is not re-evaluated after the scan") {
-    // FileScan declares its partition columns in fullyPushedFilterAttributes: applying such a
+    // The file scan declares its partition columns in fullyPushedFilterAttributes: applying such a
     // filter selects partition directories, so every row the scan returns satisfies it and Spark
     // drops the post-scan FilterExec, the same treatment a compile-time partition filter gets.
     withDppV2Conf {
