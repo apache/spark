@@ -64,7 +64,7 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
 
   import testImplicits._
 
-  private val ExternalLookupCatalogName = "external_lookup_cat"
+  private val EXTERNAL_LOOKUP_CATALOG_NAME = "external_lookup_cat"
 
   private val streamRuns = new AtomicInteger()
 
@@ -333,21 +333,22 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
         "operation" -> "batch scan"))
     // A join that reads it but cannot be a lookup join fails with the reason. The condition must
     // be written in the join, not in a later filter.
-    Seq(
-      left.crossJoin(lookup),
-      left.join(lookup).where(left("id") === lookup("id")),
-      left.crossJoin(lookup).where(left("id") === lookup("id"))).foreach { joined =>
-      checkError(
-        exception = streamFailure[AnalysisException](joined),
-        condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.MISSING_JOIN_CONDITION",
-        parameters = Map.empty)
+    checkError(
+      exception = streamFailure[AnalysisException](
+        left.join(lookup).where(left("id") === lookup("id"))),
+      condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.MISSING_JOIN_CONDITION",
+      parameters = Map.empty)
+    // An unsupported join type fails when the DataFrame is built, with or without a condition.
+    Seq[(() => DataFrame, String)](
+      (() => left.join(lookup, left("id") === lookup("id"), "full_outer"), "FULL OUTER"),
+      (() => left.crossJoin(lookup), "CROSS"),
+      (() => left.crossJoin(lookup).where(left("id") === lookup("id")), "CROSS")).foreach {
+      case (joined, joinType) =>
+        val error = intercept[AnalysisException](joined())
+        assert(error.getCondition === "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.JOIN_TYPE")
+        assert(error.getMessageParameters.asScala.toMap - "supportedJoinTypes" ===
+          Map("joinType" -> joinType, "relation" -> "`SimpleExternalLookupTable`"))
     }
-    val fullOuter = intercept[AnalysisException] {
-      left.join(lookup, left("id") === lookup("id"), "full_outer").queryExecution.analyzed
-    }
-    assert(fullOuter.getCondition === "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.JOIN_TYPE")
-    assert(fullOuter.getMessageParameters.asScala.toMap - "supportedJoinTypes" ===
-      Map("joinType" -> "FULL OUTER", "relation" -> "`SimpleExternalLookupTable`"))
   }
 
   test("a common expression in the join condition is evaluated in the lookup join") {
@@ -439,9 +440,9 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
 
   test("a catalog-resolved external lookup-only table cannot be read outside a lookup join") {
     withSQLConf(
-        s"spark.sql.catalog.$ExternalLookupCatalogName" ->
+        s"spark.sql.catalog.$EXTERNAL_LOOKUP_CATALOG_NAME" ->
           classOf[ExternalLookupTestCatalog].getName) {
-      val table = s"$ExternalLookupCatalogName.ns.lookup"
+      val table = s"$EXTERNAL_LOOKUP_CATALOG_NAME.ns.lookup"
       val left = Seq(1).toDF("id")
       Seq[() => DataFrame](
         () => spark.table(table),
@@ -955,10 +956,10 @@ object SimpleExternalLookupDataSource {
   val outputSchema: StructType = new StructType()
     .add("id", "int", nullable = true)
     .add("department", "string", nullable = false)
-  private val InitialValues: Map[Int, Seq[String]] = Map(
+  private val INITIAL_VALUES: Map[Int, Seq[String]] = Map(
     1 -> Seq("engineering", "research"),
     2 -> Seq("sales"))
-  val values = new AtomicReference(InitialValues)
+  val values = new AtomicReference(INITIAL_VALUES)
 
   def resetCounters(): Unit = {
     requestCount.set(0)
@@ -978,7 +979,7 @@ object SimpleExternalLookupDataSource {
     beforeLookupReturns.set(() => ())
     lookupCandidates.set(Seq.empty)
     lookupCandidateDescriptions.set(Seq.empty)
-    values.set(InitialValues)
+    values.set(INITIAL_VALUES)
   }
 }
 
