@@ -897,8 +897,11 @@ class ArrowBatchedUDFArrowHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
             if runner_conf.arrow_concurrency_level <= 0:
                 if not args:
                     return [udf_func() for _ in range(num_rows)]
-                # Feed the columns straight to map() to avoid building a tuple per row.
-                return list(map(udf_func, *args))
+                # Call the UDF in the comprehension body, not via list(map(...)): map()
+                # would swallow a StopIteration raised by the UDF as end of input.
+                if len(args) == 1:
+                    return [udf_func(v) for v in args[0]]
+                return [udf_func(*row) for row in zip(*args)]
             from concurrent.futures import ThreadPoolExecutor
 
             with ThreadPoolExecutor(max_workers=runner_conf.arrow_concurrency_level) as pool:
