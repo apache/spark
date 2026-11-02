@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.jdbc.v2
 
-import java.sql.Connection
+import java.sql.{Connection, Timestamp}
+import java.time.LocalDateTime
 import java.util.Locale
 
 import scala.util.Using
@@ -25,6 +26,8 @@ import scala.util.Using
 import org.apache.spark.{SparkConf, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.OracleDatabaseOnDocker
@@ -184,6 +187,47 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
 
   override def caseConvert(tableName: String): String = tableName.toUpperCase(Locale.ROOT)
 
+  test("SPARK-60420: V2 NTZ reads and writes honor per-query timestampNTZAsWallClock") {
+    val table = s"$catalogName.${namespaceOpt.get}.${caseConvert("datetime")}"
+    val ldt = LocalDateTime.of(2022, 5, 19, 0, 0, 0)
+    val noWallClock = "'timestampNTZAsWallClock' = 'false'"
+    withDefaultTimeZone(LA) {
+      // With the conversion off, values go through a JVM-default-zone java.sql.Timestamp.
+      val readShifted = DateTimeUtils.microsToLocalDateTime(
+        DateTimeUtils.fromJavaTimestampNoRebase(Timestamp.valueOf(ldt)))
+      val perRead = sql(s"SELECT time1 FROM $table WITH ($noWallClock) WHERE name = 'amy'")
+      assert(perRead.schema.head.dataType === TimestampNTZType)
+      checkAnswer(perRead, Row(readShifted))
+
+      // Reading back with the defaults shows the stored wall-clock exactly.
+      val target = s"$catalogName.${namespaceOpt.get}.${caseConvert("ntz_write")}"
+      withTable(target) {
+        sql(s"CREATE TABLE $target (t TIMESTAMP_NTZ)")
+        sql(s"INSERT INTO $target SELECT TIMESTAMP_NTZ'2022-05-19 00:00:00'")
+        sql(s"INSERT INTO $target WITH ($noWallClock) SELECT TIMESTAMP_NTZ'2022-05-20 00:00:00'")
+        val writeShifted = DateTimeUtils.toJavaTimestampNoRebase(
+          DateTimeUtils.localDateTimeToMicros(LocalDateTime.of(2022, 5, 20, 0, 0, 0)))
+          .toLocalDateTime
+        checkAnswer(sql(s"SELECT t FROM $target"), Seq(ldt, writeShifted).map(Row(_)))
+      }
+    }
+  }
+
+  test("SPARK-60420: zonelessTimestampAsNTZ set on the catalog decides the V2 table schema") {
+    val table = s"${namespaceOpt.get}.${caseConvert("datetime")}"
+    withSQLConf(
+        "spark.sql.catalog.oracle_ltz" -> classOf[JDBCTableCatalog].getName,
+        "spark.sql.catalog.oracle_ltz.url" -> db.getJdbcUrl(dockerIp, externalPort),
+        "spark.sql.catalog.oracle_ltz.zonelessTimestampAsNTZ" -> "false") {
+      Seq(catalogName -> TimestampNTZType, "oracle_ltz" -> TimestampType).foreach {
+        case (catalog, expected) =>
+          val schema = spark.table(s"$catalog.$table").schema
+          assert(schema("DATE1").dataType === expected)
+          assert(schema("TIME1").dataType === expected)
+      }
+    }
+  }
+
   test("SPARK-46478: Revert SPARK-43049 to use varchar(255) for string") {
     val tableName = catalogName + ".t1"
     withTable(tableName) {
@@ -230,6 +274,11 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
         "CREATE SYNONYM func_synonym FOR broken_func"),
       objectName = "FUNC_SYNONYM",
       teardown = Seq("DROP SYNONYM func_synonym", "DROP FUNCTION broken_func")),
+    "synonym -> missing target (ORA-00980)" -> NonSelectableObjectCase(
+      // Oracle does not validate the target on CREATE SYNONYM; SELECT raises ORA-00980.
+      setup = Seq("CREATE SYNONYM broken_synonym FOR non_existent_table_xyz"),
+      objectName = "BROKEN_SYNONYM",
+      teardown = Seq("DROP SYNONYM broken_synonym")),
     "invalid view (ORA-04063)" -> NonSelectableObjectCase(
       // FORCE-create a view over a missing table -> view is INVALID; SELECT raises ORA-04063.
       setup = Seq("CREATE FORCE VIEW invalid_view AS SELECT * FROM non_existent_table_xyz"),
@@ -406,5 +455,65 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
     assert(rows11.length === 2)
     assert(rows11(0).getString(0) === "amy")
     assert(rows11(1).getString(0) === "alex")
+  }
+
+  test("SPARK-60479: CHAR equality is pushed, including CJK") {
+    val tableName = caseConvert("char_pad")
+    val table = s"$catalogName.$tableName"
+    withTable(table) {
+      // CHAR(n CHAR) so CJK occupies one length unit, matching Spark CHAR padding.
+      Using.resource(getConnection()) { conn =>
+        conn.prepareStatement(
+          s"CREATE TABLE $tableName (id NUMBER, flag CHAR(4 CHAR))").executeUpdate()
+      }
+      // scalastyle:off nonascii
+      sql(s"INSERT INTO $table VALUES (1, 'Y'), (2, NULL), (3, '日本')")
+      // scalastyle:on nonascii
+      val eq = sql(s"SELECT id FROM $table WHERE flag = 'Y'")
+      checkFilterPushed(eq)
+      val eqRows = eq.collect()
+      assert(eqRows.length === 1)
+      assert(eqRows(0).getDecimal(0).intValueExact() === 1)
+      // scalastyle:off nonascii
+      val cjk = sql(s"SELECT id FROM $table WHERE flag = '日本'")
+      // scalastyle:on nonascii
+      checkFilterPushed(cjk)
+      val cjkRows = cjk.collect()
+      assert(cjkRows.length === 1)
+      assert(cjkRows(0).getDecimal(0).intValueExact() === 3)
+      val isNull = sql(s"SELECT id FROM $table WHERE flag IS NULL")
+      checkFilterPushed(isNull)
+      val nullRows = isNull.collect()
+      assert(nullRows.length === 1)
+      assert(nullRows(0).getDecimal(0).intValueExact() === 2)
+    }
+  }
+
+  test("SPARK-60479: CHAR(n BYTE) multibyte equality is pushed") {
+    val tableName = caseConvert("char_byte")
+    val table = s"$catalogName.$tableName"
+    withTable(table) {
+      Using.resource(getConnection()) { conn =>
+        conn.prepareStatement(
+          s"CREATE TABLE $tableName (id NUMBER, flag CHAR(4 BYTE))").executeUpdate()
+        // Insert via JDBC. A Spark INSERT would pad the 2-byte character to
+        // CHAR width in characters (5 bytes) and Oracle would raise ORA-12899.
+        // scalastyle:off nonascii
+        conn.prepareStatement(
+          s"INSERT INTO $tableName VALUES (1, 'ä'), (2, 'äb'), (3, 'Y')").executeUpdate()
+        // scalastyle:on nonascii
+      }
+      // scalastyle:off nonascii
+      val eq = sql(s"SELECT id FROM $table WHERE flag = 'ä'")
+      checkFilterPushed(eq)
+      assert(eq.collect().map(_.getDecimal(0).intValueExact()).toSet === Set(1))
+      val eqAb = sql(s"SELECT id FROM $table WHERE flag = 'äb'")
+      checkFilterPushed(eqAb)
+      assert(eqAb.collect().map(_.getDecimal(0).intValueExact()).toSet === Set(2))
+      // scalastyle:on nonascii
+      val eqY = sql(s"SELECT id FROM $table WHERE flag = 'Y'")
+      checkFilterPushed(eqY)
+      assert(eqY.collect().map(_.getDecimal(0).intValueExact()).toSet === Set(3))
+    }
   }
 }

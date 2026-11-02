@@ -30,7 +30,7 @@ import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{ArrayType, StructType}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.VersionUtils.majorMinorVersion
-import org.apache.spark.util.collection.OpenHashMap
+import org.apache.spark.util.collection.{OpenHashMap, OpenHashSet}
 
 /**
  * Maps a sequence of terms to their term frequencies using the hashing trick.
@@ -92,13 +92,12 @@ class HashingTF @Since("3.0.0") private[ml] (
     val outputSchema = transformSchema(dataset.schema)
     val n = $(numFeatures)
     def binaryHashUDF(hashFunc: Any => Int) = udf { terms: Seq[_] =>
-      val map = new OpenHashMap[Int, Int]
+      val indices = new OpenHashSet[Int]
       terms.foreach { term =>
-        map.update(Utils.nonNegativeMod(hashFunc(term), n), 1)
+        indices.add(Utils.nonNegativeMod(hashFunc(term), n))
       }
-      Vectors.sparse(n, map.iterator.map { case (index, count) =>
-        (index, count.toDouble)
-      }.toSeq)
+      val sortedIndices = indices.iterator.toArray.sorted
+      Vectors.sparse(n, sortedIndices, Array.fill(sortedIndices.length)(1.0))
     }
 
     def countHashUDF(hashFunc: Any => Int) = udf { terms: Seq[_] =>

@@ -23,7 +23,7 @@ import java.util.concurrent.RejectedExecutionException
 import org.apache.hive.service.ServiceException
 import org.apache.hive.service.cli.{HiveSQLException, OperationType}
 
-import org.apache.spark.{ErrorMessageFormat, SparkThrowable, SparkThrowableHelper}
+import org.apache.spark.{ErrorMessageFormat, SparkException, SparkThrowable, SparkThrowableHelper}
 
 /**
  * Object for grouping error messages from (most) exceptions thrown during
@@ -66,5 +66,14 @@ object HiveThriftServerErrors {
 
   def failedToStartServiceError(serviceName: String, e: Throwable): Throwable = {
     new ServiceException(s"Failed to Start $serviceName", e)
+  }
+
+  def ineffectiveDoAsError(doAsConf: String, allowIneffectiveDoAsConf: String): Throwable = {
+    new SparkException(
+      errorClass = "HIVE_THRIFT_SERVER_INEFFECTIVE_DOAS",
+      messageParameters = Map(
+        "doAsConf" -> doAsConf,
+        "allowIneffectiveDoAsConf" -> allowIneffectiveDoAsConf),
+      cause = null)
   }
 }

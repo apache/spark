@@ -22,7 +22,7 @@ import java.io.File
 import jakarta.servlet.http.HttpServletResponse
 
 import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
-import org.apache.spark.deploy.{Command, DeployMessages, DriverDescription, SparkSubmit}
+import org.apache.spark.deploy.{Command, DeployMessages, DriverDescription, DriverEnvironment, SparkSubmit}
 import org.apache.spark.deploy.ClientArguments._
 import org.apache.spark.internal.config
 import org.apache.spark.launcher.{JavaModuleOptions, SparkLauncher}
@@ -67,6 +67,10 @@ private[deploy] class StandaloneRestServer(
     new StandaloneKillRequestServlet(masterEndpoint, masterConf)
   protected override val killAllRequestServlet =
     new StandaloneKillAllRequestServlet(masterEndpoint, masterConf)
+  protected override val holdRequestServlet =
+    new StandaloneHoldRequestServlet(masterEndpoint, masterConf, hold = true)
+  protected override val resumeRequestServlet =
+    new StandaloneHoldRequestServlet(masterEndpoint, masterConf, hold = false)
   protected override val statusRequestServlet =
     new StandaloneStatusRequestServlet(masterEndpoint, masterConf)
   protected override val clearRequestServlet =
@@ -107,6 +111,32 @@ private[rest] class StandaloneKillAllRequestServlet(masterEndpoint: RpcEndpointR
     k.message = response.message
     k.success = response.success
     k
+  }
+}
+
+/**
+ * A servlet for handling hold or resume requests passed to the [[StandaloneRestServer]].
+ *
+ * The Master checks `spark.ui.holdEnabled` on both itself and the application, like for the
+ * Master UI controls. The response tells only whether the request was forwarded to the driver:
+ * the resulting hold status is reported by the Master's `/json/` endpoint once the driver acts
+ * on it.
+ */
+private[rest] class StandaloneHoldRequestServlet(
+    masterEndpoint: RpcEndpointRef,
+    conf: SparkConf,
+    hold: Boolean)
+  extends HoldRequestServlet(hold) {
+
+  protected def handleHold(appId: String): HoldApplicationResponse = {
+    val response = masterEndpoint.askSync[DeployMessages.ApplicationHoldResponse](
+      DeployMessages.RequestApplicationHold(appId, hold))
+    val h = new HoldApplicationResponse
+    h.serverSparkVersion = sparkVersion
+    h.message = response.message
+    h.appId = appId
+    h.success = response.success
+    h
   }
 }
 
@@ -231,10 +261,13 @@ private[rest] class StandaloneSubmitRequestServlet(
       _.replace(s":$masterRestPort", s":$masterPort")).getOrElse(masterUrl)
     val appArgs = Option(request.appArgs).getOrElse(Array[String]())
     // Filter SPARK_LOCAL_(IP|HOSTNAME) environment variables from being set on the remote system.
+    // This is the server-side check: clients that do not go through RestSubmissionClient
+    // (including older spark-submit) can set these variables, and the Worker would pass them
+    // into the driver's process environment (SPARK-20025).
     // In addition, the placeholders are replaced into the values of environment variables.
     val environmentVariables =
       Option(request.environmentVariables).getOrElse(Map.empty[String, String])
-        .filterNot(x => x._1.matches("SPARK_LOCAL_(IP|HOSTNAME)"))
+        .filterNot(x => DriverEnvironment.HOST_SPECIFIC_ENV_VARS.contains(x._1))
         .map(x => (x._1, replacePlaceHolder(x._2)))
 
     // Construct driver description

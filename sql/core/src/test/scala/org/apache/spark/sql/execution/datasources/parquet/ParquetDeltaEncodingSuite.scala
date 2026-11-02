@@ -204,6 +204,25 @@ abstract class ParquetDeltaEncodingSuite[T] extends ParquetCompatibilityTest
       reader.initFromPage(100, craftHeader(128, 4, -1))
     }
     assert(e3.getMessage.contains("total value count"))
+
+    // The mini blocks must have a multiple of 8 values: 128 values do not split into 3 mini
+    // blocks, and split into 32 mini blocks of 4 values.
+    Seq(3, 32).foreach { miniBlockNum =>
+      reader = new VectorizedDeltaBinaryPackedReader
+      val e4 = intercept[ParquetDecodingException] {
+        reader.initFromPage(100, craftHeader(128, miniBlockNum, 1))
+      }
+      assert(e4.getMessage == s"Invalid DELTA_BINARY_PACKED mini block count: $miniBlockNum " +
+        "(block size in values: 128, the mini block size must be a multiple of 8)")
+    }
+
+    // A page must have at least one value.
+    reader = new VectorizedDeltaBinaryPackedReader
+    val e5 = intercept[ParquetDecodingException] {
+      reader.initFromPage(0, craftHeader(128, 4, 1))
+    }
+    assert(e5.getMessage ==
+      "Invalid DELTA_BINARY_PACKED page: it must have at least one value, but it has 0")
   }
 
   test("skip()") {

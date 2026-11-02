@@ -58,7 +58,11 @@ class InMemoryPartitionPredicateDeleteTable(
     properties.getOrDefault(
       InMemoryPartitionPredicateDeleteTable.AcceptDataPredicatesKey, "false").toBoolean
 
-  private val partPaths = partCols.map(_.mkString(".")).toSet
+  // Only an identity transform keeps its source value in the partition key, so only its column
+  // can be matched against that key. `partCols` also holds the source columns of the other
+  // transforms, e.g. `pk` of `bucket(4, pk)`, whose slot holds the bucket value instead.
+  private val partPaths =
+    identityPartitionReferences.map(_.fieldNames().mkString(".")).toSet
 
   private def refsOnlyPartCols(p: Predicate): Boolean =
     p.references().forall(ref => partPaths.contains(ref.fieldNames().mkString(".")))

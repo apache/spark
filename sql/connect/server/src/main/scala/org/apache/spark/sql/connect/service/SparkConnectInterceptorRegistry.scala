@@ -29,8 +29,10 @@ import org.apache.spark.util.Utils
 
 /**
  * This object provides a global list of configured interceptors for GRPC. The interceptors are
- * added to the GRPC server in order of their position in the list. Once the statically compiled
- * interceptors are added, dynamically configured interceptors are added.
+ * added to the GRPC server in order of their position in the list, and gRPC invokes them in the
+ * reverse of the order they were added, so the first entry runs last, closest to the service
+ * handler. Once the statically compiled interceptors are added, dynamically configured
+ * interceptors are added.
  */
 object SparkConnectInterceptorRegistry {
 
@@ -44,13 +46,20 @@ object SparkConnectInterceptorRegistry {
     interceptor[RequestDecompressionInterceptor](classOf[RequestDecompressionInterceptor]))
 
   /**
-   * Given a NettyServerBuilder instance, will chain all interceptors to it in reverse order.
+   * Adds all interceptors to the builder in list order. gRPC invokes interceptors in the reverse
+   * of the order they were added, so later entries run first.
    * @param sb
    */
   def chainInterceptors(sb: NettyServerBuilder): Unit = {
     chainInterceptors(sb, createConfiguredInterceptors())
   }
 
+  /**
+   * Adds all interceptors to the builder in list order. gRPC invokes interceptors in the reverse
+   * of the order they were added, so later entries run first.
+   * @param sb
+   * @param additionalInterceptors
+   */
   def chainInterceptors(
       sb: NettyServerBuilder,
       additionalInterceptors: Seq[ServerInterceptor]): Unit = {

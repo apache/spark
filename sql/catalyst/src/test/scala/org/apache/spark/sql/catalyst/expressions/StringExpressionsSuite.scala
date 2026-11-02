@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.util.CharsetProvider
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.errors.QueryExecutionErrors.toSQLId
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
@@ -1058,6 +1059,48 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkEvaluation(StringTrim(Literal("yxTomxx"), Literal("xyz")), "Tom")
     checkEvaluation(StringTrim(Literal("xxxbarxxx"), Literal("x")), "bar")
+  }
+
+  test("default trim uses collation-aware space matching") {
+    val nbsp = 0xA0.toChar.toString
+    val source = nbsp + "abc" + nbsp
+
+    // Case-insensitive ICU collations treat NBSP as equal to ASCII space, so the default
+    // (unary) trim removes it, matching the explicit two-argument form with a space trim string.
+    for (collationName <- Seq("UNICODE_CI", "UNICODE_CI_AI", "en_CI")) {
+      val collationId = CollationFactory.collationNameToId(collationName)
+      val src = Literal.create(source, StringType(collationId))
+      val space = Literal.create(" ", StringType(collationId))
+
+      checkEvaluation(StringTrimLeft(src), "abc" + nbsp)
+      checkEvaluation(StringTrimRight(src), nbsp + "abc")
+      checkEvaluation(StringTrim(src), "abc")
+
+      // The unary form matches the explicit two-argument form with a space trim string.
+      checkEvaluation(StringTrimLeft(src), StringTrimLeft(src, space).eval())
+      checkEvaluation(StringTrimRight(src), StringTrimRight(src, space).eval())
+      checkEvaluation(StringTrim(src), StringTrim(src, space).eval())
+
+      // Mixed padding of NBSP and ASCII space is fully trimmed.
+      val mixed = Literal.create(nbsp + " abc " + nbsp, StringType(collationId))
+      checkEvaluation(StringTrim(mixed), "abc")
+
+      // A string consisting solely of space separators trims to empty.
+      val allSpaces = Literal.create(nbsp + " " + nbsp, StringType(collationId))
+      checkEvaluation(StringTrimLeft(allSpaces), "")
+      checkEvaluation(StringTrimRight(allSpaces), "")
+      checkEvaluation(StringTrim(allSpaces), "")
+    }
+
+    // Case-sensitive collations keep the existing binary behavior: NBSP is preserved.
+    for (collationName <- Seq("UNICODE", "UTF8_BINARY", "UTF8_LCASE")) {
+      val collationId = CollationFactory.collationNameToId(collationName)
+      val src = Literal.create(source, StringType(collationId))
+
+      checkEvaluation(StringTrimLeft(src), source)
+      checkEvaluation(StringTrimRight(src), source)
+      checkEvaluation(StringTrim(src), source)
+    }
   }
 
   test("LTRIM") {
