@@ -19,57 +19,49 @@ package org.apache.spark.sql.execution.datasources.v2
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicReference
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, BoundReference, Expression, Predicate}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, Expression, Predicate}
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
 import org.apache.spark.sql.connector.read.InputPartition
-import org.apache.spark.sql.execution.datasources.FilePartition
+import org.apache.spark.sql.execution.InSubqueryExec
+import org.apache.spark.sql.execution.datasources.{FilePartition, PartitionDirectory}
 import org.apache.spark.sql.internal.connector.SupportsRuntimeCatalystFiltering
 
 /**
- * A [[FileScan]] that prunes its partition directories with runtime filters, the DPP filters and
- * scalar subquery filters Spark derives over its partition columns (SPARK-30628). The built-in
- * file formats mix this in; a [[FileScan]] that does not extend one of their scans keeps its
- * previous behavior.
+ * A [[FileScan]] that prunes its partition directories with the runtime filters Spark derives over
+ * its partition columns (SPARK-30628). The built-in file formats mix this in.
  *
- * The runtime-filter path returns plain [[FilePartition]]s packed from what `partitions` planned,
- * so a scan that overrides `planInputPartitions()` or reports a partitioning or an ordering should
- * not mix this in.
+ * Both read paths start from one listing of the file index and split and pack the files they
+ * keep, so `partitions` is not used. A scan that overrides it or `planInputPartitions()`, or that
+ * reports a partitioning or an ordering, should not mix this in.
  */
 trait RuntimePartitionPruningFileScan extends FileScan with SupportsRuntimeCatalystFiltering {
 
-  @transient private lazy val plannedPartitionsRef = new AtomicReference[Seq[FilePartition]]()
+  @transient private lazy val listingRef = new AtomicReference[Seq[PartitionDirectory]]()
+  @transient private lazy val allPartitionsRef = new AtomicReference[Seq[FilePartition]]()
 
   /**
-   * The partitions `partitions` planned, stored once per scan instance. Both the plain read path
-   * and the runtime-filter path go through this, so a scan node that gets runtime filters lists the
-   * files once and filters that listing, rather than reading the index twice and risking two
-   * snapshots. A subclass still customizes `partitions`.
-   *
-   * `partitions` runs outside the scan's monitor, which a `lazy val` would hold while it runs. Two
-   * threads asking first at once may both list; both get the result that was stored.
+   * The file index listing and its packing, each taken once per scan so planning and execution
+   * read one snapshot. A `lazy val` would compute them while holding the scan's monitor.
    */
-  private def plannedPartitions: Seq[FilePartition] = {
-    val ref = plannedPartitionsRef
+  private def listing: Seq[PartitionDirectory] =
+    once(listingRef)(fileIndex.listFiles(partitionFilters, dataFilters))
+
+  private def allPartitions: Seq[FilePartition] = once(allPartitionsRef)(filePartitions(listing))
+
+  private def once[T >: Null <: AnyRef](ref: AtomicReference[T])(compute: => T): T =
     Option(ref.get()).getOrElse {
-      ref.compareAndSet(null, partitions)
+      ref.compareAndSet(null, compute)
       ref.get()
     }
-  }
 
-  override def planInputPartitions(): Array[InputPartition] = {
-    plannedPartitions.toArray
-  }
+  override def planInputPartitions(): Array[InputPartition] = allPartitions.toArray
 
   /**
-   * The partition columns Spark can derive a runtime filter on, restricted to the ones
-   * `readSchema()` still exposes: a reference missing from the scan relation output fails to
-   * resolve, and a pushed-down aggregate keeps only the partition columns it groups by.
-   *
-   * A filter over one of them is evaluated against each file's partition values, so the scan
-   * evaluates it in full and Spark does not evaluate it again after the scan --
-   * `FileScanBuilder.pushFilters` already keeps compile-time partition filters out of the post-scan
-   * filters for the same reason.
+   * The read partition columns that `readSchema()` still exposes; a pushed-down aggregate keeps
+   * only the ones it groups by. The scan evaluates a filter over them in full.
    */
   override def filterAttributes(): Array[NamedReference] = {
     val readFields = readSchema().fieldNames.map(normalizePartitionName).toSet
@@ -81,53 +73,43 @@ trait RuntimePartitionPruningFileScan extends FileScan with SupportsRuntimeCatal
   override def fullyPushedFilterAttributes(): Array[NamedReference] = filterAttributes()
 
   /**
-   * Plans the files whose partition values satisfy `expressions`, taken from what `partitions`
-   * planned and bin-packed again for the surviving set.
+   * Keeps the listed partition directories whose values satisfy `expressions`, then splits and
+   * packs their files for their own size, as V1 does for `dynamicallySelectedPartitions`.
    *
-   * Filtering what was planned rather than listing the files again keeps one listing per scan, and
-   * the files a subclass excluded in `partitions` stay excluded. How the survivors group into
-   * partitions is decided here again, for their own size. Where each file was cut into splits is
-   * not: `partitions` cut them for the whole set it listed, before these filters existed.
-   *
-   * A partition value is fixed within a file, so every row of every partition returned satisfies
-   * the expressions even though one partition can still hold files from several partition
-   * directories.
+   * A DPP filter that fails to evaluate on a directory keeps it, since the join applies the filter
+   * again. Any other filter is fully pushed, so its failure fails the query.
    */
   override def planInputPartitionsWithRuntimeFilters(
       expressions: Array[Expression]): Array[InputPartition] = {
-    val fieldIndex = readPartitionSchema.fieldNames.zipWithIndex
-      .map { case (name, i) => normalizePartitionName(name) -> i }.toMap
-    // Evaluating these is the scan's only chance to apply them, since the attributes are declared
-    // fully pushed and Spark drops the post-scan filter. A reference outside the read partition
-    // schema has no value to evaluate against, so fail loudly rather than return wrong rows. Spark
-    // screens against `filterAttributes()` before it gets here, which is a subset of that schema.
+    if (expressions.isEmpty) return allPartitions.toArray
+    val readFields = readPartitionSchema.fieldNames.map(normalizePartitionName).toSet
     val notApplicable = expressions.filterNot(
-      _.references.forall(a => fieldIndex.contains(normalizePartitionName(a.name))))
+      _.references.forall(a => readFields.contains(normalizePartitionName(a.name))))
     if (notApplicable.nonEmpty) {
       throw SparkException.internalError("A file scan can only apply a runtime filter over its " +
         s"read partition columns ${readPartitionSchema.fieldNames.mkString("[", ", ", "]")}, " +
         s"got ${notApplicable.mkString(", ")}")
     }
-    val bound = expressions.reduce(And).transform {
-      case a: Attribute =>
-        BoundReference(fieldIndex(normalizePartitionName(a.name)), a.dataType, a.nullable)
+    // Directory values follow the table's partition schema, not the read one.
+    val fieldIndex = fileIndex.partitionSchema.fieldNames.zipWithIndex
+      .map { case (name, i) => normalizePartitionName(name) -> i }.toMap
+    val predicates = expressions.toSeq.map { e =>
+      val bound = e.transform {
+        case a: Attribute =>
+          BoundReference(fieldIndex(normalizePartitionName(a.name)), a.dataType, a.nullable)
+      }
+      (Predicate.createInterpreted(bound), e.isInstanceOf[InSubqueryExec])
     }
-    val predicate = Predicate.createInterpreted(bound)
-    val keptFiles = plannedPartitions
-      .flatMap(_.files.filter(file => predicate.eval(file.partitionValues)))
-      .sortBy(_.length)(implicitly[Ordering[Long]].reverse)
-    // Pack the survivors instead of handing back the planned partitions with files removed:
-    // `partitions` sized those bins for the whole file set, so a scan that pruned most of its files
-    // would run the same few tasks over a fraction of the data. V1 packs the pruned set the same
-    // way, from `dynamicallySelectedPartitions`.
-    val openCostInBytes = conf.filesOpenCostInBytes
-    val maxSplitBytes = FilePartition.maxSplitBytes(
-      sparkSession, keptFiles.map(_.length + openCostInBytes).sum)
-    FilePartition.getFilePartitions(sparkSession, keptFiles, maxSplitBytes).toArray
+    // A directory with no file to read is dropped before any filter is evaluated on it.
+    val kept = listing.filter { dir =>
+      dir.files.nonEmpty && predicates.forall { case (predicate, keepOnFailure) =>
+        try predicate.eval(dir.values) catch { case NonFatal(_) if keepOnFailure => true }
+      }
+    }
+    filePartitions(kept).toArray
   }
 
-  // Read when the scan is built, as `FileScan` reads it for the names `partitions` matches, so the
-  // runtime filters bind the same way even if the session's setting changes before they arrive.
+  // Read when the scan is built, as `FileScan` does.
   private val isCaseSensitive = conf.caseSensitiveAnalysis
 
   private def normalizePartitionName(name: String): String = {

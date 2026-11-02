@@ -243,7 +243,7 @@ class StorageFilterTestScanBuilder(tableSchema: StructType, options: CaseInsensi
         override def fullyPushedFilterAttributes(): Array[NamedReference] = filterAttributes()
         override def planInputPartitionsWithRuntimeFilters(
             expressions: Array[Expression]): Array[InputPartition] = {
-          StorageFilterTestSource.runtimeFilterCalls.incrementAndGet()
+          if (expressions.nonEmpty) StorageFilterTestSource.runtimeFilterCalls.incrementAndGet()
           planInputPartitions()
         }
       }

@@ -695,7 +695,39 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
       checkAnswer(df, Row(3, 3))
 
       assert(collectBatchScan(df).runtimeFilters.isEmpty)
-      assertPushedCatalystPredicates(df, 0)
+      assert(getCatalystScan(df).filterCallCount === 0)
+    }
+  }
+
+  test("every runtime filter screened out -> the scan re-plans with no expression") {
+    val fact = s"$catalogName.fact_screened"
+    val dim = s"$catalogName.dim_screened"
+    withTable(fact, dim) {
+      sql(s"CREATE TABLE $fact (id INT, part INT) USING $v2Source PARTITIONED BY (part)")
+      for (i <- 0 until 5) {
+        sql(s"INSERT INTO $fact VALUES ($i, $i)")
+      }
+      sql(s"CREATE TABLE $dim (dim_id INT, dim_val STRING) USING $v2Source")
+      sql(s"INSERT INTO $dim VALUES (2, 'two')")
+
+      // With reuse-only DPP and no broadcast to reuse, the DPP filter degrades to true.
+      withDPPConf {
+        withSQLConf(
+          SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+          val df = sql(
+            s"""SELECT f.id, f.part FROM $fact f JOIN $dim d
+               |ON f.part = d.dim_id WHERE d.dim_val = 'two'""".stripMargin)
+          checkAnswer(df, Row(2, 2))
+
+          val batchScan = collectBatchScan(df)
+          assert(batchScan.runtimeFilters === Seq(DynamicPruningExpression(Literal.TrueLiteral)))
+          assert(getCatalystScan(df).filterCallCount === 1)
+          assertPushedCatalystPredicates(df, 0)
+          assert(batchScan.filteredPartitions.flatten.size === 5)
+        }
+      }
     }
   }
 

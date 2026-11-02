@@ -230,9 +230,7 @@ abstract class RowLevelOperationCatalystRuntimeFilterSuiteBase
     assert(scannedGroups.sorted === expectedFilter.groups.sorted,
       s"scan must read only the filtered groups, got ${scannedGroups.mkString(", ")}")
 
-    // and what Spark went on to read, which the assertion above no longer witnesses: the scan plans
-    // fresh partitions per call rather than narrowing itself, so a re-plan whose result Spark
-    // ignored would leave the two disagreeing.
+    // and what each scan node read
     batchScans.foreach { batchScan =>
       val readGroups = batchScan.filteredPartitions.flatten
         .map(_.asInstanceOf[BufferedRows].keyString()).distinct

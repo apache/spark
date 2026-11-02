@@ -87,17 +87,15 @@ trait SupportsRuntimeCatalystFiltering extends Scan {
    * them to plan fewer [[InputPartition]]s than [[org.apache.spark.sql.connector.read.Batch]]
    * would without them.
    *
-   * Spark calls this method at execution time, and only when at least one runtime filter survives
-   * screening; the partitions it returns replace the ones that scan node would otherwise have
-   * read. Spark may also call `Batch.planInputPartitions()` on the same scan, so neither method may
-   * assume it is the only one used. One scan instance can back several scan nodes (e.g. the two
-   * branches of a group-based UPDATE), each with its own runtime filters, so an implementation
-   * must derive its result from the given expressions alone and must not carry state over from a
-   * previous call. A group-based scan whose write replaces the groups that were read has to record
-   * what each call returned for that write, and count a scan node that read through
-   * `planInputPartitions()` as having read every group that method returns. Spark may also call
-   * that method while planning a scan node, so such a call alone does not show that the node read
-   * through it.
+   * Spark calls this method at execution time for every scan node that has runtime filters, with
+   * the ones that survive screening. The array may be empty, which applies no runtime filter. The
+   * partitions it returns replace the ones that scan node would otherwise have read. Spark may also
+   * call `Batch.planInputPartitions()` on the same scan, so neither method may assume it is the
+   * only one used. One scan instance can back several scan nodes (e.g. the two branches of a
+   * group-based UPDATE), each with its own runtime filters, so an implementation must derive its
+   * result from the given expressions alone and must not carry state over from a previous call. A
+   * group-based scan whose write replaces the groups that were read records what each call
+   * returned; a scan node without runtime filters reads what `planInputPartitions()` returns.
    *
    * Spark currently tracks runtime-filter eligibility by root attribute. If [[filterAttributes]]
    * returns a nested reference, an expression may access another nested field under the same root.

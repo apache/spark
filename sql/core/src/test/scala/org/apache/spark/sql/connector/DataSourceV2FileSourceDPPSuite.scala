@@ -19,16 +19,14 @@ package org.apache.spark.sql.connector
 
 import java.io.File
 
-import scala.collection.mutable
-
 import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, DynamicPruningExpression, DynamicPruningSubquery, EqualTo, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
 import org.apache.spark.sql.connector.read.InputPartition
-import org.apache.spark.sql.execution.FilterExec
+import org.apache.spark.sql.execution.{FilterExec, ScalarSubquery}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
-import org.apache.spark.sql.execution.datasources.FilePartition
+import org.apache.spark.sql.execution.datasources.{FilePartition, InMemoryFileIndex, PartitionDirectory}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, FileScan, RuntimePartitionPruningFileScan}
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.internal.SQLConf
@@ -89,6 +87,26 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
 
   private def fileScanOf(df: DataFrame): RuntimePartitionPruningFileScan =
     factScanOf(df).scan.asInstanceOf[RuntimePartitionPruningFileScan]
+
+  // A copy of `scan` whose file index runs `onList` every time it lists files.
+  private def withListingHook(scan: ParquetScan)(onList: => Unit): ParquetScan = {
+    val index = scan.fileIndex
+    scan.copy(fileIndex = new InMemoryFileIndex(spark, index.rootPaths, Map.empty, None,
+        userSpecifiedPartitionSpec = Some(index.partitionSpec())) {
+      override def listFiles(
+          partitionFilters: Seq[Expression],
+          dataFilters: Seq[Expression]): Seq[PartitionDirectory] = {
+        onList
+        super.listFiles(partitionFilters, dataFilters)
+      }
+    })
+  }
+
+  // The splits of each partition, as (path, start, length).
+  private def layoutOf(parts: Array[InputPartition]): Seq[Seq[(String, Long, Long)]] =
+    parts.toSeq.map(_.asInstanceOf[FilePartition].files.toSeq.map { f =>
+      (f.filePath.toString, f.start, f.length)
+    })
 
   private def collectDppFilters(plan: LogicalPlan): Seq[Expression] = {
     plan.collect {
@@ -275,13 +293,9 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
     }
   }
 
-  test("a partition value the runtime filter cannot evaluate fails the query") {
-    // A partition value the filter cannot be evaluated against has to fail the query: keeping the
-    // file would return rows that nothing filters, since the filter is declared fully pushed. What
-    // this pins is that the failure is not swallowed. The exposure is the same one a compile-time
-    // partition filter over the same column has, and it is why this path must not gain the
-    // eval-failure tolerance the iterative PartitionPredicate path has. That no FilterExec is left
-    // above the scan is pinned separately.
+  test("a DPP filter keeps a partition it cannot evaluate, a scalar subquery filter fails") {
+    // The scan alone evaluates the fully pushed scalar subquery filter, while the join applies
+    // the DPP filter again.
     withDppV2Conf {
       withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
         withTempDir { dir =>
@@ -300,60 +314,103 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
           }
           assert(e.getCondition === "CAST_INVALID_INPUT",
             s"expected the failing cast to surface, got ${e.getCondition}")
+          // `f.id <> 3` drops the row of directory 'abc' before the join casts its key.
+          val df = sql(
+            """SELECT f.id FROM fact_str f JOIN dim d
+              |ON f.part = d.dim_id WHERE d.dim_val = 7 AND f.id <> 3""".stripMargin)
+          checkAnswer(df, Row(7))
+          val factScan = factScanOf(df)
+          assert(factScan.runtimeFilters.exists(_.isInstanceOf[DynamicPruningExpression]),
+            s"expected a DPP filter, got ${factScan.runtimeFilters}")
+          val readDirs = factScan.filteredPartitions.flatten
+            .flatMap(_.asInstanceOf[FilePartition].files.map(_.partitionValues.getString(0)))
+          assert(readDirs.sorted === Seq("7", "abc"))
         }
       }
     }
   }
 
-  test("a subclass that narrows the file set in partitions keeps it under a runtime filter") {
-    // The runtime-filter path filters the files `partitions` returned, so a file an override of it
-    // drops stays dropped. Listing the files again instead would hand it back as soon as a filter
-    // fired, and with the filter declared fully pushed nothing above the scan would remove it.
+  test("a runtime filter is not evaluated on a partition directory with no file to read") {
+    // The file index lists 'abc', but drops its only file because the file is empty.
+    withDppV2Conf {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        withTempDir { dir =>
+          writeFactAndDim(dir)
+          val strPath = new File(dir, "fact_str").getCanonicalPath
+          spark.range(10).selectExpr("id", "CAST(id AS STRING) AS part")
+            .write.format("parquet").partitionBy("part").save(strPath)
+          val emptyDir = new File(strPath, "part=abc")
+          assert(emptyDir.mkdir() && new File(emptyDir, "empty.parquet").createNewFile())
+          spark.read.format("parquet").schema("id long, part string").load(strPath)
+            .createOrReplaceTempView("fact_str")
+          val df = sql(
+            """SELECT f.id FROM fact_str f
+              |WHERE f.part = (SELECT max(dim_id) FROM dim WHERE dim_val = 7)""".stripMargin)
+          checkAnswer(df, Row(7))
+          val factScan = factScanOf(df)
+          assert(factScan.runtimeFilters.exists(_.exists(_.isInstanceOf[ScalarSubquery])),
+            s"expected the scalar subquery filter on the scan, got ${factScan.runtimeFilters}")
+          val readDirs = factScan.filteredPartitions.flatten
+            .flatMap(_.asInstanceOf[FilePartition].files.map(_.partitionValues.getString(0)))
+          assert(readDirs.distinct === Seq("7"))
+          assert(fileScanOf(df).fileIndex.partitionSpec().partitions.size === 11,
+            "expected the file index to list directory 'abc'")
+        }
+      }
+    }
+  }
+
+  test("an empty runtime filter array returns the partitions planInputPartitions planned") {
+    // Spark passes an empty array when every runtime filter of a scan node is screened out, e.g. a
+    // DPP filter degraded to true. Packing the files again would repeat planning's work.
     withDppV2Conf {
       withTempDir { dir =>
         writeFactAndDim(dir)
         val df = sql("SELECT f.id, f.part FROM fact f")
         df.collect()
-        val scan = fileScanOf(df).asInstanceOf[ParquetScan]
-        // Keeps only partition directory 3's files and counts how often the scan asks for its
-        // partitions.
-        var partitionsCalls = 0
-        val narrowed = new ParquetScan(scan.sparkSession, scan.hadoopConf, scan.fileIndex,
-          scan.dataSchema, scan.readDataSchema, scan.readPartitionSchema, scan.pushedFilters,
-          scan.options, scan.pushedAggregate, scan.partitionFilters, scan.dataFilters,
-          scan.pushedVariantExtractions) {
-          override protected def partitions: Seq[FilePartition] = {
-            partitionsCalls += 1
-            super.partitions.map { part =>
-              part.copy(files = part.files.filter(_.partitionValues.getInt(0) == 3))
-            }.filter(_.files.nonEmpty)
+        val base = fileScanOf(df).asInstanceOf[ParquetScan]
+        var packings = 0
+        val scan = new ParquetScan(base.sparkSession, base.hadoopConf, base.fileIndex,
+          base.dataSchema, base.readDataSchema, base.readPartitionSchema, base.pushedFilters,
+          base.options, base.pushedAggregate, base.partitionFilters, base.dataFilters,
+          base.pushedVariantExtractions) {
+          override protected def filePartitions(
+              selectedPartitions: Seq[PartitionDirectory]): Seq[FilePartition] = {
+            packings += 1
+            super.filePartitions(selectedPartitions)
           }
         }
-        def partValues(parts: Array[InputPartition]): Seq[Int] =
-          parts.flatMap(_.asInstanceOf[FilePartition].files.map(_.partitionValues.getInt(0)))
-            .distinct.toSeq
-        val partAttr = AttributeReference("part", IntegerType)()
-        // The plain read path first, as planning does through `supportsColumnar`.
-        assert(partValues(narrowed.planInputPartitions()) === Seq(3))
-        // A filter selecting a directory the override dropped comes back with nothing, and the
-        // calls after it, plain and filtered, still find the directory it kept: no call narrows
-        // what the next one starts from.
-        assert(narrowed.planInputPartitionsWithRuntimeFilters(
-          Array(EqualTo(partAttr, Literal(7)))).isEmpty)
-        assert(partValues(narrowed.planInputPartitions()) === Seq(3))
-        assert(partValues(narrowed.planInputPartitionsWithRuntimeFilters(
-          Array(EqualTo(partAttr, Literal(3))))) === Seq(3))
-        // All four calls above shared one listing, which is what keeps the plan and the execution
-        // on one snapshot of the file index.
-        assert(partitionsCalls === 1, s"expected one listing, got $partitionsCalls")
+        val planned = layoutOf(scan.planInputPartitions())
+        assert(layoutOf(scan.planInputPartitionsWithRuntimeFilters(Array.empty)) === planned)
+        assert(packings === 1, s"expected the files to be packed once, got $packings")
       }
     }
   }
 
-  test("partitions runs without holding the scan's monitor") {
-    // An override of `partitions` may hand work to another thread and wait for it. If the memo
-    // held the scan's monitor meanwhile, that thread would block when it tried to initialize one
-    // of the scan's lazy vals.
+  test("the plain and the runtime-filtered read paths share one listing") {
+    withDppV2Conf {
+      withTempDir { dir =>
+        writeFactAndDim(dir)
+        val df = sql("SELECT f.id, f.part FROM fact f")
+        df.collect()
+        var listings = 0
+        val scan = withListingHook(fileScanOf(df).asInstanceOf[ParquetScan]) { listings += 1 }
+        def partValues(parts: Array[InputPartition]): Seq[Int] =
+          parts.flatMap(_.asInstanceOf[FilePartition].files.map(_.partitionValues.getInt(0)))
+            .distinct.sorted.toSeq
+        val partAttr = AttributeReference("part", IntegerType)()
+        assert(partValues(scan.planInputPartitions()) === (0 until 10))
+        assert(partValues(scan.planInputPartitionsWithRuntimeFilters(
+          Array(EqualTo(partAttr, Literal(3))))) === Seq(3))
+        assert(partValues(scan.planInputPartitions()) === (0 until 10))
+        assert(listings === 1, s"expected one listing, got $listings")
+      }
+    }
+  }
+
+  test("another thread can read the scan while it lists its files") {
+    // The thread forces a lazy val of the scan through `equals`. Listing under the scan's
+    // monitor would block it.
     withDppV2Conf {
       withTempDir { dir =>
         writeFactAndDim(dir)
@@ -365,18 +422,14 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
           _.planInputPartitions(),
           _.planInputPartitionsWithRuntimeFilters(Array(EqualTo(partAttr, Literal(3))))
         ).foreach { firstCall =>
-          val heldLock = mutable.ArrayBuffer.empty[Boolean]
-          val probe = new ParquetScan(scan.sparkSession, scan.hadoopConf, scan.fileIndex,
-            scan.dataSchema, scan.readDataSchema, scan.readPartitionSchema, scan.pushedFilters,
-            scan.options, scan.pushedAggregate, scan.partitionFilters, scan.dataFilters,
-            scan.pushedVariantExtractions) {
-            override protected def partitions: Seq[FilePartition] = {
-              heldLock += Thread.holdsLock(this)
-              super.partitions
-            }
+          var probe: ParquetScan = null
+          probe = withListingHook(scan) {
+            val reader = new Thread(() => probe.equals(probe))
+            reader.start()
+            reader.join(30000)
+            assert(!reader.isAlive, "the other thread is still blocked on the scan")
           }
           firstCall(probe)
-          assert(heldLock.toSeq === Seq(false))
         }
       }
     }
@@ -550,11 +603,8 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
   }
 
   test("a fully pushed filter stays exact when one FilePartition spans partition directories") {
-    // The fully-pushed contract used to ask for the attribute's value to be fixed within every
-    // InputPartition. A file scan does not satisfy that: FilePartition packs by size and can hold
-    // files from several partition directories. What makes the declaration sound is that the
-    // predicate chose those directories, so every row in the partition satisfies it even though the
-    // value varies. Pack the surviving directories into one FilePartition to exercise that.
+    // One FilePartition holds files from several partition directories, and every row in it still
+    // satisfies the filter, because the filter chose those directories.
     withDppV2Conf {
       withSQLConf(
         SQLConf.FILES_MAX_PARTITION_BYTES.key -> "1g",
@@ -582,66 +632,42 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
     }
   }
 
-  test("runtime pruning packs the surviving files for their own size") {
-    // `partitions` sized its bins for the whole file set, so handing those bins back with files
-    // removed leaves a heavily pruned scan running the few tasks the unpruned set needed. Selecting
-    // the same partitions at compile time packs for the pruned set, so the two layouts must agree.
+  test("runtime pruning splits the surviving files for their own size") {
+    // As in V1, the split size follows the files that survive, so a runtime-pruned scan is split
+    // like the same partitions selected at compile time.
     withDppV2Conf {
       withSQLConf(
         SQLConf.FILES_MAX_PARTITION_BYTES.key -> "1g",
-        SQLConf.FILES_MIN_PARTITION_NUM.key -> "3",
+        SQLConf.FILES_MIN_PARTITION_NUM.key -> "20",
         SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "0") {
         withTempDir { dir =>
           writeFactAndDim(dir)
+          def layout(df: DataFrame): Seq[Seq[(String, Long, Long)]] =
+            layoutOf(factScanOf(df).filteredPartitions.flatten.toArray)
           val expected = (0 until 10).flatMap(i => Seq(Row(i * 10 + 8, 8), Row(i * 10 + 9, 9)))
-          // min(dim_id) over dim_val > 7 is 8, so this keeps partitions 8 and 9.
-          val runtime = sql(
-            """SELECT f.id, f.part FROM fact f
-              |WHERE f.part >= (SELECT min(dim_id) FROM dim WHERE dim_val > 7)""".stripMargin)
-          checkAnswer(runtime, expected)
           val compileTime = sql("SELECT f.id, f.part FROM fact f WHERE f.part >= 8")
           checkAnswer(compileTime, expected)
-          // What gives the comparison teeth: the whole file set packs two or more of the surviving
-          // files into one bin, so handing those bins back with the other files removed cannot
-          // produce as many partitions as packing the survivors does. That needs the fixture to
-          // write more than one file per partition directory, and this is the assertion that fails
-          // if it stops doing so.
           val unpruned = sql("SELECT f.id, f.part FROM fact f")
           unpruned.collect()
-          val unprunedPartitions = factScanOf(unpruned).filteredPartitions.flatten
-            .map(_.asInstanceOf[FilePartition])
-          val binsHoldingSurvivors =
-            unprunedPartitions.count(_.files.exists(_.partitionValues.getInt(0) >= 8))
-          val survivorsWhenUnpruned =
-            unprunedPartitions.flatMap(_.files).count(_.partitionValues.getInt(0) >= 8)
-          assert(binsHoldingSurvivors < survivorsWhenUnpruned,
-            s"expected the whole set to pack $survivorsWhenUnpruned surviving files into fewer " +
-              s"than $survivorsWhenUnpruned bins, got $binsHoldingSurvivors")
-          val compileTimePartitions = factScanOf(compileTime).filteredPartitions.flatten
-            .map(_.asInstanceOf[FilePartition])
-          val runtimePartitions = factScanOf(runtime).filteredPartitions.flatten
-            .map(_.asInstanceOf[FilePartition])
-          val runtimeFiles = runtimePartitions.flatMap(_.files).size
-          // The teeth above were measured on the unpruned scan; this is what ties them to this arm.
-          assert(runtimeFiles === survivorsWhenUnpruned,
-            s"expected this arm to read the $survivorsWhenUnpruned files the unpruned packing " +
-              s"held, got $runtimeFiles")
-          // Both arms must see the same files: the runtime path cannot re-split, so a compile-time
-          // maxSplitBytes below one file's length would cut that arm's files finer and the counts
-          // would differ for a reason this test is not about.
-          assert(runtimeFiles === compileTimePartitions.flatMap(_.files).size,
-            s"expected both arms to read $runtimeFiles files, got " +
-              s"${compileTimePartitions.flatMap(_.files).size} at compile time")
-          // The two arms pack from differently ordered input: `partitions` sorts within a partition
-          // directory, this path sorts the survivors globally, and Next Fit Decreasing is sensitive
-          // to that. What makes the counts comparable is that under this conf no two surviving
-          // files fit in one bin, so both arms give one partition per file whatever the order.
-          assert(runtimePartitions.size === runtimeFiles,
-            s"expected one partition per surviving file, got ${runtimePartitions.size} " +
-              s"for $runtimeFiles files")
-          assert(runtimePartitions.size === compileTimePartitions.size,
-            "expected the runtime-pruned scan to be packed like the compile-time one " +
-              s"(${compileTimePartitions.size} partitions), got ${runtimePartitions.size}")
+          // Sized for the whole table, the files of partitions 8 and 9 are cut into fewer splits.
+          val unprunedSplits = factScanOf(unpruned).filteredPartitions.flatten
+            .flatMap(_.asInstanceOf[FilePartition].files)
+            .count(_.partitionValues.getInt(0) >= 8)
+          assert(layout(compileTime).flatten.size > unprunedSplits,
+            s"expected more than $unprunedSplits splits at compile time, got " +
+              s"${layout(compileTime).flatten.size}")
+          Seq(
+            // min(dim_id) over dim_val > 7 is 8.
+            """SELECT f.id, f.part FROM fact f
+              |WHERE f.part >= (SELECT min(dim_id) FROM dim WHERE dim_val > 7)""".stripMargin,
+            """SELECT f.id, f.part FROM fact f JOIN dim d
+              |ON f.part = d.dim_id WHERE d.dim_val > 7""".stripMargin).foreach { query =>
+            val runtime = sql(query)
+            checkAnswer(runtime, expected)
+            val sameLayout = layout(runtime) == layout(compileTime)
+            assert(sameLayout, s"expected the ${layout(compileTime).flatten.size} splits of " +
+              s"the compile-time scan, got ${layout(runtime).flatten.size}")
+          }
         }
       }
     }
@@ -649,9 +675,7 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
 
   test("a DPP filter degraded to true leaves the v2 file scan unpruned") {
     // With reuse-only DPP and no broadcast to reuse, the subquery is replaced by true before
-    // execution. What this pins is that such a filter still reaches the scan and the query stays
-    // correct; the row count only records that nothing was pruned, which is what a true predicate
-    // does whether or not `catalystRuntimeFilters` drops it.
+    // execution.
     withDppV2Conf {
       withSQLConf(
         SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true",
@@ -677,11 +701,8 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
   }
 
   test("a runtime filter binds to the read partition columns when only some of them are read") {
-    // `partitions` projects each file's partition values down to `readPartitionSchema` when the
-    // query reads a strict subset of the partition columns, so a filter on `p2` has to read slot 0
-    // of those values. Binding by the table's partition schema would read slot 1, which in the
-    // projected values holds `p3`: rows that satisfy the filter are lost, and with the filter
-    // fully pushed, rows that do not are returned.
+    // The filter is evaluated on directory values, which follow the table's partition schema
+    // (p1, p2, p3), while the scan reads only p2 and p3.
     withDppV2Conf {
       withTempDir { dir =>
         val tPath = new File(dir, "t").getCanonicalPath
