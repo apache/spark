@@ -905,7 +905,10 @@ class NativePartitionReader(
         // That thread may not call next or close again, so the reader is released once it ends.
         val thread = consumer
         NativePartitionReader.releaser.execute(() => {
-          thread.join()
+          // Stops waiting as well once that thread released the reader itself.
+          while (thread.isAlive && !synchronized(released)) {
+            thread.join(NativePartitionReader.ReleaseCheckIntervalMs)
+          }
           releaseClosed()
         })
       }
@@ -940,6 +943,8 @@ class NativePartitionReader(
 object NativePartitionReader {
   // Waits for the threads that may still read the batch of a closed reader, and then releases it.
   private val releaser = ThreadUtils.newDaemonCachedThreadPool("native-partition-reader-release")
+  // How often a releaser checks whether the thread that it waits for released the reader itself.
+  private val ReleaseCheckIntervalMs = 100L
 }
 
 /** Writes the batches of a task to the data writer of a native library. */
