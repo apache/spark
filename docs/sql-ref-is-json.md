@@ -96,7 +96,10 @@ Checking the input is subject to the following limits, which match those of `par
 If checking the input requires going beyond one of these limits, the predicate does not return
 `true` or `false`; instead the query fails with an `IS_JSON_INPUT_LIMIT_EXCEEDED` error, as
 `parse_json` also fails on such input. The error names the limit that was exceeded and shows the
-beginning of the input.
+beginning of the input. A shape mismatch, however, is decided by the first token alone: input
+whose first token already rules out the requested shape returns `false` even if classifying the
+rest would exceed a limit, so an over-long number under `IS JSON OBJECT` or `IS JSON ARRAY`
+returns `false` rather than failing the query.
 
 ### Examples
 

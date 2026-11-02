@@ -2262,6 +2262,27 @@ Project [is_json(concat(repeat([, 1001), repeat(], 1001)), Any) AS (concat(repea
 
 
 -- !query
+select repeat('9', 1001) IS JSON OBJECT, repeat('9', 1001) IS JSON ARRAY
+-- !query analysis
+Project [is_json(repeat(9, 1001), Object) AS (repeat(9, 1001) IS JSON OBJECT)#x, is_json(repeat(9, 1001), Array) AS (repeat(9, 1001) IS JSON ARRAY)#x]
++- OneRowRelation
+
+
+-- !query
+select '{' IS JSON, '[1,' IS JSON, '{"a"' IS JSON
+-- !query analysis
+Project [is_json({, Any) AS ({ IS JSON)#x, is_json([1,, Any) AS ([1, IS JSON)#x, is_json({"a", Any) AS ({"a" IS JSON)#x]
++- OneRowRelation
+
+
+-- !query
+select '[1,]' IS JSON ARRAY, '{"a":1,}' IS JSON OBJECT, '[1,,2]' IS JSON ARRAY, '[1}' IS JSON ARRAY
+-- !query analysis
+Project [is_json([1,], Array) AS ([1,] IS JSON ARRAY)#x, is_json({"a":1,}, Object) AS ({"a":1,} IS JSON OBJECT)#x, is_json([1,,2], Array) AS ([1,,2] IS JSON ARRAY)#x, is_json([1}, Array) AS ([1} IS JSON ARRAY)#x]
++- OneRowRelation
+
+
+-- !query
 select cast(X'228022' AS STRING) IS JSON
 -- !query analysis
 Project [is_json(cast(0x228022 as string), Any) AS (CAST(X'228022' AS STRING) IS JSON)#x]
@@ -2325,10 +2346,56 @@ Project [is_json(collate({"a":1}, UTF8_LCASE), Object) AS (collate({"a":1}, UTF8
 
 
 -- !query
-select 'bad' COLLATE UNICODE IS JSON, cast('[1]' AS VARCHAR(10)) IS JSON ARRAY
+select 'bad' COLLATE UNICODE IS JSON
 -- !query analysis
-Project [is_json(collate(bad, UNICODE), Any) AS (collate(bad, UNICODE) IS JSON)#x, is_json(cast([1] as string), Array) AS (CAST([1] AS STRING) IS JSON ARRAY)#x]
+Project [is_json(collate(bad, UNICODE), Any) AS (collate(bad, UNICODE) IS JSON)#x]
 +- OneRowRelation
+
+
+-- !query
+select cast('[1]' AS VARCHAR(10)) IS JSON ARRAY
+-- !query analysis
+Project [is_json(cast([1] as string), Array) AS (CAST([1] AS STRING) IS JSON ARRAY)#x]
++- OneRowRelation
+
+
+-- !query
+SET spark.sql.preserveCharVarcharTypeInfo=true
+-- !query analysis
+SetCommand (spark.sql.preserveCharVarcharTypeInfo,Some(true))
+
+
+-- !query
+select cast('[1]' AS VARCHAR(10)) IS JSON ARRAY, cast('bad' AS VARCHAR(10)) IS JSON,
+       cast('{"a":1}' AS CHAR(10)) IS JSON OBJECT
+-- !query analysis
+Project [is_json(cast([1] as varchar(10)), Array) AS (CAST([1] AS VARCHAR(10)) IS JSON ARRAY)#x, is_json(cast(bad as varchar(10)), Any) AS (CAST(bad AS VARCHAR(10)) IS JSON)#x, is_json(cast({"a":1} as char(10)), Object) AS (CAST({"a":1} AS CHAR(10)) IS JSON OBJECT)#x]
++- OneRowRelation
+
+
+-- !query
+SET spark.sql.preserveCharVarcharTypeInfo=false
+-- !query analysis
+SetCommand (spark.sql.preserveCharVarcharTypeInfo,Some(false))
+
+
+-- !query
+SET spark.sql.charVarchar.standardSemantics.enabled=true
+-- !query analysis
+SetCommand (spark.sql.charVarchar.standardSemantics.enabled,Some(true))
+
+
+-- !query
+select cast('[1]' AS VARCHAR(10)) IS JSON ARRAY, cast('bad' AS VARCHAR(10)) IS JSON
+-- !query analysis
+Project [is_json(cast(cast([1] as varchar(10)) as string), Array) AS (CAST([1] AS VARCHAR(10)) IS JSON ARRAY)#x, is_json(cast(cast(bad as varchar(10)) as string), Any) AS (CAST(bad AS VARCHAR(10)) IS JSON)#x]
++- OneRowRelation
+
+
+-- !query
+SET spark.sql.charVarchar.standardSemantics.enabled=false
+-- !query analysis
+SetCommand (spark.sql.charVarchar.standardSemantics.enabled,Some(false))
 
 
 -- !query
