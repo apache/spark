@@ -1803,19 +1803,80 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   // Returns the concrete `SparkRuntimeException` (not `Throwable`) so the Java implementation of
   // IS JSON can `throw` it without a checked-exception declaration. Only a prefix of the input is
-  // echoed, so a long input cannot blow up the message.
-  def isJsonInputLimitExceededError(
-      reason: String, input: UTF8String, cause: Throwable): SparkRuntimeException = {
+  // echoed, so a long input cannot blow up the message. The helpers below cover the four limits
+  // Jackson's StreamReadConstraints enforce, plus one for a constraint report it does not
+  // recognize.
+  private def isJsonInputLimitExceededError(
+      condition: String,
+      messageParameters: java.util.Map[String, String],
+      input: UTF8String,
+      cause: Throwable): SparkRuntimeException = {
     val maxPrefixChars = 128
     val inputPrefix = if (input.numChars() > maxPrefixChars) {
       input.substring(0, maxPrefixChars).toString + "..."
     } else {
       input.toString
     }
+    val parameters = new java.util.HashMap[String, String](messageParameters)
+    parameters.put("inputPrefix", toSQLValue(inputPrefix))
     new SparkRuntimeException(
-      errorClass = "IS_JSON_INPUT_LIMIT_EXCEEDED",
-      messageParameters = Map("reason" -> reason, "inputPrefix" -> toSQLValue(inputPrefix)),
+      errorClass = condition,
+      messageParameters = parameters.asScala.toMap,
       cause = cause)
+  }
+
+  def isJsonNestingDepthLimitError(
+      input: UTF8String, maxNestingDepth: Int, cause: Throwable): SparkRuntimeException = {
+    isJsonInputLimitExceededError(
+      "IS_JSON_INPUT_LIMIT_EXCEEDED.NESTING_DEPTH",
+      java.util.Map.of("maxNestingDepth", maxNestingDepth.toString),
+      input,
+      cause)
+  }
+
+  def isJsonNumberLengthLimitError(
+      input: UTF8String, maxNumberLength: Int, cause: Throwable): SparkRuntimeException = {
+    isJsonInputLimitExceededError(
+      "IS_JSON_INPUT_LIMIT_EXCEEDED.NUMBER_LENGTH",
+      java.util.Map.of("maxNumberLength", maxNumberLength.toString),
+      input,
+      cause)
+  }
+
+  def isJsonStringLengthLimitError(
+      input: UTF8String, maxStringLength: Int, cause: Throwable): SparkRuntimeException = {
+    isJsonInputLimitExceededError(
+      "IS_JSON_INPUT_LIMIT_EXCEEDED.STRING_LENGTH",
+      java.util.Map.of("maxStringLength", maxStringLength.toString),
+      input,
+      cause)
+  }
+
+  def isJsonNameLengthLimitError(
+      input: UTF8String, maxNameLength: Int, cause: Throwable): SparkRuntimeException = {
+    isJsonInputLimitExceededError(
+      "IS_JSON_INPUT_LIMIT_EXCEEDED.NAME_LENGTH",
+      java.util.Map.of("maxNameLength", maxNameLength.toString),
+      input,
+      cause)
+  }
+
+  def isJsonUnknownLimitError(
+      input: UTF8String,
+      maxNestingDepth: Int,
+      maxNumberLength: Int,
+      maxStringLength: Int,
+      maxNameLength: Int,
+      cause: Throwable): SparkRuntimeException = {
+    isJsonInputLimitExceededError(
+      "IS_JSON_INPUT_LIMIT_EXCEEDED.UNKNOWN",
+      java.util.Map.of(
+        "maxNestingDepth", maxNestingDepth.toString,
+        "maxNumberLength", maxNumberLength.toString,
+        "maxStringLength", maxStringLength.toString,
+        "maxNameLength", maxNameLength.toString),
+      input,
+      cause)
   }
 
   def jsonExistsOnError(functionName: String, path: String): Throwable = {

@@ -27,6 +27,7 @@ import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.fasterxml.jackson.core.exc.StreamConstraintsException;
 
+import org.apache.spark.SparkRuntimeException;
 import org.apache.spark.sql.catalyst.json.CreateJacksonParser;
 import org.apache.spark.sql.catalyst.util.GenericArrayData;
 import org.apache.spark.sql.errors.QueryExecutionErrors;
@@ -141,10 +142,13 @@ public class JsonExpressionUtils {
    * read exactly once here, so a non-deterministic input is evaluated a single time (unlike a
    * plan that references the child in more than one place). NULL handling (NULL input yields a
    * NULL result) is left to the calling expression; this method is only invoked for non-null
-   * input. Malformed input yields false, but input that exceeds one of Jackson's default
+   * input. Malformed input yields false. Input that exceeds one of Jackson's default
    * {@code StreamReadConstraints} (nesting depth, number length, string length, or field name
-   * length) cannot be classified and raises IS_JSON_INPUT_LIMIT_EXCEEDED, at the same limits
-   * where {@code parse_json} fails.
+   * length) cannot be classified and raises an IS_JSON_INPUT_LIMIT_EXCEEDED condition, at the
+   * same limits where {@code parse_json} fails -- but only if checking the input actually
+   * requires going past a limit: a shape mismatch decided by the first token (including an
+   * over-long root number under OBJECT or ARRAY, which cannot be an object or an array)
+   * returns false, like any other mismatch.
    */
   public static boolean isJson(UTF8String json, int shape) {
     // The parser decodes the bytes through a UTF-8 reader that silently replaces malformed
@@ -155,7 +159,20 @@ public class JsonExpressionUtils {
     }
     try (JsonParser jsonParser =
         CreateJacksonParser.utf8String(STRICT_JSON_FACTORY, json)) {
-      JsonToken token = jsonParser.nextToken();
+      JsonToken token;
+      try {
+        token = jsonParser.nextToken();
+      } catch (StreamConstraintsException e) {
+        // Jackson validates a number's length while producing its token, and no other limit can
+        // be reached while producing the first token (nesting needs a second token, and strings
+        // and field names are not decoded until getText), so the first value is an over-long
+        // number. It can never be an object or an array, so the shape is decided without
+        // classifying the number; the other shapes accept a number and still need it classified.
+        if (shape == SHAPE_OBJECT || shape == SHAPE_ARRAY) {
+          return false;
+        }
+        throw limitError(e, json);
+      }
       if (token == null) {
         // Empty input is not a JSON value.
         return false;
@@ -201,36 +218,34 @@ public class JsonExpressionUtils {
       // well-formed JSON value is accepted.
       return jsonParser.nextToken() == null;
     } catch (StreamConstraintsException e) {
-      throw QueryExecutionErrors.isJsonInputLimitExceededError(describeLimit(e), json, e);
+      throw limitError(e, json);
     } catch (IOException e) {
       return false;
     }
   }
 
-  // Describes the parser limit that `e` reports, for IS_JSON_INPUT_LIMIT_EXCEEDED. Jackson does
-  // not expose which limit was exceeded, so this matches the message prefixes used by
-  // StreamReadConstraints, and lists every limit if the message is not recognized.
-  private static String describeLimit(StreamConstraintsException e) {
+  // Builds the IS_JSON_INPUT_LIMIT_EXCEEDED condition for the parser limit that `e` reports.
+  // Jackson does not expose which limit was exceeded, so this matches the message prefixes used
+  // by StreamReadConstraints, and falls back to the condition listing every limit for a message
+  // it does not recognize.
+  private static SparkRuntimeException limitError(StreamConstraintsException e, UTF8String json) {
     StreamReadConstraints limits = STRICT_JSON_FACTORY.streamReadConstraints();
     String message = String.valueOf(e.getMessage());
     if (message.startsWith("Document nesting depth")) {
-      return "the nesting depth of objects and arrays exceeds the maximum of " +
-          limits.getMaxNestingDepth();
+      return QueryExecutionErrors.isJsonNestingDepthLimitError(
+          json, limits.getMaxNestingDepth(), e);
     } else if (message.startsWith("Number value length")) {
-      return "a number is longer than the maximum of " + limits.getMaxNumberLength() +
-          " characters";
+      return QueryExecutionErrors.isJsonNumberLengthLimitError(
+          json, limits.getMaxNumberLength(), e);
     } else if (message.startsWith("String value length")) {
-      return "a string value is longer than the maximum of " + limits.getMaxStringLength() +
-          " characters";
+      return QueryExecutionErrors.isJsonStringLengthLimitError(
+          json, limits.getMaxStringLength(), e);
     } else if (message.startsWith("Name length")) {
-      return "a field name is longer than the maximum of " + limits.getMaxNameLength() +
-          " characters";
+      return QueryExecutionErrors.isJsonNameLengthLimitError(json, limits.getMaxNameLength(), e);
     } else {
-      return String.format(
-          "the limits are a nesting depth of %d and lengths of %d characters for numbers, " +
-              "%d for string values, and %d for field names",
-          limits.getMaxNestingDepth(), limits.getMaxNumberLength(), limits.getMaxStringLength(),
-          limits.getMaxNameLength());
+      return QueryExecutionErrors.isJsonUnknownLimitError(
+          json, limits.getMaxNestingDepth(), limits.getMaxNumberLength(),
+          limits.getMaxStringLength(), limits.getMaxNameLength(), e);
     }
   }
 

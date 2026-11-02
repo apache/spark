@@ -2617,13 +2617,37 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "IS_JSON_INPUT_LIMIT_EXCEEDED",
+  "errorClass" : "IS_JSON_INPUT_LIMIT_EXCEEDED.NESTING_DEPTH",
   "sqlState" : "54000",
   "messageParameters" : {
     "inputPrefix" : "'[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[...'",
-    "reason" : "the nesting depth of objects and arrays exceeds the maximum of 1000"
+    "maxNestingDepth" : "1000"
   }
 }
+
+
+-- !query
+select repeat('9', 1001) IS JSON OBJECT, repeat('9', 1001) IS JSON ARRAY
+-- !query schema
+struct<(repeat(9, 1001) IS JSON OBJECT):boolean,(repeat(9, 1001) IS JSON ARRAY):boolean>
+-- !query output
+false	false
+
+
+-- !query
+select '{' IS JSON, '[1,' IS JSON, '{"a"' IS JSON
+-- !query schema
+struct<({ IS JSON):boolean,([1, IS JSON):boolean,({"a" IS JSON):boolean>
+-- !query output
+false	false	false
+
+
+-- !query
+select '[1,]' IS JSON ARRAY, '{"a":1,}' IS JSON OBJECT, '[1,,2]' IS JSON ARRAY, '[1}' IS JSON ARRAY
+-- !query schema
+struct<([1,] IS JSON ARRAY):boolean,({"a":1,} IS JSON OBJECT):boolean,([1,,2] IS JSON ARRAY):boolean,([1} IS JSON ARRAY):boolean>
+-- !query output
+false	false	false	false
 
 
 -- !query
@@ -2699,11 +2723,68 @@ true	true
 
 
 -- !query
-select 'bad' COLLATE UNICODE IS JSON, cast('[1]' AS VARCHAR(10)) IS JSON ARRAY
+select 'bad' COLLATE UNICODE IS JSON
 -- !query schema
-struct<(collate(bad, UNICODE) IS JSON):boolean,(CAST([1] AS STRING) IS JSON ARRAY):boolean>
+struct<(collate(bad, UNICODE) IS JSON):boolean>
 -- !query output
-false	true
+false
+
+
+-- !query
+select cast('[1]' AS VARCHAR(10)) IS JSON ARRAY
+-- !query schema
+struct<(CAST([1] AS STRING) IS JSON ARRAY):boolean>
+-- !query output
+true
+
+
+-- !query
+SET spark.sql.preserveCharVarcharTypeInfo=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.preserveCharVarcharTypeInfo	true
+
+
+-- !query
+select cast('[1]' AS VARCHAR(10)) IS JSON ARRAY, cast('bad' AS VARCHAR(10)) IS JSON,
+       cast('{"a":1}' AS CHAR(10)) IS JSON OBJECT
+-- !query schema
+struct<(CAST([1] AS VARCHAR(10)) IS JSON ARRAY):boolean,(CAST(bad AS VARCHAR(10)) IS JSON):boolean,(CAST({"a":1} AS CHAR(10)) IS JSON OBJECT):boolean>
+-- !query output
+true	false	true
+
+
+-- !query
+SET spark.sql.preserveCharVarcharTypeInfo=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.preserveCharVarcharTypeInfo	false
+
+
+-- !query
+SET spark.sql.charVarchar.standardSemantics.enabled=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.charVarchar.standardSemantics.enabled	true
+
+
+-- !query
+select cast('[1]' AS VARCHAR(10)) IS JSON ARRAY, cast('bad' AS VARCHAR(10)) IS JSON
+-- !query schema
+struct<(CAST([1] AS VARCHAR(10)) IS JSON ARRAY):boolean,(CAST(bad AS VARCHAR(10)) IS JSON):boolean>
+-- !query output
+true	false
+
+
+-- !query
+SET spark.sql.charVarchar.standardSemantics.enabled=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.charVarchar.standardSemantics.enabled	false
 
 
 -- !query

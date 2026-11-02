@@ -28,6 +28,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
+import org.apache.spark.sql.catalyst.expressions.Not
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{PST, UTC, UTC_OPT}
@@ -1173,28 +1174,59 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(IsJson(Literal("""{"a":1,"a":2}"""), IsJsonShape.Object), true)
   }
 
+  test("SPARK-58793: IS JSON rejects structurally malformed containers") {
+    // Containers that only turn malformed after a valid first token: truncated input, trailing
+    // commas, missing values, a missing colon, and mismatched or unmatched closers. Pinning these
+    // guards against a strict factory accidentally built with JsonReadFeature.ALLOW_TRAILING_COMMA
+    // or ALLOW_MISSING_VALUES, or against a token walk that accepts a container ending early.
+    Seq("{", "[", "[1,", "{\"a\"", "{\"a\":", "[1,]", "{\"a\":1,}", "[1,,2]", "{\"a\"}", "[1}",
+      "{]", "}", "]").foreach { json =>
+      checkEvaluation(IsJson(Literal(json), IsJsonShape.Any), false)
+    }
+    // The matching shape qualifier must reject them too, not only bare IS JSON: the first token
+    // matches the shape, so only the malformed rest can reject the input.
+    checkEvaluation(IsJson(Literal("[1,]"), IsJsonShape.Array), false)
+    checkEvaluation(IsJson(Literal("{\"a\":1,}"), IsJsonShape.Object), false)
+    checkEvaluation(IsJson(Literal("[1,,2]"), IsJsonShape.Array), false)
+    checkEvaluation(IsJson(Literal("[1}"), IsJsonShape.Array), false)
+  }
+
   test("SPARK-58793: IS JSON fails on input beyond the parser limits, like parse_json") {
-    def checkLimit(json: String, shape: IsJsonShape, reason: String): Unit = {
+    def checkLimit(
+        json: String,
+        shape: IsJsonShape,
+        condition: String,
+        parameters: Map[String, String]): Unit = {
       // Only the first 128 characters of the input are echoed in the error.
       checkErrorInExpression[SparkRuntimeException](
         IsJson(Literal(json), shape),
         InternalRow.empty,
-        "IS_JSON_INPUT_LIMIT_EXCEEDED",
-        Map("reason" -> reason, "inputPrefix" -> s"'${json.take(128)}...'"))
+        condition,
+        parameters + ("inputPrefix" -> s"'${json.take(128)}...'"))
     }
     // Inputs at the limits are classified as usual.
     checkEvaluation(IsJson(Literal("[" * 1000 + "]" * 1000), IsJsonShape.Array), true)
     checkEvaluation(IsJson(Literal("1" * 1000), IsJsonShape.Scalar), true)
     // One past the nesting depth, number length, or field name length limit is an error rather
-    // than a false result, since the input may well be well-formed.
+    // than a false result, since the input may well be well-formed. The condition names the
+    // limit structurally, with its numeric maximum as a parameter.
     checkLimit("[" * 1001 + "]" * 1001, IsJsonShape.Any,
-      "the nesting depth of objects and arrays exceeds the maximum of 1000")
+      "IS_JSON_INPUT_LIMIT_EXCEEDED.NESTING_DEPTH",
+      Map("maxNestingDepth" -> "1000"))
     checkLimit("1" * 1001, IsJsonShape.Scalar,
-      "a number is longer than the maximum of 1000 characters")
+      "IS_JSON_INPUT_LIMIT_EXCEEDED.NUMBER_LENGTH",
+      Map("maxNumberLength" -> "1000"))
     checkLimit(s"""{"${"a" * 50001}":1}""", IsJsonShape.Object,
-      "a field name is longer than the maximum of 50000 characters")
-    // A shape mismatch is decided by the first token, before any limit is reached.
+      "IS_JSON_INPUT_LIMIT_EXCEEDED.NAME_LENGTH",
+      Map("maxNameLength" -> "50000"))
+    // A shape mismatch is decided by the first token, before any limit is reached: an over-deep
+    // array is not an object, and an over-long root number is neither an object nor an array
+    // even though Jackson reports the limit while producing the first token.
     checkEvaluation(IsJson(Literal("[" * 1001 + "]" * 1001), IsJsonShape.Object), false)
+    checkEvaluation(IsJson(Literal("1" * 1001), IsJsonShape.Object), false)
+    checkEvaluation(IsJson(Literal("1" * 1001), IsJsonShape.Array), false)
+    // The negated predicate over the same input returns true rather than raising.
+    checkEvaluation(Not(IsJson(Literal("1" * 1001), IsJsonShape.Object)), true)
   }
 
   test("SPARK-58793: IS JSON rejects malformed UTF-8 and unpaired surrogates") {
