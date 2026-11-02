@@ -142,6 +142,51 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     }
   }
 
+  private def checkSubqueryError(query: String, condition: String): Unit = {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(query)
+      },
+      condition = "SUBQUERY_IN_CHECK_CONSTRAINT",
+      sqlState = "42621",
+      parameters = Map("checkCondition" -> condition),
+      context = ExpectedContext(fragment = condition))
+  }
+
+  test("SPARK-60781: Subquery in check constraint -- alter table") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT) $defaultUsing")
+      // An unresolved subquery, one that needs no resolution, and one that fails in the child
+      // `Filter` of the command.
+      Seq("id > (SELECT 0)", "id > (SELECT 0 AS a)", "id > (SELECT 1 FROM missing)").foreach { c =>
+        checkSubqueryError(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK ($c)", c)
+      }
+      assert(loadTable(nonPartitionCatalog, "ns", "tbl").constraints.isEmpty)
+      // A missing table is reported first.
+      val missing = s"$nonPartitionCatalog.ns.missing"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $missing ADD CONSTRAINT c1 CHECK (id > (SELECT 0))")
+        },
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relationName" -> s"`$nonPartitionCatalog`.`ns`.`missing`"),
+        context = ExpectedContext(fragment = missing))
+    }
+  }
+
+  test("SPARK-60781: Subquery in check constraint -- create and replace table") {
+    // An unresolved subquery and one that needs no resolution.
+    Seq("id > (SELECT 0)", "id > (SELECT 0 AS a)").foreach { c =>
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        val schema = s"(id INT, CONSTRAINT c1 CHECK ($c)) $defaultUsing"
+        checkSubqueryError(s"CREATE TABLE $t $schema", c)
+        sql(s"CREATE TABLE $t (id INT) $defaultUsing")
+        checkSubqueryError(s"REPLACE TABLE $t $schema", c)
+        assert(loadTable(nonPartitionCatalog, "ns", "tbl").constraints.isEmpty)
+      }
+    }
+  }
+
   private def getCheckConstraint(table: Table): Check = {
     assert(table.constraints.length == 1)
     assert(table.constraints.head.isInstanceOf[Check])
