@@ -103,14 +103,9 @@ private[pipelines] object Scd1VersionMap {
       upsertSequence: Column,
       sequencingType: DataType,
       resolver: Resolver): Column = {
-    val ignoreNullSchema = ColumnSelection.applyToSchema(
-      schemaName = "ignoreNullSelection",
-      schema = schema,
-      columnSelection = Some(ignoreNullSelection),
-      resolver = resolver
-    )
-    val ignoreNullLeafPaths =
-      AutoCdcSchemaUtils.flattenStructFieldPaths(ignoreNullSchema).toSet
+    val ignoreNullLeafPaths = AutoCdcSchemaUtils
+      .resolveIgnoreNullLeafPaths(schema, ignoreNullSelection, resolver)
+      .toSet
 
     val entries = AutoCdcSchemaUtils.flattenStructFieldPaths(schema).map { path =>
       val leafSequence =
