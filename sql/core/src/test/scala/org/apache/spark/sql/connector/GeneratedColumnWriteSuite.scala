@@ -322,6 +322,21 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
+  test("SPARK-60803: INSERT by name computes generated column from the stored (post-cast) " +
+    "struct field") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  s STRUCT<f: INT>,
+             |  g INT GENERATED ALWAYS AS (s.f * 10)
+             |) USING foo""".stripMargin)
+      // 5.7 is cast to INT (= 5) when stored in `s.f`. The generated column must be computed from
+      // the stored value (5 * 10 = 50), not from the pre-cast value (5.7 * 10 = 57).
+      sql(s"INSERT INTO testcat.$tblName(s) SELECT named_struct('f', 5.7D)")
+      checkAnswer(spark.table(s"testcat.$tblName"), Row(Row(5), 50))
+    }
+  }
+
   test("INSERT by position validates generated column against the stored (post-cast) value") {
     val tblName = "my_tab"
     withTable(s"testcat.$tblName") {

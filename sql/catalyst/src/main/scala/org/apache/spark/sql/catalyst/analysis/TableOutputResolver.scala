@@ -832,9 +832,12 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       matched: Seq[NamedExpression],
       conf: SQLConf): Expression = {
     genExpr.transform {
-      case u: UnresolvedAttribute if u.nameParts.size == 1 =>
+      case u @ UnresolvedAttribute(name +: nestedFields) =>
         matched.collectFirst {
-          case alias: Alias if conf.resolver(alias.name, u.nameParts.head) => alias.child
+          case alias: Alias if conf.resolver(alias.name, name) =>
+            nestedFields.foldLeft(alias.child) { (child, field) =>
+              UnresolvedExtractValue(child, Literal(field))
+            }
         }.getOrElse(u)
     }
   }
