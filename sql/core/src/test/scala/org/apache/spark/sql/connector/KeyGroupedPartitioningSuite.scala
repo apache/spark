@@ -1152,147 +1152,10 @@ class KeyGroupedPartitioningSuite
     testWithCustomersAndOrders(customers_partitions, orders_partitions, 2, 0)
   }
 
-  test("SPARK-60618: scan rebuilt with different partition keys after alignment") {
-    val cols = Array(Column.create("id", IntegerType))
-    createTable("rebuild_left", cols, Array(identity("id")))
-    createTable("rebuild_right", cols, Array(identity("id")))
-    sql("INSERT INTO testcat.ns.rebuild_left VALUES (1), (2)")
-    sql("INSERT INTO testcat.ns.rebuild_right VALUES (1), (2), (3)")
-
-    withSQLConf(
-        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
-        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
-        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
-        SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "true") {
-      // The original left layout [1, 2] is already the inner join's intersection. The right
-      // grouping prunes key 3, so it keeps the original [1, 2] pairing after the left scan rebuild.
-      def plannedJoin(): SortMergeJoinExec = {
-        val df = sql("SELECT /*+ MERGE(l, r) */ l.id, r.id " +
-          "FROM testcat.ns.rebuild_left l JOIN testcat.ns.rebuild_right r ON l.id = r.id")
-        val joins = collect(df.queryExecution.executedPlan) { case j: SortMergeJoinExec => j }
-        assert(joins.size == 1)
-        val join = joins.head
-        assert(collectAllShuffles(join).isEmpty)
-        assert(collectAllGroupPartitions(join.left).size == 1)
-        assert(collectAllGroupPartitions(join.right).size == 1)
-        join
-      }
-
-      def run(
-          replacementKeys: Seq[Int],
-          keepIdentity: Boolean): Seq[Row] = {
-        val join = plannedJoin()
-        val leftScan = collect(join.left) { case s: BatchScanExec => s }.head
-        val inMemoryScan = leftScan.scan.asInstanceOf[InMemoryBaseTable#BatchScanBaseClass]
-        val oldData = inMemoryScan.data
-        val oldRows = oldData.map(_.asInstanceOf[BufferedRows])
-        val expected = collectAllGroupPartitions(join.left).head
-        assert(expected.grouping.isIdentity)
-        assert(expected.outputPartitioning == expected.child.outputPartitioning)
-        val newData = replacementKeys.map { key =>
-          oldRows.find(_.key == Seq(key)).getOrElse {
-            new BufferedRows(Seq(key), oldRows.head.schema).withRow(InternalRow(key))
-          }
-        }
-        try {
-          // A rewritten runtime filter makes the scan copy distinct for tree replacement, while
-          // the true literal leaves the connector's replacement partitions unchanged.
-          inMemoryScan.data = newData
-          val rebuilt = leftScan.copy(runtimeFilters = Seq(Literal.TrueLiteral))
-          assert(rebuilt.outputPartitioning.numPartitions == replacementKeys.size)
-          assert(rebuilt.outputPartitioning != leftScan.outputPartitioning ||
-            replacementKeys == Seq(1, 2))
-          val replaced = join.transformUp {
-            case scan: BatchScanExec if scan eq leftScan => rebuilt
-            case g: GroupPartitionsExec if !keepIdentity && g.child.exists(_ eq rebuilt) => g.child
-          }
-          val rebuiltScans = collect(replaced) {
-            case scan: BatchScanExec if scan eq rebuilt => scan
-          }
-          assert(rebuiltScans.size == 1)
-          assert(ValidateRequirements.validate(replaced) == (replacementKeys == Seq(1, 2)))
-          replaced.executeCollect().map(row => Row(row.getInt(0), row.getInt(1))).toSeq
-        } finally {
-          inMemoryScan.data = oldData
-        }
-      }
-
-      // The replacement scan is a controlled post-planning rewrite; it deliberately changes the
-      // connector's split set without re-running EnsureRequirements.
-      assert(run(Seq(1, 2), keepIdentity = false).toSet == Set(Row(1, 1), Row(2, 2)))
-      assert(run(Seq(1, 2), keepIdentity = true).toSet == Set(Row(1, 1), Row(2, 2)))
-      // Without the guard, key 2 is silently paired with key 3 instead of its match.
-      assert(run(Seq(2, 3), keepIdentity = false).isEmpty)
-      val error = intercept[SparkException] {
-        run(Seq(2, 3), keepIdentity = true)
-      }
-      assert(error.getMessage.contains("no longer reports the partitioning it was planned over"))
-      val countError = intercept[Exception] {
-        run(Seq(1, 2, 3), keepIdentity = false)
-      }
-      assert(countError.getMessage.contains("Can't zip RDDs with unequal numbers of partitions"))
-    }
-  }
-
   test("partitioned join: only one side reports partitioning") {
     val customers_partitions = Array(bucket(4, "customer_id"))
 
     testWithCustomersAndOrders(customers_partitions, Array.empty, 2, 0)
-  }
-
-  test("SPARK-60618: Skip the pass-through GroupPartitionsExec in a storage-partitioned " +
-    "join's alignment") {
-    // `items` reports more partition keys than the join uses, so the aligned layout has to be
-    // projected onto the join keys. The shuffled side is laid out on that same projection, so
-    // its `GroupPartitionsExec` would only re-state the keys its shuffle already has and must
-    // not be built.
-    withSQLConf(
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-        SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "100m",
-        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
-        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
-        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
-      withTable(s"testcat.ns.$items", s"testcat.ns.$purchases") {
-        createTable(items, itemsColumns, Array(identity("id"), identity("name")))
-        sql(s"INSERT INTO testcat.ns.$items VALUES " +
-            s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
-            s"(1, 'aa', 30.0, cast('2020-01-02' as timestamp)), " +
-            s"(3, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
-            s"(4, 'cc', 15.5, cast('2020-02-01' as timestamp))")
-        createTable(purchases, purchasesColumns, Array.empty)
-        sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
-            s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
-            s"(1, 89.0, cast('2020-01-03' as timestamp)), " +
-            s"(3, 19.5, cast('2020-02-01' as timestamp)), " +
-            s"(5, 26.0, cast('2023-01-01' as timestamp)), " +
-            s"(6, 50.0, cast('2023-02-01' as timestamp))")
-
-        val df = sql(s"SELECT i.id, i.name, i.price AS purchase_price, p.price AS sale_price " +
-            s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p ON i.id = p.item_id")
-        checkAnswer(df, Seq(
-          Row(1, "aa", 30.0, 42.0), Row(1, "aa", 30.0, 89.0),
-          Row(1, "aa", 40.0, 42.0), Row(1, "aa", 40.0, 89.0),
-          Row(3, "bb", 10.0, 19.5)))
-
-        val plan = df.queryExecution.executedPlan
-        // The one-side shuffle still happens; only the regrouping node over it goes away.
-        assert(collectAllShuffles(plan).size == 1, s"expected one shuffle:\n$plan")
-        assert(collect(plan) {
-          case g: GroupPartitionsExec
-              if g.child.isInstanceOf[ShuffleQueryStageExec] ||
-                g.child.isInstanceOf[AQEShuffleReadExec] => g
-        }.isEmpty, s"no GroupPartitionsExec should sit over a shuffle stage:\n$plan")
-        // Without the node over the stage the join converts to a shuffled hash join.
-        val shj = collect(plan) { case j: ShuffledHashJoinExec => j }
-        assert(shj.size == 1 && collect(plan) { case j: SortMergeJoinExec => j }.isEmpty,
-          s"the join should convert to a shuffled hash join:\n$plan")
-        // The source side keeps its node: `items` holds two splits for key (1, 'aa'), and merging
-        // them is work the join needs.
-        assert(collect(shj.head.left) { case _: GroupPartitionsExec => true }.nonEmpty,
-          s"the source side should keep its grouping node:\n$plan")
-      }
-    }
   }
 
   private val details: String = "details"
@@ -2228,6 +2091,88 @@ class KeyGroupedPartitioningSuite
     }
   }
 
+  test("SPARK-60618: scan rebuilt with different partition keys after alignment") {
+    val cols = Array(Column.create("id", IntegerType))
+    createTable("rebuild_left", cols, Array(identity("id")))
+    createTable("rebuild_right", cols, Array(identity("id")))
+    sql("INSERT INTO testcat.ns.rebuild_left VALUES (1), (2)")
+    sql("INSERT INTO testcat.ns.rebuild_right VALUES (1), (2), (3)")
+
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "true") {
+      // The original left layout [1, 2] is already the inner join's intersection. The right
+      // grouping prunes key 3, so it keeps the original [1, 2] pairing after the left scan rebuild.
+      def plannedJoin(): SortMergeJoinExec = {
+        val df = sql("SELECT /*+ MERGE(l, r) */ l.id, r.id " +
+          "FROM testcat.ns.rebuild_left l JOIN testcat.ns.rebuild_right r ON l.id = r.id")
+        val joins = collect(df.queryExecution.executedPlan) { case j: SortMergeJoinExec => j }
+        assert(joins.size == 1)
+        val join = joins.head
+        assert(collectAllShuffles(join).isEmpty)
+        assert(collectAllGroupPartitions(join.left).size == 1)
+        assert(collectAllGroupPartitions(join.right).size == 1)
+        join
+      }
+
+      def run(
+          replacementKeys: Seq[Int],
+          keepIdentity: Boolean): Seq[Row] = {
+        val join = plannedJoin()
+        val leftScan = collect(join.left) { case s: BatchScanExec => s }.head
+        val inMemoryScan = leftScan.scan.asInstanceOf[InMemoryBaseTable#BatchScanBaseClass]
+        val oldData = inMemoryScan.data
+        val oldRows = oldData.map(_.asInstanceOf[BufferedRows])
+        val expected = collectAllGroupPartitions(join.left).head
+        assert(expected.grouping.isIdentity)
+        assert(expected.outputPartitioning == expected.child.outputPartitioning)
+        val newData = replacementKeys.map { key =>
+          oldRows.find(_.key == Seq(key)).getOrElse {
+            new BufferedRows(Seq(key), oldRows.head.schema).withRow(InternalRow(key))
+          }
+        }
+        try {
+          // A rewritten runtime filter makes the scan copy distinct for tree replacement, while
+          // the true literal leaves the connector's replacement partitions unchanged.
+          inMemoryScan.data = newData
+          val rebuilt = leftScan.copy(runtimeFilters = Seq(Literal.TrueLiteral))
+          assert(rebuilt.outputPartitioning.numPartitions == replacementKeys.size)
+          assert(rebuilt.outputPartitioning != leftScan.outputPartitioning ||
+            replacementKeys == Seq(1, 2))
+          val replaced = join.transformUp {
+            case scan: BatchScanExec if scan eq leftScan => rebuilt
+            case g: GroupPartitionsExec if !keepIdentity && g.child.exists(_ eq rebuilt) => g.child
+          }
+          val rebuiltScans = collect(replaced) {
+            case scan: BatchScanExec if scan eq rebuilt => scan
+          }
+          assert(rebuiltScans.size == 1)
+          assert(ValidateRequirements.validate(replaced) == (replacementKeys == Seq(1, 2)))
+          replaced.executeCollect().map(row => Row(row.getInt(0), row.getInt(1))).toSeq
+        } finally {
+          inMemoryScan.data = oldData
+        }
+      }
+
+      // The replacement scan is a controlled post-planning rewrite; it deliberately changes the
+      // connector's split set without re-running EnsureRequirements.
+      assert(run(Seq(1, 2), keepIdentity = false).toSet == Set(Row(1, 1), Row(2, 2)))
+      assert(run(Seq(1, 2), keepIdentity = true).toSet == Set(Row(1, 1), Row(2, 2)))
+      // Without the guard, key 2 is silently paired with key 3 instead of its match.
+      assert(run(Seq(2, 3), keepIdentity = false).isEmpty)
+      val error = intercept[SparkException] {
+        run(Seq(2, 3), keepIdentity = true)
+      }
+      assert(error.getMessage.contains("no longer reports the partitioning it was planned over"))
+      val countError = intercept[Exception] {
+        run(Seq(1, 2, 3), keepIdentity = false)
+      }
+      assert(countError.getMessage.contains("Can't zip RDDs with unequal numbers of partitions"))
+    }
+  }
+
   test("SPARK-59252: a planned scan keeps the partitioning it was planned with") {
     createBucketedIdTable("l4", 4)
     createBucketedIdTable("r4", 4)
@@ -3081,6 +3026,61 @@ class KeyGroupedPartitioningSuite
         val allGroupPartitions = collectAllGroupPartitions(df.queryExecution.executedPlan)
         assert(allGroupPartitions.size === 1,
           "expected 1 GroupPartitionsExec above the checkpointed join for dedup")
+      }
+    }
+  }
+
+  test("SPARK-60618: Skip the pass-through GroupPartitionsExec in a storage-partitioned " +
+    "join's alignment") {
+    // `items` reports more partition keys than the join uses, so the aligned layout has to be
+    // projected onto the join keys. The shuffled side is laid out on that same projection, so
+    // its `GroupPartitionsExec` would only re-state the keys its shuffle already has and must
+    // not be built.
+    withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "100m",
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      withTable(s"testcat.ns.$items", s"testcat.ns.$purchases") {
+        createTable(items, itemsColumns, Array(identity("id"), identity("name")))
+        sql(s"INSERT INTO testcat.ns.$items VALUES " +
+            s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+            s"(1, 'aa', 30.0, cast('2020-01-02' as timestamp)), " +
+            s"(3, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+            s"(4, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+        createTable(purchases, purchasesColumns, Array.empty)
+        sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+            s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+            s"(1, 89.0, cast('2020-01-03' as timestamp)), " +
+            s"(3, 19.5, cast('2020-02-01' as timestamp)), " +
+            s"(5, 26.0, cast('2023-01-01' as timestamp)), " +
+            s"(6, 50.0, cast('2023-02-01' as timestamp))")
+
+        val df = sql(s"SELECT i.id, i.name, i.price AS purchase_price, p.price AS sale_price " +
+            s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p ON i.id = p.item_id")
+        checkAnswer(df, Seq(
+          Row(1, "aa", 30.0, 42.0), Row(1, "aa", 30.0, 89.0),
+          Row(1, "aa", 40.0, 42.0), Row(1, "aa", 40.0, 89.0),
+          Row(3, "bb", 10.0, 19.5)))
+
+        val plan = df.queryExecution.executedPlan
+        // The one-side shuffle still happens; only the regrouping node over it goes away.
+        assert(collectAllShuffles(plan).size == 1, s"expected one shuffle:\n$plan")
+        assert(collect(plan) {
+          case g: GroupPartitionsExec
+              if g.child.isInstanceOf[ShuffleQueryStageExec] ||
+                g.child.isInstanceOf[AQEShuffleReadExec] => g
+        }.isEmpty, s"no GroupPartitionsExec should sit over a shuffle stage:\n$plan")
+        // Without the node over the stage the join converts to a shuffled hash join.
+        val shj = collect(plan) { case j: ShuffledHashJoinExec => j }
+        assert(shj.size == 1 && collect(plan) { case j: SortMergeJoinExec => j }.isEmpty,
+          s"the join should convert to a shuffled hash join:\n$plan")
+        // The source side keeps its node: `items` holds two splits for key (1, 'aa'), and merging
+        // them is work the join needs.
+        assert(collect(shj.head.left) { case _: GroupPartitionsExec => true }.nonEmpty,
+          s"the source side should keep its grouping node:\n$plan")
       }
     }
   }
@@ -5558,10 +5558,9 @@ class KeyGroupedPartitioningSuite
     // The smaller side by statistics is replicated: `pc_small` holds five splits in 200 bytes,
     // `pc_large` three splits in 216. Both are bucketed, whose transform derives no ordering, so
     // the join's sort has to be added. The larger side ends up with one split per bucket, so the
-    // alignment on it is the identity and the pass-through node has to stay: a re-run peels a
-    // local sort only through a `GroupPartitionsExec`, and reading the statistics from the scans
-    // again is what keeps the choice. Without the node the counts (five against three) pick the
-    // other side.
+    // alignment on it is the identity. Its leaf is a scan, so the node stays, and a re-run peels
+    // the local sort through it and reads the statistics from the scans again. Without the node
+    // the counts (five against three) would pick the other side.
     val smallColumns = Array(Column.create("id", LongType), Column.create("data", StringType))
     createTable("pc_small", smallColumns, Array(bucket(4, "id")))
     // 1, 5 and 9 share bucket 1; 2 and 3 have buckets of their own.

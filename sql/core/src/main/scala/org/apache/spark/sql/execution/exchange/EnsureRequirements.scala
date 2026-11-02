@@ -932,7 +932,9 @@ case class EnsureRequirements(
       def canSkipIdentityGroup(gpe: GroupPartitionsExec): Boolean = {
         val child = gpe.child
         // Keep both nodes when a replicate side is chosen, including when the join type declines
-        // it, so a re-run can peel the local sorts and reproduce the choice.
+        // it, so a re-run can peel the local sorts and reproduce the choice. This also guards a
+        // plan with existing keyed shuffle stages: the planner does not create keyed shuffles when
+        // partially clustered distribution is enabled.
         // Shuffle stages report their exchanges' fixed partitioning. Keep the node when any leaf
         // is not a stage: if a scan is rebuilt with different partitioning after alignment, the
         // node checks its child against the planned partitioning and fails instead of letting the
