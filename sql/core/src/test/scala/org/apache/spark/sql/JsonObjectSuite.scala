@@ -1363,6 +1363,9 @@ world'))"""))
           sql(s"CREATE OR REPLACE FUNCTION perm_json_fn() RETURNS STRING RETURN $body")
           checkAnswer(sql("SELECT spark_catalog.default.perm_json_fn()"), Row(expected))
         }
+        // Qualifying every level selects the built-in.
+        checkAnswer(sql("SELECT builtin.json_object('a', builtin.json_object('b', 1))"),
+          Row("""{"a":{"b":1}}"""))
       } finally {
         sql("SET PATH = DEFAULT_PATH")
         sql("DROP FUNCTION IF EXISTS perm_json_fn")

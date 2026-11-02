@@ -32,6 +32,14 @@ Null-field handling inside a struct argument therefore follows
 `spark.sql.jsonGenerator.ignoreNullFields`, exactly as `to_json` does; the `ON NULL` clause below
 controls only the top-level array elements.
 
+A call without any clause or `FORMAT JSON`, nested or not, resolves like an ordinary function call,
+so a same-named function placed before `system.builtin` in the SQL `PATH`, or a replacement
+injected by a session extension, can own it. A constructor written directly as another
+constructor's value always means the built-in. Qualifying every level
+(e.g. `builtin.json_array(builtin.json_array(1))`) selects the built-in over a function in the
+`PATH`; adding a clause (e.g. `json_array(json_array(1) NULL ON NULL)`) always selects it, even
+over an extension's replacement.
+
 ### Syntax
 
 ```sql
