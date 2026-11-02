@@ -40,7 +40,8 @@ struct<>
 
 
 -- !query
-CREATE TABLE streaming_sql_golden_union_error_left (value INT) USING parquet
+CREATE TABLE streaming_sql_golden_union_error_left (
+  value INT, event_time TIMESTAMP) USING parquet
 -- !query schema
 struct<>
 -- !query output
@@ -48,7 +49,9 @@ struct<>
 
 
 -- !query
-INSERT INTO streaming_sql_golden_union_error_left VALUES (1), (2)
+INSERT INTO streaming_sql_golden_union_error_left VALUES
+  (1, TIMESTAMP '2024-01-01 00:00:01'),
+  (2, TIMESTAMP '2024-01-01 00:00:02')
 -- !query schema
 struct<>
 -- !query output
@@ -56,7 +59,8 @@ struct<>
 
 
 -- !query
-CREATE TABLE streaming_sql_golden_union_error_right (value INT) USING parquet
+CREATE TABLE streaming_sql_golden_union_error_right (
+  value INT, event_time TIMESTAMP) USING parquet
 -- !query schema
 struct<>
 -- !query output
@@ -64,7 +68,9 @@ struct<>
 
 
 -- !query
-INSERT INTO streaming_sql_golden_union_error_right VALUES (2), (3)
+INSERT INTO streaming_sql_golden_union_error_right VALUES
+  (2, TIMESTAMP '2024-01-01 00:00:02'),
+  (3, TIMESTAMP '2024-01-01 00:00:03')
 -- !query schema
 struct<>
 -- !query output
@@ -83,8 +89,10 @@ struct<>
 CREATE FLOW streaming_sql_golden_union_error_flow AS
 INSERT INTO streaming_sql_golden_union_error_sink BY NAME
 SELECT value FROM STREAM(streaming_sql_golden_union_error_left)
+  WATERMARK event_time DELAY OF INTERVAL 1 SECOND
 UNION
 SELECT value FROM STREAM(streaming_sql_golden_union_error_right)
+  WATERMARK event_time DELAY OF INTERVAL 1 SECOND
 -- !query schema
 struct<>
 -- !query output
@@ -108,7 +116,8 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-CREATE TABLE streaming_sql_golden_distinct_error_source (value INT) USING parquet
+CREATE TABLE streaming_sql_golden_distinct_error_source (
+  value INT, event_time TIMESTAMP) USING parquet
 -- !query schema
 struct<>
 -- !query output
@@ -116,7 +125,10 @@ struct<>
 
 
 -- !query
-INSERT INTO streaming_sql_golden_distinct_error_source VALUES (1), (1), (2)
+INSERT INTO streaming_sql_golden_distinct_error_source VALUES
+  (1, TIMESTAMP '2024-01-01 00:00:01'),
+  (1, TIMESTAMP '2024-01-01 00:00:02'),
+  (2, TIMESTAMP '2024-01-01 00:00:03')
 -- !query schema
 struct<>
 -- !query output
@@ -134,7 +146,9 @@ struct<>
 -- !query
 CREATE FLOW streaming_sql_golden_distinct_error_flow AS
 INSERT INTO streaming_sql_golden_distinct_error_sink BY NAME
-SELECT DISTINCT value FROM STREAM(streaming_sql_golden_distinct_error_source)
+SELECT DISTINCT value
+FROM STREAM(streaming_sql_golden_distinct_error_source)
+  WATERMARK event_time DELAY OF INTERVAL 1 SECOND
 -- !query schema
 struct<>
 -- !query output

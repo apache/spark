@@ -23,7 +23,8 @@ CREATE FLOW streaming_sql_golden_asof_flow AS
 INSERT INTO streaming_sql_golden_asof_sink BY NAME
 SELECT b.id AS batch_id, s.id AS stream_id
 FROM streaming_sql_golden_asof_batch b
-INNER ASOF JOIN STREAM(streaming_sql_golden_asof_stream) s
+INNER ASOF JOIN STREAM(streaming_sql_golden_asof_stream)
+  WATERMARK event_time DELAY OF INTERVAL 1 SECOND s
   MATCH_CONDITION (b.event_time >= s.event_time)
   ON b.id = s.id;
 

@@ -12,7 +12,8 @@ CREATE TABLE streaming_sql_golden_window_sink (id INT, row_num INT) USING parque
 CREATE FLOW streaming_sql_golden_window_flow AS
 INSERT INTO streaming_sql_golden_window_sink BY NAME
 SELECT id, ROW_NUMBER() OVER (ORDER BY event_time) AS row_num
-FROM STREAM(streaming_sql_golden_window_source);
+FROM STREAM(streaming_sql_golden_window_source)
+  WATERMARK event_time DELAY OF INTERVAL 1 SECOND;
 
 REFRESH FLOW streaming_sql_golden_window_flow;
 

@@ -21,17 +21,20 @@ DropTable true, false
 
 
 -- !query
-CREATE TABLE streaming_sql_golden_nearest_stream (id INT) USING parquet
+CREATE TABLE streaming_sql_golden_nearest_stream (
+  id INT, event_time TIMESTAMP) USING parquet
 -- !query analysis
 CreateDataSourceTableCommand `spark_catalog`.`default`.`streaming_sql_golden_nearest_stream`, false
 
 
 -- !query
-INSERT INTO streaming_sql_golden_nearest_stream VALUES (1), (2)
+INSERT INTO streaming_sql_golden_nearest_stream VALUES
+  (1, TIMESTAMP '2024-01-01 00:00:01'),
+  (2, TIMESTAMP '2024-01-01 00:00:02')
 -- !query analysis
-InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_nearest_stream, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_nearest_stream], Append, `spark_catalog`.`default`.`streaming_sql_golden_nearest_stream`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_nearest_stream), [id]
-+- Project [col1#x AS id#x]
-   +- LocalRelation [col1#x]
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_nearest_stream, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_nearest_stream], Append, `spark_catalog`.`default`.`streaming_sql_golden_nearest_stream`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_nearest_stream), [id, event_time]
++- Project [col1#x AS id#x, col2#x AS event_time#x]
+   +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -59,7 +62,8 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`streaming_sql_golden_nea
 CREATE FLOW streaming_sql_golden_nearest_flow AS
 INSERT INTO streaming_sql_golden_nearest_sink BY NAME
 SELECT s.id AS stream_id, b.id AS batch_id
-FROM STREAM(streaming_sql_golden_nearest_stream) s
+FROM STREAM(streaming_sql_golden_nearest_stream)
+  WATERMARK event_time DELAY OF INTERVAL 1 SECOND s
 JOIN streaming_sql_golden_nearest_batch b
   APPROX NEAREST 1 BY DISTANCE abs(s.id - b.id)
 -- !query analysis
@@ -70,8 +74,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 198,
-    "stopIndex" : 286,
+    "startIndex" : 248,
+    "stopIndex" : 336,
     "fragment" : "JOIN streaming_sql_golden_nearest_batch b\n  APPROX NEAREST 1 BY DISTANCE abs(s.id - b.id)"
   } ]
 }

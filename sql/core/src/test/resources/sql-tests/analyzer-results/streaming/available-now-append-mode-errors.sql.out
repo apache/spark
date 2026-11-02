@@ -35,31 +35,37 @@ DropTable true, false
 
 
 -- !query
-CREATE TABLE streaming_sql_golden_union_error_left (value INT) USING parquet
+CREATE TABLE streaming_sql_golden_union_error_left (
+  value INT, event_time TIMESTAMP) USING parquet
 -- !query analysis
 CreateDataSourceTableCommand `spark_catalog`.`default`.`streaming_sql_golden_union_error_left`, false
 
 
 -- !query
-INSERT INTO streaming_sql_golden_union_error_left VALUES (1), (2)
+INSERT INTO streaming_sql_golden_union_error_left VALUES
+  (1, TIMESTAMP '2024-01-01 00:00:01'),
+  (2, TIMESTAMP '2024-01-01 00:00:02')
 -- !query analysis
-InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_union_error_left, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_union_error_left], Append, `spark_catalog`.`default`.`streaming_sql_golden_union_error_left`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_union_error_left), [value]
-+- Project [col1#x AS value#x]
-   +- LocalRelation [col1#x]
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_union_error_left, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_union_error_left], Append, `spark_catalog`.`default`.`streaming_sql_golden_union_error_left`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_union_error_left), [value, event_time]
++- Project [col1#x AS value#x, col2#x AS event_time#x]
+   +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
-CREATE TABLE streaming_sql_golden_union_error_right (value INT) USING parquet
+CREATE TABLE streaming_sql_golden_union_error_right (
+  value INT, event_time TIMESTAMP) USING parquet
 -- !query analysis
 CreateDataSourceTableCommand `spark_catalog`.`default`.`streaming_sql_golden_union_error_right`, false
 
 
 -- !query
-INSERT INTO streaming_sql_golden_union_error_right VALUES (2), (3)
+INSERT INTO streaming_sql_golden_union_error_right VALUES
+  (2, TIMESTAMP '2024-01-01 00:00:02'),
+  (3, TIMESTAMP '2024-01-01 00:00:03')
 -- !query analysis
-InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_union_error_right, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_union_error_right], Append, `spark_catalog`.`default`.`streaming_sql_golden_union_error_right`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_union_error_right), [value]
-+- Project [col1#x AS value#x]
-   +- LocalRelation [col1#x]
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_union_error_right, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_union_error_right], Append, `spark_catalog`.`default`.`streaming_sql_golden_union_error_right`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_union_error_right), [value, event_time]
++- Project [col1#x AS value#x, col2#x AS event_time#x]
+   +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -72,17 +78,21 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`streaming_sql_golden_uni
 CREATE FLOW streaming_sql_golden_union_error_flow AS
 INSERT INTO streaming_sql_golden_union_error_sink BY NAME
 SELECT value FROM STREAM(streaming_sql_golden_union_error_left)
+  WATERMARK event_time DELAY OF INTERVAL 1 SECOND
 UNION
 SELECT value FROM STREAM(streaming_sql_golden_union_error_right)
+  WATERMARK event_time DELAY OF INTERVAL 1 SECOND
 -- !query analysis
 ~Distinct
 +- ~Union false, false
    :- ~Project [value#x]
-   :  +- ~SubqueryAlias spark_catalog.default.streaming_sql_golden_union_error_left
-   :     +- StreamingRelation FileSource[file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_union_error_left], [value#x], name=<Unassigned>
+   :  +- ~EventTimeWatermark xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx, event_time#x: timestamp, 1 seconds
+   :     +- ~SubqueryAlias spark_catalog.default.streaming_sql_golden_union_error_left
+   :        +- StreamingRelation FileSource[file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_union_error_left], [value#x, event_time#x], name=<Unassigned>
    +- ~Project [value#x]
-      +- ~SubqueryAlias spark_catalog.default.streaming_sql_golden_union_error_right
-         +- StreamingRelation FileSource[file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_union_error_right], [value#x], name=<Unassigned>
+      +- ~EventTimeWatermark xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx, event_time#x: timestamp, 1 seconds
+         +- ~SubqueryAlias spark_catalog.default.streaming_sql_golden_union_error_right
+            +- StreamingRelation FileSource[file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_union_error_right], [value#x, event_time#x], name=<Unassigned>
 
 
 -- !query
@@ -92,17 +102,21 @@ REFRESH FLOW streaming_sql_golden_union_error_flow
 
 
 -- !query
-CREATE TABLE streaming_sql_golden_distinct_error_source (value INT) USING parquet
+CREATE TABLE streaming_sql_golden_distinct_error_source (
+  value INT, event_time TIMESTAMP) USING parquet
 -- !query analysis
 CreateDataSourceTableCommand `spark_catalog`.`default`.`streaming_sql_golden_distinct_error_source`, false
 
 
 -- !query
-INSERT INTO streaming_sql_golden_distinct_error_source VALUES (1), (1), (2)
+INSERT INTO streaming_sql_golden_distinct_error_source VALUES
+  (1, TIMESTAMP '2024-01-01 00:00:01'),
+  (1, TIMESTAMP '2024-01-01 00:00:02'),
+  (2, TIMESTAMP '2024-01-01 00:00:03')
 -- !query analysis
-InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_distinct_error_source, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_distinct_error_source], Append, `spark_catalog`.`default`.`streaming_sql_golden_distinct_error_source`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_distinct_error_source), [value]
-+- Project [col1#x AS value#x]
-   +- LocalRelation [col1#x]
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_distinct_error_source, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_distinct_error_source], Append, `spark_catalog`.`default`.`streaming_sql_golden_distinct_error_source`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_distinct_error_source), [value, event_time]
++- Project [col1#x AS value#x, col2#x AS event_time#x]
+   +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -114,12 +128,15 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`streaming_sql_golden_dis
 -- !query
 CREATE FLOW streaming_sql_golden_distinct_error_flow AS
 INSERT INTO streaming_sql_golden_distinct_error_sink BY NAME
-SELECT DISTINCT value FROM STREAM(streaming_sql_golden_distinct_error_source)
+SELECT DISTINCT value
+FROM STREAM(streaming_sql_golden_distinct_error_source)
+  WATERMARK event_time DELAY OF INTERVAL 1 SECOND
 -- !query analysis
 ~Distinct
 +- ~Project [value#x]
-   +- ~SubqueryAlias spark_catalog.default.streaming_sql_golden_distinct_error_source
-      +- StreamingRelation FileSource[file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_distinct_error_source], [value#x], name=<Unassigned>
+   +- ~EventTimeWatermark xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx, event_time#x: timestamp, 1 seconds
+      +- ~SubqueryAlias spark_catalog.default.streaming_sql_golden_distinct_error_source
+         +- StreamingRelation FileSource[file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_distinct_error_source], [value#x, event_time#x], name=<Unassigned>
 
 
 -- !query

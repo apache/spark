@@ -21,17 +21,20 @@ DropTable true, false
 
 
 -- !query
-CREATE TABLE streaming_sql_golden_subquery_stream (id INT) USING parquet
+CREATE TABLE streaming_sql_golden_subquery_stream (
+  id INT, event_time TIMESTAMP) USING parquet
 -- !query analysis
 CreateDataSourceTableCommand `spark_catalog`.`default`.`streaming_sql_golden_subquery_stream`, false
 
 
 -- !query
-INSERT INTO streaming_sql_golden_subquery_stream VALUES (1), (2)
+INSERT INTO streaming_sql_golden_subquery_stream VALUES
+  (1, TIMESTAMP '2024-01-01 00:00:01'),
+  (2, TIMESTAMP '2024-01-01 00:00:02')
 -- !query analysis
-InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_subquery_stream, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_subquery_stream], Append, `spark_catalog`.`default`.`streaming_sql_golden_subquery_stream`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_subquery_stream), [id]
-+- Project [col1#x AS id#x]
-   +- LocalRelation [col1#x]
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_subquery_stream, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_subquery_stream], Append, `spark_catalog`.`default`.`streaming_sql_golden_subquery_stream`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_subquery_stream), [id, event_time]
++- Project [col1#x AS id#x, col2#x AS event_time#x]
+   +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -61,7 +64,8 @@ SELECT b.id
 FROM streaming_sql_golden_subquery_batch b
 WHERE EXISTS (
   SELECT 1
-  FROM STREAM(streaming_sql_golden_subquery_stream) s
+  FROM STREAM(streaming_sql_golden_subquery_stream)
+    WATERMARK event_time DELAY OF INTERVAL 1 SECOND s
   WHERE s.id = b.id)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -72,8 +76,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 106,
-    "stopIndex" : 260,
-    "fragment" : "SELECT b.id\nFROM streaming_sql_golden_subquery_batch b\nWHERE EXISTS (\n  SELECT 1\n  FROM STREAM(streaming_sql_golden_subquery_stream) s\n  WHERE s.id = b.id)"
+    "stopIndex" : 312,
+    "fragment" : "SELECT b.id\nFROM streaming_sql_golden_subquery_batch b\nWHERE EXISTS (\n  SELECT 1\n  FROM STREAM(streaming_sql_golden_subquery_stream)\n    WATERMARK event_time DELAY OF INTERVAL 1 SECOND s\n  WHERE s.id = b.id)"
   } ]
 }
 
