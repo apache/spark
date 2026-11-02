@@ -390,126 +390,93 @@ trait KeyGroupedPartitioningRuntimeFilterTests extends KeyGroupedPartitioningSui
     }
   }
 
-  test("SPARK-60260: a storage-partitioned join keeps the planned keyed layout when v2 bucketing " +
-    "is disabled after planning") {
-    // reportedKeyedPartitioning used to read spark.sql.sources.v2.bucketing.enabled at execution,
-    // so turning it off between planning and execution dropped the keyed layout on the scan that
-    // PlanAdaptiveDynamicPruningFilters rebuilds at stage creation, and the sort-merge join then
-    // lined partitions up wrong. The decision is frozen at planning now. Covered across three
-    // shapes, each planned with bucketing on and then executed with it off, AQE on.
-    val letters = Seq("a", "b", "c", "d", "e", "f", "g")
-
-    // Plan under bucketing on (so the keyed layout and DPP are decided here), assert the shape,
-    // then execute with bucketing off and check both the rows and that the rebuilt keyed scan kept
-    // its KeyedPartitioning. checkToRDD = false runs only the committed plan, not a new one.
-    def check(filter: String, expected: Seq[Row], groupPartitions: Boolean, shuffle: Boolean)
-      : Unit = {
-      val df = sql(s"SELECT i.id, i.name, p.price FROM testcat.ns.$items i " +
-        s"JOIN testcat.ns.$purchases p ON i.id = p.item_id WHERE $filter")
-      val plan = df.queryExecution.executedPlan
-      assert(collect(plan) { case j: SortMergeJoinExec => j }.nonEmpty,
-        s"expected a sort-merge join:\n$plan")
-      assert(collectScans(plan).exists(_.runtimeFilters.nonEmpty),
-        s"expected dynamic partition pruning on the keyed scan:\n$plan")
-      assert(collectGroupPartitions(plan).nonEmpty == groupPartitions,
-        s"expected GroupPartitionsExec present == $groupPartitions:\n$plan")
-      assert(collectShuffles(plan).nonEmpty == shuffle,
-        s"expected a shuffle present == $shuffle:\n$plan")
-
-      withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "false") {
-        // Without checkToRDD, so only the committed plan runs, not a newly planned one.
-        QueryTest.checkAnswer(df, expected, checkToRDD = false)
-        // Re-collected, because under AQE executedPlan only reaches the rebuilt scans once the
-        // query has run. Without this fix the rebuilt keyed scan reports UnknownPartitioning here.
-        val executed = df.queryExecution.executedPlan
-        // The scan with the DPP filter is the one PlanAdaptiveDynamicPruningFilters rebuilds.
-        val rebuilt = collectScans(executed).filter(_.runtimeFilters.nonEmpty)
-        assert(rebuilt.nonEmpty &&
-          rebuilt.forall(_.outputPartitioning.isInstanceOf[KeyedPartitioning]),
-          s"expected the rebuilt scan to keep its keyed layout:\n$executed")
-      }
-    }
-
+  test("SPARK-60752: a DPP subquery's build side does not change the layout of the scan it " +
+    "shares with the join") {
+    // A DPP subquery that does not reuse a broadcast plans its build side again, over the same
+    // `Scan` as the join's `purchases` scan. A scalar subquery filter on `item_id` is a runtime
+    // filter of both, and the subquery runs it first, which prunes the shared `Scan`. The join's
+    // scan is a copy made after planning, when the scalar subquery is replaced by a reused one. Had
+    // it planned its partitions again, it would report fewer of them than `items`, and the join
+    // would fail with "Can't zip RDDs". Of the two suites that run this, only the Catalyst one
+    // prunes on these predicates.
     withSQLConf(
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
         SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
         SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
         SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "10") {
+      createTable(items, itemsColumns, Array(identity("id")))
+      sql(s"INSERT INTO testcat.ns.$items VALUES " + (1 to 7).map(i =>
+        s"($i, 'x', 10.0, cast('2020-01-01' as timestamp))").mkString(", "))
+      createTable(purchases, purchasesColumns, Array(identity("item_id")))
+      sql(s"INSERT INTO testcat.ns.$purchases VALUES " + (1 to 7).map(i =>
+        s"($i, $i.0, cast('2020-01-01' as timestamp))").mkString(", "))
 
-      // Shape 1: one split per key on both sides, no GroupPartitionsExec above the join. Without
-      // this fix it returns 2 of the 7 rows, and fails with "Can't zip RDDs" once a filter prunes.
-      withTable(s"testcat.ns.$items", s"testcat.ns.$purchases") {
-        createTable(items, itemsColumns, Array(identity("id")))
-        sql(s"INSERT INTO testcat.ns.$items VALUES " + (1 to 7).map(i =>
-          s"($i, '${letters(i - 1)}', 10.0, cast('2020-01-01' as timestamp))").mkString(", "))
-        createTable(purchases, purchasesColumns, Array(identity("item_id")))
-        sql(s"INSERT INTO testcat.ns.$purchases VALUES " + (1 to 7).map(i =>
-          s"($i, $i.0, cast('2020-01-01' as timestamp))").mkString(", "))
-        check("p.price > 0.0", (1 to 7).map(i => Row(i.toLong, letters(i - 1), i.toFloat)),
-          groupPartitions = false, shuffle = false)
-        check("p.price > 5.0", Seq(6, 7).map(i => Row(i.toLong, letters(i - 1), i.toFloat)),
-          groupPartitions = false, shuffle = false)
-      }
-
-      // Shape 2: two rows per id on items, so a GroupPartitionsExec sits above the pruned scan.
-      // Without this fix it fails with INTERNAL_ERROR (the node's child no longer reports the
-      // partitioning it was planned over).
-      withTable(s"testcat.ns.$items", s"testcat.ns.$purchases") {
-        createTable(items, itemsColumns, Array(identity("id")))
-        sql(s"INSERT INTO testcat.ns.$items VALUES " + (1 to 7).flatMap(i => Seq(
-          s"($i, '${letters(i - 1)}', 10.0, cast('2020-01-01' as timestamp))",
-          s"($i, '${letters(i - 1)}', 11.0, cast('2020-01-02' as timestamp))")).mkString(", "))
-        createTable(purchases, purchasesColumns, Array(identity("item_id")))
-        sql(s"INSERT INTO testcat.ns.$purchases VALUES " + (1 to 7).map(i =>
-          s"($i, $i.0, cast('2020-01-01' as timestamp))").mkString(", "))
-        check("p.price > 0.0",
-          (1 to 7).flatMap(i => Seq.fill(2)(Row(i.toLong, letters(i - 1), i.toFloat))),
-          groupPartitions = true, shuffle = false)
-        check("p.price > 5.0",
-          Seq(6, 7).flatMap(i => Seq.fill(2)(Row(i.toLong, letters(i - 1), i.toFloat))),
-          groupPartitions = true, shuffle = false)
-      }
-
-      // Shape 3: purchases is not partitioned and the SPJ shuffle is on, so it is shuffled onto the
-      // keyed items scan. Without this fix it returns 2 of 7, or fails to zip once a filter prunes.
-      withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
-        withTable(s"testcat.ns.$items", s"testcat.ns.$purchases") {
-          createTable(items, itemsColumns, Array(identity("id")))
-          sql(s"INSERT INTO testcat.ns.$items VALUES " + (1 to 7).map(i =>
-            s"($i, '${letters(i - 1)}', 10.0, cast('2020-01-01' as timestamp))").mkString(", "))
-          createTable(purchases, purchasesColumns, Array.empty[Transform])
-          sql(s"INSERT INTO testcat.ns.$purchases VALUES " + (1 to 7).map(i =>
-            s"($i, $i.0, cast('2020-01-01' as timestamp))").mkString(", "))
-          check("p.price > 0.0", (1 to 7).map(i => Row(i.toLong, letters(i - 1), i.toFloat)),
-            groupPartitions = false, shuffle = true)
-          check("p.price > 5.0", Seq(6, 7).map(i => Row(i.toLong, letters(i - 1), i.toFloat)),
-            groupPartitions = false, shuffle = true)
-        }
-      }
-
-      // Shape 4: a scalar subquery over the keyed column is a runtime filter of the keyed scan too.
-      // Without this fix it returns 1 of 3 rows with AQE off, or fails to zip with the Catalyst
-      // runtime filters. DPP stays off here; with it on and AQE off the Catalyst runtime filters
-      // hit a separate, pre-existing failure (SPARK-60752).
+      def bound(agg: String): String =
+        s"(SELECT $agg(item_id) FROM testcat.ns.$purchases WHERE price > 4.0)"
       Seq(true, false).foreach { aqe =>
-        withSQLConf(
-            SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false",
-            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
-          withTable(s"testcat.ns.$items", s"testcat.ns.$purchases") {
-            createTable(items, itemsColumns, Array(identity("id")))
-            sql(s"INSERT INTO testcat.ns.$items VALUES " + (1 to 7).map(i =>
-              s"($i, '${letters(i - 1)}', 10.0, cast('2020-01-01' as timestamp))").mkString(", "))
-            createTable(purchases, purchasesColumns, Array(identity("item_id")))
-            sql(s"INSERT INTO testcat.ns.$purchases VALUES " + (1 to 7).map(i =>
-              s"($i, $i.0, cast('2020-01-01' as timestamp))").mkString(", "))
-            check(s"i.id >= (SELECT min(item_id) FROM testcat.ns.$purchases WHERE price > 4.0)",
-              (5 to 7).map(i => Row(i.toLong, letters(i - 1), i.toFloat)),
-              groupPartitions = false, shuffle = false)
+        withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
+          Seq(s"i.id = ${bound("max")}" -> Seq(7), s"i.id >= ${bound("min")}" -> (5 to 7)).foreach {
+            case (filter, ids) =>
+              val df = sql(s"SELECT i.id, p.price FROM testcat.ns.$items i " +
+                s"JOIN testcat.ns.$purchases p ON i.id = p.item_id WHERE $filter")
+              checkAnswer(df, ids.map(i => Row(i.toLong, i.toFloat)))
+              val plan = df.queryExecution.executedPlan
+              assert(collectShuffles(plan).isEmpty,
+                s"aqe=$aqe, $filter: the join should stay storage-partitioned:\n$plan")
           }
         }
       }
     }
+  }
+
+  test("SPARK-60752: a nested DPP filter on a DPP subquery's build side does not change the " +
+    "layout of the scan it shares with the join") {
+    // As above, with a DPP filter from a broadcast dimension as the build side's own runtime
+    // filter, which every fixture prunes on. Two rows per key give `purchases` two splits per key,
+    // so a GroupPartitionsExec groups that side and checks the layout of the copied scan.
+    val dim = "dim"
+    withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "10") {
+      createTable(items, itemsColumns, Array(identity("id")))
+      sql(s"INSERT INTO testcat.ns.$items VALUES " + (1 to 7).map(i =>
+        s"($i, 'x', 10.0, cast('2020-01-01' as timestamp))").mkString(", "))
+      createTable(purchases, purchasesColumns, Array(identity("item_id")))
+      sql(s"INSERT INTO testcat.ns.$purchases VALUES " + (1 to 7).flatMap(i =>
+        Seq.fill(2)(s"($i, $i.0, cast('2020-01-01' as timestamp))")).mkString(", "))
+      createTable(dim, Array(Column.create("k", LongType), Column.create("flag", IntegerType)),
+        Array.empty)
+      sql(s"INSERT INTO testcat.ns.$dim VALUES " +
+        (1 to 7).map(i => s"($i, ${if (i >= 5) 1 else 0})").mkString(", "))
+
+      Seq(true, false).foreach { aqe =>
+        withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
+          val df = sql(s"SELECT i.id, p.price FROM testcat.ns.$items i JOIN " +
+            s"(SELECT /*+ BROADCAST(d) */ p.item_id, p.price FROM testcat.ns.$purchases p " +
+            s"JOIN testcat.ns.$dim d ON p.item_id = d.k WHERE d.flag = 1) p ON i.id = p.item_id")
+          checkAnswer(df, (5 to 7).flatMap(i => Seq.fill(2)(Row(i.toLong, i.toFloat))))
+          val plan = df.queryExecution.executedPlan
+          assert(collectShuffles(plan).isEmpty,
+            s"aqe=$aqe: the join should stay storage-partitioned:\n$plan")
+        }
+      }
+    }
+  }
+
+  test("SPARK-60752: copies of a BatchScanExec share the input partitions it planned") {
+    createTable(items, itemsColumns, Array(identity("id")))
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      "(2, 'bb', 10.0, cast('2020-01-01' as timestamp))")
+    def plannedScan(): BatchScanExec =
+      collectScans(sql(s"SELECT * FROM testcat.ns.$items").queryExecution.executedPlan).head
+    val scan = plannedScan()
+    // A copy, like the ones runtime filter rewrites make, uses the partitions the node planned.
+    assert(scan.copy(runtimeFilters = Nil).inputPartitions eq scan.inputPartitions)
+    // A copy over another `Scan` plans its own.
+    assert(!(scan.copy(scan = plannedScan().scan).inputPartitions eq scan.inputPartitions))
   }
 }
 

@@ -46,6 +46,12 @@ import org.apache.spark.util.ArrayImplicits._
  *                       post-scan `Filter` too.
  * @param appendsCheckedColumn Whether the readers mark the rows they checked in a boolean column,
  *                             the last of `output`, see `StorageFilterPlanning.checkedColumn`.
+ * @param plannedInputPartitions Keeps the input partitions once the node plans them. The copies
+ *                               later rules make of the node share it, so they report the layout
+ *                               the plan was built for. Planning again could see fewer partitions,
+ *                               because the `Scan` can be shared with another node whose runtime
+ *                               filter prunes it first, e.g. the build side of a DPP subquery
+ *                               (SPARK-60752).
  */
 case class BatchScanExec(
     output: Seq[AttributeReference],
@@ -55,7 +61,8 @@ case class BatchScanExec(
     @transient table: Table,
     keyGroupedPartitioning: Option[Seq[Expression]] = None,
     storageFilters: Seq[Expression] = Nil,
-    appendsCheckedColumn: Boolean = false
+    appendsCheckedColumn: Boolean = false,
+    @transient plannedInputPartitions: PlannedInputPartitions = new PlannedInputPartitions
   ) extends DataSourceV2ScanExecBase {
 
   // The readers are asked for the column only with storage filters, and append it last.
@@ -109,7 +116,7 @@ case class BatchScanExec(
     keyGroupedPartitioning.map(_.filter(_.references.subsetOf(outputSet)))
 
   @transient override lazy val inputPartitions: Seq[InputPartition] =
-    batch.planInputPartitions().toImmutableArraySeq
+    plannedInputPartitions.getOrPlan(scan)(batch.planInputPartitions().toImmutableArraySeq)
 
   // Visible for testing. Runtime filtering resolves the scan's columns by name, which the checked
   // column must not take part in.
@@ -179,5 +186,26 @@ case class BatchScanExec(
 
   override def nodeName: String = {
     s"BatchScan ${table.name()}".trim
+  }
+}
+
+/**
+ * The input partitions of a [[BatchScanExec]], planned once, by the first node that asks for them.
+ * Each newly built node gets its own instance, and the copies later rules make of the node share
+ * that instance. Only the nodes over the `Scan` that planned the partitions use them. A copy given
+ * another `Scan` plans its own.
+ */
+class PlannedInputPartitions {
+  private var planned: Option[(Scan, Seq[InputPartition])] = None
+
+  def getOrPlan(scan: Scan)(plan: => Seq[InputPartition]): Seq[InputPartition] = synchronized {
+    planned match {
+      case Some((plannedScan, partitions)) if plannedScan eq scan => partitions
+      case Some(_) => plan
+      case None =>
+        val partitions = plan
+        planned = Some((scan, partitions))
+        partitions
+    }
   }
 }
