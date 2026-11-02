@@ -1498,6 +1498,18 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       /* size */ 0,
       /* offset list */ 5))
 
+    // Malformed containers: dataStart + final offset overflows an int.
+    invalid(Array(arrayHeader(false, 4),
+      /* size */ 0,
+      /* offset list */ -1, -1, -1, 0x7F))
+    invalid(Array(objectHeader(false, 1, 4),
+      /* size */ 0,
+      /* offset list */ -1, -1, -1, 0x7F))
+    invalid(Array(arrayHeader(false, 1),
+      /* size */ 1,
+      /* offset list */ 0, 6,
+      /* element data */ arrayHeader(false, 4), 0, -1, -1, -1, 0x7F))
+
     // Valid container: the final offset may cover unused bytes within the value.
     valid(Array(arrayHeader(false, 1),
       /* size */ 0,
