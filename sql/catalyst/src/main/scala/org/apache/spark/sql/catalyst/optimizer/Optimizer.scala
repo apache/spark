@@ -2621,7 +2621,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     // not split when a part after that one is rejected by it, with only the cheap aliases
     // substituted. An IS NOT NULL part before that one, over a cheap alias that a held part
     // after that one reads, stays above too when `canPushAhead` rejects it with the alias
-    // substituted.
+    // substituted, and so does a throwable part written after such a check.
     // SPARK-13473: We can't push the predicate down when the underlying projection output non-
     // deterministic field(s).  Non-deterministic expressions are essentially stateful. This
     // implies that, for a given input row, the output are determined by the expression's initial
@@ -2666,7 +2666,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         }
         // Split the filter's components into cheap and expensive while keeping track of
         // what each references from the projection. The cheap components written before the
-        // first expensive one are pushed, except the IS NOT NULL checks kept above (see below).
+        // first expensive one are pushed, except the IS NOT NULL checks kept above and the
+        // throwable components written after one (see below).
         // After the first component over an expensive alias the projection evaluates, which is
         // the first one held back, only the cheap components that `canPushAhead` accepts are
         // pushed; the others stay above with the expensive ones, so they are only evaluated
@@ -2686,7 +2687,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         // components before that one. It stays above when `canPushAhead` rejects it with the
         // alias substituted, also when the user wrote it there. With whole-stage codegen,
         // `FilterExec` then evaluates an IS NOT NULL check on a column just before the first
-        // component that reads the column. A held component that reads the alias is rejected
+        // component that reads the column, or earlier after a component that can be NULL (see
+        // `precedingNotNullChecks`). A held component that reads the alias is rejected
         // too, so the projection is not split then (see `keepsWrittenOrder`).
         val heldRefs = AttributeSet(held.flatMap(_._1.references))
         def keepsNotNull(cond: Expression, used: AttributeMap[Alias], replaced: Expression) =
@@ -2697,7 +2699,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         val (beforeKept, fromKept) = written.span {
           case (cond, used, replaced) => !keepsNotNull(cond, used, replaced)
         }
-        val (keptNotNull, afterKept) = fromKept.partition {
+        val (keptWritten, afterKept) = fromKept.partition {
           case (cond, used, replaced) => keepsNotNull(cond, used, replaced) || replaced.throwable
         }
         val leading = beforeKept ++ afterKept
@@ -2709,7 +2711,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
           case (_, used, replaced) => isCheap(used) && canPushAhead(replaced)
         }
         val cheapRest = cheapBefore ++ cheapHeld
-        val expensiveWithUsed = keptNotNull ++ expensiveBefore ++ firstHeld ++ expensiveHeld
+        val expensiveWithUsed = keptWritten ++ expensiveBefore ++ firstHeld ++ expensiveHeld
         val cheapWithUsed = leading ++ cheapRest
         // Cheap filters (cases 1 & 2) pushed below the projection.
         val baseChild: LogicalPlan = if (cheapWithUsed.nonEmpty) {

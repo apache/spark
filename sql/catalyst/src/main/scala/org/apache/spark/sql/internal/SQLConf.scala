@@ -688,8 +688,10 @@ object SQLConf {
         "over Python UDFs, but not Python UDFs alone, which are evaluated below it. Otherwise, " +
         "the projection split may still compute the expensive element a later condition reads " +
         "ahead of the conditions before it. When false, an IS NOT NULL check written or " +
-        "inferred before the expensive condition, over a column that a later condition reads, " +
-        "stays above too when it is not plain; when true, only when the column is throwable.")
+        "inferred before the expensive condition, over a column that a condition after the " +
+        "expensive one reads, stays above too when it is not plain, and so does a throwable " +
+        "condition written after the check; when true, only when the expression that defines " +
+        "the column is throwable.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
