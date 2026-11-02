@@ -52,14 +52,28 @@ object StoredExpressionText {
    * Parses `text` under [[conf]]. A text these settings cannot parse is parsed under the active
    * session, as a text they cannot resolve is analyzed under it.
    */
-  def parse(text: String): Expression = {
+  def parse(text: String): Expression = parse(conf(SQLConf.get), text)
+
+  /**
+   * Parses `text` under [[conf]] with the ANSI value of the active session, for a text that
+   * [[conf]] cannot resolve and the session analyzes. Only its ANSI behavior follows the session.
+   */
+  def parseWithSessionAnsi(text: String): Expression = parse(confWithSessionAnsi(SQLConf.get), text)
+
+  private def parse(c: SQLConf, text: String): Expression = {
     try {
-      SQLConf.withExistingConf(conf(SQLConf.get)) {
+      SQLConf.withExistingConf(c) {
         CatalystSqlParser.parseExpression(text)
       }
     } catch {
       case _: ParseException => CatalystSqlParser.parseExpression(text)
     }
+  }
+
+  private def confWithSessionAnsi(session: SQLConf): SQLConf = {
+    val c = conf(session)
+    c.setConfString(SQLConf.ANSI_ENABLED.key, session.ansiEnabled.toString)
+    c
   }
 
   /**
@@ -81,9 +95,7 @@ object StoredExpressionText {
    * uses the ANSI value of the session, so that it is about how the text reads.
    */
   def readsAsInSession(text: String): Boolean = {
-    val session = SQLConf.get
-    val fixed = conf(session)
-    fixed.setConfString(SQLConf.ANSI_ENABLED.key, session.ansiEnabled.toString)
+    val fixed = confWithSessionAnsi(SQLConf.get)
     val parsedInSession = CatalystSqlParser.parseExpression(text)
     try {
       val parsed = SQLConf.withExistingConf(fixed) {

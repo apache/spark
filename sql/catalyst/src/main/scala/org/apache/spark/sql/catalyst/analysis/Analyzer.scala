@@ -41,7 +41,6 @@ import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.optimizer.OptimizeUpdateFields
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -4137,7 +4136,9 @@ class Analyzer(
           }
           v2Write
             .withNewQuery(analyzeAutoFilledGeneratedColumns(
-              projection, autoFilledGenCols, resolveOutput(CatalystSqlParser.parseExpression)._1))
+              projection,
+              autoFilledGenCols,
+              resolveOutput(StoredExpressionText.parseWithSessionAnsi)._1))
             .withNewTable(cleanedTable)
         } else {
           v2Write
@@ -4149,9 +4150,9 @@ class Analyzer(
      * is read under, so that the implicit casts and the functions of a generation expression do
      * not follow the session that writes.
      *
-     * A column these settings cannot resolve comes from `readInSession`, where the session reads
-     * its text, and the analysis of the write resolves it under the session. So does a text a
-     * catalog stores that analyzes to another plan.
+     * A column these settings cannot resolve comes from `readInSession`, where its text is read
+     * with the ANSI value of the session, and the analysis of the write resolves it under the
+     * session. So does a text a catalog stores that analyzes to another plan.
      */
     private def analyzeAutoFilledGeneratedColumns(
         projection: LogicalPlan,

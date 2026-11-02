@@ -1707,6 +1707,7 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
   }
 
   test("SPARK-60757: the validation of a provided value does not substitute a variable") {
+    import testImplicits._
     val tblName = "my_tab"
     val variable = s"$${system:java.version}"
     withTable(s"testcat.$tblName") {
@@ -1716,8 +1717,12 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
                |  b STRING GENERATED ALWAYS AS (concat(a, '$variable'))
                |) USING foo""".stripMargin)
         sql(s"INSERT INTO testcat.$tblName VALUES ('w', 'w$variable')")
-        checkAnswer(spark.table(s"testcat.$tblName"), Row("w", s"w$variable"))
       }
+      // Substitution is on by default. A DataFrame write keeps the variable in its values.
+      Seq(("v", s"v$variable")).toDF("a", "b").writeTo(s"testcat.$tblName").append()
+      checkAnswer(
+        spark.table(s"testcat.$tblName"),
+        Seq(Row("w", s"w$variable"), Row("v", s"v$variable")))
     }
   }
 
@@ -1776,6 +1781,30 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
+  test("SPARK-60757: a text the fixed settings cannot resolve keeps their parser settings") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+        sql(s"""CREATE TABLE testcat.$tblName(
+               |  d DATE,
+               |  s STRING,
+               |  b BOOLEAN GENERATED ALWAYS AS (CAST(d AS BOOLEAN) OR s = 'x\\\\y')
+               |) USING foo""".stripMargin)
+        withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> "true") {
+          sql(s"INSERT INTO testcat.$tblName(d, s) " +
+            "SELECT DATE'2024-01-01', concat('x', chr(92), 'y')")
+          sql(s"INSERT INTO testcat.$tblName " +
+            "SELECT DATE'2024-01-02', concat('x', chr(92), 'y'), true")
+        }
+        checkAnswer(
+          spark.table(s"testcat.$tblName"),
+          Seq(
+            Row(sqlDate("2024-01-01"), "x\\y", true),
+            Row(sqlDate("2024-01-02"), "x\\y", true)))
+      }
+    }
+  }
+
   test("SPARK-60757: a text the fixed settings cannot analyze is read under the session") {
     val tblName = "my_tab"
     withTable(s"testcat.$tblName") {
@@ -1808,11 +1837,30 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
         exception = intercept[AnalysisException] {
           sql(s"INSERT INTO testcat.$tblName VALUES (1, 2)")
         },
-        condition = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+        condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
         parameters = Map(
-          "fieldName" -> "b",
-          "expressionStr" -> genExpr.toString,
-          "reason" -> "Spark cannot convert the expression to check a value of the column"))
+          "tableName" -> "`testcat`.`my_tab`",
+          "operation" -> ("a value for the generated column `b`, because Spark cannot convert " +
+            s"its expression $genExpr")))
+    }
+  }
+
+  test("SPARK-60757: the validation of a provided value compares it with the stored value") {
+    val tblName = "my_tab"
+    Seq("false", "true").foreach { ansi =>
+      withTable(s"testcat.$tblName") {
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+          sql(s"""CREATE TABLE testcat.$tblName(
+                 |  s STRING,
+                 |  b STRING GENERATED ALWAYS AS (coalesce(s, 1))
+                 |) USING foo""".stripMargin)
+          sql(s"INSERT INTO testcat.$tblName VALUES ('007', '7')")
+          assertWriteFails("CHECK_CONSTRAINT_VIOLATION") {
+            sql(s"INSERT INTO testcat.$tblName VALUES ('007', '07')")
+          }
+          checkAnswer(spark.table(s"testcat.$tblName"), Row("007", "7"))
+        }
+      }
     }
   }
 
