@@ -759,8 +759,9 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
   test("SPARK-60027: KeyedShuffleSpec refuses a transform whose arguments miss its input types") {
     // Nothing casts a transform's arguments, the bucket count included, to its function's
     // `inputTypes()` after analysis, so the call would get the raw values. So the gates require
-    // the arguments to match the input types in number and type. A narrower integral argument is
-    // widened, as the cast keeps its value, and anything else is refused.
+    // the arguments to suit the input types in number and type: types stored alike go as they
+    // are, and a narrower numeric argument, integral or floating-point, is cast, which gives the
+    // value Java's widening gave a magic `invoke`. Anything else is refused.
     def bucketFunction(declared: DataType*): ScalarFunction[Int] = new ScalarFunction[Int] {
       override def inputTypes(): Array[DataType] = declared.toArray
       override def resultType(): DataType = IntegerType
@@ -794,8 +795,8 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
       (Seq(IntegerType, VarcharType(5)), StringType, true),
       (Seq(IntegerType, StringType), StringType("UTF8_LCASE"), false),
       (Seq(IntegerType, StringType("UTF8_LCASE")), VarcharType(10), false),
-      // A decimal suits a declared decimal of its scale that can hold its value, so that its
-      // unscaled digits are what a function reads. Not one of another scale.
+      // A decimal suits a declared decimal of its scale, so that its unscaled digits are what a
+      // function reads, at the top level at any precision. Not one of another scale.
       (Seq(IntegerType, DecimalType(38, 2)), DecimalType(10, 2), true),
       (Seq(IntegerType, DecimalType(38, 18)), DecimalType(10, 2), false),
       (Seq(IntegerType, DecimalType(10, 2)), DecimalType(5, 0), false),

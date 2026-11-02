@@ -23,7 +23,7 @@ import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ScalarFunction}
-import org.apache.spark.sql.types.{ArrayType, DataType, DateType, Decimal, DecimalType, DoubleType, IntegerType, LongType, MapType, StringType, StructType, UserDefinedType, VarcharType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, DataType, DateType, Decimal, DecimalType, DoubleType, IntegerType, LongType, MapType, StringType, StructType, UserDefinedType, VarcharType}
 import org.apache.spark.unsafe.types.UTF8String
 
 class TransformExpressionSuite extends SparkFunSuite {
@@ -148,7 +148,7 @@ class TransformExpressionSuite extends SparkFunSuite {
       assert(transform.eval(InternalRow.empty) == 3, value.dataType)
     }
 
-    // Wider than declared, not integral, or the wrong number of arguments: refused.
+    // Wider than declared, not numeric, or the wrong number of arguments: refused.
     val intBucket = new ScalarFunction[Int] {
       override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
       override def resultType(): DataType = IntegerType
@@ -404,6 +404,51 @@ class TransformExpressionSuite extends SparkFunSuite {
     assert(logged.exists(m => m.contains("int_bucket") && m.contains("(int, int)") &&
       m.contains("(int, bigint)")), logged)
     assert(logged.exists(_.contains("(int, string)")), logged)
+  }
+
+  test("SPARK-60027: a function that is not a ScalarFunction is logged once per class") {
+    // A class of its own, since the set of classes logged for is shared by the JVM.
+    class NotScalar extends BoundFunction {
+      override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "bucket"
+      override def canonicalName(): String = "test.bucket"
+    }
+    val appender = new LogAppender("partition transform that is not a ScalarFunction")
+    withLogAppender(appender, level = Some(Level.INFO)) {
+      Seq(Literal(1L), Literal(2L)).foreach { value =>
+        assert(bucket(new NotScalar, value).evaluableFunction.isEmpty)
+      }
+    }
+    val logged = appender.loggingEvents
+      .filter(e => e.getLevel == Level.INFO && e.getLoggerName.endsWith("TransformExpression"))
+      .map(_.getMessage.getFormattedMessage)
+      .filter(_.contains("is not a ScalarFunction"))
+    assert(logged.size == 1, logged)
+  }
+
+  test("SPARK-60027: a mismatch is logged once per argument and declared types") {
+    // One class can declare other input types per instance, e.g. one per column type, so each
+    // declared signature a mismatch is logged for gets its own line.
+    class TypedBucket(valueType: DataType) extends ScalarFunction[Int] {
+      override def inputTypes(): Array[DataType] = Array(IntegerType, valueType)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "typed_bucket"
+      override def canonicalName(): String = "test.bucket"
+      override def produceResult(input: InternalRow): Int = 0
+    }
+    val appender = new LogAppender("partition transform mismatches per declared types")
+    withLogAppender(appender, level = Some(Level.INFO)) {
+      Seq(StringType, BinaryType, StringType).foreach { declared =>
+        assert(bucket(new TypedBucket(declared), Literal(7L)).evaluableFunction.isEmpty)
+      }
+    }
+    val logged = appender.loggingEvents
+      .filter(e => e.getLevel == Level.INFO && e.getLoggerName.endsWith("TransformExpression"))
+      .map(_.getMessage.getFormattedMessage)
+      .filter(_.contains("typed_bucket"))
+    assert(logged.size == 2, logged)
+    assert(logged.exists(_.contains("(int, string)")) && logged.exists(_.contains("(int, binary)")))
   }
 
   test("SPARK-60027: a function class that fails in another way is warned about again") {

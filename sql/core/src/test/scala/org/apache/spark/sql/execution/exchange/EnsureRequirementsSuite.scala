@@ -1711,6 +1711,76 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-60027: a cogroup shuffled from a key Spark cannot place fails while planning") {
+    // A cogroup does not coerce its keys (SPARK-60782), so a `BIGINT` key can be shuffled onto a
+    // `bucket` over an `INT` column whose function declares `INT`. Falling back to a hash shuffle
+    // would pair the groups wrongly, so it stays a failure, but while planning, not in a task.
+    val intBucket = new ScalarFunction[Int] {
+      override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "bucket"
+      override def canonicalName(): String = "bucket"
+      override def produceResult(input: InternalRow): Int =
+        Math.floorMod(input.getInt(1), input.getInt(0))
+    }
+    val cL = AttributeReference("cL", IntegerType)()
+    val cR = AttributeReference("cR", LongType)()
+    val left = DummySparkPlan(outputPartitioning = KeyedPartitioning(
+      Seq(TransformExpression(intBucket, Seq(cL), Some(4))), (0 until 4).map(InternalRow(_))))
+    val right = DummySparkPlan(outputPartitioning = UnknownPartitioning(0))
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("value", IntegerType))),
+      Seq.empty,
+      PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+      true)
+    val cogroup = FlatMapCoGroupsInPandasExec(Seq(cL), Seq(cR), pythonUdf,
+      AttributeReference("value", IntegerType)() :: Nil, left, right)
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      val e = intercept[AssertionError](EnsureRequirements.apply(cogroup))
+      assert(e.getMessage.contains("Cannot shuffle a child onto a layout Spark cannot evaluate"))
+    }
+  }
+
+  test("SPARK-60522: a cogroup picks among a child's layouts by what Spark can evaluate") {
+    // The left child offers two layouts: a `bucket` Spark cannot evaluate, listed first so that
+    // ranking alone would pick it, and its own column. A child that pairs with the first as it
+    // stands evaluates nothing, so it keeps it. A child that pairs with neither is shuffled, and
+    // only onto the one Spark can evaluate.
+    val nonScalar = NonScalarBucketFunction
+    // Over `INT` columns, so that both layouts hold `INT` keys, as a collection's members must.
+    val idL = AttributeReference("idL", IntegerType)()
+    val idR = AttributeReference("idR", IntegerType)()
+    val keys = (0 until 4).map(InternalRow(_))
+    val left = DummySparkPlan(outputPartitioning = PartitioningCollection.fromPartitionings(Seq(
+      KeyedPartitioning(Seq(TransformExpression(nonScalar, Seq(idL), Some(4))), keys),
+      KeyedPartitioning(Seq(idL), keys))))
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("value", IntegerType))),
+      Seq.empty,
+      PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+      true)
+    def cogroup(right: SparkPlan): FlatMapCoGroupsInPandasExec =
+      FlatMapCoGroupsInPandasExec(Seq(idL), Seq(idR), pythonUdf,
+        AttributeReference("value", IntegerType)() :: Nil, left, right)
+
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      val sameBucket = DummySparkPlan(outputPartitioning = KeyedPartitioning(
+        Seq(TransformExpression(nonScalar, Seq(idR), Some(4))), keys))
+      assert(EnsureRequirements.apply(cogroup(sameBucket)).collect {
+        case s: ShuffleExchangeExec => s
+      }.isEmpty, "paired with the layout Spark cannot evaluate as it stands")
+
+      val plain = DummySparkPlan(outputPartitioning = UnknownPartitioning(0))
+      val shuffled = EnsureRequirements.apply(cogroup(plain)).collect {
+        case s: ShuffleExchangeExec => s.outputPartitioning
+      }
+      assert(shuffled.size == 1 && (shuffled.head match {
+        case k: KeyedPartitioning => k.expressions == Seq(idR)
+        case _ => false
+      }), s"shuffled onto the column, the layout Spark can evaluate, got $shuffled")
+    }
+  }
+
   test("SPARK-59971: a cogroup runs on a keyed side only if it covers every cogroup key") {
     val idL = AttributeReference("idL", IntegerType)()
     val tL = AttributeReference("tL", IntegerType)()

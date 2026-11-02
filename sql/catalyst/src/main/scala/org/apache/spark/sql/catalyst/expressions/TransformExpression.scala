@@ -204,8 +204,9 @@ case class TransformExpression(
    * declares for it in `inputTypes()`, see `atDeclaredType` for which arguments suit. `None` when
    * an argument does not, when there is another number of arguments, when the call fails to
    * resolve, and wherever `resolvedFunction` is `None`. `eval` rethrows a failure to resolve. A
-   * storage-partitioned join shuffles instead of evaluating such a transform, so each case is
-   * logged, see `logArgumentsMismatch` and `logCannotResolve`.
+   * storage-partitioned join shuffles instead of evaluating such a transform, so each case but
+   * reduced keys is logged once, see `logNotScalar`, `logArgumentsMismatch` and
+   * `logCannotResolve`.
    */
   def evaluableFunction: Option[Expression] = evaluableFunctionAttempt match {
     case Success(call) => call
@@ -231,8 +232,12 @@ case class TransformExpression(
     Failure(e)
   }
 
-  private def resolveEvaluableFunction(): Option[Expression] =
-    scalarFunction.flatMap { scalarFunc =>
+  private def resolveEvaluableFunction(): Option[Expression] = scalarFunction match {
+    case None =>
+      // Reduced keys are the planner's own doing, so only a function Spark cannot call is logged.
+      if (!function.isInstanceOf[ScalarFunction[_]]) TransformExpression.logNotScalar(function)
+      None
+    case Some(scalarFunc) =>
       val arguments = callArguments
       val declaredTypes = scalarFunc.inputTypes().toSeq
       val typed = arguments.zip(declaredTypes).map { case (argument, declaredType) =>
@@ -245,7 +250,7 @@ case class TransformExpression(
           declaredTypes)
         None
       }
-    }
+  }
 
   override def eval(input: InternalRow): Any = evaluableFunctionAttempt match {
     case Success(Some(call)) => call.eval(input)
@@ -266,10 +271,14 @@ object TransformExpression extends Logging {
   private val failuresWarnedAbout: java.util.Set[String] = ConcurrentHashMap.newKeySet[String]()
 
   /**
-   * The function classes and argument types a mismatch with the function's input types was
-   * logged for, as `functionClass:argumentTypes`.
+   * The mismatches with a function's input types that were logged, as
+   * `functionClass:argumentTypes:declaredTypes`, since one class can declare other input types per
+   * instance, e.g. one per column type.
    */
   private val mismatchesLogged: java.util.Set[String] = ConcurrentHashMap.newKeySet[String]()
+
+  /** The classes of the functions that are not a `ScalarFunction` and were logged for. */
+  private val notScalarLogged: java.util.Set[String] = ConcurrentHashMap.newKeySet[String]()
 
   /**
    * `text`, or `fallback` when it throws. `name()` and a failure's message are connector code,
@@ -289,12 +298,23 @@ object TransformExpression extends Logging {
     def typeList(types: Seq[DataType]): String = types.map(_.catalogString).mkString("(", ", ", ")")
     val functionClass = function.getClass.getName
     val arguments = typeList(argumentTypes)
-    if (mismatchesLogged.add(s"$functionClass:$arguments")) {
+    if (mismatchesLogged.add(s"$functionClass:$arguments:${typeList(declaredTypes)}")) {
       val functionName = orElse(function.name(), functionClass)
       logInfo(log"The partition transform ${MDC(FUNCTION_NAME, functionName)} " +
         log"(${MDC(CLASS_NAME, functionClass)}) declares the input types " +
         log"${MDC(FUNCTION_PARAM, typeList(declaredTypes))}, which do not take arguments of " +
         log"types ${MDC(ARGS, arguments)}, so a storage-partitioned join does not evaluate it")
+    }
+  }
+
+  /** Logs that `function` is not a `ScalarFunction`, so Spark cannot call it. */
+  private def logNotScalar(function: BoundFunction): Unit = {
+    val functionClass = function.getClass.getName
+    if (notScalarLogged.add(functionClass)) {
+      logInfo(log"The partition transform " +
+        log"${MDC(FUNCTION_NAME, orElse(function.name(), functionClass))} " +
+        log"(${MDC(CLASS_NAME, functionClass)}) is not a ScalarFunction, so a " +
+        log"storage-partitioned join does not evaluate it")
     }
   }
 
@@ -332,8 +352,9 @@ object TransformExpression extends Logging {
    * An argument goes as it is when it is stored the way the declared type is (`storedAlike`),
    * which is how a function read it before this check. A numeric argument narrower than declared
    * (`UpCastRule.legalNumericPrecedence`), e.g. a `SMALLINT` against an `INT` or an `INT` against a
-   * `DOUBLE`, is held as another JVM type, so it is cast, which gives the value a magic `invoke`
-   * got from Java's widening before this check, and needs no time zone. Anything else is refused,
+   * `DOUBLE`, is held as another JVM type, so it is cast. That gives the value a magic `invoke` got
+   * from Java's widening before this check, which can lose digits for a `BIGINT` against a
+   * `DOUBLE` as it did there, and needs no time zone. Anything else is refused,
    * a `DATE` against a `TIMESTAMP` in particular, whose cast takes the session time zone.
    */
   private def atDeclaredType(argument: Expression, declaredType: DataType): Option[Expression] =

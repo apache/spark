@@ -1891,8 +1891,9 @@ class KeyGroupedPartitioningSuite
   test("SPARK-60027: a transform whose arguments are not its input types is evaluated or refused") {
     // Nothing casts a transform's arguments to its function's `inputTypes()` after analysis. The
     // identity reduce and the one-side shuffle evaluate it, and without a check a mismatch failed
-    // or returned wrong rows there. A narrower integral argument is widened, so the join keeps its
-    // plan. Anything else is refused, so both sides are shuffled.
+    // or returned wrong rows there. A narrower numeric argument is widened, and one stored as the
+    // declared type, e.g. a `DATE` against a `DATE`, goes as it is, so the join keeps its plan.
+    // Anything else is refused, so both sides are shuffled.
     def ids(dataType: DataType): Seq[Row] = (0 until 8).map { i =>
       Row(dataType match {
         case ShortType => i.toShort

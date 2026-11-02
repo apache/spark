@@ -1890,7 +1890,8 @@ trait LeafShuffleSpec extends ShuffleSpec {
    * of a child shuffled onto this layout. [[canCreatePartitioning]] does not ask it, since a child
    * that pairs with this layout as it stands evaluates nothing. A caller that shuffles a child onto
    * this layout has to ask it too. Only a [[KeyedShuffleSpec]] can answer false, and its
-   * [[createPartitioning]] asserts it, so a caller that does not ask fails while planning.
+   * [[createPartitioning]] asserts that what it builds is evaluable, so a caller that does not ask,
+   * or a cogroup child whose key has another type, fails while planning.
    */
   def canEvaluatePartitioning: Boolean = true
 
@@ -2622,18 +2623,21 @@ case class KeyedShuffleSpec(
   override def createPartitioning(clustering: Seq[Expression]): Partitioning = {
     assert(clustering.size == distribution.clustering.size,
       "Required distributions of join legs should be the same size.")
-    // A child shuffled onto this layout is placed by evaluating it, which would fail on an
-    // executor. A caller has to ask `canEvaluatePartitioning` first, so a caller that does not
-    // fails here, while planning. It is asked of this layout's own keys, see `canEvaluate`.
-    assert(canEvaluatePartitioning,
-      s"Cannot shuffle a child onto a layout Spark cannot evaluate: ${partitioning.expressions}")
-
     val newExpressions = partitioning.expressions.zip(keyPositions).map {
       case (te: TransformExpression, positionSet) =>
         // `canCreatePartitioning` admits only a template over bare columns, see there.
         rebuiltOver(te, clustering(positionSet.head))
       case (_, positionSet) => clustering(positionSet.head)
     }
+    // The child shuffled onto this layout is placed by evaluating what is built here, which would
+    // fail on an executor. A caller has to ask `canEvaluatePartitioning` first, which answers for
+    // this layout's own keys. A join's keys share their types, so that answers for what is built
+    // too. A cogroup's need not (SPARK-60782), and falling back to a hash shuffle would pair its
+    // groups wrongly, so such a child fails here, while planning.
+    assert(newExpressions.forall {
+      case t: TransformExpression => t.evaluableFunction.isDefined
+      case _ => true
+    }, s"Cannot shuffle a child onto a layout Spark cannot evaluate: $newExpressions")
     // The shuffled side is laid out on this side's partitions, so it shares their layout, with one
     // change. The child re-shuffled onto it may hold keys outside the declared set, so every
     // partitioning produced here carries the marker (see [[KeyLayout]]'s `@param`). Only the
