@@ -257,6 +257,11 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
         assert(
           session.sql(query).collect() === Array(Row(1)),
           "injected replacement should win the nested call")
+        // A clause selects Spark's constructor; qualifying does not, as the replacement owns it.
+        assert(session.sql("SELECT json_array(json_array(1) NULL ON NULL)").collect() ===
+          Array(Row("[[1]]")))
+        assert(session.sql("SELECT builtin.json_array(builtin.json_array(1))").collect() ===
+          Array(Row(1)))
       } finally {
         session.conf.unset(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key)
       }
