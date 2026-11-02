@@ -136,8 +136,12 @@ class DatasetOptimizationSuite extends SharedSparkSession {
     val ds = spark.range(1).map { _ =>
       Tuple1((Map("k" -> ("map-a", "map-b")), ("other-a", "other-b")))
     }
-    // Projecting the sibling as well can leave the original serializer in place.
     val query = ds.selectExpr("_1._1['k']._2", "_1._2._1")
+    // The map and its sibling share a serializer. Visiting the map converters twice causes
+    // pruning to fall back to the original schema, so the projection must use its ordinals.
+    assert(query.queryExecution.optimizedPlan.collectFirst {
+      case s: SerializeFromObject => s.schema
+    }.contains(ds.schema))
     checkAnswer(query, Row("map-b", "other-a"))
   }
 
