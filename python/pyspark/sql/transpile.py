@@ -162,9 +162,6 @@ class AbstractTranspiler(object):
     # to enable this transpiler.
     variety: str = ""
 
-    def __init__(self, null_strictness: str = "strict") -> None:
-        pass
-
     @classmethod
     def register(cls) -> None:
         AbstractTranspiler.varieties[cls.variety] = cls
@@ -307,8 +304,15 @@ class CatalystTranspiler(AbstractTranspiler):
 
     variety = "catalyst"
 
-    def __init__(self, null_strictness: str = "strict") -> None:
-        self._null_strictness = null_strictness
+    def __init__(self) -> None:
+        from pyspark.sql import SparkSession
+
+        session = SparkSession.getActiveSession()
+        self._null_strictness = (
+            session.conf.get("spark.sql.experimental.optimizer.transpileNullStrictness", "strict")
+            if session is not None
+            else None
+        ) or "strict"
         self._param_categories: dict[int, str] = {}
         self._category_cache: dict[int, str] = {}
         self._nonnull_params: frozenset = frozenset()
@@ -1119,10 +1123,6 @@ def _get_transpilers(session: "SparkSession") -> List[AbstractTranspiler]:
     configured_transpilers = session.conf.get("spark.sql.experimental.optimizer.pyTranspilers")
     if not configured_transpilers:
         return []
-    null_strictness = (
-        session.conf.get("spark.sql.experimental.optimizer.transpileNullStrictness", "strict")
-        or "strict"
-    )
     transpiler_names = configured_transpilers.split(",")
     unknown_names = [name for name in transpiler_names if name not in AbstractTranspiler.varieties]
     if unknown_names:
@@ -1132,7 +1132,7 @@ def _get_transpilers(session: "SparkSession") -> List[AbstractTranspiler]:
             f"{sorted(AbstractTranspiler.varieties)}"
         )
     return [
-        AbstractTranspiler.varieties[name](null_strictness=null_strictness)
+        AbstractTranspiler.varieties[name]()
         for name in transpiler_names
         if name in AbstractTranspiler.varieties
     ]
