@@ -25,8 +25,8 @@ import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, LeftOuter, RightOuter}
-import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupJoin, Join, JoinHint,
-  LocalRelation, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupHint, ExternalLookupJoin, Join,
+  JoinHint, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.streaming.WriteToStream
 import org.apache.spark.sql.catalyst.trees.TreePattern.{DATA_SOURCE_V2_RELATION,
   LOOKUP_ONLY_RELATION}
@@ -96,13 +96,52 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
 
   test("keep ordinary joins that cannot become external lookup joins") {
     val other = LocalRelation($"k".int, $"k2".int)
+    val dual = relation(BATCH_READ, EXTERNAL_LOOKUP)
     Seq(
       innerJoinOnId(tableWith(BATCH_READ, EXTERNAL_LOOKUP)),
       innerJoinOnId(tableWith(BATCH_READ)),
       innerJoinOnId(other),
-      innerJoinOnId(Project(lookupOnly.output, lookupOnly))).foreach { join =>
+      // Without the hint, a table that also supports batch reads keeps the ordinary join.
+      innerJoinOnId(Project(dual.output, dual))).foreach { join =>
       CheckExternalLookupJoin(join)
       assert(FormExternalLookupJoin(join) == join)
+    }
+  }
+
+  test("the hint opts a join in, and the lookup side is found beneath hints and aliases") {
+    val dual = relation(BATCH_READ, EXTERNAL_LOOKUP)
+    Seq(dual.hint("external_lookup").as("d"), lookupOnly.as("t").hint("external_lookup"))
+      .foreach { right =>
+        val analyzed =
+          analyze(left.join(right, LeftOuter, Some(left.output(1) === right.output(1))))
+        CheckExternalLookupJoin(analyzed)
+        val formed = FormExternalLookupJoin(analyzed)
+        assert(formed.isInstanceOf[ExternalLookupJoin])
+        assert(formed.output == analyzed.output)
+        assert(!formed.exists(_.isInstanceOf[ExternalLookupHint]))
+      }
+    // A hint that is not on the lookup side of a join is dropped.
+    val stray = analyze(dual.hint("external_lookup"))
+    assert(stray.isInstanceOf[ExternalLookupHint])
+    assert(FormExternalLookupJoin(stray) == dual)
+  }
+
+  test("a lookup side with another operator above the table fails in validation") {
+    val dual = relation(BATCH_READ, EXTERNAL_LOOKUP)
+    // Projections and filters on the lookup side are not supported, so they fail in validation,
+    // whether or not the optimizer would later remove them.
+    Seq(
+      lookupOnly.select(lookupOnly.output: _*),
+      lookupOnly.as("t").where(lookupOnly.output(2) =!= "x"),
+      dual.select(dual.output: _*).hint("external_lookup"),
+      dual.hint("external_lookup").where(dual.output(2) =!= "x")).foreach { right =>
+      val analyzed = analyze(left.join(right, Inner, Some(left.output(1) === right.output(1))))
+      Seq[LogicalPlan => Any](CheckExternalLookupJoin, FormExternalLookupJoin(_)).foreach { rule =>
+        checkError(
+          exception = intercept[AnalysisException] { rule(analyzed) },
+          condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.LOOKUP_PLAN",
+          parameters = Map.empty)
+      }
     }
   }
 
