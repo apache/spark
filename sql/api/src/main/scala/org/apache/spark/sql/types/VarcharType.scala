@@ -22,6 +22,10 @@ import org.apache.spark.sql.catalyst.util.CollationFactory
 /**
  * A data type representing variable-length character strings with a specified maximum length.
  *
+ * A standalone collated `VarcharType` writes its collation inline in JSON and therefore requires
+ * a current reader. Within a [[StructField]], schema JSON stores the collation in field metadata
+ * and emits an uncollated `varchar(n)` type so older readers can still read the schema.
+ *
  * @param length
  *   The maximum length of the varchar string (must be non-negative)
  * @param collation

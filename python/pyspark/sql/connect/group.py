@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import datetime
+import decimal
 import warnings
 from typing import (
     TYPE_CHECKING,
@@ -246,11 +248,13 @@ class GroupedData:
                     },
                 )
             for v in values:
-                if not isinstance(v, (bool, float, int, str)):
+                if v is not None and not isinstance(
+                    v, (bool, float, int, str, datetime.date, decimal.Decimal)
+                ):
                     raise PySparkTypeError(
                         errorClass="NOT_EXPECTED_TYPE",
                         messageParameters={
-                            "expected_type": "bool, float, int or str",
+                            "expected_type": "bool, date, Decimal, float, int, None or str",
                             "arg_name": "value",
                             "arg_type": type(v).__name__,
                         },

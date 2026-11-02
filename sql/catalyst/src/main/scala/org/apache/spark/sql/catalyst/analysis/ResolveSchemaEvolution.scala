@@ -20,7 +20,8 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
+import org.apache.spark.internal.LogKeys.{DATA_SOURCE, TABLE_NAME}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, MetadataAttributeWithLogicalName}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
@@ -49,6 +50,17 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
     case write: WriteWithSchemaEvolution if write.pendingSchemaChanges.nonEmpty =>
       write.table match {
         case relation @ ExtractV2CatalogAndIdentifier(catalog, ident) =>
+          if (relation.skipSchemaResolution && relation.autoSchemaEvolution) {
+            val dataSource = relation.table.properties().getOrDefault(
+              TableCatalog.PROP_PROVIDER, relation.table.getClass.getName)
+            logWarning(log"Applying schema evolution to ${MDC(DATA_SOURCE, dataSource)} table " +
+              log"${MDC(TABLE_NAME, relation.name)}, which reports both " +
+              log"AUTOMATIC_SCHEMA_EVOLUTION and ACCEPT_ANY_SCHEMA capabilities. While " +
+              log"AUTOMATIC_SCHEMA_EVOLUTION natively resolves and evolves the schema on a write " +
+              log"schema evolution request, ACCEPT_ANY_SCHEMA skips native write schema " +
+              log"resolution and alignment. This may cause the write to fail after the table " +
+              log"schema has been updated. Consider disabling ACCEPT_ANY_SCHEMA.")
+          }
           evolveSchema(catalog, ident, write.pendingSchemaChanges)
           val newTable = CatalogV2Util.loadTableForV2Write(
             catalog, ident, write.writePrivileges, relation.options)
@@ -88,7 +100,9 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
     val newOutput = DataTypeUtils.toAttributes(newTable.columns)
     val newRelation = relation.copy(table = newTable, output = newOutput)
     val writeWithNewTargetTable = write.withNewTable(newRelation)
-    rewriteAttrs(writeWithNewTargetTable, oldOutput, newOutput)
+    val writeWithNewMetadataAttrs =
+      rewriteMetadataAttrs(writeWithNewTargetTable, relation, newRelation)
+    rewriteAttrs(writeWithNewMetadataAttrs, oldOutput, newOutput)
   }
 
   private def rewriteAttrs[T <: LogicalPlan](
@@ -96,6 +110,27 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
       oldOutput: Seq[Attribute],
       newOutput: Seq[Attribute]): T = {
     val attrMap = AttributeMap(oldOutput.zip(newOutput))
+    plan.rewriteAttrs(attrMap).asInstanceOf[T]
+  }
+
+  /**
+   * Rewrites references to the metadata columns of the old relation (e.g. in MERGE conditions)
+   * to the metadata columns of the new relation, which exposes them with new expression IDs.
+   * Metadata columns are matched by their logical name, which stays the same even if a data column
+   * of the new table renames a conflicting metadata column. References to metadata columns that
+   * the new relation does not expose are left unchanged.
+   */
+  private def rewriteMetadataAttrs[T <: LogicalPlan](
+      plan: T,
+      oldRelation: DataSourceV2Relation,
+      newRelation: DataSourceV2Relation): T = {
+    val newMetadataAttrs: Map[String, Attribute] = newRelation.metadataOutput.collect {
+      case MetadataAttributeWithLogicalName(attr, name) => name -> attr
+    }.toMap
+    val attrMap = AttributeMap(oldRelation.metadataOutput.collect {
+      case MetadataAttributeWithLogicalName(attr, name) if newMetadataAttrs.contains(name) =>
+        attr -> newMetadataAttrs(name)
+    })
     plan.rewriteAttrs(attrMap).asInstanceOf[T]
   }
 

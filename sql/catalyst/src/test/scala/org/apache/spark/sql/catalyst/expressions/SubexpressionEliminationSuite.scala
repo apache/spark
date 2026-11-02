@@ -546,12 +546,139 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     assert(equivalence1.getCommonSubexpressions.size == 1)
   }
 
-  test("SPARK-58902: no candidate below a With, with or without the short-circuit peel") {
+  test("With exposes always-evaluated definitions through nested scopes") {
+    val input = AttributeReference("input", IntegerType)()
+    val shared = Add(input, Literal(1))
+    val direct = With(shared) { case Seq(ref) => Add(ref, Literal(2)) }
+    val nested = With(shared) { case Seq(outerRef) =>
+      With(Add(outerRef, Literal(2))) { case Seq(innerRef) => Add(innerRef, input) }
+    }
+    Seq(direct, nested).foreach { expression =>
+      val equivalence = new EquivalentExpressions
+      equivalence.addExprTree(expression)
+      equivalence.addExprTree(Multiply(shared, input))
+      assert(equivalence.getCommonSubexpressions == Seq(shared))
+      assert(equivalence.getAllExprStates().forall { state =>
+        state.expr == expression || !state.expr.exists(_.isInstanceOf[CommonExpressionRef])
+      })
+    }
+  }
+
+  test("With definition traversal is bounded for deeply nested scopes") {
+    val input = AttributeReference("input", IntegerType, nullable = false)()
+    val shared = Add(input, Literal(1))
+    Seq(10, 30).foreach { depth =>
+      var visits = 0
+      def nested(value: Expression, remaining: Int): Expression = {
+        With(value) { case Seq(ref) =>
+          if (remaining == 0) {
+            new If(GreaterThan(ref, Literal(0)), shared, Literal(0)) {
+              override def alwaysEvaluatedInputs: Seq[Expression] = {
+                visits += 1
+                assert(visits <= 4 * depth * depth, s"depth=$depth visits=$visits")
+                super.alwaysEvaluatedInputs
+              }
+            }
+          } else {
+            Add(nested(Add(ref, Literal(1)), remaining - 1), shared)
+          }
+        }
+      }
+      val equivalence = new EquivalentExpressions
+      equivalence.addExprTree(nested(shared, depth))
+      equivalence.addExprTree(Multiply(shared, input))
+      assert(visits > 0)
+      assert(equivalence.getCommonSubexpressions == Seq(shared))
+    }
+  }
+
+  test("With definitions stay lazy behind guards, fallback and shadowing") {
+    val input = AttributeReference("input", IntegerType)()
+    val shared = Add(input, Literal(1))
+    val unused = With(shared) { case Seq(_) => input }
+    val guarded = With(shared) { case Seq(ref) =>
+      If(GreaterThan(input, Literal(0)), ref, input)
+    }
+    val shortcut = With(shared) { case Seq(ref) =>
+      And(GreaterThan(input, Literal(0)), GreaterThan(ref, Literal(0)))
+    }
+    val fallback = With(shared) { case Seq(ref) => CodegenFallbackExpression(ref) }
+    val lambdaVar = NamedLambdaVariable("x", IntegerType, nullable = false)
+    val higherOrder = With(shared) { case Seq(ref) =>
+      ArrayExists(CreateArray(Seq(input)),
+        LambdaFunction(GreaterThan(ref, lambdaVar), Seq(lambdaVar)),
+        followThreeValuedLogic = true)
+    }
+    val outerDef = CommonExpressionDef(shared)
+    val innerDef = CommonExpressionDef(Add(input, Literal(2)), outerDef.id)
+    val shadowed = With(With(new CommonExpressionRef(innerDef), Seq(innerDef)), Seq(outerDef))
+    Seq(unused, guarded, shortcut, fallback, higherOrder, shadowed).foreach { expression =>
+      val equivalence = new EquivalentExpressions(skipForShortcutEnable = true)
+      equivalence.addExprTree(expression)
+      equivalence.addExprTree(Multiply(shared, input))
+      assert(equivalence.getCommonSubexpressions.isEmpty, s"$expression")
+    }
+  }
+
+  test("With exposes independent subexpressions but not unbound references") {
+    val input = AttributeReference("input", IntegerType)()
+    val shared = Add(input, Literal(1))
+    val expression = With(input) { case Seq(ref) =>
+      Add(ref, Multiply(shared, shared))
+    }
+    val equivalence = new EquivalentExpressions
+    equivalence.addExprTree(expression)
+    assert(equivalence.getCommonSubexpressions == Seq(shared))
+    assert(equivalence.getAllExprStates().forall { state =>
+      state.expr == expression || !state.expr.exists(_.isInstanceOf[CommonExpressionRef])
+    })
+  }
+
+  test("With candidates must bind references in their lexical scope") {
+    val input = AttributeReference("input", IntegerType)()
+    val shared = Add(input, Literal(1))
+    var inner: Expression = null
+    val outer = With(input) { case Seq(outerRef) =>
+      inner = With(input) { case Seq(innerRef) =>
+        Add(Add(outerRef, innerRef), shared)
+      }
+      Add(inner, shared)
+    }
+    val equivalence = new EquivalentExpressions
+    equivalence.addExprTree(outer)
+    assert(equivalence.getExprState(outer).nonEmpty)
+    assert(equivalence.getExprState(inner).isEmpty)
+    assert(equivalence.getCommonSubexpressions == Seq(shared))
+    assert(!equivalence.addExpr(inner))
+    val closed = With(input) { case Seq(ref) => Add(ref, Literal(1)) }
+    val sibling = new CommonExpressionRef(closed.defs.head)
+    assert(!equivalence.addExpr(Add(closed, sibling)))
+  }
+
+  test("With does not expose lazy definitions or interpreted children") {
+    val input = AttributeReference("input", IntegerType)()
+    val shared = Add(input, Literal(1))
+    val lazyDefinition = With(Multiply(shared, shared)) { case Seq(ref) =>
+      If(Literal(false), ref, input)
+    }
+    val fallback = With(input) { case Seq(ref) =>
+      Add(CodegenFallbackExpression(ref), Multiply(shared, shared))
+    }
+    val guarded = With(input) { case Seq(ref) =>
+      If(GreaterThan(ref, Literal(0)), Multiply(shared, shared), Literal(0))
+    }
+    Seq(lazyDefinition, fallback, guarded).foreach { expression =>
+      val equivalence = new EquivalentExpressions
+      equivalence.addExprTree(expression)
+      assert(equivalence.getCommonSubexpressions.isEmpty)
+    }
+  }
+
+  test("SPARK-58902: candidates below a With cannot hold unbound references") {
     // A `CommonExpressionRef` can only be evaluated inside the `With` that binds it: the codegen
     // slots exist only while that `With` is being generated, and `getCommonExpr` throws otherwise.
     // Subexpression elimination generates its candidates outside every `With` scope, so a candidate
-    // holding a reference would fail the query. `childrenToRecurse` therefore stops at a `With`,
-    // including after `skipForShortcut` has peeled an `And`/`Or` down to one.
+    // holding an unbound reference would fail the query.
     val a = AttributeReference("a", IntegerType)()
     val memoized = With(Add(a, a)) { case Seq(ref) =>
       And(GreaterThan(ref, Literal(0)), LessThan(ref, Literal(10)))
@@ -572,16 +699,15 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
         assert(states.nonEmpty, s"nothing was recorded for $expr (peel = $peel)")
         // The `With` itself stays a candidate wherever it is reached: deduplicating it as a whole
         // is safe, since it carries its own definitions and brings their slots into scope wherever
-        // it is generated. The exception is an `And` root with the peel on, where the peel lands on
-        // the `With` and the guard drops it along with its subtree -- no opportunity is lost there,
-        // because the peel never hands back the node it lands on, only that node's children.
+        // it is generated. With an `And` root and the peel on, the `With` itself is skipped; its
+        // child is still traversed, but candidates with unbound references are rejected.
         if (!(peel && expr.isInstanceOf[And])) {
           assert(states.exists(_.expr.isInstanceOf[With]),
             s"the With itself stopped being a candidate for $expr (peel = $peel)")
         }
         states.foreach { state =>
-          // A candidate may hold a reference only if it also holds the `With` that binds it -- the
-          // whole `With`, or something above it, is a legal candidate; anything below it is not.
+          // A candidate may hold a reference only if it also holds the `With` that binds it.
+          // Reference-free candidates below a `With` are legal too.
           // The ids are collected over the whole candidate rather than per reference, so a
           // reference sitting beside its binder rather than under it would pass; `With.apply`
           // cannot build that shape.
@@ -589,7 +715,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
           val boundIds =
             state.expr.collect { case inScope: With => inScope.defs.map(_.id) }.flatten.toSet
           assert(refIds.subsetOf(boundIds),
-            s"a candidate below the With was added for $expr (peel = $peel): ${state.expr}")
+            s"an unbound reference was added for $expr (peel = $peel): ${state.expr}")
           assert(!state.expr.isInstanceOf[CommonExpressionDef],
             s"an unevaluable definition was added for $expr (peel = $peel): ${state.expr}")
         }
@@ -683,6 +809,19 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
       val states = eliminated(expr)
       assert(states.map(_.expr) == Seq(add), s"$expr")
       assert(states.head.useCount == 2, s"$expr")
+    }
+  }
+
+  test("SPARK-59426: ExpressionEquals.hashCode matches the previous Objects.hash implementation") {
+    Seq[Expression](
+      Literal(1),
+      Literal("abc"),
+      Add(Literal(1), Literal(2)),
+      Coalesce(Seq(Literal(1), Literal(2), Literal(3)))
+    ).foreach { e =>
+      val wrapper = ExpressionEquals(e)
+      val expected = java.util.Objects.hash(e.semanticHash(): Integer, wrapper.height: Integer)
+      assert(wrapper.hashCode == expected, s"hashCode mismatch for $e")
     }
   }
 }
