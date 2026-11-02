@@ -24,13 +24,14 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.reflect.ClassTag
 
 import test.org.apache.spark.sql.connector.catalog.functions.{JavaInitTrackingStrLen, JavaStaticInitFailingStrLen}
-import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen.JavaStrLenNoImpl
+import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen.{JavaStrLenNoImpl, JavaStrLenStaticMagic}
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow}
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ScalarFunction, SimpleFunction, UnboundFunction}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType, StructType}
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SparkTestUtils, Utils}
 
 /**
@@ -50,9 +51,13 @@ class CreateV2FunctionSuite extends QueryTest with SharedSparkSession {
    * Compiles a V2 string length function named `className` into a jar that is not on the
    * classpath, and returns the jar URI. The jar is named after the class, as Spark rejects
    * registering the same jar name with a different path. With `magic`, the function implements
-   * the magic `invoke` method, otherwise `produceResult`.
+   * the magic `invoke` method, otherwise `produceResult`. With `requires`, initializing the class
+   * loads that class through the context classloader.
    */
-  private def createStrLenJar(className: String, magic: Boolean = true): String = {
+  private def createStrLenJar(
+      className: String,
+      magic: Boolean = true,
+      requires: Option[String] = None): String = {
     val dir = Utils.createTempDir()
     val cp = ManagementFactory.getRuntimeMXBean.getClassPath
       .split(File.pathSeparator).map(p => new File(p).toURI.toURL).toSeq
@@ -62,6 +67,15 @@ class CreateV2FunctionSuite extends QueryTest with SharedSparkSession {
     } else {
       "public Integer produceResult(InternalRow r) { return r.getUTF8String(0).numChars(); }"
     }
+    val staticInit = requires.map { required =>
+      s"""static {
+         |    try {
+         |      Class.forName("$required", true, Thread.currentThread().getContextClassLoader());
+         |    } catch (ClassNotFoundException e) {
+         |      throw new IllegalStateException(e);
+         |    }
+         |  }""".stripMargin
+    }.getOrElse("")
     val source =
       s"""package ${className.stripSuffix("." + simpleName)};
          |
@@ -73,6 +87,7 @@ class CreateV2FunctionSuite extends QueryTest with SharedSparkSession {
          |import org.apache.spark.unsafe.types.UTF8String;
          |
          |public class $simpleName implements SimpleFunction, ScalarFunction<Integer> {
+         |  $staticInit
          |  public DataType[] inputTypes() { return new DataType[] { DataTypes.StringType }; }
          |  public DataType resultType() { return DataTypes.IntegerType; }
          |  public String name() { return "jar_strlen"; }
@@ -185,22 +200,33 @@ class CreateV2FunctionSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("DESCRIBE FUNCTION reports the V2 function description") {
-    withUserDefinedFunction("default.strlen" -> false) {
+  test("DESCRIBE FUNCTION reports the V2 function description once it is loaded") {
+    withUserDefinedFunction("tstrlen" -> true, "default.strlen" -> false) {
+      def describe(name: String): Seq[String] =
+        sql(s"DESCRIBE FUNCTION $name").collect().map(_.getString(0)).toSeq
+
+      sql(s"CREATE TEMPORARY FUNCTION tstrlen AS '$strLenClass'")
+      assert(describe("tstrlen").exists(_.contains("strlen(string) -> int")))
+
       sql(s"CREATE FUNCTION strlen AS '$strLenClass'")
-      val output = sql("DESCRIBE FUNCTION default.strlen").collect().map(_.getString(0))
-      assert(output.exists(_.contains(strLenClass)))
-      assert(output.exists(_.contains("strlen(string) -> int")))
+      // A persistent function is loaded on first invocation in the session.
+      assert(describe("default.strlen").exists(_.contains(strLenClass)))
+      assert(!describe("default.strlen").exists(_.contains("strlen(string) -> int")))
+      checkAnswer(sql("SELECT strlen('abc')"), Row(3))
+      assert(describe("default.strlen").exists(_.contains("strlen(string) -> int")))
     }
   }
 
-  test("persistent existence and first invocation do not construct unused metadata instances") {
+  test("metadata reads do not construct a persistent function before its first invocation") {
     V2MetadataTrackingStrLen.constructions.set(0)
     val className = classOf[V2MetadataTrackingStrLen].getName
     withUserDefinedFunction("default.metadata_len" -> false) {
       sql(s"CREATE FUNCTION metadata_len AS '$className'")
       assert(spark.catalog.functionExists("metadata_len"))
       assert(spark.catalog.functionExists("default", "metadata_len"))
+      assert(spark.catalog.listFunctions().collect().exists(_.name == "metadata_len"))
+      assert(spark.catalog.getFunction("metadata_len").className == className)
+      sql("DESCRIBE FUNCTION EXTENDED metadata_len").collect()
       assert(V2MetadataTrackingStrLen.constructions.get() == 0)
       checkAnswer(sql("SELECT metadata_len('abc')"), Row(3))
       assert(V2MetadataTrackingStrLen.constructions.get() == 1)
@@ -209,16 +235,21 @@ class CreateV2FunctionSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("persistent metadata-only reads recover after ADD JAR") {
-    val className = "test.v2udf.MetadataAfterAddJarStrLen"
-    assert(!Utils.classIsLoadable(className))
+  test("metadata reads do not initialize the class of a persistent function") {
+    val className = "test.v2udf.RequiresLaterJarStrLen"
+    val requiredClassName = "test.v2udf.LaterJarStrLen"
+    // Initializing the class fails until the jar of the class it requires is added. A failed
+    // initialization would make the class unusable for the rest of the JVM's life.
+    sql(s"ADD JAR '${createStrLenJar(className, requires = Some(requiredClassName))}'")
     withUserDefinedFunction("default.metadata_len" -> false) {
       sql(s"CREATE FUNCTION metadata_len AS '$className'")
+      assert(spark.catalog.listFunctions().collect().exists(_.name == "metadata_len"))
       assert(spark.catalog.getFunction("metadata_len").description == "N/A.")
-      sql(s"ADD JAR '${createStrLenJar(className)}'")
+      sql("DESCRIBE FUNCTION EXTENDED metadata_len").collect()
+
+      sql(s"ADD JAR '${createStrLenJar(requiredClassName)}'")
+      checkAnswer(sql("SELECT metadata_len('abc')"), Row(3))
       assert(spark.catalog.getFunction("metadata_len").description == "jar_strlen(string) -> int")
-      assert(sql("DESCRIBE FUNCTION metadata_len").collect().map(_.getString(0))
-        .exists(_.contains("jar_strlen(string) -> int")))
     }
   }
 
@@ -239,7 +270,6 @@ class CreateV2FunctionSuite extends QueryTest with SharedSparkSession {
       }
 
       checkUnavailableDescription("tstrlen")
-      checkUnavailableDescription("pstrlen")
       checkAnswer(sql("SELECT tstrlen(CAST(id AS STRING)) FROM range(9, 11)"),
         Row(1) :: Row(2) :: Nil)
       checkAnswer(sql("SELECT pstrlen(CAST(id AS STRING)) FROM range(9, 11)"),
@@ -280,6 +310,27 @@ class CreateV2FunctionSuite extends QueryTest with SharedSparkSession {
       checkUnsupported("iavg(id) IGNORE NULLS", "`iavg`", "IGNORE NULLS")
       checkUnsupported(
         "iavg(id) WITHIN GROUP (ORDER BY id)", "`iavg`", "WITHIN GROUP (ORDER BY ...)")
+    }
+  }
+
+  test("column names of magic methods use the function name") {
+    val simpleMagicClass = classOf[V2SimpleStrLenMagic].getName
+    withUserDefinedFunction(
+        "strlen" -> true, "sstrlen" -> true, "simple_strlen" -> true, "default.pstrlen" -> false) {
+      sql(s"CREATE TEMPORARY FUNCTION strlen AS '$strLenMagicClass'")
+      sql(s"CREATE TEMPORARY FUNCTION sstrlen AS '${classOf[V2StrLenStaticMagic].getName}'")
+      sql(s"CREATE TEMPORARY FUNCTION simple_strlen AS '$simpleMagicClass'")
+      sql(s"CREATE FUNCTION pstrlen AS '$strLenMagicClass'")
+      val df = sql("SELECT strlen('a'), sstrlen('a'), simple_strlen('a'), pstrlen('a')")
+      assert(df.columns.toSeq ==
+        Seq("strlen(a)", "sstrlen(a)", "simple_strlen(a)", "spark_catalog.default.pstrlen(a)"))
+
+      // The column name does not depend on the function instance.
+      withTempView("v") {
+        sql("CREATE TEMPORARY VIEW v AS SELECT simple_strlen(s) FROM VALUES ('abc') t(s)")
+        sql(s"CREATE OR REPLACE TEMPORARY FUNCTION simple_strlen AS '$simpleMagicClass'")
+        checkAnswer(spark.table("v"), Row(3))
+      }
     }
   }
 
@@ -398,9 +449,9 @@ class CreateV2FunctionSuite extends QueryTest with SharedSparkSession {
       checkFatal(sql(s"CREATE TEMPORARY FUNCTION f AS '$className'"))
       withUserDefinedFunction("default.f" -> false) {
         sql(s"CREATE FUNCTION f AS '$className'")
-        checkFatal(sql("DESCRIBE FUNCTION f").collect())
-        checkFatal(spark.catalog.getFunction("f"))
-        checkFatal(spark.catalog.listFunctions().collect())
+        sql("DESCRIBE FUNCTION f").collect()
+        spark.catalog.getFunction("f")
+        spark.catalog.listFunctions().collect()
         checkFatal(sql("SELECT f('abc')").collect())
         checkFatal(sql("REFRESH FUNCTION f"))
       }
@@ -499,6 +550,21 @@ class V2SimpleStrLen extends SimpleFunction with ScalarFunction[Int] {
   override def name(): String = "strlen"
   override def description(): String = "strlen: strlen(string) -> int"
   override def produceResult(input: InternalRow): Int = input.getUTF8String(0).numChars()
+}
+
+class V2StrLenStaticMagic extends V2StrLen {
+  override def bind(inputType: StructType): BoundFunction = {
+    super.bind(inputType)
+    new JavaStrLenStaticMagic
+  }
+}
+
+class V2SimpleStrLenMagic extends SimpleFunction with ScalarFunction[Int] {
+  override def inputTypes(): Array[DataType] = Array(StringType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "strlen"
+  override def description(): String = "strlen: strlen(string) -> int"
+  def invoke(s: UTF8String): Int = s.numChars()
 }
 
 class V2IntegralAverage extends UnboundFunction {

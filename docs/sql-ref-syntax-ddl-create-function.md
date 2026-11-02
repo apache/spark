@@ -91,10 +91,10 @@ CREATE [ OR REPLACE ] [ TEMPORARY ] FUNCTION [ IF NOT EXISTS ]
     * Should extend `UserDefinedAggregateFunction` in `org.apache.spark.sql.expressions` package.
 
     **Note:** If an `UnboundFunction` binds to a `ScalarFunction` that implements the magic method
-    `invoke`, and its jar is added at runtime (`ADD JAR`, or `USING JAR`), queries calling it may
-    fail to compile generated code when run on a thread other than the one that added the jar,
-    e.g., a later line in spark-shell. To avoid it, provide the jar at startup via `--jars` or
-    `spark.jars`, or implement `produceResult` instead.
+    `invoke`, and its jar is added at runtime (`ADD JAR`, or `USING JAR`), codegen may fail to find
+    the class, e.g., in spark-shell. Whole-stage codegen falls back to slower interpreted
+    execution, other codegen fails the query. To avoid it, add the jar at startup via `--jars`, or
+    implement `produceResult` instead.
 
 * **resource_locations**
 

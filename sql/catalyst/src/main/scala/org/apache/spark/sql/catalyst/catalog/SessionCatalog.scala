@@ -2228,34 +2228,10 @@ class SessionCatalog(
       if (funcDefinition.isUserDefinedFunction) {
         UserDefinedFunction.fromCatalogFunction(funcDefinition, parser).toExpressionInfo
       } else {
-        makeExprInfoForClassFunction(funcDefinition)
+        makeExprInfoForHiveFunction(funcDefinition)
       }
     }
     registry.registerFunction(identToRegister, resolvedInfo, functionBuilder)
-  }
-
-  /**
-   * Builds the [[ExpressionInfo]] of a class-based function (`CREATE FUNCTION ... AS 'class'`).
-   * A V2 function reports its own description, which requires instantiating it. Otherwise, or if
-   * the class cannot be loaded or instantiated, use the class-name-only info, so that like a Hive
-   * UDF, a broken function only fails when invoked. The class of a function with `USING`
-   * resources is not touched, as initializing it may require those resources, which are only
-   * loaded on first invocation.
-   */
-  private def makeExprInfoForClassFunction(func: CatalogFunction): ExpressionInfo = {
-    if (func.resources.nonEmpty) {
-      return makeExprInfoForHiveFunction(func)
-    }
-    try {
-      val clazz = Utils.classForName(func.className, initialize = false)
-      if (isV2FunctionClass(clazz)) {
-        makeExprInfoForV2Function(func, newV2FunctionInstance(clazz, func.identifier))
-      } else {
-        makeExprInfoForHiveFunction(func)
-      }
-    } catch {
-      case NonFatal(_) | _: LinkageError => makeExprInfoForHiveFunction(func)
-    }
   }
 
   private def makeExprInfoForV2Function(
@@ -2794,21 +2770,20 @@ class SessionCatalog(
     // Check if already cached in either registry
     functionRegistry.lookupFunction(qualifiedIdent)
       .orElse(tableFunctionRegistry.lookupFunction(qualifiedIdent))
-      .getOrElse(makePersistentFunctionInfo(fetchCatalogFunction(qualifiedIdent)))
-  }
-
-  private def makePersistentFunctionInfo(func: CatalogFunction): ExpressionInfo = {
-    if (func.isUserDefinedFunction) {
-      UserDefinedFunction.fromCatalogFunction(func, parser).toExpressionInfo
-    } else {
-      makeExprInfoForClassFunction(func)
-    }
+      .getOrElse {
+        val funcMetadata = fetchCatalogFunction(qualifiedIdent)
+        if (funcMetadata.isUserDefinedFunction) {
+          UserDefinedFunction.fromCatalogFunction(funcMetadata, parser).toExpressionInfo
+        } else {
+          makeExprInfoForHiveFunction(funcMetadata)
+        }
+      }
   }
 
   /**
    * Load a persistent scalar function by name.
    * Returns V1Function with:
-   * - Lazy info (no resource loading)
+   * - Eager info (from cache or catalog fetch, no resource loading)
    * - Lazy builder (resource loading only on first invoke)
    *
    * This matches V1 behavior where DESCRIBE doesn't load resources.
@@ -2825,6 +2800,11 @@ class SessionCatalog(
       case None =>
         // Fetch metadata eagerly (no resource loading yet)
         val funcMetadata = fetchCatalogFunction(qualifiedIdent)
+        val info = if (funcMetadata.isUserDefinedFunction) {
+          UserDefinedFunction.fromCatalogFunction(funcMetadata, parser).toExpressionInfo
+        } else {
+          makeExprInfoForHiveFunction(funcMetadata)
+        }
 
         // Builder factory - loads resources only on first invoke()
         val builderFactory: () => FunctionBuilder = () => synchronized {
@@ -2845,11 +2825,7 @@ class SessionCatalog(
           }
         }
 
-        // Once invoked, the registered function carries the complete info.
-        val infoFactory: () => ExpressionInfo = () =>
-          functionRegistry.lookupFunction(qualifiedIdent)
-            .getOrElse(makePersistentFunctionInfo(funcMetadata))
-        V1Function.lazyInfo(infoFactory, builderFactory)
+        V1Function(info, builderFactory)
     }
   }
 
