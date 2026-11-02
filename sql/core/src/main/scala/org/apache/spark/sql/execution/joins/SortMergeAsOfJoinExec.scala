@@ -161,7 +161,8 @@ private[joins] class SortMergeAsOfJoinScanner(
   private val joinedOutput = leftOutput ++ rightOutput
   private val joinedRow = new JoinedRow()
   // Use nullable bound references so outer-join null padding is safe even when
-  // right attributes are NOT NULL in the catalog schema.
+  // right attributes are NOT NULL in the catalog schema. Every output row reuses the
+  // projection's row.
   private val resultProjection = {
     val nullableRefs = joinedOutput.zipWithIndex.map { case (attr, i) =>
       BoundReference(i, attr.dataType, nullable = true)
@@ -169,9 +170,11 @@ private[joins] class SortMergeAsOfJoinScanner(
     UnsafeProjection.create(nullableRefs, joinedOutput)
   }
 
-  private val boundAsOfCond = bindReference(asOfCondition, joinedOutput)
+  // Compiled once, so a check runs generated code instead of walking the expression tree.
+  // The scan checks the as-of condition for every right row it reads.
+  private val boundAsOfCond = Predicate.create(asOfCondition, joinedOutput)
   private val boundResidualCond =
-    residualCondition.map(bindReference(_, joinedOutput))
+    residualCondition.map(Predicate.create(_, joinedOutput))
 
   private val equiKeyOrdering: Option[BaseOrdering] =
     if (leftKeys.nonEmpty) {
@@ -259,7 +262,7 @@ private[joins] class SortMergeAsOfJoinScanner(
           if (joinType == LeftOuter) {
             numOutputRows += 1
             joinedRow.withLeft(leftRow).withRight(nullRightRow)
-            return resultProjection(joinedRow).copy()
+            return resultProjection(joinedRow)
           }
         } else {
           advanceRightTo(leftKey)
@@ -269,11 +272,11 @@ private[joins] class SortMergeAsOfJoinScanner(
           if (bestMatch != null) {
             numOutputRows += 1
             joinedRow.withLeft(leftRow).withRight(bestMatch)
-            return resultProjection(joinedRow).copy()
+            return resultProjection(joinedRow)
           } else if (joinType == LeftOuter) {
             numOutputRows += 1
             joinedRow.withLeft(leftRow).withRight(nullRightRow)
-            return resultProjection(joinedRow).copy()
+            return resultProjection(joinedRow)
           }
         }
       }
@@ -368,13 +371,14 @@ private[joins] class SortMergeAsOfJoinScanner(
   }
 
   /** Whether `cond` is TRUE on the current joined row. FALSE and NULL both fail. */
-  private def holds(cond: Expression): Boolean = {
-    val result = cond.eval(joinedRow)
-    result != null && result.asInstanceOf[Boolean]
-  }
+  private def holds(cond: BasePredicate): Boolean = cond.eval(joinedRow)
 
   /** Whether the residual ON condition, if any, holds on the current joined row. */
-  private def residualHolds: Boolean = boundResidualCond.forall(holds)
+  private def residualHolds: Boolean = boundResidualCond match {
+    // A match, not `forall`, so the per-row check makes no closure.
+    case Some(cond) => cond.eval(joinedRow)
+    case None => true
+  }
 
   /**
    * Backward joins keep the last row that passes the as-of and residual conditions.
