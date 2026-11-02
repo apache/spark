@@ -137,6 +137,47 @@ class Scd1VersionMapSuite extends QueryTest with SharedSparkSession {
     )))
   }
 
+  test("buildVersionMap reads selected struct leaves independently and under null structs") {
+    val userDataSchema = new StructType()
+      .add("profile", new StructType()
+        .add("city", StringType)
+        .add("contact", new StructType().add("zip", StringType)))
+      .add("billing", new StructType().add("city", StringType))
+    val inputSchema = StructType(userDataSchema.fields :+ StructField("seq", LongType))
+    val input = dataFrameOf(inputSchema)(
+      Row(null, null, 10L),
+      Row(Row("SF", null), Row(null), 20L),
+      Row(Row(null, Row("94105")), Row("NYC"), 30L)
+    )
+    val ignoreNullSelection =
+      ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("profile")))
+
+    val result = input.select(
+      Scd1VersionMap.buildVersionMap(
+        schema = userDataSchema,
+        ignoreNullSelection = ignoreNullSelection,
+        authorshipSequence = F.col("seq"),
+        sequencingType = LongType,
+        resolver = caseSensitiveResolution
+      )
+    )
+
+    checkAnswer(result, Seq(
+      Row(Map[String, Any](
+        encodedPath("profile", "city") -> null,
+        encodedPath("profile", "contact", "zip") -> null,
+        encodedPath("billing", "city") -> 10L)),
+      Row(Map[String, Any](
+        encodedPath("profile", "city") -> 20L,
+        encodedPath("profile", "contact", "zip") -> null,
+        encodedPath("billing", "city") -> 20L)),
+      Row(Map[String, Any](
+        encodedPath("profile", "city") -> null,
+        encodedPath("profile", "contact", "zip") -> 30L,
+        encodedPath("billing", "city") -> 30L))
+    ))
+  }
+
   test("buildVersionMap respects the supplied resolver for ignore-null selection") {
     val userDataSchema = new StructType().add("Value", StringType)
     val inputSchema = StructType(userDataSchema.fields :+ StructField("seq", LongType))
@@ -229,7 +270,11 @@ class Scd1VersionMapSuite extends QueryTest with SharedSparkSession {
     val input = dataFrameOf(inputSchema)(
       Row(null, null, Row(null), Row.fromSeq(Seq.fill[Any](wrapperLeafNames.size)(null)), 10L))
 
-    // Selecting every leaf makes buildVersionMap resolve each leaf's column through its key.
+    leafPathsAndExpectedKeys.foreach { case (path, key) =>
+      assert(Scd1VersionMap.serializeKey(path) === key)
+    }
+
+    // Selecting every leaf makes buildVersionMap resolve each leaf's column by its path.
     val result = input.select(
       Scd1VersionMap.buildVersionMap(
         schema = userDataSchema,

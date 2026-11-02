@@ -33,8 +33,15 @@ import org.apache.spark.sql.types.{DataType, MapType, StringType, StructType}
  * Concretely, the contract of the version map is as follows.
  * 1. Every user-data leaf present in the row when the map is written receives an entry.
  * 2. A non-null entry is the sequencing clock of the event that authored the leaf's current stored
- *    value.
+ *    value. A delete authors a null value until a later upsert reauthors the leaf.
  * 3. A null entry means the leaf has no authored value.
+ * 4. A leaf absent from the map was not in the row when the map was written, such as a leaf added
+ *    through later schema evolution. It is treated as unauthored, as in (3), until the map is next
+ *    rewritten; then a null entry is explicitly materialized.
+ *
+ * Unlike the SCD2 version map, the SCD1 version map is mutable reconciliation state. When a newer
+ * CDC event authors a leaf, reconciliation updates that leaf's stored value and advances its
+ * sequencing clock in the map without changing the clocks of other leaves.
  *
  * A user-data leaf is a non-key, non-framework field obtained by recursively expanding structs.
  *
@@ -62,7 +69,7 @@ private[pipelines] object Scd1VersionMap {
    * Builds a version map of type `mapType(sequencingType)` with one entry per leaf.
    *
    * @param entries Each leaf's raw, unquoted name parts, paired with its authorship sequence. Keys
-   *                are serialized with [[serializeKey]].
+   *                are serialized with [[serializeKey]], and the leaf paths must be distinct.
    * @param sequencingType The data type the sequences are cast to.
    */
   private def fromEntries(entries: Seq[(Seq[String], Column)], sequencingType: DataType): Column = {
@@ -110,7 +117,7 @@ private[pipelines] object Scd1VersionMap {
     val entries = AutoCdcSchemaUtils.flattenStructFieldPaths(schema).map { path =>
       val leafSequence =
         if (ignoreNullLeafPaths.contains(path)) {
-          F.when(F.col(serializeKey(path)).isNotNull, authorshipSequence)
+          F.when(F.col(QuotingUtils.quoteNameParts(path)).isNotNull, authorshipSequence)
         } else {
           authorshipSequence
         }

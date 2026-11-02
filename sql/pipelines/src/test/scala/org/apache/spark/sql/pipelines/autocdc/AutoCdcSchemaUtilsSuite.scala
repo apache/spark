@@ -140,10 +140,20 @@ class AutoCdcSchemaUtilsSuite extends SparkFunSuite {
 
     val mismatchedSelection =
       ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("profile")))
-    intercept[AnalysisException] {
-      AutoCdcSchemaUtils.resolveIgnoreNullLeafPaths(
-        schema, mismatchedSelection, caseSensitiveResolution)
-    }
+    checkError(
+      exception = intercept[AnalysisException] {
+        AutoCdcSchemaUtils.resolveIgnoreNullLeafPaths(
+          schema, mismatchedSelection, caseSensitiveResolution)
+      },
+      condition = "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA",
+      sqlState = "42703",
+      parameters = Map(
+        "caseSensitivity" -> "case-sensitive",
+        "schemaName" -> "ignoreNullSelection",
+        "missingColumns" -> "profile",
+        "availableColumns" -> "Profile"
+      )
+    )
   }
 
   test("resolveIgnoreNullLeafPaths preserves raw special-character names") {
