@@ -25,7 +25,7 @@ INSERT INTO streaming_sql_golden_pivot_source VALUES
   (TIMESTAMP '2024-01-01 00:00:01', 'books', 2),
   (TIMESTAMP '2024-01-01 00:00:01', 'games', 3),
   (TIMESTAMP '2024-01-01 00:00:02', 'books', 5),
-  (TIMESTAMP '2024-01-01 00:00:10', 'watermark', 0)
+  (TIMESTAMP '2024-01-01 00:00:10', 'games', 7)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_pivot_source, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_pivot_source], Append, `spark_catalog`.`default`.`streaming_sql_golden_pivot_source`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_pivot_source), [event_time, category, amount]
 +- Project [col1#x AS event_time#x, col2#x AS category#x, col3#x AS amount#x]
@@ -61,6 +61,34 @@ PIVOT (
                +- ~EventTimeWatermark xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx, event_time#x: timestamp, 1 seconds
                   +- ~SubqueryAlias spark_catalog.default.streaming_sql_golden_pivot_source
                      +- StreamingRelation FileSource[file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_pivot_source], [event_time#x, category#x, amount#x], name=<Unassigned>
+
+
+-- !query
+REFRESH FLOW streaming_sql_golden_pivot_flow
+-- !query analysis
+
+
+
+-- !query
+SELECT * FROM streaming_sql_golden_pivot_sink ORDER BY event_time
+-- !query analysis
+Sort [event_time#x ASC NULLS FIRST], true
++- Project [event_time#x, books#xL, games#xL]
+   +- SubqueryAlias spark_catalog.default.streaming_sql_golden_pivot_sink
+      +- Relation spark_catalog.default.streaming_sql_golden_pivot_sink[event_time#x,books#xL,games#xL] parquet
+
+
+-- !query
+INSERT INTO streaming_sql_golden_pivot_source VALUES
+  (TIMESTAMP '2024-01-01 00:00:01', 'books', 100),
+  (TIMESTAMP '2024-01-01 00:00:10', 'books', 11),
+  (TIMESTAMP '2024-01-01 00:00:11', 'books', 13),
+  (TIMESTAMP '2024-01-01 00:00:11', 'games', 17),
+  (TIMESTAMP '2024-01-01 00:00:20', 'games', 19)
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_pivot_source, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_pivot_source], Append, `spark_catalog`.`default`.`streaming_sql_golden_pivot_source`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_pivot_source), [event_time, category, amount]
++- Project [col1#x AS event_time#x, col2#x AS category#x, col3#x AS amount#x]
+   +- LocalRelation [col1#x, col2#x, col3#x]
 
 
 -- !query
