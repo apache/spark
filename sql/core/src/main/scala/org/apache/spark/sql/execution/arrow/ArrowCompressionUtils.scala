@@ -22,7 +22,7 @@ import scala.jdk.CollectionConverters._
 
 import com.github.luben.zstd.Zstd
 import org.apache.arrow.compression.{Lz4CompressionCodec, ZstdCompressionCodec}
-import org.apache.arrow.memory.{ArrowBuf, BufferAllocator}
+import org.apache.arrow.memory.{ArrowBuf, BufferAllocator, OutOfMemoryException}
 import org.apache.arrow.util.AutoCloseables
 import org.apache.arrow.vector.{VectorSchemaRoot, VectorUnloader}
 import org.apache.arrow.vector.compression.{CompressionCodec, CompressionUtil, NoCompressionCodec}
@@ -78,13 +78,22 @@ private[sql] object ArrowCompressionUtils {
 }
 
 /**
- * A [[ZstdCompressionCodec]] that never lets zstd write past its output buffer. arrow-java up to
- * 19.0 passes `compressBound(len) + 8` as the destination capacity while pointing zstd 8 bytes
- * into a buffer of that size, so zstd can overrun it by up to 8 bytes; here the capacity is
- * `compressBound(len)`. Remove once on Arrow 20.0.0 (apache/arrow-java#1119).
+ * A [[ZstdCompressionCodec]] that never lets zstd write past its output buffer and that does not
+ * keep that buffer for an output that needs much less memory.
+ *
+ * arrow-java up to 19.0 passes `compressBound(len) + 8` as the destination capacity while pointing
+ * zstd 8 bytes into a buffer of that size, so zstd can overrun it by up to 8 bytes; here the
+ * capacity is `compressBound(len)`. Remove `doCompress` once on Arrow 20.0.0
+ * (apache/arrow-java#1119).
+ *
+ * arrow-java also leaves the output in that buffer, whose size the allocator rounds up to a power
+ * of two below 16 MiB, and `VectorUnloader` keeps the output of every vector buffer until the
+ * record batch is closed. So a batch would hold about as much direct memory as its uncompressed
+ * vectors, whatever the compression ratio.
  */
 private[sql] class BoundedZstdCompressionCodec(compressionLevel: Int)
   extends ZstdCompressionCodec(compressionLevel) {
+  import BoundedZstdCompressionCodec._
 
   override protected def doCompress(
       allocator: BufferAllocator,
@@ -105,6 +114,36 @@ private[sql] class BoundedZstdCompressionCodec(compressionLevel: Int)
     compressedBuffer.writerIndex(CompressionUtil.SIZE_OF_UNCOMPRESSED_LENGTH + bytesWritten)
     compressedBuffer
   }
+
+  override def compress(allocator: BufferAllocator, uncompressedBuffer: ArrowBuf): ArrowBuf = {
+    val compressed = super.compress(allocator, uncompressedBuffer)
+    val length = compressed.writerIndex()
+    val roundedLength = allocator.getRoundingPolicy.getRoundedSize(length)
+    // Requiring at least half of the buffer back also limits the extra memory that the copy needs
+    // while both buffers are alive. Empty and raw outputs are already in a buffer of their size.
+    if (roundedLength > compressed.capacity() / 2 ||
+        compressed.capacity() - roundedLength < MIN_SHRINK_SAVING_BYTES) {
+      compressed
+    } else {
+      try {
+        val shrunk = allocator.buffer(length)
+        shrunk.setBytes(0, compressed, 0, length)
+        shrunk.writerIndex(length)
+        compressed.close()
+        shrunk
+      } catch {
+        // The output is complete, so this only gives up the saving. Failing would also be wrong:
+        // the input is already released, and TrackingCompressionCodec would release it again.
+        case _: OutOfMemoryException => compressed
+      }
+    }
+  }
+}
+
+private object BoundedZstdCompressionCodec {
+  // A smaller saving does not pay for another allocation, copy and release, which a small batch,
+  // e.g. a group of a grouped Python UDF, would do for each of its buffers.
+  val MIN_SHRINK_SAVING_BYTES = 4 * 1024
 }
 
 /**
