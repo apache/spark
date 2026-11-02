@@ -3103,6 +3103,12 @@
     ],
     "sqlState" : "42623"
   },
+  "GENERATOR_IN_CHECK_CONSTRAINT" : {
+    "message" : [
+      "The check constraint `<checkCondition>` calls a generator function. Check constraints compute one value for each row and cannot call functions that return multiple rows."
+    ],
+    "sqlState" : "42621"
+  },
   "GEO_ENCODER_SRID_MISMATCH_ERROR" : {
     "message" : [
       "Failed to encode <type> value because provided SRID <valueSrid> of a value to encode does not match type SRID: <typeSrid>."
