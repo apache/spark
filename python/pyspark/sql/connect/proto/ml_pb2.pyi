@@ -419,6 +419,7 @@ class MlCommand(google.protobuf.message.Message):
     GET_CACHE_INFO_FIELD_NUMBER: builtins.int
     CREATE_SUMMARY_FIELD_NUMBER: builtins.int
     GET_MODEL_SIZE_FIELD_NUMBER: builtins.int
+    MODEL_SUMMARY_DATASET_FIELD_NUMBER: builtins.int
     @property
     def fit(self) -> global___MlCommand.Fit: ...
     @property
@@ -439,6 +440,9 @@ class MlCommand(google.protobuf.message.Message):
     def create_summary(self) -> global___MlCommand.CreateSummary: ...
     @property
     def get_model_size(self) -> global___MlCommand.GetModelSize: ...
+    @property
+    def model_summary_dataset(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
+        """(Optional) the dataset for restoring the model summary when fetching an attribute."""
     def __init__(
         self,
         *,
@@ -452,10 +456,13 @@ class MlCommand(google.protobuf.message.Message):
         get_cache_info: global___MlCommand.GetCacheInfo | None = ...,
         create_summary: global___MlCommand.CreateSummary | None = ...,
         get_model_size: global___MlCommand.GetModelSize | None = ...,
+        model_summary_dataset: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
+            "_model_summary_dataset",
+            b"_model_summary_dataset",
             "clean_cache",
             b"clean_cache",
             "command",
@@ -474,6 +481,8 @@ class MlCommand(google.protobuf.message.Message):
             b"get_cache_info",
             "get_model_size",
             b"get_model_size",
+            "model_summary_dataset",
+            b"model_summary_dataset",
             "read",
             b"read",
             "write",
@@ -483,6 +492,8 @@ class MlCommand(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "_model_summary_dataset",
+            b"_model_summary_dataset",
             "clean_cache",
             b"clean_cache",
             "command",
@@ -501,12 +512,20 @@ class MlCommand(google.protobuf.message.Message):
             b"get_cache_info",
             "get_model_size",
             b"get_model_size",
+            "model_summary_dataset",
+            b"model_summary_dataset",
             "read",
             b"read",
             "write",
             b"write",
         ],
     ) -> None: ...
+    @typing.overload
+    def WhichOneof(
+        self,
+        oneof_group: typing_extensions.Literal["_model_summary_dataset", b"_model_summary_dataset"],
+    ) -> typing_extensions.Literal["model_summary_dataset"] | None: ...
+    @typing.overload
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["command", b"command"]
     ) -> (

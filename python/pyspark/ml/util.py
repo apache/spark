@@ -306,6 +306,10 @@ def try_remote_call(f: FuncT) -> FuncT:
                 command.ml_command.fetch.CopyFrom(
                     pb2.Fetch(obj_ref=pb2.ObjectRef(id=obj_ref), methods=methods)
                 )
+                if methods[0].method == "summary":
+                    command.ml_command.model_summary_dataset.CopyFrom(
+                        self._summary_dataset._plan.plan(session.client)  # type: ignore
+                    )
                 _, properties, _ = session.client.execute_command(command)
                 ml_command_result = properties["ml_command_result"]
                 if ml_command_result.HasField("summary"):

@@ -41,6 +41,8 @@ message MlCommand {
     CreateSummary create_summary = 9;
     GetModelSize get_model_size = 10;
   }
+  // (Optional) the dataset for restoring the model summary when fetching an attribute.
+  optional Relation model_summary_dataset = 11;
 
   // Command for estimator.fit(dataset)
   message Fit {

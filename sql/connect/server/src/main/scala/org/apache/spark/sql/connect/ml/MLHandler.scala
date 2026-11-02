@@ -58,9 +58,9 @@ private class AttributeHelper(
     obj
   }
   // Get the attribute by reflection
-  def getAttribute: Any = {
+  def getAttribute(instance: Object): Any = {
     assert(methods.length >= 1)
-    methods.foldLeft(instance()) { (obj, m) =>
+    methods.foldLeft(instance) { (obj, m) =>
       if (m.argValues.isEmpty) {
         MLUtils.invokeMethodAllowed(obj, m.name)
       } else {
@@ -258,16 +258,12 @@ private[connect] object MLHandler extends Logging {
           .build()
 
       case proto.MlCommand.CommandCase.FETCH =>
-        val objRefId = mlCommand.getFetch.getObjRef.getId
-        val methods = mlCommand.getFetch.getMethodsList.asScala.toArray
-        val obj = sessionHolder.mlCache.get(objRefId)
-        if (obj != null && obj.isInstanceOf[HasTrainingSummary[_]]
-          && methods(0).getMethod == "summary"
-          && !obj.asInstanceOf[HasTrainingSummary[_]].hasSummary) {
-          throw MLModelSummaryLostException(objRefId)
+        val summaryDataset = if (mlCommand.hasModelSummaryDataset) {
+          Some(mlCommand.getModelSummaryDataset)
+        } else {
+          None
         }
-        val helper = AttributeHelper(sessionHolder, objRefId, methods)
-        val attrResult = helper.getAttribute
+        val attrResult = fetchAttribute(sessionHolder, mlCommand.getFetch, summaryDataset)
         attrResult match {
           case s: Summary =>
             val id = mlCache.register(s)
@@ -487,6 +483,33 @@ private[connect] object MLHandler extends Logging {
       .asInstanceOf[proto.MlCommandResult]
   }
 
+  private def fetchAttribute(
+      sessionHolder: SessionHolder,
+      fetch: proto.Fetch,
+      summaryDataset: Option[proto.Relation]): Any = {
+    val objRefId = fetch.getObjRef.getId
+    val methods = fetch.getMethodsList.asScala.toArray
+    val obj = sessionHolder.mlCache.get(objRefId)
+    if (obj == null) {
+      throw MLCacheInvalidException(objRefId, sessionHolder.mlCache.getOffloadingTimeoutMinute)
+    }
+    sessionHolder.mlCache.synchronized {
+      if (obj.isInstanceOf[HasTrainingSummary[_]] && methods(0).getMethod == "summary"
+        && !obj.asInstanceOf[HasTrainingSummary[_]].hasSummary) {
+        val dataset = summaryDataset.getOrElse {
+          // Older clients restore the summary with a separate CreateSummary command.
+          throw MLModelSummaryLostException(objRefId)
+        }
+        val modelPath = sessionHolder.mlCache.getModelOffloadingPath(objRefId)
+        obj.asInstanceOf[HasTrainingSummary[_]].loadSummary(
+          modelPath.resolve("summary").toString,
+          MLUtils.parseRelationProto(dataset, sessionHolder))
+      }
+    }
+    // Use the same model even if its cache entry is evicted while restoring the summary.
+    AttributeHelper(sessionHolder, objRefId, methods).getAttribute(obj)
+  }
+
   private def createModelSummary(
       sessionHolder: SessionHolder,
       createSummaryCmd: proto.MlCommand.CreateSummary): proto.MlCommandResult =
@@ -539,29 +562,12 @@ private[connect] object MLHandler extends Logging {
 
       // Get the attribute from a cached object which could be a model or summary
       case proto.MlRelation.MlTypeCase.FETCH =>
-        val objRefId = relation.getFetch.getObjRef.getId
-        val methods = relation.getFetch.getMethodsList.asScala.toArray
-        val obj = sessionHolder.mlCache.get(objRefId)
-        sessionHolder.mlCache.synchronized {
-          if (obj != null && obj.isInstanceOf[HasTrainingSummary[_]]
-            && methods(0).getMethod == "summary"
-            && !obj.asInstanceOf[HasTrainingSummary[_]].hasSummary) {
-
-            if (relation.hasModelSummaryDataset) {
-              val dataset =
-                MLUtils.parseRelationProto(relation.getModelSummaryDataset, sessionHolder)
-              val modelPath = sessionHolder.mlCache.getModelOffloadingPath(objRefId)
-              val summaryPath = modelPath.resolve("summary").toString
-              obj.asInstanceOf[HasTrainingSummary[_]].loadSummary(summaryPath, dataset)
-            } else {
-              // For old Spark client backward compatibility.
-              throw MLModelSummaryLostException(objRefId)
-            }
-          }
+        val summaryDataset = if (relation.hasModelSummaryDataset) {
+          Some(relation.getModelSummaryDataset)
+        } else {
+          None
         }
-
-        val helper = AttributeHelper(sessionHolder, objRefId, methods)
-        helper.getAttribute.asInstanceOf[DataFrame]
+        fetchAttribute(sessionHolder, relation.getFetch, summaryDataset).asInstanceOf[DataFrame]
 
       case other => throw MlUnsupportedException(s"$other not supported")
     }

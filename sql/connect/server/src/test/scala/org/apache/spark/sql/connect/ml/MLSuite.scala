@@ -459,6 +459,54 @@ class MLSuite extends MLHelper {
     }
   }
 
+  test("fetch offloaded model summaries without retaining cache entries") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    sessionHolder.session.conf
+      .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_ENABLED.key, "true")
+    // Evict every model immediately, including models reloaded while restoring a summary.
+    sessionHolder.session.conf
+      .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_IN_MEMORY_SIZE.key, 0)
+    val modelId = trainLogisticRegressionModel(sessionHolder)
+    val dataset = createLocalRelationProto
+    val summaryFetch = proto.Fetch.newBuilder()
+      .setObjRef(proto.ObjectRef.newBuilder().setId(modelId))
+      .addMethods(proto.Fetch.Method.newBuilder().setMethod("summary"))
+      .addMethods(proto.Fetch.Method.newBuilder().setMethod("labels"))
+      .build()
+    val command = proto.MlCommand.newBuilder().setFetch(summaryFetch).build()
+
+    try {
+      // The legacy two-command recovery cannot retain the summary until the next fetch.
+      val createSummary = proto.MlCommand.newBuilder()
+        .setCreateSummary(proto.MlCommand.CreateSummary.newBuilder()
+          .setModelRef(proto.ObjectRef.newBuilder().setId(modelId))
+          .setDataset(dataset))
+        .build()
+      assert(MLHandler.handleMlCommand(sessionHolder, createSummary).getParam.getBoolean)
+      intercept[MLModelSummaryLostException] {
+        MLHandler.handleMlCommand(sessionHolder, command)
+      }
+
+      val restoredCommand = command.toBuilder.setModelSummaryDataset(dataset).build()
+      for (_ <- 0 until 2) {
+        val result = MLHandler.handleMlCommand(sessionHolder, restoredCommand)
+        assert(result.getParam.getArray.getElementsList.asScala.map(_.getDouble) === Seq(0.0, 1.0))
+        assert(sessionHolder.mlCache.cachedModel.isEmpty)
+      }
+
+      val predictions = summaryFetch.toBuilder
+        .setMethods(1, proto.Fetch.Method.newBuilder().setMethod("predictions"))
+      val relation = proto.MlRelation.newBuilder()
+        .setFetch(predictions)
+        .setModelSummaryDataset(dataset)
+        .build()
+      assert(MLHandler.transformMLRelation(relation, sessionHolder).count() === 4)
+      assert(sessionHolder.mlCache.cachedModel.isEmpty)
+    } finally {
+      sessionHolder.mlCache.clear()
+    }
+  }
+
   test("Model size limit") {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     sessionHolder.session.conf
