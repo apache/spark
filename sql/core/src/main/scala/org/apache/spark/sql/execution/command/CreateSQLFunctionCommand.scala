@@ -346,7 +346,6 @@ case class CreateSQLFunctionCommand(
       catalog: SessionCatalog,
       analyzer: Analyzer,
       child: LogicalPlan): (Seq[Seq[String]], Seq[String]) = {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     def collectTempViews(child: LogicalPlan): Seq[Seq[String]] = {
       child.flatMap {
         case UnresolvedRelation(nameParts, _, _) if catalog.isTempView(nameParts) =>
@@ -366,9 +365,8 @@ case class CreateSQLFunctionCommand(
         case plan if !plan.resolved =>
           plan.expressions.flatMap(_.flatMap {
             case e: SubqueryExpression => collectTempFunctions(e.plan)
-            case e: UnresolvedFunction
-              if catalog.isTemporaryFunction(e.nameParts.asFunctionIdentifier) =>
-              Seq(e.nameParts.asFunctionIdentifier.funcName)
+            case e: UnresolvedFunction if isTemporaryFunctionName(catalog, e.nameParts) =>
+              Seq(e.nameParts.last)
             // A routed JSON constructor is a temporary-function reference only when the
             // temporary function owns it, not the built-in or a persistent function before it.
             case j: UnresolvedJsonConstructor
@@ -385,6 +383,40 @@ case class CreateSQLFunctionCommand(
     // runs inside the CALL's analysis pass, whose cached path may predate a SET PATH.
     val tempFunctions = AnalysisContext.withNewAnalysisContext(collectTempFunctions(child))
     (collectTempViews(child), tempFunctions)
+  }
+
+  // Whether `nameParts` (unqualified, or `session.` / `system.session.`-qualified) names a temp
+  // function.
+  private def isTemporaryFunctionName(catalog: SessionCatalog, nameParts: Seq[String]): Boolean =
+    nameParts match {
+      case Seq(funcName) => catalog.isTemporaryFunction(FunctionIdentifier(funcName))
+      case _ => functionIdentifierForLookup(catalog, nameParts).exists {
+        case (ident, isSystem) => isSystem && catalog.isTemporaryFunction(ident)
+      }
+    }
+
+  // The identifier to look up `nameParts` by, and whether it is in a system namespace. A
+  // `builtin.` / `session.` name follows function resolution's candidate order. None for another
+  // catalog's function.
+  private def functionIdentifierForLookup(
+      catalog: SessionCatalog,
+      nameParts: Seq[String]): Option[(FunctionIdentifier, Boolean)] = {
+    lazy val persistentIdent = nameParts match {
+      case Seq(_) | Seq(_, _) => Some(nameParts.asFunctionIdentifier)
+      case Seq(c, db, f) if conf.resolver(c, CatalogManager.SESSION_CATALOG_NAME) =>
+        Some(FunctionIdentifier(f, Some(db), Some(c)))
+      case _ => None
+    }
+    def systemFunctionExists(ident: FunctionIdentifier): Boolean =
+      catalog.lookupFunctionInfoByIdentifier(ident, tableFunction = false).isDefined ||
+        catalog.lookupFunctionInfoByIdentifier(ident, tableFunction = true).isDefined
+    catalog.identifierFromSystemNameParts(nameParts) match {
+      case Some(ident) if nameParts.length > 2 ||
+          (conf.prioritizeSystemCatalog && systemFunctionExists(ident)) ||
+          !catalog.isPersistentFunction(persistentIdent.get) =>
+        Some((ident, true))
+      case _ => persistentIdent.map((_, false))
+    }
   }
 
   /**
@@ -432,14 +464,23 @@ case class CreateSQLFunctionCommand(
       identifier: FunctionIdentifier,
       plan: LogicalPlan): Unit = {
 
+    // `functionIdentifierForLookup`, if `nameParts` names a SQL function.
+    def sqlFunctionIdentifier(
+        nameParts: Seq[String],
+        tableFunction: Boolean): Option[(FunctionIdentifier, Boolean)] =
+      functionIdentifierForLookup(catalog, nameParts).filter {
+        case (ident, true) => catalog.lookupFunctionInfoByIdentifier(ident, tableFunction)
+          .exists(info => isSQLFunction(info.getClassName))
+        case (ident, false) => isSQLFunction(catalog.lookupFunctionInfo(ident).getClassName)
+      }
+
     def checkPlan(plan: LogicalPlan, path: Seq[FunctionIdentifier]): Unit = {
       plan.foreach {
         case u @ UnresolvedTableValuedFunction(nameParts, arguments, _) =>
-          val funcId = nameParts.asFunctionIdentifier
-          val info = catalog.lookupFunctionInfo(funcId)
-          if (isSQLFunction(info.getClassName)) {
+          sqlFunctionIdentifier(nameParts, tableFunction = true).foreach { case (ident, isSystem) =>
             val f = withPosition(u) {
-              catalog.lookupTableFunction(funcId, arguments).asInstanceOf[SQLTableFunction]
+              (if (isSystem) catalog.resolveTableFunctionByIdentifier(ident, arguments).get
+              else catalog.lookupTableFunction(ident, arguments)).asInstanceOf[SQLTableFunction]
             }
             // Check cyclic reference using qualified function names.
             val newPath = path :+ f.function.name
@@ -466,11 +507,10 @@ case class CreateSQLFunctionCommand(
     }
 
     def checkFunction(u: UnresolvedFunction, path: Seq[FunctionIdentifier]): Unit = {
-      val funcId = u.nameParts.asFunctionIdentifier
-      val info = catalog.lookupFunctionInfo(funcId)
-      if (isSQLFunction(info.getClassName)) {
+      sqlFunctionIdentifier(u.nameParts, tableFunction = false).foreach { case (ident, isSystem) =>
         val f = withPosition(u) {
-          catalog.lookupFunction(funcId, u.arguments).asInstanceOf[SQLFunctionExpression]
+          (if (isSystem) catalog.resolveScalarFunctionByIdentifier(ident, u.arguments).get
+          else catalog.lookupFunction(ident, u.arguments)).asInstanceOf[SQLFunctionExpression]
         }
         // Check cyclic reference using qualified function names.
         val newPath = path :+ f.function.name

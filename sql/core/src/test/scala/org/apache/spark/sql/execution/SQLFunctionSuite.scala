@@ -534,4 +534,112 @@ class SQLFunctionSuite extends SharedSparkSession {
       checkAnswer(sql("SELECT * FROM tvf(null_udf(1))"), Row(null))
     }
   }
+
+  test("SPARK-60805: a SQL function body can call system-qualified functions") {
+    withUserDefinedFunction("perm_q" -> false, "perm_q_tbl" -> false) {
+      Seq("builtin.abs(-1)", "system.builtin.abs(-1)", "SYSTEM.Builtin.abs(-1)").foreach { call =>
+        sql(s"CREATE OR REPLACE FUNCTION perm_q() RETURNS INT RETURN $call")
+        checkAnswer(sql("SELECT perm_q()"), Row(1))
+        sql(s"CREATE OR REPLACE FUNCTION perm_q_tbl() RETURNS TABLE (a INT) RETURN SELECT $call")
+        checkAnswer(sql("SELECT * FROM perm_q_tbl()"), Row(1))
+      }
+    }
+    // A catalog-qualified persistent call works too, and is checked for cyclic references.
+    withUserDefinedFunction("perm_in" -> false, "perm_out" -> false) {
+      sql("CREATE FUNCTION perm_in() RETURNS INT RETURN 5")
+      sql("CREATE FUNCTION perm_out() RETURNS INT RETURN spark_catalog.default.perm_in()")
+      checkAnswer(sql("SELECT perm_out()"), Row(5))
+      val e = intercept[AnalysisException] {
+        sql("CREATE OR REPLACE FUNCTION perm_in() RETURNS INT " +
+          "RETURN spark_catalog.default.perm_out()")
+      }
+      assert(e.getCondition == "CYCLIC_FUNCTION_REFERENCE", e.getMessage)
+    }
+    withUserDefinedFunction("tbl_in" -> false, "tbl_out" -> false) {
+      sql("CREATE FUNCTION tbl_in() RETURNS TABLE (a INT) RETURN SELECT 1")
+      sql("CREATE FUNCTION tbl_out() RETURNS TABLE (a INT) " +
+        "RETURN SELECT * FROM SPARK_CATALOG.default.tbl_in()")
+      checkAnswer(sql("SELECT * FROM tbl_out()"), Row(1))
+      val e = intercept[AnalysisException] {
+        sql("CREATE OR REPLACE FUNCTION tbl_in() RETURNS TABLE (a INT) " +
+          "RETURN SELECT * FROM spark_catalog.default.tbl_out()")
+      }
+      assert(e.getCondition == "CYCLIC_FUNCTION_REFERENCE", e.getMessage)
+    }
+    // A session-qualified call is checked for cyclic references like an unqualified one.
+    withUserDefinedFunction("temp_c" -> true, "temp_c_tbl" -> true) {
+      sql("CREATE TEMPORARY FUNCTION temp_c() RETURNS INT RETURN 1")
+      sql("CREATE TEMPORARY FUNCTION temp_c_tbl() RETURNS TABLE (a INT) RETURN SELECT 1")
+      Seq(
+        "CREATE OR REPLACE TEMPORARY FUNCTION temp_c() RETURNS INT RETURN session.temp_c()",
+        "CREATE OR REPLACE TEMPORARY FUNCTION temp_c() RETURNS INT " +
+          "RETURN system.session.temp_c()",
+        "CREATE OR REPLACE TEMPORARY FUNCTION temp_c_tbl() RETURNS TABLE (a INT) " +
+          "RETURN SELECT * FROM session.temp_c_tbl()"
+      ).foreach { ddl =>
+        val e = intercept[AnalysisException](sql(ddl))
+        assert(e.getCondition == "CYCLIC_FUNCTION_REFERENCE", s"$ddl: ${e.getMessage}")
+      }
+    }
+  }
+
+  test("SPARK-60805: a permanent function cannot reference a session-qualified temp function") {
+    withUserDefinedFunction("temp_fn" -> true, "temp_caller" -> true) {
+      sql("CREATE TEMPORARY FUNCTION temp_fn() RETURNS INT RETURN 1")
+      // A temp function may.
+      sql("CREATE TEMPORARY FUNCTION temp_caller() RETURNS INT RETURN system.session.temp_fn()")
+      checkAnswer(sql("SELECT temp_caller()"), Row(1))
+      Seq(
+        "CREATE FUNCTION perm_fn() RETURNS INT RETURN session.temp_fn()",
+        "CREATE FUNCTION perm_fn() RETURNS INT RETURN system.session.temp_fn()"
+      ).foreach { ddl =>
+        val e = intercept[AnalysisException](sql(ddl))
+        assert(e.getCondition == "INVALID_TEMP_OBJ_REFERENCE", s"$ddl: ${e.getMessage}")
+      }
+    }
+  }
+
+  test("SPARK-60805: builtin./session. calls fall back to a same-named persistent schema") {
+    Seq("builtin", "session").foreach { schema =>
+      withDatabase(schema) {
+        sql(s"CREATE DATABASE $schema")
+        sql(s"CREATE FUNCTION $schema.pf() RETURNS INT RETURN 1")
+        sql(s"CREATE FUNCTION $schema.pg() RETURNS INT RETURN $schema.pf()")
+        sql(s"CREATE FUNCTION $schema.pt() RETURNS TABLE (a INT) RETURN SELECT 1")
+        checkAnswer(sql(s"SELECT $schema.pg()"), Row(1))
+        Seq(
+          s"CREATE OR REPLACE FUNCTION $schema.pf() RETURNS INT RETURN $schema.pf()",
+          s"CREATE OR REPLACE FUNCTION $schema.pf() RETURNS INT RETURN $schema.pg()",
+          s"CREATE OR REPLACE FUNCTION $schema.pt() RETURNS TABLE (a INT) " +
+            s"RETURN SELECT * FROM $schema.pt()"
+        ).foreach { ddl =>
+          val e = intercept[AnalysisException](sql(ddl))
+          assert(e.getCondition == "CYCLIC_FUNCTION_REFERENCE", s"$ddl: ${e.getMessage}")
+        }
+      }
+    }
+  }
+
+  test("SPARK-60805: session. calls follow spark.sql.legacy.persistentCatalogFirst") {
+    withDatabase("session") {
+      sql("CREATE DATABASE session")
+      sql("CREATE FUNCTION session.sf() RETURNS INT RETURN 3")
+      withUserDefinedFunction("sf" -> true, "perm_sf" -> false) {
+        sql("CREATE TEMPORARY FUNCTION sf() RETURNS INT RETURN 7")
+        val createPerm = "CREATE OR REPLACE FUNCTION perm_sf() RETURNS INT RETURN session.sf()"
+        // By default the temp function owns `session.sf`.
+        val e = intercept[AnalysisException](sql(createPerm))
+        assert(e.getCondition == "INVALID_TEMP_OBJ_REFERENCE", e.getMessage)
+        withSQLConf(SQLConf.PERSISTENT_CATALOG_FIRST.key -> "true") {
+          // The persistent function owns it.
+          sql(createPerm)
+          checkAnswer(sql("SELECT perm_sf()"), Row(3))
+          val cycle = intercept[AnalysisException] {
+            sql("CREATE OR REPLACE FUNCTION session.sf() RETURNS INT RETURN session.sf()")
+          }
+          assert(cycle.getCondition == "CYCLIC_FUNCTION_REFERENCE", cycle.getMessage)
+        }
+      }
+    }
+  }
 }
