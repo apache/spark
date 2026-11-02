@@ -575,16 +575,15 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
   }
 
   test("chmod700 leaves rwx------ under concurrent calls on the same path") {
-    // Workers in local-cluster mode share local root dirs and can chmod the same
-    // per-application directory concurrently; the stat-then-chmod File.set* sequence
-    // interleaves into broken permission sets, so chmod700 must be atomic. Check both
-    // the final mode and samples taken during the race: with an atomic chmod every sample
-    // is the initial or the final mode, and anything else is a non-atomic interleaving.
+    // Check both the final mode and samples taken during the race: with an atomic chmod every
+    // sample is the initial or the final mode, and anything else is a non-atomic interleaving.
     assume(FileSystems.getDefault.supportedFileAttributeViews().contains("posix"))
     withTempDir { dir =>
       val initialPerms = PosixFilePermissions.fromString("rwxr-xr-x")
       val expectedPerms = PosixFilePermissions.fromString("rwx------")
       // Start from a permissive mode so the assertions cannot pass vacuously under umask 077.
+      Files.setPosixFilePermissions(dir.toPath, initialPerms)
+      assert(Utils.chmod700(dir))
       Files.setPosixFilePermissions(dir.toPath, initialPerms)
       @volatile var observing = true
       // Written only by the observer and read after observer.join(), which synchronizes.

@@ -224,7 +224,7 @@ private[spark] object Utils
     writeByteBufferImpl(bb, out.write)
   }
 
-  // fromString returns a mutable HashSet; wrap it so no future caller can mutate the shared set.
+  // fromString returns a mutable set; wrap it so no future caller can mutate the shared set.
   private val chmod700Perms =
     Collections.unmodifiableSet(PosixFilePermissions.fromString("rwx------"))
 
@@ -232,10 +232,10 @@ private[spark] object Utils
    * JDK equivalent of `chmod 700 file`.
    *
    * On POSIX filesystems this is a single `chmod` call, which is atomic: concurrent calls on
-   * the same path (e.g. Workers sharing a local root dir in local-cluster mode) cannot
-   * interleave into a broken permission set, unlike the `File.set*` fallback below, each call
-   * of which is a non-atomic stat-then-chmod. The POSIX call writes exactly the nine rwx bits,
-   * so it also clears setuid, setgid, and sticky bits; the fallback preserves them.
+   * the same path cannot interleave into a broken permission set, unlike the `File.set*`
+   * fallback below, each call of which is a non-atomic stat-then-chmod. The POSIX call writes
+   * exactly the nine rwx bits, so it also clears setuid, setgid, and sticky bits, which the
+   * previous `File.set*` implementation kept.
    *
    * @param file the file whose permissions will be modified
    * @return true if the permissions were successfully changed, false otherwise.
@@ -251,9 +251,9 @@ private[spark] object Utils
       true
     } catch {
       case _: UnsupportedOperationException =>
-        // Non-POSIX filesystem (e.g. Windows): best-effort, non-atomic fallback. Attempt
-        // every operation even after a failure, revoke group/other access before granting
-        // owner access where supported, and never grant group/other access.
+        // Non-POSIX filesystems use this best-effort, non-atomic fallback. On Windows, these
+        // calls change nothing for a directory and return false. Attempt every operation even
+        // after a failure, and never grant group/other access.
         val succeeded =
           file.setReadable(false, false) &
           file.setWritable(false, false) &
