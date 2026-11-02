@@ -831,15 +831,26 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       genExpr: Expression,
       matched: Seq[NamedExpression],
       conf: SQLConf): Expression = {
-    genExpr.transform {
-      case u @ UnresolvedAttribute(name +: nestedFields) =>
-        matched.collectFirst {
-          case alias: Alias if conf.resolver(alias.name, name) =>
-            nestedFields.foldLeft(alias.child) { (child, field) =>
-              UnresolvedExtractValue(child, Literal(field))
-            }
-        }.getOrElse(u)
+    def storedValue(nameParts: Seq[String]): Option[Expression] = matched.collectFirst {
+      case alias: Alias if conf.resolver(alias.name, nameParts.head) =>
+        nameParts.tail.foldLeft(alias.child) { (child, field) =>
+          UnresolvedExtractValue(child, Literal(field))
+        }
     }
+
+    // The parser turns every reference in a lambda function into a lambda variable, so a lambda
+    // variable that no enclosing lambda function declares refers to a column.
+    def resolve(e: Expression, lambdaVars: Seq[String]): Expression = e match {
+      case u: UnresolvedAttribute => storedValue(u.nameParts).getOrElse(u)
+      case v: UnresolvedNamedLambdaVariable
+          if !lambdaVars.exists(conf.resolver(_, v.nameParts.head)) =>
+        storedValue(v.nameParts).getOrElse(v)
+      case l: LambdaFunction =>
+        l.copy(function = resolve(l.function, lambdaVars ++ l.arguments.map(_.name)))
+      case _ => e.mapChildren(resolve(_, lambdaVars))
+    }
+
+    resolve(genExpr, Nil)
   }
 
   // For table insertions, capture the overflow errors and show proper message.
