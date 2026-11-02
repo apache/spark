@@ -60,7 +60,7 @@ class Scd1VersionMapSuite extends QueryTest with SharedSparkSession {
       Scd1VersionMap.buildVersionMap(
         schema = userDataSchema,
         ignoreNullSelection = ignoreNullSelection,
-        upsertSequence = F.col("seq"),
+        authorshipSequence = F.col("seq"),
         sequencingType = IntegerType,
         resolver = caseSensitiveResolution
       ).as("versionMap")
@@ -89,7 +89,7 @@ class Scd1VersionMapSuite extends QueryTest with SharedSparkSession {
       Scd1VersionMap.buildVersionMap(
         schema = userDataSchema,
         ignoreNullSelection = ignoreNullSelection,
-        upsertSequence = F.col("seq"),
+        authorshipSequence = F.col("seq"),
         sequencingType = LongType,
         resolver = caseSensitiveResolution
       ).as("versionMap")
@@ -122,7 +122,7 @@ class Scd1VersionMapSuite extends QueryTest with SharedSparkSession {
       Scd1VersionMap.buildVersionMap(
         schema = userDataSchema,
         ignoreNullSelection = ignoreNullSelection,
-        upsertSequence = F.col("seq"),
+        authorshipSequence = F.col("seq"),
         sequencingType = LongType,
         resolver = caseSensitiveResolution
       ).as("versionMap")
@@ -149,7 +149,7 @@ class Scd1VersionMapSuite extends QueryTest with SharedSparkSession {
       Scd1VersionMap.buildVersionMap(
         schema = userDataSchema,
         ignoreNullSelection = ignoreNullSelection,
-        upsertSequence = F.col("seq"),
+        authorshipSequence = F.col("seq"),
         sequencingType = LongType,
         resolver = caseInsensitiveResolution
       ).as("versionMap")
@@ -165,7 +165,7 @@ class Scd1VersionMapSuite extends QueryTest with SharedSparkSession {
       Scd1VersionMap.buildVersionMap(
         schema = new StructType(),
         ignoreNullSelection = ColumnSelection.ExcludeColumns(Seq.empty),
-        upsertSequence = F.col("seq"),
+        authorshipSequence = F.col("seq"),
         sequencingType = LongType,
         resolver = caseSensitiveResolution
       ).as("versionMap")
@@ -188,7 +188,7 @@ class Scd1VersionMapSuite extends QueryTest with SharedSparkSession {
         Scd1VersionMap.buildVersionMap(
           schema = userDataSchema,
           ignoreNullSelection = ColumnSelection.ExcludeColumns(Seq.empty),
-          upsertSequence = F.col("seq"),
+          authorshipSequence = F.col("seq"),
           sequencingType = sequencingType,
           resolver = caseSensitiveResolution
         ).as("versionMap")
@@ -234,7 +234,7 @@ class Scd1VersionMapSuite extends QueryTest with SharedSparkSession {
       Scd1VersionMap.buildVersionMap(
         schema = userDataSchema,
         ignoreNullSelection = ColumnSelection.ExcludeColumns(Seq.empty),
-        upsertSequence = F.col("seq"),
+        authorshipSequence = F.col("seq"),
         sequencingType = LongType,
         resolver = caseSensitiveResolution
       )
@@ -257,7 +257,7 @@ class Scd1VersionMapSuite extends QueryTest with SharedSparkSession {
       Scd1VersionMap.buildVersionMap(
         schema = userDataSchema,
         ignoreNullSelection = ColumnSelection.ExcludeColumns(Seq.empty),
-        upsertSequence = F.col("seq"),
+        authorshipSequence = F.col("seq"),
         sequencingType = LongType,
         resolver = caseSensitiveResolution
       )
@@ -283,7 +283,7 @@ class Scd1VersionMapSuite extends QueryTest with SharedSparkSession {
       Scd1VersionMap.buildVersionMap(
         schema = userDataSchema,
         ignoreNullSelection = ignoreNullSelection,
-        upsertSequence = F.col("seq"),
+        authorshipSequence = F.col("seq"),
         sequencingType = LongType,
         resolver = caseSensitiveResolution
       )
@@ -313,7 +313,7 @@ class Scd1VersionMapSuite extends QueryTest with SharedSparkSession {
       Scd1VersionMap.buildVersionMap(
         schema = userDataSchema,
         ignoreNullSelection = ignoreNullSelection,
-        upsertSequence = F.col("seq"),
+        authorshipSequence = F.col("seq"),
         sequencingType = sequencingType,
         resolver = caseSensitiveResolution
       ).as("versionMap")

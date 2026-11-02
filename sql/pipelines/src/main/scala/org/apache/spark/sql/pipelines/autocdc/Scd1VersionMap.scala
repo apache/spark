@@ -80,11 +80,11 @@ private[pipelines] object Scd1VersionMap {
   }
 
   /**
-   * Builds a column that computes the version map of an upsert row from that row's column values.
+   * Builds a column that computes a row's version map from that row's column values.
    *
-   * The map has an entry for every leaf in `schema`. A leaf selected by `ignoreNullSelection` is
-   * read by path from the row: a null value receives a null entry, and a non-null value receives
-   * `upsertSequence`. Every other leaf receives `upsertSequence` regardless of its value.
+   * Every leaf in `schema` receives an entry of `authorshipSequence`, except that a leaf selected
+   * by `ignoreNullSelection` is read by path from the row and receives a null entry when its value
+   * is null.
    *
    * @param schema The user-data schema, without keys or framework columns, whose leaves receive
    *               version-map entries. Keys take each name part's spelling verbatim from this
@@ -92,15 +92,15 @@ private[pipelines] object Scd1VersionMap {
    *               same across runs. Its leaves selected by `ignoreNullSelection` must resolve by
    *               path in the DataFrame on which the returned column is evaluated.
    * @param ignoreNullSelection The selection identifying leaves whose null values are unauthored.
-   * @param upsertSequence The upsert event's non-null sequencing value.
-   * @param sequencingType The data type of `upsertSequence`.
+   * @param authorshipSequence The sequence at which the leaves of `schema` are considered authored.
+   * @param sequencingType The data type of `authorshipSequence`.
    * @param resolver The resolver used for column-name matching.
-   * @return A column of type `mapType(sequencingType)` holding the upsert's version map.
+   * @return A column of type `mapType(sequencingType)` holding the row's version map.
    */
   def buildVersionMap(
       schema: StructType,
       ignoreNullSelection: ColumnSelection,
-      upsertSequence: Column,
+      authorshipSequence: Column,
       sequencingType: DataType,
       resolver: Resolver): Column = {
     val ignoreNullLeafPaths = AutoCdcSchemaUtils
@@ -110,9 +110,9 @@ private[pipelines] object Scd1VersionMap {
     val entries = AutoCdcSchemaUtils.flattenStructFieldPaths(schema).map { path =>
       val leafSequence =
         if (ignoreNullLeafPaths.contains(path)) {
-          F.when(F.col(serializeKey(path)).isNotNull, upsertSequence)
+          F.when(F.col(serializeKey(path)).isNotNull, authorshipSequence)
         } else {
-          upsertSequence
+          authorshipSequence
         }
       path -> leafSequence
     }
