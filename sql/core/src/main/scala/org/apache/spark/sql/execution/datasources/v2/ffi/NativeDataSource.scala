@@ -475,8 +475,8 @@ object NativeWriterCommitMessage {
  * not get the release of the stream during get_next, and the task context must stay valid until
  * then, so [[close]] then leaves the release to [[next]], once get_next returns, rather than wait
  * for it and keep the task from completing. That [[next]] then returns false, or throws the error
- * of its read. A [[next]] called once the reader is closed returns false without calling the
- * library.
+ * of its read. A [[next]] called once the reader is closed returns false without reading from
+ * the library, and releases the stream if the release is left to it, as described below.
  *
  * Such a thread also reads the rows of the batch that [[next]] returned to it after [[next]]
  * returns, and the column vectors read the buffers of the batch at their addresses. So a

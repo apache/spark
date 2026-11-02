@@ -1274,11 +1274,14 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       // thread calls next again.
       reader.close()
       assert(!marker.isFile, "The stream was released.")
+      // Nor does a next or another close on this thread, which did not read the batch.
+      assert(!reader.next())
+      reader.close()
+      assert(!marker.isFile, "The stream was released.")
       val rows = onPool((0 until reader.get().numRows()).map(reader.get().column(0).getLong))
       assert(rows === (0L until 10L))
       assert(!onPool(reader.next()))
       assert(Files.readString(marker.toPath) == "after get_next")
-      assert(!reader.next())
     } finally {
       // Once the other thread ends, a close that the test did not reach releases the reader.
       pool.shutdown()

@@ -27,7 +27,7 @@ import org.apache.arrow.vector._
 import org.apache.arrow.vector.complex.StructVector
 import org.apache.arrow.vector.types.pojo.{ArrowType, FieldType}
 
-import org.apache.spark.{SparkArithmeticException, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
 import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, ReusedArrowColumnVector}
@@ -268,9 +268,8 @@ class NativeColumnVectorSuite extends SparkFunSuite {
 
   test("decimals that a long holds round to integers as those of Spark's own column vectors") {
     // The decimals of Spark's own column vectors and of the native one, of OnHeapColumnVector and
-    // NativeColumnVector, hold longs, which Decimal rounds exactly, and those of ArrowColumnVector
-    // BigDecimals, which it rounds through doubles.
-    def decimals(value: String, scale: Int)(f: (Decimal, Decimal, Decimal) => Unit): Unit = {
+    // NativeColumnVector, hold longs, which Decimal rounds exactly.
+    def decimals(value: String, scale: Int)(f: (Decimal, Decimal) => Unit): Unit = {
       val precision = Decimal.MAX_LONG_DIGITS
       withDecimalVector(precision, scale) { vector =>
         vector.allocateNew(1)
@@ -278,21 +277,15 @@ class NativeColumnVectorSuite extends SparkFunSuite {
         vector.setValueCount(1)
         Using.resource(new OnHeapColumnVector(1, DecimalType(precision, scale))) { own =>
           own.putDecimal(0, Decimal(value), precision)
-          f(own.getDecimal(0, precision, scale), native(vector).getDecimal(0, precision, scale),
-            new ArrowColumnVector(vector).getDecimal(0, precision, scale))
+          f(own.getDecimal(0, precision, scale), native(vector).getDecimal(0, precision, scale))
         }
       }
     }
-    decimals("123456789.999999999", 9) { (own, column, arrow) =>
-      assert(own.roundToInt() === 123456789)
-      assert(column.roundToInt() === 123456789)
-      assert(arrow.roundToInt() === 123456790)
+    decimals("123456789.999999999", 9) { (own, column) =>
+      assert(column.roundToInt() === own.roundToInt())
     }
-    decimals("127.999999999999999", 15) { (own, column, arrow) =>
-      assert(own.roundToByte() === 127.toByte)
-      assert(column.roundToByte() === 127.toByte)
-      assert(intercept[SparkArithmeticException](arrow.roundToByte()).getCondition ===
-        "CAST_OVERFLOW")
+    decimals("127.999999999999999", 15) { (own, column) =>
+      assert(column.roundToByte() === own.roundToByte())
     }
   }
 

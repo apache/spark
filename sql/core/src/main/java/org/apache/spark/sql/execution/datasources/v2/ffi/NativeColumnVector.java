@@ -54,9 +54,10 @@ import org.apache.spark.unsafe.types.UTF8String;
  * Spark does not need these checks here: it reads only the rows of the batch, whose buffers Arrow
  * Java sizes by the lengths of the arrays, which the reader checks before it imports them, and
  * the buffers of a batch stay allocated until the thread that read it calls next again or closes
- * the reader: a close on another thread leaves the release to that thread. Spark reads a value
- * of a nullable column only after {@link #isNullAt(int)}, and the reader checks that the columns
- * that the schema declares not nullable have no null.
+ * the reader: a close on another thread releases them at once only if that thread has ended, and
+ * otherwise leaves the release to that thread, or to a thread that waits for it to end. Spark
+ * reads a value of a nullable column only after {@link #isNullAt(int)}, and the reader checks
+ * that the columns that the schema declares not nullable have no null.
  *
  * <p>The vector returns the decimals that fit their precision in a long, of a scale from 0 to
  * their precision, as the unscaled longs that Spark's own column vectors hold, which Spark adds as
