@@ -605,6 +605,24 @@ def maybe_dispatch_ufunc_to_spark_func(
             op_name
         )
 
+        if op_name == "floor" and isinstance(
+            ser_or_index.spark.data_type, (FloatType, DoubleType)
+        ):
+
+            def floating_floor(c: Column) -> Column:
+                # Preserve non-finite values, signed zero, and large floating-point
+                # values that are already integral at double precision.
+                return (
+                    F.when(c == 0.0, c.cast("double"))
+                    .when(
+                        F.isnan(c) | (F.abs(c) >= float(2**52)),
+                        c.cast("double"),
+                    )
+                    .otherwise(F.floor(c).cast("double"))
+                )
+
+            np_spark_map_func = floating_floor
+
         @no_type_check
         def convert_arguments(*args):
             args = [F.lit(inp) for inp in args]
