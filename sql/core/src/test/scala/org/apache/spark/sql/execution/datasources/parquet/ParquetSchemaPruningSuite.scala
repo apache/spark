@@ -41,7 +41,7 @@ abstract class ParquetSchemaPruningSuite extends SchemaPruningSuite with Adaptiv
   override protected val vectorizedReaderNestedEnabledKey: String =
     SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key
 
-  test("a pruned two-level Parquet LIST preserves its element type and field IDs") {
+  test("SPARK-60788: a pruned two-level LIST preserves its element type and field IDs") {
     withTempPath { file =>
       // After clipping legacy to just wanted, both LISTs have identical repeated groups.
       val fileSchema = MessageTypeParser.parseMessageType(
@@ -93,7 +93,42 @@ abstract class ParquetSchemaPruningSuite extends SchemaPruningSuite with Adaptiv
     }
   }
 
-  test("a two-level Parquet LIST preserves enclosing struct nullness after pruning") {
+  test("SPARK-60788: prune a two-level LIST nested inside another two-level LIST") {
+    withTempPath { file =>
+      val fileSchema = MessageTypeParser.parseMessageType(
+        """message m {
+          |  optional group outer (LIST) {
+          |    repeated group o {
+          |      optional group inner (LIST) {
+          |        repeated group i { optional int32 a; optional int32 b; }
+          |      }
+          |      optional int32 z;
+          |    }
+          |  }
+          |}""".stripMargin)
+      val writer = ExampleParquetWriter.builder(new Path(file.toURI))
+        .withConf(spark.sessionState.newHadoopConf()).withType(fileSchema).build()
+      try {
+        val row = new SimpleGroupFactory(fileSchema).newGroup()
+        val inner = row.addGroup("outer").addGroup("o").addGroup("inner")
+        inner.addGroup("i").append("a", 1).append("b", 2)
+        inner.addGroup("i").append("a", 3).append("b", 4)
+        writer.write(row)
+      } finally {
+        writer.close()
+      }
+      Seq("true", "false").foreach { vectorized =>
+        withSQLConf(vectorizedReaderEnabledKey -> vectorized) {
+          val data = spark.read.parquet(file.getCanonicalPath)
+          val query = data.selectExpr("outer[0].inner[1].a")
+          checkScanSchemata(query, "struct<outer:array<struct<inner:array<struct<a:int>>>>>")
+          checkAnswer(query, Row(3))
+        }
+      }
+    }
+  }
+
+  test("SPARK-60788: a two-level LIST preserves enclosing struct nullness after pruning") {
     withTempPath { file =>
       val fileSchema = MessageTypeParser.parseMessageType(
         """message m {
@@ -159,7 +194,8 @@ class ParquetV2SchemaPruningSuite extends ParquetSchemaPruningSuite {
       .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "")
 
-  test("row reader uses the scan's field ID setting") {
+  // V1 uses the session setting for both clipping and conversion. Only V2 honors the scan option.
+  test("SPARK-60788: row reader uses the scan's field ID setting") {
     withTempPath { dir =>
       def fieldId(id: Long): Metadata =
         new MetadataBuilder().putLong(ParquetUtils.FIELD_ID_METADATA_KEY, id).build()

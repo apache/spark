@@ -252,10 +252,10 @@ private[parquet] class ParquetRowConverter(
     }
     parquetType.getFields.asScala.map { parquetField =>
       Option(parquetField.getId).flatMap { fieldId =>
-        // field has id, try to match by id first before falling back to match by name
+        // Match requested fields with IDs by ID, as in ParquetReadSupport.clipParquetGroupFields.
         catalystFieldIdxByFieldId.get(fieldId.intValue())
       }.orElse {
-        // A field read only for struct nullness can share a name with a missing field ID.
+        // A name match for a missing ID can only be a field read for struct nullness.
         catalystFieldIdxByName.get(parquetField.getName).filterNot { index =>
           useFieldId && ParquetUtils.hasFieldId(catalystType(index))
         }
