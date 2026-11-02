@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.exchange
 
+import org.apache.logging.log4j.Level
+
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -32,6 +34,7 @@ import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.execution.{BinaryExecNode, DummySparkPlan, LeafExecNode, SafeForKWayMerge, SortExec, UnaryExecNode}
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.adaptive.ShuffleQueryStageExec
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, GroupPartitionsExec}
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeAsOfJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.python.FlatMapCoGroupsInPandasExec
@@ -1066,22 +1069,15 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       // simple case
       var smjExec = SortMergeJoinExec(
         exprA :: exprB :: exprC :: Nil, exprA :: exprC :: exprB :: Nil, Inner, None, plan1, plan2)
-      // A side whose alignment is the pass-through keeps its own layout, so the regrouping node
-      // is optional: peel the sort, then read the node's own report, or the dummy plan's if none.
-      def plannedPartitioning(plan: SparkPlan): Partitioning = plan match {
-        case SortExec(_, _, child, _) => plannedPartitioning(child)
-        // The node's own report is what these assertions are about. Only a side whose alignment
-        // is the identity has no node, and there the child's layout is the aligned one.
-        case g: GroupPartitionsExec => g.outputPartitioning
-        case d: DummySparkPlan => d.outputPartitioning
-        case other => fail(s"expected a dummy plan, got $other")
-      }
-
       applyEnsureRequirementsWithSubsetKeys(smjExec) match {
-        case smj: SortMergeJoinExec =>
-          assert(groupPartitionsNodes(smj).size == 1, "the pruning side is regrouped")
-          val left = plannedPartitioning(smj.left).asInstanceOf[KeyedPartitioning]
-          val right = plannedPartitioning(smj.right).asInstanceOf[KeyedPartitioning]
+        case SortMergeJoinExec(_, _, _, _,
+            SortExec(_, _,
+              GroupPartitionsExec(DummySparkPlan(_, _, left: KeyedPartitioning, _, _),
+                _, _, _, _, _, _, _, _), _),
+            SortExec(_, _,
+              GroupPartitionsExec(DummySparkPlan(_, _, right: KeyedPartitioning, _, _),
+                _, _, _, _, _, _, _, _), _),
+            _) =>
           assert(left.expressions === Seq(bucket(4, exprB), bucket(8, exprC)))
           assert(right.expressions === Seq(bucket(4, exprC), bucket(8, exprB)))
         case other => fail(other.toString)
@@ -1098,10 +1094,14 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       smjExec = SortMergeJoinExec(
         exprA :: exprB :: exprC :: Nil, exprA :: exprC :: exprB :: Nil, Inner, None, plan1, plan2)
       applyEnsureRequirementsWithSubsetKeys(smjExec) match {
-        case smj: SortMergeJoinExec =>
-          assert(groupPartitionsNodes(smj).size == 1, "the pruning side is regrouped")
-          val left = plannedPartitioning(smj.left).asInstanceOf[PartitioningCollection]
-          val right = plannedPartitioning(smj.right).asInstanceOf[KeyedPartitioning]
+        case SortMergeJoinExec(_, _, _, _,
+            SortExec(_, _,
+              GroupPartitionsExec(DummySparkPlan(_, _, left: PartitioningCollection, _, _),
+                _, _, _, _, _, _, _, _), _),
+            SortExec(_, _,
+              GroupPartitionsExec(DummySparkPlan(_, _, right: KeyedPartitioning, _, _),
+                _, _, _, _, _, _, _, _), _),
+            _) =>
           assert(left.partitionings.length == 2)
           assert(left.partitionings.head.isInstanceOf[KeyedPartitioning])
           assert(left.partitionings.head.asInstanceOf[KeyedPartitioning].expressions ==
@@ -1129,10 +1129,14 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       smjExec = SortMergeJoinExec(
         exprA :: exprB :: exprC :: Nil, exprA :: exprC :: exprB :: Nil, Inner, None, plan1, plan2)
       applyEnsureRequirementsWithSubsetKeys(smjExec) match {
-        case smj: SortMergeJoinExec =>
-          assert(groupPartitionsNodes(smj).size == 1, "the pruning side is regrouped")
-          val left = plannedPartitioning(smj.left).asInstanceOf[PartitioningCollection]
-          val right = plannedPartitioning(smj.right).asInstanceOf[PartitioningCollection]
+        case SortMergeJoinExec(_, _, _, _,
+            SortExec(_, _,
+              GroupPartitionsExec(DummySparkPlan(_, _, left: PartitioningCollection, _, _),
+                _, _, _, _, _, _, _, _), _),
+            SortExec(_, _,
+              GroupPartitionsExec(DummySparkPlan(_, _, right: PartitioningCollection, _, _),
+                _, _, _, _, _, _, _, _), _),
+            _) =>
           assert(left.partitionings.length == 2)
           assert(left.partitionings.head.isInstanceOf[KeyedPartitioning])
           assert(left.partitionings.head.asInstanceOf[KeyedPartitioning].expressions ==
@@ -1141,6 +1145,126 @@ class EnsureRequirementsSuite extends SharedSparkSession {
           assert(right.partitionings.head.isInstanceOf[PartitioningCollection])
         case other => fail(other.toString)
       }
+    }
+  }
+
+  test("SPARK-60618: skip identity alignment only when all leaves are shuffle stages") {
+    val keys = Seq(InternalRow(1), InternalRow(2))
+    val extraKeys = keys :+ InternalRow(3)
+
+    def stage(partitionKeys: Seq[InternalRow]): ShuffleQueryStageExec = {
+      val leaf = DummySparkPlan(outputPartitioning = UnknownPartitioning(partitionKeys.size))
+      val exchange = ShuffleExchangeExec(KeyedPartitioning(Seq(exprA), partitionKeys), leaf)
+      ShuffleQueryStageExec(0, exchange, exchange)
+    }
+
+    def planned(left: SparkPlan, rightKeys: Seq[InternalRow]): SortMergeJoinExec = {
+      val right = DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(exprB), rightKeys))
+      val join = SortMergeJoinExec(Seq(exprA), Seq(exprB), Inner, None, left, right)
+      EnsureRequirements.apply(join).asInstanceOf[SortMergeJoinExec]
+    }
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false") {
+      val identityStage = stage(keys)
+      val identity = planned(identityStage, extraKeys)
+      assert(groupPartitionsNodes(identity.left).isEmpty)
+      assert(identity.left.exists(_ eq identityStage))
+      assert(groupPartitionsNodes(identity.right).size == 1)
+      assert(ValidateRequirements.validate(identity))
+
+      val wrapped = DummyPassthroughUnaryExec(identityStage)
+      val wrappedPlan = planned(wrapped, extraKeys)
+      assert(groupPartitionsNodes(wrappedPlan.left).isEmpty,
+        "an identity alignment over a wrapped shuffle stage is skipped")
+      assert(wrappedPlan.left.exists(_ eq identityStage))
+      assert(ValidateRequirements.validate(wrappedPlan))
+
+      val stagePair = DummyOrderFromLeftBinaryExec(identityStage, stage(keys))
+      val stagesPlan = planned(stagePair, extraKeys)
+      assert(groupPartitionsNodes(stagesPlan.left).isEmpty,
+        "an identity alignment over multiple shuffle-stage leaves is skipped")
+      assert(ValidateRequirements.validate(stagesPlan))
+
+      val mixed = DummyOrderFromLeftBinaryExec(identityStage,
+        DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(exprA), keys)))
+      val mixedPlan = planned(mixed, extraKeys)
+      assert(groupPartitionsNodes(mixedPlan.left).size == 1,
+        "a child with a non-stage leaf retains its identity alignment")
+      assert(groupPartitionsNodes(mixedPlan.left).head.grouping.isIdentity)
+      assert(ValidateRequirements.validate(mixedPlan))
+
+      val identityExchange = identityStage.plan
+      val exchangePlan = planned(identityExchange, extraKeys)
+      assert(groupPartitionsNodes(exchangePlan.left).size == 1,
+        "an exchange outside a query stage retains its alignment node")
+      assert(groupPartitionsNodes(exchangePlan.left).head.grouping.isIdentity)
+      assert(ValidateRequirements.validate(exchangePlan))
+
+      val pruningStage = stage(extraKeys)
+      val nonIdentity = planned(pruningStage, keys)
+      val grouping = groupPartitionsNodes(nonIdentity.left)
+      assert(grouping.size == 1 && !grouping.head.grouping.isIdentity,
+        "a shuffle stage still needs non-identity alignment")
+      assert(ValidateRequirements.validate(nonIdentity))
+    }
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true") {
+      def stageJoin(joinType: JoinType): SortMergeJoinExec = {
+        val rightExchange = ShuffleExchangeExec(KeyedPartitioning(Seq(exprB), extraKeys),
+          DummySparkPlan(outputPartitioning = UnknownPartitioning(extraKeys.size)))
+        SortMergeJoinExec(Seq(exprA), Seq(exprB), joinType, None,
+          stage(keys), ShuffleQueryStageExec(1, rightExchange, rightExchange))
+      }
+      Seq(Inner, LeftOuter).foreach { joinType =>
+        val planned = EnsureRequirements.apply(stageJoin(joinType))
+          .asInstanceOf[SortMergeJoinExec]
+        val left = groupPartitionsNodes(planned.left)
+        val right = groupPartitionsNodes(planned.right)
+        assert(left.size == 1 && right.size == 1,
+          s"$joinType: a chosen replicate side keeps both alignment nodes")
+        assert(left.head.grouping.isIdentity,
+          s"$joinType: the left alignment is the identity")
+        assert(ValidateRequirements.validate(planned))
+      }
+    }
+  }
+
+  test("SPARK-60618: log a push only when an alignment node is retained") {
+    val keys = Seq(InternalRow(1), InternalRow(2))
+    def stage(expr: Attribute, id: Int, values: Seq[InternalRow]): ShuffleQueryStageExec = {
+      val leaf = DummySparkPlan(outputPartitioning = UnknownPartitioning(values.size))
+      val exchange = ShuffleExchangeExec(KeyedPartitioning(Seq(expr), values), leaf)
+      ShuffleQueryStageExec(id, exchange, exchange)
+    }
+    def join(rightKeys: Seq[InternalRow]): SortMergeJoinExec =
+      SortMergeJoinExec(Seq(exprA), Seq(exprB), FullOuter, None,
+        stage(exprA, 0, keys), stage(exprB, 1, rightKeys))
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true") {
+      def check(rightKeys: Seq[InternalRow], expectPush: Boolean): Unit = {
+        val appender = new LogAppender("storage partition alignment")
+        withLogAppender(appender, loggerNames = Seq(classOf[EnsureRequirements].getName),
+            level = Some(Level.INFO)) {
+          val planned = EnsureRequirements.apply(join(rightKeys))
+          assert(ValidateRequirements.validate(planned))
+          assert(groupPartitionsNodes(planned).nonEmpty == expectPush)
+        }
+        val pushLogged = appender.loggingEvents.exists(_.getMessage.getFormattedMessage
+          .contains("Pushing common partition values for storage-partitioned join"))
+        assert(pushLogged == expectPush)
+      }
+      check(keys, expectPush = false)
+      check(keys :+ InternalRow(3), expectPush = true)
     }
   }
 
@@ -1756,9 +1880,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       // The fine pair's members are each their child's own layout, so no projection is reported and
       // the nodes only align to the merged keys. Taking the first agreeing pair instead groups both
       // sides on `a` alone, i.e. positions `Some(Seq(0))`.
-      // The pass-through side keeps its own layout and gets no node, so the pair shows up as the
-      // one unprojected node the other side gets.
-      assert(groupPartitionsNodes(planned).map(_.joinKeyPositions) === Seq(None),
+      assert(groupPartitionsNodes(planned).map(_.joinKeyPositions) === Seq(None, None),
         "the join must be planned on the pair that keeps the most partitions")
     }
   }
@@ -2614,34 +2736,23 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     // already wrapped the non-grouped side, and picked a different side wherever one holds more
     // than one split per key. Both shapes read the choice back off the `distributePartitions`
     // flags.
-    // A side picked to spread keeps its node; a side whose alignment is the identity keeps its
-    // child and so has none, which reads as "not distributing". The node is asserted on the side
-    // that is expected to distribute before the flags are read, so a node that went missing
-    // cannot pass for the replicated side.
-    def flags(smj: SparkPlan, expected: (Boolean, Boolean)): Unit =
+    def distribute(child: SparkPlan): Boolean = child.collectFirst {
+      case g: GroupPartitionsExec => g
+    }.get.distributePartitions
+
+    def flags(smj: SparkPlan): (Boolean, Boolean) =
       withSQLConf(
           SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
           SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true") {
         val Seq(newLeft, newRight) = EnsureRequirements.apply(smj).children
-        val nodes = Seq(newLeft, newRight).map(_.collectFirst {
-          case g: GroupPartitionsExec => g
-        })
-        nodes.zip(Seq(expected._1, expected._2)).foreach { case (node, distributes) =>
-          if (distributes) {
-            assert(node.isDefined, "a side that distributes keeps its grouping node")
-          }
-        }
-        val distributed = nodes.map(_.exists(_.distributePartitions))
-        assert(distributed === Seq(expected._1, expected._2),
-          s"left/right distributePartitions, expected $expected")
+        (distribute(newLeft), distribute(newRight))
       }
 
     // The re-run shape: each child is the output of a first pass, a local sort over an aligned
     // `GroupPartitionsExec`.
     def distributeFlags(
         leftKeys: Seq[InternalRow], leftSplits: Int,
-        rightKeys: Seq[InternalRow], rightSplits: Int,
-        expected: (Boolean, Boolean)): Unit = {
+        rightKeys: Seq[InternalRow], rightSplits: Int): (Boolean, Boolean) = {
       def alignedChild(expr: AttributeReference, keys: Seq[InternalRow], splits: Int) = {
         val leaf = DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(expr), keys))
         val gpe = GroupPartitionsExec(leaf,
@@ -2650,46 +2761,44 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         SortExec(Seq(SortOrder(expr, Ascending)), global = false, gpe)
       }
       flags(SortMergeJoinExec(Seq(exprA), Seq(exprB), Inner, None,
-        alignedChild(exprA, leftKeys, leftSplits), alignedChild(exprB, rightKeys, rightSplits)),
-        expected)
+        alignedChild(exprA, leftKeys, leftSplits), alignedChild(exprB, rightKeys, rightSplits)))
     }
 
     // The bare first-pass shape: the children are the scans themselves.
     def firstPassFlags(
-        leftKeys: Seq[InternalRow], rightKeys: Seq[InternalRow],
-        expected: (Boolean, Boolean)): Unit =
+        leftKeys: Seq[InternalRow], rightKeys: Seq[InternalRow]): (Boolean, Boolean) =
       flags(SortMergeJoinExec(Seq(exprA), Seq(exprB), Inner, None,
         DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(exprA), leftKeys)),
-        DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(exprB), rightKeys))), expected)
+        DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(exprB), rightKeys))))
 
     // Re-run shape. The left side holds one partition against three on the right: it is
     // replicated, so it does not distribute. Counting the aligned reports instead sees one key
     // on both sides and always picks the right side.
-    distributeFlags(
+    assert(distributeFlags(
       leftKeys = Seq(InternalRow(1)), leftSplits = 1,
-      rightKeys = Seq(InternalRow(1), InternalRow(1), InternalRow(1)), rightSplits = 3,
-      expected = (false, true))
+      rightKeys = Seq(InternalRow(1), InternalRow(1), InternalRow(1)), rightSplits = 3) ===
+        ((false, true)))
 
     // The mirrored control: the right side is replicated.
-    distributeFlags(
+    assert(distributeFlags(
       leftKeys = Seq(InternalRow(1), InternalRow(1), InternalRow(1)), leftSplits = 3,
-      rightKeys = Seq(InternalRow(1)), rightSplits = 1,
-      expected = (true, false))
+      rightKeys = Seq(InternalRow(1)), rightSplits = 1) ===
+        ((true, false)))
 
     // Bare first pass where the pre-fix count disagrees: the left side holds three splits under
     // one distinct key, the right two splits under two keys. The pre-fix count saw one distinct
     // key against two and replicated the left side; the pre-alignment count replicates the side
     // with fewer splits.
-    firstPassFlags(
+    assert(firstPassFlags(
       leftKeys = Seq(InternalRow(1), InternalRow(1), InternalRow(1)),
-      rightKeys = Seq(InternalRow(1), InternalRow(2)),
-      expected = (true, false))
+      rightKeys = Seq(InternalRow(1), InternalRow(2))) ===
+        ((true, false)))
 
     // The first-pass control where both counts agree.
-    firstPassFlags(
+    assert(firstPassFlags(
       leftKeys = Seq(InternalRow(1), InternalRow(2)),
-      rightKeys = Seq(InternalRow(1), InternalRow(2), InternalRow(3)),
-      expected = (false, true))
+      rightKeys = Seq(InternalRow(1), InternalRow(2), InternalRow(3))) ===
+        ((false, true)))
   }
 
   test("SPARK-59671: the alignment stamps one repeating side, only where the join type may") {
@@ -2702,15 +2811,9 @@ class EnsureRequirementsSuite extends SharedSparkSession {
           SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
           SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true") {
         EnsureRequirements.apply(smj).children.map { child =>
-          child.collectFirst { case g: GroupPartitionsExec => g }.map { gpe =>
-            (gpe.ungroupingOrigin,
-              gpe.outputPartitioning.asInstanceOf[KeyedPartitioning].isGrouped)
-          }.getOrElse {
-            // No node: the alignment is the pass-through, so the child already holds the merged
-            // keys and groups with no stamp.
-            val keyed = PartitioningCollection.representativeOf(child.outputPartitioning).get
-            (None, keyed.isGrouped)
-          }
+          val gpe = child.collectFirst { case g: GroupPartitionsExec => g }.get
+          (gpe.ungroupingOrigin,
+            gpe.outputPartitioning.asInstanceOf[KeyedPartitioning].isGrouped)
         }
       }
     def smj(joinType: JoinType, leftKeys: Seq[InternalRow],
@@ -2965,13 +3068,9 @@ class EnsureRequirementsSuite extends SharedSparkSession {
           assert(planned.collect { case s: ShuffleExchangeExec => s }.isEmpty,
             s"$joinType: a marked pair keeps its storage-partitioned join either way:\n" +
               planned.treeString)
-          // The marked side already holds the three merged keys and gets no node; the subset side
-          // is padded to them.
-          assert(groupPartitionsNodes(planned).map(_.expectedKeyCount) === Seq(Some(3)),
-            s"$joinType: the subset side is pushed the marked side's three keys:\n" +
-              planned.treeString)
-          assert(planned.children.map(_.outputPartitioning.numPartitions) === Seq(3, 3),
-            s"$joinType: both sides end up on the marked side's three keys:\n" +
+          assert(groupPartitionsNodes(planned).map(_.expectedKeyCount) ===
+            Seq(Some(3), Some(3)),
+            s"$joinType: both sides are pushed the marked side's three keys:\n" +
               planned.treeString)
           assert(ValidateRequirements.validate(planned),
             s"$joinType: the planned join must satisfy both children's required distribution:\n" +
