@@ -470,11 +470,13 @@ class MLSuite extends MLHelper {
     val modelId = trainLogisticRegressionModel(sessionHolder)
     // Use a plan deeper than the default protobuf recursion limit.
     val dataset = (0 until 60).foldLeft(createLocalRelationProto) { (input, _) =>
-      proto.Relation.newBuilder()
+      proto.Relation
+        .newBuilder()
         .setLimit(proto.Limit.newBuilder().setInput(input).setLimit(4))
         .build()
     }
-    val summaryFetch = proto.Fetch.newBuilder()
+    val summaryFetch = proto.Fetch
+      .newBuilder()
       .setObjRef(proto.ObjectRef.newBuilder().setId(modelId))
       .addMethods(proto.Fetch.Method.newBuilder().setMethod("summary"))
       .addMethods(proto.Fetch.Method.newBuilder().setMethod("labels"))
@@ -487,18 +489,25 @@ class MLSuite extends MLHelper {
           MLHandler.handleMlCommand(sessionHolder, command)
         }
       }
-      val createSummary = proto.MlCommand.newBuilder()
-        .setCreateSummary(proto.MlCommand.CreateSummary.newBuilder()
-          .setModelRef(proto.ObjectRef.newBuilder().setId(modelId))
-          .setDataset(dataset))
+      val createSummary = proto.MlCommand
+        .newBuilder()
+        .setCreateSummary(
+          proto.MlCommand.CreateSummary
+            .newBuilder()
+            .setModelRef(proto.ObjectRef.newBuilder().setId(modelId))
+            .setDataset(dataset))
         .build()
       // Persist the plan even when CreateSummary finds the model already has its summary.
-      assert(MLHandler.handleMlCommand(sessionHolder, createSummary)
-        .getParam.getBoolean === (cacheSize == 0))
+      assert(
+        MLHandler
+          .handleMlCommand(sessionHolder, createSummary)
+          .getParam
+          .getBoolean === (cacheSize == 0))
       for (_ <- 0 until 2) {
         sessionHolder.mlCache.remove(modelId, evictOnly = true)
         val result = MLHandler.handleMlCommand(sessionHolder, command)
-        assert(result.getParam.getArray.getElementsList.asScala.map(_.getDouble) === Seq(0.0, 1.0))
+        assert(
+          result.getParam.getArray.getElementsList.asScala.map(_.getDouble) === Seq(0.0, 1.0))
         if (cacheSize == 0) {
           assert(sessionHolder.mlCache.cachedModel.isEmpty)
         }
@@ -506,15 +515,17 @@ class MLSuite extends MLHelper {
 
       val predictions = summaryFetch.toBuilder
         .setMethods(1, proto.Fetch.Method.newBuilder().setMethod("predictions"))
-      val relation = proto.MlRelation.newBuilder()
+      val relation = proto.MlRelation
+        .newBuilder()
         .setFetch(predictions)
         .setModelSummaryDataset(dataset)
         .build()
       sessionHolder.mlCache.remove(modelId, evictOnly = true)
       assert(MLHandler.transformMLRelation(relation, sessionHolder).count() === 4)
       sessionHolder.mlCache.remove(modelId, evictOnly = true)
-      assert(MLHandler.transformMLRelation(
-        relation.toBuilder.clearModelSummaryDataset().build(), sessionHolder).count() === 4)
+      assert(MLHandler
+        .transformMLRelation(relation.toBuilder.clearModelSummaryDataset().build(), sessionHolder)
+        .count() === 4)
       if (cacheSize == 0) {
         assert(sessionHolder.mlCache.cachedModel.isEmpty)
       }

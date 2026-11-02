@@ -502,12 +502,14 @@ private[connect] object MLHandler extends Logging {
           ProtoUtils.parseWithRecursionLimit(
             Files.readAllBytes(datasetPath),
             proto.Relation.parser(),
-            sessionHolder.session.sparkContext.conf.get(
-              Connect.CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT))
+            sessionHolder.session.sparkContext.conf
+              .get(Connect.CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT))
         }
-        obj.asInstanceOf[HasTrainingSummary[_]].loadSummary(
-          modelPath.resolve("summary").toString,
-          MLUtils.parseRelationProto(dataset, sessionHolder))
+        obj
+          .asInstanceOf[HasTrainingSummary[_]]
+          .loadSummary(
+            modelPath.resolve("summary").toString,
+            MLUtils.parseRelationProto(dataset, sessionHolder))
       }
     }
     // Use the same model even if its cache entry is evicted while restoring the summary.
@@ -531,7 +533,8 @@ private[connect] object MLHandler extends Logging {
       }
       if (sessionHolder.mlCache.getMemoryControlEnabled) {
         // Keep the dataset plan on disk so recovery survives subsequent model evictions.
-        val datasetPath = sessionHolder.mlCache.getModelOffloadingPath(refId)
+        val datasetPath = sessionHolder.mlCache
+          .getModelOffloadingPath(refId)
           .resolve("summary_dataset")
         Files.write(datasetPath, createSummaryCmd.getDataset.toByteArray)
       }
