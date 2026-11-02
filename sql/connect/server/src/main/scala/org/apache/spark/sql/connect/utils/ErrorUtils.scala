@@ -33,7 +33,7 @@ import io.grpc.stub.StreamObserver
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods
 
-import org.apache.spark.{QueryContextType, SparkEnv, SparkException, SparkThrowable}
+import org.apache.spark.{QueryContextType, SparkEnv, SparkException, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.api.python.PythonException
 import org.apache.spark.connect.proto.FetchErrorDetailsResponse
 import org.apache.spark.internal.Logging
@@ -53,12 +53,23 @@ private[connect] object ErrorUtils extends Logging {
     if (error.getCondition == "FAILED_JDBC.WRITE") {
       // Connect clients have no negotiated error-catalog capability. Keep the URL supplied
       // by the WRITE error; it has already been redacted by JDBCOptions.
-      ("FAILED_JDBC.UNCLASSIFIED", Map(
-        "url" -> parameters.getOrElse("url", "jdbc:"),
-        "message" -> s"Write rows to the table ${parameters.getOrElse("tableName", "")}."))
+      (
+        "FAILED_JDBC.UNCLASSIFIED",
+        Map(
+          "url" -> parameters.getOrElse("url", "jdbc:"),
+          "message" -> s"Write rows to the table ${parameters.getOrElse("tableName", "")}."))
     } else {
       (error.getCondition, parameters)
     }
+  }
+
+  private def compatibleErrorMessage(error: Throwable): String = error match {
+    case sparkThrowable: SparkThrowable if sparkThrowable.getCondition == "FAILED_JDBC.WRITE" =>
+      val (errorClass, parameters) = compatibleErrorClass(sparkThrowable)
+      // Python clients retain the server message, while Scala clients render the condition.
+      // Both channels must name the projected condition that an older client can reconstruct.
+      SparkThrowableHelper.getMessage(errorClass, parameters)
+    case _ => error.getMessage
   }
 
   private def allClasses(cl: Class[_]): Seq[Class[_]] = {
@@ -100,7 +111,7 @@ private[connect] object ErrorUtils extends Logging {
     while (buffer.size < MAX_ERROR_CHAIN_LENGTH && currentError != null) {
       val builder = FetchErrorDetailsResponse.Error
         .newBuilder()
-        .setMessage(currentError.getMessage)
+        .setMessage(compatibleErrorMessage(currentError))
         .addAllErrorTypeHierarchy(
           ErrorUtils.allClasses(currentError.getClass).map(_.getName).asJava)
 
@@ -254,8 +265,8 @@ private[connect] object ErrorUtils extends Logging {
         val errorClass = e.getCondition
         if (errorClass != null && errorClass.nonEmpty) {
           val (compatibleClass, compatibleParameters) = compatibleErrorClass(e)
-          val messageParameters = JsonMethods.compact(
-            JsonMethods.render(map2jvalue(compatibleParameters)))
+          val messageParameters =
+            JsonMethods.compact(JsonMethods.render(map2jvalue(compatibleParameters)))
           if (messageParameters.length <= maxMetadataSize) {
             errorInfo.putMetadata("errorClass", compatibleClass)
             errorInfo.putMetadata("messageParameters", messageParameters)
@@ -311,7 +322,7 @@ private[connect] object ErrorUtils extends Logging {
    * an error whose description is empty.
    */
   private def errorDescription(e: Throwable): String = {
-    val message = e.getMessage
+    val message = compatibleErrorMessage(e)
     if (message != null && message.nonEmpty) {
       Utils.abbreviate(message, 2048)
     } else {

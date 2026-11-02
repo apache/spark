@@ -769,7 +769,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
         e,
         condition = "FAILED_JDBC.WRITE",
         messageParameters = Map("url" -> options.getRedactUrl(), "tableName" -> table),
-        description = "Write rows to the table.",
+        description = s"Write rows to the table $table.",
         isRuntime = true)
     }
 
@@ -833,7 +833,12 @@ object JdbcUtils extends Logging with SQLConfHelper {
           withWriteException { stmt.executeBatch() }
         }
       } finally {
-        withWriteException { stmt.close() }
+        // Cleanup must not replace a binding/batch failure or abort a pending commit.
+        try {
+          stmt.close()
+        } catch {
+          case NonFatal(e) => logWarning("Exception closing JDBC statement", e)
+        }
       }
       if (supportsTransactions) {
         withWriteException { conn.commit() }

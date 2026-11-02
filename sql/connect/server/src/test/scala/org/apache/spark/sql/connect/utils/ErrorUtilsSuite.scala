@@ -83,15 +83,18 @@ class ErrorUtilsSuite extends SharedSparkSession {
       Map("url" -> "jdbc:redacted", "tableName" -> "t"),
       cause)
 
-    val expectedParameters = Map(
-      "url" -> "jdbc:redacted",
-      "message" -> "Write rows to the table t.")
+    val expectedParameters =
+      Map("url" -> "jdbc:redacted", "message" -> "Write rows to the table t.")
     val status = ErrorUtils.buildStatusFromThrowable(error, None)
     val info = status.getDetails(0).unpack(classOf[ErrorInfo])
     assert(info.getMetadataOrDefault("errorClass", "") == "FAILED_JDBC.UNCLASSIFIED")
     assert(info.getMetadataOrDefault("sqlState", "") == "HV000")
     val statusParameters = info.getMetadataOrDefault("messageParameters", "")
     assert(JsonMethods.parse(statusParameters).values == expectedParameters)
+    val expectedMessage =
+      "[FAILED_JDBC.UNCLASSIFIED] Failed JDBC jdbc:redacted on the operation: " +
+        "Write rows to the table t. SQLSTATE: HV000"
+    assert(status.getMessage == expectedMessage)
 
     val response = ErrorUtils.throwableToFetchErrorDetailsResponse(error)
     val root = response.getErrors(0)
@@ -99,7 +102,24 @@ class ErrorUtilsSuite extends SharedSparkSession {
     assert(projected.getErrorClass == "FAILED_JDBC.UNCLASSIFIED")
     assert(projected.getSqlState == "HV000")
     assert(projected.getMessageParametersMap.asScala.toMap == expectedParameters)
+    assert(root.getMessage == expectedMessage)
     assert(root.getCauseIdx == 1)
+    assert(response.getErrors(1).getMessage == cause.getMessage)
+  }
+
+  test("other JDBC error messages and causes are unchanged") {
+    val cause = new SQLException("connection rejected", "08001")
+    val error =
+      new SparkRuntimeException("FAILED_JDBC.CONNECTION", Map("url" -> "jdbc:redacted"), cause)
+
+    val status = ErrorUtils.buildStatusFromThrowable(error, None)
+    val info = status.getDetails(0).unpack(classOf[ErrorInfo])
+    assert(info.getMetadataOrDefault("errorClass", "") == "FAILED_JDBC.CONNECTION")
+    assert(status.getMessage == error.getMessage)
+    val response = ErrorUtils.throwableToFetchErrorDetailsResponse(error)
+    assert(response.getErrors(0).getMessage == error.getMessage)
+    assert(response.getErrors(0).getSparkThrowable.getErrorClass == "FAILED_JDBC.CONNECTION")
+    assert(response.getErrors(0).getCauseIdx == 1)
     assert(response.getErrors(1).getMessage == cause.getMessage)
   }
 }
