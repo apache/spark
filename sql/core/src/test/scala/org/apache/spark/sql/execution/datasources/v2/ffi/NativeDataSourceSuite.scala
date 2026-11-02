@@ -36,6 +36,7 @@ import org.apache.spark.api.python.{PythonBroadcast, SimplePythonFunction}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
+import org.apache.spark.sql.connector.read.PartitionReader
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
@@ -48,6 +49,7 @@ import org.apache.spark.sql.streaming.{StreamingQuery, Trigger}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
@@ -1297,7 +1299,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     }).get(1, TimeUnit.MINUTES)
     // Returns a reader closed while a thread of the pool may still read its batch, and the file
     // that the library creates when the stream is released.
-    def closedReader(pool: ExecutorService) = {
+    def closedReader(pool: ExecutorService): (PartitionReader[ColumnarBatch], File) = {
       val marker = new File(Utils.createTempDir(), "released")
       // get_next does not wait: the file .continue exists.
       new File(marker.getPath + ".continue").createNewFile()
