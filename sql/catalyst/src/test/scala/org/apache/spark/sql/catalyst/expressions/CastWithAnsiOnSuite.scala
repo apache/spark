@@ -160,6 +160,51 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     checkEvaluation(cast(Long.MinValue - 0.9D, LongType), Long.MinValue)
   }
 
+  test("SPARK-60843: ANSI cast of a wide decimal to int/short/byte truncates exactly") {
+    // BigDecimal-backed decimal(20, s) literals just inside and just outside each bound. The
+    // in-range ones round up past the bound as a Double, which used to make them overflow.
+    // Values just below an integer near the bound used to be rounded up to that integer.
+    def wideDecimal(str: String, scale: Int): Literal = {
+      // Decimal(BigDecimal, p, s) always keeps the BigDecimal-backed representation.
+      val d = Decimal(BigDecimal(str), 20, scale)
+      Literal(d)
+    }
+    Seq[(DataType, Int, String, Any, String, Any, String)](
+      (IntegerType, 8, "2147483647.99999999", Int.MaxValue, "-2147483648.99999999",
+        Int.MinValue, "0.00000001"),
+      (ShortType, 13, "32767.9999999999999", Short.MaxValue, "-32768.9999999999999",
+        Short.MinValue, "0.0000000000001"),
+      (ByteType, 15, "127.999999999999999", Byte.MaxValue, "-128.999999999999999",
+        Byte.MinValue, "0.000000000000001")
+    ).foreach { case (dt, scale, maxStr, maxValue, minStr, minValue, ulp) =>
+      checkEvaluation(cast(wideDecimal(maxStr, scale), dt), maxValue)
+      checkEvaluation(cast(wideDecimal(minStr, scale), dt), minValue)
+      // One unit in the last place past the integral bound overflows.
+      Seq(
+        BigDecimal(maxValue.toString) + 1 + BigDecimal(ulp),
+        BigDecimal(minValue.toString) - 1 - BigDecimal(ulp)
+      ).foreach { value =>
+        val lit = wideDecimal(value.toString, scale)
+        checkErrorInExpression[SparkArithmeticException](
+          cast(lit, dt),
+          "CAST_OVERFLOW",
+          Map(
+            "value" -> s"${value}BD",
+            "sourceType" -> s"\"${DecimalType(20, scale).sql}\"",
+            "targetType" -> s"\"${dt.sql}\"",
+            "ansiConfig" -> "\"spark.sql.ansi.enabled\""))
+      }
+    }
+    Seq[(DataType, Int, String, Any)](
+      (IntegerType, 8, "2147483646.99999999", 2147483646),
+      (IntegerType, 8, "-2147483647.99999999", -2147483647),
+      (ShortType, 13, "32766.9999999999999", 32766.toShort),
+      (ByteType, 15, "126.999999999999999", 126.toByte)
+    ).foreach { case (dt, scale, str, expected) =>
+      checkEvaluation(cast(wideDecimal(str, scale), dt), expected)
+    }
+  }
+
   test("ANSI mode: Throw exception on casting out-of-range value to decimal type") {
     checkExceptionInExpression[ArithmeticException](
       cast(Literal("134.12"), DecimalType(3, 2)), "cannot be represented")

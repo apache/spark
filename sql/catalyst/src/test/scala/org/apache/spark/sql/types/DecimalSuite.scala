@@ -609,4 +609,56 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
       }
     }
   }
+
+  test("SPARK-60843: roundToInt/Short/Byte truncate exactly for decimals not backed by a long") {
+    // Each value is so close to the next integer that it rounds up to it as a Double. The
+    // ones that truncate to the type's max/min used to fail the range check, and the ones
+    // just below an integer near the bound used to come back as that integer.
+    val inRange = Seq(
+      ("2147483647.99999999", 20, 8, (d: Decimal) => d.roundToInt().toLong, Int.MaxValue.toLong),
+      ("-2147483648.99999999", 20, 8, (d: Decimal) => d.roundToInt().toLong, Int.MinValue.toLong),
+      ("32767.9999999999999", 20, 13, (d: Decimal) => d.roundToShort().toLong,
+        Short.MaxValue.toLong),
+      ("-32768.9999999999999", 20, 13, (d: Decimal) => d.roundToShort().toLong,
+        Short.MinValue.toLong),
+      ("127.999999999999999", 20, 15, (d: Decimal) => d.roundToByte().toLong,
+        Byte.MaxValue.toLong),
+      ("-128.999999999999999", 20, 15, (d: Decimal) => d.roundToByte().toLong,
+        Byte.MinValue.toLong),
+      ("2147483646.99999999", 20, 8, (d: Decimal) => d.roundToInt().toLong, 2147483646L),
+      ("-2147483647.99999999", 20, 8, (d: Decimal) => d.roundToInt().toLong, -2147483647L),
+      ("32766.9999999999999", 20, 13, (d: Decimal) => d.roundToShort().toLong, 32766L),
+      ("126.999999999999999", 20, 15, (d: Decimal) => d.roundToByte().toLong, 126L))
+    inRange.foreach { case (str, precision, scale, round, expected) =>
+      val expanded = Decimal(BigDecimal(str), precision, scale)
+      checkCompact(expanded, false)
+      assert(round(expanded) === expected, str)
+      // The same value held as an unscaled long must give the same answer.
+      val compact = Decimal(BigDecimal(str).underlying.unscaledValue.longValueExact,
+        precision, scale)
+      checkCompact(compact, true)
+      assert(round(compact) === expected, str)
+    }
+
+    val outOfRange = Seq(
+      ("2147483648.00000001", "INT", (d: Decimal) => d.roundToInt()),
+      ("-2147483649.00000001", "INT", (d: Decimal) => d.roundToInt()),
+      ("32768.00000001", "SMALLINT", (d: Decimal) => d.roundToShort()),
+      ("-32769.00000001", "SMALLINT", (d: Decimal) => d.roundToShort()),
+      ("128.00000001", "TINYINT", (d: Decimal) => d.roundToByte()),
+      ("-129.00000001", "TINYINT", (d: Decimal) => d.roundToByte()),
+      ("99999999999999999999999999999.99999999", "INT", (d: Decimal) => d.roundToInt()))
+    outOfRange.foreach { case (str, targetType, round) =>
+      val expanded = Decimal(BigDecimal(str), 38, 8)
+      checkCompact(expanded, false)
+      checkError(
+        exception = intercept[SparkArithmeticException](round(expanded)),
+        condition = "CAST_OVERFLOW",
+        parameters = Map(
+          "value" -> s"${str}BD",
+          "sourceType" -> "\"DECIMAL(38,8)\"",
+          "targetType" -> s"\"${targetType}\"",
+          "ansiConfig" -> "\"spark.sql.ansi.enabled\""))
+    }
+  }
 }
