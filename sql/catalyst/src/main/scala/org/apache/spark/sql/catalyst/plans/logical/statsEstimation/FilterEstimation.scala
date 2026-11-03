@@ -162,7 +162,9 @@ case class FilterEstimation(
   /**
    * Returns a percentage of rows meeting a single condition in Filter node.
    * Currently we only support binary predicates where one side is a column,
-   * and the other is a literal.
+   * and the other is a literal. A side may also be the read-side CHAR padding of a column, which
+   * is what a predicate pushed below the padding Project compares. It is estimated as the column
+   * itself, as `EstimationUtils.getAliasStats` does above the padding Project.
    *
    * @param condition a single logical expression
    * @param update a boolean flag to specify if we need to update ColumnStat of a column
@@ -171,11 +173,8 @@ case class FilterEstimation(
    *         It returns None if the condition is not supported.
    */
   def calculateSingleCondition(condition: Expression, update: Boolean): Option[Double] = {
-    // A predicate pushed below a read-side CHAR padding Project compares the padding expression
-    // rather than the column. The column's statistics already describe padded values (see
-    // `EstimationUtils.getAliasStats`), so estimate it as a predicate on the column itself.
     val unpadded = condition.mapChildren {
-      case CharVarcharUtils.ReadSidePadding(attr: Attribute) => attr
+      case CharVarcharUtils.ReadSidePadding(attr: Attribute, _) => attr
       case other => other
     }
     unpadded match {

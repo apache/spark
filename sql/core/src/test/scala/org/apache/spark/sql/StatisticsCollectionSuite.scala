@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, PST, UTC}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, TimeZoneUTC}
 import org.apache.spark.sql.execution.LogicalRDD
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -229,6 +230,28 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         assert(estimatedRows(s"SELECT * FROM $tableName WHERE c IN ('3', '4')") {
           case f: Filter => f
         }.contains(BigInt(200)))
+      }
+    }
+  }
+
+  test("SPARK-60810: partition pruning estimates a filter on a CHAR partition column") {
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "true",
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "true") {
+      val tableName = "char_partition_pruning_stats"
+      withTable(tableName) {
+        sql(s"CREATE TABLE $tableName(v INT, p CHAR(5)) USING parquet PARTITIONED BY (p)")
+        sql(s"INSERT INTO $tableName SELECT CAST(id AS INT), CAST(id % 10 AS STRING) " +
+          "FROM range(1000)")
+        sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS v, p")
+
+        // PruneFileSourcePartitions estimates the pushed-down partition filter, which compares
+        // the padding expression, and saves the result as the pruned relation's statistics.
+        val plan = sql(s"SELECT * FROM $tableName WHERE p = '3'").queryExecution.optimizedPlan
+        val prunedStats = plan.collectFirst {
+          case l: LogicalRelation => l.catalogTable.flatMap(_.stats)
+        }.flatten.getOrElse(fail(s"no catalog statistics in\n${plan.treeString}"))
+        assert(prunedStats.rowCount.contains(BigInt(100)), plan.treeString)
       }
     }
   }

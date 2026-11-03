@@ -178,6 +178,13 @@ class ProjectEstimationSuite extends StatsEstimationTestBase {
     assert(padded != c, "expected a read-side padding expression for a CHAR column")
     val proj = Project(Seq(Alias(padded, "c")()), child)
     assert(proj.stats.attributeStats.get(proj.output.head).contains(colStat))
+
+    // Statistics of values shorter than N, e.g. collected with read-side padding off: every
+    // non-null padded value has at least N characters.
+    val shortStat = colStat.copy(avgLen = Some(3), maxLen = Some(4))
+    val shortChild = child.copy(attributeStats = AttributeMap(Seq(c -> shortStat)))
+    val shortProj = Project(Seq(Alias(padded, "c")()), shortChild)
+    assert(shortProj.stats.attributeStats.get(shortProj.output.head).contains(colStat))
   }
 
   private def checkProjectStats(

@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUti
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * In this test suite, we test predicates containing the following operators:
@@ -969,7 +970,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       DataTypeUtils.toAttribute(CharVarcharUtils.replaceCharVarcharWithStringInSchema(
         StructType(Seq(StructField("cstring", CharType(2))))).head).withExprId(attrString.exprId))
     assert(padded match {
-      case CharVarcharUtils.ReadSidePadding(a: Attribute) => a.exprId == attrString.exprId
+      case CharVarcharUtils.ReadSidePadding(a: Attribute, _) => a.exprId == attrString.exprId
       case _ => false
     }, s"expected read-side padding over cstring, got $padded")
     val child = childStatsTestPlan(Seq(attrString), tableRowCount = 10L)
@@ -978,10 +979,15 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       EqualTo(padded, Literal("A0")) -> 1,
       EqualTo(Literal("A0"), padded) -> 1,
       In(padded, Seq(Literal("A0"), Literal("A1"))) -> 2,
+      InSet(padded, Set(UTF8String.fromString("A0"), UTF8String.fromString("A1"))) -> 2,
       IsNull(padded) -> 0).foreach { case (condition, expectedRows) =>
       val filter = Filter(condition, child)
       assert(filter.stats.rowCount.contains(BigInt(expectedRows)), condition)
     }
+    // With no nulls IS NOT NULL keeps every row, which an unsupported predicate does too.
+    val childWithNulls = childStatsTestPlan(Seq(attrString), tableRowCount = 10L,
+      attributeMap = AttributeMap(Seq(attrString -> colStatString.copy(nullCount = Some(4)))))
+    assert(Filter(IsNotNull(padded), childWithNulls).stats.rowCount.contains(BigInt(6)))
   }
 
   test("ColumnStatsMap tests") {
