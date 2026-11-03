@@ -19,9 +19,9 @@ package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, ExpressionWithUnresolvedIdentifier}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, ExprId}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, ExprId, NamedExpression}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -34,18 +34,25 @@ object StoredExpressionText {
    * The settings a stored text is read under. The session time zone, case sensitivity, timestamp
    * type and decimal precision loss stay with the given session, because the settings of the DDL
    * are not known here and pinning them would silently change existing tables of a deployment that
-   * sets them.
+   * sets them. Any other config that the parsing or the analysis reads takes its default value,
+   * also one that a function reads while it is built, such as
+   * `spark.sql.legacy.negativeIndexInArrayInsert`. With
+   * `spark.sql.legacy.useCurrentConfigsForGeneratedColumn`, these are the settings of the session.
    */
   def conf(session: SQLConf): SQLConf = {
-    val c = new SQLConf
-    Analyzer.retainResolutionConfigsForAnalysis(newConf = c, existingConf = session)
-    c.setConfString(SQLConf.ANSI_ENABLED.key, "true")
-    c.setConfString(SQLConf.SESSION_LOCAL_TIMEZONE.key, session.sessionLocalTimeZone)
-    c.setConfString(SQLConf.CASE_SENSITIVE.key, session.caseSensitiveAnalysis.toString)
-    c.setConf(SQLConf.TIMESTAMP_TYPE, session.getConf(SQLConf.TIMESTAMP_TYPE))
-    c.setConf(
-      SQLConf.DECIMAL_OPERATIONS_ALLOW_PREC_LOSS, session.decimalOperationsAllowPrecisionLoss)
-    c
+    if (session.useCurrentSQLConfigsForGeneratedColumn) {
+      session.clone()
+    } else {
+      val c = new SQLConf
+      Analyzer.retainResolutionConfigsForAnalysis(newConf = c, existingConf = session)
+      c.setConfString(SQLConf.ANSI_ENABLED.key, "true")
+      c.setConfString(SQLConf.SESSION_LOCAL_TIMEZONE.key, session.sessionLocalTimeZone)
+      c.setConfString(SQLConf.CASE_SENSITIVE.key, session.caseSensitiveAnalysis.toString)
+      c.setConf(SQLConf.TIMESTAMP_TYPE, session.getConf(SQLConf.TIMESTAMP_TYPE))
+      c.setConf(
+        SQLConf.DECIMAL_OPERATIONS_ALLOW_PREC_LOSS, session.decimalOperationsAllowPrecisionLoss)
+      c
+    }
   }
 
   /**
@@ -77,17 +84,35 @@ object StoredExpressionText {
   }
 
   /**
-   * Analyzes `plan` with `analyzer` under [[conf]], or returns None if a text in it cannot be
-   * analyzed under these settings, such as an identifier string that only the session can parse.
+   * Analyzes `expr` over `input` with `analyzer` under [[conf]], so that an auto-filled value and
+   * the check of a provided value read a stored text the same way. If these settings cannot
+   * analyze or resolve it, such as an identifier string that only the session can parse, or it
+   * analyzes to another plan, such as an aggregate that a catalog stores, this returns `inSession`
+   * instead, and the analysis of the write resolves that under the session.
    */
-  def analyze(plan: LogicalPlan, analyzer: LogicalPlan => LogicalPlan): Option[LogicalPlan] = {
-    try {
-      Some(SQLConf.withExistingConf(conf(SQLConf.get)) {
-        analyzer(plan)
-      })
+  def analyze[E <: Expression](
+      expr: E,
+      inSession: => E,
+      input: Seq[Attribute],
+      analyzer: LogicalPlan => LogicalPlan): E = {
+    val named = expr match {
+      case n: NamedExpression => n
+      case e => Alias(e, "value")()
+    }
+    val analyzed = try {
+      SQLConf.withExistingConf(conf(SQLConf.get)) {
+        analyzer(Project(Seq(named), LocalRelation(input)))
+      } match {
+        case Project(Seq(a), _: LocalRelation) if a.resolved => Some(a)
+        case _ => None
+      }
     } catch {
       case _: AnalysisException => None
     }
+    analyzed.map {
+      case Alias(child, _) if !expr.isInstanceOf[NamedExpression] => child
+      case a => a
+    }.getOrElse(inSession).asInstanceOf[E]
   }
 
   /**

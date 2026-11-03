@@ -4594,6 +4594,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val USE_CURRENT_SQL_CONFIGS_FOR_GENERATED_COLUMN =
+    buildConf("spark.sql.legacy.useCurrentConfigsForGeneratedColumn")
+      .internal()
+      .doc("When true, a write parses and analyzes the SQL text of a generation expression of a " +
+        "Data Source V2 table under the SQL configs of the current active SparkSession, and " +
+        "CREATE TABLE and REPLACE TABLE do not reject a text that the session reads differently.")
+      .version("4.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val STORE_ANALYZED_PLAN_FOR_VIEW =
     buildConf("spark.sql.legacy.storeAnalyzedPlanForView")
       .internal()
@@ -10109,6 +10119,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def maxNestedViewDepth: Int = getConf(SQLConf.MAX_NESTED_VIEW_DEPTH)
 
   def useCurrentSQLConfigsForView: Boolean = getConf(SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_VIEW)
+
+  def useCurrentSQLConfigsForGeneratedColumn: Boolean =
+    getConf(SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_GENERATED_COLUMN)
 
   def storeAnalyzedPlanForView: Boolean = getConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW)
 

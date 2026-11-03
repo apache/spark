@@ -1573,8 +1573,9 @@ class DataSourceV2DataFrameSuite
           parameters = Map(
             "fieldName" -> "c2",
             "expressionStr" -> "current_date",
-            "reason" -> ("generation expression reads differently under the settings of this " +
-              "session than under the settings a write reads it with")))
+            "reason" -> ("a write reads it with the default values of the parser configs, " +
+              "such as spark.sql.parser.escapedStringLiterals and " +
+              "spark.sql.ansi.enforceReservedKeywords, and this session reads it differently")))
 
         // CURDATE is not a reserved keyword, so it reads as the function in both cases.
         sql(s"CREATE TABLE $tableName (c2 DATE GENERATED ALWAYS AS (curdate())) USING foo")

@@ -127,11 +127,13 @@ case class GeneratedColumnExpression(
     }
 
     // A write reads the stored text under fixed settings, so that a value does not depend on the
-    // session that writes it. The text has to read the same there.
+    // session that writes it. The text has to read the same there. This also applies to a table
+    // that computes the values itself, so that the text means the same to any reader.
     if (!StoredExpressionText.readsAsInSession(originalSQL)) {
       throw unsupportedExpressionError(
-        "generation expression reads differently under the settings of this session " +
-          "than under the settings a write reads it with")
+        "a write reads it with the default values of the parser configs, such as " +
+          "spark.sql.parser.escapedStringLiterals and spark.sql.ansi.enforceReservedKeywords, " +
+          "and this session reads it differently")
     }
   }
 

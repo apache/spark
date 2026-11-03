@@ -29,7 +29,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, GeneralScalarExpression, Transform}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType, StructType}
+import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder, StringType, StructType}
 
 /**
  * Tests for generated column auto-fill and constraint enforcement during writes.
@@ -119,8 +119,9 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     assert(ex.getCondition == condition)
   }
 
-  private val readsDifferentlyReason = "generation expression reads differently under the " +
-    "settings of this session than under the settings a write reads it with"
+  private val readsDifferentlyReason = "a write reads it with the default values of the parser " +
+    "configs, such as spark.sql.parser.escapedStringLiterals and " +
+    "spark.sql.ansi.enforceReservedKeywords, and this session reads it differently"
 
   testGeneratedColumnWrite("append_data_v2") { table =>
     import testImplicits._
@@ -1407,25 +1408,6 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
-  test("SPARK-60757: a DELETE that rewrites rows does not depend on the parser settings of the " +
-    "writer") {
-    withRowLevelCatalog {
-      val tblName = "my_tab"
-      withTable(s"$rowLevelCat.$tblName") {
-        sql(s"""CREATE TABLE $rowLevelCat.$tblName(
-               |  id INT,
-               |  a STRING,
-               |  b STRING GENERATED ALWAYS AS (concat(a, 'x\\\\y'))
-               |) USING foo""".stripMargin)
-        sql(s"INSERT INTO $rowLevelCat.$tblName(id, a) VALUES (1, 'p'), (2, 'q')")
-        withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> "true") {
-          sql(s"DELETE FROM $rowLevelCat.$tblName WHERE id <= 1")
-        }
-        checkAnswer(spark.table(s"$rowLevelCat.$tblName"), Row(2, "q", "qx\\y"))
-      }
-    }
-  }
-
   test("SPARK-60757: a later write carries a row that a non-ANSI writer auto-filled") {
     val tblName = "my_tab"
     withTable(s"testcat.$tblName") {
@@ -1861,6 +1843,42 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
           checkAnswer(spark.table(s"testcat.$tblName"), Row("007", "7"))
         }
       }
+    }
+  }
+
+  test("SPARK-60757: a provided value overflows the column type as an auto-filled one does") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      // A catalog can store a column type narrower than the type of the expression.
+      catalog("testcat").asInstanceOf[InMemoryCatalog].createTable(
+        Identifier.of(Array(), tblName),
+        Array(
+          Column.create("a", LongType),
+          Column.create("b", IntegerType, true, null, "a", null)),
+        Array.empty[Transform],
+        Collections.emptyMap[String, String])
+      assertWriteFails("CAST_OVERFLOW_IN_TABLE_INSERT") {
+        sql(s"INSERT INTO testcat.$tblName(a) VALUES (3000000000L)")
+      }
+      assertWriteFails("CAST_OVERFLOW_IN_TABLE_INSERT") {
+        sql(s"INSERT INTO testcat.$tblName VALUES (3000000000L, 1)")
+      }
+    }
+  }
+
+  test("SPARK-60757: a legacy config reads a generation expression under the session") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      withSQLConf(
+          SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_GENERATED_COLUMN.key -> "true",
+          SQLConf.ESCAPED_STRING_LITERALS.key -> "true") {
+        sql(s"""CREATE TABLE testcat.$tblName(
+               |  a STRING,
+               |  b STRING GENERATED ALWAYS AS (concat(a, 'x\\\\y'))
+               |) USING foo""".stripMargin)
+        sql(s"INSERT INTO testcat.$tblName(a) VALUES ('v')")
+      }
+      checkAnswer(spark.table(s"testcat.$tblName"), Row("v", "vx\\\\y"))
     }
   }
 

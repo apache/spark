@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.expressions.{And, Cast, CheckInvariant, EqualNullSafe, Expression, V2ExpressionUtils}
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, RowLevelWrite, V2WriteCommand, WriteDelta}
+import org.apache.spark.sql.catalyst.expressions.{And, CheckInvariant, EqualNullSafe, Expression, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, RowLevelWrite, V2WriteCommand, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, GeneratedColumn, StoredExpressionText}
@@ -139,38 +139,24 @@ class ResolveTableConstraints(
           val colRef = UnresolvedAttribute.quoted(col.name)
           val columnExtractors = Seq(col.name -> colRef)
           val genExprSql = Option(genExpr.getSql()).getOrElse(catalystExpr.sql)
-          // Compare with the value an auto-fill stores, which store assignment casts to the column
-          // type. Otherwise, the comparison can cast the provided value to the expression type.
+          // Compare with the value an auto-fill stores, with the cast that store assignment adds
+          // for it. Otherwise, the comparison can cast the provided value to the expression type.
           val colType = CharVarcharUtils.replaceCharVarcharWithString(col.dataType())
           def check(expr: Expression): Expression = CheckInvariant(
-            EqualNullSafe(
-              colRef, Cast(expr, colType, Option(conf.sessionLocalTimeZone), ansiEnabled = true)),
+            EqualNullSafe(colRef, TableOutputResolver.cast(expr, colType, conf, col.name)),
             columnExtractors,
             "Generated Column",
             s"${col.name} <=> $genExprSql")
-          analyzeGeneratedColumnCheck(check(catalystExpr), v2Write.query).getOrElse {
-            // The analysis of the write resolves it under the session that writes.
+          // Analyze the check under the settings an auto-filled value is analyzed under, so that a
+          // row Spark auto-filled passes it when a later write carries it.
+          StoredExpressionText.analyze(
+            check(catalystExpr),
             check(Option(genExpr.getSql).map(StoredExpressionText.parseWithSessionAnsi)
-              .getOrElse(catalystExpr))
-          }
+              .getOrElse(catalystExpr)),
+            v2Write.query.output,
+            analyze)
         }
     }.toSeq
-  }
-
-  /**
-   * Analyzes the check of a provided value under the settings an auto-filled value is analyzed
-   * under, so that a row Spark auto-filled passes the check when a later write carries it.
-   *
-   * @return the analyzed check, or None if these settings cannot resolve it. A catalog can also
-   *         store a text that analyzes to another plan.
-   */
-  private def analyzeGeneratedColumnCheck(
-      check: Expression,
-      query: LogicalPlan): Option[Expression] = {
-    StoredExpressionText.analyze(Filter(check, LocalRelation(query.output)), analyze) match {
-      case Some(Filter(analyzed, _: LocalRelation)) if analyzed.resolved => Some(analyzed)
-      case _ => None
-    }
   }
 
   /**
