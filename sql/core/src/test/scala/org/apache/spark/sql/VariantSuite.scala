@@ -110,6 +110,35 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
     checkAnswer(df.select(try_variant_get(v, "$.a", "binary")), rows(null, null))
   }
 
+  test("variant colon paths with escapes") {
+    val df = Seq("""{"a'b":1,"a\"b":2,"a\\b":3,"items":[{"a'b":4}]}""")
+      .toDF("json").select(parse_json($"json").as("v"))
+    withSQLConf(SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL.key -> "false") {
+      checkAnswer(
+        df.selectExpr("""v:['a\'b']::int""", """v:["a\"b"]::int""",
+          """v:items[0]['a\'b']::int"""),
+        Row(1, 2, 4))
+      // Colon paths decode escapes independently of SQL string literal settings.
+      Seq(false, true).foreach { escapedStringLiterals =>
+        withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> escapedStringLiterals.toString) {
+          checkAnswer(df.selectExpr("""v:['a\\b']::int"""), Row(3))
+        }
+      }
+    }
+  }
+
+  test("variant colon paths with legacy literal backslashes") {
+    val df = Seq("""{"a\nb":1,"a\\nb":2}""").toDF("json")
+      .select(parse_json($"json").as("v"))
+    Seq(false, true).foreach { legacy =>
+      withSQLConf(SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL.key -> legacy.toString) {
+        val expected = if (legacy) 2 else 1
+        checkAnswer(df.selectExpr("""v:['a\nb']::int""", """v:["a\nb"]::int"""),
+          Row(expected, expected))
+      }
+    }
+  }
+
   test("non-literal variant_get") {
     def rows(results: Any*): Seq[Row] = results.map(Row(_))
 

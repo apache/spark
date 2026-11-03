@@ -652,12 +652,28 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("`c`.a[b]", UnresolvedAttribute("c.a").getItem($"b"))
   }
 
-  test("invalid semi-structured extract path") {
-    checkError(
-      exception = parseException("c:['']"),
-      condition = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "'['']'", "hint" -> ""),
-      queryContext = Array(ExpectedContext("c:['']", 0, 5)))
+  test("semi-structured extract paths") {
+    Seq("['']", """[""]""").foreach { path =>
+      assertEqual(s"c:$path", Alias(SemiStructuredExtract($"c", "$" + path), "")())
+    }
+    Seq(false, true).foreach { legacy =>
+      withSQLConf(SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL.key -> legacy.toString) {
+        val alias = if (legacy) """a\nb""" else "a\nb"
+        assertEqual("""c:['a\nb']""",
+          Alias(SemiStructuredExtract($"c", """$['a\nb']"""), alias)())
+      }
+    }
+  }
+
+  test("invalid semi-structured extract paths") {
+    Seq("[2147483648]", "['a''b']").foreach { field =>
+      val query = s"c:$field"
+      checkError(
+        exception = parseException(query),
+        condition = "PARSE_SYNTAX_ERROR",
+        parameters = Map("error" -> s"'$field'", "hint" -> ""),
+        queryContext = Array(ExpectedContext(query, 0, query.length - 1)))
+    }
   }
 
   test("parenthesis") {
