@@ -22,7 +22,7 @@ import java.sql.{Connection, DatabaseMetaData, PreparedStatement, SQLException}
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 
-import org.apache.spark.{SparkFunSuite, SparkRuntimeException, SparkSQLException, TaskContext}
+import org.apache.spark.{SparkFunSuite, SparkRuntimeException, SparkSQLException, SparkThrowable, TaskContext}
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, NoLegacyJDBCError}
@@ -250,7 +250,7 @@ class JdbcWriteExceptionSuite extends SparkFunSuite {
     }
   }
 
-  test("savePartition preserves classification from a legacy JDBC dialect") {
+  test("savePartition normalizes an unclassified legacy JDBC write failure") {
     val conn = mock(classOf[Connection])
     val metadata = mock(classOf[DatabaseMetaData])
     val stmt = mock(classOf[PreparedStatement])
@@ -269,7 +269,8 @@ class JdbcWriteExceptionSuite extends SparkFunSuite {
     val context = TaskContext.empty()
     TaskContext.setTaskContext(context)
     try {
-      val error = intercept[AnalysisException] {
+      val options = newWriteOptions()
+      val error = intercept[SparkRuntimeException] {
         JdbcUtils.savePartition(
           "t",
           Iterator(Row(1)),
@@ -278,17 +279,155 @@ class JdbcWriteExceptionSuite extends SparkFunSuite {
           batchSize = 1,
           dialect,
           Connection.TRANSACTION_NONE,
-          newWriteOptions())
+          options)
       }
       checkError(
         exception = error,
-        condition = "FAILED_JDBC.UNCLASSIFIED",
+        condition = "FAILED_JDBC.WRITE",
         sqlState = Some("HV000"),
-        parameters = Map("url" -> "jdbc:", "message" -> "Write rows to the table t."))
+        parameters = Map("url" -> options.getRedactUrl(), "tableName" -> "t"))
       assert(error.getCause eq batchFailure)
     } finally {
       TaskContext.unset()
       JdbcDialects.unregisterDialect(dialect)
+    }
+  }
+
+  gridTest("savePartition preserves specific dialect mappings")(Seq(true, false)) { legacy =>
+    val conn = mock(classOf[Connection])
+    val stmt = mock(classOf[PreparedStatement])
+    when(conn.prepareStatement(anyString())).thenReturn(stmt)
+    val batchFailure = new SQLException("table already exists", "42P07")
+    when(stmt.executeBatch()).thenThrow(batchFailure)
+    val mappedFailure = new AnalysisException(
+      errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
+      messageParameters = Map("relationName" -> "`t`"),
+      cause = Some(batchFailure))
+    val dialect = new JdbcDialect {
+      override def canHandle(url: String): Boolean = url == testJdbcUrl
+      override def createConnectionFactory(options: JDBCOptions): Int => Connection = _ => conn
+      override def classifyException(message: String, e: Throwable): AnalysisException = {
+        mappedFailure
+      }
+      override def classifyException(
+          e: Throwable,
+          condition: String,
+          messageParameters: Map[String, String],
+          description: String,
+          isRuntime: Boolean): Throwable with SparkThrowable = {
+        if (legacy) {
+          super.classifyException(e, condition, messageParameters, description, isRuntime)
+        } else {
+          mappedFailure
+        }
+      }
+    }
+    TaskContext.setTaskContext(TaskContext.empty())
+    try {
+      val error = intercept[AnalysisException] {
+        JdbcUtils.savePartition(
+          "t", Iterator(Row(1)), StructType(Seq(StructField("a", IntegerType))),
+          "INSERT INTO t (a) VALUES (?)", 1, dialect, Connection.TRANSACTION_NONE,
+          newWriteOptions())
+      }
+      assert(error eq mappedFailure)
+      assert(error.getCause eq batchFailure)
+    } finally {
+      TaskContext.unset()
+    }
+  }
+
+  gridTest("savePartition handles connection acquisition failures")(
+      for (stage <- Seq("factory", "connect"); kind <- Seq("plain", "interrupted", "classified"))
+        yield (stage, kind)) { case (stage, kind) =>
+    val connectionFailure = if (kind == "classified") {
+      new SparkSQLException("FAILED_JDBC.CONNECTION", Map("url" -> "jdbc:destination"),
+        Some("08001"))
+    } else {
+      new SQLException("connection rejected", "08001")
+    }
+    val nextFailure = new SQLException("connection detail")
+    connectionFailure.setNextException(nextFailure)
+    val context = TaskContext.empty()
+    TaskContext.setTaskContext(context)
+    val dialect = new JdbcDialect with NoLegacyJDBCError {
+      override def canHandle(url: String): Boolean = url.startsWith(testJdbcUrl)
+      override def createConnectionFactory(options: JDBCOptions): Int => Connection = {
+        if (kind == "interrupted") context.markInterrupted("test")
+        if (stage == "factory") throw connectionFailure
+        _ => throw connectionFailure
+      }
+    }
+    try {
+      val options = newWriteOptions(Map("url" -> s"$testJdbcUrl?password=secret"))
+      val error = intercept[Exception] {
+        JdbcUtils.savePartition(
+          "t", Iterator(Row(1)), StructType(Seq(StructField("a", IntegerType))),
+          "INSERT INTO t (a) VALUES (?)", 1, dialect, Connection.TRANSACTION_NONE, options)
+      }
+      if (kind == "plain") {
+        checkError(
+          exception = error.asInstanceOf[SparkRuntimeException],
+          condition = "FAILED_JDBC.WRITE",
+          sqlState = Some("HV000"),
+          parameters = Map("url" -> options.getRedactUrl(), "tableName" -> "t"))
+        assert(!error.getMessage.contains("secret"))
+        assert(error.getCause eq connectionFailure)
+      } else {
+        assert(error eq connectionFailure)
+      }
+      assert(connectionFailure.getNextException eq nextFailure)
+      assert(connectionFailure.getCause eq nextFailure)
+    } finally {
+      TaskContext.unset()
+    }
+  }
+
+  gridTest("savePartition classifies JDBC write setup failures")(
+      Seq("autoCommit", "isolation", "prepareStatement", "queryTimeout")) { operation =>
+    val conn = mock(classOf[Connection])
+    val metadata = mock(classOf[DatabaseMetaData])
+    val stmt = mock(classOf[PreparedStatement])
+    when(conn.getMetaData).thenReturn(metadata)
+    when(metadata.supportsTransactions()).thenReturn(true)
+    when(metadata.supportsTransactionIsolationLevel(Connection.TRANSACTION_READ_COMMITTED))
+      .thenReturn(true)
+    when(conn.prepareStatement(anyString())).thenReturn(stmt)
+    val setupFailure = new SQLException("write setup rejected", "08006")
+    operation match {
+      case "autoCommit" => doThrow(setupFailure).when(conn).setAutoCommit(false)
+      case "isolation" =>
+        doThrow(setupFailure).when(conn)
+          .setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED)
+      case "prepareStatement" => when(conn.prepareStatement(anyString())).thenThrow(setupFailure)
+      case "queryTimeout" => doThrow(setupFailure).when(stmt).setQueryTimeout(anyInt())
+    }
+    val dialect = new JdbcDialect with NoLegacyJDBCError {
+      override def canHandle(url: String): Boolean = url == testJdbcUrl
+      override def createConnectionFactory(options: JDBCOptions): Int => Connection = _ => conn
+    }
+    TaskContext.setTaskContext(TaskContext.empty())
+    try {
+      val options = newWriteOptions()
+      val error = intercept[SparkRuntimeException] {
+        JdbcUtils.savePartition(
+          "t", Iterator(Row(1)), StructType(Seq(StructField("a", IntegerType))),
+          "INSERT INTO t (a) VALUES (?)", 1, dialect,
+          Connection.TRANSACTION_READ_COMMITTED, options)
+      }
+      checkError(
+        exception = error,
+        condition = "FAILED_JDBC.WRITE",
+        sqlState = Some("HV000"),
+        parameters = Map("url" -> options.getRedactUrl(), "tableName" -> "t"))
+      assert(error.getCause eq setupFailure)
+      verify(conn).rollback()
+      verify(conn).close()
+      verify(stmt, never()).executeBatch()
+      verify(conn, never()).commit()
+      if (operation == "queryTimeout") verify(stmt).close()
+    } finally {
+      TaskContext.unset()
     }
   }
 

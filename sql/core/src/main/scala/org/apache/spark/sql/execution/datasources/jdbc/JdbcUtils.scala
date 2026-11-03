@@ -27,7 +27,7 @@ import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkContext, SparkThrowable, SparkUnsupportedOperationException, TaskContext}
+import org.apache.spark.{SparkContext, SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{DEFAULT_ISOLATION_LEVEL, ISOLATION_LEVEL}
@@ -670,7 +670,57 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
     val outMetrics = TaskContext.get().taskMetrics().outputMetrics
 
-    val conn = dialect.createConnectionFactory(options)(-1)
+    def linkNextException(e: SQLException): Unit = {
+      val cause = e.getNextException
+      if (cause != null && e.getCause != cause) {
+        // If there is no cause already, set 'next exception' as cause. If cause is null,
+        // it *may* be because no cause was set yet
+        if (e.getCause == null) {
+          try {
+            e.initCause(cause)
+          } catch {
+            // Or it may be null because the cause *was* explicitly initialized, to *null*,
+            // in which case this fails. There is no other way to detect it.
+            // addSuppressed in this case as well.
+            case _: IllegalStateException => e.addSuppressed(cause)
+          }
+        } else {
+          e.addSuppressed(cause)
+        }
+      }
+    }
+
+    def classifyWriteException(e: SQLException): Nothing = {
+      linkNextException(e)
+      // Closing the connection on task cancellation can cause a SQLException. Do not
+      // report that cancellation side effect as a JDBC write failure.
+      if (TaskContext.get().isInterrupted() || e.isInstanceOf[SparkThrowable]) {
+        throw e
+      }
+      val parameters = Map("url" -> options.getRedactUrl(), "tableName" -> table)
+      val classified = dialect.classifyException(
+        e,
+        condition = "FAILED_JDBC.WRITE",
+        messageParameters = parameters,
+        description = s"Write rows to the table $table.",
+        isRuntime = true)
+      // The legacy classifier ignores the supplied condition and uses a placeholder URL.
+      // Normalize only its generic fallback so specific dialect mappings still take precedence.
+      if (classified.getCondition == "FAILED_JDBC.UNCLASSIFIED") {
+        throw new SparkRuntimeException("FAILED_JDBC.WRITE", parameters, e)
+      }
+      throw classified
+    }
+
+    def withWriteException[T](f: => T): T = {
+      try {
+        f
+      } catch {
+        case e: SQLException => classifyWriteException(e)
+      }
+    }
+
+    val conn = withWriteException { dialect.createConnectionFactory(options)(-1) }
 
     // Close JDBC connection so blocked native reads (e.g. executeBatch) fail instead of
     // ignoring Thread.interrupt(). Listener registered after opening the connection; we don't need
@@ -722,26 +772,6 @@ object JdbcUtils extends Logging with SQLConfHelper {
     }
     val supportsTransactions = finalIsolationLevel != Connection.TRANSACTION_NONE
     var totalRowCount = 0L
-    def linkNextException(e: SQLException): Unit = {
-      val cause = e.getNextException
-      if (cause != null && e.getCause != cause) {
-        // If there is no cause already, set 'next exception' as cause. If cause is null,
-        // it *may* be because no cause was set yet
-        if (e.getCause == null) {
-          try {
-            e.initCause(cause)
-          } catch {
-            // Or it may be null because the cause *was* explicitly initialized, to *null*,
-            // in which case this fails. There is no other way to detect it.
-            // addSuppressed in this case as well.
-            case _: IllegalStateException => e.addSuppressed(cause)
-          }
-        } else {
-          e.addSuppressed(cause)
-        }
-      }
-    }
-
     def sourceHasNext: Boolean = {
       try {
         iterator.hasNext
@@ -759,29 +789,6 @@ object JdbcUtils extends Logging with SQLConfHelper {
         case e: SQLException =>
           linkNextException(e)
           throw e
-      }
-    }
-
-    def classifyWriteException(e: SQLException): Nothing = {
-      linkNextException(e)
-      // Closing the connection on task cancellation can cause a SQLException. Do not
-      // report that cancellation side effect as a JDBC write failure.
-      if (TaskContext.get().isInterrupted() || e.isInstanceOf[SparkThrowable]) {
-        throw e
-      }
-      throw dialect.classifyException(
-        e,
-        condition = "FAILED_JDBC.WRITE",
-        messageParameters = Map("url" -> options.getRedactUrl(), "tableName" -> table),
-        description = s"Write rows to the table $table.",
-        isRuntime = true)
-    }
-
-    def withWriteException[T](f: => T): T = {
-      try {
-        f
-      } catch {
-        case e: SQLException => classifyWriteException(e)
       }
     }
 
