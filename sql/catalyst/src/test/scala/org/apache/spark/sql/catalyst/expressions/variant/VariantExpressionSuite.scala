@@ -1383,6 +1383,11 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(IsValidVariant(Literal.create(null, VariantType)), null)
   }
 
+  // canonicalize_variant marks its output as canonical, and the unsafe-row check compares row
+  // bytes including that flag, so expected values are built with the flag set.
+  private def canonical(v: VariantVal): VariantVal =
+    new VariantVal(v.getValue, v.getMetadata, true)
+
   test("canonicalize_variant") {
     val expression = CanonicalizeVariant(BoundReference(0, VariantType, nullable = true))
     val inputs = Seq(
@@ -1398,18 +1403,18 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         """{"a":[3,2,1],"b":[{"c":1,"d":2},null]}""")
 
     inputs.foreach { case (input, expected) =>
-      checkEvaluation(expression, parseJson(expected), InternalRow(parseJson(input)))
+      checkEvaluation(expression, canonical(parseJson(expected)), InternalRow(parseJson(input)))
     }
 
     val literalExpression = CanonicalizeVariant(Literal(parseJson("""{"b":2,"a":1}""")))
     assert(literalExpression.foldable)
-    checkEvaluation(literalExpression, parseJson("""{"a":1,"b":2}"""))
+    checkEvaluation(literalExpression, canonical(parseJson("""{"a":1,"b":2}""")))
   }
 
   test("canonicalize_variant SQL null and Variant null") {
     val expression = CanonicalizeVariant(BoundReference(0, VariantType, nullable = true))
     checkEvaluation(expression, null, InternalRow(null))
-    checkEvaluation(expression, parseJson("null"), InternalRow(parseJson("null")))
+    checkEvaluation(expression, canonical(parseJson("null")), InternalRow(parseJson("null")))
     checkEvaluation(CanonicalizeVariant(Literal.create(null, VariantType)), null)
   }
 
@@ -1423,8 +1428,8 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       Array[Byte](objectHeader(false, 1, 1), 2, 0, 1, 0, 2, 4,
         shortStrHeader(1), 0xfe.toByte, shortStrHeader(1), 0xff.toByte),
       Array[Byte](VERSION, 2, 0, 1, 2, 0xfe.toByte, 0xff.toByte))
-    checkEvaluation(expression, expected, InternalRow(new VariantVal(value, metadata)))
-    checkEvaluation(expression, expected, InternalRow(expected))
+    checkEvaluation(expression, canonical(expected), InternalRow(new VariantVal(value, metadata)))
+    checkEvaluation(expression, canonical(expected), InternalRow(expected))
   }
 
   test("canonicalize_variant input types and nullability") {

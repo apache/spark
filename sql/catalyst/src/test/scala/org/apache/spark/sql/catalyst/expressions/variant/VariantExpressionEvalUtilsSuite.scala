@@ -224,7 +224,7 @@ class VariantExpressionEvalUtilsSuite extends SparkFunSuite {
     check("[{\"a\" : 13, \"b\" : null}]", expected = false)
   }
 
-  test("canonicalizeVariant reuses canonical input") {
+  test("canonicalizeVariant reuses canonical input bytes and sets the flag") {
     val inputs = Seq(
       new VariantVal(Array(primitiveHeader(NULL)), Array[Byte](VERSION, 0, 0)),
       new VariantVal(Array(primitiveHeader(INT1), 1), Array[Byte](VERSION, 0, 0)),
@@ -234,8 +234,24 @@ class VariantExpressionEvalUtilsSuite extends SparkFunSuite {
         Array[Byte](VERSION, 2, 0, 1, 2, 'a', 'b')))
 
     inputs.foreach { input =>
-      assert(VariantExpressionEvalUtils.canonicalizeVariant(input) eq input)
+      assert(!input.isCanonical)
+      val result = VariantExpressionEvalUtils.canonicalizeVariant(input)
+      // Already canonical: the arrays are shared and only the flag is added.
+      assert(result.getValue eq input.getValue)
+      assert(result.getMetadata eq input.getMetadata)
+      assert(result.isCanonical)
     }
+  }
+
+  test("canonicalizeVariant returns flagged input without inspecting the bytes") {
+    // Non-canonical bytes (keys out of order) marked canonical: the flag short-circuits, so the
+    // value is returned as is. Only canonicalizeVariant itself ever sets the flag.
+    val flagged = new VariantVal(
+      Array(objectHeader(false, 1, 1), 2, 1, 0, 2, 0, 4,
+        primitiveHeader(INT1), 2, primitiveHeader(INT1), 1),
+      Array[Byte](VERSION, 2, 0, 1, 2, 'b', 'a'),
+      true)
+    assert(VariantExpressionEvalUtils.canonicalizeVariant(flagged) eq flagged)
   }
 
   test("canonicalizeVariant rebuilds without mutating input") {
@@ -253,8 +269,10 @@ class VariantExpressionEvalUtilsSuite extends SparkFunSuite {
     val result = VariantExpressionEvalUtils.canonicalizeVariant(input)
     assert(result ne input)
     assert(result === expected)
+    assert(result.isCanonical)
     assert(input.getValue === originalValue)
     assert(input.getMetadata === originalMetadata)
+    // The flagged result is returned as is on a second canonicalization.
     assert(VariantExpressionEvalUtils.canonicalizeVariant(result) eq result)
   }
 }
