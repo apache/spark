@@ -184,6 +184,7 @@ class CollectInputsSuite extends SparkFunSuite with SQLHelper {
       "expression's method, and in an operator's method that takes it") {
     val ctx = context()
     ctx.INPUT_ROW = ctx.addMutableState("InternalRow", "row")
+    assert(ctx.INPUT_ROW.matches("\\w+\\[\\d+\\]"), ctx.INPUT_ROW)
     ctx.currentVars = Seq(evaluated(0))
     val e1 = intercept[AssertionError](ctx.collectInputs(Seq(input(0)), commonExpr, Map.empty))
     assert(e1.getMessage.contains("set INPUT_ROW to a local"), e1.getMessage)

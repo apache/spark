@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+import javax.lang.model.SourceVersion
+
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -123,9 +125,11 @@ case class SubExprCodes(
  * @param followCommonExprs follow a `With` and a `CommonExpressionRef` into the definitions the
  *                          code computes, rather than walk them like any other node.
  * @param onlyNames refuse a value no parameter can name, rather than pass over an expression and
- *                  pass a variable. A variable the walk takes that is not a name fails testing
- *                  either way: here under this policy, and otherwise where an operator builds a
- *                  method taking it (`CodegenContext.assertParametersAreNames`).
+ *                  pass a variable. A variable that is not a name fails testing either way, if
+ *                  the walk reaches it before its first refusal: here under this policy, and
+ *                  otherwise where an operator builds a method taking it
+ *                  (`CodegenContext.assertMethodParameters`). The row a whole stage split appends
+ *                  is not checked (SPARK-60510).
  * @param fieldsNeedNoArgument leave a variable naming a field `addMutableState` registered out of
  *                             the arguments, the method reading it as it stands, rather than pass
  *                             it.
@@ -1333,8 +1337,9 @@ class CodegenContext extends Logging {
     // policy says so, passing one being refused by the whole stage split's own check (`splitCall`)
     // in tests. A slot of a compacted array is not a name at all, so it has to be handed out as a
     // `GlobalValue`, and `INPUT_ROW` cannot be one. Testing checks for one handed out as a
-    // variable: here, where the policy asks for names; elsewhere, in the method taking it
-    // (`assertParametersAreNames`).
+    // variable: here, where the policy asks for names, for what the walk reaches before its first
+    // refusal; elsewhere, in the method taking it (`assertMethodParameters`). The row a whole stage
+    // split appends is not checked (SPARK-60510).
     def take(v: ExprValue): Boolean = v match {
       case local: VariableValue =>
         val name = local.variableName
@@ -1419,8 +1424,7 @@ class CodegenContext extends Logging {
 
   /** Whether `name` can name a parameter: a slot of a compacted array, `array[i]`, cannot. */
   private def isJavaName(name: String): Boolean =
-    name.nonEmpty && Character.isJavaIdentifierStart(name.head) &&
-      name.forall(Character.isJavaIdentifierPart)
+    SourceVersion.isIdentifier(name) && !SourceVersion.isKeyword(name)
 
   /** How the producer of `name`, a value that cannot name a parameter, can hand it out instead. */
   private def nameFix(name: String): String = if (name == INPUT_ROW) {
@@ -1936,6 +1940,19 @@ class CodegenContext extends Logging {
   }
 
   /**
+   * Under testing, asserts what the method `method` an operator moves its code `body` into needs
+   * of its `parameters`: each is a Java name (`assertParametersAreNames`), and each call to a split
+   * function in `body` passes only those parameters (`assertSplitCallsWithin`).
+   */
+  private[sql] def assertMethodParameters(
+      body: => String,
+      parameters: Seq[String],
+      method: String): Unit = {
+    assertParametersAreNames(parameters, method)
+    assertSplitCallsWithin(body, parameters, method)
+  }
+
+  /**
    * Under testing, asserts that each of `parameters`, the parameters of the method `method` an
    * operator moves its code into, is a Java name. The parameters are the variables
    * `InputPolicy.operatorMethod` collects, which passes a `VariableValue` whatever its name.
@@ -2242,8 +2259,7 @@ class CodegenContext extends Logging {
           // Generate the code for this expression tree and wrap it in a function.
           val fnName = freshName("subExpr")
           val inputVars = inputVarsForAllFuncs(i)
-          assertParametersAreNames(inputVars.map(_.variableName), fnName)
-          assertSplitCallsWithin(eval.code.toString, inputVars.map(_.variableName), fnName)
+          assertMethodParameters(eval.code.toString, inputVars.map(_.variableName), fnName)
           val argList =
             inputVars.map(v => s"${CodeGenerator.typeName(v.javaType)} ${v.variableName}")
           val fn =

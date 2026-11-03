@@ -28,10 +28,11 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkNumberFormatException}
 import org.apache.spark.metrics.source.CodegenMetrics
-import org.apache.spark.rdd.MapPartitionsWithEvaluatorRDD
+import org.apache.spark.rdd.{MapPartitionsWithEvaluatorRDD, RDD}
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SaveMode}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, Cast, CodegenObjectFactoryMode, Expression, IsNotNull, Literal, With}
-import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodegenContext, CodeGenerator, WholeStageSplit, WholeStageSplitKey}
+import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodegenContext, CodeGenerator, ExprCode, ExprValue, GlobalValue, JavaCode, WholeStageSplit, WholeStageSplitKey}
 import org.apache.spark.sql.catalyst.plans.logical.MergeRows
 import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Keep, Update}
 import org.apache.spark.sql.classic
@@ -1966,6 +1967,8 @@ class WholeStageCodegenSuite extends SharedSparkSession
    * `v`, with the whole stage split on and off: a method named like `method` calls `lpad` on the
    * slot of the compacted mutable state array that `ExpandExec` holds `v` in, `check` holds of
    * the code, the code compiles, and the rows match those computed without whole stage codegen.
+   * With the slot handed out as a local variable instead, building that method fails the testing
+   * check on its parameters.
    */
   private def checkExpandSlotRead(
       method: String,
@@ -1988,8 +1991,25 @@ class WholeStageCodegenSuite extends SharedSparkSession
           checkAnswer(df, expected)
         }
       }
+      withSQLConf(SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS.key -> "false") {
+        val e = intercept[AssertionError](genCodeWithLocalExpandOutput(df))
+        assert(s"\\w*$method\\w* takes \\w+\\[\\d+\\]".r.findFirstIn(e.getMessage).isDefined,
+          e.getMessage)
+      }
     }
   }
+
+  /**
+   * `genCode`, with the bottom `ExpandExec` of the plan handing out its output as local variables,
+   * as it did before SPARK-59589.
+   */
+  private def genCodeWithLocalExpandOutput(df: DataFrame): Seq[CodeAndComment] =
+    df.queryExecution.executedPlan.collect { case w: WholeStageCodegenExec => w }.map { w =>
+      val child = w.child.transformUp {
+        case e: ExpandExec if !e.child.exists(_.isInstanceOf[ExpandExec]) => LocalOutputExec(e)
+      }
+      w.withNewChildren(Seq(child)).asInstanceOf[WholeStageCodegenExec].doCodeGen()._2
+    }
 
   test("SPARK-33301: a CASE WHEN too large for one method is split under whole stage codegen") {
     // Inside a stage the inputs are local variables of the stage's method, and the branches were
@@ -3249,4 +3269,28 @@ class WholeStageCodegenSuite extends SharedSparkSession
       }
     }
   }
+}
+
+/** Hands out the values and null flags its child hands out as fields as local variables. */
+private case class LocalOutputExec(child: SparkPlan) extends UnaryExecNode with CodegenSupport {
+  override def output: Seq[Attribute] = child.output
+
+  override def inputRDDs(): Seq[RDD[InternalRow]] =
+    child.asInstanceOf[CodegenSupport].inputRDDs()
+
+  override protected def doProduce(ctx: CodegenContext): String =
+    child.asInstanceOf[CodegenSupport].produce(ctx, this)
+
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String =
+    consume(ctx, input.map(e => e.copy(isNull = local(e.isNull), value = local(e.value))))
+
+  private def local(v: ExprValue): ExprValue = v match {
+    case GlobalValue(name, javaType) => JavaCode.variable(name, javaType)
+    case _ => v
+  }
+
+  override protected def doExecute(): RDD[InternalRow] = child.execute()
+
+  override protected def withNewChildInternal(newChild: SparkPlan): LocalOutputExec =
+    copy(child = newChild)
 }
