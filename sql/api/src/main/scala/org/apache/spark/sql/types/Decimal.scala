@@ -270,7 +270,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   /**
    * @return
-   *   the Byte value that is equal to the rounded decimal.
+   *   the Byte value of the decimal truncated toward zero.
    * @throws ArithmeticException
    *   if the decimal is too big to fit in Byte type.
    */
@@ -279,7 +279,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   /**
    * @return
-   *   the Short value that is equal to the rounded decimal.
+   *   the Short value of the decimal truncated toward zero.
    * @throws ArithmeticException
    *   if the decimal is too big to fit in Short type.
    */
@@ -288,7 +288,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   /**
    * @return
-   *   the Int value that is equal to the rounded decimal.
+   *   the Int value of the decimal truncated toward zero.
    * @throws ArithmeticException
    *   if the decimal too big to fit in Int type.
    */
@@ -312,12 +312,14 @@ final class Decimal extends Ordered[Decimal] with Serializable {
           integralType)
       }
     } else {
-      // Truncate exactly, as `roundToLong` does. Going through a Double would round values
-      // just below a bound (e.g. 2147483647.99999999) up past it and wrongly overflow.
+      // Truncate exactly, as `roundToLong` does. Going through a Double would round a value
+      // whose fraction is close enough to 1 up to the next integer, returning a value one too
+      // high or, at a bound, overflowing.
       val truncated = decimalVal.bigDecimal.toBigInteger
-      if (truncated.bitLength() < 32 &&
-        truncated.intValue() <= maxValue && truncated.intValue() >= minValue) {
-        f(truncated.longValue())
+      // intValue() keeps only the low 32 bits, so it is exact only when bitLength() < 32.
+      val intVal = truncated.intValue()
+      if (truncated.bitLength() < 32 && intVal <= maxValue && intVal >= minValue) {
+        f(intVal)
       } else {
         throw DataTypeErrors.castingCauseOverflowError(
           toSqlValue,
