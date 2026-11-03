@@ -35,18 +35,18 @@ it easy for both types of applications to evolve alongside Spark. As illustrated
 Client applications connect to Spark using the Spark Connect API, which is essentially the
 DataFrame API and fully declarative.
 
-<p style="text-align: center;">
+<figure style="text-align: center;">
   <img
     src="img/extending-spark-connect-labelled.png"
     alt="Extending Spark Connect Diagram"
   />
-  <figcaption style="text-align: center;">Figure 1: Architecture</figcaption>
-</p>
+  <figcaption>Figure 1: Architecture</figcaption>
+</figure>
 
 Spark Server Libraries extend Spark. They typically provide additional server-side logic integrated
 with Spark, which is exposed to client applications as part of the Spark Connect API, using Spark
 Connect extension points. For example, the _Spark Server Library_ consists of custom
-service-side logic (the blue box labeled _Plugin_, with its _App Logic_), which is exposed to
+server-side logic (the blue box labeled _Plugin_, with its _App Logic_), which is exposed to
 the client via the blue _Proto API_ box as part of the Spark Connect API. The client uses this
 API, e.g., alongside PySpark or the Spark Scala client, making it easy for Spark client
 applications to work with the custom logic/library.

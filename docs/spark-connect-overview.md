@@ -68,7 +68,7 @@ that developers need to be aware of when using Spark Connect:
    the execution environment. In particular, in PySpark, the client does not use Py4J
    and thus the accessing the private fields holding the JVM implementation of `DataFrame`,
    `Column`, `SparkSession`, etc. is not possible (e.g. `df._jdf`).
-2. By design, the Spark Connect protocol uses Sparks logical
+2. By design, the Spark Connect protocol uses Spark's logical
    plans as the abstraction to be able to declaratively describe the operations to be executed
    on the server. Consequently, the Spark Connect protocol does not support all the
    execution APIs of Spark, most importantly RDDs. Alternatives for missing RDD functionality
