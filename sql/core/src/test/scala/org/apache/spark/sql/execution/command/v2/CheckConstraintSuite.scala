@@ -33,6 +33,7 @@ import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, Unbound
 import org.apache.spark.sql.execution.command.DDLCommandTestUtils
 import org.apache.spark.sql.functions.udaf
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.metricview.serde.{AssetSource, Column, DimensionExpression, MeasureExpression, MetricView, MetricViewFactory}
 import org.apache.spark.sql.types.{DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -625,6 +626,52 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
           parameters = Map("constraintName" -> "abc",
             "oldConstraint" -> "CONSTRAINT abc CHECK (id > 0) ENFORCED NORELY")
         )
+      }
+    }
+  }
+
+  private def checkAddToViewError(view: String, viewName: String): Unit = {
+    val query = s"ALTER TABLE $view ADD CONSTRAINT c1 CHECK (id > 0)"
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(query)
+      },
+      condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+      sqlState = "42809",
+      parameters = Map("viewName" -> viewName, "operation" -> "ALTER TABLE ... ADD CONSTRAINT"),
+      context = ExpectedContext(fragment = query, start = 0, stop = query.length - 1))
+  }
+
+  test("SPARK-60822: Check constraint cannot be added to a view") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT) $defaultUsing")
+      sql(s"INSERT INTO $t VALUES (-1), (10)")
+      withTempView("tv") {
+        withView("v") {
+          // A view that hides the violating row of its table, and one that no table backs.
+          sql(s"CREATE TEMPORARY VIEW tv AS SELECT * FROM $t WHERE id > 5")
+          sql("CREATE VIEW v AS SELECT id FROM range(3)")
+          checkAddToViewError("tv", "`tv`")
+          checkAddToViewError("v", "`spark_catalog`.`default`.`v`")
+        }
+      }
+      assert(loadTable(nonPartitionCatalog, "ns", "tbl").constraints.isEmpty)
+    }
+  }
+
+  test("SPARK-60822: Check constraint cannot be added to a metric view") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT) $defaultUsing")
+      val yaml = MetricViewFactory.toYAML(MetricView(
+        "0.1",
+        AssetSource(t),
+        None,
+        Seq(
+          Column("id", DimensionExpression("id"), 0),
+          Column("cnt", MeasureExpression("count(1)"), 1))))
+      withView("mv") {
+        sql(s"CREATE VIEW mv WITH METRICS LANGUAGE YAML AS $$$$\n$yaml\n$$$$")
+        checkAddToViewError("mv", "`spark_catalog`.`default`.`mv`")
       }
     }
   }
