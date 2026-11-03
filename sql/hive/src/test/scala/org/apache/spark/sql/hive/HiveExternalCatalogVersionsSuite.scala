@@ -198,10 +198,11 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
 
     if (PROCESS_TABLES.testingVersions.isEmpty) {
       if (PROCESS_TABLES.isPythonVersionAvailable) {
-        if (Utils.isJavaVersionAtMost17) {
+        if (PROCESS_TABLES.minimumTestingVersion.isDefined) {
           logError("Fail to get the latest Spark versions to test.")
         } else {
-          logInfo("Skip tests because old Spark versions don't support Java 21.")
+          logInfo("Skip tests because old Spark versions don't support " +
+            s"Java ${Runtime.version().feature()}.")
         }
       } else {
         logError(s"Python version <  ${TestUtils.minimumPythonSupportedVersion}, " +
@@ -261,9 +262,13 @@ object PROCESS_TABLES extends QueryTest {
   val isPythonVersionAvailable = TestUtils.isPythonVersionAvailable
   val releaseMirror = sys.env.getOrElse("SPARK_RELEASE_MIRROR",
     "https://dist.apache.org/repos/dist/release")
-  // Tests the latest version of every release line if Java version is at most 17.
+  // Spark 3.3, 4.0, and 4.2 are the first release lines that support Java 17, 21, and 25,
+  // respectively. No release line supports the other Java versions, e.g., Java 26.
+  val minimumTestingVersion: Option[String] =
+    Map(17 -> "3.3.0", 21 -> "4.0.0", 25 -> "4.2.0").get(Runtime.version().feature())
+  // Tests the latest version of every release line that supports the running Java version.
   val testingVersions: Seq[String] = if (isPythonVersionAvailable &&
-      Utils.isJavaVersionAtMost17) {
+      minimumTestingVersion.isDefined) {
     import scala.io.Source
     val sparkVersionPattern = """<a href="spark-(\d.\d.\d)/">""".r
     try Utils.tryWithResource(
@@ -273,6 +278,7 @@ object PROCESS_TABLES extends QueryTest {
         .filter(sparkVersionPattern.unanchored.matches(_))
         .map(sparkVersionPattern.findFirstMatchIn(_).get.group(1))
         .filter(_ < org.apache.spark.SPARK_VERSION)
+        .filter(_ >= minimumTestingVersion.get)
         .filterNot(skipReleaseVersions.contains).toImmutableArraySeq
     } catch {
       // Do not throw exception during object initialization.
