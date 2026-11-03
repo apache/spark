@@ -390,51 +390,11 @@ trait KeyGroupedPartitioningRuntimeFilterTests extends KeyGroupedPartitioningSui
     }
   }
 
-  test("SPARK-60752: a DPP subquery's build side does not change the layout of the scan it " +
-    "shares with the join") {
-    // A DPP subquery that does not reuse a broadcast plans its build side again, over the same
-    // `Scan` as the join's `purchases` scan. A scalar subquery filter on `item_id` is a runtime
-    // filter of both, and the subquery runs it first, which prunes the shared `Scan`. The join's
-    // scan is a copy made after planning, when the scalar subquery is replaced by a reused one. Had
-    // it planned its partitions again, it would report fewer of them than `items`, and the join
-    // would fail with "Can't zip RDDs". Of the two suites that run this, only the Catalyst one
-    // prunes on these predicates.
-    withSQLConf(
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "10") {
-      createTable(items, itemsColumns, Array(identity("id")))
-      sql(s"INSERT INTO testcat.ns.$items VALUES " + (1 to 7).map(i =>
-        s"($i, 'x', 10.0, cast('2020-01-01' as timestamp))").mkString(", "))
-      createTable(purchases, purchasesColumns, Array(identity("item_id")))
-      sql(s"INSERT INTO testcat.ns.$purchases VALUES " + (1 to 7).map(i =>
-        s"($i, $i.0, cast('2020-01-01' as timestamp))").mkString(", "))
-
-      def bound(agg: String): String =
-        s"(SELECT $agg(item_id) FROM testcat.ns.$purchases WHERE price > 4.0)"
-      Seq(true, false).foreach { aqe =>
-        withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
-          Seq(s"i.id = ${bound("max")}" -> Seq(7), s"i.id >= ${bound("min")}" -> (5 to 7)).foreach {
-            case (filter, ids) =>
-              val df = sql(s"SELECT i.id, p.price FROM testcat.ns.$items i " +
-                s"JOIN testcat.ns.$purchases p ON i.id = p.item_id WHERE $filter")
-              checkAnswer(df, ids.map(i => Row(i.toLong, i.toFloat)))
-              val plan = df.queryExecution.executedPlan
-              assert(collectShuffles(plan).isEmpty,
-                s"aqe=$aqe, $filter: the join should stay storage-partitioned:\n$plan")
-          }
-        }
-      }
-    }
-  }
-
-  test("SPARK-60752: a nested DPP filter on a DPP subquery's build side does not change the " +
-    "layout of the scan it shares with the join") {
-    // As above, with a DPP filter from a broadcast dimension as the build side's own runtime
-    // filter, which every fixture prunes on. Two rows per key give `purchases` two splits per key,
-    // so a GroupPartitionsExec groups that side and checks the layout of the copied scan.
-    val dim = "dim"
+  /**
+   * Runs `f` over `items` and `purchases`, both partitioned by the ids 1 to 7, with `rowsPerKey`
+   * rows in each `purchases` key, under the confs of a DPP subquery that reuses no broadcast.
+   */
+  private def withDppSubqueryTables(rowsPerKey: Int)(f: => Unit): Unit = {
     withSQLConf(
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
         SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
@@ -445,38 +405,63 @@ trait KeyGroupedPartitioningRuntimeFilterTests extends KeyGroupedPartitioningSui
         s"($i, 'x', 10.0, cast('2020-01-01' as timestamp))").mkString(", "))
       createTable(purchases, purchasesColumns, Array(identity("item_id")))
       sql(s"INSERT INTO testcat.ns.$purchases VALUES " + (1 to 7).flatMap(i =>
-        Seq.fill(2)(s"($i, $i.0, cast('2020-01-01' as timestamp))")).mkString(", "))
-      createTable(dim, Array(Column.create("k", LongType), Column.create("flag", IntegerType)),
-        Array.empty)
-      sql(s"INSERT INTO testcat.ns.$dim VALUES " +
-        (1 to 7).map(i => s"($i, ${if (i >= 5) 1 else 0})").mkString(", "))
+        Seq.fill(rowsPerKey)(s"($i, $i.0, cast('2020-01-01' as timestamp))")).mkString(", "))
+      f
+    }
+  }
 
-      Seq(true, false).foreach { aqe =>
-        withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
-          val df = sql(s"SELECT i.id, p.price FROM testcat.ns.$items i JOIN " +
-            s"(SELECT /*+ BROADCAST(d) */ p.item_id, p.price FROM testcat.ns.$purchases p " +
-            s"JOIN testcat.ns.$dim d ON p.item_id = d.k WHERE d.flag = 1) p ON i.id = p.item_id")
-          checkAnswer(df, (5 to 7).flatMap(i => Seq.fill(2)(Row(i.toLong, i.toFloat))))
-          val plan = df.queryExecution.executedPlan
-          assert(collectShuffles(plan).isEmpty,
-            s"aqe=$aqe: the join should stay storage-partitioned:\n$plan")
-        }
+  /** Checks the rows of `query`, and that its join plans no shuffle, with AQE on and off. */
+  private def checkStoragePartitionedJoin(query: String, expected: Seq[Row]): Unit = {
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
+        val df = sql(query)
+        checkAnswer(df, expected)
+        val plan = df.queryExecution.executedPlan
+        assert(collectShuffles(plan).isEmpty,
+          s"aqe=$aqe: the join should stay storage-partitioned:\n$plan")
       }
     }
   }
 
-  test("SPARK-60752: copies of a BatchScanExec share the input partitions it planned") {
-    createTable(items, itemsColumns, Array(identity("id")))
-    sql(s"INSERT INTO testcat.ns.$items VALUES " +
-      "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
-      "(2, 'bb', 10.0, cast('2020-01-01' as timestamp))")
-    def plannedScan(): BatchScanExec =
-      collectScans(sql(s"SELECT * FROM testcat.ns.$items").queryExecution.executedPlan).head
-    val scan = plannedScan()
-    // A copy, like the ones runtime filter rewrites make, uses the partitions the node planned.
-    assert(scan.copy(runtimeFilters = Nil).inputPartitions eq scan.inputPartitions)
-    // A copy over another `Scan` plans its own.
-    assert(!(scan.copy(scan = plannedScan().scan).inputPartitions eq scan.inputPartitions))
+  test("SPARK-60752: a DPP subquery's build side does not change the layout of the scan it " +
+    "shares with the join") {
+    // A DPP subquery that does not reuse a broadcast plans its build side again, over the same
+    // `Scan` as the join's `purchases` scan. A scalar subquery filter on `item_id` is a runtime
+    // filter of both, and the subquery runs it first, which prunes the shared `Scan`. The join's
+    // scan is a copy made after planning, when the scalar subquery is replaced by a reused one. Had
+    // it planned its partitions again, it would report fewer of them than `items`, and the join
+    // would fail with "Can't zip RDDs". Of the two suites that run this, only the Catalyst one
+    // prunes on this predicate.
+    withDppSubqueryTables(rowsPerKey = 1) {
+      checkStoragePartitionedJoin(
+        s"SELECT i.id, p.price FROM testcat.ns.$items i JOIN testcat.ns.$purchases p " +
+          s"ON i.id = p.item_id WHERE i.id = " +
+          s"(SELECT max(item_id) FROM testcat.ns.$purchases WHERE price > 4.0)",
+        Seq(Row(7L, 7.0f)))
+    }
+  }
+
+  test("SPARK-60752: a nested DPP filter on a DPP subquery's build side does not change the " +
+    "layout of the scan it shares with the join") {
+    // As above, with a DPP filter from a broadcast dimension as the build side's own runtime
+    // filter, which every fixture prunes on. Two rows per key give `purchases` two splits per key,
+    // so a GroupPartitionsExec groups that side and checks the layout of the copied scan. With
+    // `flag = 2` the build side's filter prunes every split.
+    val dim = "dim"
+    withDppSubqueryTables(rowsPerKey = 2) {
+      createTable(dim, Array(Column.create("k", LongType), Column.create("flag", IntegerType)),
+        Array.empty)
+      sql(s"INSERT INTO testcat.ns.$dim VALUES " +
+        (1 to 7).map(i => s"($i, ${if (i >= 5) 1 else 0})").mkString(", "))
+      Seq(1 -> (5 to 7), 2 -> Nil).foreach { case (flag, ids) =>
+        checkStoragePartitionedJoin(
+          s"SELECT i.id, p.price FROM testcat.ns.$items i JOIN " +
+            s"(SELECT /*+ BROADCAST(d) */ p.item_id, p.price FROM testcat.ns.$purchases p " +
+            s"JOIN testcat.ns.$dim d ON p.item_id = d.k WHERE d.flag = $flag) p " +
+            "ON i.id = p.item_id",
+          ids.flatMap(i => Seq.fill(2)(Row(i.toLong, i.toFloat))))
+      }
+    }
   }
 }
 

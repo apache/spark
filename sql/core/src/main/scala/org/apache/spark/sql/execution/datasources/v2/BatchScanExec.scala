@@ -46,9 +46,8 @@ import org.apache.spark.util.ArrayImplicits._
  *                       post-scan `Filter` too.
  * @param appendsCheckedColumn Whether the readers mark the rows they checked in a boolean column,
  *                             the last of `output`, see `StorageFilterPlanning.checkedColumn`.
- * @param plannedInputPartitions Keeps the input partitions once the node plans them. The copies
- *                               later rules make of the node share it, so they report the layout
- *                               the plan was built for. Planning again could see fewer partitions,
+ * @param plannedInputPartitions The `Batch` and the input partitions this node and its copies read,
+ *                               see [[PlannedInputPartitions]]. They have to be the planned ones,
  *                               because the `Scan` can be shared with another node whose runtime
  *                               filter prunes it first, e.g. the build side of a DPP subquery
  *                               (SPARK-60752).
@@ -74,7 +73,9 @@ case class BatchScanExec(
   private def scanOutput: Seq[AttributeReference] =
     if (appendsCheckedColumn) output.init else output
 
-  @transient lazy val batch: Batch = if (scan == null) null else scan.toBatch
+  @transient private lazy val planned = plannedInputPartitions(scan)
+
+  @transient lazy val batch: Batch = if (scan == null) null else planned.batch
 
   override protected lazy val sparkMetrics: Map[String, SQLMetric] = {
     val name = "number of output rows"
@@ -115,8 +116,7 @@ case class BatchScanExec(
   @transient lazy val prunedKeyGroupedPartitioning: Option[Seq[Expression]] =
     keyGroupedPartitioning.map(_.filter(_.references.subsetOf(outputSet)))
 
-  @transient override lazy val inputPartitions: Seq[InputPartition] =
-    plannedInputPartitions.getOrPlan(scan)(batch.planInputPartitions().toImmutableArraySeq)
+  @transient override lazy val inputPartitions: Seq[InputPartition] = planned.inputPartitions
 
   // Visible for testing. Runtime filtering resolves the scan's columns by name, which the checked
   // column must not take part in.
@@ -190,22 +190,24 @@ case class BatchScanExec(
 }
 
 /**
- * The input partitions of a [[BatchScanExec]], planned once, by the first node that asks for them.
- * Each newly built node gets its own instance, and the copies later rules make of the node share
- * that instance. Only the nodes over the `Scan` that planned the partitions use them. A copy given
- * another `Scan` plans its own.
+ * The `Batch` and the input partitions of a [[BatchScanExec]], planned once per `Scan` by the first
+ * node over that `Scan` that asks for them. Each newly built node gets its own instance, and the
+ * copies later rules make of the node share it. So a copy reads the partitions the first node
+ * planned, with a reader factory from the `Batch` that planned them. A copy given another `Scan`
+ * plans that one once, for itself and its own copies.
  */
 class PlannedInputPartitions {
-  private var planned: Option[(Scan, Seq[InputPartition])] = None
+  // By identity, since a runtime filter changes one `Scan` instance, which can equal another.
+  private val planned = new java.util.IdentityHashMap[Scan, PlannedInputPartitions.Planned]
 
-  def getOrPlan(scan: Scan)(plan: => Seq[InputPartition]): Seq[InputPartition] = synchronized {
-    planned match {
-      case Some((plannedScan, partitions)) if plannedScan eq scan => partitions
-      case Some(_) => plan
-      case None =>
-        val partitions = plan
-        planned = Some((scan, partitions))
-        partitions
-    }
+  def apply(scan: Scan): PlannedInputPartitions.Planned = synchronized {
+    planned.computeIfAbsent(scan, s => new PlannedInputPartitions.Planned(s))
+  }
+}
+
+object PlannedInputPartitions {
+  class Planned(scan: Scan) {
+    lazy val batch: Batch = scan.toBatch
+    lazy val inputPartitions: Seq[InputPartition] = batch.planInputPartitions().toImmutableArraySeq
   }
 }
