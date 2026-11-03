@@ -17,100 +17,181 @@
 
 package org.apache.spark.sql.execution.streaming.runtime
 
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, NamedExpression}
-import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, Distinct, LogicalPlan, SetOperation, UnionBase}
+import scala.collection.mutable
+import scala.util.control.NonFatal
+
+import org.apache.spark.internal.{Logging, LogKeys}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet}
+import org.apache.spark.sql.catalyst.planning.PhysicalOperation
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.catalog.SupportsRead
-import org.apache.spark.sql.connector.read.{Scan, SupportsPushDownRequiredColumns}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
+import org.apache.spark.sql.execution.datasources.v2.PushDownUtils
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * Prunes the top-level columns that the scans of Data Source V2 streaming sources read to those
- * that a streaming query needs, as `V2ScanRelationPushDown` does for batch scans. The scan of a
- * streaming source is built once, when the query starts, from its analyzed plan, so the required
- * columns are taken from that plan: the optimizer prunes the columns of each micro-batch further,
- * so stateful operators keep getting the same columns as without this pruning.
+ * that the optimized plan of the query reads from them, as `V2ScanRelationPushDown` does for the
+ * scans of batch queries.
+ *
+ * The stream of a source is created from its scan, and has to exist before any micro-batch is
+ * planned, so the scan is built when the query starts. The query is optimized once at that point,
+ * by the optimizer of its micro-batches and with their configuration, and the scan of each source
+ * reads the columns that the planner takes from the optimized plan for the relation of the source
+ * (see `DataSourceV2Strategy`).
+ *
+ * The relations in the plan of the query keep all their columns, so each micro-batch is optimized
+ * as it is without this pruning: the optimizer keeps deciding which columns every operator gets,
+ * and in which order, including the stateful ones. Only the scan node of the physical plan outputs
+ * the columns that the scan reads, and the planner checks that the micro-batch reads no other
+ * column of the relation.
  */
-private[sql] object StreamingV2ColumnPruning {
+private[sql] object StreamingV2ColumnPruning extends Logging {
 
   /**
-   * Returns the attributes of its sources that a query needs: those in its output, those that its
-   * operators reference, and every column of the children of the operators that need all of them,
-   * such as a distinct, or that map the columns of a child to their output by position rather
-   * than by attribute, such as a union of any kind or the definition of a common table expression.
+   * Returns the columns that the optimized `plan` reads from each of its streaming relations of
+   * Data Source V2: what the planner takes from the projections and the filters over each
+   * occurrence of the relation, or all its columns where nothing is projected over it. A relation
+   * that the optimized plan does not have, or any relation if the optimizer fails, has no entry,
+   * so that its scan reads all its columns.
+   *
+   * @param optimizer the optimizer of the micro-batches of the query
+   * @param conf the configuration that the micro-batches of the query run with
    */
-  def requiredAttributes(plan: LogicalPlan): AttributeSet = {
-    var required = plan.outputSet
-    plan.foreach { node =>
-      required ++= node.references
-      val needsAllColumns = node match {
-        case _: UnionBase | _: SetOperation | _: Distinct | _: CTERelationDef => true
-        case _ => mapsColumnsByPosition(node)
-      }
-      if (needsAllColumns) {
-        node.children.foreach(child => required ++= child.outputSet)
+  def requiredColumns(
+      optimizer: RuleExecutor[LogicalPlan],
+      conf: SQLConf,
+      plan: LogicalPlan): Map[StreamingRelationV2, AttributeSet] = {
+    SQLConf.withExistingConf(conf) {
+      try {
+        val required = mutable.HashMap.empty[StreamingRelationV2, mutable.Buffer[AttributeSet]]
+        // Visits the nodes as the planner plans them: the projections and the filters over a
+        // relation are planned with its scan, and the other nodes on their own.
+        def visit(node: LogicalPlan): Unit = node match {
+          case PhysicalOperation(project, filters, relation: StreamingRelationV2) =>
+            required.getOrElseUpdate(relation, mutable.Buffer.empty) +=
+              AttributeSet((project ++ filters).flatMap(_.references))
+          case _ =>
+            node.children.foreach(visit)
+        }
+        visit(optimizer.execute(plan))
+        required.map { case (relation, columns) =>
+          relation -> AttributeSet.fromAttributeSets(columns)
+        }.toMap
+      } catch {
+        case NonFatal(e) =>
+          logWarning(log"Could not optimize the streaming query to prune the columns of the " +
+            log"scans of its sources, which read all their columns.", e)
+          Map.empty
       }
     }
-    required
   }
 
   /**
-   * Returns whether a node outputs attributes that are neither of its children, nor produced or
-   * defined by its expressions, which it then maps from the columns of its children by position.
-   */
-  private def mapsColumnsByPosition(node: LogicalPlan): Boolean = node.children.nonEmpty && {
-    val known = AttributeSet(node.children.flatMap(_.output)) ++ node.producedAttributes ++
-      AttributeSet(node.expressions.collect { case named: NamedExpression => named.toAttribute })
-    node.output.exists(attribute => !known.contains(attribute))
-  }
-
-  /**
-   * Builds the scan of a streaming source that reads the columns of `output` in `required`, when
-   * its scan builder supports column pruning, and creates its stream with `createStream`.
-   * Returns the scan, its stream and its output: the columns of `output` that it reads, in the
-   * order of its read schema when the scan prunes them, and otherwise `output` as it is. A scan
-   * that does not read the required columns, as named in `output`, is replaced by one of all the
-   * columns, as without pruning.
+   * Builds the scan of a streaming source, which reads the columns of `output` in `required` when
+   * its scan builder supports column pruning, and creates its stream with `createStream`. Returns
+   * the scan, its stream, and the columns of `output` that the scan reads, in the order of its
+   * read schema, unless these are `output` itself. `required` is only evaluated for a scan builder
+   * that supports column pruning.
    *
-   * The read schema of the scan is asked once its stream is created, since a scan may only know
-   * then what it reads for a stream.
+   * A pruned scan must read the required columns and only columns of `output`, each once, as
+   * `SupportsPushDownRequiredColumns` requires. A scan that does not is replaced by a scan of all
+   * the columns, as without pruning, and its stream is stopped. Spark asks a scan for its read
+   * schema once the stream is created, since a scan may only know then what its stream reads.
    *
-   * @param output the output of the source, with the metadata columns that the query reads, which
-   *               the analyzer added to it
-   * @param required the attributes that the query needs, or None to read all the columns
+   * @param output the output of the relation of the source, with the metadata columns that the
+   *               query reads, which the analyzer added to it, so that connectors implementing
+   *               `SupportsMetadataColumns` include them in `readSchema()`
+   * @param required the columns of `output` that the query reads, or None to read all of them
    */
   def buildScan[S <: SparkDataStream](
       table: SupportsRead,
       options: CaseInsensitiveStringMap,
       output: Seq[AttributeReference],
-      required: Option[AttributeSet])(
-      createStream: Scan => S): (Scan, S, Seq[AttributeReference]) = {
-    def build(columns: Seq[AttributeReference]): (Scan, Boolean) = {
-      val builder = table.newScanBuilder(options)
-      val prunes = builder match {
+      required: => Option[AttributeSet])(
+      createStream: Scan => S): (Scan, S, Option[Seq[AttributeReference]]) = {
+    def build(builder: ScanBuilder, columns: Seq[AttributeReference]): Scan = {
+      builder match {
         case pruning: SupportsPushDownRequiredColumns =>
           pruning.pruneColumns(DataTypeUtils.fromAttributes(columns))
-          true
-        case _ => false
+        case _ =>
       }
-      (builder.build(), prunes)
+      builder.build()
     }
-    val requiredOutput = required.map(r => output.filter(r.contains)).getOrElse(output)
-    val (scan, prunes) = build(requiredOutput)
-    val stream = createStream(scan)
-    if (!prunes || requiredOutput.length == output.length) {
-      (scan, stream, output)
+    def buildFullScan(builder: ScanBuilder): (Scan, S, Option[Seq[AttributeReference]]) = {
+      val scan = build(builder, output)
+      (scan, createStream(scan), None)
+    }
+
+    val builder = table.newScanBuilder(options)
+    val requiredOutput = builder match {
+      case _: SupportsPushDownRequiredColumns =>
+        required.map(columns => output.filter(columns.contains)).getOrElse(output)
+      case _ =>
+        output
+    }
+    if (requiredOutput.length == output.length) {
+      buildFullScan(builder)
     } else {
-      val byName = output.map(attribute => attribute.name -> attribute).toMap
-      val readSchema = scan.readSchema()
-      val scanOutput = readSchema.fieldNames.toSeq.flatMap(byName.get)
-      if (scanOutput.length == readSchema.length && requiredOutput.forall(scanOutput.contains)) {
-        (scan, stream, scanOutput)
+      val scan = build(builder, requiredOutput)
+      val stream = createStream(scan)
+      val (readSchema, scanOutput) = try {
+        val readSchema = scan.readSchema()
+        (readSchema, prunedScanOutput(readSchema, output, requiredOutput))
+      } catch {
+        case e: Throwable =>
+          try stream.stop() catch {
+            case NonFatal(suppressed) => e.addSuppressed(suppressed)
+          }
+          throw e
+      }
+      scanOutput match {
+        case Right(scanOutput) =>
+          val readsOutput = scanOutput.map(_.exprId) == output.map(_.exprId)
+          (scan, stream, if (readsOutput) None else Some(scanOutput))
+        case Left(reason) =>
+          val columns = requiredOutput.map(_.name).mkString(", ")
+          logWarning(log"The scan of the streaming table " +
+            log"${MDC(LogKeys.STREAMING_TABLE, table)} was asked to read the columns " +
+            log"${MDC(LogKeys.COLUMN_NAMES, columns)}, but its read schema " +
+            log"${MDC(LogKeys.SCHEMA, readSchema.simpleString)} " +
+            log"${MDC(LogKeys.REASON, reason)}. It reads all the columns instead.")
+          stream.stop()
+          buildFullScan(table.newScanBuilder(options))
+      }
+    }
+  }
+
+  /**
+   * Returns the columns of `output` that a scan pruned to `requiredOutput` reads, as batch scans
+   * map them with `PushDownUtils.toOutputAttrs`, or why the read schema does not follow
+   * `SupportsPushDownRequiredColumns`.
+   */
+  private def prunedScanOutput(
+      readSchema: StructType,
+      output: Seq[AttributeReference],
+      requiredOutput: Seq[AttributeReference]): Either[String, Seq[AttributeReference]] = {
+    val names = readSchema.fieldNames.toSeq
+    val outputNames = output.map(_.name).toSet
+    val unknown = names.filterNot(outputNames.contains)
+    val repeated = names.diff(names.distinct).distinct
+    if (unknown.nonEmpty) {
+      Left(s"has the columns ${unknown.mkString(", ")}, which the relation does not output")
+    } else if (repeated.nonEmpty) {
+      Left(s"has the columns ${repeated.mkString(", ")} more than once")
+    } else {
+      val scanOutput = PushDownUtils.toOutputAttrs(readSchema, output)
+      val missing = requiredOutput.filterNot(AttributeSet(scanOutput).contains)
+      if (missing.nonEmpty) {
+        Left(s"does not have the columns ${missing.map(_.name).mkString(", ")}")
       } else {
-        stream.stop()
-        val (fullScan, _) = build(output)
-        (fullScan, createStream(fullScan), output)
+        Right(scanOutput)
       }
     }
   }

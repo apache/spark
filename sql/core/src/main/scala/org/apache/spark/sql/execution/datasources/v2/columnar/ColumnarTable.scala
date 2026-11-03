@@ -141,6 +141,10 @@ class ColumnarScanBuilder(
 }
 
 /**
+ * The read schema of a scan of a micro-batch stream is only known once the stream is created, as
+ * `StreamingV2ColumnPruning` asks for it: it is the full schema, while the read schema that the
+ * scan reports before is the one of a batch, whose planner it creates to prune the columns.
+ *
  * @param requiredSchema the top-level columns that the query needs, if fewer than those of the
  *                       full schema. A batch scan asks its planner to prune the other columns,
  *                       while a streaming scan reads all the columns of the full schema, which is
@@ -162,15 +166,14 @@ class ColumnarScan(
   // The columns that the batch reads: the required ones if the planner prunes the others.
   private lazy val batchSchema = requiredSchema.filter(planner.pruneColumns).getOrElse(fullSchema)
 
-  // Spark may call `toBatch` more than once for the same scan; the partitions are planned once,
-  // after the columns are pruned.
+  // Spark may call `toBatch` more than once for the same scan; the partitions are planned once.
   private lazy val batch = {
-    batchSchema
+    // The planner prunes the columns before it plans the partitions.
+    val _ = batchSchema
     new ColumnarBatchScan(planner)
   }
 
-  // Whether the scan is the one of a micro-batch stream, which Spark asks for its read schema
-  // after it creates the stream.
+  // Whether the scan is the one of a micro-batch stream, whose read schema is the full schema.
   @volatile private var streaming = false
 
   override def readSchema(): StructType = if (streaming) fullSchema else batchSchema

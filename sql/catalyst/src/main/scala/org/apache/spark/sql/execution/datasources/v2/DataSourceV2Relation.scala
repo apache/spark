@@ -478,6 +478,12 @@ case class StreamingDataSourceV2Relation(
 /**
  * A specialization of [[DataSourceV2ScanRelation]] with the streaming bit set to true, as well
  * as start and end offsets for Microbatch processing.
+ *
+ * @param output the columns of the source that the query references, which the plan of each
+ *               micro-batch is optimized with
+ * @param prunedOutput the columns of `output` that the scan reads, in the order of its read schema,
+ *                     if it was built to read fewer of them. The scan node of the physical plan
+ *                     outputs these, so the plan must not read the other columns of `output`.
  */
 case class StreamingDataSourceV2ScanRelation(
     relation: StreamingDataSourceV2Relation,
@@ -485,7 +491,8 @@ case class StreamingDataSourceV2ScanRelation(
     output: Seq[AttributeReference],
     stream: SparkDataStream,
     startOffset: Option[Offset] = None,
-    endOffset: Option[Offset] = None)
+    endOffset: Option[Offset] = None,
+    prunedOutput: Option[Seq[AttributeReference]] = None)
   extends LeafNode with MultiInstanceRelation with NamedRelation  {
 
   val (catalog, identifier) = (relation.catalog, relation.identifier)
@@ -499,7 +506,13 @@ case class StreamingDataSourceV2ScanRelation(
 
   override def isStreaming: Boolean = true
 
-  override def newInstance(): LogicalPlan = copy(output = output.map(_.newInstance()))
+  override def newInstance(): LogicalPlan = {
+    val newOutput = output.map(_.newInstance())
+    val newAttributes = AttributeMap(output.zip(newOutput))
+    copy(
+      output = newOutput,
+      prunedOutput = prunedOutput.map(_.map(a => a.withExprId(newAttributes(a).exprId))))
+  }
 
   override def computeStats(): Statistics = scan match {
     case r: SupportsReportStatistics =>

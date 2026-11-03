@@ -77,13 +77,14 @@ class ContinuousExecution(
     val v2ToRelationMap = MutableMap[StreamingRelationV2, StreamingDataSourceV2ScanRelation]()
     var nextSourceId = 0
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
-    // The columns of the Data Source V2 sources that the query needs, which their scans read.
-    val requiredAttributes =
-      if (sparkSession.sessionState.conf.streamingV2ColumnPruningEnabled) {
-        Some(StreamingV2ColumnPruning.requiredAttributes(analyzedPlan))
-      } else {
-        None
-      }
+    // The columns that the query reads from each Data Source V2 source, which the scan of a source
+    // that supports column pruning reads. They come from the plan of the query optimized once, as
+    // it is optimized when it runs. The plan is only optimized for a scan builder that supports
+    // column pruning.
+    val streamConf = sparkSessionForStream.sessionState.conf
+    val pruneColumns = streamConf.streamingV2ColumnPruningEnabled
+    lazy val requiredColumns = StreamingV2ColumnPruning.requiredColumns(
+      sparkSessionForStream.sessionState.optimizer, streamConf, analyzedPlan)
     val _logicalPlan = analyzedPlan.transform {
       case s @ StreamingRelationV2(ds, sourceName, table: SupportsRead, options, output,
         catalog, identifier, _, _) =>
@@ -101,11 +102,13 @@ class ContinuousExecution(
           // TODO: operator pushdown.
           // The output includes the metadata columns that the query reads, so that connectors
           // implementing SupportsMetadataColumns include them in readSchema().
-          val (scan, stream, scanOutput) = StreamingV2ColumnPruning.buildScan(
-            table, options, output, requiredAttributes)(_.toContinuousStream(metadataPath))
+          val (scan, stream, prunedOutput) = StreamingV2ColumnPruning.buildScan(
+            table, options, output, if (pruneColumns) requiredColumns.get(s) else None)(
+            _.toContinuousStream(metadataPath))
           val relation = StreamingDataSourceV2Relation(
-              table, scanOutput, catalog, identifier, options, metadataPath)
-          StreamingDataSourceV2ScanRelation(relation, scan, scanOutput, stream)
+              table, output, catalog, identifier, options, metadataPath)
+          StreamingDataSourceV2ScanRelation(
+            relation, scan, output, stream, prunedOutput = prunedOutput)
         })
     }
 

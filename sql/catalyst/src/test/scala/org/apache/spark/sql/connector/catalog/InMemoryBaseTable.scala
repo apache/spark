@@ -214,6 +214,9 @@ abstract class InMemoryBaseTable(
   private val simulateIncompleteColumnPruning = properties
     .getOrDefault(InMemoryBaseTable.SIMULATE_INCOMPLETE_COLUMN_PRUNING, "false").toBoolean
 
+  private val simulateReorderedColumnPruning = properties
+    .getOrDefault(InMemoryBaseTable.SIMULATE_REORDERED_COLUMN_PRUNING, "false").toBoolean
+
   private val acceptAnySchema = properties.getOrDefault("accept-any-schema", "false").toBoolean
   private val autoSchemaEvolution = properties.getOrDefault("auto-schema-evolution", "true")
     .toBoolean
@@ -619,6 +622,10 @@ abstract class InMemoryBaseTable(
       } else if (simulateIncompleteColumnPruning && dataFields.length < tableSchema.length) {
         // Drop the first required data column when only some of them are required.
         StructType(prunedFields.filterNot(dataFields.headOption.contains))
+      } else if (simulateReorderedColumnPruning && dataFields.length < tableSchema.length) {
+        // Return the required data columns in the reverse order when only some of them are
+        // required.
+        StructType(dataFields.reverse ++ prunedFields.filter(isRequiredMetadataField))
       } else {
         StructType(prunedFields)
       }
@@ -1132,6 +1139,11 @@ object InMemoryBaseTable {
   // which `SupportsPushDownRequiredColumns` does not permit: when only some of the data columns
   // are required, `Scan.readSchema()` does not have the first of them.
   val SIMULATE_INCOMPLETE_COLUMN_PRUNING = "simulate-incomplete-column-pruning"
+
+  // Test table property that simulates a connector that returns the required columns in another
+  // order than they were asked in, which `SupportsPushDownRequiredColumns` permits: when only some
+  // of the data columns are required, `Scan.readSchema()` has them in the reverse order.
+  val SIMULATE_REORDERED_COLUMN_PRUNING = "simulate-reordered-column-pruning"
 
   /**
    * Assigns fresh IDs to any top-level column or nested struct field that does not already

@@ -6253,8 +6253,9 @@ object SQLConf {
     buildConf("spark.sql.streaming.v2ColumnPruning.enabled")
       .internal()
       .doc("When true, the scan of a Data Source V2 streaming source that supports column " +
-        "pruning only reads the top-level columns that the streaming query needs, as for batch " +
-        "scans. When false, it reads all the columns of the source.")
+        "pruning only reads the top-level columns that the streaming query reads from it, which " +
+        "Spark takes from the plan of the query optimized when the query starts, as it does for " +
+        "batch scans. When false, it reads all the columns of the source.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf

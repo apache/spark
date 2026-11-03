@@ -39,6 +39,9 @@ public interface SupportsPushDownRequiredColumns extends ScanBuilder {
    * <p>
    * Note that, {@link Scan#readSchema()} implementation should take care of the column
    * pruning applied here.
+   * <p>
+   * The scans of streaming queries are pruned too, since 4.4.0, so the readers of the micro-batch
+   * and continuous streams of a scan must also return the columns of its read schema.
    */
   void pruneColumns(StructType requiredSchema);
 }

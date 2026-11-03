@@ -27,7 +27,7 @@ import org.apache.spark.internal.LogKeys.EXPR
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedPersistentView, ResolvedTable, ResolvedTempView}
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, BloomFilterMightContain, Cast, DynamicPruning, Expression, InSet, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, AttributeSet, BloomFilterMightContain, Cast, DynamicPruning, Expression, InSet, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -245,8 +245,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       if r.startOffset.isDefined && r.endOffset.isDefined =>
 
       val microBatchStream = r.stream.asInstanceOf[MicroBatchStream]
+      val output = DataSourceV2Strategy.streamingScanOutput(r, p, f)
       val scanExec = MicroBatchScanExec(
-        r.output, r.scan, microBatchStream, r.startOffset.get, r.endOffset.get)
+        output, r.scan, microBatchStream, r.startOffset.get, r.endOffset.get)
 
       // Add a Project here to make sure we produce unsafe rows.
       DataSourceV2Strategy.withProjectAndFilter(p, f, scanExec, !scanExec.supportsColumnar) :: Nil
@@ -254,6 +255,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case PhysicalOperation(p, f, r: StreamingDataSourceV2ScanRelation)
       if r.startOffset.isDefined && r.endOffset.isEmpty =>
 
+        val output = DataSourceV2Strategy.streamingScanOutput(r, p, f)
         val scanExec = if (r.relation.realTimeModeDuration.isDefined) {
           if (!r.stream.isInstanceOf[SupportsRealTimeMode]) {
             throw new SparkIllegalArgumentException(
@@ -263,7 +265,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           }
           val microBatchStream = r.stream.asInstanceOf[MicroBatchStream]
           new RealTimeStreamScanExec(
-            r.output,
+            output,
             r.scan,
             microBatchStream,
             r.startOffset.get,
@@ -271,7 +273,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           )
         } else {
           val continuousStream = r.stream.asInstanceOf[ContinuousStream]
-          val s = ContinuousScanExec(r.output, r.scan, continuousStream, r.startOffset.get)
+          val s = ContinuousScanExec(output, r.scan, continuousStream, r.startOffset.get)
           // initialize partitions
           s.inputPartitions
           s
@@ -1100,6 +1102,30 @@ private[sql] object DataSourceV2Strategy extends Logging {
     } else {
       withFilter
     }
+  }
+
+  /**
+   * Returns the output of the scan node of a streaming relation: the columns that its scan reads.
+   * A scan built to read fewer columns than the relation outputs only gets them when the
+   * projections and the filters over the relation, which the scan node is planned with, read no
+   * other column of the relation (see `StreamingV2ColumnPruning`).
+   */
+  private def streamingScanOutput(
+      relation: StreamingDataSourceV2ScanRelation,
+      project: Seq[NamedExpression],
+      filters: Seq[Expression]): Seq[AttributeReference] = relation.prunedOutput match {
+    case Some(prunedOutput) =>
+      val missing = AttributeSet((project ++ filters).flatMap(_.references)) -- prunedOutput
+      if (missing.nonEmpty) {
+        throw SparkException.internalError(
+          s"The scan of the streaming relation ${relation.name} does not read the columns " +
+            s"${missing.toSeq.map(_.name).mkString(", ")} that the plan reads from it. Set " +
+            s"${SQLConf.STREAMING_V2_COLUMN_PRUNING_ENABLED.key} to false to make the scans of " +
+            "streaming queries read all the columns of their sources.")
+      }
+      prunedOutput
+    case None =>
+      relation.output
   }
 }
 

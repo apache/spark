@@ -30,8 +30,8 @@ import org.apache.spark.sql.connector.catalog.{Table, TableCapability, TableProv
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
-import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, MicroBatchScanExec}
+import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.DataSourceRegister
@@ -214,6 +214,26 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession {
     }
     assert(TestColumnarSink.rows(table).sorted == (0L until 5L).map(id => (id, s"name$id")))
     assert(TestColumnarSink.epochs.get(table) == Seq(0L))
+  }
+
+  test("streaming read of some of the columns") {
+    val query = spark.readStream.format(format).option("end", "5").load().select("name")
+      .writeStream
+      .format("memory")
+      .queryName("pruned_stream")
+      .start()
+    try {
+      query.processAllAvailable()
+      // A stream reader reads all the columns of the data source, so the scan of a stream reads
+      // all of them too, and Spark drops the other columns.
+      val scans = query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution
+        .executedPlan.collect { case scan: MicroBatchScanExec => scan }
+      assert(scans.map(_.output.map(_.name)) == Seq(Seq("id", "name")))
+      assert(scans.head.scan.readSchema() == StructType.fromDDL("id BIGINT, name STRING"))
+    } finally {
+      query.stop()
+    }
+    checkAnswer(spark.table("pruned_stream"), (0L until 5L).map(id => Row(s"name$id")))
   }
 
   test("create a stream writer for each micro-batch") {

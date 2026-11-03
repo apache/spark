@@ -40,8 +40,10 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
 
 - Since Spark 4.4, the scan of a Data Source V2 streaming source whose scan builder implements
   `SupportsPushDownRequiredColumns` only reads the top-level columns that the streaming query
-  needs, as the scans of batch queries do. Before, it read all the columns of the source. To
-  restore the previous behavior, set `spark.sql.streaming.v2ColumnPruning.enabled` to `false`.
+  reads from it, which Spark takes from the plan of the query optimized when the query starts, as
+  it does for the scans of batch queries. Before, it read all the columns of the source. The
+  readers of its streams must then return the columns of `Scan.readSchema()`. To restore the
+  previous behavior, set `spark.sql.streaming.v2ColumnPruning.enabled` to `false`.
 
 ## Upgrading from Structured Streaming 4.2 to 4.3
 

@@ -715,7 +715,17 @@ object PushDownUtils extends Logging {
   def toOutputAttrs(
       schema: StructType,
       relation: DataSourceV2Relation): Seq[AttributeReference] = {
-    val nameToAttr = Utils.toMap(relation.output.map(_.name), relation.output)
+    toOutputAttrs(schema, relation.output)
+  }
+
+  /**
+   * Returns the attributes of the fields of the read schema of a scan, with the expression IDs of
+   * the attributes of `output` that have their names. Each field must be named after one of them.
+   */
+  def toOutputAttrs(
+      schema: StructType,
+      output: Seq[AttributeReference]): Seq[AttributeReference] = {
+    val nameToAttr = Utils.toMap(output.map(_.name), output)
     val cleaned = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
     toAttributes(cleaned).map { a =>
       val orig = nameToAttr(a.name)

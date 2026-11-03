@@ -260,13 +260,19 @@ class MicroBatchExecution(
     }
 
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
-    // The columns of the Data Source V2 sources that the query needs, which their scans read.
-    val requiredAttributes =
-      if (sparkSession.sessionState.conf.streamingV2ColumnPruningEnabled) {
-        Some(StreamingV2ColumnPruning.requiredAttributes(planWithDedupKeys))
-      } else {
-        None
+    // The columns that the query reads from each Data Source V2 source, which the scan of a source
+    // that supports column pruning reads. They come from the plan of the query optimized once,
+    // with the configuration of its micro-batches, which a restarted query takes from the offset
+    // log. The plan is only optimized for a scan builder that supports column pruning.
+    val pruneColumns = streamConf.streamingV2ColumnPruningEnabled
+    lazy val requiredColumns = {
+      val batchConf = streamConf.clone()
+      initialLatestOffsetSeq.flatMap(_._2.metadataOpt).foreach { metadata =>
+        OffsetSeqMetadata.setSessionConf(metadata, batchConf, logChanges = false)
       }
+      StreamingV2ColumnPruning.requiredColumns(
+        sparkSessionForStream.sessionState.optimizer, batchConf, planWithDedupKeys)
+    }
     val _logicalPlan = planWithDedupKeys.transform {
       case streamingRelation @ StreamingRelation(
           dataSourceV1, sourceName, output, sourceIdentifyingName) =>
@@ -297,11 +303,12 @@ class MicroBatchExecution(
             // TODO: operator pushdown.
             // The output includes the metadata columns that the query reads, so that connectors
             // implementing SupportsMetadataColumns include them in readSchema().
-            val (scan, stream, scanOutput) = StreamingV2ColumnPruning.buildScan(
-              table, options, output, requiredAttributes)(_.toMicroBatchStream(metadataPath))
+            val (scan, stream, prunedOutput) = StreamingV2ColumnPruning.buildScan(
+              table, options, output, if (pruneColumns) requiredColumns.get(s) else None)(
+              _.toMicroBatchStream(metadataPath))
             val relation = StreamingDataSourceV2Relation(
                 table,
-                scanOutput,
+                output,
                 catalog,
                 identifier,
                 options,
@@ -312,7 +319,8 @@ class MicroBatchExecution(
                 },
                 sourceIdentifyingName
               )
-            StreamingDataSourceV2ScanRelation(relation, scan, scanOutput, stream)
+            StreamingDataSourceV2ScanRelation(
+              relation, scan, output, stream, prunedOutput = prunedOutput)
           })
         } else if (v1.isEmpty) {
           throw QueryExecutionErrors.microBatchUnsupportedByDataSourceError(
