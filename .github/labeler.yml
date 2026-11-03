@@ -26,6 +26,16 @@ AVRO:
         'python/**/avro/**/*',
         ]
 
+BLOCK MANAGER:
+  - changed-files:
+    - all-globs-to-any-file: [
+        'core/src/**/storage/**/*',
+        '!**/ui/**/*',
+        ]
+    - any-glob-to-any-file: [
+        'common/utils/src/**/storage/**/*',
+        ]
+
 BUILD:
   - changed-files:
     - all-globs-to-any-file: [
@@ -196,6 +206,23 @@ R:
         '**/R/**/*',
         '**/r/**/*',
         'bin/sparkR*',
+        ]
+
+SCHEDULER:
+  - changed-files:
+    - any-glob-to-any-file: [
+        'common/utils/src/**/scheduler/**/*',
+        'core/src/**/scheduler/**/*',
+        ]
+
+SHUFFLE:
+  - changed-files:
+    - any-glob-to-any-file: [
+        'common/network-common/**/shuffle/**/*',
+        'common/network-shuffle/**/*',
+        'common/network-yarn/**/*',
+        'core/src/**/shuffle/**/*',
+        'resource-managers/**/shuffle/**/*',
         ]
 
 SPARK SHELL:
