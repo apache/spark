@@ -1856,9 +1856,9 @@ CreateViewCommand `spark_catalog`.`default`.`cv_meta`, [(id,Some(row id)), (labe
 
 
 -- !query
-DESCRIBE cv_meta
+DESCRIBE EXTENDED cv_meta
 -- !query analysis
-DescribeTableCommand `spark_catalog`.`default`.`cv_meta`, false, [col_name#x, data_type#x, comment#x]
+DescribeTableCommand `spark_catalog`.`default`.`cv_meta`, true, [col_name#x, data_type#x, comment#x]
 +- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.cv_meta, spark_catalog.default.cv_meta
 
 

@@ -1761,12 +1761,29 @@ struct<>
 
 
 -- !query
-DESCRIBE cv_meta
+DESCRIBE EXTENDED cv_meta
 -- !query schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query output
 id                  	int                 	row id              
-label               	string              	label text
+label               	string              	label text          
+                    	                    	                    
+# Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
+Database            	default             	                    
+Table               	cv_meta             	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	VIEW                	                    
+Comment             	metadata baseline   	                    
+Collation           	UTF8_LCASE          	                    
+View Text           	SELECT id, name AS label FROM cv_t1	                    
+View Original Text  	SELECT id, name AS label FROM cv_t1	                    
+View Schema Mode    	BINDING             	                    
+View Catalog and Namespace	spark_catalog.default	                    
+View Query Output Columns	[`id`, `label`]     	                    
+Table Properties    	[owner_team=sql, purpose=baseline]
 
 
 -- !query

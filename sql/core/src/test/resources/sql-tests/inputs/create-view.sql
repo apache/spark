@@ -1,4 +1,4 @@
--- Baseline for persistent CREATE [OR REPLACE] VIEW. Names are single-part (current schema).
+-- Baseline for persistent CREATE [OR REPLACE] VIEW. Names resolve in the current schema.
 -- Every object created here is dropped at the end of the file.
 DROP VIEW IF EXISTS cv_plain;
 DROP VIEW IF EXISTS cv_over_view;
@@ -280,11 +280,11 @@ CREATE VIEW cv_meta (id COMMENT 'row id', label COMMENT 'label text')
   DEFAULT COLLATION UTF8_LCASE
   WITH SCHEMA BINDING
   AS SELECT id, name AS label FROM cv_t1;
-DESCRIBE cv_meta;
+DESCRIBE EXTENDED cv_meta;
 SHOW TBLPROPERTIES cv_meta ('owner_team');
 SELECT * FROM cv_meta ORDER BY id;
 
--- String literal in the body of a DEFAULT COLLATION view is compared case-insensitively.
+-- String literal in a DEFAULT COLLATION UTF8_LCASE view is compared case-insensitively.
 CREATE VIEW cv_collate DEFAULT COLLATION UTF8_LCASE AS SELECT 'ABC' AS s;
 SELECT COUNT(*) FROM cv_collate WHERE s = 'abc';
 
