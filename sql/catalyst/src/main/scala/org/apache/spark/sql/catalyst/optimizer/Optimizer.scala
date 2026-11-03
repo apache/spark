@@ -2619,9 +2619,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     // expensive alias that the projection evaluates itself, only the cheap parts that
     // `canPushAhead` accepts (plain comparisons and the like) are pushed, and the projection is
     // not split when a part after that one is rejected by it, with only the cheap aliases
-    // substituted. An IS NOT NULL part before that one, over a cheap alias that a held part
-    // after that one reads, stays above too when `canPushAhead` rejects it with the alias
-    // substituted, and so does a throwable part written after such a check.
+    // substituted. After a part only expensive through scalar Python UDFs, a non-deterministic
+    // part stays above too.
     // SPARK-13473: We can't push the predicate down when the underlying projection output non-
     // deterministic field(s).  Non-deterministic expressions are essentially stateful. This
     // implies that, for a given input row, the output are determined by the expression's initial
@@ -2664,55 +2663,53 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
             case udf if isScalarPythonUDF(udf) => AttributeReference("pythonUDF", udf.dataType)()
           })
         }
-        // Split the filter's components into cheap and expensive while keeping track of
-        // what each references from the projection. The cheap components written before the
-        // first expensive one are pushed, except the IS NOT NULL checks kept above and the
-        // throwable components written after one (see below).
-        // After the first component over an expensive alias the projection evaluates, which is
-        // the first one held back, only the cheap components that `canPushAhead` accepts are
-        // pushed; the others stay above with the expensive ones, so they are only evaluated
-        // where none of the components before them is false. Before that one, the cheap
-        // components that are not throwable are pushed, as before SPARK-60730, except the IS NOT
-        // NULL checks kept above.
-        val (written, rest) = originalAndRewrittenConditionsWithUsedAlias.span {
-          case (_, used, _) => isCheap(used)
+        // Split the filter's components, in their written order, into the cheap ones pushed
+        // below the projection and the ones kept above it. The cheap components written before
+        // the first one kept above are all pushed, as before SPARK-60730. After it, a cheap
+        // component is only pushed when it can be evaluated ahead of the components before it,
+        // and how strictly that is checked depends on why a component was kept above:
+        // - after a component over an expensive alias that the projection does not evaluate,
+        //   i.e. one only expensive through scalar Python UDFs, a cheap component is pushed
+        //   when it is deterministic and not throwable;
+        // - after a component over an expensive alias the projection evaluates, the first one
+        //   held back, a cheap component is pushed only when `canPushAhead` accepts it, so the
+        //   others are only evaluated where none of the components before them is false.
+        // The IS NOT NULL checks that `InferFiltersFromConstraints` puts in front of the
+        // condition are pushed as if written there, so one over a cheap alias that can fail,
+        // e.g. a division, still computes it ahead of the components written before the one it
+        // was inferred from.
+        val components = originalAndRewrittenConditionsWithUsedAlias
+        val firstHeldIndex = components.indexWhere {
+          case (_, used, _) => !isCheap(used) && evaluatedHere(used)
         }
-        val (beforeHeld, fromHeld) = rest.span {
-          case (_, used, _) => isCheap(used) || !evaluatedHere(used)
+        val legacy = SQLConf.get.legacyPushFilterAheadOfExpensiveConjunct
+        val pushed = Seq.newBuilder[(Expression, AttributeMap[Alias], Expression)]
+        val kept = Seq.newBuilder[(Expression, AttributeMap[Alias], Expression)]
+        val keptHeld = Seq.newBuilder[(Expression, AttributeMap[Alias], Expression)]
+        // 0: nothing kept above yet; 1: after a component only expensive through Python UDFs;
+        // 2: after the first component held back.
+        var strictness = 0
+        components.zipWithIndex.foreach { case (component @ (cond, used, replaced), index) =>
+          val push = isCheap(used) && (strictness match {
+            case 0 => true
+            case 1 => !replaced.throwable && (legacy || cond.deterministic)
+            case _ => canPushAhead(replaced)
+          })
+          if (push) {
+            pushed += component
+          } else {
+            kept += component
+            if (index > firstHeldIndex && firstHeldIndex >= 0) keptHeld += component
+            if (index == firstHeldIndex) {
+              strictness = 2
+            } else if (!isCheap(used)) {
+              strictness = math.max(strictness, 1)
+            }
+          }
         }
-        val (firstHeld, held) = fromHeld.splitAt(1)
-        // `InferFiltersFromConstraints` puts the IS NOT NULL checks it infers in front of the
-        // condition, so such a check over a cheap alias that a held component after the first
-        // one reads, e.g. a division, would be pushed and compute the alias ahead of the
-        // components before that one. It stays above when `canPushAhead` rejects it with the
-        // alias substituted, also when the user wrote it there. With whole-stage codegen,
-        // `FilterExec` then evaluates an IS NOT NULL check on a column just before the first
-        // component that reads the column, or earlier after a component that can be NULL (see
-        // `precedingNotNullChecks`). A held component that reads the alias is rejected
-        // too, so the projection is not split then (see `keepsWrittenOrder`).
-        val heldRefs = AttributeSet(held.flatMap(_._1.references))
-        def keepsNotNull(cond: Expression, used: AttributeMap[Alias], replaced: Expression) =
-          cond.isInstanceOf[IsNotNull] && used.keys.exists(heldRefs.contains) &&
-            !canPushAhead(replaced)
-        // As in `splitPushable`, a throwable component written after a check kept above stays
-        // above too.
-        val (beforeKept, fromKept) = written.span {
-          case (cond, used, replaced) => !keepsNotNull(cond, used, replaced)
-        }
-        val (keptWritten, afterKept) = fromKept.partition {
-          case (cond, used, replaced) => keepsNotNull(cond, used, replaced) || replaced.throwable
-        }
-        val leading = beforeKept ++ afterKept
-        val (cheapBefore, expensiveBefore) = beforeHeld.partition {
-          case (cond, used, replaced) =>
-            isCheap(used) && !replaced.throwable && !keepsNotNull(cond, used, replaced)
-        }
-        val (cheapHeld, expensiveHeld) = held.partition {
-          case (_, used, replaced) => isCheap(used) && canPushAhead(replaced)
-        }
-        val cheapRest = cheapBefore ++ cheapHeld
-        val expensiveWithUsed = keptWritten ++ expensiveBefore ++ firstHeld ++ expensiveHeld
-        val cheapWithUsed = leading ++ cheapRest
+        val cheapWithUsed = pushed.result()
+        val expensiveWithUsed = kept.result()
+        val expensiveHeld = keptHeld.result()
         // Cheap filters (cases 1 & 2) pushed below the projection.
         val baseChild: LogicalPlan = if (cheapWithUsed.nonEmpty) {
           val combinedCheapFilter = cheapWithUsed.map(_._3).reduce(And)
@@ -2731,8 +2728,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         // tell nothing about an expensive one such as a UDF): e.g. a division over an expensive
         // alias, or a cheap condition held back above, which needs no expensive alias and so
         // would go lowest. The filter then stays above the projection as written, as without
-        // the split. This is always the case when an IS NOT NULL check is kept above, which
-        // would go lowest too: a held condition reads its alias, so it is rejected too.
+        // the split.
         lazy val keepsWrittenOrder = !SQLConf.get.legacyPushFilterAheadOfExpensiveConjunct &&
             expensiveHeld.nonEmpty && {
           val cheapAliasMap =
@@ -3175,10 +3171,9 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
    * with ANSI mode off. Two filters the optimizer adds, which have no written position to
    * keep, are accepted too: a runtime bloom filter over keys the check accepts, which can not
    * fail, and a dynamic partition pruning filter, which the scan evaluates at run time to prune
-   * what it reads, not on the filtered rows, so its position does not matter. The caller also
-   * uses it for the IS NOT NULL checks that `InferFiltersFromConstraints` adds in front of the
-   * condition; the other filters it adds there, which it infers from equalities, are pushed as
-   * if written first, also over an alias the check would reject.
+   * what it reads, not on the filtered rows, so its position does not matter. The filters
+   * that `InferFiltersFromConstraints` adds in front of the condition are pushed as if written
+   * first, also over an alias the check would reject.
    * With [[SQLConf.LEGACY_PUSH_FILTER_AHEAD_OF_EXPENSIVE_CONJUNCT]], only throwable components
    * are rejected.
    *

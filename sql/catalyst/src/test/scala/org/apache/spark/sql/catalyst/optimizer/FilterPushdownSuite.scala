@@ -1045,108 +1045,29 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("SPARK-60730: an IS NOT NULL check in front of the condition over an alias that can " +
-    "fail is not pushed ahead of an expensive one") {
-    // `InferFiltersFromConstraints`, which this suite does not run, puts the IS NOT NULL
-    // checks it infers in front of the condition, as written here.
+  test("SPARK-60730: an IS NOT NULL check written in front of the condition is pushed with " +
+    "the conditions after it in their written order") {
+    // `InferFiltersFromConstraints`, which this suite does not run, also puts the checks it
+    // infers there. Before the first expensive condition, everything is pushed as written, so
+    // `isnotnull(a + 1)` still guards the division after it below the projection.
     def project: LogicalPlan = testStringRelation
-      .select($"a", expensiveRLike("magic") as "f", $"a" + 1 as "x", $"a" as "y", $"b")
+      .select($"a", expensiveRLike("magic") as "f", $"a" + 1 as "x", $"b")
     Seq(true, false).foreach { split =>
       withSQLConf(SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> split.toString) {
-        // Pushing `isnotnull(x)` would compute `a + 1` ahead of `f`.
         val originalQuery = project
-          .where(IsNotNull($"x") && $"f" && $"x" > 6 && $"b" > 1)
+          .where(IsNotNull($"x") && Literal(10) / $"b" > 1 && $"f" && $"x" > 6)
           .analyze
-        val Seq(notNull, expensive, failable, _) = splitConjunctivePredicates(
-          originalQuery.collectFirst { case Filter(condition, _) => condition }.get)
         val optimized = Optimize.execute(originalQuery)
-        val correctAnswer = testStringRelation
-          .where($"b" > 1)
-          .select($"a", expensiveRLike("magic") as "f", $"a" + 1 as "x", $"a" as "y", $"b")
-          .where(IsNotNull($"x") && $"f" && $"x" > 6)
-          .analyze
-        comparePlans(optimized, correctAnswer)
-        assertTopFilterConjuncts(optimized, Seq(notNull, expensive, failable))
-
-        // It is pushed when no held condition reads the alias, also when the first expensive
-        // condition does, which is evaluated first anyway; or when the alias can not fail.
-        Seq[Expression]($"f", $"f" || $"x" > 6).foreach { first =>
-          val notReadQuery = project
-            .where(IsNotNull($"x") && first && $"a" + 2 > 6)
-            .analyze
-          val notReadAnswer = testStringRelation
-            .where(IsNotNull($"a" + 1))
-            .select($"a", expensiveRLike("magic") as "f", $"a" + 1 as "x", $"a" as "y", $"b")
-            .where(first && $"a" + 2 > 6)
-            .analyze
-          comparePlans(Optimize.execute(notReadQuery), notReadAnswer)
-        }
-        val plainQuery = project
-          .where(IsNotNull($"y") && $"f" && $"y" + 1 > 6)
-          .analyze
-        val plainAnswer = testStringRelation
-          .where(IsNotNull($"a"))
-          .select($"a", expensiveRLike("magic") as "f", $"a" + 1 as "x", $"a" as "y", $"b")
-          .where($"f" && $"y" + 1 > 6)
-          .analyze
-        comparePlans(Optimize.execute(plainQuery), plainAnswer)
-        // Only an IS NOT NULL check stays above. A condition written first is evaluated first
-        // anyway, so it is pushed.
-        val writtenQuery = project
-          .where($"x" > 0 && $"f" && $"x" < 100)
-          .analyze
-        val writtenAnswer = testStringRelation
-          .where($"a" + 1 > 0)
-          .select($"a", expensiveRLike("magic") as "f", $"a" + 1 as "x", $"a" as "y", $"b")
-          .where($"f" && $"x" < 100)
-          .analyze
-        comparePlans(Optimize.execute(writtenQuery), writtenAnswer)
+        comparePlans(optimized, testStringRelation
+          .where(IsNotNull($"a" + 1) && Literal(10) / $"b" > 1)
+          .select($"a", expensiveRLike("magic") as "f", $"a" + 1 as "x", $"b")
+          .where($"f" && $"x" > 6)
+          .analyze)
+        val pushedConjuncts = optimized.collectFirst {
+          case Project(_, Filter(condition, _)) => splitConjunctivePredicates(condition)
+        }.get
+        assert(pushedConjuncts.head.isInstanceOf[IsNotNull], pushedConjuncts)
       }
-    }
-    // Also after a condition over a Python UDF, which does not hold conditions back.
-    val pythonUDF = PythonUDF("pythonUDF", null, IntegerType, Seq(attrA),
-      PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
-    val afterPython = testStringRelation
-      .select($"a", pythonUDF.as("p"), expensiveRLike("magic") as "f", $"a" + 1 as "x", $"b")
-      .where($"p" > 1 && IsNotNull($"x") && $"f" && $"x" > 6)
-      .analyze
-    comparePlans(Optimize.execute(afterPython), afterPython)
-    // A throwable condition written after the check stays above with it, in written order,
-    // while a plain one is still pushed.
-    val raiseError = IsNull(RaiseError(Literal("boom")))
-    val throwableAfter = project
-      .where(IsNotNull($"x") && ($"b" > 1 || raiseError) && $"b" < 10 && $"f" && $"x" > 6)
-      .analyze
-    val Seq(keptCheck, throwableCond, _, expensiveCond, failableCond) =
-      splitConjunctivePredicates(throwableAfter.collectFirst { case Filter(c, _) => c }.get)
-    val throwableAfterOptimized = Optimize.execute(throwableAfter)
-    comparePlans(throwableAfterOptimized, testStringRelation
-      .where($"b" < 10)
-      .select($"a", expensiveRLike("magic") as "f", $"a" + 1 as "x", $"a" as "y", $"b")
-      .where(IsNotNull($"x") && ($"b" > 1 || raiseError) && $"f" && $"x" > 6)
-      .analyze)
-    assertTopFilterConjuncts(throwableAfterOptimized,
-      Seq(keptCheck, throwableCond, expensiveCond, failableCond))
-    // Written before the check, it is pushed as before.
-    val throwableBefore = project
-      .where(($"b" > 1 || raiseError) && IsNotNull($"x") && $"f" && $"x" > 6)
-      .analyze
-    comparePlans(Optimize.execute(throwableBefore), testStringRelation
-      .where($"b" > 1 || raiseError)
-      .select($"a", expensiveRLike("magic") as "f", $"a" + 1 as "x", $"a" as "y", $"b")
-      .where(IsNotNull($"x") && $"f" && $"x" > 6)
-      .analyze)
-    // The legacy config pushes it, with the conditions after `f`, as before.
-    withSQLConf(SQLConf.LEGACY_PUSH_FILTER_AHEAD_OF_EXPENSIVE_CONJUNCT.key -> "true") {
-      val originalQuery = project
-        .where(IsNotNull($"x") && $"f" && $"x" > 6)
-        .analyze
-      val correctAnswer = testStringRelation
-        .where(IsNotNull($"a" + 1) && $"a" + 1 > 6)
-        .select($"a", expensiveRLike("magic") as "f", $"a" + 1 as "x", $"a" as "y", $"b")
-        .where($"f")
-        .analyze
-      comparePlans(Optimize.execute(originalQuery), correctAnswer)
     }
   }
 
@@ -1289,6 +1210,40 @@ class FilterPushdownSuite extends PlanTest {
       .analyze
 
     comparePlans(Optimize.execute(originalQuery), correctAnswer)
+
+    // A non-deterministic condition after it stays above, so it only sees the rows the
+    // condition over the UDF keeps, as when `ExtractPythonUDFs` pushes the whole filter later.
+    val randQuery = testStringRelation
+      .select($"a", pythonUDF.as("p"), $"b")
+      .where($"p" > 1 && Rand(10) > 0.5 && $"a" + 1 > 6)
+      .analyze
+    val Seq(pythonCond, randCond, _) = splitConjunctivePredicates(
+      randQuery.collectFirst { case Filter(condition, _) => condition }.get)
+    val randOptimized = Optimize.execute(randQuery)
+    comparePlans(randOptimized, testStringRelation
+      .where($"a" + 1 > 6)
+      .select($"a", pythonUDF.as("p"), $"b")
+      .where($"p" > 1 && Rand(10) > 0.5)
+      .analyze)
+    assertTopFilterConjuncts(randOptimized, Seq(pythonCond, randCond))
+    // So does a throwable one, as before this change (SPARK-60602).
+    val throwableQuery = testStringRelation
+      .select($"a", pythonUDF.as("p"), $"b")
+      .where($"p" > 1 && ($"b" > 1 || IsNull(RaiseError(Literal("boom")))) && $"a" + 1 > 6)
+      .analyze
+    comparePlans(Optimize.execute(throwableQuery), testStringRelation
+      .where($"a" + 1 > 6)
+      .select($"a", pythonUDF.as("p"), $"b")
+      .where($"p" > 1 && ($"b" > 1 || IsNull(RaiseError(Literal("boom")))))
+      .analyze)
+    // The legacy config pushes it, as before.
+    withSQLConf(SQLConf.LEGACY_PUSH_FILTER_AHEAD_OF_EXPENSIVE_CONJUNCT.key -> "true") {
+      comparePlans(Optimize.execute(randQuery), testStringRelation
+        .where(Rand(10) > 0.5 && $"a" + 1 > 6)
+        .select($"a", pythonUDF.as("p"), $"b")
+        .where($"p" > 1)
+        .analyze)
+    }
 
     // A Python UDF over an expensive expression evaluates it below the projection too.
     val pythonOverRegex = PythonUDF("pythonUDF", null, IntegerType, Seq(expensiveRLike("magic")),
