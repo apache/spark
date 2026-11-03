@@ -455,12 +455,6 @@ object FileFormat {
 abstract class TextBasedFileFormat extends FileFormat with SessionStateHelper {
   private var codecFactory: CompressionCodecFactory = _
 
-  // The `decompression` splittability resolved for the options of the latest [[isSplitable]]
-  // call. The scan passes the same options map for every file, so this avoids parsing the codec
-  // name and loading its class again per file.
-  @transient @volatile
-  private var decompressionCodecSplittableCache: (Map[String, String], Option[Boolean]) = _
-
   /**
    * Forces the `decompression` read option, when set, onto `hadoopConf` before the format's
    * [[buildReader]] broadcasts it, so the readers decompress every file with that codec instead of
@@ -490,23 +484,12 @@ abstract class TextBasedFileFormat extends FileFormat with SessionStateHelper {
       sparkSession: SparkSession,
       options: Map[String, String],
       path: Path): Boolean = {
-    decompressionCodecSplittable(options).getOrElse {
+    new FileSourceOptions(options).decompressionCodecSplittable.getOrElse {
       if (codecFactory == null) {
         codecFactory = new CompressionCodecFactory(getHadoopConf(sparkSession, options))
       }
       val codec = codecFactory.getCodec(path)
       codec == null || codec.isInstanceOf[SplittableCompressionCodec]
-    }
-  }
-
-  private def decompressionCodecSplittable(options: Map[String, String]): Option[Boolean] = {
-    val cache = decompressionCodecSplittableCache
-    if (cache != null && (cache._1 eq options)) {
-      cache._2
-    } else {
-      val splittable = new FileSourceOptions(options).decompressionCodecSplittable
-      decompressionCodecSplittableCache = (options, splittable)
-      splittable
     }
   }
 }

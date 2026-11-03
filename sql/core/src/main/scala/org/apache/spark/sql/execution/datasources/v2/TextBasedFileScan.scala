@@ -34,7 +34,17 @@ abstract class TextBasedFileScan(
   @transient private lazy val codecFactory: CompressionCodecFactory = new CompressionCodecFactory(
     sparkSession.sessionState.newHadoopConfWithOptions(options.asScala.toMap))
 
-  override def isSplitable(path: Path): Boolean = Utils.isFileSplittable(path, codecFactory)
+  // The splittability of the `decompression` read option's codec, or `None` when it is absent.
+  @transient private lazy val decompressionCodecSplittable: Option[Boolean] =
+    new FileSourceOptions(options.asScala.toMap).decompressionCodecSplittable
+
+  /**
+   * Whether the file at `path` can be split by its compression codec. When the `decompression`
+   * read option is set, the splittability of that codec wins over the file name extension, so
+   * the split decision always agrees with how the readers decompress (see [[newReadHadoopConf]]).
+   */
+  override def isSplitable(path: Path): Boolean =
+    decompressionCodecSplittable.getOrElse(Utils.isFileSplittable(path, codecFactory))
 
   /**
    * Creates the Hadoop configuration the readers use, from the scan options (Hadoop configurations

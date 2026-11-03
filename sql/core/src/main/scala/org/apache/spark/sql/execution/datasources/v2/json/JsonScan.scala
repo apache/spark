@@ -53,16 +53,12 @@ case class JsonScan(
     conf.columnNameOfCorruptRecord)
 
   override def isSplitable(path: Path): Boolean = {
-    // When `decompression` is set, its splittability wins over the file extension.
-    JsonDataSource(parsedOptions).isSplitable &&
-      parsedOptions.decompressionCodecSplittable.getOrElse(super.isSplitable(path))
+    JsonDataSource(parsedOptions).isSplitable && super.isSplitable(path)
   }
 
   override def getFileUnSplittableReason(path: Path): String = {
     assert(!isSplitable(path))
-    // Report the codec first: a forced `decompression` decides splittability, not the
-    // file name extension.
-    if (!parsedOptions.decompressionCodecSplittable.getOrElse(super.isSplitable(path))) {
+    if (!super.isSplitable(path)) {
       super.getFileUnSplittableReason(path)
     } else {
       "the json datasource is set multiLine mode"
