@@ -29,8 +29,8 @@ import org.apache.spark.util.Utils
 
 class HistoryServerPluginSuite extends SparkFunSuite {
 
-  private val StaticDir = "org/apache/spark/ui/static"
-  private val StaticFile = "jquery.min.js"
+  private val staticDir = "org/apache/spark/ui/static"
+  private val staticFile = "spark-dag-viz.js"
 
   /** A plugin that declares one static resource path, or throws when asked for it. */
   private class StaticPlugin(path: String, fail: Boolean = false) extends AppHistoryServerPlugin {
@@ -43,13 +43,13 @@ class HistoryServerPluginSuite extends SparkFunSuite {
       if (fail) {
         throw new IllegalStateException("staticResources failed")
       }
-      Seq(StaticDir -> path)
+      Seq(staticDir -> path)
     }
   }
 
   private def statusOf(server: HistoryServer, path: String): Int = {
     val host = Utils.localHostNameForURI()
-    val url = new URI(s"http://$host:${server.boundPort}$path/$StaticFile").toURL
+    val url = new URI(s"http://$host:${server.boundPort}$path/$staticFile").toURL
     HistoryServerSuite.getContentAndCode(url)._1
   }
 
