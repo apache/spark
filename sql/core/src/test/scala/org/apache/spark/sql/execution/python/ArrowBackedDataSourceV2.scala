@@ -143,13 +143,16 @@ private class ArrowBackedScanBuilder(options: CaseInsensitiveStringMap)
     options.getBoolean("reuseVectors", false)
   private val freshBatches =
     options.getInt("freshBatches", 0)
+  private val retainable =
+    options.getBoolean("retainable", true)
   private val batchSize =
     options.getInt("batchSize", ArrowBackedDataSourceV2.BATCH_SIZE)
   private val arrowIdColumn =
     options.getBoolean("arrowIdColumn", true)
 
   override def createReaderFactory(): PartitionReaderFactory = {
-    new ArrowBackedReaderFactory(columnar, reuseVectors, freshBatches, batchSize, arrowIdColumn)
+    new ArrowBackedReaderFactory(
+      columnar, reuseVectors, freshBatches, retainable, batchSize, arrowIdColumn)
   }
 }
 
@@ -166,6 +169,8 @@ private case class ArrowPartition(start: Int, end: Int)
  *   the columnar optimization.
  * @param freshBatches if `reuseVectors` is true, the number of batches that the reader returns
  *   with fresh vectors before it reuses its vectors for the rest.
+ * @param retainable whether the fresh vectors of a batch tell the consumer that it may hold them
+ *   past the next batch, with [[ColumnVector.isRetainable]].
  * @param arrowIdColumn if false, the `id` column of the batches is not an
  *   [[ArrowColumnVector]], so that a batch is not entirely Arrow-backed.
  */
@@ -173,6 +178,7 @@ private class ArrowBackedReaderFactory(
     columnar: Boolean,
     reuseVectors: Boolean,
     freshBatches: Int,
+    retainable: Boolean,
     batchSize: Int,
     arrowIdColumn: Boolean)
   extends PartitionReaderFactory {
@@ -204,12 +210,12 @@ private class ArrowBackedReaderFactory(
     if (reuseVectors && freshBatches > 0) {
       val reuseStart = math.min(end, start + freshBatches * batchSize)
       new SwitchingArrowPartitionReader(
-        new ArrowBackedPartitionReader(start, reuseStart, batchSize, arrowIdColumn),
+        new ArrowBackedPartitionReader(start, reuseStart, batchSize, arrowIdColumn, retainable),
         new ReusingArrowPartitionReader(reuseStart, end, batchSize))
     } else if (reuseVectors) {
       new ReusingArrowPartitionReader(start, end, batchSize)
     } else {
-      new ArrowBackedPartitionReader(start, end, batchSize, arrowIdColumn)
+      new ArrowBackedPartitionReader(start, end, batchSize, arrowIdColumn, retainable)
     }
   }
 }
@@ -217,8 +223,8 @@ private class ArrowBackedReaderFactory(
 /**
  * Reads the same rows as [[ArrowBackedPartitionReader]], with short values in `data`, but refills
  * the same vectors for every batch and closes them once the reader is closed, as columnar readers
- * may: a batch is only valid until the next one, so its columns are
- * [[ReusedArrowColumnVector]]s.
+ * may: a batch is only valid until the next one. Its columns are [[ReusedArrowColumnVector]]s,
+ * whose closeIfFreeable is a no-op, and are not retainable.
  */
 private class ReusingArrowPartitionReader(start: Int, end: Int, batchSize: Int)
     extends PartitionReader[ColumnarBatch] {
@@ -293,10 +299,10 @@ private class SwitchingArrowPartitionReader(
  * - value (DOUBLE): id * 0.1
  * - data (STRING): 100 random characters
  *
- * Every batch has vectors of its own, which are not [[ReusedArrowColumnVector]]s: the consumer may
- * hold them past the next batch, even past the close of the reader, and releases them with
- * closeIfFreeable. The ones it does not release are closed when the task completes. Their
- * release is counted in [[ArrowBackedDataSourceV2]].
+ * Every batch has vectors of its own, which stay valid past the next batch, even past the close of
+ * the reader: if `retainable` is true, they say so with [[ColumnVector.isRetainable]], so the
+ * consumer may hold them and releases them with closeIfFreeable. The ones it does not release are
+ * closed when the task completes. Their release is counted in [[ArrowBackedDataSourceV2]].
  *
  * If `arrowIdColumn` is false, the `id` column is a [[ColumnVector]] over its Arrow vector that is
  * not an [[ArrowColumnVector]].
@@ -305,7 +311,8 @@ private class ArrowBackedPartitionReader(
     start: Int,
     end: Int,
     batchSize: Int,
-    arrowIdColumn: Boolean = true)
+    arrowIdColumn: Boolean = true,
+    retainable: Boolean = true)
   extends PartitionReader[ColumnarBatch] {
 
   private var current = start
@@ -340,9 +347,14 @@ private class ArrowBackedPartitionReader(
     ArrowBackedDataSourceV2.releasedBatches.incrementAndGet()
   }
 
+  /** A column of a batch, which is retainable if `retainable` is true. */
+  private class FreshArrowColumnVector(vector: ValueVector) extends ArrowColumnVector(vector) {
+    override def isRetainable(): Boolean = retainable
+  }
+
   /** The first column of a batch, which counts the releases of the batch by its consumer. */
   private class ReleaseCountingArrowColumnVector(vector: ValueVector)
-      extends ArrowColumnVector(vector) {
+      extends FreshArrowColumnVector(vector) {
     override def closeIfFreeable(): Unit = {
       countRelease()
       super.closeIfFreeable()
@@ -352,6 +364,7 @@ private class ArrowBackedPartitionReader(
   /** Like [[ReleaseCountingArrowColumnVector]], but not an [[ArrowColumnVector]]. */
   private class ReleaseCountingColumnVector(vector: ArrowColumnVector)
       extends ColumnVector(vector.dataType()) {
+    override def isRetainable(): Boolean = retainable
     override def closeIfFreeable(): Unit = {
       countRelease()
       close()
@@ -388,16 +401,16 @@ private class ArrowBackedPartitionReader(
     val dataVector = createLongStringVector(
       allocator, "data", count)
 
-    // Wrap in ArrowColumnVector
+    // Wrap in ArrowColumnVectors
     val columns: Array[ColumnVector] = Array(
       if (arrowIdColumn) {
         new ReleaseCountingArrowColumnVector(idVector)
       } else {
         new ReleaseCountingColumnVector(new ArrowColumnVector(idVector))
       },
-      new ArrowColumnVector(nameVector),
-      new ArrowColumnVector(valueVector),
-      new ArrowColumnVector(dataVector))
+      new FreshArrowColumnVector(nameVector),
+      new FreshArrowColumnVector(valueVector),
+      new FreshArrowColumnVector(dataVector))
 
     currentBatch = new ColumnarBatch(columns, count)
     allBatches.synchronized {

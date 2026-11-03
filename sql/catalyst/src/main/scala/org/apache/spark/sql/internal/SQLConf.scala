@@ -5677,13 +5677,13 @@ object SQLConf {
         "bypassing the ColumnarToRow and ArrowWriter conversion. " +
         "This optimization reduces data transfer overhead between " +
         "the JVM and Python worker processes. The columns that the UDFs pass through " +
-        "are kept until the results of their batch come back from Python, unless the " +
-        "upstream operator may reuse or release them before then, as it marks with " +
-        "ReusedColumnVector: such columns are read as rows or copied.")
+        "are kept until the results of their batch come back from Python only if the " +
+        "upstream operator allows it with ColumnVector.isRetainable, and their memory is " +
+        "not accounted for until then. Other columns are read as rows or copied.")
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val ARROW_CACHE_PREFETCH_ENABLED =
     buildConf("spark.sql.execution.arrow.cache.prefetch.enabled")

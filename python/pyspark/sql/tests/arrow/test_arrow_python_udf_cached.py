@@ -64,11 +64,14 @@ class ArrowPythonUDFCachedInputTests(ReusedSQLTestCase):
     def setUpClass(cls):
         super().setUpClass()
         cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "true")
+        # The columnar input path, which this suite tests, is disabled by default.
+        cls.spark.conf.set("spark.sql.execution.arrow.pythonUDF.columnarInput.enabled", "true")
 
     @classmethod
     def tearDownClass(cls):
         try:
             cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
+            cls.spark.conf.unset("spark.sql.execution.arrow.pythonUDF.columnarInput.enabled")
         finally:
             super().tearDownClass()
 
