@@ -2928,11 +2928,6 @@
       "The join cannot be executed as an external lookup join:"
     ],
     "subClass" : {
-      "CHAR_VARCHAR_COLUMN" : {
-        "message" : [
-          "The column <column> of the lookup-only table <relation> needs read-side CHAR padding or a VARCHAR length check, which an external lookup join does not support."
-        ]
-      },
       "CONFLICTING_JOIN_STRATEGY" : {
         "message" : [
           "The join strategy hint <strategy> cannot be honored by an external lookup join over <relation>. Remove the <strategy> hint."
@@ -2945,7 +2940,7 @@
       },
       "LOOKUP_PLAN" : {
         "message" : [
-          "The lookup side must be a DSv2 table, with no other operator between the table and the join."
+          "The lookup side must be a DSv2 table, optionally under projections and filters, which Spark evaluates on the lookup results. They cannot contain Python UDFs, external UDFs or subqueries, and no other operator can be between the table and the join."
         ]
       },
       "LOOKUP_TABLE_ON_LEFT" : {
@@ -2970,7 +2965,7 @@
       },
       "NO_LOOKUP_CANDIDATE" : {
         "message" : [
-          "The join condition has no lookup predicate that Spark can offer to table <table>. A lookup predicate is an equality `=` between a lookup column, with no cast or other expression applied to it, and an expression over the streaming side. The lookup column must have a type that stores compare as Spark does; the Javadoc of `SupportsExternalLookup.selectLookupPredicates()` lists these types. Instead of casting the lookup column, cast the streaming-side expression to its type, if every streaming-side value is exactly representable in that type."
+          "The join condition has no lookup predicate that Spark can offer to table <table>. Spark offers only the comparisons `=`, `<=>`, `<`, `<=`, `>` and `>=` between a lookup column, with no cast or other expression applied to it, and an expression over the streaming side. If the lookup column is cast to match the streaming side, casting the streaming-side expression to the lookup column's type instead keeps the join's meaning only when every streaming-side value is exactly representable in that type. Otherwise it changes which rows match, for example when a value overflows, a decimal is rounded or a TIMESTAMP becomes a DATE. Spark offers it only on lookup columns whose type a store compares as Spark does: integral types, BOOLEAN, DECIMAL, DATE, TIMESTAMP, TIMESTAMP_NTZ, BINARY, and strings with a binary collation such as UTF8_BINARY. It never offers one on FLOAT, DOUBLE, CHAR, VARCHAR, a string with another collation, a complex type or any other type."
         ]
       },
       "NO_LOOKUP_PREDICATE" : {
