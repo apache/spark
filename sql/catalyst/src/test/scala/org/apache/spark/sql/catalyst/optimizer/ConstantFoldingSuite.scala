@@ -307,6 +307,24 @@ class ConstantFoldingSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("SPARK-60820: Do not fold the size of CreateArray over an ANSI cast in a non-ANSI session") {
+    val t = LocalRelation($"s".string)
+    Seq(false, true).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        EvalMode.values.foreach { evalMode =>
+          val cast = Cast($"s", IntegerType, evalMode = evalMode)
+          val query = t.select(Size(CreateArray(Seq(cast))).as("d")).analyze
+          val expected = if (!ansiEnabled && evalMode != EvalMode.ANSI) {
+            t.select(Literal(1).as("d")).analyze
+          } else {
+            query
+          }
+          comparePlans(Optimize.execute(query), expected)
+        }
+      }
+    }
+  }
+
   test("SPARK-37907: InvokeLike support ConstantFolding") {
     val originalQuery =
       testRelation
