@@ -58,6 +58,10 @@ CONNECT:
 CORE:
   - changed-files:
     - all-globs-to-any-file: [
+        'common/utils/**/*',
+        '!common/utils/src/main/resources/error/**',
+        ]
+    - all-globs-to-any-file: [
         'core/**/*',
         '!**/*UI.scala',
         '!**/ui/**/*',
@@ -68,7 +72,6 @@ CORE:
         'common/network-common/**/*',
         'common/network-shuffle/**/*',
         'common/tags/**/*',
-        'common/utils/**/*',
         'common/utils-java/**/*',
         'python/pyspark/*.py',
         'python/pyspark/core/**/*',
