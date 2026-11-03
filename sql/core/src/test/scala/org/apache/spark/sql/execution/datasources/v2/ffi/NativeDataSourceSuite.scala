@@ -1600,8 +1600,9 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     val notAZip = new File(dir, "range-2.2.sparkpkg")
     Files.writeString(notAZip.toPath, "not a zip")
     // The message of the ZipException names no file.
-    check(notAZip, "INVALID_MANIFEST", Map("reason" ->
-      s"The package is not a valid zip file: ${intercept[ZipException](new ZipFile(notAZip))}"))
+    val notAZipReason =
+      s"The package is not a valid zip file: ${intercept[ZipException](new ZipFile(notAZip))}"
+    check(notAZip, "INVALID_MANIFEST", Map("reason" -> notAZipReason))
     val directory = new File(dir, "range-2.3.sparkpkg")
     assert(directory.mkdir())
     check(directory, "INVALID_MANIFEST", Map("reason" -> "The package is a directory."))
@@ -1627,9 +1628,13 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       session.addArtifact(Files.readAllBytes(createPackage(library, dataSources(""),
         abiVersion = 2).toPath), "range-2.6.sparkpkg")
     }
-    assert(staged.getCondition == "INVALID_NATIVE_DATA_SOURCE_PACKAGE.UNSUPPORTED_ABI_VERSION")
-    assert(staged.getMessageParameters.get("path") ==
-      Paths.get("files", "range-2.6.sparkpkg").toString)
+    checkError(
+      exception = staged,
+      condition = "INVALID_NATIVE_DATA_SOURCE_PACKAGE.UNSUPPORTED_ABI_VERSION",
+      parameters = Map(
+        "path" -> Paths.get("files", "range-2.6.sparkpkg").toString,
+        "version" -> "2",
+        "supported" -> "1"))
     assert(session.artifactManager.getNativeDataSourcePackages._1.isEmpty)
 
     // A valid package with the same file name as a rejected one can be added then.
@@ -1678,9 +1683,12 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     val rejected = intercept[SparkRuntimeException] {
       session.addArtifacts(sameName.toURI, notAZip.toURI, valid.toURI)
     }
-    assert(rejected.getCondition == "ARTIFACT_ALREADY_EXISTS")
-    assert(rejected.getSuppressed.toSeq.map(_.asInstanceOf[SparkRuntimeException].getCondition) ==
-      Seq("INVALID_NATIVE_DATA_SOURCE_PACKAGE.INVALID_MANIFEST"))
+    checkExisting(rejected)
+    assert(rejected.getSuppressed.length == 1)
+    checkError(
+      exception = rejected.getSuppressed.head.asInstanceOf[SparkRuntimeException],
+      condition = "INVALID_NATIVE_DATA_SOURCE_PACKAGE.INVALID_MANIFEST",
+      parameters = Map("path" -> notAZip.getPath, "reason" -> notAZipReason))
     checkRows(ids(), Seq(Row(0L), Row(1L), Row(2L)))
 
     // Only the file artifacts (files/) with the extension are packages, which Spark checks, and
@@ -1702,6 +1710,25 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     Files.writeString(file.toPath, "not a zip")
     session.addArtifact(file.getPath)
     assert(session.artifactManager.hasFileArtifact(file.getName))
+  }
+
+  test("add a read-only package as a writable artifact") {
+    // Spark checks a copy of the file of the user, which keeps its permissions, or on Windows
+    // its read-only attribute, and must be deletable if the package is rejected.
+    val session = spark.newSession()
+    sessions += session
+    val pkg = createZip(Utils.createTempDir(), "read_only.sparkpkg",
+      NativeDataSourcePackage.MANIFEST_NAME -> manifestJson(
+        dataSources(""), Map(NativePlatform.current -> "lib.so")).getBytes(UTF_8),
+      "lib.so" -> "lib".getBytes(UTF_8))
+    assert(pkg.setWritable(false))
+    try {
+      session.addArtifact(pkg.getPath)
+      val artifact = session.artifactManager.getNativeDataSourcePackages._1.head
+      assert(Files.isWritable(artifact.toPath))
+    } finally {
+      pkg.setWritable(true)
+    }
   }
 
   nativeTest("Java data sources take precedence") {

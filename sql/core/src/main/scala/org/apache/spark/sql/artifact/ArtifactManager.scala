@@ -316,8 +316,9 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
   /**
    * Add and prepare a staged artifact (i.e an artifact that has been rebuilt locally from bytes
    * over the wire) for use. `addLocalArtifacts` calls it for the artifacts that it adds, except for
-   * a local native data source package, which it adds through a private overload, so that the
-   * errors of its check name the file of the user.
+   * a local native data source package that Spark checks, while
+   * `spark.sql.dataSource.native.enabled` is true, which it adds through a private overload, so
+   * that the errors of its check name the file of the user.
    *
    * @param remoteRelativePath
    * @param serverLocalStagingPath

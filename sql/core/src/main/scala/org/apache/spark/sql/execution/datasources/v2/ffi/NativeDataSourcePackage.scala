@@ -236,8 +236,16 @@ object NativeDataSourcePackage extends Logging {
       file: File,
       e: IOException,
       dataSources: Seq[String] = Nil): InvalidNativeDataSourcePackage = {
-    InvalidNativeDataSourcePackage(
-      invalidManifestError(file.getPath, s"The package cannot be read: $e", e), dataSources)
+    invalidPackage(file.getPath, s"The package cannot be read: $e", dataSources, e)
+  }
+
+  /** An invalid package, which errors call `path`, whose manifest lists `dataSources`. */
+  private def invalidPackage(
+      path: String,
+      reason: String,
+      dataSources: Seq[String],
+      cause: Throwable): InvalidNativeDataSourcePackage = {
+    InvalidNativeDataSourcePackage(invalidManifestError(path, reason, cause), dataSources)
   }
 
   private def invalidManifestError(path: String, reason: String, cause: Throwable = null) = {
@@ -268,7 +276,7 @@ object NativeDataSourcePackage extends Logging {
       file: File,
       path: String): Either[InvalidNativeDataSourcePackage, NativeDataSourceManifest] = {
     def invalid(reason: String, dataSources: Seq[String] = Nil, cause: Throwable = null) = {
-      Left(InvalidNativeDataSourcePackage(invalidManifestError(path, reason, cause), dataSources))
+      Left(invalidPackage(path, reason, dataSources, cause))
     }
     if (file.isDirectory) {
       // The error of ZipFile would name the file, which can be a copy of the one at `path`.

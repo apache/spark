@@ -435,8 +435,8 @@ class ArtifactManagerSuite extends SharedSparkSession {
 
   test("Add local artifacts through the public addArtifact") {
     // A subclass that overrides addArtifact, for example to audit what a session adds, sees the
-    // local files that addLocalArtifacts adds, as it sees the in-memory ones, other than a native
-    // data source package, which goes through a private overload.
+    // local files that addLocalArtifacts adds, other than a native data source package that Spark
+    // checks, which goes through a private overload, as it sees the in-memory ones.
     val added = ArrayBuffer.empty[Path]
     val manager = new ArtifactManager(spark.newSession()) {
       override def addArtifact(

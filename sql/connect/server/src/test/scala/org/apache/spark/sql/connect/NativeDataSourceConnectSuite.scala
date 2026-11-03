@@ -120,7 +120,11 @@ class NativeDataSourceConnectSuite extends SparkConnectServerTest {
         session.addArtifacts(other.toURI, valid.toURI)
       }
       assert(
-        rejected.getMessage.contains("[INVALID_NATIVE_DATA_SOURCE_PACKAGE.INVALID_MANIFEST]"))
+        rejected.getMessage.contains("[INVALID_NATIVE_DATA_SOURCE_PACKAGE.INVALID_MANIFEST]"),
+        rejected)
+      assert(
+        rejected.getMessage.contains(s"package files${File.separator}${other.getName}:"),
+        rejected)
       // The valid package has the file name of the rejected one, which the session can add then.
       val df = session.read.format("native_range").option("end", "3").load()
       assert(df.select("id").collect().map(_.getLong(0)).sorted.toSeq == Seq(0L, 1L, 2L))
