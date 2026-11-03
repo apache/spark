@@ -493,11 +493,11 @@ class CollationTypePrecedenceSuite extends SharedSparkSession {
   testFixedPointAndSinglePass("variant_get with a collated target type has implicit strength") {
     val tableName = "variant_get_tbl"
     withTable(tableName) {
-      sql(s"CREATE TABLE $tableName (id INT, c STRING COLLATE UNICODE_CI, v VARIANT) " +
+      sql(s"CREATE TABLE $tableName (id INT, c STRING COLLATE UNICODE_CI, p STRING, v VARIANT) " +
         s"USING $dataSource")
       sql(
         s"""
-           |INSERT INTO $tableName SELECT id, 'OPEN', parse_json(j) FROM VALUES
+           |INSERT INTO $tableName SELECT id, 'OPEN', 'OPEN', parse_json(j) FROM VALUES
            |  (1, '{"s": "Open", "a": ["Open"]}'),
            |  (2, '{"s": "open", "a": ["open"]}'),
            |  (3, '{"s": "closed", "a": ["closed"]}') AS t(id, j)
@@ -505,6 +505,8 @@ class CollationTypePrecedenceSuite extends SharedSparkSession {
 
       Seq("variant_get", "try_variant_get").foreach { fn =>
         val lcase = s"$fn(v, '$$.s', 'STRING COLLATE UTF8_LCASE')"
+        val lcaseMap = s"$fn(v, '$$', 'MAP<STRING, STRING COLLATE UTF8_LCASE>')"
+        val mixedStruct = s"$fn(v, '$$', 'STRUCT<s: STRING, t: STRING COLLATE UTF8_LCASE>')"
         checkAnswer(
           sql(s"SELECT DISTINCT COLLATION($lcase || 'a') FROM $tableName"),
           Row(UTF8_LCASE_COLLATION_NAME))
@@ -514,14 +516,28 @@ class CollationTypePrecedenceSuite extends SharedSparkSession {
           s"$lcase IN ('OPEN', 'x')",
           s"startswith($lcase, 'OP')",
           s"array_contains($fn(v, '$$.a', 'ARRAY<STRING COLLATE UTF8_LCASE>'), 'OPEN')",
-          s"$fn(v, '$$', 'STRUCT<s: STRING COLLATE UTF8_LCASE>').s = 'OPEN'").foreach { cond =>
+          s"$fn(v, '$$', 'STRUCT<s: STRING COLLATE UTF8_LCASE>').s = 'OPEN'",
+          s"$lcaseMap['s'] = 'OPEN'",
+          s"element_at($lcaseMap, 's') = 'OPEN'").foreach { cond =>
           checkAnswer(sql(s"SELECT id FROM $tableName WHERE $cond"), Seq(Row(1), Row(2)))
         }
+
+        // The UTF8_BINARY field of a partly collated struct stays UTF8_BINARY.
+        checkAnswer(sql(s"SELECT id FROM $tableName WHERE $mixedStruct.s = 'OPEN'"), Seq.empty)
 
         checkAnswer(
           sql(s"SELECT id FROM $tableName WHERE $lcase = 'Open' COLLATE UTF8_BINARY"),
           Seq(Row(1)))
-        assertIndeterminateCollation(sql(s"SELECT $lcase = c FROM $tableName"))
+
+        // Like a column of the target type, it conflicts with other implicit collations.
+        Seq(
+          s"$lcase = c",
+          s"$lcase = p",
+          s"$lcase IN (p, 'x')",
+          s"$fn(v, '$$.s', 'STRING COLLATE UTF8_BINARY') = c",
+          s"$mixedStruct.s = c").foreach { cond =>
+          assertIndeterminateCollation(sql(s"SELECT id FROM $tableName WHERE $cond"))
+        }
 
         // A plain STRING target keeps default strength.
         checkAnswer(
