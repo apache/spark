@@ -3143,6 +3143,20 @@ class WholeStageCodegenSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-60377: a filter does not evaluate a later expression check after FALSE") {
+    withNullConjunctTable(Int.MaxValue) {
+      val query = "SELECT a FROM t WHERE coalesce(b, cast(s AS INT)) < 0 AND " +
+        "cast(s AS INT) IS NOT NULL"
+      Seq(true, false).foreach { cse =>
+        withNullConjunctConfs(
+            SQLConf.ANSI_ENABLED.key -> "true",
+            SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> cse.toString) { _ =>
+          checkAnswer(sql(query), Seq.empty)
+        }
+      }
+    }
+  }
+
   test("SPARK-60315: an aggregate FILTER evaluates the conjuncts after a NULL one") {
     withNullConjunctTable(Int.MaxValue) {
       val query = "SELECT count(a) FILTER (WHERE NOT (a > 0 AND b > 0) AND y + 1 > 0) FROM t"
