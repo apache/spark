@@ -20,8 +20,9 @@ package org.apache.spark.sql.execution.datasources
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
+import java.util.regex.Pattern
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -89,6 +90,27 @@ trait TextArchiveReadBase extends QueryTest with SharedSparkSession {
       withTempDir { dir =>
         entries.foreach { case (n, b) => Files.write(new File(dir, n).toPath, b) }
         checkAnswer(fromArchive, read(dir.getCanonicalPath).collect().toSeq)
+      }
+    }
+  }
+
+  Seq(true, false).foreach { ignoreCorrupt =>
+    test(s"decompression is rejected for an archive (ignoreCorruptFiles=$ignoreCorrupt)") {
+      archiveExtensions.foreach { ext =>
+        withArchiveFile(ext) { archive =>
+          writeArchive(archive, Seq("a.txt" -> textBytes("line1\n")))
+          // Raised while planning the scan, so `ignoreCorruptFiles` cannot skip the archive.
+          withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> ignoreCorrupt.toString) {
+            checkErrorMatchPVals(
+              exception = intercept[SparkUnsupportedOperationException] {
+                read(archive.getCanonicalPath, Map("decompression" -> "gzip")).collect()
+              },
+              condition = "UNSUPPORTED_FEATURE.DECOMPRESSION_CODEC_FOR_ARCHIVE",
+              parameters = Map(
+                "option" -> "\"decompression\"",
+                "path" -> s".*${Pattern.quote(archive.getName)}"))
+          }
+        }
       }
     }
   }
