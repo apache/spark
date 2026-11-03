@@ -25,7 +25,9 @@ import org.apache.spark.sql.internal.SQLConf
  * `Decimal.MAX_LONG_DIGITS`, so the buffer lives in the variable-length region of an UnsafeRow.
  *
  * It covers `sum` and `avg` of a decimal(15,2) column (buffer decimal(25,2)), the TPC-H q1
- * expression `sum(p * (1 - d) * (1 + t))` over decimal(15,2) columns, and a sum over a
+ * expression `sum(p * (1 - d) * (1 + t))` over decimal(15,2) columns, `sum(a * b * c)` over
+ * decimal(20,2) columns whose values fit a Long (decimal multiplication goes through
+ * `toJavaBigDecimal`, so this measures that cost for compact values), and a sum over a
  * decimal(28,0) column whose values are all >= 10^18, so the unscaled values never fit the
  * compact (Long) representation. Each case runs with ANSI mode off and on. The input table is
  * cached up front so that the measured time is dominated by the aggregation.
@@ -49,6 +51,7 @@ object DecimalArithmeticBenchmark extends SqlBasedBenchmark {
     ("sum(decimal(15,2))", "sum(p)"),
     ("avg(decimal(15,2))", "avg(p)"),
     ("TPC-H q1 sum(p * (1 - d) * (1 + t))", "sum(p * (1 - d) * (1 + t))"),
+    ("sum(a * b * c), decimal(20,2) inputs", "sum(a * b * c)"),
     ("sum(decimal(28,0)), all values >= 10^18", "sum(big)")
   )
 
@@ -59,6 +62,13 @@ object DecimalArithmeticBenchmark extends SqlBasedBenchmark {
         "cast(rand(1) * 99999 + 900 as decimal(15, 2)) as p",
         "cast(rand(2) * 0.1 as decimal(15, 2)) as d",
         "cast(rand(3) * 0.08 as decimal(15, 2)) as t",
+        // a * b * c is decimal(38,6) and so is its sum buffer. Values of at most 100 keep each
+        // product at most 10^6 (unscaled 10^12). With the default 10M rows, a group of 10^4
+        // rows sums to at most unscaled 10^16, so the buffer is read back compact (Long-backed)
+        // and the inputs and the buffer each pay one toJavaBigDecimal per row.
+        "cast(rand(5) * 100 as decimal(20, 2)) as a",
+        "cast(rand(6) * 100 as decimal(20, 2)) as b",
+        "cast(rand(7) * 100 as decimal(20, 2)) as c",
         "cast(rand(4) * 1e18 + 1e18 as decimal(28, 0)) as big")
       .coalesce(1)
       .createOrReplaceTempView("t")
