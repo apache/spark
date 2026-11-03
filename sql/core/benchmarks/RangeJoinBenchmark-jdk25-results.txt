@@ -1,0 +1,390 @@
+================================================================================================
+Range Join Benchmark
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+point-in-range inner, build ranges (probe=400000, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                               3641           3660          27          0.1        9102.4       1.0X
+Broadcast range join                                                       78             91          12          5.1         195.7      46.5X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+point-in-range inner, build points (probe=400000, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                               4342           4393          71          0.0     1085607.3       1.0X
+Broadcast range join                                                      238            275          32          0.0       59517.9      18.2X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+point-in-range left outer (probe=400000, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                      3832           3833           2          0.1        9579.5       1.0X
+Broadcast range join                                              73             79           4          5.5         182.9      52.4X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+point-in-range right outer (probe=400000, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                       3833           3840          10          0.1        9581.4       1.0X
+Broadcast range join                                               72             81           4          5.6         179.8      53.3X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+point-in-range left semi (probe=400000, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                     1652           1665          18          0.2        4130.6       1.0X
+Broadcast range join                                             57             63           4          7.0         142.2      29.0X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+point-in-range left anti (probe=400000, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                     3381           3408          38          0.1        8452.6       1.0X
+Broadcast range join                                             36             40           4         11.1          90.4      93.5X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+point-in-range inner, tiny probe (probe=1, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                          14             18           3          0.3        3584.3       1.0X
+Broadcast range join                                                14             17           4          0.3        3505.3       1.0X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+point-in-range inner, tiny probe (probe=10, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                           13             16           4          0.3        3220.7       1.0X
+Broadcast range join                                                 13             15           3          0.3        3261.4       1.0X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+point-in-range inner, tiny probe (probe=100, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                            13             15           3          0.3        3229.8       1.0X
+Broadcast range join                                                  12             14           3          0.3        3079.7       1.0X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+point-in-range inner, tiny probe (probe=1000, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                             21             23           3          0.2        5196.7       1.0X
+Broadcast range join                                                   12             14           3          0.3        3048.8       1.7X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+point-in-range inner, tiny probe (probe=5000, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                             59             63           3          0.1       14645.7       1.0X
+Broadcast range join                                                   13             15           3          0.3        3131.7       4.7X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+point-in-range inner, tiny probe (probe=10000, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                             102            106           3          0.0       25538.8       1.0X
+Broadcast range join                                                    13             15           3          0.3        3195.2       8.0X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+point-in-range inner, full overlap (probe=2000, ranges=1000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                               51             53           2          0.0       25442.0       1.0X
+Broadcast range join                                                     52             54           2          0.0       26154.9       1.0X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+point-in-range inner, large build (probe=10000, ranges=1000000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                               63595          69877        8883          0.0     6359495.1       1.0X
+Broadcast range join                                                       649            758         106          0.0       64950.0      97.9X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+interval overlap inner, build right (probe=400000, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                                3380           3608         322          0.1        8450.2       1.0X
+Broadcast range join                                                        35             45           8         11.3          88.4      95.6X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+interval overlap inner, build left (probe=400000, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                               5015           6117        1558          0.0     1253861.8       1.0X
+Broadcast range join                                                      225            256          39          0.0       56211.2      22.3X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+interval overlap left outer (probe=400000, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                        3755           3791          50          0.1        9388.4       1.0X
+Broadcast range join                                                45             55           8          8.9         112.0      83.8X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+interval overlap right outer (probe=400000, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                         3821           3830          13          0.1        9552.1       1.0X
+Broadcast range join                                                 46             55           7          8.8         114.3      83.6X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+interval overlap left semi (probe=400000, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                       3395           3619         317          0.1        8488.1       1.0X
+Broadcast range join                                               31             37           5         12.9          77.8     109.1X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+interval overlap left anti (probe=400000, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                       3486           3489           5          0.1        8715.0       1.0X
+Broadcast range join                                               31             33           2         12.8          78.2     111.4X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+interval overlap inner, wide (probe=100000, ranges=2000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                          493            498           5          0.2        4927.3       1.0X
+Broadcast range join                                                 17             19           3          5.7         174.6      28.2X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+partial < inner, build upper (probe=400000, bounds=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                         2329           2360          44          0.2        5822.2       1.0X
+Broadcast range join                                                 55             60           4          7.3         137.5      42.3X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+partial < inner, build lower (probe=400000, bounds=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                         4321           4457         192          0.0     1080197.7       1.0X
+Broadcast range join                                                275            317          38          0.0       68747.4      15.7X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+partial < left outer (probe=400000, bounds=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                 3099           3106          10          0.1        7747.6       1.0X
+Broadcast range join                                         59             71           7          6.8         147.3      52.6X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+partial < right outer (probe=400000, bounds=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                  2972           2973           1          0.1        7431.2       1.0X
+Broadcast range join                                          57             68           9          7.0         142.0      52.3X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+partial < left semi (probe=400000, bounds=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                2223           2226           3          0.2        5558.7       1.0X
+Broadcast range join                                        20             23           3         19.9          50.3     110.5X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+partial < left anti (probe=400000, bounds=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                2487           2498          16          0.2        6216.9       1.0X
+Broadcast range join                                        19             21           3         20.5          48.7     127.6X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+partial < inner, median bound (probe=10000, bounds=1000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                          114            120           5          0.1       11409.5       1.0X
+Broadcast range join                                                105            109           3          0.1       10536.0       1.1X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+partial < inner, tiny probe (probe=1, bounds=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                     10             11           3          0.4        2416.8       1.0X
+Broadcast range join                                           10             11           3          0.4        2473.7       1.0X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+partial < inner, tiny probe (probe=10, bounds=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                      10             12           3          0.4        2526.0       1.0X
+Broadcast range join                                            10             12           3          0.4        2557.9       1.0X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+partial < inner, tiny probe (probe=100, bounds=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                       14             15           3          0.3        3512.0       1.0X
+Broadcast range join                                             14             16           3          0.3        3505.4       1.0X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+partial < inner, tiny probe (probe=1000, bounds=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                        58             63           6          0.1       14424.0       1.0X
+Broadcast range join                                              54             57           2          0.1       13613.5       1.1X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+partial < inner, tiny probe (probe=5000, bounds=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                       252            268          15          0.0       62953.1       1.0X
+Broadcast range join                                             234            237           3          0.0       58534.3       1.1X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+partial < inner, tiny probe (probe=10000, bounds=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                        498            506           8          0.0      124541.6       1.0X
+Broadcast range join                                              450            460          10          0.0      112400.2       1.1X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+partial > inner, build lower (probe=400000, bounds=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                         2312           2323          16          0.2        5778.8       1.0X
+Broadcast range join                                                 54             57           2          7.4         136.0      42.5X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+partial > inner, build upper (probe=400000, bounds=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                         4307           4660         499          0.0     1076771.6       1.0X
+Broadcast range join                                                269            307          47          0.0       67319.5      16.0X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+partial > left outer (probe=400000, bounds=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                 3019           3032          18          0.1        7548.1       1.0X
+Broadcast range join                                         55             57           2          7.3         137.3      55.0X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+partial > right outer (probe=400000, bounds=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                  2950           2964          20          0.1        7374.7       1.0X
+Broadcast range join                                          57             60           3          7.0         143.1      51.6X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+partial > left semi (probe=400000, bounds=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                 249            264          13          1.6         622.9       1.0X
+Broadcast range join                                        20             21           3         20.1          49.6      12.6X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+partial > left anti (probe=400000, bounds=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                2510           2551          58          0.2        6274.4       1.0X
+Broadcast range join                                        19             21           3         20.6          48.6     129.2X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+partial > inner, median bound (probe=10000, bounds=1000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                          113            116           2          0.1       11327.1       1.0X
+Broadcast range join                                                104            107           2          0.1       10368.2       1.1X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+point-in-range inner, date (probe=400000, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                       3265           3275          15          0.1        8161.6       1.0X
+Broadcast range join                                               70             73           3          5.7         175.2      46.6X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+point-in-range inner, timestamp (probe=400000, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                            3488           3489           2          0.1        8719.4       1.0X
+Broadcast range join                                                    58             60           2          6.9         145.3      60.0X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+point-in-range inner, decimal (probe=400000, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                         11472          11544         102          0.0       28680.1       1.0X
+Broadcast range join                                                  75             78           2          5.3         187.3     153.1X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+point-in-range inner, collated string (probe=400000, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                                187357         187484         180          0.0      468391.5       1.0X
+Broadcast range join                                                        1224           1225           2          0.3        3059.1     153.1X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+interval overlap inner, staggered 5% overlap (probe=10000, ranges=2000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                                          66             68           4          0.2        6559.7       1.0X
+Broadcast range join                                                                58             60           3          0.2        5771.2       1.1X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+interval overlap inner, staggered 10% overlap (probe=10000, ranges=2000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                                           81             83           2          0.1        8086.1       1.0X
+Broadcast range join                                                                 99            102           1          0.1        9943.2       0.8X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+interval overlap inner, staggered 25% overlap (probe=10000, ranges=2000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                                          140            146           6          0.1       13993.9       1.0X
+Broadcast range join                                                                201            205           2          0.0       20102.5       0.7X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+interval overlap inner, staggered 50% overlap (probe=10000, ranges=2000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                                          224            226           2          0.0       22396.6       1.0X
+Broadcast range join                                                                328            335          10          0.0       32757.2       0.7X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+interval overlap inner, staggered 90% overlap (probe=10000, ranges=2000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                                          418            427           8          0.0       41818.8       1.0X
+Broadcast range join                                                                535            539           3          0.0       53466.8       0.8X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+interval overlap inner, staggered 5% overlap on double (probe=10000, ranges=2000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                                                    78             84           8          0.1        7764.8       1.0X
+Broadcast range join                                                                          86             91           5          0.1        8553.3       0.9X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+interval overlap inner, staggered 10% overlap on double (probe=10000, ranges=2000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                                                     83             89          11          0.1        8283.7       1.0X
+Broadcast range join                                                                          135            143           8          0.1       13464.8       0.6X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+interval overlap inner, staggered 25% overlap on double (probe=10000, ranges=2000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                                                    135            139           4          0.1       13522.4       1.0X
+Broadcast range join                                                                          258            259           1          0.0       25766.0       0.5X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+interval overlap inner, staggered 50% overlap on double (probe=10000, ranges=2000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                                                    228            230           2          0.0       22792.7       1.0X
+Broadcast range join                                                                          403            405           3          0.0       40308.7       0.6X
+
+OpenJDK 64-Bit Server VM 25.0.5+8-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) 6973P-C
+interval overlap inner, staggered 90% overlap on double (probe=10000, ranges=2000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                                                    411            425           9          0.0       41051.3       1.0X
+Broadcast range join                                                                          679            695          25          0.0       67850.7       0.6X
+
+

@@ -18,14 +18,15 @@
 package org.apache.spark.sql.execution.bucketing
 
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, GreaterThanOrEqual, LessThanOrEqual}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
+import org.apache.spark.sql.catalyst.planning.PointInRangeJoin
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.execution.{BinaryExecNode, FileSourceScanExec, SparkPlan}
+import org.apache.spark.sql.execution.{BinaryExecNode, FileSourceScanExec, LocalTableScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InMemoryFileIndex, PartitionSpec}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastRangeJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.IntegerType
@@ -259,6 +260,60 @@ class CoalesceBucketsInJoinSuite extends SharedSparkSession {
         rightRelation = lRel,
         joinOperator = SHUFFLED_HASH_JOIN,
         shjBuildSide = Some(BuildRight)))
+    }
+  }
+
+  test("bucket coalescing should see through a broadcast range join on the streamed side") {
+    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
+      val bucketedCols = Seq(
+        AttributeReference("i", IntegerType)(),
+        AttributeReference("p", IntegerType)())
+      val boundCols = Seq(
+        AttributeReference("lo", IntegerType)(),
+        AttributeReference("hi", IntegerType)())
+      val point = bucketedCols(1)
+      val lo = boundCols(0)
+      val hi = boundCols(1)
+      val condition = And(GreaterThanOrEqual(point, lo), LessThanOrEqual(point, hi))
+
+      // `i` is the only bucketing column, so the equi-join keys match the
+      // bucketed output partitioning of both scans.
+      def newBucketedScan(cols: Seq[Attribute], numBuckets: Int): FileSourceScanExec = {
+        val relation = HadoopFsRelation(
+          location = new InMemoryFileIndex(spark, Nil, Map.empty, None),
+          partitionSchema = PartitionSpec.emptySpec.partitionColumns,
+          dataSchema = DataTypeUtils.fromAttributes(cols),
+          bucketSpec = Some(BucketSpec(numBuckets, Seq("i"), Nil)),
+          fileFormat = new ParquetFileFormat(),
+          options = Map.empty)(spark)
+        FileSourceScanExec(relation, None, cols, relation.dataSchema, Nil, None, None, Nil, None)
+      }
+
+      // Both range-join build sides put the bucketed scan on the streamed side,
+      // the side looked through, as for broadcast hash and nested loop joins.
+      val rangeJoins = Seq(
+        BroadcastRangeJoinExec(
+          newBucketedScan(bucketedCols, 4),
+          LocalTableScanExec(boundCols, Nil, None),
+          BuildRight, Inner, Seq(point), Seq(lo, hi), Some(condition), PointInRangeJoin),
+        BroadcastRangeJoinExec(
+          LocalTableScanExec(boundCols, Nil, None),
+          newBucketedScan(bucketedCols, 4),
+          BuildLeft, Inner, Seq(lo, hi), Seq(point), Some(condition), PointInRangeJoin))
+
+      rangeJoins.foreach { rangeJoin =>
+        val join = SortMergeJoinExec(
+          Seq(bucketedCols.head), Seq(bucketedCols.head), Inner, None,
+          rangeJoin, newBucketedScan(Seq(bucketedCols.head), 8))
+        val plan = CoalesceBucketsInJoin(join)
+        val coalesced = plan.collect {
+          case f: FileSourceScanExec if f.optionalNumCoalescedBuckets.nonEmpty =>
+            f.optionalNumCoalescedBuckets.get
+        }
+        // The 8-bucket scan on the right coalesces to 4; the 4-bucket scan
+        // behind the range join keeps its own bucket count.
+        assert(coalesced == Seq(4))
+      }
     }
   }
 

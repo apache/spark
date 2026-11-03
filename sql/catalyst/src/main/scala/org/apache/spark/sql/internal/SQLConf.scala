@@ -1254,6 +1254,25 @@ object SQLConf {
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("10MB")
 
+  val BROADCAST_RANGE_JOIN_ENABLED = buildConf("spark.sql.join.broadcastRangeJoin.enabled")
+    .internal()
+    .doc("When true, a non-equi join is planned as a broadcast range join instead of a broadcast " +
+      "nested loop join when it tests whether a value falls inside a range, whether two ranges " +
+      "overlap, or compares the two sides once with `<`, `<=`, `>`, or `>=`. Each range key must " +
+      "be deterministic, of boolean, integer, floating-point, decimal, string, binary, date, or " +
+      "timestamp type, and drawn entirely from one side. The broadcast side is sorted and " +
+      "indexed once, which evaluates the range key of every broadcast row. When probing, " +
+      "each row of the other side evaluates its range key and reads only the part of the index " +
+      "that can match it. Keys are evaluated before any pair is tested, so a key expression that " +
+      "throws an error can fail a query that a nested loop join would have completed. The range " +
+      "join is much faster when that part is small, somewhat slower when it covers most of the " +
+      "broadcast side. The cost of building the index grows with the size of the broadcast side " +
+      "and can outweigh the scans the range join saves. This is disabled by default.")
+    .version("4.4.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .booleanConf
+    .createWithDefault(false)
+
   val SHUFFLE_HASH_JOIN_FACTOR =
     buildConfFromConfigFile[Int]("spark.sql.shuffledHashJoinFactor")
       .checkValue(_ >= 1, "The shuffle hash join factor must be at least 1.")
@@ -9835,6 +9854,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(LEGACY_FILTER_SHORT_CIRCUIT_ON_NULL_CONJUNCT)
 
   def autoBroadcastJoinThreshold: Long = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
+
+  def broadcastRangeJoinEnabled: Boolean = getConf(BROADCAST_RANGE_JOIN_ENABLED)
 
   def limitInitialNumPartitions: Int = getConf(LIMIT_INITIAL_NUM_PARTITIONS)
 

@@ -42,6 +42,7 @@ import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{LogicalRelation, WriteFiles, WriteFilesExec}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, StreamingDataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.exchange.{REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.joins.BroadcastRangeJoinExec
 import org.apache.spark.sql.execution.python._
 import org.apache.spark.sql.execution.python.streaming.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPySparkExec}
 import org.apache.spark.sql.execution.streaming.operators.stateful.{EventTimeWatermarkExec, StreamingDeduplicateExec, StreamingDeduplicateWithinWatermarkExec, StreamingGlobalLimitExec, StreamingLocalLimitExec, UpdateEventTimeColumnExec}
@@ -184,6 +185,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * - Shuffle sort merge join (SMJ):
    *     Only supported for equi-joins and the join keys have to be sortable.
    *     Supported for all join types.
+   *
+   * - Broadcast range join (BRJ):
+   *     Supports a point-in-range predicate, an interval overlap, or one cross-side inequality.
+   *     Inner may broadcast either side. Left outer, left semi, and left anti
+   *     broadcast the right side. Right outer broadcasts the left side.
+   *     Full outer is not supported.
    *
    * - Broadcast nested loop join (BNLJ):
    *     Supports both equi-joins and non-equi-joins.
@@ -351,22 +358,33 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         Seq(joins.BroadcastHashJoinExec(leftKeys, rightKeys, LeftAnti, BuildRight,
           None, planLater(j.left), planLater(j.right), isNullAwareAntiJoin = true))
 
-      // If it is not an equi-join, we first look at the join hints w.r.t. the following order:
-      //   1. broadcast hint: pick broadcast nested loop join. If both sides have the broadcast
-      //      hints, choose the smaller side (based on stats) to broadcast for inner and full joins,
-      //      choose the left side for right join, and choose right side for left join.
-      //   2. shuffle replicate NL hint: pick cartesian product if join type is inner like.
+      // If it is not an equi-join, a broadcast hint is considered first:
+      //   1. When range join is enabled and the condition is a range predicate,
+      //      pick a broadcast range join if the hinted build side is one
+      //      BroadcastRangeJoinExec supports. Both sides hinted: the smaller
+      //      side, when that side is supported. An unsupported hinted side
+      //      falls through.
+      //   2. Otherwise a broadcast hint picks broadcast nested loop join. Both
+      //      sides hinted: the smaller side for inner and full joins, the left
+      //      side for a right join, and the right side for a left join.
+      //   3. A shuffle replicate NL hint picks cartesian product for an
+      //      inner-like join.
       //
-      // If there is no hint or the hints are not applicable, we follow these rules one by one:
-      //   1. Pick broadcast nested loop join if one side is small enough to broadcast. If only left
-      //      side is broadcast-able and it's left join, or only right side is broadcast-able and
-      //      it's right join, we skip this rule. If both sides are small, broadcasts the smaller
-      //      side for inner and full joins, broadcasts the left side for right join, and broadcasts
-      //      right side for left join.
-      //   2. Pick cartesian product if join type is inner like.
-      //   3. Pick broadcast nested loop join as the final solution. It may OOM but we don't have
-      //      other choice. It broadcasts the smaller side for inner and full joins, broadcasts the
-      //      left side for right join, and broadcasts right side for left join.
+      // If there is no hint, or none of those hints apply:
+      //   1. When range join is enabled and a side is small enough to broadcast,
+      //      pick a broadcast range join on a side BroadcastRangeJoinExec
+      //      supports. Both sides small: the smaller side when it is supported.
+      //      The preserved side of an outer, semi, or anti join is not built.
+      //   2. Pick broadcast nested loop join if one side is small enough to
+      //      broadcast. If only the left side is broadcastable and it is a left
+      //      join, or only the right side is broadcastable and it is a right
+      //      join, skip this rule. Both sides small: the smaller side for inner
+      //      and full joins, the left side for a right join, and the right side
+      //      for a left join.
+      //   3. Pick cartesian product if the join type is inner-like.
+      //   4. Pick broadcast nested loop join as the final solution. It may OOM.
+      //      It broadcasts the smaller side for inner and full joins, the left
+      //      side for a right join, and the right side for a left join.
       case logical.Join(left, right, joinType, condition, hint) =>
         checkHintNonEquiJoin(hint)
         val desiredBuildSide = if (joinType.isInstanceOf[InnerLike] || joinType == FullOuter) {
@@ -379,30 +397,44 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           if (canBuildBroadcastLeft(joinType)) BuildLeft else BuildRight
         }
 
-        def createBroadcastNLJoin(onlyLookingAtHint: Boolean) = {
-          val buildLeft = if (onlyLookingAtHint) {
-            hintToBroadcastLeft(hint)
-          } else {
-            canBroadcastBySize(left, conf) && !hintToNotBroadcastAndReplicateLeft(hint)
+        /**
+         * Which side to broadcast. A hint-only pass honors a BROADCAST hint.
+         * Otherwise a side qualifies when it is small enough and is not marked
+         * NO_BROADCAST_AND_REPLICATION. `allowed` drops a side this operator
+         * cannot build. Both sides qualify: `desiredBuildSide`, which is the
+         * smaller side for inner-like and full outer joins and otherwise the
+         * join type's preferred side.
+         */
+        def broadcastSide(
+            onlyLookingAtHint: Boolean,
+            allowed: BuildSide => Boolean): Option[BuildSide] = {
+          def qualifies(
+              plan: LogicalPlan,
+              broadcastHint: Boolean,
+              blocked: Boolean): Boolean = {
+            if (onlyLookingAtHint) {
+              broadcastHint
+            } else {
+              canBroadcastBySize(plan, conf) && !blocked
+            }
           }
-
-          val buildRight = if (onlyLookingAtHint) {
-            hintToBroadcastRight(hint)
-          } else {
-            canBroadcastBySize(right, conf) && !hintToNotBroadcastAndReplicateRight(hint)
-          }
-
-          val maybeBuildSide = if (buildLeft && buildRight) {
+          val canBuildLeft = qualifies(left, hintToBroadcastLeft(hint),
+            hintToNotBroadcastAndReplicateLeft(hint)) && allowed(BuildLeft)
+          val canBuildRight = qualifies(right, hintToBroadcastRight(hint),
+            hintToNotBroadcastAndReplicateRight(hint)) && allowed(BuildRight)
+          if (canBuildLeft && canBuildRight) {
             Some(desiredBuildSide)
-          } else if (buildLeft) {
+          } else if (canBuildLeft) {
             Some(BuildLeft)
-          } else if (buildRight) {
+          } else if (canBuildRight) {
             Some(BuildRight)
           } else {
             None
           }
+        }
 
-          maybeBuildSide.map { buildSide =>
+        def createBroadcastNLJoin(onlyLookingAtHint: Boolean) = {
+          broadcastSide(onlyLookingAtHint, _ => true).map { buildSide =>
             Seq(joins.BroadcastNestedLoopJoinExec(
               planLater(left), planLater(right), buildSide, joinType, condition))
           }
@@ -416,8 +448,26 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           }
         }
 
+        def createRangeJoin(onlyLookingAtHint: Boolean) = {
+          if (conf.broadcastRangeJoinEnabled) {
+            plan match {
+              case ExtractRangeJoinKeys(_, leftKeys, rightKeys, rangeJoinKind) =>
+                val allowed = BroadcastRangeJoinExec.supports(joinType, _: BuildSide)
+                broadcastSide(onlyLookingAtHint, allowed).map { buildSide =>
+                  Seq(BroadcastRangeJoinExec(
+                    planLater(left), planLater(right), buildSide, joinType,
+                    leftKeys, rightKeys, condition, rangeJoinKind))
+                }
+              case _ => None
+            }
+          } else {
+            None
+          }
+        }
+
         def createJoinWithoutHint() = {
-          createBroadcastNLJoin(false)
+          createRangeJoin(onlyLookingAtHint = false)
+            .orElse(createBroadcastNLJoin(false))
             .orElse(createCartesianProduct())
             .getOrElse {
               // This join could be very slow or OOM
@@ -433,7 +483,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         if (hint.isEmpty) {
           createJoinWithoutHint()
         } else {
-          createBroadcastNLJoin(true)
+          createRangeJoin(onlyLookingAtHint = true)
+            .orElse(createBroadcastNLJoin(true))
             .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
             .getOrElse(createJoinWithoutHint())
         }
