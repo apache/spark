@@ -71,7 +71,7 @@ case class BatchScanExec(
 
   override def scan: Scan = if (plannedScan == null) null else plannedScan.scan
 
-  @transient lazy val batch: Batch = if (scan == null) null else plannedScan.batch
+  def batch: Batch = if (scan == null) null else plannedScan.batch
 
   override protected lazy val sparkMetrics: Map[String, SQLMetric] = {
     val name = "number of output rows"
@@ -112,7 +112,7 @@ case class BatchScanExec(
   @transient lazy val prunedKeyGroupedPartitioning: Option[Seq[Expression]] =
     keyGroupedPartitioning.map(_.filter(_.references.subsetOf(outputSet)))
 
-  @transient override lazy val inputPartitions: Seq[InputPartition] = plannedScan.inputPartitions
+  override def inputPartitions: Seq[InputPartition] = plannedScan.inputPartitions
 
   // Visible for testing. Runtime filtering resolves the scan's columns by name, which the checked
   // column must not take part in.
@@ -189,8 +189,10 @@ case class BatchScanExec(
  * A `Scan`, with the `Batch` and the input partitions a [[BatchScanExec]] plans from it once, when
  * a node first asks for them. The copies later rules make of the node share it, so they read the
  * partitions the first node planned, with a reader factory from the `Batch` that planned them.
- * They have to be the planned ones, because the `Scan` can be shared with another node whose
- * runtime filter prunes it first, e.g. the build side of a DPP subquery (SPARK-60752).
+ * The partitions have to be the planned ones, because the `Scan` can be shared with another node
+ * whose runtime filter prunes it first, e.g. the build side of a DPP subquery (SPARK-60752). A
+ * pushed runtime filter replans them from a new `Batch`, but keeps the planned `Batch`'s reader
+ * factory.
  */
 final class PlannedScan(val scan: Scan) {
   lazy val batch: Batch = scan.toBatch
