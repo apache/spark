@@ -704,13 +704,11 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     if (!session.sessionState.conf.getConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING)) {
       // Allowing changing cached plan output partitioning might lead to regression as it introduces
       // extra shuffle
-      disableConfigs =
-        disableConfigs :+ SQLConf.ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS
-      SparkSession.getOrCloneSessionWithConfigsOff(session, disableConfigs,
-        Seq(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED))
-    } else {
-      SparkSession.getOrCloneSessionWithConfigsOff(session, disableConfigs)
+      disableConfigs ++= Seq(
+        SQLConf.ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS,
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED)
     }
+    SparkSession.getOrCloneSessionWithConfigsOff(session, disableConfigs)
   }
 }
 
