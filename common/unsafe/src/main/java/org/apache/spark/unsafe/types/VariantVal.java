@@ -41,36 +41,17 @@ import java.util.Arrays;
  * and {@link org.apache.spark.sql.catalyst.expressions.UnsafeArrayData} is: the fixed-size part is
  * a long value "offsetAndSize". The upper 32 bits is the offset that points to the start position
  * of the actual binary content. The lower 32 bits is the total length of the binary content. The
- * binary content contains: 4 bytes representing the length of {@link VariantVal#value}, 1 flags
- * byte (see {@link VariantVal#CANONICAL_FLAG}), content of {@link VariantVal#value}, content of
- * {@link VariantVal#metadata}. This is an internal and transient format and can be modified at any
- * time.
+ * binary content contains: 4 bytes representing the length of {@link VariantVal#value}, content of
+ * {@link VariantVal#value}, content of {@link VariantVal#metadata}. This is an internal and
+ * transient format and can be modified at any time.
  */
 public class VariantVal implements Serializable {
-  /** Size of the header before the value bytes in the UnsafeRow binary content: length + flags. */
-  public static final int UNSAFE_ROW_HEADER_SIZE = 5;
-  /** Bit of the flags byte that records {@link VariantVal#canonical}. */
-  public static final byte CANONICAL_FLAG = 0x1;
-
   protected final byte[] value;
   protected final byte[] metadata;
-  /**
-   * Whether `value` and `metadata` are known to be in canonical form, so that logically equal
-   * variants have identical bytes. The canonicalization expression sets it so that later
-   * canonicalizations of the same value in the query can return immediately. It survives UnsafeRow
-   * round trips (and therefore shuffle, sort and spill) but is dropped by every other
-   * representation, where it resets to `false`. It is not part of equality.
-   */
-  protected final boolean canonical;
 
   public VariantVal(byte[] value, byte[] metadata) {
-    this(value, metadata, false);
-  }
-
-  public VariantVal(byte[] value, byte[] metadata, boolean canonical) {
     this.value = value;
     this.metadata = metadata;
-    this.canonical = canonical;
   }
 
   public byte[] getValue() {
@@ -79,15 +60,6 @@ public class VariantVal implements Serializable {
 
   public byte[] getMetadata() {
     return metadata;
-  }
-
-  public boolean isCanonical() {
-    return canonical;
-  }
-
-  /** The flags byte stored in the UnsafeRow binary content for this value. */
-  public byte unsafeRowFlags() {
-    return canonical ? CANONICAL_FLAG : 0;
   }
 
   /**
@@ -102,25 +74,24 @@ public class VariantVal implements Serializable {
     int offset = (int) (offsetAndSize >> 32);
     int totalSize = (int) offsetAndSize;
     int valueSize = Platform.getInt(baseObject, baseOffset + offset);
-    byte flags = Platform.getByte(baseObject, baseOffset + offset + 4);
-    int metadataSize = totalSize - UNSAFE_ROW_HEADER_SIZE - valueSize;
+    int metadataSize = totalSize - 4 - valueSize;
     byte[] value = new byte[valueSize];
     byte[] metadata = new byte[metadataSize];
     Platform.copyMemory(
         baseObject,
-        baseOffset + offset + UNSAFE_ROW_HEADER_SIZE,
+        baseOffset + offset + 4,
         value,
         Platform.BYTE_ARRAY_OFFSET,
         valueSize
     );
     Platform.copyMemory(
         baseObject,
-        baseOffset + offset + UNSAFE_ROW_HEADER_SIZE + valueSize,
+        baseOffset + offset + 4 + valueSize,
         metadata,
         Platform.BYTE_ARRAY_OFFSET,
         metadataSize
     );
-    return new VariantVal(value, metadata, (flags & CANONICAL_FLAG) != 0);
+    return new VariantVal(value, metadata);
   }
 
   public String debugString() {

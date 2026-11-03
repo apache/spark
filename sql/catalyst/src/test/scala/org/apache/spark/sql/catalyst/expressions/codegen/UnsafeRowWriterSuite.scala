@@ -157,37 +157,4 @@ class UnsafeRowWriterSuite extends SparkFunSuite {
     rowWriter.write(1, variant)
     assert(rowWriter.getRow.getVariant(1).debugString() == variant.debugString())
   }
-
-  test("variant canonical flag round-trips through UnsafeRow") {
-    val value = Array[Byte](1, 2, 3)
-    val metadata = Array[Byte](-1, -2, -3, -4)
-    val plain = new VariantVal(value, metadata)
-    val flagged = new VariantVal(value, metadata, true)
-
-    val rowWriter = new UnsafeRowWriter(2)
-    rowWriter.resetRowWriter()
-    rowWriter.write(0, plain)
-    rowWriter.write(1, flagged)
-    val row = rowWriter.getRow
-
-    // Both cells hold the same bytes; only the flags byte differs.
-    val readPlain = row.getVariant(0)
-    val readFlagged = row.getVariant(1)
-    assert(readPlain.getValue === value)
-    assert(readPlain.getMetadata === metadata)
-    assert(!readPlain.isCanonical)
-    assert(readFlagged.getValue === value)
-    assert(readFlagged.getMetadata === metadata)
-    assert(readFlagged.isCanonical)
-
-    // The flag lives in the row bytes, so it survives a copy of the row.
-    val copied = row.copy()
-    assert(!copied.getVariant(0).isCanonical)
-    assert(copied.getVariant(1).isCanonical)
-
-    // The size half of offsetAndSize is the exact content size: 4-byte length, flags byte, value
-    // and metadata (the 8-byte rounding only affects the cursor).
-    val cellSize = row.getLong(0).toInt
-    assert(cellSize == VariantVal.UNSAFE_ROW_HEADER_SIZE + value.length + metadata.length)
-  }
 }

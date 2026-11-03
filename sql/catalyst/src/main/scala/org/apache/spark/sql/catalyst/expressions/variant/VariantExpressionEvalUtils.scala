@@ -77,9 +77,6 @@ object VariantExpressionEvalUtils {
     VariantUtil.isValidVariant(input.getValue, input.getMetadata)
 
   def canonicalizeVariant(input: VariantVal): VariantVal = {
-    // Set by an earlier canonicalization in this query; the flag survives UnsafeRow round trips,
-    // so the bytes do not have to be inspected again.
-    if (input.isCanonical) return input
     val variant = new Variant(input.getValue, input.getMetadata)
     val canonicalized = try {
       VariantBuilder.canonicalize(variant)
@@ -87,8 +84,11 @@ object VariantExpressionEvalUtils {
       case _: VariantSizeLimitException =>
         throw QueryExecutionErrors.variantConstructorSizeLimitError()
     }
-    // Share the input arrays when they were already canonical; only the flag is new.
-    new VariantVal(canonicalized.getValue, canonicalized.getMetadata, true)
+    if (canonicalized eq variant) {
+      input
+    } else {
+      new VariantVal(canonicalized.getValue, canonicalized.getMetadata)
+    }
   }
 
   /**
