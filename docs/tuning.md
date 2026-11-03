@@ -232,7 +232,7 @@ temporary objects created during task execution. Some steps which may be useful 
   value of the JVM's `NewRatio` parameter. Many JVMs default this to 2, meaning that the Old generation 
   occupies 2/3 of the heap. It should be large enough such that this fraction exceeds `spark.memory.fraction`.
   
-* Since 5.0.0, Spark uses JDK 21 by default, which also makes the G1GC garbage collector the default. Note that with
+* Spark requires JDK 21 or later, where G1GC is the default garbage collector. Note that with
   large executor heap sizes, it may be important to increase the G1 region size with `-XX:G1HeapRegionSize`.
 
 * As an example, if your task is reading data from HDFS, the amount of memory used by the task can be estimated using
