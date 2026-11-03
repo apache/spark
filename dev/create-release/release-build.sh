@@ -689,6 +689,10 @@ if [[ $JAVA_VERSION < "1.8." ]] && [[ $SPARK_VERSION < "4.0" ]]; then
   echo "Java version $JAVA_VERSION is less than required 1.8 for 2.2+"
   echo "Please set JAVA_HOME correctly."
   exit 1
+elif [[ $JAVA_VERSION < "21" ]] && [[ $SPARK_VERSION > "4.99" ]]; then
+  echo "Java version $JAVA_VERSION is less than required 21 for 5.0+"
+  echo "Please set JAVA_HOME correctly."
+  exit 1
 elif [[ $JAVA_VERSION < "17.0." ]] && [[ $SPARK_VERSION > "3.5.99" ]]; then
   echo "Java version $JAVA_VERSION is less than required 17 for 4.0+"
   echo "Please set JAVA_HOME correctly."
