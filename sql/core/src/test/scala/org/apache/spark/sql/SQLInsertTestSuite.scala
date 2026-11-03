@@ -621,27 +621,33 @@ trait SQLInsertTestSuite extends QueryTest with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("SPARK-59538: nested collection resolution can use legacy behavior") {
+  test("SPARK-59538: flag-off preserves equal-arity positional resolution") {
     withSQLConf(
-        SQLConf.INSERT_COLUMN_LIST_NESTED_FIELDS_RESOLVE_BY_POSITION.key -> "false") {
+        SQLConf.INSERT_COLUMN_LIST_DIFFERENT_ARITY_STRUCTS_RESOLVE_BY_POSITION.key -> "false") {
       withTable("t") {
         createTable(
           "t",
-          Seq("s", "arr", "m"),
+          Seq("s", "arr", "m", "nested"),
           Seq(
             "STRUCT<x: INT, y: INT>",
             "ARRAY<STRUCT<x: INT, y: INT>>",
-            "MAP<STRING, STRUCT<x: INT, y: INT>>"))
+            "MAP<STRING, STRUCT<x: INT, y: INT>>",
+            "STRUCT<arr: ARRAY<STRUCT<x: INT, y: INT>>>"))
         sql(
-          """INSERT INTO t (s, arr, m)
+          """INSERT INTO t (s, arr, m, nested)
             |SELECT
             |  named_struct('y', 20, 'x', 10),
             |  array(named_struct('y', 20, 'x', 10)),
-            |  map('k', named_struct('y', 20, 'x', 10))
+            |  map('k', named_struct('y', 20, 'x', 10)),
+            |  named_struct('arr', array(named_struct('y', 20, 'x', 10)))
             |""".stripMargin)
         checkAnswer(
           spark.table("t"),
-          Row(Row(20, 10), Seq(Row(10, 20)), Map("k" -> Row(10, 20))))
+          Row(
+            Row(20, 10),
+            Seq(Row(20, 10)),
+            Map("k" -> Row(20, 10)),
+            Row(Seq(Row(20, 10)))))
       }
     }
   }
