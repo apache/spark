@@ -38,22 +38,22 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - name: Check whether this is every tenth commit
+      - name: Check whether this is every fifth commit
         id: count
         run: |
           count=$(git rev-list --count HEAD)
-          remainder=$((count % 10))
+          remainder=$((count % 5))
 
           if ((remainder == 0)); then
             should_run=true
             icon=":white_check_mark:"
             title="Commit count matched"
-            details="Commit count $count is divisible by 10."
+            details="Commit count $count is divisible by 5."
           else
             should_run=false
             icon=":pause_button:"
             title="Commit count not matched"
-            details="Commit count $count is not divisible by 10."
+            details="Commit count $count is not divisible by 5."
           fi
 
           echo "should-run=$should_run" >> "$GITHUB_OUTPUT"
