@@ -53,7 +53,10 @@ object ConstantFolding extends Rule[LogicalPlan] {
   private def hasNoSideEffect(e: Expression): Boolean = e match {
     case _: Attribute => true
     case _: Literal => true
-    case c: Cast if !conf.ansiEnabled => hasNoSideEffect(c.child)
+    // A cast keeps the eval mode it was analyzed with (for example, in a view), so check it as
+    // well. Keep the session check: some LEGACY casts can still fail, such as an interval
+    // overflow, and this should not start folding them in ANSI sessions.
+    case c: Cast if !conf.ansiEnabled && c.evalMode != EvalMode.ANSI => hasNoSideEffect(c.child)
     case _: NoThrow if e.deterministic => e.children.forall(hasNoSideEffect)
     case _ => false
   }
