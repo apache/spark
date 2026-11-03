@@ -169,8 +169,8 @@ jobs:
             docs=false
             java25=false
           fi
-          build=`./dev/is-changed.py -m "core,unsafe,kvstore,avro,utils,utils-java,network-common,network-shuffle,repl,launcher,examples,sketch,variant,api,catalyst,hive-thriftserver,mllib-local,mllib,graphx,streaming,sql-kafka-0-10,streaming-kafka-0-10,streaming-kinesis-asl,credential-aws,kubernetes,hadoop-cloud,spark-ganglia-lgpl,profiler,protobuf,yarn,connect,sql,hive,pipelines"`
-          build_core_utils=`./dev/is-changed.py -m "core,unsafe,kvstore,utils,utils-java,network-common,network-shuffle,sketch,variant,launcher"`
+          build=`./dev/is-changed.py -m "core,unsafe,kvstore,avro,utils,utils-java,config,network-common,network-shuffle,repl,launcher,examples,sketch,variant,api,catalyst,hive-thriftserver,mllib-local,mllib,graphx,streaming,sql-kafka-0-10,streaming-kafka-0-10,streaming-kinesis-asl,credential-aws,kubernetes,hadoop-cloud,spark-ganglia-lgpl,profiler,protobuf,yarn,connect,sql,hive,pipelines"`
+          build_core_utils=`./dev/is-changed.py -m "core,unsafe,kvstore,utils,utils-java,config,network-common,network-shuffle,sketch,variant,launcher"`
           precondition="
             {
               \"build\": \"$build\",
@@ -289,7 +289,7 @@ jobs:
         # Note that the modules below are from sparktestsupport/modules.py.
         modules:
           - >-
-            core, unsafe, kvstore, utils, utils-java,
+            core, unsafe, kvstore, utils, utils-java, config,
             network-common, network-shuffle, sketch, variant, launcher
           - >-
             api, catalyst, hive-thriftserver
@@ -341,7 +341,7 @@ jobs:
           # Skip the core/utils group when a PR doesn't touch those modules (e.g. SQL-only or
           # PySpark-only changes). The precondition is opt-out: omitted means run (so periodic
           # full-build workflows that set only "build": "true" keep running this entry).
-          - modules: ${{ fromJson(needs.precondition.outputs.required).build-core-utils == 'false' && 'core, unsafe, kvstore, utils, utils-java, network-common, network-shuffle, sketch, variant, launcher' }}
+          - modules: ${{ fromJson(needs.precondition.outputs.required).build-core-utils == 'false' && 'core, unsafe, kvstore, utils, utils-java, config, network-common, network-shuffle, sketch, variant, launcher' }}
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
       EXCLUDED_TAGS: ${{ matrix.excluded-tags }}
@@ -952,6 +952,15 @@ jobs:
         export MAVEN_OPTS="-Xss64m -Xmx4g -Xms4g -XX:ReservedCodeCacheSize=128m -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
         export MAVEN_CLI_OPTS="--no-transfer-progress"
         ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Pcredential-aws clean install
+    # Native data sources are called with the FFM API, which requires Java 22 or later, so the
+    # other jobs, on Java 17, skip the tests that load a library. The tests build their library
+    # with the C++ compiler of the runner.
+    - name: Test native data sources
+      run: |
+        export MAVEN_OPTS="-Xss64m -Xmx4g -Xms4g -XX:ReservedCodeCacheSize=128m -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
+        export MAVEN_CLI_OPTS="--no-transfer-progress"
+        ./build/mvn $MAVEN_CLI_OPTS -pl sql/core -Dtest=none -DwildcardSuites=org.apache.spark.sql.execution.datasources.v2.ffi.NativeDataSourceSuite,org.apache.spark.sql.execution.datasources.v2.ffi.NativeDataSourceClusterSuite test
+        ./build/mvn $MAVEN_CLI_OPTS -pl sql/connect/server -Dtest=none -DwildcardSuites=org.apache.spark.sql.connect.NativeDataSourceConnectSuite test
 
   # Documentation build
   docs:
@@ -1062,7 +1071,10 @@ jobs:
         path: ./tpcds-kit
     - name: Build tpcds-kit
       if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
-      run: cd tpcds-kit/tools && make OS=LINUX
+      run: |
+        # tpcds-kit is old C code (implicit int, K&R declarations) that newer GCC
+        # versions (e.g. GCC 15 on Ubuntu 26.04) reject by default, so pin the C standard.
+        cd tpcds-kit/tools && make OS=LINUX LINUX_CFLAGS="-O3 -std=gnu89"
     - name: Generate TPC-DS (SF=1) table data
       if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
       run: build/sbt "sql/Test/runMain org.apache.spark.sql.GenTPCDSData --dsdgenDir `pwd`/tpcds-kit/tools --location `pwd`/tpcds-sf-1 --scaleFactor 1 --numPartitions 1 --overwrite"
@@ -1222,6 +1234,7 @@ jobs:
           # https://docs.github.com/en/actions/reference/runners/github-hosted-runners#standard-github-hosted-runners-for-public-repositories
           cpus: 2
           memory: 6144m
+          addons: metrics-server
       - name: Print K8S pods and nodes info
         run: |
           kubectl get pods -A

@@ -39,6 +39,8 @@ import org.apache.spark.util.ArrayImplicits._
 class ResolveCatalogs(val catalogManager: CatalogManager)
   extends Rule[LogicalPlan] with LookupCatalog {
 
+  private val catalogIdentifierResolution = new CatalogIdentifierResolution(catalogManager)
+
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown {
     // We only support temp variables for now and the system catalog is not properly implemented
     // yet. We need to resolve `UnresolvedIdentifier` for variable commands specially.
@@ -116,11 +118,13 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     // For CREATE TABLE and REPLACE TABLE statements, resolve the table identifier and include
     // the table columns as output. This allows expressions (e.g., constraints) referencing these
     // columns to be resolved correctly.
-    case c @ CreateTable(UnresolvedIdentifier(nameParts, allowTemp), columns, _, _, _) =>
+    case c @ CreateTable(
+        UnresolvedIdentifier(nameParts, allowTemp), columns, _, _, _, _, _) =>
       val resolvedIdentifier = resolveIdentifier(nameParts, allowTemp, columns)
       c.copy(name = resolvedIdentifier)
 
-    case r @ ReplaceTable(UnresolvedIdentifier(nameParts, allowTemp), columns, _, _, _) =>
+    case r @ ReplaceTable(
+        UnresolvedIdentifier(nameParts, allowTemp), columns, _, _, _, _, _) =>
       val resolvedIdentifier = resolveIdentifier(nameParts, allowTemp, columns)
       r.copy(name = resolvedIdentifier)
 
@@ -129,13 +133,13 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       c.copy(name = resolvedIdentifier)
 
     case c @ CreateTableAsSelect(
-        UnresolvedIdentifier(nameParts, allowTemp), _, _, _, writeOptions, _, _) =>
+        UnresolvedIdentifier(nameParts, allowTemp), _, _, _, writeOptions, _, _, _, _) =>
       val resolvedIdentifier = resolveIdentifier(nameParts, allowTemp, Nil)
       rejectTimeTravelOptionsForWrite(resolvedIdentifier, writeOptions)
       c.copy(name = resolvedIdentifier)
 
     case r @ ReplaceTableAsSelect(
-        UnresolvedIdentifier(nameParts, allowTemp), _, _, _, writeOptions, _, _) =>
+        UnresolvedIdentifier(nameParts, allowTemp), _, _, _, writeOptions, _, _, _, _) =>
       val resolvedIdentifier = resolveIdentifier(nameParts, allowTemp, Nil)
       rejectTimeTravelOptionsForWrite(resolvedIdentifier, writeOptions)
       r.copy(name = resolvedIdentifier)
@@ -163,13 +167,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       }
       AttributeReference(col.name, dataType, col.nullable, col.metadata)()
     }
-    if (allowTemp && catalogManager.v1SessionCatalog.isTempView(nameParts)) {
-      val ident = Identifier.of(nameParts.dropRight(1).toArray, nameParts.last)
-      ResolvedIdentifier(FakeSystemCatalog, ident, columnOutput)
-    } else {
-      val CatalogAndIdentifier(catalog, identifier) = nameParts
-      ResolvedIdentifier(catalog, identifier, columnOutput)
-    }
+    catalogIdentifierResolution.resolveIdentifier(nameParts, allowTemp, columnOutput)
   }
 
   private def rejectTimeTravelOptionsForWrite(

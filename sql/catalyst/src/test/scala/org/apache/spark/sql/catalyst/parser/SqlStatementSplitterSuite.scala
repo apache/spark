@@ -18,8 +18,10 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.internal.SQLConf
 
-class SqlStatementSplitterSuite extends SparkFunSuite {
+class SqlStatementSplitterSuite extends SparkFunSuite with SQLHelper {
 
   private def split(sql: String): SqlStatementSplitResult = SqlStatementSplitter.split(sql)
 
@@ -268,6 +270,15 @@ class SqlStatementSplitterSuite extends SparkFunSuite {
     val result = split(block + ";")
     assert(result.completeStatements == Seq(statement(block)))
     assert(result.partialStatement.isEmpty)
+  }
+
+  test("BEGIN..END block that declares a FILE column is a single statement") {
+    val block = "BEGIN CREATE TABLE t (f FILE EXTERNAL); SELECT 1; END"
+    withSQLConf(SQLConf.FILE_TYPE_ENABLED.key -> "true") {
+      val result = split(block + ";")
+      assert(result.completeStatements == Seq(statement(block)))
+      assert(result.partialStatement.isEmpty)
+    }
   }
 
   test("BEGIN..END block followed by another statement") {

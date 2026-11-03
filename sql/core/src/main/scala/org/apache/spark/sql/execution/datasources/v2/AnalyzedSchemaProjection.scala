@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Alias, ArrayTransform, AttributeReference, AttributeSeq, CreateNamedStruct, Expression, ExtractValue, GetStructField, If, IsNull, KnownNotNull, LambdaFunction, Literal, MetadataAttributeWithLogicalName, NamedLambdaVariable, TaggingExpression, TransformKeys, TransformValues, UnresolvedNamedLambdaVariable}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
-import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, MetadataColumnHelper}
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, Metadata, StructType}
 import org.apache.spark.sql.util.SchemaUtils
 
@@ -346,7 +346,24 @@ private[sql] object AnalyzedSchemaProjection extends SQLConfHelper {
   private def sameAttributeShape(left: AttributeReference, right: AttributeReference): Boolean = {
     left.dataType == right.dataType &&
     left.nullable == right.nullable &&
-    left.metadata == right.metadata
+    sameMetadata(left.metadata, right.metadata)
+  }
+
+  // ApplyCharTypePadding removes __CHAR_VARCHAR_TYPE_STRING after it pads. Refresh rebuilds
+  // the current relation through DataSourceV2Relation.create, which stamps that key again.
+  // Treat cleaned vs stamped as the same metadata so the rebound relation keeps the padded
+  // (cleaned) attribute. Differing type strings (CHAR(5) vs CHAR(10)) still do not match.
+  private def sameMetadata(left: Metadata, right: Metadata): Boolean = {
+    if (left == right) {
+      true
+    } else {
+      val leftRaw = CharVarcharUtils.getRawTypeString(left)
+      val rightRaw = CharVarcharUtils.getRawTypeString(right)
+      (leftRaw.isEmpty && rightRaw.isDefined &&
+        CharVarcharUtils.cleanMetadata(right) == left) ||
+      (rightRaw.isEmpty && leftRaw.isDefined &&
+        CharVarcharUtils.cleanMetadata(left) == right)
+    }
   }
 
   private def unexpectedSchemaChange(message: String): Nothing = {

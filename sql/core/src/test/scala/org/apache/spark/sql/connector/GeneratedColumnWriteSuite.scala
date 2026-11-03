@@ -322,6 +322,21 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
+  test("SPARK-60803: INSERT by name computes generated column from the stored (post-cast) " +
+    "struct field") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  s STRUCT<f: INT>,
+             |  g INT GENERATED ALWAYS AS (s.f * 10)
+             |) USING foo""".stripMargin)
+      // 5.7 is cast to INT (= 5) when stored in `s.f`. The generated column must be computed from
+      // the stored value (5 * 10 = 50), not from the pre-cast value (5.7 * 10 = 57).
+      sql(s"INSERT INTO testcat.$tblName(s) SELECT named_struct('f', 5.7D)")
+      checkAnswer(spark.table(s"testcat.$tblName"), Row(Row(5), 50))
+    }
+  }
+
   test("INSERT by position validates generated column against the stored (post-cast) value") {
     val tblName = "my_tab"
     withTable(s"testcat.$tblName") {
@@ -359,6 +374,29 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
         sql(s"INSERT INTO testcat.$tblName(eventDate, eventYear) VALUES (DATE'2024-06-15', 2025)")
       }
       assert(ex.getCondition == "CHECK_CONSTRAINT_VIOLATION")
+    }
+  }
+
+  test("SPARK-60764: INSERT by name with a double quote in the generation expression") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  a STRING,
+             |  b STRING GENERATED ALWAYS AS (concat(a, '"'))
+             |) USING foo""".stripMargin)
+      // Read from `range` so that the check runs in whole-stage codegen.
+      sql(s"""INSERT INTO testcat.$tblName(a, b) SELECT 'p', concat('p', '"') FROM range(2)""")
+      val ex = intercept[SparkRuntimeException] {
+        sql(s"INSERT INTO testcat.$tblName(a, b) SELECT 'p', 'q' FROM range(2)")
+      }
+      checkError(
+        exception = ex,
+        condition = "CHECK_CONSTRAINT_VIOLATION",
+        sqlState = "23001",
+        parameters = Map(
+          "constraintName" -> "Generated Column",
+          "expression" -> """b <=> concat(a, '"')""",
+          "values" -> " - b : q"))
     }
   }
 
@@ -453,6 +491,26 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
       checkAnswer(
         spark.table(s"testcat.$tblName"),
         Row(3, 5, 8))
+    }
+  }
+
+  test("SPARK-59962: CREATE and REPLACE TABLE with a generation expression reading a value twice") {
+    // NULLIF reads `a + b` twice. The table is created from the expression rather than evaluating
+    // it, so nothing may be pre-evaluated under the CREATE or REPLACE TABLE. The second statement
+    // replaces the table the first one created.
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      Seq("CREATE TABLE", "CREATE OR REPLACE TABLE").foreach { create =>
+        sql(s"""$create testcat.$tblName(
+               |  a INT,
+               |  b INT,
+               |  c INT GENERATED ALWAYS AS (nullif(a + b, 3))
+               |) USING foo""".stripMargin)
+        sql(s"INSERT INTO testcat.$tblName(a, b) VALUES (1, 1), (1, 2)")
+        checkAnswer(
+          spark.table(s"testcat.$tblName"),
+          Seq(Row(1, 1, 2), Row(1, 2, null)))
+      }
     }
   }
 
