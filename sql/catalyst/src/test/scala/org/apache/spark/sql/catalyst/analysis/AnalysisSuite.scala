@@ -1934,10 +1934,12 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
     val first = variable("first")
     val second = variable("second")
+    val third = variable("third")
     val subqueryPlan = Project(Seq(Alias(Add(second, first), "value")()), OneRowRelation())
     val subquery = ScalarSubquery(subqueryPlan)
     val expression = Add(first, subquery)
-    val plan = Project(Seq(Alias(expression, "value")()), subqueryPlan)
+    val childPlan = Project(Seq(Alias(third, "child_value")()), OneRowRelation())
+    val plan = Project(Seq(Alias(expression, "value")()), childPlan)
     val expected = Seq(first.originalNameParts, second.originalNameParts)
 
     assert(IdentifierResolution.collectTemporaryVariablesInExpressionTree(first) ==
@@ -1945,7 +1947,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assert(IdentifierResolution.collectTemporaryVariablesInExpressionTree(subquery) ==
       Seq(second.originalNameParts, first.originalNameParts))
     assert(IdentifierResolution.collectTemporaryVariablesInExpressionTree(expression) == expected)
-    assert(IdentifierResolution.collectTemporaryVariablesInLogicalPlan(plan) == expected)
+    assert(IdentifierResolution.collectTemporaryVariablesInLogicalPlan(plan) ==
+      Seq(first.originalNameParts, second.originalNameParts, third.originalNameParts))
     assert(IdentifierResolution.collectTemporaryVariablesInExpressionTree(Literal(1)).isEmpty)
     assert(IdentifierResolution.collectTemporaryVariablesInLogicalPlan(OneRowRelation()).isEmpty)
   }

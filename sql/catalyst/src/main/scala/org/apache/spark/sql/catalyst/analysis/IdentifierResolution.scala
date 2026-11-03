@@ -50,14 +50,20 @@ object IdentifierResolution extends AliasHelper with EvalHelper {
     }
   }
 
-  /** Collects distinct session variable names from a plan, including its subqueries. */
+  /**
+   * Collects distinct original name parts of session and SQL-script local variable references
+   * from a plan, including its subqueries.
+   */
   def collectTemporaryVariablesInLogicalPlan(plan: LogicalPlan): Seq[Seq[String]] = {
     plan.flatMap { operator =>
       operator.expressions.flatMap(collectTemporaryVariablesInExpressionTree)
     }.distinct
   }
 
-  /** Collects distinct session variable names from an expression, including the root. */
+  /**
+   * Collects distinct original name parts of session and SQL-script local variable references
+   * from an expression, including its root and subqueries.
+   */
   def collectTemporaryVariablesInExpressionTree(expression: Expression): Seq[Seq[String]] = {
     expression.flatMap {
       case subquery: SubqueryExpression => collectTemporaryVariablesInLogicalPlan(subquery.plan)

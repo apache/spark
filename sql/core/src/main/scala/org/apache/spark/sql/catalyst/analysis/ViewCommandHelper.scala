@@ -63,6 +63,7 @@ object ViewCommandHelper {
 
   /**
    * Lowers a session-catalog [[CreateView]] to [[CreateViewCommand]], leaving other targets intact.
+   * Fails if a session-catalog target's namespace does not have exactly one part.
    * Analysis-only state is not transferred: HandleSpecialCommand marks the new command analyzed.
    */
   def rewriteCreateView(createView: CreateView): LogicalPlan = createView match {
