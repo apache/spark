@@ -332,9 +332,11 @@ object FileFormat {
 
   /**
    * The column a reader that applies storage filters marks the rows it has checked in. See
-   * [[FileFormat.buildReaderWithStorageFilters]]. The name is reserved, as the row-index metadata
-   * column's is. A relation with a column of that name is offered no storage filters, and a file
-   * holding one outside the relation's schema is not supported.
+   * [[FileFormat.buildReaderWithStorageFilters]]. The file-source reader finds the column by this
+   * name, so there the name is reserved, as the row-index metadata column's is. A relation with a
+   * column of that name is offered no storage filters, and a file holding one outside the
+   * relation's schema is not supported. A data source v2 scan's checked column has the same name,
+   * but Spark finds it by position, so a v2 table may have a column of that name.
    */
   val STORAGE_FILTER_CHECKED_COLUMN_NAME = "_tmp_storage_filter_checked"
 

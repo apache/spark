@@ -22,7 +22,7 @@ Handler-flavor tests live alongside their module, e.g. the Arrow handlers in
 """
 
 import os
-from types import SimpleNamespace
+import unittest
 from unittest.mock import patch
 
 from pyspark.errors import PySparkRuntimeError
@@ -35,20 +35,23 @@ from pyspark.eval_handlers._base import (
     get_eval_type_handler,
 )
 from pyspark.eval_handlers._typing import UDF
-from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.pandas.serializers import (
     ArrowStreamCoGroupSerializer,
     ArrowStreamGroupSerializer,
     ArrowStreamSerializer,
 )
 from pyspark.sql.types import LongType
-from pyspark.testing.utils import PySparkBaseTestCase
+from pyspark.testing.utils import (
+    PySparkBaseTestCase,
+    have_pandas,
+    have_pyarrow,
+    pandas_requirement_message,
+    pyarrow_requirement_message,
+)
 from pyspark.util import PythonEvalType
 
 with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
-    from pyspark.worker import read_single_udf
-    from pyspark.worker_message import UDFInfo
-    from pyspark.worker_util import RunnerConf, pickleSer
+    from pyspark.worker_util import RunnerConf
 
 
 class EvalTypeHandlerTests(PySparkBaseTestCase):
@@ -79,14 +82,20 @@ class EvalTypeHandlerTests(PySparkBaseTestCase):
 
     def test_default_serializer_per_category(self):
         class _Batch(BatchEvalTypeHandler["pa.RecordBatch"]):
+            _multi_udf = True
+
             def run(self, split_index, data):
                 return data
 
         class _Grouped(GroupedEvalTypeHandler["pa.RecordBatch"]):
+            _multi_udf = True
+
             def run(self, split_index, data):
                 return data
 
         class _CoGrouped(CoGroupedEvalTypeHandler["pa.RecordBatch"]):
+            _multi_udf = True
+
             def run(self, split_index, data):
                 return data
 
@@ -100,6 +109,8 @@ class EvalTypeHandlerTests(PySparkBaseTestCase):
 
     def test_run_produces_output(self):
         class _Doubler(BatchEvalTypeHandler["pa.RecordBatch"]):
+            _multi_udf = True
+
             def run(self, split_index, data):
                 for item in data:
                     yield item * 2
@@ -272,30 +283,188 @@ class EvalTypeHandlerTests(PySparkBaseTestCase):
         self.assertNotIn(unused_eval_type, _eval_type_handlers)
 
 
-class ReadSingleUDFTests(PySparkBaseTestCase):
-    def test_returns_udf_record(self):
-        def stop(x):
-            raise StopIteration(x)
+class HandlerUDFsTests(PySparkBaseTestCase):
+    class _Handler(BatchEvalTypeHandler["pa.RecordBatch"]):
+        _multi_udf = True
 
-        udf_info = UDFInfo(
-            udfs=[CloudPickleSerializer().dumps((stop, LongType()))],
-            args=[1],
-            kwargs={"y": 2},
+        def run(self, split_index, data):
+            return data
+
+    @staticmethod
+    def _stop(x):
+        raise StopIteration(x)
+
+    @staticmethod
+    def _udf(*funcs):
+        return UDF(
+            funcs=list(funcs),
+            args_offsets=[1],
+            kwargs_offsets={"y": 2},
+            return_type=LongType(),
             result_id=0,
         )
-        # read_single_udf only reads these two attributes of the handler class.
-        handler_cls = SimpleNamespace(eval_type=PythonEvalType.SQL_BATCHED_UDF, is_iter_based=False)
-        udf = read_single_udf(pickleSer, udf_info, handler_cls, RunnerConf({}))
+
+    def _new(self, handler_cls, runner_conf=None):
+        return handler_cls([self._udf(self._stop)], runner_conf or RunnerConf({}), None)
+
+    def test_wraps_udfs(self):
+        handler = self._new(self._Handler)
+        udf = handler._udf_descs[0]
 
         self.assertIsInstance(udf, UDF)
         self.assertEqual(udf.args_offsets, [1])
         self.assertEqual(udf.kwargs_offsets, {"y": 2})
         self.assertEqual(udf.return_type, LongType())
-        # func is wrapped in fail_on_stopiteration; raw_func is the unwrapped function.
+        # The handler keeps the function wrapped in fail_on_stopiteration; the record and the
+        # handler's raw function keep it unwrapped.
         with self.assertRaises(PySparkRuntimeError):
-            udf.func(1)
+            handler._funcs[0](1)
         with self.assertRaises(StopIteration):
-            udf.raw_func(1)
+            udf.funcs[0](1)
+        self.assertIs(handler._raw_funcs[0], self._stop)
+
+    def test_fail_on_stopiteration_per_handler(self):
+        not_wrapped = {PythonEvalType.SQL_ARROW_BATCHED_UDF}
+        for _, variants in list(_eval_type_handlers.values()):
+            for handler_cls in variants.values():
+                with self.subTest(handler=handler_cls.__name__):
+                    self.assertEqual(
+                        handler_cls._fail_on_stopiteration,
+                        handler_cls.eval_type not in not_wrapped,
+                    )
+
+        class _NotWrapped(self._Handler):
+            _fail_on_stopiteration = False
+
+        with self.assertRaises(StopIteration):
+            self._new(_NotWrapped)._funcs[0](1)
+
+    def test_profiler_selected_by_conf(self):
+        def f(x):
+            return x
+
+        def data_source_f(x):
+            return x
+
+        data_source_f.__module__ = "pyspark.sql.worker.plan_data_source_read"
+
+        udf_perf = self._Handler([], RunnerConf({"spark.sql.pyspark.udf.profiler": "perf"}), None)
+        data_source_perf = self._Handler(
+            [], RunnerConf({"spark.sql.pyspark.dataSource.profiler": "perf"}), None
+        )
+        udf_memory = self._Handler(
+            [], RunnerConf({"spark.sql.pyspark.udf.profiler": "memory"}), None
+        )
+        no_profiler = self._Handler([], RunnerConf({}), None)
+        with patch.object(
+            EvalTypeHandler, "_with_perf_profiler", side_effect=lambda func, result_id: "perf"
+        ) as perf:
+            self.assertEqual(udf_perf._with_profiler(f, 0), "perf")
+            self.assertIs(data_source_perf._with_profiler(f, 0), f)
+            self.assertIs(udf_perf._with_profiler(data_source_f, 0), data_source_f)
+            self.assertEqual(data_source_perf._with_profiler(data_source_f, 0), "perf")
+            self.assertEqual(perf.call_count, 2)
+        with patch.object(
+            EvalTypeHandler, "_with_memory_profiler", side_effect=lambda func, result_id: "memory"
+        ):
+            self.assertEqual(udf_memory._with_profiler(f, 0), "memory")
+        self.assertIs(no_profiler._with_profiler(f, 0), f)
+
+    def test_iter_profiler_keeps_stop_iteration_error(self):
+        # A StopIteration raised by the call of an iterator UDF fails with
+        # STOP_ITERATION_OCCURRED whether or not a profiler is set.
+        class _IterHandler(self._Handler):
+            _iter_based = True
+
+        for profiler in (None, "perf", "memory"):
+            with self.subTest(profiler=profiler):
+                conf = {"spark.sql.pyspark.udf.profiler": profiler} if profiler else {}
+                handler = self._new(_IterHandler, RunnerConf(conf))
+                with self.assertRaises(PySparkRuntimeError) as cm:
+                    handler._funcs[0](1)
+                self.assertEqual(cm.exception.getCondition(), "STOP_ITERATION_OCCURRED")
+
+    def test_chains_funcs_in_order(self):
+        handler = self._Handler(
+            [self._udf(lambda x: x + 1, lambda x: x * 2, str)], RunnerConf({}), None
+        )
+        self.assertEqual(handler._raw_funcs[0](3), "8")
+        self.assertEqual(handler._funcs[0](3), "8")
+
+    def test_single_func_not_chained(self):
+        # A single function is kept as is, so its signature (and an incremental Aggregator
+        # object) survives.
+        def f(key, value):
+            return value
+
+        handler = self._Handler([self._udf(f)], RunnerConf({}), None)
+        self.assertIs(handler._raw_funcs[0], f)
+
+    def test_single_udf(self):
+        class _Single(BatchEvalTypeHandler["pa.RecordBatch"]):
+            def run(self, split_index, data):
+                return data
+
+        def f(x):
+            return x + 1
+
+        handler = _Single([self._udf(f)], RunnerConf({}), None)
+        self.assertIs(handler._udf_desc, handler._udf_descs[0])
+        self.assertIs(handler._raw_func, f)
+        self.assertIs(handler._func, handler._funcs[0])
+        self.assertEqual(handler._func(1), 2)
+        for udf_descs in ([], [self._udf(f), self._udf(f)]):
+            with self.subTest(num_udfs=len(udf_descs)):
+                with self.assertRaisesRegex(
+                    PySparkRuntimeError,
+                    "^One _Single UDF expected, but got {}.$".format(len(udf_descs)),
+                ):
+                    _Single(udf_descs, RunnerConf({}), None)
+
+        handler = self._Handler([self._udf(f), self._udf(f)], RunnerConf({}), None)
+        self.assertFalse(hasattr(handler, "_udf_desc"))
+
+    @unittest.skipIf(
+        not (have_pandas and have_pyarrow),
+        pandas_requirement_message or pyarrow_requirement_message,
+    )
+    def test_single_udf_count_error_names_eval_type(self):
+        for eval_type, expected in (
+            (PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF, "COGROUPED_MAP_ARROW UDF"),
+            (
+                PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
+                "GROUPED_MAP_PANDAS_UDF_WITH_STATE UDF",
+            ),
+            (PythonEvalType.SQL_TABLE_UDF, "UDTF"),
+        ):
+            handler_cls = _eval_type_handlers[eval_type][1][None]
+            with self.subTest(handler=handler_cls.__name__):
+                with self.assertRaisesRegex(
+                    PySparkRuntimeError, "^One {} expected, but got 2.$".format(expected)
+                ):
+                    handler_cls([self._udf(str), self._udf(str)], RunnerConf({}), None)
+
+    def test_multi_udf_per_handler(self):
+        multi = {
+            PythonEvalType.SQL_BATCHED_UDF,
+            PythonEvalType.SQL_ARROW_BATCHED_UDF,
+            PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+            PythonEvalType.SQL_SCALAR_ARROW_UDF,
+            PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF,
+            PythonEvalType.SQL_SCALAR_PANDAS_ELEMENTWISE_UDF,
+            PythonEvalType.SQL_SCALAR_ARROW_ELEMENTWISE_UDF,
+            PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+            PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
+            PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
+            PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
+            PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF,
+            PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF,
+            PythonEvalType.SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF,
+        }
+        for _, variants in list(_eval_type_handlers.values()):
+            for handler_cls in variants.values():
+                with self.subTest(handler=handler_cls.__name__):
+                    self.assertEqual(handler_cls._multi_udf, handler_cls.eval_type in multi)
 
 
 if __name__ == "__main__":

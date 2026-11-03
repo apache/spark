@@ -650,7 +650,7 @@ object FunctionRegistry {
     expressionBuilder("now", NowExpressionBuilder),
     expression[Quarter]("quarter"),
     expressionBuilder("second", SecondExpressionBuilder),
-    expression[ParseToTimestamp]("to_timestamp"),
+    expressionBuilder("to_timestamp", ParseToTimestampExpressionBuilder),
     expression[ParseToDate]("to_date"),
     expression[TimeDiff]("time_diff"),
     expression[ToTime]("to_time"),

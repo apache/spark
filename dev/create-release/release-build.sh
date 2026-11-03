@@ -154,19 +154,14 @@ if [[ "$1" == "finalize" ]]; then
   rm -rf svn-spark
   echo "PySpark uploaded"
 
-  # download the docs from the dev directory and upload it to spark-website
-  echo "Uploading docs to spark-website"
+  # Download the generated docs, then publish them with the website updates below.
+  echo "Preparing spark-website"
   svn co "$RELEASE_STAGING_LOCATION/$RELEASE_TAG-docs" docs
   git clone "https://$ASF_USERNAME:$ASF_PASSWORD@gitbox.apache.org/repos/asf/spark-website.git" -b asf-site
   mv docs/_site "spark-website/site/docs/$RELEASE_VERSION"
   cd spark-website
-  git add site/docs/$RELEASE_VERSION
-  git commit -m "Add docs for Apache Spark $RELEASE_VERSION"
-  cd ..
-  echo "docs committed for later upload"
 
-  echo "Uploading release docs to spark-website"
-  cd spark-website
+  echo "Updating spark-website for the release"
 
   # 1. Add download link to documentation.md
   python3 <<EOF
@@ -539,13 +534,14 @@ EOF
   fi
 
   git add .
-  git commit -m "Add release docs for Apache Spark $RELEASE_VERSION"
+  git commit -m "Update docs and website for Apache Spark $RELEASE_VERSION"
+  # One commit and one push.
   # We want to `git push` the website only once to eliminate the chance that
   # multiple pushes will race with spark-website CI pushing HTML commits,
   # creating annoying fast-forward failures.
   git push origin HEAD:asf-site
   cd ..
-  echo "release docs uploaded"
+  echo "spark-website updated"
   rm -rf spark-website
 
   # Moves the docs from dev directory to release directory.
@@ -691,6 +687,10 @@ BASE_RELEASE_PROFILES="$BASE_PROFILES -Psparkr"
 
 if [[ $JAVA_VERSION < "1.8." ]] && [[ $SPARK_VERSION < "4.0" ]]; then
   echo "Java version $JAVA_VERSION is less than required 1.8 for 2.2+"
+  echo "Please set JAVA_HOME correctly."
+  exit 1
+elif [[ $JAVA_VERSION < "21" ]] && [[ $SPARK_VERSION > "4.99" ]]; then
+  echo "Java version $JAVA_VERSION is less than required 21 for 5.0+"
   echo "Please set JAVA_HOME correctly."
   exit 1
 elif [[ $JAVA_VERSION < "17.0." ]] && [[ $SPARK_VERSION > "3.5.99" ]]; then
