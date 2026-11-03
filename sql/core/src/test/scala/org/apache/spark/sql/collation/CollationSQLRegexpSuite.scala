@@ -69,7 +69,30 @@ class CollationSQLRegexpSuite
     })
   }
 
-  test("Like simplification should work with collated strings") {
+  test("LIKE under UTF8_LCASE keeps matching semantics after optimization") {
+    // The original LIKE matches dotless i (U+0131) against pattern 'i' via Java regex case
+    // folding, while the Contains rewrite matched via ICU lowercase mapping and did not.
+    checkAnswer(sql("SELECT like(collate('ı', 'UTF8_LCASE'), '%i%')"), Row(true))
+
+    // On a column input the predicate must reach the optimized plan unmodified.
+    val tableName = "T_LCASE_DOTLESS_I"
+    withTable(tableName) {
+      sql(s"CREATE TABLE IF NOT EXISTS $tableName(c STRING COLLATE UTF8_LCASE) using PARQUET")
+      sql(s"INSERT INTO $tableName(c) VALUES('ı')")
+      val query = sql(s"SELECT c LIKE '%i%' FROM $tableName")
+      checkAnswer(query, Row(true))
+      val optimized = query.queryExecution.optimizedPlan.asInstanceOf[Project]
+        .projectList.head.asInstanceOf[Alias].child
+      assert(optimized.isInstanceOf[Like],
+        s"UTF8_LCASE LIKE must not be simplified, got: $optimized")
+    }
+  }
+
+  test("Like simplification only applies to binary collation") {
+    // LIKE under UTF8_LCASE matches via Java regex case folding, while the replacement
+    // predicates (StartsWith/EndsWith/Contains/EqualTo) match via ICU lowercase mapping;
+    // the two disagree for some code points (e.g. dotless i U+0131), so only binary
+    // collation LIKEs may be simplified.
     case class SimplifyLikeTestCase[R](collation: String, str: String, cls: Class[_], result: R)
     val testCases = Seq(
       SimplifyLikeTestCase("UTF8_BINARY", "ab%", classOf[StartsWith], false),
@@ -77,11 +100,11 @@ class CollationSQLRegexpSuite
       SimplifyLikeTestCase("UTF8_BINARY", "a%c", classOf[And], false),
       SimplifyLikeTestCase("UTF8_BINARY", "%b%", classOf[Contains], false),
       SimplifyLikeTestCase("UTF8_BINARY", "abc", classOf[EqualTo], false),
-      SimplifyLikeTestCase("UTF8_LCASE", "ab%", classOf[StartsWith], true),
-      SimplifyLikeTestCase("UTF8_LCASE", "%bc", classOf[EndsWith], true),
-      SimplifyLikeTestCase("UTF8_LCASE", "a%c", classOf[And], true),
-      SimplifyLikeTestCase("UTF8_LCASE", "%b%", classOf[Contains], true),
-      SimplifyLikeTestCase("UTF8_LCASE", "abc", classOf[EqualTo], true)
+      SimplifyLikeTestCase("UTF8_LCASE", "ab%", classOf[Like], true),
+      SimplifyLikeTestCase("UTF8_LCASE", "%bc", classOf[Like], true),
+      SimplifyLikeTestCase("UTF8_LCASE", "a%c", classOf[Like], true),
+      SimplifyLikeTestCase("UTF8_LCASE", "%b%", classOf[Like], true),
+      SimplifyLikeTestCase("UTF8_LCASE", "abc", classOf[Like], true)
     )
     val tableName = "T"
     withTable(tableName) {

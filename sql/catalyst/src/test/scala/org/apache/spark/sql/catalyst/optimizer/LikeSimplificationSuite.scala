@@ -390,32 +390,80 @@ class LikeSimplificationSuite extends PlanTest {
 
   // scalastyle:off nonascii
   test("SPARK-59063: LikeSimplification preserves LIKE semantics under non-binary collation") {
-    // Under UTF8_LCASE, StartsWith/EndsWith are collation-aware, so a single code point
-    // whose case-folded form equals the anchor satisfies BOTH StartsWith(prefix) and
-    // EndsWith(suffix). The Kelvin sign (U+212A) is one code point of three UTF-8 bytes
-    // that folds to 'k'. LIKE 'k%k' is false for it -- the pattern requires two 'k's --
-    // so the rewrite's length guard must reject it. A byte-length guard (OctetLength >=
-    // numBytes("k") + numBytes("k") = 2) is satisfied by the 3-byte Kelvin sign and would
-    // wrongly accept it; the code-point guard kept for non-binary collations rejects it.
+    // LIKE under UTF8_LCASE matches via Java regex case folding, while the predicates a
+    // rewrite would use (StartsWith/EndsWith plus a length guard) match via ICU lowercase
+    // mapping. A single multibyte code point can satisfy both anchors and clear the byte
+    // guard: the Kelvin sign (U+212A) is three UTF-8 bytes and lowercases to 'k', so LIKE
+    // 'k%k' is false for it (the pattern needs two 'k's) while the rewrite
+    // accepted it. Rewrites under non-binary collation are no longer made at all, so the
+    // predicate must survive optimization untouched.
     val lcase = StringType("UTF8_LCASE")
     val relation = LocalRelation(AttributeReference("a", lcase)())
     val attr = relation.output.head
     val like = Like(attr, Literal.create("k%k", lcase), '\\')
 
     val optimized = Optimize.execute(relation.where(like).analyze)
-    val simplified = optimized.asInstanceOf[Filter].condition
+    val condition = optimized.asInstanceOf[Filter].condition
+    assert(condition.semanticEquals(like),
+      s"UTF8_LCASE LIKE must not be rewritten, got: $condition")
 
     // A single Kelvin sign: one code point, three UTF-8 bytes.
     val row = InternalRow(UTF8String.fromString("\u212a"))
-    val likeResult = BindReferences.bindReference(like, relation.output).eval(row)
-    val simplifiedResult = BindReferences.bindReference(simplified, relation.output).eval(row)
-
-    assert(likeResult === false,
+    assert(BindReferences.bindReference(like, relation.output).eval(row) === false,
       "LIKE 'k%k' should not match a single Kelvin sign under UTF8_LCASE")
-    // The rewrite must be behavior-preserving: it must reject the single Kelvin sign too.
-    assert(simplifiedResult === likeResult,
-      s"LikeSimplification changed the LIKE 'k%k' result under UTF8_LCASE: expected " +
-        s"$likeResult but the rewritten predicate returned $simplifiedResult")
+  }
+
+  test("LikeSimplification does not rewrite LIKE under UTF8_LCASE") {
+    // The rewrite replaces Java regex case folding with ICU lowercase matching, and the two
+    // disagree for some code points: e.g. the dotless i (U+0131) matches 'i' under the Java
+    // fold but lowercases to itself under ICU. Every simplifiable shape must be left alone.
+    val lcase = StringType("UTF8_LCASE")
+    val relation = LocalRelation(AttributeReference("a", lcase)())
+    val attr = relation.output.head
+    Seq("i%", "%i", "%i%", "i", "i%i").foreach { pattern =>
+      val like = Like(attr, Literal.create(pattern, lcase), '\\')
+      val optimized = Optimize.execute(relation.where(like).analyze)
+      val condition = optimized.asInstanceOf[Filter].condition
+      assert(condition.semanticEquals(like),
+        s"UTF8_LCASE LIKE '$pattern' must not be rewritten, got: $condition")
+    }
+
+    // The discriminating case: LIKE '%i%' matches dotless i, ordinary case-insensitive
+    // matching still works for ASCII, so the issue is Unicode-specific.
+    val containsLike = Like(attr, Literal.create("%i%", lcase), '\\')
+    val bound = BindReferences.bindReference(containsLike, relation.output)
+    assert(bound.eval(InternalRow(UTF8String.fromString("ı"))) === true,
+      "LIKE '%i%' should match dotless i under UTF8_LCASE")
+    assert(bound.eval(InternalRow(UTF8String.fromString("I"))) === true,
+      "LIKE '%i%' should match ASCII 'I' under UTF8_LCASE")
+  }
+
+  test("LikeSimplification does not rewrite multi-LIKE under UTF8_LCASE") {
+    // simplifyMultiLike funnels through simplifyLike, so the collation guard must keep the
+    // whole multi-LIKE intact, including when only some patterns are simplifiable.
+    val lcase = StringType("UTF8_LCASE")
+    val relation = LocalRelation(AttributeReference("a", lcase)())
+    val attr = relation.output.head
+    val multi = LikeAny(attr, Seq(UTF8String.fromString("%i%"), UTF8String.fromString("x_y")))
+
+    val optimized = Optimize.execute(relation.where(multi).analyze)
+    val condition = optimized.asInstanceOf[Filter].condition
+    assert(condition.semanticEquals(multi),
+      s"UTF8_LCASE multi-LIKE must not be rewritten, got: $condition")
+  }
+
+  test("LikeSimplification still rewrites UTF8_BINARY") {
+    // The same patterns are still simplified for binary collation, where LIKE and the
+    // replacement predicates both do exact byte comparison.
+    val relation = LocalRelation($"a".string)
+    val attr = relation.output.head
+    Seq("i%" -> classOf[StartsWith], "%i" -> classOf[EndsWith],
+        "%i%" -> classOf[Contains], "i" -> classOf[EqualTo]).foreach { case (pattern, cls) =>
+      val optimized = Optimize.execute(relation.where(attr like pattern).analyze)
+      val condition = optimized.asInstanceOf[Filter].condition
+      assert(cls.isInstance(condition),
+        s"UTF8_BINARY LIKE '$pattern' should be rewritten to $cls, got: $condition")
+    }
   }
 
   test("SPARK-59063: LikeSimplification preserves LIKE semantics for multibyte UTF8_BINARY") {

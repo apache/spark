@@ -899,27 +899,17 @@ object LikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
     EqualTo(input, Literal.create(str, input.dataType))
 
   // 'a%a' is basically 'a%' && '%a', but a length guard is required to stop 'a' matching 'a%a'.
-  // When the collation matches raw bytes (supportsBinaryEquality), StartsWith/EndsWith pin the
-  // literal bytes of the prefix and suffix, so a byte-length guard (OctetLength, O(1) via the
-  // stored numBytes) accepts exactly the same inputs as the code-point guard and is cheaper.
-  // Otherwise the anchors are collation-aware (LIKE reaches this only for UTF8_LCASE) and can
-  // match a code point whose UTF-8 length differs from the pattern's -- a single multibyte code
-  // point could then satisfy both anchors and clear the byte guard -- so the code-point (Length)
-  // guard must be kept for correctness.
+  // Only binary-collation inputs reach this rewrite (see `simplifyLike`), so StartsWith/EndsWith
+  // pin the literal bytes of the prefix and suffix and a byte-length guard (OctetLength, O(1)
+  // via the stored numBytes) accepts exactly the same inputs as a code-point guard.
   // The replacement reads the input three times, so it is made only for a deterministic input;
   // a nondeterministic one could give each read a different value.
   private def startsAndEndsWithExpr(
       input: Expression, prefix: String, postfix: String): Expression = {
-    val lengthGuard = input.dataType match {
-      case st: StringType if st.supportsBinaryEquality =>
-        GreaterThanOrEqual(OctetLength(input),
-          Literal.create(UTF8String.fromString(prefix).numBytes
-            + UTF8String.fromString(postfix).numBytes))
-      case _ =>
-        GreaterThanOrEqual(Length(input),
-          Literal.create(prefix.codePointCount(0, prefix.length)
-            + postfix.codePointCount(0, postfix.length)))
-    }
+    val lengthGuard =
+      GreaterThanOrEqual(OctetLength(input),
+        Literal.create(UTF8String.fromString(prefix).numBytes
+          + UTF8String.fromString(postfix).numBytes))
     And(lengthGuard, And(startsWithExpr(input, prefix), endsWithExpr(input, postfix)))
   }
 
@@ -973,7 +963,13 @@ object LikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
 
   private def simplifyLike(
       input: Expression, pattern: String, escapeChar: Char = '\\'): Option[Expression] = {
-    if (!pattern.contains(escapeChar)) {
+    // LIKE under UTF8_LCASE matches via Java regex case folding, while the replacement
+    // predicates (StartsWith/EndsWith/Contains/EqualTo) match via ICU lowercase mapping; the
+    // two disagree for some code points (e.g. dotless i U+0131), so the rewrite is made only
+    // for binary-collation inputs, where both sides do exact byte comparison.
+    if (!input.dataType.asInstanceOf[StringType].supportsBinaryEquality) {
+      None
+    } else if (!pattern.contains(escapeChar)) {
       // Fast path: no escape character, so `%`/`_` are the only wildcards.
       pattern match {
         case startsWith(prefix) => Some(startsWithExpr(input, prefix))
