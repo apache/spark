@@ -22,9 +22,10 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
 import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractSingleColumnNullAwareAntiJoin}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{INVOKE, JSON_TO_STRUCT, LIKE_FAMLIY, PYTHON_UDF, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, SCALA_UDF}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, INVOKE, JSON_TO_STRUCT, LIKE_FAMLIY, PYTHON_UDF, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, SCALA_UDF}
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.NumericType
 
 /**
  * Insert a runtime filter on one side of the join (we call this side the application side) if
@@ -377,14 +378,11 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     }
   }
 
-  // The plans that a broadcast hash join of `plan` could broadcast: the side that
-  // `getBroadcastHashJoinBuildSide` picks. For an equi-join, that is the side with a broadcast
-  // hint, or else a side small enough to broadcast that the join type can build from, unless a
-  // `SHUFFLE_HASH` hint asks for a shuffle hash join. For a null-aware anti join, it is the right
-  // side under the null-aware anti join thresholds. It ignores the other join hints, so the list
-  // can hold more plans than physical planning broadcasts. It holds no fewer, unless the
-  // statistics change after this rule. It takes each side without the DPP filters on top of it,
-  // since cleanup can still drop them.
+  // The plans that a broadcast hash join of `plan` could broadcast, as
+  // `getBroadcastHashJoinBuildSide` picks them, but no null-aware anti join under AQE. The list can
+  // hold more plans than physical planning broadcasts, and no fewer that a DPP filter can reuse,
+  // unless the statistics change after this rule. It takes each side without the DPP filters on top
+  // of it, since cleanup can still drop them.
   private def broadcastablePlans(plan: LogicalPlan): Seq[LogicalPlan] = plan.flatMap {
     // AQE plans a DPP filter as `true` even if a null-aware anti join broadcasts its build plan.
     // Without AQE, physical planning keeps such a filter, though the filter builds its own
@@ -406,6 +404,17 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       val newChild = withoutDppFilters(child, drop)
       if (drop(dpp)) newChild else f.withNewChildren(Seq(newChild))
     case _ => plan
+  }
+
+  // Whether evaluating `key` cannot fail: an attribute, a numeric up-cast of such a key, or the
+  // normalization that `NormalizeFloatingNumbers` puts around a floating point join key.
+  private def isSafeKey(key: Expression): Boolean = key match {
+    case _: Attribute => true
+    case c: Cast if c.child.dataType.isInstanceOf[NumericType] &&
+        c.dataType.isInstanceOf[NumericType] && Cast.canUpCast(c.child.dataType, c.dataType) =>
+      isSafeKey(c.child)
+    case KnownFloatingPointNormalized(NormalizeNaNAndZero(child)) => isSafeKey(child)
+    case _ => false
   }
 
   // The plans whose broadcast a DPP filter may reuse: its build plan, and for an `onlyInBroadcast`
@@ -446,20 +455,20 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     //    could reuse.
     // 2. Counts an `onlyInBroadcast` DPP filter as kept (`isKept`) if one of its plans has the same
     //    result as a plan in `reused`. Any other DPP filter counts as kept. So does every DPP
-    //    filter in a subquery. The optimizer runs on a subquery on its own, and an IN or EXISTS
-    //    subquery is joined with the rest of the query only later. Then this rule runs again, and
-    //    sees all the broadcasts.
-    // 3. Adds a bloom filter for a key whose DPP filters are all dropped only if the bloom filter
-    //    cannot land in a plan in `reused` (`goesIntoReused`). There it would change the broadcast,
-    //    and physical planning would drop the DPP filter that reuses it. Pushdown moves the bloom
-    //    filter along its key, down to the leaf the key comes from, and into every branch of a
-    //    union. So a reused broadcast elsewhere in the join side does not matter, such as a
-    //    broadcast dimension joined to the same fact table. The key on the application side must
-    //    also be an attribute, at the join and at every leaf it comes from (`isAttributeAtLeaves`).
-    //    On a partition column, the bloom filter becomes a partition filter, which evaluates the
-    //    key on every partition before the data filters. So a key that can fail could fail the
-    //    query (SPARK-60809). And the creation side must be deterministic. The bloom filter
-    //    evaluates it again, apart from the join, so it could drop rows (SPARK-60808).
+    //    filter in a subquery. An uncorrelated IN subquery is joined with the rest of the query
+    //    later, where `PartitionPruning` puts a new DPP filter on the key, and this rule decides
+    //    that one against all the broadcasts. A scalar subquery, which includes an uncorrelated
+    //    EXISTS, is planned on its own, so a key there with a DPP filter gets no bloom filter.
+    // 3. Adds a bloom filter for a key whose DPP filters are all dropped only if pushdown can take
+    //    it down safely (`canPushDown`) and its creation side is safe (`canTakeBloomFilter`).
+    //    Pushdown moves the bloom filter along its key, down to the leaves the key comes from, and
+    //    into every branch of a union. There it must not land in a plan in `reused`. It would
+    //    change the broadcast, and physical planning would drop the DPP filter that reuses it. A
+    //    reused broadcast elsewhere in the join side does not matter, such as a broadcast
+    //    dimension joined to the same fact table. The key must also be safe at every leaf
+    //    (`isSafeKey`). On a partition column, the bloom filter becomes a partition filter, which
+    //    evaluates the key on every partition before the data filters. So a key that can fail
+    //    could fail the query (SPARK-60809).
     // Physical planning reuses a broadcast only with exchange reuse on.
     lazy val reused = if (conf.exchangeReuseEnabled) {
       // After the optimizer ran on an IN subquery on its own, a DPP filter there can be a conjunct
@@ -477,16 +486,15 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     def isKept(dpp: DynamicPruningSubquery): Boolean =
       !dpp.onlyInBroadcast || inSubquery ||
         reusablePlans(dpp).exists(p => reused.exists(_.sameResult(p)))
-    def goesIntoReused(key: Expression, side: LogicalPlan): Boolean =
-      findExpressionAndTrackAllLineagesDown(key, side).exists { case (_, leaf) =>
-        reused.exists(_.exists(_.fastEquals(leaf)))
+    // Pushdown rewrites the key of the bloom filter through the aliases on its way down. Where the
+    // key cannot be followed, pushdown can still move a copy of the bloom filter, so the check
+    // fails there.
+    def canPushDown(key: Expression, side: LogicalPlan): Boolean = {
+      val lineages = findExpressionAndTrackAllLineagesDown(key, side, strict = true)
+      lineages.nonEmpty && lineages.forall { case (leafKey, leaf) =>
+        isSafeKey(leafKey) && !reused.exists(_.exists(_.fastEquals(leaf)))
       }
-    // Pushdown rewrites the bloom filter through the aliases on its way down, so the key must be an
-    // attribute there too, not only at the join.
-    def isAttributeAtLeaves(key: Expression, side: LogicalPlan): Boolean =
-      key.isInstanceOf[Attribute] && findExpressionAndTrackAllLineagesDown(key, side).forall {
-        case (leafKey, _) => leafKey.isInstanceOf[Attribute]
-      }
+    }
     plan transformUp {
       case join @ ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, left, right, hint) =>
         var newLeft = left
@@ -507,9 +515,20 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             // the search for the creation side, since `isSimpleExpression` sees the plan of a
             // subquery too.
             def creationPlan(side: LogicalPlan) = withoutDppFilters(side, keyDpps.contains)
+            // The bloom filter evaluates its creation side again, apart from the join. So that side
+            // must be deterministic (SPARK-60808), and must not read a CTE, whose reference hides
+            // the determinism of its plan. Nor may it keep an `onlyInBroadcast` DPP filter that
+            // physical planning keeps in the join. In the bloom filter's subquery that filter finds
+            // no broadcast, so the creation side would read partitions that the join never reads.
             def canTakeBloomFilter(key: Expression, side: LogicalPlan, other: LogicalPlan) =
-              !hasDroppedDpp || (isAttributeAtLeaves(key, side) &&
-                creationPlan(other).deterministic && !goesIntoReused(key, side))
+              !hasDroppedDpp || {
+                val creation = creationPlan(other)
+                canPushDown(key, side) && creation.deterministic &&
+                  !creation.containsPattern(CTE) && !creation.exists(_.expressions.exists(_.exists {
+                    case dpp: DynamicPruningSubquery => dpp.onlyInBroadcast && isKept(dpp)
+                    case _ => false
+                  }))
+              }
             // Check if:
             // 1. The current join type supports prune the left side with runtime filter
             // 2. The current join is a shuffle join or a broadcast join that
