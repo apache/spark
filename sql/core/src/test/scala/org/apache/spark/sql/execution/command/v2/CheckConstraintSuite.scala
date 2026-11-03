@@ -189,6 +189,20 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     }
   }
 
+  test("SPARK-60823: Alter table add check constraint on a path") {
+    withTempPath { dir =>
+      spark.range(1).write.parquet(dir.getCanonicalPath)
+      val path = s"parquet.`${dir.getCanonicalPath}`"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $path ADD CONSTRAINT c1 CHECK (id > 0)")
+        },
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relationName" -> s"`parquet`.`${dir.getCanonicalPath}`"),
+        context = ExpectedContext(fragment = path))
+    }
+  }
+
   private def getCheckConstraint(table: Table): Check = {
     assert(table.constraints.length == 1)
     assert(table.constraints.head.isInstanceOf[Check])
