@@ -1362,10 +1362,10 @@ class Analyzer(
 
       // The child of `AddCheckConstraint` reads its target to validate the existing data, so the
       // target is an `UnresolvedRelation` that can resolve to a view, unlike `UnresolvedTable`.
-      case a @ AddCheckConstraint(Filter(_, SubqueryAlias(_, v: View)), _) =>
+      case a @ AddCheckConstraint(Filter(_, SubqueryAlias(_, v: View)), _, _) =>
         throw QueryCompilationErrors.expectTableNotViewError(
           v.desc.fullIdent, "ALTER TABLE ... ADD CONSTRAINT", suggestAlternative = false, a)
-      case a @ AddCheckConstraint(Filter(_, m: MetricViewPlaceholder), _) =>
+      case a @ AddCheckConstraint(Filter(_, m: MetricViewPlaceholder), _, _) =>
         throw QueryCompilationErrors.expectTableNotViewError(
           m.metadata.fullIdent, "ALTER TABLE ... ADD CONSTRAINT", suggestAlternative = false, a)
 
