@@ -83,6 +83,25 @@ class SortMergeAsOfJoinSuite extends QueryTest
   }
 
   /**
+   * Like checkAnswer, but also asserts that the join used the cursor scan. A right group spills
+   * from its second row, so a cursor scan that buffered rows would show a spill.
+   */
+  private def checkCursorScan(df: classic.DataFrame, expectedAnswer: Seq[Row]): Unit = {
+    withSQLConf(
+        SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
+        SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
+      checkAnswer(df, expectedAnswer)
+    }
+    val op = collectFirst(df.queryExecution.executedPlan) {
+      case s: SortMergeAsOfJoinExec => s
+    }
+    assert(op.isDefined,
+      s"Expected SortMergeAsOfJoinExec in plan:\n${df.queryExecution.executedPlan}")
+    assert(op.get.metrics("numAsOfCursorTasks").value > 0, "Expected the cursor scan")
+    assert(op.get.metrics("spillSize").value == 0, "The cursor scan buffered right rows")
+  }
+
+  /**
    * Rewrites each as-of comparison with the right side first, as an optimizer rule may:
    * `l.ts >= r.ts` becomes `r.ts <= l.ts`. It only flips a comparison that starts with a left
    * side column, so running it again changes nothing.
@@ -152,7 +171,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
 
   test("backward join - simple") {
     val (df1, df2) = prepareForAsOfJoin()
-    checkAnswer(
+    checkCursorScan(
       df1.joinAsOf(
         df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
         joinType = "inner", tolerance = null,
@@ -195,7 +214,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
 
   test("forward join") {
     val (df1, df2) = prepareForAsOfJoin()
-    checkAnswer(
+    checkCursorScan(
       df1.joinAsOf(
         df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
         joinType = "inner", tolerance = null,
@@ -243,7 +262,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
           right, left.col("ts"), right.col("ts"), usingColumns = Seq.empty,
           joinType = "inner", tolerance = null,
           allowExactMatches = true, direction = directionName)
-        checkAnswer(joined, expected :: Nil)
+        checkCursorScan(joined, expected :: Nil)
         val op = collectFirst(joined.queryExecution.executedPlan) {
           case s: SortMergeAsOfJoinExec => s
         }.get

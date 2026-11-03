@@ -1191,8 +1191,9 @@ object SQLConf {
       .internal()
       .doc("When true, the sort-merge AS-OF join reads the right side once with a cursor if " +
         "the join is backward or forward, has no residual join condition, and its as-of " +
-        "condition compares the two scalar sort keys. Otherwise it buffers each right-side " +
-        "group and scans the buffer again for every left row.")
+        "condition compares the two sort keys, of the same type. Other joins, and joins on " +
+        "STRUCT, ARRAY, TIME or nanosecond timestamp keys, buffer each right-side group and " +
+        "scan the buffer again for every left row.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf

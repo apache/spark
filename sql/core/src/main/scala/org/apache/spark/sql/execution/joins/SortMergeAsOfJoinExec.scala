@@ -237,8 +237,10 @@ private[joins] class SortMergeAsOfJoinScanner(
   private var rightPeek: UnsafeRow = _
   private var rightDone: Boolean = !rightIter.hasNext
 
-  // Cursor scan state: the left equi-key of the current group, and its best right row so far.
+  // Cursor scan state: the left equi-key of the current group, whether the group has any right
+  // row, and its best right row so far.
   private var cursorGroupKey: UnsafeRow = _
+  private var cursorGroupHasRight: Boolean = false
   private var cursorBest: UnsafeRow = _
 
   // Projection to convert right rows to UnsafeRow for the buffer
@@ -473,13 +475,14 @@ private[joins] class SortMergeAsOfJoinScanner(
    * next left row, and forward drops each failing row, since no later left row can match it.
    */
   private def findWithCursor(leftRow: InternalRow, leftKey: UnsafeRow): InternalRow = {
-    equiKeyOrdering match {
-      case Some(ordering)
-          if cursorGroupKey == null || ordering.compare(leftKey, cursorGroupKey) != 0 =>
-        cursorGroupKey = leftKey
-        cursorBest = null
-      case _ =>
+    // Without equi-keys, all rows form one group, so only the first left row starts it.
+    if (cursorGroupKey == null || equiKeyOrdering.exists(_.compare(leftKey, cursorGroupKey) != 0)) {
+      startCursorGroup(leftKey)
     }
+    // Like the buffered scan, a group with no right rows never evaluates the left as-of key,
+    // which can fail at runtime, for example on an invalid cast under ANSI.
+    if (!cursorGroupHasRight) return null
+
     val (leftAsOfKey, rightAsOfKey) = cursorKeys
     // A NULL left as-of key matches nothing. It must not move the cursor, or forward would drop
     // right rows that later left rows need.
@@ -493,17 +496,11 @@ private[joins] class SortMergeAsOfJoinScanner(
       cursorBest = null
     }
 
-    while (rightPeek != null) {
-      val cmp = equiKeyOrdering match {
-        case Some(ordering) => ordering.compare(leftKey, rightKeyProj(rightPeek))
-        case None => 0
-      }
-      if (cmp > 0 || (cmp == 0 && rightAsOfKey.eval(rightPeek) == null)) {
-        // An earlier group, or a NULL right as-of key: no later left row can match it.
+    // The group's right rows end at the first row of a later group.
+    while (rightPeek != null && compareToRightPeek(leftKey) == 0) {
+      if (rightAsOfKey.eval(rightPeek) == null) {
+        // A NULL right as-of key: no left row can match it.
         advanceRightPeek()
-      } else if (cmp < 0) {
-        // A later group, so this group has no more right rows.
-        return cursorBest
       } else {
         joinedRow.withRight(rightPeek)
         if (holds(boundAsOfCond)) {
@@ -519,6 +516,26 @@ private[joins] class SortMergeAsOfJoinScanner(
       }
     }
     cursorBest
+  }
+
+  /**
+   * Starts the cursor group of `leftKey`. It skips the right rows of earlier groups without
+   * evaluating either as-of key, then records whether the group has a right row. A right row
+   * with a NULL as-of key counts, since the buffered scan evaluates the as-of condition on it.
+   */
+  private def startCursorGroup(leftKey: UnsafeRow): Unit = {
+    cursorGroupKey = leftKey
+    cursorBest = null
+    while (rightPeek != null && compareToRightPeek(leftKey) > 0) {
+      advanceRightPeek()
+    }
+    cursorGroupHasRight = rightPeek != null && compareToRightPeek(leftKey) == 0
+  }
+
+  /** Compares `leftKey` with the equi-key of `rightPeek`. Without equi-keys, all rows tie. */
+  private def compareToRightPeek(leftKey: UnsafeRow): Int = equiKeyOrdering match {
+    case Some(ordering) => ordering.compare(leftKey, rightKeyProj(rightPeek))
+    case None => 0
   }
 
   /** Finds the nearest row passing both conditions, preferring the predecessor on equal gaps. */
@@ -648,7 +665,10 @@ private[execution] object SortMergeAsOfJoinScanner {
     }
   }
 
-  /** Scalar key types only for now. STRUCT and ARRAY keys keep the buffered scan. */
+  /**
+   * The key types the cursor scan supports. STRUCT, ARRAY, TIME and nanosecond timestamp keys
+   * keep the buffered scan for now, since the cursor scan has no tests for them yet.
+   */
   private def supportsCursorKey(dataType: DataType): Boolean = dataType match {
     case _: NumericType | BooleanType | _: StringType | BinaryType | NullType => true
     case DateType | TimestampType | TimestampNTZType => true

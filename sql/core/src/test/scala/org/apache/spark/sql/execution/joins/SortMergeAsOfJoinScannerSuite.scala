@@ -118,7 +118,7 @@ class SortMergeAsOfJoinScannerSuite extends SparkFunSuite with LocalSparkContext
       Backward, GreaterThanOrEqual(longL, longR), None, Seq(longL), Seq(longR)))
   }
 
-  test("cursor scan accepts scalar sort key types only") {
+  test("cursor scan accepts scalar sort keys except TIME and nanosecond timestamps") {
     def supportsType(dataType: DataType): Boolean = {
       val l = AttributeReference("l", dataType)()
       val r = AttributeReference("r", dataType)()
@@ -130,7 +130,7 @@ class SortMergeAsOfJoinScannerSuite extends SparkFunSuite with LocalSparkContext
       TimestampType, TimestampNTZType, YearMonthIntervalType(), DayTimeIntervalType()
     ).foreach(dataType => assert(supportsType(dataType), dataType))
     Seq(
-      StructType(Seq(StructField("a", IntegerType))), ArrayType(IntegerType),
+      StructType(Seq(StructField("a", IntegerType))), ArrayType(IntegerType), TimeType(),
       TimestampLTZNanosType(9), TimestampNTZNanosType(9)
     ).foreach(dataType => assert(!supportsType(dataType), dataType))
   }

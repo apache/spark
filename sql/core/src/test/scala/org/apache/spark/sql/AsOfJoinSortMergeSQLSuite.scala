@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
 
+import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.plans.{AsOfJoinDirection, Backward, Forward}
 import org.apache.spark.sql.catalyst.plans.logical.AsOfJoin
@@ -1584,7 +1585,8 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
     }
   }
 
-  test("cursor scan: STRING against INT MATCH_CONDITION casts both sides") {
+  test("cursor scan: STRING against INT MATCH_CONDITION casts the STRING side to the " +
+      "comparison type") {
     Seq(true, false).foreach { ansi =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
         Seq(">=" -> 3, "<=" -> 7).foreach { case (op, expected) =>
@@ -1598,6 +1600,68 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
                    |  MATCH_CONDITION (t.s $op q.n)
                    |""".stripMargin),
               Row(expected) :: Nil)
+          }
+        }
+      }
+    }
+  }
+
+  test("cursor scan: a left row whose key has no right rows never evaluates its as-of side") {
+    // Under ANSI, 'bad' cannot be cast to a number and Long.MaxValue * 1000 overflows. The
+    // buffered scan evaluates the as-of condition only on right rows with the same key, so key
+    // B never fails the query. The cursor scan must not evaluate the left side of key B either.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      Seq(
+        ("('A', '1'), ('B', 'bad'), ('C', '3')",
+          "('A', 0, 'a0'), ('A', 2, 'a2'), ('C', 2, 'c2'), ('C', 4, 'c4')", "t.v"),
+        ("('A', 1L), ('B', 9223372036854775807L), ('C', 3L)",
+          "('A', 0L, 'a0'), ('A', 2000L, 'a2'), ('C', 2000L, 'c2'), ('C', 4000L, 'c4')",
+          "t.v * 1000")
+      ).foreach { case (leftRows, rightRows, leftSide) =>
+        for {
+          (op, tagA, tagC) <- Seq((">=", "a0", "c2"), ("<=", "a2", "c4"))
+          (joinType, unmatched) <- Seq("LEFT" -> Seq(Row("B", null)), "INNER" -> Nil)
+        } {
+          withClue(s"$leftSide $op q.v, $joinType: ") {
+            checkCursorScan(
+              sql(
+                s"""
+                   |SELECT t.k, q.tag
+                   |FROM VALUES $leftRows AS t(k, v)
+                   |$joinType ASOF JOIN VALUES $rightRows AS q(k, v, tag)
+                   |  MATCH_CONDITION ($leftSide $op q.v) ON t.k = q.k
+                   |""".stripMargin),
+              Seq(Row("A", tagA), Row("C", tagC)) ++ unmatched)
+          }
+        }
+      }
+    }
+  }
+
+  test("cursor scan: a failing as-of side fails the query when its key has right rows") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      Seq(
+        ("('A', 'bad')", "('A', 1)", "t.v", "CAST_INVALID_INPUT"),
+        ("('A', 9223372036854775807L)", "('A', 1L)", "t.v * 1000", "ARITHMETIC_OVERFLOW")
+      ).foreach { case (leftRows, rightRows, leftSide, errorCondition) =>
+        for {
+          op <- Seq(">=", "<=")
+          cursorScan <- Seq(false, true)
+        } {
+          withClue(s"$leftSide $op q.v, cursor scan $cursorScan: ") {
+            withSQLConf(
+                SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> cursorScan.toString) {
+              val e = intercept[RuntimeException] {
+                sql(
+                  s"""
+                     |SELECT t.k, q.v
+                     |FROM VALUES $leftRows AS t(k, v)
+                     |LEFT ASOF JOIN VALUES $rightRows AS q(k, v)
+                     |  MATCH_CONDITION ($leftSide $op q.v) ON t.k = q.k
+                     |""".stripMargin).collect()
+              }
+              assert(e.asInstanceOf[SparkThrowable].getCondition == errorCondition, e)
+            }
           }
         }
       }
