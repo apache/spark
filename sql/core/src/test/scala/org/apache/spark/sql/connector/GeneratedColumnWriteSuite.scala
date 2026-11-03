@@ -354,6 +354,35 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
+  test("SPARK-60817: INSERT by name computes generated column in a lambda from a DEFAULT " +
+    "column declared after it") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  a ARRAY<INT>,
+             |  g ARRAY<INT> GENERATED ALWAYS AS (transform(a, x -> x + d)),
+             |  d INT DEFAULT 5
+             |) USING foo""".stripMargin)
+      // `d` is filled with its default value, which `g` must read (1 + 5).
+      sql(s"INSERT INTO testcat.$tblName(a) SELECT array(1)")
+      checkAnswer(spark.table(s"testcat.$tblName"), Row(Seq(1), Seq(6), 5))
+    }
+  }
+
+  test("SPARK-60817: INSERT by name computes generated column from the stored (post-cast) " +
+    "value of a column referenced with IDENTIFIER") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  i INT,
+             |  g INT GENERATED ALWAYS AS (IDENTIFIER('i') * 10)
+             |) USING foo""".stripMargin)
+      // 5.7 is cast to INT (= 5) when stored in `i`. `g` must read the stored value (5 * 10).
+      sql(s"INSERT INTO testcat.$tblName(i) SELECT 5.7D")
+      checkAnswer(spark.table(s"testcat.$tblName"), Row(5, 50))
+    }
+  }
+
   test("INSERT by position validates generated column against the stored (post-cast) value") {
     val tblName = "my_tab"
     withTable(s"testcat.$tblName") {
