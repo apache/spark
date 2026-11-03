@@ -1191,7 +1191,7 @@ def format_jira_verification(
     resolution=None,
     use_color=False,
     is_followup=False,
-    is_revert=False,
+    is_wrapped=False,
 ):
     """Render the JIRA-vs-PR match block shown before merging.
 
@@ -1209,12 +1209,12 @@ def format_jira_verification(
     a note instead of a warning so the expected divergence isn't flagged as a
     likely wrong ticket. The Resolved/Closed warning still applies.
 
-    ``is_revert`` drops the Resolved/Closed warning for a ticket resolved as Fixed, since
-    the change a revert undoes normally fixed its ticket. Any other resolution is still
-    warned about, because the revert path cannot update such a ticket (see
-    :func:`get_jira_issue`). A revert of a revert re-lands the change and is not a revert
-    here (see :func:`_is_revert_title`), so it keeps the warning: it usually targets the
-    ticket that the revert reopened, so a ticket that is still resolved is worth a look.
+    ``is_wrapped`` drops the Resolved/Closed warning for a ticket resolved as Fixed. A
+    ``Revert "..."`` / ``Reapply "..."`` title, in either direction, follows a change
+    that already fixed its ticket, and a revert only offers to reopen it, with No as the
+    default, so the ticket is normally still Resolved (Fixed). Any other resolution is
+    still warned about, because neither JIRA path can update such a ticket (see
+    :func:`get_jira_issue`).
 
     >>> print(format_jira_verification(
     ...     42,
@@ -1264,8 +1264,8 @@ def format_jira_verification(
       Type:    Bug
       Match:   0.00   (FOLLOWUP: title intentionally differs, not checked)
 
-    A revert normally targets a ticket resolved as Fixed, so that is not warned about,
-    while another resolution still is:
+    A Revert/Reapply title normally targets a ticket resolved as Fixed, so that is not
+    warned about, while another resolution still is:
 
     >>> print(format_jira_verification(
     ...     42,
@@ -1275,7 +1275,7 @@ def format_jira_verification(
     ...     "Resolved",
     ...     "Bug",
     ...     resolution="Fixed",
-    ...     is_revert=True,
+    ...     is_wrapped=True,
     ... ))
     === Verify JIRA matches PR #42 ===
     PR title:  Revert "[SPARK-1][SQL] Add a cache"
@@ -1291,7 +1291,7 @@ def format_jira_verification(
     ...     "Resolved",
     ...     "Bug",
     ...     resolution="Duplicate",
-    ...     is_revert=True,
+    ...     is_wrapped=True,
     ... ))
     === Verify JIRA matches PR #42 ===
     PR title:  Revert "[SPARK-1][SQL] Add a cache"
@@ -1302,7 +1302,7 @@ def format_jira_verification(
     """
     status_warning = ""
     resolution_suffix = " (%s)" % resolution if resolution else ""
-    if status in ("Resolved", "Closed") and not (is_revert and resolution == "Fixed"):
+    if status in ("Resolved", "Closed") and not (is_wrapped and resolution == "Fixed"):
         status_warning = "   <-- WARNING: already Resolved/Closed"
         if use_color:
             status_warning = red(status_warning)
@@ -1352,15 +1352,13 @@ def print_jira_issue_summary(issue):
     )
 
 
-def check_linked_jira_issues(pr_num, title, *, is_revert):
+def check_linked_jira_issues(pr_num, title):
     """Check the JIRA tickets that open ``title`` before merging, failing on a mismatch.
 
     Only the leading ids count (see :func:`leading_jira_ids`), so a ticket that
     the title body mentions is neither fetched nor checked.  Requires
     ``asf_jira`` to be set unless JIRA was disabled for this run, in which case
-    both checks are skipped (see :func:`jira_ids_to_verify`).  ``is_revert`` is the
-    direction decided by :func:`prepare_merge_title`, passed on to
-    :func:`format_jira_verification`.
+    both checks are skipped (see :func:`jira_ids_to_verify`).
     """
     jira_ids = jira_ids_to_verify(title)
     # Epic / Umbrella tickets group related work and must not be resolved by a single PR.
@@ -1393,12 +1391,14 @@ def check_linked_jira_issues(pr_num, title, *, is_revert):
     # reference the wrong ticket -- e.g. mistaking a GitHub PR number in the body
     # ("Closes #NNNNN") for a SPARK JIRA id -- which resolves an unrelated ticket on merge.
     # Show the PR title next to each ticket's summary, warn when a ticket is already
-    # Resolved/Closed (a fresh merge should target an open one, while a revert normally targets
-    # a resolved one, see is_revert), and require confirmation.
+    # Resolved/Closed (a fresh merge should target an open one, while a Revert/Reapply PR
+    # normally targets one resolved as Fixed, see format_jira_verification), and require
+    # confirmation.
     # For [FOLLOWUP] PRs the title describes the follow-up fix rather than the ticket, so
     # its low similarity to the JIRA summary is expected and the warning is suppressed.
     # The tag is read inside Revert/Reapply wrappers too.
     is_followup = "FOLLOWUP" in leading_title_tags(title)
+    is_wrapped = bool(_unwrap_wrappers(title)[1])
     for jira_id, issue in linked_issues:
         print()
         print(
@@ -1414,7 +1414,7 @@ def check_linked_jira_issues(pr_num, title, *, is_revert):
                 ),
                 use_color=True,
                 is_followup=is_followup,
-                is_revert=is_revert,
+                is_wrapped=is_wrapped,
             )
         )
         if get_input("Does %s match this PR? (y/N): " % jira_id, ["y", "n", ""]) != "y":
@@ -2031,15 +2031,57 @@ def jira_skip_tags(title):
     return [tag for tag in skip_jira_title_tags if tag in tags]
 
 
-def describe_jira_action(title, is_revert):
-    """Say what :func:`update_jira_for_pr` will do, for the summary shown before a push.
+def _bracketed(tags):
+    """Format tags as in a title, e.g. ``[MINOR], [FOLLOWUP]``, for JIRA messages."""
+    return ", ".join("[%s]" % tag for tag in tags)
 
-    >>> describe_jira_action('[SPARK-1234][SQL] Fix', False)
-    'resolve SPARK-1234 (or add fix versions if already resolved as Fixed)'
-    >>> describe_jira_action('Revert "[SPARK-1234][SQL] Fix"', True)
-    'revert SPARK-1234 (remove fix versions; offer to reopen if resolved)'
-    >>> describe_jira_action('Revert "Fix"', True)
-    'revert a ticket entered at the prompt (remove fix versions; offer to reopen if resolved)'
+
+def jira_action(title, is_revert):
+    """Decide what :func:`update_jira_for_pr` does, as ``(action, detail)``.
+
+    ``action`` is ``"disabled"`` when JIRA is unreachable, ``"skip"`` when the title has
+    skip tags (``detail`` lists them), and otherwise ``"revert"`` or ``"resolve"``, with
+    the leading JIRA ids as ``detail``; with no id, the committer enters one at the
+    prompt. :func:`describe_jira_action` shows the same decision before the push.
+
+    >>> jira_action('[SPARK-1234][SPARK-5678][SQL] Fix', False)
+    ('resolve', ['SPARK-1234', 'SPARK-5678'])
+    >>> jira_action('Revert "Fix"', True)
+    ('revert', [])
+    >>> jira_action('Revert "[MINOR][SQL] Fix"', True)
+    ('skip', ['MINOR'])
+    >>> from unittest.mock import patch
+    >>> with patch.dict(jira_action.__globals__, jira_disabled=True):
+    ...     jira_action('[SPARK-1234][SQL] Fix', False)
+    ('disabled', [])
+    """
+    if jira_disabled:
+        return "disabled", []
+    skipped = jira_skip_tags(title)
+    if skipped:
+        return "skip", skipped
+    return ("revert" if is_revert else "resolve"), leading_jira_ids(title)
+
+
+def describe_jira_action(title, is_revert):
+    """Say what :func:`update_jira_for_pr` will do (see :func:`jira_action`), before a push.
+
+    Both JIRA paths leave a ticket that is resolved other than as Fixed as it is (see
+    :func:`get_jira_issue`), which the summary cannot tell without fetching the ticket,
+    so it says so.
+
+    >>> print(describe_jira_action('[SPARK-1234][SQL] Fix', False))
+    ... # doctest: +NORMALIZE_WHITESPACE
+    resolve SPARK-1234 (or add fix versions if already resolved as Fixed;
+    a ticket resolved other than as Fixed is left as is)
+    >>> print(describe_jira_action('Revert "[SPARK-1234][SQL] Fix"', True))
+    ... # doctest: +NORMALIZE_WHITESPACE
+    revert SPARK-1234 (remove fix versions and offer to reopen if resolved;
+    a ticket resolved other than as Fixed is left as is)
+    >>> print(describe_jira_action('Revert "Fix"', True))
+    ... # doctest: +NORMALIZE_WHITESPACE
+    revert a ticket entered at the prompt (remove fix versions and offer to reopen if resolved;
+    a ticket resolved other than as Fixed is left as is)
     >>> describe_jira_action('Revert "[MINOR][SQL] Fix"', True)
     'skip (title has [MINOR])'
     >>> from unittest.mock import patch
@@ -2047,19 +2089,21 @@ def describe_jira_action(title, is_revert):
     ...     describe_jira_action('[SPARK-1234][SQL] Fix', False)
     'skip (JIRA is unreachable)'
     """
-    if jira_disabled:
+    action, detail = jira_action(title, is_revert)
+    if action == "disabled":
         return "skip (JIRA is unreachable)"
-    skipped = jira_skip_tags(title)
-    if skipped:
-        return "skip (title has %s)" % ", ".join("[%s]" % tag for tag in skipped)
-    ids = ", ".join(leading_jira_ids(title)) or "a ticket entered at the prompt"
-    if is_revert:
-        return "revert %s (remove fix versions; offer to reopen if resolved)" % ids
-    return "resolve %s (or add fix versions if already resolved as Fixed)" % ids
+    if action == "skip":
+        return "skip (title has %s)" % _bracketed(detail)
+    ids = ", ".join(detail) or "a ticket entered at the prompt"
+    other = "a ticket resolved other than as Fixed is left as is"
+    if action == "revert":
+        return "revert %s (remove fix versions and offer to reopen if resolved; %s)" % (ids, other)
+    return "resolve %s (or add fix versions if already resolved as Fixed; %s)" % (ids, other)
 
 
 def update_jira_for_pr(pr_num, title, merge_branches, title_components, *, is_revert):
-    if jira_disabled:
+    action, detail = jira_action(title, is_revert)
+    if action == "disabled":
         # JIRA was disabled at startup (unreachable); nothing to update.
         print()
         print_error(
@@ -2068,13 +2112,11 @@ def update_jira_for_pr(pr_num, title, merge_branches, title_components, *, is_re
         )
         return
 
-    jira_ids = leading_jira_ids(title)
-    skipped = jira_skip_tags(title)
-    if skipped:
+    if action == "skip":
         print()
         print_error(
             "Skipping JIRA operations for PR #%s because title has %s."
-            % (pr_num, ", ".join("[%s]" % tag for tag in skipped))
+            % (pr_num, _bracketed(detail))
         )
         return
 
@@ -2082,7 +2124,8 @@ def update_jira_for_pr(pr_num, title, merge_branches, title_components, *, is_re
     # initialize_jira() fails fast on a missing library/credentials when JIRA is live.
     print()
     continue_maybe("Would you like to update an associated JIRA?")
-    if is_revert:
+    jira_ids = detail
+    if action == "revert":
         for jira_id in jira_ids or [""]:
             revert_jira_issue(merge_branches, jira_id)
         return
@@ -2227,9 +2270,10 @@ _LEADING_TAGS = frozenset({"MINOR", "TRIVIAL"})
 _BARE_SPARK_ID_RE = re.compile(r"SPARK-[0-9]+\b", re.IGNORECASE | re.ASCII)
 # A Revert "..." / Reapply "..." wrapper, which prepare_merge_title() keeps in the PR title.
 _WRAPPER_RE = re.compile(r'(Revert|Reapply) "(.*)"', re.DOTALL)
-# A wrapper word that still opens a title after unwrapping, e.g. 'Revert [SPARK-N] ...'. Case
-# is ignored, as older subjects include 'revert [SPARK-N] ...'.
-_WRAPPER_WORD_RE = re.compile(r"(?:Revert|Reapply)\b", re.IGNORECASE)
+# Revert or Reapply, or a form of either such as Reverting, still opening a title after
+# unwrapping, e.g. 'Revert [SPARK-N] ...'. Case is ignored, as older subjects include
+# 'revert [SPARK-N] ...' and 'Reverting ...'.
+_WRAPPER_WORD_RE = re.compile(r"Revert|Reapply", re.IGNORECASE)
 
 
 def _iter_bracket_tags(raw: str) -> Iterator[tuple[str, int]]:
@@ -2420,8 +2464,8 @@ def _unwrap_title(title: str) -> str:
     return _unwrap_wrappers(title)[0]
 
 
-def _is_revert_title(title: str) -> bool:
-    """Whether the ``Revert "..."`` / ``Reapply "..."`` wrappers of a PR title net to a revert.
+def _is_net_revert(words: list[str]) -> bool:
+    """Whether the wrapper words from :func:`_unwrap_wrappers` net to a revert.
 
     A net revert takes the revert path of :func:`update_jira_for_pr`, which removes fix
     versions instead of resolving. The direction is decided by all the wrappers (see
@@ -2442,7 +2486,7 @@ def _is_revert_title(title: str) -> bool:
     ...           ' Revert "[SPARK-1234][SQL] Fix" ',
     ...           'Revert "',
     ...           'Reapply "'):
-    ...     print(_is_revert_title(t), repr(t))
+    ...     print(_is_net_revert(_unwrap_wrappers(t)[1]), repr(t))
     False '[SPARK-1234][SQL] Fix'
     True 'Revert "[SPARK-1234][SQL] Fix"'
     False 'Reapply "[SPARK-1234][SQL] Fix"'
@@ -2456,7 +2500,7 @@ def _is_revert_title(title: str) -> bool:
     False 'Revert "'
     False 'Reapply "'
     """
-    return _unwrap_wrappers(title)[1].count("Revert") % 2 == 1
+    return words.count("Revert") % 2 == 1
 
 
 def leading_jira_ids(title: str) -> list[str]:
@@ -2600,7 +2644,7 @@ def prepare_merge_title(raw_title: str) -> tuple[str, list[str], bool]:
     predate the current title rules, so it is not parsed and has no components. It is
     rejected when the innermost title still starts with ``Revert`` or ``Reapply``, e.g.
     with a quote dropped: that wrapper would not be counted when deciding the direction
-    (see :func:`_is_revert_title`), and its JIRA id and skip tags would not be found
+    (see :func:`_is_net_revert`), and its JIRA id and skip tags would not be found
     either. Any other title is parsed with :meth:`Title.parse`, which
     fails on a malformed title, and its component tags are normalized, with a prompt for
     a primary component when there is none. A title that changes is printed.
@@ -2611,10 +2655,11 @@ def prepare_merge_title(raw_title: str) -> tuple[str, list[str], bool]:
         if _WRAPPER_WORD_RE.match(inner):
             fail(
                 "Unbalanced Revert/Reapply wrappers in PR title: %s. Retitle the PR so that "
-                'each layer is Revert "..." or Reapply "..." around the reverted title.' % title
+                'each layer is Revert "..." or Reapply "...", e.g. Reapply "[SPARK-N] ..." '
+                "for a revert of a revert." % title
             )
         title_components: list[str] = []
-        is_revert = _is_revert_title(title)
+        is_revert = _is_net_revert(words)
     else:
         # Parse; fail on a malformed title.
         try:
@@ -3000,7 +3045,7 @@ def main():
         )
         continue_maybe(msg)
 
-    check_linked_jira_issues(pr_num, title, is_revert=is_revert_pr)
+    check_linked_jira_issues(pr_num, title)
 
     print("\n=== Pull Request #%s ===" % pr_num)
     print("title\t%s\nsource\t%s\ntarget\t%s\nurl\t%s" % (title, pr_repo_desc, target_ref, url))
@@ -3215,7 +3260,7 @@ __test__ = {
     "update_jira_for_revert": """
     Reverts update each leading JIRA id once and bypass the resolve/add path. update()
     passes is_revert as main() gets it from prepare_merge_title(), by wrapper parity (see
-    _is_revert_title), so a net re-land resolves.
+    _is_net_revert), so a net re-land resolves.
 
     >>> from contextlib import redirect_stdout
     >>> from io import StringIO
@@ -3231,7 +3276,7 @@ __test__ = {
     ...         redirect_stdout(StringIO()),
     ...     ):
     ...         update_jira_for_pr("123", title, branches, list(components),
-    ...                            is_revert=_is_revert_title(title))
+    ...                            is_revert=_is_net_revert(_unwrap_wrappers(title)[1]))
     >>> title = 'Revert "[SPARK-1234][SPARK-5678][SQL] Fix mentions SPARK-9999"'
     >>> update(title, ["master", "branch-4.x"])
     >>> assert reverter.call_args_list == [
@@ -3355,7 +3400,7 @@ __test__ = {
     ...         redirect_stdout(output),
     ...     ):
     ...         update_jira_for_pr("123", title, ["master"], [],
-    ...                            is_revert=_is_revert_title(title))
+    ...                            is_revert=_is_net_revert(_unwrap_wrappers(title)[1]))
     ...     assert not reverter.called
     ...     assert not resolver.called
     ...     assert not confirm.called
@@ -3456,17 +3501,16 @@ __test__ = {
     >>> for title in ('Revert "Revert "[SPARK-1234][SQL] Fix"',
     ...               'Reapply "Revert "[SPARK-1234][SQL] Fix"',
     ...               'Revert "Revert [SPARK-1234][SQL] Fix""',
-    ...               'Revert "revert [SPARK-1234][SQL] Fix"'):
+    ...               'Revert "revert [SPARK-1234][SQL] Fix"',
+    ...               'Revert "Reverted [SPARK-1234][SQL] Fix"',
+    ...               'Revert "Reapply "[SPARK-1234][SQL] Fix"'):
     ...     print(prepare(title).split(". Retitle")[0])
     Unbalanced Revert/Reapply wrappers in PR title: Revert "Revert "[SPARK-1234][SQL] Fix"
     Unbalanced Revert/Reapply wrappers in PR title: Reapply "Revert "[SPARK-1234][SQL] Fix"
     Unbalanced Revert/Reapply wrappers in PR title: Revert "Revert [SPARK-1234][SQL] Fix""
     Unbalanced Revert/Reapply wrappers in PR title: Revert "revert [SPARK-1234][SQL] Fix"
-
-    A word that merely starts with Revert is not a wrapper word.
-
-    >>> prepare('Revert "Reverted [SPARK-1234][SQL] Fix"')
-    ('Revert "Reverted [SPARK-1234][SQL] Fix"', [], True)
+    Unbalanced Revert/Reapply wrappers in PR title: Revert "Reverted [SPARK-1234][SQL] Fix"
+    Unbalanced Revert/Reapply wrappers in PR title: Revert "Reapply "[SPARK-1234][SQL] Fix"
     """,
     "check_linked_jira_issues": """
     Only the leading ids are fetched and checked, so an Epic that the title body mentions
@@ -3485,7 +3529,7 @@ __test__ = {
     ...     "SPARK-34261": issue("Epic"), "SPARK-34262": issue("Umbrella")}.__getitem__
     >>> verify = Mock(return_value="")
     >>> stop = Mock(side_effect=SystemExit)
-    >>> def check(title, answers=("y",), is_revert=False):
+    >>> def check(title, answers=("y",)):
     ...     for m in (client, verify, stop):
     ...         m.reset_mock()
     ...     with (
@@ -3495,7 +3539,7 @@ __test__ = {
     ...         patch("builtins.input", side_effect=answers),
     ...         redirect_stdout(StringIO()),
     ...     ):
-    ...         check_linked_jira_issues("123", title, is_revert=is_revert)
+    ...         check_linked_jira_issues("123", title)
     >>> check("[SPARK-60328][SQL][TESTS] Use a unique jar copy in the HiveDDLSuite "
     ...       "SPARK-34261 test")
     >>> client.issue.call_args_list
@@ -3545,7 +3589,7 @@ __test__ = {
     ...     patch.dict(check_linked_jira_issues.__globals__, asf_jira=client, jira_disabled=True),
     ...     redirect_stdout(output),
     ... ):
-    ...     check_linked_jira_issues("123", "[SPARK-60328][SQL] Fix", is_revert=False)
+    ...     check_linked_jira_issues("123", "[SPARK-60328][SQL] Fix")
     >>> client.issue.assert_not_called()
     >>> "skipping the Epic/Umbrella check" in output.getvalue()
     True
@@ -3577,13 +3621,16 @@ __test__ = {
     True
     True
 
-    The direction main() decided is passed on, so a revert is not warned about its
-    resolved ticket (see format_jira_verification).
+    A Revert/Reapply title, in either direction, is passed on as wrapped, so a ticket still
+    resolved as Fixed is not warned about (see format_jira_verification).
 
     >>> for title in ('Revert "[SPARK-60328][SQL] Fix"',
-    ...               'Revert "Revert "[SPARK-60328][SQL] Fix""'):
-    ...     check(title, is_revert=_is_revert_title(title))
-    ...     print(verify.call_args.kwargs["is_revert"])
+    ...               'Revert "Revert "[SPARK-60328][SQL] Fix""',
+    ...               'Reapply "[SPARK-60328][SQL] Fix"', '[SPARK-60328][SQL] Fix'):
+    ...     check(title)
+    ...     print(verify.call_args.kwargs["is_wrapped"])
+    True
+    True
     True
     False
     """,
