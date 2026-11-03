@@ -47,7 +47,9 @@ as the scan returned them, without the checks of a conversion, such as the preci
 The batches that Spark copies end with the batches of the scan, so a library may get smaller
 batches than `spark.sql.execution.arrow.maxRecordsPerBatch` rows then. The data of a query in which
 Spark also filters, projects or shuffles the rows is still converted to rows, and with adaptive
-query execution, so is the data of a query with a subquery.
+query execution, so is the data of a query with a subquery. So is the data of every query when an
+extension of the session (`spark.sql.extensions`) has columnar rules, which may replace the
+conversions to rows with their own, such as those of an engine that runs queries in native code.
 
 Spark calls native data sources with the
 [Foreign Function and Memory API](https://openjdk.org/jeps/454) of Java, which is final from Java

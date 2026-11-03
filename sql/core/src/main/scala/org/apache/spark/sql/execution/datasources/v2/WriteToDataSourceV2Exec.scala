@@ -630,7 +630,9 @@ trait V2TableWriteExec
    * and the query only supports columnar output. A query that supports rows too, such as a scan
    * of a cached DataFrame, is written as rows. When the write takes the batches, the query gets no
    * transition to rows (see `ApplyColumnarRulesAndInsertTransitions`), and its batches are written
-   * with `WritingSparkTask.runColumnar` of `writingTask`.
+   * with `WritingSparkTask.runColumnar` of `writingTask`. With columnar rules of extensions, which
+   * may replace the transitions to rows with their own, the query gets a transition, so the write
+   * then takes rows.
    */
   def writesColumnar: Boolean =
     supportsColumnarInput && query.supportsColumnar && !query.supportsRowBased

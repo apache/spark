@@ -39,7 +39,7 @@ import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
 import org.apache.spark.sql.connector.read.streaming.{ReadLimit, SupportsAdmissionControl}
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
-import org.apache.spark.sql.execution.{ColumnarToRowExec, RowToColumnConverter, SparkPlan}
+import org.apache.spark.sql.execution.{ApplyColumnarRulesAndInsertTransitions, ColumnarRule, ColumnarToRowExec, RowToColumnConverter, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
 import org.apache.spark.sql.execution.arrow.ArrowWriter
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
@@ -225,6 +225,27 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession
         (id, name.toUpperCase(Locale.ROOT))
       })
     }
+  }
+
+  test("write rows when an extension has columnar rules") {
+    // The physical plan of a copy, before the transitions between rows and columns.
+    val qe = QueryTest.withQueryExecutionsCaptured(spark) {
+      spark.read.format(format).option("end", "10").load()
+        .write.format(format).option("table", "extension_write").mode("append").save()
+    }.find(_.executedPlan.exists(_.isInstanceOf[V2TableWriteExec])).get
+    def write(columnarRules: Seq[ColumnarRule]): V2TableWriteExec = {
+      ApplyColumnarRulesAndInsertTransitions(columnarRules, outputsColumnar = false)
+        .apply(qe.sparkPlan)
+        .collectFirst { case write: V2TableWriteExec => write }.get
+    }
+    // Without columnar rules, the write takes the batches of the scan.
+    assert(write(Nil).writesColumnar && write(Nil).query.isInstanceOf[BatchScanExec])
+    // The columnar rules of an extension, such as of an engine that runs queries in native code,
+    // may replace the transitions to rows with their own, which may be the only way to read its
+    // batches, so the write then takes rows through a transition.
+    val withRules = write(Seq(new ColumnarRule))
+    assert(!withRules.writesColumnar, withRules)
+    assert(withRules.query.isInstanceOf[ColumnarToRowExec], withRules.query)
   }
 
   test("copy the Arrow columns of every type, or convert the columns of a batch") {
