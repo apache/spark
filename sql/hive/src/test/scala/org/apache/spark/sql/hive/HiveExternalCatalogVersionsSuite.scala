@@ -202,7 +202,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
           logError("Fail to get the latest Spark versions to test.")
         } else {
           logInfo("Skip tests because old Spark versions don't support " +
-            s"Java ${Runtime.version().feature()}.")
+            s"Java ${PROCESS_TABLES.javaVersion}.")
         }
       } else {
         logError(s"Python version <  ${TestUtils.minimumPythonSupportedVersion}, " +
@@ -262,10 +262,12 @@ object PROCESS_TABLES extends QueryTest {
   val isPythonVersionAvailable = TestUtils.isPythonVersionAvailable
   val releaseMirror = sys.env.getOrElse("SPARK_RELEASE_MIRROR",
     "https://dist.apache.org/repos/dist/release")
+  val javaVersion = Runtime.version().feature()
   // Spark 3.3, 4.0, and 4.2 are the first release lines that support Java 17, 21, and 25,
-  // respectively. No release line supports the other Java versions, e.g., Java 26.
+  // respectively. No release line supports the other Java versions, e.g., Java 26. Add an entry
+  // here when a Spark release adds a Java version to its `docs/index.md`.
   val minimumTestingVersion: Option[String] =
-    Map(17 -> "3.3.0", 21 -> "4.0.0", 25 -> "4.2.0").get(Runtime.version().feature())
+    Map(17 -> "3.3.0", 21 -> "4.0.0", 25 -> "4.2.0").get(javaVersion)
   // Tests the latest version of every release line that supports the running Java version.
   val testingVersions: Seq[String] = if (isPythonVersionAvailable &&
       minimumTestingVersion.isDefined) {
@@ -278,7 +280,7 @@ object PROCESS_TABLES extends QueryTest {
         .filter(sparkVersionPattern.unanchored.matches(_))
         .map(sparkVersionPattern.findFirstMatchIn(_).get.group(1))
         .filter(_ < org.apache.spark.SPARK_VERSION)
-        .filter(_ >= minimumTestingVersion.get)
+        .filter(v => minimumTestingVersion.exists(_ <= v))
         .filterNot(skipReleaseVersions.contains).toImmutableArraySeq
     } catch {
       // Do not throw exception during object initialization.
