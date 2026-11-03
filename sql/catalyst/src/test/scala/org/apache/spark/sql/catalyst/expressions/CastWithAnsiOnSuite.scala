@@ -163,7 +163,6 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
   test("SPARK-60843: ANSI cast of a wide decimal to int/short/byte truncates exactly") {
     // BigDecimal-backed decimal(20, s) literals just inside and just outside each bound. The
     // in-range ones round up past the bound as a Double, which used to make them overflow.
-    // Values just below an integer near the bound used to be rounded up to that integer.
     def wideDecimal(str: String, scale: Int): Literal = {
       // Decimal(BigDecimal, p, s) always keeps the BigDecimal-backed representation.
       val d = Decimal(BigDecimal(str), 20, scale)
@@ -195,11 +194,17 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
             "ansiConfig" -> "\"spark.sql.ansi.enabled\""))
       }
     }
+    // In-range values whose fraction is close enough to 1 to round up as a Double, near a bound
+    // or not, used to come back one too high.
     Seq[(DataType, Int, String, Any)](
       (IntegerType, 8, "2147483646.99999999", 2147483646),
       (IntegerType, 8, "-2147483647.99999999", -2147483647),
       (ShortType, 13, "32766.9999999999999", 32766.toShort),
-      (ByteType, 15, "126.999999999999999", 126.toByte)
+      (ByteType, 15, "126.999999999999999", 126.toByte),
+      (IntegerType, 18, "0.999999999999999999", 0),
+      (IntegerType, 10, "1000000000.9999999999", 1000000000),
+      (ShortType, 14, "12345.99999999999999", 12345.toShort),
+      (ByteType, 16, "99.9999999999999999", 99.toByte)
     ).foreach { case (dt, scale, str, expected) =>
       checkEvaluation(cast(wideDecimal(str, scale), dt), expected)
     }

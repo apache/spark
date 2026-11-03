@@ -611,9 +611,9 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
   }
 
   test("SPARK-60843: roundToInt/Short/Byte truncate exactly for decimals not backed by a long") {
-    // Each value is so close to the next integer that it rounds up to it as a Double. The
-    // ones that truncate to the type's max/min used to fail the range check, and the ones
-    // just below an integer near the bound used to come back as that integer.
+    // Each value is so close to the next integer that it rounds up to it as a Double. The old
+    // Double path returned that next integer for any such value, near a bound or not, and for
+    // values that truncate to the type's max/min the rounded value also overflowed.
     val inRange = Seq(
       ("2147483647.99999999", 20, 8, (d: Decimal) => d.roundToInt().toLong, Int.MaxValue.toLong),
       ("-2147483648.99999999", 20, 8, (d: Decimal) => d.roundToInt().toLong, Int.MinValue.toLong),
@@ -628,7 +628,12 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
       ("2147483646.99999999", 20, 8, (d: Decimal) => d.roundToInt().toLong, 2147483646L),
       ("-2147483647.99999999", 20, 8, (d: Decimal) => d.roundToInt().toLong, -2147483647L),
       ("32766.9999999999999", 20, 13, (d: Decimal) => d.roundToShort().toLong, 32766L),
-      ("126.999999999999999", 20, 15, (d: Decimal) => d.roundToByte().toLong, 126L))
+      ("126.999999999999999", 20, 15, (d: Decimal) => d.roundToByte().toLong, 126L),
+      ("0.999999999999999999", 20, 18, (d: Decimal) => d.roundToInt().toLong, 0L),
+      ("-0.999999999999999999", 20, 18, (d: Decimal) => d.roundToInt().toLong, 0L),
+      ("100000000.999999999", 20, 9, (d: Decimal) => d.roundToInt().toLong, 100000000L),
+      ("12345.9999999999999", 20, 13, (d: Decimal) => d.roundToShort().toLong, 12345L),
+      ("99.9999999999999999", 20, 16, (d: Decimal) => d.roundToByte().toLong, 99L))
     inRange.foreach { case (str, precision, scale, round, expected) =>
       val expanded = Decimal(BigDecimal(str), precision, scale)
       checkCompact(expanded, false)
