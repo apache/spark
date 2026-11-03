@@ -20,6 +20,7 @@ import java.io.File
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.{AccessDeniedException, Files, NoSuchFileException, Paths}
 import java.nio.file.StandardCopyOption.REPLACE_EXISTING
+import java.nio.file.attribute.{PosixFileAttributeView, PosixFilePermission}
 import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDate}
 import java.util.UUID
@@ -1713,8 +1714,8 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
   }
 
   test("add a read-only package as a writable artifact") {
-    // Spark checks a copy of the file of the user, which keeps its permissions, or on Windows
-    // its read-only attribute, and must be deletable if the package is rejected.
+    // Spark checks a copy of the file of the user, which keeps its permissions, or on Windows its
+    // read-only attribute, so Spark makes it writable: the artifact, moved from it, is writable.
     val session = spark.newSession()
     sessions += session
     val pkg = createZip(Utils.createTempDir(), "read_only.sparkpkg",
@@ -1724,8 +1725,15 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(pkg.setWritable(false))
     try {
       session.addArtifact(pkg.getPath)
-      val artifact = session.artifactManager.getNativeDataSourcePackages._1.head
-      assert(Files.isWritable(artifact.toPath))
+      val artifact = session.artifactManager.getNativeDataSourcePackages._1.head.toPath
+      // The permissions rather than Files.isWritable, which is true for root whatever they are.
+      Option(Files.getFileAttributeView(artifact, classOf[PosixFileAttributeView])) match {
+        case Some(view) =>
+          assert(view.readAttributes().permissions().contains(PosixFilePermission.OWNER_WRITE))
+        case None =>
+          // On Windows, Files.isWritable reads the read-only attribute.
+          assert(Files.isWritable(artifact))
+      }
     } finally {
       pkg.setWritable(true)
     }

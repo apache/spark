@@ -280,8 +280,9 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
         // Fails as for the other artifacts if the file does not exist or cannot be read.
         val copy = dir.toPath.resolve(normalizedRemoteRelativePath.getFileName)
         Files.copy(serverLocalStagingPath, copy)
-        // On Windows, the copy keeps the read-only attribute of the file, and since Java 25,
-        // File.delete does not delete a read-only file there, so the copy could not be deleted.
+        // The copy keeps the permissions of the file, or on Windows its read-only attribute.
+        // Since Java 25, File.delete does not delete a read-only file on Windows, so neither the
+        // copy of a rejected package nor the artifact, moved from the copy, could be deleted.
         copy.toFile.setWritable(true)
         copy
       }.getOrElse(serverLocalStagingPath)
