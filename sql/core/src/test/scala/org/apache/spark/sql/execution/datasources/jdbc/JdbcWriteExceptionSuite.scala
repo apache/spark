@@ -25,7 +25,7 @@ import org.mockito.Mockito._
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException, SparkSQLException, SparkThrowable, TaskContext}
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, NoLegacyJDBCError}
+import org.apache.spark.sql.jdbc.{JdbcDialect, NoLegacyJDBCError}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 /** Tests destination write classification and propagation of upstream JDBC failures. */
@@ -41,37 +41,53 @@ class JdbcWriteExceptionSuite extends SparkFunSuite {
     ) ++ extra))
   }
 
-  private def registerDialect(dialect: JdbcDialect): Unit = {
-    JdbcDialects.unregisterDialect(dialect)
-    JdbcDialects.registerDialect(dialect)
-  }
-
-  private def savePartitionWithSourceError(iterator: Iterator[Row]): SQLException = {
-    val conn = mock(classOf[Connection])
-    val stmt = mock(classOf[PreparedStatement])
+  private class WriteFixture {
+    val conn: Connection = mock(classOf[Connection])
+    val stmt: PreparedStatement = mock(classOf[PreparedStatement])
+    val context = TaskContext.empty()
+    val options: JdbcOptionsInWrite = newWriteOptions()
     when(conn.prepareStatement(anyString())).thenReturn(stmt)
 
-    val dialect = new JdbcDialect with NoLegacyJDBCError {
+    // savePartition receives its dialect directly; no global dialect registration is needed.
+    val dialect: JdbcDialect = new JdbcDialect with NoLegacyJDBCError {
       override def canHandle(url: String): Boolean = url == testJdbcUrl
       override def createConnectionFactory(options: JDBCOptions): Int => Connection = _ => conn
     }
-    registerDialect(dialect)
-    TaskContext.setTaskContext(TaskContext.empty())
+
+    def enableTransactions(): Unit = {
+      val metadata = mock(classOf[DatabaseMetaData])
+      when(conn.getMetaData).thenReturn(metadata)
+      when(metadata.supportsTransactions()).thenReturn(true)
+      when(metadata.supportsTransactionIsolationLevel(Connection.TRANSACTION_READ_COMMITTED))
+        .thenReturn(true)
+    }
+
+    def savePartition(
+        iterator: Iterator[Row] = Iterator(Row(1)),
+        dialect: JdbcDialect = this.dialect,
+        isolationLevel: Int = Connection.TRANSACTION_NONE,
+        options: JDBCOptions = this.options): Unit = {
+      JdbcUtils.savePartition(
+        "t", iterator, StructType(Seq(StructField("a", IntegerType))),
+        "INSERT INTO t (a) VALUES (?)", 1, dialect, isolationLevel, options)
+    }
+  }
+
+  private def withWriteFixture[T](f: WriteFixture => T): T = {
+    val fixture = new WriteFixture
+    TaskContext.setTaskContext(fixture.context)
     try {
-      intercept[SQLException] {
-        JdbcUtils.savePartition(
-          "t",
-          iterator,
-          StructType(Seq(StructField("a", IntegerType))),
-          "INSERT INTO t (a) VALUES (?)",
-          batchSize = 1,
-          dialect,
-          Connection.TRANSACTION_NONE,
-          newWriteOptions())
-      }
+      f(fixture)
     } finally {
       TaskContext.unset()
-      JdbcDialects.unregisterDialect(dialect)
+    }
+  }
+
+  private def savePartitionWithSourceError(iterator: Iterator[Row]): SQLException = {
+    withWriteFixture { fixture =>
+      intercept[SQLException] {
+        fixture.savePartition(iterator)
+      }
     }
   }
 
@@ -121,30 +137,13 @@ class JdbcWriteExceptionSuite extends SparkFunSuite {
   }
 
   test("savePartition classifies JDBC row binding failures") {
-    val conn = mock(classOf[Connection])
-    val stmt = mock(classOf[PreparedStatement])
-    when(conn.prepareStatement(anyString())).thenReturn(stmt)
-    val bindingFailure = new SQLException("binding rejected", "22001")
-    doThrow(bindingFailure).when(stmt).setInt(anyInt(), anyInt())
+    withWriteFixture { fixture =>
+      import fixture._
+      val bindingFailure = new SQLException("binding rejected", "22001")
+      doThrow(bindingFailure).when(stmt).setInt(anyInt(), anyInt())
 
-    val dialect = new JdbcDialect with NoLegacyJDBCError {
-      override def canHandle(url: String): Boolean = url == testJdbcUrl
-      override def createConnectionFactory(options: JDBCOptions): Int => Connection = _ => conn
-    }
-    registerDialect(dialect)
-    TaskContext.setTaskContext(TaskContext.empty())
-    try {
-      val options = newWriteOptions()
       val error = intercept[SparkRuntimeException] {
-        JdbcUtils.savePartition(
-          "t",
-          Iterator(Row(1)),
-          StructType(Seq(StructField("a", IntegerType))),
-          "INSERT INTO t (a) VALUES (?)",
-          batchSize = 1,
-          dialect,
-          Connection.TRANSACTION_NONE,
-          options)
+        savePartition()
       }
       checkError(
         exception = error,
@@ -153,44 +152,19 @@ class JdbcWriteExceptionSuite extends SparkFunSuite {
         parameters = Map("url" -> options.getRedactUrl(), "tableName" -> "t"))
       assert(error.getCause eq bindingFailure)
       verify(stmt, never()).executeBatch()
-    } finally {
-      TaskContext.unset()
-      JdbcDialects.unregisterDialect(dialect)
     }
   }
 
   test("savePartition classifies JDBC batch write failures") {
-    val conn = mock(classOf[Connection])
-    val metadata = mock(classOf[DatabaseMetaData])
-    val stmt = mock(classOf[PreparedStatement])
-    when(conn.getMetaData).thenReturn(metadata)
-    when(metadata.supportsTransactions()).thenReturn(false)
-    when(conn.prepareStatement(anyString())).thenReturn(stmt)
+    withWriteFixture { fixture =>
+      import fixture._
+      val batchFailure = new SQLException("batch rejected", "23000", 2627)
+      val nextFailure = new SQLException("duplicate key detail")
+      batchFailure.setNextException(nextFailure)
+      when(stmt.executeBatch()).thenThrow(batchFailure)
 
-    val batchFailure = new SQLException("batch rejected", "23000", 2627)
-    val nextFailure = new SQLException("duplicate key detail")
-    batchFailure.setNextException(nextFailure)
-    when(stmt.executeBatch()).thenThrow(batchFailure)
-
-    val dialect = new JdbcDialect with NoLegacyJDBCError {
-      override def canHandle(url: String): Boolean = url == testJdbcUrl
-      override def createConnectionFactory(options: JDBCOptions): Int => Connection = _ => conn
-    }
-    registerDialect(dialect)
-    val context = TaskContext.empty()
-    TaskContext.setTaskContext(context)
-    try {
-      val options = newWriteOptions()
       val error = intercept[SparkRuntimeException] {
-        JdbcUtils.savePartition(
-          "t",
-          Iterator(Row(1)),
-          StructType(Seq(StructField("a", IntegerType))),
-          "INSERT INTO t (a) VALUES (?)",
-          batchSize = 1,
-          dialect,
-          Connection.TRANSACTION_NONE,
-          options)
+        savePartition()
       }
       checkError(
         exception = error,
@@ -200,42 +174,18 @@ class JdbcWriteExceptionSuite extends SparkFunSuite {
       assert(error.getCause eq batchFailure)
       assert(batchFailure.getNextException eq nextFailure)
       assert(batchFailure.getCause eq nextFailure)
-    } finally {
-      TaskContext.unset()
-      JdbcDialects.unregisterDialect(dialect)
     }
   }
 
   test("savePartition classifies JDBC commit failures") {
-    val conn = mock(classOf[Connection])
-    val metadata = mock(classOf[DatabaseMetaData])
-    val stmt = mock(classOf[PreparedStatement])
-    when(conn.getMetaData).thenReturn(metadata)
-    when(metadata.supportsTransactions()).thenReturn(true)
-    when(metadata.supportsTransactionIsolationLevel(Connection.TRANSACTION_READ_COMMITTED))
-      .thenReturn(true)
-    when(conn.prepareStatement(anyString())).thenReturn(stmt)
+    withWriteFixture { fixture =>
+      import fixture._
+      enableTransactions()
+      val commitFailure = new SQLException("commit rejected", "40001")
+      doThrow(commitFailure).when(conn).commit()
 
-    val commitFailure = new SQLException("commit rejected", "40001")
-    doThrow(commitFailure).when(conn).commit()
-    val dialect = new JdbcDialect with NoLegacyJDBCError {
-      override def canHandle(url: String): Boolean = url == testJdbcUrl
-      override def createConnectionFactory(options: JDBCOptions): Int => Connection = _ => conn
-    }
-    registerDialect(dialect)
-    TaskContext.setTaskContext(TaskContext.empty())
-    try {
-      val options = newWriteOptions()
       val error = intercept[SparkRuntimeException] {
-        JdbcUtils.savePartition(
-          "t",
-          Iterator(Row(1)),
-          StructType(Seq(StructField("a", IntegerType))),
-          "INSERT INTO t (a) VALUES (?)",
-          batchSize = 1,
-          dialect,
-          Connection.TRANSACTION_READ_COMMITTED,
-          options)
+        savePartition(isolationLevel = Connection.TRANSACTION_READ_COMMITTED)
       }
       checkError(
         exception = error,
@@ -244,42 +194,21 @@ class JdbcWriteExceptionSuite extends SparkFunSuite {
         parameters = Map("url" -> options.getRedactUrl(), "tableName" -> "t"))
       assert(error.getCause eq commitFailure)
       verify(conn).rollback()
-    } finally {
-      TaskContext.unset()
-      JdbcDialects.unregisterDialect(dialect)
     }
   }
 
   test("savePartition normalizes an unclassified legacy JDBC write failure") {
-    val conn = mock(classOf[Connection])
-    val metadata = mock(classOf[DatabaseMetaData])
-    val stmt = mock(classOf[PreparedStatement])
-    when(conn.getMetaData).thenReturn(metadata)
-    when(metadata.supportsTransactions()).thenReturn(false)
-    when(conn.prepareStatement(anyString())).thenReturn(stmt)
+    withWriteFixture { fixture =>
+      import fixture._
+      val batchFailure = new SQLException("batch rejected", "23000", 2627)
+      when(stmt.executeBatch()).thenThrow(batchFailure)
+      val legacyDialect = new JdbcDialect {
+        override def canHandle(url: String): Boolean = url == testJdbcUrl
+        override def createConnectionFactory(options: JDBCOptions): Int => Connection = _ => conn
+      }
 
-    val batchFailure = new SQLException("batch rejected", "23000", 2627)
-    when(stmt.executeBatch()).thenThrow(batchFailure)
-
-    val dialect = new JdbcDialect {
-      override def canHandle(url: String): Boolean = url == testJdbcUrl
-      override def createConnectionFactory(options: JDBCOptions): Int => Connection = _ => conn
-    }
-    registerDialect(dialect)
-    val context = TaskContext.empty()
-    TaskContext.setTaskContext(context)
-    try {
-      val options = newWriteOptions()
       val error = intercept[SparkRuntimeException] {
-        JdbcUtils.savePartition(
-          "t",
-          Iterator(Row(1)),
-          StructType(Seq(StructField("a", IntegerType))),
-          "INSERT INTO t (a) VALUES (?)",
-          batchSize = 1,
-          dialect,
-          Connection.TRANSACTION_NONE,
-          options)
+        savePartition(dialect = legacyDialect)
       }
       checkError(
         exception = error,
@@ -287,83 +216,69 @@ class JdbcWriteExceptionSuite extends SparkFunSuite {
         sqlState = Some("HV000"),
         parameters = Map("url" -> options.getRedactUrl(), "tableName" -> "t"))
       assert(error.getCause eq batchFailure)
-    } finally {
-      TaskContext.unset()
-      JdbcDialects.unregisterDialect(dialect)
     }
   }
 
   gridTest("savePartition preserves specific dialect mappings")(Seq(true, false)) { legacy =>
-    val conn = mock(classOf[Connection])
-    val stmt = mock(classOf[PreparedStatement])
-    when(conn.prepareStatement(anyString())).thenReturn(stmt)
-    val batchFailure = new SQLException("table already exists", "42P07")
-    when(stmt.executeBatch()).thenThrow(batchFailure)
-    val mappedFailure = new AnalysisException(
-      errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
-      messageParameters = Map("relationName" -> "`t`"),
-      cause = Some(batchFailure))
-    val dialect = new JdbcDialect {
-      override def canHandle(url: String): Boolean = url == testJdbcUrl
-      override def createConnectionFactory(options: JDBCOptions): Int => Connection = _ => conn
-      override def classifyException(message: String, e: Throwable): AnalysisException = {
-        mappedFailure
-      }
-      override def classifyException(
-          e: Throwable,
-          condition: String,
-          messageParameters: Map[String, String],
-          description: String,
-          isRuntime: Boolean): Throwable with SparkThrowable = {
-        if (legacy) {
-          super.classifyException(e, condition, messageParameters, description, isRuntime)
-        } else {
+    withWriteFixture { fixture =>
+      import fixture._
+      val batchFailure = new SQLException("table already exists", "42P07")
+      when(stmt.executeBatch()).thenThrow(batchFailure)
+      val mappedFailure = new AnalysisException(
+        errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
+        messageParameters = Map("relationName" -> "`t`"),
+        cause = Some(batchFailure))
+      val mappedDialect = new JdbcDialect {
+        override def canHandle(url: String): Boolean = url == testJdbcUrl
+        override def createConnectionFactory(options: JDBCOptions): Int => Connection = _ => conn
+        override def classifyException(message: String, e: Throwable): AnalysisException = {
           mappedFailure
         }
+        override def classifyException(
+            e: Throwable,
+            condition: String,
+            messageParameters: Map[String, String],
+            description: String,
+            isRuntime: Boolean): Throwable with SparkThrowable = {
+          if (legacy) {
+            super.classifyException(e, condition, messageParameters, description, isRuntime)
+          } else {
+            mappedFailure
+          }
+        }
       }
-    }
-    TaskContext.setTaskContext(TaskContext.empty())
-    try {
       val error = intercept[AnalysisException] {
-        JdbcUtils.savePartition(
-          "t", Iterator(Row(1)), StructType(Seq(StructField("a", IntegerType))),
-          "INSERT INTO t (a) VALUES (?)", 1, dialect, Connection.TRANSACTION_NONE,
-          newWriteOptions())
+        savePartition(dialect = mappedDialect)
       }
       assert(error eq mappedFailure)
       assert(error.getCause eq batchFailure)
-    } finally {
-      TaskContext.unset()
     }
   }
 
   gridTest("savePartition handles connection acquisition failures")(
       for (stage <- Seq("factory", "connect"); kind <- Seq("plain", "interrupted", "classified"))
         yield (stage, kind)) { case (stage, kind) =>
-    val connectionFailure = if (kind == "classified") {
-      new SparkSQLException("FAILED_JDBC.CONNECTION", Map("url" -> "jdbc:destination"),
-        Some("08001"))
-    } else {
-      new SQLException("connection rejected", "08001")
-    }
-    val nextFailure = new SQLException("connection detail")
-    connectionFailure.setNextException(nextFailure)
-    val context = TaskContext.empty()
-    TaskContext.setTaskContext(context)
-    val dialect = new JdbcDialect with NoLegacyJDBCError {
-      override def canHandle(url: String): Boolean = url.startsWith(testJdbcUrl)
-      override def createConnectionFactory(options: JDBCOptions): Int => Connection = {
-        if (kind == "interrupted") context.markInterrupted("test")
-        if (stage == "factory") throw connectionFailure
-        _ => throw connectionFailure
+    withWriteFixture { fixture =>
+      import fixture._
+      val connectionFailure = if (kind == "classified") {
+        new SparkSQLException("FAILED_JDBC.CONNECTION", Map("url" -> "jdbc:destination"),
+          Some("08001"))
+      } else {
+        new SQLException("connection rejected", "08001")
       }
-    }
-    try {
+      val nextFailure = new SQLException("connection detail")
+      connectionFailure.setNextException(nextFailure)
+      val failingDialect = new JdbcDialect with NoLegacyJDBCError {
+        override def canHandle(url: String): Boolean = url.startsWith(testJdbcUrl)
+        override def createConnectionFactory(options: JDBCOptions): Int => Connection = {
+          if (kind == "interrupted") context.markInterrupted("test")
+          if (stage == "factory") throw connectionFailure
+          _ => throw connectionFailure
+        }
+      }
       val options = newWriteOptions(Map("url" -> s"$testJdbcUrl?password=secret"))
       val error = intercept[Exception] {
-        JdbcUtils.savePartition(
-          "t", Iterator(Row(1)), StructType(Seq(StructField("a", IntegerType))),
-          "INSERT INTO t (a) VALUES (?)", 1, dialect, Connection.TRANSACTION_NONE, options)
+        savePartition(dialect = failingDialect, options = options)
       }
       if (kind == "plain") {
         checkError(
@@ -378,42 +293,25 @@ class JdbcWriteExceptionSuite extends SparkFunSuite {
       }
       assert(connectionFailure.getNextException eq nextFailure)
       assert(connectionFailure.getCause eq nextFailure)
-    } finally {
-      TaskContext.unset()
     }
   }
 
   gridTest("savePartition classifies JDBC write setup failures")(
       Seq("autoCommit", "isolation", "prepareStatement", "queryTimeout")) { operation =>
-    val conn = mock(classOf[Connection])
-    val metadata = mock(classOf[DatabaseMetaData])
-    val stmt = mock(classOf[PreparedStatement])
-    when(conn.getMetaData).thenReturn(metadata)
-    when(metadata.supportsTransactions()).thenReturn(true)
-    when(metadata.supportsTransactionIsolationLevel(Connection.TRANSACTION_READ_COMMITTED))
-      .thenReturn(true)
-    when(conn.prepareStatement(anyString())).thenReturn(stmt)
-    val setupFailure = new SQLException("write setup rejected", "08006")
-    operation match {
-      case "autoCommit" => doThrow(setupFailure).when(conn).setAutoCommit(false)
-      case "isolation" =>
-        doThrow(setupFailure).when(conn)
-          .setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED)
-      case "prepareStatement" => when(conn.prepareStatement(anyString())).thenThrow(setupFailure)
-      case "queryTimeout" => doThrow(setupFailure).when(stmt).setQueryTimeout(anyInt())
-    }
-    val dialect = new JdbcDialect with NoLegacyJDBCError {
-      override def canHandle(url: String): Boolean = url == testJdbcUrl
-      override def createConnectionFactory(options: JDBCOptions): Int => Connection = _ => conn
-    }
-    TaskContext.setTaskContext(TaskContext.empty())
-    try {
-      val options = newWriteOptions()
+    withWriteFixture { fixture =>
+      import fixture._
+      enableTransactions()
+      val setupFailure = new SQLException("write setup rejected", "08006")
+      operation match {
+        case "autoCommit" => doThrow(setupFailure).when(conn).setAutoCommit(false)
+        case "isolation" =>
+          doThrow(setupFailure).when(conn)
+            .setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED)
+        case "prepareStatement" => when(conn.prepareStatement(anyString())).thenThrow(setupFailure)
+        case "queryTimeout" => doThrow(setupFailure).when(stmt).setQueryTimeout(anyInt())
+      }
       val error = intercept[SparkRuntimeException] {
-        JdbcUtils.savePartition(
-          "t", Iterator(Row(1)), StructType(Seq(StructField("a", IntegerType))),
-          "INSERT INTO t (a) VALUES (?)", 1, dialect,
-          Connection.TRANSACTION_READ_COMMITTED, options)
+        savePartition(isolationLevel = Connection.TRANSACTION_READ_COMMITTED)
       }
       checkError(
         exception = error,
@@ -426,8 +324,6 @@ class JdbcWriteExceptionSuite extends SparkFunSuite {
       verify(stmt, never()).executeBatch()
       verify(conn, never()).commit()
       if (operation == "queryTimeout") verify(stmt).close()
-    } finally {
-      TaskContext.unset()
     }
   }
 
@@ -451,38 +347,18 @@ class JdbcWriteExceptionSuite extends SparkFunSuite {
   }
 
   gridTest("statement cleanup preserves the write failure")(Seq("binding", "batch")) { operation =>
-    val conn = mock(classOf[Connection])
-    val metadata = mock(classOf[DatabaseMetaData])
-    val stmt = mock(classOf[PreparedStatement])
-    when(conn.getMetaData).thenReturn(metadata)
-    when(metadata.supportsTransactions()).thenReturn(true)
-    when(metadata.supportsTransactionIsolationLevel(Connection.TRANSACTION_READ_COMMITTED))
-      .thenReturn(true)
-    when(conn.prepareStatement(anyString())).thenReturn(stmt)
-    val writeFailure = new SQLException("write rejected", "23000")
-    if (operation == "binding") {
-      doThrow(writeFailure).when(stmt).setInt(anyInt(), anyInt())
-    } else {
-      when(stmt.executeBatch()).thenThrow(writeFailure)
-    }
-    doThrow(new SQLException("statement close failed", "08006")).when(stmt).close()
-    val dialect = new JdbcDialect with NoLegacyJDBCError {
-      override def canHandle(url: String): Boolean = url == testJdbcUrl
-      override def createConnectionFactory(options: JDBCOptions): Int => Connection = _ => conn
-    }
-    TaskContext.setTaskContext(TaskContext.empty())
-    try {
-      val options = newWriteOptions()
+    withWriteFixture { fixture =>
+      import fixture._
+      enableTransactions()
+      val writeFailure = new SQLException("write rejected", "23000")
+      if (operation == "binding") {
+        doThrow(writeFailure).when(stmt).setInt(anyInt(), anyInt())
+      } else {
+        when(stmt.executeBatch()).thenThrow(writeFailure)
+      }
+      doThrow(new SQLException("statement close failed", "08006")).when(stmt).close()
       val error = intercept[SparkRuntimeException] {
-        JdbcUtils.savePartition(
-          "t",
-          Iterator(Row(1)),
-          StructType(Seq(StructField("a", IntegerType))),
-          "INSERT INTO t (a) VALUES (?)",
-          batchSize = 1,
-          dialect,
-          Connection.TRANSACTION_READ_COMMITTED,
-          options)
+        savePartition(isolationLevel = Connection.TRANSACTION_READ_COMMITTED)
       }
       checkError(
         exception = error,
@@ -493,44 +369,20 @@ class JdbcWriteExceptionSuite extends SparkFunSuite {
       verify(conn).rollback()
       verify(conn, never()).commit()
       verify(stmt).close()
-    } finally {
-      TaskContext.unset()
     }
   }
 
   test("statement cleanup does not abort a successful write before commit") {
-    val conn = mock(classOf[Connection])
-    val metadata = mock(classOf[DatabaseMetaData])
-    val stmt = mock(classOf[PreparedStatement])
-    when(conn.getMetaData).thenReturn(metadata)
-    when(metadata.supportsTransactions()).thenReturn(true)
-    when(metadata.supportsTransactionIsolationLevel(Connection.TRANSACTION_READ_COMMITTED))
-      .thenReturn(true)
-    when(conn.prepareStatement(anyString())).thenReturn(stmt)
-    doThrow(new SQLException("statement close failed", "08006")).when(stmt).close()
-    val dialect = new JdbcDialect with NoLegacyJDBCError {
-      override def canHandle(url: String): Boolean = url == testJdbcUrl
-      override def createConnectionFactory(options: JDBCOptions): Int => Connection = _ => conn
-    }
-    val context = TaskContext.empty()
-    TaskContext.setTaskContext(context)
-    try {
-      JdbcUtils.savePartition(
-        "t",
-        Iterator(Row(1)),
-        StructType(Seq(StructField("a", IntegerType))),
-        "INSERT INTO t (a) VALUES (?)",
-        batchSize = 1,
-        dialect,
-        Connection.TRANSACTION_READ_COMMITTED,
-        newWriteOptions())
+    withWriteFixture { fixture =>
+      import fixture._
+      enableTransactions()
+      doThrow(new SQLException("statement close failed", "08006")).when(stmt).close()
+      savePartition(isolationLevel = Connection.TRANSACTION_READ_COMMITTED)
       verify(stmt).executeBatch()
       verify(stmt).close()
       verify(conn).commit()
       verify(conn, never()).rollback()
       assert(context.taskMetrics.outputMetrics.recordsWritten == 1)
-    } finally {
-      TaskContext.unset()
     }
   }
 }
