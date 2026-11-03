@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.expressions.{And, CheckInvariant, EqualNullSafe, Expression, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{And, Cast, CheckInvariant, EqualNullSafe, Expression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, RowLevelWrite, V2WriteCommand, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
@@ -139,11 +139,12 @@ class ResolveTableConstraints(
           val colRef = UnresolvedAttribute.quoted(col.name)
           val columnExtractors = Seq(col.name -> colRef)
           val genExprSql = Option(genExpr.getSql()).getOrElse(catalystExpr.sql)
-          // Compare with the value an auto-fill stores, with the cast that store assignment adds
-          // for it. Otherwise, the comparison can cast the provided value to the expression type.
+          // Compare with the value an auto-fill stores, which store assignment casts to the column
+          // type. Otherwise, the comparison can cast the provided value to the expression type.
           val colType = CharVarcharUtils.replaceCharVarcharWithString(col.dataType())
           def check(expr: Expression): Expression = CheckInvariant(
-            EqualNullSafe(colRef, TableOutputResolver.cast(expr, colType, conf, col.name)),
+            EqualNullSafe(
+              colRef, Cast(expr, colType, Option(conf.sessionLocalTimeZone), ansiEnabled = true)),
             columnExtractors,
             "Generated Column",
             s"${col.name} <=> $genExprSql")

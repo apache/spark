@@ -29,7 +29,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, GeneralScalarExpression, Transform}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder, StringType, StructType}
+import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType, StructType}
 
 /**
  * Tests for generated column auto-fill and constraint enforcement during writes.
@@ -1846,22 +1846,15 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
-  test("SPARK-60757: a provided value overflows the column type as an auto-filled one does") {
+  test("SPARK-60757: the check of a provided value reports the error of the expression") {
     val tblName = "my_tab"
     withTable(s"testcat.$tblName") {
-      // A catalog can store a column type narrower than the type of the expression.
-      catalog("testcat").asInstanceOf[InMemoryCatalog].createTable(
-        Identifier.of(Array(), tblName),
-        Array(
-          Column.create("a", LongType),
-          Column.create("b", IntegerType, true, null, "a", null)),
-        Array.empty[Transform],
-        Collections.emptyMap[String, String])
-      assertWriteFails("CAST_OVERFLOW_IN_TABLE_INSERT") {
-        sql(s"INSERT INTO testcat.$tblName(a) VALUES (3000000000L)")
-      }
-      assertWriteFails("CAST_OVERFLOW_IN_TABLE_INSERT") {
-        sql(s"INSERT INTO testcat.$tblName VALUES (3000000000L, 1)")
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  a INT,
+             |  c DECIMAL(20, 0) GENERATED ALWAYS AS (a div 0)
+             |) USING foo""".stripMargin)
+      assertWriteFails("DIVIDE_BY_ZERO") {
+        sql(s"INSERT INTO testcat.$tblName VALUES (1, 0)")
       }
     }
   }
@@ -1877,8 +1870,12 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
                |  b STRING GENERATED ALWAYS AS (concat(a, 'x\\\\y'))
                |) USING foo""".stripMargin)
         sql(s"INSERT INTO testcat.$tblName(a) VALUES ('v')")
+        // The check of a provided value reads the text under the session too.
+        sql(s"INSERT INTO testcat.$tblName VALUES ('w', 'wx\\\\y')")
       }
-      checkAnswer(spark.table(s"testcat.$tblName"), Row("v", "vx\\\\y"))
+      checkAnswer(
+        spark.table(s"testcat.$tblName"),
+        Seq(Row("v", "vx\\\\y"), Row("w", "wx\\\\y")))
     }
   }
 

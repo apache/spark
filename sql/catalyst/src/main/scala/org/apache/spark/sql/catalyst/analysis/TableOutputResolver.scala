@@ -858,8 +858,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
 
   private def canCauseCastOverflow(cast: Cast): Boolean = {
     containsIntegralOrDecimalType(cast.dataType) &&
-      // The check of a generated column casts an expression before it is resolved.
-      (!cast.child.resolved || !Cast.canUpCast(cast.child.dataType, cast.dataType))
+      !Cast.canUpCast(cast.child.dataType, cast.dataType)
   }
 
   private def checkField(
@@ -940,7 +939,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     case _ => expr
   }
 
-  private[analysis] def cast(
+  private def cast(
       expr: Expression,
       expectedType: DataType,
       conf: SQLConf,
