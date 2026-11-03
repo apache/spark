@@ -275,21 +275,23 @@ object ConstantPropagation extends Rule[LogicalPlan] {
 object ReorderAssociativeOperator extends Rule[LogicalPlan] {
   // Flatten only operators evaluated in the same mode as the root: rebuilding a TRY-mode Add or
   // Multiply (try_add, try_multiply) in the enclosing mode would change its overflow behavior.
+  // TRY arithmetic is never regrouped either, because each TRY step returns NULL only when its
+  // own operation overflows, so regrouping or folding its literals changes which step overflows.
   private def flattenAdd(
     expression: Expression,
     groupSet: ExpressionSet,
-    evalContext: NumericEvalContext): Seq[Expression] = expression match {
-    case expr @ Add(l, r, c) if c == evalContext && !groupSet.contains(expr) =>
-      flattenAdd(l, groupSet, evalContext) ++ flattenAdd(r, groupSet, evalContext)
+    evalMode: EvalMode.Value): Seq[Expression] = expression match {
+    case expr @ Add(l, r, c) if c.evalMode == evalMode && !groupSet.contains(expr) =>
+      flattenAdd(l, groupSet, evalMode) ++ flattenAdd(r, groupSet, evalMode)
     case other => other :: Nil
   }
 
   private def flattenMultiply(
     expression: Expression,
     groupSet: ExpressionSet,
-    evalContext: NumericEvalContext): Seq[Expression] = expression match {
-    case expr @ Multiply(l, r, c) if c == evalContext && !groupSet.contains(expr) =>
-      flattenMultiply(l, groupSet, evalContext) ++ flattenMultiply(r, groupSet, evalContext)
+    evalMode: EvalMode.Value): Seq[Expression] = expression match {
+    case expr @ Multiply(l, r, c) if c.evalMode == evalMode && !groupSet.contains(expr) =>
+      flattenMultiply(l, groupSet, evalMode) ++ flattenMultiply(r, groupSet, evalMode)
     case other => other :: Nil
   }
 
@@ -312,8 +314,9 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
       // grouping expressions.
       val groupingExpressionSet = collectGroupingExpressions(q)
       q.transformExpressionsDownWithPruning(_.containsPattern(BINARY_ARITHMETIC)) {
-      case a @ Add(_, _, f) if a.deterministic && a.dataType.isInstanceOf[IntegralType] =>
-        val (literals, others) = flattenAdd(a, groupingExpressionSet, f)
+      case a @ Add(_, _, f) if f.evalMode != EvalMode.TRY && a.deterministic &&
+          a.dataType.isInstanceOf[IntegralType] =>
+        val (literals, others) = flattenAdd(a, groupingExpressionSet, f.evalMode)
           .partition(_.isInstanceOf[Literal])
         if (literals.nonEmpty) {
           val literalExpr = literals.reduce((x, y) => Add(x, y, f))
@@ -327,8 +330,9 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
         } else {
           a
         }
-      case m @ Multiply(_, _, f) if m.deterministic && m.dataType.isInstanceOf[IntegralType] =>
-        val (literals, others) = flattenMultiply(m, groupingExpressionSet, f)
+      case m @ Multiply(_, _, f) if f.evalMode != EvalMode.TRY && m.deterministic &&
+          m.dataType.isInstanceOf[IntegralType] =>
+        val (literals, others) = flattenMultiply(m, groupingExpressionSet, f.evalMode)
           .partition(_.isInstanceOf[Literal])
         if (literals.nonEmpty) {
           val literalExpr = literals.reduce((x, y) => Multiply(x, y, f))

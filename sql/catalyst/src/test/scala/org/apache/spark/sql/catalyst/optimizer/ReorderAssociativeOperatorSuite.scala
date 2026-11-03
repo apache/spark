@@ -171,4 +171,50 @@ class ReorderAssociativeOperatorSuite extends PlanTest {
       comparePlans(optimized, correctAnswer)
     }
   }
+
+  test("Do not regroup TRY-mode Add and Multiply chains") {
+    def tryAdd(left: Expression, right: Expression): Expression = Add(left, right, EvalMode.TRY)
+    def tryMultiply(left: Expression, right: Expression): Expression =
+      Multiply(left, right, EvalMode.TRY)
+
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        val tryChains = Seq(
+          tryAdd(tryAdd($"a", -5), $"b").as("try_add_chain"),
+          tryAdd(tryAdd($"a", Int.MaxValue), 1).as("try_add_chain_of_literals"),
+          tryAdd(tryAdd($"a", 1), 2).as("try_add_chain_of_positive_literals"),
+          tryMultiply(tryMultiply($"a", -1), $"b").as("try_multiply_chain"),
+          tryMultiply(tryMultiply($"a", 2), 3).as("try_multiply_chain_of_literals"),
+          (tryAdd(tryAdd($"a", -5), $"b") + 1).as("try_add_chain_plus_1"),
+          (tryMultiply(tryMultiply($"a", -1), $"b") * 3).as("try_multiply_chain_times_3"))
+        val tryOperand = tryAdd(tryAdd($"a", Int.MaxValue), 1)
+        val originalQuery =
+          testRelation.select(tryChains :+ (Literal(-5) + tryOperand).as("minus_5_plus"): _*)
+            .analyze
+
+        val optimized = Optimize.execute(originalQuery)
+
+        // The TRY chains keep their written grouping and literals. Only the enclosing regular
+        // operator moves its own literal after the TRY operand.
+        val correctAnswer =
+          testRelation.select(tryChains :+ (tryOperand + -5).as("minus_5_plus"): _*).analyze
+        comparePlans(optimized, correctAnswer)
+      }
+    }
+  }
+
+  test("Fold operators whose evaluation contexts differ only in decimal precision loss") {
+    val noPrecisionLoss = NumericEvalContext(EvalMode.ANSI, allowDecimalPrecisionLoss = false)
+    val precisionLoss = NumericEvalContext(EvalMode.ANSI, allowDecimalPrecisionLoss = true)
+    val originalQuery = testRelation.select(
+      Add(Add($"a", 1, noPrecisionLoss), 2, precisionLoss).as("add"),
+      Multiply(Multiply($"a", 2, noPrecisionLoss), 3, precisionLoss).as("multiply")).analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    val correctAnswer = testRelation.select(
+      Add($"a", 3, precisionLoss).as("add"),
+      Multiply($"a", 6, precisionLoss).as("multiply")).analyze
+    comparePlans(optimized, correctAnswer)
+  }
 }
