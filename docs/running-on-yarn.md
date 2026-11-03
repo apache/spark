@@ -865,6 +865,11 @@ will include a list of all tokens obtained, and their expiry details
 
 # Configuring the External Shuffle Service
 
+The Spark Shuffle Service runs inside the `NodeManager` JVM, so all `NodeManager`s in your cluster
+must run on a [supported version of Java](index.html#downloading). Unlike Spark applications, the
+shuffle service cannot use a different JDK from the `NodeManager` (see
+[Configuring different JDKs for Spark Applications](#configuring-different-jdks-for-spark-applications)).
+
 To start the Spark Shuffle Service on each `NodeManager` in your YARN cluster, follow these
 instructions:
 
