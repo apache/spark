@@ -94,6 +94,53 @@ Sort [event_id#x ASC NULLS FIRST], true
 
 
 -- !query
+WITH batch_output AS (
+  SELECT customer_id, event_id, amount, tier
+  FROM streaming_sql_golden_natural_join_events
+  NATURAL INNER JOIN streaming_sql_golden_natural_join_customers
+),
+streaming_output AS (
+  SELECT customer_id, event_id, amount, tier FROM streaming_sql_golden_natural_join_sink
+)
+SELECT
+  NOT EXISTS (SELECT * FROM batch_output EXCEPT ALL SELECT * FROM streaming_output)
+    AND NOT EXISTS (SELECT * FROM streaming_output EXCEPT ALL SELECT * FROM batch_output)
+    AS complete_output_identical
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias batch_output
+:     +- Project [customer_id#x, event_id#x, amount#x, tier#x]
+:        +- Project [customer_id#x, event_id#x, amount#x, tier#x]
+:           +- Join Inner, (customer_id#x = customer_id#x)
+:              :- SubqueryAlias spark_catalog.default.streaming_sql_golden_natural_join_events
+:              :  +- Relation spark_catalog.default.streaming_sql_golden_natural_join_events[event_id#x,customer_id#x,amount#x] parquet
+:              +- SubqueryAlias spark_catalog.default.streaming_sql_golden_natural_join_customers
+:                 +- Relation spark_catalog.default.streaming_sql_golden_natural_join_customers[customer_id#x,tier#x] parquet
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias streaming_output
+:     +- Project [customer_id#x, event_id#x, amount#x, tier#x]
+:        +- SubqueryAlias spark_catalog.default.streaming_sql_golden_natural_join_sink
+:           +- Relation spark_catalog.default.streaming_sql_golden_natural_join_sink[customer_id#x,event_id#x,amount#x,tier#x] parquet
++- Project [(NOT exists#x [] AND NOT exists#x []) AS complete_output_identical#x]
+   :  :- Except All true
+   :  :  :- Project [customer_id#x, event_id#x, amount#x, tier#x]
+   :  :  :  +- SubqueryAlias batch_output
+   :  :  :     +- CTERelationRef xxxx, true, [customer_id#x, event_id#x, amount#x, tier#x], false, false
+   :  :  +- Project [customer_id#x, event_id#x, amount#x, tier#x]
+   :  :     +- SubqueryAlias streaming_output
+   :  :        +- CTERelationRef xxxx, true, [customer_id#x, event_id#x, amount#x, tier#x], false, false
+   :  +- Except All true
+   :     :- Project [customer_id#x, event_id#x, amount#x, tier#x]
+   :     :  +- SubqueryAlias streaming_output
+   :     :     +- CTERelationRef xxxx, true, [customer_id#x, event_id#x, amount#x, tier#x], false, false
+   :     +- Project [customer_id#x, event_id#x, amount#x, tier#x]
+   :        +- SubqueryAlias batch_output
+   :           +- CTERelationRef xxxx, true, [customer_id#x, event_id#x, amount#x, tier#x], false, false
+   +- OneRowRelation
+
+
+-- !query
 DROP TABLE streaming_sql_golden_natural_join_events
 -- !query analysis
 DropTable false, false

@@ -22,5 +22,18 @@ REFRESH FLOW streaming_sql_golden_unnest_flow;
 
 SELECT * FROM streaming_sql_golden_unnest_sink ORDER BY id, position;
 
+WITH batch_output AS (
+  SELECT id, item, position
+  FROM streaming_sql_golden_unnest_source,
+  LATERAL UNNEST(items) WITH ORDINALITY AS expanded(item, position)
+),
+streaming_output AS (
+  SELECT id, item, position FROM streaming_sql_golden_unnest_sink
+)
+SELECT
+  NOT EXISTS (SELECT * FROM batch_output EXCEPT ALL SELECT * FROM streaming_output)
+    AND NOT EXISTS (SELECT * FROM streaming_output EXCEPT ALL SELECT * FROM batch_output)
+    AS complete_output_identical;
+
 DROP TABLE streaming_sql_golden_unnest_source;
 DROP TABLE streaming_sql_golden_unnest_sink;

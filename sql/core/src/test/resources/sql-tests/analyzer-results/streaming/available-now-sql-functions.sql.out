@@ -97,6 +97,53 @@ Sort [id#x ASC NULLS FIRST], true
 
 
 -- !query
+WITH batch_output AS (
+  SELECT id, streaming_sql_golden_double(value) AS doubled_value
+  FROM streaming_sql_golden_function_source
+  WHERE streaming_sql_golden_double(value) >= 20
+),
+streaming_output AS (
+  SELECT id, doubled_value FROM streaming_sql_golden_scalar_function_sink
+)
+SELECT
+  NOT EXISTS (SELECT * FROM batch_output EXCEPT ALL SELECT * FROM streaming_output)
+    AND NOT EXISTS (SELECT * FROM streaming_output EXCEPT ALL SELECT * FROM batch_output)
+    AS complete_output_identical
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias batch_output
+:     +- Project [id#x, streaming_sql_golden_double(x#x) AS doubled_value#x]
+:        +- Project [id#x, value#x, cast(value#x as int) AS x#x]
+:           +- Project [id#x, value#x]
+:              +- Filter (streaming_sql_golden_double(x#x) >= 20)
+:                 +- Project [id#x, value#x, cast(value#x as int) AS x#x]
+:                    +- SubqueryAlias spark_catalog.default.streaming_sql_golden_function_source
+:                       +- Relation spark_catalog.default.streaming_sql_golden_function_source[id#x,value#x] parquet
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias streaming_output
+:     +- Project [id#x, doubled_value#x]
+:        +- SubqueryAlias spark_catalog.default.streaming_sql_golden_scalar_function_sink
+:           +- Relation spark_catalog.default.streaming_sql_golden_scalar_function_sink[id#x,doubled_value#x] parquet
++- Project [(NOT exists#x [] AND NOT exists#x []) AS complete_output_identical#x]
+   :  :- Except All true
+   :  :  :- Project [id#x, doubled_value#x]
+   :  :  :  +- SubqueryAlias batch_output
+   :  :  :     +- CTERelationRef xxxx, true, [id#x, doubled_value#x], false, false
+   :  :  +- Project [id#x, doubled_value#x]
+   :  :     +- SubqueryAlias streaming_output
+   :  :        +- CTERelationRef xxxx, true, [id#x, doubled_value#x], false, false
+   :  +- Except All true
+   :     :- Project [id#x, doubled_value#x]
+   :     :  +- SubqueryAlias streaming_output
+   :     :     +- CTERelationRef xxxx, true, [id#x, doubled_value#x], false, false
+   :     +- Project [id#x, doubled_value#x]
+   :        +- SubqueryAlias batch_output
+   :           +- CTERelationRef xxxx, true, [id#x, doubled_value#x], false, false
+   +- OneRowRelation
+
+
+-- !query
 CREATE TEMPORARY FUNCTION streaming_sql_golden_expand(x INT)
 RETURNS TABLE (expanded_value INT)
 RETURN SELECT x + 1
@@ -144,6 +191,57 @@ Sort [id#x ASC NULLS FIRST, expanded_value#x ASC NULLS FIRST], true
 +- Project [id#x, expanded_value#x]
    +- SubqueryAlias spark_catalog.default.streaming_sql_golden_table_function_sink
       +- Relation spark_catalog.default.streaming_sql_golden_table_function_sink[id#x,expanded_value#x] parquet
+
+
+-- !query
+WITH batch_output AS (
+  SELECT source.id, expanded.expanded_value
+  FROM streaming_sql_golden_function_source AS source,
+  LATERAL streaming_sql_golden_expand(source.value) AS expanded
+),
+streaming_output AS (
+  SELECT id, expanded_value FROM streaming_sql_golden_table_function_sink
+)
+SELECT
+  NOT EXISTS (SELECT * FROM batch_output EXCEPT ALL SELECT * FROM streaming_output)
+    AND NOT EXISTS (SELECT * FROM streaming_output EXCEPT ALL SELECT * FROM batch_output)
+    AS complete_output_identical
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias batch_output
+:     +- Project [id#x, expanded_value#x]
+:        +- LateralJoin lateral-subquery#x [value#x], Inner
+:           :  +- SubqueryAlias expanded
+:           :     +- SQLFunctionNode streaming_sql_golden_expand
+:           :        +- SubqueryAlias streaming_sql_golden_expand
+:           :           +- Project [cast((outer(streaming_sql_golden_expand.x) + 1)#x as int) AS expanded_value#x]
+:           :              +- Project [(cast(outer(value#x) as int) + 1) AS (outer(streaming_sql_golden_expand.x) + 1)#x]
+:           :                 +- OneRowRelation
+:           +- SubqueryAlias source
+:              +- SubqueryAlias spark_catalog.default.streaming_sql_golden_function_source
+:                 +- Relation spark_catalog.default.streaming_sql_golden_function_source[id#x,value#x] parquet
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias streaming_output
+:     +- Project [id#x, expanded_value#x]
+:        +- SubqueryAlias spark_catalog.default.streaming_sql_golden_table_function_sink
+:           +- Relation spark_catalog.default.streaming_sql_golden_table_function_sink[id#x,expanded_value#x] parquet
++- Project [(NOT exists#x [] AND NOT exists#x []) AS complete_output_identical#x]
+   :  :- Except All true
+   :  :  :- Project [id#x, expanded_value#x]
+   :  :  :  +- SubqueryAlias batch_output
+   :  :  :     +- CTERelationRef xxxx, true, [id#x, expanded_value#x], false, false
+   :  :  +- Project [id#x, expanded_value#x]
+   :  :     +- SubqueryAlias streaming_output
+   :  :        +- CTERelationRef xxxx, true, [id#x, expanded_value#x], false, false
+   :  +- Except All true
+   :     :- Project [id#x, expanded_value#x]
+   :     :  +- SubqueryAlias streaming_output
+   :     :     +- CTERelationRef xxxx, true, [id#x, expanded_value#x], false, false
+   :     +- Project [id#x, expanded_value#x]
+   :        +- SubqueryAlias batch_output
+   :           +- CTERelationRef xxxx, true, [id#x, expanded_value#x], false, false
+   +- OneRowRelation
 
 
 -- !query

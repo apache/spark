@@ -28,6 +28,19 @@ REFRESH FLOW streaming_sql_golden_scalar_function_flow;
 
 SELECT * FROM streaming_sql_golden_scalar_function_sink ORDER BY id;
 
+WITH batch_output AS (
+  SELECT id, streaming_sql_golden_double(value) AS doubled_value
+  FROM streaming_sql_golden_function_source
+  WHERE streaming_sql_golden_double(value) >= 20
+),
+streaming_output AS (
+  SELECT id, doubled_value FROM streaming_sql_golden_scalar_function_sink
+)
+SELECT
+  NOT EXISTS (SELECT * FROM batch_output EXCEPT ALL SELECT * FROM streaming_output)
+    AND NOT EXISTS (SELECT * FROM streaming_output EXCEPT ALL SELECT * FROM batch_output)
+    AS complete_output_identical;
+
 CREATE TEMPORARY FUNCTION streaming_sql_golden_expand(x INT)
 RETURNS TABLE (expanded_value INT)
 RETURN SELECT x + 1;
@@ -44,6 +57,19 @@ LATERAL streaming_sql_golden_expand(source.value) AS expanded;
 REFRESH FLOW streaming_sql_golden_table_function_flow;
 
 SELECT * FROM streaming_sql_golden_table_function_sink ORDER BY id, expanded_value;
+
+WITH batch_output AS (
+  SELECT source.id, expanded.expanded_value
+  FROM streaming_sql_golden_function_source AS source,
+  LATERAL streaming_sql_golden_expand(source.value) AS expanded
+),
+streaming_output AS (
+  SELECT id, expanded_value FROM streaming_sql_golden_table_function_sink
+)
+SELECT
+  NOT EXISTS (SELECT * FROM batch_output EXCEPT ALL SELECT * FROM streaming_output)
+    AND NOT EXISTS (SELECT * FROM streaming_output EXCEPT ALL SELECT * FROM batch_output)
+    AS complete_output_identical;
 
 DROP TABLE streaming_sql_golden_function_source;
 DROP TABLE streaming_sql_golden_scalar_function_sink;

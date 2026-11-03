@@ -108,6 +108,25 @@ struct<id:int,doubled_value:int>
 
 
 -- !query
+WITH batch_output AS (
+  SELECT id, streaming_sql_golden_double(value) AS doubled_value
+  FROM streaming_sql_golden_function_source
+  WHERE streaming_sql_golden_double(value) >= 20
+),
+streaming_output AS (
+  SELECT id, doubled_value FROM streaming_sql_golden_scalar_function_sink
+)
+SELECT
+  NOT EXISTS (SELECT * FROM batch_output EXCEPT ALL SELECT * FROM streaming_output)
+    AND NOT EXISTS (SELECT * FROM streaming_output EXCEPT ALL SELECT * FROM batch_output)
+    AS complete_output_identical
+-- !query schema
+struct<complete_output_identical:boolean>
+-- !query output
+true
+
+
+-- !query
 CREATE TEMPORARY FUNCTION streaming_sql_golden_expand(x INT)
 RETURNS TABLE (expanded_value INT)
 RETURN SELECT x + 1
@@ -154,6 +173,25 @@ struct<id:int,expanded_value:int>
 1	6
 2	11
 3	16
+
+
+-- !query
+WITH batch_output AS (
+  SELECT source.id, expanded.expanded_value
+  FROM streaming_sql_golden_function_source AS source,
+  LATERAL streaming_sql_golden_expand(source.value) AS expanded
+),
+streaming_output AS (
+  SELECT id, expanded_value FROM streaming_sql_golden_table_function_sink
+)
+SELECT
+  NOT EXISTS (SELECT * FROM batch_output EXCEPT ALL SELECT * FROM streaming_output)
+    AND NOT EXISTS (SELECT * FROM streaming_output EXCEPT ALL SELECT * FROM batch_output)
+    AS complete_output_identical
+-- !query schema
+struct<complete_output_identical:boolean>
+-- !query output
+true
 
 
 -- !query

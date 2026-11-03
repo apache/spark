@@ -22,5 +22,20 @@ REFRESH FLOW streaming_sql_golden_unpivot_flow;
 
 SELECT * FROM streaming_sql_golden_unpivot_sink ORDER BY id, month;
 
+WITH batch_output AS (
+  SELECT id, month, sales
+  FROM streaming_sql_golden_unpivot_source
+  UNPIVOT INCLUDE NULLS (
+    sales FOR month IN (jan AS january, feb AS february, mar AS march)
+  )
+),
+streaming_output AS (
+  SELECT id, month, sales FROM streaming_sql_golden_unpivot_sink
+)
+SELECT
+  NOT EXISTS (SELECT * FROM batch_output EXCEPT ALL SELECT * FROM streaming_output)
+    AND NOT EXISTS (SELECT * FROM streaming_output EXCEPT ALL SELECT * FROM batch_output)
+    AS complete_output_identical;
+
 DROP TABLE streaming_sql_golden_unpivot_source;
 DROP TABLE streaming_sql_golden_unpivot_sink;

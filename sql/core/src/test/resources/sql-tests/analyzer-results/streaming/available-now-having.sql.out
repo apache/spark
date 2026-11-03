@@ -71,6 +71,51 @@ Sort [event_time#x ASC NULLS FIRST, category#x ASC NULLS FIRST], true
 
 
 -- !query
+WITH batch_output AS (
+  SELECT event_time, category, SUM(amount) AS total
+  FROM streaming_sql_golden_having_source
+  GROUP BY event_time, category
+  HAVING total > 1
+),
+streaming_output AS (
+  SELECT event_time, category, total FROM streaming_sql_golden_having_sink
+)
+SELECT
+  NOT EXISTS (SELECT * FROM batch_output EXCEPT ALL SELECT * FROM streaming_output)
+    AND NOT EXISTS (SELECT * FROM streaming_output EXCEPT ALL SELECT * FROM batch_output)
+    AS complete_output_identical
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias batch_output
+:     +- Filter (total#xL > cast(1 as bigint))
+:        +- Aggregate [event_time#x, category#x], [event_time#x, category#x, sum(amount#x) AS total#xL]
+:           +- SubqueryAlias spark_catalog.default.streaming_sql_golden_having_source
+:              +- Relation spark_catalog.default.streaming_sql_golden_having_source[event_time#x,category#x,amount#x] parquet
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias streaming_output
+:     +- Project [event_time#x, category#x, total#xL]
+:        +- SubqueryAlias spark_catalog.default.streaming_sql_golden_having_sink
+:           +- Relation spark_catalog.default.streaming_sql_golden_having_sink[event_time#x,category#x,total#xL] parquet
++- Project [(NOT exists#x [] AND NOT exists#x []) AS complete_output_identical#x]
+   :  :- Except All true
+   :  :  :- Project [event_time#x, category#x, total#xL]
+   :  :  :  +- SubqueryAlias batch_output
+   :  :  :     +- CTERelationRef xxxx, true, [event_time#x, category#x, total#xL], false, false
+   :  :  +- Project [event_time#x, category#x, total#xL]
+   :  :     +- SubqueryAlias streaming_output
+   :  :        +- CTERelationRef xxxx, true, [event_time#x, category#x, total#xL], false, false
+   :  +- Except All true
+   :     :- Project [event_time#x, category#x, total#xL]
+   :     :  +- SubqueryAlias streaming_output
+   :     :     +- CTERelationRef xxxx, true, [event_time#x, category#x, total#xL], false, false
+   :     +- Project [event_time#x, category#x, total#xL]
+   :        +- SubqueryAlias batch_output
+   :           +- CTERelationRef xxxx, true, [event_time#x, category#x, total#xL], false, false
+   +- OneRowRelation
+
+
+-- !query
 DROP TABLE streaming_sql_golden_having_source
 -- !query analysis
 DropTable false, false

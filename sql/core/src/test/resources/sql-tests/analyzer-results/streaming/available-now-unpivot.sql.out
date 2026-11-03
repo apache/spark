@@ -68,6 +68,52 @@ Sort [id#x ASC NULLS FIRST, month#x ASC NULLS FIRST], true
 
 
 -- !query
+WITH batch_output AS (
+  SELECT id, month, sales
+  FROM streaming_sql_golden_unpivot_source
+  UNPIVOT INCLUDE NULLS (
+    sales FOR month IN (jan AS january, feb AS february, mar AS march)
+  )
+),
+streaming_output AS (
+  SELECT id, month, sales FROM streaming_sql_golden_unpivot_sink
+)
+SELECT
+  NOT EXISTS (SELECT * FROM batch_output EXCEPT ALL SELECT * FROM streaming_output)
+    AND NOT EXISTS (SELECT * FROM streaming_output EXCEPT ALL SELECT * FROM batch_output)
+    AS complete_output_identical
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias batch_output
+:     +- Project [id#x, month#x, sales#x]
+:        +- Expand [[id#x, january, jan#x], [id#x, february, feb#x], [id#x, march, mar#x]], [id#x, month#x, sales#x]
+:           +- SubqueryAlias spark_catalog.default.streaming_sql_golden_unpivot_source
+:              +- Relation spark_catalog.default.streaming_sql_golden_unpivot_source[id#x,jan#x,feb#x,mar#x] parquet
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias streaming_output
+:     +- Project [id#x, month#x, sales#x]
+:        +- SubqueryAlias spark_catalog.default.streaming_sql_golden_unpivot_sink
+:           +- Relation spark_catalog.default.streaming_sql_golden_unpivot_sink[id#x,month#x,sales#x] parquet
++- Project [(NOT exists#x [] AND NOT exists#x []) AS complete_output_identical#x]
+   :  :- Except All true
+   :  :  :- Project [id#x, month#x, sales#x]
+   :  :  :  +- SubqueryAlias batch_output
+   :  :  :     +- CTERelationRef xxxx, true, [id#x, month#x, sales#x], false, false
+   :  :  +- Project [id#x, month#x, sales#x]
+   :  :     +- SubqueryAlias streaming_output
+   :  :        +- CTERelationRef xxxx, true, [id#x, month#x, sales#x], false, false
+   :  +- Except All true
+   :     :- Project [id#x, month#x, sales#x]
+   :     :  +- SubqueryAlias streaming_output
+   :     :     +- CTERelationRef xxxx, true, [id#x, month#x, sales#x], false, false
+   :     +- Project [id#x, month#x, sales#x]
+   :        +- SubqueryAlias batch_output
+   :           +- CTERelationRef xxxx, true, [id#x, month#x, sales#x], false, false
+   +- OneRowRelation
+
+
+-- !query
 DROP TABLE streaming_sql_golden_unpivot_source
 -- !query analysis
 DropTable false, false

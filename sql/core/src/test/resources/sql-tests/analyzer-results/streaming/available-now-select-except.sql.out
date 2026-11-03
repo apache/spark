@@ -64,6 +64,48 @@ Sort [id#x ASC NULLS FIRST], true
 
 
 -- !query
+WITH batch_output AS (
+  SELECT * EXCEPT (internal_note)
+  FROM streaming_sql_golden_select_except_source
+),
+streaming_output AS (
+  SELECT id, category, amount FROM streaming_sql_golden_select_except_sink
+)
+SELECT
+  NOT EXISTS (SELECT * FROM batch_output EXCEPT ALL SELECT * FROM streaming_output)
+    AND NOT EXISTS (SELECT * FROM streaming_output EXCEPT ALL SELECT * FROM batch_output)
+    AS complete_output_identical
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias batch_output
+:     +- Project [id#x, category#x, amount#x]
+:        +- SubqueryAlias spark_catalog.default.streaming_sql_golden_select_except_source
+:           +- Relation spark_catalog.default.streaming_sql_golden_select_except_source[id#x,category#x,amount#x,internal_note#x] parquet
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias streaming_output
+:     +- Project [id#x, category#x, amount#x]
+:        +- SubqueryAlias spark_catalog.default.streaming_sql_golden_select_except_sink
+:           +- Relation spark_catalog.default.streaming_sql_golden_select_except_sink[id#x,category#x,amount#x] parquet
++- Project [(NOT exists#x [] AND NOT exists#x []) AS complete_output_identical#x]
+   :  :- Except All true
+   :  :  :- Project [id#x, category#x, amount#x]
+   :  :  :  +- SubqueryAlias batch_output
+   :  :  :     +- CTERelationRef xxxx, true, [id#x, category#x, amount#x], false, false
+   :  :  +- Project [id#x, category#x, amount#x]
+   :  :     +- SubqueryAlias streaming_output
+   :  :        +- CTERelationRef xxxx, true, [id#x, category#x, amount#x], false, false
+   :  +- Except All true
+   :     :- Project [id#x, category#x, amount#x]
+   :     :  +- SubqueryAlias streaming_output
+   :     :     +- CTERelationRef xxxx, true, [id#x, category#x, amount#x], false, false
+   :     +- Project [id#x, category#x, amount#x]
+   :        +- SubqueryAlias batch_output
+   :           +- CTERelationRef xxxx, true, [id#x, category#x, amount#x], false, false
+   +- OneRowRelation
+
+
+-- !query
 DROP TABLE streaming_sql_golden_select_except_source
 -- !query analysis
 DropTable false, false

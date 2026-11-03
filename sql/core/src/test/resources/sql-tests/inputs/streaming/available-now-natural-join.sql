@@ -28,6 +28,19 @@ REFRESH FLOW streaming_sql_golden_natural_join_flow;
 
 SELECT * FROM streaming_sql_golden_natural_join_sink ORDER BY event_id;
 
+WITH batch_output AS (
+  SELECT customer_id, event_id, amount, tier
+  FROM streaming_sql_golden_natural_join_events
+  NATURAL INNER JOIN streaming_sql_golden_natural_join_customers
+),
+streaming_output AS (
+  SELECT customer_id, event_id, amount, tier FROM streaming_sql_golden_natural_join_sink
+)
+SELECT
+  NOT EXISTS (SELECT * FROM batch_output EXCEPT ALL SELECT * FROM streaming_output)
+    AND NOT EXISTS (SELECT * FROM streaming_output EXCEPT ALL SELECT * FROM batch_output)
+    AS complete_output_identical;
+
 DROP TABLE streaming_sql_golden_natural_join_events;
 DROP TABLE streaming_sql_golden_natural_join_customers;
 DROP TABLE streaming_sql_golden_natural_join_sink;
