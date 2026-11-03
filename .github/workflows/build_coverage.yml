@@ -49,3 +49,4 @@ jobs:
         }
     secrets:
       codecov_token: ${{ secrets.CODECOV_TOKEN }}
+      SPARK_DEVELOCITY_ACCESS_KEY: ${{ secrets.SPARK_DEVELOCITY_ACCESS_KEY }}

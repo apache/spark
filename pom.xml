@@ -2697,6 +2697,22 @@
     <pluginManagement>
       <plugins>
         <plugin>
+          <groupId>com.gradle</groupId>
+          <artifactId>develocity-maven-extension</artifactId>
+          <configuration>
+            <develocity>
+              <plugins>
+                <plugin>
+                  <artifactId>maven-surefire-plugin</artifactId>
+                  <outputs>
+                    <notCacheableBecause>Spark tests read inputs the build cache key does not track (environment variables, files outside the module, Python and R on the PATH), so a cached result could hide a failure</notCacheableBecause>
+                  </outputs>
+                </plugin>
+              </plugins>
+            </develocity>
+          </configuration>
+        </plugin>
+        <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-enforcer-plugin</artifactId>
           <version>3.6.2</version>

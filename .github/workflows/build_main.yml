@@ -35,3 +35,5 @@ jobs:
       github.repository == 'apache/spark'
       || github.ref != 'refs/heads/master'
     uses: ./.github/workflows/build_and_test.yml
+    secrets:
+      SPARK_DEVELOCITY_ACCESS_KEY: ${{ secrets.SPARK_DEVELOCITY_ACCESS_KEY }}

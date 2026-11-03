@@ -25,6 +25,7 @@
 .idea_modules/
 .kiro/
 .metals
+.mvn/.develocity/
 .project
 .pydevproject
 .scala_dependencies
