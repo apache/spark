@@ -30,7 +30,7 @@ import org.apache.spark.util.Utils
 class HistoryServerPluginSuite extends SparkFunSuite {
 
   private val StaticDir = "org/apache/spark/ui/static"
-  private val StaticFile = "jquery-3.5.1.min.js"
+  private val StaticFile = "jquery.min.js"
 
   /** A plugin that declares one static resource path, or throws when asked for it. */
   private class StaticPlugin(path: String, fail: Boolean = false) extends AppHistoryServerPlugin {
