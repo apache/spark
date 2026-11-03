@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
 import org.apache.spark.sql.connector.catalog.functions.Reducer
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, IntegerType}
 import org.apache.spark.util.TransientBestEffortLazyVal
@@ -1890,8 +1891,9 @@ trait LeafShuffleSpec extends ShuffleSpec {
    * of a child shuffled onto this layout. [[canCreatePartitioning]] does not ask it, since a child
    * that pairs with this layout as it stands evaluates nothing. A caller that shuffles a child onto
    * this layout has to ask it too. Only a [[KeyedShuffleSpec]] can answer false, and its
-   * [[createPartitioning]] asserts that what it builds is evaluable, so a caller that does not ask,
-   * or a cogroup child whose key has another type, fails while planning.
+   * [[createPartitioning]] asserts it, so a caller that does not ask fails while planning. What it
+   * builds over a cogroup child's key of another type can still be one Spark cannot evaluate, and
+   * fails while planning too, with `STORAGE_PARTITION_JOIN_KEY_TYPE_MISMATCH`.
    */
   def canEvaluatePartitioning: Boolean = true
 
@@ -2439,8 +2441,9 @@ case class KeyedShuffleSpec(
    * for a join, asking this of the reported transform answers it for the rebuilt one, and the
    * reported one keeps the answer. A cogroup does not coerce its keys, so a key of another type,
    * e.g. a `BIGINT` against a transform over an `INT` column that declares `INT`, can still fail
-   * where its rows are placed, as it did before this check. A decimal key of the column's scale
-   * passes, since its precision does not change what the function reads.
+   * as it did before this check. A one-side shuffle fails while planning, in `createPartitioning`.
+   * A decimal key of the column's scale passes, since its precision does not change what the
+   * function reads.
    *
    * A Scala class or object that extends `ScalarFunction` directly gets a mixin forwarder to the
    * default `produceResult`, which the lookup finds, so this is true even when the connector
@@ -2631,13 +2634,19 @@ case class KeyedShuffleSpec(
     }
     // The child shuffled onto this layout is placed by evaluating what is built here, which would
     // fail on an executor. A caller has to ask `canEvaluatePartitioning` first, which answers for
-    // this layout's own keys. A join's keys share their types, so that answers for what is built
-    // too. A cogroup's need not (SPARK-60782), and falling back to a hash shuffle would pair its
-    // groups wrongly, so such a child fails here, while planning.
-    assert(newExpressions.forall {
-      case t: TransformExpression => t.evaluableFunction.isDefined
-      case _ => true
-    }, s"Cannot shuffle a child onto a layout Spark cannot evaluate: $newExpressions")
+    // this layout's own keys, so a caller that does not is a bug.
+    assert(canEvaluatePartitioning,
+      s"Cannot shuffle a child onto a layout Spark cannot evaluate: ${partitioning.expressions}")
+    // A join's keys share their types, so that answers for what is built too. A cogroup's need not
+    // (SPARK-60782), e.g. a `BIGINT` key or a string of another collation, and falling back to a
+    // hash shuffle would pair its groups wrongly. So such a child fails here, while planning, with
+    // an error that names the key's type.
+    newExpressions.foreach {
+      case t: TransformExpression if t.evaluableFunction.isEmpty =>
+        throw QueryExecutionErrors.storagePartitionJoinKeyTypeMismatchError(
+          t.function.name(), t.function.inputTypes().toSeq, t.children.head.dataType)
+      case _ =>
+    }
     // The shuffled side is laid out on this side's partitions, so it shares their layout, with one
     // change. The child re-shuffled onto it may hold keys outside the declared set, so every
     // partitioning produced here carries the marker (see [[KeyLayout]]'s `@param`). Only the

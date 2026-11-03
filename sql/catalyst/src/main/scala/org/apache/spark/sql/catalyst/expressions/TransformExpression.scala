@@ -244,7 +244,16 @@ case class TransformExpression(
         TransformExpression.atDeclaredType(argument, declaredType)
       }
       if (arguments.length == declaredTypes.length && typed.forall(_.isDefined)) {
-        Some(V2ExpressionUtils.resolveScalarFunction(scalarFunc, typed.flatten))
+        val call = V2ExpressionUtils.resolveScalarFunction(scalarFunc, typed.flatten)
+        // `Invoke` and `StaticInvoke` look the method up again from the arguments' classes, a
+        // user-defined type's being `Object`, so look it up here, where a failure is caught and
+        // logged, rather than in `eval`.
+        call match {
+          case i: objects.Invoke => i.method
+          case s: objects.StaticInvoke => s.method
+          case _ =>
+        }
+        Some(call)
       } else {
         TransformExpression.logArgumentsMismatch(scalarFunc, arguments.map(_.dataType),
           declaredTypes)

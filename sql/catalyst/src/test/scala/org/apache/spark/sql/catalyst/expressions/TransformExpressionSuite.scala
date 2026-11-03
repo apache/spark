@@ -283,6 +283,39 @@ class TransformExpressionSuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-60027: a user-defined type is refused where a magic invoke cannot take it") {
+    // A user-defined type goes as its `sqlType`, and `resolveScalarFunction` finds a magic
+    // `invoke` from the declared types. But `Invoke` and `StaticInvoke` look the method up again
+    // from the arguments' classes, a user-defined type's being `Object`, so that call cannot be
+    // made and is refused. A `produceResult` reads the row, so it takes the value.
+    class IntUDT extends UserDefinedType[Integer] {
+      override def sqlType: DataType = IntegerType
+      override def serialize(obj: Integer): Any = obj
+      override def deserialize(datum: Any): Integer = datum.asInstanceOf[Integer]
+      override def userClass: Class[Integer] = classOf[Integer]
+    }
+    val withInvoke = new ScalarFunction[Int] {
+      override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "bucket"
+      override def canonicalName(): String = "test.bucket"
+      def invoke(numBuckets: Int, value: Int): Int = Math.floorMod(value, numBuckets)
+    }
+    val withProduceResult = new ScalarFunction[Int] {
+      override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "bucket"
+      override def canonicalName(): String = "test.bucket"
+      override def produceResult(input: InternalRow): Int =
+        Math.floorMod(input.getInt(1), input.getInt(0))
+    }
+    val argument = BoundReference(0, new IntUDT, nullable = true)
+    assert(bucket(withInvoke, argument).evaluableFunction.isEmpty, "a magic invoke")
+    val transform = bucket(withProduceResult, argument)
+    assert(transform.evaluableFunction.isDefined, "produceResult")
+    assert(transform.eval(InternalRow(5)) == 1)
+  }
+
   test("SPARK-60027: a transform whose call fails to resolve is not evaluable, and says why") {
     // Connector code can throw while Spark resolves the call. That counts as cannot evaluate, and
     // the answer is kept, so the connector is asked once. `eval` rethrows what it threw.

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.exchange
 
+import org.apache.spark.SparkException
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -38,7 +39,7 @@ import org.apache.spark.sql.execution.python.FlatMapCoGroupsInPandasExec
 import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DataType, Decimal, DecimalType, IntegerType, LongType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, Decimal, DecimalType, IntegerType, LongType, StringType, StructField, StructType}
 
 class EnsureRequirementsSuite extends SharedSparkSession {
   private val exprA = AttributeReference("a", IntegerType)()
@@ -1712,32 +1713,43 @@ class EnsureRequirementsSuite extends SharedSparkSession {
   }
 
   test("SPARK-60027: a cogroup shuffled from a key Spark cannot place fails while planning") {
-    // A cogroup does not coerce its keys (SPARK-60782), so a `BIGINT` key can be shuffled onto a
-    // `bucket` over an `INT` column whose function declares `INT`. Falling back to a hash shuffle
-    // would pair the groups wrongly, so it stays a failure, but while planning, not in a task.
-    val intBucket = new ScalarFunction[Int] {
-      override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
+    // A cogroup does not coerce its keys (SPARK-60782), so its other key can have a type the
+    // layout's function does not take: a `BIGINT` against a function declaring `INT`, or a string
+    // of another collation, which master paired wrongly. Falling back to a hash shuffle would pair
+    // the groups wrongly too, so it fails, while planning, with an error that names the key's type.
+    def bucket(valueType: DataType): ScalarFunction[Int] = new ScalarFunction[Int] {
+      override def inputTypes(): Array[DataType] = Array(IntegerType, valueType)
       override def resultType(): DataType = IntegerType
       override def name(): String = "bucket"
       override def canonicalName(): String = "bucket"
-      override def produceResult(input: InternalRow): Int =
-        Math.floorMod(input.getInt(1), input.getInt(0))
+      override def produceResult(input: InternalRow): Int = 0
     }
-    val cL = AttributeReference("cL", IntegerType)()
-    val cR = AttributeReference("cR", LongType)()
-    val left = DummySparkPlan(outputPartitioning = KeyedPartitioning(
-      Seq(TransformExpression(intBucket, Seq(cL), Some(4))), (0 until 4).map(InternalRow(_))))
-    val right = DummySparkPlan(outputPartitioning = UnknownPartitioning(0))
     val pythonUdf = PythonUDF("pyUDF", null,
       StructType(Seq(StructField("value", IntegerType))),
       Seq.empty,
       PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
       true)
-    val cogroup = FlatMapCoGroupsInPandasExec(Seq(cL), Seq(cR), pythonUdf,
-      AttributeReference("value", IntegerType)() :: Nil, left, right)
-    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
-      val e = intercept[AssertionError](EnsureRequirements.apply(cogroup))
-      assert(e.getMessage.contains("Cannot shuffle a child onto a layout Spark cannot evaluate"))
+    Seq(
+      (IntegerType, LongType, "\"INT\"", "\"BIGINT\""),
+      (StringType, StringType("UTF8_LCASE"), "\"STRING\"", "\"STRING COLLATE UTF8_LCASE\"")
+    ).foreach { case (columnType, keyType, declared, key) =>
+      val cL = AttributeReference("cL", columnType)()
+      val cR = AttributeReference("cR", keyType)()
+      val left = DummySparkPlan(outputPartitioning = KeyedPartitioning(
+        Seq(TransformExpression(bucket(columnType), Seq(cL), Some(4))),
+        (0 until 4).map(InternalRow(_))))
+      val right = DummySparkPlan(outputPartitioning = UnknownPartitioning(0))
+      val cogroup = FlatMapCoGroupsInPandasExec(Seq(cL), Seq(cR), pythonUdf,
+        AttributeReference("value", IntegerType)() :: Nil, left, right)
+      withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+        checkError(
+          exception = intercept[SparkException](EnsureRequirements.apply(cogroup)),
+          condition = "STORAGE_PARTITION_JOIN_KEY_TYPE_MISMATCH",
+          parameters = Map(
+            "transform" -> "bucket",
+            "inputTypes" -> ("(\"INT\", " + declared + ")"),
+            "keyType" -> key))
+      }
     }
   }
 
