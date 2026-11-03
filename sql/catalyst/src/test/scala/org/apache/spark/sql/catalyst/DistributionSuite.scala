@@ -508,6 +508,49 @@ class DistributionSuite extends SparkFunSuite with SQLHelper {
     assert(interned.layout eq kpX.layout, "the whole layout is interned, keys and all")
   }
 
+  test("SPARK-60859: a KeyedPartitioning plan string shows the keys that fit and their total") {
+    val x = AttributeReference("x", IntegerType)()
+    val keys = (1 to 12).map(InternalRow(_))
+
+    // One expression, the total and the two flags take four of the ten slots.
+    withSQLConf(SQLConf.MAX_TO_STRING_FIELDS.key -> "10") {
+      assert(KeyedPartitioning(Seq(x), keys).toString ==
+        s"keyedpartitioning($x, [1], [2], [3], [4], [5], [6], " +
+          "... 12 partition keys in total, true, false)")
+
+      // When every key fits, the total is not needed.
+      assert(KeyedPartitioning(Seq(x), keys.take(6)).toString ==
+        s"keyedpartitioning($x, [1], [2], [3], [4], [5], [6], true, false)")
+
+      // An origin after the flags keeps its slot, so one key fewer is shown.
+      val marked = KeyedPartitioning(Seq(x), keys)
+        .withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
+      assert(marked.toString ==
+        s"keyedpartitioning($x, [1], [2], [3], [4], [5], " +
+          "... 12 partition keys in total, true, false, HASH_ROUTING)")
+
+      // Both origins keep their slots too.
+      val stamped = marked.withLayout(_.copy(ungroupingOrigin = Some(SPLIT_FOR_JOIN)))
+      assert(stamped.toString ==
+        s"keyedpartitioning($x, [1], [2], [3], [4], " +
+          "... 12 partition keys in total, true, false, HASH_ROUTING, SPLIT_FOR_JOIN)")
+
+      // Each expression takes a slot of its own.
+      val y = AttributeReference("y", IntegerType)()
+      val z = AttributeReference("z", IntegerType)()
+      val composite = (1 to 12).map(i => InternalRow(i, i, i))
+      assert(KeyedPartitioning(Seq(x, y, z), composite).toString ==
+        s"keyedpartitioning($x, $y, $z, [1,1,1], [2,2,2], [3,3,3], [4,4,4], " +
+          "... 12 partition keys in total, true, false)")
+    }
+
+    // With no slot left for a key, the total still wins over the last flag.
+    withSQLConf(SQLConf.MAX_TO_STRING_FIELDS.key -> "3") {
+      assert(KeyedPartitioning(Seq(x), keys).toString ==
+        s"keyedpartitioning($x, ... 12 partition keys in total, true, ... 1 more fields)")
+    }
+  }
+
   test("SPARK-59050: a marked one-partition layout keeps the global ordering claim") {
     // The one-partition exemption inside `keysSatisfy`'s ordered branch: a single partition
     // holds every row, so an out-of-set key cannot break the cross-partition sequence, while

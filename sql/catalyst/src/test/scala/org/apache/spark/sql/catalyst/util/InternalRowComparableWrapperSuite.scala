@@ -21,6 +21,7 @@ import java.util.UUID
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -152,5 +153,25 @@ class InternalRowComparableWrapperSuite extends SparkFunSuite {
     assert(fromA !== wrap(structA, InternalRow(InternalRow(2))), "two values are still two")
     assert(wrap(IntegerType, InternalRow(1)) !== wrap(LongType, InternalRow(1L)),
       "and a type that decides where a value belongs still tells them apart")
+  }
+
+  test("SPARK-60859: a wrapper rejects a row whose width disagrees with its types") {
+    val factory = InternalRowComparableWrapper
+      .getInternalRowComparableWrapperFactory(Seq(IntegerType, IntegerType))
+    val e = intercept[IllegalArgumentException] {
+      factory(InternalRow(1, 2, 3))
+    }
+    assert(e.getMessage.contains("The row has 3 fields, but the types it is compared at have 2"))
+  }
+
+  test("SPARK-60859: a wrapper prints its row values") {
+    val factory = InternalRowComparableWrapper
+      .getInternalRowComparableWrapperFactory(Seq(IntegerType, StringType))
+    assert(factory(InternalRow(1, UTF8String.fromString("a"))).toString === "[1,a]")
+
+    // An UnsafeRow has no toString of its own, so the wrapper has to read the row.
+    val unsafeProjection = UnsafeProjection.create(Array[DataType](IntegerType, StringType))
+    val unsafeRow = unsafeProjection(InternalRow(2, UTF8String.fromString("b")))
+    assert(factory(unsafeRow).toString === "[2,b]")
   }
 }

@@ -39,6 +39,10 @@ class InternalRowComparableWrapper private (
     @transient private var _structType: StructType,
     @transient private var _ordering: BaseOrdering) extends Serializable {
 
+  require(row.numFields == dataTypes.length,
+    s"The row has ${row.numFields} fields, but the types it is compared at have " +
+      s"${dataTypes.length}")
+
   /**
    * Previous constructor for binary compatibility. Prefer using
    * `getInternalRowComparableWrapperFactory` for the creation of InternalRowComparableWrapper's in
@@ -64,6 +68,9 @@ class InternalRowComparableWrapper private (
     }
     _ordering
   }
+
+  override def toString: String =
+    row.toSeq(dataTypes).mkString("[", ",", "]")
 
   override def hashCode(): Int = Murmur3HashFunction.hash(
     row,
