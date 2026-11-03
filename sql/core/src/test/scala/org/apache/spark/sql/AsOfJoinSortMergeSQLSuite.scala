@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.sql.catalyst.expressions.Cast
+import org.apache.spark.sql.catalyst.expressions.{Cast, CodegenObjectFactoryMode}
 import org.apache.spark.sql.catalyst.plans.{AsOfJoinDirection, Backward, Forward}
 import org.apache.spark.sql.catalyst.plans.logical.AsOfJoin
 import org.apache.spark.sql.execution.FileSourceScanExec
@@ -114,6 +114,25 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
     withTempView("r") {
       sql(s"SELECT * FROM VALUES $rows AS r($columns)").coalesce(1).createOrReplaceTempView("r")
       f
+    }
+  }
+
+  /**
+   * Runs `f` in ANSI mode, so a division by zero or a bad cast throws. Runs it with compiled
+   * and with interpreted conditions, each with subexpression elimination on and off.
+   */
+  private def withGuardedOnConditionConfs(f: => Unit): Unit = {
+    val factoryModes =
+      Seq(CodegenObjectFactoryMode.CODEGEN_ONLY, CodegenObjectFactoryMode.NO_CODEGEN)
+    for (factoryMode <- factoryModes; subexprElimination <- Seq("true", "false")) {
+      withClue(s"factoryMode=$factoryMode, subexprElimination=$subexprElimination: ") {
+        withSQLConf(
+            SQLConf.ANSI_ENABLED.key -> "true",
+            SQLConf.CODEGEN_FACTORY_MODE.key -> factoryMode.toString,
+            SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> subexprElimination) {
+          f
+        }
+      }
     }
   }
 
@@ -1188,6 +1207,55 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
         Row(Timestamp.valueOf("2026-06-29 10:00:05"), null),
         Row(Timestamp.valueOf("2026-06-29 10:00:11"), 180.20),
         Row(Timestamp.valueOf("2026-06-29 10:00:12"), null)))
+  }
+
+  test("ON condition does not divide when an AND guard before it is FALSE") {
+    withGuardedOnConditionConfs {
+      // The closer right row has the same y, so `t.y <> r.y` must stop the division by zero.
+      checkSortMergeAsOf(
+        sql(
+          """
+            |SELECT r.tag
+            |FROM VALUES (10, 6, 5) AS t(k, x, y)
+            |ASOF JOIN VALUES (5, 3, 'differs'), (8, 5, 'same') AS r(k, y, tag)
+            |  MATCH_CONDITION (t.k >= r.k)
+            |  ON t.y <> r.y AND t.x / (t.y - r.y) > 1 AND t.x / (t.y - r.y) < 10
+            |""".stripMargin),
+        Row("differs") :: Nil)
+    }
+  }
+
+  test("ON condition does not divide when an OR guard before it is TRUE") {
+    withGuardedOnConditionConfs {
+      // The closer right row has the same y, so `t.y = r.y` must match it without the division.
+      checkSortMergeAsOf(
+        sql(
+          """
+            |SELECT r.tag
+            |FROM VALUES (10, 6, 5) AS t(k, x, y)
+            |ASOF JOIN VALUES (5, 3, 'differs'), (8, 5, 'same') AS r(k, y, tag)
+            |  MATCH_CONDITION (t.k >= r.k)
+            |  ON t.y = r.y OR (t.x / (t.y - r.y) > 1 AND t.x / (t.y - r.y) < 10)
+            |""".stripMargin),
+        Row("same") :: Nil)
+    }
+  }
+
+  test("LEFT ASOF JOIN ON condition does not cast when a left-only guard is FALSE") {
+    withGuardedOnConditionConfs {
+      // Left row 2 fails `t.kind <> 'text'`, so its candidate 'abc' must never be cast to INT.
+      // The guard is not `t.kind = 'num'`, which the planner would make a join key.
+      checkSortMergeAsOf(
+        sql(
+          """
+            |SELECT t.id, r.v
+            |FROM VALUES (1, 6, 'num', 0, 100), (2, 10, 'text', 0, 100) AS t(id, k, kind, lo, hi)
+            |LEFT ASOF JOIN VALUES (5, '42'), (8, 'abc') AS r(k, v)
+            |  MATCH_CONDITION (t.k >= r.k)
+            |  ON t.kind <> 'text' AND CAST(r.v AS INT) >= t.lo AND CAST(r.v AS INT) <= t.hi
+            |""".stripMargin),
+        Seq(Row(1, "42"), Row(2, null)))
+    }
   }
 
   test("LEFT ASOF JOIN null-pads NOT NULL right catalog columns") {

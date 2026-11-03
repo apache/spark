@@ -23,8 +23,9 @@ import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSui
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.plans.{Inner, Nearest}
+import org.apache.spark.sql.catalyst.plans.{Backward, Inner, Nearest}
 import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
 class SortMergeAsOfJoinScannerSuite extends SparkFunSuite with LocalSparkContext {
@@ -64,6 +65,54 @@ class SortMergeAsOfJoinScannerSuite extends SparkFunSuite with LocalSparkContext
     // The scan reads the right rows 0 to 100 and stops at 100, the first row after 98.
     assert(matchedKeys == List(100))
     assert(evaluations == 11, s"evaluated the as-of condition $evaluations times")
+  }
+
+  gridTest("residual condition skips a repeated part behind a FALSE guard")(
+      Seq(CodegenObjectFactoryMode.CODEGEN_ONLY, CodegenObjectFactoryMode.NO_CODEGEN)) { mode =>
+    sc = new SparkContext("local", "SortMergeAsOfJoinScannerSuite", new SparkConf(false))
+    val (matchedKeys, evaluations) = sc.parallelize(Seq(0), 1)
+      .mapPartitions { _ =>
+        val leftKey = AttributeReference("leftKey", IntegerType)()
+        val rightKey = AttributeReference("rightKey", IntegerType)()
+        val count = new AtomicInteger()
+        val counted = CountedEvaluation(rightKey, count)
+        // The guard `leftKey < 0` is FALSE for every pair, so neither copy of `counted` may run.
+        val residual = And(
+          And(LessThan(leftKey, Literal(0)), GreaterThan(counted, Literal(0))),
+          LessThan(counted, Literal(100)))
+        val conf = new SQLConf
+        conf.setConfString(SQLConf.CODEGEN_FACTORY_MODE.key, mode.toString)
+        conf.setConfString(SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key, "true")
+        SQLConf.withExistingConf(conf) {
+          val scanner = new SortMergeAsOfJoinScanner(
+            leftIter = Iterator(InternalRow(10)),
+            rightIter = (0 until 10).iterator.map(i => InternalRow(i)),
+            leftOutput = Seq(leftKey),
+            rightOutput = Seq(rightKey),
+            leftKeys = Nil,
+            rightKeys = Nil,
+            leftSortExprs = Seq(leftKey),
+            rightSortExprs = Seq(rightKey),
+            asOfCondition = GreaterThanOrEqual(leftKey, rightKey),
+            joinType = Inner,
+            residualCondition = Some(residual),
+            numOutputRows = new SQLMetric("sum"),
+            spillSize = new SQLMetric("sum"),
+            direction = Backward,
+            inMemoryThreshold = 256,
+            sizeInBytesSpillThreshold = Long.MaxValue,
+            spillThreshold = 256)
+          try {
+            Iterator.single((scanner.iterator.map(_.getInt(1)).toList, count.get()))
+          } finally {
+            scanner.close()
+          }
+        }
+      }.collect().head
+
+    // All 10 right rows pass the as-of condition and then fail the guard.
+    assert(matchedKeys.isEmpty)
+    assert(evaluations == 0, s"evaluated the repeated part $evaluations times")
   }
 }
 

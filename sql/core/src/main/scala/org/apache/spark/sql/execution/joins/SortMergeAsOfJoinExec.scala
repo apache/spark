@@ -24,7 +24,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReference
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, GenerateOrdering}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, GenerateOrdering,
+  GeneratePredicate}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.AsOfJoin
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -171,10 +172,12 @@ private[joins] class SortMergeAsOfJoinScanner(
   }
 
   // Compiled once, so a check runs generated code instead of walking the expression tree.
-  // The scan checks the as-of condition for every right row it reads.
+  // The scan checks the as-of condition for every right row it reads. Its repeated parts are
+  // the match keys, which its first comparison always computes, so sharing them is safe.
   private val boundAsOfCond = Predicate.create(asOfCondition, joinedOutput)
+  // The residual can guard a part that throws, as in `y <> 0 AND x / y > 1`.
   private val boundResidualCond =
-    residualCondition.map(Predicate.create(_, joinedOutput))
+    residualCondition.map(ShortCircuitPredicate.create(_, joinedOutput))
 
   private val equiKeyOrdering: Option[BaseOrdering] =
     if (leftKeys.nonEmpty) {
@@ -521,4 +524,21 @@ private[joins] class SortMergeAsOfJoinScanner(
     val upper = upperKey.asInstanceOf[java.lang.Number].doubleValue()
     if (lower.isNaN || upper.isNaN) 2 else if (lower.isInfinite || upper.isInfinite) 1 else 0
   }
+}
+
+/**
+ * Compiles a predicate without subexpression elimination, so AND and OR still skip the parts
+ * they do not need.
+ */
+private[joins] object ShortCircuitPredicate
+    extends CodeGeneratorWithInterpretedFallback[Expression, BasePredicate] {
+
+  def create(e: Expression, inputSchema: Seq[Attribute]): BasePredicate =
+    createObject(bindReference(e, inputSchema))
+
+  override protected def createCodeGeneratedObject(in: Expression): BasePredicate =
+    GeneratePredicate.generate(in, useSubexprElimination = false)
+
+  override protected def createInterpretedObject(in: Expression): BasePredicate =
+    InterpretedPredicate(in)
 }
