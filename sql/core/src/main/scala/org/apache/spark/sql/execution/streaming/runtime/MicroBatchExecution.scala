@@ -260,18 +260,18 @@ class MicroBatchExecution(
     }
 
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
-    // The columns that the query reads from each Data Source V2 source, which the scan of a source
-    // that supports column pruning reads. They come from the plan of the query optimized once,
-    // with the configuration of its micro-batches, which a restarted query takes from the offset
-    // log. The plan is only optimized for a scan builder that supports column pruning.
-    val pruneColumns = streamConf.streamingV2ColumnPruningEnabled
-    lazy val requiredColumns = {
+    // The columns and the filters that the query reads from each Data Source V2 source, which the
+    // scan of the source gets if it supports them. They come from the plan of the query optimized
+    // once as its micro-batches are, with their current time and their configuration, which a
+    // restarted query takes from the offset log. The plan is only optimized for a scan builder
+    // that supports a pushdown.
+    lazy val sourceReads = {
       val batchConf = streamConf.clone()
       initialLatestOffsetSeq.flatMap(_._2.metadataOpt).foreach { metadata =>
         OffsetSeqMetadata.setSessionConf(metadata, batchConf, logChanges = false)
       }
-      StreamingV2ColumnPruning.requiredColumns(
-        sparkSessionForStream.sessionState.optimizer, batchConf, planWithDedupKeys)
+      StreamingV2ScanPushDown.reads(sparkSessionForStream.sessionState.optimizer, batchConf,
+        withBatchTimestamp(planWithDedupKeys, batchTimestampMs = 0L))
     }
     val _logicalPlan = planWithDedupKeys.transform {
       case streamingRelation @ StreamingRelation(
@@ -300,11 +300,12 @@ class MicroBatchExecution(
             logInfo(log"Reading table [${MDC(LogKeys.STREAMING_TABLE, table)}] " +
               log"from DataSourceV2 named '${MDC(LogKeys.STREAMING_DATA_SOURCE_NAME, srcName)}' " +
               log"${MDC(LogKeys.STREAMING_DATA_SOURCE_DESCRIPTION, dsStr)}")
-            // TODO: operator pushdown.
-            // The output includes the metadata columns that the query reads, so that connectors
-            // implementing SupportsMetadataColumns include them in readSchema().
-            val (scan, stream, prunedOutput) = StreamingV2ColumnPruning.buildScan(
-              table, options, output, if (pruneColumns) requiredColumns.get(s) else None)(
+            // The scan gets the columns and the filters that the query reads from the source, see
+            // StreamingV2ScanPushDown. The output includes the metadata columns that the query
+            // reads, so that connectors implementing SupportsMetadataColumns include them in
+            // readSchema().
+            val (scan, stream, prunedOutput) = StreamingV2ScanPushDown.buildScan(
+              table, options, output, streamConf, sourceReads.get(s))(
               _.toMicroBatchStream(metadataPath))
             val relation = StreamingDataSourceV2Relation(
                 table,
@@ -1194,6 +1195,32 @@ class MicroBatchExecution(
   }
 
   /**
+   * Replaces the current time and date in the expressions of `plan` with the time of the
+   * micro-batch whose timestamp is `batchTimestampMs`, which the optimizer does not fold.
+   */
+  private def withBatchTimestamp(plan: LogicalPlan, batchTimestampMs: Long): LogicalPlan = {
+    plan.transformAllExpressionsWithPruning(_.containsPattern(CURRENT_LIKE)) {
+      case ct: CurrentTimestamp =>
+        // CurrentTimestamp is not TimeZoneAwareExpression while CurrentBatchTimestamp is.
+        // Without TimeZoneId, CurrentBatchTimestamp is unresolved. Here, we use an explicit
+        // dummy string to prevent UnresolvedException and to prevent to be used in the future.
+        CurrentBatchTimestamp(batchTimestampMs, ct.dataType, Some("Dummy TimeZoneId"))
+      case ct: CurrentTimestampNanos =>
+        // Like CurrentTimestamp, the nanosecond current_timestamp(p) is not
+        // TimeZoneAwareExpression, so supply the dummy time zone. The batch timestamp is
+        // millisecond resolution, so the folded TIMESTAMP_LTZ(p) literal has zero
+        // nanos-within-micro.
+        CurrentBatchTimestamp(batchTimestampMs, ct.dataType, Some("Dummy TimeZoneId"))
+      case lt: LocalTimestamp =>
+        CurrentBatchTimestamp(batchTimestampMs, lt.dataType, lt.timeZoneId)
+      case lt: LocalTimestampNanos =>
+        CurrentBatchTimestamp(batchTimestampMs, lt.dataType, lt.timeZoneId)
+      case cd: CurrentDate =>
+        CurrentBatchTimestamp(batchTimestampMs, cd.dataType, cd.timeZoneId)
+    }
+  }
+
+  /**
    * Processes any data available between `endOffsets` and `startOffset`.
    * @param sparkSessionToRunBatch Isolated [[SparkSession]] to run this batch with.
    */
@@ -1327,31 +1354,8 @@ class MicroBatchExecution(
     }
     execCtx.newData = mutableNewData.toMap
     // Rewire the plan to use the new attributes that were returned by the source.
-    val newAttributePlan = newBatchesPlan.transformAllExpressionsWithPruning(
-      _.containsPattern(CURRENT_LIKE)) {
-      case ct: CurrentTimestamp =>
-        // CurrentTimestamp is not TimeZoneAwareExpression while CurrentBatchTimestamp is.
-        // Without TimeZoneId, CurrentBatchTimestamp is unresolved. Here, we use an explicit
-        // dummy string to prevent UnresolvedException and to prevent to be used in the future.
-        CurrentBatchTimestamp(execCtx.offsetSeqMetadata.batchTimestampMs,
-          ct.dataType, Some("Dummy TimeZoneId"))
-      case ct: CurrentTimestampNanos =>
-        // Like CurrentTimestamp, the nanosecond current_timestamp(p) is not
-        // TimeZoneAwareExpression, so supply the dummy time zone. The batch timestamp is
-        // millisecond resolution, so the folded TIMESTAMP_LTZ(p) literal has zero
-        // nanos-within-micro.
-        CurrentBatchTimestamp(execCtx.offsetSeqMetadata.batchTimestampMs,
-          ct.dataType, Some("Dummy TimeZoneId"))
-      case lt: LocalTimestamp =>
-        CurrentBatchTimestamp(execCtx.offsetSeqMetadata.batchTimestampMs,
-          lt.dataType, lt.timeZoneId)
-      case lt: LocalTimestampNanos =>
-        CurrentBatchTimestamp(execCtx.offsetSeqMetadata.batchTimestampMs,
-          lt.dataType, lt.timeZoneId)
-      case cd: CurrentDate =>
-        CurrentBatchTimestamp(execCtx.offsetSeqMetadata.batchTimestampMs,
-          cd.dataType, cd.timeZoneId)
-    }
+    val newAttributePlan =
+      withBatchTimestamp(newBatchesPlan, execCtx.offsetSeqMetadata.batchTimestampMs)
 
     val triggerLogicalPlan = sink match {
       case _: Sink =>

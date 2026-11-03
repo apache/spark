@@ -34,6 +34,9 @@ public interface SupportsPushDownFilters extends ScanBuilder {
    * <p>
    * Rows should be returned from the data source if and only if all of the filters match. That is,
    * filters must be interpreted as ANDed together.
+   * <p>
+   * The scans of streaming queries get the filters too, since 4.4.0. Spark evaluates all of them
+   * after a streaming scan, also those that this does not return.
    */
   Filter[] pushFilters(Filter[] filters);
 

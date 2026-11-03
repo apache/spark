@@ -34,14 +34,14 @@ import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryBaseTable, In
 import org.apache.spark.sql.connector.read.{InputPartition, Scan, ScanBuilder, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousPartitionReader, ContinuousPartitionReaderFactory, ContinuousStream, Offset, PartitionOffset}
 import org.apache.spark.sql.execution.datasources.v2.{MicroBatchScanExec, StreamingDataSourceV2ScanRelation}
-import org.apache.spark.sql.execution.streaming.runtime.{StreamingQueryWrapper, StreamingV2ColumnPruning}
+import org.apache.spark.sql.execution.streaming.runtime.{StreamExecution, StreamingQueryWrapper, StreamingV2ScanPushDown}
 import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class StreamingV2ColumnPruningSuite extends StreamTest with BeforeAndAfter {
+class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
   import testImplicits._
 
   private val tbl = "testcat.t"
@@ -69,6 +69,37 @@ class StreamingV2ColumnPruningSuite extends StreamTest with BeforeAndAfter {
 
   private def pruningEnabled(enabled: Boolean): Map[String, String] =
     Map(SQLConf.STREAMING_V2_COLUMN_PRUNING_ENABLED.key -> enabled.toString)
+
+  /**
+   * Runs `f`, which restarts streams with other values of the confs of these pushdowns, and then
+   * restores their values: `testStream` restores the value that a conf had before the last
+   * `StartStream` that set it, rather than before the first.
+   */
+  private def withPushDownConfsRestored(f: => Unit): Unit = withSQLConf(
+    SQLConf.STREAMING_V2_COLUMN_PRUNING_ENABLED.key -> "true",
+    SQLConf.STREAMING_V2_FILTER_PUSHDOWN_ENABLED.key -> "true")(f)
+
+  private def filterPushdownEnabled(enabled: Boolean): Map[String, String] =
+    Map(SQLConf.STREAMING_V2_FILTER_PUSHDOWN_ENABLED.key -> enabled.toString)
+
+  /** Returns the filters pushed down to the scan of each streaming source of the query. */
+  private def pushedFilters(query: StreamExecution): Seq[Seq[String]] = {
+    query.logicalPlan.collect {
+      case relation: StreamingDataSourceV2ScanRelation =>
+        relation.scan match {
+          case scan: InMemoryBaseTable#InMemoryBatchScan =>
+            scan.pushedFilters.map(_.toString).toSeq.sorted
+        }
+    }
+  }
+
+  /** Checks that the filters pushed down to the scan of each streaming source are `filters`. */
+  private def assertPushedFilters(filters: String*): StreamAction = AssertOnQuery { query =>
+    val pushed = pushedFilters(query)
+    assert(pushed.nonEmpty)
+    pushed.foreach(p => assert(p === filters.sorted))
+    true
+  }
 
   /** Checks the read schemas of the scans of the streaming sources of the query. */
   private def assertReadSchemas(columns: Seq[String]*): StreamAction = AssertOnQuery { query =>
@@ -302,7 +333,7 @@ class StreamingV2ColumnPruningSuite extends StreamTest with BeforeAndAfter {
         .asInstanceOf[InMemoryBaseTable]
       val logAppender = new LogAppender("the fallback of streaming column pruning")
       withLogAppender(logAppender,
-          loggerNames = Seq(StreamingV2ColumnPruning.getClass.getName.stripSuffix("$")),
+          loggerNames = Seq(StreamingV2ScanPushDown.getClass.getName.stripSuffix("$")),
           level = Some(Level.WARN)) {
         testStream(spark.readStream.table(tbl).select("data"))(
           ProcessAllAvailable(),
@@ -374,62 +405,66 @@ class StreamingV2ColumnPruningSuite extends StreamTest with BeforeAndAfter {
 
   test("keep the layout of the state of a stream-stream join across the values of the conf " +
       "when a scan returns the columns in another order") {
-    val (leftTable, rightTable) = ("testcat.l", "testcat.r")
-    withTable(leftTable, rightTable) {
-      sql(s"CREATE TABLE $leftTable (k bigint, v bigint, unused int) TBLPROPERTIES " +
-        s"('${InMemoryBaseTable.SIMULATE_REORDERED_COLUMN_PRUNING}' = 'true')")
-      sql(s"CREATE TABLE $rightTable (rk bigint, w int)")
-      // The left row is kept in the state of the join, which is written without pruning first.
-      sql(s"INSERT INTO $leftTable VALUES (1, 100, 0)")
-      val left = spark.readStream.table(leftTable)
-      val right = spark.readStream.table(rightTable)
-      val df = left.join(right, $"k" === $"rk").select("v", "w")
-      testStream(df)(
-        StartStream(additionalConfs = pruningEnabled(false)),
-        ProcessAllAvailable(),
-        assertReadSchemas(Seq("k", "v", "unused"), Seq("rk", "w")),
-        CheckAnswer(),
-        StopStream,
-        // The pruned scan returns (v, k), and the join still gets (k, v).
-        insert("(1, 7)", rightTable),
-        StartStream(additionalConfs = pruningEnabled(true)),
-        ProcessAllAvailable(),
-        assertReadSchemas(Seq("v", "k"), Seq("rk", "w")),
-        CheckAnswer(Row(100L, 7)),
-        // And the other way around.
-        insert("(2, 200, 0)", leftTable),
-        ProcessAllAvailable(),
-        StopStream,
-        insert("(2, 8)", rightTable),
-        StartStream(additionalConfs = pruningEnabled(false)),
-        ProcessAllAvailable(),
-        CheckAnswer(Row(100L, 7), Row(200L, 8)))
+    withPushDownConfsRestored {
+      val (leftTable, rightTable) = ("testcat.l", "testcat.r")
+      withTable(leftTable, rightTable) {
+        sql(s"CREATE TABLE $leftTable (k bigint, v bigint, unused int) TBLPROPERTIES " +
+          s"('${InMemoryBaseTable.SIMULATE_REORDERED_COLUMN_PRUNING}' = 'true')")
+        sql(s"CREATE TABLE $rightTable (rk bigint, w int)")
+        // The left row is kept in the state of the join, which is written without pruning first.
+        sql(s"INSERT INTO $leftTable VALUES (1, 100, 0)")
+        val left = spark.readStream.table(leftTable)
+        val right = spark.readStream.table(rightTable)
+        val df = left.join(right, $"k" === $"rk").select("v", "w")
+        testStream(df)(
+          StartStream(additionalConfs = pruningEnabled(false)),
+          ProcessAllAvailable(),
+          assertReadSchemas(Seq("k", "v", "unused"), Seq("rk", "w")),
+          CheckAnswer(),
+          StopStream,
+          // The pruned scan returns (v, k), and the join still gets (k, v).
+          insert("(1, 7)", rightTable),
+          StartStream(additionalConfs = pruningEnabled(true)),
+          ProcessAllAvailable(),
+          assertReadSchemas(Seq("v", "k"), Seq("rk", "w")),
+          CheckAnswer(Row(100L, 7)),
+          // And the other way around.
+          insert("(2, 200, 0)", leftTable),
+          ProcessAllAvailable(),
+          StopStream,
+          insert("(2, 8)", rightTable),
+          StartStream(additionalConfs = pruningEnabled(false)),
+          ProcessAllAvailable(),
+          CheckAnswer(Row(100L, 7), Row(200L, 8)))
+      }
     }
   }
 
   test("keep the state of a streaming aggregation across the values of the conf when a scan " +
       "returns the columns in another order") {
-    withTable(tbl) {
-      sql(s"CREATE TABLE $tbl (k bigint, v bigint, unused int) TBLPROPERTIES " +
-        s"('${InMemoryBaseTable.SIMULATE_REORDERED_COLUMN_PRUNING}' = 'true')")
-      sql(s"INSERT INTO $tbl VALUES (1, 10, 0), (2, 20, 0)")
-      val df = spark.readStream.table(tbl).groupBy("k").agg(sum("v"))
-      testStream(df, OutputMode.Complete())(
-        StartStream(additionalConfs = pruningEnabled(false)),
-        ProcessAllAvailable(),
-        assertReadSchema("k", "v", "unused"),
-        CheckAnswer(Row(1L, 10L), Row(2L, 20L)),
-        StopStream,
-        insert("(1, 1, 0)"),
-        StartStream(additionalConfs = pruningEnabled(true)),
-        ProcessAllAvailable(),
-        assertReadSchema("v", "k"),
-        CheckAnswer(Row(1L, 11L), Row(2L, 20L)),
-        StopStream,
-        insert("(2, 2, 0)"),
-        StartStream(additionalConfs = pruningEnabled(false)),
-        ProcessAllAvailable(),
-        CheckAnswer(Row(1L, 11L), Row(2L, 22L)))
+    withPushDownConfsRestored {
+      withTable(tbl) {
+        sql(s"CREATE TABLE $tbl (k bigint, v bigint, unused int) TBLPROPERTIES " +
+          s"('${InMemoryBaseTable.SIMULATE_REORDERED_COLUMN_PRUNING}' = 'true')")
+        sql(s"INSERT INTO $tbl VALUES (1, 10, 0), (2, 20, 0)")
+        val df = spark.readStream.table(tbl).groupBy("k").agg(sum("v"))
+        testStream(df, OutputMode.Complete())(
+          StartStream(additionalConfs = pruningEnabled(false)),
+          ProcessAllAvailable(),
+          assertReadSchema("k", "v", "unused"),
+          CheckAnswer(Row(1L, 10L), Row(2L, 20L)),
+          StopStream,
+          insert("(1, 1, 0)"),
+          StartStream(additionalConfs = pruningEnabled(true)),
+          ProcessAllAvailable(),
+          assertReadSchema("v", "k"),
+          CheckAnswer(Row(1L, 11L), Row(2L, 20L)),
+          StopStream,
+          insert("(2, 2, 0)"),
+          StartStream(additionalConfs = pruningEnabled(false)),
+          ProcessAllAvailable(),
+          CheckAnswer(Row(1L, 11L), Row(2L, 22L)))
+      }
     }
   }
 
@@ -475,6 +510,62 @@ class StreamingV2ColumnPruningSuite extends StreamTest with BeforeAndAfter {
       assert(readSchemas.map(_.toSeq) === Seq(Seq("_2", "_3")))
     } finally {
       query.stop()
+    }
+  }
+
+  test("push the filters of a streaming query down to the scan of its source") {
+    withPushDownConfsRestored {
+      withSourceTable() {
+        val df = spark.readStream.table(tbl).where("extra > 10").select("data")
+        testStream(df)(
+          StartStream(additionalConfs = filterPushdownEnabled(true)),
+          ProcessAllAvailable(),
+          assertPushedFilters("GreaterThan(extra,10)", "IsNotNull(extra)"),
+          // The scan of the in-memory table does not apply the filters, which Spark evaluates.
+          CheckAnswer(Row("b")),
+          StopStream,
+          insert("(3, 'c', 30), (4, 'd', 5)"),
+          StartStream(additionalConfs = filterPushdownEnabled(false)),
+          ProcessAllAvailable(),
+          assertPushedFilters(),
+          CheckAnswer(Row("b"), Row("c")),
+          StopStream,
+          insert("(5, 'e', 50), (6, 'f', 6)"),
+          StartStream(additionalConfs = filterPushdownEnabled(true)),
+          ProcessAllAvailable(),
+          assertPushedFilters("GreaterThan(extra,10)", "IsNotNull(extra)"),
+          CheckAnswer(Row("b"), Row("c"), Row("e")))
+      }
+    }
+  }
+
+  test("push down only the filters that every read of a relation applies") {
+    withSourceTable() {
+      val source = spark.readStream.table(tbl)
+      val df = source.where("extra > 10").union(source.where("extra > 10 AND id > 1"))
+      testStream(df)(
+        ProcessAllAvailable(),
+        assertPushedFilters("GreaterThan(extra,10)", "IsNotNull(extra)"),
+        CheckAnswer(Row(2L, "b", 20), Row(2L, "b", 20)))
+    }
+  }
+
+  test("do not push down a filter on the current time of a micro-batch") {
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (id bigint, data string, ts timestamp)")
+      sql(s"INSERT INTO $tbl VALUES " +
+        "(1, 'a', timestamp_seconds(0)), (2, 'b', timestamp_seconds(10))")
+      // Each micro-batch has its own current time, so the time when the query started cannot be
+      // pushed down in its place.
+      val df = spark.readStream.table(tbl).where("ts < current_timestamp()").select("data")
+      testStream(df)(
+        ProcessAllAvailable(),
+        AssertOnQuery { query =>
+          val pushed = pushedFilters(query)
+          assert(pushed.nonEmpty && pushed.flatten.forall(!_.contains("LessThan")), pushed)
+          true
+        },
+        CheckAnswer(Row("a"), Row("b")))
     }
   }
 

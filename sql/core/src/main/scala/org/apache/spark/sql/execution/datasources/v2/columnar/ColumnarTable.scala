@@ -142,7 +142,7 @@ class ColumnarScanBuilder(
 
 /**
  * The read schema of a scan of a micro-batch stream is only known once the stream is created, as
- * `StreamingV2ColumnPruning` asks for it: it is the full schema, while the read schema that the
+ * `StreamingV2ScanPushDown` asks for it: it is the full schema, while the read schema that the
  * scan reports before is the one of a batch, whose planner it creates to prune the columns.
  *
  * @param requiredSchema the top-level columns that the query needs, if fewer than those of the

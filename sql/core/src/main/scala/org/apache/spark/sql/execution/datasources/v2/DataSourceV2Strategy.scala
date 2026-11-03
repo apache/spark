@@ -1108,7 +1108,7 @@ private[sql] object DataSourceV2Strategy extends Logging {
    * Returns the output of the scan node of a streaming relation: the columns that its scan reads.
    * A scan built to read fewer columns than the relation outputs only gets them when the
    * projections and the filters over the relation, which the scan node is planned with, read no
-   * other column of the relation (see `StreamingV2ColumnPruning`).
+   * other column of the relation (see `StreamingV2ScanPushDown`).
    */
   private def streamingScanOutput(
       relation: StreamingDataSourceV2ScanRelation,

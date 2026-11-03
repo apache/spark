@@ -45,6 +45,12 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   readers of its streams must then return the columns of `Scan.readSchema()`. To restore the
   previous behavior, set `spark.sql.streaming.v2ColumnPruning.enabled` to `false`.
 
+- Since Spark 4.4, the scan of a Data Source V2 streaming source whose scan builder implements
+  `SupportsPushDownFilters` or `SupportsPushDownV2Filters` gets the filters that the streaming
+  query applies to all the rows that it reads from the source, as the scans of batch queries do.
+  Before, it got no filter. Spark still evaluates all the filters after the scan. To restore the
+  previous behavior, set `spark.sql.streaming.v2FilterPushdown.enabled` to `false`.
+
 ## Upgrading from Structured Streaming 4.2 to 4.3
 
 - Since Spark 4.3, in Spark Connect the DataFrame passed to a Python `foreachBatch` function is bound to the streaming query's own session, a clone of the session that started the query, matching classic `foreachBatch`. This runs the batch under the configuration the streaming engine pins on the clone rather than the root session's. As a result, the batch DataFrame can no longer be combined with the root session inside the function: a temporary view created from it is not visible to the root session, referencing it from `spark.sql` on the root session fails with `DATAFRAME_NOT_FOUND`, and joining it with a DataFrame captured from the root session fails with `SESSION_NOT_SAME`. Run such work through the batch DataFrame's own session (`batch_df.sparkSession`) instead, and pass results out through a table or a global temporary view rather than a session-local temporary view. To restore the previous behavior, set `spark.sql.connect.streaming.foreachBatch.useClonedSession` to `false`.
