@@ -555,6 +555,19 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     }
   }
 
+  test("SPARK-60824: Alter table add check constraint that always holds") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT NOT NULL, data STRING) $defaultUsing")
+      sql(s"INSERT INTO $t VALUES (1, 'a')")
+      // The optimizer replaces the scan that validates the existing rows with an empty relation.
+      sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK (id IS NOT NULL)")
+      val table = loadTable(nonPartitionCatalog, "ns", "tbl")
+      assert(table.validatedVersion() == "1")
+      assert(getCheckConstraint(table).toDDL ==
+        "CONSTRAINT c1 CHECK (id IS NOT NULL) ENFORCED NORELY")
+    }
+  }
+
   test("Alter table add new check constraint with nested column") {
     withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
       sql(s"CREATE TABLE $t (id INT, s STRUCT<num INT, str STRING>) $defaultUsing")

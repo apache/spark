@@ -420,7 +420,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
       // The child `Filter` holds the same condition. Check it first so that an error of the
       // subquery in the `Filter` does not hide that the constraint cannot have a subquery. A
       // missing table is still reported first, by the bottom-up traversal.
-      case AddCheckConstraint(Filter(_, relation), check) if relation.resolved =>
+      case AddCheckConstraint(Filter(_, relation), check, _) if relation.resolved =>
         check.failIfContainsSubquery()
 
       case _ =>
