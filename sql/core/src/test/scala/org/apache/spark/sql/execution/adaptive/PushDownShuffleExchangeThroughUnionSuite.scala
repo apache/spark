@@ -590,21 +590,21 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
     }
   }
 
-  test("SPARK-60379: disabling optional session configs clones only when necessary") {
+  test("SPARK-60379: disabling push-down clones the session only when enabled") {
     val conf = spark.sessionState.conf
     val entry = SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED
     val explicit = conf.getConfString(entry.key, null)
     try {
       Seq(None, Some(true), Some(false)).foreach { value =>
         value match {
-          case Some(enabled) => conf.setConf(entry, Some(enabled))
+          case Some(enabled) => conf.setConf(entry, enabled)
           case None => conf.unsetConf(entry.key)
         }
         val configured = org.apache.spark.sql.classic.SparkSession.getOrCloneSessionWithConfigsOff(
-          spark, Nil, Seq(entry))
-        assert((configured eq spark) === value.contains(false))
-        assert(configured.sessionState.conf.getConf(entry).contains(false))
-        assert(conf.getConf(entry) === value)
+          spark, Seq(entry))
+        assert((configured eq spark) === !value.contains(true))
+        assert(!configured.sessionState.conf.getConf(entry))
+        assert(conf.getConf(entry) === value.getOrElse(false))
       }
     } finally {
       if (explicit == null) { conf.unsetConf(entry.key) } else {
@@ -635,7 +635,15 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
             assert(!conf.pushDownShuffleThroughUnionEnabled)
           }
         }
-        assert(conf.pushDownShuffleThroughUnionEnabled)
+        assert(!conf.pushDownShuffleThroughUnionEnabled)
+        val a = attr("id")
+        val union = UnionExec(Seq(leaf(a, hash(a, 2)), leaf(attr("id"))))
+        val parent = TestPartitioningPlan(children = Seq(ensureShuffle(hash(a, 2), union)),
+          required = Seq(clustered(a)), output = Seq(a))
+        assert(pushDown(parent).fastEquals(parent))
+        withSQLConf(key -> "true") {
+          assert(numShufflesOnUnion(pushDown(parent)) === 0)
+        }
       } finally {
         if (explicit == null) { conf.unsetConf(key) } else { conf.setConfString(key, explicit) }
       }
