@@ -28,15 +28,15 @@ import org.scalatest.GivenWhenThen
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{BroadcastValueProjection,
-  DynamicPruningExpression, DynamicPruningSubquery, Expression}
+  DynamicPruningExpression, DynamicPruningSubquery, Expression, Not, Or}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
-import org.apache.spark.sql.catalyst.optimizer.BuildRight
+import org.apache.spark.sql.catalyst.optimizer.{BooleanSimplification, BuildRight}
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, Inner, LeftAnti}
-import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation}
 import org.apache.spark.sql.connector.catalog.{BufferedRows, InMemoryTableCatalog, InMemoryTableCatalystRuntimeFilterCatalog, InMemoryTableWithV2FilterCatalog}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive._
-import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeLike, ReusedExchangeExec}
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
@@ -2695,6 +2695,89 @@ abstract class DynamicPartitionPruningV2Suite extends DynamicPartitionPruningDat
       assert(scan.filteredPartitions.flatten.isEmpty,
         s"expected all partitions pruned by the empty runtime filter, " +
           s"got ${scan.filteredPartitions.flatten.size} of ${scan.inputPartitions.size}")
+    }
+  }
+
+  test("SPARK-38148: no DPP over a partition column a fully pushed static equality fixes") {
+    // The scan takes these conditions fully, so no Filter above it carries them. A plain
+    // in-memory catalog is used because its scan builder applies what it takes.
+    withSQLConf(
+      SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+      "spark.sql.catalog.pushcat" -> classOf[InMemoryTableCatalog].getName) {
+      withTable("pushcat.fact_pushed") {
+        spark.table("fact_sk").writeTo("pushcat.fact_pushed").partitionedBy($"store_id")
+          .tableProperty("push-partition-filters", "true").create()
+        // (condition, whether the scan takes it fully, whether DPP stays)
+        Seq(
+          ("f.store_id = 1", true, false),
+          ("1 = f.store_id", true, false),
+          ("f.store_id <=> 1", true, false),
+          ("1 <=> f.store_id", true, false),
+          ("f.store_id > 1", false, true),
+          ("5 > f.store_id", false, true),
+          ("f.store_id <> 1", true, true),
+          ("(f.store_id = 1 OR f.store_id = 2)", true, true)
+        ).foreach { case (condition, fullyPushed, hasDPP) =>
+          val df = sql(
+            s"""
+               |SELECT /*+ broadcast(s) */ * FROM pushcat.fact_pushed f
+               |JOIN dim_store s ON f.store_id = s.store_id
+               |WHERE $condition
+              """.stripMargin)
+          val pushed = df.queryExecution.optimizedPlan.collectFirst {
+            case r: DataSourceV2ScanRelation => r.pushedFilters
+          }.getOrElse(fail(s"no scan relation in:\n${df.queryExecution.optimizedPlan}"))
+          assert(pushed.nonEmpty === fullyPushed,
+            s"`$condition`: pushed filters $pushed\n${df.queryExecution}")
+          checkPartitionPruningPredicate(df, false, withBroadcast = hasDPP)
+          checkAnswer(df, sql("SELECT * FROM fact_sk f JOIN dim_store s " +
+            s"ON f.store_id = s.store_id WHERE $condition"))
+        }
+      }
+    }
+  }
+
+  test("push-partition-filters returns what Spark's filter does, including a NULL key") {
+    // Without constraint propagation no `isnotnull` stays above the scan, so the fixture alone
+    // decides whether the NULL partition is returned.
+    withSQLConf(
+      SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false",
+      "spark.sql.catalog.pushcat" -> classOf[InMemoryTableCatalog].getName) {
+      withTable("pushcat.null_keys", "pushcat.null_keys_ref", "pushcat.date_keys") {
+        val data = sql("SELECT * FROM VALUES (1, 1), (2, 2), (3, CAST(NULL AS INT)) AS t(id, p)")
+        data.writeTo("pushcat.null_keys").partitionedBy($"p")
+          .tableProperty("push-partition-filters", "true").create()
+        data.writeTo("pushcat.null_keys_ref").partitionedBy($"p").create()
+        def pushedFilters(df: DataFrame): Seq[Expression] =
+          df.queryExecution.optimizedPlan.collectFirst {
+            case r: DataSourceV2ScanRelation => r.pushedFilters
+          }.getOrElse(fail(s"no scan relation in:\n${df.queryExecution.optimizedPlan}"))
+        def checkFullyPushed(condition: String): Unit = {
+          val df = sql(s"SELECT id FROM pushcat.null_keys WHERE $condition")
+          val plan = df.queryExecution.optimizedPlan
+          assert(pushedFilters(df).nonEmpty && plan.collectFirst {
+            case f: Filter => f
+          }.isEmpty, s"`$condition` must be fully pushed:\n$plan")
+          checkAnswer(df, sql(s"SELECT id FROM pushcat.null_keys_ref WHERE $condition"))
+        }
+        Seq("p = 1", "p <=> 1", "p <> 1", "NOT (p <=> 1)", "(p <=> 1 OR p = 2)")
+          .foreach(checkFullyPushed)
+        // BooleanSimplification would rewrite this into two NOTs, so the fixture would never see
+        // an OR that is NULL on the NULL key.
+        withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> BooleanSimplification.ruleName) {
+          val condition = "NOT (p <=> 1 OR p = 2)"
+          checkFullyPushed(condition)
+          val pushed = pushedFilters(sql(s"SELECT id FROM pushcat.null_keys WHERE $condition"))
+          assert(pushed.exists { case Not(_: Or) => true; case _ => false },
+            s"expected the fixture to take a NOT over an OR, got $pushed")
+        }
+        // The fixture compares string forms, which for a date is not its SQL value.
+        sql("SELECT 1 AS id, DATE'2024-01-01' AS d").writeTo("pushcat.date_keys")
+          .partitionedBy($"d").tableProperty("push-partition-filters", "true").create()
+        val df = sql("SELECT id FROM pushcat.date_keys WHERE d = DATE'2024-01-01'")
+        assert(pushedFilters(df).isEmpty, "a date key must stay a post-scan filter")
+        checkAnswer(df, Row(1))
+      }
     }
   }
 

@@ -217,6 +217,14 @@ abstract class InMemoryBaseTable(
   private val generateColumnValuesOnWrite =
     properties.getOrDefault("generate-column-values-on-write", "true").toBoolean
 
+  // When true, `InMemoryScanBuilder` also takes `=`, `<=>`, `NOT` and `OR` over an integral,
+  // boolean or string identity partition column fully at build time, leaving no post-scan filter
+  // for them. Only `InMemoryScanBuilder.build` applies them, and only to an `InMemoryBatchScan`,
+  // so a builder that overrides `build` must not see this set. Scans that took different filters
+  // still compare equal, so scan the table once per query.
+  private val pushPartitionFilters =
+    properties.getOrDefault("push-partition-filters", "false").toBoolean
+
   partitioning.foreach {
     case _: IdentityTransform =>
     case _: YearsTransform =>
@@ -554,10 +562,48 @@ abstract class InMemoryBaseTable(
     if (partitioning.length == 1 && identityRefs.length == 1) {
       filter match {
         case In(attrName, _) if attrName == identityRefs.head.toString => true
-        case _ => false
+        case f => pushesOnKey(f, identityRefs.head)
       }
     } else {
       false
+    }
+  }
+
+  // `evalOnKey` compares `keyString()` with the filter value's string form, which is SQL equality
+  // only for these key types.
+  private def pushesOnKey(filter: Filter, ref: NamedReference): Boolean = {
+    lazy val comparableKey = schema().findNestedField(ref.fieldNames.toImmutableArraySeq).exists {
+      case (_, field) => field.dataType match {
+        case _: IntegralType | BooleanType | StringType => true
+        case _ => false
+      }
+    }
+    pushPartitionFilters && comparableKey && evaluatesOnKey(filter, ref.toString)
+  }
+
+  private def evaluatesOnKey(filter: Filter, ref: String): Boolean = filter match {
+    case EqualTo(attr, _) => attr == ref
+    case EqualNullSafe(attr, _) => attr == ref
+    case Not(child) => evaluatesOnKey(child, ref)
+    case Or(left, right) => evaluatesOnKey(left, ref) && evaluatesOnKey(right, ref)
+    case _ => false
+  }
+
+  // The SQL result of `filter` on a partition, None for NULL.
+  private def evalOnKey(filter: Filter, rows: BufferedRows): Option[Boolean] = {
+    val isNullKey = rows.key == Seq(null)
+    filter match {
+      case EqualTo(_, value) =>
+        if (value == null || isNullKey) None else Some(rows.keyString() == value.toString)
+      case EqualNullSafe(_, value) =>
+        Some(if (value == null) isNullKey else !isNullKey && rows.keyString() == value.toString)
+      case Not(child) => evalOnKey(child, rows).map(!_)
+      case Or(left, right) => (evalOnKey(left, rows), evalOnKey(right, rows)) match {
+        case (Some(true), _) | (_, Some(true)) => Some(true)
+        case (Some(false), Some(false)) => Some(false)
+        case _ => None
+      }
+      case _ => None
     }
   }
 
@@ -579,7 +625,9 @@ abstract class InMemoryBaseTable(
             s.filter(evaluableFilters)
           }
           s.pushedFilters = _pushedFilters
-        case _ =>
+        case other =>
+          assert(!pushPartitionFilters,
+            s"push-partition-filters needs an InMemoryBatchScan, got ${other.getClass.getName}")
       }
       recordScanEvent(_pushedFilters)
       scan
@@ -912,6 +960,11 @@ abstract class InMemoryBaseTable(
                 case _ => matchingKeys.contains(rows.keyString())
               }
             })
+
+          case f if pushesOnKey(f, ref) =>
+            this.data = this.data.filter { partition =>
+              evalOnKey(f, partition.asInstanceOf[BufferedRows]).contains(true)
+            }
 
           case _ => // skip
         }
