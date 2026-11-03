@@ -25,6 +25,7 @@ import java.util.Arrays;
 final class BitArray {
   private final long[] data;
   private long bitCount;
+  private final long bitSizeMask;
 
   static int numWords(long numBits) {
     if (numBits <= 0) {
@@ -48,6 +49,8 @@ final class BitArray {
       bitCount += Long.bitCount(word);
     }
     this.bitCount = bitCount;
+    long bitSize = (long) data.length * Long.SIZE;
+    this.bitSizeMask = bitSize > 0 && (bitSize & (bitSize - 1)) == 0 ? bitSize - 1 : 0;
   }
 
   /** Returns true if the bit changed value. */
@@ -67,6 +70,15 @@ final class BitArray {
   /** Number of bits */
   long bitSize() {
     return (long) data.length * Long.SIZE;
+  }
+
+  /**
+   * Returns {@code bitSize() - 1} when the number of bits is a power of two, and 0 otherwise.
+   * Reducing a non-negative hash with such a mask is exactly equivalent to taking it modulo
+   * {@link #bitSize()}, but does not need a division. See {@link BloomFilterBase#bitIndex}.
+   */
+  long bitSizeMask() {
+    return bitSizeMask;
   }
 
   /** Number of set bits (1s) */
