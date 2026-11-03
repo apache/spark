@@ -327,25 +327,29 @@ The packages of a session take precedence over the installed libraries, and the 
 session added last over its other packages, also the configured ones: a session cannot remove an
 artifact, or add another file with the name of one that it added, so it upgrades a package by adding
 the new version under another file name, such as `rust_range-1.1.sparkpkg`. Distinct file names are
-also needed because the sessions that are not isolated share the files they add. A query fails if
-more than one configured package provides its data source. `spark.addArtifact` fails for a file that
-is not a valid package, or for a package whose version Spark does not support, or that has no
-library for the platform of the driver, which loads the library to plan a query, instead of adding a
-package that the session could not use: the session would ignore it and silently keep using the
-package or library that it used before, or fail every query on its data sources. After the failure,
-the session keeps the packages that it had, and a call that adds several artifacts in Scala or Java
-still adds the others. In Python, a rejected package stops the rest of the call: without Spark
-Connect, `spark.addArtifacts` adds the packages first, one at a time, so only the packages before it
-are added; with Spark Connect, it adds the paths one at a time, so the paths before the package are
-added. Spark does not load the library when it checks a package, so a library that fails to load
-fails the queries that use it. Nor does it check that the driver can run native data sources at all:
-before Java 22, a valid package is added, and the queries fail with
+also needed because the sessions that are not isolated share the files they add.
+
+A query fails if more than one configured package provides its data source. Spark ignores, and logs,
+a configured package that it cannot read or whose version it does not support, unless its manifest
+lists the data source that a query uses and no other package or installed library provides it.
+
+`spark.addArtifact` fails for a file that is not a valid package, or for a package whose version
+Spark does not support, or that has no library for the platform of the driver, which loads the
+library to plan a query, instead of adding a package that the session could not use: the session
+would ignore it and silently keep using the package or library that it used before, or fail every
+query on its data sources. After the failure, the session keeps the packages that it had, and a call
+that adds several artifacts in Scala or Java still adds the others. In Python, a rejected package
+stops the rest of the call: without Spark Connect, `spark.addArtifacts` adds the packages first, one
+at a time, so only the packages before it are added; with Spark Connect, it adds the paths one at a
+time, so the paths before the package are added. A file that does not exist or cannot be read stops
+the call, as for the other artifacts.
+
+Spark does not load the library when it checks a package, so a library that fails to load fails the
+queries that use it. Nor does it check that the driver can run native data sources at all: before
+Java 22, a valid package is added, and the queries fail with
 `NATIVE_DATA_SOURCE_UNSUPPORTED_JAVA_VERSION`; on a platform where the C data interface of Arrow
 Java does not load, such as Linux with musl, only a package with a library for that platform is
-added, and the queries fail with `NATIVE_DATA_SOURCE_UNSUPPORTED_PLATFORM`. A file that does not
-exist or cannot be read stops the call, as for the other artifacts. Spark ignores, and logs, a
-configured package that it cannot read or whose version it does not support, unless its manifest
-lists the data source that a query uses and no other package or installed library provides it.
+added, and the queries fail with `NATIVE_DATA_SOURCE_UNSUPPORTED_PLATFORM`.
 
 ## Example in Rust
 
@@ -775,7 +779,7 @@ statically, or install them on the nodes.
 
 | Property Name | Default | Meaning |
 |---------------|---------|---------|
-| `spark.sql.dataSource.native.enabled` | true | Whether Spark loads native data sources. It is a static configuration, so it can only be set when the Spark application starts. |
+| `spark.sql.dataSource.native.enabled` | true | Whether Spark loads native data sources. It is a static configuration, so it can only be set when the Spark application starts. When false, `spark.addArtifact` adds a `.sparkpkg` file as a file of the session, without checking it as a package. |
 | `spark.sql.dataSource.native.paths` | (none) | Comma-separated list of native data source packages, and of directories that contain them, on the local file system of the driver. They take precedence over the installed libraries, and the packages that a session adds with `spark.addArtifact` take precedence over them. |
 
 ## Security

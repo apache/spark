@@ -197,9 +197,7 @@ object NativeDataSourcePackage extends Logging {
     val version = try {
       FileVersion(file.getCanonicalFile)
     } catch {
-      case e: IOException =>
-        return Left(InvalidNativeDataSourcePackage(
-          invalidManifestError(file.getPath, s"The package cannot be read: $e", e), Nil))
+      case e: IOException => return Left(cannotRead(file, e))
     }
     Option(packages.getIfPresent(version)).getOrElse {
       val canonical = new File(version.path)
@@ -233,20 +231,30 @@ object NativeDataSourcePackage extends Logging {
     packages.asMap().keySet().asScala.exists(_.path == canonicalPath)
   }
 
+  /** The invalid package in a file that cannot be read, whose manifest lists `dataSources`. */
+  private def cannotRead(
+      file: File,
+      e: IOException,
+      dataSources: Seq[String] = Nil): InvalidNativeDataSourcePackage = {
+    InvalidNativeDataSourcePackage(
+      invalidManifestError(file.getPath, s"The package cannot be read: $e", e), dataSources)
+  }
+
   private def invalidManifestError(path: String, reason: String, cause: Throwable = null) = {
     QueryExecutionErrors.invalidNativeDataSourcePackageError(
       path, "INVALID_MANIFEST", Map("reason" -> reason), cause)
   }
 
-  /** Reads the package in the given file. */
+  /**
+   * Reads the manifest of the package in the given file and computes its checksum, without the
+   * cache and the log of [[tryRead]].
+   */
   private def parse(file: File): ReadResult = {
     readManifest(file, file.getPath).flatMap { manifest =>
       try {
         Right(NativeDataSourcePackage(file.getPath, sha256(file), manifest))
       } catch {
-        case e: IOException => Left(InvalidNativeDataSourcePackage(
-          invalidManifestError(file.getPath, s"The package cannot be read: $e", e),
-          manifest.dataSources))
+        case e: IOException => Left(cannotRead(file, e, manifest.dataSources))
       }
     }
   }

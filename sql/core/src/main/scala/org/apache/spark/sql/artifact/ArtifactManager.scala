@@ -217,7 +217,7 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
   }
 
   /**
-   * Returns true if a file artifact with the same content is at `target` already, which makes
+   * Returns true if an artifact with the same content is at `target` already, which makes
    * adding it idempotent, and fails with ARTIFACT_ALREADY_EXISTS if another file is there: an
    * artifact is not overwritten.
    */
@@ -249,9 +249,9 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
    * of the check. The file is compared with the artifact first, so that adding the same file again
    * neither copies nor checks it. A file of the user is then copied to a temporary directory,
    * outside of the artifacts, which the file server serves and a clone of the session copies, and
-   * the copy is checked and then moved, so that the session gets the bytes that are checked. Errors
-   * name the file of the user, or the artifact if Spark staged the file for it, such as for a Spark
-   * Connect client.
+   * the copy is checked and then moved, so that the session gets the bytes that are checked. The
+   * errors of the check name the file of the user, or the artifact if Spark staged the file for
+   * it, such as for a Spark Connect client.
    */
   private def addNativeDataSourcePackage(
       normalizedRemoteRelativePath: Path,
@@ -280,6 +280,10 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
         // Fails as for the other artifacts if the file does not exist or cannot be read.
         val copy = dir.toPath.resolve(normalizedRemoteRelativePath.getFileName)
         Files.copy(serverLocalStagingPath, copy)
+        // On Windows, the copy keeps the read-only attribute of the file, and since Java 25,
+        // File.delete does not delete a read-only file there, so the copy could not be deleted.
+        copy.toFile.setWritable(true)
+        copy
       }.getOrElse(serverLocalStagingPath)
       NativeDataSourcePackage.checkAdded(
         staged.toFile, sourceName.getOrElse(normalizedRemoteRelativePath.toString))
@@ -311,7 +315,9 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
 
   /**
    * Add and prepare a staged artifact (i.e an artifact that has been rebuilt locally from bytes
-   * over the wire) for use.
+   * over the wire) for use. `addLocalArtifacts` calls it for the artifacts that it adds, except for
+   * a local native data source package, which it adds through a private overload, so that the
+   * errors of its check name the file of the user.
    *
    * @param remoteRelativePath
    * @param serverLocalStagingPath
@@ -329,8 +335,9 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
 
   /**
    * Adds an artifact, as [[addArtifact]] above. `sourceName` is the name of the file that the
-   * user added, if `serverLocalStagingPath` is that file, which errors then give instead of the
-   * artifact, rather than a file in which Spark staged the artifact.
+   * user added, if `serverLocalStagingPath` is that file, which the errors of the check of a
+   * native data source package then give instead of the artifact, rather than a file in which
+   * Spark staged the artifact.
    */
   private def addArtifact(
       remoteRelativePath: Path,
@@ -455,7 +462,7 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
       try {
         artifact.storage match {
           case d: Artifact.LocalFile if isCheckedPackage(artifact.path) =>
-            // Its errors name the file of the user.
+            // The errors of its check name the file of the user.
             addArtifact(
               artifact.path,
               d.path,

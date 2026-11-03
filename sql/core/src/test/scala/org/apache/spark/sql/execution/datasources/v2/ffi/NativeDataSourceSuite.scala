@@ -25,6 +25,7 @@ import java.time.{Instant, LocalDate}
 import java.util.UUID
 import java.util.concurrent.{Callable, CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
+import java.util.zip.{ZipException, ZipFile}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
@@ -1568,10 +1569,10 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     def check(pkg: File, subClass: String, params: Map[String, String]): Unit = {
       // Also when the same file is added again.
       (1 to 2).foreach { _ =>
-        val e = intercept[SparkRuntimeException](session.addArtifact(pkg.getPath))
-        assert(e.getCondition == s"INVALID_NATIVE_DATA_SOURCE_PACKAGE.$subClass")
-        assert(e.getMessageParameters.get("path") == pkg.getPath)
-        params.foreach { case (key, value) => assert(e.getMessageParameters.get(key) == value) }
+        checkError(
+          exception = intercept[SparkRuntimeException](session.addArtifact(pkg.getPath)),
+          condition = s"INVALID_NATIVE_DATA_SOURCE_PACKAGE.$subClass",
+          parameters = Map("path" -> pkg.getPath) ++ params)
       }
       // The session does not get it, and keeps using the configured package.
       assert(session.artifactManager.getNativeDataSourcePackages._1.isEmpty)
@@ -1598,7 +1599,9 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         s"The package does not contain the manifest ${NativeDataSourcePackage.MANIFEST_NAME}."))
     val notAZip = new File(dir, "range-2.2.sparkpkg")
     Files.writeString(notAZip.toPath, "not a zip")
-    check(notAZip, "INVALID_MANIFEST", Map.empty)
+    // The message of the ZipException names no file.
+    check(notAZip, "INVALID_MANIFEST", Map("reason" ->
+      s"The package is not a valid zip file: ${intercept[ZipException](new ZipFile(notAZip))}"))
     val directory = new File(dir, "range-2.3.sparkpkg")
     assert(directory.mkdir())
     check(directory, "INVALID_MANIFEST", Map("reason" -> "The package is a directory."))
@@ -1640,34 +1643,35 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(session.artifactManager.getNativeDataSourcePackages._1.map(_.getName) ==
       Seq("range-2.0.sparkpkg"))
     checkRows(ids(), Seq(Row(0L), Row(-1L), Row(-2L)))
-    // Another file with the name of an artifact fails as such, also if it is not a package.
+    // Another file with the name of an artifact fails as such, also if it is not a package, and
+    // the error names the artifact.
+    def checkExisting(e: SparkRuntimeException, fileName: String = "range-2.0.sparkpkg"): Unit = {
+      checkError(
+        exception = e,
+        condition = "ARTIFACT_ALREADY_EXISTS",
+        parameters = Map("normalizedRemoteRelativePath" -> Paths.get("files", fileName).toString))
+    }
     val sameName = new File(Utils.createTempDir(), "range-2.0.sparkpkg")
     Files.copy(notAZip.toPath, sameName.toPath)
-    val existing = intercept[SparkRuntimeException](session.addArtifact(sameName.getPath))
-    assert(existing.getCondition == "ARTIFACT_ALREADY_EXISTS")
+    checkExisting(intercept[SparkRuntimeException](session.addArtifact(sameName.getPath)))
     val sameNameDirectory = new File(Utils.createTempDir(), "range-2.0.sparkpkg")
     assert(sameNameDirectory.mkdir())
-    val existingDirectory =
-      intercept[SparkRuntimeException](session.addArtifact(sameNameDirectory.getPath))
-    assert(existingDirectory.getCondition == "ARTIFACT_ALREADY_EXISTS")
+    checkExisting(intercept[SparkRuntimeException](session.addArtifact(sameNameDirectory.getPath)))
     val missing = new File(Utils.createTempDir(), "range-2.0.sparkpkg")
-    val existingMissing = intercept[SparkRuntimeException](session.addArtifact(missing.getPath))
-    assert(existingMissing.getCondition == "ARTIFACT_ALREADY_EXISTS")
+    checkExisting(intercept[SparkRuntimeException](session.addArtifact(missing.getPath)))
     // Also for a package that Spark staged, which is compared with the artifact before the check.
-    val existingStaged = intercept[SparkRuntimeException] {
+    checkExisting(intercept[SparkRuntimeException] {
       session.addArtifact("not a zip".getBytes(UTF_8), "range-2.0.sparkpkg")
-    }
-    assert(existingStaged.getCondition == "ARTIFACT_ALREADY_EXISTS")
+    })
     // And for an artifact that is a directory, as files/range-5.0.sparkpkg is after this.
     val inner = new File(Utils.createTempDir(), "inner.txt")
     Files.writeString(inner.toPath, "inner")
     session.artifactManager.addArtifact(Paths.get("files", "range-5.0.sparkpkg", inner.getName),
       inner.toPath, None, deleteStagedFile = false)
-    val existingTarget = intercept[SparkRuntimeException] {
+    checkExisting(intercept[SparkRuntimeException] {
       session.addArtifact(createPackage(library, dataSources(""),
         fileName = "range-5.0.sparkpkg").getPath)
-    }
-    assert(existingTarget.getCondition == "ARTIFACT_ALREADY_EXISTS")
+    }, "range-5.0.sparkpkg")
 
     // A call that adds several artifacts adds the others, and reports all the rejected ones.
     val valid = createPackage(library, dataSources(""), dir = dir, fileName = "range-3.0.sparkpkg")

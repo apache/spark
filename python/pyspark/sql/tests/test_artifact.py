@@ -159,6 +159,8 @@ class ArtifactTests(ArtifactTestsMixin, ReusedSQLTestCase):
             self.assertEqual(
                 e.exception.getCondition(), "INVALID_NATIVE_DATA_SOURCE_PACKAGE.INVALID_MANIFEST"
             )
+            # It names the file of the user, which the JVM resolves to its canonical path.
+            self.assertEqual(e.exception.getMessageParameters()["path"], os.path.realpath(invalid))
             packages = spark._jsparkSession.artifactManager().getNativeDataSourcePackages()._1()
             self.assertEqual(
                 sorted(packages.apply(i).getName() for i in range(packages.size())),

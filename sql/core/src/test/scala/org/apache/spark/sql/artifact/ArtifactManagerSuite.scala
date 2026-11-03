@@ -19,9 +19,8 @@ package org.apache.spark.sql.artifact
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path, Paths}
-import java.util.concurrent.CopyOnWriteArrayList
 
-import scala.jdk.CollectionConverters._
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException}
 import org.apache.spark.metrics.source.CodegenMetrics
@@ -436,15 +435,16 @@ class ArtifactManagerSuite extends SharedSparkSession {
 
   test("Add local artifacts through the public addArtifact") {
     // A subclass that overrides addArtifact, for example to audit what a session adds, sees the
-    // local files that addLocalArtifacts adds, as it sees the in-memory ones.
-    val added = new CopyOnWriteArrayList[Path]()
+    // local files that addLocalArtifacts adds, as it sees the in-memory ones, other than a native
+    // data source package, which goes through a private overload.
+    val added = ArrayBuffer.empty[Path]
     val manager = new ArtifactManager(spark.newSession()) {
       override def addArtifact(
           remoteRelativePath: Path,
           serverLocalStagingPath: Path,
           fragment: Option[String],
           deleteStagedFile: Boolean): Unit = {
-        added.add(remoteRelativePath)
+        added += remoteRelativePath
         super.addArtifact(remoteRelativePath, serverLocalStagingPath, fragment, deleteStagedFile)
       }
     }
@@ -452,7 +452,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
       val file = Files.writeString(Utils.createTempDir().toPath.resolve("audited.txt"), "audited")
       manager.addLocalArtifacts(
         Artifact.newFileArtifact(Paths.get("audited.txt"), new Artifact.LocalFile(file)) :: Nil)
-      assert(added.asScala.toSeq == Seq(Paths.get("files", "audited.txt")))
+      assert(added.toSeq == Seq(Paths.get("files", "audited.txt")))
     } finally {
       manager.close()
     }
