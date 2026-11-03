@@ -447,7 +447,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       attempt.info.startTime.getTime(), attempt.info.appSparkVersion)
 
     // place the tab in UI based on the display order
-    loadPlugins().toSeq.sortBy(_.displayOrder).foreach(_.setupUI(ui))
+    AppHistoryServerPlugin.loadPlugins().toSeq.sortBy(_.displayOrder).foreach(_.setupUI(ui))
 
     val loadedUI = LoadedAppUI(ui)
     synchronized {
@@ -1439,7 +1439,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     replayBus.addListener(listener)
 
     for {
-      plugin <- loadPlugins()
+      plugin <- AppHistoryServerPlugin.loadPlugins()
       listener <- plugin.createListeners(conf, trackingStore)
     } replayBus.addListener(listener)
 
@@ -1718,8 +1718,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
     store
   }
-
-  private def loadPlugins(): Iterable[AppHistoryServerPlugin] = AppHistoryServerPlugin.loadPlugins()
 
   /** For testing. Returns internal data about a single attempt. */
   private[history] def getAttempt(appId: String, attemptId: Option[String]): AttemptInfoWrapper = {
