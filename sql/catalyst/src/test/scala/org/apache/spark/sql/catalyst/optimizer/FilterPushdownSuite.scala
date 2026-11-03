@@ -1114,6 +1114,23 @@ class FilterPushdownSuite extends PlanTest {
       val originalQuery = project.where(condition).analyze
       comparePlans(Optimize.execute(originalQuery), originalQuery)
     }
+    // Nor when a condition kept above after one over a Python UDF comes before the first one
+    // held back.
+    val pythonUDF = PythonUDF("pythonUDF", null, IntegerType, Seq(attrA),
+      PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
+    def pythonProject: LogicalPlan = testStringRelation
+      .select($"a", pythonUDF.as("p"), expensiveRLike("magic") as "f", expensiveRLike("third")
+        as "h", $"b")
+    Seq[Expression](
+      $"p" > 1 && Rand(10) > 0.5 && $"f" && $"h",
+      $"p" > 1 && ($"b" > 1 || raiseError) && $"f" && $"h"
+    ).foreach { condition =>
+      val originalQuery = pythonProject.where(condition).analyze
+      comparePlans(Optimize.execute(originalQuery), originalQuery)
+    }
+    // Other conditions over the Python UDF before it do not keep it from being split.
+    val splitQuery = pythonProject.where($"p" > 1 && $"p" < 100 && $"f" && $"h").analyze
+    assert(Optimize.execute(splitQuery).collect { case p: Project => p }.size > 1)
   }
 
   test("SPARK-60730: the legacy config pushes a cheap condition that can fail ahead of an " +
@@ -1226,6 +1243,15 @@ class FilterPushdownSuite extends PlanTest {
       .where($"p" > 1 && Rand(10) > 0.5)
       .analyze)
     assertTopFilterConjuncts(randOptimized, Seq(pythonCond, randCond))
+    // A condition over an expensive alias the projection evaluates holds the conditions after
+    // it back, also when it comes after the condition over the UDF, or before it.
+    val mixedProject = testStringRelation
+      .select($"a", pythonUDF.as("p"), expensiveRLike("magic") as "f", $"b")
+    Seq[Expression]($"p" > 1 && $"f" && $"a" + 1 > 6, $"f" && $"p" > 1 && $"a" + 1 > 6)
+      .foreach { condition =>
+        val mixedQuery = mixedProject.where(condition).analyze
+        comparePlans(Optimize.execute(mixedQuery), mixedQuery)
+      }
     // So does a throwable one, as before this change (SPARK-60602).
     val throwableQuery = testStringRelation
       .select($"a", pythonUDF.as("p"), $"b")

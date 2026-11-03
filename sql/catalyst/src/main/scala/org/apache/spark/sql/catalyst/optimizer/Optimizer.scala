@@ -2653,7 +2653,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         // Python UDF is not evaluated here: `ExtractPythonUDFs` later moves it, with its
         // arguments, to an eval node below the projection, and pushes the conditions below that
         // again, except the throwable ones written after one over its output (SPARK-60633), so
-        // holding a condition back behind one here would gain nothing and only cost
+        // holding a deterministic condition back behind one here would gain nothing and only cost
         // the pushdown of the batches in between. What is left of the alias without its Python
         // UDFs, e.g. a Scala UDF over one, is evaluated here though. Each Python UDF is replaced
         // with an attribute, as `ExtractPythonUDFs` does, so that `isExpensive` sees an input
@@ -2689,6 +2689,9 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         // 0: nothing kept above yet; 1: after a component only expensive through Python UDFs;
         // 2: after the first component held back.
         var strictness = 0
+        // Whether a cheap component was kept above at strictness 1, i.e. one that is
+        // non-deterministic or throwable, before the first one held back.
+        var keptCheapBeforeHeld = false
         components.zipWithIndex.foreach { case (component @ (cond, used, replaced), index) =>
           val push = isCheap(used) && (strictness match {
             case 0 => true
@@ -2699,7 +2702,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
             pushed += component
           } else {
             kept += component
-            if (index > firstHeldIndex && firstHeldIndex >= 0) keptHeld += component
+            if (firstHeldIndex >= 0 && index > firstHeldIndex) keptHeld += component
+            if (strictness == 1 && isCheap(used)) keptCheapBeforeHeld = true
             if (index == firstHeldIndex) {
               strictness = 2
             } else if (!isCheap(used)) {
@@ -2728,15 +2732,17 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         // tell nothing about an expensive one such as a UDF): e.g. a division over an expensive
         // alias, or a cheap condition held back above, which needs no expensive alias and so
         // would go lowest. The filter then stays above the projection as written, as without
-        // the split.
-        lazy val keepsWrittenOrder = !SQLConf.get.legacyPushFilterAheadOfExpensiveConjunct &&
-            expensiveHeld.nonEmpty && {
-          val cheapAliasMap =
-            AttributeMap(aliasMap.filter { case (_, a) => !isExpensive(a.child) })
-          expensiveHeld.exists {
-            case (cond, _, _) => !canPushAhead(replaceAlias(cond, cheapAliasMap))
-          }
-        }
+        // the split. So it does when a cheap component kept above after one over a Python UDF
+        // comes before the first one held back, as the split would compute the held ones
+        // ahead of it.
+        lazy val keepsWrittenOrder = !legacy &&
+            (keptCheapBeforeHeld && firstHeldIndex >= 0 || expensiveHeld.nonEmpty && {
+              val cheapAliasMap =
+                AttributeMap(aliasMap.filter { case (_, a) => !isExpensive(a.child) })
+              expensiveHeld.exists {
+                case (cond, _, _) => !canPushAhead(replaceAlias(cond, cheapAliasMap))
+              }
+            })
         val (splitChild, splitAliases, stayUp) =
           if (SQLConf.get.splitProjectionForExpensiveFilters && expensiveWithUsed.nonEmpty &&
               !keepsWrittenOrder) {
