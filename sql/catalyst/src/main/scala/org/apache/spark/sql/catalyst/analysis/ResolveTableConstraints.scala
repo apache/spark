@@ -171,10 +171,16 @@ class ResolveTableConstraints(
     Option(genExpr.getSql)
       .map(StoredExpressionText.parse)
       .orElse(Option(genExpr.getExpression).flatMap(V2ExpressionUtils.toCatalyst))
-      .getOrElse(throw QueryCompilationErrors.unsupportedTableOperationError(
-        r.catalog.get, r.identifier.get,
-        s"a value for the generated column ${toSQLId(colName)}, because Spark cannot convert " +
-          s"its expression ${genExpr.getExpression}"))
+      .getOrElse {
+        val operation = s"a value for the generated column ${toSQLId(colName)}, because " +
+          s"Spark cannot convert its expression ${genExpr.getExpression}"
+        // A relation of a TableProvider has no catalog and no identifier.
+        throw ((r.catalog, r.identifier) match {
+          case (Some(catalog), Some(ident)) =>
+            QueryCompilationErrors.unsupportedTableOperationError(catalog, ident, operation)
+          case _ => QueryCompilationErrors.unsupportedTableOperationError(r.table, operation)
+        })
+      }
   }
 
   private def buildColumnExtractors(

@@ -4601,6 +4601,7 @@ object SQLConf {
         "Data Source V2 table under the SQL configs of the current active SparkSession, and " +
         "CREATE TABLE and REPLACE TABLE do not reject a text that the session reads differently.")
       .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
