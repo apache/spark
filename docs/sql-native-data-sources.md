@@ -102,9 +102,10 @@ Spark calls the functions of the table as follows:
   not specify a schema, Spark asks for it with `schema`.
 - **Batch reads**: on the driver, Spark creates a reader with `create_reader`, pushes operations
   down with `push_limit` and `prune_columns`, and plans the partitions with `partitions`, which
-  also returns the state of the reader. Then it calls `read` on the executors, in one task for each
-  partition, with a `SparkDsReadInfo` that has the partition, the schema to read and the state of
-  the reader, and `read` exports an `ArrowArrayStream`. Its callbacks can be called from any
+  also returns the state of the reader. Then it calls `read` on the executors for each partition,
+  in tasks that may each read several partitions, for example after a coalesce or a union, with a
+  `SparkDsReadInfo` that has the partition, the schema to read and the state of the reader, and
+  `read` exports an `ArrowArrayStream`. Its callbacks can be called from any
   thread, but never concurrently.
 - **Streaming reads**: on the driver, Spark creates a stream reader with `create_stream_reader`,
   which gets the columns to read, which may be only those that the query needs, and the location of

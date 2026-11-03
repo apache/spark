@@ -404,16 +404,6 @@ final class NativeLibrary {
     static final long SINK;
     static final long STATE_SINK;
     static final long IS_INTERRUPTED;
-    // The callbacks of the streams that Spark wraps for engines, see EngineStream.
-    static final long ENGINE_STREAM_GET_SCHEMA;
-    static final long ENGINE_STREAM_GET_NEXT;
-    static final long ENGINE_STREAM_GET_LAST_ERROR;
-    static final long ENGINE_STREAM_RELEASE;
-    // The callbacks of struct ArrowArrayStream, called with the address of the function first:
-    // get_schema and get_next, get_last_error, and release.
-    static final MethodHandle STREAM_INT_CALLBACK;
-    static final MethodHandle STREAM_POINTER_CALLBACK;
-    static final MethodHandle STREAM_VOID_CALLBACK;
 
     static {
       try {
@@ -475,25 +465,6 @@ final class NativeLibrary {
           lookup.findStatic(NativeLibrary.class, "isInterrupted",
             MethodType.methodType(boolean.class, long.class)),
           C.BOOL, C.PTR);
-        ENGINE_STREAM_GET_SCHEMA = upcall(
-          lookup.findStatic(NativeLibrary.class, "engineStreamGetSchema",
-            MethodType.methodType(int.class, long.class, long.class)),
-          C.I32, C.PTR, C.PTR);
-        ENGINE_STREAM_GET_NEXT = upcall(
-          lookup.findStatic(NativeLibrary.class, "engineStreamGetNext",
-            MethodType.methodType(int.class, long.class, long.class)),
-          C.I32, C.PTR, C.PTR);
-        ENGINE_STREAM_GET_LAST_ERROR = upcall(
-          lookup.findStatic(NativeLibrary.class, "engineStreamGetLastError",
-            MethodType.methodType(long.class, long.class)),
-          C.PTR, C.PTR);
-        ENGINE_STREAM_RELEASE = upcall(
-          lookup.findStatic(NativeLibrary.class, "engineStreamRelease",
-            MethodType.methodType(void.class, long.class)),
-          C.VOID, C.PTR);
-        STREAM_INT_CALLBACK = unboundDowncall(C.I32, C.PTR, C.PTR);
-        STREAM_POINTER_CALLBACK = unboundDowncall(C.PTR, C.PTR);
-        STREAM_VOID_CALLBACK = unboundDowncall(C.VOID, C.PTR);
       } catch (Throwable e) {
         // The message names the cause, because the JVM only keeps this message for the later
         // uses of the class.
@@ -1128,7 +1099,8 @@ final class NativeLibrary {
   // Task contexts
   // ---------------------------------------------------------------------------------------------
 
-  // Whether the task of each SparkDsTaskContext was killed, by the address of the struct.
+  // Whether the library should stop reading or writing with each SparkDsTaskContext, which
+  // is_interrupted answers, by the address of the struct.
   private static final ConcurrentHashMap<Long, BooleanSupplier> tasks = new ConcurrentHashMap<>();
 
   /**
@@ -1205,6 +1177,55 @@ final class NativeLibrary {
 
   private static final AtomicLong nextEngineStreamId = new AtomicLong(1);
   // The streams wrapped for engines that are not released yet, by their private_data.
+  /**
+   * The callbacks of the streams that Spark wraps for engines, see {@link EngineStream}, and the
+   * method handles that call the callbacks of the wrapped streams. They are created when the first
+   * stream is wrapped, so that a JVM that wraps no stream does not create them, and a failure to
+   * create them only fails the streams of engines.
+   */
+  private static final class EngineStreamCallbacks {
+    // The addresses of the C functions that call Java, which live as long as the JVM.
+    static final long GET_SCHEMA;
+    static final long GET_NEXT;
+    static final long GET_LAST_ERROR;
+    static final long RELEASE;
+    // The callbacks of struct ArrowArrayStream, called with the address of the function first:
+    // get_schema and get_next, get_last_error, and release.
+    static final MethodHandle INT_CALLBACK;
+    static final MethodHandle POINTER_CALLBACK;
+    static final MethodHandle VOID_CALLBACK;
+
+    static {
+      try {
+        MethodHandles.Lookup lookup = MethodHandles.lookup();
+        GET_SCHEMA = Ffm.upcall(
+          lookup.findStatic(NativeLibrary.class, "engineStreamGetSchema",
+            MethodType.methodType(int.class, long.class, long.class)),
+          C.I32, C.PTR, C.PTR);
+        GET_NEXT = Ffm.upcall(
+          lookup.findStatic(NativeLibrary.class, "engineStreamGetNext",
+            MethodType.methodType(int.class, long.class, long.class)),
+          C.I32, C.PTR, C.PTR);
+        GET_LAST_ERROR = Ffm.upcall(
+          lookup.findStatic(NativeLibrary.class, "engineStreamGetLastError",
+            MethodType.methodType(long.class, long.class)),
+          C.PTR, C.PTR);
+        RELEASE = Ffm.upcall(
+          lookup.findStatic(NativeLibrary.class, "engineStreamRelease",
+            MethodType.methodType(void.class, long.class)),
+          C.VOID, C.PTR);
+        INT_CALLBACK = Ffm.unboundDowncall(C.I32, C.PTR, C.PTR);
+        POINTER_CALLBACK = Ffm.unboundDowncall(C.PTR, C.PTR);
+        VOID_CALLBACK = Ffm.unboundDowncall(C.VOID, C.PTR);
+      } catch (Throwable e) {
+        // The message names the cause, because the JVM only keeps this message for the later
+        // uses of the class.
+        throw new IllegalStateException(
+          "Cannot create the callbacks of the streams of engines: " + rootCause(e), e);
+      }
+    }
+  }
+
   private static final ConcurrentHashMap<Long, EngineStream> engineStreams =
     new ConcurrentHashMap<>();
 
@@ -1235,10 +1256,16 @@ final class NativeLibrary {
       return Platform.getLong(null, inner + offset);
     }
 
-    /** Records an error of Spark, which get_last_error then returns, and logs it. */
-    int fail(String message, Throwable e) {
+    /**
+     * Records an error of Spark in the given callback, which get_last_error then returns, and logs
+     * it. The message is built here, since building it can throw too, as a StackOverflowError on
+     * the small stack of a thread of an engine can.
+     */
+    int fail(String callback, Throwable e) {
       try {
         clearError();
+        String message =
+          "The " + callback + " of the stream of the native data source " + name + " failed";
         sparkError = toCString(message + ": " + rootCause(e));
         LOGGER.error(message, e);
       } catch (Throwable ignored) {
@@ -1273,10 +1300,10 @@ final class NativeLibrary {
       Platform.freeMemory(inner);
       throw e;
     }
-    Platform.putLong(null, stream + STREAM_GET_SCHEMA, Ffm.ENGINE_STREAM_GET_SCHEMA);
-    Platform.putLong(null, stream + STREAM_GET_NEXT, Ffm.ENGINE_STREAM_GET_NEXT);
-    Platform.putLong(null, stream + STREAM_GET_LAST_ERROR, Ffm.ENGINE_STREAM_GET_LAST_ERROR);
-    Platform.putLong(null, stream + STREAM_RELEASE, Ffm.ENGINE_STREAM_RELEASE);
+    Platform.putLong(null, stream + STREAM_GET_SCHEMA, EngineStreamCallbacks.GET_SCHEMA);
+    Platform.putLong(null, stream + STREAM_GET_NEXT, EngineStreamCallbacks.GET_NEXT);
+    Platform.putLong(null, stream + STREAM_GET_LAST_ERROR, EngineStreamCallbacks.GET_LAST_ERROR);
+    Platform.putLong(null, stream + STREAM_RELEASE, EngineStreamCallbacks.RELEASE);
     Platform.putLong(null, stream + STREAM_PRIVATE_DATA, id);
   }
 
@@ -1308,12 +1335,10 @@ final class NativeLibrary {
         return EINVAL;
       }
       wrapped.clearError();
-      return (int) Ffm.STREAM_INT_CALLBACK.invokeExact(
+      return (int) EngineStreamCallbacks.INT_CALLBACK.invokeExact(
         wrapped.callback(offset), wrapped.inner, out);
     } catch (Throwable e) {
-      return wrapped == null ? EIO : wrapped.fail(
-        "The " + callback + " of the stream of the native data source " + wrapped.name +
-          " failed", e);
+      return wrapped == null ? EIO : wrapped.fail(callback, e);
     }
   }
 
@@ -1326,7 +1351,7 @@ final class NativeLibrary {
       if (wrapped.sparkError != 0) {
         return wrapped.sparkError;
       }
-      return (long) Ffm.STREAM_POINTER_CALLBACK.invokeExact(
+      return (long) EngineStreamCallbacks.POINTER_CALLBACK.invokeExact(
         wrapped.callback(STREAM_GET_LAST_ERROR), wrapped.inner);
     } catch (Throwable e) {
       return 0;
@@ -1339,7 +1364,8 @@ final class NativeLibrary {
       wrapped = engineStreams.remove(Platform.getLong(null, stream + STREAM_PRIVATE_DATA));
       if (wrapped != null) {
         try {
-          Ffm.STREAM_VOID_CALLBACK.invokeExact(wrapped.callback(STREAM_RELEASE), wrapped.inner);
+          EngineStreamCallbacks.VOID_CALLBACK.invokeExact(
+            wrapped.callback(STREAM_RELEASE), wrapped.inner);
         } finally {
           // The library no longer uses the task once it released its stream.
           wrapped.clearError();

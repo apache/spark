@@ -57,8 +57,9 @@
  * - Batch reads. On the driver, Spark creates a reader with create_reader, pushes operations down
  *   by calling, each at most once and in this order, push_limit and prune_columns, plans the
  *   partitions with partitions, which also returns the state of the reader, and closes it. Then it
- *   calls read on the executors, in one task for each partition, with the schema to read and the
- *   state of the reader. If Spark never plans the partitions, for example to only explain the plan
+ *   calls read on the executors for each partition, with the schema to read and the state of the
+ *   reader, in tasks that may each read several partitions, for example after a coalesce or a
+ *   union. If Spark never plans the partitions, for example to only explain the plan
  *   of the query, it closes the reader once the reader is no longer referenced.
  * - Streaming reads. On the driver, Spark creates a stream reader with create_stream_reader, with
  *   the columns to read and the location of the checkpoint of the source, and keeps it until the
@@ -378,12 +379,14 @@ typedef struct SparkDsCommitOffsetInfo {
 
 /*
  * The task that calls read or create_data_writer, on an executor. It stays valid until the stream
- * that read returns is released, or until the data writer is closed. An engine that runs a query
- * in native code may get the stream that read returns from Spark. It reads the stream in the task
- * that opened it, but may release it once the task ended, from another thread: the task stays valid
- * until then too, and is_interrupted then also returns true once the task failed or completed, so
- * the library may stop reading then. Such an engine may also keep the arrays of the stream after
- * it released the stream, so the release of an array must not use the stream or the task.
+ * that read returns is released, or until the data writer is closed. The stream of a read may be
+ * released once the task ended, from another thread: an engine that runs a query in native code
+ * may get the stream from Spark, read it in the task that opened it and release it later, and
+ * Spark itself may read a stream on a thread that the task does not wait for, for example the one
+ * of a PipedRDD. The task stays valid until then too, and for a read, is_interrupted then also
+ * returns true once the task failed or completed, so the library may stop reading then. Such an
+ * engine may also keep the arrays and the schemas of the stream after it released the stream, so
+ * the release of an array or a schema must not use the stream or the task.
  */
 typedef struct SparkDsTaskContext {
   /* The size of this struct in the header that Spark was built with, as in SparkDsHost. */
@@ -404,10 +407,10 @@ typedef struct SparkDsTaskContext {
   /* The ID of the task attempt, unique in the Spark application. */
   int64_t task_attempt_id;
   /*
-   * Returns whether the task was killed, for example because its query was canceled, and for the
-   * stream of an engine, also whether the task failed or completed. Spark cannot interrupt native
-   * code, so a read or a write that runs for long, or blocks, should check it regularly, and fail
-   * once it is true.
+   * Returns whether the task was killed, for example because its query was canceled, and for read,
+   * also whether the task failed or completed, since the stream of a read may be read after its
+   * task ended. Spark cannot interrupt native code, so a read or a write that runs for long, or
+   * blocks, should check it regularly, and fail once it is true.
    */
   bool (*is_interrupted)(const struct SparkDsTaskContext* task);
 } SparkDsTaskContext;
@@ -623,7 +626,8 @@ typedef struct SparkDsLibrary {
   int (*prune_columns)(void* reader, const char* const* columns, int64_t count, bool* pruned);
 
   /*
-   * Plans the partitions of the scan. Spark reads each partition in a separate task.
+   * Plans the partitions of the scan. Spark reads each partition with a call of read, in a task
+   * that may read several partitions, for example after a coalesce or a union.
    *
    * info: nothing yet but its size, so that inputs can be added within this version
    * add_partition: called with each partition, serialized in a format defined by the library

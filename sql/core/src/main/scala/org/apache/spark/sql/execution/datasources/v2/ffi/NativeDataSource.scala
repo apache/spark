@@ -24,7 +24,7 @@ import java.util.function.BooleanSupplier
 import javax.annotation.concurrent.GuardedBy
 
 import scala.jdk.CollectionConverters._
-import scala.reflect.ClassTag
+import scala.reflect.{classTag, ClassTag}
 import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core.JsonProcessingException
@@ -315,10 +315,10 @@ class NativePartitionReaderFactory(
   }
 
   override def openArrowStream(partition: InputPartition, streamAddress: Long): Unit = {
-    val nativePartition =
-      NativePartitionReader.engineStreamPartition[NativeInputPartition](partition, streamAddress)
-    NativePartitionReader.openEngineStream(location, name, NativeLibrary.READ_BATCH, readerState,
-      nativePartition, readSchema, timeZoneId, streamAddress)
+    NativePartitionReader.openEngineStream[NativeInputPartition](location, name,
+      NativeLibrary.READ_BATCH, partition, readSchema, timeZoneId, streamAddress) { partition =>
+      (readerState, partition)
+    }
   }
 }
 
@@ -332,18 +332,19 @@ class NativeDataSourceStreamReader(
     name: String,
     schema: StructType,
     timeZoneId: String,
-    @transient private val handle: NativeHandle)
+    handle: NativeHandle)
   extends ColumnarStreamReader {
   import NativeCalls._
 
-  // The range that was planned last, and its partitions, which only the driver keeps. All the
-  // scans of the source in a micro-batch plan the same range, such as both sides of a union of the
-  // source with itself, so they read the partitions of a single stream_partitions call, with the
-  // state that it returned.
-  @transient private var plannedRange: (String, String) = _
-  @transient private var plannedPartitions: Array[InputPartition] = _
+  // The range that was planned last, its partitions, and the broadcast of its state, if it has
+  // one. All the scans of the source in a micro-batch plan the same range, such as both sides of
+  // a union of the source with itself, so they read the partitions of a single stream_partitions
+  // call, with the state that it returned.
+  private var plannedRange: (String, String) = _
+  private var plannedPartitions: Array[InputPartition] = _
+  private var plannedState: Option[Broadcast[Array[Byte]]] = None
 
-  @transient private lazy val library = NativeLibraries.get(location)
+  private lazy val library = NativeLibraries.get(location)
 
   override def initialOffset(): String = {
     checkOffset("initial_offset", call(name, "plan a scan of")(library.initialOffset(handle.get)))
@@ -383,20 +384,19 @@ class NativeDataSourceStreamReader(
       }
       val partitions = NativeInputPartition.from(planned.partitions)
       // The executors fetch the state once for the micro-batch, as a broadcast, rather than with
-      // each of its tasks. The partitions keep the broadcast, which the ContextCleaner removes once
-      // the driver no longer refers to them: in the plan of the micro-batch, in an engine, or here
-      // until the next range is planned.
-      val state = Option(planned.state).filter(_.nonEmpty && partitions.nonEmpty).map { bytes =>
-        SparkSession.active.sparkContext.broadcast(bytes)
+      // each of its tasks. Spark only plans the next range once the micro-batch of the previous
+      // one finished, so the copies of its state on the executors are removed then. The driver
+      // keeps its own copy, so that the partitions and the reader factories that an engine keeps
+      // can still fetch it, until the ContextCleaner removes it once nothing refers to them.
+      plannedState.foreach(_.unpersist(blocking = false))
+      plannedState = Option(planned.state).filter(_.nonEmpty && partitions.nonEmpty).map {
+        bytes => SparkSession.active.sparkContext.broadcast(bytes)
       }
-      plannedPartitions = partitions.map[InputPartition](NativeMicroBatchPartition(_, state))
+      plannedPartitions =
+        partitions.map[InputPartition](NativeMicroBatchPartition(_, plannedState))
       plannedRange = (start, end)
     }
     plannedPartitions
-  }
-
-  override def read(partition: InputPartition): PartitionReader[ColumnarBatch] = {
-    readerFactory().createColumnarReader(partition)
   }
 
   override def readerFactory(): PartitionReaderFactory = {
@@ -436,11 +436,10 @@ class NativeMicroBatchPartitionReaderFactory(
   }
 
   override def openArrowStream(partition: InputPartition, streamAddress: Long): Unit = {
-    val microBatchPartition = NativePartitionReader
-      .engineStreamPartition[NativeMicroBatchPartition](partition, streamAddress)
-    NativePartitionReader.openEngineStream(location, name, NativeLibrary.READ_MICRO_BATCH,
-      microBatchPartition.readerState, microBatchPartition.partition, schema, timeZoneId,
-      streamAddress)
+    NativePartitionReader.openEngineStream[NativeMicroBatchPartition](location, name,
+      NativeLibrary.READ_MICRO_BATCH, partition, schema, timeZoneId, streamAddress) { partition =>
+      (partition.readerState, partition.partition)
+    }
   }
 }
 
@@ -991,15 +990,26 @@ object NativePartitionReader {
   import NativeCalls._
 
   /**
-   * Checks the arguments of `SupportsArrowStreamRead.openArrowStream` before it looks at the
-   * partition, and returns the partition as a `P`, the class of the partitions of the scan of the
-   * reader factory.
+   * Initializes the stream at `streamAddress` with the data of a partition for an engine, see
+   * [[SupportsArrowStreamRead]]: the context of its task is closed once the stream is released.
+   * It first checks the arguments of `openArrowStream`, before it looks at the partition, which
+   * must be a `P`, the class of the partitions of the scan of the reader factory. It then reads
+   * the partition with the state and the partition of the library that `stateAndPartition`
+   * returns for it.
    */
-  def engineStreamPartition[P <: InputPartition](
+  private[ffi] def openEngineStream[P <: InputPartition: ClassTag](
+      location: NativeLibraryLocation,
+      name: String,
+      kind: Int,
       partition: InputPartition,
-      streamAddress: Long)(implicit tag: ClassTag[P]): P = {
+      schema: StructType,
+      timeZoneId: String,
+      streamAddress: Long)(
+      stateAndPartition: P => (Array[Byte], NativeInputPartition)): Unit = {
+    // A task that failed or was killed is over too, also while its listeners run.
     val context = TaskContext.get()
-    if (context == null || context.isCompleted()) {
+    if (context == null || context.isInterrupted() || context.isFailed() ||
+        context.isCompleted()) {
       throw new IllegalStateException(
         "openArrowStream must be called in the running task that reads the partition.")
     }
@@ -1007,31 +1017,15 @@ object NativePartitionReader {
       throw new IllegalArgumentException(
         "openArrowStream needs the address of a stream whose release callback is NULL.")
     }
-    partition match {
-      case expected: P => expected
+    val (readerState, nativePartition) = partition match {
+      case expected: P => stateAndPartition(expected)
       case _ =>
         throw new IllegalArgumentException("openArrowStream needs a partition of the scan of " +
-          s"the reader factory, a ${tag.runtimeClass.getSimpleName}, but got " +
+          s"the reader factory, a ${classTag[P].runtimeClass.getSimpleName}, but got " +
           s"${Option(partition).map(_.getClass.getName).orNull}.")
     }
-  }
-
-  /**
-   * Initializes the stream at `streamAddress` with the data of a partition for an engine, see
-   * [[SupportsArrowStreamRead]], once `engineStreamPartition` checked the arguments: the context
-   * of its task is closed once the stream is released.
-   */
-  def openEngineStream(
-      location: NativeLibraryLocation,
-      name: String,
-      kind: Int,
-      readerState: Array[Byte],
-      partition: NativeInputPartition,
-      schema: StructType,
-      timeZoneId: String,
-      streamAddress: Long): Unit = {
-    val task = openStream(location, name, kind, readerState, partition, schema, timeZoneId,
-      streamAddress, mayOutliveTask = true)
+    val task = openStream(location, name, kind, readerState, nativePartition, schema, timeZoneId,
+      streamAddress)
     try {
       NativeLibrary.wrapEngineStream(streamAddress, task, name)
     } catch {
@@ -1050,10 +1044,8 @@ object NativePartitionReader {
    * @param partition the partition, whose index in the scan the library gets as `partition_id`,
    *                  rather than the partition of the task: a task may read several partitions of
    *                  a scan, or of several scans, as after a coalesce or a union
-   * @param mayOutliveTask whether an engine may read the stream after the task ended, see
-   *                       `NativeTask.create`
    */
-  private[ffi] def openStream(
+  private def openStream(
       location: NativeLibraryLocation,
       name: String,
       kind: Int,
@@ -1061,11 +1053,10 @@ object NativePartitionReader {
       partition: NativeInputPartition,
       schema: StructType,
       timeZoneId: String,
-      streamAddress: Long,
-      mayOutliveTask: Boolean = false): NativeLibrary.Task = {
+      streamAddress: Long): NativeLibrary.Task = {
     val library = NativeLibraries.get(location)
     val stream = ArrowArrayStream.wrap(streamAddress)
-    val task = NativeTask.create(Some(partition.index), mayOutliveTask = mayOutliveTask)
+    val task = NativeTask.create(Some(partition.index), read = true)
     try {
       NativeArrow.exportSchema(schema, timeZoneId) { schemaAddress =>
         call(name, "read") {
@@ -1093,7 +1084,7 @@ object NativePartitionReader {
    * the task that it may use, and marks it released in case its release callback did not. A
    * failure to clean up is added to `failure`.
    */
-  private[ffi] def releaseOnFailure(
+  private def releaseOnFailure(
       failure: Throwable,
       streamAddress: Long,
       task: NativeLibrary.Task): Unit = {
@@ -1204,20 +1195,27 @@ private[ffi] object NativeTask {
    * @param partitionId the `partition_id` of the context: the index of the partition in the scan
    *                    for a read, and by default the partition of the task
    * @param taskAttemptId the ID of the task attempt, by default the one of the task
-   * @param mayOutliveTask whether the library may use the context after the task ended, as for
-   *                       the stream of an engine: `is_interrupted` then also reports the end of
-   *                       the task, and the context does not keep the task alive
+   * @param read whether the context is the one of a read, which the library may use after the
+   *             task ended: an engine may read the stream of a partition then, and a thread that
+   *             the task does not wait for may be in get_next once it completes, as with
+   *             `PipedRDD`. `is_interrupted` then also reports that the task failed or completed,
+   *             and the context does not keep the task alive. A data writer only runs within its
+   *             task, whose kill `is_interrupted` reports. Outside of a task, it reports nothing.
    */
   def create(
       partitionId: Option[Int] = None,
       taskAttemptId: Option[Long] = None,
-      mayOutliveTask: Boolean = false): NativeLibrary.Task = {
+      read: Boolean = false): NativeLibrary.Task = {
     val context = Option(TaskContext.get())
-    val interrupted: BooleanSupplier = if (mayOutliveTask) {
-      val task = new WeakReference(context.orNull)
-      () => Option(task.get()).forall(t => t.isInterrupted() || t.isFailed() || t.isCompleted())
-    } else {
-      () => context.exists(_.isInterrupted())
+    val interrupted: BooleanSupplier = context match {
+      case Some(taskContext) if read =>
+        val task = new WeakReference(taskContext)
+        () => Option(task.get()).forall(t => t.isInterrupted() || t.isFailed() || t.isCompleted())
+      case Some(taskContext) =>
+        () => taskContext.isInterrupted()
+      case None =>
+        // Outside of a task, as in tests, nothing interrupts the library.
+        () => false
     }
     new NativeLibrary.Task(
       context.map(_.stageId()).getOrElse(-1),

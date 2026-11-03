@@ -1570,6 +1570,44 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       Platform.freeMemory(waiting)
     }
 
+    // So does the context of a stream that an engine reads in its task once the task is killed,
+    // although the task did not end.
+    val killedMarker = new File(Utils.createTempDir(), "interrupted")
+    val (killedFactory, killedPartitions) = plannedScan(range(session, "end" -> "6",
+      "partitions" -> "1", "wait_for_interrupt" -> killedMarker.getPath).select("id"))
+    val contextsBeforeKill = NativeLibrary.openTaskContexts()
+    val jobGroup = s"native-data-source-${UUID.randomUUID()}"
+    val killError = new AtomicReference[Throwable]()
+    val engineThread = new Thread(() => {
+      session.sparkContext.setJobGroup(jobGroup, "an engine that waits", interruptOnCancel = true)
+      try {
+        inTask {
+          // Reads the stream on the thread of the task, which waits in get_next.
+          val stream = ArrowArrayStream.allocateNew(ArrowUtils.rootAllocator)
+          try {
+            killedFactory.openArrowStream(killedPartitions.head, stream.memoryAddress())
+            try readIdsInPlace(stream) finally stream.release()
+          } finally {
+            stream.close()
+          }
+        }
+      } catch {
+        case e: Throwable => killError.set(e)
+      }
+    })
+    engineThread.start()
+    eventually(timeout(1.minute)) {
+      assert(new File(killedMarker.getPath + ".waiting").isFile)
+    }
+    session.sparkContext.cancelJobGroup(jobGroup)
+    engineThread.join(TimeUnit.MINUTES.toMillis(1))
+    assert(!engineThread.isAlive && killError.get() != null)
+    eventually(timeout(1.minute)) {
+      assert(killedMarker.isFile && Files.readString(killedMarker.toPath) == "interrupted")
+      assert(NativeLibrary.openEngineStreams() == 0)
+      assert(NativeLibrary.openTaskContexts() == contextsBeforeKill)
+    }
+
     // So does the reader factory of a micro-batch scan, with the state of its micro-batch.
     val streamTaskDir = Utils.createTempDir()
     val query = session.readStream.format("native_counter").option("max_offset", "4")
@@ -1639,6 +1677,11 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         }
         assert(read == Seq(0L, 1L))
       }
+      // A micro-batch without partitions broadcasts no state, although the stream reader
+      // returned one.
+      val nextBroadcast = session.sparkContext.broadcast(0).id + 1
+      assert(plan(stream, 2, 2).isEmpty)
+      assert(session.sparkContext.broadcast(0).id == nextBroadcast)
     } finally {
       stream.stop()
     }
@@ -1666,6 +1709,19 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       }
     }
     assert(Utils.exceptionString(completed).contains("must be called in the running task"))
+    // Nor in a task that failed, while its failure listeners run.
+    val failed = intercept[Exception] {
+      session.artifactManager.withResources {
+        session.sparkContext.parallelize(Seq(0), 1).foreach { _ =>
+          TaskContext.get().addTaskFailureListener { (_, _) =>
+            factory.openArrowStream(partitions.head, 0)
+          }
+          throw new IllegalStateException("injected failure of the task")
+        }
+      }
+    }
+    assert(Utils.exceptionString(failed).contains("injected failure of the task"))
+    assert(Utils.exceptionString(failed).contains("must be called in the running task"))
     val noStream = intercept[Exception](inTask(factory.openArrowStream(partitions.head, 0)))
     assert(Utils.exceptionString(noStream).contains("whose release callback is NULL"))
     // The arguments are checked before the partition, which must be of the kind of the scan of the
@@ -1793,6 +1849,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     val marker = new File(Utils.createTempDir(), "released")
     val reading = marker.getPath + ".reading"
     val df = range(session, "end" -> "10", "partitions" -> "1", "slow_read" -> marker.getPath)
+    val contexts = NativeLibrary.openTaskContexts()
     try {
       // PipedRDD reads the scan on a thread of its own, which the task does not wait for. The
       // task completes without reading the output of the command, once that thread is in
@@ -1810,16 +1867,18 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       assert(count == 0)
       assert(new File(reading).isFile, "get_next was not called.")
       if (marker.isFile) fail(s"The stream was released: ${Files.readString(marker.toPath)}.")
+      // The task completed, but its context stays valid until the stream is released.
+      assert(NativeLibrary.openTaskContexts() == contexts + 1)
     } finally {
       new File(marker.getPath + ".continue").createNewFile()
     }
-    // The thread in get_next releases the stream once get_next returns.
+    // The thread in get_next releases the stream once get_next returns, and then the context.
     eventually(timeout(1.minute)) {
       assert(marker.isFile && Files.readString(marker.toPath) == "after get_next")
+      assert(NativeLibrary.openTaskContexts() == contexts)
     }
-    // The task context was still valid once get_next continued: Spark answers that a context
-    // that it freed is interrupted, and this task was not.
-    assert(Files.readString(new File(marker.getPath + ".interrupted").toPath) == "false")
+    // The read learned that its task ended, so that it may stop reading.
+    assert(Files.readString(new File(marker.getPath + ".interrupted").toPath) == "true")
   }
 
   nativeTest("close a reader while another thread reads it") {
@@ -1848,7 +1907,8 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
           case e: ExecutionException => Left(e.getCause)
         }
         assert(Files.readString(marker.toPath) == "after get_next")
-        // The task context was still valid once get_next continued, as in the test above.
+        // The context was still valid once get_next continued: Spark answers that a context that
+        // it freed is interrupted, and a read outside of a task never is.
         assert(Files.readString(new File(marker.getPath + ".interrupted").toPath) == "false")
         // A reader that was closed reads nothing more, and closing it again does not fail.
         assert(!reader.next())

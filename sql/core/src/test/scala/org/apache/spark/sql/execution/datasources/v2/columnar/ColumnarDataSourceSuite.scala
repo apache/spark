@@ -28,7 +28,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.connector.catalog.{Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
+import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.connector.read.streaming.{ReadLimit, SupportsAdmissionControl}
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
@@ -418,10 +418,7 @@ class TestRangeStreamReader(end: Long, schema: StructType, table: String)
     Array(TestRangePartition(offset(start), offset(end)))
   }
 
-  override def read(partition: InputPartition): PartitionReader[ColumnarBatch] = {
-    val range = partition.asInstanceOf[TestRangePartition]
-    new TestBatchReader(range.lo, range.hi, schema)
-  }
+  override def readerFactory(): PartitionReaderFactory = new TestRangeReaderFactory(schema)
 }
 
 object TestRangeStreamReader {

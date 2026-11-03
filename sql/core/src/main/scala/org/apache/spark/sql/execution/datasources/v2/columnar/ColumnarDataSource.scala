@@ -20,7 +20,7 @@ import java.util
 
 import org.apache.spark.sql.connector.catalog.TableCapability
 import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, BATCH_WRITE, MICRO_BATCH_READ, STREAMING_WRITE, TRUNCATE}
-import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
+import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory}
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
@@ -111,11 +111,11 @@ case class ColumnarPlannedBatch(
 
 /**
  * Reads the data of a [[ColumnarDataSource]] for a micro-batch streaming scan, with offsets in
- * JSON. Spark plans the partitions of each micro-batch on the driver, then serializes the reader
- * factory of `readerFactory` to the executors, which reads each partition, by default with `read`
- * of this reader.
+ * JSON. Spark plans the partitions of each micro-batch on the driver with this reader, which stays
+ * there, and serializes the reader factory that `readerFactory` returns to the executors, which
+ * read the partitions with it.
  */
-trait ColumnarStreamReader extends Serializable {
+trait ColumnarStreamReader {
   /**
    * Returns the offset to start from when the streaming query has no checkpoint. Spark keeps it in
    * the checkpoint of the source, and only asks for it when the checkpoint does not have it yet.
@@ -133,15 +133,12 @@ trait ColumnarStreamReader extends Serializable {
   /** Plans the partitions that read the data after `start` up to and including `end`. */
   def partitions(start: String, end: String): Array[InputPartition]
 
-  def read(partition: InputPartition): PartitionReader[ColumnarBatch]
-
   /**
-   * Returns the reader factory of a micro-batch, which Spark serializes to the executors. By
-   * default, it reads each partition with `read`, so that this reader is serialized with it. A
-   * reader may return a factory that also implements other interfaces of reader factories, such as
+   * Returns the reader factory of a micro-batch, which Spark serializes to the executors. It may
+   * also implement other interfaces of reader factories, such as
    * `org.apache.spark.sql.connector.read.SupportsArrowStreamRead`.
    */
-  def readerFactory(): PartitionReaderFactory = new ColumnarStreamPartitionReaderFactory(this)
+  def readerFactory(): PartitionReaderFactory
 
   /** Tells the data source that Spark has processed all the data up to and including `end`. */
   def commit(end: String): Unit = {}

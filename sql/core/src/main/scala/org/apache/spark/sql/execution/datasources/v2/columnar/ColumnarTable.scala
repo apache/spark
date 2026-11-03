@@ -36,7 +36,6 @@ import org.apache.spark.sql.execution.streaming.checkpointing.HDFSMetadataLog
 import org.apache.spark.sql.internal.connector.SupportsMetadata
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.Utils
 
 /**
@@ -335,11 +334,4 @@ abstract class ColumnarOnlyPartitionReaderFactory extends PartitionReaderFactory
   }
 
   override def supportColumnarReads(partition: InputPartition): Boolean = true
-}
-
-class ColumnarStreamPartitionReaderFactory(reader: ColumnarStreamReader)
-  extends ColumnarOnlyPartitionReaderFactory {
-  override def createColumnarReader(partition: InputPartition): PartitionReader[ColumnarBatch] = {
-    reader.read(partition)
-  }
 }

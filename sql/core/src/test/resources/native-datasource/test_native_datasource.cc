@@ -45,8 +45,8 @@
 //                   one, then waits until the file <slow_read>.continue exists, for at most a
 //                   minute; with the option "fail" set to "slow_read", each get_next then fails.
 //                   After the wait, it creates the file <slow_read>.interrupted with what
-//                   is_interrupted returns for the task context, "true" for one that Spark freed
-//                   meanwhile. Releasing the stream creates the file <slow_read>, which says
+//                   is_interrupted returns for the task context, "true" once the task ended.
+//                   Releasing the stream creates the file <slow_read>, which says
 //                   whether Spark released it "during get_next", which it must not, or "after
 //                   get_next" otherwise.
 //   native_sink     Writes the rows as CSV files under the directory in the option "path". With
@@ -910,9 +910,8 @@ int streamGetNext(ArrowArrayStream* stream, ArrowArray* out) {
         for (int i = 0; i < 6000 && stat(go.c_str(), &info) != 0; i++) {
           std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
-        // The task context must still be valid, as a library that checks it here expects. Spark
-        // only looks its address up, and answers true for a context that it freed, unless a new
-        // one got the same address, which no other read in these tests creates meanwhile.
+        // The task context must still be valid, as a library that checks it here expects, and
+        // it tells a read that its task ended.
         bool interrupted = state->is_interrupted(state->task);
         writeFile(state->slow_read + ".interrupted", interrupted ? "true" : "false");
       }
