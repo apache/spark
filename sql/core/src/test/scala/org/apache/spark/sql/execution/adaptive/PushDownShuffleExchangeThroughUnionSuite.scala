@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.{
   WholeStageCodegenExec}
 import org.apache.spark.sql.execution.exchange.{
   ENSURE_REQUIREMENTS, EnsureRequirements, REPARTITION_BY_COL, REPARTITION_BY_NUM,
-  ShuffleExchangeExec, ValidateRequirements}
+  ShuffleExchangeExec, ShuffleExchangeLike, ValidateRequirements}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.window.{Final => FinalWindowGroupLimit, Partial => PartialWindowGroupLimit, WindowGroupLimitExec}
 import org.apache.spark.sql.internal.SQLConf
@@ -722,14 +722,14 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
             val unions = finalNodes.collect { case union: UnionExec => union }
             assert(unions.size === 1)
             assert(unions.head.children.size === 2)
-            assert(!AQEUtils.isPushedThroughUnion(unions.head))
+            assert(!PushDownShuffleExchangeThroughUnion.hasPushedShuffle(unions.head))
           }
         }
       }
     }
   }
 
-  test("SPARK-60379: rejected zero-move candidates leave the input union unmarked") {
+  test("SPARK-60379: rejected zero-move candidates preserve input origins") {
     withPushDown {
       val a = attr("a")
       val b = attr("b")
@@ -744,15 +744,16 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
       val parent = TestPartitioningPlan(children = Seq(shuffle),
         required = Seq(clustered(b)), output = Seq(a, b))
       assert(pushDown(parent).fastEquals(parent))
-      assert(!AQEUtils.isPushedThroughUnion(original))
+      assert(!PushDownShuffleExchangeThroughUnion.hasPushedShuffle(original))
       assert(org.apache.spark.sql.execution.exchange.PartitioningOrigin.validateNode(original))
       assert(SimpleCostEvaluator(false, false, true).evaluateCost(parent) === SimpleCost(0, 1, 0))
       val accepted = TestPartitioningPlan(children = Seq(ensureShuffle(hash(a, 2), original)),
         required = Seq(clustered(a)), output = Seq(a, b))
       val result = pushDown(accepted)
       assert(result.children.head.isInstanceOf[UnionExec])
-      assert(!AQEUtils.isPushedThroughUnion(result.children.head))
-      assert(!AQEUtils.isPushedThroughUnion(original))
+      assert(!PushDownShuffleExchangeThroughUnion.hasPushedShuffle(
+        result.children.head.asInstanceOf[UnionExec]))
+      assert(!PushDownShuffleExchangeThroughUnion.hasPushedShuffle(original))
       assert(SimpleCostEvaluator(false, false, true).evaluateCost(result) === SimpleCost(0, 0, 0))
     }
   }
@@ -1911,7 +1912,7 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
             assert(original.outputPartitioning.asInstanceOf[HashPartitioning]
               .semanticEquals(originalLayout))
           }
-          assert(AQEUtils.isPushedThroughUnion(union))
+          assert(PushDownShuffleExchangeThroughUnion.hasPushedShuffle(union))
         }
       }
     }
@@ -2433,6 +2434,133 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
     }
   }
 
+  test("SPARK-60379: pruning the empty pushed branch removes the two-child union cost") {
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS.key ->
+          classOf[RecordingUnionCostEvaluator].getName) {
+      withTempView("kept", "empty_source") {
+        val kept = spark.range(20).selectExpr("id % 7 k", "id v")
+          .repartition(5, $"k").cache()
+        kept.createOrReplaceTempView("kept")
+        kept.count()
+        val never = org.apache.spark.sql.functions.udf((id: Long) => id < 0)
+        spark.range(10).filter(never($"id")).selectExpr("id k", "id v")
+          .createOrReplaceTempView("empty_source")
+        try {
+          val sql = """SELECT k, v, row_number() OVER (PARTITION BY k ORDER BY v) rn FROM (
+            | SELECT * FROM kept UNION ALL SELECT * FROM empty_source)""".stripMargin
+          val expected = expectedResult(sql)
+          RecordingUnionCostEvaluator.clear()
+          val df = spark.sql(sql)
+          val initial = aqeInitialPlan(df)
+          val union = initial.collectFirst { case u: UnionExec => u }.get
+          assert(union.children.length === 2)
+          val moved = union.children(1).asInstanceOf[ShuffleExchangeExec]
+          assert(PushDownShuffleExchangeThroughUnion.isPushedDownShuffle(moved))
+          assert(numShufflesOnUnion(initial) === 0)
+          // The kept cache is materialized; only the moved branch has a pending shuffle job.
+          assert(df.collect().toSeq.sortBy(_.toString) === expected.sortBy(_.toString))
+          val finalPlan = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+            .executedPlan
+          assert(!finalPlan.exists(_.isInstanceOf[UnionExec]),
+            s"empty branch must be pruned:\n$finalPlan")
+          val evaluations = RecordingUnionCostEvaluator.comparisons.toSeq
+          assert(evaluations.nonEmpty && evaluations.length % 2 == 0)
+          assert(evaluations.grouped(2).exists { pair =>
+            pair.head == Seq((true, true, SimpleCost(0, 1, 0))) && pair(1).isEmpty
+          }, s"pruning must remove the union from a real cost comparison: $evaluations")
+        } finally {
+          kept.unpersist()
+          RecordingUnionCostEvaluator.clear()
+        }
+      }
+    }
+  }
+
+  test("SPARK-60379: pruning the only pushed branch loses cost on a surviving union") {
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS.key ->
+          classOf[RecordingUnionCostEvaluator].getName) {
+      withTempView("kept1", "kept2", "empty_source") {
+        val first = spark.range(20).selectExpr("id % 7 k", "id v")
+          .repartition(5, $"k").cache()
+        val second = spark.range(20, 40).selectExpr("id % 7 k", "id v")
+          .repartition(5, $"k").cache()
+        first.createOrReplaceTempView("kept1")
+        second.createOrReplaceTempView("kept2")
+        first.count()
+        second.count()
+        val never = org.apache.spark.sql.functions.udf((id: Long) => id < 0)
+        spark.range(10).filter(never($"id")).selectExpr("id k", "id v")
+          .createOrReplaceTempView("empty_source")
+        try {
+          val sql = """SELECT k, v, row_number() OVER (PARTITION BY k ORDER BY v) rn FROM (
+            | SELECT * FROM kept1 UNION ALL SELECT * FROM kept2
+            | UNION ALL SELECT * FROM empty_source)""".stripMargin
+          val expected = expectedResult(sql)
+          RecordingUnionCostEvaluator.clear()
+          val df = spark.sql(sql)
+          val initial = aqeInitialPlan(df)
+          val union = initial.collectFirst { case u: UnionExec => u }.get
+          def numShuffles(plan: SparkPlan): Int = plan match {
+            case stage: QueryStageExec => numShuffles(stage.plan)
+            case shuffle: ShuffleExchangeLike => 1 + shuffle.children.map(numShuffles).sum
+            case other => other.children.map(numShuffles).sum
+          }
+          assert(numShuffles(initial) === 1, s"only the moved branch should shuffle:\n$initial")
+          assert(union.children.length === 3)
+          val moved = union.children(2).asInstanceOf[ShuffleExchangeExec]
+          assert(PushDownShuffleExchangeThroughUnion.isPushedDownShuffle(moved))
+          assert(!union.children.take(2).exists(_.isInstanceOf[ShuffleExchangeLike]))
+          assert(numShufflesOnUnion(initial) === 0)
+          // Cached branches are ready; the only pending shuffle is the runtime-empty moved branch.
+          assert(df.collect().toSeq.sortBy(_.toString) === expected.sortBy(_.toString))
+          val finalPlan = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+            .executedPlan
+          def unions(plan: SparkPlan): Seq[UnionExec] = plan match {
+            case stage: QueryStageExec => unions(stage.plan)
+            case union: UnionExec => union +: union.children.flatMap(unions)
+            case other => other.children.flatMap(unions)
+          }
+          assert(numShuffles(finalPlan) === 0,
+            s"pruning must not leave or introduce a shuffle:\n$finalPlan")
+          val surviving = unions(finalPlan).headOption.getOrElse {
+            fail(s"expected a surviving two-child union:\n$finalPlan")
+          }
+          assert(surviving.children.length === 2)
+          assert(!surviving.isPlainUnion)
+          assert(!PushDownShuffleExchangeThroughUnion.hasPushedShuffle(surviving))
+          val comparisons = RecordingUnionCostEvaluator.comparisons.toSeq
+          val costs = RecordingUnionCostEvaluator.totalCosts.toSeq
+          assert(comparisons.nonEmpty && comparisons.length % 2 == 0)
+          assert(costs.length === comparisons.length)
+          val prunedRounds = comparisons.grouped(2).zip(costs.grouped(2)).filter {
+            case (pair, _) =>
+              pair.head == Seq((true, true, SimpleCost(0, 1, 0))) &&
+                pair(1) == Seq((false, false, SimpleCost(0, 0, 0)))
+          }.toSeq
+          assert(prunedRounds.nonEmpty,
+            s"expected a surviving union to lose its cost: $comparisons; total costs: $costs")
+          prunedRounds.foreach { case (_, pairCosts) =>
+            assert(pairCosts === Seq(SimpleCost(0, 1, 0), SimpleCost(0, 0, 0)))
+          }
+        } finally {
+          first.unpersist()
+          second.unpersist()
+          RecordingUnionCostEvaluator.clear()
+        }
+      }
+    }
+  }
+
   test("SPARK-60379: shuffle cost counts pushed-through unions instead of added exchanges") {
     withPushDown {
       val a = attr("id")
@@ -2447,8 +2575,8 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
       val disabled = SimpleCostEvaluator(false, false, pushDownShuffleThroughUnion = false)
       assert(disabled.evaluateCost(rebuilt) === SimpleCost(0, 3, 0))
       assert(evaluator.evaluateCost(ensureShuffle(hash(a, 2), rebuilt)) === SimpleCost(0, 2, 0))
-      val untagged = UnionExec(rebuilt.children)
-      assert(evaluator.evaluateCost(untagged) === SimpleCost(0, 0, 0))
+      val replanned = UnionExec(rebuilt.children)
+      assert(evaluator.evaluateCost(replanned) === SimpleCost(0, 1, 0))
       val first = rebuilt.children(1).asInstanceOf[ShuffleExchangeExec]
       val second = rebuilt.children(2).asInstanceOf[ShuffleExchangeExec]
       val staged = rebuilt.withNewChildren(Seq(rebuilt.children.head,
@@ -2461,7 +2589,6 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
       }))
       assert(evaluator.evaluateCost(allStaged) === SimpleCost(0, 1, 0))
       val plain = UnionExec(Seq(leaf(a), leaf(attr("id"))))
-      plain.setTagValue(AQEUtils.PUSHED_THROUGH_UNION, true)
       assert(evaluator.evaluateCost(plain) === SimpleCost(0, 0, 0))
     }
   }
@@ -2479,14 +2606,14 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
         val kept = spark.table("t1").repartition(5, $"id").cache()
         kept.createOrReplaceTempView("kept")
         kept.count()
-        RecordingUnionCostEvaluator.comparisons.clear()
+        RecordingUnionCostEvaluator.clear()
         try {
           val sql = """SELECT id, v,
             | row_number() OVER (PARTITION BY id ORDER BY v) rn FROM (
             | SELECT * FROM kept
             | UNION ALL SELECT * FROM t2)""".stripMargin
           val expected = expectedResult(sql)
-          RecordingUnionCostEvaluator.comparisons.clear()
+          RecordingUnionCostEvaluator.clear()
           val df = spark.sql(sql)
           // checkAnswer also executes the RDD path, adding cost evaluations beyond this collect.
           // Collect once so the assertion below covers exactly this execution's comparisons.
@@ -2498,13 +2625,13 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
           assert(evaluations === Seq.fill(evaluations.length)(expectedEvaluation))
         } finally {
           kept.unpersist()
-          RecordingUnionCostEvaluator.comparisons.clear()
+          RecordingUnionCostEvaluator.clear()
         }
       }
     }
   }
 
-  test("SPARK-60379: requirement stages restore union cost before all branches finish") {
+  test("SPARK-60379: requirement boundaries identify union cost before all branches finish") {
     withPushDown {
       val a = attr("id")
       val b = attr("id")
@@ -2518,7 +2645,7 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
         val union = UnionExec(Seq(kept, second, child))
         val root = TestPartitioningPlan(children = Seq(union), output = Seq(a))
         val result = pushDown(root)
-        assert(AQEUtils.isPushedThroughUnion(union))
+        assert(PushDownShuffleExchangeThroughUnion.hasPushedShuffle(union))
         val shuffles = if (child eq moved) { 4 } else { 3 }
         assert(evaluator.evaluateCost(result) === SimpleCost(0, shuffles, 0))
         val extra = ensureShuffle(hash(a, 2), result)
@@ -2532,7 +2659,7 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
         val columnsOnly = UnionExec(Seq(kept, second))
         pushDown(TestPartitioningPlan(children = Seq(columnsOnly), output = Seq(a)))
-        assert(!AQEUtils.isPushedThroughUnion(columnsOnly))
+        assert(!PushDownShuffleExchangeThroughUnion.hasPushedShuffle(columnsOnly))
       }
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "8") {
         val retargeted = kept.copy(outputPartitioning = hash(a, 2))
@@ -2540,21 +2667,21 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
           ShuffleQueryStageExec(3, retargeted, retargeted.canonicalized)).foreach { child =>
           val union = UnionExec(Seq(child, second))
           pushDown(TestPartitioningPlan(children = Seq(union), output = Seq(a)))
-          assert(AQEUtils.isPushedThroughUnion(union))
+          assert(PushDownShuffleExchangeThroughUnion.hasPushedShuffle(union))
         }
         val fixed = kept.copy(shuffleOrigin = REPARTITION_BY_NUM)
         val union = UnionExec(Seq(fixed, fixed))
         pushDown(TestPartitioningPlan(children = Seq(union), output = Seq(a)))
-        assert(!AQEUtils.isPushedThroughUnion(union))
+        assert(!PushDownShuffleExchangeThroughUnion.hasPushedShuffle(union))
       }
       val plain = UnionExec(Seq(kept, ensureShuffle(hash(c, 3), leaf(c))))
       pushDown(TestPartitioningPlan(children = Seq(plain), output = Seq(a)))
       assert(plain.isPlainUnion)
-      assert(!AQEUtils.isPushedThroughUnion(plain))
+      assert(!PushDownShuffleExchangeThroughUnion.hasPushedShuffle(plain))
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
         val wrapped = UnionExec(Seq(kept, ProjectExec(Seq(c), stage)))
         pushDown(TestPartitioningPlan(children = Seq(wrapped), output = Seq(a)))
-        assert(!AQEUtils.isPushedThroughUnion(wrapped))
+        assert(!PushDownShuffleExchangeThroughUnion.hasPushedShuffle(wrapped))
       }
     }
   }
@@ -2677,17 +2804,25 @@ private class RecordingUnionCostEvaluator extends CostEvaluator {
 
   override def evaluateCost(plan: SparkPlan): Cost = {
     val unions = plan.collect { case union: UnionExec =>
-      (AQEUtils.isPushedThroughUnion(union),
+      (PushDownShuffleExchangeThroughUnion.hasPushedShuffle(union),
         union.children.exists(_.isInstanceOf[ShuffleQueryStageExec]),
         evaluator.evaluateCost(union))
     }
     RecordingUnionCostEvaluator.comparisons += unions
-    evaluator.evaluateCost(plan)
+    val cost = evaluator.evaluateCost(plan)
+    RecordingUnionCostEvaluator.totalCosts += cost
+    cost
   }
 }
 
 private object RecordingUnionCostEvaluator {
   val comparisons = ArrayBuffer.empty[Seq[(Boolean, Boolean, Cost)]]
+  val totalCosts = ArrayBuffer.empty[Cost]
+
+  def clear(): Unit = {
+    comparisons.clear()
+    totalCosts.clear()
+  }
 }
 
 /** A node with a fixed output partitioning; empty requirements default to one per child. */

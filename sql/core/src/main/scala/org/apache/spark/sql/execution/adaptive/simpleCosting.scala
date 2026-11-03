@@ -53,11 +53,14 @@ case class SimpleCost(numSkewJoins: Int, numShuffles: Int, numLocalSorts: Int) e
 /**
  * A skew join aware implementation of [[CostEvaluator]], which counts the number of
  * [[ShuffleExchangeLike]] nodes, skew join nodes and (optionally) local [[SortExec]] nodes in the
- * plan. With union shuffle push-down enabled, tagged new exchanges are excluded and each tagged
- * union counts as one shuffle instead. Query-stage contents are not visited, while a surviving
- * tagged union still contributes one even after its input exchanges have become stages.
- * Preparation restores the mark for direct requirement or retargeted column shuffles and stages.
- * This keeps equivalent re-plans from gaining a shuffle-cost credit when a moved branch finishes.
+ * plan. With union shuffle push-down enabled, tagged new exchanges are excluded and each union
+ * identified by [[PushDownShuffleExchangeThroughUnion.hasPushedShuffle]] counts as one shuffle.
+ * Query-stage contents are not visited. Inspecting the same shape in current and re-planned unions
+ * keeps an equivalent re-plan from gaining a shuffle-cost credit when a moved branch finishes.
+ * Ordinary exchanges and recognized unions have equal weight, with no separate tie-breaker.
+ * This is shape-based compensation, not a record of executed work: pruning the only qualifying
+ * branch can remove the union cost even while the union survives. That decrease can offset an
+ * additional exchange elsewhere, so adoption need not match the push-down-disabled plan.
  * See [[SimpleCost]] for how the components are compared.
  */
 case class SimpleCostEvaluator(
@@ -70,20 +73,18 @@ case class SimpleCostEvaluator(
     var numSkewJoins = 0
     var numShuffles = 0
     var numLocalSorts = 0
-    var numPushedThroughUnion = 0
     plan.foreach {
       case j: ShuffledJoin if forceOptimizeSkewedJoin && j.isSkewJoin => numSkewJoins += 1
       case j: BroadcastHashJoinExec if forceOptimizeSkewedJoin && j.isSkewJoin => numSkewJoins += 1
       case shuffle: ShuffleExchangeLike if pushDownShuffleThroughUnion &&
-          AQEUtils.isPushedDownShuffle(shuffle) =>
+          PushDownShuffleExchangeThroughUnion.isPushedDownShuffle(shuffle) =>
       case _: ShuffleExchangeLike => numShuffles += 1
       case union: UnionExec if pushDownShuffleThroughUnion &&
-          AQEUtils.isPushedThroughUnion(union) && !union.isPlainUnion =>
-        numPushedThroughUnion += 1
+          PushDownShuffleExchangeThroughUnion.hasPushedShuffle(union) =>
+        numShuffles += 1
       case s: SortExec if countLocalSort && !s.global => numLocalSorts += 1
       case _ =>
     }
-    numShuffles += numPushedThroughUnion
     SimpleCost(numSkewJoins, numShuffles, numLocalSorts)
   }
 }
