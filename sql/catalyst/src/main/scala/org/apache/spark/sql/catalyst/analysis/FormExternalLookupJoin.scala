@@ -17,15 +17,14 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{CommonExpressionRef, Expression,
-  SubqueryExpression, With}
+import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupJoin, Join, JoinStrategyHint,
   LogicalPlan, ResolvedHint}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.WriteToStream
-import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMON_EXPR_REF, JOIN, WITH_EXPRESSION}
+import org.apache.spark.sql.catalyst.trees.TreePattern.JOIN
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.execution.datasources.v2.ExternalLookupRelations
@@ -169,7 +168,7 @@ object FormExternalLookupJoin extends Rule[LogicalPlan] {
               join.left,
               join.right,
               join.joinType,
-              join.condition.map(inlineCommonExpressions),
+              join.condition,
               join.right.output)
           // Operator optimization could push a filter's predicate into the join later, but the
           // condition must be written in the join.
@@ -178,23 +177,6 @@ object FormExternalLookupJoin extends Rule[LogicalPlan] {
               "MISSING_JOIN_CONDITION")
           case Ineligible(error) => throw error
           case NotLookupJoin => join
-        }
-    }
-
-  /**
-   * Inlines the common expressions of every `With` in a lookup join condition, such as the input of
-   * `BETWEEN`, at each of their references. `RewriteWithExpression` would otherwise evaluate one
-   * that is not cheap in a projection below the join, over the lookup side, which the lookup join
-   * cannot read. A definition can be evaluated more than once: analysis allows only deterministic
-   * join conditions.
-   */
-  private def inlineCommonExpressions(condition: Expression): Expression =
-    condition.transformUpWithPruning(_.containsPattern(WITH_EXPRESSION)) {
-      case With(child, defs) =>
-        val definitions = defs.map(definition => definition.id -> definition.child).toMap
-        // A reference to an enclosing `With` is inlined when the transformation reaches it.
-        child.transformWithPruning(_.containsPattern(COMMON_EXPR_REF)) {
-          case ref: CommonExpressionRef if definitions.contains(ref.id) => definitions(ref.id)
         }
     }
 }
