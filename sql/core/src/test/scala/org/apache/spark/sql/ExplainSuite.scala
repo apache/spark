@@ -511,8 +511,8 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
   }
 
   test("Explain formatted output shows the runtime filters of a datasource V2 scan") {
-    // A scalar subquery filter over a partition column is fully pushed into a built-in V2 file
-    // scan, so no FilterExec above the scan prints it and the scan's own details have to.
+    // A scalar subquery filter over a partition column prunes a built-in V2 file scan at runtime,
+    // so the scan's own details list it.
     withTempDir { dir =>
       val factPath = dir.getCanonicalPath + "/fact"
       val dimPath = dir.getCanonicalPath + "/dim"
@@ -527,7 +527,6 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
           val output = getNormalizedExplain(q, FormattedMode)
           assert("""(?m)^RuntimeFilters: \[\(part#x = Subquery scalar-subquery#x, \[id=#x\]\)\]$"""
             .r.findFirstIn(output).isDefined, output)
-          assert(!output.contains("Filter ("), output)
         }
       }
     }

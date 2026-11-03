@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import scala.annotation.nowarn
 import scala.collection.mutable
 
 import org.apache.spark.SparkException
@@ -173,8 +174,15 @@ object PushDownUtils extends Logging {
    * different results.
    *
    * A scan implementing [[SupportsRuntimeCatalystFiltering]] gets its runtime filters through
-   * [[replanWithRuntimeFilters]] instead. This method rejects such a scan when it has a filter to
-   * push, since `DataSourceV2Strategy` may already have dropped the filter's `FilterExec`.
+   * [[replanWithRuntimeFilters]] instead, so this method pushes nothing to it and returns false.
+   * Correctness never depends on that pruning: the join applies a DPP filter, the `FilterExec`
+   * above the scan applies a scalar subquery filter, and a row-level group filter only narrows
+   * the groups read. The exception is a fully pushed filter (see [[isFullyPushedRuntimeFilter]]),
+   * which has no other evaluator, so this method rejects the scan rather than leave it unapplied.
+   * A scan whose classes do not declare `planInputPartitionsWithRuntimeFilters`, such as one built
+   * against Spark 4.3, instead gets its screened filters through the deprecated `filter`, as in
+   * Spark 4.3. A Scala scan compiled against this trait takes the path above even if it overrides
+   * only `filter`.
    *
    * @return true if any filters were pushed to the data source
    */
@@ -230,10 +238,27 @@ object PushDownUtils extends Logging {
 
         translatedFiltersPushed || partPredicatesPushed
 
-      case _: SupportsRuntimeCatalystFiltering if pushableFilters.nonEmpty =>
-        throw SparkException.internalError(
-          s"${scan.getClass.getName} implements SupportsRuntimeCatalystFiltering, so its runtime " +
-          "filters must go through PushDownUtils.replanWithRuntimeFilters, not pushRuntimeFilters.")
+      case catalystScan: SupportsRuntimeCatalystFiltering
+          if runtimeFilters.nonEmpty && implementsOnlyDeprecatedFilter(catalystScan) =>
+        filterWithDeprecatedMethod(catalystScan, runtimeFilters, output)
+
+      case catalystScan: SupportsRuntimeCatalystFiltering =>
+        // Resolved only when a filter could be fully pushed, so a node with no such filter does
+        // not ask the scan.
+        lazy val fullyPushedAttrs = V2ExpressionUtils.resolveDataSourceRuntimeFilterRefs(
+          catalystScan.fullyPushedFilterAttributes(),
+          output,
+          "fullyPushedFilterAttributes()",
+          catalystScan.getClass.getName)
+        val evaluatedOnlyByScan =
+          runtimeFilters.filter(isFullyPushedRuntimeFilter(_, fullyPushedAttrs))
+        if (evaluatedOnlyByScan.nonEmpty) {
+          throw SparkException.internalError(
+            s"${scan.getClass.getName} fully evaluates the runtime filters " +
+            s"${evaluatedOnlyByScan.mkString(", ")}, so they must go through " +
+            "PushDownUtils.replanWithRuntimeFilters, not pushRuntimeFilters.")
+        }
+        false
 
       case _ =>
         false
@@ -263,6 +288,27 @@ object PushDownUtils extends Logging {
       .filter(isPushablePartitionFilter(_, includeSubquery = true))
       .flatMap(unwrapRuntimeFilterExpression)
       .filterNot(_ == Literal.TrueLiteral)
+  }
+
+  /**
+   * Whether no class of `scan` declares `planInputPartitionsWithRuntimeFilters`, which holds for a
+   * class compiled against Spark 4.3 and for a Java class implementing this trait directly that
+   * overrides only `filter`. A Scala class that mixes in this trait gets a forwarder, so it and
+   * its subclasses take the general path.
+   */
+  private def implementsOnlyDeprecatedFilter(scan: SupportsRuntimeCatalystFiltering): Boolean =
+    scan.getClass.getMethod("planInputPartitionsWithRuntimeFilters", classOf[Array[Expression]])
+      .getDeclaringClass == classOf[SupportsRuntimeCatalystFiltering]
+
+  /** Pushes the screened filters through the deprecated `filter`, as Spark 4.3 did. */
+  @nowarn("cat=deprecation")
+  private def filterWithDeprecatedMethod(
+      scan: SupportsRuntimeCatalystFiltering,
+      runtimeFilters: Seq[Expression],
+      output: Seq[AttributeReference]): Boolean = {
+    val catalystFilters = catalystRuntimeFilters(scan, runtimeFilters, output)
+    if (catalystFilters.nonEmpty) scan.filter(catalystFilters.toArray)
+    catalystFilters.nonEmpty
   }
 
   /**
@@ -543,6 +589,20 @@ object PushDownUtils extends Logging {
     f.deterministic &&
       !f.exists(_.isInstanceOf[PythonUDF]) &&
       (includeSubquery || !SubqueryExpression.hasSubquery(f))
+
+  /**
+   * Whether `DataSourceV2Strategy` leaves no `FilterExec` for runtime filter `f`, so the scan is
+   * its only evaluator: a pushable scalar subquery filter, not a DPP filter, over attributes the
+   * scan declared fully pushed. Both that strategy and [[pushRuntimeFilters]] decide with this.
+   */
+  private[v2] def isFullyPushedRuntimeFilter(
+      f: Expression,
+      fullyPushedAttrs: => AttributeSet): Boolean =
+    mayBeFullyPushed(f) && f.references.subsetOf(fullyPushedAttrs)
+
+  private def mayBeFullyPushed(f: Expression): Boolean =
+    !f.isInstanceOf[DynamicPruning] && f.references.nonEmpty &&
+      isPushablePartitionFilter(f, includeSubquery = true)
 
   /**
    * Replaces all partition column references with canonical [[AttributeReference]]s

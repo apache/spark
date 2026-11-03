@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector
 
 import java.io.File
 
-import org.apache.spark.{SparkException, SparkThrowable}
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, DynamicPruningExpression, DynamicPruningSubquery, EqualTo, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
@@ -27,8 +27,9 @@ import org.apache.spark.sql.connector.read.InputPartition
 import org.apache.spark.sql.execution.{FilterExec, ScalarSubquery}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.datasources.{FilePartition, InMemoryFileIndex, PartitionDirectory}
-import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, FileScan, RuntimePartitionPruningFileScan}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, FileScan, PushDownUtils, RuntimePartitionPruningFileScan}
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
+import org.apache.spark.sql.execution.datasources.v2.text.TextScan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, LongType}
@@ -43,6 +44,15 @@ import org.apache.spark.sql.types.{IntegerType, LongType}
 abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
   with SharedSparkSession
   with AdaptiveSparkPlanHelper {
+
+  // The tests register their temp views over temp directories deleted when the test ends.
+  override def afterEach(): Unit = {
+    try {
+      spark.sessionState.catalog.clearTempTables()
+    } finally {
+      super.afterEach()
+    }
+  }
 
   // Standard V2-only conf for DPP tests on file sources. AQE is set by the concrete subclasses,
   // which mix in DisableAdaptiveExecutionSuite / EnableAdaptiveExecutionSuite: the DPP subquery is
@@ -293,68 +303,45 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
     }
   }
 
-  test("a DPP filter keeps a partition it cannot evaluate, a scalar subquery filter fails") {
-    // The scan alone evaluates the fully pushed scalar subquery filter, while the join applies
-    // the DPP filter again.
+  test("a runtime filter keeps a partition directory it cannot evaluate") {
+    // The join applies a DPP filter again, and the FilterExec above the scan a scalar subquery
+    // filter, so the scan keeps a directory whose value fails the filter's cast under ANSI.
     withDppV2Conf {
       withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
         withTempDir { dir =>
           writeFactAndDim(dir)
+          def readDirs(df: DataFrame): Seq[String] = factScanOf(df).filteredPartitions.flatten
+            .flatMap(_.asInstanceOf[FilePartition].files.map(_.partitionValues.getString(0)))
+            .distinct.sorted
           val strPath = new File(dir, "fact_str").getCanonicalPath
           spark.range(10)
             .selectExpr("id", "CASE WHEN id = 3 THEN 'abc' ELSE CAST(id AS STRING) END AS part")
             .write.format("parquet").partitionBy("part").save(strPath)
           spark.read.format("parquet").schema("id long, part string").load(strPath)
             .createOrReplaceTempView("fact_str")
-          val e = intercept[SparkThrowable] {
-            sql(
-              """SELECT f.id FROM fact_str f
-                |WHERE f.part = (SELECT max(dim_id) FROM dim WHERE dim_val = 7)""".stripMargin)
-              .collect()
-          }
-          assert(e.getCondition === "CAST_INVALID_INPUT",
-            s"expected the failing cast to surface, got ${e.getCondition}")
           // `f.id <> 3` drops the row of directory 'abc' before the join casts its key.
-          val df = sql(
+          val dpp = sql(
             """SELECT f.id FROM fact_str f JOIN dim d
               |ON f.part = d.dim_id WHERE d.dim_val = 7 AND f.id <> 3""".stripMargin)
-          checkAnswer(df, Row(7))
-          val factScan = factScanOf(df)
-          assert(factScan.runtimeFilters.exists(_.isInstanceOf[DynamicPruningExpression]),
-            s"expected a DPP filter, got ${factScan.runtimeFilters}")
-          val readDirs = factScan.filteredPartitions.flatten
-            .flatMap(_.asInstanceOf[FilePartition].files.map(_.partitionValues.getString(0)))
-          assert(readDirs.sorted === Seq("7", "abc"))
-        }
-      }
-    }
-  }
-
-  test("a runtime filter is not evaluated on a partition directory with no file to read") {
-    // The file index lists 'abc', but drops its only file because the file is empty.
-    withDppV2Conf {
-      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-        withTempDir { dir =>
-          writeFactAndDim(dir)
-          val strPath = new File(dir, "fact_str").getCanonicalPath
+          checkAnswer(dpp, Row(7))
+          assert(factScanOf(dpp).runtimeFilters.exists(_.isInstanceOf[DynamicPruningExpression]),
+            s"expected a DPP filter, got ${factScanOf(dpp).runtimeFilters}")
+          assert(readDirs(dpp) === Seq("7", "abc"))
+          // Directory 'abc' holds a file with no row, so only the scan evaluates the filter on it.
+          val emptyPath = new File(dir, "fact_empty").getCanonicalPath
           spark.range(10).selectExpr("id", "CAST(id AS STRING) AS part")
-            .write.format("parquet").partitionBy("part").save(strPath)
-          val emptyDir = new File(strPath, "part=abc")
-          assert(emptyDir.mkdir() && new File(emptyDir, "empty.parquet").createNewFile())
-          spark.read.format("parquet").schema("id long, part string").load(strPath)
-            .createOrReplaceTempView("fact_str")
-          val df = sql(
-            """SELECT f.id FROM fact_str f
+            .write.format("parquet").partitionBy("part").save(emptyPath)
+          spark.range(0).write.parquet(new File(emptyPath, "part=abc").getCanonicalPath)
+          spark.read.format("parquet").schema("id long, part string").load(emptyPath)
+            .createOrReplaceTempView("fact_empty")
+          val scalar = sql(
+            """SELECT f.id FROM fact_empty f
               |WHERE f.part = (SELECT max(dim_id) FROM dim WHERE dim_val = 7)""".stripMargin)
-          checkAnswer(df, Row(7))
-          val factScan = factScanOf(df)
-          assert(factScan.runtimeFilters.exists(_.exists(_.isInstanceOf[ScalarSubquery])),
-            s"expected the scalar subquery filter on the scan, got ${factScan.runtimeFilters}")
-          val readDirs = factScan.filteredPartitions.flatten
-            .flatMap(_.asInstanceOf[FilePartition].files.map(_.partitionValues.getString(0)))
-          assert(readDirs.distinct === Seq("7"))
-          assert(fileScanOf(df).fileIndex.partitionSpec().partitions.size === 11,
-            "expected the file index to list directory 'abc'")
+          checkAnswer(scalar, Row(7))
+          val scalarFilters = factScanOf(scalar).runtimeFilters
+          assert(scalarFilters.exists(_.exists(_.isInstanceOf[ScalarSubquery])),
+            s"expected the scalar subquery filter on the scan, got $scalarFilters")
+          assert(readDirs(scalar) === Seq("7", "abc"))
         }
       }
     }
@@ -511,32 +498,35 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
     }
   }
 
-  test("scalar subquery on a partition column is not re-evaluated after the scan") {
-    // The file scan declares its partition columns in fullyPushedFilterAttributes: applying such a
-    // filter selects partition directories, so every row the scan returns satisfies it and Spark
-    // drops the post-scan FilterExec, the same treatment a compile-time partition filter gets.
+  test("a scalar subquery filter on a partition column is evaluated again after the scan") {
+    // The scan does not declare its partition columns fully pushed, so a plugin node that reads
+    // the scan's planned partitions instead of pruning them still returns the right rows, and one
+    // that goes through PushDownUtils.pushRuntimeFilters gets false back rather than an error.
     withDppV2Conf {
       withTempDir { dir =>
         writeFactAndDim(dir)
         val df = sql(
           """SELECT f.id FROM fact f
             |WHERE f.part = (SELECT max(dim_id) FROM dim WHERE dim_val = 7)""".stripMargin)
-        val rows = df.collect()
-        assert(rows.length == 10, s"expected 10 rows, got ${rows.length}")
+        checkAnswer(df, (0 until 10).map(i => Row(i * 10 + 7)))
+        assert(fileScanOf(df).fullyPushedFilterAttributes().isEmpty)
         val executedPlan = df.queryExecution.executedPlan
-        assert(collect(executedPlan) { case f: FilterExec => f }.isEmpty,
-          "a fully pushed partition filter should leave no FilterExec above the scan, got:\n" +
-            executedPlan.treeString)
+        assert(collect(executedPlan) {
+          case f: FilterExec if f.condition.exists(_.isInstanceOf[ScalarSubquery]) => f
+        }.nonEmpty, s"expected a FilterExec applying the scalar subquery, got:\n" +
+          executedPlan.treeString)
+        val factScan = factScanOf(df)
+        assert(factScan.runtimeFilters.exists(_.exists(_.isInstanceOf[ScalarSubquery])),
+          s"expected the scalar subquery filter on the scan, got ${factScan.runtimeFilters}")
+        assert(!PushDownUtils.pushRuntimeFilters(
+          factScan.scan, factScan.runtimeFilters, factScan.table, factScan.output))
       }
     }
   }
 
   test("a runtime filter is ANDed with the compile-time partition filters, not substituted") {
-    // The two halves are applied in different places: `partitions` puts `partitionFilters` through
-    // `fileIndex.listFiles`, and `planInputPartitionsWithRuntimeFilters` filters what that planned.
-    // Both are the scan's only evaluator: FileScanBuilder.pushFilters returns just the data filters
-    // as post-scan filters, and a partition-column runtime filter is declared fully pushed, so
-    // dropping either half returns rows that nothing filters out.
+    // The compile-time filter goes through `fileIndex.listFiles`, and the runtime filter prunes
+    // that listing, so the scan reads only what both keep.
     withDppV2Conf {
       withTempDir { dir =>
         writeFactAndDim(dir)
@@ -575,10 +565,8 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
 
   test("a runtime filter the scan cannot apply is rejected rather than silently dropped") {
     // Unreachable through SQL: PushDownUtils screens a filter against the attributes the scan
-    // declared before handing it over. Calling the scan directly is what pins the guard, which has
-    // to fail rather than drop the filter, since a fully pushed predicate dropped here would be
-    // evaluated nowhere. The reference is matched the way the rest of the scan matches partition
-    // column names, so a mixed-case reference binds rather than being rejected.
+    // declared before handing it over, so the scan is called directly. A mixed-case reference is
+    // matched the way the scan matches partition column names, so it binds.
     withDppV2Conf {
       withTempDir { dir =>
         writeFactAndDim(dir)
@@ -598,36 +586,6 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
         assert(mixedCase.flatMap(
           _.asInstanceOf[FilePartition].files.map(_.partitionValues.getInt(0))).distinct.toSeq
           === Seq(7))
-      }
-    }
-  }
-
-  test("a fully pushed filter stays exact when one FilePartition spans partition directories") {
-    // One FilePartition holds files from several partition directories, and every row in it still
-    // satisfies the filter, because the filter chose those directories.
-    withDppV2Conf {
-      withSQLConf(
-        SQLConf.FILES_MAX_PARTITION_BYTES.key -> "1g",
-        SQLConf.FILES_MIN_PARTITION_NUM.key -> "1",
-        SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "0") {
-        withTempDir { dir =>
-          writeFactAndDim(dir)
-          // min(dim_id) over dim_val > 7 is 8, so this keeps partitions 8 and 9.
-          val df = sql(
-            """SELECT f.id FROM fact f
-              |WHERE f.part >= (SELECT min(dim_id) FROM dim WHERE dim_val > 7)""".stripMargin)
-          checkAnswer(df, (0 until 10).flatMap(i => Seq(Row(i * 10 + 8), Row(i * 10 + 9))))
-          val factScan = factScanOf(df)
-          assert(factScan.filteredPartitions.flatten.size == 1,
-            "expected both surviving partition directories to pack into one FilePartition, got " +
-              s"${factScan.filteredPartitions.flatten.size}")
-          val numOutputRows = factScan.metrics("numOutputRows").value
-          assert(numOutputRows == 20,
-            s"expected that one FilePartition to carry both directories' 20 rows, got " +
-              s"$numOutputRows")
-          assert(collect(df.queryExecution.executedPlan) { case f: FilterExec => f }.isEmpty,
-            "expected the partition filter to be fully pushed, leaving no FilterExec")
-        }
       }
     }
   }
@@ -776,6 +734,38 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
                 s"`$condition` with v1 sources '$v1Sources': expected DPP $hasDpp, got\n$optimized")
               checkAnswer(df, expected)
             }
+          }
+        }
+      }
+    }
+  }
+
+  test("DPP and a scalar subquery prune input partitions at runtime for v2 text") {
+    // The text writer takes a single string column, so `fact_text` has its own fixture. Its files
+    // are smaller than `dim`'s, so DPP has no estimated benefit and has to reuse the broadcast.
+    withDppV2Conf {
+      withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
+        withTempDir { dir =>
+          writeFactAndDim(dir)
+          val textPath = new File(dir, "fact_text").getCanonicalPath
+          spark.range(100).selectExpr("CAST(id AS STRING) AS value", "id % 10 AS part")
+            .write.format("text").partitionBy("part").save(textPath)
+          spark.read.format("text").schema("value string, part int").load(textPath)
+            .createOrReplaceTempView("fact_text")
+          Seq(
+            """SELECT /*+ broadcast(d) */ f.value FROM fact_text f JOIN dim d
+              |ON f.part = d.dim_id WHERE d.dim_val = 7""".stripMargin,
+            """SELECT f.value FROM fact_text f
+              |WHERE f.part = (SELECT max(dim_id) FROM dim WHERE dim_val = 7)""".stripMargin
+          ).foreach { query =>
+            val df = sql(query)
+            checkAnswer(df, (0 until 10).map(i => Row((i * 10 + 7).toString)))
+            val factScan = factScanOf(df)
+            assert(factScan.scan.isInstanceOf[TextScan],
+              s"expected a text scan, got ${factScan.scan}")
+            val numOutputRows = factScan.metrics("numOutputRows").value
+            assert(numOutputRows == 10, s"expected the scan to read partition 7 only, got " +
+              s"$numOutputRows rows for:\n$query")
           }
         }
       }

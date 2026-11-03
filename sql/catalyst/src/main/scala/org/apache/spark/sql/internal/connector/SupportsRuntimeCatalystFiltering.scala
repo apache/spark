@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.internal.connector
 
+import scala.annotation.nowarn
+
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.connector.read.{InputPartition, Scan}
@@ -56,19 +59,16 @@ trait SupportsRuntimeCatalystFiltering extends Scan {
    *
    * Any runtime predicate that references only attributes in this set is considered fully pushed
    * and will not be evaluated again after the scan. These attributes must also be returned by
-   * [[filterAttributes]].
+   * [[filterAttributes]]. Each attribute's value must therefore be fixed within every
+   * [[org.apache.spark.sql.connector.read.InputPartition]] the scan returns, since pruning
+   * partitions cannot fully evaluate a predicate on a column that varies within a partition.
    *
-   * Spark relies on the scan alone here, so every row of every [[InputPartition]] the scan
-   * returns must satisfy such a predicate. A scan that prunes previously planned partitions can
-   * guarantee that only for an attribute whose value is fixed within a partition; a scan that
-   * plans its partitions with the predicate applied -- for instance one that selects only the
-   * partition directories matching it -- guarantees it even when the attribute varies within a
-   * returned partition.
-   *
-   * Spark passes these expressions through as they are, leaving both translation and capability
-   * checking to the scan, so evaluating one can fail, for example on an ANSI cast or overflow
-   * error, or on a nested access that the scan matches differently against its partition layout.
-   * Declare an attribute only when the scan can evaluate every predicate over it.
+   * Spark relies on the scan alone here, so the scan must return only partitions it has proven
+   * satisfy such a predicate. Spark passes these expressions through as they are, leaving both
+   * translation and capability checking to the scan, so evaluating one can fail, for example on
+   * an ANSI cast or overflow error, or on a nested access that the scan matches differently
+   * against its partition layout. Declare an attribute only when the scan can evaluate every
+   * predicate over it.
    *
    * Each reference must be a top-level attribute present in [[Scan.readSchema]]. Nested
    * references are rejected, and attributes pruned out of the read schema fail to resolve, when
@@ -109,7 +109,25 @@ trait SupportsRuntimeCatalystFiltering extends Scan {
    * them with empty [[InputPartition]]s, or report only a subset of the original partition
    * values (omitting those with no data). The scan must not report new partition values that
    * were not present in the original partitioning.
+   *
+   * The default calls the deprecated [[filter]] when `expressions` is not empty and then returns
+   * `toBatch.planInputPartitions()`, which is what Spark 4.3 did when a runtime filter survived
+   * screening. Like `filter` in Spark 4.3, successive calls on such a scan are additive.
    */
+  @nowarn("cat=deprecation")
   def planInputPartitionsWithRuntimeFilters(
-      expressions: Array[Expression]): Array[InputPartition]
+      expressions: Array[Expression]): Array[InputPartition] = {
+    if (expressions.nonEmpty) filter(expressions)
+    toBatch.planInputPartitions()
+  }
+
+  /**
+   * Filters this scan with runtime Catalyst expressions, the method Spark 4.3 called. A scan that
+   * implements only this keeps working through the default of
+   * [[planInputPartitionsWithRuntimeFilters]]; a new scan implements that method instead.
+   */
+  @deprecated("Implement planInputPartitionsWithRuntimeFilters instead", "4.4.0")
+  def filter(expressions: Array[Expression]): Unit =
+    throw SparkException.internalError(
+      s"${getClass.getName} must implement planInputPartitionsWithRuntimeFilters")
 }

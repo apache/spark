@@ -25,7 +25,6 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, Expression, Predicate}
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
 import org.apache.spark.sql.connector.read.InputPartition
-import org.apache.spark.sql.execution.InSubqueryExec
 import org.apache.spark.sql.execution.datasources.{FilePartition, PartitionDirectory}
 import org.apache.spark.sql.internal.connector.SupportsRuntimeCatalystFiltering
 
@@ -61,7 +60,8 @@ trait RuntimePartitionPruningFileScan extends FileScan with SupportsRuntimeCatal
 
   /**
    * The read partition columns that `readSchema()` still exposes; a pushed-down aggregate keeps
-   * only the ones it groups by. The scan evaluates a filter over them in full.
+   * only the ones it groups by. None is declared fully pushed, so a scalar subquery filter over
+   * them is evaluated again above the scan.
    */
   override def filterAttributes(): Array[NamedReference] = {
     val readFields = readSchema().fieldNames.map(normalizePartitionName).toSet
@@ -70,14 +70,12 @@ trait RuntimePartitionPruningFileScan extends FileScan with SupportsRuntimeCatal
       .map(FieldReference.column)
   }
 
-  override def fullyPushedFilterAttributes(): Array[NamedReference] = filterAttributes()
-
   /**
    * Keeps the listed partition directories whose values satisfy `expressions`, then splits and
    * packs their files for their own size, as V1 does for `dynamicallySelectedPartitions`.
    *
-   * A DPP filter that fails to evaluate on a directory keeps it, since the join applies the filter
-   * again. Any other filter is fully pushed, so its failure fails the query.
+   * A filter that fails to evaluate on a directory keeps it, since the join or the `FilterExec`
+   * above the scan applies the filter again.
    */
   override def planInputPartitionsWithRuntimeFilters(
       expressions: Array[Expression]): Array[InputPartition] = {
@@ -90,20 +88,21 @@ trait RuntimePartitionPruningFileScan extends FileScan with SupportsRuntimeCatal
         s"read partition columns ${readPartitionSchema.fieldNames.mkString("[", ", ", "]")}, " +
         s"got ${notApplicable.mkString(", ")}")
     }
-    // Directory values follow the table's partition schema, not the read one.
-    val fieldIndex = fileIndex.partitionSchema.fieldNames.zipWithIndex
+    // Directory values follow the table's partition schema, not the read one, and bind as V1
+    // binds them: with that schema's types, nullable.
+    val partitionSchema = fileIndex.partitionSchema
+    val fieldIndex = partitionSchema.fieldNames.zipWithIndex
       .map { case (name, i) => normalizePartitionName(name) -> i }.toMap
     val predicates = expressions.toSeq.map { e =>
-      val bound = e.transform {
+      Predicate.createInterpreted(e.transform {
         case a: Attribute =>
-          BoundReference(fieldIndex(normalizePartitionName(a.name)), a.dataType, a.nullable)
-      }
-      (Predicate.createInterpreted(bound), e.isInstanceOf[InSubqueryExec])
+          val i = fieldIndex(normalizePartitionName(a.name))
+          BoundReference(i, partitionSchema(i).dataType, nullable = true)
+      })
     }
-    // A directory with no file to read is dropped before any filter is evaluated on it.
     val kept = listing.filter { dir =>
-      dir.files.nonEmpty && predicates.forall { case (predicate, keepOnFailure) =>
-        try predicate.eval(dir.values) catch { case NonFatal(_) if keepOnFailure => true }
+      predicates.forall { predicate =>
+        try predicate.eval(dir.values) catch { case NonFatal(_) => true }
       }
     }
     filePartitions(kept).toArray

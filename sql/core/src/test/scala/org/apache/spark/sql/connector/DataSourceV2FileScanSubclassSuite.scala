@@ -69,11 +69,13 @@ class DataSourceV2FileScanSubclassSuite extends QueryTest with SharedSparkSessio
         spark.range(100).selectExpr("id", "id % 10 AS part")
           .write.partitionBy("part").parquet(factPath)
         spark.range(10).selectExpr("id AS dim_id", "id AS dim_val").write.parquet(dimPath)
-        spark.read.format(source.getName).schema("id long, part int").load(factPath)
-          .createOrReplaceTempView("fact")
-        spark.read.schema("dim_id long, dim_val long").parquet(dimPath)
-          .createOrReplaceTempView("dim")
-        f
+        withTempView("fact", "dim") {
+          spark.read.format(source.getName).schema("id long, part int").load(factPath)
+            .createOrReplaceTempView("fact")
+          spark.read.schema("dim_id long, dim_val long").parquet(dimPath)
+            .createOrReplaceTempView("dim")
+          f
+        }
       }
     }
   }

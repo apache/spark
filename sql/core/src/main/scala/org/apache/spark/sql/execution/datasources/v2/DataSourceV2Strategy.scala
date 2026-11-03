@@ -217,10 +217,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
       // Screen with the same test pushdown applies, or a filter dropped here and rejected there
       // would be evaluated nowhere.
-      val fullyPushedRuntimeFilters = scalarSubqueryFilters.filter { f =>
-        f.references.subsetOf(relation.fullyPushedRuntimeFilterAttrs) &&
-          PushDownUtils.isPushablePartitionFilter(f, includeSubquery = true)
-      }
+      val fullyPushedRuntimeFilters = scalarSubqueryFilters.filter(
+        PushDownUtils.isFullyPushedRuntimeFilter(_, relation.fullyPushedRuntimeFilterAttrs))
       // dynamicFilters need no such check: a DynamicPruningSubquery over a non-deterministic
       // filtering plan is itself non-deterministic, so CleanupDynamicPruningFilters has already
       // rewritten it to TrueLiteral by the time we get here.
