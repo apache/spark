@@ -191,10 +191,9 @@ class SparkConnectClientSuite extends ConnectFunSuite {
     assert(client.userId == "abc123")
   }
 
-  // Use 0 to start the server at a random port
-  private def testClientConnection(serverPort: Int = 0)(
-      clientBuilder: Int => SparkConnectClient): Unit = {
-    startDummyServer(serverPort)
+  // Starts the server at a random port and connects the client built for that port to it.
+  private def testClientConnection(clientBuilder: Int => SparkConnectClient): Unit = {
+    startDummyServer(0)
     client = clientBuilder(server.getPort)
     val request = AnalyzePlanRequest
       .newBuilder()
@@ -224,11 +223,11 @@ class SparkConnectClientSuite extends ConnectFunSuite {
   }
 
   test("Test connection") {
-    testClientConnection() { testPort => SparkConnectClient.builder().port(testPort).build() }
+    testClientConnection { testPort => SparkConnectClient.builder().port(testPort).build() }
   }
 
   test("Test connection string") {
-    testClientConnection() { testPort =>
+    testClientConnection { testPort =>
       SparkConnectClient.builder().connectionString(s"sc://localhost:$testPort").build()
     }
   }
@@ -404,7 +403,10 @@ class SparkConnectClientSuite extends ConnectFunSuite {
     TestPackURI(
       "sc://localhost/",
       isCorrect = true,
-      client => testClientConnection(ConnectCommon.CONNECT_GRPC_BINDING_PORT)(_ => client)),
+      client => {
+        assert(client.configuration.host == "localhost")
+        assert(client.configuration.port == ConnectCommon.CONNECT_GRPC_BINDING_PORT)
+      }),
     TestPackURI(
       "sc://localhost:1234/",
       isCorrect = true,

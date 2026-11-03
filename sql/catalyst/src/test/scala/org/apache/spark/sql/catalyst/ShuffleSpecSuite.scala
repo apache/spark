@@ -172,7 +172,7 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
       // A marked layout is never offered through a projection: the projecting half of `keysSatisfy`
       // excludes a marked member, so the keys an offered marked one carries are the keys its claim
       // is over.
-      val marked = source.withLayout(_.copy(mayContainUnknownPartitionKeys = true))
+      val marked = source.withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
       assert(PartitioningCollection.specsForPairing(marked, cd).isEmpty,
         "a marked member is not offered through a projection")
     }
@@ -705,6 +705,65 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("SPARK-59971: canCreatePartitioning: KeyedShuffleSpec requires all the cluster keys") {
+    val a = $"a".int
+    val b = $"b".int
+    val distribution = ClusteredDistribution(Seq(a, b))
+    def spec(expressions: Expression*): KeyedShuffleSpec = KeyedShuffleSpec(
+      KeyedPartitioning(expressions, Seq(InternalRow.fromSeq(expressions.map(_ => 1)))),
+      distribution)
+    val bucketA = TransformExpression(TestBucketFunction, Seq(a), Some(4))
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "true") {
+      // Key order does not matter, and a transform covers the column it is over.
+      Seq(spec(a, b), spec(b, a), spec(bucketA, b)).foreach { s =>
+        assert(s.canCreatePartitioning, s"${s.partitioning.expressions} covers [a, b]")
+      }
+      Seq(spec(a), spec(bucketA)).foreach { s =>
+        assert(!s.canCreatePartitioning, s"${s.partitioning.expressions} does not cover b")
+      }
+      // The same specs are accepted without the requirement, so it is what turns them away.
+      withSQLConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false") {
+        Seq(spec(a), spec(bucketA)).foreach { s =>
+          assert(s.canCreatePartitioning, s"${s.partitioning.expressions} without the requirement")
+        }
+      }
+    }
+  }
+
+  test("SPARK-59971: the V2 co-partition key requirement overrides the general one") {
+    val a = $"a".int
+    val b = $"b".int
+    val distribution = ClusteredDistribution(Seq(a, b))
+    val keyed = KeyedShuffleSpec(KeyedPartitioning(Seq(a), Seq(InternalRow(1))), distribution)
+    val hashed = HashShuffleSpec(HashPartitioning(Seq(a), 4), distribution)
+    val v2Key = SQLConf.V2_BUCKETING_REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key
+
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      // Unset, the V2 config follows the general one.
+      Seq(true, false).foreach { requireAll =>
+        withSQLConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> requireAll.toString) {
+          assert(keyed.canCreatePartitioning == !requireAll, s"requireAll = $requireAll")
+        }
+      }
+      // Set, it decides for a keyed spec only. A hash spec still follows the general config.
+      withSQLConf(
+          SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "true",
+          v2Key -> "false") {
+        assert(keyed.canCreatePartitioning, "the V2 config lifts the requirement")
+        assert(!hashed.canCreatePartitioning, "a hash spec keeps the general requirement")
+      }
+      withSQLConf(
+          SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+          v2Key -> "true") {
+        assert(!keyed.canCreatePartitioning, "the V2 config keeps the requirement")
+        assert(hashed.canCreatePartitioning, "a hash spec follows the general config")
+      }
+    }
+  }
+
   test("SPARK-59120: createShuffleSpec sorts the projected keys at their built-with types") {
     val a = $"a".timestamp
     val b = $"b".int
@@ -754,11 +813,13 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
   test("areKeysCompatible: unknown partition keys only allow a subset of the declared keys") {
     val a = $"a".int
     val distribution = ClusteredDistribution(Seq(a))
+    def routing(hasUnknown: Boolean): Option[UnknownKeysOrigin] =
+      Option.when(hasUnknown)(HASH_ROUTING)
     def keyedSpec(
         keys: Seq[Int],
         hasUnknown: Boolean = false): KeyedShuffleSpec = KeyedShuffleSpec(
       KeyedPartitioning(Seq(a), keys.map(k => InternalRow(k)))
-        .withLayout(_.copy(mayContainUnknownPartitionKeys = hasUnknown)), distribution)
+        .withLayout(_.copy(unknownKeysOrigin = routing(hasUnknown))), distribution)
 
     // A partitioning with unknown partition keys (e.g. a side re-shuffled onto a keyed layout by
     // `KeyedShuffleSpec.createPartitioning`) only guarantees co-location for its declared keys, so
@@ -814,16 +875,18 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
 
     val a = $"a".long
     val distribution = ClusteredDistribution(Seq(a))
+    def routing(hasUnknown: Boolean): Option[UnknownKeysOrigin] =
+      Option.when(hasUnknown)(HASH_ROUTING)
     def bucketSpec(
         keys: Seq[Long],
         hasUnknown: Boolean = false): KeyedShuffleSpec = KeyedShuffleSpec(
       KeyedPartitioning(Seq(bucket(4, a)), keys.map(k => InternalRow(k)))
-        .withLayout(_.copy(mayContainUnknownPartitionKeys = hasUnknown)), distribution)
+        .withLayout(_.copy(unknownKeysOrigin = routing(hasUnknown))), distribution)
     def keyedSpec(
         keys: Seq[Long],
         hasUnknown: Boolean = false): KeyedShuffleSpec = KeyedShuffleSpec(
       KeyedPartitioning(Seq(a), keys.map(k => InternalRow(k)))
-        .withLayout(_.copy(mayContainUnknownPartitionKeys = hasUnknown)), distribution)
+        .withLayout(_.copy(unknownKeysOrigin = routing(hasUnknown))), distribution)
 
     // `isExpressionCompatible` admits an identity-vs-transform pair when compatible transforms
     // are allowed, but then the two sides' partition keys live in different domains: raw values
@@ -1002,11 +1065,52 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("SPARK-60277: concat preserves routing only for one grouped nonempty leg") {
+    val a = $"a".int
+    def kp(keys: Int*): KeyedPartitioning =
+      KeyedPartitioning(Seq(a), keys.map(InternalRow(_)))
+    val marked = kp(1, 2, 3).withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
+    val accurate = kp(4, 5)
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      Seq(Seq(marked, accurate), Seq(accurate, marked)).foreach { legs =>
+        val out = KeyedPartitioning.concat(legs)
+        assert(out.isGrouped && out.mayContainUnknownPartitionKeys && !out.unknownKeysRouted)
+        assert(!KeyedShuffleSpec(out, ClusteredDistribution(Seq(a))).canCreatePartitioning)
+      }
+      val unchanged = KeyedPartitioning.concat(Seq(kp(), marked, kp()))
+      assert(unchanged.isGrouped && unchanged.unknownKeysOrigin.contains(HASH_ROUTING))
+      assert(KeyedShuffleSpec(unchanged, ClusteredDistribution(Seq(a))).canCreatePartitioning)
+    }
+    val repeated = kp(1, 1, 2).withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
+    assert(!KeyedPartitioning.concat(Seq(kp(), repeated)).unknownKeysRouted)
+  }
+
+  test("SPARK-60277: keyed plan strings show bare unknown-key origins") {
+    val base = KeyedPartitioning(Seq($"a".int), Seq(InternalRow(1)))
+    assert(!base.toString.contains("None"))
+    Seq(HASH_ROUTING, ROUTING_LOST).foreach { origin =>
+      val rendered = base.withLayout(_.copy(unknownKeysOrigin = Some(origin))).toString
+      assert(rendered.contains(origin.toString))
+      assert(!rendered.contains("Some("))
+    }
+  }
+
+  test("SPARK-60277: toGrouped gives the routing up") {
+    val a = $"a".int
+    val marked = KeyedPartitioning(Seq(a), Seq(InternalRow(1), InternalRow(1), InternalRow(2)))
+      .withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
+    assert(!marked.isGrouped, "test setup: the duplicate key keeps the layout ungrouped")
+    val grouped = marked.toGrouped
+    assert(grouped.isGrouped && grouped.mayContainUnknownPartitionKeys &&
+      !grouped.unknownKeysRouted,
+      s"dedup and sort move the keys off the routing: $grouped")
+  }
+
   test("createShuffleSpec: a marked narrowing projection yields an unusable spec") {
     val a = $"a".int
     val b = $"b".int
     val marked = KeyedPartitioning(Seq(a, b), Seq(InternalRow(1, 2), InternalRow(3, 4)))
-      .withLayout(_.copy(mayContainUnknownPartitionKeys = true))
+      .withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
     withSQLConf(
         SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
@@ -1027,7 +1131,7 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     // refused would only have re-sorted the keys.
     val marked = KeyedPartitioning(Seq(a),
       Seq(InternalRow(3), InternalRow(4), InternalRow(1), InternalRow(2)))
-      .withLayout(_.copy(mayContainUnknownPartitionKeys = true))
+      .withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
     assert(marked.isGrouped, "test setup: the keys are distinct, so the layout is grouped")
     withSQLConf(
         SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
@@ -1051,7 +1155,7 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
         KeyedPartitioning(
           Seq(TransformExpression(fn, Seq(a), Some(numBuckets))),
           Seq(InternalRow(0L), InternalRow(1L)))
-          .withLayout(_.copy(mayContainUnknownPartitionKeys = hasUnknown)),
+          .withLayout(_.copy(unknownKeysOrigin = Option.when(hasUnknown)(HASH_ROUTING))),
         ClusteredDistribution(Seq(a)))
 
     // `allowCompatibleTransforms` lets a differing-bucket-count pair through

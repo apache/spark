@@ -112,6 +112,28 @@ jobs:
             const isActionRequiredBuildCheck = (cr) =>
               cr.name == 'Build' && cr.conclusion == 'action_required';
 
+            // PRs whose sync failed on this pass: listing their check runs, PATCHing a Build
+            // check, or backfilling one. A failed call skips only that PR (it is retried on the
+            // next pass) instead of aborting the whole scheduled run and leaving every PR later
+            // in the iteration unsynced. The step still fails after the pass, so an error that
+            // keeps recurring (e.g. a 422 for a value the endpoint rejects) stays visible instead
+            // of hiding in the log of a green run. Transient fork-run lookup failures (see
+            // isTransientError) are not recorded: they also skip the PR until a later pass, but
+            // leave the step green.
+            const failedPRs = new Set();
+
+            // PATCH a Build check-run, recording a failure against the PR instead of throwing.
+            const updateCheckRun = async (pr, body) => {
+              try {
+                await github.request('PATCH /repos/{owner}/{repo}/check-runs/{check_run_id}', body);
+              } catch (error) {
+                console.error('    Updating check run ' + body.check_run_id + ' failed; '
+                  + 'will retry next pass');
+                console.error(error);
+                failedPRs.add(pr.number);
+              }
+            };
+
             // Iterate open PRs
             for await (const prs of github.paginate.iterator(endpoint,params)) {
               // Each page
@@ -119,7 +141,15 @@ jobs:
                 console.log('SHA: ' + pr.head.sha)
                 console.log('  Mergeable status: ' + pr.mergeable_state)
                 if (pr.mergeable_state == null || maybeReady.includes(pr.mergeable_state)) {
-                  const checkRuns = await listCheckRuns(pr.head.sha)
+                  let checkRuns
+                  try {
+                    checkRuns = await listCheckRuns(pr.head.sha)
+                  } catch (error) {
+                    console.error('  Listing check runs failed for this PR; will retry next pass')
+                    console.error(error)
+                    failedPRs.add(pr.number)
+                    continue
+                  }
 
                   // Does this SHA already carry an action_required Build check? notify (or an
                   // earlier pass of this updater) writes one when no fork run was found. It is
@@ -179,14 +209,22 @@ jobs:
 
                       // Keep syncing the status of the checks
                       if (run.data.status == 'completed') {
-                        console.log('    Run ' + cr.id + ': set status (' + run.data.status + ') and conclusion (' + run.data.conclusion + ')')
-                        const response = await github.request('PATCH /repos/{owner}/{repo}/check-runs/{check_run_id}', {
+                        // PATCH /check-runs accepts only success | failure | neutral |
+                        // cancelled | timed_out | action_required | skipped, but a workflow_run
+                        // may also conclude startup_failure / stale, or report a null conclusion.
+                        // Those all mean the run produced no test result, so they become failure.
+                        const conclusions = ['success', 'failure', 'neutral', 'cancelled',
+                          'timed_out', 'action_required', 'skipped']
+                        const conclusion = conclusions.includes(run.data.conclusion)
+                          ? run.data.conclusion : 'failure'
+                        console.log('    Run ' + cr.id + ': set status (' + run.data.status + ') and conclusion (' + run.data.conclusion + ' -> ' + conclusion + ')')
+                        await updateCheckRun(pr, {
                           owner: context.repo.owner,
                           repo: context.repo.repo,
                           check_run_id: cr.id,
                           output: cr.output,
                           status: run.data.status,
-                          conclusion: run.data.conclusion,
+                          conclusion: conclusion,
                           details_url: run.data.details_url
                         })
                       } else {
@@ -194,7 +232,7 @@ jobs:
                         // but workflow_run may also report requested / waiting / pending.
                         const status = run.data.status == 'in_progress' ? 'in_progress' : 'queued'
                         console.log('    Run ' + cr.id + ': set status (' + run.data.status + ' -> ' + status + ')')
-                        const response = await github.request('PATCH /repos/{owner}/{repo}/check-runs/{check_run_id}', {
+                        await updateCheckRun(pr, {
                           owner: context.repo.owner,
                           repo: context.repo.repo,
                           check_run_id: cr.id,
@@ -301,9 +339,9 @@ jobs:
                     // even though its output still parses as syncable, so it too is excluded.
                     //
                     // The recheck listing and the create below are wrapped so a failure on one
-                    // PR degrades to "skip this PR, retry next pass" rather than aborting the
-                    // whole scheduled run and starving every PR later in the iteration - the same
-                    // reason the sync loop above guards its calls.
+                    // PR degrades to "skip this PR, retry next pass" (see failedPRs) rather than
+                    // aborting the whole scheduled run and starving every PR later in the
+                    // iteration - the same reason the sync loop above guards its calls.
                     try {
                       const recheck = await listCheckRuns(pr.head.sha)
                       const existingBuild = recheck.some(cr =>
@@ -379,9 +417,15 @@ jobs:
                     } catch (error) {
                       console.error('  Backfill failed for this PR; will retry next pass')
                       console.error(error)
+                      failedPRs.add(pr.number)
                       continue
                     }
                   }
                 }
               }
+            }
+
+            if (failedPRs.size > 0) {
+              core.setFailed('Failed to sync ' + failedPRs.size + ' PR(s), will retry next pass: #'
+                + [...failedPRs].join(', #'))
             }

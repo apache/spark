@@ -380,6 +380,8 @@ object Cast extends QueryErrorsBase {
    * (micro and nanosecond), TIME -> TIMESTAMP_NTZ (whose date fields come from CURRENT_DATE), and
    * both directions of TIME <-> TIMESTAMP_LTZ (the LTZ value is an absolute instant, so extracting
    * its time-of-day and attaching CURRENT_DATE to a TIME both depend on the session time zone).
+   * A cast to STRING is zone-dependent whenever one of those timestamps appears anywhere in the
+   * source type, including under ARRAY/MAP/STRUCT.
    */
   def needsTimeZone(from: DataType, to: DataType): Boolean = (from, to) match {
     case (VariantType, _) => true
@@ -429,6 +431,26 @@ object Cast extends QueryErrorsBase {
           case (fromField, toField) =>
             needsTimeZone(fromField.dataType, toField.dataType)
         }
+    // `castToString` recurses into ARRAY/MAP/STRUCT and formats each LTZ leaf with `zoneId`, while
+    // the complex-to-complex cases above only match a target of the same shape.
+    case (from, _: StringType) => from.existsRecursively(needsTimeZoneToString)
+    case _ => false
+  }
+
+  /**
+   * Whether this type node reads the session time zone when rendered as a string.
+   * ARRAY/MAP/STRUCT nodes return false; the caller uses `existsRecursively` to inspect
+   * nested types, while Python UDTs recursively check their `sqlType`.
+   *
+   * Only the LTZ families carry an absolute instant that has to be localized;
+   * TIMESTAMP_NTZ, DATE and TIME render on a fixed grid, and a nested VARIANT renders
+   * through `VariantVal.toString` at UTC (only a top-level VARIANT reads the zone,
+   * via the `(VariantType, _)` arm).
+   */
+  private def needsTimeZoneToString(dt: DataType): Boolean = dt match {
+    case TimestampType | _: TimestampLTZNanosType => true
+    // A Python UDT renders through its `sqlType`; a Scala UDT through its `stringifyValue`.
+    case pudt: PythonUserDefinedType => pudt.sqlType.existsRecursively(needsTimeZoneToString)
     case _ => false
   }
 

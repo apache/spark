@@ -970,6 +970,23 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       Array(ExpectedContext("test", 12, 15)))
   }
 
+  test("UnresolvedInsert that is not lowered during analysis is an internal error") {
+    // The parser never builds a resolved target here. It cannot be lowered to
+    // InsertIntoStatement, so the temporary INSERT plan would remain after analysis.
+    val insert = UnresolvedInsert(
+      table = testRelation,
+      partitionSpec = Map.empty,
+      userSpecifiedCols = Nil,
+      query = testRelation2,
+      overwrite = false,
+      ifPartitionNotExists = false)
+    checkError(
+      exception = intercept[SparkException](insert.analyze),
+      condition = "INTERNAL_ERROR",
+      parameters = Map(
+        "message" -> "UnresolvedInsert target was not lowered during analysis: LocalRelation"))
+  }
+
   test("check CollectMetrics resolved") {
     val a = testRelation.output.head
     val sum = Sum(a).toAggregateExpression().as("sum")

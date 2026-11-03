@@ -21,7 +21,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.AGGREGATE
+import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE, CASE_WHEN, IF, PLAN_EXPRESSION}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.util.collection.Utils
 
@@ -157,8 +158,8 @@ import org.apache.spark.util.collection.Utils
  *      output = ['key, 'cat1, 'cat2, 'gid, 'max_cond1, 'max_cond2, 'total])
  *     Expand(
  *        projections = [('key, null, null, 0, null, null, cast('value as bigint), 'id),
- *                       ('key, 'cat1, null, 1, 'id > 1, null, null, null),
- *                       ('key, null, 'cat2, 2, null, 'id > 2, null, null)]
+ *                       ('key, if('id > 1, 'cat1, null), null, 1, 'id > 1, null, null, null),
+ *                       ('key, null, if('id > 2, 'cat2, null), 2, null, 'id > 2, null, null)]
  *        output = ['key, 'cat1, 'cat2, 'gid, 'cond1, 'cond2, 'value, 'id])
  *       LocalTableScan [...]
  * }}}
@@ -173,7 +174,13 @@ import org.apache.spark.util.collection.Utils
  *    later on. Groups can by identified by a group id (gid) column added by the expand operator.
  *    If distinct group exists filter clause, the expand will calculate the filter and output it's
  *    result (e.g. cond1) which will be used to calculate the global conditions (e.g. max_cond1)
- *    equivalent to filter clauses.
+ *    equivalent to filter clauses. When rewriteCountDistinctConditional is enabled, the distinct
+ *    key of a group whose aggregates are all filtered, whose filters are deterministic and
+ *    subquery-free, and whose children are safe to evaluate unconditionally, is guarded by the
+ *    union of their filters (e.g. if('id > 1, 'cat1, null)):
+ *    rows matching no predicate project NULL as the key and collapse into a single key of the
+ *    first aggregate, keeping its output cardinality bounded by the un-rewritten plan. A
+ *    child that is not safe to evaluate unconditionally stays the raw key.
  * 2. De-duplicate the distinct paths and aggregate the non-aggregate path. The group by clause of
  *    this aggregate consists of the original group by clause, all the requested distinct columns
  *    and the group id. Both de-duplication of distinct column and the aggregation of the
@@ -223,27 +230,47 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
     case a: Aggregate if mayNeedtoRewrite(a) => rewrite(a)
   }
 
-  def rewrite(a: Aggregate): Aggregate = {
+  /**
+   * Groups distinct aggregate expressions by their unfoldable children. Aggregates that
+   * share a key can share one Expand projection (or the single-distinct physical path).
+   */
+  private def groupDistinctAggs(
+      aggExpressions: Seq[AggregateExpression]): Map[ExpressionSet, Seq[AggregateExpression]] = {
+    aggExpressions.filter(_.isDistinct).groupBy { e =>
+      val unfoldableChildren = ExpressionSet(e.aggregateFunction.children.filter(!_.foldable))
+      if (unfoldableChildren.nonEmpty) {
+        // Only expand the unfoldable children
+        unfoldableChildren
+      } else {
+        // If aggregateFunction's children are all foldable
+        // we must expand at least one of the children (here we take the first child),
+        // or If we don't, we will get the wrong result, for example:
+        // count(distinct 1) will be explained to count(1) after the rewrite function.
+        // Generally, the distinct aggregateFunction should not run
+        // foldable TypeCheck for the first child.
+        ExpressionSet(e.aggregateFunction.children.take(1))
+      }
+    }
+  }
 
+  private def numDistinctAggGroups(a: Aggregate): Int =
+    groupDistinctAggs(collectAggregateExprs(a)).size
+
+  def rewrite(origAgg: Aggregate): Aggregate = {
+    // Keep the normalized form only when it strictly reduces the number of distinct
+    // groups. Otherwise shapes like COUNT(DISTINCT IF) + SUM(DISTINCT IF) (same IF)
+    // or a repeated COUNT(DISTINCT IF) next to COUNT(*) would move from the
+    // single-distinct path onto an Expand with no fan-out win.
+    val normalized = normalizeCountDistinctConditional(origAgg)
+    val a =
+      if (numDistinctAggGroups(normalized) < numDistinctAggGroups(origAgg)) {
+        normalized
+      } else {
+        origAgg
+      }
     val aggExpressions = collectAggregateExprs(a)
     val distinctAggs = aggExpressions.filter(_.isDistinct)
-
-    // Extract distinct aggregate expressions.
-    val distinctAggGroups = aggExpressions.filter(_.isDistinct).groupBy { e =>
-        val unfoldableChildren = ExpressionSet(e.aggregateFunction.children.filter(!_.foldable))
-        if (unfoldableChildren.nonEmpty) {
-          // Only expand the unfoldable children
-          unfoldableChildren
-        } else {
-          // If aggregateFunction's children are all foldable
-          // we must expand at least one of the children (here we take the first child),
-          // or If we don't, we will get the wrong result, for example:
-          // count(distinct 1) will be explained to count(1) after the rewrite function.
-          // Generally, the distinct aggregateFunction should not run
-          // foldable TypeCheck for the first child.
-          ExpressionSet(e.aggregateFunction.children.take(1))
-        }
-    }
+    val distinctAggGroups = groupDistinctAggs(aggExpressions)
 
     // Aggregation strategy can handle queries with a single distinct group without filter clause.
     if (distinctAggGroups.size > 1 || mustRewrite(distinctAggs, a.groupingExpressions)) {
@@ -290,9 +317,44 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
             case e => nullify(e)
           }
 
+          // Union-of-filters guard for the shared distinct key. Without the guard, the
+          // Expand projects the raw child for every row, so every distinct child value
+          // becomes a key of the first aggregate, no matter how few rows the filters
+          // select. Guarding the key with the union of the filters restores the
+          // NULL-collapse: rows matching no predicate project NULL as the key and merge
+          // into one key, keeping the first aggregate's output bounded by the
+          // pre-rewrite plan:
+          //   distinct(child | Or(filters)) + 1 <= sum_i distinct(child | filter_i) + n
+          // The guard must not apply when the group contains an unfiltered aggregate
+          // (it needs the raw child over all rows). The guard re-evaluates each
+          // filter, so every filter must be deterministic and free of subqueries.
+          // IN, EXISTS, and NOT IN are still subquery expressions here:
+          // RewritePredicateSubquery runs later and builds one ExistenceJoin per
+          // occurrence, with no dedup, so copying the filter into the key would
+          // join the input twice. The guard also evaluates the child only when the
+          // union is true, so every child must pass canEvaluateUnconditionally. A
+          // child that fails, such as a division, stays raw and keeps today's
+          // evaluation count and error behavior. The guard shares the
+          // rewriteCountDistinctConditional kill switch so conf=false restores the
+          // pre-feature Expand key (raw child) for user-written FILTER distincts too.
+          val canGuard = SQLConf.get.rewriteCountDistinctConditionalEnabled &&
+            expressions.forall(_.filter.isDefined) &&
+            filters.forall { f =>
+              f.deterministic && !f.containsPattern(PLAN_EXPRESSION)
+            } &&
+            group.forall(ExprUtils.canEvaluateUnconditionally)
+          val guardCondOpt = if (canGuard) {
+            Some(filters.distinctBy(_.canonicalized).reduce(Or))
+          } else {
+            None
+          }
+
           // Expand projection
           val projection = distinctAggChildren.map {
-            case e if group.contains(e) => e
+            case e if group.contains(e) =>
+              guardCondOpt.fold(e) { cond =>
+                If(cond, e, Literal.create(null, e.dataType))
+              }
             case e => nullify(e)
           } :+ id
 
@@ -417,6 +479,104 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
     } else {
       a
     }
+  }
+
+  /**
+   * Canonicalizes COUNT(DISTINCT IF(cond, base, NULL)) and
+   * COUNT(DISTINCT CASE WHEN cond THEN base END) to COUNT(DISTINCT base) FILTER (WHERE cond).
+   * Multiple conditional counts on the same base then share one distinct group, shrinking
+   * Expand fan-out from Nx to 1x. [[rewrite]] only keeps this form when it strictly
+   * reduces the number of distinct groups.
+   *
+   * With the union-of-filters guard enabled, an all-filtered group whose children
+   * pass [[ExprUtils.canEvaluateUnconditionally]] projects `IF(Or(conds), base, NULL)`.
+   * `base` then runs on the union of the member filters: a row where some `cond_i`
+   * holds, which is a row whose original `IF(cond_i, base, NULL)` already evaluated
+   * `base`. The guard does not apply when any filter is non-deterministic, contains
+   * a subquery, or when a child fails that check (a user-written FILTER on a
+   * division, for example). Expand then projects the raw child on every row. A group
+   * that also has an unfiltered aggregate on the same base projects the raw base
+   * for every row too, matching the uncollapsed plan, which already evaluated it
+   * for that unfiltered member.
+   *
+   * A condition that itself contains a subquery is not normalized. Guarding that
+   * group would duplicate the predicate into a second existence join, and collapsing
+   * it without the guard would project the raw base.
+   *
+   * A count whose IF/CASE child is also the distinct child of an aggregate that is
+   * not normalized (e.g. SUM(DISTINCT IF(...)) on the same expression) is skipped:
+   * collapsing it would duplicate that child across the guarded {base} group and
+   * the surviving shared group, inflating the first aggregate's output for rows
+   * matching its condition. Keeping the count in the shared group preserves the
+   * original key sharing.
+   */
+  private def normalizeCountDistinctConditional(a: Aggregate): Aggregate = {
+    if (!SQLConf.get.rewriteCountDistinctConditionalEnabled) return a
+    // Distinct children (canonicalized) of aggregates this method will not
+    // normalize. A conditional count sharing one of these children stays put, so
+    // the shared group survives instead of its keys being carried twice.
+    val protectedChildren = collectAggregateExprs(a)
+      .filter(ae => ae.isDistinct && !isConditionalCount(ae))
+      .flatMap(_.aggregateFunction.children.map(_.canonicalized))
+      .toSet
+    a.transformExpressionsUpWithPruning(
+      _.containsAnyPattern(IF, CASE_WHEN)) {
+      case ae @ AggregateExpression(count: Count, _, true, None, _)
+          if count.children.size == 1 &&
+            !protectedChildren.contains(count.children.head.canonicalized) =>
+        extractCondAndBase(count.children.head) match {
+          case Some((cond, base)) =>
+            ae.copy(
+              aggregateFunction = Count(base),
+              filter = Some(cond))
+          case None => ae
+        }
+    }
+  }
+
+  /**
+   * Whether `ae` is a COUNT(DISTINCT IF/CASE) that
+   * [[normalizeCountDistinctConditional]] can canonicalize to FILTER form.
+   */
+  private def isConditionalCount(ae: AggregateExpression): Boolean = ae match {
+    case AggregateExpression(count: Count, _, true, None, _) if count.children.size == 1 =>
+      extractCondAndBase(count.children.head).isDefined
+    case _ => false
+  }
+
+  /**
+   * Matches IF(cond, base, null), CASE WHEN cond THEN base END, and
+   * CASE WHEN cond THEN base ELSE NULL END (including null wrapped in Cast).
+   * Multi-branch CaseWhen is intentionally not rewritten -- Or-flattening is out of scope.
+   * The base must pass [[ExprUtils.canEvaluateUnconditionally]]. The condition must
+   * not contain a subquery: normalizing one would merge the counts into a group
+   * that cannot be guarded, so Expand would project the raw base. The condition
+   * needs no [[ExprUtils.canEvaluateUnconditionally]] check, because it is already
+   * evaluated unconditionally as the IF/CASE WHEN predicate. A non-deterministic
+   * filter skips the guard and the raw base is projected for every row
+   * (see [[normalizeCountDistinctConditional]]).
+   * Returns None for anything else.
+   */
+  private def extractCondAndBase(expr: Expression): Option[(Expression, Expression)] = {
+    def eligible(cond: Expression, base: Expression): Boolean = {
+      !cond.containsPattern(PLAN_EXPRESSION) && ExprUtils.canEvaluateUnconditionally(base)
+    }
+
+    expr match {
+      case If(cond, base, e) if isNullExpr(e) && eligible(cond, base) =>
+        Some((cond, base))
+      case CaseWhen(Seq((cond, base)), None) if eligible(cond, base) =>
+        Some((cond, base))
+      case CaseWhen(Seq((cond, base)), Some(e)) if isNullExpr(e) && eligible(cond, base) =>
+        Some((cond, base))
+      case _ => None
+    }
+  }
+
+  private def isNullExpr(e: Expression): Boolean = e match {
+    case Literal(null, _) => true
+    case Cast(child, _, _, _) => isNullExpr(child)
+    case _ => false
   }
 
   private def collectAggregateExprs(a: Aggregate): Seq[AggregateExpression] = {

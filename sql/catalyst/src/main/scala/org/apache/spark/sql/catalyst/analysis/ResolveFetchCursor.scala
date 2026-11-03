@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Expression, VariableReference}
 import org.apache.spark.sql.catalyst.plans.logical.{FetchCursor, LogicalPlan, SingleStatement}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -36,21 +35,6 @@ class ResolveFetchCursor(val catalogManager: CatalogManager) extends Rule[Logica
   // and session variables (via tempVariableManager), checking local variables first.
   private val variableResolution =
     new VariableResolution(catalogManager.tempVariableManager, catalogManager)
-
-  /**
-   * Checks for duplicate variable names and throws an exception if found.
-   * Names are normalized when the variables are created.
-   * No need for case insensitive comparison here.
-   */
-  private def checkForDuplicateVariables(variables: Seq[VariableReference]): Unit = {
-    val dups = variables.groupBy(_.identifier).filter(kv => kv._2.length > 1)
-    if (dups.nonEmpty) {
-      throw new AnalysisException(
-        errorClass = "DUPLICATE_ASSIGNMENTS",
-        messageParameters = Map("nameList" ->
-          dups.keys.map(key => toSQLId(key.name())).mkString(", ")))
-    }
-  }
 
   /**
    * Resolves and validates the target variables for a FetchCursor command.
@@ -73,7 +57,7 @@ class ResolveFetchCursor(val catalogManager: CatalogManager) extends Rule[Logica
     }
 
     // Check for duplicates immediately after resolution
-    checkForDuplicateVariables(resolvedVars)
+    VariableAssignmentUtils.checkForDuplicateVariables(resolvedVars)
     resolvedVars
   }
 
