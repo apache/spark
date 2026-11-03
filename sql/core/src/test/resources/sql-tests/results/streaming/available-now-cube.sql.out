@@ -25,7 +25,7 @@ struct<>
 
 -- !query
 CREATE TABLE streaming_sql_golden_cube_source (
-  id INT, category STRING, event_time TIMESTAMP) USING parquet
+  course STRING, year INT, earnings INT, event_time TIMESTAMP) USING parquet
 -- !query schema
 struct<>
 -- !query output
@@ -34,10 +34,12 @@ struct<>
 
 -- !query
 INSERT INTO streaming_sql_golden_cube_source VALUES
-  (1, 'a', TIMESTAMP '2024-01-01 00:00:01'),
-  (1, 'b', TIMESTAMP '2024-01-01 00:00:01'),
-  (2, 'a', TIMESTAMP '2024-01-01 00:00:02'),
-  (99, 'z', TIMESTAMP '2024-01-01 00:00:10')
+  ('dotNET', 2012, 10000, TIMESTAMP '2024-01-01 00:00:01'),
+  ('Java', 2012, 20000, TIMESTAMP '2024-01-01 00:00:01'),
+  ('dotNET', 2012, 5000, TIMESTAMP '2024-01-01 00:00:01'),
+  ('dotNET', 2013, 48000, TIMESTAMP '2024-01-01 00:00:01'),
+  ('Java', 2013, 30000, TIMESTAMP '2024-01-01 00:00:01'),
+  (NULL, NULL, 0, TIMESTAMP '2024-01-01 00:00:10')
 -- !query schema
 struct<>
 -- !query output
@@ -46,7 +48,7 @@ struct<>
 
 -- !query
 CREATE TABLE streaming_sql_golden_cube_sink (
-  event_time TIMESTAMP, id INT, total BIGINT) USING parquet
+  course STRING, total BIGINT) USING parquet
 -- !query schema
 struct<>
 -- !query output
@@ -55,7 +57,7 @@ struct<>
 
 -- !query
 CREATE TABLE streaming_sql_golden_cube_two_columns_sink (
-  event_time TIMESTAMP, id INT, category STRING, total BIGINT) USING parquet
+  course STRING, year INT, total BIGINT) USING parquet
 -- !query schema
 struct<>
 -- !query output
@@ -65,10 +67,10 @@ struct<>
 -- !query
 CREATE FLOW streaming_sql_golden_cube_flow AS
 INSERT INTO streaming_sql_golden_cube_sink BY NAME
-SELECT event_time, id, COUNT(*) AS total
+SELECT course, SUM(earnings) AS total
 FROM STREAM(streaming_sql_golden_cube_source)
   WATERMARK event_time DELAY OF INTERVAL 1 SECOND
-GROUP BY event_time, CUBE(id)
+GROUP BY event_time, CUBE(course)
 -- !query schema
 struct<>
 -- !query output
@@ -78,10 +80,10 @@ struct<>
 -- !query
 CREATE FLOW streaming_sql_golden_cube_two_columns_flow AS
 INSERT INTO streaming_sql_golden_cube_two_columns_sink BY NAME
-SELECT event_time, id, category, COUNT(*) AS total
+SELECT course, year, SUM(earnings) AS total
 FROM STREAM(streaming_sql_golden_cube_source)
   WATERMARK event_time DELAY OF INTERVAL 1 SECOND
-GROUP BY event_time, CUBE(id, category)
+GROUP BY event_time, CUBE(course, year)
 -- !query schema
 struct<>
 -- !query output
@@ -97,14 +99,13 @@ struct<>
 
 
 -- !query
-SELECT * FROM streaming_sql_golden_cube_sink ORDER BY event_time, id
+SELECT * FROM streaming_sql_golden_cube_sink ORDER BY course
 -- !query schema
-struct<event_time:timestamp,id:int,total:bigint>
+struct<course:string,total:bigint>
 -- !query output
-2024-01-01 00:00:01	NULL	2
-2024-01-01 00:00:01	1	2
-2024-01-01 00:00:02	NULL	1
-2024-01-01 00:00:02	2	1
+NULL	113000
+Java	50000
+dotNET	63000
 
 
 -- !query
@@ -117,20 +118,19 @@ struct<>
 
 -- !query
 SELECT * FROM streaming_sql_golden_cube_two_columns_sink
-ORDER BY event_time, id, category
+ORDER BY course, year
 -- !query schema
-struct<event_time:timestamp,id:int,category:string,total:bigint>
+struct<course:string,year:int,total:bigint>
 -- !query output
-2024-01-01 00:00:01	NULL	NULL	2
-2024-01-01 00:00:01	NULL	a	1
-2024-01-01 00:00:01	NULL	b	1
-2024-01-01 00:00:01	1	NULL	2
-2024-01-01 00:00:01	1	a	1
-2024-01-01 00:00:01	1	b	1
-2024-01-01 00:00:02	NULL	NULL	1
-2024-01-01 00:00:02	NULL	a	1
-2024-01-01 00:00:02	2	NULL	1
-2024-01-01 00:00:02	2	a	1
+NULL	NULL	113000
+NULL	2012	35000
+NULL	2013	78000
+Java	NULL	50000
+Java	2012	20000
+Java	2013	30000
+dotNET	NULL	63000
+dotNET	2012	15000
+dotNET	2013	48000
 
 
 -- !query

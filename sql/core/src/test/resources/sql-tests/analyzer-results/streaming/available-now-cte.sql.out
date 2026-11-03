@@ -20,7 +20,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`streaming_sql_golden_cte
 
 
 -- !query
-INSERT INTO streaming_sql_golden_cte_source VALUES (1), (2), (3)
+INSERT INTO streaming_sql_golden_cte_source VALUES (0), (1), (2)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_cte_source, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_cte_source], Append, `spark_catalog`.`default`.`streaming_sql_golden_cte_source`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/streaming_sql_golden_cte_source), [value]
 +- Project [col1#x AS value#x]

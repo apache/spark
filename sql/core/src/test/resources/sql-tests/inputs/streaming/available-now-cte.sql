@@ -2,7 +2,9 @@ DROP TABLE IF EXISTS streaming_sql_golden_cte_source;
 DROP TABLE IF EXISTS streaming_sql_golden_cte_sink;
 
 CREATE TABLE streaming_sql_golden_cte_source (value INT) USING parquet;
-INSERT INTO streaming_sql_golden_cte_source VALUES (1), (2), (3);
+-- Match all three input values from the `t` view in cte.sql. This identity CTE emits the same
+-- three values.
+INSERT INTO streaming_sql_golden_cte_source VALUES (0), (1), (2);
 
 CREATE TABLE streaming_sql_golden_cte_sink (value INT) USING parquet;
 

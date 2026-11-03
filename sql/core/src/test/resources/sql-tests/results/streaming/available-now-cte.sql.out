@@ -24,7 +24,7 @@ struct<>
 
 
 -- !query
-INSERT INTO streaming_sql_golden_cte_source VALUES (1), (2), (3)
+INSERT INTO streaming_sql_golden_cte_source VALUES (0), (1), (2)
 -- !query schema
 struct<>
 -- !query output
@@ -65,9 +65,9 @@ SELECT * FROM streaming_sql_golden_cte_sink ORDER BY value
 -- !query schema
 struct<value:int>
 -- !query output
+0
 1
 2
-3
 
 
 -- !query
