@@ -1,0 +1,40 @@
+================================================================================================
+Grouped decimal aggregates with a wide (precision > 18) buffer
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1017-azure
+AMD EPYC 9V45 96-Core Processor
+sum(decimal(15,2)):                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+ansi=false                                          693            708          18         14.4          69.3       1.0X
+ansi=true                                           690            694           4         14.5          69.0       1.0X
+
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1017-azure
+AMD EPYC 9V45 96-Core Processor
+avg(decimal(15,2)):                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+ansi=false                                          693            701          11         14.4          69.3       1.0X
+ansi=true                                           666            689          19         15.0          66.6       1.0X
+
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1017-azure
+AMD EPYC 9V45 96-Core Processor
+TPC-H q1 sum(p * (1 - d) * (1 + t)):      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+ansi=false                                         1961           2005          43          5.1         196.1       1.0X
+ansi=true                                          2011           2060          41          5.0         201.1       1.0X
+
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1017-azure
+AMD EPYC 9V45 96-Core Processor
+sum(a * b * c), decimal(20,2) inputs:     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+ansi=false                                         1857           1885          25          5.4         185.7       1.0X
+ansi=true                                          1868           1874           9          5.4         186.8       1.0X
+
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1017-azure
+AMD EPYC 9V45 96-Core Processor
+sum(decimal(28,0)), all values >= 10^18:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+ansi=false                                         1415           1428           8          7.1         141.5       1.0X
+ansi=true                                          1405           1438          30          7.1         140.5       1.0X
+
+
