@@ -868,8 +868,8 @@ trait CharVarcharTestSuite extends QueryTest {
 
   test("SPARK-XXXXX: char type comparison: outer reference returned by a LATERAL subquery") {
     withTable("t1", "t2") {
-      sql(s"CREATE TABLE t1(c CHAR(5), s STRING) USING $format")
-      sql("INSERT INTO t1 VALUES ('ab', 'x'), ('cd', 'y')")
+      sql(s"CREATE TABLE t1(c CHAR(5), s STRING, v VARCHAR(3)) USING $format")
+      sql("INSERT INTO t1 VALUES ('ab', 'x', 'v1'), ('cd', 'y', 'v2')")
       sql(s"CREATE TABLE t2(c CHAR(8)) USING $format")
       sql("INSERT INTO t2 VALUES ('ab')")
       Seq(
@@ -885,6 +885,8 @@ trait CharVarcharTestSuite extends QueryTest {
         "SELECT l.c FROM t1, LATERAL (SELECT t1.*) l").foreach { q =>
         checkColType(sql(q).schema.head, CharType(5))
       }
+      checkColType(
+        sql("SELECT l.v FROM t1, LATERAL (SELECT t1.v) l").schema.head, VarcharType(3))
     }
   }
 

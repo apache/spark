@@ -160,6 +160,25 @@ Project [outer_param_pure(x#x) AS outer_param_pure(42)#x]
 
 
 -- !query
+CREATE OR REPLACE TEMPORARY FUNCTION derived_col_vs_paramless(u STRING)
+RETURNS STRING RETURN (SELECT current_user FROM (SELECT u AS current_user))
+-- !query analysis
+CreateSQLFunctionCommand derived_col_vs_paramless, u STRING, STRING, (SELECT current_user FROM (SELECT u AS current_user)), false, true, false, true
+
+
+-- !query
+SELECT derived_col_vs_paramless('x')
+-- !query analysis
+Project [derived_col_vs_paramless(u#x) AS derived_col_vs_paramless(x)#x]
+:  +- Project [current_user#x]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Project [outer(u#x) AS current_user#x]
+:           +- OneRowRelation
++- Project [cast(x as string) AS u#x]
+   +- OneRowRelation
+
+
+-- !query
 DECLARE x = 999
 -- !query analysis
 CreateVariable default(999, sql='999'), false
@@ -273,6 +292,12 @@ DropFunctionCommand outer_vs_param, false, true
 DROP TEMPORARY FUNCTION outer_param_pure
 -- !query analysis
 DropFunctionCommand outer_param_pure, false, true
+
+
+-- !query
+DROP TEMPORARY FUNCTION derived_col_vs_paramless
+-- !query analysis
+DropFunctionCommand derived_col_vs_paramless, false, true
 
 
 -- !query

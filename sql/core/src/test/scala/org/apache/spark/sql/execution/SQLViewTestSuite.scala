@@ -627,6 +627,14 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
     }
   }
 
+  test("SPARK-XXXXX: allow an explicit alias over an outer auto gen alias column") {
+    withView("v") {
+      sql("CREATE VIEW v AS SELECT l.x FROM (SELECT count(*) FROM VALUES (1), (2) t(a)) a, " +
+        "LATERAL (SELECT a.`count(1)` AS x) l")
+      checkAnswer(sql("SELECT * FROM v"), Seq(Row(2)))
+    }
+  }
+
   test("SPARK-35686: error out for alter view with auto gen alias") {
     withView("v") {
       sql("CREATE VIEW v AS SELECT 1 AS a")
