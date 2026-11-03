@@ -145,19 +145,21 @@ case class CheckConstraint(
    * another function or to none, so the constraint would not enforce what this DDL declares.
    */
   def failIfCallsUserDefinedFunction(): Unit = {
-    child.collectFirst {
-      case f: SQLFunctionExpression => (f, toSQLId(f.function.name.nameParts))
-      case f: UserDefinedExpression => (f, toSQLId(Seq(f.name)))
-      case i: StaticInvoke if i.scalarFunction.isDefined =>
-        (i, toSQLId(Seq(i.scalarFunction.get.name)))
-      case i @ Invoke(Literal(f: ScalarFunction[_], _), _, _, _, _, _, _, _) =>
-        (i, toSQLId(Seq(f.name)))
-      case a: V2Aggregator[_, _] => (a, toSQLId(Seq(a.aggrFunc.name)))
-    }.foreach { case (call, functionName) =>
+    userDefinedFunctionCall.foreach { case (call, functionName) =>
       call.failAnalysis(
         errorClass = "USER_DEFINED_FUNCTION_IN_CHECK_CONSTRAINT",
         messageParameters = Map("checkCondition" -> condition, "functionName" -> functionName))
     }
+  }
+
+  private def userDefinedFunctionCall: Option[(Expression, String)] = child.collectFirst {
+    case f: SQLFunctionExpression => (f, toSQLId(f.function.name.nameParts))
+    case f: UserDefinedExpression => (f, toSQLId(Seq(f.name)))
+    case i: StaticInvoke if i.scalarFunction.isDefined =>
+      (i, toSQLId(Seq(i.scalarFunction.get.name)))
+    case i @ Invoke(Literal(f: ScalarFunction[_], _), _, _, _, _, _, _, _) =>
+      (i, toSQLId(Seq(f.name)))
+    case a: V2Aggregator[_, _] => (a, toSQLId(Seq(a.aggrFunc.name)))
   }
 
   /** Fails the analysis if the condition contains a subquery, which `Check` does not allow. */
@@ -172,16 +174,19 @@ case class CheckConstraint(
   override def stringArgs: Iterator[Any] =
     Iterator(child, condition, userProvidedName, tableName, userProvidedCharacteristic)
 
-  // A write parses `condition` again. It cannot bind a parameter marker that the legacy parameter
-  // substitution leaves there, resolves an IDENTIFIER clause in its own session, and does not
-  // resolve a column qualified by the table name the way ALTER TABLE does. By default, it also
-  // resolves a `current_date` or `user` without parentheses to a column of that name added later.
-  // None of them can be told apart after analysis, so the parser sets `keepPredicate` for them,
-  // and for any name with more than one part, since it cannot tell a table qualifier from a struct
-  // column. Such a condition, or one that `resolvesDifferentlyOnWrite`, keeps the predicate built
-  // from the optimized plan, as before.
+  // A write parses `condition` again, with its own settings. It cannot bind a parameter marker
+  // that the legacy parameter substitution leaves there, resolves an IDENTIFIER clause in its own
+  // session, and does not resolve a column qualified by the table name the way ALTER TABLE does.
+  // It also resolves a name such as `current_date` or `user` to the function or to a column,
+  // depending on its case sensitivity, its reserved keywords and the columns of the table at that
+  // time. None of them can be told apart after analysis, so the parser sets `keepPredicate` for
+  // them, and for any name with more than one part, since it cannot tell a table qualifier from a
+  // struct column. Such a condition, or one that `resolvesDifferentlyOnWrite`, keeps the predicate
+  // built from the optimized plan, as before. So does one that calls a user-defined function,
+  // which the analysis rejects next and which is not evaluated here.
   override def markAsAnalyzed(): CheckConstraint = copy(omitPredicate =
-    !keepPredicate && !CheckConstraint.resolvesDifferentlyOnWrite(child) &&
+    !keepPredicate && userDefinedFunctionCall.isEmpty &&
+      !CheckConstraint.resolvesDifferentlyOnWrite(child) &&
       CheckConstraint.readsCurrentContext(child))
 
   // ALTER TABLE builds the constraint from the optimized plan, where the current time, date,

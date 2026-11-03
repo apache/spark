@@ -49,7 +49,7 @@ class ResolveTableConstraints(val catalogManager: CatalogManager) extends Rule[L
                 case c: Check =>
                   val unresolvedExpr = buildCatalystExpression(c)
                   val columnExtractors = mutable.Map[String, Expression]()
-                  buildColumnExtractors(unresolvedExpr, v2Write.query, columnExtractors)
+                  buildColumnExtractors(unresolvedExpr, columnExtractors)
                   CheckInvariant(unresolvedExpr, columnExtractors.toSeq, c.name, c.predicateSql)
               }.toSeq
             } else {
@@ -63,6 +63,16 @@ class ResolveTableConstraints(val catalogManager: CatalogManager) extends Rule[L
         case _ =>
           v2Write
       }
+    // Once the analysis resolves the names of a parsed condition, drop the ones that are not a
+    // value of the row, such as `current_user` without parentheses or a variable, from the values
+    // that the violation message lists.
+    case v2Write: V2WriteCommand if containsCheckInvariant(v2Write.query) =>
+      val query = v2Write.query.transformExpressions {
+        case c: CheckInvariant
+            if c.resolved && c.columnExtractors.exists(_._2.references.isEmpty) =>
+          c.copy(columnExtractors = c.columnExtractors.filter(_._2.references.nonEmpty))
+      }
+      if (query eq v2Write.query) v2Write else v2Write.withNewQuery(query)
   }
 
   private def containsCheckInvariant(plan: LogicalPlan): Boolean = {
@@ -144,22 +154,16 @@ class ResolveTableConstraints(val catalogManager: CatalogManager) extends Rule[L
 
   private def buildColumnExtractors(
       expr: Expression,
-      query: LogicalPlan,
       columnExtractors: mutable.Map[String, Expression]): Unit = {
     expr match {
       case u: UnresolvedExtractValue =>
         // When extracting a value from a Map or Array type, we display only the specific extracted
         // value rather than the entire Map or Array structure for clarity and readability.
         columnExtractors(u.sql) = u
-      // A name that is not a column of the write, such as `current_timestamp` without parentheses
-      // or a variable, is not a value of the row.
       case u: UnresolvedAttribute =>
-        val resolver = catalogManager.v1SessionCatalog.conf.resolver
-        if (withPosition(u)(query.resolve(u.nameParts, resolver)).isDefined) {
-          columnExtractors(u.name) = u
-        }
+        columnExtractors(u.name) = u
       case other =>
-        other.children.foreach(buildColumnExtractors(_, query, columnExtractors))
+        other.children.foreach(buildColumnExtractors(_, columnExtractors))
     }
   }
 }

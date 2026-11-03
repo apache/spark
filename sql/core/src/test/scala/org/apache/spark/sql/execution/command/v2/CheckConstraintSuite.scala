@@ -43,6 +43,18 @@ private object ConstantString extends ScalarFunction[UTF8String] {
   override def produceResult(input: InternalRow): UTF8String = UTF8String.fromString("OK")
 }
 
+// A V2 function that counts its calls.
+private object CountingString extends ScalarFunction[UTF8String] {
+  @volatile var calls = 0
+  override def inputTypes(): Array[DataType] = Array(StringType)
+  override def resultType(): DataType = StringType
+  override def name(): String = "counting_string"
+  override def produceResult(input: InternalRow): UTF8String = {
+    calls += 1
+    input.getUTF8String(0)
+  }
+}
+
 class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLCommandTestUtils {
   override protected def command: String = "Check CONSTRAINT"
 
@@ -439,18 +451,16 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     // The optimizer keeps an expression that fails in a branch that may not run, and so does the
     // check for the current date.
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      Seq(
-        "coalesce(id, CAST(CAST(1/0 AS STRING) AS INT)) > 0",
-        "id < IF(false, hour(CAST(CAST(1/0 AS STRING) AS TIMESTAMP_LTZ(9))), 100)"
-      ).foreach { cond =>
-        withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
-          sql(s"CREATE TABLE $t (id INT, ts TIMESTAMP) $defaultUsing")
-          sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK ($cond)")
-          sql(s"INSERT INTO $t VALUES (1, current_timestamp())")
-          checkAnswer(spark.table(t).select("id"), Seq(Row(1)))
-        }
+      // A cast to DATE, TIMESTAMP or TIMESTAMP_NTZ fails in `SpecialDatetimeValues`, so this one
+      // casts to TIMESTAMP_LTZ(9).
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        sql(s"CREATE TABLE $t (id INT, ts TIMESTAMP) $defaultUsing")
+        sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK " +
+          "(id < IF(false, hour(CAST(CAST(1/0 AS STRING) AS TIMESTAMP_LTZ(9))), 100))")
+        sql(s"INSERT INTO $t VALUES (1, current_timestamp())")
+        checkAnswer(spark.table(t).select("id"), Seq(Row(1)))
       }
-      Seq("INT", "DATE").foreach { to =>
+      Seq("TIMESTAMP", "DATE").foreach { to =>
         withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
           sql(s"CREATE TABLE $t (id INT) $defaultUsing")
           val error = intercept[AnalysisException] {
@@ -468,7 +478,8 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     // added later, so such a condition keeps the predicate built from the optimized plan.
     Seq(
       ("owner STRING", "owner = user", "user STRING", "'', ''"),
-      ("d DATE", "d <= current_date", "current_date DATE", "DATE'2999-01-01', DATE'2999-12-31'")
+      ("d DATE", "d <= current_date", "current_date DATE", "DATE'2999-01-01', DATE'2999-12-31'"),
+      ("d DATE", "d <= `current_date`", "current_date DATE", "DATE'2999-01-01', DATE'2999-12-31'")
     ).foreach { case (column, cond, added, values) =>
       withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
         sql(s"CREATE TABLE $t (id INT, $column) $defaultUsing")
@@ -480,37 +491,68 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         assert(error.getCondition == "CHECK_CONSTRAINT_VIOLATION", cond)
       }
     }
+    // With `spark.sql.ansi.enforceReservedKeywords`, the keyword parses as the function, which a
+    // write with the default settings resolves to such a column.
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT, owner STRING) $defaultUsing")
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
+          SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true") {
+        sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK (owner = user)")
+      }
+      assert(getCheckConstraint(loadTable(nonPartitionCatalog, "ns", "tbl")).predicate() != null)
+      sql(s"ALTER TABLE $t ADD COLUMN user STRING")
+      val error = intercept[SparkRuntimeException](sql(s"INSERT INTO $t VALUES (1, '', '')"))
+      assert(error.getCondition == "CHECK_CONSTRAINT_VIOLATION")
+    }
+    // A column with such a name keeps the predicate too. A write with
+    // `spark.sql.ansi.enforceReservedKeywords` parses `user` as the function, and a case-sensitive
+    // one resolves `USER` to the function, so both would accept a NULL row without it.
+    Seq("user", "`USER`").foreach { name =>
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        sql(s"CREATE TABLE $t (id INT, user STRING, ts TIMESTAMP) $defaultUsing")
+        sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK ($name IS NOT NULL AND ts <= now())")
+        assert(getCheckConstraint(loadTable(nonPartitionCatalog, "ns", "tbl")).predicate() != null,
+          name)
+      }
+    }
   }
 
-  test("SPARK-60032: Check constraint violation lists only the columns it reads") {
-    // `current_user` without parentheses parses as a name, which a write that parses
-    // `predicateSql` resolves to the function, not to a column.
-    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
-      sql(s"CREATE TABLE $t (id INT, owner STRING, " +
-        s"CONSTRAINT c1 CHECK (owner = current_user)) $defaultUsing")
-      checkError(
-        exception = intercept[SparkRuntimeException] {
-          sql(s"INSERT INTO $t VALUES (1, 'nobody')")
-        },
-        condition = "CHECK_CONSTRAINT_VIOLATION",
-        sqlState = "23001",
-        parameters = Map(
-          "constraintName" -> "c1",
-          "expression" -> "owner = current_user",
-          "values" -> " - owner : nobody"))
+  test("SPARK-60032: Check constraint added by ALTER TABLE does not call a user-defined function") {
+    // `HandleSpecialCommand` runs before `CheckAnalysis` rejects such a condition, so it must not
+    // evaluate the function.
+    withV2Function("strlen", StrLen(CountingString)) {
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        sql(s"CREATE TABLE $t (id INT, ts TIMESTAMP) $defaultUsing")
+        CountingString.calls = 0
+        val error = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK " +
+            s"(ts <= CAST(fun_$catalog.ns.strlen('12:00:00') AS TIMESTAMP))")
+        }
+        assert(error.getCondition == "USER_DEFINED_FUNCTION_IN_CHECK_CONSTRAINT")
+        assert(CountingString.calls == 0)
+      }
     }
-    // An error while looking up a name points at the name in the condition.
-    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
-      sql(s"CREATE TABLE $t (id INT, s STRUCT<j: STRING, k: INT>, " +
-        s"CONSTRAINT c1 CHECK (nullif(s.j, 'x') IS NOT NULL)) $defaultUsing")
-      sql(s"ALTER TABLE $t DROP COLUMN s.j")
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(s"INSERT INTO $t VALUES (1, named_struct('k', 1))")
-        },
-        condition = "FIELD_NOT_FOUND",
-        parameters = Map("fieldName" -> "`j`", "fields" -> "`k`"),
-        context = ExpectedContext(fragment = "s.j", start = 7, stop = 9))
+  }
+
+  test("SPARK-60032: Check constraint violation lists only the values of the row") {
+    // A write that parses `predicateSql` resolves `current_user` without parentheses and a
+    // variable to values that are not columns of the row.
+    withSessionVariable("v") {
+      sql("DECLARE VARIABLE v STRING DEFAULT 'x'")
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        sql(s"CREATE TABLE $t (id INT, owner STRING, " +
+          s"CONSTRAINT c1 CHECK (owner = current_user OR owner = v)) $defaultUsing")
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            sql(s"INSERT INTO $t VALUES (1, 'nobody')")
+          },
+          condition = "CHECK_CONSTRAINT_VIOLATION",
+          sqlState = "23001",
+          parameters = Map(
+            "constraintName" -> "c1",
+            "expression" -> "owner = current_user OR owner = v",
+            "values" -> " - owner : nobody"))
+      }
     }
   }
 

@@ -7194,13 +7194,22 @@ class AstBuilder extends DataTypeAstBuilder
         child = child,
         condition = condition,
         keepPredicate = child.containsAnyPattern(PARAMETER, UNRESOLVED_IDENTIFIER) ||
+          hasCurrentLikeKeyword(ctx.booleanExpression()) ||
           child.exists {
             case u: UnresolvedAttribute =>
-              u.nameParts.length > 1 || LiteralFunctionResolution.resolve(u.nameParts).isDefined
+              u.nameParts.length > 1 || LiteralFunctionResolution.isLiteralFunction(u.nameParts)
             case _ => false
           })
     }
 
+  /**
+   * Whether `tree` has a keyword such as `current_date` or `user` without parentheses, which parses
+   * as a column name or as the function depending on `spark.sql.ansi.enforceReservedKeywords`.
+   */
+  private def hasCurrentLikeKeyword(tree: ParseTree): Boolean = tree match {
+    case c: CurrentLikeContext => c.name.getType != SqlBaseParser.CURRENT_PATH
+    case _ => (0 until tree.getChildCount).exists(i => hasCurrentLikeKeyword(tree.getChild(i)))
+  }
 
   override def visitUniqueConstraint(ctx: UniqueConstraintContext): TableConstraint =
     withOrigin(ctx) {
