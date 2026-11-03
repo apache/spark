@@ -234,14 +234,14 @@ The connection may also be programmatically created using _SparkSession#builder_
 <div data-lang="python"  markdown="1">
 ```python
 from pyspark.sql import SparkSession
-spark = SparkSession.builder.remote("sc://localhost:443/;token=ABCDEFG").getOrCreate()
+spark = SparkSession.builder.remote("sc://myhost.com:443/;token=ABCDEFG").getOrCreate()
 ```
 </div>
 
 <div data-lang="scala"  markdown="1">
 ```scala
 @ import org.apache.spark.sql.SparkSession
-@ val spark = SparkSession.builder.remote("sc://localhost:443/;token=ABCDEFG").getOrCreate()
+@ val spark = SparkSession.builder.remote("sc://myhost.com:443/;token=ABCDEFG").getOrCreate()
 ```
 </div>
 </div>
@@ -418,9 +418,22 @@ For extending Spark Connect with custom server-side functionality, see
 
 ## Switching between Spark Connect and Spark Classic
 
-Spark provides the API mode, `spark.api.mode` configuration, enabling Spark Classic applications
-to switch to Spark Connect. Depending on the value of `spark.api.mode`, the application
-can run in either Spark Classic or Spark Connect mode. Here is an example:
+There are three ways to get a Spark Connect session, depending on where the server runs:
+
+- An `sc://` connection string, given as `spark.remote`, `--remote` or the `remote()` argument,
+  connects to a server that is already running: a shared cluster's Spark Connect endpoint, or the
+  [persistent local server](#faster-local-iteration-with-a-persistent-connect-server) during
+  development.
+- A `local[...]` or `local-cluster[...]` value of `spark.remote` or `--remote` starts a local
+  Spark Connect server for the application and connects to it. Use it for local development and
+  tests.
+- `--master ...` together with `spark.api.mode=connect` starts a Spark Connect server in the
+  application's driver, running on that master, and runs the application against it. It accepts
+  the same master URLs as Spark Classic, such as `spark://`, so an existing Spark Classic
+  application switches to Spark Connect without code changes.
+
+Depending on the value of `spark.api.mode`, the application runs in either Spark Classic or Spark
+Connect mode. Set it in the session builder:
 
 ```python
 from pyspark.sql import SparkSession
@@ -428,20 +441,11 @@ from pyspark.sql import SparkSession
 SparkSession.builder.config("spark.api.mode", "connect").master("...").getOrCreate()
 ```
 
-You can also apply this configuration to both Scala and PySpark applications when submitting yours:
+or when submitting a Scala or PySpark application:
 
 ```bash
 spark-submit --master "..." --conf spark.api.mode=connect
 ```
-
-Additionally, Spark Connect offers convenient options for local testing. By setting `spark.remote`
-to `local[...]` or `local-cluster[...]`, you can start a local Spark Connect server and access a Spark
-Connect session.
-
-This is similar to using `--conf spark.api.mode=connect` with `--master ...`. However, a `local*`
-value of `spark.remote` or `--remote` starts a local server and an `sc://` value connects to an
-existing server, while `--conf spark.api.mode=connect` with `--master ...` supports additional cluster URLs, such as spark://, for broader compatibility with
-Spark Classic.
 
 ## Client application authentication
 
