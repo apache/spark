@@ -31,6 +31,7 @@ import com.esotericsoftware.kryo.io.Output;
 import org.apache.spark.SparkIllegalArgumentException;
 import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
 import org.apache.spark.sql.catalyst.types.*;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
@@ -295,7 +296,8 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
       } else if (value.isCompact()) {
         // Write the unscaled Long directly, in the same bytes BigInteger.toByteArray() returns.
         final int numBytes =
-          writeCompactUnscaledBytes(baseObject, baseOffset + cursor, value.toUnscaledLong());
+          UnsafeRowWriter.writeCompactUnscaledBytes(
+            baseObject, baseOffset + cursor, value.toUnscaledLong());
         setLong(ordinal, (cursor << 32) | ((long) numBytes));
       } else {
 
@@ -309,23 +311,6 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
         setLong(ordinal, (cursor << 32) | ((long) bytes.length));
       }
     }
-  }
-
-  /**
-   * Writes `unscaled` as the minimal big-endian two's-complement bytes that
-   * `BigInteger.valueOf(unscaled).toByteArray()` would return, which is how decimals with
-   * precision > 18 are encoded, and returns the number of bytes written (1 to 8).
-   */
-  public static int writeCompactUnscaledBytes(Object baseObject, long address, long unscaled) {
-    // BigInteger's bitLength() of `unscaled`, plus one sign bit, rounded up to whole bytes.
-    final int bitLength = 64 - Long.numberOfLeadingZeros(unscaled < 0 ? ~unscaled : unscaled);
-    final int numBytes = (bitLength >> 3) + 1;
-    long remaining = unscaled;
-    for (int i = numBytes - 1; i >= 0; i--) {
-      Platform.putByte(baseObject, address + i, (byte) remaining);
-      remaining >>= 8;
-    }
-    return numBytes;
   }
 
   @Override
