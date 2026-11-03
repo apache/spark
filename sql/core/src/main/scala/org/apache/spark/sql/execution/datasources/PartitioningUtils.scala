@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.lang.{Double => JDouble, Long => JLong}
+import java.lang.{Byte => JByte, Double => JDouble, Long => JLong, Short => JShort}
 import java.math.{BigDecimal => JBigDecimal}
 import java.time.ZoneId
 import java.util.Locale
@@ -582,13 +582,15 @@ object PartitioningUtils extends SQLConfHelper {
     case _ if value == DEFAULT_PARTITION_NAME => null
     case NullType => null
     case _: StringType => UTF8String.fromString(unescapePathName(value))
-    case ByteType => Integer.parseInt(value).toByte
-    case ShortType => Integer.parseInt(value).toShort
+    case ByteType => JByte.parseByte(value)
+    case ShortType => JShort.parseShort(value)
     case IntegerType => Integer.parseInt(value)
     case LongType => JLong.parseLong(value)
     case FloatType => JDouble.parseDouble(value).toFloat
     case DoubleType => JDouble.parseDouble(value)
-    case _: DecimalType => Literal(new JBigDecimal(value)).value
+    // Cast in ANSI mode to fail on a value that the type cannot hold in any session, so that
+    // `spark.sql.sources.validatePartitionColumns` alone decides between an error and null.
+    case dt: DecimalType => Cast(Literal(value), dt, ansiEnabled = true).eval()
     case DateType =>
       Cast(Literal(value), DateType, Some(zoneId.getId)).eval()
     case tt: TimeType => Cast(Literal(unescapePathName(value)), tt).eval()

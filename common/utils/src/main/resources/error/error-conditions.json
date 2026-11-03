@@ -11,6 +11,12 @@
     ],
     "sqlState" : "42845"
   },
+  "AGGREGATE_OR_WINDOW_FUNCTION_IN_CHECK_CONSTRAINT" : {
+    "message" : [
+      "The check constraint `<checkCondition>` calls an aggregate or window function. Check constraints apply to each row and cannot call these functions."
+    ],
+    "sqlState" : "42621"
+  },
   "AGGREGATE_OUT_OF_MEMORY" : {
     "message" : [
       "No enough memory for aggregation"
@@ -634,6 +640,12 @@
       "The provided URL cannot be decoded: <url>. Please ensure that the URL is properly formatted and try again."
     ],
     "sqlState" : "22546"
+  },
+  "CANNOT_INSTANTIATE_FUNCTION_CLASS" : {
+    "message" : [
+      "Cannot instantiate class <className> when registering the function <functionName>: <msg>. Please make sure the class has a public no-arg constructor that succeeds."
+    ],
+    "sqlState" : "46103"
   },
   "CANNOT_INSTANTIATE_HIVE_FUNCTION" : {
     "message" : [

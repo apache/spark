@@ -20,7 +20,6 @@ import java.util.UUID
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{AnalysisErrorAt, SQLFunctionExpression, TypeCheckResult, UnresolvedException}
-import org.apache.spark.sql.catalyst.expressions.aggregate.V2Aggregator
 import org.apache.spark.sql.catalyst.expressions.codegen.{Block, CodegenContext, ExprCode, FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
@@ -159,7 +158,6 @@ case class CheckConstraint(
       (i, toSQLId(Seq(i.scalarFunction.get.name)))
     case i @ Invoke(Literal(f: ScalarFunction[_], _), _, _, _, _, _, _, _) =>
       (i, toSQLId(Seq(f.name)))
-    case a: V2Aggregator[_, _] => (a, toSQLId(Seq(a.aggrFunc.name)))
   }
 
   /** Fails the analysis if the condition contains a subquery, which `Check` does not allow. */

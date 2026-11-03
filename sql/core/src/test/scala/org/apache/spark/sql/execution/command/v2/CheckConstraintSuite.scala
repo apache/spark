@@ -21,7 +21,7 @@ import test.org.apache.spark.sql.connector.catalog.functions.JavaAverage
 import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen.JavaStrLenStaticMagic
 
 import org.apache.spark.SparkRuntimeException
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, MapTypeBufferAgg, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.catalyst.util.AttributeNameParser
@@ -31,6 +31,7 @@ import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryCatalog, Tabl
 import org.apache.spark.sql.connector.catalog.constraints.{Check, Constraint}
 import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.execution.command.DDLCommandTestUtils
+import org.apache.spark.sql.functions.udaf
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -620,11 +621,40 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     }
   }
 
-  test("SPARK-60777: Check constraint cannot call a V2 aggregate function") {
+  test("SPARK-60800: Check constraint cannot call an aggregate or window function") {
+    def checkRejected(call: String): Unit = {
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        sql(s"CREATE TABLE $t (id INT) $defaultUsing")
+        val cond = s"$call > 0"
+        Seq(
+          s"CREATE TABLE ${t}_2 (id INT, CONSTRAINT c1 CHECK ($cond)) $defaultUsing",
+          s"REPLACE TABLE $t (id INT, CONSTRAINT c1 CHECK ($cond)) $defaultUsing"
+        ).foreach { query =>
+          checkError(
+            exception = intercept[AnalysisException](sql(query)),
+            condition = "AGGREGATE_OR_WINDOW_FUNCTION_IN_CHECK_CONSTRAINT",
+            sqlState = "42621",
+            parameters = Map("checkCondition" -> cond),
+            context = ExpectedContext(fragment = call))
+        }
+      }
+    }
+
+    checkRejected("max(id)")
+    // These are aggregate functions, but not an `AggregateExpression`.
+    checkRejected("grouping(id)")
+    checkRejected("grouping_id()")
+    checkRejected("row_number() OVER (ORDER BY id)")
+    // `row_number()` has no `WindowExpression`, and `abs(id)` is not a `WindowFunction`.
+    checkRejected("row_number()")
+    checkRejected("abs(id) OVER ()")
+    // A user-defined aggregate function fails in the same way as a built-in one.
+    withUserDefinedFunction("tmp_agg" -> true) {
+      spark.udf.register("tmp_agg", udaf(MapTypeBufferAgg))
+      checkRejected("tmp_agg(id)")
+    }
     withV2Function("avg", new JavaAverage) {
-      // ALTER TABLE keeps failing with the error for an aggregate in a filter.
-      val call = s"fun_$catalog.ns.avg(CAST(id AS DOUBLE))"
-      checkUserDefinedFunctionRejected(s"$call > 0", call, "`davg`", inAlter = false)
+      checkRejected(s"fun_$catalog.ns.avg(CAST(id AS DOUBLE))")
     }
   }
 

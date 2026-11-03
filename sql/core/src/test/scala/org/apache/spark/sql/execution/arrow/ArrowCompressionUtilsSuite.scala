@@ -25,9 +25,9 @@ import scala.jdk.CollectionConverters._
 import scala.util.Random
 
 import org.apache.arrow.compression.ZstdCompressionCodec
-import org.apache.arrow.memory.{ArrowBuf, BufferAllocator, RootAllocator}
+import org.apache.arrow.memory.{ArrowBuf, BufferAllocator, OutOfMemoryException, RootAllocator}
 import org.apache.arrow.vector.{VarCharVector, VectorSchemaRoot, VectorUnloader}
-import org.apache.arrow.vector.compression.NoCompressionCodec
+import org.apache.arrow.vector.compression.{CompressionUtil, NoCompressionCodec}
 import org.apache.arrow.vector.ipc.WriteChannel
 import org.apache.arrow.vector.ipc.message.MessageSerializer
 
@@ -368,6 +368,51 @@ class ArrowCompressionUtilsSuite extends SparkFunSuite {
   test("SPARK-60779: zstd codec keeps its output buffer when there is no memory to shrink it") {
     withZstdOutput(compressibleInput, memoryLimit = 2 * allocatedSize) { (_, output) =>
       assert(output.capacity() === allocatedSize)
+    }
+  }
+
+  test("SPARK-60816: empty buffers are written with the uncompressed length prefix") {
+    // For an empty buffer, arrow-java up to 19.0 writes a `0` length prefix and no compressed data,
+    // which Arrow C++ (PyArrow) fails to decompress for LZ4. Readers already see the `-1` prefix
+    // for buffers that do not compress.
+    val allocator =
+      ArrowUtils.rootAllocator.newChildAllocator(this.getClass.getSimpleName, 0, Long.MaxValue)
+    Utils.tryWithSafeFinally {
+      Seq("lz4", "zstd").foreach { codecName =>
+        val codec = ArrowCompressionUtils.createCompressionCodec(codecName, 3)
+        // A newly allocated buffer has writerIndex 0, so `compress` sees an empty buffer.
+        val compressed = codec.compress(allocator, allocator.buffer(16))
+        try {
+          assert(compressed.writerIndex() === CompressionUtil.SIZE_OF_UNCOMPRESSED_LENGTH)
+          assert(compressed.getLong(0) === CompressionUtil.NO_COMPRESSION_LENGTH, codecName)
+        } finally {
+          compressed.close()
+        }
+      }
+    } {
+      // Fails if `compress` leaked its input buffer.
+      allocator.close()
+    }
+  }
+
+  test("SPARK-60816: unloader releases an empty buffer once if its prefix allocation fails") {
+    val arrowSchema = ArrowUtils.toArrowSchema(
+      StructType(Seq(StructField("c", LongType))), "UTC", true, false)
+    val allocator =
+      ArrowUtils.rootAllocator.newChildAllocator(this.getClass.getSimpleName, 0, Long.MaxValue)
+    val root = VectorSchemaRoot.create(arrowSchema, allocator)
+    val codec = ArrowCompressionUtils.createCompressionCodec("lz4", 3)
+    val unloader = ArrowCompressionUtils.createVectorUnloader(root, codec)
+    Utils.tryWithSafeFinally {
+      root.allocateNew()
+      // With no rows the first buffer is empty, so its length prefix is the first allocation.
+      allocator.setLimit(0)
+      intercept[OutOfMemoryException](unloader.getRecordBatch())
+    } {
+      // Closing the vector fails if the buffer was released twice, and closing the allocator fails
+      // if it was not released.
+      root.close()
+      allocator.close()
     }
   }
 }
