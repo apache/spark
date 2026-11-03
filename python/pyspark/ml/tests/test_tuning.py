@@ -154,9 +154,12 @@ class TuningTestsMixin:
 
         checkSubModels(model.subModels)
 
-        for i in range(numFolds):
-            for j in range(len(grid)):
-                self.assertEqual(model.subModels[i][j].uid, model.subModels[i][j].uid)
+        def checkSubModelsEqual(subModels1, subModels2):
+            for i in range(numFolds):
+                for j in range(len(grid)):
+                    m1, m2 = subModels1[i][j], subModels2[i][j]
+                    self.assertEqual(m1.coefficients, m2.coefficients)
+                    self.assertEqual(m1.intercept, m2.intercept)
 
         # save & load
         with tempfile.TemporaryDirectory(prefix="cv") as d:
@@ -169,6 +172,7 @@ class TuningTestsMixin:
             model.write().overwrite().save(d)
             model2 = CrossValidatorModel.load(d)
             checkSubModels(model2.subModels)
+            checkSubModelsEqual(model.subModels, model2.subModels)
             self.assertEqual(str(model), str(model2))
             self.assertEqual(str(model.getEstimator()), str(model2.getEstimator()))
             self.assertEqual(str(model.getEvaluator()), str(model2.getEvaluator()))

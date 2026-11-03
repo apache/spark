@@ -216,6 +216,17 @@ tags = Module(
     ],
 )
 
+config = Module(
+    name="config",
+    dependencies=[tags],
+    source_file_regexes=[
+        "common/config/",
+    ],
+    sbt_test_goals=[
+        "config/test",
+    ],
+)
+
 utils_java = Module(
     name="utils-java",
     dependencies=[tags],
@@ -229,7 +240,7 @@ utils_java = Module(
 
 utils = Module(
     name="utils",
-    dependencies=[tags, utils_java],
+    dependencies=[tags, utils_java, config],
     source_file_regexes=[
         "common/utils/",
     ],
@@ -360,7 +371,7 @@ catalyst = Module(
 
 sql = Module(
     name="sql",
-    dependencies=[catalyst],
+    dependencies=[catalyst, udf_worker],
     source_file_regexes=[
         "sql/core/",
         "python/pyspark/sql/worker/",  # analyze_udtf is invoked and tested in JVM
@@ -585,10 +596,22 @@ examples = Module(
     ],
 )
 
+# Shared Python test environment.
+pyspark_base = Module(
+    name="pyspark-base",
+    dependencies=[],
+    source_file_regexes=[
+        "dev/spark-test-image/python-.*/",
+        "pyproject.toml",
+    ],
+)
+
 pyspark_core = Module(
     name="pyspark-core",
-    dependencies=[core],
-    source_file_regexes=["python/(?!pyspark/(ml|mllib|sql|streaming|pandas|resource|testing))"],
+    dependencies=[core, pyspark_base],
+    source_file_regexes=[
+        "python/(?!pyspark/(ml|mllib|sql|streaming|pandas|resource|testing|inprocess))"
+    ],
     python_test_goals=[
         # doctests
         "pyspark.conf",
@@ -631,7 +654,7 @@ pyspark_core = Module(
 pyspark_sql = Module(
     name="pyspark-sql",
     dependencies=[pyspark_core, hive, avro, protobuf],
-    source_file_regexes=["python/pyspark/sql"],
+    source_file_regexes=["python/pyspark/sql", "python/pyspark/inprocess"],
     python_test_goals=[
         # doctests
         "pyspark.sql.types",
@@ -665,7 +688,11 @@ pyspark_sql = Module(
         # unittests
         "pyspark.eval_handlers.tests.test_arrow_eval_type_handlers",
         "pyspark.eval_handlers.tests.test_base_eval_type_handlers",
+        "pyspark.eval_handlers.tests.test_elementwise_eval_type_handlers",
         "pyspark.eval_handlers.tests.test_pandas_eval_type_handlers",
+        "pyspark.eval_handlers.tests.test_stateful_eval_type_handlers",
+        "pyspark.eval_handlers.tests.test_udtf_eval_type_handlers",
+        "pyspark.eval_handlers.tests.test_vanilla_eval_type_handlers",
         "pyspark.sql.tests.test_artifact",
         "pyspark.sql.tests.test_catalog",
         "pyspark.sql.tests.test_column",
@@ -688,6 +715,8 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_group",
         "pyspark.sql.tests.test_sql",
         "pyspark.sql.tests.test_job_cancellation",
+        "pyspark.sql.tests.test_inprocess_udf",
+        "pyspark.sql.tests.test_inprocess_runtime",
         "pyspark.sql.tests.arrow.test_arrow",
         "pyspark.sql.tests.arrow.test_arrow_map",
         "pyspark.sql.tests.arrow.test_arrow_cogrouped_map",
@@ -929,7 +958,7 @@ pyspark_ml = Module(
 
 pyspark_periodic = Module(
     name="pyspark-periodic",
-    dependencies=[],
+    dependencies=[pyspark_base],
     source_file_regexes=[
         # This module contains tests that are not sensitive to pyspark code changes.
         # We run these on scheduled CIs and pre-merge CIs, not post-merge CIs.
@@ -1727,7 +1756,7 @@ pyspark_errors = Module(
 
 pyspark_logger = Module(
     name="pyspark-logger",
-    dependencies=[],
+    dependencies=[pyspark_base],
     source_file_regexes=["python/pyspark/logger"],
     python_test_goals=[
         # doctests
@@ -1853,6 +1882,38 @@ root = Module(
     should_run_r_tests=True,
     should_run_build_tests=True,
 )
+
+
+def transitive_dependencies(module: Module) -> set[Module]:
+    """
+    Return all modules that `module` depends on, directly or transitively.
+    The module itself is not included.
+
+    `utils-java` is an indirect dependency of `unsafe`:
+
+    >>> sorted(dependency.name for dependency in transitive_dependencies(unsafe))
+    ['config', 'tags', 'utils', 'utils-java']
+
+    Every `pyspark-*` module must depend on `pyspark-base`:
+
+    >>> [
+    ...     module.name
+    ...     for module in all_modules
+    ...     if module.name.startswith("pyspark-")
+    ...     and module is not pyspark_base
+    ...     and pyspark_base not in transitive_dependencies(module)
+    ... ]
+    []
+    """
+    seen = set()
+    pending = list(module.dependencies)
+    while pending:
+        dependency = pending.pop()
+        if dependency in seen or dependency is module:
+            continue
+        seen.add(dependency)
+        pending.extend(dependency.dependencies)
+    return seen
 
 
 def _test():

@@ -52,7 +52,6 @@ private[spark] class SparkAsyncProfiler(conf: SparkConf, executorId: String) ext
 
   private val startcmd = s"start,$profilerOptions,file=$profilerLocalDir/$profileFile"
   private val stopcmd = s"stop,$profilerOptions,file=$profilerLocalDir/$profileFile"
-  private val dumpcmd = s"dump,$profilerOptions,file=$profilerLocalDir/$profileFile"
   private val resumecmd = s"resume,$profilerOptions,file=$profilerLocalDir/$profileFile"
 
   private val PROFILER_FOLDER_PERMISSIONS = new FsPermission(Integer.parseInt("770", 8).toShort)
@@ -172,11 +171,10 @@ private[spark] class SparkAsyncProfiler(conf: SparkConf, executorId: String) ext
     }
 
     try {
-      // stop (pause) the profiler, dump the results and then resume. This is not ideal as we miss
-      // the events while the file is being dumped, but that is the only way to make sure that
+      // stop (pause) the profiler and then resume. This is not ideal as we miss
+      // the events while the profiler is stopped, but that is the only way to make sure that
       // the chunk of data we are copying to dfs is in a consistent state.
       profiler.get.execute(stopcmd)
-      profiler.get.execute(dumpcmd)
       var remaining = inputStream.available()
       if (!lastChunk) {
         profiler.get.execute(resumecmd)

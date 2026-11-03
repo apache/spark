@@ -89,15 +89,12 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
 
   /**
    * The Parquet reader {@link #reader} wraps, or null when a {@link ParquetRowGroupReader} was
-   * handed in rather than built here, which no file reader stands behind. A subclass that needs an
-   * API a row-group reader does not describe reads it here. The wrapper owns it and closes it.
+   * handed in. The wrapper owns it and closes it.
    */
   protected ParquetFileReader fileReader;
 
   /**
    * The options {@link #fileReader} was built with, or null when a row-group reader was handed in.
-   * A subclass that has to agree with that reader about a setting reads it here rather than parsing
-   * the conf a second time.
    */
   protected ParquetReadOptions readOptions;
 

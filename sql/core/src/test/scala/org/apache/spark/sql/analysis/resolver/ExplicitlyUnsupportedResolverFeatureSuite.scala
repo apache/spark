@@ -73,18 +73,18 @@ class ExplicitlyUnsupportedResolverFeatureSuite extends SharedSparkSession {
     )
   }
 
-  test("ASOF JOIN MATCH_CONDITION operands requiring element-wise ordering") {
+  test("ASOF JOIN MATCH_CONDITION accepts ARRAY operands") {
     withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
       checkResolution(
         """SELECT t.a, r.a FROM VALUES (ARRAY(1, 3)) AS t(a)
           |ASOF JOIN VALUES (ARRAY(1, 2)) AS r(a) MATCH_CONDITION (t.a >= r.a);""".stripMargin,
-        expectedMessage = Some("MATCH_CONDITION with a lambda-based ordering expression")
+        shouldPass = true
       )
       checkResolution(
         """SELECT t.a, r.a FROM VALUES (ARRAY(named_struct('seq', 1))) AS t(a)
           |ASOF JOIN VALUES (ARRAY(named_struct('seq', 2))) AS r(a)
           |MATCH_CONDITION (t.a >= r.a);""".stripMargin,
-        expectedMessage = Some("MATCH_CONDITION with a lambda-based ordering expression")
+        shouldPass = true
       )
       checkResolution(
         """SELECT t.k, r.k FROM VALUES (10) AS t(k)

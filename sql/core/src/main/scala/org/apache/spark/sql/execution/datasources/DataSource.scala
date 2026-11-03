@@ -41,14 +41,15 @@ import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connector.catalog.TableProvider
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.execution.command.DataWritingCommand
+import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
+import org.apache.spark.sql.execution.command.{DataWritingCommand, DataWritingCommandExec}
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
-import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
+import org.apache.spark.sql.execution.datasources.v2.{FileDataSourceV2, NamedTableProvider}
+import org.apache.spark.sql.execution.datasources.v2.ffi.{NativeDataSourceRegistry, NativeDataSourceV2}
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
 import org.apache.spark.sql.execution.datasources.v2.python.PythonDataSourceV2
 import org.apache.spark.sql.execution.datasources.xml.XmlFileFormat
@@ -336,18 +337,29 @@ case class DataSource(
     }
   }
 
-  /** Returns a sink that can be used to continually write data. */
-  def createSink(outputMode: OutputMode): Sink = {
+  /** Returns a sink that can be used to continually write data of the given schema. */
+  def createSink(outputMode: OutputMode, schema: StructType): Sink = {
     providingInstance() match {
       case s: StreamSinkProvider =>
         s.createSink(sparkSession.sqlContext, caseInsensitiveOptions, partitionColumns, outputMode)
 
       case fileFormat: FileFormat =>
+        disallowWritingIntervals(schema, fileFormat.toString, forbidAnsiIntervals = false)
+        // Like batch writes, check empty schemas only when writing to a path, not to a table.
+        if (catalogTable.isEmpty) {
+          DataSource.validateSchema(fileFormat.toString, schema, conf)
+        }
         val path = makeQualified(new Path(caseInsensitiveOptions.getOrElse("path", {
           throw QueryExecutionErrors.dataPathNotSpecifiedError()
         }))).toString
         if (outputMode != OutputMode.Append) {
           throw QueryCompilationErrors.dataSourceOutputModeUnsupportedError(className, outputMode)
+        }
+        PartitioningUtils.validatePartitionColumn(
+          schema, partitionColumns, conf.caseSensitiveAnalysis)
+        catalogTable.foreach { table =>
+          FileStreamSink.checkPartitioningOfCommittedFiles(
+            sparkSession, new Path(path), table.qualifiedName, partitionColumns)
         }
         new FileStreamSink(sparkSession, path, fileFormat, partitionColumns, caseInsensitiveOptions)
 
@@ -530,11 +542,15 @@ case class DataSource(
    * @param outputColumnNames The original output column names of the input query plan. The
    *                          optimizer may not preserve the output column's names' case, so we need
    *                          this parameter instead of `data.output`.
+   * @param beforeWrite Called right before writing. For a [[FileFormat]], it runs after the driver
+   *                    side checks of the write. For a [[CreatableRelationProvider]], it runs
+   *                    before `createRelation`, which checks the write itself.
    */
   def writeAndRead(
       mode: SaveMode,
       data: LogicalPlan,
-      outputColumnNames: Seq[String]): BaseRelation = {
+      outputColumnNames: Seq[String],
+      beforeWrite: () => Unit = () => ()): BaseRelation = {
     val outputColumns = DataWritingCommand.logicalPlanOutputWithNames(data, outputColumnNames)
     providingInstance() match {
       case dataSource: CreatableRelationProvider =>
@@ -544,13 +560,26 @@ case class DataSource(
               dataSource.toString, StructField(attr.toString, attr.dataType))
           }
         }
+        beforeWrite()
         dataSource.createRelation(
           sparkSession.sqlContext, mode, caseInsensitiveOptions, Dataset.ofRows(sparkSession, data))
       case format: FileFormat =>
         disallowWritingIntervals(
           outputColumns.toStructType.asNullable, format.toString, forbidAnsiIntervals = false)
         val cmd = planForWritingFileFormat(format, mode, data)
-        QueryExecution.runCommand(sparkSession, cmd, "file source write")
+        cmd.setTagValue(InsertIntoHadoopFsRelationCommand.BEFORE_WRITE_JOB, beforeWrite)
+        // An extension can replace the command in the physical plan (e.g. with a native writer),
+        // and then nothing calls `beforeWrite` during the write. Call it before such a write.
+        val callBeforeWriteIfReplaced = (plan: SparkPlan) => {
+          val runsCommand = plan.exists {
+            case DataWritingCommandExec(c, _) =>
+              c.getTagValue(InsertIntoHadoopFsRelationCommand.BEFORE_WRITE_JOB).isDefined
+            case _ => false
+          }
+          if (!runsCommand) beforeWrite()
+        }
+        QueryExecution.runCommand(
+          sparkSession, cmd, "file source write", beforeExecution = callBeforeWriteIfReplaced)
         // Replace the schema with that of the DataFrame we just wrote out to avoid re-inferring
         copy(userSpecifiedSchema = Some(outputColumns.toStructType.asNullable)).resolveRelation()
       case _ => throw SparkException.internalError(
@@ -666,6 +695,21 @@ object DataSource extends Logging {
 
   /** Given a provider name, look up the data source class definition. */
   def lookupDataSource(provider: String, conf: SQLConf): Class[_] = {
+    lookupDataSource(provider, conf, includeNativeDataSources = true)
+  }
+
+  /**
+   * Given a provider name, look up the data source class definition.
+   *
+   * @param includeNativeDataSources whether to look the name up among the native data sources,
+   *                                 which come after the Java and Python data sources
+   */
+  private[sql] def lookupDataSource(
+      provider: String,
+      conf: SQLConf,
+      includeNativeDataSources: Boolean): Class[_] = {
+    // The provider created for a native data source only takes the result of this lookup.
+    NativeDataSourceRegistry.clearLookup()
     val provider1 = backwardCompatibilityMap.getOrElse(provider, provider) match {
       case name if name.equalsIgnoreCase("orc") &&
           conf.getConf(SQLConf.ORC_IMPLEMENTATION) == "native" =>
@@ -682,6 +726,9 @@ object DataSource extends Logging {
     val serviceLoader = ServiceLoader.load(classOf[DataSourceRegister], loader)
     lazy val isUserDefinedDataSource = SparkSession.getActiveSession.exists(
       _.sessionState.dataSourceManager.dataSourceExists(provider))
+    // The provider created for the native data source takes the result of this lookup.
+    lazy val isNativeDataSource = includeNativeDataSources &&
+      NativeDataSourceRegistry.lookupForProvider(provider, conf).isDefined
 
     try {
       serviceLoader.asScala.filter(_.shortName().equalsIgnoreCase(provider1)).toList match {
@@ -703,6 +750,8 @@ object DataSource extends Logging {
                   throw QueryCompilationErrors.failedToFindKafkaDataSourceError(provider1)
                 } else if (isUserDefinedDataSource) {
                   classOf[PythonDataSourceV2]
+                } else if (isNativeDataSource) {
+                  classOf[NativeDataSourceV2]
                 } else {
                   throw QueryExecutionErrors.dataSourceNotFoundError(provider1, error)
                 }
@@ -718,9 +767,9 @@ object DataSource extends Logging {
               }
           }
         case head :: Nil =>
-          // We do not check whether the provider is a Python data source
-          // (isUserDefinedDataSource) to avoid the lookup cost. Java data sources
-          // always take precedence over Python user-defined data sources.
+          // We do not check whether the provider is a Python or native data source
+          // (isUserDefinedDataSource, isNativeDataSource) to avoid the lookup cost. Java data
+          // sources always take precedence over Python and native data sources.
           head.getClass
         case sources =>
           // There are multiple registered aliases for the input. If there is single datasource
@@ -783,7 +832,7 @@ object DataSource extends Logging {
       case t: TableProvider
           if !useV1Sources.contains(cls.getCanonicalName.toLowerCase(Locale.ROOT)) =>
         t match {
-          case p: PythonDataSourceV2 => p.setShortName(provider)
+          case p: NamedTableProvider => p.setShortName(provider)
           case _ =>
         }
         Some(t)
