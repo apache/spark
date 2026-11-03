@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.benchmark
 
+import java.util.Arrays
+
 import scala.util.Random
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
@@ -69,13 +71,31 @@ object ByteArrayBenchmark extends BenchmarkBase {
       }
     }
 
+    // Baseline above is the hand-rolled word-at-a-time ByteArray.compareBinary. This measures the
+    // java.util.Arrays.compareUnsigned intrinsic that the production BinaryType comparison paths
+    // now use, so the results file documents the difference side by side.
+    def compareUnsigned(data: Array[Array[Byte]]) = { _: Int =>
+      var sum = 0L
+      for (_ <- 0L until iters) {
+        var i = 0
+        while (i < count) {
+          sum += Arrays.compareUnsigned(data(i), data((i + 1) % count))
+          i += 1
+        }
+      }
+    }
+
     val benchmark = new Benchmark("Byte Array compareTo", count * iters, 25, output = output)
     benchmark.addCase("2-7 byte")(compareBinary(dataTiny))
+    benchmark.addCase("2-7 byte (Arrays.compareUnsigned)")(compareUnsigned(dataTiny))
     benchmark.addCase("8-16 byte")(compareBinary(dataSmall))
+    benchmark.addCase("8-16 byte (Arrays.compareUnsigned)")(compareUnsigned(dataSmall))
     benchmark.addCase("16-32 byte")(compareBinary(dataMedium))
+    benchmark.addCase("16-32 byte (Arrays.compareUnsigned)")(compareUnsigned(dataMedium))
     benchmark.addCase("512-1024 byte")(compareBinary(dataLarge))
+    benchmark.addCase("512-1024 byte (Arrays.compareUnsigned)")(compareUnsigned(dataLarge))
     benchmark.addCase("512 byte slow")(compareBinary(dataLargeSlow))
-    benchmark.addCase("2-7 byte")(compareBinary(dataTiny))
+    benchmark.addCase("512 byte slow (Arrays.compareUnsigned)")(compareUnsigned(dataLargeSlow))
     benchmark.run()
   }
 
