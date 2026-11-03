@@ -33,8 +33,8 @@ import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.expressions.{Add, Cast, LessThan, Literal, Rand}
-import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, LogicalPlan,
-  PreparedExternalLookupJoin}
+import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, ExternalLookupFilter,
+  LogicalPlan, PreparedExternalLookupJoin}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connector.catalog.{Identifier, SupportsRead, Table, TableCapability,
@@ -54,8 +54,8 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.StreamingDedu
 import org.apache.spark.sql.execution.streaming.runtime.{IncrementalExecution, MemoryStream,
   StreamingQueryWrapper}
 import org.apache.spark.sql.execution.streaming.sources.LowLatencyMemoryStream
-import org.apache.spark.sql.functions.{broadcast, coalesce, col, concat, expr, length, lit,
-  raise_error, to_json, when}
+import org.apache.spark.sql.functions.{broadcast, coalesce, col, concat, expr, length, lit, max,
+  raise_error, rand, to_json, upper, when}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{StreamingQueryException, StreamRealTimeModeE2ESuiteBase}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -310,31 +310,50 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("an empty lookup side does not call the connector") {
+    val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    val left = streamOf(Seq(1, 3).toDF("id"))
+    withTempView("empty_side_lookup", "empty_side_left") {
+      lookup.createOrReplaceTempView("empty_side_lookup")
+      left.createOrReplaceTempView("empty_side_left")
+      Seq("inner" -> "INNER", "left_outer" -> "LEFT OUTER").foreach { case (joinType, sqlJoin) =>
+        val expected =
+          if (joinType == "inner") Seq.empty[Row] else Seq(Row(1, null, null), Row(3, null, null))
+        val empty = lookup.where(lit(false))
+        Seq(
+          () => left.join(empty, left("id") === empty("id"), joinType),
+          () => sql(s"SELECT * FROM empty_side_left l $sqlJoin JOIN " +
+            "(SELECT * FROM empty_side_lookup WHERE 1 = 0) r ON l.id = r.id")).foreach { query =>
+          SimpleExternalLookupDataSource.resetCounters()
+          val joined = query()
+          assert(!runStream(joined).plan.exists(_.isInstanceOf[PreparedExternalLookupJoin]))
+          checkStream(joined, expected)
+          assert(SimpleExternalLookupDataSource.lookupCandidates.get() === Seq.empty)
+          assert(SimpleExternalLookupDataSource.readerCount.get() === 0)
+          assert(SimpleExternalLookupDataSource.requestCount.get() === 0)
+        }
+      }
+    }
+  }
+
   test("a lookup side with another operator above the table fails when the DataFrame is built") {
     val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
     val dual = spark.read.format(classOf[DualCapabilityExternalLookupDataSource].getName).load()
     val left = streamOf(Seq(1, 3).toDF("id"))
-    withTempView("operator_side_lookup", "operator_side_left") {
-      lookup.createOrReplaceTempView("operator_side_lookup")
-      left.createOrReplaceTempView("operator_side_left")
-      // A lookup-only table, which no other join can read, and a hinted table that supports batch
-      // reads too. The join fails even where the optimizer would remove the operator.
-      Seq(
-        lookup.where(lit(false)),
-        lookup.select($"id", $"department"),
-        dual.select($"id", $"department").hint("external_lookup"),
-        dual.hint("external_lookup").where($"id" > 0)).foreach { right =>
-        checkError(
-          exception = intercept[AnalysisException] {
-            left.join(right, left("id") === right("id"), "left_outer")
-          },
-          condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.LOOKUP_PLAN",
-          parameters = Map.empty)
-      }
+    val values = Seq(1).toDF("v")
+    // A lookup-only table, which no other join can read, and a hinted table that supports batch
+    // reads too. The join fails even where the optimizer would remove the operator. A subquery is
+    // planned apart from the lookup results, so a projection or filter with one cannot run either.
+    Seq(
+      lookup.limit(1),
+      lookup.distinct(),
+      dual.limit(1).hint("external_lookup"),
+      lookup.filter($"id".isin(values)),
+      lookup.filter(values.where(col("v") === 1).exists()),
+      lookup.filter($"id" < spark.range(2).select(max($"id")).scalar())).foreach { right =>
       checkError(
         exception = intercept[AnalysisException] {
-          sql("SELECT * FROM operator_side_left l JOIN " +
-            "(SELECT * FROM operator_side_lookup WHERE 1 = 0) r ON l.id = r.id")
+          left.join(right, left("id") === right("id"), "left_outer")
         },
         condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.LOOKUP_PLAN",
         parameters = Map.empty)
@@ -403,6 +422,54 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     checkStream(lookupOnlyJoin, Seq(
       Row(10, 1, "a", 1, "engineering"), Row(10, 1, "a", 1, "research"),
       Row(20, 2, "b", 2, "sales")))
+  }
+
+  test("an explicit external lookup option marker rejects unsupported join shapes") {
+    val lookup = spark.read.format(classOf[DualCapabilityExternalLookupDataSource].getName).load()
+    val left = streamOf(Seq(1).toDF("id"))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        left.join(
+          lookup.hint("external_lookup"),
+          left("id") === lookup("id"),
+          "right_outer").queryExecution.analyzed
+      },
+      condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.JOIN_TYPE",
+      parameters = Map(
+        "joinType" -> "RIGHT OUTER",
+        "relation" -> "`DualCapabilityExternalLookupTable`",
+        "supportedJoinTypes" -> "INNER, LEFT OUTER, LEFT SEMI, LEFT ANTI"))
+
+    // A cross join fails with its join type while it is analyzed, before its missing condition.
+    checkError(
+      exception = intercept[AnalysisException](left.crossJoin(lookup.hint("external_lookup"))),
+      condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.JOIN_TYPE",
+      parameters = Map(
+        "joinType" -> "CROSS",
+        "relation" -> "`DualCapabilityExternalLookupTable`",
+        "supportedJoinTypes" -> "INNER, LEFT OUTER, LEFT SEMI, LEFT ANTI"))
+
+    // A strategy hint on the same join conflicts before the join type is checked.
+    checkError(
+      exception = intercept[AnalysisException] {
+        left.join(
+          lookup.hint("external_lookup").hint("merge"),
+          left("id") === lookup("id"),
+          "right_outer").queryExecution.analyzed
+      },
+      condition = "INVALID_EXTERNAL_LOOKUP_HINT.CONFLICTING_JOIN_STRATEGY",
+      parameters = Map("strategy" -> "MERGE", "relation" -> "`DualCapabilityExternalLookupTable`"))
+  }
+
+  test("external lookup predicate negotiation includes type and null semantics") {
+    SimpleExternalLookupDataSource.resetCounters()
+    val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    val left = streamOf(Seq[java.lang.Integer](null, 1).toDF("id"))
+
+    runStream(left.join(lookup, left("id") <=> lookup("id"), "inner"))
+    assert(SimpleExternalLookupDataSource.lookupCandidates.get() ===
+      Seq(("<=>", "id", IntegerType)))
   }
 
   test("an external lookup hint on an ineligible join is rejected") {
@@ -570,6 +637,54 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       Seq(Row(1, 1, "engineering"), Row(1, 1, "research")))
   }
 
+  test("external lookup prunes unused throwable lookup expressions") {
+    val rawLookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    val lookup = rawLookup.select($"id", expr("raise_error('unused')").as("unused"))
+    val left = streamOf(Seq(1).toDF("id"))
+
+    checkStream(
+      left.join(lookup, left("id") === lookup("id"), "left_semi"),
+      Seq(Row(1)))
+
+    val projected = left.as("left").join(
+      lookup.as("lookup"),
+      $"left.id" === $"lookup.id",
+      "inner").select($"left.id")
+    checkStream(projected, Seq(Row(1), Row(1)))
+  }
+
+  test("external lookup preserves non-deterministic projection and filter boundaries") {
+    val rawLookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    val lookup = rawLookup
+      .select($"id", $"department", rand(3).as("sample"))
+      .filter($"sample" >= 0.5)
+      .select($"id", $"department")
+    // Both copies of key 1 share one looked-up row set, and the seeded sample is drawn once per
+    // looked-up row, so the duplicates must see the same rows.
+    val left = streamOf(Seq(1, 1, 2).toDF("id"))
+
+    checkStream(
+      left.join(lookup, left("id") === lookup("id"), "inner"),
+      Seq(Row(1, 1, "research"), Row(1, 1, "research"), Row(2, 2, "sales")))
+  }
+
+  test("external lookup pushes the filters below a non-deterministic lookup-side boundary") {
+    val rawLookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    // The bottom filter reaches the source. The filter on the sample stays a lookup-side stage
+    // above the projection that draws it.
+    val lookup = rawLookup
+      .filter($"department" =!= "research")
+      .select($"id", $"department", rand(3).as("sample"))
+      .filter($"sample" >= 0.5)
+      .select($"id", $"department")
+    val left = streamOf(Seq(1, 2).toDF("id"))
+
+    val run = runStream(left.join(lookup, left("id") === lookup("id"), "inner"))
+    assert(run.rows.forall(_.getString(2) != "research"))
+    assert(SimpleExternalLookupDataSource.pushedPredicateCount.get() > 0)
+    assert(run.lookupJoin.lookupTransforms.exists(_.isInstanceOf[ExternalLookupFilter]))
+  }
+
   test("external lookup hint rejects invalid placement and relation targets") {
     val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
     val left = streamOf(Seq(1).toDF("id"))
@@ -702,6 +817,8 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       .select(left("id"), lookup("department"))
 
     assert(runStream(joined).plan.exists(_.isInstanceOf[PreparedExternalLookupJoin]))
+    // The source is asked for only the lookup column that the projection reads.
+    assert(SimpleExternalLookupDataSource.requiredColumns.get() === Seq("department"))
     checkStream(joined, Seq(Row(1, "engineering"), Row(1, "research"), Row(3, null)))
   }
 
@@ -898,7 +1015,8 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
           ("dual", catalogTable, "dual"),
           ("ns.dual", catalogTable, "dual"),
           (catalogTable, catalogTable, "dual"),
-          ("r", s"$catalogTable r", "r")).foreach {
+          ("r", s"$catalogTable r", "r"),
+          ("s", "(SELECT * FROM external_lookup_right) s", "s")).foreach {
           case (hintTarget, right, rightName) =>
             val df = query(hintTarget, right, rightName)
             assert(runStream(df).plan.exists(_.isInstanceOf[PreparedExternalLookupJoin]),
@@ -906,14 +1024,6 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
             checkStream(df, expected)
         }
 
-        // An aliased subquery can be named, but its projection is an operator between the table
-        // and the join.
-        checkError(
-          exception = intercept[AnalysisException] {
-            query("s", "(SELECT * FROM external_lookup_right) s", "s")
-          },
-          condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.LOOKUP_PLAN",
-          parameters = Map.empty)
         // Like join strategy hints, a target name does not reach into an aliased subquery.
         checkError(
           exception = intercept[AnalysisException] {
@@ -1087,6 +1197,52 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("external lookup join applies lookup-side projection and filter before joining") {
+    val rawLookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    val lookup = rawLookup
+      .filter($"department" =!= "research")
+      .select($"id", upper($"department").as("department"))
+    val left = streamOf(Seq(1, 2).toDF("id"))
+
+    checkStream(
+      left.join(lookup, left("id") === lookup("id"), "inner"),
+      Seq(Row(1, 1, "ENGINEERING"), Row(2, 2, "SALES")))
+  }
+
+  test("external lookup rebinds projections after required-column pruning") {
+    val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    val left = streamOf(Seq(1, 2).toDF("id"))
+
+    val result = left.join(
+      lookup, left("id") === lookup("id"), "inner")
+      .select(upper(lookup("department")))
+
+    checkStream(result, Seq(Row("ENGINEERING"), Row("RESEARCH"), Row("SALES")))
+  }
+
+  test("external lookup join resolves a projected key alias") {
+    val rawLookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    val lookup = rawLookup.select($"id".as("lookup_id"), $"department")
+    val left = streamOf(Seq(1, 3).toDF("id"))
+
+    checkStream(
+      left.join(
+        lookup, left("id") === lookup("lookup_id"), "left_outer"),
+      Seq(Row(1, 1, "engineering"), Row(1, 1, "research"), Row(3, null, null)))
+  }
+
+  test("external lookup join composes nested aliases and filters") {
+    val rawLookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    val once = rawLookup.select($"id".as("lookup_id"), $"department")
+    val lookup = once.filter($"lookup_id" > 0).select($"lookup_id", $"department")
+    val left = streamOf(Seq(1, 3).toDF("id"))
+
+    checkStream(
+      left.join(
+        lookup, left("id") === lookup("lookup_id"), "left_outer"),
+      Seq(Row(1, 1, "engineering"), Row(1, 1, "research"), Row(3, null, null)))
+  }
+
   test("an external lookup hint without relation names marks the whole query") {
     val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
     val dual = spark.read.format(classOf[DualCapabilityExternalLookupDataSource].getName).load()
@@ -1116,6 +1272,127 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       runStream(dataFrameJoin).plan.exists(_.isInstanceOf[PreparedExternalLookupJoin]) === false)
   }
 
+  test("external lookup pushes accepted filters and required columns to the source") {
+    SimpleExternalLookupDataSource.resetCounters()
+    val rawLookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    val lookup = rawLookup.filter($"department" =!= "research").select($"id")
+    val left = streamOf(Seq(1, 2).toDF("id"))
+
+    checkStream(
+      left.join(lookup, left("id") === lookup("id"), "inner"),
+      Seq(Row(1, 1), Row(2, 2)))
+    assert(SimpleExternalLookupDataSource.requiredColumns.get() === Seq("id"))
+    assert(SimpleExternalLookupDataSource.pushedPredicateCount.get() > 0)
+  }
+
+  test("external lookup pushes no filter above a non-deterministic lookup-side filter") {
+    val rawLookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    // The source would evaluate a pushed filter before the sample is drawn.
+    val lookup = rawLookup.filter(rand(3) >= 0.5).filter($"department" =!= "research")
+    val left = streamOf(Seq(1, 2).toDF("id"))
+
+    val run = runStream(left.join(lookup, left("id") === lookup("id"), "inner"))
+    assert(run.rows.forall(_.getString(2) != "research"))
+    assert(SimpleExternalLookupDataSource.pushedPredicateCount.get() === 0)
+  }
+
+  test("external lookup canonicalizes filters through a relation alias") {
+    SimpleExternalLookupDataSource.resetCounters()
+    val rawLookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+      .alias("lookup_source")
+    val lookup = rawLookup
+      .filter($"lookup_source.DEPARTMENT" =!= "research")
+      .select($"lookup_source.id")
+    val left = streamOf(Seq(1, 2).toDF("id"))
+
+    checkStream(
+      left.join(lookup, left("id") === lookup("id"), "inner"),
+      Seq(Row(1, 1), Row(2, 2)))
+    assert(SimpleExternalLookupDataSource.pushedPredicateFields.get() === Seq("department"))
+  }
+
+  test("an empty lookup side gives semi and anti join results without a connector call") {
+    val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    val left = streamOf(Seq(1, 3).toDF("id"))
+    val empty = lookup.where(lit(false))
+    Seq(
+      ("left_semi", Seq.empty[Row]),
+      ("left_anti", Seq(Row(1), Row(3)))).foreach { case (joinType, expected) =>
+      Seq(
+        () => left.join(empty, left("id") === empty("id"), joinType),
+        () => left.join(lookup, left("id") === lookup("id") && lit(false), joinType)).foreach {
+        query =>
+          SimpleExternalLookupDataSource.resetCounters()
+          val joined = query()
+          checkStream(joined, expected)
+          assert(SimpleExternalLookupDataSource.lookupCandidates.get() === Seq.empty)
+          assert(SimpleExternalLookupDataSource.readerCount.get() === 0)
+          assert(SimpleExternalLookupDataSource.requestCount.get() === 0)
+      }
+    }
+  }
+
+  test("external lookup pads CHAR columns as a batch read does") {
+    val lookup = spark.read
+      .format(classOf[ReadSchemaExternalLookupDataSource].getName)
+      .option("kind", "char")
+      .load()
+    val left = streamOf(Seq(1).toDF("id"))
+    // The connector returns "ab" for a CHAR(5) column; read-side padding makes it "ab   ".
+    checkStream(left.join(lookup, left("id") === lookup("id")), Seq(Row(1, 1, "ab   ")))
+  }
+
+  test("external lookup join supports left semi and left anti joins") {
+    SimpleExternalLookupDataSource.resetCounters()
+    val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    val left = streamOf(Seq(1, 2, 3).toDF("id"))
+
+    checkStream(
+      left.join(lookup, left("id") === lookup("id"), "left_semi"),
+      Seq(Row(1), Row(2)))
+    assert(SimpleExternalLookupDataSource.requiredColumns.get().isEmpty)
+    checkStream(
+      left.join(lookup, left("id") === lookup("id"), "left_anti"),
+      Seq(Row(3)))
+  }
+
+  test("external lookup prunes request keys from inner and outer responses") {
+    val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    val left = streamOf(Seq(1, 3).toDF("id"))
+
+    Seq("inner", "left_outer").foreach { joinType =>
+      SimpleExternalLookupDataSource.resetCounters()
+      val result = left.join(
+        lookup, left("id") === lookup("id"), joinType)
+        .select(left("id"))
+      val expected = if (joinType == "inner") Seq(Row(1), Row(1)) else {
+        Seq(Row(1), Row(1), Row(3))
+      }
+      checkStream(result, expected)
+      assert(SimpleExternalLookupDataSource.requiredColumns.get().isEmpty)
+    }
+  }
+
+  test("external lookup evaluates semi and anti residuals on the pruned response layout") {
+    val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    val left = streamOf(Seq((1, "engineering"), (1, "missing"), (3, "missing"))
+      .toDF("id", "department"))
+    val condition = left("id") === lookup("id") &&
+      left("department") === lookup("department")
+
+    SimpleExternalLookupDataSource.resetCounters()
+    checkStream(
+      left.join(lookup, condition, "left_semi"),
+      Seq(Row(1, "engineering")))
+    assert(SimpleExternalLookupDataSource.requiredColumns.get() === Seq("department"))
+
+    SimpleExternalLookupDataSource.resetCounters()
+    checkStream(
+      left.join(lookup, condition, "left_anti"),
+      Seq(Row(1, "missing"), Row(3, "missing")))
+    assert(SimpleExternalLookupDataSource.requiredColumns.get() === Seq("department"))
+  }
+
   test("external lookup join handles null, missing, duplicate, and partial batches") {
     val lookup = spark.read
       .format(classOf[SimpleExternalLookupDataSource].getName)
@@ -1142,6 +1419,23 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     assert(metrics("lookupTime").value > 0)
   }
 
+  test("external lookup join supports null-safe lookup keys") {
+    SimpleExternalLookupDataSource.resetCounters()
+    val lookup = spark.read
+      .format(classOf[SimpleExternalLookupDataSource].getName)
+      .load()
+    val left = streamOf(Seq[java.lang.Integer](1, null, 3).toDF("id"))
+
+    checkStream(
+      left.join(lookup, left("id") <=> lookup("id"), "left_outer"),
+      Seq(
+        Row(1, 1, "engineering"),
+        Row(1, 1, "research"),
+        Row(null, null, "unknown"),
+        Row(3, null, null)))
+    assert(SimpleExternalLookupDataSource.nullKeyRequests.get() > 0)
+  }
+
   test("external lookup join supports complete composite equi-keys") {
     val lookup = spark.read
       .format(classOf[CompositeExternalLookupDataSource].getName)
@@ -1155,6 +1449,88 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
         "left_outer"),
       Seq(Row(1, 1, 1, 1, "one-one"), Row(1, 2, null, null, null),
         Row(2, 1, 2, 1, "two-one")))
+  }
+
+  test("external lookup combines equality and range predicates in one access path") {
+    CompositeExternalLookupDataSource.selectedLookupPredicates.set(Seq.empty)
+    val lookup = spark.read
+      .format(classOf[CompositeExternalLookupDataSource].getName)
+      .load()
+    val left = streamOf(Seq(
+      (1, 1, 3),
+      (1, 2, 4),
+      (2, 0, 2),
+      (3, 0, 10)).toDF("tenant", "start", "end"))
+    val condition = lookup("tenant") === left("tenant") &&
+      lookup("id") >= left("start") &&
+      lookup("id") < left("end")
+
+    checkStream(
+      left.join(lookup, condition, "inner"),
+      Seq(
+        Row(1, 1, 3, 1, 1, "one-one"),
+        Row(1, 2, 4, 1, 3, "one-three"),
+        Row(2, 0, 2, 2, 1, "two-one")))
+    assert(CompositeExternalLookupDataSource.selectedLookupPredicates.get() === Seq(
+      ("=", "tenant"),
+      (">=", "id"),
+      ("<", "id")))
+  }
+
+  test("external lookup join supports multiple range predicates on one field") {
+    SimpleExternalLookupDataSource.resetCounters()
+    val lookup = spark.read
+      .format(classOf[SimpleExternalLookupDataSource].getName)
+      .load()
+    val left = streamOf(Seq((1, 2), (1, 3)).toDF("start", "end"))
+
+    checkStream(
+      left.join(
+        lookup,
+        lookup("id") >= left("start") && lookup("id") < left("end"),
+        "inner"),
+      Seq(
+        Row(1, 2, 1, "engineering"),
+        Row(1, 2, 1, "research"),
+        Row(1, 3, 1, "engineering"),
+        Row(1, 3, 1, "research"),
+        Row(1, 3, 2, "sales")))
+    assert(SimpleExternalLookupDataSource.lookupCandidates.get() ===
+      Seq((">=", "id", IntegerType), ("<", "id", IntegerType)))
+
+    checkStream(
+      left.join(
+        lookup,
+        left("start") < lookup("id") && left("end") >= lookup("id"),
+        "inner"),
+      Seq(
+        Row(1, 2, 2, "sales"),
+        Row(1, 3, 2, "sales")))
+    assert(SimpleExternalLookupDataSource.lookupCandidates.get() ===
+      Seq((">", "id", IntegerType), ("<=", "id", IntegerType)))
+  }
+
+  test("external lookup leaves unselected criteria as Spark residuals") {
+    SimpleExternalLookupDataSource.resetCounters()
+    val lookup = spark.read
+      .format(classOf[SimpleExternalLookupDataSource].getName)
+      .load()
+    val left = streamOf(Seq(
+      (1, 3, "sales"),
+      (1, 3, "research"),
+      (1, 2, "missing")).toDF("start", "end", "department"))
+    val condition = lookup("id") >= left("start") &&
+      lookup("id") < left("end") &&
+      lookup("department") === left("department")
+
+    checkStream(
+      left.join(lookup, condition, "left_semi"),
+      Seq(Row(1, 3, "sales"), Row(1, 3, "research")))
+    assert(SimpleExternalLookupDataSource.lookupCandidates.get() === Seq(
+      (">=", "id", IntegerType),
+      ("<", "id", IntegerType),
+      ("=", "department", StringType)))
+    assert(SimpleExternalLookupDataSource.requiredColumns.get() === Seq("department"))
   }
 
   test("an upstream limit stops one-to-many cursor consumption") {
@@ -1406,17 +1782,14 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("a lookup-only table that needs read-side CHAR or VARCHAR handling is rejected") {
-    val parameters = Map("relation" -> "`ReadSchemaExternalLookupTable`", "column" -> "`name`")
-    checkError(
-      exception = intercept[AnalysisException](readSchemaLookup("char")),
-      condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.CHAR_VARCHAR_COLUMN",
-      parameters = parameters)
+  test("external lookup applies the read-side VARCHAR check under standard semantics") {
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
-      checkError(
-        exception = intercept[AnalysisException](readSchemaLookup("varchar")),
-        condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.CHAR_VARCHAR_COLUMN",
-        parameters = parameters)
+      val left = streamOf(Seq(1).toDF("id"))
+      val varchar = readSchemaLookup("varchar")
+      val run = runStream(left.join(varchar, left("id") === varchar("id")))
+      QueryTest.sameRows(Seq(Row(1, 1, "ab")), run.rows).foreach(fail(_))
+      // The check is a lookup-side projection over the connector's value rows.
+      assert(run.lookupJoin.lookupTransforms.nonEmpty)
     }
   }
 
@@ -1428,12 +1801,22 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     val condition =
       left("id") === lookup("id") && pythonUDF(lookup("department")) === "engineering"
 
-    // An inner join evaluates it above the lookup join; a left outer join cannot.
+    // An inner join evaluates it above the lookup join; other join types cannot.
     checkStream(left.join(lookup, condition), Seq(Row(1, 1, "engineering")))
+    Seq("left_outer" -> "LEFT OUTER", "left_semi" -> "LEFT SEMI").foreach {
+      case (joinType, sqlJoinType) =>
+        checkError(
+          exception = streamFailure[AnalysisException](left.join(lookup, condition, joinType)),
+          condition = "UNSUPPORTED_FEATURE.PYTHON_UDF_IN_ON_CLAUSE",
+          parameters = Map("joinType" -> sqlJoinType))
+    }
+    // A lookup-side filter is evaluated inside the lookup join, which cannot run a Python UDF, so
+    // the join fails when the DataFrame is built.
+    val filtered = lookup.filter(pythonUDF(lookup("department")) === "engineering")
     checkError(
-      exception = streamFailure[AnalysisException](left.join(lookup, condition, "left_outer")),
-      condition = "UNSUPPORTED_FEATURE.PYTHON_UDF_IN_ON_CLAUSE",
-      parameters = Map("joinType" -> "LEFT OUTER"))
+      exception = intercept[AnalysisException](left.join(filtered, left("id") === filtered("id"))),
+      condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.LOOKUP_PLAN",
+      parameters = Map.empty)
   }
 
   test("external lookup merges the connector metrics of every reader in a task") {
@@ -1550,6 +1933,33 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
         TaskContext.unset()
       }
     }
+  }
+
+  test("external lookup failures propagate from outer joins instead of becoming misses") {
+    val lookup = spark.read
+      .format(classOf[SimpleExternalLookupDataSource].getName)
+      .option("failAt", "request")
+      .load()
+    val left = streamOf(Seq(1, 3).toDF("id"))
+
+    Seq("left_outer", "left_anti").foreach { joinType =>
+      SimpleExternalLookupDataSource.resetCounters()
+      val failure = streamFailure[SparkException](
+        left.join(lookup, left("id") === lookup("id"), joinType))
+      assert(failure.getMessage.contains("injected external lookup request failure"))
+    }
+  }
+
+  test("external lookup bounds each request by the engine batch size") {
+    SimpleExternalLookupDataSource.resetCounters()
+    val lookup = spark.read
+      .format(classOf[SimpleExternalLookupDataSource].getName)
+      .option("maxBatchSize", "5000")
+      .load()
+    val left = streamOf((1 to 1500).toDF("id"))
+
+    assert(runStream(left.join(lookup, left("id") === lookup("id"), "left_semi")).rows.size === 2)
+    assert(SimpleExternalLookupDataSource.requestSizes.asScala.toSeq === Seq(1000, 500))
   }
 
   test("external lookup caps each inner-join request at the engine batch size") {

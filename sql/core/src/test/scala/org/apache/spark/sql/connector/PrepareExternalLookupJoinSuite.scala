@@ -164,6 +164,23 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
     assert(idOnly.residualCondition === Some(idOnlyConjuncts.drop(1).reduce(_ && _)))
   }
 
+  test("a candidate is offered with the lookup column first, also for a literal value") {
+    var offered = Seq.empty[String]
+    val lookup = lookupRelation(PlanningExternalLookupTable("id INT, value STRING", select = {
+      candidates =>
+        offered = candidates.map(_.toString).toSeq
+        candidates
+    }))
+    val Seq(id, value) = lookup.output
+    val streamId = stream.output.head
+    // A value that reads no column, such as a literal, is a parameter as well.
+    val conjuncts = Seq(streamId === id, Literal("a") === value, Literal(0) < id, id <= streamId)
+    val prepared = prepare(lookupJoin(lookup, conjuncts.reduce(_ && _)))
+    assert(offered === Seq("id = ?", "value = ?", "id > ?", "id <= ?"))
+    assert(prepared.lookupParameters === Seq(streamId, Literal("a"), Literal(0), streamId))
+    assert(prepared.residualCondition.isEmpty)
+  }
+
   test("the read schema binds to the analyzed lookup attributes by exact name") {
     val lookup = lookupRelation(PlanningExternalLookupTable(
       "id INT NOT NULL, value VARCHAR(8) NOT NULL, s STRUCT<a: INT NOT NULL>",
@@ -293,6 +310,7 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
     val (lookupLeft, lookupRight) =
       pruned.collectFirst { case join: ExternalLookupJoin => (join.left, join.right) }.get
     assert(lookupLeft.output === Seq(stream.output.head))
+    // One pass narrows the lookup columns that the join keeps; only a later one projects them.
     assert(lookupRight === lookup)
     assert(PrepareExternalLookupJoin(pruned).exists(_.isInstanceOf[PreparedExternalLookupJoin]))
   }

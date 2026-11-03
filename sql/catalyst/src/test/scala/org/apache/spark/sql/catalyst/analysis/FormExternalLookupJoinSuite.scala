@@ -24,9 +24,10 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions.ScalarSubquery
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, LeftOuter, RightOuter}
-import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupHint, ExternalLookupJoin, Join,
-  JoinHint, LocalRelation, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Distinct, ExternalLookupHint,
+  ExternalLookupJoin, Join, JoinHint, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.connector.catalog.{Table, TableCapability}
 import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, EXTERNAL_LOOKUP}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation,
@@ -87,9 +88,14 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
     }
   }
 
-  test("the hint opts a join in, and the lookup side is found beneath hints and aliases") {
+  test("the hint opts a join in, and the lookup side is found beneath hints, aliases, " +
+      "projections and filters") {
     val dual = tableWith(BATCH_READ, EXTERNAL_LOOKUP)
-    Seq(dual.hint("external_lookup").as("d"), lookupOnly.as("t").hint("external_lookup"))
+    Seq(
+      dual.hint("external_lookup").as("d"),
+      lookupOnly.as("t").hint("external_lookup"),
+      dual.select(dual.output: _*).hint("external_lookup"),
+      lookupOnly.as("t").where(lookupOnly.output(2) =!= "x").select(lookupOnly.output: _*))
       .foreach { right =>
         val analyzed =
           analyze(stream.join(right, LeftOuter, Some(stream.output(1) === right.output(1))))
@@ -107,13 +113,15 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
 
   test("a lookup side with another operator above the table fails in validation") {
     val dual = tableWith(BATCH_READ, EXTERNAL_LOOKUP)
-    // Projections and filters on the lookup side are not supported, so they fail in validation,
-    // whether or not the optimizer would later remove them.
+    // Whether the optimizer would later remove the operator does not matter. A filter with a
+    // subquery cannot be evaluated on the lookup results.
+    val subqueryFilter =
+      lookupOnly.where(lookupOnly.output(1) === ScalarSubquery(LocalRelation($"v".int)))
     Seq(
-      lookupOnly.select(lookupOnly.output: _*),
-      lookupOnly.as("t").where(lookupOnly.output(2) =!= "x"),
-      dual.select(dual.output: _*).hint("external_lookup"),
-      dual.hint("external_lookup").where(dual.output(2) =!= "x")).foreach { right =>
+      lookupOnly.limit(1),
+      Distinct(lookupOnly.as("t")),
+      dual.limit(1).hint("external_lookup"),
+      subqueryFilter).foreach { right =>
       val analyzed = analyze(stream.join(right, Inner, Some(stream.output(1) === right.output(1))))
       Seq[LogicalPlan => Any](CheckExternalLookupJoin, FormExternalLookupJoin(_)).foreach { rule =>
         checkError(

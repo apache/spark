@@ -21,7 +21,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, AttributeSet,
   BoundReference, EqualNullSafe, EqualTo, Expression, ExprUtils, PredicateHelper}
-import org.apache.spark.sql.catalyst.plans.{JoinType, LeftOuter}
+import org.apache.spark.sql.catalyst.plans.{JoinType, LeftAnti, LeftOuter, LeftSemi}
+import org.apache.spark.sql.catalyst.plans.logical.ExternalLookupTransform
 import org.apache.spark.sql.connector.metric.CustomTaskMetric
 import org.apache.spark.sql.connector.read.{ExternalLookupReaderFactory, Scan}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
@@ -38,6 +39,7 @@ case class ExternalLookupJoinExec(
     lookupParameters: Seq[Expression],
     lookupInput: Seq[Attribute],
     lookupOutput: Seq[Attribute],
+    lookupTransforms: Seq[ExternalLookupTransform],
     nullSafeParameters: Seq[Boolean],
     lookupKeys: Seq[Attribute],
     joinType: JoinType,
@@ -47,15 +49,20 @@ case class ExternalLookupJoinExec(
     maxParameterRowsPerRequest: Int,
     child: SparkPlan) extends UnaryExecNode with SupportsCustomDriverMetrics with PredicateHelper {
 
-  // The connector's value rows follow the read schema, which `lookupInput` describes. The lookup
-  // columns keep their analyzed order and take the read schema's types. Their nullability, at
-  // every nested level, combines the table's and the read schema's: a field is NOT NULL when
-  // either says so.
-  private lazy val inputByLookupOutput = AttributeMap(lookupInput.map(attr => attr -> attr))
+  // The connector's value rows follow the read schema, which `lookupInput` describes, and the
+  // lookup-side stages turn them into rows of `transformedLookup`. The lookup columns keep their
+  // analyzed order, and take the types and nullability of those rows. In `lookupInput`, the
+  // nullability at every nested level combines the table's and the read schema's: a field is NOT
+  // NULL when either says so.
+  private lazy val transformedLookup = lookupTransforms.lastOption.map(_.output)
+    .getOrElse(lookupInput)
+  private lazy val inputByLookupOutput =
+    AttributeMap(transformedLookup.map(attr => attr -> attr))
   private lazy val lookupColumns = lookupOutput.map(inputByLookupOutput)
 
   override def output: Seq[Attribute] = joinType match {
     case LeftOuter => child.output ++ lookupColumns.map(_.withNullability(true))
+    case LeftSemi | LeftAnti => child.output
     case _ => child.output ++ lookupColumns
   }
 
@@ -128,7 +135,8 @@ case class ExternalLookupJoinExec(
       nullSafeParameters,
       lookupKeyCheck,
       child.output,
-      lookupInput,
+      lookupTransforms,
+      transformedLookup,
       output,
       joinType,
       streamCondition,

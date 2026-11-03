@@ -18,8 +18,10 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression}
-import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftOuter}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, BinaryComparison,
+  EqualNullSafe, EqualTo, Expression, ExternalUserDefinedFunction, GreaterThan,
+  GreaterThanOrEqual, LessThan, LessThanOrEqual, NamedExpression, PythonUDF, SubqueryExpression}
+import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftAnti, LeftOuter, LeftSemi}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXTERNAL_LOOKUP_HINT, EXTERNAL_LOOKUP_JOIN,
   TreePattern}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -53,8 +55,9 @@ case class ExternalLookupHint(child: LogicalPlan) extends UnaryNode {
  * A lookup join retained through ordinary expression and operator optimization.
  *
  * @param requiredLookupOutput Lookup-side attributes still required above this join. They are
- *   part of this node's references, which keeps generic column pruning from projecting the lookup
- *   relation.
+ *   part of this node's references, so column pruning keeps them on the lookup side.
+ *   `ColumnPruning` narrows them to what the parent reads, and `PrepareExternalLookupJoin` prunes
+ *   the lookup scan to them.
  */
 case class ExternalLookupJoin(
     left: LogicalPlan,
@@ -68,12 +71,111 @@ case class ExternalLookupJoin(
   override def output: Seq[Attribute] = joinType match {
     case Inner => left.output ++ right.output
     case LeftOuter => left.output ++ right.output.map(_.withNullability(true))
+    case LeftSemi | LeftAnti => left.output
     case other => throw SparkException.internalError(s"Unexpected external lookup join type $other")
+  }
+
+  override def maxRows: Option[Long] = joinType match {
+    case LeftSemi | LeftAnti => left.maxRows
+    case _ => None
   }
 
   override protected def withNewChildrenInternal(
       newLeft: LogicalPlan,
       newRight: LogicalPlan): ExternalLookupJoin = copy(left = newLeft, right = newRight)
+}
+
+/**
+ * The join-condition and lookup-side shapes that an external lookup join can run. Analysis,
+ * lookup planning and the optimizer rules for lookup joins share them.
+ */
+object ExternalLookupJoinShapes {
+  /**
+   * A lookup candidate: a comparison of a lookup column with a value, written with the lookup
+   * column on the left. `predicateName` is the name of the DSv2 `Predicate` that is offered to the
+   * connector for it: the SQL operator of the comparison, as `V2ExpressionBuilder` names it.
+   */
+  case class LookupComparison(
+      lookupField: Attribute,
+      parameter: Expression,
+      predicateName: String,
+      nullSafe: Boolean)
+
+  /**
+   * `conjunct` of the condition of a lookup join as a lookup candidate: `=`, `<=>`, `<`, `<=`, `>`
+   * or `>=` between a bare lookup column and a value, in either operand order. When the lookup
+   * column is written on the right, the comparison is rebuilt with it on the left, so
+   * `s.ts < t.event_time` is offered as `event_time > ?`.
+   *
+   * The value is the other operand, which Spark evaluates for each stream row to fill the
+   * comparison's parameter. It may read only stream columns, and it may read none, as a literal
+   * does. A value that reads lookup columns, as in `t.a = t.b`, cannot be a parameter.
+   *
+   * @param streamOutput The output of the join's left side, the stream side.
+   * @param lookupOutput The output of the join's right side, the lookup side.
+   */
+  def lookupComparison(
+      conjunct: Expression,
+      streamOutput: AttributeSet,
+      lookupOutput: AttributeSet): Option[LookupComparison] = {
+    def isLookupComparison(lookupField: Attribute, parameter: Expression): Boolean =
+      lookupOutput.contains(lookupField) && parameter.references.subsetOf(streamOutput)
+    conjunct match {
+      case comparison: BinaryComparison if isLookupOperator(comparison) =>
+        val nullSafe = comparison.isInstanceOf[EqualNullSafe]
+        Seq(comparison, withOperandsSwapped(comparison)).collectFirst {
+          case candidate @ BinaryComparison(lookupField: Attribute, parameter)
+              if isLookupComparison(lookupField, parameter) =>
+            LookupComparison(lookupField, parameter, candidate.sqlOperator, nullSafe)
+        }
+      case _ => None
+    }
+  }
+
+  private def isLookupOperator(comparison: BinaryComparison): Boolean = comparison match {
+    case _: EqualTo | _: EqualNullSafe | _: LessThan | _: LessThanOrEqual | _: GreaterThan |
+        _: GreaterThanOrEqual => true
+    case _ => false
+  }
+
+  /** The same comparison with its operands swapped, so that `a < b` becomes `b > a`. */
+  private def withOperandsSwapped(comparison: BinaryComparison): BinaryComparison =
+    comparison match {
+      case EqualTo(left, right) => EqualTo(right, left)
+      case EqualNullSafe(left, right) => EqualNullSafe(right, left)
+      case LessThan(left, right) => GreaterThan(right, left)
+      case LessThanOrEqual(left, right) => GreaterThanOrEqual(right, left)
+      case GreaterThan(left, right) => LessThan(right, left)
+      case GreaterThanOrEqual(left, right) => LessThanOrEqual(right, left)
+    }
+
+  /**
+   * Whether a lookup-side projection or filter can evaluate `expression` on the lookup results,
+   * inside the join. Python and external UDFs and subqueries are planned as separate operators,
+   * which a lookup-side stage cannot contain.
+   */
+  def canEvaluateInLookupStage(expression: Expression): Boolean = !(expression.exists {
+    case _: PythonUDF | _: ExternalUserDefinedFunction | _: SubqueryExpression => true
+    case _ => false
+  })
+}
+
+/** One optimized lookup-side operation, retained in evaluation order. */
+sealed trait ExternalLookupTransform {
+  def input: Seq[Attribute]
+  def output: Seq[Attribute]
+}
+
+case class ExternalLookupProject(
+    projectList: Seq[NamedExpression],
+    input: Seq[Attribute]) extends ExternalLookupTransform {
+  override def output: Seq[Attribute] = projectList.map(_.toAttribute)
+}
+
+case class ExternalLookupFilter(
+    condition: Expression,
+    input: Seq[Attribute]) extends ExternalLookupTransform {
+  override def output: Seq[Attribute] = input
 }
 
 /**
@@ -91,6 +193,7 @@ case class PreparedExternalLookupJoin(
     maxParameterRowsPerRequest: Int,
     lookupInput: Seq[Attribute],
     lookupOutput: Seq[Attribute],
+    lookupTransforms: Seq[ExternalLookupTransform],
     lookupParameters: Seq[Expression],
     nullSafeParameters: Seq[Boolean],
     lookupKeys: Seq[Attribute],
@@ -100,6 +203,7 @@ case class PreparedExternalLookupJoin(
   override def output: Seq[Attribute] = joinType match {
     case Inner => child.output ++ lookupOutput
     case LeftOuter => child.output ++ lookupOutput.map(_.withNullability(true))
+    case LeftSemi | LeftAnti => child.output
     case other => throw SparkException.internalError(s"Unexpected external lookup join type $other")
   }
 
