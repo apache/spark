@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{Partial => PartialAg
 import org.apache.spark.sql.catalyst.optimizer.BuildLeft
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, HashPartitioning, HashShuffleSpec, Partitioning, PartitioningCollection}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution.{
   FilterExec, ProjectExec, SortExec, SparkPlan, UnaryExecNode, UnionConfSnapshot,
   UnionExec}
@@ -154,7 +155,7 @@ case class PushDownShuffleExchangeThroughUnion(
           }
         }
     }
-    val accepted = if (pushed.fastEquals(plan)) {
+    if (pushed.fastEquals(plan)) {
       plan
     } else {
       // Local checks do not cover ancestors or elided repartitions below the root. Reject the
@@ -174,17 +175,6 @@ case class PushDownShuffleExchangeThroughUnion(
       } else {
         plan
       }
-    }
-    // Re-planning creates fresh unions without the cost mark. Once a moved branch is a stage,
-    // all children may already share the target, so EnsureRequirements adds no union exchange
-    // and this pass has nothing to push down. Check every accepted union, including partially
-    // staged ones, for direct requirement or retargeted column shuffles. Restoring the mark keeps
-    // an equivalent re-plan from costing one shuffle less and masking a new shuffle elsewhere.
-    // Mark only after validation so rejected candidates cannot affect subsequent cost comparisons.
-    accepted.transform {
-      case union: UnionExec if union.children.exists(hasPushedShuffle) && !union.isPlainUnion =>
-        union.setTagValue(AQEUtils.PUSHED_THROUGH_UNION, true)
-        union
     }
   }
 
@@ -233,22 +223,6 @@ case class PushDownShuffleExchangeThroughUnion(
         findPushableShuffle(operator.child, lookThrough, found)
       case _ => None
     }
-  }
-
-  /**
-   * Recognizes the two direct shuffle shapes produced for moved union branches: a requirement
-   * shuffle, or a column repartition retargeted away from the effective default partition count.
-   * Column retargeting preserves keys in order, so only its count distinguishes it here. Query
-   * stages retain these origins and counts. No intermediate operators are followed: adaptive reads
-   * are added after preparation. Update this check if push-down changes these shapes or origins.
-   */
-  private def hasPushedShuffle(plan: SparkPlan): Boolean = plan match {
-    case shuffle: ShuffleExchangeLike =>
-      shuffle.shuffleOrigin == ENSURE_REQUIREMENTS ||
-        (shuffle.shuffleOrigin == REPARTITION_BY_COL &&
-          shuffle.outputPartitioning.numPartitions != conf.numShufflePartitions)
-    case stage: ShuffleQueryStageExec => hasPushedShuffle(stage.shuffle)
-    case _ => false
   }
 
   /**
@@ -475,7 +449,7 @@ case class PushDownShuffleExchangeThroughUnion(
       sharedExchanges: Set[SparkPlan]): Option[SparkPlan] = {
     def addExchange(partitioning: Partitioning, child: SparkPlan): ShuffleExchangeExec = {
       val exchange = ShuffleExchangeExec(partitioning, child, ENSURE_REQUIREMENTS)
-      exchange.setTagValue(AQEUtils.PUSHED_DOWN_SHUFFLE, true)
+      exchange.setTagValue(PushDownShuffleExchangeThroughUnion.PUSHED_DOWN_SHUFFLE, true)
       exchange
     }
     val newChildren = union.children.zip(layouts).map { case (child, reported) =>
@@ -587,5 +561,40 @@ case class PushDownShuffleExchangeThroughUnion(
     } else {
       SortExec(requiredOrdering, global = false, child)
     }
+  }
+}
+
+object PushDownShuffleExchangeThroughUnion {
+  private val PUSHED_DOWN_SHUFFLE = TreeNodeTag[Boolean]("unionPushedDownShuffle")
+
+  /**
+   * Whether this node carries the mark of a shuffle inserted below a union by push-down.
+   * Custom cost evaluators can distinguish these exchanges from ordinary shuffles;
+   * exchanges only retargeted by the rule are not newly marked.
+   */
+  def isPushedDownShuffle(plan: SparkPlan): Boolean = {
+    plan.getTagValue(PUSHED_DOWN_SHUFFLE).contains(true)
+  }
+
+  /**
+   * Whether this union represents one shuffle in the push-down cost model. Inspect the current
+   * shape on both sides of an adaptive cost comparison, rather than carrying a union tag across
+   * re-planning. Moved branches have direct requirement shuffles, or column repartitions whose
+   * counts differ from the effective default after retargeting; stages retain these properties.
+   * Column retargeting preserves keys in order. This is a shape inference, not provenance: pruning
+   * the only qualifying child makes a surviving union stop contributing its virtual shuffle cost.
+   * Update this check if the rewrite changes these shapes.
+   * Costs are compared before read optimization, which runs inside exchange or final result stages.
+   */
+  def hasPushedShuffle(union: UnionExec): Boolean = {
+    def pushed(plan: SparkPlan): Boolean = plan match {
+      case shuffle: ShuffleExchangeLike =>
+        isPushedDownShuffle(shuffle) || shuffle.shuffleOrigin == ENSURE_REQUIREMENTS ||
+          (shuffle.shuffleOrigin == REPARTITION_BY_COL &&
+            shuffle.outputPartitioning.numPartitions != SQLConf.get.numShufflePartitions)
+      case stage: ShuffleQueryStageExec => pushed(stage.shuffle)
+      case _ => false
+    }
+    union.children.exists(pushed) && !union.isPlainUnion
   }
 }
