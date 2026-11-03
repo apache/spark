@@ -87,10 +87,9 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
           "TABLE", Map("table" -> toSQLId(tableName)))
     }
     val conjuncts = join.condition.toSeq.flatMap(splitConjunctivePredicates)
-    // The residual is evaluated inside the lookup join, where a Python or external UDF over lookup
-    // columns cannot be extracted. As ExtractPythonUDFFromJoinCondition and PlanExternalUDFs do for
-    // other joins, an inner join evaluates such a conjunct in a filter above the join, and an
-    // outer join is rejected.
+    // A Python or external UDF over lookup columns cannot run in the residual. The rules that move
+    // one out of a join condition match only Join and run later, so this rule does it: an inner
+    // join evaluates the conjunct in a filter above the join, and an outer join is rejected.
     if (join.joinType == LeftOuter) {
       conjuncts.flatMap(lookupSideUDF(join, _)).headOption.foreach {
         case _: ExternalUserDefinedFunction =>
