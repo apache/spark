@@ -39,6 +39,8 @@ import org.apache.spark.util.ArrayImplicits._
 /**
  * Physical plan node for scanning a batch of data from a data source v2.
  *
+ * @param plannedScan The `Scan` to read, with the `Batch` and the input partitions planned from it,
+ *                    see [[PlannedScan]].
  * @param storageFilters Predicates the scan's readers may evaluate, to skip reading the other
  *                       columns of the rows they reject, see [[SupportsStorageFilters]]. Non-empty
  *                       only for a scan that declared their columns. Each task's readers get them
@@ -46,22 +48,16 @@ import org.apache.spark.util.ArrayImplicits._
  *                       post-scan `Filter` too.
  * @param appendsCheckedColumn Whether the readers mark the rows they checked in a boolean column,
  *                             the last of `output`, see `StorageFilterPlanning.checkedColumn`.
- * @param plannedInputPartitions The `Batch` and the input partitions this node and its copies read,
- *                               see [[PlannedInputPartitions]]. They have to be the planned ones,
- *                               because the `Scan` can be shared with another node whose runtime
- *                               filter prunes it first, e.g. the build side of a DPP subquery
- *                               (SPARK-60752).
  */
 case class BatchScanExec(
     output: Seq[AttributeReference],
-    @transient scan: Scan,
+    @transient plannedScan: PlannedScan,
     runtimeFilters: Seq[Expression],
     ordering: Option[Seq[SortOrder]] = None,
     @transient table: Table,
     keyGroupedPartitioning: Option[Seq[Expression]] = None,
     storageFilters: Seq[Expression] = Nil,
-    appendsCheckedColumn: Boolean = false,
-    @transient plannedInputPartitions: PlannedInputPartitions = new PlannedInputPartitions
+    appendsCheckedColumn: Boolean = false
   ) extends DataSourceV2ScanExecBase {
 
   // The readers are asked for the column only with storage filters, and append it last.
@@ -73,9 +69,9 @@ case class BatchScanExec(
   private def scanOutput: Seq[AttributeReference] =
     if (appendsCheckedColumn) output.init else output
 
-  @transient private lazy val planned = plannedInputPartitions(scan)
+  override def scan: Scan = if (plannedScan == null) null else plannedScan.scan
 
-  @transient lazy val batch: Batch = if (scan == null) null else planned.batch
+  @transient lazy val batch: Batch = if (scan == null) null else plannedScan.batch
 
   override protected lazy val sparkMetrics: Map[String, SQLMetric] = {
     val name = "number of output rows"
@@ -116,7 +112,7 @@ case class BatchScanExec(
   @transient lazy val prunedKeyGroupedPartitioning: Option[Seq[Expression]] =
     keyGroupedPartitioning.map(_.filter(_.references.subsetOf(outputSet)))
 
-  @transient override lazy val inputPartitions: Seq[InputPartition] = planned.inputPartitions
+  @transient override lazy val inputPartitions: Seq[InputPartition] = plannedScan.inputPartitions
 
   // Visible for testing. Runtime filtering resolves the scan's columns by name, which the checked
   // column must not take part in.
@@ -190,24 +186,17 @@ case class BatchScanExec(
 }
 
 /**
- * The `Batch` and the input partitions of a [[BatchScanExec]], planned once per `Scan` by the first
- * node over that `Scan` that asks for them. Each newly built node gets its own instance, and the
- * copies later rules make of the node share it. So a copy reads the partitions the first node
- * planned, with a reader factory from the `Batch` that planned them. A copy given another `Scan`
- * plans that one once, for itself and its own copies.
+ * A `Scan`, with the `Batch` and the input partitions a [[BatchScanExec]] plans from it once, when
+ * a node first asks for them. The copies later rules make of the node share it, so they read the
+ * partitions the first node planned, with a reader factory from the `Batch` that planned them.
+ * They have to be the planned ones, because the `Scan` can be shared with another node whose
+ * runtime filter prunes it first, e.g. the build side of a DPP subquery (SPARK-60752).
  */
-class PlannedInputPartitions {
-  // By identity, since a runtime filter changes one `Scan` instance, which can equal another.
-  private val planned = new java.util.IdentityHashMap[Scan, PlannedInputPartitions.Planned]
-
-  def apply(scan: Scan): PlannedInputPartitions.Planned = synchronized {
-    planned.computeIfAbsent(scan, s => new PlannedInputPartitions.Planned(s))
-  }
+final class PlannedScan(val scan: Scan) {
+  lazy val batch: Batch = scan.toBatch
+  lazy val inputPartitions: Seq[InputPartition] = batch.planInputPartitions().toImmutableArraySeq
 }
 
-object PlannedInputPartitions {
-  class Planned(scan: Scan) {
-    lazy val batch: Batch = scan.toBatch
-    lazy val inputPartitions: Seq[InputPartition] = batch.planInputPartitions().toImmutableArraySeq
-  }
+object PlannedScan {
+  def unapply(plannedScan: PlannedScan): Some[Scan] = Some(plannedScan.scan)
 }

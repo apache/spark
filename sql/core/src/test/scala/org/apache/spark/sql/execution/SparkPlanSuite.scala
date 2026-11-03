@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCo
 import org.apache.spark.sql.catalyst.plans.logical.Deduplicate
 import org.apache.spark.sql.catalyst.trees.LeafLike
 import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionReaderFactory, Scan}
-import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, PlannedScan}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -209,14 +209,14 @@ class SparkPlanSuite extends SharedSparkSession {
     // violating the contract that equal objects must have equal hash codes.
     val exec1 = BatchScanExec(
       output = Seq.empty,
-      scan = null,
+      plannedScan = null,
       runtimeFilters = Seq.empty,
       table = null,
       keyGroupedPartitioning = Some(Seq(Literal(1)))
     )
     val exec2 = BatchScanExec(
       output = Seq.empty,
-      scan = null,
+      plannedScan = null,
       runtimeFilters = Seq.empty,
       table = null,
       keyGroupedPartitioning = Some(Seq(Literal(2)))
@@ -307,7 +307,7 @@ class SparkPlanSuite extends SharedSparkSession {
     val data = AttributeReference("data", StringType)(ExprId(1))
     val scan = BatchScanExec(
       output = Seq(id, data),
-      scan = null,
+      plannedScan = null,
       runtimeFilters = Seq.empty,
       table = null,
       keyGroupedPartitioning = Some(Seq(id, data)))
@@ -339,17 +339,12 @@ class SparkPlanSuite extends SharedSparkSession {
       case _ => false
     }
 
-    val scan = BatchScanExec(Seq.empty, new NewBatchScan, Seq.empty, table = null)
-    // The copies that rules make, through `makeCopy` or `clone`, share what the node planned.
+    val scan = BatchScanExec(Seq.empty, new PlannedScan(new NewBatchScan), Seq.empty, table = null)
+    // Copies through `makeCopy`, `clone` or `copy` share what the node planned.
     assert(sharesPlanning(scan.makeCopy(scan.productIterator.map(_.asInstanceOf[AnyRef]).toArray),
       scan))
     assert(sharesPlanning(scan.clone(), scan))
-    // A copy given another `Scan` plans that one once, for itself and its own copies.
-    val other = scan.copy(scan = new NewBatchScan)
-    assert(!(other.batch eq scan.batch))
-    assert(sharesPlanning(other.clone(), other))
-    // The node's own copies still share what it planned.
-    assert(sharesPlanning(scan.clone(), scan))
+    assert(sharesPlanning(scan.copy(runtimeFilters = Nil), scan))
   }
 }
 
