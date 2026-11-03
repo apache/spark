@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, MetadataAttribute}
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, DeleteAction, InsertAction, LogicalPlan, MergeAction, MergeIntoTable, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig
 import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig.AnsiStoreAssignmentCastCheck
@@ -44,6 +45,9 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     _.containsPattern(COMMAND), ruleId) {
+    case MetadataColumnAssignments(assignments, errors) =>
+      throw QueryCompilationErrors.invalidRowLevelOperationAssignments(assignments, errors)
+
     case u: UpdateTable if !u.skipSchemaResolution && u.resolved && u.rewritable && !u.aligned =>
       validateStoreAssignmentPolicy()
       val (newTable, metadataAttrMap) = cleanAttrMetadata(u.table)
@@ -80,6 +84,40 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
 
     case m: MergeIntoTable if shouldAlignAssignments(m) && containsFinalSchema(m) =>
       resolveAssignments(m)
+  }
+
+  // The values of metadata columns are produced by the data source and cannot be written, so
+  // assignments to metadata columns are rejected unless the legacy behavior is enabled. The keys
+  // are checked as soon as they are resolved, so that the command fails before schema evolution
+  // changes the target table.
+  private object MetadataColumnAssignments {
+    def unapply(plan: LogicalPlan): Option[(Seq[Assignment], Seq[String])] = {
+      val assignmentsToCheck = plan match {
+        case _ if conf.getConf(SQLConf.LEGACY_IGNORE_METADATA_COLUMN_ASSIGNMENTS) =>
+          Nil
+        case u: UpdateTable if !u.skipSchemaResolution && u.rewritable =>
+          Seq(u.assignments)
+        case m: MergeIntoTable if !m.skipSchemaResolution && m.rewritable =>
+          val actions = m.matchedActions ++ m.notMatchedActions ++ m.notMatchedBySourceActions
+          actions.collect {
+            case UpdateAction(_, assignments, _) => assignments
+            case InsertAction(_, assignments) => assignments
+          }
+        case _ =>
+          Nil
+      }
+      assignmentsToCheck.iterator
+        .map(assignments => (assignments, metadataColumnAssignmentErrors(assignments)))
+        .find { case (_, errors) => errors.nonEmpty }
+    }
+  }
+
+  private def metadataColumnAssignmentErrors(assignments: Seq[Assignment]): Seq[String] = {
+    assignments.map(_.key).filter(_.resolved).flatMap(_.references)
+      .filter(attr => MetadataAttribute.isValid(attr.metadata))
+      .map(_.name)
+      .distinct
+      .map(name => s"Cannot assign to metadata column '$name'")
   }
 
   private def shouldAlignAssignments(m: MergeIntoTable): Boolean = {

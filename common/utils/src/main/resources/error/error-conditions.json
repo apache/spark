@@ -11,6 +11,12 @@
     ],
     "sqlState" : "42845"
   },
+  "AGGREGATE_OR_WINDOW_FUNCTION_IN_CHECK_CONSTRAINT" : {
+    "message" : [
+      "The check constraint `<checkCondition>` calls an aggregate or window function. Check constraints apply to each row and cannot call these functions."
+    ],
+    "sqlState" : "42621"
+  },
   "AGGREGATE_OUT_OF_MEMORY" : {
     "message" : [
       "No enough memory for aggregation"
@@ -634,6 +640,12 @@
       "The provided URL cannot be decoded: <url>. Please ensure that the URL is properly formatted and try again."
     ],
     "sqlState" : "22546"
+  },
+  "CANNOT_INSTANTIATE_FUNCTION_CLASS" : {
+    "message" : [
+      "Cannot instantiate class <className> when registering the function <functionName>: <msg>. Please make sure the class has a public no-arg constructor that succeeds."
+    ],
+    "sqlState" : "46103"
   },
   "CANNOT_INSTANTIATE_HIVE_FUNCTION" : {
     "message" : [
@@ -2369,6 +2381,12 @@
       "Encountered error when saving to external data source."
     ],
     "sqlState" : "KD010"
+  },
+  "DATA_SOURCE_EXTERNAL_LOOKUP_NOT_SUPPORTED" : {
+    "message" : [
+      "<description>: External lookup is not supported."
+    ],
+    "sqlState" : "0A000"
   },
   "DATA_SOURCE_INVALID_RUNTIME_FILTER_ATTRIBUTE" : {
     "message" : [
@@ -8383,6 +8401,12 @@
     ],
     "sqlState" : "22023"
   },
+  "SUBQUERY_IN_CHECK_CONSTRAINT" : {
+    "message" : [
+      "The check constraint `<checkCondition>` contains a subquery. Check constraints cannot contain subqueries."
+    ],
+    "sqlState" : "42621"
+  },
   "SUM_OF_LIMIT_AND_OFFSET_EXCEEDS_MAX_INT" : {
     "message" : [
       "The sum of the LIMIT clause and the OFFSET clause must not be greater than the maximum 32-bit integer value (2,147,483,647) but found limit = <limit>, offset = <offset>."
@@ -10195,6 +10219,12 @@
       }
     },
     "sqlState" : "42601"
+  },
+  "USER_DEFINED_FUNCTION_IN_CHECK_CONSTRAINT" : {
+    "message" : [
+      "The check constraint `<checkCondition>` calls the user-defined function <functionName>. Check constraints can only call built-in functions."
+    ],
+    "sqlState" : "42621"
   },
   "USER_RAISED_EXCEPTION" : {
     "message" : [
