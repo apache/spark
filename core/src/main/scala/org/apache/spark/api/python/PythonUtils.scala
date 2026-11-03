@@ -26,7 +26,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.sys.process.Process
 
-import org.apache.spark.{SparkContext, SparkEnv}
+import org.apache.spark.SparkEnv
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{PATH, PYTHON_PACKAGES, PYTHON_VERSION}
@@ -37,7 +37,7 @@ import org.apache.spark.util.Utils
 private[spark] object PythonUtils extends Logging {
   val PY4J_ZIP_NAME = "py4j-0.10.9.9-src.zip"
 
-  /** Get the PYTHONPATH for PySpark, either from SPARK_HOME, if it is set, or from our JAR */
+  /** Get the PYTHONPATH for PySpark from SPARK_HOME, if it is set */
   def sparkPythonPath: String = {
     val pythonPath = new ArrayBuffer[String]
     for (sparkHome <- sys.env.get("SPARK_HOME")) {
@@ -45,7 +45,6 @@ private[spark] object PythonUtils extends Logging {
       pythonPath +=
         Seq(sparkHome, "python", "lib", PY4J_ZIP_NAME).mkString(File.separator)
     }
-    pythonPath ++= SparkContext.jarOfObject(this)
     pythonPath.mkString(File.pathSeparator)
   }
 

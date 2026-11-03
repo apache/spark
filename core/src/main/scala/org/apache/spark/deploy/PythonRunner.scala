@@ -73,8 +73,8 @@ object PythonRunner {
       thread.join()
     }
 
-    // Build up a PYTHONPATH that includes the Spark assembly (where this class is), the
-    // python directories in SPARK_HOME (if set), and any files in the pyFiles argument
+    // Build up a PYTHONPATH that includes the python directories in SPARK_HOME (if set)
+    // and any files in the pyFiles argument
     val pathElements = new ArrayBuffer[String]
     pathElements ++= formattedPyFiles
     pathElements += PythonUtils.sparkPythonPath
