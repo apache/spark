@@ -56,8 +56,8 @@ class ExecutorResizeDriverPlugin extends DriverPlugin with Logging {
 
   override def init(sc: SparkContext, ctx: PluginContext): JMap[String, String] = {
     val allocator = sc.conf.get(KUBERNETES_ALLOCATION_PODS_ALLOCATOR)
-    if (allocator != "direct") {
-      logWarning(log"ExecutorResizePlugin requires the 'direct' pods allocator; " +
+    if (allocator != "direct" && allocator != "deployment") {
+      logWarning(log"ExecutorResizePlugin requires the 'direct' or 'deployment' pods allocator; " +
         log"${MDC(CONFIG, KUBERNETES_ALLOCATION_PODS_ALLOCATOR.key)} is " +
         log"${MDC(CONFIG2, allocator)}. Plugin will not start.")
       return Map.empty[String, String].asJava
@@ -111,13 +111,20 @@ class ExecutorResizeDriverPlugin extends DriverPlugin with Logging {
       .list()
       .getItems.asScala
 
-    // Drop executors that no longer exist so that cappedExecutors does not grow unbounded.
-    cappedExecutors.retainAll(pods.flatMap { p =>
-      Option(p.getMetadata.getLabels.get(SPARK_EXECUTOR_ID_LABEL))
-    }.toSet.asJava)
+    val executorPods = pods.flatMap { pod =>
+      pod.getMetadata.getLabels.get(SPARK_EXECUTOR_ID_LABEL) match {
+        case "EXECID" | null =>
+          // The exec label has not yet been assigned
+          None
+        case id =>
+          Some((id, pod))
+      }
+    }
 
-    pods.filter(_.getMetadata.getLabels.get(SPARK_EXECUTOR_ID_LABEL) != null).foreach { pod =>
-      val execId = pod.getMetadata.getLabels.get(SPARK_EXECUTOR_ID_LABEL)
+    // Drop executors that no longer exist so that cappedExecutors does not grow unbounded.
+    cappedExecutors.retainAll(executorPods.map(_._1).toSet.asJava)
+
+    executorPods.foreach { case (execId, pod) =>
       try {
         val metrics = kubernetesClient.top().pods().metrics(namespace, pod.getMetadata.getName)
 

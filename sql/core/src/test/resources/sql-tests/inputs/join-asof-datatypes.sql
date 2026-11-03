@@ -142,11 +142,40 @@ FROM VALUES (DATE '2026-06-29') AS t(d) ASOF JOIN
      VALUES (TIMESTAMP '2026-06-29 10:00:00'), (TIMESTAMP '2026-06-28 08:00:00') AS r(ts)
   MATCH_CONDITION (t.d >= r.ts);
 
--- FVT-ASOF-4-016: coercion TIMESTAMP vs TIMESTAMP_NTZ
-SELECT t.ts, r.ts_ntz AS matched_ts_ntz
-FROM VALUES (TIMESTAMP '2026-06-29 10:00:00') AS t(ts) ASOF JOIN
-     VALUES (TIMESTAMP_NTZ '2026-06-29 09:00:00') AS r(ts_ntz)
-  MATCH_CONDITION (t.ts >= r.ts_ntz);
+-- FVT-ASOF-4-016: coercion TIMESTAMP vs TIMESTAMP_NTZ across a DST gap
+SET spark.sql.session.timeZone=America/Los_Angeles;
+
+-- The DST gap maps 02:50 to 10:50Z, after 03:00 (10:00Z) and 03:15 (10:15Z).
+SELECT l.id, r.id
+FROM VALUES
+  (TIMESTAMP_LTZ '2024-03-10 10:05:00Z', 1),
+  (TIMESTAMP_LTZ '2024-03-10 10:55:00Z', 2) AS l(ts, id)
+LEFT ASOF JOIN VALUES
+  (TIMESTAMP_NTZ '2024-03-10 02:50:00', 1),
+  (TIMESTAMP_NTZ '2024-03-10 03:00:00', 2),
+  (TIMESTAMP_NTZ '2024-03-10 03:15:00', 3) AS r(ts, id)
+MATCH_CONDITION (l.ts <= r.ts);
+
+SELECT l.id, r.id
+FROM VALUES
+  (TIMESTAMP_LTZ '2024-03-10 10:05:00Z', 1),
+  (TIMESTAMP_LTZ '2024-03-10 10:55:00Z', 2) AS l(ts, id)
+LEFT ASOF JOIN VALUES
+  (TIMESTAMP_NTZ '2024-03-10 02:50:00', 1),
+  (TIMESTAMP_NTZ '2024-03-10 03:00:00', 2),
+  (TIMESTAMP_NTZ '2024-03-10 03:15:00', 3) AS r(ts, id)
+MATCH_CONDITION (l.ts >= r.ts);
+
+-- Timestamp coercion also applies within a tuple that widens INT to BIGINT.
+SELECT r.id
+FROM VALUES (TIMESTAMP_LTZ '2024-03-10 10:15:00Z', 2L) AS l(ts, n)
+LEFT ASOF JOIN VALUES
+  (TIMESTAMP_NTZ '2024-03-10 02:50:00', 1, 1),
+  (TIMESTAMP_NTZ '2024-03-10 03:15:00', 1, 2),
+  (TIMESTAMP_NTZ '2024-03-10 03:15:00', 3, 3) AS r(ts, n, id)
+MATCH_CONDITION ((l.ts, l.n) <= (r.ts, r.n));
+
+RESET spark.sql.session.timeZone;
 
 -- FVT-ASOF-4-016a: coercion DATE vs STRING (SPARK-59527), coerced like the >= operator
 SELECT t.d, r.s AS matched_s

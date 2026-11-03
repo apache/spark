@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.expressions.xml.{StructsToXmlEvaluator, XmlExpressionEvalUtils, XmlToStructsEvaluator}
 import org.apache.spark.sql.catalyst.util.DropMalformedMode
@@ -53,6 +54,18 @@ import org.apache.spark.unsafe.types.UTF8String
        {"time":2015-08-26 00:00:00}
       > SELECT _FUNC_('<p><teacher>Alice</teacher><student><name>Bob</name><rank>1</rank></student><student><name>Charlie</name><rank>2</rank></student></p>', 'STRUCT<teacher: STRING, student: ARRAY<STRUCT<name: STRING, rank: INT>>>');
        {"teacher":"Alice","student":[{"name":"Bob","rank":1},{"name":"Charlie","rank":2}]}
+  """,
+  note = """
+    A CHAR `xmlStr` is not rtrimmed; padding is trailing whitespace that XML ignores.
+    CHAR/VARCHAR in `schema` is accepted when CHAR/VARCHAR are first-class
+    (spark.sql.charVarchar.standardSemantics.enabled or
+    spark.sql.preserveCharVarcharTypeInfo): fields are assigned (CHAR padded; overflow is
+    a bad record). spark.sql.legacy.charVarcharAsString reads them as STRING. Otherwise
+    the schema raises UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING. With
+    spark.sql.charVarchar.standardSemantics.enabled, CHAR/VARCHAR map keys are
+    length-checked without padding or trimming; with only
+    spark.sql.preserveCharVarcharTypeInfo, short CHAR keys are padded and over-length keys
+    raise EXCEED_LIMIT_LENGTH.
   """,
   group = "xml_funcs",
   since = "4.0.0")
@@ -113,22 +126,30 @@ case class XmlToStructs(
     copy(timeZoneId = Option(timeZoneId))
   }
 
-  override def nullSafeEval(xml: Any): Any = evaluator.evaluate(xml.asInstanceOf[UTF8String])
+  override def nullSafeEval(xml: Any): Any = {
+    evaluator.evaluate(xml.asInstanceOf[UTF8String])
+  }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val expr = ctx.addReferenceObj("this", this)
+    val inputEval = child.genCode(ctx)
     // nullSafeEval returns an InternalRow for struct output and a VariantVal for variant output.
     // The variant result can be null (e.g. a malformed record rescued under PERMISSIVE mode), so
     // cast to the actual output type and null-check the result.
     val resultType = CodeGenerator.javaType(dataType)
     val result = ctx.freshName("xmlResult")
-    nullSafeCodeGen(ctx, ev, input =>
-      s"""
-         |$resultType $result = ($resultType) $expr.nullSafeEval($input);
-         |if ($result == null) {
-         |  ${ev.isNull} = true;
-         |} else {
-         |  ${ev.value} = $result;
+    ev.copy(code =
+      code"""
+         |${inputEval.code}
+         |boolean ${ev.isNull} = ${inputEval.isNull};
+         |$resultType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+         |if (!${ev.isNull}) {
+         |  $resultType $result = ($resultType) $expr.nullSafeEval(${inputEval.value});
+         |  if ($result == null) {
+         |    ${ev.isNull} = true;
+         |  } else {
+         |    ${ev.value} = $result;
+         |  }
          |}
        """.stripMargin)
   }
@@ -158,6 +179,10 @@ case class XmlToStructs(
        STRUCT<a: BIGINT>
       > SELECT _FUNC_('<p><a attr="2">1</a><a>3</a></p>', map('excludeAttribute', 'true'));
        STRUCT<a: ARRAY<BIGINT>>
+  """,
+  note = """
+    A CHAR `xml` argument is not rtrimmed. Padding is trailing whitespace in the sample
+    document; XML inference ignores it.
   """,
   since = "4.0.0",
   group = "xml_funcs")
@@ -200,7 +225,7 @@ case class SchemaOfXml(
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_NULL",
         messageParameters = Map("exprName" -> "xml"))
-    } else if (child.dataType != StringType) {
+    } else if (!child.dataType.isInstanceOf[StringType]) {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(

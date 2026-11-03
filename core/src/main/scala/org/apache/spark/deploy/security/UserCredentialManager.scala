@@ -28,7 +28,7 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.config._
@@ -513,9 +513,56 @@ private[spark] object UserCredentialManager extends Logging {
             s"${SECURITY_OIDC_ENABLED.key} is true")
       }
 
+      // Credentials are transmitted to executors over Spark's RPC channel (via
+      // UpdateUserCredentials broadcasts and TaskDescription delivery). If RPC encryption is not
+      // configured, those credentials travel in cleartext. Per the SPIP, enabling credential
+      // propagation without RPC encryption logs a warning by default; operators can opt into a
+      // fail-fast mode via spark.security.oidc.requireRpcEncryption. This check runs after the
+      // required-config checks above so a missing token file is not masked by an encryption
+      // warning/error about an unrelated setting.
+      checkRpcEncryption(sparkConf)
+
       val tokenIngestor = new FileTokenIngestor(Paths.get(tokenFile))
       Some(new UserCredentialManager(
         sparkConf, tokenIngestor, onCredentialsUpdate, selectionLoader))
+    }
+  }
+
+  /**
+   * Checks RPC channel encryption when OIDC credential propagation is enabled, since credentials
+   * are otherwise transmitted over the RPC channel in cleartext.
+   *
+   * By default this only logs a warning, per the SPIP's warn-by-default behavior. When
+   * `spark.security.oidc.requireRpcEncryption` is true, it instead fails fast with an
+   * `IllegalArgumentException`, mirroring [[HadoopDelegationTokenManager]]'s
+   * direct-credential-provider path.
+   *
+   * The encryption predicate and the remediation hint are shared with
+   * [[HadoopDelegationTokenManager]]'s `require()` via [[SecurityManager]], so the warning, the
+   * fail-fast message here, and the direct-provider `require()` message cannot drift apart.
+   */
+  private[security] def checkRpcEncryption(sparkConf: SparkConf): Unit = {
+    if (!SecurityManager.isRpcEncryptionEnabled(sparkConf)) {
+      if (sparkConf.get(SECURITY_OIDC_REQUIRE_RPC_ENCRYPTION)) {
+        throw new IllegalArgumentException(
+          s"OIDC credential propagation (${SECURITY_OIDC_ENABLED.key}=true) requires RPC channel " +
+            s"encryption when ${SECURITY_OIDC_REQUIRE_RPC_ENCRYPTION.key}=true, but it is not " +
+            s"configured. ${SecurityManager.rpcEncryptionRemediation}")
+      }
+      // The remediation hint is carried under MDC(LogKeys.MESSAGE, ...) rather than
+      // MDC(LogKeys.REASON, ...): REASON is used elsewhere for the reason an operation failed, so
+      // keeping the hint out of it leaves the structured `reason` field clean for real failure
+      // reasons. We say credentials "may be" (not "will be") transmitted in cleartext because the
+      // channel could still be protected outside Spark (e.g. a service mesh or a private network),
+      // which Spark cannot detect. We also point operators at the fail-fast mode so those who want
+      // Spark to enforce encryption (rather than warn) know how to opt in.
+      logWarning(log"OIDC credential propagation is enabled " +
+        log"(${MDC(LogKeys.CONFIG, SECURITY_OIDC_ENABLED.key)}=true) but RPC channel encryption " +
+        log"is not configured. Credentials may be transmitted to executors over an unencrypted " +
+        log"channel. " + log"${MDC(LogKeys.MESSAGE, SecurityManager.rpcEncryptionRemediation)}" +
+        log" This is a warning by default; set " +
+        log"${MDC(LogKeys.CONFIG2, SECURITY_OIDC_REQUIRE_RPC_ENCRYPTION.key)}=true to fail fast " +
+        log"instead.")
     }
   }
 

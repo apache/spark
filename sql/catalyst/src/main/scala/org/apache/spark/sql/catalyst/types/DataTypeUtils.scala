@@ -25,6 +25,8 @@ import org.apache.spark.sql.connector.catalog.Column
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy.{ANSI, STRICT}
+import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig.AnsiStoreAssignmentCastCheck
+import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig.AnsiStoreAssignmentCastCheck.{ANALYSIS, RUNTIME}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DecimalType.{forType, fromDecimal}
 
@@ -111,13 +113,15 @@ object DataTypeUtils {
       resolver: Resolver,
       context: String,
       storeAssignmentPolicy: StoreAssignmentPolicy.Value,
-      addError: String => Unit): Boolean = {
+      addError: String => Unit,
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck =
+        AnsiStoreAssignmentCastCheck.DEFAULT): Boolean = {
     (write, read) match {
       case (wArr: ArrayType, rArr: ArrayType) =>
         // run compatibility check first to produce all error messages
         val typesCompatible = canWrite(
           tableName, wArr.elementType, rArr.elementType, byName, resolver, context + ".element",
-          storeAssignmentPolicy, addError)
+          storeAssignmentPolicy, addError, ansiStoreAssignmentCastCheck)
 
         if (wArr.containsNull && !rArr.containsNull) {
           throw QueryCompilationErrors.incompatibleDataToTableNullableArrayElementsError(
@@ -134,10 +138,10 @@ object DataTypeUtils {
         // run compatibility check first to produce all error messages
         val keyCompatible = canWrite(
           tableName, wMap.keyType, rMap.keyType, byName, resolver, context + ".key",
-          storeAssignmentPolicy, addError)
+          storeAssignmentPolicy, addError, ansiStoreAssignmentCastCheck)
         val valueCompatible = canWrite(
           tableName, wMap.valueType, rMap.valueType, byName, resolver, context + ".value",
-          storeAssignmentPolicy, addError)
+          storeAssignmentPolicy, addError, ansiStoreAssignmentCastCheck)
 
         if (wMap.valueContainsNull && !rMap.valueContainsNull) {
           throw QueryCompilationErrors.incompatibleDataToTableNullableMapValuesError(
@@ -155,7 +159,7 @@ object DataTypeUtils {
             val fieldContext = s"$context.${rField.name}"
             val typesCompatible = canWrite(
               tableName, wField.dataType, rField.dataType, byName, resolver, fieldContext,
-              storeAssignmentPolicy, addError)
+              storeAssignmentPolicy, addError, ansiStoreAssignmentCastCheck)
 
             if (byName && !nameMatch) {
               throw QueryCompilationErrors.incompatibleDataToTableUnexpectedColumnNameError(
@@ -198,7 +202,8 @@ object DataTypeUtils {
 
       case (_: NullType, _) if storeAssignmentPolicy == ANSI => true
 
-      case (w: AtomicType, r: AtomicType) if storeAssignmentPolicy == ANSI =>
+      case (w: AtomicType, r: AtomicType)
+          if storeAssignmentPolicy == ANSI && ansiStoreAssignmentCastCheck == ANALYSIS =>
         if (!Cast.canANSIStoreAssign(w, r)) {
           throw QueryCompilationErrors.incompatibleDataToTableCannotSafelyCastError(
             tableName, context, w.catalogString, r.catalogString
@@ -213,13 +218,34 @@ object DataTypeUtils {
       // If write-side data type is a user-defined type, check with its underlying data type.
       case (w, r) if w.isInstanceOf[UserDefinedType[_]] && !r.isInstanceOf[UserDefinedType[_]] =>
         canWrite(tableName, w.asInstanceOf[UserDefinedType[_]].sqlType, r, byName, resolver,
-          context, storeAssignmentPolicy, addError)
+          context, storeAssignmentPolicy, addError, ansiStoreAssignmentCastCheck)
 
       // If read-side data type is a user-defined type, check with its underlying data type.
       case (w, r) if r.isInstanceOf[UserDefinedType[_]] && !w.isInstanceOf[UserDefinedType[_]] =>
         canWrite(tableName, w, r.asInstanceOf[UserDefinedType[_]].sqlType, byName, resolver,
-          context, storeAssignmentPolicy, addError)
+          context, storeAssignmentPolicy, addError, ansiStoreAssignmentCastCheck)
 
+      // RUNTIME defers to the inserted ANSI cast, which fails on malformed or overflowing
+      // values at runtime. Clearly invalid conversion are still rejected either in an earlier
+      // branch of this match clause, or in checkAnalysis.
+      case (w, r) if storeAssignmentPolicy == ANSI && ansiStoreAssignmentCastCheck == RUNTIME =>
+        (w, r) match {
+          // Some casts that pass checkAnalysis don't behave correctly at runtime. Keep rejecting
+          // them for now:
+          // - Long/decimal -> timestamp can silently overflow.
+          // - Variant -> complex types doesn't enforce nested field non-nullability.
+          case (LongType | _: DecimalType, TimestampType) |
+               (VariantType, _: StructType | _: ArrayType | _: MapType) =>
+            throw QueryCompilationErrors.incompatibleDataToTableCannotSafelyCastError(
+              tableName, context, w.catalogString, r.catalogString)
+          // - Building a variant from TIME or nanosecond timestamps isn't supported, whether the
+          //   value is top-level or nested in an array.
+          case (_, VariantType) if w.existsRecursively(
+              t => t.isInstanceOf[TimeType] || t.isInstanceOf[AnyTimestampNanoType]) =>
+            throw QueryCompilationErrors.incompatibleDataToTableCannotSafelyCastError(
+              tableName, context, w.catalogString, r.catalogString)
+          case _ => true
+        }
       case (w, r) =>
         throw QueryCompilationErrors.incompatibleDataToTableCannotSafelyCastError(
           tableName, context, w.catalogString, r.catalogString
@@ -331,4 +357,3 @@ object DataTypeUtils {
     }
   }
 }
-

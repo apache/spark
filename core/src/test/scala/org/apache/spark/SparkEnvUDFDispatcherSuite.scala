@@ -26,20 +26,21 @@ import org.mockito.Answers.RETURNS_DEEP_STUBS
 import org.mockito.Mockito.{mock, verify}
 
 import org.apache.spark.broadcast.BroadcastManager
-import org.apache.spark.internal.config.UDF
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.OutputCommitCoordinator
 import org.apache.spark.storage.BlockManager
-import org.apache.spark.udf.worker.UDFWorkerSpecification
+import org.apache.spark.udf.worker.{DirectWorker, UDFWorkerSpecification}
 import org.apache.spark.udf.worker.core.{UDFDispatcherFactory, WorkerDispatcher, WorkerLogger}
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 class SparkEnvUDFDispatcherSuite extends SparkFunSuite {
 
   private def spec = UDFWorkerSpecification.getDefaultInstance
 
-  private def newEnv(conf: SparkConf): SparkEnv = {
+  private def newEnv(
+      conf: SparkConf,
+      factory: Option[() => UDFDispatcherFactory] = None): SparkEnv = {
     new SparkEnv(
       SparkContext.DRIVER_IDENTIFIER,
       mock(classOf[RpcEnv]),
@@ -52,74 +53,54 @@ class SparkEnvUDFDispatcherSuite extends SparkFunSuite {
       null,
       mock(classOf[MetricsSystem]),
       mock(classOf[OutputCommitCoordinator]),
-      conf)
+      conf) {
+      override private[spark] def createUDFDispatcherFactory(): UDFDispatcherFactory = {
+        factory.map(_()).getOrElse(super.createUDFDispatcherFactory())
+      }
+    }
   }
 
-  test("no factory configured: dispatcher creation fails with an actionable message") {
-    val factory = SparkEnv.resolveUDFDispatcherFactory(new SparkConf(false), isDriver = true)
-    // Resolution itself must succeed: applications that never run an external UDF should not
-    // fail at SparkEnv creation just because no dispatcher is configured.
+  test("an unset worker type fails with an actionable message") {
+    val factory = SparkEnv.resolveUDFDispatcherFactory()
     val e = intercept[UnsupportedOperationException] {
       factory.createDispatcher(spec, WorkerLogger.NoOp)
     }
-    assert(e.getMessage.contains(UDF.DISPATCHER_FACTORY.key))
+    assert(e.getMessage.contains("WORKER_NOT_SET"))
+    assert(e.getMessage.contains("UDFWorkerSpecification.worker"))
   }
 
-  test("configured factory is instantiated and used") {
-    val conf = new SparkConf(false)
-      .set(UDF.DISPATCHER_FACTORY, classOf[TestNoArgDispatcherFactory].getName)
-    val factory = SparkEnv.resolveUDFDispatcherFactory(conf, isDriver = true)
-    assert(factory.isInstanceOf[TestNoArgDispatcherFactory])
-    assert(factory.createDispatcher(spec, WorkerLogger.NoOp) === null)
-  }
-
-  test("factory receives the SparkConf and isDriver when it declares them") {
-    val conf = new SparkConf(false)
-      .set(UDF.DISPATCHER_FACTORY, classOf[TestConfDispatcherFactory].getName)
-      .set("spark.test.marker", "set-by-conf")
-    Seq(true, false).foreach { isDriver =>
-      val factory = SparkEnv.resolveUDFDispatcherFactory(conf, isDriver)
-        .asInstanceOf[TestConfDispatcherFactory]
-      assert(factory.conf.get("spark.test.marker") === "set-by-conf")
-      assert(factory.isDriver === isDriver)
-    }
-  }
-
-  test("a class that is not a UDFDispatcherFactory is rejected against the config key") {
-    val conf = new SparkConf(false)
-      .set(UDF.DISPATCHER_FACTORY, classOf[NotAFactory].getName)
-    val e = intercept[SparkException] {
-      SparkEnv.resolveUDFDispatcherFactory(conf, isDriver = true)
-    }
-    assert(e.getMessage.contains(UDF.DISPATCHER_FACTORY.key))
-    assert(e.getMessage.contains(classOf[NotAFactory].getName))
-  }
-
-  test("an incompatible factory class is rejected before its initializer runs") {
-    val key = "spark.test.incompatibleFactoryInitialized"
-    System.clearProperty(key)
-    try {
-      val conf = new SparkConf(false)
-        .set(UDF.DISPATCHER_FACTORY, "org.apache.spark.NotAFactoryWithInitializer$")
-      intercept[SparkException] {
-        SparkEnv.resolveUDFDispatcherFactory(conf, isDriver = true)
+  test("a direct worker requests the Spark-owned runtime") {
+    val directSpec = UDFWorkerSpecification
+      .newBuilder()
+      .setDirect(DirectWorker.getDefaultInstance)
+      .build()
+    val userLoader = new ClassLoader(getClass.getClassLoader) {
+      override def loadClass(name: String, resolve: Boolean): Class[_] = {
+        if (name == SparkEnv.DIRECT_DISPATCHER_FACTORY_CLASS) {
+          throw new IllegalStateException(s"User class loader was asked for $name")
+        }
+        super.loadClass(name, resolve)
       }
-      assert(System.getProperty(key) == null)
-    } finally {
-      System.clearProperty(key)
     }
+    val factory = SparkEnv.resolveUDFDispatcherFactory()
+    val e = Utils.withContextClassLoader(userLoader) {
+      intercept[SparkException] {
+        factory.createDispatcher(directSpec, WorkerLogger.NoOp)
+      }
+    }
+    assert(e.getMessage.contains("DIRECT"))
+    assert(e.getMessage.contains("spark-udf-worker-grpc"))
+    assert(e.getMessage.contains(SparkEnv.DIRECT_DISPATCHER_FACTORY_CLASS))
   }
 
   test("stop waits for lazy dispatcher manager creation and closes created dispatchers") {
-    val factory = TestBlockingDispatcherFactory
-    val conf = new SparkConf(false)
-      .set(UDF.DISPATCHER_FACTORY, classOf[TestBlockingDispatcherFactory].getName)
-    val env = newEnv(conf)
+    val hooks = TestBlockingDispatcherFactory
+    val env = newEnv(new SparkConf(false), Some(() => new TestBlockingDispatcherFactory))
     val pool = ThreadUtils.newDaemonFixedThreadPool(2, "udf-dispatcher-test")
     implicit val executionContext: ExecutionContext = ExecutionContext.fromExecutor(pool)
     val creator = Future { Try(env.getExternalUDFDispatcher(spec)) }
     try {
-      assert(factory.entered.await(10, TimeUnit.SECONDS))
+      assert(hooks.entered.await(10, TimeUnit.SECONDS))
       val stopStarted = new CountDownLatch(1)
       val stopFinished = new CountDownLatch(1)
       val stopper = Future {
@@ -129,49 +110,21 @@ class SparkEnvUDFDispatcherSuite extends SparkFunSuite {
       }
       assert(stopStarted.await(10, TimeUnit.SECONDS))
       assert(!stopFinished.await(100, TimeUnit.MILLISECONDS))
-      factory.release.countDown()
+      hooks.release.countDown()
       val result = ThreadUtils.awaitResult(creator, 30.seconds)
       ThreadUtils.awaitResult(stopper, 30.seconds)
       assert(result.isSuccess || result.failed.get.isInstanceOf[IllegalStateException])
-      if (factory.dispatcherCreated) {
-        verify(factory.dispatcher).close()
+      if (hooks.dispatcherCreated) {
+        verify(hooks.dispatcher).close()
       }
       intercept[IllegalStateException] {
         env.getExternalUDFDispatcher(spec)
       }
     } finally {
-      factory.release.countDown()
+      hooks.release.countDown()
       pool.shutdownNow()
     }
   }
-
-  test("an unknown class name fails to resolve") {
-    val conf = new SparkConf(false).set(UDF.DISPATCHER_FACTORY, "not.a.real.Factory")
-    intercept[ClassNotFoundException] {
-      SparkEnv.resolveUDFDispatcherFactory(conf, isDriver = true)
-    }
-  }
-}
-
-// Declared as top-level classes so that they have constructors Spark can find reflectively.
-
-class TestNoArgDispatcherFactory extends UDFDispatcherFactory {
-  override def createDispatcher(
-      workerSpec: UDFWorkerSpecification,
-      logger: WorkerLogger): WorkerDispatcher = null
-}
-
-class TestConfDispatcherFactory(val conf: SparkConf, val isDriver: Boolean)
-  extends UDFDispatcherFactory {
-  override def createDispatcher(
-      workerSpec: UDFWorkerSpecification,
-      logger: WorkerLogger): WorkerDispatcher = null
-}
-
-class NotAFactory
-
-object NotAFactoryWithInitializer {
-  System.setProperty("spark.test.incompatibleFactoryInitialized", "true")
 }
 
 object TestBlockingDispatcherFactory {

@@ -528,11 +528,36 @@ private[spark] class ApplicationMaster(
         logError(log"SparkContext did not initialize after waiting for " +
             log"${MDC(LogKeys.TIMEOUT, totalWaitTime)} ms. " +
             log"Please check earlier log output for errors. Failing the application.")
+        if (sparkConf.get(AM_SC_INIT_TIMEOUT_THREAD_DUMP)) {
+          dumpThreadStacksOnScInitTimeout()
+        }
         finish(FinalApplicationStatus.FAILED,
           ApplicationMaster.EXIT_SC_NOT_INITED,
           "Timed out waiting for SparkContext.")
     } finally {
       resumeDriver()
+    }
+  }
+
+  /**
+   * Log the stack traces of all threads to help diagnose what the user application thread
+   * (driver) was blocked on when SparkContext initialization timed out. The user thread is
+   * sorted to the front since it is usually the most relevant one. Failures of the dump
+   * itself are swallowed so that they never mask the original timeout error.
+   */
+  private def dumpThreadStacksOnScInitTimeout(): Unit = {
+    try {
+      val dumps = Utils.getThreadDump()
+      val sorted = Option(userClassThread) match {
+        case Some(t) => dumps.sortBy(d => if (d.threadId == t.getId) 0 else 1)
+        case None => dumps
+      }
+      logError(log"Thread dump on SparkContext initialization timeout:\n" +
+        log"${MDC(LogKeys.THREAD, sorted.map(_.toString).mkString("\n"))}")
+    } catch {
+      case NonFatal(dumpError) =>
+        logWarning("Failed to capture thread dump on SparkContext initialization timeout.",
+          dumpError)
     }
   }
 

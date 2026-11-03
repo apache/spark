@@ -34,7 +34,7 @@ import org.apache.spark.network.util.JavaUtils.sha256Hex
 import org.apache.spark.sql.Artifact
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.test.ConnectFunSuite
-import org.apache.spark.util.IvyTestUtils
+import org.apache.spark.util.{IvyTestUtils, SparkFileUtils}
 import org.apache.spark.util.MavenUtils.MavenCoordinate
 
 class ArtifactSuite extends ConnectFunSuite {
@@ -47,6 +47,8 @@ class ArtifactSuite extends ConnectFunSuite {
   private var bstub: CustomSparkConnectBlockingStub = _
   private var stub: CustomSparkConnectStub = _
   private var state: SparkConnectStubState = _
+  private var ivyHome: Path = _
+  private var previousIvyHome: Option[String] = _
 
   private def startDummyServer(): Unit = {
     service = new DummySparkConnectService()
@@ -67,23 +69,39 @@ class ArtifactSuite extends ConnectFunSuite {
 
   override def beforeEach(): Unit = {
     super.beforeEach()
+    previousIvyHome = Option(System.getProperty("ivy.home"))
+    ivyHome = Files.createTempDirectory("artifact-suite-ivy")
+    Files.createDirectories(ivyHome.resolve("cache"))
+    Files.createDirectories(ivyHome.resolve("jars"))
+    System.setProperty("ivy.home", ivyHome.toString)
     startDummyServer()
     createArtifactManager()
     client = null
   }
 
   override def afterEach(): Unit = {
-    if (server != null) {
-      server.shutdownNow()
-      assert(server.awaitTermination(5, TimeUnit.SECONDS), "server failed to shutdown")
-    }
+    try {
+      if (server != null) {
+        server.shutdownNow()
+        assert(server.awaitTermination(5, TimeUnit.SECONDS), "server failed to shutdown")
+      }
 
-    if (channel != null) {
-      channel.shutdownNow()
-    }
+      if (channel != null) {
+        channel.shutdownNow()
+      }
 
-    if (client != null) {
-      client.shutdown()
+      if (client != null) {
+        client.shutdown()
+      }
+    } finally {
+      previousIvyHome match {
+        case Some(path) => System.setProperty("ivy.home", path)
+        case None => System.clearProperty("ivy.home")
+      }
+      if (ivyHome != null) {
+        SparkFileUtils.deleteRecursively(ivyHome.toFile)
+      }
+      super.afterEach()
     }
   }
 

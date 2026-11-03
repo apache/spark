@@ -105,6 +105,18 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
     assert(asOfJoin.matchLeftOperand.isEmpty)
   }
 
+  test("INNER ASOF JOIN keeps NOT NULL right columns; LEFT ASOF JOIN makes them nullable") {
+    def rightValueNullable(joinType: String): Boolean =
+      sql(
+        s"""
+           |SELECT l.k, r.v
+           |FROM VALUES (2) AS l(k) $joinType ASOF JOIN VALUES (1, 'a') AS r(k, v)
+           |  MATCH_CONDITION (l.k >= r.k)
+           |""".stripMargin).schema("v").nullable
+    assert(!rightValueNullable(""))
+    assert(rightValueNullable("LEFT"))
+  }
+
   test("SQL ASOF JOIN uses sort-merge without DataFrame sort-merge conf") {
     setupTradeQuoteViews()
     val sqlText =
@@ -143,6 +155,69 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
                        |  ON t.symbol = q.symbol""".stripMargin,
           start = 31,
           stop = 137)))
+  }
+
+  // Tests run both analyzers and compare their plans (dualRunWithLegacy), so checkAnswer also
+  // covers the single-pass analyzer. LEFT JOIN leaves d.k NULL on some rows, so a match on the
+  // visible k column gives a different answer.
+  test("MATCH_CONDITION accepts a hidden USING column of the right input") {
+    checkAnswer(
+      sql(
+        """
+          |SELECT l.lts, r.rts
+          |FROM (VALUES (1, 10), (2, 20)) AS l(k, lts)
+          |ASOF JOIN (
+          |  (VALUES (1, 5), (8, 15)) AS r(k, rts) LEFT JOIN (VALUES (1)) AS d(k) USING (k))
+          |  MATCH_CONDITION (l.lts >= d.k)
+          |""".stripMargin),
+      Seq(Row(10, 5), Row(20, 5)))
+  }
+
+  test("MATCH_CONDITION accepts a hidden USING column of the left input") {
+    checkAnswer(
+      sql(
+        """
+          |SELECT l.lts, r.rts
+          |FROM ((VALUES (1, 10), (2, 20), (8, 30)) AS l(k, lts)
+          |  LEFT JOIN (VALUES (1), (2)) AS d(k) USING (k))
+          |ASOF JOIN (VALUES (5), (15)) AS r(rts)
+          |  MATCH_CONDITION (d.k <= r.rts)
+          |""".stripMargin),
+      Seq(Row(10, 5), Row(20, 5)))
+  }
+
+  test("ON condition accepts a hidden USING column") {
+    checkAnswer(
+      sql(
+        """
+          |SELECT l.lts, r.rts
+          |FROM (VALUES (1, 10), (1, 20), (2, 30)) AS l(k, lts)
+          |ASOF JOIN (
+          |  (VALUES (1, 5), (1, 15), (2, 25)) AS r(k, rts)
+          |  LEFT JOIN (VALUES (1)) AS d(k) USING (k))
+          |  MATCH_CONDITION (l.lts >= r.rts)
+          |  ON l.k = d.k
+          |""".stripMargin),
+      Seq(Row(10, 5), Row(20, 15)))
+  }
+
+  test("MATCH_CONDITION rejects a hidden USING column on the same side as the other operand") {
+    val sqlText =
+      """
+        |SELECT l.lts, r.rts
+        |FROM ((VALUES (1, 10), (2, 20)) AS l(k, lts) JOIN (VALUES (1), (2)) AS d(k) USING (k))
+        |ASOF JOIN (VALUES (5), (15)) AS r(rts)
+        |  MATCH_CONDITION (l.lts >= d.k)
+        |""".stripMargin
+    Seq("false", "true").foreach { singlePass =>
+      withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass) {
+        checkError(
+          exception = intercept[AnalysisException](sql(sqlText)),
+          condition = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
+          sqlState = Some("42K0E"),
+          parameters = Map("refs1" -> "\"lts\"", "refs2" -> "\"k\""))
+      }
+    }
   }
 
   test("MATCH_CONDITION rejects invalid table references") {
@@ -446,7 +521,6 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
   }
 
   test("MATCH_CONDITION accepts ARRAY operands with coercible element types") {
-    // SPARK-59528: a resolved orderExpression proves the elements were unified for the ZipWith.
     val sqlText =
       """
         |SELECT t.a
@@ -458,7 +532,6 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
     assert(analyzed.resolved)
     val asOfJoin = analyzed.collectFirst { case j: AsOfJoin => j }.get
     assert(asOfJoin.asOfCondition.resolved)
-    assert(asOfJoin.orderExpression.resolved)
   }
 
   test("ARRAY<STRUCT> MATCH_CONDITION with mismatched element names and types is rejected") {
