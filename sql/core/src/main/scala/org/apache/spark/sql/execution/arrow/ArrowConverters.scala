@@ -99,7 +99,7 @@ private[sql] object ArrowConverters extends Logging {
     // Create compression codec based on config
     private val codec = ArrowCompressionUtils.createCompressionCodec(
       SQLConf.get.arrowCompressionCodec, SQLConf.get.arrowZstdCompressionLevel)
-    protected val unloader = new VectorUnloader(root, true, codec, true)
+    protected val unloader = ArrowCompressionUtils.createVectorUnloader(root, codec)
     protected val arrowWriter = ArrowWriter.create(root)
     protected def maxBytesPerBatch: Long = -1L
 
