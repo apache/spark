@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.execution.dynamicpruning
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeSeq, BindReferences, BroadcastValueProjection, DynamicPruningExpression, DynamicPruningSubquery, Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{AttributeSeq, BindReferences, BroadcastValueProjection, DynamicPruningExpression, DynamicPruningSubquery, Expression, Literal}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.DYNAMIC_PRUNING_SUBQUERY
@@ -123,14 +123,9 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession) extends Rule[Sp
           case None if onlyInBroadcast =>
             DynamicPruningExpression(Literal.TrueLiteral)
           case None =>
-            val aliases = broadcastKeyIndices.map(idx =>
-              Alias(buildKeys(idx), buildKeys(idx).toString)())
-            // Alias the keys in a Project instead of making them the grouping expressions.
-            // Grouping on plain attributes lets the aggregate keep the build side's partitioning
-            // (e.g. KeyedPartitioning) instead of requiring a shuffle. See
-            // AliasAwareOutputExpression.
-            val groupingAttrs = aliases.map(_.toAttribute)
-            val aggregate = Aggregate(groupingAttrs, groupingAttrs, Project(aliases, buildPlan))
+            val aggregate =
+              DynamicPruningSubquery.planDistinctBuildKeys(buildPlan, buildKeys,
+                broadcastKeyIndices)
             val sparkPlan = QueryExecution.prepareExecutedPlan(sparkSession, aggregate)
             val values = SubqueryExec(name, sparkPlan)
             DynamicPruningExpression(InSubqueryExec(value, values, exprId))
