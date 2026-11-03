@@ -39,8 +39,8 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.tags.{ExtendedHiveTest, SlowHiveTest}
+import org.apache.spark.util.{Utils, VersionUtils}
 import org.apache.spark.util.ArrayImplicits._
-import org.apache.spark.util.Utils
 
 /**
  * Test HiveExternalCatalog backward compatibility.
@@ -272,15 +272,18 @@ object PROCESS_TABLES extends QueryTest {
   val testingVersions: Seq[String] = if (isPythonVersionAvailable &&
       minimumTestingVersion.isDefined) {
     import scala.io.Source
-    val sparkVersionPattern = """<a href="spark-(\d.\d.\d)/">""".r
+    import scala.math.Ordering.Implicits._
+    val sparkVersionPattern = """<a href="spark-(\d+\.\d+\.\d+)/">""".r
+    // Compare versions numerically, e.g., 3.5.9 < 3.5.10, instead of as strings.
+    def parseVersion(version: String) = VersionUtils.majorMinorPatchVersion(version).get
     try Utils.tryWithResource(
       Source.fromURL(s"$releaseMirror/spark")) { source =>
       source.mkString
         .split("\n")
         .filter(sparkVersionPattern.unanchored.matches(_))
         .map(sparkVersionPattern.findFirstMatchIn(_).get.group(1))
-        .filter(_ < org.apache.spark.SPARK_VERSION)
-        .filter(v => minimumTestingVersion.exists(_ <= v))
+        .filter(v => parseVersion(v) < parseVersion(org.apache.spark.SPARK_VERSION))
+        .filter(v => minimumTestingVersion.exists(m => parseVersion(m) <= parseVersion(v)))
         .filterNot(skipReleaseVersions.contains).toImmutableArraySeq
     } catch {
       // Do not throw exception during object initialization.
