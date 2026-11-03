@@ -160,12 +160,13 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     checkEvaluation(cast(Long.MinValue - 0.9D, LongType), Long.MinValue)
   }
 
-  test("SPARK-59805: ANSI cast of a wide decimal to int/short/byte truncates exactly") {
+  test("SPARK-60843: ANSI cast of a wide decimal to int/short/byte truncates exactly") {
     // BigDecimal-backed decimal(20, s) literals just inside and just outside each bound. The
     // in-range ones round up past the bound as a Double, which used to make them overflow.
+    // Values just below an integer near the bound used to be rounded up to that integer.
     def wideDecimal(str: String, scale: Int): Literal = {
+      // Decimal(BigDecimal, p, s) always keeps the BigDecimal-backed representation.
       val d = Decimal(BigDecimal(str), 20, scale)
-      assert(!d.isCompact, s"$str should not be backed by a long")
       Literal(d)
     }
     Seq[(DataType, Int, String, Any, String, Any, String)](
@@ -193,6 +194,14 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
             "targetType" -> s"\"${dt.sql}\"",
             "ansiConfig" -> "\"spark.sql.ansi.enabled\""))
       }
+    }
+    Seq[(DataType, Int, String, Any)](
+      (IntegerType, 8, "2147483646.99999999", 2147483646),
+      (IntegerType, 8, "-2147483647.99999999", -2147483647),
+      (ShortType, 13, "32766.9999999999999", 32766.toShort),
+      (ByteType, 15, "126.999999999999999", 126.toByte)
+    ).foreach { case (dt, scale, str, expected) =>
+      checkEvaluation(cast(wideDecimal(str, scale), dt), expected)
     }
   }
 

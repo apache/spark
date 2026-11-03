@@ -611,9 +611,10 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     }
   }
 
-  test("SPARK-59805: roundToInt/Short/Byte are exact for decimals not backed by a long") {
-    // Each value truncates to the type's max/min but is so close to the next integer that
-    // it rounds up to it as a Double, which used to fail the range check.
+  test("SPARK-60843: roundToInt/Short/Byte truncate exactly for decimals not backed by a long") {
+    // Each value is so close to the next integer that it rounds up to it as a Double. The
+    // ones that truncate to the type's max/min used to fail the range check, and the ones
+    // just below an integer near the bound used to come back as that integer.
     val inRange = Seq(
       ("2147483647.99999999", 20, 8, (d: Decimal) => d.roundToInt().toLong, Int.MaxValue.toLong),
       ("-2147483648.99999999", 20, 8, (d: Decimal) => d.roundToInt().toLong, Int.MinValue.toLong),
@@ -624,7 +625,11 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
       ("127.999999999999999", 20, 15, (d: Decimal) => d.roundToByte().toLong,
         Byte.MaxValue.toLong),
       ("-128.999999999999999", 20, 15, (d: Decimal) => d.roundToByte().toLong,
-        Byte.MinValue.toLong))
+        Byte.MinValue.toLong),
+      ("2147483646.99999999", 20, 8, (d: Decimal) => d.roundToInt().toLong, 2147483646L),
+      ("-2147483647.99999999", 20, 8, (d: Decimal) => d.roundToInt().toLong, -2147483647L),
+      ("32766.9999999999999", 20, 13, (d: Decimal) => d.roundToShort().toLong, 32766L),
+      ("126.999999999999999", 20, 15, (d: Decimal) => d.roundToByte().toLong, 126L))
     inRange.foreach { case (str, precision, scale, round, expected) =>
       val expanded = Decimal(BigDecimal(str), precision, scale)
       checkCompact(expanded, false)
