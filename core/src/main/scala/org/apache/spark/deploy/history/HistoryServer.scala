@@ -156,13 +156,45 @@ class HistoryServer(
     attachHandler(ApiRootResource.getServletHandler(this))
 
     addStaticHandler(SparkUI.STATIC_RESOURCE_DIR)
-    AppHistoryServerPlugin.loadPlugins().foreach(_.setupStaticResources(this))
+    setupPluginStaticResources(AppHistoryServerPlugin.loadPlugins())
     addRenderLogHandler(this, conf)
 
     val contextHandler = new ServletContextHandler
     contextHandler.setContextPath(HistoryServer.UI_PATH_PREFIX)
     contextHandler.addServlet(new ServletHolder(loaderServlet), "/*")
     attachHandler(contextHandler)
+  }
+
+  /**
+   * Registers the static resources declared by every available plugin. A plugin that cannot be
+   * loaded, or whose declared resources cannot be registered, is skipped with a warning so that
+   * it does not prevent the History Server from starting. Throwable is caught around both
+   * hasNext and next() because the ServiceLoader iterator can throw ServiceConfigurationError
+   * or LinkageError for a provider whose class is missing or cannot be linked.
+   */
+  private[history] def setupPluginStaticResources(
+      plugins: Iterable[AppHistoryServerPlugin]): Unit = {
+    val iterator = plugins.iterator
+    var keepLoading = true
+    while (keepLoading) {
+      try {
+        if (iterator.hasNext) {
+          val plugin = iterator.next()
+          try {
+            plugin.staticResources.foreach { case (dir, path) => addStaticHandler(dir, path) }
+          } catch {
+            case t: Throwable =>
+              logWarning(log"Failed to set up static resources for " +
+                log"${MDC(CLASS_NAME, plugin.getClass.getName)}", t)
+          }
+        } else {
+          keepLoading = false
+        }
+      } catch {
+        case t: Throwable =>
+          logWarning("Skipping an AppHistoryServerPlugin that failed to load", t)
+      }
+    }
   }
 
   /** Bind to the HTTP server behind this web interface. */

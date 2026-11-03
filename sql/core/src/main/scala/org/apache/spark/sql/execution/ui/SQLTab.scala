@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.ui
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
-import org.apache.spark.ui.{SparkUI, SparkUITab}
+import org.apache.spark.ui.{SparkUI, SparkUITab, WebUI}
 
 class SQLTab(val sqlStore: SQLAppStatusStore, sparkUI: SparkUI)
   extends SparkUITab(sparkUI, "SQL") with Logging {
@@ -34,11 +34,20 @@ class SQLTab(val sqlStore: SQLAppStatusStore, sparkUI: SparkUI)
   attachPage(new ExecutionPage(this))
   parent.attachTab(this)
 
-  parent.addStaticHandler(SQLTab.STATIC_RESOURCE_DIR, "/static/sql")
+  SQLTab.addStaticHandler(parent)
 
   override def displayOrder: Int = 0
 }
 
 object SQLTab {
-  private[ui] val STATIC_RESOURCE_DIR = "org/apache/spark/sql/execution/ui/static"
+  private val STATIC_RESOURCE_DIR = "org/apache/spark/sql/execution/ui/static"
+  private val STATIC_RESOURCE_PATH = "/static/sql"
+
+  /** The (classpath directory, URL path) pair under which the SQL static resources are served. */
+  private[sql] val STATIC_RESOURCE: (String, String) = STATIC_RESOURCE_DIR -> STATIC_RESOURCE_PATH
+
+  /** Serves the SQL static resources from the given UI. */
+  private[sql] def addStaticHandler(ui: WebUI): Unit = {
+    ui.addStaticHandler(STATIC_RESOURCE_DIR, STATIC_RESOURCE_PATH)
+  }
 }
