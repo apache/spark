@@ -19,6 +19,8 @@ package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
 
+import scala.util.Random
+
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.plans.{AsOfJoinDirection, Backward, Forward}
@@ -28,6 +30,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.joins.SortMergeAsOfJoinExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
 /**
  * SQL ASOF JOIN tests that exercise the sort-merge physical operator.
@@ -1661,6 +1664,67 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
                      |""".stripMargin).collect()
               }
               assert(e.asInstanceOf[SparkThrowable].getCondition == errorCondition, e)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("cursor scan: random rows match a plain join with the cursor scan off and on") {
+    // Right as-of keys are unique within each ON key, so a plain join with MAX or MIN over
+    // (as-of key, tag) finds the one closest right row. Tags of random length, NULL keys, and ON
+    // keys that only one side has check that neither scan drops, mixes up or reuses a row.
+    val leftSchema = new StructType().add("id", IntegerType).add("k", IntegerType)
+      .add("ts", IntegerType)
+    val rightSchema = new StructType().add("k", IntegerType).add("ts", IntegerType)
+      .add("tag", StringType)
+    (1 to 3).foreach { seed =>
+      val random = new Random(seed)
+      def orNull(value: Int): Any = if (random.nextInt(10) == 0) null else value
+      def tag(): String =
+        if (random.nextInt(8) == 0) null else random.alphanumeric.take(random.nextInt(40)).mkString
+      // Left ON keys are 0 to 7 and right ON keys 2 to 9, so keys 0, 1, 8 and 9 have one side.
+      val leftRows = (0 until 200).map { id =>
+        Row(id, orNull(random.nextInt(8)), orNull(random.nextInt(100)))
+      }
+      val rightRows = (2 until 10).flatMap { k =>
+        random.shuffle((0 until 100).toList).take(30).map(ts => Row(k, ts, tag()))
+      } ++ Seq(Row(null, 5, "NULL ON key"), Row(3, null, "NULL as-of key"))
+      withTempView("t", "q") {
+        spark.createDataFrame(spark.sparkContext.parallelize(leftRows), leftSchema)
+          .createOrReplaceTempView("t")
+        spark.createDataFrame(spark.sparkContext.parallelize(rightRows), rightSchema)
+          .createOrReplaceTempView("q")
+        for {
+          (op, closest) <- Seq(">=" -> "MAX", ">" -> "MAX", "<=" -> "MIN", "<" -> "MIN")
+          joinType <- Seq("LEFT", "INNER")
+        } {
+          val expected = sql(
+            s"""
+               |SELECT id, m.ts, m.tag
+               |FROM (
+               |  SELECT t.id, $closest(named_struct('ts', q.ts, 'tag', q.tag)) AS m
+               |  FROM t LEFT JOIN q ON t.k = q.k AND t.ts $op q.ts
+               |  GROUP BY t.id)
+               |WHERE '$joinType' = 'LEFT' OR m.ts IS NOT NULL
+               |""".stripMargin).collect().toSeq
+          // The default spill thresholds, unlike checkCursorScan: with a one-row threshold, the
+          // buffered scan would open one spill file per right row of the group for every left row.
+          for (cursorScan <- Seq(false, true)) {
+            withClue(s"seed $seed, $joinType, t.ts $op q.ts, cursor scan $cursorScan: ") {
+              withSQLConf(
+                  SQLConf.SHUFFLE_PARTITIONS.key -> "1",
+                  SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> cursorScan.toString) {
+                val df = sql(
+                  s"""
+                     |SELECT t.id, q.ts, q.tag
+                     |FROM t $joinType ASOF JOIN q
+                     |  MATCH_CONDITION (t.ts $op q.ts) ON t.k = q.k
+                     |""".stripMargin)
+                checkAnswer(df, expected)
+                assert((asOfJoinMetric(df, "numAsOfCursorTasks") > 0) == cursorScan)
+              }
             }
           }
         }

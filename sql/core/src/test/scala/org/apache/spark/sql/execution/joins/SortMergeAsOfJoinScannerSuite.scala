@@ -23,9 +23,11 @@ import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSui
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.plans.{AsOfJoinDirection, Backward, Forward, Inner, Nearest}
+import org.apache.spark.sql.catalyst.plans.{AsOfJoinDirection, Backward, Forward, Inner, LeftOuter,
+  Nearest}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 class SortMergeAsOfJoinScannerSuite extends SparkFunSuite with LocalSparkContext {
 
@@ -90,6 +92,27 @@ class SortMergeAsOfJoinScannerSuite extends SparkFunSuite with LocalSparkContext
         assert(cursorKeys == expected)
         assert(evaluations == 20, s"evaluated the as-of condition $evaluations times")
         assert(cursorTasks == 1)
+      }
+    }
+  }
+
+  test("cursor scan keeps its best right row while it reads the next right rows") {
+    // Tags grow and shrink, so the reused best-row buffer has to resize and drop older bytes.
+    val longTag = "a tag that is longer than the tags around it"
+    val rightRows = Seq(10 -> "a", 20 -> longTag, 30 -> "bb", 40 -> null, 50 -> "c" * 30)
+    val leftValues = Seq(5, 15, 15, 25, 35, 45, 55)
+    Seq(
+      // Backward keeps its best row while it reads the first failing row after it.
+      (Backward, Seq(None, Some(10 -> "a"), Some(10 -> "a"), Some(20 -> longTag),
+        Some(30 -> "bb"), Some(40 -> null), Some(50 -> "c" * 30))),
+      // Forward reads past its best row, then reuses it for the second left row 15.
+      (Forward, Seq(Some(10 -> "a"), Some(20 -> longTag), Some(20 -> longTag), Some(30 -> "bb"),
+        Some(40 -> null), Some(50 -> "c" * 30), None))
+    ).foreach { case (direction, expected) =>
+      Seq(false, true).foreach { useCursorScan =>
+        withClue(s"$direction, cursor scan $useCursorScan: ") {
+          assert(runTagScan(leftValues, rightRows, direction, useCursorScan) == expected)
+        }
       }
     }
   }
@@ -224,6 +247,64 @@ class SortMergeAsOfJoinScannerSuite extends SparkFunSuite with LocalSparkContext
         try {
           val matchedKeys = scanner.iterator.map(_.getInt(1)).toList
           Iterator.single((matchedKeys, count.get(), numAsOfCursorTasks.value))
+        } finally {
+          scanner.close()
+        }
+      }.collect().head
+  }
+
+  /**
+   * Runs a LEFT OUTER scan of INT left keys against right rows of (INT key, STRING tag), and
+   * returns the matched right row of each left row. The right input reuses one row object, as
+   * many operators do, so the scan has to copy each row it keeps.
+   */
+  private def runTagScan(
+      leftValues: Seq[Int],
+      rightRows: Seq[(Int, String)],
+      direction: AsOfJoinDirection,
+      useCursorScan: Boolean): Seq[Option[(Int, String)]] = {
+    if (sc == null) {
+      sc = new SparkContext("local", "SortMergeAsOfJoinScannerSuite", new SparkConf(false))
+    }
+    sc.parallelize(Seq(0), 1)
+      .mapPartitions { _ =>
+        val leftKey = AttributeReference("leftKey", IntegerType)()
+        val rightKey = AttributeReference("rightKey", IntegerType)()
+        val tag = AttributeReference("tag", StringType)()
+        val reusedRow = new GenericInternalRow(2)
+        val scanner = new SortMergeAsOfJoinScanner(
+          leftIter = leftValues.iterator.map(value => InternalRow(value)),
+          rightIter = rightRows.iterator.map { case (key, value) =>
+            reusedRow.update(0, key)
+            reusedRow.update(1, UTF8String.fromString(value))
+            reusedRow
+          },
+          leftOutput = Seq(leftKey),
+          rightOutput = Seq(rightKey, tag),
+          leftKeys = Nil,
+          rightKeys = Nil,
+          leftSortExprs = Seq(leftKey),
+          rightSortExprs = Seq(rightKey),
+          asOfCondition = direction match {
+            case Backward => GreaterThanOrEqual(leftKey, rightKey)
+            case _ => LessThanOrEqual(leftKey, rightKey)
+          },
+          joinType = LeftOuter,
+          residualCondition = None,
+          numOutputRows = new SQLMetric("sum"),
+          spillSize = new SQLMetric("sum"),
+          direction = direction,
+          inMemoryThreshold = 256,
+          sizeInBytesSpillThreshold = Long.MaxValue,
+          spillThreshold = 256,
+          useCursorScan = useCursorScan,
+          numAsOfCursorTasks = new SQLMetric("sum"))
+        try {
+          val matches = scanner.iterator.map { row =>
+            val tagValue = if (row.isNullAt(2)) null else row.getString(2)
+            if (row.isNullAt(1)) None else Some(row.getInt(1) -> tagValue)
+          }.toList
+          Iterator.single(matches)
         } finally {
           scanner.close()
         }

@@ -234,20 +234,24 @@ private[joins] class SortMergeAsOfJoinScanner(
     inMemoryThreshold, sizeInBytesSpillThreshold, spillThreshold, sizeInBytesSpillThreshold)
 
   private var rightGroupKey: UnsafeRow = _
+  // The next right row. It is the output row of `rightToUnsafe`, so reading the right row after
+  // it overwrites it. Anything that keeps it longer must copy it.
   private var rightPeek: UnsafeRow = _
   private var rightDone: Boolean = !rightIter.hasNext
 
   // Cursor scan state: the left equi-key of the current group, whether the group has any right
-  // row, and its best right row so far.
+  // row, and its best right row so far. `cursorBest` is null or `cursorBestBuffer`, which holds
+  // a copy of the best row and is reused for every new best row.
   private var cursorGroupKey: UnsafeRow = _
   private var cursorGroupHasRight: Boolean = false
   private var cursorBest: UnsafeRow = _
+  private var cursorBestBuffer: UnsafeRow = _
 
   // Projection to convert right rows to UnsafeRow for the buffer
   private val rightToUnsafe = UnsafeProjection.create(rightOutput, rightOutput)
 
   if (!rightDone) {
-    rightPeek = rightToUnsafe(rightIter.next()).copy()
+    rightPeek = rightToUnsafe(rightIter.next())
   }
 
   if (useCursorScan) {
@@ -359,10 +363,13 @@ private[joins] class SortMergeAsOfJoinScanner(
     }
   }
 
-  /** Moves `rightPeek` to the next right row, or to null at the end of the right input. */
+  /**
+   * Moves `rightPeek` to the next right row, or to null at the end of the right input. The row
+   * is not copied: the buffer copies the rows it keeps, and the cursor copies its best row.
+   */
   private def advanceRightPeek(): Unit = {
     rightPeek = if (rightIter.hasNext) {
-      rightToUnsafe(rightIter.next()).copy()
+      rightToUnsafe(rightIter.next())
     } else {
       rightDone = true; null
     }
@@ -504,8 +511,8 @@ private[joins] class SortMergeAsOfJoinScanner(
       } else {
         joinedRow.withRight(rightPeek)
         if (holds(boundAsOfCond)) {
-          // Each peeked row is its own copy, so it can be kept as is.
-          cursorBest = rightPeek
+          // The next right row overwrites `rightPeek`, so keep a copy.
+          cursorBest = copyToCursorBestBuffer(rightPeek)
           advanceRightPeek()
           if (direction == Forward) return cursorBest
         } else if (direction == Backward) {
@@ -530,6 +537,19 @@ private[joins] class SortMergeAsOfJoinScanner(
       advanceRightPeek()
     }
     cursorGroupHasRight = rightPeek != null && compareToRightPeek(leftKey) == 0
+  }
+
+  /**
+   * Copies `row` into `cursorBestBuffer` and returns the buffer. One buffer is enough, since the
+   * cursor never needs the old best row once it has a new one.
+   */
+  private def copyToCursorBestBuffer(row: UnsafeRow): UnsafeRow = {
+    if (cursorBestBuffer == null) {
+      cursorBestBuffer = row.copy()
+    } else {
+      cursorBestBuffer.copyFrom(row)
+    }
+    cursorBestBuffer
   }
 
   /** Compares `leftKey` with the equi-key of `rightPeek`. Without equi-keys, all rows tie. */
