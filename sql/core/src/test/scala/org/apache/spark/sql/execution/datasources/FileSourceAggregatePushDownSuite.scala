@@ -155,8 +155,8 @@ trait FileSourceAggregatePushDownSuite
   test("SPARK-59607: GROUP BY a null partition column is not overcounted with push down") {
     withTempPath { dir =>
       // Partition a (1 row) / __HIVE_DEFAULT_PARTITION__ (2 rows) / b (1 row). Grouping on p
-      // routes a NULL group key through the reOrderPartitionCol/JoinedRow path; COUNT(p) in
-      // the null group must be 0, not the group's row count.
+      // routes a NULL group key through the JoinedRow (group key + footer aggregate) path;
+      // COUNT(p) in the null group must be 0, not the group's row count.
       Seq((1, "a"), (2, null), (3, null), (4, "b")).toDF("v", "p")
         .write.partitionBy("p").format(format).save(dir.getCanonicalPath)
       withTempView("tmp") {
