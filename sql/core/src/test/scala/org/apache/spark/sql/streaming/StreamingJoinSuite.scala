@@ -360,6 +360,28 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
     )
   }
 
+  test("stream stream inner join filters late rows when event time is projected away") {
+    val leftInput = MemoryStream[(Int, Long)]
+    val rightInput = MemoryStream[(Int, Long)]
+
+    val left = leftInput.toDF().toDF("key", "time")
+      .select($"key", timestamp_seconds($"time").as("leftTime"))
+      .withWatermark("leftTime", "10 seconds")
+    val right = rightInput.toDF().toDF("key", "time")
+      .select($"key", timestamp_seconds($"time").as("rightTime"))
+      .withWatermark("rightTime", "10 seconds")
+    val joined = left.join(right, "key").select($"key")
+
+    testStream(joined)(
+      MultiAddData(leftInput, (1, 1000000L))(rightInput, (1, 1000000L)),
+      CheckNewAnswer(1),
+      MultiAddData(leftInput, (3, 1000001L))(rightInput, (4, 1000001L)),
+      CheckNewAnswer(),
+      MultiAddData(leftInput, (2, 1000L))(rightInput, (2, 1000L)),
+      CheckNewAnswer()
+    )
+  }
+
   testWithAppendAndUpdate("stream stream inner join on windows - without watermark") { outputMode =>
     val input1 = MemoryStream[Int]
     val input2 = MemoryStream[Int]
