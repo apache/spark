@@ -1145,6 +1145,7 @@ std::string idRanges(const SparkDsDomain* domain) {
 int pushDomains(void* handle, const SparkDsDomain* const* domains, int64_t count, bool* used) {
   return guarded([&] {
     auto* reader = fromHandle<Reader>(handle);
+    maybeFail(reader->state, "push_domains");
     // Spark calls push_domains at most once, with at least one domain, and before push_limit.
     if (reader->state.count("id_ranges") > 0 || reader->state.count("domains") > 0) {
       throw std::runtime_error("pushDomains was called twice");

@@ -47,7 +47,7 @@ import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.streaming.{StreamingQuery, Trigger}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.util.{ArrowUtils, CaseInsensitiveStringMap}
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
@@ -994,6 +994,16 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     check("plan a scan of", "injected failure in plan") { session =>
       range(session, "fail" -> "plan").collect()
     }
+    // Spark releases the ranges of the domains that it pushes down, after a failure of push_domains
+    // as after a success.
+    val allocated = ArrowUtils.rootAllocator.getAllocatedMemory
+    check("plan a scan of", "injected failure in push_domains") { session =>
+      range(session, "end" -> "5", "fail" -> "push_domains").where("id IN (1, 3)").collect()
+    }
+    assert(ArrowUtils.rootAllocator.getAllocatedMemory == allocated)
+    checkRows(range(newSession(defaultPackage), "end" -> "5").where("id IN (1, 3)").select("id"),
+      Seq(Row(1L), Row(3L)))
+    assert(ArrowUtils.rootAllocator.getAllocatedMemory == allocated)
     check("read", "injected failure in open") { session =>
       range(session, "fail" -> "open").collect()
     }

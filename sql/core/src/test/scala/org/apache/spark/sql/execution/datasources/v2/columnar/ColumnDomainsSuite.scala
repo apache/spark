@@ -87,7 +87,7 @@ class ColumnDomainsSuite extends QueryTest with SharedSparkSession with Predicat
     assert(domains("id IS NOT NULL") == Seq("id: ANY"))
     assert(domains("id IN (3, 1, 2, 3)") == Seq("id: 1L, 2L, 3L"))
     assert(domains("id NOT IN (1, 3)") == Seq("id: (-inf, 1L), (1L, 3L), (3L, +inf)"))
-    // Comparisons with null are null: so is NOT (x IN (..., NULL)), which matches no row.
+    // Comparisons with null are null, and NOT (x IN (..., NULL)) is false or null: never true.
     assert(domains("id = NULL") == Seq("id: NONE"))
     assert(domains("NOT (id = NULL)") == Seq("id: NONE"))
     assert(domains("id IN (1, NULL)") == Seq("id: 1L"))
@@ -147,9 +147,11 @@ class ColumnDomainsSuite extends QueryTest with SharedSparkSession with Predicat
     assert(domains("d IN (1.0, CAST('NaN' AS DOUBLE))") == Seq("d: NaN, 1.0D"))
     assert(domains("d NOT IN (1.0)") == Seq("d: NaN, (-inf, 1.0D), (1.0D, +inf)"))
     assert(domains("d IS NOT NULL") == Seq("d: NaN, ANY"))
-    // -0.0 is equal to 0.0, which a data source may order after -0.0.
-    assert(domains("d = -0.0") == Seq("d: 0.0D"))
-    assert(domains("f > CAST(-0.0 AS FLOAT)") == Seq("f: NaN, (CAST('0.0' AS FLOAT), +inf)"))
+    // -0.0 is equal to 0.0, which a data source may order after -0.0. The SQL literal -0.0 is a
+    // decimal without a sign, so these are a double literal and a cast from a string, which keep
+    // the sign of the zero.
+    assert(domains("d = -0.0D") == Seq("d: 0.0D"))
+    assert(domains("f > CAST('-0.0' AS FLOAT)") == Seq("f: NaN, (CAST('0.0' AS FLOAT), +inf)"))
     assert(domains("f = CAST('NaN' AS FLOAT)") == Seq("f: NaN"))
   }
 
