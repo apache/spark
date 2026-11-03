@@ -4067,3 +4067,262 @@ DROP TEMPORARY VARIABLE identifier_subq_col
 -- !query analysis
 DropVariable false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_subq_col
+
+
+-- !query
+CREATE TEMPORARY FUNCTION identifier_sql_function(arg1 STRING) RETURNS STRING
+RETURN arg1 || 'blah'
+-- !query analysis
+CreateSQLFunctionCommand identifier_sql_function, arg1 STRING, STRING, arg1 || 'blah', false, true, false, false
+
+
+-- !query
+DECLARE identifier_sql_function_name STRING DEFAULT 'identifier_sql_function'
+-- !query analysis
+CreateVariable default(cast(identifier_sql_function as string), sql=''identifier_sql_function''), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_sql_function_name
+
+
+-- !query
+SELECT IDENTIFIER(identifier_sql_function_name)(col1) FROM VALUES ('b'), ('a') GROUP BY col1
+-- !query analysis
+Project [identifier_sql_function(arg1#x) AS identifier_sql_function(col1)#x]
++- Project [col1#x, cast(col1#x as string) AS arg1#x]
+   +- Aggregate [col1#x], [col1#x]
+      +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT count(*) FROM VALUES ('b'), ('a') GROUP BY IDENTIFIER(identifier_sql_function_name)(col1)
+-- !query analysis
+Project [count(1)#xL]
++- Aggregate [identifier_sql_function#x], [count(1) AS count(1)#xL]
+   +- Project [col1#x, identifier_sql_function(arg1#x) AS identifier_sql_function#x]
+      +- Project [col1#x, cast(col1#x as string) AS arg1#x]
+         +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT * FROM VALUES ('a') t1(a) JOIN VALUES ('ablah') t2(b)
+ON IDENTIFIER(identifier_sql_function_name)(a) = b
+-- !query analysis
+Project [a#x, b#x]
++- Join Inner, (identifier_sql_function(arg1#x) = b#x)
+   :- SubqueryAlias t1
+   :  +- LocalRelation [a#x]
+   +- SubqueryAlias t2
+      +- LocalRelation [b#x]
+
+
+-- !query
+SELECT * FROM VALUES ('a'), ('b') t(c) WHERE IDENTIFIER(identifier_sql_function_name)(c) = 'ablah'
+-- !query analysis
+Project [c#x]
++- Project [c#x]
+   +- Filter (identifier_sql_function(arg1#x) = ablah)
+      +- Project [c#x, cast(c#x as string) AS arg1#x]
+         +- SubqueryAlias t
+            +- LocalRelation [c#x]
+
+
+-- !query
+SELECT col1 FROM VALUES ('b'), ('a') GROUP BY col1
+HAVING IDENTIFIER(identifier_sql_function_name)(col1) = 'ablah'
+-- !query analysis
+Project [col1#x]
++- Filter (identifier_sql_function(arg1#x) = ablah)
+   +- Project [col1#x, cast(col1#x as string) AS arg1#x]
+      +- Aggregate [col1#x], [col1#x]
+         +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT col1 FROM VALUES ('b'), ('a') ORDER BY IDENTIFIER(identifier_sql_function_name)(col1)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SQL_UDF_USAGE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "functionName" : "`identifier_sql_function`",
+    "nodeName" : "Sort"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 47,
+    "stopIndex" : 92,
+    "fragment" : "IDENTIFIER(identifier_sql_function_name)(col1)"
+  } ]
+}
+
+
+-- !query
+SELECT col1 FROM VALUES ('b'), ('a') ORDER BY identifier_sql_function(col1)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SQL_UDF_USAGE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "functionName" : "`identifier_sql_function`",
+    "nodeName" : "Sort"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 47,
+    "stopIndex" : 75,
+    "fragment" : "identifier_sql_function(col1)"
+  } ]
+}
+
+
+-- !query
+SELECT col1, row_number() OVER (
+  PARTITION BY IDENTIFIER(identifier_sql_function_name)(col1) ORDER BY col1) AS rn
+FROM VALUES ('b'), ('a')
+-- !query analysis
+Project [col1#x, rn#x]
++- Project [col1#x, _w0#x, rn#x, rn#x]
+   +- Window [row_number() windowspecdefinition(_w0#x, col1#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rn#x], [_w0#x], [col1#x ASC NULLS FIRST]
+      +- Project [col1#x, identifier_sql_function(arg1#x) AS _w0#x]
+         +- Project [col1#x, cast(col1#x as string) AS arg1#x]
+            +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT max(IDENTIFIER(identifier_sql_function_name)(col1)) FROM VALUES ('b'), ('a')
+-- !query analysis
+Project [max(identifier_sql_function(col1))#x]
++- Aggregate [max(identifier_sql_function(arg1#x)) AS max(identifier_sql_function(col1))#x]
+   +- Project [col1#x, cast(col1#x as string) AS arg1#x]
+      +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT IDENTIFIER(identifier_sql_function_name)(col1), count(*) FROM VALUES ('b'), ('a')
+GROUP BY ALL
+-- !query analysis
+Project [identifier_sql_function(col1)#x, count(1)#xL]
++- Aggregate [identifier_sql_function#x], [identifier_sql_function#x AS identifier_sql_function(col1)#x, count(1) AS count(1)#xL]
+   +- Project [col1#x, identifier_sql_function(arg1#x) AS identifier_sql_function#x]
+      +- Project [col1#x, cast(col1#x as string) AS arg1#x]
+         +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT IDENTIFIER(identifier_sql_function_name || '')(col1) FROM VALUES ('b'), ('a') GROUP BY col1
+-- !query analysis
+Project [identifier_sql_function(arg1#x) AS identifier_sql_function(col1)#x]
++- Project [col1#x, cast(col1#x as string) AS arg1#x]
+   +- Aggregate [col1#x], [col1#x]
+      +- LocalRelation [col1#x]
+
+
+-- !query
+DECLARE identifier_builtin_function_name STRING DEFAULT 'rand'
+-- !query analysis
+CreateVariable default(cast(rand as string), sql=''rand''), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_builtin_function_name
+
+
+-- !query
+SELECT * FROM VALUES ('a') t1(a) JOIN VALUES ('ablah') t2(b)
+ON IDENTIFIER(identifier_builtin_function_name)(0) > 0.5
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "sqlExprs" : "\"(rand(0) > 0.5)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 34,
+    "stopIndex" : 117,
+    "fragment" : "JOIN VALUES ('ablah') t2(b)\nON IDENTIFIER(identifier_builtin_function_name)(0) > 0.5"
+  } ]
+}
+
+
+-- !query
+SET VAR identifier_builtin_function_name = 'max'
+-- !query analysis
+SetVariable [variablereference(system.session.identifier_builtin_function_name='rand')]
++- Project [max AS identifier_builtin_function_name#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT * FROM VALUES ('a') t1(a) JOIN VALUES ('ablah') t2(b)
+ON IDENTIFIER(identifier_builtin_function_name)(a) = b
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "invalidExprSqls" : "\"max(a)\"",
+    "operator" : "Join"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 34,
+    "stopIndex" : 115,
+    "fragment" : "JOIN VALUES ('ablah') t2(b)\nON IDENTIFIER(identifier_builtin_function_name)(a) = b"
+  } ]
+}
+
+
+-- !query
+SET VAR identifier_builtin_function_name = 'explode'
+-- !query analysis
+SetVariable [variablereference(system.session.identifier_builtin_function_name='max')]
++- Project [explode AS identifier_builtin_function_name#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT count(*) FROM VALUES (array(1, 2)) AS t(a)
+GROUP BY IDENTIFIER(identifier_builtin_function_name)(a)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "invalidExprSqls" : "\"explode(a)\"",
+    "operator" : "Aggregate"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 51,
+    "stopIndex" : 106,
+    "fragment" : "GROUP BY IDENTIFIER(identifier_builtin_function_name)(a)"
+  } ]
+}
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_builtin_function_name
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_builtin_function_name
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_sql_function_name
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_sql_function_name
+
+
+-- !query
+DROP TEMPORARY FUNCTION identifier_sql_function
+-- !query analysis
+DropFunctionCommand identifier_sql_function, false, true

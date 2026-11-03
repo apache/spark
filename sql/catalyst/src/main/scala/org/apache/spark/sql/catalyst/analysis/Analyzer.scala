@@ -63,6 +63,7 @@ import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSource
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{PartitionOverwriteMode, StoreAssignmentPolicy}
 import org.apache.spark.sql.internal.connector.{SchemaAlignmentConfig, SupportsConfigurableSchemaAlignment, V1Function}
+import org.apache.spark.sql.metricview.logical.MetricViewPlaceholder
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -1353,6 +1354,15 @@ class Analyzer(
               identifier, cmd, suggestAlternative, u)
           case table => table
         }.getOrElse(u)
+
+      // The child of `AddCheckConstraint` reads its target to validate the existing data, so the
+      // target is an `UnresolvedRelation` that can resolve to a view, unlike `UnresolvedTable`.
+      case a @ AddCheckConstraint(Filter(_, SubqueryAlias(_, v: View)), _) =>
+        throw QueryCompilationErrors.expectTableNotViewError(
+          v.desc.fullIdent, "ALTER TABLE ... ADD CONSTRAINT", suggestAlternative = false, a)
+      case a @ AddCheckConstraint(Filter(_, m: MetricViewPlaceholder), _) =>
+        throw QueryCompilationErrors.expectTableNotViewError(
+          m.metadata.fullIdent, "ALTER TABLE ... ADD CONSTRAINT", suggestAlternative = false, a)
 
       case u @ UnresolvedView(identifier, cmd, allowTemp, suggestAlternative) =>
         lookupTableOrView(identifier, viewOnly = true).map {
