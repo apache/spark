@@ -783,6 +783,44 @@ SELECT * FROM t1;
 
 SET spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation=100;
 
+-- Same with small steps converted to local relations, kept in codegen by a join
+WITH RECURSIVE t1(lvl, arr) AS (
+    SELECT 0, ARRAY(id) FROM range(3)
+    UNION ALL
+    SELECT lvl + 1, IF(lvl = 0, ARRAY(CAST(NULL AS BIGINT)), ARRAY(arr[0] + 1))
+    FROM t1 CROSS JOIN range(1) WHERE lvl < 2
+)
+SELECT * FROM t1;
+
+-- Nested nullability differs from the anchor while another column needs a cast
+WITH RECURSIVE t1(s, arr) AS (
+    SELECT 'a', ARRAY(1)
+    UNION ALL
+    SELECT NULL, arr FROM t1 WHERE s IS NOT NULL
+)
+SELECT * FROM t1;
+
+WITH RECURSIVE t1(n, m, arr) AS (
+    SELECT 1, CAST(1 AS BIGINT), ARRAY(1)
+    UNION ALL
+    SELECT n + 1, n + 1, arr FROM t1 WHERE n < 3
+)
+SELECT * FROM t1;
+
+WITH RECURSIVE t1(n, m, arr) AS (
+    SELECT 1, CAST(1 AS BIGINT), ARRAY(1)
+    UNION ALL
+    SELECT n + 1, n + 1, ARRAY(CAST(NULL AS INT)) FROM t1 WHERE n < 3
+)
+SELECT * FROM t1;
+
+WITH RECURSIVE t1(n, arr) AS (
+    SELECT 1, ARRAY(CAST(1 AS BIGINT))
+    UNION ALL
+    SELECT n + 1, ARRAY(CAST(NULL AS INT)) FROM t1 WHERE n < 3
+)
+SELECT * FROM t1;
+
 -- Two calls to same rCTE with and without limit
 WITH RECURSIVE t1(n) AS (
     SELECT 1
