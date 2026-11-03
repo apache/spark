@@ -588,9 +588,9 @@ object PartitioningUtils extends SQLConfHelper {
     case LongType => JLong.parseLong(value)
     case FloatType => JDouble.parseDouble(value).toFloat
     case DoubleType => JDouble.parseDouble(value)
-    // Cast in ANSI mode, here and in the datetime cases below, to fail on a value that the type
-    // cannot hold in any session, so that `spark.sql.sources.validatePartitionColumns` alone
-    // decides between an error and null.
+    // Cast in ANSI mode, here and in the datetime and interval cases below, so that a value that
+    // the type cannot hold fails in any session and `spark.sql.sources.validatePartitionColumns`
+    // alone decides between an error and null.
     case dt: DecimalType => Cast(Literal(value), dt, ansiEnabled = true).eval()
     case DateType =>
       Cast(Literal(value), DateType, Some(zoneId.getId), ansiEnabled = true).eval()
@@ -599,7 +599,7 @@ object PartitioningUtils extends SQLConfHelper {
     case dt if AnyTimestampType.acceptsType(dt) || AnyTimestampNanoType.acceptsType(dt) =>
       Cast(Literal(unescapePathName(value)), dt, Some(zoneId.getId), ansiEnabled = true).eval()
     case it: AnsiIntervalType =>
-      Cast(Literal(unescapePathName(value)), it).eval()
+      Cast(Literal(unescapePathName(value)), it, ansiEnabled = true).eval()
     case BinaryType => value.getBytes()
     case BooleanType => value.toBoolean
     case dt => throw SparkException.internalError(s"Unsupported partition type: $dt")
