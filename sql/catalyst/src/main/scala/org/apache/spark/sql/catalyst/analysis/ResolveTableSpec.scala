@@ -119,6 +119,12 @@ object ResolveTableSpec extends Rule[LogicalPlan] {
               messageParameters = Map("checkCondition" -> check.condition)
             )
           }
+          check.child.collectFirst { case g: Generator => g }.foreach { generator =>
+            generator.failAnalysis(
+              errorClass = "GENERATOR_IN_CHECK_CONSTRAINT",
+              messageParameters = Map("checkCondition" -> check.condition)
+            )
+          }
           check.failIfCallsUserDefinedFunction()
         case _ =>
       }

@@ -348,6 +348,25 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     }
   }
 
+  test("SPARK-60821: Check constraint cannot call a generator function") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT) $defaultUsing")
+      val call = "explode(array(id))"
+      val cond = s"$call IS NOT NULL"
+      Seq(
+        s"CREATE TABLE ${t}_2 (id INT, CONSTRAINT c1 CHECK ($cond)) $defaultUsing",
+        s"REPLACE TABLE $t (id INT, CONSTRAINT c1 CHECK ($cond)) $defaultUsing"
+      ).foreach { query =>
+        checkError(
+          exception = intercept[AnalysisException](sql(query)),
+          condition = "GENERATOR_IN_CHECK_CONSTRAINT",
+          sqlState = "42621",
+          parameters = Map("checkCondition" -> cond),
+          context = ExpectedContext(fragment = call))
+      }
+    }
+  }
+
   test("SPARK-60777: Existing check constraint calling a user-defined function still works") {
     withUserDefinedFunction("tmp_len" -> true) {
       spark.udf.register("tmp_len", (s: String) => s.length)
