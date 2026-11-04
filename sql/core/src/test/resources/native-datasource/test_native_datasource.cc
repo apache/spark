@@ -1163,7 +1163,7 @@ int createStreamReader(void* handle, struct ArrowSchema* schema,
     reader->state["batch_size"] = get(source->options, "batch_size", "1000");
     for (const char* option :
          {"commit_path", "bad_offset", "bad_initial_offset", "closed_path", "starts_path",
-          "initial_offsets_path", "ranges_path", "states", "stateless", "task_path"}) {
+          "initial_offsets_path", "ranges_path", "states", "stateless", "task_path", "fail"}) {
       reader->state[option] = get(source->options, option, "");
     }
     *out = reader;
@@ -1284,6 +1284,7 @@ int streamPartitions(void* handle, const SparkDsStreamPartitionsInfo* info,
   return guarded([&] {
     checkSize("SparkDsStreamPartitionsInfo", info->size, sizeof(SparkDsStreamPartitionsInfo));
     auto* reader = fromHandle<Reader>(handle);
+    maybeFail(reader->state, "stream_partitions");
     std::string ranges_path = get(reader->state, "ranges_path", "");
     if (!ranges_path.empty()) {
       FILE* file = std::fopen(ranges_path.c_str(), "a");

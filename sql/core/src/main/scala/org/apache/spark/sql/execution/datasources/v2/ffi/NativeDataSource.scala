@@ -25,6 +25,7 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.jdk.CollectionConverters._
 import scala.reflect.{classTag, ClassTag}
+import scala.util.Try
 import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core.JsonProcessingException
@@ -336,21 +337,25 @@ class NativeDataSourceStreamReader(
   extends ColumnarStreamReader {
   import NativeCalls._
 
-  // The range that was planned last, its partitions, and the broadcast of its state, if it has
-  // one. All the scans of the source in a micro-batch plan the same range, such as both sides of
-  // a union of the source with itself, so they read the partitions of a single stream_partitions
-  // call, with the state that it returned.
+  // The range that was planned last, its partitions or the failure to plan them, and the broadcast
+  // of its state, if it has one. All the scans of the source in a micro-batch plan the same range,
+  // such as both sides of a union of the source with itself, so they get the result of a single
+  // stream_partitions call, with the state that it returned.
   private var plannedRange: (String, String) = _
-  private var plannedPartitions: Array[InputPartition] = _
+  private var plannedPartitions: Try[Array[InputPartition]] = _
   private var plannedState: Option[Broadcast[Array[Byte]]] = None
 
   private lazy val library = NativeLibraries.get(location)
 
-  override def initialOffset(): String = {
+  // The calls of the reader on the driver are synchronized, since calls on a handle must not run
+  // at the same time: Spark may plan the scans of a micro-batch on several threads, such as the
+  // side of a broadcast join, and stop the stream from another thread than the query.
+
+  override def initialOffset(): String = synchronized {
     checkOffset("initial_offset", call(name, "plan a scan of")(library.initialOffset(handle.get)))
   }
 
-  override def latestOffset(start: String): String = {
+  override def latestOffset(start: String): String = synchronized {
     checkOffset("latest_offset",
       call(name, "plan a scan of")(library.latestOffset(handle.get, start)))
   }
@@ -377,40 +382,41 @@ class NativeDataSourceStreamReader(
     offset
   }
 
-  override def partitions(start: String, end: String): Array[InputPartition] = {
+  override def partitions(start: String, end: String): Array[InputPartition] = synchronized {
     if (plannedRange != (start, end)) {
-      val planned = call(name, "plan a scan of") {
-        library.streamPartitions(handle.get, start, end)
-      }
-      val partitions = NativeInputPartition.from(planned.partitions)
-      // The executors fetch the state once for the micro-batch, as a broadcast, rather than with
-      // each of its tasks. Spark only plans the next range once the micro-batch of the previous
-      // one finished, so the copies of its state on the executors are removed then. The driver
-      // keeps its own copy, so that the partitions and the reader factories that an engine keeps
-      // can still fetch it, until the ContextCleaner removes it once nothing refers to them.
-      plannedState.foreach(_.unpersist(blocking = false))
-      plannedState = Option(planned.state).filter(_.nonEmpty && partitions.nonEmpty).map {
-        bytes => SparkSession.active.sparkContext.broadcast(bytes)
-      }
-      plannedPartitions =
+      plannedPartitions = Try {
+        val planned = call(name, "plan a scan of") {
+          library.streamPartitions(handle.get, start, end)
+        }
+        val partitions = NativeInputPartition.from(planned.partitions)
+        // The executors fetch the state once for the micro-batch, as a broadcast, rather than with
+        // each of its tasks. Spark only plans the next range once the micro-batch of the previous
+        // one finished, so the copies of its state on the executors are removed then. The driver
+        // keeps its own copy, so that the partitions and the reader factories that an engine keeps
+        // can still fetch it, until the ContextCleaner removes it once nothing refers to them.
+        plannedState.foreach(_.unpersist(blocking = false))
+        plannedState = Option(planned.state).filter(_.nonEmpty && partitions.nonEmpty).map {
+          bytes => SparkSession.active.sparkContext.broadcast(bytes)
+        }
         partitions.map[InputPartition](NativeMicroBatchPartition(_, plannedState))
+      }
       plannedRange = (start, end)
     }
-    plannedPartitions
+    plannedPartitions.get
   }
 
   override def readerFactory(): PartitionReaderFactory = {
     new NativeMicroBatchPartitionReaderFactory(location, name, schema, timeZoneId)
   }
 
-  override def commit(end: String): Unit = {
+  override def commit(end: String): Unit = synchronized {
     call(name, "commit an offset of")(optional(library.commitOffset(handle.get, end)))
   }
 
   // The state of the last micro-batch that the reader planned, for tests.
-  private[ffi] def lastPlannedState: Option[Broadcast[Array[Byte]]] = plannedState
+  private[ffi] def lastPlannedState: Option[Broadcast[Array[Byte]]] = synchronized(plannedState)
 
-  override def stop(): Unit = {
+  override def stop(): Unit = synchronized {
     // As for the state of a micro-batch once the next one is planned.
     Utils.tryWithSafeFinally(plannedState.foreach(_.unpersist(blocking = false)))(handle.close())
   }
@@ -865,7 +871,7 @@ class NativePartitionReader(
     }
     // The C data interface requires the pointer to the buffers of an array that has buffers, even
     // if a buffer itself is NULL. Arrow Java reads the buffers through it, as `lastOffset` does.
-    def checkBuffers(array: ArrowArray.Snapshot, owner: String): Unit = {
+    def checkBuffers(array: ArrowArray.Snapshot, owner: => String): Unit = {
       if (array.n_buffers > 0 && array.buffers == 0) {
         throw error(name, "read", s"$owner has ${array.n_buffers} buffers, but a NULL pointer " +
           "to them.")
@@ -888,7 +894,7 @@ class NativePartitionReader(
     // The C data interface only allows an array of values without a validity buffer if its
     // null_count is 0. Arrow Java takes another null_count as a mix of nulls and values, and then
     // fails to load the missing buffer.
-    def checkValidity(array: ArrowArray.Snapshot, owner: String): Unit = {
+    def checkValidity(array: ArrowArray.Snapshot, owner: => String): Unit = {
       if (array.null_count != 0 && array.length > 0 && validity(array) == 0) {
         throw error(name, "read", s"$owner has a null_count of ${array.null_count} but no " +
           "validity buffer, which the C data interface only allows with a null_count of 0.")
