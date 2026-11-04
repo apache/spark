@@ -293,12 +293,27 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
   test("the bindings match the layout of spark_datasource.h") {
     assume(compiler.isDefined, "A C++ compiler is required.")
     val layout = NativeLibrary.layout().asScala.map { case (key, value) => key -> value.longValue }
+    // The values of the macros of the header that the bindings check or pass, such as the
+    // capabilities of a data source.
+    val constants = Map(
+      "SPARK_DS_BATCH_READ" -> NativeLibrary.BATCH_READ,
+      "SPARK_DS_MICRO_BATCH_READ" -> NativeLibrary.MICRO_BATCH_READ,
+      "SPARK_DS_BATCH_WRITE" -> NativeLibrary.BATCH_WRITE,
+      "SPARK_DS_STREAMING_WRITE" -> NativeLibrary.STREAMING_WRITE,
+      "SPARK_DS_BATCH_TRUNCATE" -> NativeLibrary.BATCH_TRUNCATE,
+      "SPARK_DS_STREAMING_TRUNCATE" -> NativeLibrary.STREAMING_TRUNCATE,
+      "SPARK_DS_WRITE_APPEND" -> NativeLibrary.WRITE_APPEND.toLong,
+      "SPARK_DS_WRITE_TRUNCATE" -> NativeLibrary.WRITE_TRUNCATE.toLong,
+      "SPARK_DS_READ_BATCH" -> NativeLibrary.READ_BATCH.toLong,
+      "SPARK_DS_READ_MICRO_BATCH" -> NativeLibrary.READ_MICRO_BATCH.toLong)
     val prints = layout.keys.map { key =>
       val value = key.split('.') match {
         case Array(struct) => s"sizeof($struct)"
         case Array(struct, field) => s"offsetof($struct, $field)"
       }
       s"""  std::printf("%s %zu\\n", "$key", $value);"""
+    } ++ constants.keys.map { name =>
+      s"""  std::printf("%s %lld\\n", "$name", static_cast<long long>($name));"""
     }
     val output = runProgram("layout",
       s"""#include <cstddef>
@@ -314,7 +329,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       val Array(key, value) = line.split(" ")
       key -> value.toLong
     }.toMap
-    assert(actual == layout.toMap)
+    assert(actual == layout.toMap ++ constants)
   }
 
   nativeTest("disable native data sources") {
