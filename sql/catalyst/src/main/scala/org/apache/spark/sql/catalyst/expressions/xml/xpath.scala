@@ -39,6 +39,8 @@ abstract class XPathExtract
   /** XPath expressions are always nullable, e.g. if the xml string is empty. */
   override def nullable: Boolean = true
 
+  override def stateful: Boolean = true
+
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
       StringTypeWithCollation(supportsTrimCollation = true),

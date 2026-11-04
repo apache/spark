@@ -105,6 +105,8 @@ case class UserDefinedGenerator(
     children: Seq[Expression])
   extends Generator with CodegenFallback {
 
+  override def stateful: Boolean = true
+
   @transient private[this] var inputRow: InterpretedProjection = _
   @transient private[this] var convertToScala: (InternalRow) => Row = _
 
