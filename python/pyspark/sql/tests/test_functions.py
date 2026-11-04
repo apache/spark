@@ -2228,6 +2228,57 @@ class FunctionsTestsMixin:
         self.assertEqual(sorted(rows[0].r), [1, 2, 3])
         self.assertEqual(sorted(rows[1].r), [4])
 
+    def test_collect_union_over_window(self):
+        from pyspark.sql import Window
+
+        df = self.spark.createDataFrame(
+            [
+                ("a", 1, [1, 2]),
+                ("a", 2, [2, 3]),
+                ("a", 3, None),
+                ("a", 4, [3, None, 4]),
+                ("b", 1, [5]),
+                ("b", 2, [5, None]),
+            ],
+            "k: string, o: int, value: array<int>",
+        )
+        ordered = Window.partitionBy("k").orderBy("o")
+
+        def run(col):
+            # The element order is unspecified, so sort it before comparing.
+            rows = df.select("k", "o", F.sort_array(col).alias("r")).orderBy("k", "o").collect()
+            return [r.r for r in rows]
+
+        # Whole-partition frame.
+        self.assertEqual(
+            run(F.collect_union("value").over(Window.partitionBy("k"))),
+            [[1, 2, 3, 4]] * 4 + [[5]] * 2,
+        )
+        # Growing frame.
+        self.assertEqual(
+            run(
+                F.collect_union("value").over(
+                    ordered.rowsBetween(Window.unboundedPreceding, Window.currentRow)
+                )
+            ),
+            [[1, 2], [1, 2, 3], [1, 2, 3], [1, 2, 3, 4], [5], [5]],
+        )
+        # Sliding frame.
+        self.assertEqual(
+            run(F.collect_union("value").over(ordered.rowsBetween(-1, 1))),
+            [[1, 2, 3], [1, 2, 3], [2, 3, 4], [3, 4], [5], [5]],
+        )
+        # Empty frame produces an empty array.
+        self.assertEqual(
+            run(F.collect_union("value").over(ordered.rowsBetween(Window.unboundedPreceding, -1))),
+            [[], [1, 2], [1, 2, 3], [1, 2, 3], [], [5]],
+        )
+        # RESPECT NULLS over a window keeps a single null element.
+        self.assertEqual(
+            run(F.expr("collect_union(value) RESPECT NULLS OVER (PARTITION BY k)")),
+            [[None, 1, 2, 3, 4]] * 4 + [[None, 5]] * 2,
+        )
+
     def test_listagg_functions(self):
         df = self.spark.createDataFrame(
             [(1, "1"), (2, "2"), (None, None), (1, "2")], ["key", "value"]
