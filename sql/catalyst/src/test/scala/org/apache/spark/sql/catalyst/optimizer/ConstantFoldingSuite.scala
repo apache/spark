@@ -342,6 +342,23 @@ class ConstantFoldingSuite extends PlanTest {
     }
   }
 
+  test("SPARK-60868: Do not fold the size of CreateArray over a LEGACY cast that can fail") {
+    val t = LocalRelation($"i".int, $"d".dayTimeInterval())
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      Seq(
+        // This cannot fail, as in SPARK-37392.
+        Cast($"i", StringType) -> true,
+        // These fail with CAST_OVERFLOW and EXCEED_LIMIT_LENGTH.
+        Cast($"d", ByteType) -> false,
+        Cast($"i", VarcharType(2)) -> false).foreach { case (cast, foldable) =>
+        assert(cast.evalMode == EvalMode.LEGACY)
+        val query = t.select(Size(CreateArray(Seq(cast))).as("s")).analyze
+        val expected = if (foldable) t.select(Literal(1).as("s")).analyze else query
+        comparePlans(Optimize.execute(query), expected)
+      }
+    }
+  }
+
   test("SPARK-60849: Constant folding test CreateMap") {
     // Building a map deduplicates its keys, so its size can be less than the number of pairs.
     withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {

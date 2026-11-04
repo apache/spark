@@ -594,6 +594,20 @@ object Cast extends QueryErrorsBase {
     case _ => false
   }
 
+  /**
+   * Returns true if a LEGACY cast from `from` type to `to` type never fails at runtime. Among
+   * numeric, boolean and string types, it wraps around on overflow or returns null for an invalid
+   * input instead. Other LEGACY casts can fail, for example from or to an interval and to
+   * CHAR/VARCHAR. The patterns matched reflect the current implementation in the Cast node and
+   * must stay in sync with it.
+   */
+  def isNoThrowLegacyCast(from: DataType, to: DataType): Boolean = (from, to) match {
+    case (_: NumericType | BooleanType | _: StringType, _: NumericType | BooleanType) => true
+    case (_: NumericType | BooleanType | _: StringType, s: StringType) =>
+      StringHelper.isPlainString(s)
+    case _ => false
+  }
+
   def resolvableNullability(from: Boolean, to: Boolean): Boolean = !from || to
 
   /**
