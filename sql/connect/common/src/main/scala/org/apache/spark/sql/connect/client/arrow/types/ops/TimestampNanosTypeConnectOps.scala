@@ -36,13 +36,13 @@ import org.apache.spark.unsafe.types.TimestampNanosVal
  * Combined Connect operations shared by the nanosecond-capable timestamp types
  * ([[TimestampNTZNanosType]] and [[TimestampLTZNanosType]], precision 7..9).
  *
- * Implements both the proto DataType/Literal side and the Arrow side of [[ConnectTypeOps]].
- * The physical value is [[org.apache.spark.unsafe.types.TimestampNanosVal]] (epoch micros +
- * nanos within the micro), which the proto carries as `epoch_micros` + `nanos_within_micro`
- * rather than a single int64 of nanoseconds, because nanoseconds-since-epoch cannot span the
- * supported 0001..9999 year range.
- * The two concrete subclasses differ only in their proto message arm, external java.time value
- * ([[LocalDateTime]] for NTZ, [[Instant]] for LTZ) and the conversion helpers used.
+ * Implements both the proto DataType/Literal side and the Arrow side of [[ConnectTypeOps]]. The
+ * physical value is [[org.apache.spark.unsafe.types.TimestampNanosVal]] (epoch micros + nanos
+ * within the micro), which the proto carries as `epoch_micros` + `nanos_within_micro` rather than
+ * a single int64 of nanoseconds, because nanoseconds-since-epoch cannot span the supported
+ * 0001..9999 year range. The two concrete subclasses differ only in their proto message arm,
+ * external java.time value ([[LocalDateTime]] for NTZ, [[Instant]] for LTZ) and the conversion
+ * helpers used.
  *
  * On the Arrow side the value is stored as a single int64 of epoch-nanoseconds
  * (TimeStampNanoVector for NTZ, TimeStampNanoTZVector for LTZ); the precision is recovered from
