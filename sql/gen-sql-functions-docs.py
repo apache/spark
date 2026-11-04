@@ -35,7 +35,7 @@ groups = {
     "xml_funcs", "lambda_funcs", "collection_funcs",
     "url_funcs", "hash_funcs", "struct_funcs",
     "table_funcs", "variant_funcs", "protobuf_funcs", "sketch_funcs",
-    "st_funcs"
+    "st_funcs", "vector_funcs"
 }
 
 
@@ -57,10 +57,7 @@ def _list_grouped_function_infos(jvm):
         if (name == "raise_error"):
             continue
 
-        # SPARK-45232: convert lambda_funcs to collection_funcs in doc generation
         group = jinfo.getGroup()
-        if group == "lambda_funcs":
-            group = "collection_funcs"
 
         usage = jinfo.getUsage()
         usage = usage.replace("_FUNC_", name) if usage is not None else usage

@@ -22,14 +22,14 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.SparkConf
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{AnalysisException, DataFrame}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan,
   MapInPandas, MapPartitionsExternalUDF}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.python.{MapInPandasExec,
   UserDefinedPythonFunction}
 import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType,
   StructField, StructType}
@@ -107,6 +107,17 @@ class ClassicUDFPlanningSuite
     val result = applyMapInPandas()
     assertPhysicalNode[MapInPandasExec](result)
   }
+
+  test("unified UDF execution cannot be enabled after session construction") {
+    val config = StaticSQLConf.UNIFIED_UDF_EXECUTION_ENABLED
+    assert(!spark.sessionState.conf.getConf(config))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.conf.set(config.key, true)
+      },
+      condition = "CANNOT_MODIFY_STATIC_CONFIG",
+      parameters = Map("key" -> s"\"${config.key}\""))
+  }
 }
 
 /**
@@ -118,7 +129,7 @@ class UnifiedUDFPlanningSuite
 
   override def sparkConf: SparkConf =
     super.sparkConf.set(
-      SQLConf.UNIFIED_UDF_EXECUTION_ENABLED.key, "true")
+      StaticSQLConf.UNIFIED_UDF_EXECUTION_ENABLED.key, "true")
 
   test("mapInPandas uses MapPartitionsExternalUDF logical node") {
     val result = applyMapInPandas()
@@ -129,5 +140,16 @@ class UnifiedUDFPlanningSuite
       " physical node") {
     val result = applyMapInPandas()
     assertPhysicalNode[MapPartitionsExternalUDFExec](result)
+  }
+
+  test("unified UDF execution cannot be disabled after session construction") {
+    val config = StaticSQLConf.UNIFIED_UDF_EXECUTION_ENABLED
+    assert(spark.sessionState.conf.getConf(config))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.conf.set(config.key, false)
+      },
+      condition = "CANNOT_MODIFY_STATIC_CONFIG",
+      parameters = Map("key" -> s"\"${config.key}\""))
   }
 }

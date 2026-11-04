@@ -404,6 +404,76 @@ class PythonPipelineSuite
         Set(graphIdentifier("b"), graphIdentifier("d")))
   }
 
+  test("SPARK-60494: referencing internal datasets through DataFrame arguments of spark.sql") {
+    // `d` and `e` have the SQL with DataFrame arguments under another relation.
+    val unresolvedGraph = buildGraph("""
+      |@dp.materialized_view
+      |def src():
+      |  return spark.range(5)
+      |
+      |@dp.temporary_view
+      |def view_src():
+      |  return spark.range(5)
+      |
+      |@dp.materialized_view
+      |def a():
+      |  return spark.sql("SELECT * FROM {df}", df=spark.read.table("src"))
+      |
+      |@dp.table
+      |def b():
+      |  return spark.sql("SELECT * FROM {df}", df=spark.readStream.table("src"))
+      |
+      |@dp.materialized_view
+      |def c():
+      |  return spark.sql("SELECT * FROM {df}", df=spark.read.table("view_src"))
+      |
+      |@dp.materialized_view
+      |def d():
+      |  return spark.sql("SELECT * FROM {df}", df=spark.read.table("src")).where("id > 0")
+      |
+      |@dp.materialized_view
+      |def e():
+      |  inner = spark.sql("SELECT * FROM {df}", df=spark.read.table("src"))
+      |  return spark.sql("SELECT * FROM {x}", x=inner)
+      |""".stripMargin)
+    val graph = unresolvedGraph.resolve(sessionCaseSensitive).validate(sessionCaseSensitive)
+
+    // dependency is properly tracked
+    Seq("a", "b", "d", "e").foreach { flowName =>
+      assert(graph.resolvedFlow(graphIdentifier(flowName)).inputs == Set(graphIdentifier("src")))
+    }
+    assert(graph.resolvedFlow(graphIdentifier("c")).inputs == Set(TableIdentifier("view_src")))
+    assert(!graph.resolvedFlow(graphIdentifier("a")).df.isStreaming)
+    assert(graph.resolvedFlow(graphIdentifier("b")).df.isStreaming)
+
+    val updateContext =
+      new PipelineUpdateContextImpl(unresolvedGraph, _ => (), storageRoot = storageRoot)
+    updateContext.pipelineExecution.runPipeline()
+    updateContext.pipelineExecution.awaitCompletion()
+    Seq("a", "b", "c", "e").foreach { table =>
+      assert(spark.table(table).collect().map(_.getLong(0)).toSet == (0L until 5L).toSet)
+    }
+    assert(spark.table("d").collect().map(_.getLong(0)).toSet == (1L until 5L).toSet)
+  }
+
+  test(
+    "SPARK-60494: referencing an internal dataset through DataFrame arguments of spark.sql " +
+      "tracks the dependency when its table already exists") {
+    // The table of `src` exists from a previous run of the pipeline.
+    sql("CREATE TABLE spark_catalog.default.src AS SELECT * FROM RANGE(5)")
+    val graph = buildGraph("""
+      |@dp.materialized_view
+      |def src():
+      |  return spark.range(5)
+      |
+      |@dp.materialized_view
+      |def a():
+      |  return spark.sql("SELECT * FROM {df}", df=spark.read.table("src"))
+      |""".stripMargin).resolve(sessionCaseSensitive).validate(sessionCaseSensitive)
+
+    assert(graph.resolvedFlow(graphIdentifier("a")).inputs == Set(graphIdentifier("src")))
+  }
+
   test("referencing external datasets") {
     sql("CREATE TABLE spark_catalog.default.src AS SELECT * FROM RANGE(5)")
     val graph = buildGraph("""
@@ -468,9 +538,13 @@ class PythonPipelineSuite
         |@dp.table
         |def e():
         |  return spark.sql("SELECT * FROM STREAM src")
+        |
+        |@dp.materialized_view
+        |def f():
+        |  return spark.sql("SELECT * FROM {df}", df=spark.read.table("src"))
         |""".stripMargin).resolve(sessionCaseSensitive)
 
-    assert(graph.resolutionFailedFlows.size == 5)
+    assert(graph.resolutionFailedFlows.size == 6)
     graph.resolutionFailedFlows.foreach { flow =>
       assert(flow.failure.head.getMessage.contains("[TABLE_OR_VIEW_NOT_FOUND]"))
       assert(flow.failure.head.getMessage.contains("`src`"))
@@ -971,6 +1045,20 @@ class PythonPipelineSuite
       .getOrElse(fail(s"Expected an AutoCdcFlow in the graph, got: ${graph.flows}"))
   }
 
+  /**
+   * Builds and resolves the graph, returning the resolved [[AutoCdcMergeFlow]]. Unlike
+   * [[buildAutoCdcFlow]], this exercises the flow analysis that rejects invalid change args (e.g.
+   * an ignore-null column that is also a key), so a test that asserts on the resolved flow is
+   * guaranteed to describe a configuration the flow accepts.
+   */
+  private def resolveAutoCdcMergeFlow(pipelineSource: String): AutoCdcMergeFlow = {
+    val graph = buildGraph(pipelineSource).resolve(sessionCaseSensitive)
+    graph.resolvedFlow(graphIdentifier("target")) match {
+      case f: AutoCdcMergeFlow => f
+      case other => fail(s"Expected an AutoCdcMergeFlow, got: $other")
+    }
+  }
+
   test("AutoCDC API: minimal flow registers an AutoCdcFlow with default name and SCD1 default") {
     val flow = buildAutoCdcFlow("""
         |@dp.table
@@ -1081,6 +1169,78 @@ class PythonPipelineSuite
 
     assert(
       flow.changeArgs.columnSelection.contains(
+        ColumnSelection.ExcludeColumns(Seq(UnqualifiedColumnName("timestamp")))))
+  }
+
+  test(
+    "AutoCDC API: ignore_null_updates=True is forwarded as an all-columns ignore-null " +
+      "selection") {
+    val flow = resolveAutoCdcMergeFlow("""
+        |@dp.table
+        |def src():
+        |  return spark.readStream.format("rate").load()
+        |
+        |dp.create_streaming_table("target")
+        |
+        |dp.create_auto_cdc_flow(
+        |    target = "target",
+        |    source = "src",
+        |    keys = ["value"],
+        |    sequence_by = "timestamp",
+        |    ignore_null_updates = True,
+        |)
+        |""".stripMargin)
+
+    // "All columns" is an ExcludeColumns selection with an empty list.
+    assert(
+      flow.changeArgs.ignoreNullSelection.contains(ColumnSelection.ExcludeColumns(Seq.empty)))
+  }
+
+  test("AutoCDC API: ignore_null_updates_column_list is forwarded as IncludeColumns") {
+    // Ignore-null include columns must be non-key payload columns, so the source adds one.
+    val flow = resolveAutoCdcMergeFlow("""
+        |@dp.table
+        |def src():
+        |  return (
+        |    spark.readStream.format("rate").load()
+        |    .selectExpr("value", "timestamp", "value + 1 AS payload")
+        |  )
+        |
+        |dp.create_streaming_table("target")
+        |
+        |dp.create_auto_cdc_flow(
+        |    target = "target",
+        |    source = "src",
+        |    keys = ["value"],
+        |    sequence_by = "timestamp",
+        |    ignore_null_updates_column_list = ["payload"],
+        |)
+        |""".stripMargin)
+
+    assert(
+      flow.changeArgs.ignoreNullSelection.contains(
+        ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("payload")))))
+  }
+
+  test("AutoCDC API: ignore_null_updates_except_column_list is forwarded as ExcludeColumns") {
+    val flow = resolveAutoCdcMergeFlow("""
+        |@dp.table
+        |def src():
+        |  return spark.readStream.format("rate").load()
+        |
+        |dp.create_streaming_table("target")
+        |
+        |dp.create_auto_cdc_flow(
+        |    target = "target",
+        |    source = "src",
+        |    keys = ["value"],
+        |    sequence_by = "timestamp",
+        |    ignore_null_updates_except_column_list = ["timestamp"],
+        |)
+        |""".stripMargin)
+
+    assert(
+      flow.changeArgs.ignoreNullSelection.contains(
         ColumnSelection.ExcludeColumns(Seq(UnqualifiedColumnName("timestamp")))))
   }
 
@@ -1542,13 +1702,25 @@ class PythonPipelineSuite
   private val unsupportedSqlCommandList: Seq[String] = Seq(
     "SET CATALOG some_catalog",
     "USE SCHEMA some_schema",
+    "USE SCHEMA IDENTIFIER('some_' || 'schema')",
     "SET `test_conf` = `true`",
     "CREATE TABLE some_table (id INT)",
+    "EXECUTE IMMEDIATE 'CREATE TABLE some_table (id INT)'",
     "CREATE VIEW some_view AS SELECT * FROM some_table",
+    "CREATE TEMPORARY VIEW IDENTIFIER('some_view') AS SELECT 1",
     "INSERT INTO some_table VALUES (1)",
+    "WITH v AS (SELECT 1 AS id) INSERT INTO some_table SELECT * FROM v",
+    "WITH v AS (SELECT 1 AS id) MERGE INTO some_table t USING v ON t.id = v.id " +
+      "WHEN MATCHED THEN DELETE",
+    "WITH v AS (SELECT 1 AS id) UPDATE some_table SET id = 2 WHERE id IN (SELECT id FROM v)",
+    "WITH v AS (SELECT 1 AS id) DELETE FROM some_table WHERE id IN (SELECT id FROM v)",
+    "FROM some_view INSERT INTO some_table SELECT * INSERT INTO some_new_table SELECT *",
+    "WITH v AS (SELECT 1 AS id) FROM v INSERT INTO some_table SELECT * " +
+      "INSERT INTO some_new_table SELECT *",
     "ALTER TABLE some_table RENAME TO some_new_table",
     "CREATE NAMESPACE some_namespace",
     "DROP VIEW some_view",
+    "CALL some_catalog.some_schema.some_procedure()",
     "CREATE MATERIALIZED VIEW some_view AS SELECT * FROM some_table",
     "CREATE STREAMING TABLE some_table AS SELECT * FROM some_table")
 
@@ -1586,12 +1758,16 @@ class PythonPipelineSuite
     "SHOW TBLPROPERTIES spark_catalog.default.src",
     "SHOW NAMESPACES",
     "SHOW COLUMNS FROM spark_catalog.default.src",
+    "SHOW COLUMNS FROM IDENTIFIER('spark_catalog.default.' || 'src')",
     "SHOW FUNCTIONS",
     "SHOW VIEWS",
     "SHOW CATALOGS",
     "SHOW CREATE TABLE spark_catalog.default.src",
     "SELECT * FROM RANGE(5)",
-    "SELECT * FROM spark_catalog.default.src")
+    "SELECT * FROM spark_catalog.default.src",
+    "TABLE IDENTIFIER('spark_catalog.default.' || 'src')",
+    "WITH v AS (SELECT * FROM spark_catalog.default.src) SELECT * FROM v",
+    "SELECT * FROM RANGE(5) UNION ALL SELECT * FROM spark_catalog.default.src")
 
   gridTest("Supported SQL command outside query function should work")(supportedSqlCommandList) {
     supportedSqlCommand =>

@@ -26,7 +26,7 @@ import scala.collection.mutable.HashMap
 import scala.io.Source
 
 import jakarta.servlet.http.HttpServletResponse.SC_FORBIDDEN
-import org.mockito.Mockito.{mock, times, verify, when}
+import org.mockito.Mockito.{mock, never, times, verify, when}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.DeployMessages.{DecommissionWorkersOnHosts, KillDriverResponse, MasterStateResponse, RequestApplicationHold, RequestKillDriver, RequestMasterState}
@@ -73,7 +73,8 @@ class MasterWebUISuite extends SparkFunSuite {
     when(master.idToApp).thenReturn(HashMap[String, ApplicationInfo]((activeApp.id, activeApp)))
 
     val url = s"http://${Utils.localHostNameForURI()}:${masterWebUI.boundPort}/app/kill/"
-    val body = convPostDataToString(Map(("id", activeApp.id), ("terminate", "true")))
+    val body = convPostDataToString(
+      Map(("id", activeApp.id), ("terminate", "true"), ("csrfToken", masterWebUI.csrfToken)))
     val conn = sendHttpRequest(url, "POST", body)
     conn.getResponseCode
 
@@ -84,7 +85,8 @@ class MasterWebUISuite extends SparkFunSuite {
   test("kill driver") {
     val activeDriverId = "driver-0"
     val url = s"http://${Utils.localHostNameForURI()}:${masterWebUI.boundPort}/driver/kill/"
-    val body = convPostDataToString(Map(("id", activeDriverId), ("terminate", "true")))
+    val body = convPostDataToString(
+      Map(("id", activeDriverId), ("terminate", "true"), ("csrfToken", masterWebUI.csrfToken)))
     val conn = sendHttpRequest(url, "POST", body)
     conn.getResponseCode
 
@@ -92,10 +94,53 @@ class MasterWebUISuite extends SparkFunSuite {
     verify(masterEndpointRef, times(1)).ask[KillDriverResponse](RequestKillDriver(activeDriverId))
   }
 
+  test("state-changing master UI endpoints reject a request without the CSRF token") {
+    val appDesc = createAppDesc()
+    val activeApp = new ApplicationInfo(
+      new Date().getTime, "app-notoken", appDesc, new Date(), null, Int.MaxValue)
+    when(master.idToApp).thenReturn(HashMap[String, ApplicationInfo]((activeApp.id, activeApp)))
+
+    // Without the token the request is refused before the handler runs, so the master is
+    // never asked to remove the application.
+    Seq("app/kill", "driver/kill", "app/hold", "app/resume").foreach { path =>
+      val url = s"http://${Utils.localHostNameForURI()}:${masterWebUI.boundPort}/$path/"
+      val body = convPostDataToString(Map(("id", activeApp.id), ("terminate", "true")))
+      assert(sendHttpRequest(url, "POST", body).getResponseCode === SC_FORBIDDEN,
+        s"$path accepted a request with no CSRF token")
+    }
+    verify(master, never()).removeApplication(activeApp, ApplicationState.KILLED)
+  }
+
+  test("state-changing master UI endpoints reject a wrong CSRF token") {
+    val url = s"http://${Utils.localHostNameForURI()}:${masterWebUI.boundPort}/app/kill/"
+    val body = convPostDataToString(
+      Map(("id", "app-wrongtoken"), ("terminate", "true"), ("csrfToken", "not-the-token")))
+    assert(sendHttpRequest(url, "POST", body).getResponseCode === SC_FORBIDDEN)
+  }
+
+  test("the master page embeds the CSRF token in the forms it renders") {
+    val app = new ApplicationInfo(
+      new Date().getTime, "app-render", createAppDesc(), new Date(), null, Int.MaxValue)
+    app.holdSupported = true
+    val state = new MasterStateResponse(
+      "host", 8080, None, Array.empty, Array(app), Array.empty,
+      Array.empty, Array.empty, RecoveryState.ALIVE)
+    when(masterEndpointRef.askSync[MasterStateResponse](RequestMasterState)).thenReturn(state)
+    val url = s"http://${Utils.localHostNameForURI()}:${masterWebUI.boundPort}/"
+    val rendered =
+      Source.fromInputStream(sendHttpRequest(url, "GET", "").getInputStream).mkString
+
+    // Both the kill and the hold form carry it, so the browser can drive them.
+    assert(rendered.contains("app/kill/") && rendered.contains("app/hold/"))
+    assert(rendered.split("csrfToken").length - 1 >= 2, "expected a token in each form")
+    assert(rendered.contains(masterWebUI.csrfToken))
+  }
+
   private def testHoldApplication(action: String, hold: Boolean): Unit = {
     val appId = s"app-$action"
     val url = s"http://${Utils.localHostNameForURI()}:${masterWebUI.boundPort}/app/$action/"
-    val conn = sendHttpRequest(url, "POST", convPostDataToString(Map(("id", appId))))
+    val conn = sendHttpRequest(url, "POST",
+      convPostDataToString(Map(("id", appId), ("csrfToken", masterWebUI.csrfToken))))
     conn.getResponseCode
 
     // Verify that the master was asked to forward the request to the driver of that application

@@ -139,7 +139,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     when(labeledPods.withField(anyString(), anyString())).thenReturn(labeledPods)
     when(driverPodOperations.get).thenReturn(driverPod)
     when(driverPodOperations.waitUntilReady(any(), any())).thenReturn(driverPod)
-    when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]), meq(secMgr),
+    when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]),
       meq(kubernetesClient), any(classOf[ResourceProfile]))).thenAnswer(executorPodAnswer())
     snapshotsStore = new DeterministicExecutorPodsSnapshotsStore()
     waitForExecutorPodsClock = new ManualClock(0L)
@@ -860,7 +860,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     pvc.getMetadata
       .setCreationTimestamp(Instant.now().minus(podCreationTimeout + 1, MILLIS).toString)
     when(persistentVolumeClaimList.getItems).thenReturn(Seq(pvc).asJava)
-    when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]), meq(secMgr),
+    when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]),
         meq(kubernetesClient), any(classOf[ResourceProfile])))
       .thenAnswer((invocation: InvocationOnMock) => {
       val k8sConf: KubernetesExecutorConf = invocation.getArgument(0)
@@ -977,7 +977,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       .set(s"$prefix.option.sizeLimit", "200Gi")
       .set(s"$prefix.option.storageClass", "gp3")
 
-    when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]), meq(secMgr),
+    when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]),
       meq(kubernetesClient), any(classOf[ResourceProfile])))
       .thenAnswer((invocation: InvocationOnMock) => {
         val k8sConf: KubernetesExecutorConf = invocation.getArgument(0)
@@ -1047,7 +1047,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       .set(s"$prefix.option.sizeLimit", "200Gi")
       .set(s"$prefix.option.storageClass", "gp3")
 
-    when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]), meq(secMgr),
+    when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]),
       meq(kubernetesClient), any(classOf[ResourceProfile])))
       .thenAnswer((invocation: InvocationOnMock) => {
         val k8sConf: KubernetesExecutorConf = invocation.getArgument(0)
@@ -1132,5 +1132,24 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
     podsAllocator.setRecoveryMode()
     assert(!newConf.get(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED).get)
+  }
+
+  test("SPARK-59331: unsetRecoveryMode leaves the recovery mode that setRecoveryMode turned on") {
+    val newConf = conf.clone
+    val podsAllocator = new ExecutorPodsAllocator(newConf, secMgr, executorBuilder,
+      kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocator.setRecoveryMode()
+    assert(newConf.get(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED).contains(true))
+    podsAllocator.unsetRecoveryMode()
+    assert(newConf.get(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED).isEmpty)
+  }
+
+  test("SPARK-59331: unsetRecoveryMode keeps a configured recovery mode") {
+    val newConf = conf.clone.set(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED, true)
+    val podsAllocator = new ExecutorPodsAllocator(newConf, secMgr, executorBuilder,
+      kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocator.setRecoveryMode()
+    podsAllocator.unsetRecoveryMode()
+    assert(newConf.get(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED).contains(true))
   }
 }

@@ -107,7 +107,9 @@ class InMemoryCatalystRuntimeFilterTable(
     // Not intersected with `filterAttributes()`, so a table can declare a fully pushed attribute
     // that is not a filter attribute, a combination the interface forbids.
     override def fullyPushedFilterAttributes(): Array[NamedReference] = {
-      partitionAttrs.filter(ref => fullyPushedFilterAttrs.contains(ref.fieldNames.mkString(".")))
+      identityPartitionAttributes.filter { ref =>
+        fullyPushedFilterAttrs.contains(ref.fieldNames.mkString("."))
+      }
     }
   }
 }

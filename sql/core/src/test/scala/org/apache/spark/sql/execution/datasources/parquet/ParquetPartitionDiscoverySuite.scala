@@ -1167,6 +1167,34 @@ abstract class ParquetPartitionDiscoverySuite
     }
   }
 
+  test("SPARK-59273: read CHAR/VARCHAR partition values") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      Seq("CHAR(3)" -> "a  ", "VARCHAR(3)" -> "a").foreach { case (dataType, expected) =>
+        withTempPath { path =>
+          Seq((1, "a")).toDF("id", "part")
+            .write.partitionBy("part").parquet(path.getCanonicalPath)
+          val readback = spark.read
+            .schema(s"id INT, part $dataType")
+            .parquet(path.getCanonicalPath)
+
+          checkAnswer(readback, Row(1, expected))
+        }
+      }
+      withTempPath { path =>
+        Seq((1, "abcdef")).toDF("id", "part")
+          .write.partitionBy("part").parquet(path.getCanonicalPath)
+        val readback = spark.read
+          .schema("id INT, part VARCHAR(3)")
+          .parquet(path.getCanonicalPath)
+
+        checkError(
+          exception = intercept[SparkRuntimeException](readback.collect()),
+          condition = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "3"))
+      }
+    }
+  }
+
   test("SPARK-40212: SparkSQL castPartValue does not properly handle byte, short, float") {
     withTempDir { dir =>
       val data = Seq[(Int, Byte, Short, Float)](
@@ -1181,6 +1209,21 @@ abstract class ParquetPartitionDiscoverySuite
         .schema("a INT, b BYTE, c SHORT, d FLOAT")
         .parquet(dir.getCanonicalPath)
       checkAnswer(res, Seq(Row(1, 2, 3, 4.0f)))
+    }
+  }
+
+  test("SPARK-60797: read decimal partition values with the user-specified scale") {
+    withTempDir { dir =>
+      Seq("1.5", "2", "1.555").foreach { value =>
+        spark.range(1).write.parquet(new File(dir, s"d=$value").getCanonicalPath)
+      }
+      val res = spark.read
+        .schema("id LONG, d DECIMAL(10, 2)")
+        .parquet(dir.getCanonicalPath)
+      checkAnswer(res, Seq(
+        Row(0L, BigDecimal("1.50")),
+        Row(0L, BigDecimal("2.00")),
+        Row(0L, BigDecimal("1.56"))))
     }
   }
 
@@ -1441,6 +1484,17 @@ class ParquetV2PartitionDiscoverySuite extends ParquetPartitionDiscoverySuite {
     val schema = new StructType().add("p_int", "int")
     val path = PartitioningUtils.getPathFragment(spec, schema)
     assert(s"p_int=${ExternalCatalogUtils.DEFAULT_PARTITION_NAME}" === path)
+  }
+
+  test("SPARK-51830: get path fragment of a non-numeric partition value " +
+    "when partition column validation is disabled") {
+    val spec = Map("p_int" -> "partition_value")
+    val schema = new StructType().add("p_int", "int")
+    assert("p_int=partition_value" ===
+      PartitioningUtils.getPathFragment(spec, schema, validatePartitionColumns = false))
+    intercept[NumberFormatException] {
+      PartitioningUtils.getPathFragment(spec, schema)
+    }
   }
 
   test("read partitioned table - partition key included in Parquet file") {

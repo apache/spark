@@ -1545,10 +1545,12 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
     val df = sql("SELECT id, data FROM testcat.ns1.test_table")
     val scans = collect(df.queryExecution.executedPlan) { case s: BatchScanExec => s }
     assert(scans.size === 1)
-    val ordering = scans.head.outputOrdering
+    val ordering = scans.head.ordering.getOrElse(Seq.empty)
     assert(ordering.nonEmpty,
-      "scan should report non-empty outputOrdering via SupportsReportOrdering")
+      "scan should keep the ordering reported via SupportsReportOrdering")
     assert(ordering.head.child.isInstanceOf[TransformExpression],
       "bucket-based sort order should resolve to a TransformExpression")
+    // SPARK-59995: the output ordering drops the sort order over the transform.
+    assert(scans.head.outputOrdering.isEmpty)
   }
 }

@@ -166,6 +166,9 @@ case class ParquetScan(
     hadoopConf.setBoolean(
       SQLConf.PARQUET_READER_RESPECT_UNKNOWN_TYPE_ANNOTATION.key,
       conf.parquetReaderRespectUnknownTypeAnnotation)
+    hadoopConf.setBoolean(
+      SQLConf.PARQUET_TIME_TYPE_ALLOW_IS_ADJUSTED_TO_UTC_READ.key,
+      conf.parquetTimeTypeAllowIsAdjustedToUtcRead)
 
     val broadcastedConf =
       SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)

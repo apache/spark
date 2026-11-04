@@ -18,8 +18,10 @@
 package org.apache.spark.ml
 
 import org.apache.spark.annotation.Since
+import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, VectorUDT}
 import org.apache.spark.sql.{functions => sf}
 import org.apache.spark.sql.Column
+import org.apache.spark.sql.types.{ArrayType, DoubleType, IntegerType}
 
 // scalastyle:off
 @Since("3.0.0")
@@ -56,7 +58,65 @@ object functions {
   private[ml] def vector_posexplode(
       v: Column,
       mode: String = "sparse"): Column = {
-    Column.internalFn("vector_posexplode", sf.unwrap_udt(v), sf.lit(mode))
+    Column.internalFn("ml_vector_posexplode", sf.unwrap_udt(v), sf.lit(mode))
+  }
+
+  private[ml] def vector_dot_product(left: Column, right: Column): Column =
+    Column.internalFn("ml_vector_dot_product", sf.unwrap_udt(left), sf.unwrap_udt(right))
+
+  private[ml] def vector_dot_product(left: Column, right: Vector): Column = {
+    Column.internalFn(
+      "ml_vector_dot_product",
+      sf.unwrap_udt(left),
+      vectorToStruct(right))
+  }
+
+  private[ml] def vector_scale_shift(
+      vector: Column,
+      scale: Column,
+      shift: Column): Column = {
+    val transformed = Column.internalFn(
+      "ml_vector_scale_shift",
+      sf.unwrap_udt(vector),
+      scale,
+      shift)
+    sf.wrap_udt(transformed, new VectorUDT)
+  }
+
+  private[ml] def vector_scale_shift(
+      vector: Column,
+      scale: Array[Double],
+      shift: Array[Double]): Column = {
+    val transformed = Column.internalFn(
+      "ml_vector_scale_shift",
+      sf.unwrap_udt(vector),
+      doubleArrayLiteral(scale),
+      doubleArrayLiteral(shift))
+    sf.wrap_udt(transformed, new VectorUDT)
+  }
+
+  private def doubleArrayLiteral(values: Array[Double]): Column = {
+    if (values == null) {
+      sf.lit(null).cast(ArrayType(DoubleType, containsNull = false))
+    } else {
+      sf.typedLit(values)
+    }
+  }
+
+  private def vectorToStruct(vector: Vector): Column = vector match {
+    case null => sf.lit(null).cast(new VectorUDT().sqlType)
+    case sparse: SparseVector =>
+      sf.struct(
+        sf.lit(0.toByte).alias("type"),
+        sf.lit(sparse.size).alias("size"),
+        sf.lit(sparse.indices).alias("indices"),
+        sf.lit(sparse.values).alias("values"))
+    case dense: DenseVector =>
+      sf.struct(
+        sf.lit(1.toByte).alias("type"),
+        sf.lit(null).cast(IntegerType).alias("size"),
+        sf.lit(null).cast(ArrayType(IntegerType)).alias("indices"),
+        sf.lit(dense.values).alias("values"))
   }
 
   private[ml] def array_binary_search(a: Column, v: Column): Column =

@@ -417,14 +417,13 @@ trait JoinSelectionHelper extends Logging {
 
   /**
    * The build side a broadcast hash join would use, or `None` when one is ruled out by the join
-   * shape or by a hint.
+   * shape, a hint, or its size.
    *
-   * `Some` does not promise the planner picks a broadcast hash join: a `SHUFFLE_MERGE` or
-   * `SHUFFLE_REPLICATE_NL` hint is tried before the sizes are consulted, join keys no hash join
-   * supports send it to a sort merge join, and AQE re-estimates the sizes at runtime. Within the
-   * broadcast decision itself this does follow the planner's precedence: a hinted broadcast first,
-   * a hinted shuffle hash join as a veto, then the sizes. Callers that only need to know whether a
-   * broadcast hash join is possible should use `canPlanAsBroadcastHashJoin`.
+   * For equi-joins, `Some` does not promise the planner picks a broadcast hash join: other hints,
+   * unsupported join keys, or AQE can select another strategy. For a single-column null-aware anti
+   * join, the dedicated and automatic broadcast thresholds determine eligibility before hints.
+   * Callers that only need to know whether a broadcast hash join is possible should use
+   * `canPlanAsBroadcastHashJoin`.
    */
   def getBroadcastHashJoinBuildSide(join: Join, conf: SQLConf): Option[BuildSide] = join match {
     case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, _, _, _) =>
@@ -438,9 +437,24 @@ trait JoinSelectionHelper extends Logging {
       getBroadcastBuildSide(join, hintOnly = true, conf).orElse {
         if (noShufflePlannedBefore) getBroadcastBuildSide(join, hintOnly = false, conf) else None
       }
-    // `JoinSelection` always builds from the right for this shape.
+    // `JoinSelection` always builds from the right for this shape. The applicable automatic
+    // broadcast threshold floors a nonnegative dedicated threshold. As before, threshold
+    // eligibility takes precedence over join hints. This same decision intentionally controls
+    // aggregate pushdown. If neither threshold admits the hash join, regular planning may still
+    // broadcast the right side for a nested-loop join. The thresholds limit hash relation
+    // construction, not all broadcasts.
     case j @ ExtractSingleColumnNullAwareAntiJoin(_, _) =>
-      if (canBroadcastBySize(j.right, conf)) Some(BuildRight) else None
+      val dedicatedThreshold = conf.nullAwareAntiJoinBroadcastThreshold
+      val canBroadcast = dedicatedThreshold < 0 ||
+        (dedicatedThreshold > 0 && {
+          val rightSize = j.right.stats.sizeInBytes
+          rightSize >= 0 && rightSize <= dedicatedThreshold
+        }) || canBroadcastBySize(j.right, conf)
+      if (canBroadcast) {
+        Some(BuildRight)
+      } else {
+        None
+      }
     case _ => None
   }
 

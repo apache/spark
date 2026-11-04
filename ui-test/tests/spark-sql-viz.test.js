@@ -22,6 +22,8 @@
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { jest } from '@jest/globals';
+import '../../core/src/main/resources/org/apache/spark/ui/static/jquery.min.js';
 
 // spark-sql-viz.js is a classic (non-module) script, so read it and return the helpers under test.
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -30,10 +32,9 @@ const vizPath = join(
   '../../sql/core/src/main/resources/org/apache/spark/sql/execution/ui/static/spark-sql-viz.js');
 const src = readFileSync(vizPath, 'utf8');
 
-window.$ = function () {};
 document.body.innerHTML = '<button id="plan-viz-download-btn"></button>';
-const { buildMetricsTable, filterMetricRows } = new Function(
-  src + '\nreturn { buildMetricsTable, filterMetricRows };')();
+const { buildMetricsTable, filterMetricRows, postprocessForAdditionalMetrics } = new Function(
+  src + '\nreturn { buildMetricsTable, filterMetricRows, postprocessForAdditionalMetrics };')();
 
 // A size metric renders a nested Total/Min/Med/Max stat sub-table inside its value cell.
 const SIZE_VALUE =
@@ -77,4 +78,23 @@ test('filterMetricRows restores all rows when the query is cleared', function ()
 
   body.querySelectorAll('table.sortable > tbody > tr')
     .forEach(r => expect(r.style.display).toBe(''));
+});
+
+// postprocessForAdditionalMetrics() runs on every render, including each detailed-mode re-render.
+test('postprocessForAdditionalMetrics does not stack click handlers across renders', function () {
+  document.body.innerHTML = '<input type="checkbox" id="stageId-and-taskId-checkbox">';
+  window.localStorage.setItem('stageId-and-taskId-checked', 'true');
+  postprocessForAdditionalMetrics();
+  postprocessForAdditionalMetrics();
+  postprocessForAdditionalMetrics();
+
+  // The saved checkbox state is still restored.
+  const checkbox = document.getElementById('stageId-and-taskId-checkbox');
+  expect(checkbox.checked).toBe(true);
+
+  // Each run of the click handler saves the checkbox state once.
+  const setItem = jest.spyOn(Storage.prototype, 'setItem');
+  checkbox.click();
+  expect(setItem.mock.calls).toEqual([['stageId-and-taskId-checked', false]]);
+  setItem.mockRestore();
 });

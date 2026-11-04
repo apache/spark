@@ -45,7 +45,7 @@ class AutoCdcScd2AuxiliaryTableDurabilitySuite
   import testImplicits._
 
   /** The SCD2 target's `_cdc_metadata` struct value for a given recordStartAt. */
-  private def scd2Meta(recordStartAt: Long): Row = Row(recordStartAt)
+  private def scd2Meta(recordStartAt: Long): Row = Row(recordStartAt, null)
 
   test("a higher-sequence event in a later pipeline run correctly closes and opens records") {
     spark.sql(

@@ -34,7 +34,7 @@ import org.apache.spark.internal.config.Python.{PYTHON_UNIX_DOMAIN_SOCKET_DIR, P
 import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.execution.python.{BasicPythonArrowOutput, PythonArrowInput, PythonUDFRunner}
+import org.apache.spark.sql.execution.python.{BasicPythonArrowOutput, PythonArrowInput, PythonUDFRunner, PythonWorkerEnvironment}
 import org.apache.spark.sql.execution.python.streaming.TransformWithStateInPySparkPythonRunner.{GroupedInType, InType}
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.{DriverStatefulProcessorHandleImpl, StatefulProcessorHandleImpl}
 import org.apache.spark.sql.internal.SQLConf
@@ -91,7 +91,9 @@ class TransformWithStateInPySparkPythonRunner(
       currentDataIterator = dataIter
     }
 
-    val startData = dataOut.size()
+    // The batches go through `writer`, which stays bound to the stream of the first call, while
+    // `dataOut` can be a new stream on every call. So count the bytes that `writer` writes.
+    val startData = writer.bytesWritten()
     val hasInput = if (currentDataIterator != null) {
       var isCurrentBatchFull = false
       // Stop writing when the current arrowBatch is finalized/full. If we have rows left
@@ -110,7 +112,7 @@ class TransformWithStateInPySparkPythonRunner(
       super[PythonArrowInput].close()
       false
     }
-    val deltaData = dataOut.size() - startData
+    val deltaData = writer.bytesWritten() - startData
     pythonMetrics("pythonDataSent") += deltaData
     hasInput
   }
@@ -163,6 +165,9 @@ class TransformWithStateInPySparkPythonInitialStateRunner(
       )
     }
 
+    // The batches go through `writer`, which stays bound to the stream of the first call, while
+    // `dataOut` can be a new stream on every call. So count the bytes that `writer` writes.
+    val startData = writer.bytesWritten()
 
     // If we don't have data left for the current group, move to the next group.
     if (currentDataIterator == null && inputIterator.hasNext) {
@@ -175,11 +180,10 @@ class TransformWithStateInPySparkPythonInitialStateRunner(
         pandasWriter.getTotalNumRowsForBatch > 0) {
         // So we won't have batches with mixed data and init state.
         pandasWriter.finalizeCurrentArrowBatch()
+        pythonMetrics("pythonDataSent") += writer.bytesWritten() - startData
         return true
       }
     }
-
-    val startData = dataOut.size()
 
     val hasInput = if (currentDataIterator != null) {
       var isCurrentBatchFull = false
@@ -207,7 +211,7 @@ class TransformWithStateInPySparkPythonInitialStateRunner(
       false
     }
 
-    val deltaData = dataOut.size() - startData
+    val deltaData = writer.bytesWritten() - startData
     pythonMetrics("pythonDataSent") += deltaData
     hasInput
   }
@@ -236,6 +240,13 @@ abstract class TransformWithStateInPySparkPythonBaseRunner[I](
   with TransformWithStateInPySparkPythonRunnerUtils
   with Logging {
   ArrowUtils.failDuplicatedFieldNames(schema)
+
+  // Installed at worker launch. This runner is constructed per task, so each launch reads the
+  // configuration that task carries. A running streaming query carries a snapshot:
+  // `StreamExecution` runs its batches on `sparkSession.cloneSession()`, whose conf is copied at
+  // query start, so a change made while the query runs is not seen until it restarts.
+  override val envVars: java.util.Map[String, String] =
+    PythonWorkerEnvironment.mergeValidated(funcs.head._1.funcs.head.envVars, SQLConf.get)
 
   protected val sqlConf = SQLConf.get
   protected val arrowMaxRecordsPerBatch = sqlConf.arrowMaxRecordsPerBatch
@@ -304,7 +315,8 @@ class TransformWithStateInPySparkPythonPreInitRunner(
     workerModule: String,
     groupingKeySchema: StructType,
     processorHandleImpl: DriverStatefulProcessorHandleImpl)
-  extends StreamingPythonRunner(func, "", "", workerModule)
+  extends StreamingPythonRunner(
+    func, "", "", workerModule, PythonWorkerEnvironment.readValidated(SQLConf.get))
   with TransformWithStateInPySparkPythonRunnerUtils
   with Logging {
   protected val sqlConf = SQLConf.get

@@ -11762,13 +11762,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         # dtype: bool
         return first_series(DataFrame(internal))
 
-    # TODO(SPARK-46167): add pct, na_option parameter
     def rank(
         self,
         method: Literal["average", "min", "max", "first", "dense"] = "average",
         ascending: bool = True,
         numeric_only: bool = False,
         axis: Axis = 0,
+        na_option: Literal["keep", "top", "bottom"] = "keep",
+        pct: bool = False,
     ) -> "DataFrame":
         """
         Compute numerical data ranks (1 through n) along axis. Equal values are
@@ -11804,6 +11805,17 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             .. note:: For axis=1, pandas UDF is used which may have performance overhead
                 for very wide DataFrames (100+ columns).
 
+        na_option : {'keep', 'top', 'bottom'}, default 'keep'
+            * keep: leave NA values where they are
+            * top: smallest rank if ascending
+            * bottom: largest rank if ascending
+
+            .. versionadded:: 4.4.0
+
+        pct : bool, default False
+            Whether or not to display the returned rankings in percentile form.
+
+            .. versionadded:: 4.4.0
 
         Returns
         -------
@@ -11893,14 +11905,24 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         if axis == 0:
             return psdf._apply_series_op(
-                lambda psser: psser._rank(method=method, ascending=ascending), should_resolve=True
+                lambda psser: psser._rank(
+                    method=method, ascending=ascending, na_option=na_option, pct=pct
+                ),
+                should_resolve=True,
             )
         else:
             # Fast path for small dataframes
             limit = get_option("compute.shortcut_limit")
             pdf = psdf.head(limit + 1)._to_internal_pandas()
             if len(pdf) <= limit:
-                pdf_rank = pdf.rank(method=method, ascending=ascending, axis=1, numeric_only=False)
+                pdf_rank = pdf.rank(
+                    method=method,
+                    ascending=ascending,
+                    axis=1,
+                    numeric_only=False,
+                    na_option=na_option,
+                    pct=pct,
+                )
                 return DataFrame(InternalFrame.from_pandas(pdf_rank))
 
             column_label_strings = [
@@ -11917,9 +11939,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
             def rank_axis_1(*cols: pd.Series) -> pd.DataFrame:
                 pdf_row = pd.concat(cols, axis=1, keys=column_label_strings)
-                return pdf_row.rank(method=method, ascending=ascending, axis=1).rename(
-                    columns=dict(zip(pdf_row.columns, column_label_strings))
-                )
+                return pdf_row.rank(
+                    method=method,
+                    ascending=ascending,
+                    axis=1,
+                    na_option=na_option,
+                    pct=pct,
+                ).rename(columns=dict(zip(pdf_row.columns, column_label_strings)))
 
             ranked_struct_col = rank_axis_1(*psdf._internal.data_spark_columns)
             new_data_columns = [
