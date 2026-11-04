@@ -27,7 +27,7 @@ import org.apache.spark.internal.LogKeys.EXPR
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedPersistentView, ResolvedTable, ResolvedTempView}
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, DynamicPruning, Expression, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, DynamicPruning, DynamicPruningSubquery, Expression, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -207,7 +207,16 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       // dynamicFilters need no such check: a DynamicPruningSubquery over a non-deterministic
       // filtering plan is itself non-deterministic, so CleanupDynamicPruningFilters has already
       // rewritten it to TrueLiteral by the time we get here.
-      val runtimeFilters = dynamicFilters ++ scalarSubqueryFilters
+      // A group-based read keeps only the group filter, for the reason above. PartitionPruning
+      // plans a DynamicPruningSubquery from the join of one read, so it is a filter of one read
+      // too. With an IN subquery it lands on the read of the updated rows of an UPDATE. With a
+      // NOT EXISTS subquery the negated condition becomes a semi join, so it lands on the read
+      // of the rows to copy over.
+      val runtimeFilters = if (groupBasedRead) {
+        dynamicFilters.filterNot(_.isInstanceOf[DynamicPruningSubquery])
+      } else {
+        dynamicFilters ++ scalarSubqueryFilters
+      }
 
       val batchExec = BatchScanExec(relation.output, relation.scan, runtimeFilters,
         relation.ordering, relation.relation.table, relation.keyGroupedPartitioning)
