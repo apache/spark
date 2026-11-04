@@ -45,8 +45,15 @@ trait DataSourceV2ScanExecBase
 
   def readerFactory: PartitionReaderFactory
 
-  /** Optional partitioning expressions provided by the V2 data sources, through
-   * `SupportsReportPartitioning` */
+  /**
+   * Optional partitioning expressions provided by the V2 data sources, through
+   * `SupportsReportPartitioning`. `None` means the source reported no key,
+   * `V2ScanPartitioningAndOrdering` dropped it (a key it cannot resolve, or none left after
+   * pruning), or storage-partitioned join is off for this scan: the planner gates it on
+   * `spark.sql.sources.v2.bucketing.enabled` when the scan is built (see `DataSourceV2Strategy`),
+   * so a copy of the planned node (such as the one `PlanAdaptiveDynamicPruningFilters` makes at
+   * stage creation) keeps that decision instead of reading the config again (SPARK-60260).
+   */
   def keyGroupedPartitioning: Option[Seq[Expression]]
 
   /** Optional ordering expressions provided by the V2 data sources, through
@@ -93,7 +100,7 @@ trait DataSourceV2ScanExecBase
   // key-grouped arm sorts every partition key, wraps each one and runs a `distinct` over them.
   @transient override lazy val outputPartitioning: physical.Partitioning = {
     keyGroupedPartitioning match {
-      case Some(exprs) if conf.v2BucketingEnabled && KeyedPartitioning.supportsExpressions(exprs) &&
+      case Some(exprs) if KeyedPartitioning.supportsExpressions(exprs) &&
           inputPartitions.nonEmpty && inputPartitions.forall(_.isInstanceOf[HasPartitionKey]) =>
         val dataTypes = exprs.map(_.dataType)
         val rowOrdering = RowOrdering.createNaturalAscendingOrdering(dataTypes)
