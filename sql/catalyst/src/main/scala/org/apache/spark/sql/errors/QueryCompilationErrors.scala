@@ -1260,6 +1260,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     unsupportedTableOperationError(table.name(), "batch scan")
   }
 
+  def unsupportedTableOperationError(table: Table, operation: String): Throwable = {
+    unsupportedTableOperationError(table.name(), operation)
+  }
+
   def unsupportedBatchWriteError(table: Table): Throwable = {
     unsupportedTableOperationError(table.name(), "batch write")
   }
