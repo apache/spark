@@ -202,3 +202,7 @@ final class PlannedScan(val scan: Scan) {
   lazy val inputPartitions: Seq[InputPartition] = batch.planInputPartitions().toImmutableArraySeq
   lazy val readerFactory: PartitionReaderFactory = batch.createReaderFactory()
 }
+
+object PlannedScan {
+  def unapply(plannedScan: PlannedScan): Some[Scan] = Some(plannedScan.scan)
+}
