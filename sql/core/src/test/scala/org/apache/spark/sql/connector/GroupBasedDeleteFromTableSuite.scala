@@ -18,7 +18,8 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.catalyst.expressions.InSubquery
+import org.apache.spark.sql.catalyst.expressions.{DynamicPruning, InSubquery}
+import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
@@ -277,6 +278,34 @@ class GroupBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
 
       checkReplacedPartitions(Seq("software", "hr"))
       checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 2)
+    }
+  }
+
+  test("SPARK-60863: delete with a scalar subquery condition on the group key") {
+    withTempView("src") {
+      createAndInitTable("pk INT NOT NULL, id INT, salary INT, dep STRING",
+        """{ "pk": 1, "id": 1, "salary": 300, "dep": "hr" }
+          |{ "pk": 2, "id": 2, "salary": 150, "dep": "software" }
+          |{ "pk": 3, "id": 3, "salary": 120, "dep": "hr" }
+          |""".stripMargin)
+      Seq("hr").toDF("d").createOrReplaceTempView("src")
+
+      // every hr row matches, so the negated condition that selects the rows to copy over drops
+      // hr, and pruning the scan with it would leave hr out of the groups to replace
+      val executedPlan = executeAndKeepPlan {
+        sql(s"DELETE FROM $tableNameAsString WHERE dep = (SELECT max(d) FROM src)")
+      }
+      val batchScans = collect(executedPlan) { case s: BatchScanExec => s }
+      assert(batchScans.nonEmpty)
+      batchScans.foreach { batchScan =>
+        assert(batchScan.runtimeFilters.forall(_.isInstanceOf[DynamicPruning]),
+          s"expected only the group filter as a runtime filter, got ${batchScan.runtimeFilters}")
+      }
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(2, 2, 150, "software") :: Nil)
+      checkReplacedPartitions(Seq("hr"))
     }
   }
 }
