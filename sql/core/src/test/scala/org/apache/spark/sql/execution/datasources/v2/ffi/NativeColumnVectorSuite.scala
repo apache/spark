@@ -53,7 +53,7 @@ class NativeColumnVectorSuite extends SparkFunSuite {
   /** The column vector of `vector`, refreshed as the reader refreshes it after an import. */
   private def native(vector: ValueVector, nullable: Boolean = true): NativeColumnVector = {
     val column = NativeColumnVector.create(vector, nullable)
-    column.refresh()
+    column.refresh(-1)
     column
   }
 
@@ -158,7 +158,7 @@ class NativeColumnVectorSuite extends SparkFunSuite {
                 assert(views.getDataBuffers.size > 1)
               case _ =>
             }
-            column.refresh()
+            column.refresh(-1)
             checkSame(vector, column)(_.getUTF8String(_))
             assert(column.getUTF8String(values.indexOf(None)) === null)
           }
@@ -329,9 +329,29 @@ class NativeColumnVectorSuite extends SparkFunSuite {
             case (None, row) => vector.setNull(row)
           }
           vector.setValueCount(values.size)
-          column.refresh()
+          column.refresh(-1)
           checkSame(vector, column)(_.getLong(_))
         }
+      }
+    }
+  }
+
+  test("take the null count that the library exported, and count the nulls without one") {
+    withAllocator { allocator =>
+      Using.resource(new IntVector("i", allocator)) { vector =>
+        vector.allocateNew(2)
+        vector.set(0, 1)
+        vector.setNull(1)
+        vector.setValueCount(2)
+        val column = NativeColumnVector.create(vector, true)
+        column.refresh(1)
+        assert(column.isNullAt(1))
+        // The C data interface requires a null_count of 0 to be exact, so the column vector does
+        // not read the validity bitmap then.
+        column.refresh(0)
+        assert(!column.isNullAt(1))
+        column.refresh(-1)
+        assert(column.isNullAt(1))
       }
     }
   }
@@ -345,10 +365,11 @@ class NativeColumnVectorSuite extends SparkFunSuite {
         val column = native(vector, nullable = false)
         assert(column.getClass !== classOf[NativeColumnVector])
         checkSame(vector, column)(_.getInt(_))
-        // The reader rejects a batch with a null in such a column before it refreshes the column
-        // vector, which therefore does not count the nulls of the batch.
+        // The column vector does not count the nulls of such a column when the reader refreshes
+        // it: the reader then checks that the batch has no null, and the batch has no rows until
+        // that check passes.
         vector.setNull(1)
-        column.refresh()
+        column.refresh(-1)
         assert(!column.isNullAt(1))
       }
     }

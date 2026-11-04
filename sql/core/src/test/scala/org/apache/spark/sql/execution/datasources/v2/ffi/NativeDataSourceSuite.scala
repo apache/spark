@@ -461,17 +461,35 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
   nativeTest("reject the data that has nulls where the schema to read has none") {
     // The column name is null for the ids that are multiples of 5.
     val session = newSession(defaultPackage)
-    val e = intercept[Exception] {
-      session.read.schema("id BIGINT, name STRING NOT NULL").format("native_range")
-        .option("end", "4").load().collect()
-    }
-    checkError(
+    def checkNullError(e: Throwable): Unit = checkError(
       exception = findError(e, "NATIVE_DATA_SOURCE_ERROR"),
       condition = "NATIVE_DATA_SOURCE_ERROR",
       parameters = Map(
         "action" -> "read",
         "name" -> "native_range",
         "msg" -> "The column name has a null, but the schema to read declares it not nullable."))
+    checkNullError(intercept[Exception] {
+      session.read.schema("id BIGINT, name STRING NOT NULL").format("native_range")
+        .option("end", "4").load().collect()
+    })
+    // A batch that is rejected after others were read: the second partition reads the ids 6-7,
+    // 8-9 and 10-11, and the name of id 10 is null.
+    val df = session.read.schema("id BIGINT, name STRING NOT NULL").format("native_range")
+      .options(Map("end" -> "12", "partitions" -> "2", "batch_size" -> "2")).load()
+    val batch = scan(df).toBatch
+    val reader = batch.createReaderFactory().createColumnarReader(batch.planInputPartitions()(1))
+    try {
+      assert(reader.next() && reader.next())
+      assert(reader.get().numRows() == 2)
+      assert(reader.get().column(1).getUTF8String(1).toString == "n9")
+      checkNullError(intercept[Exception](reader.next()))
+      // The batch has no rows, and its column vectors read the buffers of the rejected batch,
+      // since the import released those of the previous one.
+      assert(reader.get().numRows() == 0)
+      assert(reader.get().column(1).getUTF8String(1).toString == "n11")
+    } finally {
+      reader.close()
+    }
     // The fields that are not nullable have no nulls.
     checkRows(
       session.read.schema("id BIGINT NOT NULL, st STRUCT<a: BIGINT NOT NULL, b: STRING NOT NULL>")

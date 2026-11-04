@@ -47,9 +47,9 @@ import org.apache.spark.unsafe.types.UTF8String;
  * The column vector of a top-level column of a {@code NativePartitionReader}, which imports every
  * batch into the same Arrow vectors.
  *
- * <p>After each import, the reader calls {@link #refresh()}, and the vector then reads booleans,
- * integers, floats, dates, timestamps, decimals, and the strings of the Arrow types Utf8 and
- * Utf8View at the addresses of the buffers of the batch. {@link ArrowColumnVector} reads each
+ * <p>After each import, the reader calls {@link #refresh(long)}, and the vector then reads
+ * booleans, integers, floats, dates, timestamps, decimals, and the strings of the Arrow types Utf8
+ * and Utf8View at the addresses of the buffers of the batch. {@link ArrowColumnVector} reads each
  * value through Arrow Java, which by default checks on each access the bounds and the reference
  * count of the buffer, and whether the value is null.
  * Spark does not need these checks here: it reads only the rows of the batch, whose buffers Arrow
@@ -59,7 +59,8 @@ import org.apache.spark.unsafe.types.UTF8String;
  * otherwise leaves the release to that thread, or to a thread that waits for it to end. Spark
  * reads a value of a nullable column only after {@link #isNullAt(int)}, and the reader checks
  * that the columns that the schema declares not nullable have no null, so that the vector of such
- * a column does not count the nulls of each batch.
+ * a column does not count the nulls of each batch. The vector of a nullable column takes the
+ * null_count that the library exported, and only counts the nulls when the library did not.
  *
  * <p>The vector returns the decimals that fit their precision in a long, of a scale from 0 to
  * their precision, as the unscaled longs that Spark's own column vectors hold, which Spark adds as
@@ -103,8 +104,11 @@ class NativeColumnVector extends ReusedArrowColumnVector {
     super(vector);
   }
 
-  /** Reads the addresses of the buffers of the batch that the reader imported last. */
-  void refresh() {
+  /**
+   * Reads the addresses of the buffers of the batch that the reader imported last, whose array of
+   * this column the library exported with a null_count of {@code nullCount}.
+   */
+  void refresh(long nullCount) {
   }
 
   /** A vector that reads its values and their validity at the addresses of its buffers. */
@@ -125,9 +129,11 @@ class NativeColumnVector extends ReusedArrowColumnVector {
     }
 
     @Override
-    void refresh() {
-      // Arrow Java counts the nulls in the validity bitmap on each call.
-      boolean hasNulls = nullable && vector.getNullCount() > 0;
+    void refresh(long nullCount) {
+      // The C data interface requires a null_count other than -1 to be exact, so the nulls are
+      // only counted, which Arrow Java does in the validity bitmap on each call, for a negative
+      // one.
+      boolean hasNulls = nullable && (nullCount < 0 ? vector.getNullCount() > 0 : nullCount > 0);
       validity = hasNulls ? vector.getValidityBuffer().memoryAddress() : 0;
       data = vector.getDataBuffer().memoryAddress();
     }
@@ -263,8 +269,8 @@ class NativeColumnVector extends ReusedArrowColumnVector {
     }
 
     @Override
-    void refresh() {
-      super.refresh();
+    void refresh(long nullCount) {
+      super.refresh(nullCount);
       offsets = vector.getOffsetBuffer().memoryAddress();
     }
 
@@ -289,8 +295,8 @@ class NativeColumnVector extends ReusedArrowColumnVector {
     }
 
     @Override
-    void refresh() {
-      super.refresh();
+    void refresh(long nullCount) {
+      super.refresh(nullCount);
       List<ArrowBuf> dataBuffers = views.getDataBuffers();
       if (buffers.length != dataBuffers.size()) {
         buffers = new long[dataBuffers.size()];

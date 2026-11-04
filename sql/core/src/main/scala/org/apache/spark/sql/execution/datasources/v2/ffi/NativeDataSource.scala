@@ -693,7 +693,8 @@ class NativePartitionReader(
    * it moves to the next batch, as `ColumnarToRowExec` does with the column vectors that are
    * freeable, because closing a struct column also drops its child column vectors. The reader
    * closes the Arrow vectors at the end. `nullable` is the nullability of the column in the schema
-   * to read, which `checkNulls` enforces on each batch before the column vector reads it.
+   * to read, which `checkNulls` enforces on each batch after the column vector is refreshed: the
+   * batch has no rows until the check passes.
    */
   private def columnVector(vector: FieldVector, nullable: Boolean): NativeColumnVector = {
     try {
@@ -754,7 +755,7 @@ class NativePartitionReader(
         // The end of the stream.
         false
       } else {
-        try {
+        val nullCounts = try {
           checkArrays(snapshot)
         } catch {
           case e: Throwable =>
@@ -765,7 +766,7 @@ class NativePartitionReader(
         // new one passes the check, and the column vectors read its buffers before the check.
         batch.setNumRows(0)
         call(name, "read")(Data.importIntoVectorSchemaRoot(allocator, array, root, dictionaries))
-        columns.foreach(_.refresh())
+        columns.zip(nullCounts).foreach { case (column, nullCount) => column.refresh(nullCount) }
         checkNulls()
         batch.setNumRows(root.getRowCount)
         true
@@ -792,8 +793,9 @@ class NativePartitionReader(
    *    which also rejects them, the nulls are counted when the library did not count them.
    * The buffers are not checked, since the C data interface does not carry their sizes: Arrow
    * Java takes them from the lengths, so the library must export buffers that hold every value.
+   * Returns the null_count that the library exported for each column.
    */
-  private def checkArrays(batch: ArrowArray.Snapshot): Unit = {
+  private def checkArrays(batch: ArrowArray.Snapshot): Array[Long] = {
     // The arrays of the children, one for each field of the type: Arrow Java only checks their
     // number when an array has children, and imports the missing columns of a batch as nulls.
     def children(
@@ -887,15 +889,16 @@ class NativePartitionReader(
         "but Spark only reads batches without null rows: mark the values of the columns as null " +
         "instead.")
     }
-    val columns = root.getSchema.getFields.size
-    children(batch, columns, "The batch", s"the schema has $columns columns")
-        .zip(root.getSchema.getFields.asScala).foreach { case (column, field) =>
+    val numColumns = root.getSchema.getFields.size
+    val arrays = children(batch, numColumns, "The batch", s"the schema has $numColumns columns")
+    arrays.zip(root.getSchema.getFields.asScala).foreach { case (column, field) =>
       if (column.length < batch.length) {
         throw error(name, "read", s"The column ${field.getName} has a length of " +
           s"${column.length}, but the batch has a length of ${batch.length}.")
       }
       checkColumn(column, field, field.getName)
     }
+    arrays.map(_.null_count).toArray
   }
 
   override def get(): ColumnarBatch = batch
