@@ -1096,6 +1096,38 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
+  test("SPARK-60857: CREATE TABLE rejects a struct generation expression with other field names") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      // An auto-filled value lines up the struct fields with the column type by name, while the
+      // check of a provided value lines them up by position. So a row that Spark auto-filled from
+      // this expression would fail the check when a later write carries it.
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"""CREATE TABLE testcat.$tblName(
+                 |  a INT,
+                 |  b INT,
+                 |  s STRUCT<x: INT, y: INT> GENERATED ALWAYS AS (named_struct('y', a, 'x', b))
+                 |) USING foo""".stripMargin)
+        },
+        condition = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+        parameters = Map(
+          "fieldName" -> "s",
+          "expressionStr" -> "named_struct('y', a, 'x', b)",
+          "reason" -> ("generation expression data type struct<y:int,x:int> names its struct " +
+            "fields differently from column data type struct<x:int,y:int>")))
+
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  a INT,
+             |  b INT,
+             |  s STRUCT<x: INT, y: INT> GENERATED ALWAYS AS (named_struct('x', b, 'y', a))
+             |) USING foo""".stripMargin)
+      sql(s"INSERT INTO testcat.$tblName(a, b) VALUES (1, 2)")
+      sql(s"INSERT INTO testcat.$tblName SELECT * FROM testcat.$tblName")
+      checkAnswer(spark.table(s"testcat.$tblName"), Seq.fill(2)(Row(1, 2, Row(2, 1))))
+    }
+  }
+
   test("generation expression is not exposed in the read schema") {
     val tblName = "my_tab"
     withTable(s"testcat.$tblName") {

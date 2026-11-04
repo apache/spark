@@ -56,6 +56,7 @@ case class GeneratedColumnExpression(
    * - The expression cannot reference other generated columns
    * - The expression must be deterministic
    * - The expression data type can be safely up-cast to the destination column data type
+   * - The expression data type names its struct fields as the column data type does, in order
    * - No subquery expressions
    * - No references to session (temporary) variables
    * - No non-UTF8 binary collation
@@ -118,6 +119,14 @@ case class GeneratedColumnExpression(
       throw unsupportedExpressionError(
         s"generation expression data type ${child.dataType.simpleString} " +
           s"is incompatible with column data type ${targetDataType.simpleString}")
+    }
+
+    // Store assignment lines up the struct fields of an auto-filled value with the column type by
+    // name, while the check of a provided value lines them up by position, so the two must agree.
+    if (!DataType.equalsStructurallyByName(child.dataType, targetDataType, resolver)) {
+      throw unsupportedExpressionError(
+        s"generation expression data type ${child.dataType.simpleString} names its struct " +
+          s"fields differently from column data type ${targetDataType.simpleString}")
     }
 
     if (child.exists(e => SchemaUtils.hasNonUTF8BinaryCollation(e.dataType))) {
