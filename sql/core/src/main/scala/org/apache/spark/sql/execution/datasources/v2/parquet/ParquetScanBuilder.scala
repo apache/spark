@@ -21,14 +21,14 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
-import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
+import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Count}
 import org.apache.spark.sql.connector.read.{SupportsPushDownAggregates, SupportsPushDownVariantExtractions, VariantExtraction}
 import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, PartitioningAwareFileIndex}
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFilters, SparkToParquetSchemaConverter}
-import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
+import org.apache.spark.sql.execution.datasources.v2.{FileScanBuilder, V2ColumnUtils}
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType, UserDefinedType, VariantType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 
@@ -98,6 +98,19 @@ case class ParquetScanBuilder(
     if (!sparkSession.sessionState.conf.parquetAggregatePushDown) {
       return false
     }
+    // The footer only has statistics for leaf columns, and the null count of a leaf of a nested
+    // column is not the number of nulls of the column itself: a non-null struct can have a null
+    // field, and an empty array or map has no leaf value. So COUNT of a nested column cannot be
+    // answered from the footer.
+    val countsNestedColumn = aggregation.aggregateExpressions.exists {
+      case count: Count => V2ColumnUtils.extractV2Column(count.column).exists { colName =>
+        schema.getFieldIndex(colName).exists(i => isNestedType(schema(i).dataType))
+      }
+      case _ => false
+    }
+    if (countsNestedColumn) {
+      return false
+    }
 
     AggregatePushDownUtils.getSchemaForPushedAggregation(
       aggregation,
@@ -111,6 +124,12 @@ case class ParquetScanBuilder(
         true
       case _ => false
     }
+  }
+
+  private def isNestedType(dataType: DataType): Boolean = dataType match {
+    case _: StructType | _: ArrayType | _: MapType | _: VariantType => true
+    case udt: UserDefinedType[_] => isNestedType(udt.sqlType)
+    case _ => false
   }
 
   // SupportsPushDownVariantExtractions API implementation

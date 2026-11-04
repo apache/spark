@@ -62,7 +62,9 @@ trait FileSourceAggregatePushDownSuite
     withSQLConf(aggPushDownEnabledKey -> "true") {
       withDataSourceTable(data, "t") {
         val count = sql("SELECT Count(_1) FROM t")
-        checkPushedInfo(count, "PushedAggregation: [COUNT(_1)]")
+        // The Parquet footer has no null count for a nested column (SPARK-60598).
+        val expected = if (format == "parquet") "[]" else "[COUNT(_1)]"
+        checkPushedInfo(count, s"PushedAggregation: $expected")
         checkAnswer(count, Seq(Row(10)))
       }
     }
@@ -716,7 +718,7 @@ trait FileSourceAggregatePushDownSuite
     }
   }
 
-  private def checkPushedInfo(df: DataFrame, expectedPlanFragment: String): Unit = {
+  protected def checkPushedInfo(df: DataFrame, expectedPlanFragment: String): Unit = {
     df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         checkKeywordsExistsInExplain(df, expectedPlanFragment)
@@ -741,6 +743,8 @@ class ParquetV1AggregatePushDownSuite extends ParquetAggregatePushDownSuite {
 
 @SlowSQLTest
 class ParquetV2AggregatePushDownSuite extends ParquetAggregatePushDownSuite {
+
+  import testImplicits._
 
   override protected def sparkConf: SparkConf =
     super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "")
@@ -767,6 +771,78 @@ class ParquetV2AggregatePushDownSuite extends ParquetAggregatePushDownSuite {
               exception = interceptAggPushDownError("SELECT count(i) FROM t"),
               condition = "PARQUET_AGGREGATE_PUSH_DOWN_UNSUPPORTED.NO_NUM_NULLS",
               parameters = Map("filePath" -> ".*", "config" -> aggPushDownEnabledKey))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60598: aggregate push-down reads the right column after a nested column") {
+    Seq("false", "true").foreach { enableVectorizedReader =>
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        // `s`, `arr` and `m` have several leaf column chunks each, so a later column's
+        // position among the top-level fields is not its position among the column chunks.
+        Seq(((100, 200), Seq(7, 8), Map(9 -> 10), Some(1), 2, true),
+            ((300, 400), Seq(11), Map(12 -> 13), None, 6, false),
+            ((500, 600), Seq.empty[Int], Map.empty[Int, Int], Some(5), 4, false))
+          .toDF("s", "arr", "m", "a", "b", "c")
+          .coalesce(1).write.parquet(path)
+        withTempView("t") {
+          spark.read.parquet(path).createOrReplaceTempView("t")
+          withSQLConf(
+            aggPushDownEnabledKey -> "true",
+            vectorizedReaderEnabledKey -> enableVectorizedReader) {
+            val df = sql("SELECT max(a), min(b), count(a), max(c), min(c) FROM t")
+            checkPushedInfo(df, "PushedAggregation: [MAX(a), MIN(b), COUNT(a), MAX(c), MIN(c)]")
+            checkAnswer(df, Row(5, 2, 2, true, false))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60598: COUNT of a nested column is not pushed down") {
+    Seq("false", "true").foreach { enableVectorizedReader =>
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        // The footer only has statistics for the leaf columns. A non-null struct whose first
+        // field is null, and an empty array, are both null in the first leaf column, so its
+        // null count is not the number of null values of the column.
+        sql("SELECT named_struct('x', CAST(NULL AS INT), 'y', 1) AS s, array() AS arr, " +
+            "map(1, 2) AS m " +
+          "UNION ALL SELECT NULL, NULL, NULL " +
+          "UNION ALL SELECT named_struct('x', 3, 'y', 4), array(5), map()")
+          .coalesce(1).write.parquet(path)
+        withTempView("t") {
+          spark.read.parquet(path).createOrReplaceTempView("t")
+          withSQLConf(
+            aggPushDownEnabledKey -> "true",
+            vectorizedReaderEnabledKey -> enableVectorizedReader) {
+            val df = sql("SELECT count(s), count(arr), count(m) FROM t")
+            checkPushedInfo(df, "PushedAggregation: []")
+            checkAnswer(df, Row(2, 2, 2))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60598: aggregate push-down with a user schema that differs from the file schema") {
+    Seq("false", "true").foreach { enableVectorizedReader =>
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        Seq((1, 10L, 100), (2, 20L, 200)).toDF("x", "a", "b").coalesce(1).write.parquet(path)
+        withTempView("t") {
+          // The data schema lists `b` (as `B`) before `a`, leaves out `x`, and adds `z`, which
+          // the file does not have.
+          spark.read.schema("B INT, a LONG, z INT").parquet(path).createOrReplaceTempView("t")
+          withSQLConf(
+            aggPushDownEnabledKey -> "true",
+            vectorizedReaderEnabledKey -> enableVectorizedReader) {
+            val df = sql("SELECT max(a), min(B), count(B), count(z) FROM t")
+            checkPushedInfo(df, "PushedAggregation: [MAX(a), MIN(B), COUNT(B), COUNT(z)]")
+            checkAnswer(df, Row(20L, 100, 2, 0))
           }
         }
       }
