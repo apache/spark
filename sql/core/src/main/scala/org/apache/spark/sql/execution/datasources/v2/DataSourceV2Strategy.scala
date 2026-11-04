@@ -225,6 +225,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       // rewritten it to TrueLiteral by the time we get here.
       val runtimeFilters = dynamicFilters ++ scalarSubqueryFilters
 
+      // Decide storage-partitioned join here, once, so a rebuild of the planned node (for instance
+      // the copy PlanAdaptiveDynamicPruningFilters makes at stage creation) does not read the
+      // config again and drop the keyed layout the join was planned with (SPARK-60260).
+      val keyGroupedPartitioning = relation.keyGroupedPartitioning
+        .filter(_ => session.sessionState.conf.v2BucketingEnabled)
+
       // Whether the scan gets the checked column does not depend on whether it is columnar. Asking
       // that can plan the scan's partitions, which the node built afterwards would plan again. A
       // row-based scan gets a Project for the UnsafeRow conversion anyway, so dropping the column
@@ -234,7 +240,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val checked = StorageFilterPlanning.checkedColumn(
         session.sessionState.conf, storageFilters, relation.output)
       val batchExec = BatchScanExec(relation.output ++ checked, relation.scan, runtimeFilters,
-        relation.ordering, relation.relation.table, relation.keyGroupedPartitioning,
+        relation.ordering, relation.relation.table, keyGroupedPartitioning,
         storageFilters, checked.isDefined)
       // With the checked column the scan's output differs from `project`, so a Project drops it.
       DataSourceV2Strategy.withProjectAndFilter(project,
@@ -864,15 +870,15 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
       UncacheTableExec(r.table, cascade = !isTempView(r.table)) :: Nil
 
-    case a @ AddCheckConstraint(PhysicalOperation(_, _, d: DataSourceV2ScanRelation), check) =>
-      assert(d.relation.catalog.isDefined, "Catalog should be defined after analysis")
-      assert(d.relation.identifier.isDefined, "Identifier should be defined after analysis")
-      val catalog = d.relation.catalog.get.asTableCatalog
-      val ident = d.relation.identifier.get
+    case a @ AddCheckConstraintTarget(relation) =>
+      assert(relation.catalog.isDefined, "Catalog should be defined after analysis")
+      assert(relation.identifier.isDefined, "Identifier should be defined after analysis")
+      val catalog = relation.catalog.get.asTableCatalog
+      val ident = relation.identifier.get
       val condition = a.checkConstraint.condition
       val change = TableChange.addConstraint(
-        check.toV2Constraint,
-        d.relation.table.version)
+        a.checkConstraint.toV2Constraint,
+        relation.table.version)
       ResolveTableConstraints.validateCatalogForTableChange(Seq(change), catalog, ident)
       AddCheckConstraintExec(catalog, ident, change, condition, planLater(a.child)) :: Nil
 
@@ -933,6 +939,22 @@ private object AppendWrite {
   ): Option[(NamedRelation, Option[Write], Option[LogicalPlan])] = plan match {
     case a: AppendData => Some((a.table, a.write, a.analyzedQuery))
     case m: InsertOnlyMerge => Some((m.table, m.write, m.analyzedQuery))
+    case _ => None
+  }
+}
+
+/**
+ * Pattern that matches an [[AddCheckConstraint]] on a v2 table and exposes the table relation.
+ */
+private object AddCheckConstraintTarget {
+  def unapply(a: AddCheckConstraint): Option[DataSourceV2Relation] = a match {
+    case AddCheckConstraint(PhysicalOperation(_, _, d: DataSourceV2ScanRelation), _, _) =>
+      Some(d.relation)
+    // The optimizer replaces the filtered scan with an empty relation if no row can violate the
+    // check, so find the table in the analyzed query.
+    case AddCheckConstraint(_, _,
+        Some(Filter(_, SubqueryAlias(_, PhysicalOperation(_, _, r: DataSourceV2Relation))))) =>
+      Some(r)
     case _ => None
   }
 }
