@@ -935,6 +935,39 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
     }
   }
 
+  test("SPARK-60721: merge with assignments to metadata columns") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |""".stripMargin)
+
+      Seq((1, "hr"), (3, "hr")).toDF("pk", "dep").createOrReplaceTempView("source")
+
+      def mergeBuilder: MergeIntoWriter[Row] = spark.table("source")
+        .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
+
+      Seq(
+        mergeBuilder.whenMatched().update(Map("index" -> lit(5))) -> "index",
+        mergeBuilder.whenNotMatched().insert(Map(
+          "pk" -> col("source.pk"),
+          "salary" -> lit(0),
+          "dep" -> col("source.dep"),
+          "_partition" -> lit("x"))) -> "_partition"
+      ).foreach { case (writer, metadataCol) =>
+        val e = intercept[AnalysisException](writer.merge())
+        assert(e.getCondition == "DATATYPE_MISMATCH.INVALID_ROW_LEVEL_OPERATION_ASSIGNMENTS")
+        assert(e.getMessage.contains(s"Cannot assign to metadata column '$metadataCol'"))
+      }
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 100, "hr"), // unchanged
+          Row(2, 200, "software"))) // unchanged
+    }
+  }
+
   test("merge refreshed relation cache") {
     withTempView("temp", "source") {
       withCache("temp") {

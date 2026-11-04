@@ -97,6 +97,30 @@ class NormalizeFloatingPointNumbersSuite extends PlanTest {
     comparePlans(doubleOptimized, correctAnswer)
   }
 
+  test("SPARK-60150: normalize join keys when only one side is already normalized") {
+    val normA = KnownFloatingPointNormalized(NormalizeNaNAndZero(a))
+    val normB = KnownFloatingPointNormalized(NormalizeNaNAndZero(b))
+
+    // A key normalized on one side (e.g. by a filter pushed below an Aggregate that a subquery
+    // rewrite turned into a join) must not stop the other side from being normalized.
+    comparePlans(
+      Optimize.execute(testRelation1.join(testRelation2, condition = Some(normA === b))),
+      testRelation1.join(testRelation2, condition = Some(normA === normB)))
+    comparePlans(
+      Optimize.execute(testRelation1.join(testRelation2, condition = Some(a === normB))),
+      testRelation1.join(testRelation2, condition = Some(normA === normB)))
+
+    val equality = normA === b
+    val normalizedEquality = normA === normB
+    comparePlans(
+      Optimize.execute(testRelation1.join(
+        testRelation2, joinType = LeftAnti, condition = Some(equality || IsNull(equality)))),
+      testRelation1.join(
+        testRelation2,
+        joinType = LeftAnti,
+        condition = Some(normalizedEquality || IsNull(normalizedEquality))))
+  }
+
   test("normalize floating points in join keys (equal null safe) - idempotence") {
     val query = testRelation1.join(testRelation2, condition = Some(a <=> b))
 

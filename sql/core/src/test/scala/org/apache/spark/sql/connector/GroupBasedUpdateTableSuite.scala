@@ -84,6 +84,34 @@ class GroupBasedUpdateTableSuite extends UpdateTableSuiteBase {
     }
   }
 
+  test("SPARK-60667: update with type coercion handles metadata columns correctly") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "software" }
+        |{ "pk": 3, "id": 3, "dep": "hr" }
+        |""".stripMargin)
+
+    // the condition references a metadata column and needs type coercion (`id > 0.5`),
+    // so the UPDATE is resolved only in a later iteration of the analyzer
+    sql(
+      s"""UPDATE $tableNameAsString
+         |SET id = -1
+         |WHERE id IN (1, 100) AND _partition = 'hr' AND id > 0.5
+         |""".stripMargin)
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, "hr") :: Row(2, 2, "software") :: Row(3, 3, "hr") :: Nil)
+
+    checkLastWriteInfo(
+      expectedRowSchema = table.schema,
+      expectedMetadataSchema = Some(StructType(Array(PARTITION_FIELD, INDEX_FIELD_NULLABLE))))
+
+    checkLastWriteLog(
+      writeWithMetadataLogEntry(metadata = Row("hr", null), data = Row(1, -1, "hr")),
+      writeWithMetadataLogEntry(metadata = Row("hr", 1), data = Row(3, 3, "hr")))
+  }
+
   test("update runtime group filtering") {
     Seq(true, false).foreach { ddpEnabled =>
       Seq(true, false).foreach { aqeEnabled =>

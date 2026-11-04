@@ -63,6 +63,7 @@ import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSource
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{PartitionOverwriteMode, StoreAssignmentPolicy}
 import org.apache.spark.sql.internal.connector.{SchemaAlignmentConfig, SupportsConfigurableSchemaAlignment, V1Function}
+import org.apache.spark.sql.metricview.logical.MetricViewPlaceholder
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -1139,9 +1140,12 @@ class Analyzer(
           if (metaCols.isEmpty) {
             node
           } else {
-            val newNode = node.mapChildren(
-              addMetadataCol(_, metaCols.map(_.exprId).toSet, onlyUniqueAndNecessaryMetadataColumns)
-            )
+            val requiredAttrIds = metaCols.map(_.exprId).toSet
+            val newNode = node.mapChildren {
+              case child if isRowLevelCommandTarget(node, child) => child
+              case child =>
+                addMetadataCol(child, requiredAttrIds, onlyUniqueAndNecessaryMetadataColumns)
+            }
             // We should not change the output schema of the plan. We should project away the extra
             // metadata columns if necessary.
             if (newNode.sameOutput(node)) {
@@ -1174,6 +1178,29 @@ class Analyzer(
             plan.children.exists(c => c.metadataOutput.exists(_.exprId == a.exprId))
         case _ => false
       })
+    }
+
+    // DELETE, UPDATE and MERGE on a table that supports row-level operations are rewritten into
+    // plans that read the metadata columns they need (see RewriteRowLevelCommand). The rewrite
+    // takes the output of the target table as the data columns to write, so metadata columns must
+    // not be added to it, even if the command is resolved only in a later iteration. This does not
+    // apply to UPDATE and MERGE on a table that accepts any schema, whose assignments Spark leaves
+    // to the rules injected for that table (see ResolveRowLevelCommandAssignments). Spark still
+    // rewrites such a command once its assignments are aligned, for example a MERGE with only
+    // DELETE actions, which has nothing to align.
+    private def isRowLevelCommandTarget(node: LogicalPlan, child: LogicalPlan): Boolean = {
+      node match {
+        case d: DeleteFromTable =>
+          (d.table eq child) && (EliminateSubqueryAliases(child) match {
+            case ExtractV2Table(_: SupportsRowLevelOperations) => true
+            case _ => false
+          })
+        case u: UpdateTable =>
+          (u.table eq child) && u.rewritable && !u.skipSchemaResolution
+        case m: MergeIntoTable =>
+          (m.targetTable eq child) && m.rewritable && !m.skipSchemaResolution
+        case _ => false
+      }
     }
 
     private def addMetadataCol(
@@ -1327,6 +1354,15 @@ class Analyzer(
               identifier, cmd, suggestAlternative, u)
           case table => table
         }.getOrElse(u)
+
+      // The child of `AddCheckConstraint` reads its target to validate the existing data, so the
+      // target is an `UnresolvedRelation` that can resolve to a view, unlike `UnresolvedTable`.
+      case a @ AddCheckConstraint(Filter(_, SubqueryAlias(_, v: View)), _, _) =>
+        throw QueryCompilationErrors.expectTableNotViewError(
+          v.desc.fullIdent, "ALTER TABLE ... ADD CONSTRAINT", suggestAlternative = false, a)
+      case a @ AddCheckConstraint(Filter(_, m: MetricViewPlaceholder), _, _) =>
+        throw QueryCompilationErrors.expectTableNotViewError(
+          m.metadata.fullIdent, "ALTER TABLE ... ADD CONSTRAINT", suggestAlternative = false, a)
 
       case u @ UnresolvedView(identifier, cmd, allowTemp, suggestAlternative) =>
         lookupTableOrView(identifier, viewOnly = true).map {
