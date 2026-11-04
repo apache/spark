@@ -125,6 +125,21 @@ class SeriesTestsMixin:
         psser_from_psser = ps.Series(psser, name="y", dtype=float)
         self.assert_eq(psser_from_psser, ps.Series([1, 2, 3], name="y", dtype=float))
 
+        # Specify a pandas-on-Spark Index, e.g. the Series' own index
+        pser = pd.Series([1, 2, 3], index=[10, 20, 30], name="x")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(
+            ps.Series(psser, index=psser.index),
+            pd.Series(pser, index=pser.index),
+        )
+        self.assert_eq(
+            ps.Series(psser, index=ps.Index([30, 10])),
+            pd.Series(pser, index=pd.Index([30, 10])),
+        )
+
+        # Specify an empty index
+        self.assert_eq(ps.Series(psser, index=[]), pd.Series(pser, index=[]))
+
     def test_all_null_series(self):
         pser_a = pd.Series([None, None, None], dtype="float64")
         pser_b = pd.Series([None, None, None], dtype="str")
