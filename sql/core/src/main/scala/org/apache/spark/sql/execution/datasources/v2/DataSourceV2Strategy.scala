@@ -864,15 +864,15 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
       UncacheTableExec(r.table, cascade = !isTempView(r.table)) :: Nil
 
-    case a @ AddCheckConstraint(PhysicalOperation(_, _, d: DataSourceV2ScanRelation), check) =>
-      assert(d.relation.catalog.isDefined, "Catalog should be defined after analysis")
-      assert(d.relation.identifier.isDefined, "Identifier should be defined after analysis")
-      val catalog = d.relation.catalog.get.asTableCatalog
-      val ident = d.relation.identifier.get
+    case a @ AddCheckConstraintTarget(relation) =>
+      assert(relation.catalog.isDefined, "Catalog should be defined after analysis")
+      assert(relation.identifier.isDefined, "Identifier should be defined after analysis")
+      val catalog = relation.catalog.get.asTableCatalog
+      val ident = relation.identifier.get
       val condition = a.checkConstraint.condition
       val change = TableChange.addConstraint(
-        check.toV2Constraint,
-        d.relation.table.version)
+        a.checkConstraint.toV2Constraint,
+        relation.table.version)
       ResolveTableConstraints.validateCatalogForTableChange(Seq(change), catalog, ident)
       AddCheckConstraintExec(catalog, ident, change, condition, planLater(a.child)) :: Nil
 
@@ -933,6 +933,22 @@ private object AppendWrite {
   ): Option[(NamedRelation, Option[Write], Option[LogicalPlan])] = plan match {
     case a: AppendData => Some((a.table, a.write, a.analyzedQuery))
     case m: InsertOnlyMerge => Some((m.table, m.write, m.analyzedQuery))
+    case _ => None
+  }
+}
+
+/**
+ * Pattern that matches an [[AddCheckConstraint]] on a v2 table and exposes the table relation.
+ */
+private object AddCheckConstraintTarget {
+  def unapply(a: AddCheckConstraint): Option[DataSourceV2Relation] = a match {
+    case AddCheckConstraint(PhysicalOperation(_, _, d: DataSourceV2ScanRelation), _, _) =>
+      Some(d.relation)
+    // The optimizer replaces the filtered scan with an empty relation if no row can violate the
+    // check, so find the table in the analyzed query.
+    case AddCheckConstraint(_, _,
+        Some(Filter(_, SubqueryAlias(_, PhysicalOperation(_, _, r: DataSourceV2Relation))))) =>
+      Some(r)
     case _ => None
   }
 }
