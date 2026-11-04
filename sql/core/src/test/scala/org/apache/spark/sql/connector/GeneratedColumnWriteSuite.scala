@@ -1109,6 +1109,43 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
+  test("SPARK-60857: CREATE TABLE rejects a struct generation expression with other field names") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      // An auto-filled value lines up the struct fields with the column type by name under the
+      // writer's resolver, while the check of a provided value lines them up by position. So a row
+      // that Spark auto-filled from the first expression would fail the check when a later write
+      // carries it, and a case-sensitive writer could not auto-fill the second one.
+      Seq(
+        "named_struct('y', a, 'x', b)" -> "struct<y:int,x:int>",
+        "named_struct('X', b, 'Y', a)" -> "struct<X:int,Y:int>").foreach { case (expr, exprType) =>
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"""CREATE TABLE testcat.$tblName(
+                   |  a INT,
+                   |  b INT,
+                   |  s STRUCT<x: INT, y: INT> GENERATED ALWAYS AS ($expr)
+                   |) USING foo""".stripMargin)
+          },
+          condition = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+          parameters = Map(
+            "fieldName" -> "s",
+            "expressionStr" -> expr,
+            "reason" -> (s"generation expression data type $exprType names its struct " +
+              "fields differently from column data type struct<x:int,y:int>")))
+      }
+
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  a INT,
+             |  b INT,
+             |  s STRUCT<x: INT, y: INT> GENERATED ALWAYS AS (named_struct('x', b, 'y', a))
+             |) USING foo""".stripMargin)
+      sql(s"INSERT INTO testcat.$tblName(a, b) VALUES (1, 2)")
+      sql(s"INSERT INTO testcat.$tblName SELECT * FROM testcat.$tblName")
+      checkAnswer(spark.table(s"testcat.$tblName"), Seq.fill(2)(Row(1, 2, Row(2, 1))))
+    }
+  }
+
   test("generation expression is not exposed in the read schema") {
     val tblName = "my_tab"
     withTable(s"testcat.$tblName") {
