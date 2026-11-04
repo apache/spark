@@ -677,11 +677,7 @@ object VectorAvg {
       // Finite deltas use: new_avg = old_avg + (new_value - old_avg) * invCount.
       // updateElement handles subtraction overflow and non-finite operands.
       val invCount = 1.0f / newCount
-      if (dim < 4) {
-        updateElementsScalar(accBytes, inputArray, 0, dim, invCount)
-      } else {
-        updateElementsInBlocks(accBytes, inputArray, dim, invCount)
-      }
+      updateElementsInBlocks(accBytes, inputArray, dim, invCount)
     }
 
     private def updateElementsInBlocks(
