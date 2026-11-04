@@ -27,7 +27,7 @@ import org.apache.spark.internal.LogKeys.EXPR
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedPersistentView, ResolvedTable, ResolvedTempView}
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, BloomFilterMightContain, Cast, DynamicPruning, Expression, InSet, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, BloomFilterMightContain, Cast, DynamicPruning, DynamicPruningSubquery, Expression, InSet, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -233,7 +233,15 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       // dynamicFilters need no such check: a DynamicPruningSubquery over a non-deterministic
       // filtering plan is itself non-deterministic, so CleanupDynamicPruningFilters has already
       // rewritten it to TrueLiteral by the time we get here.
-      val runtimeFilters = dynamicFilters ++ scalarSubqueryFilters
+      // A group-based read keeps only the group filter, for the reason above. PartitionPruning
+      // plans a DynamicPruningSubquery on one read only, such as the read of the updated rows of
+      // an UPDATE with a subquery, so it would drop groups from the shared scan whose rows the
+      // read of the copied rows still writes.
+      val runtimeFilters = if (groupBasedRead) {
+        dynamicFilters.filterNot(_.isInstanceOf[DynamicPruningSubquery])
+      } else {
+        dynamicFilters ++ scalarSubqueryFilters
+      }
 
       // Decide storage-partitioned join here, once, so a rebuild of the planned node (for instance
       // the copy PlanAdaptiveDynamicPruningFilters makes at stage creation) does not read the
