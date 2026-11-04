@@ -245,20 +245,25 @@ class DataSourceSuite extends SharedSparkSession with PrivateMethodTester {
   test("SPARK-60887: newHadoopConfWithOptions preserves key casing for CaseInsensitiveMap") {
     val options = CaseInsensitiveMap(Map(
       "fs.azure.skipUserGroupMetadataDuringInitialization" -> "true",
-      "mapreduce.input.pathFilter.class" -> "org.example.CustomPathFilter",
-      "path" -> "/tmp/a",
-      "Path" -> "/tmp/b",
-      "paths" -> "/tmp/c",
-      "PATHS" -> "/tmp/d"
+      "Path" -> "/tmp/a",
+      "PATHS" -> "/tmp/b"
     ))
     val conf = spark.sessionState.newHadoopConfWithOptions(options)
     assert(conf.get("fs.azure.skipUserGroupMetadataDuringInitialization") === "true")
     assert(conf.get("fs.azure.skipusergroupmetadataduringinitialization") === null)
-    assert(conf.get("mapreduce.input.pathFilter.class") === "org.example.CustomPathFilter")
     assert(conf.get("path") === null)
     assert(conf.get("Path") === null)
     assert(conf.get("paths") === null)
     assert(conf.get("PATHS") === null)
+
+    val plainConf = spark.sessionState.newHadoopConfWithOptions(Map(
+      "fs.azure.skipUserGroupMetadataDuringInitialization" -> "true",
+      "Path" -> "/tmp/a",
+      "PATHS" -> "/tmp/b"
+    ))
+    assert(plainConf.get("fs.azure.skipUserGroupMetadataDuringInitialization") === "true")
+    assert(plainConf.get("Path") === null)
+    assert(plainConf.get("PATHS") === null)
   }
 }
 

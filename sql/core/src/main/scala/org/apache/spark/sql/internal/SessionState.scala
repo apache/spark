@@ -32,12 +32,11 @@ import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.classic.{SparkSession, StreamingCheckpointManager, StreamingQueryManager, UDFRegistration}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveRulesHolder
-import org.apache.spark.sql.execution.datasources.DataSourceManager
+import org.apache.spark.sql.execution.datasources.{DataSourceManager, DataSourceUtils}
 import org.apache.spark.sql.util.ExecutionListenerManager
 import org.apache.spark.util.{DependencyUtils, Utils}
 
@@ -121,17 +120,7 @@ private[sql] class SessionState(
 
   def newHadoopConfWithOptions(options: Map[String, String]): Configuration = {
     val hadoopConf = newHadoopConf()
-    // CaseInsensitiveMap.iterator yields lowercased keys, but Hadoop Configuration is
-    // case-sensitive. Use the original map to preserve the user's key casing.
-    val rawOptions = options match {
-      case ci: CaseInsensitiveMap[String @unchecked] => ci.originalMap
-      case other => other
-    }
-    rawOptions.foreach { case (k, v) =>
-      if ((v ne null) && !k.equalsIgnoreCase("path") && !k.equalsIgnoreCase("paths")) {
-        hadoopConf.set(k, v)
-      }
-    }
+    DataSourceUtils.mergeOptionsIntoHadoopConf(options, hadoopConf)
     hadoopConf
   }
 

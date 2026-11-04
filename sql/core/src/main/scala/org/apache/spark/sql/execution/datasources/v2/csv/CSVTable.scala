@@ -42,7 +42,7 @@ case class CSVTable(
 
   override def inferSchema(files: Seq[FileStatus]): Option[StructType] = {
     val parsedOptions = new CSVOptions(
-      options.asScala.toMap,
+      options.asCaseSensitiveMap.asScala.toMap,
       columnPruning = sparkSession.sessionState.conf.csvColumnPruning,
       sparkSession.sessionState.conf.sessionLocalTimeZone)
 

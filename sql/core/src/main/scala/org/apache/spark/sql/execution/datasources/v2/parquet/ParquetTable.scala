@@ -41,7 +41,7 @@ case class ParquetTable(
     ParquetScanBuilder(sparkSession, fileIndex, schema, dataSchema, mergedOptions(options))
 
   override def inferSchema(files: Seq[FileStatus]): Option[StructType] =
-    ParquetUtils.inferSchema(sparkSession, options.asScala.toMap, files)
+    ParquetUtils.inferSchema(sparkSession, options.asCaseSensitiveMap.asScala.toMap, files)
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
     new WriteBuilder {
