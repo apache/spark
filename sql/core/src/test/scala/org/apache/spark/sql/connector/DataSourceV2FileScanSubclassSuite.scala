@@ -25,7 +25,8 @@ import org.apache.hadoop.fs.FileStatus
 
 import org.apache.spark.sql.{DataFrame, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Expression, In, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, DynamicPruningSubquery, EqualTo, Expression, In, Literal}
+import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.expressions.{Expressions, NamedReference}
@@ -33,7 +34,7 @@ import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, Par
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
 import org.apache.spark.sql.execution.datasources.{FileFormat, FilePartition, PartitionedFile, PartitioningAwareFileIndex}
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetUtils}
-import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, FileDataSourceV2, FileScan, FileScanBuilder, FileTable}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, FileDataSourceV2, FileScan, FileScanBuilder, FileTable}
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SupportsRuntimeCatalystFiltering
@@ -105,6 +106,29 @@ class DataSourceV2FileScanSubclassSuite extends QueryTest with SharedSparkSessio
 
         checkAnswer(sql(subquery), factIdsIn(7))
       }
+    }
+  }
+
+  test("a FileScan with SupportsRuntimeFiltering keeps the DPP filter a pushed equality fixes") {
+    // CleanupDynamicPruningFilters reads the fully pushed filters only of a built-in file scan.
+    // The cast is on the dim side, so the pruning key is `f.part` itself, as in `f.part = 7`.
+    withFactAndDim(classOf[RowBasedReListingSource]) {
+      val df = sql("""SELECT f.id FROM fact f JOIN dim d ON f.part = CAST(d.dim_id AS INT)
+                     |WHERE d.dim_val = 7 AND f.part = 7""".stripMargin)
+      checkAnswer(df, factIdsIn(7))
+      val optimized = df.queryExecution.optimizedPlan
+      val pushed = optimized.collectFirst {
+        case r: DataSourceV2ScanRelation if r.scan.isInstanceOf[ReListingFileScan] =>
+          r.pushedFilters
+      }.getOrElse(fail(s"no fact scan relation in:\n$optimized"))
+      assert(pushed.exists {
+        case EqualTo(a: Attribute, Literal(7, _)) => a.name == "part"
+        case _ => false
+      }, s"expected `f.part = 7` fully pushed, got $pushed")
+      assert(optimized.exists {
+        case f: Filter => f.condition.exists(_.isInstanceOf[DynamicPruningSubquery])
+        case _ => false
+      }, s"expected the DPP filter to stay:\n$optimized")
     }
   }
 

@@ -688,10 +688,10 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
     }
   }
 
-  test("SPARK-38148: no DPP over a partition column a static equality already fixes") {
-    // `FileScanBuilder` pushes the static partition filter fully into the scan, so no `Filter`
-    // above the scan carries it; the cleanup has to read it from the scan relation's pushed
-    // filters, as it reads it from the `Filter` over a V1 relation. V1 is the reference.
+  test("no DPP over a partition column a static equality already fixes, as in V1") {
+    // `FileScanBuilder` pushes the static partition filter fully into the scan, so the cleanup
+    // reads it from the scan relation's pushed filters, as it reads it from the `Filter` over a V1
+    // relation. V1 is the reference.
     withDppV2Conf {
       withTempDir { dir =>
         writeFactAndDim(dir)
