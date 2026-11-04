@@ -207,8 +207,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       // Nothing is routed for a read of a group-based row-level operation either. The operation
       // replaces the groups its scan returns, and its reads share that scan, so a filter of one
       // read must not prune it: the negated condition that selects the rows to copy over would
-      // drop the groups where every row matches. Only the group filter of
-      // RowLevelOperationRuntimeGroupFiltering prunes that scan.
+      // drop the groups where every row matches. The group filter of
+      // RowLevelOperationRuntimeGroupFiltering prunes it instead, since it keeps every group that
+      // has a matching row.
       val groupBasedRead = relation.relation.table match {
         case t: RowLevelOperationTable => !t.operation.isInstanceOf[SupportsDelta]
         case _ => false
