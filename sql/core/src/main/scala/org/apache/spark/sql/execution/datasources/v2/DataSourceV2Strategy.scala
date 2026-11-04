@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.SCALAR_SUBQUERY
-import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, GeneratedColumn, IdentityColumn, MetadataColumnHelper, ResolveDefaultColumns, ResolveTableConstraints, V2ExpressionBuilder}
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, GeneratedColumn, IdentityColumn, MetadataColumnHelper, ResolveDefaultColumns, ResolveTableConstraints, V2ExpressionBuilder, WriteDistributionAndOrdering}
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Dependency, DependencyList, Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TableSummary, TruncatableTable, V1Table, V1View, ViewCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange
@@ -42,7 +42,7 @@ import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, And => V2And, Not => V2Not, Or => V2Or, Predicate}
 import org.apache.spark.sql.connector.read.LocalScan
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream, SupportsRealTimeMode}
-import org.apache.spark.sql.connector.write.{V1Write, Write}
+import org.apache.spark.sql.connector.write.{RowLevelOperationTable, SupportsDelta, V1Write, Write}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{FilterExec, InSubqueryExec, LeafExecNode, LocalTableScanExec, ProjectExec, RowDataSourceScanExec, ScalarSubquery => ExecScalarSubquery, SparkPlan, SparkStrategy => Strategy}
 import org.apache.spark.sql.execution.command.{CommandUtils, MetricViewHelper}
@@ -204,7 +204,17 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       // pruning while the FilterExec above the scan re-evaluates them, so the two evaluations
       // may disagree and rows the source pruned away could not be recovered. This is the
       // runtime counterpart of the pushFilters guard in PushDownUtils (SPARK-58207).
-      val scalarSubqueryFilters = if (relation.runtimeFilterAttrs.nonEmpty) {
+      // Nothing is routed for a read of a group-based row-level operation either. The operation
+      // replaces the groups its scan returns, and its reads share that scan, so a filter of one
+      // read must not prune it: the negated condition that selects the rows to copy over would
+      // drop the groups where every row matches. The group filter of
+      // RowLevelOperationRuntimeGroupFiltering prunes it instead, since it keeps every group that
+      // has a matching row.
+      val groupBasedRead = relation.relation.table match {
+        case t: RowLevelOperationTable => !t.operation.isInstanceOf[SupportsDelta]
+        case _ => false
+      }
+      val scalarSubqueryFilters = if (relation.runtimeFilterAttrs.nonEmpty && !groupBasedRead) {
         postScanFilters.filter { f =>
           f.deterministic &&
             f.containsPattern(SCALAR_SUBQUERY) &&
@@ -225,6 +235,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       // rewritten it to TrueLiteral by the time we get here.
       val runtimeFilters = dynamicFilters ++ scalarSubqueryFilters
 
+      // Decide storage-partitioned join here, once, so a rebuild of the planned node (for instance
+      // the copy PlanAdaptiveDynamicPruningFilters makes at stage creation) does not read the
+      // config again and drop the keyed layout the join was planned with (SPARK-60260).
+      val keyGroupedPartitioning = relation.keyGroupedPartitioning
+        .filter(_ => session.sessionState.conf.v2BucketingEnabled)
+
       // Whether the scan gets the checked column does not depend on whether it is columnar. Asking
       // that can plan the scan's partitions, which the node built afterwards would plan again. A
       // row-based scan gets a Project for the UnsafeRow conversion anyway, so dropping the column
@@ -234,7 +250,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val checked = StorageFilterPlanning.checkedColumn(
         session.sessionState.conf, storageFilters, relation.output)
       val batchExec = BatchScanExec(relation.output ++ checked, relation.scan, runtimeFilters,
-        relation.ordering, relation.relation.table, relation.keyGroupedPartitioning,
+        relation.ordering, relation.relation.table, keyGroupedPartitioning,
         storageFilters, checked.isDefined)
       // With the checked column the scan's output differs from `project`, so a Project drops it.
       DataSourceV2Strategy.withProjectAndFilter(project,
@@ -288,7 +304,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       WriteToDataSourceV2Exec(writer, invalidateCacheFunc, planLater(query), customMetrics) :: Nil
 
     case c @ CreateTable(ResolvedIdentifier(catalog, ident), columns, partitioning,
-        tableSpec: TableSpec, ifNotExists) =>
+        tableSpec: TableSpec, ifNotExists, writeDistributionMode, writeOrdering) =>
       val tableCatalog = catalog.asTableCatalog
       ResolveDefaultColumns.validateCatalogForDefaultValue(columns, tableCatalog, ident)
       ResolveTableConstraints.validateCatalogForTableConstraint(
@@ -296,6 +312,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val statementType = "CREATE TABLE"
       GeneratedColumn.validateCatalogForGeneratedColumn(columns, tableCatalog, ident)
       IdentityColumn.validateIdentityColumn(c.tableSchema, tableCatalog, ident)
+      WriteDistributionAndOrdering.validateCatalogForWriteDistributionAndOrdering(
+        tableCatalog, ident, statementType, writeDistributionMode, writeOrdering)
 
       CreateTableExec(
         catalog.asTableCatalog,
@@ -303,17 +321,24 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         columns.map(_.toV2Column(statementType)).toArray,
         partitioning,
         qualifyLocInTableSpec(tableSpec),
-        ifNotExists) :: Nil
+        ifNotExists,
+        writeDistributionMode,
+        writeOrdering) :: Nil
 
     case CreateTableAsSelect(ResolvedIdentifier(catalog, ident), parts, query, tableSpec: TableSpec,
-        options, ifNotExists, true) =>
+        options, ifNotExists, true, writeDistributionMode, writeOrdering) =>
+      WriteDistributionAndOrdering.validateCatalogForWriteDistributionAndOrdering(
+        catalog.asTableCatalog, ident, "CREATE TABLE AS SELECT",
+        writeDistributionMode, writeOrdering)
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicCreateTableAsSelectExec(staging, ident, parts, query,
-            qualifyLocInTableSpec(tableSpec), options, ifNotExists) :: Nil
+            qualifyLocInTableSpec(tableSpec), options, ifNotExists,
+            writeDistributionMode, writeOrdering) :: Nil
         case _ =>
           CreateTableAsSelectExec(catalog.asTableCatalog, ident, parts, query,
-            qualifyLocInTableSpec(tableSpec), options, ifNotExists) :: Nil
+            qualifyLocInTableSpec(tableSpec), options, ifNotExists,
+            writeDistributionMode, writeOrdering) :: Nil
       }
 
     // CREATE TABLE ... LIKE ... for a v2 catalog target.
@@ -345,7 +370,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       RefreshTableExec(r.catalog, r.identifier, recacheTable(r, includeTimeTravel = true)) :: Nil
 
     case c @ ReplaceTable(
-        ResolvedIdentifier(catalog, ident), columns, parts, tableSpec: TableSpec, orCreate) =>
+        ResolvedIdentifier(catalog, ident), columns, parts, tableSpec: TableSpec, orCreate,
+        writeDistributionMode, writeOrdering) =>
       val tableCatalog = catalog.asTableCatalog
       ResolveDefaultColumns.validateCatalogForDefaultValue(columns, tableCatalog, ident)
       ResolveTableConstraints.validateCatalogForTableConstraint(
@@ -353,15 +379,19 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val statementType = "REPLACE TABLE"
       GeneratedColumn.validateCatalogForGeneratedColumn(columns, tableCatalog, ident)
       IdentityColumn.validateIdentityColumn(c.tableSchema, tableCatalog, ident)
+      WriteDistributionAndOrdering.validateCatalogForWriteDistributionAndOrdering(
+        tableCatalog, ident, statementType, writeDistributionMode, writeOrdering)
 
       val v2Columns = columns.map(_.toV2Column(statementType)).toArray
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicReplaceTableExec(staging, ident, v2Columns, parts,
-            qualifyLocInTableSpec(tableSpec), orCreate = orCreate, invalidateCache) :: Nil
+            qualifyLocInTableSpec(tableSpec), orCreate = orCreate, invalidateCache,
+            writeDistributionMode, writeOrdering) :: Nil
         case _ =>
           ReplaceTableExec(tableCatalog, ident, v2Columns, parts,
-            qualifyLocInTableSpec(tableSpec), orCreate = orCreate, invalidateCache) :: Nil
+            qualifyLocInTableSpec(tableSpec), orCreate = orCreate, invalidateCache,
+            writeDistributionMode, writeOrdering) :: Nil
       }
 
     // CheckViewReferences guarantees the catalog is a ViewCatalog by the time these strategy
@@ -521,7 +551,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       DropViewExec(catalog, ident, ifExists, invalidateFunc) :: Nil
 
     case ReplaceTableAsSelect(ResolvedIdentifier(catalog, ident),
-        parts, query, tableSpec: TableSpec, options, orCreate, true) =>
+        parts, query, tableSpec: TableSpec, options, orCreate, true,
+        writeDistributionMode, writeOrdering) =>
+      WriteDistributionAndOrdering.validateCatalogForWriteDistributionAndOrdering(
+        catalog.asTableCatalog, ident, "REPLACE TABLE AS SELECT",
+        writeDistributionMode, writeOrdering)
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicReplaceTableAsSelectExec(
@@ -532,7 +566,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             qualifyLocInTableSpec(tableSpec),
             options,
             orCreate = orCreate,
-            invalidateCache) :: Nil
+            invalidateCache,
+            writeDistributionMode,
+            writeOrdering) :: Nil
         case _ =>
           ReplaceTableAsSelectExec(
             catalog.asTableCatalog,
@@ -542,7 +578,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             qualifyLocInTableSpec(tableSpec),
             options,
             orCreate = orCreate,
-            invalidateCache) :: Nil
+            invalidateCache,
+            writeDistributionMode,
+            writeOrdering) :: Nil
       }
 
     case AppendWrite(r @ ExtractV2Table(v1: SupportsWrite), Some(write), analyzedQuery)
@@ -842,15 +880,15 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
       UncacheTableExec(r.table, cascade = !isTempView(r.table)) :: Nil
 
-    case a @ AddCheckConstraint(PhysicalOperation(_, _, d: DataSourceV2ScanRelation), check) =>
-      assert(d.relation.catalog.isDefined, "Catalog should be defined after analysis")
-      assert(d.relation.identifier.isDefined, "Identifier should be defined after analysis")
-      val catalog = d.relation.catalog.get.asTableCatalog
-      val ident = d.relation.identifier.get
+    case a @ AddCheckConstraintTarget(relation) =>
+      assert(relation.catalog.isDefined, "Catalog should be defined after analysis")
+      assert(relation.identifier.isDefined, "Identifier should be defined after analysis")
+      val catalog = relation.catalog.get.asTableCatalog
+      val ident = relation.identifier.get
       val condition = a.checkConstraint.condition
       val change = TableChange.addConstraint(
-        check.toV2Constraint,
-        d.relation.table.version)
+        a.checkConstraint.toV2Constraint,
+        relation.table.version)
       ResolveTableConstraints.validateCatalogForTableChange(Seq(change), catalog, ident)
       AddCheckConstraintExec(catalog, ident, change, condition, planLater(a.child)) :: Nil
 
@@ -911,6 +949,22 @@ private object AppendWrite {
   ): Option[(NamedRelation, Option[Write], Option[LogicalPlan])] = plan match {
     case a: AppendData => Some((a.table, a.write, a.analyzedQuery))
     case m: InsertOnlyMerge => Some((m.table, m.write, m.analyzedQuery))
+    case _ => None
+  }
+}
+
+/**
+ * Pattern that matches an [[AddCheckConstraint]] on a v2 table and exposes the table relation.
+ */
+private object AddCheckConstraintTarget {
+  def unapply(a: AddCheckConstraint): Option[DataSourceV2Relation] = a match {
+    case AddCheckConstraint(PhysicalOperation(_, _, d: DataSourceV2ScanRelation), _, _) =>
+      Some(d.relation)
+    // The optimizer replaces the filtered scan with an empty relation if no row can violate the
+    // check, so find the table in the analyzed query.
+    case AddCheckConstraint(_, _,
+        Some(Filter(_, SubqueryAlias(_, PhysicalOperation(_, _, r: DataSourceV2Relation))))) =>
+      Some(r)
     case _ => None
   }
 }
@@ -1054,10 +1108,7 @@ private[sql] object DataSourceV2Strategy extends Logging {
    */
   protected[sql] def translateScalarSubqueryFilterV2(
       expr: Expression): Option[Predicate] = {
-    val literalized = expr.transform {
-      case s: ExecScalarSubquery => s.toLiteral
-    }
-    translateFilterV2(literalized)
+    translateFilterV2(ExecScalarSubquery.replaceWithLiterals(expr))
   }
 
   /**
