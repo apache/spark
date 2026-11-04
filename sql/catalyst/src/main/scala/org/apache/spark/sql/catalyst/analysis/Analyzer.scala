@@ -3998,6 +3998,24 @@ class Analyzer(
       Project(windowOps.output ++ newExpressionsWithWindowFunctions, windowOps)
     } // end of addWindow
 
+    /**
+     * Extracts all nested window expressions and places the HAVING filter below every Window.
+     */
+    private def addWindowWithHaving(
+        aggregateExpressions: Seq[NamedExpression],
+        groupingExpressions: Seq[Expression],
+        child: LogicalPlan,
+        condition: Expression): LogicalPlan = {
+      val (windowExpressions, regularExpressions) =
+        extract(aggregateExpressions, groupingExpressions)
+      val windowChild = if (hasWindowFunction(regularExpressions)) {
+        addWindowWithHaving(regularExpressions, groupingExpressions, child, condition)
+      } else {
+        Filter(condition, Aggregate(groupingExpressions, regularExpressions, child))
+      }
+      addWindow(windowExpressions, windowChild)
+    }
+
     // We have to use transformDown at here to make sure the rule of
     // "Aggregate with Having clause" will be triggered.
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsDownWithPruning(
@@ -4021,12 +4039,7 @@ class Analyzer(
             throw QueryCompilationErrors.lateralColumnAliasInAggWithWindowAndHavingUnsupportedError(
               lcaRef.nameParts)
         })
-        val (windowExpressions, aggregateExpressions) = extract(aggregateExprs, groupingExprs)
-        // Create an Aggregate operator to evaluate aggregation functions.
-        val withAggregate = Aggregate(groupingExprs, aggregateExpressions, child)
-        // Add a Filter operator for conditions in the Having clause.
-        val withFilter = Filter(condition, withAggregate)
-        val withWindow = addWindow(windowExpressions, withFilter)
+        val withWindow = addWindowWithHaving(aggregateExprs, groupingExprs, child, condition)
 
         // Finally, generate output columns according to the original projectList.
         val finalProjectList = aggregateExprs.map(_.toAttribute)

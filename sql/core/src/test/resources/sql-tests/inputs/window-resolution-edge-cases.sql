@@ -99,6 +99,16 @@ SELECT col1, MAX(ROW_NUMBER() OVER w) OVER () AS max_rn FROM t1 WINDOW w AS (ORD
 
 -- Nested windows over an aggregate, and in QUALIFY together with HAVING.
 SELECT col1, MAX(RANK() OVER (ORDER BY SUM(col2))) OVER () AS m FROM t1 GROUP BY col1;
+
+-- HAVING must be evaluated before every nested window layer.
+SELECT
+  k,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY k
+HAVING k = 'keep'
+ORDER BY k;
+
 SELECT col1 FROM t1 GROUP BY col1, col2 HAVING col2 > 0
 QUALIFY ROW_NUMBER() OVER (ORDER BY SUM(col2) OVER (PARTITION BY col1) DESC, col1) = 1;
 
