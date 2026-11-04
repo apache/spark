@@ -96,6 +96,15 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession {
       // The scan drops the other columns itself only if the planner does not prune them.
       assert(scan(both).toBatch.createReaderFactory()
         .isInstanceOf[ColumnarProjectionReaderFactory] == !prunes)
+      // A reader returns the same batch until it moves to the next one.
+      val batch = scan(both).toBatch
+      val reader =
+        batch.createReaderFactory().createColumnarReader(batch.planInputPartitions().head)
+      try {
+        assert(reader.next() && (reader.get() eq reader.get()))
+      } finally {
+        reader.close()
+      }
     }
 
     val limited = spark.read.format(format).option("end", "10").load().limit(2)
