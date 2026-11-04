@@ -41,7 +41,7 @@ import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{And => V2And, Not => V2Not, Or => V2Or, Predicate}
 import org.apache.spark.sql.connector.read.LocalScan
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream, SupportsRealTimeMode}
-import org.apache.spark.sql.connector.write.{V1Write, Write}
+import org.apache.spark.sql.connector.write.{RowLevelOperationTable, SupportsDelta, V1Write, Write}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{FilterExec, InSubqueryExec, LeafExecNode, LocalTableScanExec, ProjectExec, RowDataSourceScanExec, ScalarSubquery => ExecScalarSubquery, SparkPlan, SparkStrategy => Strategy}
 import org.apache.spark.sql.execution.command.{CommandUtils, MetricViewHelper}
@@ -178,7 +178,17 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       // pruning while the FilterExec above the scan re-evaluates them, so the two evaluations
       // may disagree and rows the source pruned away could not be recovered. This is the
       // runtime counterpart of the pushFilters guard in PushDownUtils (SPARK-58207).
-      val scalarSubqueryFilters = if (relation.runtimeFilterAttrs.nonEmpty) {
+      // Nothing is routed for a read of a group-based row-level operation either. The operation
+      // replaces the groups its scan returns, and its reads share that scan, so a filter of one
+      // read must not prune it: the negated condition that selects the rows to copy over would
+      // drop the groups where every row matches. The group filter of
+      // RowLevelOperationRuntimeGroupFiltering prunes it instead, since it keeps every group that
+      // has a matching row.
+      val groupBasedRead = relation.relation.table match {
+        case t: RowLevelOperationTable => !t.operation.isInstanceOf[SupportsDelta]
+        case _ => false
+      }
+      val scalarSubqueryFilters = if (relation.runtimeFilterAttrs.nonEmpty && !groupBasedRead) {
         postScanFilters.filter { f =>
           f.deterministic &&
             f.containsPattern(SCALAR_SUBQUERY) &&
