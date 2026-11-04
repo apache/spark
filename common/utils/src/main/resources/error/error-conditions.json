@@ -6953,13 +6953,13 @@
   },
   "PARSE_SQL_ANALYZE_REQUIRES_SESSION" : {
     "message" : [
-      "parse_sql ANALYZE mode requires an active Spark session with catalog access."
+      "<functionName> ANALYZE needs an active Spark session with catalog access. ANALYZE is evaluated on the driver; a missing session usually means the call ran in a task."
     ],
     "sqlState" : "0A000"
   },
   "PARSE_SQL_ANALYZE_UNSUPPORTED_SCRIPT" : {
     "message" : [
-      "parse_sql ANALYZE does not analyze SQL scripts."
+      "<functionName> ANALYZE does not analyze SQL scripts. Use PARSE for BEGIN ... END, or analyze each statement separately."
     ],
     "sqlState" : "0A000"
   },

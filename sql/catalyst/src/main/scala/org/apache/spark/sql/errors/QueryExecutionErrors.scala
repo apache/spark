@@ -3803,12 +3803,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def parseSqlAnalyzeRequiresSession(): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "PARSE_SQL_ANALYZE_REQUIRES_SESSION",
-      messageParameters = Map.empty)
+      messageParameters = Map("functionName" -> toSQLId("parse_sql")))
   }
 
   def parseSqlAnalyzeUnsupportedScript(): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "PARSE_SQL_ANALYZE_UNSUPPORTED_SCRIPT",
-      messageParameters = Map.empty)
+      messageParameters = Map("functionName" -> toSQLId("parse_sql")))
   }
 }

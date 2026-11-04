@@ -38,7 +38,6 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.execution.{CommandExecutionMode, SparkSqlParser}
 import org.apache.spark.sql.execution.command.{
-  CreateDataSourceTableAsSelectCommand,
   CreateDataSourceTableCommand,
   CreateTableCommand,
   CreateViewCommand,
@@ -50,12 +49,11 @@ import org.apache.spark.sql.execution.command.{
   ExplainCommand,
   LeafRunnableCommand
 }
-import org.apache.spark.sql.execution.datasources.{
-  CreateTempViewUsing, HadoopFsRelation, InsertIntoDataSourceCommand, LogicalRelation
-}
+import org.apache.spark.sql.execution.datasources.{CreateTempViewUsing, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf
+import org.apache.spark.sql.metricview.logical.ResolvedMetricView
 
 /**
  * Mode for [[ParseSqlResult.fromSql]]. `PARSE` is unresolved. `ANALYZE` types
@@ -107,6 +105,7 @@ object ParseSqlMode {
  * [[ParseException]] / [[SqlScriptingException]] to JSON.
  * ANALYZE also reports non-internal analysis errors as JSON;
  * unexpected / internal failures propagate so the function fails.
+ * Nested error locations are statement-relative Unicode code points.
  */
 object ParseSqlResult {
 
@@ -164,6 +163,18 @@ object ParseSqlResult {
         }.toList)
       }
     }
+  }
+
+  /** Analyze `plan`, including nested EXPLAIN / DESCRIBE QUERY payloads. */
+  private def analyzePlan(
+      session: ClassicSparkSession,
+      plan: LogicalPlan): LogicalPlan = {
+    val toAnalyze = plan match {
+      case s: SupervisingCommand =>
+        s.withTransformedSupervisedPlan(inner => analyzePlan(session, inner))
+      case other => other
+    }
+    session.sessionState.executePlan(toAnalyze, CommandExecutionMode.SKIP).analyzed
   }
 
   /** INTERNAL_ERROR is a Spark bug, not an analysis result: it fails the call. */
@@ -231,16 +242,7 @@ object ParseSqlResult {
         (None, Some(QueryExecutionErrors.parseSqlAnalyzeUnsupportedScript()))
       case _ =>
         try {
-          val toAnalyze = plan match {
-            case s: SupervisingCommand =>
-              s.withTransformedSupervisedPlan { inner =>
-                session.sessionState.executePlan(inner, CommandExecutionMode.SKIP).analyzed
-              }
-            case other => other
-          }
-          val analyzed =
-            session.sessionState.executePlan(toAnalyze, CommandExecutionMode.SKIP).analyzed
-          (Some(analyzed), None)
+          (Some(analyzePlan(session, plan)), None)
         } catch {
           case e: SparkThrowable with Throwable if !isInternalError(e) => (None, Some(e))
         }
@@ -265,27 +267,33 @@ object ParseSqlResult {
       fields += "analyze_success" -> JBool(analyzed.isDefined)
     }
     // Omit unused collections / markers so consumers can treat absence as empty.
-    // Functions and parameter markers always come from the parse tree. Relation
-    // identities come from the analyzed plan when analysis succeeded.
+    // Parse names decide which references exist and in which role. ANALYZE
+    // qualifies those names from the analyzed plan when it can match them.
     val parseRefs = collectPlanReferences(plan)
-    val tableRefs = analyzed.map(collectPlanReferences).getOrElse(parseRefs)
-    val targetTables = session.map { s =>
-      if (analyzed.isDefined) {
-        uniqueIdentities(tableRefs.targetTables, s)
-      } else {
-        uniqueIdentities(parseRefs.targetTables.map(qualifyTarget(_, plan, s)), s)
-      }
-    }.getOrElse(parseRefs.targetTables)
-    val sourceTables = session.map { s =>
-      if (analyzed.isDefined) {
-        uniqueIdentities(tableRefs.sourceTables, s)
-      } else {
-        uniqueIdentities(parseRefs.sourceTables.map(qualifyWithCurrentNamespace(_, s)), s)
-      }
-    }.getOrElse(parseRefs.sourceTables)
-    val functions = session.map { s =>
-      uniqueIdentities(parseRefs.functions.map(qualifyRoutine(_, s)), s)
-    }.getOrElse(parseRefs.functions)
+    val analyzedRefs = analyzed.map(collectPlanReferences)
+    val (targetTables, sourceTables, functions) = try {
+      session.map { s =>
+        val analyzedTargets = analyzedRefs.map(_.targetTables).getOrElse(Nil)
+        val analyzedSources = analyzedRefs.map(_.sourceTables).getOrElse(Nil)
+        (
+          uniqueIdentities(
+            parseRefs.targetTables.map { parts =>
+              qualifyParseIdentity(parts, analyzedTargets, qualifyTarget(_, plan, s))
+            },
+            s),
+          uniqueIdentities(
+            parseRefs.sourceTables.map { parts =>
+              qualifyParseIdentity(parts, analyzedSources, qualifySource(_, s))
+            },
+            s),
+          uniqueIdentities(parseRefs.functions.map(qualifyRoutine(_, s)), s)
+        )
+      }.getOrElse(
+        (parseRefs.targetTables, parseRefs.sourceTables, parseRefs.functions))
+    } catch {
+      case e: SparkThrowable with Throwable if !isInternalError(e) =>
+        (parseRefs.targetTables, parseRefs.sourceTables, parseRefs.functions)
+    }
     if (targetTables.nonEmpty) {
       fields += "target_table_references" ->
         JArray(targetTables.map(partsToJArray).toList)
@@ -455,8 +463,8 @@ object ParseSqlResult {
         visitPlan(cts.plan, nextScope, TableRefRole.Source)(f)
       case _: CacheTable =>
         // Name is taken from multipartIdentifier or the non-child `table` slot.
-      case _: View =>
-        // The view identity is the view; do not collect tables from its body.
+      case _: View | _: ResolvedMetricView =>
+        // The named object is the reference; do not collect tables from its body.
       case w: V2WriteCommand =>
         visitPlan(w.table, scope, TableRefRole.Target)(f)
         visitPlan(w.query, nextScope, TableRefRole.Source)(f)
@@ -582,34 +590,19 @@ object ParseSqlResult {
         case u: UnresolvedView => add(u.multipartIdentifier)
         case u: UnresolvedTableOrView => add(u.multipartIdentifier)
         case u: UnresolvedIdentifier if role == TableRefRole.Target => add(u.nameParts)
-        case c: CreateViewCommand =>
-          addTarget(c.viewType match {
-            case LocalTempView => sessionIdent(c.name.table)
-            case GlobalTempView =>
-              Seq(
-                CatalogManager.SESSION_CATALOG_NAME,
-                SQLConf.get.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE),
-                c.name.table)
-            case _ => tableIdentifierParts(c.name)
-          })
-        case c: CreateTempViewUsing => addTarget(sessionIdent(c.tableIdent.table))
+        case c: CreateViewCommand => addTarget(Seq(c.name.table))
+        case c: CreateTempViewUsing => addTarget(Seq(c.tableIdent.table))
         case c: CreateDataSourceTableCommand =>
           addTarget(persistedTableParts(c.table.identifier))
         case c: CreateTableCommand =>
           addTarget(persistedTableParts(c.table.identifier))
         case c: DropTableCommand =>
-          addTarget(
-            if (c.isView && c.tableName.database.isEmpty) {
-              sessionIdent(c.tableName.table)
-            } else {
-              persistedTableParts(c.tableName)
-            })
+          addTarget(tableIdentifierParts(c.tableName))
         case c: DropTempViewCommand =>
           addTarget(tempViewParts(c.ident))
         case c: CacheTable if c.multipartIdentifier.nonEmpty =>
           addTarget(c.multipartIdentifier)
         case u: UnresolvedTableValuedFunction => addFunction(u.name)
-        case _: CTERelationRef =>
         case r: DataSourceV2Relation =>
           v2RelationParts(r).foreach(add)
         case r: LogicalRelation =>
@@ -626,8 +619,6 @@ object ParseSqlResult {
           add(tempViewParts(r.identifier))
         case r: ResolvedIdentifier if role == TableRefRole.Target =>
           add(catalogIdentParts(r.catalog.name(), r.identifier))
-        case _: Range =>
-          addFunction(FunctionRegistry.builtinFunctionIdentifier("range").nameParts)
         case _ =>
       }
     }
@@ -708,12 +699,6 @@ object ParseSqlResult {
       } else {
         tableIdentifierParts(id)
       }
-    }.orElse {
-      r.relation match {
-        case fs: HadoopFsRelation =>
-          fs.location.rootPaths.headOption.map(p => Seq(p.toString))
-        case _ => None
-      }
     }
 
   private def viewParts(v: View): Seq[String] = {
@@ -732,30 +717,76 @@ object ParseSqlResult {
   }
 
   private def tempViewParts(ident: Identifier): Seq[String] = {
-    val ns = ident.namespace()
+    val parts = ident.namespace().toSeq :+ ident.name()
     val globalTemp = SQLConf.get.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+    val ns = ident.namespace()
     if (ns.length == 1 && ns.head.equalsIgnoreCase(globalTemp)) {
       Seq(CatalogManager.SESSION_CATALOG_NAME, ns.head, ident.name())
-    } else if (ns.isEmpty) {
+    } else if (ns.isEmpty || CatalogManager.isSessionQualifiedViewName(parts)) {
       sessionIdent(ident.name())
     } else {
       catalogIdentParts(CatalogManager.SESSION_CATALOG_NAME, ident)
     }
   }
 
-  private def isTempViewCreate(plan: LogicalPlan): Boolean = plan match {
-    case c: CreateViewCommand =>
-      c.viewType == LocalTempView || c.viewType == GlobalTempView
-    case _: CreateTempViewUsing => true
+  private def globalTempIdent(name: String): Seq[String] =
+    Seq(
+      CatalogManager.SESSION_CATALOG_NAME,
+      SQLConf.get.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE),
+      name)
+
+  private def qualifyParseIdentity(
+      parseParts: Seq[String],
+      analyzedIds: Seq[Seq[String]],
+      fallback: Seq[String] => Seq[String]): Seq[String] = {
+    matchingIdentity(parseParts, analyzedIds).getOrElse {
+      if (isPathReference(parseParts)) parseParts else fallback(parseParts)
+    }
+  }
+
+  private def matchingIdentity(
+      parseParts: Seq[String],
+      analyzedIds: Seq[Seq[String]]): Option[Seq[String]] = {
+    val parsed = parseParts.map(_.toLowerCase(Locale.ROOT))
+    analyzedIds.find { analyzed =>
+      val ident = analyzed.map(_.toLowerCase(Locale.ROOT))
+      ident.endsWith(parsed) && ident.length > parsed.length
+    }
+  }
+
+  private def isPathReference(parts: Seq[String]): Boolean = parts match {
+    case Seq(_, path) => path.contains("/") || path.contains(":")
+    case Seq(path) => path.contains("/") || path.startsWith("file:")
     case _ => false
   }
 
   private def qualifyTarget(
       parts: Seq[String],
       plan: LogicalPlan,
-      session: ClassicSparkSession): Seq[String] = {
-    if (isTempViewCreate(plan)) {
+      session: ClassicSparkSession): Seq[String] = plan match {
+    case c: CreateViewCommand if c.viewType == LocalTempView =>
       sessionIdent(parts.last)
+    case c: CreateViewCommand if c.viewType == GlobalTempView =>
+      globalTempIdent(parts.last)
+    case c: CreateTempViewUsing if c.global =>
+      globalTempIdent(parts.last)
+    case _: CreateTempViewUsing =>
+      sessionIdent(parts.last)
+    case _ =>
+      qualifySource(parts, session)
+  }
+
+  private def qualifySource(
+      parts: Seq[String],
+      session: ClassicSparkSession): Seq[String] = {
+    if (session.sessionState.catalog.isTempView(parts)) {
+      val globalTemp = SQLConf.get.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+      val last = parts.last
+      if (parts.exists(_.equalsIgnoreCase(globalTemp))) {
+        globalTempIdent(last)
+      } else {
+        sessionIdent(last)
+      }
     } else {
       qualifyWithCurrentNamespace(parts, session)
     }
@@ -775,7 +806,7 @@ object ParseSqlResult {
         TableFunctionRegistry.builtin.functionExists(id)
     }
     def isSessionBuiltin(name: String): Boolean = {
-      val id = FunctionIdentifier(name)
+      val id = FunctionRegistry.builtinFunctionIdentifier(name)
       !isTemp(name) && !isBuiltin(name) &&
         (session.sessionState.functionRegistry.functionExists(id) ||
           session.sessionState.tableFunctionRegistry.functionExists(id))
@@ -800,6 +831,10 @@ object ParseSqlResult {
     }
   }
 
+  /**
+   * Qualify `parts` using the current catalog/namespace without loading a
+   * catalog plugin. `isCatalogRegistered` instantiates the plugin.
+   */
   private def qualifyWithCurrentNamespace(
       parts: Seq[String],
       session: ClassicSparkSession): Seq[String] = {
@@ -808,9 +843,18 @@ object ParseSqlResult {
     val namespace = mgr.currentNamespace.toSeq
     parts match {
       case Seq(name) => Seq(catalogName) ++ namespace :+ name
-      case other if mgr.isCatalogRegistered(other.head) => other
+      case other if isKnownCatalogName(other.head, session) => other
       case other => catalogName +: other
     }
+  }
+
+  private def isKnownCatalogName(
+      name: String,
+      session: ClassicSparkSession): Boolean = {
+    val mgr = session.sessionState.catalogManager
+    name.equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME) ||
+      name.equalsIgnoreCase(mgr.currentCatalog.name()) ||
+      session.sessionState.conf.getConfString("spark.sql.catalog." + name, null) != null
   }
 
   private def isSystemNamespace(ns: String): Boolean =
@@ -825,8 +869,6 @@ object ParseSqlResult {
     case i: InsertIntoStatement => primaryQueryPlan(i.query)
     case d: DataWritingCommand => primaryQueryPlan(d.query)
     case w: V2WriteCommand => primaryQueryPlan(w.query)
-    case c: CreateDataSourceTableAsSelectCommand => primaryQueryPlan(c.query)
-    case i: InsertIntoDataSourceCommand => primaryQueryPlan(i.query)
     case c: CreateTableAsSelect => primaryQueryPlan(c.query)
     case r: ReplaceTableAsSelect => primaryQueryPlan(r.query)
     case c: CreateView => primaryQueryPlan(c.query)

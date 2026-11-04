@@ -64,6 +64,7 @@ class SparkOptimizer(
 
   override def defaultBatches: Seq[Batch] = flattenBatches(Seq(
     preOptimizationBatches,
+    Batch("Evaluate parse_sql", Once, EvaluateParseSql),
     super.defaultBatches,
     Batch("Optimize Metadata Only Query", Once, OptimizeMetadataOnlyQuery(catalog)),
     Batch("PartitionPruning", Once,
@@ -125,6 +126,8 @@ class SparkOptimizer(
 
   override def nonExcludableRules: Seq[String] = super.nonExcludableRules ++
     Seq(
+      // ANALYZE needs the driver session; do not leave it to ConstantFolding.
+      EvaluateParseSql.ruleName,
       // A plan with a Python UDF in a higher-order function lambda passes analysis only because
       // this rule lifts the UDF out of the lambda.
       ExtractPythonUDFFromLambda.ruleName,

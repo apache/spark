@@ -49,8 +49,7 @@ import org.apache.spark.unsafe.types.UTF8String
 // scalastyle:off line.size.limit
 // scalastyle:off nonascii
 @ExpressionDescription(
-  usage = """_FUNC_(sqlStmt[, mode]) -
-    Splits `sqlStmt` into SQL statements, parses each with the stock Spark SQL parser, and
+  usage = """_FUNC_(sqlStmt[, mode]) - Splits `sqlStmt` into SQL statements, parses each with the stock Spark SQL parser, and
     returns a JSON array describing them so callers can inspect SQL text (lineage, statement
     kind, select-list types) without running the statements. Each object has 1-based
     character `start` and character `length` (Unicode code points; a single-code-point
@@ -65,7 +64,8 @@ import org.apache.spark.unsafe.types.UTF8String
     without being executed, so a DECLARE, CREATE, USE, or SET does not affect later
     statements. `CALL` is analyzed but the procedure is not run. A SQL script calling
     `parse_sql` does not lend it its locals or cursors. `ANALYZE` inherits the invoker's
-    current catalog, schema, and SQL path and does not change them.
+    current catalog, schema, and SQL path and does not change them. Analysis may still
+    run time-travel subqueries, infer file schemas, and call Python UDTF `analyze`.
     Statement length excludes surrounding
     whitespace and the terminating semicolon. Session parser extensions are not applied.
     The JSON contract may still change while spark.sql.function.parseSql.enabled remains
@@ -81,8 +81,8 @@ import org.apache.spark.unsafe.types.UTF8String
       * sqlStmt - A SQL batch string to split and parse.
         An expression that evaluates to a string. NULL returns NULL.
       * mode - Optional `PARSE` or `ANALYZE` (case-insensitive). Defaults to `PARSE`.
-        An expression that evaluates to a string. NULL returns NULL. Any other value
-        fails the outer query with INVALID_PARAMETER_VALUE.PARSE_SQL_MODE.
+        Must be a constant string. NULL returns NULL. Any other value fails the outer
+        query with INVALID_PARAMETER_VALUE.PARSE_SQL_MODE.
   """,
   examples = """
     Examples:
@@ -111,9 +111,12 @@ import org.apache.spark.unsafe.types.UTF8String
     CTE aliases in scope are not listed as tables), `select_list` (`{name}` parts;
     ANALYZE lists the output columns, with `*` expanded, and adds `type` as a
     DESCRIBE TABLE EXTENDED AS JSON type object), `parameter_markers` (`named` and/or
-    `unnamed_count`), and `error` (STANDARD format). Later statements are still
-    processed after a per-statement parse or analysis failure. ANALYZE of a SQL
-    script reports `analyze_success` false without executing the script.
+    `unnamed_count`), and `error` (STANDARD format). Nested error locations are
+    statement-relative Unicode code points. Later statements are still processed
+    after a per-statement parse or analysis failure. ANALYZE of a SQL script reports
+    `analyze_success` false without executing the script. Path-based relations keep
+    `[format, path]` as written. Analysis may still run time-travel subqueries,
+    infer file schemas, and call Python UDTF `analyze`.
   """,
   group = "misc_funcs",
   since = "4.4.0")
@@ -138,7 +141,7 @@ case class ParseSql(
   // Foldable so constant SQL is evaluated on the driver, where ANALYZE can see the session.
   override def foldable: Boolean = children.forall(_.foldable)
 
-  override def nullIntolerant: Boolean = false
+  override def nullIntolerant: Boolean = true
 
   override def dataType: DataType = StringType
 
@@ -217,9 +220,6 @@ object ParseSql extends ExpressionBuilder {
   def apply(sqlStmt: Expression): ParseSql = new ParseSql(sqlStmt)
 
   def apply(sqlStmt: Expression, mode: Expression): ParseSql = new ParseSql(sqlStmt, mode)
-
-  /** Parameter names in argument order. */
-  val parameterNames: Seq[String] = Seq("sqlStmt", "mode")
 
   override def functionSignature: Option[FunctionSignature] = Some(FunctionSignature(Seq(
     InputParameter("sqlStmt"),
