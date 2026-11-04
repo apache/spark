@@ -29,7 +29,7 @@ name: Label pull requests
 
 on:
   schedule:
-  - cron: "5,20,35,50 * * * *"
+  - cron: "7-59/10 * * * *"
   workflow_dispatch:
     inputs:
       backfill:
@@ -71,8 +71,8 @@ jobs:
               --event schedule --status success --limit 1 --json startedAt \
               --jq '.[0].startedAt // empty')
             if [ -n "$last_success" ]; then
-              # Keep a one-hour overlap for PR updates during the previous run.
-              since=$(date -u -d "$last_success - 1 hour" +%Y-%m-%dT%H:%M:%SZ)
+              # Keep a short overlap for PR updates during the previous run.
+              since=$(date -u -d "$last_success - 10 minutes" +%Y-%m-%dT%H:%M:%SZ)
             else
               since=$(date -u -d "12 hours ago" +%Y-%m-%dT%H:%M:%SZ)
             fi
