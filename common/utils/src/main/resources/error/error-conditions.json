@@ -4467,11 +4467,39 @@
       },
       "UNSUPPORTED_PARAMETER" : {
         "message" : [
-          "The hint accepts only relation names, but got <parameter>."
+          "The hint accepts only relation names and string options, but got <parameter>."
         ]
       }
     },
     "sqlState" : "42601"
+  },
+  "INVALID_EXTERNAL_LOOKUP_OPTION" : {
+    "message" : [
+      "The `EXTERNAL_LOOKUP` hint option <option> is invalid:"
+    ],
+    "subClass" : {
+      "DUPLICATE" : {
+        "message" : [
+          "The option is specified more than once."
+        ]
+      },
+      "INVALID_FORMAT" : {
+        "message" : [
+          "An option must have the form key=value."
+        ]
+      },
+      "INVALID_VALUE" : {
+        "message" : [
+          "The value must be <expected>."
+        ]
+      },
+      "UNSUPPORTED" : {
+        "message" : [
+          "Supported options are <supportedOptions>."
+        ]
+      }
+    },
+    "sqlState" : "22023"
   },
   "INVALID_EXTERNAL_TYPE" : {
     "message" : [
