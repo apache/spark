@@ -19,6 +19,7 @@ import io
 import json
 import os
 import signal
+import subprocess
 import sys
 import tempfile
 import threading
@@ -35,6 +36,7 @@ try:
 except ImportError:
     has_resource_module = False
 
+import py4j
 from py4j.protocol import Py4JJavaError
 
 from pyspark import SparkConf, SparkContext
@@ -417,70 +419,100 @@ class WorkerInitResponseTests(unittest.TestCase):
         self.assertIn("data error", outfile.read(read_int(outfile)).decode("utf-8"))
 
 
-class InvalidateImportCachesTests(unittest.TestCase):
+class SetupSparkFilesImportCacheTests(unittest.TestCase):
     def setUp(self):
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
-        self.temp_dir = temp_dir.name
+        self.spark_files_dir = temp_dir.name
 
-    def _write_zip(self, path, modules):
-        with zipfile.ZipFile(path, "w") as zf:
-            for name, source in modules.items():
-                zf.writestr(name, source)
+        saved_sys_path = list(sys.path)
+        saved_root_directory = SparkFiles._root_directory
+        saved_is_running_on_worker = SparkFiles._is_running_on_worker
 
-    def _add_zip(self, archive_name, modules):
-        path = os.path.join(self.temp_dir, archive_name)
-        self._write_zip(path, modules)
-        sys.path.insert(0, path)
-
-        def cleanup():
-            sys.path.remove(path)
-            for key in [k for k in sys.path_importer_cache if k.startswith(path)]:
+        def restore():
+            sys.path[:] = saved_sys_path
+            for key in [k for k in sys.path_importer_cache if k.startswith(temp_dir.name)]:
                 del sys.path_importer_cache[key]
-            zipimport._zip_directory_cache.pop(path, None)
+            for key in [k for k in zipimport._zip_directory_cache if k.startswith(temp_dir.name)]:
+                del zipimport._zip_directory_cache[key]
+            SparkFiles._root_directory = saved_root_directory
+            SparkFiles._is_running_on_worker = saved_is_running_on_worker
 
-        self.addCleanup(cleanup)
-        return path
+        self.addCleanup(restore)
+
+    def _write_zip(self, name, modules):
+        with zipfile.ZipFile(os.path.join(self.spark_files_dir, name), "w") as zf:
+            for module_name, source in modules.items():
+                zf.writestr(module_name, source)
 
     def _import(self, name):
         self.addCleanup(sys.modules.pop, name, None)
         return importlib.import_module(name)
 
-    def test_startup_archives_are_not_invalidated(self):
-        startup = self._add_zip(
-            "startup.zip",
-            {"_spark_startup_pkg/__init__.py": "", "_spark_startup_pkg/mod.py": "x = 1"},
-        )
-        added = self._add_zip("added.zip", {"_spark_added_mod.py": "x = 1"})
-        self.addCleanup(sys.modules.pop, "_spark_startup_pkg", None)
-        self._import("_spark_startup_pkg.mod")
-        self._import("_spark_added_mod")
-        startup_finders = {
-            k: v for k, v in sys.path_importer_cache.items() if k.startswith(startup)
+    def test_startup_archive_import_caches_are_kept(self):
+        # py4j is loaded from the zip that PYTHONPATH puts on sys.path when the worker starts.
+        if not isinstance(py4j.__loader__, zipimport.zipimporter):
+            self.skipTest("py4j was not loaded from a zip archive")
+        py4j_archive = py4j.__loader__.archive
+        py4j_finders = {
+            key: finder
+            for key, finder in sys.path_importer_cache.items()
+            if isinstance(finder, zipimport.zipimporter) and finder.archive == py4j_archive
         }
-        # The archive itself and the package inside it each have a zipimporter.
-        self.assertEqual(len(startup_finders), 2)
+        self.assertTrue(py4j_finders)
 
-        with (
-            patch.object(worker_util, "_startup_sys_path", frozenset([startup])),
-            patch.object(zipimport.zipimporter, "invalidate_caches", autospec=True) as invalidate,
-        ):
-            worker_util._invalidate_import_caches()
+        with patch.object(zipimport.zipimporter, "invalidate_caches", autospec=True) as invalidate:
+            worker_util.setup_spark_files(self.spark_files_dir, [])
 
         invalidated = {call.args[0].archive for call in invalidate.call_args_list}
-        self.assertNotIn(startup, invalidated)
-        self.assertIn(added, invalidated)
-        for key, finder in startup_finders.items():
+        self.assertNotIn(py4j_archive, invalidated)
+        for key, finder in py4j_finders.items():
             self.assertIs(sys.path_importer_cache[key], finder)
 
-    def test_added_archive_rewritten_in_place_is_refreshed(self):
-        added = self._add_zip("added.zip", {"_spark_rewritten_a.py": "x = 1"})
-        self._import("_spark_rewritten_a")
-        self._write_zip(added, {"_spark_rewritten_a.py": "x = 1", "_spark_rewritten_b.py": "x = 2"})
+    def test_include_import_caches_are_refreshed(self):
+        self._write_zip("dep.zip", {"_spark_dep_a.py": "x = 1"})
+        worker_util.setup_spark_files(self.spark_files_dir, ["dep.zip"])
+        self.assertEqual(self._import("_spark_dep_a").x, 1)
 
-        worker_util._invalidate_import_caches()
+        # Spark does not rewrite includes, but doing so shows that a later task's
+        # setup_spark_files still invalidates the import caches of includes added before it.
+        self._write_zip("dep.zip", {"_spark_dep_a.py": "x = 1", "_spark_dep_b.py": "x = 2"})
+        self._write_zip("other.zip", {"_spark_other.py": ""})
+        worker_util.setup_spark_files(self.spark_files_dir, ["dep.zip", "other.zip"])
+        self.assertEqual(self._import("_spark_dep_b").x, 2)
 
-        self.assertEqual(self._import("_spark_rewritten_b").x, 2)
+    def test_user_archive_on_startup_path_import_caches_are_refreshed(self):
+        # A user archive on the worker's startup PYTHONPATH, e.g. from spark.executorEnv.PYTHONPATH,
+        # may be replaced while the application runs. Its directory listing can be cached before
+        # the first task, as in the daemon that forks workers, so setup_spark_files has to
+        # refresh it. This needs a new process to put the archive on the startup path.
+        self._write_zip("user.zip", {"_spark_user_a.py": "x = 1"})
+        user_zip = os.path.join(self.spark_files_dir, "user.zip")
+        files_dir = os.path.join(self.spark_files_dir, "files")
+        os.mkdir(files_dir)
+        script = (
+            "import importlib, sys, zipfile\n"
+            "from pyspark import worker_util\n"
+            "import _spark_user_a\n"
+            "with zipfile.ZipFile(sys.argv[1], 'w') as zf:\n"
+            "    zf.writestr('_spark_user_a.py', 'x = 1')\n"
+            "    zf.writestr('_spark_user_b.py', 'x = 2')\n"
+            "worker_util.setup_spark_files(sys.argv[2], [])\n"
+            "print(importlib.import_module('_spark_user_b').x)\n"
+        )
+        env = dict(os.environ, SPARK_PYTHON_RUNTIME="PYTHON_WORKER")
+        env["PYTHONPATH"] = os.pathsep.join(
+            p for p in (user_zip, os.environ.get("PYTHONPATH")) if p
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", script, user_zip, files_dir],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "2")
 
 
 class WorkerTests(ReusedPySparkTestCase):

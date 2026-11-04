@@ -20,6 +20,7 @@ Util functions for workers.
 """
 
 import importlib
+import importlib.util
 import json
 import os
 import sys
@@ -59,10 +60,20 @@ from pyspark.util import is_remote_only, local_connect_and_auth
 pickleSer = CPickleSerializer()
 utf8_deserializer = UTF8Deserializer()
 
-# sys.path as it was when the worker started, before any Spark files were added. The zip
-# archives on it (pyspark.zip, py4j and the rest of PYTHONPATH) do not change while the worker
-# runs, so _invalidate_import_caches keeps their cached directory listings.
-_startup_sys_path = frozenset(sys.path)
+
+def _zip_archive_of(module_name: str) -> Optional[str]:
+    spec = importlib.util.find_spec(module_name)
+    loader = spec.loader if spec is not None else None
+    return loader.archive if isinstance(loader, zipimport.zipimporter) else None
+
+
+# The zip archives this worker's pyspark and py4j were loaded from, such as
+# $SPARK_HOME/python/lib/pyspark.zip. They come with the Spark installation and are not replaced
+# while an application runs, so _invalidate_import_caches keeps their cached directory listings.
+# Other archives, including user archives on PYTHONPATH, may be replaced and are not kept.
+_spark_archives = frozenset(
+    archive for archive in map(_zip_archive_of, ("pyspark", "py4j")) if archive is not None
+)
 
 
 def add_path(path: str) -> bool:
@@ -76,22 +87,22 @@ def add_path(path: str) -> bool:
 
 def _invalidate_import_caches() -> None:
     """
-    Like importlib.invalidate_caches(), but keeps the zipimporters of archives that were on
-    sys.path when the worker started.
+    Like importlib.invalidate_caches(), but keeps the zipimporters of Spark's own archives
+    (_spark_archives).
 
     Up to Python 3.12, invalidating a zipimporter re-reads the archive's whole directory, and an
     archive has one zipimporter per package imported from it, so pyspark.zip is re-read once for
     every package the worker imported from it. Python 3.13+ re-reads each archive once on its
-    next lookup. Archives added after startup, such as the ones in python_includes, are still
-    invalidated.
+    next lookup. All other archives, such as user archives on PYTHONPATH and the ones in
+    python_includes, are still invalidated.
     """
     kept = {
         path: finder
-        for path, finder in sys.path_importer_cache.items()
+        for path, finder in list(sys.path_importer_cache.items())
         # importlib.invalidate_caches() drops relative paths because the working directory may
         # have changed, so only keep absolute ones.
         if isinstance(finder, zipimport.zipimporter)
-        and finder.archive in _startup_sys_path
+        and finder.archive in _spark_archives
         and os.path.isabs(path)
     }
     for path in kept:
