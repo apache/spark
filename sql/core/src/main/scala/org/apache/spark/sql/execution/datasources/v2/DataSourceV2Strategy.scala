@@ -225,6 +225,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       // rewritten it to TrueLiteral by the time we get here.
       val runtimeFilters = dynamicFilters ++ scalarSubqueryFilters
 
+      // Decide storage-partitioned join here, once, so a rebuild of the planned node (for instance
+      // the copy PlanAdaptiveDynamicPruningFilters makes at stage creation) does not read the
+      // config again and drop the keyed layout the join was planned with (SPARK-60260).
+      val keyGroupedPartitioning = relation.keyGroupedPartitioning
+        .filter(_ => session.sessionState.conf.v2BucketingEnabled)
+
       // Whether the scan gets the checked column does not depend on whether it is columnar. Asking
       // that can plan the scan's partitions, which the node built afterwards would plan again. A
       // row-based scan gets a Project for the UnsafeRow conversion anyway, so dropping the column
@@ -234,7 +240,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val checked = StorageFilterPlanning.checkedColumn(
         session.sessionState.conf, storageFilters, relation.output)
       val batchExec = BatchScanExec(relation.output ++ checked, relation.scan, runtimeFilters,
-        relation.ordering, relation.relation.table, relation.keyGroupedPartitioning,
+        relation.ordering, relation.relation.table, keyGroupedPartitioning,
         storageFilters, checked.isDefined)
       // With the checked column the scan's output differs from `project`, so a Project drops it.
       DataSourceV2Strategy.withProjectAndFilter(project,
