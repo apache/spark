@@ -372,6 +372,10 @@ class ArrowBatchedUDFArrowHandlerTests(ArrowEvalTypeHandlerTestCase):
         out = list(handler.run(0, iter([self._batch(a=list(range(10)), b=[1] * 10)])))
         self.assertEqual(out[0].column(0).to_pylist(), [v - 1 for v in range(10)])
 
+        handler = self._handler((lambda x, y: x - y, [0], {"y": 1}, LongType()), runner_conf=conf)
+        out = list(handler.run(0, iter([self._batch(a=list(range(10)), b=[1] * 10)])))
+        self.assertEqual(out[0].column(0).to_pylist(), [v - 1 for v in range(10)])
+
         handler = self._handler(
             (lambda: 7, [], {}, LongType()), runner_conf=conf, input_type=StructType()
         )
@@ -380,12 +384,26 @@ class ArrowBatchedUDFArrowHandlerTests(ArrowEvalTypeHandlerTestCase):
         self.assertEqual(out[0].column(0).to_pylist(), [7, 7, 7])
 
     def test_stop_iteration_raises_runtime_error(self):
-        def stop(a):
+        def stop(*args, **kwargs):
             raise StopIteration()
 
-        handler = self._handler((stop, [0], {}, LongType()))
-        with self.assertRaises(PySparkRuntimeError):
-            list(handler.run(0, iter([self._batch(a=[1], b=[0])])))
+        batch = self._batch(a=[1, 2], b=[0, 0])
+        empty = batch.select([])
+        # (args_offsets, kwargs_offsets, input_type, batch): one case per evaluation branch.
+        cases = {
+            "zero_arg": ([], {}, StructType(), empty),
+            "single_arg": ([0], {}, None, batch),
+            "multi_arg": ([0, 1], {}, None, batch),
+            "keyword_arg": ([0], {"y": 1}, None, batch),
+        }
+        for name, (args_offsets, kwargs_offsets, input_type, data) in cases.items():
+            with self.subTest(case=name):
+                handler = self._handler(
+                    (stop, args_offsets, kwargs_offsets, LongType()), input_type=input_type
+                )
+                with self.assertRaises(PySparkRuntimeError) as ctx:
+                    list(handler.run(0, iter([data])))
+                self.assertEqual(ctx.exception.getCondition(), "STOP_ITERATION_OCCURRED")
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)

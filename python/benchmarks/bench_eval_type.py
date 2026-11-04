@@ -535,7 +535,7 @@ class _ArrowBatchedBenchMixin:
         )
 
     # UDFs for SQL_ARROW_BATCHED_UDF operate on individual Python values.
-    # arg_offsets=[0] means the UDF receives column 0 value per row.
+    # arg_offsets lists the input columns whose values are passed to the UDF per row.
     _udfs = {
         "identity_udf": (lambda x: x, None, [0]),
         "stringify_udf": (lambda x: str(x), StringType(), [0]),

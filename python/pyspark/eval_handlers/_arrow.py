@@ -33,7 +33,6 @@ import time
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any
 
-from pyspark import _NoValue
 from pyspark.errors import PySparkRuntimeError
 from pyspark.eval_handlers._base import (
     BatchEvalTypeHandler,
@@ -840,12 +839,10 @@ class ArrowBatchedUDFArrowHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
             wrapped_func, args_kwargs_offsets = wrap_kwargs_support(
                 func, udf.args_offsets, udf.kwargs_offsets
             )
-            zero_arg = len(args_kwargs_offsets) == 0
             self._udf_infos.append(
                 (
                     wrapped_func,
-                    args_kwargs_offsets or (0,),
-                    zero_arg,
+                    args_kwargs_offsets,
                     to_arrow_type(
                         udf.return_type,
                         timezone="UTC",
@@ -932,17 +929,15 @@ class ArrowBatchedUDFArrowHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
                     )
                     for col, conv in zip(input_batch.itercolumns(), self._arrow_to_py_converters)
                 ]
-                if not columns:
-                    columns = [[_NoValue] * num_rows]
 
                 # --- Process: evaluate each UDF row-by-row ---
                 output_arrays: list[pa.Array] = []
-                for udf_func, offsets, zero_arg, arrow_return_type, result_conv in self._udf_infos:
+                for udf_func, offsets, arrow_return_type, result_conv in self._udf_infos:
                     if phase_timers is not None and output_arrays:
                         # Reuse the batch start for the first UDF, avoiding another clock read.
                         # Later UDFs start input after the loop transition.
                         input_start_ns = clock()
-                    args = [] if zero_arg else [columns[o] for o in offsets]
+                    args = [columns[o] for o in offsets]
                     if phase_timers is not None:
                         udf_start_ns = clock()
                         input_duration_ns += udf_start_ns - input_start_ns
