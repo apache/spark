@@ -703,13 +703,19 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       qualifiedPath: Path,
       includeTimeTravel: Boolean,
       refreshedIndexes: JSet[FileIndex]): Boolean = {
-    val needToRefresh = (includeTimeTravel || !fileIndex.isTimeTravel) &&
-      fileIndex.rootPaths
-        .map(_.makeQualified(fs.getUri, fs.getWorkingDirectory))
-        .exists(isSubDir(qualifiedPath, _))
-    if (needToRefresh && refreshedIndexes.add(fileIndex)) fileIndex.refresh()
-    // An already refreshed index must still select every dependent cache entry for rebuilding.
-    needToRefresh
+    // Membership records a prior match for this call's fixed path and time-travel policy.
+    // Return true without repeating path matching so every dependent entry is still rebuilt.
+    refreshedIndexes.contains(fileIndex) || {
+      val needToRefresh = (includeTimeTravel || !fileIndex.isTimeTravel) &&
+        fileIndex.rootPaths
+          .map(_.makeQualified(fs.getUri, fs.getWorkingDirectory))
+          .exists(isSubDir(qualifiedPath, _))
+      if (needToRefresh) {
+        refreshedIndexes.add(fileIndex)
+        fileIndex.refresh()
+      }
+      needToRefresh
+    }
   }
 
   /**
