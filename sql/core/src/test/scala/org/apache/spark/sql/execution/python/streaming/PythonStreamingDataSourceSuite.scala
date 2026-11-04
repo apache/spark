@@ -30,6 +30,7 @@ import org.apache.spark.sql.execution.python.PythonDataSourceSuiteBase
 import org.apache.spark.sql.execution.streaming.ProcessingTimeTrigger
 import org.apache.spark.sql.execution.streaming.checkpointing.{CommitLog, OffsetSeqLog}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{StreamingQueryException, Trigger}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -581,6 +582,45 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
     assert(q.recentProgress.forall(_.numInputRows == 2))
     q.stop()
     q.awaitTermination()
+  }
+
+  test("Filter the stream of a data source without a batch reader") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource
+         |$testDataStreamReaderScript
+         |
+         |class $dataSourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "id INT"
+         |    def streamReader(self, schema):
+         |        return TestDataStreamReader()
+         |""".stripMargin
+
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    // A Python data source pushes filters down with its batch reader, which this one does not
+    // have, so the filters of a streaming query are not pushed down to it.
+    withSQLConf(SQLConf.PYTHON_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      val df = spark.readStream.format(dataSourceName).load().where("id > 1")
+      val stopSignal = new CountDownLatch(1)
+      val q = df.writeStream
+        .foreachBatch((df: DataFrame, batchId: Long) => {
+          df.cache()
+          val expected = if (batchId == 0) Nil else Seq(Row(batchId * 2), Row(batchId * 2 + 1))
+          checkAnswer(df, expected)
+          if (batchId > 3) stopSignal.countDown()
+        })
+        .trigger(ProcessingTimeTrigger(0))
+        .start()
+      try {
+        assert(stopSignal.await(waitTimeout.toMillis, TimeUnit.MILLISECONDS), q.exception)
+      } finally {
+        q.stop()
+        q.awaitTermination()
+      }
+    }
   }
 
   // Verify that socket between python runner and JVM doesn't timeout with large trigger interval.

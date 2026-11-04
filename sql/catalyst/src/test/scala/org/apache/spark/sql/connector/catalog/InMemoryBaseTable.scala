@@ -665,8 +665,8 @@ abstract class InMemoryBaseTable(
     override def json(): String = rowCount.toString
   }
 
-  // The number of the micro-batch streams of the table that were stopped.
-  val stoppedMicroBatchStreams = new AtomicLong()
+  // The number of the micro-batch streams that the scans of the table created.
+  val createdMicroBatchStreams = new AtomicLong()
 
   class InMemoryMicroBatchStream(readSchema: StructType, tableSchema: StructType)
       extends MicroBatchStream {
@@ -694,9 +694,7 @@ abstract class InMemoryBaseTable(
     }
     override def deserializeOffset(json: String): Offset = new InMemoryTableOffset(json.toLong)
     override def commit(end: Offset): Unit = {}
-    override def stop(): Unit = {
-      stoppedMicroBatchStreams.incrementAndGet()
-    }
+    override def stop(): Unit = {}
   }
 
   abstract class BatchScanBaseClass(
@@ -791,8 +789,10 @@ abstract class InMemoryBaseTable(
       Array(new RowsReadCustomMetric)
     }
 
-    override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream =
+    override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
+      createdMicroBatchStreams.incrementAndGet()
       new InMemoryMicroBatchStream(readSchema, tableSchema)
+    }
   }
 
   /**

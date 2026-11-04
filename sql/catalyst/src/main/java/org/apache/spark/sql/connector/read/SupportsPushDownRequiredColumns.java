@@ -41,7 +41,8 @@ public interface SupportsPushDownRequiredColumns extends ScanBuilder {
    * pruning applied here.
    * <p>
    * The scans of streaming queries are pruned too, since 4.4.0, so the readers of the micro-batch
-   * and continuous streams of a scan must also return the columns of its read schema.
+   * and continuous streams of a scan must also return the columns of its read schema, which Spark
+   * asks for before it creates the stream, as it does before it plans a batch.
    */
   void pruneColumns(StructType requiredSchema);
 }

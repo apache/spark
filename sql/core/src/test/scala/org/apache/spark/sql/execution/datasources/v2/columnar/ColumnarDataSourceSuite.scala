@@ -78,6 +78,13 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession {
     checkAnswer(pruned, (0L until 4L).map(id => Row(s"name$id")))
     assert(scan(pruned).readSchema() == StructType.fromDDL("name STRING"))
 
+    // A planner that does not prune the columns reads all of them, and the scan drops the others
+    // from its batches.
+    val notPruned = spark.read.format(format).option("end", "4").option("pruneColumns", "false")
+      .load().select("name")
+    checkAnswer(notPruned, (0L until 4L).map(id => Row(s"name$id")))
+    assert(scan(notPruned).readSchema() == StructType.fromDDL("name STRING"))
+
     val limited = spark.read.format(format).option("end", "10").load().limit(2)
     assert(limited.collect().length == 2)
     assert(scan(limited).getMetaData()("PushedLimit") == "LIMIT 2")
@@ -217,23 +224,25 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession {
   }
 
   test("streaming read of some of the columns") {
-    val query = spark.readStream.format(format).option("end", "5").load().select("name")
-      .writeStream
-      .format("memory")
-      .queryName("pruned_stream")
-      .start()
-    try {
-      query.processAllAvailable()
-      // A stream reader reads all the columns of the data source, so the scan of a stream reads
-      // all of them too, and Spark drops the other columns.
-      val scans = query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution
-        .executedPlan.collect { case scan: MicroBatchScanExec => scan }
-      assert(scans.map(_.output.map(_.name)) == Seq(Seq("id", "name")))
-      assert(scans.head.scan.readSchema() == StructType.fromDDL("id BIGINT, name STRING"))
-    } finally {
-      query.stop()
+    withTempView("pruned_stream") {
+      val query = spark.readStream.format(format).option("end", "5").load().select("name")
+        .writeStream
+        .format("memory")
+        .queryName("pruned_stream")
+        .start()
+      try {
+        query.processAllAvailable()
+        // A stream reader reads all the columns of the data source, and the scan of the stream
+        // drops the other columns from its batches.
+        val scans = query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution
+          .executedPlan.collect { case scan: MicroBatchScanExec => scan }
+        assert(scans.map(_.output.map(_.name)) == Seq(Seq("name")))
+        assert(scans.head.scan.readSchema() == StructType.fromDDL("name STRING"))
+      } finally {
+        query.stop()
+      }
+      checkAnswer(spark.table("pruned_stream"), (0L until 5L).map(id => Row(s"name$id")))
     }
-    checkAnswer(spark.table("pruned_stream"), (0L until 5L).map(id => Row(s"name$id")))
   }
 
   test("create a stream writer for each micro-batch") {
@@ -297,7 +306,8 @@ class TestRangeDataSource(options: CaseInsensitiveStringMap) extends ColumnarDat
   }
 
   override def batchPlanner(schema: StructType): ColumnarBatchPlanner = {
-    new TestRangePlanner(end, schema, options.getBoolean("failPlanning", false), plans)
+    new TestRangePlanner(end, schema, options.getBoolean("failPlanning", false), plans,
+      options.getBoolean("pruneColumns", true))
   }
 
   override def streamReader(schema: StructType): ColumnarStreamReader = {
@@ -321,7 +331,12 @@ class TestRangeDataSource(options: CaseInsensitiveStringMap) extends ColumnarDat
 
 case class TestRangePartition(lo: Long, hi: Long) extends InputPartition
 
-class TestRangePlanner(end: Long, schema: StructType, fail: Boolean, plans: AtomicInteger)
+class TestRangePlanner(
+    end: Long,
+    schema: StructType,
+    fail: Boolean,
+    plans: AtomicInteger,
+    prunesColumns: Boolean)
   extends ColumnarBatchPlanner {
   private var limit = Long.MaxValue
   private var readSchema = schema
@@ -332,8 +347,10 @@ class TestRangePlanner(end: Long, schema: StructType, fail: Boolean, plans: Atom
   }
 
   override def pruneColumns(requiredSchema: StructType): Boolean = {
-    readSchema = requiredSchema
-    true
+    if (prunesColumns) {
+      readSchema = requiredSchema
+    }
+    prunesColumns
   }
 
   override def plan(): ColumnarPlannedBatch = {

@@ -27,7 +27,7 @@ import org.apache.spark.internal.LogKeys.EXPR
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedPersistentView, ResolvedTable, ResolvedTempView}
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, AttributeSet, BloomFilterMightContain, Cast, DynamicPruning, Expression, InSet, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, AttributeSet, BloomFilterMightContain, Cast, DynamicPruning, Expression, ExpressionSet, InSet, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -1106,26 +1106,37 @@ private[sql] object DataSourceV2Strategy extends Logging {
 
   /**
    * Returns the output of the scan node of a streaming relation: the columns that its scan reads.
-   * A scan built to read fewer columns than the relation outputs only gets them when the
-   * projections and the filters over the relation, which the scan node is planned with, read no
-   * other column of the relation (see `StreamingV2ScanPushDown`).
+   * The projections and the filters over the relation, which the scan node is planned with, must
+   * still apply the filters that the scan got, and read no column of the relation that the scan
+   * does not read, if it was built to read fewer columns than the relation outputs (see
+   * `StreamingV2ScanPushDown`).
    */
   private def streamingScanOutput(
       relation: StreamingDataSourceV2ScanRelation,
       project: Seq[NamedExpression],
-      filters: Seq[Expression]): Seq[AttributeReference] = relation.prunedOutput match {
-    case Some(prunedOutput) =>
-      val missing = AttributeSet((project ++ filters).flatMap(_.references)) -- prunedOutput
-      if (missing.nonEmpty) {
-        throw SparkException.internalError(
-          s"The scan of the streaming relation ${relation.name} does not read the columns " +
-            s"${missing.toSeq.map(_.name).mkString(", ")} that the plan reads from it. Set " +
-            s"${SQLConf.STREAMING_V2_COLUMN_PRUNING_ENABLED.key} to false to make the scans of " +
-            "streaming queries read all the columns of their sources.")
-      }
-      prunedOutput
-    case None =>
-      relation.output
+      filters: Seq[Expression]): Seq[AttributeReference] = {
+    val missingFilters = relation.pushedFilters.filterNot(ExpressionSet(filters).contains)
+    if (missingFilters.nonEmpty) {
+      throw SparkException.internalError(
+        s"The plan does not apply the filters ${missingFilters.map(_.sql).mkString(", ")} " +
+          s"that the scan of the streaming relation ${relation.name} got. Set " +
+          s"${SQLConf.STREAMING_V2_FILTER_PUSHDOWN_ENABLED.key} to false to push no filter " +
+          "down to the scans of streaming queries.")
+    }
+    relation.prunedOutput match {
+      case Some(prunedOutput) =>
+        val missing = AttributeSet((project ++ filters).flatMap(_.references)) -- prunedOutput
+        if (missing.nonEmpty) {
+          throw SparkException.internalError(
+            s"The scan of the streaming relation ${relation.name} does not read the columns " +
+              s"${missing.toSeq.map(_.name).mkString(", ")} that the plan reads from it. Set " +
+              s"${SQLConf.STREAMING_V2_COLUMN_PRUNING_ENABLED.key} to false to make the scans " +
+              "of streaming queries read all the columns of their sources.")
+        }
+        prunedOutput
+      case None =>
+        relation.output
+    }
   }
 }
 

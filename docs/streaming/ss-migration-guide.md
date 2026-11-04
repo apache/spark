@@ -46,10 +46,13 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   previous behavior, set `spark.sql.streaming.v2ColumnPruning.enabled` to `false`.
 
 - Since Spark 4.4, the scan of a Data Source V2 streaming source whose scan builder implements
-  `SupportsPushDownFilters` or `SupportsPushDownV2Filters` gets the filters that the streaming
-  query applies to all the rows that it reads from the source, as the scans of batch queries do.
-  Before, it got no filter. Spark still evaluates all the filters after the scan. To restore the
-  previous behavior, set `spark.sql.streaming.v2FilterPushdown.enabled` to `false`.
+  `SupportsPushDownFilters` or `SupportsPushDownV2Filters`, other than a Python data source, gets
+  the filters that the streaming query applies to all the rows that it reads from the source, as
+  the scans of batch queries do. Before, it got no filter. Spark still evaluates all the filters
+  after the scan. A source that applies the filters reads fewer rows, so the metrics of the
+  progress of the query that count the rows read from the source, `numInputRows`,
+  `inputRowsPerSecond` and `processedRowsPerSecond`, only count the rows that pass the filters.
+  To restore the previous behavior, set `spark.sql.streaming.v2FilterPushdown.enabled` to `false`.
 
 ## Upgrading from Structured Streaming 4.2 to 4.3
 

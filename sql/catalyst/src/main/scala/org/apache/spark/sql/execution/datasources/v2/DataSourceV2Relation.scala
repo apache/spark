@@ -484,6 +484,8 @@ case class StreamingDataSourceV2Relation(
  * @param prunedOutput the columns of `output` that the scan reads, in the order of its read schema,
  *                     if it was built to read fewer of them. The scan node of the physical plan
  *                     outputs these, so the plan must not read the other columns of `output`.
+ * @param pushedFilters the filters that the scan got, over `output`, which the plan must still
+ *                      apply over the relation
  */
 case class StreamingDataSourceV2ScanRelation(
     relation: StreamingDataSourceV2Relation,
@@ -492,7 +494,8 @@ case class StreamingDataSourceV2ScanRelation(
     stream: SparkDataStream,
     startOffset: Option[Offset] = None,
     endOffset: Option[Offset] = None,
-    prunedOutput: Option[Seq[AttributeReference]] = None)
+    prunedOutput: Option[Seq[AttributeReference]] = None,
+    pushedFilters: Seq[Expression] = Nil)
   extends LeafNode with MultiInstanceRelation with NamedRelation  {
 
   val (catalog, identifier) = (relation.catalog, relation.identifier)
@@ -500,8 +503,17 @@ case class StreamingDataSourceV2ScanRelation(
   override def name: String = relation.table.name()
 
   override def simpleString(maxFields: Int): String = {
+    val pruned = prunedOutput.map { columns =>
+      s", PrunedOutput: ${truncatedString(columns, "[", ", ", "]", maxFields)}"
+    }
+    val filters = if (pushedFilters.nonEmpty) {
+      Some(s", PushedFilters: ${truncatedString(pushedFilters, "[", ", ", "]", maxFields)}")
+    } else {
+      None
+    }
     statePrefix + "StreamingDataSourceV2ScanRelation" +
-      s"${truncatedString(output, "[", ", ", "]", maxFields)} $name"
+      s"${truncatedString(output, "[", ", ", "]", maxFields)} $name" +
+      pruned.getOrElse("") + filters.getOrElse("")
   }
 
   override def isStreaming: Boolean = true
@@ -511,7 +523,10 @@ case class StreamingDataSourceV2ScanRelation(
     val newAttributes = AttributeMap(output.zip(newOutput))
     copy(
       output = newOutput,
-      prunedOutput = prunedOutput.map(_.map(a => a.withExprId(newAttributes(a).exprId))))
+      prunedOutput = prunedOutput.map(_.map(a => a.withExprId(newAttributes(a).exprId))),
+      pushedFilters = pushedFilters.map(_.transform {
+        case a: AttributeReference => a.withExprId(newAttributes.getOrElse(a, a).exprId)
+      }))
   }
 
   override def computeStats(): Statistics = scan match {
@@ -528,7 +543,8 @@ case class StreamingDataSourceV2ScanRelation(
       case _ => None
     }
 
-    Seq(output, qualifiedTableName, scan, stream, startOffset, endOffset)
+    Seq(output, qualifiedTableName, scan, stream, startOffset, endOffset, prunedOutput,
+      pushedFilters)
   }
 
   override protected def stringArgs: Iterator[Any] = stringArgsVal.iterator
