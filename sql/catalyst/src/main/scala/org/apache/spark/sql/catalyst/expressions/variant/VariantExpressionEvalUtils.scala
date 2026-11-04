@@ -320,14 +320,13 @@ object VariantExpressionEvalUtils {
     new VariantVal(out.getValue, out.getMetadata)
   }
 
-  /** Cast a Spark value from `dataType` into the variant type, on behalf of the `cast` function. */
+  /** Cast a Spark value from `dataType` into the variant type. */
   def castToVariant(input: Any, dataType: DataType): VariantVal =
     castToVariant(input, dataType, "cast")
 
   /**
-   * Cast a Spark value from `dataType` into the variant type. `functionName` is the SQL function
-   * on whose behalf the cast runs; a result over the size limit raises `VARIANT_SIZE_LIMIT` naming
-   * it, rather than leaking the internal `VariantSizeLimitException`.
+   * Cast a Spark value from `dataType` into the variant type. A result over the size limit raises
+   * `VARIANT_SIZE_LIMIT` with `functionName`.
    */
   def castToVariant(input: Any, dataType: DataType, functionName: String): VariantVal = {
     // Enforce strict check because it is illegal for input struct/map/variant to contain duplicate
