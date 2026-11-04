@@ -2900,6 +2900,48 @@ class TypesTestsMixin:
                 self.assertTrue(row.sa.startswith("2020-01-02 03:04:05.1234567"), row.sa)
                 self.assertTrue(row.mv.startswith("2020-01-02 03:04:05.1234567"), row.mv)
 
+    def test_timestamp_nanos_type_arrow_conversion_floors_to_precision(self):
+        # Arrow timestamp[ns] carries nine fractional digits; a lower declared precision must floor
+        # them, or values equal at that precision compare and group as different.
+        import pandas as pd
+        import pyarrow as pa
+
+        cases = [
+            (
+                TimestampNTZNanosType(7),
+                ["2020-01-02 03:04:05.123456789", "2020-01-02 03:04:05.123456712"],
+                "2020-01-02 03:04:05.1234567",
+            ),
+            (
+                TimestampLTZNanosType(8),
+                ["2020-01-02 03:04:05.123456789", "2020-01-02 03:04:05.123456781"],
+                "2020-01-02 03:04:05.12345678",
+            ),
+            # Pre-epoch values floor toward -inf, not toward zero.
+            (
+                TimestampNTZNanosType(7),
+                ["1969-12-31 23:59:59.999999999", "1969-12-31 23:59:59.999999901"],
+                "1969-12-31 23:59:59.9999999",
+            ),
+        ]
+        with self.sql_conf(
+            {
+                "spark.sql.timestampNanosTypes.enabled": True,
+                "spark.sql.session.timeZone": "UTC",
+                "spark.sql.execution.arrow.pyspark.enabled": True,
+            }
+        ):
+            for nanos_type, values, floored in cases:
+                pdf = pd.DataFrame({"ts": pd.to_datetime(pd.Series(values))})
+                table = pa.table({"ts": pa.array(pdf["ts"], type=pa.timestamp("ns"))})
+                schema = StructType([StructField("ts", nanos_type)])
+                floored_literal = f"CAST('{floored}' AS {nanos_type.simpleString()})"
+                for data in (pdf, table):
+                    df = self.spark.createDataFrame(data, schema)
+                    self.assertEqual(1, df.distinct().count())
+                    self.assertEqual(2, df.where(f"ts = {floored_literal}").count())
+                    self.assertEqual([pd.Timestamp(floored)] * 2, list(df.toPandas()["ts"]))
+
     def test_timestamp_nanos_type_arrow_udf(self):
         # SPARK-57462 follow-up: with the eager Arrow-conversion reject removed, an Arrow-optimized
         # Python UDF (useArrow=True) can take and return the nanosecond timestamp types through the

@@ -636,6 +636,80 @@ class UDFInHigherOrderFunctionTestsMixin:
                 native,
             )
 
+    def test_udf_in_nested_lambda_over_udf_result(self):
+        # SPARK-60509: in `transform(docs, d -> transform(tokenize(d), t -> normalize(t)))`,
+        # `tokenize(d)` is the inner function's argument, so it lifts one array level deep over
+        # `docs`, while `normalize` lifts two levels deep over `tokenize`'s result. The two must
+        # not be chained into one worker function, which would flatten `docs` two levels.
+        # Compared against the equivalent native expression for the row-at-a-time, pandas and
+        # Arrow flavors.
+        import pandas as pd
+        import pyarrow as pa
+        import pyarrow.compute as pc
+
+        from pyspark.sql.functions import arrow_udf, pandas_udf
+
+        df = self.spark.createDataFrame(
+            [(["Hello World", "Foo"],), ([],), (None,), ([None, "A b"],)], "docs array<string>"
+        )
+
+        @pandas_udf(ArrayType(StringType()))
+        def tokenize_pandas(s: pd.Series) -> pd.Series:
+            return s.str.split(" ")
+
+        @pandas_udf(StringType())
+        def normalize_pandas(s: pd.Series) -> pd.Series:
+            return s.str.lower()
+
+        @arrow_udf(ArrayType(StringType()))
+        def tokenize_arrow(a: pa.Array) -> pa.Array:
+            return pc.split_pattern(a, " ")
+
+        @arrow_udf(StringType())
+        def normalize_arrow(a: pa.Array) -> pa.Array:
+            return pc.utf8_lower(a)
+
+        native = df.select(
+            sf.transform(
+                "docs", lambda d: sf.transform(sf.split(d, " "), lambda t: sf.lower(t))
+            ).alias("r")
+        )
+        for tokenize, normalize in (
+            (
+                udf(lambda d: None if d is None else d.split(" "), ArrayType(StringType())),
+                udf(lambda t: t.lower(), StringType()),
+            ),
+            (tokenize_pandas, normalize_pandas),
+            (tokenize_arrow, normalize_arrow),
+        ):
+            assertDataFrameEqual(
+                df.select(
+                    sf.transform(
+                        "docs", lambda d: sf.transform(tokenize(d), lambda t: normalize(t))
+                    ).alias("r")
+                ),
+                native,
+            )
+
+    def test_udf_in_nested_lambda_over_udf_result_of_array_element(self):
+        # SPARK-60509: as above, but the outer element is itself an array. A chained call would
+        # pass the leaves to `repeat` instead of each row; `a + a` also runs on an int, so the
+        # query would silently return wrong values rather than fail.
+        df = self.spark.createDataFrame(
+            [([[1, 2], [3]],), ([[], None],), (None,)], "values array<array<int>>"
+        )
+        repeat = udf(lambda a: None if a is None else a + a, ArrayType(IntegerType()))
+        plus_one = udf(lambda y: y + 1, IntegerType())
+
+        assertDataFrameEqual(
+            df.select(
+                sf.transform(
+                    "values", lambda row: sf.transform(repeat(row), lambda y: plus_one(y))
+                ).alias("r")
+            ),
+            [([[2, 3, 2, 3], [4, 4]],), ([[], None],), (None,)],
+        )
+
     def test_nested_lambda_with_nondeterministic_inner_argument_fails(self):
         # The inner iterated argument is nondeterministic, so the rewrite - which references it more
         # than once - would evaluate it independently and misalign the results. It must keep failing

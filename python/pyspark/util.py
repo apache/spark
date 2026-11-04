@@ -529,6 +529,22 @@ def _format_exception(
     return "".join(te.format())
 
 
+def format_worker_exception(e: BaseException, hide_traceback: Optional[bool] = None) -> str:
+    """
+    Formats an exception raised in the Python worker as it is reported to the JVM, honoring the
+    SPARK_HIDE_TRACEBACK, SPARK_SIMPLIFIED_TRACEBACK and SPARK_TRACEBACK_WITH_LOCALS environment
+    variables. Must be called while handling ``e``.
+    """
+    if hide_traceback is None:
+        hide_traceback = bool(os.environ.get("SPARK_HIDE_TRACEBACK", False))
+    return _format_exception(
+        e,
+        hide_traceback,
+        bool(os.environ.get("SPARK_SIMPLIFIED_TRACEBACK", False)),
+        bool(os.environ.get("SPARK_TRACEBACK_WITH_LOCALS", False)),
+    )
+
+
 def handle_worker_exception(
     e: BaseException, outfile: IO, hide_traceback: Optional[bool] = None
 ) -> None:
@@ -547,17 +563,8 @@ def handle_worker_exception(
         Whether to hide the traceback in the output.
         By default, hides the traceback if environment variable SPARK_HIDE_TRACEBACK is set.
     """
-
-    if hide_traceback is None:
-        hide_traceback = bool(os.environ.get("SPARK_HIDE_TRACEBACK", False))
-
     try:
-        exc_info = _format_exception(
-            e,
-            hide_traceback,
-            bool(os.environ.get("SPARK_SIMPLIFIED_TRACEBACK", False)),
-            bool(os.environ.get("SPARK_TRACEBACK_WITH_LOCALS", False)),
-        )
+        exc_info = format_worker_exception(e, hide_traceback)
         write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)
         write_with_length(exc_info.encode("utf-8"), outfile)
     except IOError:

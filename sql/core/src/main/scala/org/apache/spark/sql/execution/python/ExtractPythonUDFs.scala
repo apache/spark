@@ -188,6 +188,9 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
    *         - PythonUDF (bar)
    *           - PythonUDF (baz)
    * - if the eval types of the UDF expressions in the chain differ, return false.
+   * - if the element-wise nesting depths of the UDF expressions in the chain differ, return false.
+   *   The worker runs a chain as one function under the outermost UDF's depth. In
+   *   transform(arr, x -> transform(f(x), y -> g(y))), g lifts to depth 2 and f to depth 1.
    * - if a UDF has more than one child, e.g. foo(bar(), baz()), return false
    * If we return false here, the expectation is that the recursive calls of
    * collectEvaluableUDFsFromExpressions will then visit the children and extract them first to
@@ -204,6 +207,7 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
         PythonUDF.chainsInWorker(e) &&
           correctEvalType(e, pythonUDFArrowFallbackOnUDT) ==
           correctEvalType(child, pythonUDFArrowFallbackOnUDT) &&
+          e.elementwiseNestingDepth == child.elementwiseNestingDepth &&
           shouldExtractUDFExpressionTree(child, pythonUDFArrowFallbackOnUDT)
       // Python UDF can't be evaluated directly in JVM
       case children => !children.exists(hasScalarPythonUDF)
