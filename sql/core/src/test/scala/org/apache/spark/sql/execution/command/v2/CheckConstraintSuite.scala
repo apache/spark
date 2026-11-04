@@ -348,6 +348,25 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     }
   }
 
+  test("SPARK-60821: Check constraint cannot call a generator function") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT) $defaultUsing")
+      val call = "explode(array(id))"
+      val cond = s"$call IS NOT NULL"
+      Seq(
+        s"CREATE TABLE ${t}_2 (id INT, CONSTRAINT c1 CHECK ($cond)) $defaultUsing",
+        s"REPLACE TABLE $t (id INT, CONSTRAINT c1 CHECK ($cond)) $defaultUsing"
+      ).foreach { query =>
+        checkError(
+          exception = intercept[AnalysisException](sql(query)),
+          condition = "GENERATOR_IN_CHECK_CONSTRAINT",
+          sqlState = "42621",
+          parameters = Map("checkCondition" -> cond),
+          context = ExpectedContext(fragment = call))
+      }
+    }
+  }
+
   test("SPARK-60777: Existing check constraint calling a user-defined function still works") {
     withUserDefinedFunction("tmp_len" -> true) {
       spark.udf.register("tmp_len", (s: String) => s.length)
@@ -425,6 +444,19 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         assert(error.getCondition == "CHECK_CONSTRAINT_VIOLATION", cond)
         checkAnswer(spark.table(t).select("id"), Row(1))
       }
+    }
+  }
+
+  test("SPARK-60856: Check constraint with a subscript of a lambda variable") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT, a ARRAY<ARRAY<INT>>, " +
+        s"CONSTRAINT c1 CHECK (forall(a, x -> x[0] > 0))) $defaultUsing")
+      sql(s"INSERT INTO $t VALUES (1, array(array(1)))")
+      val error = intercept[SparkRuntimeException] {
+        sql(s"INSERT INTO $t VALUES (2, array(array(-1)))")
+      }
+      assert(error.getCondition == "CHECK_CONSTRAINT_VIOLATION")
+      checkAnswer(spark.table(t), Row(1, Seq(Seq(1))))
     }
   }
 
@@ -533,6 +565,19 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         )
         assert(loadTable(nonPartitionCatalog, "ns", "tbl").constraints.isEmpty)
       }
+    }
+  }
+
+  test("SPARK-60824: Alter table add check constraint that always holds") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT NOT NULL, data STRING) $defaultUsing")
+      sql(s"INSERT INTO $t VALUES (1, 'a')")
+      // The optimizer replaces the scan that validates the existing rows with an empty relation.
+      sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK (id IS NOT NULL)")
+      val table = loadTable(nonPartitionCatalog, "ns", "tbl")
+      assert(table.validatedVersion() == "1")
+      assert(getCheckConstraint(table).toDDL ==
+        "CONSTRAINT c1 CHECK (id IS NOT NULL) ENFORCED NORELY")
     }
   }
 
