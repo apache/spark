@@ -484,10 +484,10 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
     try {
       val planned = PlanExternalUDFs(prepared)
       assert(planned.exists(_.isInstanceOf[ExecuteExternalUDF]))
-      assert(!planned.exists {
+      assert(planned.exists {
         case _: ExecuteExternalUDF => false
         case node => node.expressions.exists(_.exists(_.isInstanceOf[ExternalUserDefinedFunction]))
-      })
+      } === false)
     } finally {
       conf.setConf(StaticSQLConf.UNIFIED_UDF_EXECUTION_ENABLED, unifiedUDFExecution)
     }

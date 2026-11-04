@@ -577,7 +577,7 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
         SimpleExternalLookupDataSource.resetCounters()
         val joined = left.join(lookup, left("id") === lookup("id") && lit(false), joinType)
         val run = runStream(joined)
-        assert(!run.plan.exists(_.isInstanceOf[PreparedExternalLookupJoin]))
+        assert(run.plan.exists(_.isInstanceOf[PreparedExternalLookupJoin]) === false)
         QueryTest.sameRows(expected, run.rows).foreach(fail(_))
         // The stateful stream side still runs.
         assert(run.plan.exists(_.isInstanceOf[Deduplicate]))
@@ -671,7 +671,7 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       assert(lookupJoin.metrics("numOutputRows").value === 2)
       // The connector description is redacted.
       assert(lookupJoin.simpleString(10).contains("MetricsExternalLookupScan(token="))
-      assert(!run.execution.executedPlan.toString.contains("secret-token"))
+      assert(run.execution.executedPlan.toString.contains("secret-token") === false)
     }
   }
 
