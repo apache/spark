@@ -70,14 +70,17 @@ class PythonRunnerSuite extends SparkFunSuite {
 
   // Test the paths Spark itself adds to the PYTHONPATH
   test("SPARK-60855: sparkPythonPath should only contain the zips under SPARK_HOME") {
+    val sparkPythonPath = PythonUtils.sparkPythonPath
     // Spark's jars contain no Python code, so the jar containing PythonUtils must not be added.
     // SBT loads PythonUtils from the spark-core jar, which makes this catch it being added back.
+    assert(!sparkPythonPath.split(File.pathSeparator).exists(_.endsWith(".jar")), sparkPythonPath)
+    // Compare the whole string, so that an empty entry, which Python reads as the current
+    // directory, also fails. It is empty when SPARK_HOME is unset.
     val expected = sys.env.get("SPARK_HOME").toSeq.flatMap { sparkHome =>
       Seq("pyspark.zip", PythonUtils.PY4J_ZIP_NAME)
         .map(name => Seq(sparkHome, "python", "lib", name).mkString(File.separator))
     }
-    assert(PythonUtils.sparkPythonPath.split(File.pathSeparator).filter(_.nonEmpty).toSeq ===
-      expected)
+    assert(sparkPythonPath === expected.mkString(File.pathSeparator))
   }
 
   test("SPARK-54052: PythonErrorUtils should have corresponding methods in SparkThrowable") {
