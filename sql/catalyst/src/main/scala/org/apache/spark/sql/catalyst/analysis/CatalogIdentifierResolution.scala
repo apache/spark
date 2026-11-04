@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, LookupCatalog}
 
 /**
@@ -25,6 +26,19 @@ import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, Looku
  */
 class CatalogIdentifierResolution(override val catalogManager: CatalogManager)
     extends LookupCatalog {
+
+  /** Resolves a command target without column output, preserving its origin and tags. */
+  def resolveUnresolvedIdentifier(
+      unresolvedIdentifier: UnresolvedIdentifier): ResolvedIdentifier = {
+    CurrentOrigin.withOrigin(unresolvedIdentifier.origin) {
+      val resolvedIdentifier = resolveIdentifier(
+        nameParts = unresolvedIdentifier.nameParts,
+        allowTemp = unresolvedIdentifier.allowTemp,
+        columnOutput = Nil)
+      resolvedIdentifier.copyTagsFrom(unresolvedIdentifier)
+      resolvedIdentifier
+    }
+  }
 
   /** A temporary view resolves to [[FakeSystemCatalog]] when `allowTemp` is set. */
   def resolveIdentifier(
