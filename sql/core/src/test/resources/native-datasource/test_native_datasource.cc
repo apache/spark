@@ -1725,13 +1725,13 @@ int abortDataWriter(void* handle, const SparkDsFinishDataWriterInfo* info) {
   auto* writer = fromHandle<DataWriter>(handle);
   if (writer->abort_called) orderViolation("abort_data_writer called twice");
   writer->abort_called = true;
+  // Spark does not abort a data writer that committed: records it if it does, and keeps its file.
+  if (writer->committed) {
+    orderViolation("abort_data_writer after a successful commit");
+    return 0;
+  }
   return guarded([&] {
     checkSize("SparkDsFinishDataWriterInfo", info->size, sizeof(SparkDsFinishDataWriterInfo));
-    // Spark does not abort a data writer that committed: records it if it does.
-    if (writer->committed) {
-      orderViolation("abort_data_writer after a successful commit");
-      return;
-    }
     // A data writer without a state has no file.
     if (writer->stateless) {
       writer->rows.clear();

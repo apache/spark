@@ -313,9 +313,9 @@ typedef struct SparkDsHost {
   /*
    * Returns whether the logger of Spark that log writes to is enabled for one of the
    * SPARK_DS_LOG_* levels, another level being treated as SPARK_DS_LOG_INFO, so that the library
-   * only formats the messages that Spark may write, and gets those that Spark writes at the levels
-   * that a library would not log by default, such as debug. The configuration of the log can still
-   * drop a message of an enabled level, for example with a filter. It follows the level of the
+   * only formats the messages that Spark may write, and can log at the levels that it would not log
+   * by default, such as debug, when Spark does. The configuration of the log can still drop a
+   * message of an enabled level, for example with a filter. It follows the level of the
    * logger, which can change while Spark runs, but each call is a call into the JVM: a library
    * may keep the answer for a while, and ask again from time to time. It is never NULL in a struct
    * whose size holds it.
