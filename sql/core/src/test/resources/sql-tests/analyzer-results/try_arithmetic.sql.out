@@ -688,6 +688,72 @@ Project [(try_multiply(try_multiply(a#x, -1), b#x) * 3) AS (try_multiply(try_mul
 
 
 -- !query
+SELECT try_add(try_add(a, 1), 2) FROM try_arithmetic_chains WHERE a = 2147483643
+-- !query analysis
+Project [try_add(try_add(a#x, 1), 2) AS try_add(try_add(a, 1), 2)#x]
++- Filter (a#x = 2147483643)
+   +- SubqueryAlias spark_catalog.default.try_arithmetic_chains
+      +- Relation spark_catalog.default.try_arithmetic_chains[a#x,b#x] parquet
+
+
+-- !query
+SELECT try_add(try_add(a, 2), 3) FROM try_arithmetic_chains WHERE a = 2147483643
+-- !query analysis
+Project [try_add(try_add(a#x, 2), 3) AS try_add(try_add(a, 2), 3)#x]
++- Filter (a#x = 2147483643)
+   +- SubqueryAlias spark_catalog.default.try_arithmetic_chains
+      +- Relation spark_catalog.default.try_arithmetic_chains[a#x,b#x] parquet
+
+
+-- !query
+SELECT try_multiply(try_multiply(a, 2), 3) FROM try_arithmetic_chains WHERE a = -10
+-- !query analysis
+Project [try_multiply(try_multiply(a#x, 2), 3) AS try_multiply(try_multiply(a, 2), 3)#x]
++- Filter (a#x = -10)
+   +- SubqueryAlias spark_catalog.default.try_arithmetic_chains
+      +- Relation spark_catalog.default.try_arithmetic_chains[a#x,b#x] parquet
+
+
+-- !query
+SELECT try_multiply(try_multiply(a, 2), 2) FROM try_arithmetic_chains WHERE a = 1073741824
+-- !query analysis
+Project [try_multiply(try_multiply(a#x, 2), 2) AS try_multiply(try_multiply(a, 2), 2)#x]
++- Filter (a#x = 1073741824)
+   +- SubqueryAlias spark_catalog.default.try_arithmetic_chains
+      +- Relation spark_catalog.default.try_arithmetic_chains[a#x,b#x] parquet
+
+
+-- !query
+SELECT try_add(try_add(a, -5), b) FROM try_arithmetic_chains WHERE a = 2147483647
+GROUP BY try_add(try_add(a, b), -5)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "MISSING_AGGREGATION",
+  "sqlState" : "42803",
+  "messageParameters" : {
+    "expression" : "\"a\"",
+    "expressionAnyValue" : "\"any_value(a)\""
+  }
+}
+
+
+-- !query
+SELECT try_multiply(try_multiply(a, -1), b) FROM try_arithmetic_chains WHERE a = 1073741824
+GROUP BY try_multiply(try_multiply(a, b), -1)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "MISSING_AGGREGATION",
+  "sqlState" : "42803",
+  "messageParameters" : {
+    "expression" : "\"a\"",
+    "expressionAnyValue" : "\"any_value(a)\""
+  }
+}
+
+
+-- !query
 DROP TABLE try_arithmetic_chains
 -- !query analysis
 DropTable false, false

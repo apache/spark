@@ -182,9 +182,12 @@ class ReorderAssociativeOperatorSuite extends PlanTest {
         val tryChains = Seq(
           tryAdd(tryAdd($"a", -5), $"b").as("try_add_chain"),
           tryAdd(tryAdd($"a", Int.MaxValue), 1).as("try_add_chain_of_literals"),
-          tryAdd(tryAdd($"a", 1), 2).as("try_add_chain_of_positive_literals"),
           tryMultiply(tryMultiply($"a", -1), $"b").as("try_multiply_chain"),
-          tryMultiply(tryMultiply($"a", 2), 3).as("try_multiply_chain_of_literals"),
+          tryAdd(tryAdd($"a", 5), -3).as("try_add_chain_of_mixed_sign_literals"),
+          tryAdd(tryAdd($"a", 1), tryAdd($"b", 2)).as("try_add_chain_of_two_operands"),
+          tryMultiply(tryMultiply($"a", -1), -1).as("try_multiply_chain_of_negative_literals"),
+          tryMultiply(tryMultiply($"a", 2), 0).as("try_multiply_chain_with_zero"),
+          tryMultiply(tryMultiply($"a", 65536), 32768).as("try_multiply_chain_overflowing_literal"),
           (tryAdd(tryAdd($"a", -5), $"b") + 1).as("try_add_chain_plus_1"),
           (tryMultiply(tryMultiply($"a", -1), $"b") * 3).as("try_multiply_chain_times_3"))
         val tryOperand = tryAdd(tryAdd($"a", Int.MaxValue), 1)
@@ -198,6 +201,33 @@ class ReorderAssociativeOperatorSuite extends PlanTest {
         // operator moves its own literal after the TRY operand.
         val correctAnswer =
           testRelation.select(tryChains :+ (tryOperand + -5).as("minus_5_plus"): _*).analyze
+        comparePlans(optimized, correctAnswer)
+      }
+    }
+  }
+
+  test("Fold TRY-mode chains whose literal folding cannot change the result") {
+    def tryAdd(left: Expression, right: Expression): Expression = Add(left, right, EvalMode.TRY)
+    def tryMultiply(left: Expression, right: Expression): Expression =
+      Multiply(left, right, EvalMode.TRY)
+
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        val originalQuery = testRelation.select(
+          tryAdd(tryAdd($"a", 1), 2).as("positive_addends"),
+          tryAdd(tryAdd($"a", -1), -2).as("negative_addends"),
+          tryAdd(Literal(1), tryAdd($"a", 0)).as("literal_first"),
+          tryMultiply(tryMultiply($"a", 2), 3).as("positive_multipliers"),
+          tryMultiply(tryMultiply(tryMultiply($"a", 1), 2), 3).as("three_multipliers")).analyze
+
+        val optimized = Optimize.execute(originalQuery)
+
+        val correctAnswer = testRelation.select(
+          tryAdd($"a", 3).as("positive_addends"),
+          tryAdd($"a", -3).as("negative_addends"),
+          tryAdd($"a", 1).as("literal_first"),
+          tryMultiply($"a", 6).as("positive_multipliers"),
+          tryMultiply($"a", 6).as("three_multipliers")).analyze
         comparePlans(optimized, correctAnswer)
       }
     }
