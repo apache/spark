@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Expre
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.convention.Convention
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
 /**
@@ -49,6 +50,7 @@ case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchan
   extends LeafExecNode {
 
   override def supportsColumnar: Boolean = child.supportsColumnar
+  override def convention: Convention = child.convention
 
   // Ignore this wrapper for canonicalizing.
   override def doCanonicalize(): SparkPlan = child.canonicalized
