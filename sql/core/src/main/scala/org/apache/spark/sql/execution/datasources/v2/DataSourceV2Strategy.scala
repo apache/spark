@@ -234,9 +234,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       // filtering plan is itself non-deterministic, so CleanupDynamicPruningFilters has already
       // rewritten it to TrueLiteral by the time we get here.
       // A group-based read keeps only the group filter, for the reason above. PartitionPruning
-      // plans a DynamicPruningSubquery on one read only, such as the read of the updated rows of
-      // an UPDATE with a subquery, so it would drop groups from the shared scan whose rows the
-      // read of the copied rows still writes.
+      // plans a DynamicPruningSubquery from the join of one read, so it is a filter of one read
+      // too. With an IN subquery it lands on the read of the updated rows of an UPDATE. With a
+      // NOT EXISTS subquery the negated condition becomes a semi join, so it lands on the read
+      // of the rows to copy over.
       val runtimeFilters = if (groupBasedRead) {
         dynamicFilters.filterNot(_.isInstanceOf[DynamicPruningSubquery])
       } else {

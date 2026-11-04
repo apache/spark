@@ -246,6 +246,27 @@ class GroupBasedUpdateTableSuite extends UpdateTableSuiteBase {
     }
   }
 
+  test("SPARK-60878: update with a NOT EXISTS subquery on the group key") {
+    withTempView("kept_dep") {
+      createAndInitTable("id INT, salary INT, dep STRING",
+        """{ "id": 1, "salary": 300, "dep": 'hr' }
+          |{ "id": 2, "salary": 150, "dep": 'software' }
+          |{ "id": 3, "salary": 120, "dep": 'hr' }
+          |""".stripMargin)
+
+      Seq("hr").toDF("d").createOrReplaceTempView("kept_dep")
+
+      sql(s"UPDATE $tableNameAsString t SET salary = -1 " +
+        "WHERE NOT EXISTS (SELECT 1 FROM kept_dep WHERE d = t.dep)")
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(1, 300, "hr") :: Row(2, -1, "software") :: Row(3, 120, "hr") :: Nil)
+
+      checkReplacedPartitions(Seq("software"))
+    }
+  }
+
   test("update with nondeterministic conditions") {
     createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }
