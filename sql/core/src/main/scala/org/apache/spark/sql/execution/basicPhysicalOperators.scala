@@ -36,10 +36,11 @@ import org.apache.spark.sql.catalyst.optimizer.{CollapseProject, InferFiltersFro
 import org.apache.spark.sql.catalyst.plans.logical.Sample
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
-import org.apache.spark.sql.types.{LongType, StructType}
+import org.apache.spark.sql.types.{LongType, NumericType, StructType}
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
@@ -173,8 +174,59 @@ trait GeneratePredicateHelper extends PredicateHelper {
    * Whether evaluating `e` on a row can be observed other than through its value: it can raise
    * an error, is nondeterministic or may have side effects, such as a UDF. Such an expression
    * has to be evaluated on the rows, and in the order, that `And.eval` evaluates it on.
+   *
+   * On top of `ExprUtils.canEvaluateUnconditionally`, a total expression over such expressions
+   * is known not to raise: the string functions of `isTotal`, a hash, the Bloom filter predicate
+   * of a runtime filter, and the arithmetic of numbers in the legacy evaluation mode, which
+   * returns NULL instead of raising. A column that an operator of the same stage computes
+   * lazily, such as a projection alias or a result of an aggregate, is judged by the expression
+   * that computes it, see `producedBy`, since a check on the column evaluates that expression.
    */
-  protected def mayRaise(e: Expression): Boolean = !ExprUtils.canEvaluateUnconditionally(e)
+  protected def mayRaise(e: Expression): Boolean = {
+    val resolved = e.transform { case a: Attribute => producedBy(a) }
+    !(ExprUtils.canEvaluateUnconditionally(resolved) || isTotal(resolved))
+  }
+
+  private def isTotal(e: Expression): Boolean = e.deterministic && isTotalInternal(e)
+
+  // The structural cases of `ExprUtils.canEvaluateUnconditionally`, plus the total functions.
+  private def isTotalInternal(e: Expression): Boolean = e match {
+    case _: AttributeReference | _: Literal => true
+    case _: And | _: Or | _: Not | _: BinaryComparison | _: IsNull | _: IsNotNull | _: IsNaN |
+         _: NullIf | _: Coalesce | _: In | _: InSet |
+         _: GetStructField | _: GetArrayStructFields | _: GetMapValue |
+         _: Upper | _: Lower | _: Length | _: StringTrim | _: StringTrimLeft |
+         _: StringTrimRight | _: Substring | _: Concat | _: XxHash64 | _: Murmur3Hash =>
+      e.children.forall(isTotalInternal)
+    // The Bloom filter is a scalar subquery already evaluated, or a literal.
+    case b: BloomFilterMightContain => isTotalInternal(b.valueExpression)
+    case b: BinaryArithmetic
+        if b.evalMode == EvalMode.LEGACY && b.dataType.isInstanceOf[NumericType] =>
+      e.children.forall(isTotalInternal)
+    case _ => false
+  }
+
+  /**
+   * The expression that computes `attr` lazily in this stage, when an operator between this one
+   * and the input of the stage does: a projection alias, or a result expression of an aggregate,
+   * whose own inputs, the aggregation buffers, are not computed lazily. The attribute itself
+   * otherwise: an input of the stage, read from a scan, a columnar batch or an exchange, or an
+   * output that its operator computes before this one runs.
+   */
+  protected def producedBy(attr: Attribute): Expression = {
+    def substitute(e: Expression, named: Seq[NamedExpression]): Expression = {
+      val aliases =
+        AttributeMap(named.collect { case a @ Alias(child, _) => a.toAttribute -> child })
+      e.transform { case a: Attribute if aliases.contains(a) => aliases(a) }
+    }
+    def resolve(plan: SparkPlan, e: Expression): Expression = plan match {
+      case p: ProjectExec => resolve(p.child, substitute(e, p.projectList))
+      case a: BaseAggregateExec => substitute(e, a.resultExpressions)
+      case f: FilterExec => resolve(f.child, e)
+      case _ => e
+    }
+    self.children.headOption.map(resolve(_, attr)).getOrElse(attr)
+  }
 
   /**
    * Returns a fresh name for the flag that records a conjunct evaluated to NULL, or None if the
@@ -238,11 +290,15 @@ trait GeneratePredicateHelper extends PredicateHelper {
    * is generated at its position when the difference is observable:
    *
    *  - Before a conjunct that `mayRaise`, the checks written in the query that cannot raise
-   *    (SPARK-60329). Such a check only drops a row before an error the conjunct raises on it,
-   *    as `And.eval` does. A check that `InferFiltersFromConstraints` inferred is implied by the
-   *    conjunct it was inferred from, so it keeps the lazy placement, which does not load its
-   *    column before that conjunct; so does a check on an expression that can raise itself,
-   *    past a conjunct that may reject the row (SPARK-56032). Both unless the flag applies.
+   *    (SPARK-60329), unless `spark.sql.legacy.filterLazyNotNullCheckPlacement` is set. Such a
+   *    check only drops a row before an error the conjunct raises on it, as `And.eval` does. A
+   *    conjunct known not to raise, such as a string function, does not move the checks, so
+   *    that their columns are not loaded before it. A check that `InferFiltersFromConstraints`
+   *    inferred is implied by the conjunct it was inferred from, so it keeps the lazy placement,
+   *    which does not load its column before that conjunct; so does a check on an expression
+   *    that can raise itself, or on a column that the stage computes lazily by such an
+   *    expression, past a conjunct that may reject the row (SPARK-56032). Both unless the flag
+   *    applies.
    *  - With the NULL-conjunct flag, a NULL conjunct no longer drops the row, so the conjuncts
    *    after it are evaluated in the order of the condition (SPARK-60315): once a conjunct that
    *    can be NULL has been generated (`afterNullable`), all the pending checks before a
@@ -271,7 +327,7 @@ trait GeneratePredicateHelper extends PredicateHelper {
     val positioned = if (afterNullable &&
         (conjunctMayRaise || pending.exists(p => mayRaise(p._1)))) {
       pending
-    } else if (conjunctMayRaise) {
+    } else if (conjunctMayRaise && !conf.legacyFilterLazyNotNullCheckPlacement) {
       pending.filter { case (p, _) =>
         !mayRaise(p) && p.getTagValue(InferFiltersFromConstraints.INFERRED).isEmpty
       }
@@ -484,8 +540,9 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     //       got synthetic coverage) emit after all otherPreds. With the NULL-conjunct
     //       flag, once an otherPred that can be NULL is emitted, the notNullPreds that
     //       precede a later otherPred in the condition are emitted before it first, when it
-    //       or one of them can raise, and the plain-column ones are before an otherPred that
-    //       can raise in any case (`precedingNotNullChecks`, SPARK-60329), and a complex
+    //       or one of them can raise; and with or without the flag, the ones written in the
+    //       query that cannot raise, inferred ones excluded, are emitted before an otherPred
+    //       that can raise (`precedingNotNullChecks`, SPARK-60329), and a complex
     //       `IsNotNull(expr)` written after the otherPred is left to the remaining
     //       notNullPreds, so it does not raise on a row the otherPred rejects, as in the
     //       non-CSE branch (SPARK-60315).

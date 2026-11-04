@@ -2264,7 +2264,9 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
    * Marks a predicate that this rule infers, as opposed to one written in the query. An inferred
    * `IsNotNull` check is implied by the conjunct it was inferred from, so the whole-stage codegen
    * of a filter keeps generating it lazily, before the first conjunct that references its column,
-   * while it generates a check written in the query at its position, see `FilterExec`.
+   * where it generates a check written in the query at its position: before an earlier conjunct
+   * that can raise an error, when the check cannot raise one itself, see
+   * `GeneratePredicateHelper.precedingNotNullChecks`.
    */
   val INFERRED = TreeNodeTag[Unit]("inferred")
 

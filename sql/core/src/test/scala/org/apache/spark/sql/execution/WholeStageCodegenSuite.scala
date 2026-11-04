@@ -2857,7 +2857,8 @@ class WholeStageCodegenSuite extends SharedSparkSession
   private def withNullConjunctTable(y: Int)(f: => Unit): Unit = {
     withTable("t") {
       sql("CREATE TABLE t USING parquet AS SELECT *, named_struct('x', x) AS st " +
-        s"FROM VALUES (NULL, 1, $y, NULL, 'x'), (0, 1, 0, 1, '1') AS v(a, b, y, x, s)")
+        s"FROM VALUES (NULL, 1, $y, NULL, 'x', NULL), (0, 1, 0, 1, '1', 'n') " +
+        "AS v(a, b, y, x, s, ns)")
       f
     }
   }
@@ -3189,17 +3190,36 @@ class WholeStageCodegenSuite extends SharedSparkSession
           checkAnswer(sql("SELECT a FROM t WHERE x IS NOT NULL AND y + 1 > 0"), Row(0))
           // The same with a common subexpression.
           checkAnswer(sql(cseQuery), Row(0))
-          // A check on an expression that cannot raise is generated at its position too, while
-          // one that can raise, `cast(s AS INT) IS NOT NULL`, keeps the lazy placement and is
-          // evaluated after the overflowing conjunct, on the second row only, where it holds.
+          // A check on an expression that cannot raise, a struct field or a total string
+          // function, is generated at its position too.
           checkAnswer(sql("SELECT a FROM t WHERE st.x IS NOT NULL AND y + 1 > 0"), Row(0))
-          checkAnswer(
-            sql("SELECT a FROM t WHERE x IS NOT NULL AND cast(s AS INT) IS NOT NULL AND " +
-              "y + 1 > 0"),
-            Row(0))
+          checkAnswer(sql("SELECT a FROM t WHERE upper(ns) IS NOT NULL AND y + 1 > 0"), Row(0))
           // A check written after the overflowing conjunct stays after it, so the query raises.
           checkArithmeticOverflow("SELECT a FROM t WHERE y + 1 > 0 AND x IS NOT NULL")
         }
+      }
+      // A check on an expression that can raise, `cast(s AS INT) IS NOT NULL`, keeps the lazy
+      // placement with codegen on, so the overflowing conjunct raises on the first row before
+      // the check does, while codegen off evaluates the check first and raises its error.
+      Seq(true, false).foreach { codegen =>
+        withSQLConf(
+            SQLConf.ANSI_ENABLED.key -> "true",
+            SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "false",
+            SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString) {
+          val raisingCheck = "SELECT a FROM t WHERE cast(s AS INT) IS NOT NULL AND y + 1 > 0"
+          if (codegen) {
+            checkArithmeticOverflow(raisingCheck)
+          } else {
+            checkCastInvalidInput(raisingCheck)
+          }
+        }
+      }
+      // The legacy config keeps the lazy placement of a check written in the query.
+      withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> "true",
+          SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "false",
+          SQLConf.LEGACY_FILTER_LAZY_NOT_NULL_CHECK_PLACEMENT.key -> "true") {
+        checkArithmeticOverflow("SELECT a FROM t WHERE x IS NOT NULL AND y + 1 > 0")
       }
       // `isnotnull(x)` inferred from `x > 0` is implied by it and keeps the lazy placement, just
       // before `x > 0`, so that `x` is not loaded before `y + 1 > 0` rejects a row: the query
@@ -3217,6 +3237,35 @@ class WholeStageCodegenSuite extends SharedSparkSession
       withNullConjunctConfs(SQLConf.ANSI_ENABLED.key -> "true") { _ =>
         checkAnswer(
           sql("SELECT count(1) FILTER (WHERE x IS NOT NULL AND y + 1 > 0) FROM t"), Row(1))
+      }
+    }
+  }
+
+  test("SPARK-60329: a check on a column computed lazily by the stage keeps the lazy placement " +
+      "when the computation can raise") {
+    // A check on such a column evaluates the computation, so it is judged by it: `r` is
+    // `sum(a) / sum(b)`, which raises DIVIDE_BY_ZERO on the first group with codegen on if the
+    // check is generated before `max(y) + 1 > 0`, which is FALSE and drops the group. With
+    // codegen off the aggregate computes `r` eagerly and the query raises.
+    Seq(true, false).foreach { legacy =>
+      withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> "true",
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+          SQLConf.LEGACY_FILTER_SHORT_CIRCUIT_ON_NULL_CONJUNCT.key -> legacy.toString) {
+        checkAnswer(
+          sql("SELECT k FROM VALUES (1, 1, 0, -5), (2, 1, 1, 0) AS v(k, a, b, y) GROUP BY k " +
+            "HAVING sum(a) / sum(b) IS NOT NULL AND max(y) + 1 > 0"),
+          Row(2))
+        // A projection alias kept above its projection: the filter is not pushed through the
+        // nondeterministic projection, and the check on `c` evaluates `cast(s AS INT)`, which
+        // can raise, so it keeps the lazy placement and the overflowing conjunct raises first.
+        withNullConjunctTable(Int.MaxValue) {
+          withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "false") {
+            checkArithmeticOverflow(
+              "SELECT a FROM (SELECT a, cast(s AS INT) AS c, y, rand() AS r FROM t) " +
+                "WHERE c IS NOT NULL AND y + 1 > 0")
+          }
+        }
       }
     }
   }

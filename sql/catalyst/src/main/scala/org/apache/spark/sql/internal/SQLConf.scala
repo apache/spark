@@ -1808,6 +1808,21 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_FILTER_LAZY_NOT_NULL_CHECK_PLACEMENT =
+    buildConf("spark.sql.legacy.filterLazyNotNullCheckPlacement")
+      .internal()
+      .doc("When true, whole stage codegen of a filter condition, including the FILTER clause " +
+        "of an aggregate function, evaluates an IS NOT NULL check just before the first " +
+        "top-level conjunct that references its column, or after all conjuncts, even when a " +
+        "conjunct before that position can raise an error, so the error is raised on a row " +
+        "that the check rejects. When false, a check written in the query that cannot raise " +
+        "an error is evaluated at its position before such a conjunct, as the interpreted " +
+        "evaluation does, so the row is dropped before the error.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val CASE_SENSITIVE = buildConf(SqlApiConfHelper.CASE_SENSITIVE_KEY)
     .internal()
     .doc("Whether the query analyzer should be case sensitive or not. " +
@@ -9856,6 +9871,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyFilterShortCircuitOnNullConjunct: Boolean =
     getConf(LEGACY_FILTER_SHORT_CIRCUIT_ON_NULL_CONJUNCT)
+
+  def legacyFilterLazyNotNullCheckPlacement: Boolean =
+    getConf(LEGACY_FILTER_LAZY_NOT_NULL_CHECK_PLACEMENT)
 
   def autoBroadcastJoinThreshold: Long = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 
