@@ -80,6 +80,13 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession {
     checkAnswer(pruned, (0L until 4L).map(id => Row(s"name$id")))
     assert(scan(pruned).readSchema() == StructType.fromDDL("name STRING"))
 
+    // A planner that does not prune the columns reads all of them, and the scan drops the others
+    // from its batches.
+    val notPruned = spark.read.format(format).option("end", "4").option("pruneColumns", "false")
+      .load().select("name")
+    checkAnswer(notPruned, (0L until 4L).map(id => Row(s"name$id")))
+    assert(scan(notPruned).readSchema() == StructType.fromDDL("name STRING"))
+
     val limited = spark.read.format(format).option("end", "10").load().limit(2)
     assert(limited.collect().length == 2)
     assert(scan(limited).getMetaData()("PushedLimit") == "LIMIT 2")
@@ -211,7 +218,9 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession {
     val failingBuilder = new ColumnarScanBuilder(format, failing.schema(), () => failing)
     failingBuilder.pruneColumns(StructType.fromDDL("id BIGINT"))
     val failingScan = failingBuilder.build()
-    val failure = intercept[IllegalStateException](failingScan.readSchema())
+    // The read schema does not need the planner.
+    assert(failingScan.readSchema() == StructType.fromDDL("id BIGINT"))
+    val failure = intercept[IllegalStateException](failingScan.toBatch)
     assert(failure.getMessage == "injected pruning failure")
     assert(intercept[IllegalStateException](failingScan.toBatch) eq failure)
     assert(failing.prunes.get() == 1)
@@ -281,6 +290,9 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession {
     val builder = new ColumnarScanBuilder(format, dataSource.schema(), () => dataSource)
     builder.pruneColumns(StructType.fromDDL("name STRING"))
     val scan = builder.build()
+    // Spark may ask for the read schema of the scan before it creates the stream.
+    assert(scan.readSchema() == StructType.fromDDL("name STRING"))
+    assert(scan.asInstanceOf[ColumnarScan].getMetaData()("ReadSchema") == "struct<name:string>")
     val stream = scan.toMicroBatchStream(Utils.createTempDir().getPath)
     assert(scan.readSchema() == StructType.fromDDL("name STRING"))
     // The stream reader gets the pruned schema, and its batches only have these columns.
@@ -429,7 +441,7 @@ class TestRangeDataSource(options: CaseInsensitiveStringMap) extends ColumnarDat
   override def batchPlanner(schema: StructType): ColumnarBatchPlanner = {
     batchPlanners.incrementAndGet()
     new TestRangePlanner(end, schema, options.getBoolean("failPlanning", false), plans, prunes,
-      options.getBoolean("failPruning", false))
+      options.getBoolean("failPruning", false), options.getBoolean("pruneColumns", true))
   }
 
   override def streamReader(
@@ -462,7 +474,8 @@ class TestRangePlanner(
     fail: Boolean,
     plans: AtomicInteger,
     prunes: AtomicInteger,
-    failPruning: Boolean)
+    failPruning: Boolean,
+    prunesColumns: Boolean)
   extends ColumnarBatchPlanner {
   private var limit = Long.MaxValue
   private var readSchema = schema
@@ -477,8 +490,10 @@ class TestRangePlanner(
     if (failPruning) {
       throw new IllegalStateException("injected pruning failure")
     }
-    readSchema = requiredSchema
-    true
+    if (prunesColumns) {
+      readSchema = requiredSchema
+    }
+    prunesColumns
   }
 
   override def plan(): ColumnarPlannedBatch = {
