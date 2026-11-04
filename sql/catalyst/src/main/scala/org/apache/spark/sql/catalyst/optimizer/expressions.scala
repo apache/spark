@@ -279,19 +279,26 @@ object ConstantPropagation extends Rule[LogicalPlan] {
  * Reorder associative integral-type operators and fold all constants into one.
  */
 object ReorderAssociativeOperator extends Rule[LogicalPlan] {
+  // Flatten only operators evaluated in the same mode as the root: rebuilding a TRY-mode Add or
+  // Multiply (try_add, try_multiply) in the enclosing mode would change its overflow behavior.
+  // TRY arithmetic is not regrouped in general either, because each TRY step returns NULL only
+  // when its own operation overflows, so regrouping or folding its literals can change which step
+  // overflows. See foldTryChain for the one shape where folding is exact.
   private def flattenAdd(
     expression: Expression,
-    groupSet: ExpressionSet): Seq[Expression] = expression match {
-    case expr @ Add(l, r, _) if !groupSet.contains(expr) =>
-      flattenAdd(l, groupSet) ++ flattenAdd(r, groupSet)
+    groupSet: ExpressionSet,
+    evalMode: EvalMode.Value): Seq[Expression] = expression match {
+    case expr @ Add(l, r, c) if c.evalMode == evalMode && !groupSet.contains(expr) =>
+      flattenAdd(l, groupSet, evalMode) ++ flattenAdd(r, groupSet, evalMode)
     case other => other :: Nil
   }
 
   private def flattenMultiply(
     expression: Expression,
-    groupSet: ExpressionSet): Seq[Expression] = expression match {
-    case expr @ Multiply(l, r, _) if !groupSet.contains(expr) =>
-      flattenMultiply(l, groupSet) ++ flattenMultiply(r, groupSet)
+    groupSet: ExpressionSet,
+    evalMode: EvalMode.Value): Seq[Expression] = expression match {
+    case expr @ Multiply(l, r, c) if c.evalMode == evalMode && !groupSet.contains(expr) =>
+      flattenMultiply(l, groupSet, evalMode) ++ flattenMultiply(r, groupSet, evalMode)
     case other => other :: Nil
   }
 
@@ -306,17 +313,62 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
     case _ => false
   }
 
+  /**
+   * Folds the literals of a flattened TRY chain into one TRY operation only when that cannot change
+   * the result: the chain has exactly one non-literal operand, `literalsMoveAwayFromZero` holds for
+   * its literals, and the folded literal fits the result type. The partial results then move
+   * monotonically from the operand to the final value, so a written step overflows exactly when the
+   * folded one does.
+   */
+  private def foldTryChain(
+      operands: Seq[Expression],
+      dataType: DataType,
+      literalsMoveAwayFromZero: Seq[BigInt] => Boolean,
+      combine: (BigInt, BigInt) => BigInt,
+      build: (Expression, Expression) => Expression): Option[Expression] = {
+    val (literals, others) = operands.partition(_.isInstanceOf[Literal])
+    val values = literals.map(_.asInstanceOf[Literal].value)
+    if (others.length != 1 || literals.length < 2 || values.contains(null)) return None
+    val integers = values.map(v => BigInt(v.asInstanceOf[Number].longValue))
+    if (!literalsMoveAwayFromZero(integers)) return None
+    val folded = integers.reduce(combine)
+    val foldedLiteral = dataType match {
+      case ByteType if folded.isValidByte => Some(Literal(folded.toByte))
+      case ShortType if folded.isValidShort => Some(Literal(folded.toShort))
+      case IntegerType if folded.isValidInt => Some(Literal(folded.toInt))
+      case LongType if folded.isValidLong => Some(Literal(folded.toLong))
+      case _ => None
+    }
+    foldedLiteral.map(build(others.head, _))
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(BINARY_ARITHMETIC), ruleId) {
     case q: LogicalPlan =>
       // We have to respect aggregate expressions which exists in grouping expressions when plan
       // is an Aggregate operator, otherwise the optimized expression could not be derived from
       // grouping expressions.
-      // TODO: do not reorder consecutive `Add`s or `Multiply`s with different `failOnError` flags
       val groupingExpressionSet = collectGroupingExpressions(q)
       q.transformExpressionsDownWithPruning(_.containsPattern(BINARY_ARITHMETIC)) {
-      case a @ Add(_, _, f) if a.deterministic && a.dataType.isInstanceOf[IntegralType] =>
-        val (literals, others) = flattenAdd(a, groupingExpressionSet)
+      case a @ Add(_, _, f) if f.evalMode == EvalMode.TRY && a.deterministic &&
+          a.dataType.isInstanceOf[IntegralType] =>
+        foldTryChain(
+          flattenAdd(a, groupingExpressionSet, f.evalMode),
+          a.dataType,
+          literals => literals.forall(_ >= 0) || literals.forall(_ <= 0),
+          _ + _,
+          (x, y) => Add(x, y, f)).getOrElse(a)
+      case m @ Multiply(_, _, f) if f.evalMode == EvalMode.TRY && m.deterministic &&
+          m.dataType.isInstanceOf[IntegralType] =>
+        foldTryChain(
+          flattenMultiply(m, groupingExpressionSet, f.evalMode),
+          m.dataType,
+          _.forall(_ >= 1),
+          _ * _,
+          (x, y) => Multiply(x, y, f)).getOrElse(m)
+      case a @ Add(_, _, f) if f.evalMode != EvalMode.TRY && a.deterministic &&
+          a.dataType.isInstanceOf[IntegralType] =>
+        val (literals, others) = flattenAdd(a, groupingExpressionSet, f.evalMode)
           .partition(_.isInstanceOf[Literal])
         if (literals.nonEmpty) {
           val literalExpr = literals.reduce((x, y) => Add(x, y, f))
@@ -330,8 +382,9 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
         } else {
           a
         }
-      case m @ Multiply(_, _, f) if m.deterministic && m.dataType.isInstanceOf[IntegralType] =>
-        val (literals, others) = flattenMultiply(m, groupingExpressionSet)
+      case m @ Multiply(_, _, f) if f.evalMode != EvalMode.TRY && m.deterministic &&
+          m.dataType.isInstanceOf[IntegralType] =>
+        val (literals, others) = flattenMultiply(m, groupingExpressionSet, f.evalMode)
           .partition(_.isInstanceOf[Literal])
         if (literals.nonEmpty) {
           val literalExpr = literals.reduce((x, y) => Multiply(x, y, f))

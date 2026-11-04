@@ -111,3 +111,26 @@ SELECT try_multiply(interval 2 year, 0);
 SELECT try_multiply(interval 2 second, 0);
 SELECT try_multiply(interval 2147483647 month, 2);
 SELECT try_multiply(interval 106751991 day, 2);
+
+-- try_add and try_multiply chains over non-foldable inputs keep their written grouping, both at
+-- the top level and nested in regular arithmetic.
+CREATE TABLE try_arithmetic_chains(a INT, b INT) USING parquet;
+INSERT INTO try_arithmetic_chains VALUES (2147483647, 1), (-10, 0), (2147483643, 0), (1073741824, 2);
+SELECT try_add(try_add(a, -5), b) FROM try_arithmetic_chains WHERE a = 2147483647;
+SELECT try_add(try_add(a, -5), b) + 1 FROM try_arithmetic_chains WHERE a = 2147483647;
+SELECT try_add(try_add(a, 2147483647), 1) FROM try_arithmetic_chains WHERE a = -10;
+SELECT -5 + try_add(try_add(a, 2147483647), 1) FROM try_arithmetic_chains WHERE a = -10;
+SELECT try_add(try_add(a, 5), -3) FROM try_arithmetic_chains WHERE a = 2147483643;
+SELECT try_multiply(try_multiply(a, -1), b) FROM try_arithmetic_chains WHERE a = 1073741824;
+SELECT try_multiply(try_multiply(a, -1), b) * 3 FROM try_arithmetic_chains WHERE a = 1073741824;
+-- Chains with one column operand and literals that move away from zero fold exactly.
+SELECT try_add(try_add(a, 1), 2) FROM try_arithmetic_chains WHERE a = 2147483643;
+SELECT try_add(try_add(a, 2), 3) FROM try_arithmetic_chains WHERE a = 2147483643;
+SELECT try_multiply(try_multiply(a, 2), 3) FROM try_arithmetic_chains WHERE a = -10;
+SELECT try_multiply(try_multiply(a, 2), 2) FROM try_arithmetic_chains WHERE a = 1073741824;
+-- A differently grouped TRY chain is not the grouping expression.
+SELECT try_add(try_add(a, -5), b) FROM try_arithmetic_chains WHERE a = 2147483647
+GROUP BY try_add(try_add(a, b), -5);
+SELECT try_multiply(try_multiply(a, -1), b) FROM try_arithmetic_chains WHERE a = 1073741824
+GROUP BY try_multiply(try_multiply(a, b), -1);
+DROP TABLE try_arithmetic_chains;

@@ -480,6 +480,43 @@ class CanonicalizeSuite extends SparkFunSuite {
     }
   }
 
+  test("TRY-mode Add and Multiply chains keep their nesting in canonicalization") {
+    val a = $"a".int
+    val b = $"b".int
+    def tryAdd(l: Expression, r: Expression): Expression = Add(l, r, EvalMode.TRY)
+    def tryMultiply(l: Expression, r: Expression): Expression = Multiply(l, r, EvalMode.TRY)
+
+    val default = SQLConf.get.getConf(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD)
+    Seq(2, 100).foreach { threshold =>
+      SQLConf.get.setConfString(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD.key, threshold.toString)
+      try {
+        // Regrouping changes which TRY step can overflow, so these are not equivalent.
+        assert(!tryAdd(tryAdd(a, -5), b).semanticEquals(tryAdd(tryAdd(a, b), -5)))
+        assert(!tryMultiply(tryMultiply(a, -1), b).semanticEquals(
+          tryMultiply(tryMultiply(a, b), -1)))
+        assert(!new TryAdd(new TryAdd(a, -5), b).semanticEquals(new TryAdd(new TryAdd(a, b), -5)))
+        assert(!new TryMultiply(new TryMultiply(a, -1), b).semanticEquals(
+          new TryMultiply(new TryMultiply(a, b), -1)))
+
+        // Swapping the operands of each step is still allowed.
+        assert(tryAdd(a, b).semanticEquals(tryAdd(b, a)))
+        assert(tryAdd(tryAdd(a, -5), b).semanticEquals(tryAdd(b, tryAdd(-5, a))))
+        assert(tryMultiply(tryMultiply(a, -1), b).semanticEquals(
+          tryMultiply(b, tryMultiply(-1, a))))
+        assert(new TryAdd(a, b).semanticEquals(new TryAdd(b, a)))
+
+        // ANSI and LEGACY chains are still treated as associative.
+        Seq(EvalMode.ANSI, EvalMode.LEGACY).foreach { mode =>
+          assert(Add(Add(a, -5, mode), b, mode).semanticEquals(Add(Add(a, b, mode), -5, mode)))
+          assert(Multiply(Multiply(a, -1, mode), b, mode).semanticEquals(
+            Multiply(Multiply(a, b, mode), -1, mode)))
+        }
+      } finally {
+        SQLConf.get.setConfString(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD.key, default.toString)
+      }
+    }
+  }
+
   test("unit test for gatherCommutative()") {
     val addExpression = Add(
       Literal(1),

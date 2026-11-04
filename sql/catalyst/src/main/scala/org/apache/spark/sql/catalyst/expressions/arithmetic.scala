@@ -481,7 +481,10 @@ case class Add(
 
   override lazy val canonicalized: Expression = {
     val reorderResult = buildCanonicalizedPlan(
-      { case Add(l, r, em) if em == evalContext => Seq(l, r) },
+      // TRY arithmetic is commutative but not associative: each step returns NULL only when its
+      // own operation overflows. Keep the written nesting and order only the direct operands.
+      { case a @ Add(l, r, em) if em == evalContext && (evalMode != EvalMode.TRY || (a eq this)) =>
+        Seq(l, r) },
       { case (l: Expression, r: Expression) => Add(l, r, evalContext)},
       Some(evalContext)
     )
@@ -662,7 +665,9 @@ case class Multiply(
 
   override lazy val canonicalized: Expression = {
     buildCanonicalizedPlan(
-      { case Multiply(l, r, ec) if ec == evalContext => Seq(l, r) },
+      // See Add.canonicalized for why TRY chains keep their written nesting.
+      { case m @ Multiply(l, r, ec)
+          if ec == evalContext && (evalMode != EvalMode.TRY || (m eq this)) => Seq(l, r) },
       { case (l: Expression, r: Expression) => Multiply(l, r, evalContext) },
       Some(evalContext)
     )
