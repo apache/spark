@@ -53,6 +53,58 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 class AnalysisSuite extends AnalysisTest with Matchers {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
 
+  test("resolve a table specification without changing option evaluation or other fields") {
+    val specification = UnresolvedTableSpec(
+      properties = Map("property" -> "value"),
+      provider = Some("parquet"),
+      optionExpression = OptionList(Seq(
+        "answer" -> Literal(1),
+        "answer" -> Add(Literal(40), Literal(2)),
+        "nullable" -> Literal(null))),
+      location = Some("/table"),
+      comment = Some("table comment"),
+      collation = Some("UTF8_BINARY"),
+      serde = None,
+      external = true,
+      constraints = Nil)
+
+    val expected = TableSpec(
+      properties = specification.properties,
+      provider = specification.provider,
+      options = Map("answer" -> "42", "nullable" -> null),
+      location = specification.location,
+      comment = specification.comment,
+      collation = specification.collation,
+      serde = specification.serde,
+      external = specification.external,
+      constraints = Nil)
+    assert(ResolveTableSpec.resolveTableSpec(specification) == expected)
+    assert(ResolveTableSpec.resolveTableSpec(expected) eq expected)
+    val unresolved = specification.copy(
+      optionExpression = OptionList(Seq("answer" -> UnresolvedAttribute("missing"))))
+    assert(ResolveTableSpec.resolveTableSpec(unresolved) eq unresolved)
+  }
+
+  test("table specification rejects a root subquery option before evaluating it") {
+    val specification = UnresolvedTableSpec(
+      properties = Map.empty,
+      provider = Some("parquet"),
+      optionExpression = OptionList(Seq("answer" -> ScalarSubquery(OneRowRelation()))),
+      location = None,
+      comment = None,
+      collation = None,
+      serde = None,
+      external = false,
+      constraints = Nil)
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        ResolveTableSpec.resolveTableSpec(specification)
+      },
+      condition = "INVALID_SQL_SYNTAX.OPTION_IS_INVALID",
+      parameters = Map("key" -> "answer", "supported" -> "constant expressions"))
+  }
+
   test("fail for unresolved plan") {
     intercept[AnalysisException] {
       // `testRelation` does not have column `b`.
