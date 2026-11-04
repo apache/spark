@@ -114,9 +114,11 @@ case class GroupPartitionsExec(
    * `plannedPartitioning` rebuilds its keyed members on top of the grouping. A rule that hands this
    * node a child reporting something else invalidates both, so the keyed claim is dropped and only
    * the physical output count is reported. `ValidateRequirements` then finds the parent's
-   * distribution unsatisfied and `AdaptiveSparkPlanExec` reverts the rewrite, which is what an
-   * `AQEShuffleReadExec` landing over a keyed shuffle stage relies on. Only an `AQEShuffleReadRule`
-   * is validated that way, so `checkChildStillMatches` covers the rest at execution.
+   * distribution unsatisfied and `AdaptiveSparkPlanExec` reverts the rewrite. A coalesced
+   * `AQEShuffleReadExec` over a keyed stage also reports `UnknownPartitioning` itself, so
+   * validation can reject it even without this node. Only an `AQEShuffleReadRule` is validated
+   * that way, so a retained node also checks its child at execution with `checkChildStillMatches`.
+   * A side whose identity node was skipped has no such execution-time check.
    *
    * Re-deriving instead would apply a recipe chosen for one pairing to a different child, yielding
    * a claim nothing validated against the other side. It would also buy nothing today: no rule is

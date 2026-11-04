@@ -43,7 +43,7 @@ import org.apache.spark.unsafe.Platform;
  * {@code org/apache/spark/sql/datasource/spark_datasource.h}, called through the Foreign Function
  * and Memory (FFM) API of Java 22 and later.
  * <p>
- * Spark compiles for Java 17, where the FFM API does not exist, so the API is only reached
+ * Spark compiles for Java 21, where the FFM API is still in preview, so the API is only reached
  * through method handles, looked up once when the first library is loaded. The library exports
  * {@code spark_ds_init}, which returns its table of functions, {@code SparkDsLibrary}. Each
  * function of the table is bound to a method handle that takes and returns primitive values only,
