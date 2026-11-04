@@ -2178,7 +2178,10 @@ class Analyzer(
       case f @ Filter(cond, child) if !cond.resolved || f.missingInput.nonEmpty =>
         val resolvedBasic = resolveExpressionByPlanChildren(cond, f)
         val resolvedWithAgg = resolveColWithAgg(resolvedBasic, child)
-        val (newCond, newChild) = resolveExprsAndAddMissingAttrs(Seq(resolvedWithAgg), child)
+        val (newCond, newChild) = resolveExprsAndAddMissingAttrs(
+          Seq(resolvedWithAgg), child,
+          preserveHavingScope = f.getTagValue(
+            ColumnResolutionHelper.HAVING_GROUPING_SCOPE_TAG).contains(true))
         // Missing columns should be resolved right after basic column resolution.
         // See the doc of `ResolveReferences`.
         val resolvedFinal = resolveColsLastResort(newCond.head)
@@ -2187,6 +2190,7 @@ class Analyzer(
         } else {
           // Add missing attributes and then project them away.
           val newFilter = Filter(resolvedFinal, newChild)
+          newFilter.copyTagsFrom(f)
           Project(child.output, newFilter)
         }
 
@@ -3202,7 +3206,7 @@ class Analyzer(
         // resolved by ResolveAggregateFunctions or ResolveGroupingAnalytics, because rewriting SQL
         // functions in aggregate can add an additional project on top of the aggregate
         // which breaks the pattern matching in those rules.
-        f.copy(child = a.copy(child = rewrite(a.child)))
+        f.withNewChildren(Seq(a.copy(child = rewrite(a.child))))
 
       case h @ UnresolvedHaving(_, a: Aggregate) =>
         // Similarly UnresolvedHaving should be resolved by ResolveAggregateFunctions first
@@ -3475,9 +3479,11 @@ class Analyzer(
           }
         })
 
-      case Filter(cond, agg: Aggregate) if agg.resolved && cond.resolved =>
+      case filter @ Filter(cond, agg: Aggregate) if agg.resolved && cond.resolved =>
         resolveOperatorWithAggregate(Seq(cond), agg, (newExprs, newChild) => {
-          Filter(newExprs.head, newChild)
+          val newFilter = Filter(newExprs.head, newChild)
+          newFilter.copyTagsFrom(filter)
+          newFilter
         })
 
       case s @ Sort(_, _, agg: Aggregate, _) if agg.resolved && s.order.forall(_.resolved) =>
@@ -5063,7 +5069,14 @@ object UpdateOuterReferences extends Rule[LogicalPlan] {
             // Collect the aliases from output of aggregate.
             val outerAliases = a.aggregateExpressions collect { case a: Alias => a }
             // Update the subquery plan to record the OuterReference to point to outer query plan.
-            s.withNewPlan(updateOuterReferenceInSubquery(s.plan, outerAliases))
+            val newPlan = updateOuterReferenceInSubquery(s.plan, outerAliases)
+            val newSubquery = s.withNewPlan(newPlan)
+            if (f.getTagValue(ColumnResolutionHelper.HAVING_GROUPING_SCOPE_TAG).contains(true)) {
+              // Computed grouping keys replace individual inputs with one output dependency.
+              newSubquery.withNewOuterAttrs(SubExprUtils.getOuterReferences(newPlan))
+            } else {
+              newSubquery
+            }
       }
     }
   }

@@ -127,3 +127,86 @@ SELECT col2 FROM hav_outer GROUP BY col2 HAVING (SELECT max(col1)) > 1;
 SELECT col2 FROM hav_outer GROUP BY col2 HAVING (SELECT col1);
 
 DROP VIEW hav_outer;
+
+-- HAVING keeps grouping scope below a window; aggregate aliases keep their types.
+SET spark.sql.analyzer.havingWithWindowResolvesGroupingColumnFirst.enabled=true;
+SELECT k + 10 AS k, avg(score) AS score, count(*) OVER () AS n
+FROM VALUES (1, 2), (1, 3), (2, 2), (2, 3) AS t(k, score)
+GROUP BY k HAVING k >= 2 AND score >= 2.5 ORDER BY 1;
+
+-- Ambiguous grouping names fall back to aliases; computed grouping inputs retain scope.
+SELECT sum(1) AS k, (g + 1) + 10 AS g, count(*) OVER () AS n
+FROM VALUES (1, 1), (1, 2) AS t1(k, g) CROSS JOIN VALUES (2) AS t2(k)
+GROUP BY t1.k, t2.k, g + 1 HAVING k >= 1 AND g + 1 >= 3 ORDER BY g;
+
+-- Nested identity calls delay expansion so the lambda capture resolves after window extraction.
+CREATE TEMPORARY FUNCTION having_id(v INT) RETURNS INT RETURN v;
+SELECT sum(k) AS k, sum(1) AS a, count(*) OVER () AS n
+FROM (
+  SELECT having_id(having_id(having_id(k))) AS k FROM VALUES (1), (1), (2) AS t(k)
+) AS s
+GROUP BY k HAVING exists(array(a), x -> k >= 2) ORDER BY a, k;
+DROP TEMPORARY FUNCTION having_id;
+
+-- Correlated references resolve in HAVING grouping scope.
+SELECT sum(k) AS k, count(*) OVER () AS n
+FROM VALUES (1), (1), (2) AS t(k)
+GROUP BY k HAVING (SELECT k) >= 2 ORDER BY k;
+
+-- Keep complete computed keys as correlated dependencies, rather than bare input columns.
+SELECT (g + 1) + 10 AS g, count(*) OVER () AS n
+FROM VALUES (1), (2) AS t(g)
+GROUP BY g + 1 HAVING (SELECT g + 1) >= 3 ORDER BY 1;
+
+-- A nested grouping field takes precedence over a nested SELECT-alias field.
+SELECT named_struct('x', s.x + 10) AS s, count(*) OVER () AS n
+FROM VALUES (named_struct('x', 1)), (named_struct('x', 2)) AS t(s)
+GROUP BY s.x HAVING s.x >= 2 ORDER BY s.x;
+
+-- A raw input of a computed grouping expression must not mask an aggregate alias.
+SELECT sum(v) AS k, count(*) OVER () AS n
+FROM VALUES (1, 10), (2, 20) AS t(k, v)
+GROUP BY k + 1 HAVING k >= 15 ORDER BY 1;
+
+-- Ungrouped inputs still participate in detecting ambiguous names before alias fallback.
+SELECT sum(1) AS k, sum(1) AS a, count(*) OVER () AS n
+FROM VALUES (1), (2) AS t1(k) CROSS JOIN VALUES (9) AS t2(k)
+GROUP BY t1.k HAVING exists(array(a), x -> k >= 2) ORDER BY 1;
+
+-- Aggregate arguments still refer to inputs, even when the grouping key has an output alias.
+SELECT k AS a, count(*) OVER () AS n
+FROM VALUES (1), (2) AS t(k)
+GROUP BY k HAVING sum(k) >= 2 ORDER BY a;
+
+-- Outer aggregate arguments retain their input even when a SELECT alias comes first.
+SELECT k AS a, k, count(*) OVER () AS n
+FROM VALUES (1), (2) AS t(k)
+GROUP BY k HAVING EXISTS (
+  SELECT 1 FROM VALUES (0) AS u(v) WHERE sum(k) >= 2
+) ORDER BY a;
+
+-- A complete computed key inside an outer aggregate must retain its input expression.
+SELECT k, count(*) OVER () AS n
+FROM VALUES (1), (2) AS t(k)
+GROUP BY k, k + 1 HAVING EXISTS (
+  SELECT 1 FROM VALUES (0) AS u(v) WHERE sum(k + 1) >= 3
+) ORDER BY k;
+
+-- A helper for one grouping input must not hide ambiguity when there is no SELECT alias.
+SELECT sum(1) AS a, count(*) OVER () AS n
+FROM VALUES (1), (2) AS t1(k) CROSS JOIN VALUES (9) AS t2(k)
+GROUP BY t1.k HAVING k >= 2 ORDER BY a;
+
+-- A qualified reference must not make a later ambiguous unqualified reference valid.
+SELECT sum(1) AS a, count(*) OVER () AS n
+FROM VALUES (1), (2) AS t1(k) CROSS JOIN VALUES (9) AS t2(k)
+GROUP BY t1.k HAVING t1.k >= 1 AND k >= 2 ORDER BY a;
+
+-- Disabling the fix preserves the legacy SELECT-alias precedence and window count.
+SET spark.sql.analyzer.singlePassResolver.dualRunWithLegacy=false;
+SET spark.sql.analyzer.havingWithWindowResolvesGroupingColumnFirst.enabled=false;
+SELECT k + 10 AS k, count(*) OVER () AS n
+FROM VALUES (1), (2), (3) AS t(k)
+GROUP BY k HAVING k >= 2 ORDER BY 1;
+RESET spark.sql.analyzer.havingWithWindowResolvesGroupingColumnFirst.enabled;
+RESET spark.sql.analyzer.singlePassResolver.dualRunWithLegacy;

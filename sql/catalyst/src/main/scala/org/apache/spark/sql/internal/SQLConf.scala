@@ -465,6 +465,16 @@ object SQLConf {
     .intConf
     .createWithDefault(100)
 
+  val HAVING_WITH_WINDOW_RESOLVES_GROUPING_COLUMN_FIRST =
+    buildConf("spark.sql.analyzer.havingWithWindowResolvesGroupingColumnFirst.enabled")
+      .internal()
+      .doc("When true, preserve HAVING name-resolution scope during window extraction so that " +
+        "grouping columns take precedence over SELECT aliases. When false, retain the legacy " +
+        "SELECT-alias precedence after window extraction.")
+      .version("4.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val ANALYZER_SINGLE_PASS_RESOLVER_ENABLED =
     buildConf("spark.sql.analyzer.singlePassResolver.enabled")
       .internal()
