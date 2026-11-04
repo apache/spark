@@ -133,10 +133,10 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     val expected = Seq(Row(1, 1, "engineering"), Row(1, 1, "research"))
 
     assert(lookup.queryExecution.analyzed.isInstanceOf[DataSourceV2Relation])
-    assert(!lookup.queryExecution.analyzed.isInstanceOf[ExternalLookupRelation])
+    assert(lookup.queryExecution.analyzed.isInstanceOf[ExternalLookupRelation] === false)
     SimpleExternalLookupDataSource.resetCounters()
     val ordinary = left.join(lookup, left("id") === lookup("id"), "inner")
-    assert(!runStream(ordinary).plan.exists(_.isInstanceOf[PreparedExternalLookupJoin]))
+    assert(runStream(ordinary).plan.exists(_.isInstanceOf[PreparedExternalLookupJoin]) === false)
     checkStream(ordinary, expected)
     assert(SimpleExternalLookupDataSource.readerCount.get() === 0)
 
@@ -221,7 +221,7 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     // Without the lookup hint, the strategy hint plans the ordinary join it asks for.
     SimpleExternalLookupDataSource.resetCounters()
     val ordinary = left.join(dual.hint("merge"), left("id") === dual("id"))
-    assert(!runStream(ordinary).plan.exists(_.isInstanceOf[PreparedExternalLookupJoin]))
+    assert(runStream(ordinary).plan.exists(_.isInstanceOf[PreparedExternalLookupJoin]) === false)
     checkStream(ordinary, Seq(Row(1, 1, "engineering"), Row(1, 1, "research")))
     assert(SimpleExternalLookupDataSource.requestCount.get() === 0)
   }
@@ -1088,7 +1088,8 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       }
     }
     val dataFrameJoin = left.join(dual, left("id") === dual("id")).hint("external_lookup")
-    assert(!runStream(dataFrameJoin).plan.exists(_.isInstanceOf[PreparedExternalLookupJoin]))
+    assert(
+      runStream(dataFrameJoin).plan.exists(_.isInstanceOf[PreparedExternalLookupJoin]) === false)
   }
 
   test("external lookup join handles null, missing, duplicate, and partial batches") {
