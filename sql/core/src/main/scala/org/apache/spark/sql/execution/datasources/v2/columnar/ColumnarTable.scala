@@ -397,9 +397,16 @@ private class ColumnarProjectionReader(
     ordinals: Array[Int])
   extends PartitionReader[ColumnarBatch] {
 
-  override def next(): Boolean = reader.next()
+  // The projection of the current batch of the reader, which `get` returns until `next`.
+  private var batch: ColumnarBatch = _
 
-  override def get(): ColumnarBatch = new ProjectedColumnarBatch(reader.get(), ordinals)
+  override def next(): Boolean = {
+    val hasNext = reader.next()
+    batch = if (hasNext) new ProjectedColumnarBatch(reader.get(), ordinals) else null
+    hasNext
+  }
+
+  override def get(): ColumnarBatch = batch
 
   override def close(): Unit = reader.close()
 
