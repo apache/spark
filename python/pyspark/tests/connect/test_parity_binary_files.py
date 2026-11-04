@@ -16,8 +16,8 @@
 # limitations under the License.
 #
 
-from pyspark.tests.test_readwrite import BinaryFilesTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.tests.test_readwrite import BinaryFilesTestsMixin
 
 
 class BinaryFilesParityTests(

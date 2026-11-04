@@ -15,8 +15,8 @@
 # limitations under the License.
 #
 
-from pyspark.tests.test_statcounter import StatCounterTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.tests.test_statcounter import StatCounterTestsMixin
 
 
 class StatCounterParityTests(StatCounterTestsMixin, ReusedConnectTestCase):

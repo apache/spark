@@ -15,8 +15,8 @@
 # limitations under the License.
 #
 
-from pyspark.tests.test_shuffle import ShuffleRDDSortTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.tests.test_shuffle import ShuffleRDDSortTestsMixin
 
 
 class ShuffleRDDSortParityTests(ShuffleRDDSortTestsMixin, ReusedConnectTestCase):

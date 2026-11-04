@@ -186,11 +186,10 @@ class SparkConnectErrorTests(ReusedConnectTestCase):
         )
 
     @unittest.skipIf(is_remote_only(), "Disabled for remote only")
-    def test_unsupported_functions(self):
-        # SPARK-41225: Disable unsupported functions.
+    def test_rdd(self):
+        # SPARK-41225 disabled DataFrame.rdd, which Spark Connect now supports.
         df = self.spark.range(10)
-        with self.assertRaises(NotImplementedError):
-            df.rdd
+        self.assertEqual(df.rdd.map(lambda row: row.id).collect(), list(range(10)))
 
     def test_unsupported_jvm_attribute(self):
         # Unsupported jvm attributes for Spark session.

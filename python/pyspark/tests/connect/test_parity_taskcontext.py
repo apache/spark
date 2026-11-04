@@ -17,8 +17,8 @@
 
 import unittest
 
-from pyspark.tests.test_taskcontext import TaskContextTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.tests.test_taskcontext import TaskContextTestsMixin
 
 
 class TaskContextParityTests(TaskContextTestsMixin, ReusedConnectTestCase):

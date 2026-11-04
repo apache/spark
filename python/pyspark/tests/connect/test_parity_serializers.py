@@ -17,9 +17,9 @@
 
 import unittest
 
-from pyspark.tests.test_serializers import NumPyTestsMixin, SciPyTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.utils import have_numpy, have_scipy
+from pyspark.tests.test_serializers import NumPyTestsMixin, SciPyTestsMixin
 
 
 @unittest.skipIf(not have_scipy, "SciPy not installed")

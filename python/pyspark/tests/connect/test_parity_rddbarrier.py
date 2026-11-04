@@ -15,8 +15,8 @@
 # limitations under the License.
 #
 
-from pyspark.tests.test_rddbarrier import RDDBarrierTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.tests.test_rddbarrier import RDDBarrierTestsMixin
 
 
 class RDDBarrierParityTests(RDDBarrierTestsMixin, ReusedConnectTestCase):

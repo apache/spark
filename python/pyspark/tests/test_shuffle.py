@@ -31,7 +31,6 @@ from pyspark.shuffle import (
     Merger,
     SimpleAggregator,
 )
-
 from pyspark.testing.utils import ReusedPySparkTestCase
 
 

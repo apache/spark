@@ -15,8 +15,8 @@
 # limitations under the License.
 #
 
-from pyspark.tests.test_rddsampler import RDDSamplerTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.tests.test_rddsampler import RDDSamplerTestsMixin
 
 
 class RDDSamplerParityTests(RDDSamplerTestsMixin, ReusedConnectTestCase):

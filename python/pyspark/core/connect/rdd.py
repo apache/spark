@@ -98,6 +98,7 @@ from pyspark.shuffle import (
     ExternalSorter,
     get_used_memory,
 )
+from pyspark.sql.connect.logging import logger
 from pyspark.statcounter import StatCounter
 from pyspark.storagelevel import StorageLevel
 from pyspark.util import _parse_memory, fail_on_stopiteration, portable_hash
@@ -1881,8 +1882,12 @@ class RDD(RDDFacade, Generic[T_co]):
 
         # If the first sample didn't turn out large enough, keep trying to take samples;
         # this shouldn't happen often because we use a big multiplier for their initial size.
+        numIters = 0
         while len(samples) < num:
-            # TODO: add log warning for when more than one iteration was run
+            numIters += 1
+            logger.warning(
+                "Needed to re-sample due to insufficient sample size. Repeat #%d" % numIters
+            )
             seed = rand.randint(0, sys.maxsize)
             samples = self.sample(withReplacement, fraction, seed).collect()
 

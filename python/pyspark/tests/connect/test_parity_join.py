@@ -15,8 +15,8 @@
 # limitations under the License.
 #
 
-from pyspark.tests.test_join import JoinTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.tests.test_join import JoinTestsMixin
 
 
 class JoinParityTests(JoinTestsMixin, ReusedConnectTestCase):
