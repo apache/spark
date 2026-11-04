@@ -261,20 +261,21 @@ private[pipelines] object Scd1LeafLevelReconciliation {
         val resolver = alignedDf.sparkSession.sessionState.conf.resolver
         val cdcMetadataCol = F.col(AutoCdcReservedNames.cdcMetadataColName)
         val upsertSequence = Scd1BatchProcessor.upsertSequenceOf(cdcMetadataCol)
+        // Keys and CDC metadata columns are not eligible for optional authorship. Drop them
+        // from the user schema that the version map will be constructed from.
+        val userDataSchema = AutoCdcSchemaUtils.excludeColumns(
+          schema = alignedDf.schema,
+          columnNamesToExclude =
+            changeArgs.keys.map(_.name) :+ AutoCdcReservedNames.cdcMetadataColName,
+          resolver = resolver
+        )
         val versionMap = F.when(
           upsertSequence.isNotNull,
           Scd1VersionMap.buildVersionMap(
-            schema = AutoCdcSchemaUtils.excludeColumns(
-              schema = alignedDf.schema,
-              // Keys and CDC metadata columns are not eligible for optional authorship. Drop them
-              // from the user schema that the version map will be constructed from.
-              columnNamesToExclude =
-                changeArgs.keys.map(_.name) :+ AutoCdcReservedNames.cdcMetadataColName,
-              resolver = resolver
-            ),
+            schema = userDataSchema,
             ignoreNullSelection = ignoreNullSelection,
             omittedLeafPaths = AutoCdcSchemaUtils
-              .fieldPathsMissingFrom(alignedDf.schema, unalignedSchema, resolver)
+              .fieldPathsMissingFrom(userDataSchema, unalignedSchema, resolver)
               .toSet,
             authorshipSequence = upsertSequence,
             sequencingType = resolvedSequencingType,
