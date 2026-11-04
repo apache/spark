@@ -52,6 +52,33 @@ class OffsetSeqLogSuite extends SharedSparkSession {
     assert(metadata.conf.get(SQLConf.REGEX_PATTERN_COST_ESTIMATE_VERSION.key).contains("1"))
   }
 
+  test("SPARK-60885: avoidDoubleFilterEval defaults to false for checkpoints written " +
+      "before Spark 4.2") {
+    val key = SQLConf.AVOID_DOUBLE_FILTER_EVAL
+    val (_, offsetSeq) = readFromResource("offset-log-version-2.1.0")
+    val metadata = offsetSeq.metadataOpt.get
+    assert(OffsetSeqMetadata.readValue(metadata, key) === "false")
+
+    val sessionConf = new SQLConf
+    sessionConf.setConfString(key.key, "true")
+    OffsetSeqMetadata.setSessionConf(metadata, sessionConf)
+    assert(sessionConf.getConfString(key.key) === "false")
+  }
+
+  test("SPARK-60885: avoidDoubleFilterEval keeps the session value for checkpoints of " +
+      "Spark 4.2 and 4.3") {
+    val key = SQLConf.AVOID_DOUBLE_FILTER_EVAL
+    // Spark 4.2.0 records ENABLE_STREAMING_SOURCE_EVOLUTION but not AVOID_DOUBLE_FILTER_EVAL.
+    val metadata = OffsetSeqMetadata(
+      0, 0, Map(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "false"))
+    assert(OffsetSeqMetadata.readValueOpt(metadata, key).isEmpty)
+
+    val sessionConf = new SQLConf
+    sessionConf.setConfString(key.key, "true")
+    OffsetSeqMetadata.setSessionConf(metadata, sessionConf)
+    assert(sessionConf.getConfString(key.key) === "true")
+  }
+
   test("SPARK-59919: v1 and v2 metadata persist rebound stateful shuffle partitions") {
     withSQLConf(
       SQLConf.SHUFFLE_PARTITIONS.key -> "10",

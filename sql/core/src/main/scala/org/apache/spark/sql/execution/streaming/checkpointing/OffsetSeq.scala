@@ -205,7 +205,8 @@ object OffsetSeqMetadata extends Logging {
     PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN, STREAMING_STATE_STORE_ENCODING_FORMAT,
     STATE_STORE_ROW_CHECKSUM_ENABLED, PROTOBUF_EXTENSIONS_SUPPORT_ENABLED,
     ENABLE_STREAMING_SOURCE_EVOLUTION,
-    REGEX_PATTERN_COST_ESTIMATE_VERSION
+    REGEX_PATTERN_COST_ESTIMATE_VERSION,
+    AVOID_DOUBLE_FILTER_EVAL
   )
 
   /**
@@ -279,6 +280,27 @@ object OffsetSeqMetadata extends Logging {
     REGEX_PATTERN_COST_ESTIMATE_VERSION.key -> "0"
   )
 
+  /**
+   * Returns the value to use for a relevant configuration missing in the given metadata, if any.
+   *
+   * `AVOID_DOUBLE_FILTER_EVAL` cannot be in `relevantSQLConfDefaultValues` because its absence has
+   * two meanings. Before Spark 4.2 the behavior was always that of `false`. Spark 4.2 and 4.3 used
+   * the session value, `true` by default, without recording it. Forcing `false` on the latter could
+   * move a filter under a stateful operator, so that the rows already in the state skip it. Forcing
+   * `true` on the former could change the state schema. They are told apart by
+   * `ENABLE_STREAMING_SOURCE_EVOLUTION`, which is recorded since Spark 4.2.
+   */
+  private def defaultValueForMissingConf(
+      metadata: OffsetSeqMetadataBase,
+      confKey: String): Option[String] = {
+    if (confKey == AVOID_DOUBLE_FILTER_EVAL.key &&
+        !metadata.conf.contains(ENABLE_STREAMING_SOURCE_EVOLUTION.key)) {
+      Some("false")
+    } else {
+      relevantSQLConfDefaultValues.get(confKey)
+    }
+  }
+
   def readValue[T](metadataLog: OffsetSeqMetadataBase, confKey: ConfigEntry[T]): String = {
     readValueOpt(metadataLog, confKey).getOrElse(confKey.defaultValueString)
   }
@@ -290,7 +312,8 @@ object OffsetSeqMetadata extends Logging {
       rebindSQLConfsSessionToOffsetLog(confKey)
     } else confKey
 
-    metadataLog.conf.get(actualKey.key).orElse(relevantSQLConfDefaultValues.get(actualKey.key))
+    metadataLog.conf.get(actualKey.key)
+      .orElse(defaultValueForMissingConf(metadataLog, actualKey.key))
   }
 
   def apply(json: String): OffsetSeqMetadata = Serialization.read[OffsetSeqMetadata](json)
@@ -331,9 +354,9 @@ object OffsetSeqMetadata extends Logging {
 
         case None =>
           // For backward compatibility, if a config was not recorded in the offset log,
-          // then either inject a default value (if specified in `relevantSQLConfDefaultValues`) or
+          // then either inject a default value (if `defaultValueForMissingConf` returns one) or
           // let the existing conf value in SparkSession prevail.
-          relevantSQLConfDefaultValues.get(confKeyInOffsetLog) match {
+          defaultValueForMissingConf(metadata, confKeyInOffsetLog) match {
 
             case Some(defaultValue) =>
               sessionConf.setConfString(confKeyInSession, defaultValue)
