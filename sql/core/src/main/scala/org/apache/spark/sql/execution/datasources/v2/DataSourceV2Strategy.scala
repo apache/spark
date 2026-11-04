@@ -240,8 +240,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val checked = StorageFilterPlanning.checkedColumn(
         session.sessionState.conf, storageFilters, relation.output)
       val batchExec = BatchScanExec(relation.output ++ checked, new PlannedScan(relation.scan),
-        runtimeFilters, relation.ordering, relation.relation.table,
-        relation.keyGroupedPartitioning, storageFilters, checked.isDefined)
+        runtimeFilters, relation.ordering, relation.relation.table, keyGroupedPartitioning,
+        storageFilters, checked.isDefined)
       // With the checked column the scan's output differs from `project`, so a Project drops it.
       DataSourceV2Strategy.withProjectAndFilter(project,
         StorageFilterPlanning.skipCheckedRows(filtersAbove, storageFilters, checked),
