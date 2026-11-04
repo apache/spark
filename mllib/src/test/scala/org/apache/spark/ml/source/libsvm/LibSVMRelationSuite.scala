@@ -17,8 +17,10 @@
 
 package org.apache.spark.ml.source.libsvm
 
-import java.io.{File, IOException}
+import java.io.{File, FileOutputStream, IOException}
+import java.nio.charset.StandardCharsets
 import java.nio.file.Files
+import java.util.zip.GZIPOutputStream
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute.AttributeGroup
@@ -27,6 +29,7 @@ import org.apache.spark.ml.linalg.SQLDataTypes.VectorType
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 import org.apache.spark.util.Utils
 
@@ -221,6 +224,38 @@ class LibSVMRelationSuite
       val row1 = df2.first()
       val v = row1.getAs[SparseVector](1)
       assert(v == Vectors.sparse(2, Seq((0, 2.0), (1, 3.0))))
+    }
+  }
+
+  test("SPARK-60217 decompression option decides whether a libsvm file is split") {
+    withTempDir { dir =>
+      // A gzip-compressed file whose `.libsvm` name says nothing about its compression.
+      val file = new File(dir, "data.libsvm")
+      val out = new GZIPOutputStream(new FileOutputStream(file))
+      try {
+        out.write((1 to 2000).map(i => s"${i % 2} 1:$i.0").mkString("\n")
+          .getBytes(StandardCharsets.UTF_8))
+      } finally {
+        out.close()
+      }
+      val maxPartitionBytes = SQLConf.FILES_MAX_PARTITION_BYTES.key
+      val previous = spark.conf.getOption(maxPartitionBytes)
+      spark.conf.set(maxPartitionBytes, "256")
+      try {
+        // gzip is not splittable, so the file must be read as a single split, whether or not
+        // numFeatures has to be inferred first.
+        Seq(Map.empty[String, String], Map("numFeatures" -> "1")).foreach { options =>
+          val df = spark.read.format("libsvm").options(options)
+            .option("decompression", "gzip").load(file.getCanonicalPath)
+          assert(df.rdd.getNumPartitions == 1, s"options=$options")
+          assert(df.count() == 2000, s"options=$options")
+        }
+      } finally {
+        previous match {
+          case Some(v) => spark.conf.set(maxPartitionBytes, v)
+          case None => spark.conf.unset(maxPartitionBytes)
+        }
+      }
     }
   }
 }

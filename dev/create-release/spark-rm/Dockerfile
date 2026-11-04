@@ -17,14 +17,14 @@
 
 # Spark master (5.0.0-SNAPSHOT) release image
 # Extends the base image with:
-# - Java 17
+# - Java 21
 # - Python 3.11 with required packages
 
 FROM spark-rm-base:latest
 
-# Install Java 17 for Spark 5.x
+# Install Java 21 for Spark 5.x
 RUN apt-get update && apt-get install -y \
-    openjdk-17-jdk-headless \
+    openjdk-21-jdk-headless \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python 3.11

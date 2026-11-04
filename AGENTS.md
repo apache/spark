@@ -16,6 +16,9 @@ Before the first code edit or running test in a session, ensure a clean working 
 
 SQL golden file tests are managed by `SQLQueryTestSuite` and its variants. Read the class documentation before running or updating these tests. DO NOT edit the generated golden files (`.sql.out`) directly. Always regenerate them when needed, and carefully review the diff to make sure it's expected.
 
+When adding new SQL syntax or a user-visible SQL feature, follow the streaming test coverage
+guidance in the `SQLQueryTestSuite` class documentation.
+
 Spark Connect protocol is defined in proto files under `sql/connect/common/src/main/protobuf/`. Read the README there before modifying proto definitions.
 
 When adding a member to an existing class or object, follow the sectioning the file already uses and put the new member with the code it belongs with. The common failure mode is dropping it wherever it is first used without checking how the file is organized, splitting a section of unrelated code in the process. Beyond grouping related code there is no prescribed order -- the Databricks Scala guide, which Spark follows, asks only that a long class group its members into logical sections with comment headers. Do not reorganize existing members unless the change requires it.
