@@ -17,34 +17,23 @@
 # under the License.
 #
 
+# This is a placeholder. Java 17 is not supported on master since Spark 5.0, so
+# master does not run this build. The file exists here only so that the README
+# build status badge, which resolves a workflow by its path on the default
+# branch, renders for the branches that still run it (e.g. branch-4.x), and so
+# that branch4*_scheduler.yml can dispatch it to those branches with
+# `gh workflow run --ref`. The actual build is defined in the same file on
+# those branches.
+
 name: "Build / Java17 (Scala 2.13, JDK 17)"
 
 on:
   workflow_dispatch:
 
 jobs:
-  run-build:
-    permissions:
-      packages: write
-    name: Run
-    uses: ./.github/workflows/build_and_test.yml
+  noop:
     if: github.repository == 'apache/spark'
-    with:
-      java: 17
-      hadoop: hadoop3
-      envs: >-
-        {
-          "SCALA_PROFILE": "scala2.13",
-          "PYSPARK_IMAGE_TO_TEST": "",
-          "PYTHON_TO_TEST": ""
-        }
-      jobs: >-
-        {
-          "build": "true",
-          "sparkr": "true",
-          "tpcds-1g": "true",
-          "docker-integration-tests": "true",
-          "k8s-integration-tests": "true",
-          "oidc-e2e": "true",
-          "lint" : "true"
-        }
+    runs-on: ubuntu-latest
+    steps:
+      - name: No-op
+        run: echo "Java 17 is not built on this branch. See branches that still support it (e.g. branch-4.x)."
