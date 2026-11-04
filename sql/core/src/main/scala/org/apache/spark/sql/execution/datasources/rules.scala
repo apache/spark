@@ -387,7 +387,7 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
       case _ => cls
     }
 
-  // FILE has no defined ordering, so it cannot be a partition, bucket or clustering column. A
+  // FILE is not comparable, so it cannot be a partition, bucket or clustering column. A
   // bucket column is reported as a partition column, as for the V2 `bucket` transform.
   private def checkNoFileTypePartitionOrClusteringColumn(
       schema: StructType,

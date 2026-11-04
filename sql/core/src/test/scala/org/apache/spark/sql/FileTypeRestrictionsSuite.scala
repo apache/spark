@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.{DataType, FileType, IntegerType, MapType, Str
 
 /**
  * Tests the rules on where the FILE type can be used: table columns must be FILE EXTERNAL,
- * routines declare a plain FILE, and FILE has no defined ordering.
+ * routines declare a plain FILE, and FILE is not comparable.
  */
 class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
 

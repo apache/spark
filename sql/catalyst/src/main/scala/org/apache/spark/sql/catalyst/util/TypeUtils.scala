@@ -213,8 +213,9 @@ object TypeUtils extends QueryErrorsBase {
   }
 
   /**
-   * Fails if `field` holds a FILE, as FILE has no defined ordering and so cannot be a partition
-   * column (`usage` is `PARTITION_COLUMN`) or a clustering column (`CLUSTERING_COLUMN`).
+   * Fails if `field` holds a FILE, as FILE is not comparable and so cannot be a partition column
+   * (`usage` is `PARTITION_COLUMN`), a clustering column (`CLUSTERING_COLUMN`) or a write-ordering
+   * column (`WRITE_ORDERING_COLUMN`).
    */
   def checkNoFileTypeInColumnUsage(field: StructField, usage: String): Unit = {
     if (field.dataType.existsRecursively(_.isInstanceOf[FileType])) {

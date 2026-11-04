@@ -45,12 +45,13 @@ import org.apache.spark.annotation.Unstable
  * (mode not yet determined, such as the result of a cast or of a UDF). Mode is part of type
  * identity - files with different modes are distinct under `equals`.
  *
- * FileType has no defined ordering, so an operation that compares, sorts, groups or hashes a FILE
- * fails at analysis, such as a join or grouping key, `DISTINCT`, `INTERSECT`, `EXCEPT`, `UNION`
- * without `ALL`, or a repartition key. A FILE also cannot be the key of a map built in a query or
- * of a map in the return type of a function, or a partition, bucket, clustering or write-ordering
- * column of a table. Users can extract the uri field for such operations. The physical
- * representation is added by a later part.
+ * FileType is not comparable: it defines neither equality nor an ordering, as it is not clear
+ * what equality of two files should mean. So an operation that needs equality fails at analysis,
+ * such as a join or grouping key, `DISTINCT`, `INTERSECT`, `EXCEPT`, `UNION` without `ALL`,
+ * hashing, or a repartition key, and so does one that needs an ordering, such as sorting. A FILE
+ * also cannot be the key of a map built in a query or of a map in the return type of a function,
+ * or a partition, bucket, clustering or write-ordering column of a table. Users can extract the
+ * uri field for such operations. The physical representation is added by a later part.
  *
  * @param mode
  *   the mode for this FileType column

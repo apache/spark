@@ -3092,7 +3092,7 @@
   },
   "FILE_TYPE_UNSUPPORTED_COLUMN_USAGE" : {
     "message" : [
-      "The column <colName> of type <dataType> holds a FILE, which has no defined ordering."
+      "The column <colName> of type <dataType> holds a FILE, which is not comparable."
     ],
     "subClass" : {
       "CLUSTERING_COLUMN" : {

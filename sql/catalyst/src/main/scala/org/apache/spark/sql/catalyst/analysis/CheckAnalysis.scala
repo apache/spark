@@ -1043,8 +1043,8 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               case _ =>
                 TypeUtils.checkFileTypeHasQualifier(create.tableSchema)
             }
-            // FILE has no defined ordering, so it cannot be a partition, clustering or
-            // write-ordering column.
+            // FILE is not comparable, so it cannot be a partition, clustering or write-ordering
+            // column.
             create.partitioning.foreach { transform =>
               val usage = transform match {
                 case _: ClusterByTransform => "CLUSTERING_COLUMN"
@@ -1234,7 +1234,8 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               origin = operator.origin
             )
 
-          // FILE has no defined ordering, so it cannot be compared in a set operation.
+          // FILE is not comparable (it has no defined equality), so it cannot be in a set
+          // operation.
           case o if fileColumnInSetOperation(o).isDefined =>
             throw QueryCompilationErrors.unsupportedSetOperationOnFileType(
               fileCol = fileColumnInSetOperation(o).get,
@@ -1515,7 +1516,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           case _ =>
         }
 
-      // FILE has no defined ordering, so it cannot be a clustering column.
+      // FILE is not comparable, so it cannot be a clustering column.
       case AlterTableClusterBy(table: ResolvedTable, Some(clusterBySpec)) =>
         TypeUtils.checkNoFileTypeClusteringColumn(table.schema, clusterBySpec, alter.conf.resolver)
       case _ =>
