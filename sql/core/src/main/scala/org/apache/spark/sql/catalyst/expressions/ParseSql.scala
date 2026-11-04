@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{
@@ -26,7 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.parser.{ParseSqlMode, ParseSqlResult}
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter}
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types.{AbstractDataType, DataType, StringType}
@@ -206,7 +207,8 @@ case class ParseSql(
     val sqlText = sqlInput.asInstanceOf[UTF8String].toString
     val modeStr = modeInput.asInstanceOf[UTF8String].toString
     val parsedMode = ParseSqlMode.parse(modeStr).getOrElse {
-      throw QueryExecutionErrors.invalidParseSqlMode(modeStr)
+      throw SparkException.internalError(
+        s"parse_sql mode passed analysis but is not PARSE or ANALYZE: $modeStr")
     }
     UTF8String.fromString(ParseSqlResult.fromSql(sqlText, parsedMode))
   }

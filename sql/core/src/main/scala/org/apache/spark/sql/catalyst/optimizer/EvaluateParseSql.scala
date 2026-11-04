@@ -27,8 +27,9 @@ import org.apache.spark.sql.types.StringType
  * session catalog, so this must run even when `ConstantFolding` is excluded.
  */
 object EvaluateParseSql extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressions {
-    case p: ParseSql if p.children.forall(_.foldable) =>
-      Literal.create(p.eval(), StringType)
-  }
+  override def apply(plan: LogicalPlan): LogicalPlan =
+    plan.transformAllExpressionsWithSubqueries {
+      case p: ParseSql if p.children.forall(_.foldable) =>
+        Literal.create(p.eval(), StringType)
+    }
 }

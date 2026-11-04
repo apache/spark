@@ -1,4 +1,4 @@
--- End-to-end coverage for parse_sql ANALYZE mode (SPARK-60593).
+-- End-to-end coverage for parse_sql ANALYZE mode (SPARK-60621).
 --SET spark.sql.function.parseSql.enabled=true
 
 -- default PARSE and explicit PARSE agree

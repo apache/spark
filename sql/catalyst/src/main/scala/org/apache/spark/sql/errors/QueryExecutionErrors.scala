@@ -3791,15 +3791,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
-  def invalidParseSqlMode(mode: String): SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "INVALID_PARAMETER_VALUE.PARSE_SQL_MODE",
-      messageParameters = Map(
-        "functionName" -> toSQLId("parse_sql"),
-        "parameter" -> toSQLId("mode"),
-        "invalidValue" -> toSQLValue(mode, StringType)))
-  }
-
   def parseSqlAnalyzeRequiresSession(): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "PARSE_SQL_ANALYZE_REQUIRES_SESSION",

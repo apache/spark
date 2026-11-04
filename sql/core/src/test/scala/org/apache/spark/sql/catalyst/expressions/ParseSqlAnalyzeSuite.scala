@@ -406,8 +406,65 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
       assert(j \ "parse_success" === JBool(true))
       assert(j \ "analyze_success" === JBool(false))
       val cls = (j \ "error" \ "errorClass").asInstanceOf[JString].s
-      assert(cls !== "INTERNAL_ERROR")
-      assert(!cls.startsWith("INTERNAL_ERROR"))
+      assert(cls == "UNRESOLVED_ROUTINE" || cls.contains("UNRESOLVED_ROUTINE"))
+    }
+  }
+
+  test("ANALYZE keeps distinct tables that share a name suffix") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      sql("CREATE DATABASE parse_sql_zzdb")
+      try {
+        withTable("parse_sql_zzdb.t", "t") {
+          sql("CREATE TABLE parse_sql_zzdb.t (a INT) USING parquet")
+          sql("CREATE TABLE t (a INT) USING parquet")
+          val join1 = evalStatement("SELECT * FROM parse_sql_zzdb.t JOIN t")
+          assert(join1 \ "analyze_success" === JBool(true))
+          assert(join1 \ "source_table_references" === JArray(List(
+            ref("spark_catalog", "parse_sql_zzdb", "t"),
+            ref("spark_catalog", "default", "t"))))
+          val join2 = evalStatement("SELECT * FROM t JOIN parse_sql_zzdb.t")
+          assert(join2 \ "analyze_success" === JBool(true))
+          assert(join2 \ "source_table_references" === JArray(List(
+            ref("spark_catalog", "default", "t"),
+            ref("spark_catalog", "parse_sql_zzdb", "t"))))
+          val join3 = evalStatement(
+            "SELECT * FROM spark_catalog.parse_sql_zzdb.t JOIN t")
+          assert(join3 \ "analyze_success" === JBool(true))
+          assert(join3 \ "source_table_references" === JArray(List(
+            ref("spark_catalog", "parse_sql_zzdb", "t"),
+            ref("spark_catalog", "default", "t"))))
+        }
+      } finally {
+        sql("DROP DATABASE IF EXISTS parse_sql_zzdb CASCADE")
+      }
+    }
+  }
+
+  test("ANALYZE persistent CTAS and CREATE VIEW ignore a same-named temp view") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      withTempView("parse_sql_tv") {
+        sql("CREATE TEMP VIEW parse_sql_tv AS SELECT 1 AS a")
+        val ctas = evalStatement(
+          "CREATE TABLE parse_sql_tv USING parquet AS SELECT 1 AS a")
+        assert(ctas \ "analyze_success" === JBool(true))
+        assert(ctas \ "target_table_references" === JArray(List(
+          ref("spark_catalog", "default", "parse_sql_tv"))))
+        val view = evalStatement("CREATE VIEW parse_sql_tv AS SELECT 1 AS a")
+        assert(view \ "analyze_success" === JBool(true))
+        assert(view \ "target_table_references" === JArray(List(
+          ref("spark_catalog", "default", "parse_sql_tv"))))
+      }
+    }
+  }
+
+  test("ANALYZE expands star select lists") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      withTable("parse_sql_star_t") {
+        sql("CREATE TABLE parse_sql_star_t (a INT) USING parquet")
+        val j = evalStatement("SELECT * FROM parse_sql_star_t")
+        assert(j \ "analyze_success" === JBool(true))
+        assert(j \ "select_list" === typedColumns("a" -> jsonInt))
+      }
     }
   }
 
@@ -514,6 +571,10 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
       val j = evalStatement("SELECT 1 AS a")
       assert(j \ "analyze_success" === JBool(true))
       assert(j \ "select_list" === typedColumns("a" -> jsonInt))
+      val scalar = evalCall(
+        "SELECT (SELECT parse_sql('SELECT 1 AS a', 'ANALYZE'))")
+      assert(scalar.head \ "analyze_success" === JBool(true))
+      assert(scalar.head \ "select_list" === typedColumns("a" -> jsonInt))
     }
   }
 

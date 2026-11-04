@@ -38,6 +38,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.execution.{CommandExecutionMode, SparkSqlParser}
 import org.apache.spark.sql.execution.command.{
+  CreateDataSourceTableAsSelectCommand,
   CreateDataSourceTableCommand,
   CreateTableCommand,
   CreateViewCommand,
@@ -177,9 +178,9 @@ object ParseSqlResult {
     session.sessionState.executePlan(toAnalyze, CommandExecutionMode.SKIP).analyzed
   }
 
-  /** INTERNAL_ERROR is a Spark bug, not an analysis result: it fails the call. */
+  /** INTERNAL_ERROR / SQLSTATE XX are Spark bugs, not analysis results. */
   private def isInternalError(e: SparkThrowable): Boolean =
-    Option(e.getCondition).exists(_.startsWith("INTERNAL_ERROR"))
+    e.isInternalError || Option(e.getSqlState).exists(_.startsWith("XX"))
 
   /** Character span of a statement object in the original batch. */
   private case class StatementSpan(start: Int, length: Int)
@@ -277,14 +278,12 @@ object ParseSqlResult {
         val analyzedSources = analyzedRefs.map(_.sourceTables).getOrElse(Nil)
         (
           uniqueIdentities(
-            parseRefs.targetTables.map { parts =>
-              qualifyParseIdentity(parts, analyzedTargets, qualifyTarget(_, plan, s))
-            },
+            qualifyParseIdentities(
+              parseRefs.targetTables, analyzedTargets, qualifyTarget(_, plan, s)),
             s),
           uniqueIdentities(
-            parseRefs.sourceTables.map { parts =>
-              qualifyParseIdentity(parts, analyzedSources, qualifySource(_, s))
-            },
+            qualifyParseIdentities(
+              parseRefs.sourceTables, analyzedSources, qualifySource(_, s)),
             s),
           uniqueIdentities(parseRefs.functions.map(qualifyRoutine(_, s)), s)
         )
@@ -594,6 +593,8 @@ object ParseSqlResult {
         case c: CreateTempViewUsing => addTarget(Seq(c.tableIdent.table))
         case c: CreateDataSourceTableCommand =>
           addTarget(persistedTableParts(c.table.identifier))
+        case c: CreateDataSourceTableAsSelectCommand =>
+          addTarget(persistedTableParts(c.table.identifier))
         case c: CreateTableCommand =>
           addTarget(persistedTableParts(c.table.identifier))
         case c: DropTableCommand =>
@@ -651,7 +652,11 @@ object ParseSqlResult {
     named.map(selectListItem)
   }
 
-  /** Select-list items with SQL types from an analyzed query's output. */
+  /**
+   * Select-list items with SQL types from the analyzed query output, so `*`
+   * is expanded and names match analysis. INSERT reports the write projection
+   * (target columns), not the user's SELECT aliases.
+   */
   private def collectTypedSelectList(
       analyzed: LogicalPlan,
       parsed: LogicalPlan): Seq[JObject] = {
@@ -735,13 +740,36 @@ object ParseSqlResult {
       SQLConf.get.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE),
       name)
 
-  private def qualifyParseIdentity(
-      parseParts: Seq[String],
+  /**
+   * Match each parse name to an analyzed identity at most once. Longer parse
+   * names claim first so `spark_catalog.db.t` is not stolen by a later bare
+   * `t`. Equal-length matches count: a 3-part parse name is already complete.
+   */
+  private def qualifyParseIdentities(
+      parseIds: Seq[Seq[String]],
       analyzedIds: Seq[Seq[String]],
-      fallback: Seq[String] => Seq[String]): Seq[String] = {
-    matchingIdentity(parseParts, analyzedIds).getOrElse {
-      if (isPathReference(parseParts)) parseParts else fallback(parseParts)
+      fallback: Seq[String] => Seq[String]): Seq[Seq[String]] = {
+    val remaining = analyzedIds.to(mutable.ArrayBuffer)
+    val assigned = Array.fill[Option[Seq[String]]](parseIds.length)(None)
+    parseIds.zipWithIndex.sortBy { case (parts, _) => -parts.length }.foreach {
+      case (parts, i) =>
+        matchingIdentity(parts, remaining.toSeq) match {
+          case Some(matched) =>
+            val matchedKey = matched.map(_.toLowerCase(Locale.ROOT))
+            val idx = remaining.indexWhere { analyzed =>
+              analyzed.map(_.toLowerCase(Locale.ROOT)) == matchedKey
+            }
+            if (idx >= 0) {
+              remaining.remove(idx)
+            }
+            assigned(i) = Some(matched)
+          case None =>
+            val ident =
+              if (isPathReference(parts)) parts else fallback(parts)
+            assigned(i) = Some(ident)
+        }
     }
+    assigned.map(_.get).toSeq
   }
 
   private def matchingIdentity(
@@ -750,7 +778,9 @@ object ParseSqlResult {
     val parsed = parseParts.map(_.toLowerCase(Locale.ROOT))
     analyzedIds.find { analyzed =>
       val ident = analyzed.map(_.toLowerCase(Locale.ROOT))
-      ident.endsWith(parsed) && ident.length > parsed.length
+      ident.endsWith(parsed) &&
+        (ident.length > parsed.length ||
+          ident.length == parsed.length && parsed.length >= 2)
     }
   }
 
@@ -772,6 +802,13 @@ object ParseSqlResult {
       globalTempIdent(parts.last)
     case _: CreateTempViewUsing =>
       sessionIdent(parts.last)
+    case _: CreateTableAsSelect | _: ReplaceTableAsSelect | _: CreateTable |
+         _: ReplaceTable | _: CreateView |
+         _: org.apache.spark.sql.execution.datasources.CreateTable =>
+      // Persistent DDL never names a temp view, even if one shares the name.
+      qualifyWithCurrentNamespace(parts, session)
+    case c: CreateViewCommand if c.viewType == PersistedView =>
+      qualifyWithCurrentNamespace(parts, session)
     case _ =>
       qualifySource(parts, session)
   }
@@ -854,7 +891,9 @@ object ParseSqlResult {
     val mgr = session.sessionState.catalogManager
     name.equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME) ||
       name.equalsIgnoreCase(mgr.currentCatalog.name()) ||
-      session.sessionState.conf.getConfString("spark.sql.catalog." + name, null) != null
+      session.sessionState.conf.getAllConfs.exists { case (key, _) =>
+        key.equalsIgnoreCase("spark.sql.catalog." + name)
+      }
   }
 
   private def isSystemNamespace(ns: String): Boolean =
