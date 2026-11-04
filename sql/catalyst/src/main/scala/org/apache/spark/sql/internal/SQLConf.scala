@@ -5708,15 +5708,16 @@ object SQLConf {
 
   val ARROW_PYSPARK_UDF_COLUMNAR_INPUT_ENABLED =
     buildConf("spark.sql.execution.arrow.pythonUDF.columnarInput.enabled")
-      .doc("When true, Arrow-based Python UDFs (pandas UDFs) can accept " +
-        "columnar input directly from upstream operators that produce " +
-        "Arrow-backed ColumnarBatch (e.g., DataSource V2 connectors), " +
-        "bypassing the ColumnarToRow and ArrowWriter conversion. " +
-        "This optimization reduces data transfer overhead between " +
-        "the JVM and Python worker processes. It keeps the columns that the UDFs pass " +
-        "through until the results of their batch come back from Python, so it requires " +
-        "an upstream operator whose batches stay valid until then, which a columnar " +
-        "reader does not promise.")
+      .doc("When true, Arrow-based Python UDFs (pandas UDFs) accept columnar input " +
+        "from upstream operators that produce ColumnarBatch, and write the UDF inputs " +
+        "of Arrow-backed batches to Python directly. The columns that the UDFs pass " +
+        "through skip the conversion to rows and back only if all the columns of the " +
+        "first batch are ArrowColumnVectors whose ColumnVector.isRetainable returns " +
+        "true, which no built-in operator does. They are then kept until the results " +
+        "of their batch come back from Python, without accounting for their memory, " +
+        "and so are on-heap copies of the columns of a later batch that cannot all be " +
+        "kept. Otherwise, the batches are converted to rows and back, which can cost " +
+        "more than leaving this disabled.")
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf

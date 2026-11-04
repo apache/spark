@@ -17,7 +17,7 @@
 package org.apache.spark.sql.execution.python
 
 import java.io.File
-import java.util.ArrayDeque
+import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
@@ -27,11 +27,12 @@ import org.apache.spark.api.python.ChainedPythonFunctions
 import org.apache.spark.internal.config.Python.PYTHON_UDF_PIPELINED_EXECUTION
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.RowToColumnConverter
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
-import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
+import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, WritableColumnVector}
 import org.apache.spark.sql.types.{DataType, StructField, StructType, UserDefinedType}
 import org.apache.spark.sql.types.DataType.equalsIgnoreCompatibleCollation
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
@@ -43,25 +44,29 @@ import org.apache.spark.util.Utils
  * Three execution paths based on input characteristics:
  *
  * 1. '''Arrow columnar path''' (UDF inputs are simple column refs AND
- *    columns are [[ArrowColumnVector]]): Arrow FieldVectors are extracted
- *    directly and serialized to IPC. Pass-through columns are kept as
- *    [[ColumnVector]] references, which is only correct if the batches stay
- *    valid until their results come back from Python: a columnar reader may
- *    reuse or release the vectors of a batch once it is asked for the next
- *    one. So `spark.sql.execution.arrow.pythonUDF.columnarInput.enabled`
- *    is disabled by default. Output is produced by columnar combining:
+ *    all the columns of the first batch are [[ArrowColumnVector]]s that the
+ *    producer allows to be held with [[ColumnVector.isRetainable]]): Arrow
+ *    FieldVectors are extracted directly and serialized to IPC. Pass-through
+ *    columns are kept as [[ColumnVector]] references until the result of
+ *    their batch comes back from Python. The pass-through columns of a later
+ *    batch that cannot all be held are copied into on-heap vectors, which
+ *    are kept the same way. Output is produced by columnar combining:
  *    passThruCols ++ resultCols -> ColumnarBatch, so the consumer of the
- *    output releases the pass-through columns with closeIfFreeable on the
- *    task thread. With `spark.python.udf.pipelined.enabled`, the Python
- *    writer reads the next input batches on its own thread meanwhile, so
- *    the upstream operator must allow its vectors to be released while it
+ *    output releases the pass-through columns with closeIfFreeable. The
+ *    held columns and copies are not accounted for and cannot spill, and
+ *    their number is bounded only by how far the writer runs ahead of the
+ *    results. With `spark.python.udf.pipelined.enabled`, the Python writer
+ *    reads the next input batches on its own thread meanwhile, so the
+ *    upstream operator must allow its vectors to be released while it
  *    returns the next batches.
  *
- * 2. '''Non-Arrow columnar path''' (UDF inputs are simple column refs
- *    BUT columns are NOT [[ArrowColumnVector]]): Non-Arrow columnar
- *    readers (Parquet vectorized, InMemoryTableScan) reuse ColumnVector
- *    objects across batches. Uses [[HybridRowQueue]] for pass-through
- *    buffering and converts joined rows back to [[ColumnarBatch]].
+ * 2. '''Row queue columnar path''' (UDF inputs are simple column refs
+ *    BUT columns cannot be held): e.g. Parquet vectorized readers reuse
+ *    [[WritableColumnVector]]s across batches, the Arrow cache releases the
+ *    vectors of a batch when the next one is read, and the Python output of
+ *    a stacked [[ArrowEvalPythonExec]] is loaded into the same vectors for
+ *    every batch. Uses [[HybridRowQueue]] for pass-through buffering and
+ *    converts joined rows back to [[ColumnarBatch]].
  *
  * 3. '''Row fallback path''' (UDF inputs contain complex expressions):
  *    Rows are extracted via [[MutableProjection]] and sent using
@@ -69,7 +74,9 @@ import org.apache.spark.util.Utils
  *    and converts joined rows back to [[ColumnarBatch]].
  *
  * Paths 2 and 3 copy what they need from an input batch, so they release
- * it with closeIfFreeable once it has been written to Python.
+ * it with closeIfFreeable once it has been written to Python. Input batches
+ * without rows are released and skipped on all paths, so that the UDFs are
+ * not called with empty input, as on the row path.
  *
  * TODO: Add a physical plan rule that inserts a ProjectExec before
  *   ArrowEvalPythonExec to pre-evaluate complex UDF input expressions
@@ -96,6 +103,9 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
 
   private class ColumnarArrowEvalPythonPartitionEvaluator
       extends PartitionEvaluator[ColumnarBatch, ColumnarBatch] {
+
+    private lazy val childSchema = DataTypeUtils.fromAttributes(childOutput)
+    private lazy val passThruConverter = new RowToColumnConverter(childSchema)
 
     private def collectFunctions(
         udf: PythonUDF
@@ -155,24 +165,41 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
 
       val inputColumnIndices = resolveColumnIndices(allInputs.toSeq)
 
-      // Peek at first batch to check if Arrow-backed.
-      val peekIter = new PeekableIterator(inputIter)
-      val isArrow = peekIter.peek().exists { batch =>
-        batch.numCols() > 0 &&
-          batch.column(0).isInstanceOf[ArrowColumnVector]
+      val nonEmptyIter = inputIter.filter { batch =>
+        if (batch.numRows() == 0) batch.closeIfFreeable()
+        batch.numRows() > 0
       }
 
-      if (inputColumnIndices.isDefined && isArrow) {
+      // Peek at the first batch to check whether its columns are Arrow vectors
+      // that may be held until the result of the batch comes back.
+      val peekIter = new PeekableIterator(nonEmptyIter)
+      val canHoldInput = peekIter.peek().exists(batch => canHold(passThruColumns(batch)))
+
+      if (inputColumnIndices.isDefined && canHoldInput) {
         // Path 1: Arrow columnar -- full optimization.
         evalArrowColumnar(peekIter, context, pyFuncs, argMetas,
           udfInputSchema, outputTypes, inputColumnIndices.get)
       } else {
-        // Path 2 & 3: non-Arrow or complex expressions.
+        // Path 2 & 3: columns that cannot be held, or complex expressions.
         evalWithRowQueue(peekIter, context, pyFuncs, argMetas,
           allInputs.toSeq, udfInputSchema, outputTypes,
           inputColumnIndices)
       }
     }
+
+    private def passThruColumns(batch: ColumnarBatch): Array[ColumnVector] =
+      childOutput.indices.map(i => batch.column(i)).toArray
+
+    /**
+     * Whether the pass-through columns of a batch may be held until its result
+     * comes back from Python: they are all [[ArrowColumnVector]]s whose producer
+     * allows it with [[ColumnVector.isRetainable]].
+     */
+    private def canHold(columns: Array[ColumnVector]): Boolean =
+      columns.nonEmpty && columns.forall {
+        case v: ArrowColumnVector => v.isRetainable
+        case _ => false
+      }
 
     private def resolveColumnIndices(
         allInputs: Seq[Expression]): Option[Array[Int]] = {
@@ -186,10 +213,14 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
     }
 
     /**
-     * Path 1: Arrow columnar. Keeps references to the pass-through
-     * ColumnVectors, which requires the input batches to stay valid until
-     * their results come back from Python, and combines them with the UDF
-     * result columns into ColumnarBatch.
+     * Path 1: Arrow columnar. Holding the ColumnVector references is safe
+     * because the producer allows it (see [[ColumnVector.isRetainable]]).
+     * Combines pass-through + UDF result columns into ColumnarBatch.
+     *
+     * The path is chosen from the first batch, while a later batch could
+     * have columns that cannot be held. The pass-through columns of such a
+     * batch are copied instead, and the batch is released once it has been
+     * written to Python. The copies are held like the columns they replace.
      */
     private def evalArrowColumnar(
         inputIter: Iterator[ColumnarBatch],
@@ -200,15 +231,21 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
         outputTypes: Seq[DataType],
         columnIndices: Array[Int]): Iterator[ColumnarBatch] = {
 
+      // In pipelined mode the batches are added in the writer thread, and
+      // polled by the consumer of the output, possibly on another thread.
       val passThruQueue =
-        new ArrayDeque[(Array[ColumnVector], Int)]()
+        new ConcurrentLinkedQueue[(Array[ColumnVector], Int)]()
 
-      val bufferedIter = inputIter.map { batch =>
-        val passThruCols = childOutput.indices.map(
-          i => batch.column(i)).toArray
-        passThruQueue.add((passThruCols, batch.numRows()))
-        batch
-      }
+      val bufferedIter = new WrittenBatchReleasingIterator(inputIter, { batch =>
+        val passThruCols = passThruColumns(batch)
+        if (canHold(passThruCols)) {
+          passThruQueue.add((passThruCols, batch.numRows()))
+          false
+        } else {
+          passThruQueue.add((copyColumns(passThruCols, batch.numRows()), batch.numRows()))
+          true
+        }
+      })
 
       val pyRunner = new ColumnarArrowPythonWithNamedArgumentRunner(
         pyFuncs, evalType, argMetas, udfInputSchema,
@@ -233,7 +270,7 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
     }
 
     /**
-     * Paths 2 & 3: non-Arrow or complex expressions.
+     * Paths 2 & 3: columns that cannot be held, or complex expressions.
      * Uses HybridRowQueue for pass-through, joins rows, then
      * converts back to ColumnarBatch via RowToColumnConverter.
      */
@@ -262,7 +299,7 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
         childOutput, childOutput)
 
       val resultIter = if (inputColumnIndices.isDefined) {
-        // Path 2: simple column refs, non-Arrow vectors.
+        // Path 2: simple column refs, columns that cannot be held.
         val bufferedIter = new WrittenBatchReleasingIterator(inputIter, { batch =>
           batch.rowIterator().asScala.foreach { row =>
             queue.add(unsafeProj(row).copy())
@@ -312,6 +349,17 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
 
       // Convert joined rows back to ColumnarBatch.
       rowsToColumnarBatches(rowIter, context)
+    }
+
+    /** Copies the first `numRows` rows of the pass-through columns into on-heap vectors. */
+    private def copyColumns(
+        columns: Array[ColumnVector],
+        numRows: Int): Array[ColumnVector] = {
+      val vectors = OnHeapColumnVector.allocateColumns(numRows, childSchema)
+        .toArray[WritableColumnVector]
+      new ColumnarBatch(columns, numRows).rowIterator().asScala
+        .foreach(passThruConverter.convert(_, vectors))
+      vectors.toArray[ColumnVector]
     }
 
     private def validateOutputTypes(

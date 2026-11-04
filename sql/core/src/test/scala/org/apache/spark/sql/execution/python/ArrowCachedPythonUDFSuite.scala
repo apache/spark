@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.python
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.IntegratedUDFTestUtils
 import org.apache.spark.sql.execution.columnar.{ArrowCachedBatchSerializer, InMemoryRelation}
+import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StringType
@@ -49,11 +50,13 @@ class ArrowCachedPythonUDFSuite extends SharedSparkSession {
     }
   }
 
-  test("Arrow Python UDFs over the Arrow cache with the default configuration") {
+  test("Arrow Python UDFs over the Arrow cache, with and without columnar input") {
     assume(shouldTestPandasUDFs)
     // The scan of the Arrow cache also returns rows, so no ColumnarToRowExec is added below
     // ArrowEvalPythonExec, whose child still supports columnar: it must still read rows when
-    // columnar input is disabled, as it is by default.
+    // columnar input is disabled, as it is by default. With columnar input, the cache closes the
+    // root of a batch when it returns the next one, so its vectors are not retainable, and its
+    // 200 batches take the row queue path.
     withSQLConf(SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> "1000") {
       val pandasUDF = TestScalarPandasUDF(
         name = "cached_str_udf", returnType = Some(StringType))
@@ -62,20 +65,33 @@ class ArrowCachedPythonUDFSuite extends SharedSparkSession {
       val cached = spark.range(0, 200000, 1, 1).selectExpr("id", "CAST(id AS STRING) AS s")
         .cache()
       try {
-        // The test UDF casts its input to string, which is removed on a string column.
-        val result = cached.selectExpr("id", "s", "cached_str_udf(s) AS u")
-        val arrowExec = result.queryExecution.executedPlan.collect {
-          case exec: ArrowEvalPythonExec => exec
-        }
-        assert(arrowExec.nonEmpty && arrowExec.head.child.supportsColumnar &&
-          !arrowExec.head.supportsColumnar)
+        Seq(false, true).foreach { columnarInput =>
+          withSQLConf(
+              SQLConf.ARROW_PYSPARK_UDF_COLUMNAR_INPUT_ENABLED.key -> columnarInput.toString) {
+            // The test UDF casts its input to string, which is removed on a string column.
+            val result = cached.selectExpr("id", "s", "cached_str_udf(s) AS u")
+            val arrowExec = result.queryExecution.executedPlan.collect {
+              case exec: ArrowEvalPythonExec => exec
+            }
+            assert(arrowExec.nonEmpty && arrowExec.head.child.supportsColumnar &&
+              arrowExec.head.supportsColumnar == columnarInput)
+            if (columnarInput) {
+              // The row queue path outputs on-heap vectors, while the Arrow columnar path
+              // outputs the result vectors of Python as they are.
+              val resultClasses = arrowExec.head.executeColumnar().mapPartitionsInternal {
+                batches => batches.map(batch => batch.column(2).getClass.getName)
+              }.collect().toSet
+              assert(resultClasses == Set(classOf[OnHeapColumnVector].getName))
+            }
 
-        val rows = result.collect()
-        assert(rows.map(_.getLong(0)).toSeq == (0L until 200000L))
-        rows.foreach { row =>
-          val id = row.getLong(0)
-          assert(row.getString(1) == id.toString, s"pass-through mismatch for id $id")
-          assert(row.getString(2) == id.toString, s"UDF result mismatch for id $id")
+            val rows = result.collect()
+            assert(rows.map(_.getLong(0)).toSeq == (0L until 200000L))
+            rows.foreach { row =>
+              val id = row.getLong(0)
+              assert(row.getString(1) == id.toString, s"pass-through mismatch for id $id")
+              assert(row.getString(2) == id.toString, s"UDF result mismatch for id $id")
+            }
+          }
         }
       } finally {
         cached.unpersist()
