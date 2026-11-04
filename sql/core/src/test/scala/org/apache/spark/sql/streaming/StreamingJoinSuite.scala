@@ -382,6 +382,58 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
     )
   }
 
+  test("stream stream inner join preserves legacy state schema after restart") {
+    withTempDir { checkpointDir =>
+      val leftInput = MemoryStream[(Int, Long)]
+      val rightInput = MemoryStream[(Int, Long)]
+
+      val left = leftInput.toDF().toDF("key", "time")
+        .select($"key", timestamp_seconds($"time").as("leftTime"))
+        .withWatermark("leftTime", "10 seconds")
+      val right = rightInput.toDF().toDF("key", "time")
+        .select($"key", timestamp_seconds($"time").as("rightTime"))
+        .withWatermark("rightTime", "10 seconds")
+      val legacyJoined = left.select($"key").join(right.select($"key"), "key")
+
+      testStream(legacyJoined)(
+        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+        MultiAddData(leftInput, (1, 1000000L))(rightInput, (1, 1000000L)),
+        CheckNewAnswer(1),
+        MultiAddData(leftInput, (3, 1000001L))(rightInput, (4, 1000001L)),
+        CheckNewAnswer(),
+        StopStream)
+
+      val joined = left.join(right, "key").select($"key")
+      testStream(joined)(
+        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+        MultiAddData(leftInput, (2, 1000L))(rightInput, (2, 1000L)),
+        CheckNewAnswer(2),
+        Execute { query =>
+          val joins = query.lastExecution.executedPlan.collect {
+            case join: StreamingSymmetricHashJoinExec => join
+          }
+          assert(joins.size == 1)
+          assert(joins.head.left.output.map(_.name) == Seq("key"))
+          assert(joins.head.right.output.map(_.name) == Seq("key"))
+        },
+        MultiAddData(leftInput, (5, 1000L))(rightInput, (5, 1000L)),
+        CheckNewAnswer(5))
+
+      val changedOutput = left.join(right, "key").select($"leftTime")
+      val ex = intercept[StreamingQueryException] {
+        testStream(changedOutput)(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          MultiAddData(leftInput, (6, 1000002L))(rightInput, (6, 1000002L)),
+          CheckNewAnswer())
+      }
+      checkError(
+        ex.getCause.asInstanceOf[SparkUnsupportedOperationException],
+        condition = "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE",
+        parameters = Map("storedValueSchema" -> ".*", "newValueSchema" -> ".*"),
+        matchPVals = true)
+    }
+  }
+
   testWithAppendAndUpdate("stream stream inner join on windows - without watermark") { outputMode =>
     val input1 = MemoryStream[Int]
     val input2 = MemoryStream[Int]

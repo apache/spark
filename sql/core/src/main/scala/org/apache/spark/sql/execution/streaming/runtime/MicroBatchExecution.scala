@@ -56,6 +56,7 @@ import org.apache.spark.sql.execution.streaming.utils.StreamingUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.PartitionOffsetWithIndex
 import org.apache.spark.sql.streaming.Trigger
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{Clock, ErrorNotifier, SerializableConfiguration, Utils}
 
 class MicroBatchExecution(
@@ -195,6 +196,10 @@ class MicroBatchExecution(
   // in the query plan. It is populated by the first batch at planning time, and passed
   // into every subsequent batch's query plan.
   private val stateSchemaMetadatas = MutableMap[Long, StateSchemaBroadcast]()
+
+  // Value schemas restored for stream-stream joins whose checkpoints predate preservation of
+  // watermarked input columns. Reused by every batch so the physical input shape stays stable.
+  private val joinStateValueSchemas = MutableMap[Long, (StructType, StructType)]()
 
   /**
    * Cached result of the first `offsetLog.getLatest()` call. Reused by both
@@ -1375,6 +1380,7 @@ class MicroBatchExecution(
         execCtx.previousContext.isEmpty,
         currentStateStoreCkptId,
         stateSchemaMetadatas,
+        joinStateValueSchemas,
         isTerminatingTrigger = trigger.isInstanceOf[AvailableNowTrigger.type],
         isRealTimeMode = trigger.isInstanceOf[RealTimeTrigger])
       execCtx.executionPlan.executedPlan // Force the lazy generation of execution plan
