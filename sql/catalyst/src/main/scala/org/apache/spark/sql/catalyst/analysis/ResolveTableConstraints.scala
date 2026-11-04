@@ -21,7 +21,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.expressions.{And, CheckInvariant, EqualNullSafe, Expression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, V2WriteCommand, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
+import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMAND, LAMBDA_VARIABLE}
 import org.apache.spark.sql.catalyst.util.GeneratedColumn
 import org.apache.spark.sql.connector.catalog.{CatalogManager, GenerationExpression}
 import org.apache.spark.sql.connector.catalog.constraints.Check
@@ -130,7 +130,10 @@ class ResolveTableConstraints(val catalogManager: CatalogManager) extends Rule[L
       expr: Expression,
       columnExtractors: mutable.Map[String, Expression]): Unit = {
     expr match {
-      case u: UnresolvedExtractValue =>
+      // An extraction that refers to a lambda variable, such as `x[0]` in
+      // `forall(a, x -> x[0] > 0)`, cannot be an extractor: the lambda variable does not resolve
+      // outside its lambda function.
+      case u: UnresolvedExtractValue if !u.containsPattern(LAMBDA_VARIABLE) =>
         // When extracting a value from a Map or Array type, we display only the specific extracted
         // value rather than the entire Map or Array structure for clarity and readability.
         columnExtractors(u.sql) = u

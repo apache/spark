@@ -147,6 +147,19 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     }
   }
 
+  test("SPARK-60856: Check constraint with a subscript of a lambda variable") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT, a ARRAY<ARRAY<INT>>, " +
+        s"CONSTRAINT c1 CHECK (forall(a, x -> x[0] > 0))) $defaultUsing")
+      sql(s"INSERT INTO $t VALUES (1, array(array(1)))")
+      val error = intercept[SparkRuntimeException] {
+        sql(s"INSERT INTO $t VALUES (2, array(array(-1)))")
+      }
+      assert(error.getCondition == "CHECK_CONSTRAINT_VIOLATION")
+      checkAnswer(spark.table(t), Row(1, Seq(Seq(1))))
+    }
+  }
+
   def getConstraintCharacteristics(): Seq[(String, String)] = {
     Seq(
       ("", s"ENFORCED NORELY"),
