@@ -27,6 +27,7 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.sql.{Column, QueryTest, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Literal, PredicateHelper}
+import org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
@@ -43,7 +44,8 @@ class ColumnDomainsSuite extends QueryTest with SharedSparkSession with Predicat
 
   private val schema = StructType.fromDDL("id BIGINT, i INT, d DOUBLE, f FLOAT, s STRING, " +
     "b BINARY, flag BOOLEAN, dt DATE, ts TIMESTAMP, dec DECIMAL(10, 2), " +
-    "st STRUCT<x: INT, y: STRING>, arr ARRAY<INT>, c STRING COLLATE UTF8_LCASE")
+    "st STRUCT<x: INT, y: STRING>, arr ARRAY<INT>, c STRING COLLATE UTF8_LCASE, " +
+    "t TINYINT, sm SMALLINT, ntz TIMESTAMP_NTZ")
 
   private def char(codePoint: Int): String = new String(Character.toChars(codePoint))
 
@@ -207,6 +209,24 @@ class ColumnDomainsSuite extends QueryTest with SharedSparkSession with Predicat
     assert(domains("arr IS NULL").isEmpty)
     assert(domains("st IS NOT NULL").isEmpty)
     assert(domains("size(arr) > 1").isEmpty)
+    // The narrow integers and the timestamps without a time zone have domains of their own type.
+    assert(domains("t = CAST(1 AS TINYINT)") == Seq("t: 1Y"))
+    assert(domains("sm < CAST(10 AS SMALLINT)") == Seq("sm: (-inf, 10S)"))
+    assert(domains("ntz >= TIMESTAMP_NTZ '2020-01-01 00:00:00'") ==
+      Seq("ntz: [TIMESTAMP_NTZ '2020-01-01 00:00:00', +inf)"))
+  }
+
+  test("the narrow integers that the optimizer compares without a cast have domains") {
+    // The analyzed plan compares CAST(t AS INT) = 1, which UnwrapCastInBinaryComparison rewrites
+    // to t = 1Y, the predicate that Data Source V2 pushes for the optimized plan.
+    val df = spark.createDataFrame(Seq.empty[Row].asJava, schema).where("t = 1 AND sm < 10")
+    val condition = UnwrapCastInBinaryComparison(df.queryExecution.analyzed).collectFirst {
+      case Filter(condition, _) => condition
+    }.get
+    val optimized =
+      splitConjunctivePredicates(condition).flatMap(DataSourceV2Strategy.translateFilterV2)
+    assert(ColumnDomains.derive(optimized, schema).domains.map(_.toString) ==
+      Seq("t: 1Y", "sm: (-inf, 10S)"))
   }
 
   test("the pushed predicates are those whose domains are used") {
@@ -354,6 +374,36 @@ class ColumnDomainsSuite extends QueryTest with SharedSparkSession with Predicat
     // x IN () is null for null with the legacy behavior.
     withSQLConf(SQLConf.LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR.key -> "true") {
       check(emptyLists)
+    }
+  }
+
+  test("the domains of long chains of ORs, and of IN lists with other columns") {
+    // The DataFrame API builds a left-deep chain of ORs with reduce(_ || _), whose disjuncts are
+    // merged at once: it takes a fraction of a second here, and far longer when each OR merges the
+    // ranges of the ones before it.
+    val id = FieldReference("id")
+    val values = (0L until 20000L).map(LiteralValue(_, LongType))
+    val chain = values.map { value =>
+      new Predicate("=", Array[V2Expression](id, value))
+    }.reduce[Predicate]((left, right) => new Predicate("OR", Array[V2Expression](left, right)))
+    val in = new Predicate("IN", (id +: values).toArray[V2Expression])
+    failAfter(20.seconds) {
+      assert(ColumnDomains.derive(Seq(chain), schema).domains ==
+        ColumnDomains.derive(Seq(in), schema).domains)
+    }
+    // NOT of a chain of ANDs is a chain of ORs too.
+    val negatedAnds = new Predicate("NOT", Array[V2Expression](values.take(3).map { value =>
+      new Predicate("<>", Array[V2Expression](id, value))
+    }.reduce[Predicate]((left, right) => new Predicate("AND", Array[V2Expression](left, right)))))
+    assert(ColumnDomains.derive(Seq(negatedAnds), schema).domains.map(_.toString) ==
+      Seq("id: 0L, 1L, 2L"))
+    // Combining the domain of an IN list with those of five other columns takes time proportional
+    // to the number of values.
+    val others = Seq("i", "d", "f", "dt", "dec").map { name =>
+      new Predicate("IS_NOT_NULL", Array[V2Expression](FieldReference(name)))
+    }
+    failAfter(20.seconds) {
+      assert(ColumnDomains.derive(in +: others, schema).domains.length == 6)
     }
   }
 

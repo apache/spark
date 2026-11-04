@@ -218,7 +218,8 @@ values, with -0.0 equal to 0.0 (use IEEE 754 comparisons, not a total order such
 true. It must never skip a row whose values are all in their domains, which Spark cannot detect,
 but it can return rows that are not: Spark evaluates all the filters again after reading. So a
 library only uses the domains to read less data, and Spark does not push a `LIMIT` down with a
-filter. The library sets `used` to whether it uses each domain, and the plan of the query shows the
+filter. The library sets `used` to whether it uses each domain, and the formatted plan of the query
+(`EXPLAIN FORMATTED`, or `df.explain("formatted")`) and the SQL tab of the Spark UI show the
 filters of the used domains as `PushedFilters`, and the domains as `PushedDomains`. Set
 `spark.sql.dataSource.native.filterPushdown.enabled` to false to read without passing the domains,
 for example to check whether a library skips data that matches.

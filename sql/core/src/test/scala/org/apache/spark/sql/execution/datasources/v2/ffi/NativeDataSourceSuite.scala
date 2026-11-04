@@ -36,10 +36,12 @@ import org.apache.spark.api.python.{PythonBroadcast, SimplePythonFunction}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
+import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, LiteralValue}
+import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
-import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchScan, ColumnarScan}
+import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchScan, ColumnarScan, ColumnarScanBuilder}
 import org.apache.spark.sql.execution.datasources.v2.python.{PythonDataSourceV2, UserDefinedPythonDataSource}
 import org.apache.spark.sql.execution.vectorized.ReusedArrowColumnVector
 import org.apache.spark.sql.functions.lit
@@ -1003,6 +1005,21 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(ArrowUtils.rootAllocator.getAllocatedMemory == allocated)
     checkRows(range(newSession(defaultPackage), "end" -> "5").where("id IN (1, 3)").select("id"),
       Seq(Row(1L), Row(3L)))
+    assert(ArrowUtils.rootAllocator.getAllocatedMemory == allocated)
+    // A library may also move the ranges to take ownership of them, and keep them in its reader:
+    // they stay allocated until the library releases them, here when its reader is closed, once
+    // the partitions are planned, which read them again.
+    val movingSession = newSession(defaultPackage)
+    val (rangeName, rangeLocation) =
+      NativeDataSourceRegistry.lookup("native_range", movingSession.sessionState.conf).get
+    val moving = new NativeDataSource(rangeLocation, rangeName,
+      new CaseInsensitiveStringMap(Map("end" -> "5", "move_domains" -> "true").asJava))
+    val builder = new ColumnarScanBuilder(rangeName, moving.schema(), () => moving)
+    val in = new Predicate("IN", Array[V2Expression](FieldReference("id"),
+      LiteralValue(1L, LongType), LiteralValue(3L, LongType)))
+    movingSession.withActive(builder.pushPredicates(Array(in)))
+    assert(ArrowUtils.rootAllocator.getAllocatedMemory > allocated)
+    assert(builder.build().toBatch.planInputPartitions().nonEmpty)
     assert(ArrowUtils.rootAllocator.getAllocatedMemory == allocated)
     check("read", "injected failure in open") { session =>
       range(session, "fail" -> "open").collect()

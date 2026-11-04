@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.columnar
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkException
@@ -184,13 +185,45 @@ object ColumnDomains {
       }
     }
     predicate.name() match {
-      case "AND" => if (negated) both(or, negated = true) else both(and, negated = false)
-      case "OR" => if (negated) both(and, negated = true) else both(or, negated = false)
+      // The disjuncts of a chain of ORs, such as one that the DataFrame API builds with
+      // reduce(_ || _), are merged at once rather than two at a time.
+      case "AND" if negated => orAll(disjuncts(predicate, negated).map {
+        case (disjunct, disjunctNegated) => constraint(disjunct, disjunctNegated, schema)
+      })
+      case "OR" if !negated => orAll(disjuncts(predicate, negated).map {
+        case (disjunct, disjunctNegated) => constraint(disjunct, disjunctNegated, schema)
+      })
+      case "AND" => both(and, negated = false)
+      case "OR" => both(and, negated = true)
       case "NOT" => child(0).map(constraint(_, !negated, schema)).getOrElse(All)
       case "ALWAYS_TRUE" => if (negated) NoRow else All
       case "ALWAYS_FALSE" => if (negated) All else NoRow
       case _ => leaf(predicate, negated, schema).getOrElse(All)
     }
+  }
+
+  /**
+   * Returns the disjuncts of a predicate that is a disjunction, an OR or a negated AND, with the
+   * disjunctions that it nests, under NOT too, as the predicates and whether they are negated, in
+   * their order. It walks the predicate with a stack of its own, since a chain of ORs can be deeper
+   * than the stack of the thread.
+   */
+  private def disjuncts(predicate: Predicate, negated: Boolean): Seq[(Predicate, Boolean)] = {
+    val result = mutable.ArrayBuffer.empty[(Predicate, Boolean)]
+    val pending = mutable.Stack(predicate -> negated)
+    while (pending.nonEmpty) {
+      val (next, isNegated) = pending.pop()
+      val children = next.children().toSeq.collect { case p: Predicate => p }
+      next.name() match {
+        case "OR" | "AND" if children.length == 2 && (next.name() == "OR") != isNegated =>
+          // The left child is visited first.
+          pending.push(children(1) -> isNegated)
+          pending.push(children(0) -> isNegated)
+        case "NOT" if children.length == 1 => pending.push(children.head -> !isNegated)
+        case _ => result += next -> isNegated
+      }
+    }
+    result.toSeq
   }
 
   private def leaf(
@@ -372,7 +405,8 @@ object ColumnDomains {
 
   private def and(left: Constraint, right: Constraint): Constraint = (left, right) match {
     case (Some(l), Some(r)) =>
-      Some((l.keySet ++ r.keySet).map { column =>
+      // Through an iterator, so that only the columns are hashed, not their values.
+      Some((l.keySet ++ r.keySet).iterator.map { column =>
         column -> ((l.get(column), r.get(column)) match {
           case (Some(a), Some(b)) => intersect(column, a, b)
           case (a, b) => a.orElse(b).get
@@ -381,17 +415,18 @@ object ColumnDomains {
     case _ => NoRow
   }
 
-  // A column that only one side constrains can have any value in the rows of the other side, so
-  // only the columns that both sides constrain are constrained.
-  private def or(left: Constraint, right: Constraint): Constraint = {
-    if (matchesNoRow(left)) {
-      right
-    } else if (matchesNoRow(right)) {
-      left
-    } else {
-      val (l, r) = (left.get, right.get)
-      Some(l.keySet.intersect(r.keySet).map(column => column -> union(column, l(column), r(column)))
-        .filterNot { case (column, values) => isAll(column, values) }.toMap)
+  // A column that only some of the disjuncts constrain can have any value in the rows of the
+  // others, so only the columns that all of them constrain are constrained. A disjunct that matches
+  // no row adds no row.
+  private def orAll(disjuncts: Seq[Constraint]): Constraint = {
+    disjuncts.filterNot(matchesNoRow) match {
+      case Seq() => disjuncts.lastOption.getOrElse(NoRow)
+      case Seq(only) => only
+      case matching =>
+        val values = matching.map(_.get)
+        val columns = values.map(_.keySet).reduce(_ intersect _)
+        Some(columns.iterator.map(column => column -> union(column, values.map(_(column))))
+          .filterNot { case (column, v) => isAll(column, v) }.toMap)
     }
   }
 
@@ -403,17 +438,17 @@ object ColumnDomains {
       case (x, y) => x.orElse(y)
     })
 
-  private def union(column: Column, a: Values, b: Values): Values = Values(
-    a.nullAllowed || b.nullAllowed,
-    a.nanAllowed || b.nanAllowed,
-    (a.ranges, b.ranges) match {
-      case (Some(x), Some(y)) =>
-        unionRanges(x, y, column.ordering) match {
-          // All the values.
-          case Seq(ValueRange(None, _, None, _)) => None
-          case ranges => Some(ranges)
-        }
-      case _ => None
+  private def union(column: Column, all: Seq[Values]): Values = Values(
+    all.exists(_.nullAllowed),
+    all.exists(_.nanAllowed),
+    if (all.forall(_.ranges.isDefined)) {
+      unionRanges(all.flatMap(_.ranges.get), column.ordering) match {
+        // All the values.
+        case Seq(ValueRange(None, _, None, _)) => None
+        case ranges => Some(ranges)
+      }
+    } else {
+      None
     })
 
   // A negative value when `a` starts before `b`.
@@ -473,19 +508,16 @@ object ColumnDomains {
     result.toSeq
   }
 
-  // Merges two lists of sorted ranges, and the ranges that overlap or touch, such as [1, 2) and
+  // Merges ranges, sorted by their lows, and the ranges that overlap or touch, such as [1, 2) and
   // [2, 3].
-  private def unionRanges(
-      a: Seq[ValueRange],
-      b: Seq[ValueRange],
-      ordering: Ordering[Any]): Seq[ValueRange] = {
+  private def unionRanges(ranges: Seq[ValueRange], ordering: Ordering[Any]): Seq[ValueRange] = {
     def touches(first: ValueRange, next: ValueRange): Boolean = (first.high, next.low) match {
       case (Some(high), Some(low)) =>
         val c = ordering.compare(low, high)
         c < 0 || (c == 0 && (first.highInclusive || next.lowInclusive))
       case _ => true
     }
-    (a ++ b).sortWith(compareLows(_, _, ordering) < 0).foldLeft(List.empty[ValueRange]) {
+    ranges.sortWith(compareLows(_, _, ordering) < 0).foldLeft(List.empty[ValueRange]) {
       case (last :: rest, range) if touches(last, range) =>
         val high = if (compareHighs(last, range, ordering) >= 0) last else range
         last.copy(high = high.high, highInclusive = high.highInclusive) :: rest

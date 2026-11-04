@@ -703,7 +703,8 @@ typedef struct SparkDsLibrary {
    *
    * domains: the count domains
    * used: an array of count values, all false, to set to true for the domains that the reader
-   *       uses. Spark shows the filters of the used domains as pushed in the plan of the query.
+   *       uses. Spark shows the filters of the used domains as pushed in the formatted plan of
+   *       the query (EXPLAIN FORMATTED) and in the SQL tab of the Spark UI.
    */
   int (*push_domains)(void* reader, const SparkDsDomain* const* domains, int64_t count,
                       bool* used);

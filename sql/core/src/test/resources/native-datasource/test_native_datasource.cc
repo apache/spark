@@ -50,7 +50,9 @@
 //                   for each block that may match, with all its rows. With the option
 //                   "use_domains", it uses "all" the domains, or "none". With the option
 //                   "domains_path", it writes the domains to that file, one per line: the path
-//                   of the column, "null" or "-", "nan" or "-", and the ranges, or "*".
+//                   of the column, "null" or "-", "nan" or "-", and the ranges, or "*". With the
+//                   option "move_domains", it moves the ranges of the domains, checks them again
+//                   when it plans the partitions, and releases them when the reader is closed.
 //   native_sink     Writes the rows as CSV files under the directory in the option "path". With
 //                   the option "commit_messages", a data writer passes its commit message that
 //                   many times. Creating and closing a data writer create a file named after
@@ -764,6 +766,21 @@ void recordTask(const Options& options, const SparkDsTaskContext* task) {
 // The driver-side reader of native_range and native_counter.
 struct Reader {
   Options state;  // Serialized to the executors.
+  // With the option "move_domains", the ranges of the domains that push_domains moved, and how
+  // they read then, which partitions checks again: a library may keep the ranges that it moves.
+  std::vector<ArrowArray> moved_ranges;
+  std::vector<ArrowSchema> moved_schemas;
+  std::vector<std::string> moved_formats;
+  std::vector<std::string> moved_descriptions;
+
+  ~Reader() {
+    for (auto& ranges : moved_ranges) {
+      if (ranges.release != nullptr) ranges.release(&ranges);
+    }
+    for (auto& schema : moved_schemas) {
+      if (schema.release != nullptr) schema.release(&schema);
+    }
+  }
 };
 
 // Reads the ids [lo, hi) of the columns in the state, in batches.
@@ -1032,7 +1049,8 @@ int createReader(void* handle, struct ArrowSchema* schema, void** out) {
     reader->state["partitions"] = get(source->options, "partitions", "2");
     reader->state["batch_size"] = get(source->options, "batch_size", "1000");
     for (const char* option : {"fail", "slice", "short", "null_rows", "wait_for_interrupt",
-                               "task_path", "use_domains", "domains_path", "block", "slow_read"}) {
+                               "task_path", "use_domains", "domains_path", "block", "slow_read",
+                               "move_domains"}) {
       reader->state[option] = get(source->options, option, "");
     }
     *out = reader;
@@ -1089,9 +1107,15 @@ bool boolAt(const ArrowArray* array, int64_t i) {
 }
 
 // Formats the ranges of a domain, such as "[1,5) (7,+inf)", after checking their schema.
+std::string formatRanges(const ArrowSchema* schema, const ArrowArray* array,
+                         const std::string& format);
+
 std::string formatRanges(const SparkDsDomain* domain, const std::string& format) {
-  const ArrowSchema* schema = domain->ranges_schema;
-  const ArrowArray* array = domain->ranges;
+  return formatRanges(domain->ranges_schema, domain->ranges, format);
+}
+
+std::string formatRanges(const ArrowSchema* schema, const ArrowArray* array,
+                         const std::string& format) {
   if (schema == nullptr || std::string(schema->format) != "+s" || schema->n_children != 4 ||
       array->n_children != 4) {
     throw std::runtime_error("the ranges are not a struct array of 4 fields");
@@ -1176,6 +1200,15 @@ int pushDomains(void* handle, const SparkDsDomain* const* domains, int64_t count
       std::string ranges = domain->ranges == nullptr ? "*" : formatRanges(domain, format);
       lines += path + " " + (domain->null_allowed ? "null" : "-") + " " +
                (domain->nan_allowed ? "nan" : "-") + " " + ranges + "\n";
+      if (get(reader->state, "move_domains", "") == "true" && domain->ranges != nullptr) {
+        // Moves the ranges and their schema, as importers of the C data interface do.
+        reader->moved_ranges.push_back(*domain->ranges);
+        domain->ranges->release = nullptr;
+        reader->moved_schemas.push_back(*domain->ranges_schema);
+        domain->ranges_schema->release = nullptr;
+        reader->moved_formats.push_back(format);
+        reader->moved_descriptions.push_back(ranges);
+      }
       bool is_id = domain->path_length == 1 && column == "id" && ID_SIGN == 1;
       used[i] = use == "all" || (use.empty() && is_id);
       // Nulls are not ids: the ids are never null.
@@ -1192,6 +1225,14 @@ int planPartitions(void* handle, SparkDsSink add_partition, void* sink) {
   return guarded([&] {
     auto* reader = fromHandle<Reader>(handle);
     maybeFail(reader->state, "plan");
+#ifndef READ_ONLY
+    for (size_t i = 0; i < reader->moved_ranges.size(); i++) {
+      if (formatRanges(&reader->moved_schemas[i], &reader->moved_ranges[i],
+                       reader->moved_formats[i]) != reader->moved_descriptions[i]) {
+        throw std::runtime_error("the ranges that push_domains moved changed");
+      }
+    }
+#endif  // READ_ONLY
     int64_t lo = getLong(reader->state, "lo", 0);
     int64_t hi = getLong(reader->state, "hi", 0);
     int64_t count = getLong(reader->state, "partitions", 1);

@@ -26,6 +26,8 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.catalyst.expressions.{Contains, PredicateHelper, Rand}
+import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.connector.catalog.{Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
@@ -45,7 +47,7 @@ import org.apache.spark.util.Utils
  * Tests the Data Source V2 adapter of [[ColumnarDataSource]] with a data source implemented on the
  * JVM. `NativeDataSourceSuite` tests the native data sources, which implement it.
  */
-class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession {
+class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession with PredicateHelper {
   import testImplicits._
 
   private val format = "test_columnar_range"
@@ -81,6 +83,26 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession {
     val limited = spark.read.format(format).option("end", "10").load().limit(2)
     assert(limited.collect().length == 2)
     assert(scan(limited).getMetaData()("PushedLimit") == "LIMIT 2")
+  }
+
+  test("keep the order of the filters that Spark evaluates after a scan") {
+    // A data source only skips data with the domains, so Spark evaluates all the filters after the
+    // scan, in the order of the query, as without the pushdown: here a nondeterministic and
+    // selective one first, before an expensive one that the scan gets.
+    Seq("true", "false").foreach { enabled =>
+      withSQLConf(SQLConf.NATIVE_DATA_SOURCE_FILTER_PUSHDOWN_ENABLED.key -> enabled) {
+        val df = spark.read.format(format).option("end", "10").load()
+          .where("rand(0) < 0.5 AND lower(name) LIKE '%e1%'")
+        val conjuncts = df.queryExecution.optimizedPlan.collectFirst {
+          case Filter(condition, _: DataSourceV2ScanRelation) =>
+            splitConjunctivePredicates(condition)
+        }.get
+        // The optimizer adds the filters that it infers, such as isnotnull(name), before them.
+        val random = conjuncts.indexWhere(_.exists(_.isInstanceOf[Rand]))
+        val contains = conjuncts.indexWhere(_.isInstanceOf[Contains])
+        assert(random >= 0 && contains > random, conjuncts)
+      }
+    }
   }
 
   test("push down the domains of filtered columns") {

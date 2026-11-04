@@ -35,7 +35,7 @@ import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition, Sam
 import org.apache.spark.sql.execution.{InSubqueryExec, ScalarSubquery => ExecScalarSubquery}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, DataSourceUtils}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.{PartitionPredicateField, PartitionPredicateImpl, SupportsPushDownCatalystFilters, SupportsRuntimeCatalystFiltering}
+import org.apache.spark.sql.internal.connector.{EvaluatesAllPushedPredicates, PartitionPredicateField, PartitionPredicateImpl, SupportsPushDownCatalystFilters, SupportsRuntimeCatalystFiltering}
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.util.ArrayImplicits.SparkArrayOps
@@ -134,8 +134,13 @@ object PushDownUtils extends Logging {
               rebuildExpressions(pushedPostScanFilters, translatedFilterToExpr)
           }
 
-        val orderedPostScanFilters = prioritizeFilters(finalPostScanFilters,
-          ExpressionSet(untranslatableExprs)) ++ nonDeterministicFilters
+        val orderedPostScanFilters = r match {
+          // The builder returns all the predicates that it got, so Spark evaluates all the filters
+          // after the scan: they keep the order of the query.
+          case _: EvaluatesAllPushedPredicates => filters
+          case _ => prioritizeFilters(finalPostScanFilters,
+            ExpressionSet(untranslatableExprs)) ++ nonDeterministicFilters
+        }
         (Right(r.pushedPredicates.toImmutableArraySeq), orderedPostScanFilters)
       case r: SupportsPushDownCatalystFilters =>
         val postScanFilters = r.pushFilters(deterministicFilters) ++ nonDeterministicFilters

@@ -29,7 +29,7 @@ import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.SupportsMetadata
+import org.apache.spark.sql.internal.connector.{EvaluatesAllPushedPredicates, SupportsMetadata}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.vectorized.ColumnarBatch
@@ -86,6 +86,8 @@ class ColumnarScanBuilder(
     createDataSource: () => ColumnarDataSource)
   extends ScanBuilder
   with SupportsPushDownV2Filters
+  // Spark evaluates all the predicates after the scan, see `pushPredicates`.
+  with EvaluatesAllPushedPredicates
   with SupportsPushDownLimit
   with SupportsPushDownRequiredColumns {
 
