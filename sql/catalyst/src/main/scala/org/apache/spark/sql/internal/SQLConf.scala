@@ -4222,6 +4222,17 @@ object SQLConf {
       .checkValue(v => Set(1, 2, 3, 4).contains(v), "Valid versions are 1, 2, 3, and 4")
       .createWithDefault(2)
 
+  val STREAMING_JOIN_PRESERVE_WATERMARK_COLUMNS =
+    buildConf("spark.sql.streaming.join.preserveWatermarkColumns")
+      .internal()
+      .doc("When true, preserves watermarked event-time columns in stream-stream join inputs " +
+        "even when they are not referenced by the join condition or output. Setting this to " +
+        "false restores the legacy behavior where those columns can be pruned.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val STREAMING_SESSION_WINDOW_MERGE_SESSIONS_IN_LOCAL_PARTITION =
     buildConf("spark.sql.streaming.sessionWindow.merge.sessions.in.local.partition")
       .doc("When true, streaming session window sorts and merge sessions in local partition " +

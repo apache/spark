@@ -861,6 +861,7 @@ class MicroBatchExecution(
          * in the offset log */
         execCtx.batchId = latestBatchId
         execCtx.isCurrentBatchConstructed = true
+        execCtx.isCurrentBatchReExecution = true
         execCtx.endOffsets = nextOffsets.toStreamProgress(sources, sourceIdMap)
 
         // validate the integrity of offset log and get the previous offset from the offset log
@@ -913,6 +914,7 @@ class MicroBatchExecution(
               }
               execCtx.batchId = latestCommittedBatchId + 1
               execCtx.isCurrentBatchConstructed = false
+              execCtx.isCurrentBatchReExecution = false
               execCtx.startOffsets ++= execCtx.endOffsets
               watermarkTracker.setWatermark(
                 math.max(watermarkTracker.currentWatermark, commitMetadata.nextBatchWatermarkMs))
@@ -1381,6 +1383,7 @@ class MicroBatchExecution(
         currentStateStoreCkptId,
         stateSchemaMetadatas,
         joinStateValueSchemas,
+        isCurrentBatchReExecution = execCtx.isCurrentBatchReExecution,
         isTerminatingTrigger = trigger.isInstanceOf[AvailableNowTrigger.type],
         isRealTimeMode = trigger.isInstanceOf[RealTimeTrigger])
       execCtx.executionPlan.executedPlan // Force the lazy generation of execution plan

@@ -68,6 +68,8 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
  * @param joinStateValueSchemas legacy stream-stream join value schemas restored on restart.
  *                              It is passed in by reference so every batch preserves the same
  *                              physical input shape.
+ * @param isCurrentBatchReExecution whether the current batch was recovered from the offset log
+ *                                  without a matching commit.
  */
 class IncrementalExecution(
     sparkSession: SparkSession,
@@ -90,6 +92,7 @@ class IncrementalExecution(
       MutableMap[Long, StateSchemaBroadcast](),
     val joinStateValueSchemas: MutableMap[Long, (StructType, StructType)] =
       MutableMap[Long, (StructType, StructType)](),
+    val isCurrentBatchReExecution: Boolean = false,
     mode: CommandExecutionMode.Value = CommandExecutionMode.ALL,
     val isTerminatingTrigger: Boolean = false,
     val isRealTimeMode: Boolean = false)
@@ -489,11 +492,13 @@ class IncrementalExecution(
         List.empty
       } else {
         val info = join.getStateInfo
+        val metadataBatchId =
+          if (isCurrentBatchReExecution) currentBatchId else currentBatchId - 1
         OperatorStateMetadataReader.createReader(
           new Path(checkpointLocation, info.operatorId.toString),
           hadoopConf,
           join.operatorStateMetadataVersion,
-          currentBatchId - 1,
+          metadataBatchId,
           createMetadataDir = false).read() match {
           case Some(OperatorStateMetadataV2(_, stores, _)) =>
             stores.flatMap(_.stateSchemaFilePaths).map(new Path(_)).toList
@@ -615,7 +620,8 @@ class IncrementalExecution(
           val operatorId = join.getStateInfo.operatorId
           joinStateValueSchemas.get(operatorId) match {
             case Some(schemas) => reconcile(join, schemas, requiredOutput)
-            case None if isFirstBatch && currentBatchId != 0 =>
+            case None if isFirstBatch &&
+                (currentBatchId != 0 || isCurrentBatchReExecution) =>
               val schemas = readStateValueSchemas(join)
               val reconciled = reconcile(join, schemas, requiredOutput)
               if (reconciled.left.output != join.left.output ||

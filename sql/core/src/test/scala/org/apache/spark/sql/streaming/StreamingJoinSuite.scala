@@ -393,17 +393,18 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
       val right = rightInput.toDF().toDF("key", "time")
         .select($"key", timestamp_seconds($"time").as("rightTime"))
         .withWatermark("rightTime", "10 seconds")
-      val legacyJoined = left.select($"key").join(right.select($"key"), "key")
-
-      testStream(legacyJoined)(
-        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
-        MultiAddData(leftInput, (1, 1000000L))(rightInput, (1, 1000000L)),
-        CheckNewAnswer(1),
-        MultiAddData(leftInput, (3, 1000001L))(rightInput, (4, 1000001L)),
-        CheckNewAnswer(),
-        StopStream)
-
       val joined = left.join(right, "key").select($"key")
+
+      withSQLConf(SQLConf.STREAMING_JOIN_PRESERVE_WATERMARK_COLUMNS.key -> "false") {
+        testStream(joined)(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          MultiAddData(leftInput, (1, 1000000L))(rightInput, (1, 1000000L)),
+          CheckNewAnswer(1),
+          MultiAddData(leftInput, (3, 1000001L))(rightInput, (4, 1000001L)),
+          CheckNewAnswer(),
+          StopStream)
+      }
+
       testStream(joined)(
         StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
         MultiAddData(leftInput, (2, 1000L))(rightInput, (2, 1000L)),
@@ -431,6 +432,48 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
         condition = "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE",
         parameters = Map("storedValueSchema" -> ".*", "newValueSchema" -> ".*"),
         matchPVals = true)
+    }
+  }
+
+  test("stream stream inner join preserves legacy state schema when replaying batch 0") {
+    withTempDir { checkpointDir =>
+      val leftInput = MemoryStream[(Int, Long)]
+      val rightInput = MemoryStream[(Int, Long)]
+
+      val left = leftInput.toDF().toDF("key", "time")
+        .select($"key", timestamp_seconds($"time").as("leftTime"))
+        .withWatermark("leftTime", "10 seconds")
+      val right = rightInput.toDF().toDF("key", "time")
+        .select($"key", timestamp_seconds($"time").as("rightTime"))
+        .withWatermark("rightTime", "10 seconds")
+      val joined = left.join(right, "key").select($"key")
+
+      withSQLConf(
+          SQLConf.STREAMING_JOIN_PRESERVE_WATERMARK_COLUMNS.key -> "false",
+          SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
+        testStream(joined)(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          MultiAddData(leftInput, (1, 1000000L))(rightInput, (1, 1000000L)),
+          CheckNewAnswer(1),
+          StopStream,
+          Execute { query =>
+            query.offsetLog.purgeAfter(0)
+            query.commitLog.purgeAfter(-1)
+          })
+      }
+
+      testStream(joined)(
+        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+        WaitUntilBatchProcessed(0),
+        CheckNewAnswer(1),
+        Execute { query =>
+          val joins = query.lastExecution.executedPlan.collect {
+            case join: StreamingSymmetricHashJoinExec => join
+          }
+          assert(joins.size == 1)
+          assert(joins.head.left.output.map(_.name) == Seq("key"))
+          assert(joins.head.right.output.map(_.name) == Seq("key"))
+        })
     }
   }
 

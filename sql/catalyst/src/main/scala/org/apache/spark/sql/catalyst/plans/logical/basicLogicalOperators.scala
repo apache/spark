@@ -785,7 +785,7 @@ case class Join(
   // Stream-stream joins filter late rows even when event time is not used by the join condition
   // or selected downstream. Keep watermarked input attributes from being pruned away.
   override def references: AttributeSet = super.references ++ AttributeSet(
-    if (isStateful) {
+    if (isStateful && conf.getConf(SQLConf.STREAMING_JOIN_PRESERVE_WATERMARK_COLUMNS)) {
       children.flatMap(_.output.filter(_.metadata.contains(EventTimeWatermark.delayKey)))
     } else {
       Seq.empty
