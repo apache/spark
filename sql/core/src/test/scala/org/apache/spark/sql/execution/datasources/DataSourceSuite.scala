@@ -242,7 +242,7 @@ class DataSourceSuite extends SharedSparkSession with PrivateMethodTester {
     )
   }
 
-  test("newHadoopConfWithOptions preserves key casing for CaseInsensitiveMap") {
+  test("SPARK-60887: newHadoopConfWithOptions preserves key casing for CaseInsensitiveMap") {
     val options = CaseInsensitiveMap(Map(
       "fs.azure.skipUserGroupMetadataDuringInitialization" -> "true",
       "mapreduce.input.pathFilter.class" -> "org.example.CustomPathFilter",
