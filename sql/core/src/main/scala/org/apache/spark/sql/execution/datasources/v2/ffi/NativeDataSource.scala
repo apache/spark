@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2.ffi
 import java.lang.ref.{Cleaner, WeakReference}
 import java.util
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 import java.util.function.BooleanSupplier
 import javax.annotation.concurrent.GuardedBy
 
@@ -407,7 +407,13 @@ class NativeDataSourceStreamReader(
     call(name, "commit an offset of")(optional(library.commitOffset(handle.get, end)))
   }
 
-  override def stop(): Unit = handle.close()
+  // The state of the last micro-batch that the reader planned, for tests.
+  private[ffi] def lastPlannedState: Option[Broadcast[Array[Byte]]] = plannedState
+
+  override def stop(): Unit = {
+    // As for the state of a micro-batch once the next one is planned.
+    Utils.tryWithSafeFinally(plannedState.foreach(_.unpersist(blocking = false)))(handle.close())
+  }
 }
 
 object NativeDataSourceStreamReader {
@@ -1006,12 +1012,15 @@ object NativePartitionReader {
       timeZoneId: String,
       streamAddress: Long)(
       stateAndPartition: P => (Array[Byte], NativeInputPartition)): Unit = {
-    // A task that failed or was killed is over too, also while its listeners run.
     val context = TaskContext.get()
-    if (context == null || context.isInterrupted() || context.isFailed() ||
-        context.isCompleted()) {
-      throw new IllegalStateException(
-        "openArrowStream must be called in the running task that reads the partition.")
+    if (context != null) {
+      // A task that was killed gets the error of its kill, as Spark reports it.
+      context.killTaskIfInterrupted()
+    }
+    // A task that failed is over too, also while its listeners run.
+    if (context == null || context.isFailed() || context.isCompleted()) {
+      throw new IllegalStateException("openArrowStream must be called in the running task that " +
+        "reads the partition, on a thread that has its TaskContext.")
     }
     if (streamAddress == 0 || ArrowArrayStream.wrap(streamAddress).snapshot().release != 0) {
       throw new IllegalArgumentException(
@@ -1209,8 +1218,13 @@ private[ffi] object NativeTask {
     val context = Option(TaskContext.get())
     val interrupted: BooleanSupplier = context match {
       case Some(taskContext) if read =>
+        // Set once the task failed or completed, by listeners, so that a check only reads
+        // volatile fields, unlike `isFailed()` and `isCompleted()`, which lock the task.
+        val ended = new AtomicBoolean(false)
+        taskContext.addTaskFailureListener((_, _) => ended.set(true))
+        taskContext.addTaskCompletionListener[Unit](_ => ended.set(true))
         val task = new WeakReference(taskContext)
-        () => Option(task.get()).forall(t => t.isInterrupted() || t.isFailed() || t.isCompleted())
+        () => ended.get() || Option(task.get()).forall(_.isInterrupted())
       case Some(taskContext) =>
         () => taskContext.isInterrupted()
       case None =>

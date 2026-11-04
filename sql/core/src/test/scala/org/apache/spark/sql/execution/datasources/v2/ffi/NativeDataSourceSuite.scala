@@ -35,7 +35,7 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.{BigIntVector, VectorSchemaRoot}
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SPARK_VERSION, SparkClassNotFoundException, SparkFiles, SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException, TaskContext, TestUtils}
+import org.apache.spark.{SPARK_VERSION, SparkClassNotFoundException, SparkFiles, SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException, TaskContext, TaskKilledException, TestUtils}
 import org.apache.spark.api.python.{PythonBroadcast, SimplePythonFunction}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
@@ -1524,35 +1524,40 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       factory.openArrowStream(partition, stream)
       (stream, read(ArrowArrayStream.wrap(stream)))
     }
-    val (address, copy) = checkContexts(1) {
-      // The engine reads the stream to its end in the task, but releases it later.
-      val (address, ids) = openInTask(laterFactory, laterPartitions.head)(readIdsInPlace)
-      assert(ids == (0L until 3L))
-      assert(NativeLibrary.openEngineStreams() == 1 && !released.exists())
-      // A copy of the stream, as an engine that moves the stream may leave behind.
-      val copy = Platform.allocateMemory(streamSize)
+    // The engine reads the stream to its end in the task, but releases it later.
+    val (address, readInTask) =
+      checkContexts(1)(openInTask(laterFactory, laterPartitions.head)(readIdsInPlace))
+    // A copy of the stream, as an engine that moves the stream may leave behind.
+    val copy = Platform.allocateMemory(streamSize)
+    Utils.tryWithSafeFinally {
       Platform.copyMemory(null, address, null, copy, streamSize)
-      (address, copy)
-    }
-    checkContexts(-1) {
-      ArrowArrayStream.wrap(address).release()
-      assert(NativeLibrary.openEngineStreams() == 0 && released.exists())
-    }
-    Platform.freeMemory(address)
-    // Once the stream is released, the callbacks of the copy fail with EINVAL, and its release
-    // only marks it released.
-    checkContexts(0) {
-      val array = ArrowArray.allocateNew(ArrowUtils.rootAllocator)
-      val stale = try intercept[Exception](ArrowArrayStream.wrap(copy).getNext(array)) finally {
-        array.close()
+      assert(readInTask == (0L until 3L))
+      assert(NativeLibrary.openEngineStreams() == 1 && !released.exists())
+      checkContexts(-1) {
+        ArrowArrayStream.wrap(address).release()
+        assert(NativeLibrary.openEngineStreams() == 0 && released.exists())
       }
-      assert(Utils.exceptionString(stale)
-        .contains("The stream was released, or is not a stream of Spark."))
-      ArrowArrayStream.wrap(copy).release()
-      assert(ArrowArrayStream.wrap(copy).snapshot().release == 0)
-      assert(NativeLibrary.openEngineStreams() == 0)
+      // Once the stream is released, the callbacks of the copy fail with EINVAL, and its release
+      // only marks it released.
+      checkContexts(0) {
+        val array = ArrowArray.allocateNew(ArrowUtils.rootAllocator)
+        val stale = try intercept[Exception](ArrowArrayStream.wrap(copy).getNext(array)) finally {
+          array.close()
+        }
+        assert(Utils.exceptionString(stale)
+          .contains("The stream was released, or is not a stream of Spark."))
+        ArrowArrayStream.wrap(copy).release()
+        assert(ArrowArrayStream.wrap(copy).snapshot().release == 0)
+        assert(NativeLibrary.openEngineStreams() == 0)
+      }
+    } {
+      // A failure above may leave the stream open, which would keep the context of its task.
+      if (ArrowArrayStream.wrap(address).snapshot().release != 0) {
+        ArrowArrayStream.wrap(address).release()
+      }
+      Platform.freeMemory(address)
+      Platform.freeMemory(copy)
     }
-    Platform.freeMemory(copy)
 
     // Once the task ended, its context tells the library that it was interrupted, so that the
     // library stops waiting.
@@ -1677,13 +1682,24 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         }
         assert(read == Seq(0L, 1L))
       }
-      // A micro-batch without partitions broadcasts no state, although the stream reader
-      // returned one.
-      val nextBroadcast = session.sparkContext.broadcast(0).id + 1
-      assert(plan(stream, 2, 2).isEmpty)
-      assert(session.sparkContext.broadcast(0).id == nextBroadcast)
     } finally {
       stream.stop()
+    }
+    // A micro-batch without partitions broadcasts no state, although the stream reader returned
+    // one.
+    val (counterName, counterLocation) =
+      NativeDataSourceRegistry.lookup("native_counter", session.sessionState.conf).get
+    val streamReader = new NativeDataSource(counterLocation, counterName,
+        new CaseInsensitiveStringMap(Map("max_offset" -> "4").asJava))
+      .streamReader(StructType.fromDDL("id BIGINT"), Utils.createTempDir().getPath)
+      .asInstanceOf[NativeDataSourceStreamReader]
+    try {
+      assert(streamReader.partitions("{\"offset\":0}", "{\"offset\":2}").nonEmpty)
+      assert(streamReader.lastPlannedState.isDefined)
+      assert(streamReader.partitions("{\"offset\":2}", "{\"offset\":2}").isEmpty)
+      assert(streamReader.lastPlannedState.isEmpty)
+    } finally {
+      streamReader.stop()
     }
     // A micro-batch without a state is not broadcast.
     val stateless = microBatchStream("max_offset" -> "4", "states" -> "0")
@@ -1722,6 +1738,16 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     }
     assert(Utils.exceptionString(failed).contains("injected failure of the task"))
     assert(Utils.exceptionString(failed).contains("must be called in the running task"))
+    // A task that was killed gets the error of its kill.
+    val killedContext = TaskContext.empty()
+    killedContext.markInterrupted("killed for the test")
+    TaskContext.setTaskContext(killedContext)
+    val killed = try intercept[TaskKilledException] {
+      factory.openArrowStream(partitions.head, 0)
+    } finally {
+      TaskContext.unset()
+    }
+    assert(killed.reason == "killed for the test")
     val noStream = intercept[Exception](inTask(factory.openArrowStream(partitions.head, 0)))
     assert(Utils.exceptionString(noStream).contains("whose release callback is NULL"))
     // The arguments are checked before the partition, which must be of the kind of the scan of the
