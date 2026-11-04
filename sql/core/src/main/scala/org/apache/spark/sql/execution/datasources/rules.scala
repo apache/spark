@@ -117,7 +117,15 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
     dataSource
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+  def apply(plan: LogicalPlan): LogicalPlan = plan match {
+    // Like the other ALTER TABLE commands, which take an `UnresolvedTable`, ADD CONSTRAINT with a
+    // CHECK constraint does not run on a file. Its target is an `UnresolvedRelation` only to
+    // validate the existing rows, so leave it unresolved to be reported as not found.
+    case _: AddCheckConstraint => plan
+    case _ => resolveRelations(plan)
+  }
+
+  private def resolveRelations(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case r @ RelationTimeTravel(u: UnresolvedRelation, timestamp, _)
         if maybeSQLFile(u) && timestamp.forall(_.resolved) =>
       // If we successfully look up the data source, then this is a path-based table, so we should

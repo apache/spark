@@ -440,6 +440,12 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
         // Here we perform additional checks for them.
         checkIfSelfReferenceIsPlacedCorrectly(unionLoop, unionLoop.id)
 
+      // The child `Filter` holds the same condition. Check it first so that an error of the
+      // subquery in the `Filter` does not hide that the constraint cannot have a subquery. A
+      // missing table is still reported first, by the bottom-up traversal.
+      case AddCheckConstraint(Filter(_, relation), check, _) if relation.resolved =>
+        check.failIfContainsSubquery()
+
       case _ =>
     }
 
@@ -1115,6 +1121,9 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               errorClass = "NON_DETERMINISTIC_CHECK_CONSTRAINT",
               messageParameters = Map("checkCondition" -> a.checkConstraint.condition)
             )
+
+          case a: AddCheckConstraint =>
+            a.checkConstraint.failIfCallsUserDefinedFunction()
 
           case alter: AlterTableCommand =>
             checkAlterTableCommand(alter)
