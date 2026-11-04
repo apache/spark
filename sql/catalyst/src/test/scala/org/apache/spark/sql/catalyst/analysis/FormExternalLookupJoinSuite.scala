@@ -118,7 +118,7 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
         val formed = FormExternalLookupJoin(analyzed)
         assert(formed.isInstanceOf[ExternalLookupJoin])
         assert(formed.output == analyzed.output)
-        assert(!formed.exists(_.isInstanceOf[ExternalLookupHint]))
+        assert(formed.exists(_.isInstanceOf[ExternalLookupHint]) === false)
       }
     // A hint that is not on the lookup side of a join is dropped.
     val stray = analyze(dual.hint("external_lookup"))
