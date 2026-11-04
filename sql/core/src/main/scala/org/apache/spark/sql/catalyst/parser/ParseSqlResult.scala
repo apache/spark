@@ -868,6 +868,8 @@ object ParseSqlResult {
       primaryQueryPlan(query)
     case i: InsertIntoStatement => primaryQueryPlan(i.query)
     case d: DataWritingCommand => primaryQueryPlan(d.query)
+    // Row-level rewrites add internal columns; leave them out of select_list.
+    case _: ReplaceData | _: WriteDelta => plan
     case w: V2WriteCommand => primaryQueryPlan(w.query)
     case c: CreateTableAsSelect => primaryQueryPlan(c.query)
     case r: ReplaceTableAsSelect => primaryQueryPlan(r.query)
