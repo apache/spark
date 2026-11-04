@@ -24,6 +24,7 @@ import json
 import os
 import sys
 import warnings
+import zipimport
 from contextlib import contextmanager
 from inspect import currentframe, getframeinfo
 from typing import IO, Any, Generator, Optional, Union, overload
@@ -58,6 +59,11 @@ from pyspark.util import is_remote_only, local_connect_and_auth
 pickleSer = CPickleSerializer()
 utf8_deserializer = UTF8Deserializer()
 
+# sys.path as it was when the worker started, before any Spark files were added. The zip
+# archives on it (pyspark.zip, py4j and the rest of PYTHONPATH) do not change while the worker
+# runs, so _invalidate_import_caches keeps their cached directory listings.
+_startup_sys_path = frozenset(sys.path)
+
 
 def add_path(path: str) -> bool:
     # worker can be used, so do not add path multiple times
@@ -66,6 +72,34 @@ def add_path(path: str) -> bool:
         sys.path.insert(1, path)
         return True
     return False
+
+
+def _invalidate_import_caches() -> None:
+    """
+    Like importlib.invalidate_caches(), but keeps the zipimporters of archives that were on
+    sys.path when the worker started.
+
+    Up to Python 3.12, invalidating a zipimporter re-reads the archive's whole directory, and an
+    archive has one zipimporter per package imported from it, so pyspark.zip is re-read once for
+    every package the worker imported from it. Python 3.13+ re-reads each archive once on its
+    next lookup. Archives added after startup, such as the ones in python_includes, are still
+    invalidated.
+    """
+    kept = {
+        path: finder
+        for path, finder in sys.path_importer_cache.items()
+        # importlib.invalidate_caches() drops relative paths because the working directory may
+        # have changed, so only keep absolute ones.
+        if isinstance(finder, zipimport.zipimporter)
+        and finder.archive in _startup_sys_path
+        and os.path.isabs(path)
+    }
+    for path in kept:
+        del sys.path_importer_cache[path]
+    try:
+        importlib.invalidate_caches()
+    finally:
+        sys.path_importer_cache.update(kept)
 
 
 def read_command(serializer: FramedSerializer, file: Union[IO, bytes, memoryview]) -> Any:
@@ -172,7 +206,7 @@ def setup_spark_files(
         path_changed = add_path(os.path.join(spark_files_dir, filename)) or path_changed
 
     if path_changed:
-        importlib.invalidate_caches()
+        _invalidate_import_caches()
 
 
 @overload

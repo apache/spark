@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import importlib
 import io
 import json
 import os
@@ -23,6 +24,8 @@ import tempfile
 import threading
 import time
 import unittest
+import zipfile
+import zipimport
 from typing import Any, Optional
 from unittest.mock import patch
 
@@ -53,6 +56,7 @@ from pyspark.util import PythonEvalType
 from pyspark.worker_metrics import WorkerMetrics
 
 with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
+    from pyspark import worker_util
     from pyspark.worker import main as worker_main
 
 
@@ -411,6 +415,72 @@ class WorkerInitResponseTests(unittest.TestCase):
         self.assertEqual(self._read_init_response(outfile), {})
         self.assertEqual(read_int(outfile), SpecialLengths.PYTHON_EXCEPTION_THROWN)
         self.assertIn("data error", outfile.read(read_int(outfile)).decode("utf-8"))
+
+
+class InvalidateImportCachesTests(unittest.TestCase):
+    def setUp(self):
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        self.temp_dir = temp_dir.name
+
+    def _write_zip(self, path, modules):
+        with zipfile.ZipFile(path, "w") as zf:
+            for name, source in modules.items():
+                zf.writestr(name, source)
+
+    def _add_zip(self, archive_name, modules):
+        path = os.path.join(self.temp_dir, archive_name)
+        self._write_zip(path, modules)
+        sys.path.insert(0, path)
+
+        def cleanup():
+            sys.path.remove(path)
+            for key in [k for k in sys.path_importer_cache if k.startswith(path)]:
+                del sys.path_importer_cache[key]
+            zipimport._zip_directory_cache.pop(path, None)
+
+        self.addCleanup(cleanup)
+        return path
+
+    def _import(self, name):
+        self.addCleanup(sys.modules.pop, name, None)
+        return importlib.import_module(name)
+
+    def test_startup_archives_are_not_invalidated(self):
+        startup = self._add_zip(
+            "startup.zip",
+            {"_spark_startup_pkg/__init__.py": "", "_spark_startup_pkg/mod.py": "x = 1"},
+        )
+        added = self._add_zip("added.zip", {"_spark_added_mod.py": "x = 1"})
+        self.addCleanup(sys.modules.pop, "_spark_startup_pkg", None)
+        self._import("_spark_startup_pkg.mod")
+        self._import("_spark_added_mod")
+        startup_finders = {
+            k: v for k, v in sys.path_importer_cache.items() if k.startswith(startup)
+        }
+        # The archive itself and the package inside it each have a zipimporter.
+        self.assertEqual(len(startup_finders), 2)
+
+        with (
+            patch.object(worker_util, "_startup_sys_path", frozenset([startup])),
+            patch.object(zipimport.zipimporter, "invalidate_caches", autospec=True) as invalidate,
+        ):
+            worker_util._invalidate_import_caches()
+
+        invalidated = {call.args[0].archive for call in invalidate.call_args_list}
+        self.assertNotIn(startup, invalidated)
+        self.assertIn(added, invalidated)
+        for key, finder in startup_finders.items():
+            self.assertIs(sys.path_importer_cache[key], finder)
+
+    def test_added_archive_rewritten_in_place_is_refreshed(self):
+        added = self._add_zip("added.zip", {"_spark_rewritten_a.py": "x = 1"})
+        self._import("_spark_rewritten_a")
+        self._write_zip(added, {"_spark_rewritten_a.py": "x = 1", "_spark_rewritten_b.py": "x = 2"})
+
+        worker_util._invalidate_import_caches()
+
+        self.assertEqual(self._import("_spark_rewritten_b").x, 2)
 
 
 class WorkerTests(ReusedPySparkTestCase):
