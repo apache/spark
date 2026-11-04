@@ -449,8 +449,8 @@ class SetupSparkFilesImportCacheTests(unittest.TestCase):
         self.addCleanup(sys.modules.pop, name, None)
         return importlib.import_module(name)
 
-    def test_startup_archive_import_caches_are_kept(self):
-        # py4j is loaded from the zip that PYTHONPATH puts on sys.path when the worker starts.
+    def test_spark_archive_import_caches_are_kept(self):
+        # The zip that py4j was loaded from is one of Spark's own archives, which are kept.
         if not isinstance(py4j.__loader__, zipimport.zipimporter):
             self.skipTest("py4j was not loaded from a zip archive")
         py4j_archive = py4j.__loader__.archive
