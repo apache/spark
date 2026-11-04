@@ -4008,7 +4008,8 @@ class Analyzer(
         condition: Expression): LogicalPlan = {
       val (windowExpressions, regularExpressions) =
         extract(aggregateExpressions, groupingExpressions)
-      val windowChild = if (hasWindowFunction(regularExpressions)) {
+      val windowChild = if (hasWindowFunction(regularExpressions) &&
+          !conf.getConf(SQLConf.LEGACY_EVALUATE_HAVING_AFTER_INNER_WINDOW)) {
         addWindowWithHaving(regularExpressions, groupingExpressions, child, condition)
       } else {
         Filter(condition, Aggregate(groupingExpressions, regularExpressions, child))
@@ -5086,17 +5087,45 @@ object ResolveUnresolvedHaving extends Rule[LogicalPlan] {
    *
    * Returns None unless the condition can be evaluated below every Window in the chain.
    */
-  private def insertFilterBeforeWindow(filter: Filter): Option[LogicalPlan] = filter.child match {
-    case project: Project =>
-      insertFilterBeforeWindow(filter.copy(child = project.child))
+  private def insertFilterBeforeWindow(filter: Filter): Option[LogicalPlan] = {
+    if (SQLConf.get.getConf(SQLConf.LEGACY_EVALUATE_HAVING_AFTER_INNER_WINDOW)) {
+      insertFilterBeforeOuterWindow(filter)
+    } else {
+      insertFilterBeforeAllWindows(filter, foundWindow = false)
+    }
+  }
+
+  private def insertFilterBeforeAllWindows(
+      filter: Filter,
+      foundWindow: Boolean): Option[LogicalPlan] = filter.child match {
+    case project: Project if filter.condition.references.subsetOf(project.child.outputSet) =>
+      insertFilterBeforeAllWindows(filter.copy(child = project.child), foundWindow)
         .map(child => project.withNewChildren(Seq(child)))
-    case generate: Generate =>
-      insertFilterBeforeWindow(filter.copy(child = generate.child))
+    case generate: Generate if filter.condition.references.subsetOf(generate.child.outputSet) =>
+      insertFilterBeforeAllWindows(filter.copy(child = generate.child), foundWindow)
         .map(child => generate.withNewChildren(Seq(child)))
-    case window: Window =>
-      insertFilterBeforeWindowChain(filter, window)
+    case window: Window if filter.condition.references.subsetOf(window.child.outputSet) =>
+      insertFilterBeforeAllWindows(filter.copy(child = window.child), foundWindow = true)
+        .map(child => window.withNewChildren(Seq(child)))
+    case _ if foundWindow && filter.condition.references.subsetOf(filter.child.outputSet) =>
+      Some(filter)
     case _ =>
       None
+  }
+
+  private def insertFilterBeforeOuterWindow(filter: Filter): Option[LogicalPlan] = {
+    filter.child match {
+      case project: Project =>
+        insertFilterBeforeOuterWindow(filter.copy(child = project.child))
+          .map(child => project.withNewChildren(Seq(child)))
+      case generate: Generate =>
+        insertFilterBeforeOuterWindow(filter.copy(child = generate.child))
+          .map(child => generate.withNewChildren(Seq(child)))
+      case window: Window =>
+        insertFilterBeforeWindowChain(filter, window)
+      case _ =>
+        None
+    }
   }
 
   private def insertFilterBeforeWindowChain(

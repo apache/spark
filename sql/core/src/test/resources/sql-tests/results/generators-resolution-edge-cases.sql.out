@@ -797,6 +797,48 @@ struct<col:int,cnt:bigint,a:int>
 
 
 -- !query
+SELECT explode(array(k)) AS generated_k,
+       SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum,
+       k
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY k
+HAVING k = 'keep'
+-- !query schema
+struct<generated_k:string,rank_sum:bigint,k:string>
+-- !query output
+keep	1	keep
+
+
+-- !query
+SET spark.sql.legacy.evaluateHavingAfterInnerWindow=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.evaluateHavingAfterInnerWindow	true
+
+
+-- !query
+SELECT explode(array(k)) AS generated_k,
+       SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum,
+       k
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY k
+HAVING k = 'keep'
+-- !query schema
+struct<generated_k:string,rank_sum:bigint,k:string>
+-- !query output
+keep	2	keep
+
+
+-- !query
+RESET spark.sql.legacy.evaluateHavingAfterInnerWindow
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 SELECT explode(array(a)) AS col,
        count(*) OVER () AS group_count,
        count(*) AS row_count

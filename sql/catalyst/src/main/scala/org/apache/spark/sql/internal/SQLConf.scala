@@ -7117,6 +7117,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_EVALUATE_HAVING_AFTER_INNER_WINDOW =
+    buildConf("spark.sql.legacy.evaluateHavingAfterInnerWindow")
+      .internal()
+      .doc("When true, HAVING may be evaluated after an inner window expression when window " +
+        "expressions are nested in the SELECT list, preserving the behavior before Spark 4.4. " +
+        "When false, HAVING is evaluated before every nested window expression.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_ALLOW_EMPTY_STRING_IN_JSON =
     buildConf("spark.sql.legacy.json.allowEmptyString.enabled")
       .internal()

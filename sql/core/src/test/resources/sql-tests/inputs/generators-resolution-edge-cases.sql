@@ -222,6 +222,26 @@ FROM VALUES (1), (2), (3), (NULL) AS t(a)
 GROUP BY a
 HAVING a IS NOT NULL;
 
+-- HAVING should be evaluated before every nested window with a generator
+SELECT explode(array(k)) AS generated_k,
+       SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum,
+       k
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY k
+HAVING k = 'keep';
+
+-- The legacy configuration preserves evaluation after the inner window with a generator
+SET spark.sql.legacy.evaluateHavingAfterInnerWindow=true;
+
+SELECT explode(array(k)) AS generated_k,
+       SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum,
+       k
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY k
+HAVING k = 'keep';
+
+RESET spark.sql.legacy.evaluateHavingAfterInnerWindow;
+
 -- HAVING on an aggregate should be evaluated before a window function with a generator
 SELECT explode(array(a)) AS col,
        count(*) OVER () AS group_count,
