@@ -877,8 +877,8 @@ Apart from these, the following properties are also available, and may be useful
     <code>PYTHONPATH</code> is the one name that is neither reserved nor simply overridden: Spark
     merges the session's value into the path it computes for the worker, so a session adds to the
     worker's import path. The relative order is not guaranteed -- Spark contributes no entries of
-    its own when <code>SPARK_HOME</code> is unset and its classes did not come from a jar, which can
-    leave the session's path first -- so do not rely on a session entry being shadowed by Spark's.
+    its own when <code>SPARK_HOME</code> is unset, which can leave the session's path first -- so do
+    not rely on a session entry being shadowed by Spark's.
     <br /><br />
     Each variable is a separate configuration, so setting several is not atomic: a client that sets
     a batch may have some applied and then one rejected, leaving the earlier ones in place. Read the

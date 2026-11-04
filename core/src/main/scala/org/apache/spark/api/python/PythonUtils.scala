@@ -22,7 +22,6 @@ import java.nio.file.Paths
 import java.util.{List => JList}
 
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.sys.process.Process
 
@@ -37,15 +36,16 @@ import org.apache.spark.util.Utils
 private[spark] object PythonUtils extends Logging {
   val PY4J_ZIP_NAME = "py4j-0.10.9.9-src.zip"
 
-  /** Get the PYTHONPATH for PySpark from SPARK_HOME, if it is set */
+  /**
+   * Get the PYTHONPATH for PySpark from SPARK_HOME, if it is set. Returns an empty string
+   * otherwise, so callers should combine it with other paths via `mergePythonPaths`.
+   */
   def sparkPythonPath: String = {
-    val pythonPath = new ArrayBuffer[String]
-    for (sparkHome <- sys.env.get("SPARK_HOME")) {
-      pythonPath += Seq(sparkHome, "python", "lib", "pyspark.zip").mkString(File.separator)
-      pythonPath +=
-        Seq(sparkHome, "python", "lib", PY4J_ZIP_NAME).mkString(File.separator)
-    }
-    pythonPath.mkString(File.pathSeparator)
+    sys.env.get("SPARK_HOME").map { sparkHome =>
+      Seq("pyspark.zip", PY4J_ZIP_NAME)
+        .map(name => Seq(sparkHome, "python", "lib", name).mkString(File.separator))
+        .mkString(File.pathSeparator)
+    }.getOrElse("")
   }
 
   /** Merge PYTHONPATHS with the appropriate separator. Ignores blank strings. */
