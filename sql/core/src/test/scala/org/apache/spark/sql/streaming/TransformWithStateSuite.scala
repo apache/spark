@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.streaming
 
-import java.io.File
+import java.io.{File, IOException}
+import java.net.URI
 import java.time.Duration
 import java.util.UUID
 
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
 import org.scalatest.matchers.must.Matchers.be
 import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
 import org.scalatest.time.{Seconds, Span}
@@ -46,6 +47,22 @@ import org.apache.spark.tags.SlowSQLTest
 
 object TransformWithStateSuiteUtils {
   val NUM_SHUFFLE_PARTITIONS = 5
+}
+
+object TransformWithStateFailingDefaultFileSystem {
+  val scheme = "twsbatch"
+}
+
+class TransformWithStateFailingDefaultFileSystem extends RawLocalFileSystem {
+  override def getScheme: String = TransformWithStateFailingDefaultFileSystem.scheme
+
+  override def getUri: URI = URI.create(s"${TransformWithStateFailingDefaultFileSystem.scheme}:///")
+
+  override def exists(path: Path): Boolean = false
+
+  override def mkdirs(path: Path): Boolean = {
+    throw new IOException(s"Unexpected mkdirs on default filesystem: $path")
+  }
 }
 
 case class TwoLongs(
@@ -1540,6 +1557,31 @@ abstract class TransformWithStateSuite extends StateStoreMetricsTest
 
     val df = result.toDF()
     checkAnswer(df, Seq(("a", "1"), ("b", "1")).toDF())
+  }
+
+  test("transformWithState - batch temp directory should use local filesystem") {
+    val scheme = TransformWithStateFailingDefaultFileSystem.scheme
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString,
+      "fs.defaultFS" -> s"$scheme:///",
+      s"fs.$scheme.impl" -> classOf[TransformWithStateFailingDefaultFileSystem].getName) {
+      val hadoopConf = spark.sessionState.newHadoopConf()
+      assert(new Path("/tmp").getFileSystem(hadoopConf)
+        .isInstanceOf[TransformWithStateFailingDefaultFileSystem])
+      val tempDirPath = TransformWithStateExec.createBatchTempDirPath()
+      assert(new Path(tempDirPath).getFileSystem(hadoopConf).getScheme === "file")
+
+      val inputData = Seq("a", "b")
+      val result = inputData.toDS()
+        .groupByKey(x => x)
+        .transformWithState(new RunningCountStatefulProcessor(),
+          TimeMode.None(),
+          OutputMode.Append())
+
+      checkAnswer(result.toDF(), Seq(("a", "1"), ("b", "1")).toDF())
+    }
   }
 
   test("transformWithState - test deleteIfExists operator") {
