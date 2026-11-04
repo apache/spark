@@ -40,7 +40,7 @@ Compared to the earlier Data Source V1 API, DSV2 offers:
 
 | Feature | Description |
 |---------|-------------|
-| **Java API** | The connector interfaces are pure Java (`org.apache.spark.sql.connector`), removing the Scala dependency that DSV1 required. A [Python Data Source API](api/python/reference/pyspark.sql/api/pyspark.sql.datasource.DataSource.html) (`pyspark.sql.datasource`) is also available as a wrapper for lightweight connectors written entirely in Python. |
+| **Java API** | The connector interfaces are pure Java (`org.apache.spark.sql.connector`), removing the Scala dependency that DSV1 required. A [Python Data Source API](api/python/reference/pyspark.sql/api/pyspark.sql.datasource.DataSource.html) (`pyspark.sql.datasource`) is also available as a wrapper for lightweight connectors written entirely in Python. [Native data sources](sql-native-data-sources.html) can be written entirely in native code, such as Rust or C++. |
 | **Catalog integration** | Connectors can expose namespaces, tables, views, and functions natively through Spark SQL. |
 | **Operator pushdown** | Connectors can accept pushed-down filters, required columns, aggregates, limits, offsets, and more. |
 | **Report partitioning and ordering** | Connectors can report the physical layout of data so that Spark can avoid unnecessary shuffles and sorts. |
@@ -117,7 +117,7 @@ categories of metadata operations through Spark SQL.
 |--------|-------------|
 | `listTables(namespace)` | List tables in a namespace |
 | `loadTable(ident)` | Load a table by identifier |
-| `createTable(ident, tableInfo)` | Create a new table from a [`TableInfo`](api/java/org/apache/spark/sql/connector/catalog/TableInfo.html) carrying columns, partitioning, properties, and constraints |
+| `createTable(ident, tableInfo)` | Create a new table from a [`TableInfo`](api/java/org/apache/spark/sql/connector/catalog/TableInfo.html) carrying columns, partitioning, properties, constraints, and a requested write distribution and ordering |
 | `alterTable(ident, changes...)` | Alter a table's schema, properties, or constraints |
 | `dropTable(ident)` | Drop a table |
 | `renameTable(oldIdent, newIdent)` | Rename a table |
@@ -126,8 +126,12 @@ Spark calls `createTable(ident, tableInfo)` (since 4.1.0) for `CREATE TABLE`, `R
 CTAS, so a new catalog overrides that form. Its default forwards to the deprecated
 `createTable(ident, columns, partitions, properties)` and then
 `createTable(ident, schema, partitions, properties)` (deprecated since 4.1.0 and 3.4.0), which keeps
-older catalogs working but drops the table's constraints. A
-[`StagingTableCatalog`](#stagingtablecatalog) is reached through its own methods instead.
+older catalogs working but drops the table's constraints. The default rejects a requested write
+distribution and ordering. A catalog that reports
+[`SUPPORTS_CREATE_TABLE_WITH_WRITE_DISTRIBUTION_AND_ORDERING`](api/java/org/apache/spark/sql/connector/catalog/TableCatalogCapability.html)
+overrides `createTable(ident, tableInfo)`, and for a staging catalog also the three `stage*` forms
+below. A [`StagingTableCatalog`](#stagingtablecatalog) is reached through its own methods instead,
+except for a plain `CREATE TABLE`, which still arrives at `createTable`.
 
 ### StagingTableCatalog
 
@@ -137,8 +141,8 @@ extends `TableCatalog` and enables **atomic** `CREATE TABLE AS SELECT` and
 `commitStagedChanges()` is called. If the write fails, the catalog remains unchanged. Spark reaches
 these paths through `stageCreate(ident, tableInfo)`, `stageReplace(ident, tableInfo)`, and
 `stageCreateOrReplace(ident, tableInfo)` rather than `createTable`, so a staging catalog overrides
-those three in addition to the `TableCatalog` methods; their defaults forward to the deprecated
-forms and throw.
+those three in addition to the `TableCatalog` methods. Their defaults forward to the deprecated
+forms, which throw, and reject a requested write distribution and ordering.
 
 ### SupportsNamespaces
 
@@ -744,5 +748,7 @@ after `SET spark.sql.defaultCatalog=demo`, `db.t` resolves to `demo.db.t`.
 - [Data Sources](sql-data-sources.html) for the user-facing guide to built-in data sources (DSV1).
 - [Python Data Source API](api/python/reference/pyspark.sql/api/pyspark.sql.datasource.DataSource.html)
   for writing lightweight connectors entirely in Python.
+- [Native Data Sources](sql-native-data-sources.html) for writing connectors entirely in native
+  code, such as Rust or C++.
 - [Storage Partition Join](sql-performance-tuning.html#storage-partition-join) for how DSV2
   partitioning reporting enables join optimizations.
