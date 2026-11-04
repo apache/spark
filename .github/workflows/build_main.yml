@@ -80,7 +80,9 @@ jobs:
     needs: check-commit-count
     # Skip pushes to `master` on forks: the "Sync fork" button mirrors
     # apache/spark and would otherwise re-run the full build on every sync.
-    # Evaluate this condition even when the master-only sampling check is skipped.
+    # The sampling check is skipped outside apache/spark master. GitHub otherwise
+    # applies an implicit success() requirement to dependencies, so !cancelled()
+    # allows those builds to run when the sampling job is skipped.
     if: >-
       (!cancelled())
       && (github.repository == 'apache/spark' || github.ref != 'refs/heads/master')
