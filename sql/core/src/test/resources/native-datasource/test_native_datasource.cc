@@ -1173,7 +1173,7 @@ int createStreamReader(void* handle, struct ArrowSchema* schema,
     for (const char* option :
          {"commit_path", "bad_offset", "bad_initial_offset", "closed_path", "starts_path",
           "initial_offsets_path", "ranges_path", "states", "stateless", "max_rows_per_trigger",
-          "bad_read_limit", "limits_path"}) {
+          "bad_read_limit", "limits_path", "fail"}) {
       reader->state[option] = get(source->options, option, "");
     }
     *out = reader;
@@ -1309,6 +1309,7 @@ int streamPartitions(void* handle, const SparkDsStreamPartitionsInfo* info,
   return guarded([&] {
     checkSize("SparkDsStreamPartitionsInfo", info->size, sizeof(SparkDsStreamPartitionsInfo));
     auto* reader = fromHandle<Reader>(handle);
+    maybeFail(reader->state, "stream_partitions");
     std::string ranges_path = get(reader->state, "ranges_path", "");
     if (!ranges_path.empty()) {
       FILE* file = std::fopen(ranges_path.c_str(), "a");

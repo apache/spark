@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicLong
 import javax.annotation.concurrent.GuardedBy
 
 import scala.jdk.CollectionConverters._
+import scala.util.Try
 import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core.JsonProcessingException
@@ -332,21 +333,25 @@ class NativeDataSourceStreamReader(
   // Set on the driver whenever the partitions of a micro-batch are planned, and serialized to
   // the executors with the partitions of that micro-batch.
   private var readerState: Array[Byte] = Array.emptyByteArray
-  // The range that was planned last, and its partitions, which only the driver keeps. All the
-  // scans of the source in a micro-batch plan the same range, such as both sides of a union of the
-  // source with itself, so they read the partitions of a single stream_partitions call, whose
-  // state readerState is.
+  // The range that was planned last, and its partitions or the failure to plan them, which only
+  // the driver keeps. All the scans of the source in a micro-batch plan the same range, such as
+  // both sides of a union of the source with itself, so they get the result of a single
+  // stream_partitions call, whose state readerState is.
   @transient private var plannedRange: (String, String) = _
-  @transient private var plannedPartitions: Array[InputPartition] = _
+  @transient private var plannedPartitions: Try[Array[InputPartition]] = _
 
   @transient private lazy val library = NativeLibraries.get(location)
 
-  override def initialOffset(): String = {
+  // The calls of the reader on the driver are synchronized, since calls on a handle must not run
+  // at the same time: Spark may plan the scans of a micro-batch on several threads, such as the
+  // side of a broadcast join, and stop the stream from another thread than the query.
+
+  override def initialOffset(): String = synchronized {
     checkOffset("initial_offset", call(name, "plan a scan of")(library.initialOffset(handle.get)))
   }
 
   /** The limit that the library returns, with the capability SPARK_DS_ADMISSION_CONTROL. */
-  override def defaultReadLimit(): ReadLimit = {
+  override def defaultReadLimit(): ReadLimit = synchronized {
     if (!admissionControl) {
       ReadLimit.allAvailable()
     } else {
@@ -368,7 +373,7 @@ class NativeDataSourceStreamReader(
   override def latestOffset(
       start: String,
       limit: ReadLimit,
-      runEnd: Option[String]): String = {
+      runEnd: Option[String]): String = synchronized {
     val info = limit match {
       case _: ReadAllAvailable =>
         new NativeLibrary.ReadLimitInfo(NativeLibrary.READ_ALL_AVAILABLE, 0L)
@@ -404,16 +409,18 @@ class NativeDataSourceStreamReader(
     offset
   }
 
-  override def partitions(start: String, end: String): Array[InputPartition] = {
+  override def partitions(start: String, end: String): Array[InputPartition] = synchronized {
     if (plannedRange != (start, end)) {
-      val planned = call(name, "plan a scan of") {
-        library.streamPartitions(handle.get, start, end)
+      plannedPartitions = Try {
+        val planned = call(name, "plan a scan of") {
+          library.streamPartitions(handle.get, start, end)
+        }
+        readerState = bytesOrEmpty(Option(planned.state))
+        NativeInputPartition.from(planned.partitions)
       }
-      readerState = bytesOrEmpty(Option(planned.state))
-      plannedPartitions = NativeInputPartition.from(planned.partitions)
       plannedRange = (start, end)
     }
-    plannedPartitions
+    plannedPartitions.get
   }
 
   override def read(partition: InputPartition): PartitionReader[ColumnarBatch] = {
@@ -421,11 +428,11 @@ class NativeDataSourceStreamReader(
       partition.asInstanceOf[NativeInputPartition].bytes, schema, timeZoneId)
   }
 
-  override def commit(end: String): Unit = {
+  override def commit(end: String): Unit = synchronized {
     call(name, "commit an offset of")(optional(library.commitOffset(handle.get, end)))
   }
 
-  override def stop(): Unit = handle.close()
+  override def stop(): Unit = synchronized(handle.close())
 }
 
 object NativeDataSourceStreamReader {
@@ -851,7 +858,7 @@ class NativePartitionReader(
     }
     // The C data interface requires the pointer to the buffers of an array that has buffers, even
     // if a buffer itself is NULL. Arrow Java reads the buffers through it, as `lastOffset` does.
-    def checkBuffers(array: ArrowArray.Snapshot, owner: String): Unit = {
+    def checkBuffers(array: ArrowArray.Snapshot, owner: => String): Unit = {
       if (array.n_buffers > 0 && array.buffers == 0) {
         throw error(name, "read", s"$owner has ${array.n_buffers} buffers, but a NULL pointer " +
           "to them.")
@@ -874,7 +881,7 @@ class NativePartitionReader(
     // The C data interface only allows an array of values without a validity buffer if its
     // null_count is 0. Arrow Java takes another null_count as a mix of nulls and values, and then
     // fails to load the missing buffer.
-    def checkValidity(array: ArrowArray.Snapshot, owner: String): Unit = {
+    def checkValidity(array: ArrowArray.Snapshot, owner: => String): Unit = {
       if (array.null_count != 0 && array.length > 0 && validity(array) == 0) {
         throw error(name, "read", s"$owner has a null_count of ${array.null_count} but no " +
           "validity buffer, which the C data interface only allows with a null_count of 0.")

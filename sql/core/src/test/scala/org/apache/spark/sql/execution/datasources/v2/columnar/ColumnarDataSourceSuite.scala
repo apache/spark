@@ -86,6 +86,18 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession {
     checkAnswer(notPruned, (0L until 4L).map(id => Row(s"name$id")))
     assert(scan(notPruned).readSchema() == StructType.fromDDL("name STRING"))
 
+    // The planner that a limit is pushed down to also prunes the columns, if it does.
+    Seq(true, false).foreach { prunes =>
+      val both = spark.read.format(format).option("end", "10")
+        .option("pruneColumns", prunes.toString).load().select("name").limit(2)
+      checkAnswer(both, Seq(Row("name0"), Row("name1")))
+      assert(scan(both).readSchema() == StructType.fromDDL("name STRING"))
+      assert(scan(both).getMetaData()("PushedLimit") == "LIMIT 2")
+      // The scan drops the other columns itself only if the planner does not prune them.
+      assert(scan(both).toBatch.createReaderFactory()
+        .isInstanceOf[ColumnarProjectionReaderFactory] == !prunes)
+    }
+
     val limited = spark.read.format(format).option("end", "10").load().limit(2)
     assert(limited.collect().length == 2)
     assert(scan(limited).getMetaData()("PushedLimit") == "LIMIT 2")
