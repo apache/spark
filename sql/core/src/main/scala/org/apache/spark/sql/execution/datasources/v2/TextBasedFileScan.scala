@@ -32,7 +32,7 @@ abstract class TextBasedFileScan(
     sparkSession: SparkSession,
     options: CaseInsensitiveStringMap) extends FileScan {
   @transient private lazy val codecFactory: CompressionCodecFactory = new CompressionCodecFactory(
-    sparkSession.sessionState.newHadoopConfWithOptions(options.asScala.toMap))
+    sparkSession.sessionState.newHadoopConfWithOptions(options.asCaseSensitiveMap.asScala.toMap))
 
   // The splittability of the `decompression` read option's codec, or `None` when it is absent.
   @transient private lazy val decompressionCodecSplittable: Option[Boolean] =

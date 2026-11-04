@@ -27,6 +27,7 @@ import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{AnalysisException, SaveMode}
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
@@ -239,6 +240,25 @@ class DataSourceSuite extends SharedSparkSession with PrivateMethodTester {
       condition = "_LEGACY_ERROR_TEMP_2050",
       parameters = Map("paths" -> "/path1, /path2"))
     )
+  }
+
+  test("newHadoopConfWithOptions preserves key casing for CaseInsensitiveMap") {
+    val options = CaseInsensitiveMap(Map(
+      "fs.azure.skipUserGroupMetadataDuringInitialization" -> "true",
+      "mapreduce.input.pathFilter.class" -> "org.example.CustomPathFilter",
+      "path" -> "/tmp/a",
+      "Path" -> "/tmp/b",
+      "paths" -> "/tmp/c",
+      "PATHS" -> "/tmp/d"
+    ))
+    val conf = spark.sessionState.newHadoopConfWithOptions(options)
+    assert(conf.get("fs.azure.skipUserGroupMetadataDuringInitialization") === "true")
+    assert(conf.get("fs.azure.skipusergroupmetadataduringinitialization") === null)
+    assert(conf.get("mapreduce.input.pathFilter.class") === "org.example.CustomPathFilter")
+    assert(conf.get("path") === null)
+    assert(conf.get("Path") === null)
+    assert(conf.get("paths") === null)
+    assert(conf.get("PATHS") === null)
   }
 }
 
