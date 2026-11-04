@@ -212,7 +212,7 @@ class Scd1VersionMapSuite extends QueryTest with SharedSparkSession {
         .add("carried", StringType)
         .add("omitted", StringType))
     val inputSchema = StructType(userDataSchema.fields :+ StructField("seq", LongType))
-    val input = dataFrameOf(inputSchema)(Row(null, null, Row("value", null), 10L))
+    val input = dataFrameOf(inputSchema)(Row(null, "ignored", Row("value", "ignored"), 10L))
     val ignoreNullSelection =
       ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("profile")))
 
