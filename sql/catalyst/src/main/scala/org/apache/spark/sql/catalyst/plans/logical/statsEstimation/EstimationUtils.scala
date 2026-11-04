@@ -92,14 +92,17 @@ object EstimationUtils {
       // reads the table through it as well, so the statistics already describe padded values.
       // Statistics collected otherwise (with padding off, or reported by a connector) can
       // describe shorter values, and every non-null padded value has at least N characters.
-      // A distinct count of 0 means no non-null values, so there is nothing to pad (ANALYZE
-      // then stores the type's default size as the lengths). The distinct count is left as is.
+      // A distinct count of 0 or a null count covering every row means no non-null values, so
+      // there is nothing to pad (ANALYZE then stores the type's default size as the lengths).
+      // The distinct count is left as is.
       // It is too high only when stored values differ just in trailing spaces, which the
       // padding makes equal.
       case alias @ Alias(CharVarcharUtils.ReadSidePadding(attr: Attribute, Literal(n: Int, _)), _)
           if attributeStats.contains(attr) =>
         val stat = attributeStats(attr)
-        val padded = if (stat.distinctCount.contains(BigInt(0))) {
+        val noValues =
+          stat.distinctCount.contains(BigInt(0)) || stat.nullCount.exists(_ >= rowCount)
+        val padded = if (noValues) {
           stat
         } else {
           stat.copy(avgLen = stat.avgLen.map(_.max(n)), maxLen = stat.maxLen.map(_.max(n)))
@@ -144,6 +147,16 @@ object EstimationUtils {
     // Output size can't be zero, or sizeInBytes of BinaryNode will also be zero
     // (simple computation of statistics returns product of children).
     if (outputRowCount > 0) outputRowCount * getSizePerRow(attributes, attrStats) else 1
+  }
+
+  /**
+   * Whether the histogram estimation paths apply to a column of this type. String and binary
+   * columns have no numeric bounds, which those paths need. ANALYZE TABLE builds no histogram for
+   * them, but a DSv2 connector can report one for any type.
+   */
+  def canEstimateWithHistogram(dataType: DataType): Boolean = dataType match {
+    case _: StringType | BinaryType => false
+    case _ => true
   }
 
   /**

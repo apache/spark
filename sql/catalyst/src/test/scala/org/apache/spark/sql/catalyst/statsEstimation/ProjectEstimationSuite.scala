@@ -204,6 +204,12 @@ class ProjectEstimationSuite extends StatsEstimationTestBase {
       attributeStats = AttributeMap(Seq(wide -> nullStat)))
     val nullProj = Project(Seq(Alias(CharVarcharUtils.addPaddingForScan(wide), "w")()), nullChild)
     assert(nullProj.stats.attributeStats.get(nullProj.output.head).contains(nullStat))
+    // The same reported by a connector without a distinct count: every row is null.
+    val connectorNullStat = ColumnStat(nullCount = Some(1000), avgLen = Some(0), maxLen = Some(0))
+    val connectorNullChild = child.copy(attributeStats = AttributeMap(Seq(c -> connectorNullStat)))
+    val connectorNullProj = Project(Seq(Alias(padded, "c")()), connectorNullChild)
+    assert(connectorNullProj.stats.attributeStats.get(connectorNullProj.output.head)
+      .contains(connectorNullStat))
   }
 
   private def checkProjectStats(

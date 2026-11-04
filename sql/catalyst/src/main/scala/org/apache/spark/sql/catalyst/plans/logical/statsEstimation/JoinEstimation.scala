@@ -201,9 +201,8 @@ case class JoinEstimation(join: Join) extends Logging {
       if (ValueInterval.isIntersected(lInterval, rInterval)) {
         val (newMin, newMax) = ValueInterval.intersect(lInterval, rInterval, leftKey.dataType)
         val (card, joinStat) = (leftKeyStat.histogram, rightKeyStat.histogram) match {
-          // The intersection has no bounds for string and binary keys, which have no
-          // equi-height histograms even if a connector reported one.
-          case (Some(l: Histogram), Some(r: Histogram)) if newMin.isDefined && newMax.isDefined =>
+          case (Some(l: Histogram), Some(r: Histogram))
+              if canEstimateWithHistogram(leftKey.dataType) =>
             computeByHistogram(leftKey, rightKey, l, r, newMin, newMax)
           case _ =>
             computeByNdv(leftKey, rightKey, newMin, newMax)

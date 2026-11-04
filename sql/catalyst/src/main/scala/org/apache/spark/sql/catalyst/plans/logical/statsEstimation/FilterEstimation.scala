@@ -373,14 +373,8 @@ case class FilterEstimation(
 
     if (!valueInRange) return Some(0.0)
 
-    // Only numeric-like types have equi-height histograms: the histogram path converts the
-    // literal to a double. A string or binary column uses its distinct count even if a connector
-    // reported a histogram for it.
-    val histogram = attr.dataType match {
-      case _: StringType | BinaryType => None
-      case _ => colStat.histogram
-    }
-    val percent = if (histogram.isDefined) {
+    val useHistogram = colStat.histogram.isDefined && canEstimateWithHistogram(attr.dataType)
+    val percent = if (useHistogram) {
       if (colStat.hasMinMaxStats) {
         Some(computeEqualityPossibilityByHistogram(literal, colStat))
       } else {
