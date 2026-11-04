@@ -182,6 +182,7 @@ class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
         case s: InMemoryTableScanExec => watermarkForChild(s.relation.cachedPlan)
         case a: AdaptiveSparkPlanExec => watermarkForChild(a.executedPlan)
         case e: QueryStageExec => watermarkForChild(e.plan)
+        // ReusedExchangeExec is a leaf whose output watermark is owned by its hidden child.
         case r: ReusedExchangeExec => watermarkForChild(r.child)
         case _ =>
           nodeToOutputWatermark.getOrElse(child.id, {
@@ -207,7 +208,11 @@ class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
         case s: InMemoryTableScanExec => traverseAndSimulate(s.relation.cachedPlan)
         case a: AdaptiveSparkPlanExec => traverseAndSimulate(a.executedPlan)
         case e: QueryStageExec => traverseAndSimulate(e.plan)
-        case r: ReusedExchangeExec => traverseAndSimulate(r.child)
+        case r: ReusedExchangeExec =>
+          // Its hidden child may already have been visited through the canonical exchange.
+          if (!nodeToOutputWatermark.contains(r.child.id)) {
+            traverseAndSimulate(r.child)
+          }
         case node: EventTimeWatermarkExec =>
           val inputWatermarks = getInputWatermarks(node, nodeToOutputWatermark)
           if (inputWatermarks.nonEmpty) {
