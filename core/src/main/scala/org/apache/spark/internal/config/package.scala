@@ -3087,7 +3087,8 @@ package object config {
       .doc("Path to an Ivy settings file to customize resolution of jars specified " +
         "using spark.jars.packages or ivy:// URIs passed to SparkSession.addArtifact instead " +
         "of the built-in defaults, such as maven central. " +
-        "SparkSession.addArtifact reads this setting from the session configuration. " +
+        "SparkSession.addArtifact reads this setting from its session, including values " +
+        "inherited from SparkConf. Updates through spark.conf.set are blocked by default. " +
         "For spark.jars.packages, additional repositories from spark.jars.repositories will " +
         "also be included. " +
         "Client-resolved Spark Connect Ivy URIs do not use this setting. " +

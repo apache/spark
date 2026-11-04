@@ -1104,7 +1104,8 @@ Apart from these, the following properties are also available, and may be useful
     Path to an Ivy settings file to customize resolution of jars specified using
     <code>spark.jars.packages</code> or <code>ivy://</code> URIs passed to
     <code>SparkSession.addArtifact</code> instead of the built-in defaults, such as maven central.
-    <code>SparkSession.addArtifact</code> reads this setting from the session configuration.
+    <code>SparkSession.addArtifact</code> reads this setting from its session, including values
+    inherited from SparkConf. Updates through <code>spark.conf.set</code> are blocked by default.
     For <code>spark.jars.packages</code>, additional repositories from
     <code>spark.jars.repositories</code> will also be included.
     The <code>spark-submit --repositories</code> option applies to submission-time resolution.
