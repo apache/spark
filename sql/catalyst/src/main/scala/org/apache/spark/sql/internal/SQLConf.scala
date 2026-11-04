@@ -4594,6 +4594,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val USE_CURRENT_SQL_CONFIGS_FOR_GENERATED_COLUMN =
+    buildConf("spark.sql.legacy.useCurrentConfigsForGeneratedColumn")
+      .internal()
+      .doc("When true, a write parses and analyzes the SQL text of a generation expression of a " +
+        "Data Source V2 table under the SQL configs of the current active SparkSession, and " +
+        "CREATE TABLE and REPLACE TABLE do not reject a text that the session reads differently.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val STORE_ANALYZED_PLAN_FOR_VIEW =
     buildConf("spark.sql.legacy.storeAnalyzedPlanForView")
       .internal()
@@ -7491,9 +7502,9 @@ object SQLConf {
     .doc("Comma-separated list of native data source packages (.sparkpkg files), and of " +
       "directories that contain them, on the local file system of the driver. Spark adds a " +
       "package to the artifacts of the session when one of its data sources is used, so that " +
-      "the executors get it too. Packages can also be added with spark.addArtifact. These " +
-      "packages take precedence over the native data source libraries installed in the native " +
-      "library path. See spark.sql.dataSource.native.enabled.")
+      "the executors get it too. Packages added with spark.addArtifact take precedence over " +
+      "these packages, which take precedence over the native data source libraries installed " +
+      "in the native library path. See spark.sql.dataSource.native.enabled.")
     .version("4.4.0")
     .withBindingPolicy(ConfigBindingPolicy.SESSION)
     .stringConf
@@ -10121,6 +10132,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def maxNestedViewDepth: Int = getConf(SQLConf.MAX_NESTED_VIEW_DEPTH)
 
   def useCurrentSQLConfigsForView: Boolean = getConf(SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_VIEW)
+
+  def useCurrentSQLConfigsForGeneratedColumn: Boolean =
+    getConf(SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_GENERATED_COLUMN)
 
   def storeAnalyzedPlanForView: Boolean = getConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW)
 

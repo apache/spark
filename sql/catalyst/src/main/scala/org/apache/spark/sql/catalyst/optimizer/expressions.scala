@@ -92,8 +92,6 @@ object ConstantFolding extends Rule[LogicalPlan] {
 
     case Size(c: CreateArray, _) if c.children.forall(hasNoSideEffect) =>
       Literal(c.children.length)
-    case Size(c: CreateMap, _) if c.children.forall(hasNoSideEffect) =>
-      Literal(c.children.length / 2)
 
     case e if e.containsTag(FAILED_TO_EVALUATE) => e
 
