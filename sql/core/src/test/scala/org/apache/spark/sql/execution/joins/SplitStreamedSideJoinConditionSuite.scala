@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.sql.{DataFrame, QueryTest}
-import org.apache.spark.sql.catalyst.expressions.{Add, And, LessThan, Literal, Rand}
+import org.apache.spark.sql.catalyst.expressions.{Add, And, EvalMode, LessThan, Literal, NumericEvalContext, Rand}
 import org.apache.spark.sql.catalyst.plans.LeftOuter
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -111,12 +111,19 @@ class SplitStreamedSideJoinConditionSuite extends QueryTest with SharedSparkSess
     // non-throwing children. It must stay in the residual, which is why a !throwable
     // gate is not sufficient and the hoisted part is restricted to expression families
     // with a reliable non-throwing contract.
-    val unmarkedThrowable = LessThan(Add(a, Literal(1L)), Literal(5L))
+    val unmarkedThrowable =
+      LessThan(Add(a, Literal(1L), NumericEvalContext(EvalMode.ANSI)), Literal(5L))
     assert(!unmarkedThrowable.throwable)
     val (streamedOnly, rest) = StreamedSideJoinCondition.split(
       Some(And(hoistable, unmarkedThrowable)), LeftOuter, streamed, splitEnabled = true)
     assert(streamedOnly.contains(hoistable))
     assert(rest.contains(unmarkedThrowable))
+    // With ANSI mode off, the addition can not fail, so it is hoisted.
+    val legacyAdd = LessThan(Add(a, Literal(1L), NumericEvalContext(EvalMode.LEGACY)), Literal(5L))
+    val (legacyStreamedOnly, legacyRest) = StreamedSideJoinCondition.split(
+      Some(And(hoistable, legacyAdd)), LeftOuter, streamed, splitEnabled = true)
+    assert(legacyStreamedOnly.contains(And(hoistable, legacyAdd)))
+    assert(legacyRest.isEmpty)
   }
 
   test("split does not hoist non-deterministic conjuncts") {
