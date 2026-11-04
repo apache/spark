@@ -291,7 +291,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
       (Decimal("0.00"), Decimal("0.7"), Decimal("0.00")),
       (Decimal("1.00"), Decimal("7.0"), Decimal("1.00")),
       (Decimal(120000L, 6, 2), Decimal(70L, 2, 1), Decimal("3.00")),
-      // The 40-digit quotient is representable by the old context because it has trailing zeros.
+      // The 39-digit context represents this 40-digit quotient because it has trailing zeros.
       (Decimal("10000000000000000000000000000000000000"), Decimal("0.01"), Decimal("0"))
     ).foreach { case (left, right, expected) =>
       assert((left % right).toJavaBigDecimal == expected.toJavaBigDecimal)
