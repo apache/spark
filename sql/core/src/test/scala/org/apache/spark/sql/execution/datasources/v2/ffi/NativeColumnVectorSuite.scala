@@ -289,6 +289,28 @@ class NativeColumnVectorSuite extends SparkFunSuite {
     }
   }
 
+  test("the decimals of the fields of a struct still hold BigDecimals") {
+    // ArrowColumnVector reads the fields of a struct, so that their decimals, unlike those of a
+    // top-level column, hold BigDecimals, which Decimal rounds to ints through doubles.
+    withAllocator { allocator =>
+      Using.resource(StructVector.empty("struct", allocator)) { struct =>
+        val field = FieldType.nullable(new ArrowType.Decimal(18, 9, 128))
+        val child = struct.addOrGet("d", field, classOf[DecimalVector])
+        struct.allocateNew()
+        child.setSafe(0, new JavaBigDecimal("123456789.999999999"))
+        struct.setIndexDefined(0)
+        child.setValueCount(1)
+        struct.setValueCount(1)
+        val top = native(child).getDecimal(0, 18, 9)
+        val nested = native(struct).getChild(0).getDecimal(0, 18, 9)
+        assert(top.toDebugString === "Decimal(compact, 123456789999999999, 18, 9)")
+        assert(top.roundToInt() === 123456789)
+        assert(nested.toDebugString === "Decimal(expanded, 123456789.999999999, 18, 9)")
+        assert(nested.roundToInt() === 123456790)
+      }
+    }
+  }
+
   test("reads the buffers of the batch that the reader imported last") {
     withAllocator { allocator =>
       Using.resource(new BigIntVector("id", allocator)) { vector =>

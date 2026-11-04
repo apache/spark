@@ -221,18 +221,9 @@ class NativeColumnVector extends ReusedArrowColumnVector {
   }
 
   private static final class Decimals extends Direct {
-    // 10^i, for the precisions of the decimals that a long holds.
-    private static final long[] POW_10 = new long[Decimal.MAX_LONG_DIGITS() + 1];
     // Arrow stores the 128 bits of a decimal in native byte order, as ArrowColumnVector reads it.
     private static final int LOW_WORD = ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? 0 : 8;
     private static final int HIGH_WORD = 8 - LOW_WORD;
-
-    static {
-      POW_10[0] = 1;
-      for (int i = 1; i < POW_10.length; i++) {
-        POW_10[i] = POW_10[i - 1] * 10;
-      }
-    }
 
     // The scale of the Arrow type.
     private final int scale;
@@ -249,12 +240,12 @@ class NativeColumnVector extends ReusedArrowColumnVector {
       // support the scales from 0 to 18, which those of Spark's own column vectors have.
       if (precision <= Decimal.MAX_LONG_DIGITS() && scale == this.scale && scale >= 0 &&
           scale <= precision) {
-        long address = data + 16L * rowId;
+        long address = data + (long) DecimalVector.TYPE_WIDTH * rowId;
         long unscaled = Platform.getLong(null, address + LOW_WORD);
-        long bound = POW_10[precision];
-        if (Platform.getLong(null, address + HIGH_WORD) == unscaled >> 63 &&
-            -bound < unscaled && unscaled < bound) {
-          return Decimal.createUnsafe(unscaled, precision, scale);
+        if (Platform.getLong(null, address + HIGH_WORD) == unscaled >> 63) {
+          // Null if the value does not fit its precision.
+          Decimal decimal = new Decimal().setOrNull(unscaled, precision, scale);
+          if (decimal != null) return decimal;
         }
       }
       // Wider decimals, other scales, and the values that do not fit their precision, which
@@ -317,11 +308,14 @@ class NativeColumnVector extends ReusedArrowColumnVector {
       // in that buffer.
       long view = data + (long) BaseVariableWidthViewVector.ELEMENT_SIZE * rowId;
       int length = Platform.getInt(null, view);
+      long inline = view + BaseVariableWidthViewVector.LENGTH_WIDTH;
       if (length <= BaseVariableWidthViewVector.INLINE_SIZE) {
-        return UTF8String.fromAddress(null, view + 4, length);
+        return UTF8String.fromAddress(null, inline, length);
       }
-      long buffer = buffers[Platform.getInt(null, view + 8)];
-      return UTF8String.fromAddress(null, buffer + Platform.getInt(null, view + 12), length);
+      long bufferIndex = inline + BaseVariableWidthViewVector.PREFIX_WIDTH;
+      long buffer = buffers[Platform.getInt(null, bufferIndex)];
+      int start = Platform.getInt(null, bufferIndex + BaseVariableWidthViewVector.BUF_INDEX_WIDTH);
+      return UTF8String.fromAddress(null, buffer + start, length);
     }
   }
 }

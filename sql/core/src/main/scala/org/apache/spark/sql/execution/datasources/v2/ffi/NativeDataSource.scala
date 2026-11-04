@@ -761,9 +761,12 @@ class NativePartitionReader(
             array.release()
             throw e
         }
+        // The import releases the buffers of the previous batch: the batch has no rows until the
+        // new one passes the check, and the column vectors read its buffers before the check.
+        batch.setNumRows(0)
         call(name, "read")(Data.importIntoVectorSchemaRoot(allocator, array, root, dictionaries))
-        checkNulls()
         columns.foreach(_.refresh())
+        checkNulls()
         batch.setNumRows(root.getRowCount)
         true
       }
