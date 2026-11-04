@@ -224,6 +224,20 @@ struct<col1:int,m:int>
 
 
 -- !query
+SELECT
+  k,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY k
+HAVING k = 'keep'
+ORDER BY k
+-- !query schema
+struct<k:string,rank_sum:bigint>
+-- !query output
+keep	1
+
+
+-- !query
 SELECT col1 FROM t1 GROUP BY col1, col2 HAVING col2 > 0
 QUALIFY ROW_NUMBER() OVER (ORDER BY SUM(col2) OVER (PARTITION BY col1) DESC, col1) = 1
 -- !query schema
