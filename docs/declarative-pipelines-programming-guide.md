@@ -521,7 +521,7 @@ SELECT * FROM STREAM(customers_us_east);
 
 Many source systems emit a stream of *change events* rather than a snapshot of the current data: each record describes an insert, update, or delete to a row, identified by a key. Applying these events correctly to a target table by hand is tricky. Matching events to existing rows, applying them in the right order, and handling out-of-order and duplicate events without corrupting the table is the hard part.
 
-**Auto CDC** does this automatically. Given a source of change events and a rule for identifying and ordering them, SDP maintains a target streaming table that always reflects the latest state for each key.
+**Auto CDC** does this automatically. Given a source of change events and a rule for identifying and ordering them, SDP maintains a target streaming table that holds either the latest state of each key (SCD Type 1) or every version of each key (SCD Type 2). See [SCD Type 2: Keeping History](#scd-type-2-keeping-history).
 
 ### Keys and Sequencing
 
@@ -617,14 +617,14 @@ dp.create_auto_cdc_flow(
 | `source` | Yes | Name of the CDC source dataset to stream change events from. |
 | `keys` | Yes | The column or columns that uniquely identify a row. A list of column names (strings) or `Column` objects, given as unqualified identifiers: for example `"id"` or `col("id")`, but not `"source.id"`. |
 | `sequence_by` | Yes | An expression used to order change events for each key. The highest value wins. A SQL expression string or a `Column`. |
-| `apply_as_deletes` | No | A boolean expression identifying events that represent deletes. Matching rows are removed from the target. A SQL expression string or a `Column`. |
+| `apply_as_deletes` | No | A boolean expression identifying events that represent deletes. With SCD Type 1, a matching event removes the key's row from the target; with SCD Type 2, it closes the key's current version. A SQL expression string or a `Column`. |
 | `column_list` | No | The columns to include in the target. Mutually exclusive with `except_column_list`. |
 | `except_column_list` | No | The columns to exclude from the target; all other columns are included. Mutually exclusive with `column_list`. Commonly used to drop operation/metadata columns such as `op`. |
 | `stored_as_scd_type` | No | The SCD type of the target: `1` or `2` (or `"1"` or `"2"`). Defaults to Type 1. See [SCD Type 2: Keeping History](#scd-type-2-keeping-history). |
+| `name` | No | The name of the flow. Defaults to the target table name. |
 | `track_history_column_list` | No | SCD Type 2 only. The columns whose changes open a new version. Keyword-only. Mutually exclusive with `track_history_except_column_list`. |
 | `track_history_except_column_list` | No | SCD Type 2 only. The columns whose changes do not open a new version; changes to any other non-key column in the target do. Keyword-only. Mutually exclusive with `track_history_column_list`. |
-| `name` | No | The name of the flow. Defaults to the target table name. |
-| `spark_conf` | No | Spark configuration to apply while the flow runs. Overrides configuration set on the destination, the pipeline, or the cluster. |
+| `spark_conf` | No | Spark configuration to apply while the flow runs. Keyword-only. Overrides configuration set on the destination, the pipeline, or the cluster. |
 
 With neither `column_list` nor `except_column_list`, every source column is written to the target - including the operation column and any other change-feed bookkeeping. That is rarely right for a CDC feed, so the examples here drop `op` with `except_column_list=["op"]`. See [Selecting Which Columns Land in the Target](#selecting-which-columns-land-in-the-target).
 
@@ -836,15 +836,15 @@ WHERE __START_AT <= 1 AND (__END_AT > 1 OR __END_AT IS NULL);
 
 - **Inserts and updates** - The first event for a key opens its first version. A later event that changes a tracked column closes the key's current version at the event's sequence value and opens a new version. See [Choosing Which Columns Open a New Version](#choosing-which-columns-open-a-new-version).
 - **Deletes** - A delete closes the key's current version at the delete's sequence value and opens no new one, so the key has no row with a `NULL` `__END_AT`. The key's earlier versions stay in the target. A later insert for the key opens a new version.
-- **Out-of-order events** - A late event is placed in the history at the position its sequence value gives it. An event older than all of a key's history adds an earlier version, and an event that falls inside an existing version splits that version in two. A late delete closes the version it falls inside at the delete's sequence value. The history is the same as if the events had arrived in order.
+- **Out-of-order events** - A late event is placed in the history at the position its sequence value gives it, producing the same history as if the events had arrived in order. A late insert or update that changes a tracked column adds an earlier version if it precedes all of the key's history, or closes the version it falls inside at its sequence value and opens a new one; a late delete closes the version it falls inside at the delete's sequence value. A delete that arrives before the inserts or updates it applies to is kept, and closes the version they open once they arrive.
 - **Duplicate events** - A re-delivered event adds no version.
 
 For example, a first run receives two events for `id 1`:
 
-| id | name   | version |
-|----|--------|---------|
-| 1  | alice  | 10      |
-| 1  | alicia | 30      |
+| id | name   | version | op     |
+|----|--------|---------|--------|
+| 1  | alice  | 10      | UPSERT |
+| 1  | alicia | 30      | UPSERT |
 
 The target holds two versions. The tables here omit the `__spark_autocdc_metadata` column (see [Auto CDC Considerations](#auto-cdc-considerations)):
 
@@ -855,10 +855,10 @@ The target holds two versions. The tables here omit the `__spark_autocdc_metadat
 
 A later run receives two late events, one inside the history and one before it:
 
-| id | name   | version |
-|----|--------|---------|
-| 1  | alyssa | 20      |
-| 1  | ally   | 5       |
+| id | name   | version | op     |
+|----|--------|---------|--------|
+| 1  | alyssa | 20      | UPSERT |
+| 1  | ally   | 5       | UPSERT |
 
 `alyssa` splits the `alice` version at 20, and `ally` adds a version before `alice`:
 
@@ -911,7 +911,7 @@ STORED AS SCD TYPE 2;
 
 By default, every column written to the target except the keys is tracked, including the sequencing column. Because every event for a key has its own sequence value, each insert or update then opens a new version.
 
-Consecutive inserts and updates for a key that agree on every tracked column are coalesced into one version. That version keeps the `__START_AT` of the first event and takes the other column values of the latest one.
+Consecutive inserts and updates for a key that have equal values in every tracked column are coalesced into one version. That version keeps the `__START_AT` of the earliest event, and its untracked columns hold the values of the event with the highest sequence value.
 
 To choose the tracked columns, name them with `track_history_column_list` (Python) or `TRACK HISTORY ON (...)` (SQL), or exclude columns with `track_history_except_column_list` or `TRACK HISTORY ON * EXCEPT (...)`. The two forms are mutually exclusive, and both require SCD Type 2. Tracked columns must be columns written to the target and must not be keys; any other column fails with `AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA`.
 
@@ -950,7 +950,7 @@ Given these events:
 | 1  | alice  | inactive | 10      | UPSERT |
 | 1  | alicia | inactive | 15      | UPSERT |
 
-the first two events agree on `name` and are coalesced; the third changes `name` and opens a new version:
+the first two events have the same `name` and are coalesced; the third changes `name` and opens a new version:
 
 | id | name   | status   | version | `__START_AT` | `__END_AT` |
 |----|--------|----------|---------|--------------|------------|
@@ -966,6 +966,8 @@ Like the key set (see [Changing the Key Set](#changing-the-key-set)), the SCD ty
 ```bash
 spark-pipelines run --full-refresh customers
 ```
+
+When columns were added to the target under the default tracking or `track_history_except_column_list`, the target keeps its history without a full refresh. The `AUTOCDC_INVALID_STATE.TRACK_HISTORY_DRIFT` error lists the recorded tracked columns; passing exactly those columns in `track_history_column_list` (or `TRACK HISTORY ON (...)`) matches the recorded state, and the added columns are not tracked.
 
 #### Trying Type 2 End to End
 
