@@ -195,7 +195,7 @@ class QueryStartedEvent:
         job_tags = set()
         java_iterator = jevent.jobTags().iterator()
         while java_iterator.hasNext():
-            job_tags.add(java_iterator.next().toString())
+            job_tags.add(str(java_iterator.next()))
 
         return cls(
             id=uuid.UUID(jevent.id().toString()),
