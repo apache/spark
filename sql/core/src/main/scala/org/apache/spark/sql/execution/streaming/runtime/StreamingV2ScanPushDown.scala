@@ -25,11 +25,11 @@ import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, ResolvedInlineTable}
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, AttributeSet, Cast, Expression, ExpressionSet, SubqueryExpression, Unevaluable}
-import org.apache.spark.sql.catalyst.optimizer.{ComputeCurrentTime, InferFiltersFromConstraints}
+import org.apache.spark.sql.catalyst.optimizer.{ComputeCurrentTime, InferFiltersFromConstraints, ReplaceExpressions, SpecialDatetimeValues}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
-import org.apache.spark.sql.catalyst.trees.TreePattern.{CAST_TO_TIMESTAMP, CURRENT_LIKE}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CAST, CURRENT_LIKE, RUNTIME_REPLACEABLE}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{SupportsRead, TableCapability}
@@ -106,9 +106,11 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
    * The plan does not depend on when it is optimized, and the scan of a relation only gets what the
    * query reads from that relation:
    *  - The expressions whose values depend on when they are evaluated or on the state of the
-   *    session, such as the current time or the current database, which each micro-batch gets the
-   *    values of, become placeholders that the optimizer does not take as deterministic, as the
-   *    current time of a micro-batch, and no filter on them is pushed down.
+   *    session, such as the current time, the casts of special strings such as 'today' or 'now'
+   *    to dates and timestamps, or the current database, which each micro-batch gets the values
+   *    of, become placeholders that the optimizer does not take as deterministic, as the current
+   *    time of a micro-batch, so neither its filters nor its columns depend on them, and no filter
+   *    on them is pushed down.
    *  - The filters that the optimizer infers from the constraints of the plan, such as those of the
    *    filters over another relation joined with the relation, are not inferred, so that the scan
    *    only gets the filters that the query applies to the relation itself.
@@ -145,10 +147,7 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
             case PhysicalOperation(project, filters, relation: StreamingRelationV2) =>
               occurrences += relation -> Reads(
                 AttributeSet((project ++ filters).flatMap(_.references)),
-                filters.filter { filter =>
-                  filter.deterministic && !SubqueryExpression.hasSubquery(filter) &&
-                    !filter.exists(_.isInstanceOf[StartupValue])
-                })
+                pushableFilters(filters))
             case _ =>
               node.children.foreach(visit)
           }
@@ -181,17 +180,38 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
   /**
    * Returns what the occurrences of each relation read, combined: the scan of a relation reads the
    * rows of all its occurrences, so it reads the columns that any of them reads, and can only
-   * apply the filters that all of them apply.
+   * apply the filters that all of them apply. With several occurrences, the filters that may throw
+   * are left out: each occurrence evaluates the pushed filters before its own, in the order of the
+   * first occurrence, so such a filter could see the rows that another occurrence drops with a
+   * filter written before it, which is not pushed down.
    */
   private def combine(
       occurrences: Seq[(StreamingRelationV2, Reads)]): Map[StreamingRelationV2, Reads] = {
     occurrences.groupBy(_._1).map { case (relation, reads) =>
       val filters = reads.map(r => ExpressionSet(r._2.filters)).reduce { (left, right) =>
         ExpressionSet(left.filter(right.contains))
-      }
+      }.toSeq
       relation -> Reads(
-        AttributeSet.fromAttributeSets(reads.map(_._2.requiredColumns)), filters.toSeq)
+        AttributeSet.fromAttributeSets(reads.map(_._2.requiredColumns)),
+        if (reads.length == 1) filters else filters.filterNot(_.throwable))
     }
+  }
+
+  /**
+   * Returns the filters that the scan of a relation may get of `filters`, the filters over an
+   * occurrence of the relation in the order in which the plan evaluates them: the deterministic
+   * ones without subqueries or placeholders. The plan of each micro-batch evaluates the pushed
+   * filters first, over the relation (see `withPushedFilters`), so once a filter is not pushed
+   * down, only the filters after it that cannot throw are, as `PushPredicateThroughNonJoin` splits
+   * the filters that it pushes: a filter that throws, such as one with `raise_error`, does not see
+   * the rows that a filter written before it drops.
+   */
+  private def pushableFilters(filters: Seq[Expression]): Seq[Expression] = {
+    def canPush(filter: Expression): Boolean = filter.deterministic &&
+      !SubqueryExpression.hasSubquery(filter) && !filter.exists(_.isInstanceOf[StartupValue])
+    val (leading, rest) = filters.span(canPush)
+    // The head of `rest`, if any, is the first filter that is not pushed down.
+    leading ++ rest.drop(1).filter(filter => canPush(filter) && !filter.throwable)
   }
 
   /**
@@ -207,16 +227,26 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
     // evaluates.
     case table: ResolvedInlineTable => BatchRelation(table.output)
     case node =>
-      node.transformExpressionsUpWithPruning(
-          bits => bits.containsPattern(CURRENT_LIKE) || bits.containsPattern(CAST_TO_TIMESTAMP)) {
+      // The expressions that ReplaceExpressions replaces with others when the optimization starts
+      // are replaced first, as the optimizer does, so that the casts that they stand for, such as
+      // the one of to_date('today'), are replaced below.
+      val replaced = if (node.containsPattern(RUNTIME_REPLACEABLE)) {
+        node.mapExpressions(ReplaceExpressions.replace)
+      } else {
+        node
+      }
+      replaced.transformExpressionsUpWithPruning(
+          bits => bits.containsPattern(CURRENT_LIKE) || bits.containsPattern(CAST)) {
         // The children of an expression are replaced before it, as are the subqueries, so an
         // expression that still has the pattern CURRENT_LIKE has it itself: its value is the
         // current time, or comes from the state of the session, as the current database does.
         case e if e.containsPattern(CURRENT_LIKE) => StartupValue(e, e.children)
-        // So does a cast that ComputeCurrentTime rewrites, such as a cast of a time to a
-        // timestamp, which takes the current date. ComputeCurrentTime only rewrites casts besides
+        // So does a cast that ComputeCurrentTime or SpecialDatetimeValues rewrites: a cast of a
+        // time to a timestamp, which takes the current date, or a cast of a special string, such
+        // as 'today' or 'now', to a date or a timestamp. These rules only rewrite casts besides
         // the expressions with the pattern CURRENT_LIKE.
-        case cast: Cast if ComputeCurrentTime.applyForExpression(cast) != cast =>
+        case cast: Cast if ComputeCurrentTime.applyForExpression(cast) != cast ||
+            SpecialDatetimeValues.applyForExpression(cast) != cast =>
           StartupValue(cast, cast.children)
       }
   }

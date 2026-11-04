@@ -19,7 +19,7 @@ package org.apache.spark.sql.streaming
 
 import java.util
 import java.util.concurrent.ConcurrentLinkedQueue
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 
 import scala.jdk.CollectionConverters._
 
@@ -502,7 +502,7 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
 
   test("read only the columns that a continuous query needs") {
     val input = ContinuousMemoryStream.singlePartition[(Long, String, Int)]
-    val table = new PruningContinuousTable(input)
+    val table = new PruningContinuousTable(input, takesFilters = false)
     val df = Dataset.ofRows(spark, StreamingRelationV2(None, "pruning_continuous", table,
       CaseInsensitiveStringMap.empty(), DataTypeUtils.toAttributes(table.schema()), None, None,
       None)).toDF("id", "data", "extra").where("extra > 10").select("data")
@@ -571,11 +571,17 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
     "CAST(tod AS TIMESTAMP_NTZ) < TIMESTAMP_NTZ'2100-01-01 00:00:00'" -> "tod",
     "CAST(tod AS TIMESTAMP) < TIMESTAMP'2100-01-01 00:00:00'" -> "tod",
     "data = current_database()" -> "data",
-    "data = current_timezone()" -> "data"
+    "data = current_timezone()" -> "data",
+    // The casts of the special strings, which SpecialDatetimeValues folds.
+    "d = 'today'" -> "d",
+    "ts < 'now'" -> "ts",
+    "d = to_date('today')" -> "d",
+    "d < CAST('tomorrow' AS DATE)" -> "d",
+    "CAST(ts AS TIMESTAMP_NTZ) > CAST('yesterday' AS TIMESTAMP_NTZ)" -> "ts"
   ).foreach { case (condition, column) =>
     test(s"do not push down a filter on a value that depends on when it is evaluated: $condition") {
       withTable(tbl) {
-        sql(s"CREATE TABLE $tbl (id bigint, data string, ts timestamp, tod time)")
+        sql(s"CREATE TABLE $tbl (id bigint, data string, ts timestamp, tod time, d date)")
         val df = spark.readStream.table(tbl).where(s"id > 1 AND $condition").select("id")
         val reads = StreamingV2ScanPushDown.reads(spark, df.queryExecution.analyzed, None)
         assert(reads.size === 1)
@@ -709,9 +715,103 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
-  test("plan the micro-batches whose filters fold the pushed filters in part") {
+  test("read the columns of a condition on a special string that depends on when it is cast") {
+    withSourceTable() {
+      // The condition takes the date of each micro-batch, so the scan reads both columns.
+      val df = spark.readStream.table(tbl).select(expr("CASE WHEN CAST('today' AS DATE) < " +
+        "DATE'2100-01-01' THEN data ELSE CAST(extra AS STRING) END AS v"))
+      val reads = StreamingV2ScanPushDown.reads(spark, df.queryExecution.analyzed, None)
+      assert(reads.values.map(_.requiredColumns.map(_.name).toSet).toSeq ===
+        Seq(Set("data", "extra")))
+      testStream(df)(
+        ProcessAllAvailable(),
+        assertReadSchema("data", "extra"),
+        CheckAnswer(Row("a"), Row("b")))
+    }
+  }
+
+  test("push down no filter that may throw after a filter that is not pushed down") {
     withTable(tbl) {
-      sql(s"CREATE TABLE $tbl (id bigint, owner string, d date)")
+      sql(s"CREATE TABLE $tbl (id bigint, owner string, qty int)")
+      sql(s"INSERT INTO $tbl VALUES (1, current_user(), 1), (2, 'other', 0)")
+      val raise = "CASE WHEN qty <= 0 THEN raise_error('bad qty') ELSE true END"
+      // The filter on the owner has a value of each micro-batch, so it is not pushed down, and
+      // the filter that raises an error for the quantity 0, written after it, is not pushed down
+      // either: each micro-batch evaluates the pushed filters first, which would raise the error
+      // for the row of the other owner.
+      testStream(spark.readStream.table(tbl).where(s"owner = current_user() AND $raise")
+          .select("id"))(
+        ProcessAllAvailable(),
+        assertPushedFilters(),
+        CheckAnswer(Row(1L)))
+      // A filter that cannot throw is still pushed down after it, and so is one that may throw
+      // before it, as the query evaluates it first anyway.
+      def pushed(df: DataFrame): Seq[Set[String]] = {
+        StreamingV2ScanPushDown.reads(spark, df.queryExecution.analyzed, None).values.toSeq
+          .flatMap(_.filters).map(_.references.map(_.name).toSet)
+      }
+      val source = spark.readStream.table(tbl)
+      assert(pushed(source.where(s"$raise AND owner = current_user() AND id > 0")) ===
+        Seq(Set("qty"), Set("id")))
+      // With several reads of the relation, a filter that may throw is not pushed down: each read
+      // evaluates the pushed filters before its own.
+      val read = source.where(s"$raise AND id > 0")
+      assert(pushed(read.union(read)) === Seq(Set("id")))
+    }
+  }
+
+  test("drop the rows that fail the pushed filters in the stream of a source") {
+    withSourceTable(s"TBLPROPERTIES ('${InMemoryBaseTable.SIMULATE_STREAMING_FILTERS}' = 'true')") {
+      // The stream only returns the rows that pass the pushed filter, so the progress of the query
+      // only counts them.
+      def inputRows(query: StreamExecution): Long = query.recentProgress.map(_.numInputRows).sum
+      testStream(spark.readStream.table(tbl).where("extra > 10").select("data"))(
+        ProcessAllAvailable(),
+        assertPushedFilters("GreaterThan(extra,10)"),
+        CheckAnswer(Row("b")),
+        AssertOnQuery(inputRows(_) == 1),
+        insert("(3, 'c', 30), (4, 'd', 5), (5, 'e', 50)"),
+        ProcessAllAvailable(),
+        CheckAnswer(Row("b"), Row("c"), Row("e")),
+        AssertOnQuery(inputRows(_) == 3))
+    }
+  }
+
+  test("filter the rows of a continuous stream with the filters that its scan builder took") {
+    val input = ContinuousMemoryStream.singlePartition[(Long, String, Int)]
+    val table = new PruningContinuousTable(input, takesFilters = true)
+    val df = Dataset.ofRows(spark, StreamingRelationV2(None, "pruning_continuous", table,
+      CaseInsensitiveStringMap.empty(), DataTypeUtils.toAttributes(table.schema()), None, None,
+      None)).toDF("id", "data", "extra").where("extra > 10").select("data")
+    PruningContinuousTable.returnedRows.set(0)
+    withTempView("continuous_filtering") {
+      val query = df.writeStream.format("memory").queryName("continuous_filtering")
+        .trigger(Trigger.Continuous(100)).start()
+      try {
+        input.addData((1L, "a", 10), (2L, "b", 20), (3L, "c", 30))
+        eventually(timeout(streamingTimeout)) {
+          checkAnswer(spark.table("continuous_filtering"), Seq(Row("b"), Row("c")))
+        }
+        // The readers dropped the row that fails the filter, which the plan of the query applies
+        // to the rows of the source too.
+        assert(PruningContinuousTable.returnedRows.get() === 2)
+        val filtered = query.asInstanceOf[StreamingQueryWrapper].streamingQuery.logicalPlan
+          .collect {
+            case Filter(_, relation: StreamingDataSourceV2ScanRelation) =>
+              relation.pushedFilters.map(_.references.map(_.name).toSet)
+          }
+        assert(filtered === Seq(Seq(Set("_3"))))
+      } finally {
+        query.stop()
+      }
+    }
+  }
+
+  test("plan the micro-batches whose filters fold the pushed filters in part") {
+    // The streams drop the rows that fail the pushed filters, so the answers depend on them.
+    val filtering = s"TBLPROPERTIES ('${InMemoryBaseTable.SIMULATE_STREAMING_FILTERS}' = 'true')"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (id bigint, owner string, d date) $filtering")
       sql(s"INSERT INTO $tbl VALUES (1, current_user(), current_date()), " +
         "(6, current_user(), current_date()), (7, 'other', current_date())")
       // A micro-batch folds current_user() into a literal, which it puts in place of the column
@@ -730,7 +830,7 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
     }
     // And an equality that a micro-batch infers through a stream-static join.
     withTable(tbl) {
-      sql(s"CREATE TABLE $tbl (a bigint, b bigint)")
+      sql(s"CREATE TABLE $tbl (a bigint, b bigint) $filtering")
       sql(s"INSERT INTO $tbl VALUES (2, 0), (0, 0), (5, 3)")
       val source = spark.readStream.table(tbl).where("a > 1 OR b > 2")
       val static = spark.range(0, 2).toDF("x").where("x = 0")
@@ -952,41 +1052,64 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
 
 /**
  * A table over a continuous memory stream, whose scans only read the columns that they are asked
- * for: their readers return the rows of the stream with only these columns.
+ * for: their readers return the rows of the stream with only these columns. If `takesFilters`,
+ * its scan builders also take the filters, and the readers drop the rows that fail them.
  */
-private class PruningContinuousTable(input: ContinuousMemoryStream[_])
+private class PruningContinuousTable(input: ContinuousMemoryStream[_], takesFilters: Boolean)
   extends Table with SupportsRead {
 
   override def name(): String = "pruning_continuous"
 
   override def schema(): StructType = input.fullSchema()
 
-  override def capabilities(): util.Set[TableCapability] =
-    util.EnumSet.of(TableCapability.CONTINUOUS_READ, TableCapability.STREAMING_COLUMN_PRUNING)
+  override def capabilities(): util.Set[TableCapability] = {
+    val capabilities =
+      util.EnumSet.of(TableCapability.CONTINUOUS_READ, TableCapability.STREAMING_COLUMN_PRUNING)
+    if (takesFilters) capabilities.add(TableCapability.STREAMING_FILTER_PUSHDOWN)
+    capabilities
+  }
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-    new ScanBuilder with SupportsPushDownRequiredColumns {
+    new ScanBuilder with SupportsPushDownRequiredColumns with SupportsPushDownFilters {
       private var columns = schema()
+      private var filters = Array.empty[SourceFilter]
 
       override def pruneColumns(requiredSchema: StructType): Unit = {
         columns = StructType(requiredSchema.fieldNames.map(schema()(_)))
       }
 
+      override def pushFilters(filters: Array[SourceFilter]): Array[SourceFilter] = {
+        if (takesFilters) this.filters = filters
+        filters
+      }
+
+      override def pushedFilters(): Array[SourceFilter] = filters
+
       override def build(): Scan = new Scan {
+        private val readFilters = filters
+
         override def readSchema(): StructType = columns
 
         override def toContinuousStream(checkpointLocation: String): ContinuousStream = {
-          new PruningContinuousStream(input, columns.fieldNames.map(schema().fieldIndex), columns)
+          new PruningContinuousStream(input, columns.fieldNames.map(schema().fieldIndex), columns,
+            readFilters, schema())
         }
       }
     }
   }
 }
 
+private object PruningContinuousTable {
+  // The rows that the readers of the streams that take filters returned.
+  val returnedRows = new AtomicLong()
+}
+
 private class PruningContinuousStream(
     input: ContinuousStream,
     ordinals: Array[Int],
-    columns: StructType) extends ContinuousStream {
+    columns: StructType,
+    filters: Array[SourceFilter],
+    fullSchema: StructType) extends ContinuousStream {
 
   override def initialOffset(): Offset = input.initialOffset()
 
@@ -998,7 +1121,8 @@ private class PruningContinuousStream(
     input.planInputPartitions(start)
 
   override def createContinuousReaderFactory(): ContinuousPartitionReaderFactory =
-    new PruningContinuousReaderFactory(input.createContinuousReaderFactory(), ordinals, columns)
+    new PruningContinuousReaderFactory(input.createContinuousReaderFactory(), ordinals, columns,
+      filters, fullSchema)
 
   override def commit(end: Offset): Unit = input.commit(end)
 
@@ -1008,14 +1132,24 @@ private class PruningContinuousStream(
 private class PruningContinuousReaderFactory(
     input: ContinuousPartitionReaderFactory,
     ordinals: Array[Int],
-    columns: StructType) extends ContinuousPartitionReaderFactory {
+    columns: StructType,
+    filters: Array[SourceFilter],
+    fullSchema: StructType) extends ContinuousPartitionReaderFactory {
 
   override def createReader(partition: InputPartition): ContinuousPartitionReader[InternalRow] = {
     val reader = input.createReader(partition)
     new ContinuousPartitionReader[InternalRow] {
       private val projection = ProjectingInternalRow(columns, ordinals.toSeq)
 
-      override def next(): Boolean = reader.next()
+      // Skips the rows that fail the filters.
+      override def next(): Boolean = {
+        var hasNext = reader.next()
+        while (hasNext && !filters.forall(InMemoryBaseTable.passes(_, reader.get(), fullSchema))) {
+          hasNext = reader.next()
+        }
+        if (hasNext && filters.nonEmpty) PruningContinuousTable.returnedRows.incrementAndGet()
+        hasNext
+      }
 
       override def get(): InternalRow = {
         projection.project(reader.get())
