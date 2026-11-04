@@ -909,7 +909,7 @@ STORED AS SCD TYPE 2;
 
 #### Choosing Which Columns Open a New Version
 
-By default, every column written to the target except the keys is tracked, including the sequencing column. Because every event for a key has its own sequence value, each insert or update then opens a new version.
+By default, every column written to the target except the keys is tracked. When the sequencing column is written to the target, it is tracked too, and because every event for a key has its own sequence value, each insert or update then opens a new version. When it is excluded from the target, events that leave every tracked column unchanged are coalesced.
 
 Consecutive inserts and updates for a key that have equal values in every tracked column are coalesced into one version. That version keeps the `__START_AT` of the earliest event, and its untracked columns hold the values of the event with the highest sequence value.
 
