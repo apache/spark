@@ -101,6 +101,18 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession
     checkAnswer(notPruned, (0L until 4L).map(id => Row(s"name$id")))
     assert(scan(notPruned).readSchema() == StructType.fromDDL("name STRING"))
 
+    // The planner that a limit is pushed down to also prunes the columns, if it does.
+    Seq(true, false).foreach { prunes =>
+      val both = spark.read.format(format).option("end", "10")
+        .option("pruneColumns", prunes.toString).load().select("name").limit(2)
+      checkAnswer(both, Seq(Row("name0"), Row("name1")))
+      assert(scan(both).readSchema() == StructType.fromDDL("name STRING"))
+      assert(scan(both).getMetaData()("PushedLimit") == "LIMIT 2")
+      // The scan drops the other columns itself only if the planner does not prune them.
+      assert(scan(both).toBatch.createReaderFactory()
+        .isInstanceOf[ColumnarProjectionReaderFactory] == !prunes)
+    }
+
     val limited = spark.read.format(format).option("end", "10").load().limit(2)
     assert(limited.collect().length == 2)
     assert(scan(limited).getMetaData()("PushedLimit") == "LIMIT 2")
@@ -1069,11 +1081,12 @@ class TestArrowBatchReader(
     ArrowUtils.rootAllocator.newChildAllocator("test arrow batch reader", 0, Long.MaxValue)
   private val arrowSchema = ArrowUtils.toArrowSchema(
     schema, "UTC", errorOnDuplicatedFieldNames = true, largeVarTypes = largeVarTypes)
-  // The vectors of the batches: reused for each batch, which a consumer does not release, or new
-  // ones for each owned batch, which the consumer releases with the batch.
-  private var root: VectorSchemaRoot = _
-  private var arrowWriter: ArrowWriter = _
-  private var batch: ColumnarBatch = _
+  // The vectors of the batches, which are reused for each batch, so a consumer does not release
+  // them, unless the batches are owned: each one then has new vectors, which its consumer releases.
+  private val reusedRoot = VectorSchemaRoot.create(arrowSchema, allocator)
+  private var arrowWriter = ArrowWriter.create(reusedRoot)
+  private var batch = new ColumnarBatch(
+    reusedRoot.getFieldVectors.asScala.map(new ReusedArrowColumnVector(_): ColumnVector).toArray)
   private val ownedRoots = ArrayBuffer.empty[VectorSchemaRoot]
   private var start = lo
 
@@ -1082,13 +1095,12 @@ class TestArrowBatchReader(
       false
     } else {
       val end = math.min(hi, start + batchSize)
-      if (owned || root == null) {
-        root = VectorSchemaRoot.create(arrowSchema, allocator)
-        if (owned) ownedRoots += root
+      if (owned) {
+        val root = VectorSchemaRoot.create(arrowSchema, allocator)
+        ownedRoots += root
         arrowWriter = ArrowWriter.create(root)
-        batch = new ColumnarBatch(root.getFieldVectors.asScala.map { vector =>
-          if (owned) TestOwnedBatches.vector(vector) else new ReusedArrowColumnVector(vector)
-        }.toArray[ColumnVector])
+        batch = new ColumnarBatch(
+          root.getFieldVectors.asScala.map(TestOwnedBatches.vector(_): ColumnVector).toArray)
       } else {
         arrowWriter.reset()
       }
@@ -1112,7 +1124,7 @@ class TestArrowBatchReader(
     TestOwnedBatches.leakedBytes.addAndGet(
       ownedRoots.flatMap(_.getFieldVectors.asScala).map(_.getBufferSize.toLong).sum)
     ownedRoots.foreach(_.close())
-    if (!owned && root != null) root.close()
+    reusedRoot.close()
     allocator.close()
   }
 }

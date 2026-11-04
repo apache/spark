@@ -23,7 +23,7 @@ import java.nio.file.StandardCopyOption.REPLACE_EXISTING
 import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDate}
 import java.util.UUID
-import java.util.concurrent.{Callable, CountDownLatch, ExecutionException, TimeUnit}
+import java.util.concurrent.{Callable, CountDownLatch, CyclicBarrier, ExecutionException, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.mutable.ArrayBuffer
@@ -43,7 +43,7 @@ import org.apache.spark.sql.connector.read.streaming.{ReadLimit, SupportsAdmissi
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, MicroBatchScanExec, V2TableWriteExec}
-import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchScan, ColumnarMicroBatchStream, ColumnarScan}
+import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchScan, ColumnarMicroBatchStream, ColumnarProjectionReaderFactory, ColumnarScan}
 import org.apache.spark.sql.execution.datasources.v2.python.{PythonDataSourceV2, UserDefinedPythonDataSource}
 import org.apache.spark.sql.execution.streaming.runtime.StreamingQueryWrapper
 import org.apache.spark.sql.execution.vectorized.ReusedArrowColumnVector
@@ -289,12 +289,27 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
   test("the bindings match the layout of spark_datasource.h") {
     assume(compiler.isDefined, "A C++ compiler is required.")
     val layout = NativeLibrary.layout().asScala.map { case (key, value) => key -> value.longValue }
+    // The values of the macros of the header that the bindings check or pass, such as the
+    // capabilities of a data source.
+    val constants = Map(
+      "SPARK_DS_BATCH_READ" -> NativeLibrary.BATCH_READ,
+      "SPARK_DS_MICRO_BATCH_READ" -> NativeLibrary.MICRO_BATCH_READ,
+      "SPARK_DS_BATCH_WRITE" -> NativeLibrary.BATCH_WRITE,
+      "SPARK_DS_STREAMING_WRITE" -> NativeLibrary.STREAMING_WRITE,
+      "SPARK_DS_BATCH_TRUNCATE" -> NativeLibrary.BATCH_TRUNCATE,
+      "SPARK_DS_STREAMING_TRUNCATE" -> NativeLibrary.STREAMING_TRUNCATE,
+      "SPARK_DS_WRITE_APPEND" -> NativeLibrary.WRITE_APPEND.toLong,
+      "SPARK_DS_WRITE_TRUNCATE" -> NativeLibrary.WRITE_TRUNCATE.toLong,
+      "SPARK_DS_READ_BATCH" -> NativeLibrary.READ_BATCH.toLong,
+      "SPARK_DS_READ_MICRO_BATCH" -> NativeLibrary.READ_MICRO_BATCH.toLong)
     val prints = layout.keys.map { key =>
       val value = key.split('.') match {
         case Array(struct) => s"sizeof($struct)"
         case Array(struct, field) => s"offsetof($struct, $field)"
       }
       s"""  std::printf("%s %zu\\n", "$key", $value);"""
+    } ++ constants.keys.map { name =>
+      s"""  std::printf("%s %lld\\n", "$name", static_cast<long long>($name));"""
     }
     val output = runProgram("layout",
       s"""#include <cstddef>
@@ -310,7 +325,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       val Array(key, value) = line.split(" ")
       key -> value.toLong
     }.toMap
-    assert(actual == layout.toMap)
+    assert(actual == layout.toMap ++ constants)
   }
 
   nativeTest("disable native data sources") {
@@ -378,6 +393,27 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     checkRows(df, (0L until 4L).map(id => Row(id, Timestamp.from(Instant.ofEpochSecond(id)))))
   }
 
+  nativeTest("create the data writers with the time zone of their writer") {
+    val session = newSession(defaultPackage)
+    val (name, location) =
+      NativeDataSourceRegistry.lookup("native_sink", session.sessionState.conf).get
+    val dir = Utils.createTempDir()
+    session.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "Asia/Tokyo")
+    val writer = session.withActive {
+      new NativeDataSource(location, name,
+          new CaseInsensitiveStringMap(Map("path" -> dir.getPath).asJava))
+        .writer(StructType.fromDDL("id BIGINT, ts TIMESTAMP"), overwrite = false)
+    }
+    // A data writer gets the schema that its writer got, with the time zone of its timestamps,
+    // also when the session that creates it has another one: create_data_writer fails otherwise.
+    session.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "UTC")
+    session.withActive {
+      val dataWriter = writer.createWriter(0, 0)
+      Utils.tryWithSafeFinally(dataWriter.abort())(dataWriter.close())
+    }
+    writer.abort(Array.empty)
+  }
+
   nativeTest("prune columns") {
     val df = range(newSession(defaultPackage), "end" -> "10").select("name", "id")
     checkRows(df, (0L until 10L).map(id => Row(if (id % 5 == 0) null else s"n$id", id)))
@@ -409,6 +445,16 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     val filtered = range(newSession(defaultPackage), "end" -> "100").filter("id > 5").limit(3)
     assert(filtered.collect().length == 3)
     assert(!scan(filtered).getMetaData().contains("PushedLimit"))
+
+    // The reader that the limit was pushed down to is also asked to prune the columns, after the
+    // limit, and returns only the column that the query reads: the reader factory of the scan is
+    // the one of the library, rather than one that drops the other columns.
+    val pruned = range(newSession(defaultPackage), "end" -> "100").select("id").limit(3)
+    assert(pruned.collect().map(_.getLong(0)).toSeq == Seq(0L, 1L, 2L))
+    assert(scan(pruned).readSchema() == StructType.fromDDL("id BIGINT"))
+    assert(scan(pruned).getMetaData()("PushedLimit") == "LIMIT 3")
+    assert(!scan(pruned).toBatch.createReaderFactory()
+      .isInstanceOf[ColumnarProjectionReaderFactory])
   }
 
   nativeTest("read maps whose entry fields have other names") {
@@ -1008,6 +1054,48 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     // stream_partitions is called once for each micro-batch.
     assert(Files.readAllLines(ranges.toPath).asScala.toSeq ==
       Seq("""{"offset":0} {"offset":3}""", """{"offset":3} {"offset":6}"""))
+
+    // Spark may plan the scans of a micro-batch on several threads at the same time, such as the
+    // side of a broadcast join, and they still get the partitions of a single call.
+    val (counterName, counterLocation) =
+      NativeDataSourceRegistry.lookup("native_counter", session.sessionState.conf).get
+    def streamReader(options: (String, String)*): NativeDataSourceStreamReader = {
+      new NativeDataSource(counterLocation, counterName,
+          new CaseInsensitiveStringMap(options.toMap.asJava))
+        .streamReader(StructType.fromDDL("id BIGINT"), Utils.createTempDir().getPath)
+        .asInstanceOf[NativeDataSourceStreamReader]
+    }
+    val concurrentRanges = new File(Utils.createTempDir(), "ranges")
+    val reader = streamReader("max_offset" -> "100", "ranges_path" -> concurrentRanges.getPath)
+    try {
+      (0 until 20).foreach { i =>
+        val start = s"""{"offset":$i}"""
+        val end = s"""{"offset":${i + 1}}"""
+        val planning = new CyclicBarrier(2)
+        val planned = ThreadUtils.parmap(1 to 2, "plan-micro-batch", 2) { _ =>
+          planning.await()
+          reader.partitions(start, end)
+        }
+        assert(planned.head eq planned.last)
+      }
+    } finally {
+      reader.stop()
+    }
+    assert(Files.readAllLines(concurrentRanges.toPath).size == 20)
+    // So does a failure: planning the range again fails with the same error, without calling the
+    // library again on the handle whose call failed.
+    val failing = streamReader("fail" -> "stream_partitions")
+    try {
+      val failure = intercept[SparkRuntimeException] {
+        failing.partitions("""{"offset":0}""", """{"offset":1}""")
+      }
+      assert(failure.getMessage.contains("injected failure in stream_partitions"))
+      assert(intercept[SparkRuntimeException] {
+        failing.partitions("""{"offset":0}""", """{"offset":1}""")
+      } eq failure)
+    } finally {
+      failing.stop()
+    }
   }
 
   nativeTest("reject offsets that are not JSON on a single line") {
