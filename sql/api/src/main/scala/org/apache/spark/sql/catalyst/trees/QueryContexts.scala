@@ -19,6 +19,25 @@ package org.apache.spark.sql.catalyst.trees
 
 import org.apache.spark.{QueryContext, QueryContextType, SparkUnsupportedOperationException}
 
+object SQLQueryContext {
+
+  /**
+   * Inclusive Unicode code-point slice `[from, to]` of `text`. Indexes are clamped to the text.
+   * Parser origins store ANTLR code-point offsets, so this is the unit every SQL-text recovery
+   * path must use.
+   */
+  private[sql] def sliceByCodePoints(text: String, from: Int, to: Int): String = {
+    val count = text.codePointCount(0, text.length)
+    val begin = math.max(0, math.min(from, count))
+    val end = math.max(begin, math.min(to + 1, count))
+    text.substring(text.offsetByCodePoints(0, begin), text.offsetByCodePoints(0, end))
+  }
+
+  /** True when `text` contains a supplementary character (two UTF-16 units). */
+  private def hasSupplementary(text: String): Boolean =
+    text.length != text.codePointCount(0, text.length)
+}
+
 /** The class represents error context of a SQL query. */
 case class SQLQueryContext(
     line: Option[Int],
@@ -62,8 +81,18 @@ case class SQLQueryContext(
       builder ++= s"== SQL$objectContext$positionContext ==\n"
 
       val text = sqlText.get
-      val start = math.max(originStartIndex.get, 0)
-      val stop = math.min(originStopIndex.getOrElse(text.length - 1), text.length - 1)
+      // Parser origins are code-point indexes. Convert to UTF-16 for line walking
+      // when the text has supplementary characters; otherwise the two units match.
+      val startCp = math.max(originStartIndex.get, 0)
+      val stopCp = originStopIndex.get
+      val (start, stop) = if (SQLQueryContext.hasSupplementary(text)) {
+        val count = text.codePointCount(0, text.length)
+        val from = text.offsetByCodePoints(0, startCp)
+        val to = text.offsetByCodePoints(0, math.min(stopCp + 1, count)) - 1
+        (from, to)
+      } else {
+        (startCp, math.min(stopCp, text.length - 1))
+      }
       // Ideally we should show all the lines which contains the SQL text context of the current
       // node:
       // [additional text] [current tree node] [additional text]
@@ -99,16 +128,31 @@ case class SQLQueryContext(
         text.substring(lineStartIndex + 1, lineStopIndex) +
         (if (stopTruncated) truncatedText else "")
       val lines = truncatedSubText.split("\n")
+      val oneCaretPerCodePoint = SQLQueryContext.hasSupplementary(text)
       lines.foreach { lineText =>
         builder ++= lineText + "\n"
         currentIndex += 1
-        (0 until lineText.length).foreach { _ =>
-          if (currentIndex < start) {
-            builder ++= " "
-          } else if (currentIndex >= start && currentIndex <= stop) {
-            builder ++= "^"
+        if (oneCaretPerCodePoint) {
+          var i = 0
+          while (i < lineText.length) {
+            val width = Character.charCount(lineText.codePointAt(i))
+            if (currentIndex < start) {
+              builder ++= " "
+            } else if (currentIndex <= stop) {
+              builder ++= "^"
+            }
+            currentIndex += width
+            i += width
           }
-          currentIndex += 1
+        } else {
+          (0 until lineText.length).foreach { _ =>
+            if (currentIndex < start) {
+              builder ++= " "
+            } else if (currentIndex >= start && currentIndex <= stop) {
+              builder ++= "^"
+            }
+            currentIndex += 1
+          }
         }
         builder ++= "\n"
       }
@@ -120,15 +164,23 @@ case class SQLQueryContext(
   lazy val fragment: String = {
     if (!isValid) {
       ""
-    } else {
+    } else if (!SQLQueryContext.hasSupplementary(sqlText.get)) {
       sqlText.get.substring(originStartIndex.get, originStopIndex.get + 1)
+    } else {
+      SQLQueryContext.sliceByCodePoints(sqlText.get, originStartIndex.get, originStopIndex.get)
     }
   }
 
   def isValid: Boolean = {
-    sqlText.isDefined && originStartIndex.isDefined && originStopIndex.isDefined &&
-    originStartIndex.get >= 0 && originStopIndex.get < sqlText.get.length &&
-    originStartIndex.get <= originStopIndex.get
+    sqlText.isDefined && originStartIndex.isDefined && originStopIndex.isDefined && {
+      val text = sqlText.get
+      val start = originStartIndex.get
+      val stop = originStopIndex.get
+      val limit =
+        if (SQLQueryContext.hasSupplementary(text)) text.codePointCount(0, text.length)
+        else text.length
+      start >= 0 && stop < limit && start <= stop
+    }
   }
 
   override def callSite: String = throw SparkUnsupportedOperationException()

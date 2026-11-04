@@ -160,5 +160,15 @@ public enum TableCapability {
    *
    * @since 4.3.0
    */
-  SCAN_MERGING
+  SCAN_MERGING,
+
+  /**
+   * Signals that the table has at least one parameterized lookup access path. The table must
+   * implement {@link SupportsRead}, its scan builder must implement
+   * {@link org.apache.spark.sql.connector.read.SupportsExternalLookup}, and the built scan must
+   * implement {@link org.apache.spark.sql.connector.read.Scan#toExternalLookup()}.
+   *
+   * @since 4.4.0
+   */
+  EXTERNAL_LOOKUP
 }
