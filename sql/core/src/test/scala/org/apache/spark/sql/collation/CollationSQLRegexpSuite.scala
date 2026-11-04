@@ -70,11 +70,10 @@ class CollationSQLRegexpSuite
   }
 
   test("LIKE under UTF8_LCASE keeps matching semantics after optimization") {
-    // The original LIKE matches dotless i (U+0131) against pattern 'i' via Java regex case
-    // folding, while the Contains rewrite matched via ICU lowercase mapping and did not.
-    checkAnswer(sql("SELECT like(collate('ı', 'UTF8_LCASE'), '%i%')"), Row(true))
-
-    // On a column input the predicate must reach the optimized plan unmodified.
+    // A literal-only LIKE is constant-folded before LikeSimplification and never reaches
+    // the rule, so this test uses a column. The original LIKE matches dotless i (U+0131)
+    // against pattern 'i' via Java regex case folding; the Contains rewrite used ICU
+    // lowercase mapping and did not.
     val tableName = "T_LCASE_DOTLESS_I"
     withTable(tableName) {
       sql(s"CREATE TABLE IF NOT EXISTS $tableName(c STRING COLLATE UTF8_LCASE) using PARQUET")
