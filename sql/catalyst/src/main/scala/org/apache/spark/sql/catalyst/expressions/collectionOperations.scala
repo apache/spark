@@ -3072,7 +3072,9 @@ case class ElementAt(
           val errorContext = getContextOrNullCode(ctx)
           val utils = classOf[ArrayExpressionUtils].getName
           val assignment = s"${ev.value} = ${CodeGenerator.getValue(eval1, dataType, index)};"
-          val body = if (arrayElementNullable) {
+          // `ev.isNull` is declared only for a nullable expression. Otherwise the index raises
+          // an error or selects an element that cannot be NULL.
+          val body = if (nullable && arrayElementNullable) {
             s"""
                |if ($eval1.isNullAt($index)) {
                |  ${ev.isNull} = true;
@@ -3093,7 +3095,10 @@ case class ElementAt(
         nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
           val index = ctx.freshName("elementAtIndex")
           val intIndex = ctx.freshName("elementAtIntIndex")
-          val nullCheck = if (arrayElementNullable) {
+          // `ev.isNull` is declared only for a nullable expression. Otherwise the index is 0, or
+          // selects an element that cannot be NULL, so neither this branch nor the out-of-bounds
+          // branch below is taken.
+          val nullCheck = if (nullable && arrayElementNullable) {
             s"""
                |if ($eval1.isNullAt($intIndex)) {
                |  ${ev.isNull} = true;
@@ -3104,6 +3109,7 @@ case class ElementAt(
           }
           val errorContext = getContextOrNullCode(ctx)
           val indexOutOfBoundBranch = defaultValueOutOfBound match {
+            case _ if !nullable => ""
             case Some(value) =>
               val defaultValueEval = value.genCode(ctx)
               s"""
