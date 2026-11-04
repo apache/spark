@@ -404,7 +404,9 @@ case class GetArrayItem(
         val utils = classOf[ArrayExpressionUtils].getName
         val childArrayElementNullable = child.dataType.asInstanceOf[ArrayType].containsNull
         val assignment = s"${ev.value} = ${CodeGenerator.getValue(eval1, dataType, index)};"
-        val body = if (childArrayElementNullable) {
+        // `ev.isNull` is declared only for a nullable expression. Otherwise the index raises an
+        // error or selects an element that cannot be NULL.
+        val body = if (nullable && childArrayElementNullable) {
           s"""
              |if ($eval1.isNullAt($index)) {
              |  ${ev.isNull} = true;
@@ -424,7 +426,10 @@ case class GetArrayItem(
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         val index = ctx.freshName("index")
         val childArrayElementNullable = child.dataType.asInstanceOf[ArrayType].containsNull
-        val nullCheck = if (childArrayElementNullable) {
+        // `ev.isNull` is declared only for a nullable expression. Otherwise the index selects an
+        // element that cannot be NULL, so neither this branch nor the out-of-bounds branch below
+        // is taken.
+        val nullCheck = if (nullable && childArrayElementNullable) {
           s"""else if ($eval1.isNullAt($index)) {
                  ${ev.isNull} = true;
               }
@@ -432,10 +437,11 @@ case class GetArrayItem(
         } else {
           ""
         }
+        val outOfBound = if (nullable) s"${ev.isNull} = true;" else ""
         s"""
           final int $index = (int) $eval2;
           if ($index >= $eval1.numElements() || $index < 0) {
-            ${ev.isNull} = true;
+            $outOfBound
           } $nullCheck else {
             ${ev.value} = ${CodeGenerator.getValue(eval1, dataType, index)};
           }

@@ -430,7 +430,9 @@ abstract class TypeCoercionHelper {
    * microsecond grid (a DayTimeIntervalType in the default mode, a CalendarIntervalType when
    * spark.sql.legacy.interval.enabled is set), so widening the precision never changes the numeric
    * result -- it only keeps the two operands the same concrete type. For a pure-micro cross-family
-   * pair this returns TimestampNTZType, identical to the pre-nanos behavior.
+   * pair this returns TimestampNTZType, identical to the pre-nanos behavior. A nanos operand only
+   * survives analysis in the as-of join distance; [[NanosTimestampSubtractionCheck]] rejects it
+   * anywhere else.
    */
   private def subtractTimestampsCommonType(dt1: DataType, dt2: DataType): DataType = {
     val p = math.max(

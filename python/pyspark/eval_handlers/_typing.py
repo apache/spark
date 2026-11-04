@@ -45,10 +45,10 @@ OutputBatch = TypeVar("OutputBatch")
 class UDF:
     """One UDF as the worker reads it; each handler takes the fields it needs."""
 
-    # The chained function before any wrapping: the pickled object itself (an incremental
-    # Aggregator) with its signature. EvalTypeHandler.__init__ keeps it wrapped for profiling and,
+    # The functions applied in turn to the UDF's arguments, as unpickled. EvalTypeHandler.__init__
+    # chains them into one as the handler's _raw_funcs, and keeps that wrapped for profiling and,
     # for most eval types, in fail_on_stopiteration, as the handler's _funcs.
-    raw_func: Any
+    funcs: list[Any]
     args_offsets: list[int]
     kwargs_offsets: dict[str, int]
     # The DataType of the last function in the chain; a StructType for the eval types that

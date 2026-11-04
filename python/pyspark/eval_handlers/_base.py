@@ -21,10 +21,12 @@ This leaf module imports only ``_typing``, the serializers and ``pyspark.util``,
 package ``__init__`` and the concrete-handler submodules can both import it.
 """
 
+import functools
 from abc import ABCMeta, abstractmethod
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Generic, Optional
 
+from pyspark.errors import PySparkRuntimeError
 from pyspark.eval_handlers._typing import (
     UDF,
     UDTF,
@@ -39,7 +41,7 @@ from pyspark.sql.pandas.serializers import (
     ArrowStreamGroupSerializer,
     ArrowStreamSerializer,
 )
-from pyspark.util import fail_on_stopiteration
+from pyspark.util import PythonEvalType, fail_on_stopiteration
 
 if TYPE_CHECKING:
     import pyarrow as pa  # noqa: F401  # only in the batch category's forward-ref subscript
@@ -150,27 +152,59 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
     variant_value: ClassVar[Any] = None
     # Whether the handler's UDFs return an iterator.
     _iter_based: ClassVar[bool] = False
-    # Whether __init__ wraps the UDF in fail_on_stopiteration, so a StopIteration raised in
-    # user code fails the task instead of silently ending the loop that calls the UDF.
+    # Whether __init__ wraps the UDF in fail_on_stopiteration, so a StopIteration raised by
+    # the UDF call fails with STOP_ITERATION_OCCURRED instead of PEP 479's generic RuntimeError.
     _fail_on_stopiteration: ClassVar[bool] = True
+    # Whether the handler takes any number of UDFs. Otherwise it takes exactly one UDF or UDTF:
+    # __init__ exposes a UDF as _udf_desc and its functions as _raw_func and _func, and
+    # UDTFHandlerBase exposes a UDTF as _udtf_desc.
+    _multi_udf: ClassVar[bool] = False
 
     def __init__(
-        self, udfs: "list[UDF] | list[UDTF]", runner_conf: "RunnerConf", eval_conf: "EvalConf"
+        self, udf_descs: "list[UDF] | list[UDTF]", runner_conf: "RunnerConf", eval_conf: "EvalConf"
     ) -> None:
-        self._udfs: list[Any] = udfs
+        if not self._multi_udf and len(udf_descs) != 1:
+            raise PySparkRuntimeError(
+                "One {} expected, but got {}.".format(self._expected_udf(), len(udf_descs))
+            )
+        self._udf_descs: list[Any] = udf_descs
         self._runner_conf = runner_conf
         self._eval_conf = eval_conf
-        # Each UDF's function wrapped for profiling and, unless _fail_on_stopiteration is False,
-        # in fail_on_stopiteration, at the indexes of _udfs; empty for a UDTF.
+        # Each UDF's functions chained into one before any wrapping, at the indexes of _udf_descs: a
+        # single function is the pickled object itself (an incremental Aggregator) with its
+        # signature. Empty for a UDTF.
+        self._raw_funcs: list[Any] = []
+        # Each raw function wrapped for profiling and, unless _fail_on_stopiteration is False,
+        # in fail_on_stopiteration, at the indexes of _udf_descs; empty for a UDTF.
         self._funcs: list[Callable[..., Any]] = []
-        for udf in udfs:
+        for udf in udf_descs:
             if isinstance(udf, UDF):
-                profiling_func = self._with_profiler(udf.raw_func, udf.result_id)
+                raw_func = functools.reduce(lambda f, g: lambda *a: g(f(*a)), udf.funcs)
+                self._raw_funcs.append(raw_func)
+                profiling_func = self._with_profiler(raw_func, udf.result_id)
                 self._funcs.append(
                     fail_on_stopiteration(profiling_func)
                     if self._fail_on_stopiteration
                     else profiling_func
                 )
+        if not self._multi_udf and isinstance(udf_descs[0], UDF):
+            self._udf_desc: UDF = udf_descs[0]
+            self._raw_func: Any = self._raw_funcs[0]
+            self._func: Callable[..., Any] = self._funcs[0]
+
+    def _expected_udf(self) -> str:
+        """What a single-UDF handler takes, as named when it is given another number of UDFs:
+        its eval type without the ``SQL_`` prefix and ``_UDF`` suffix, e.g. ``MAP_ARROW_ITER
+        UDF``."""
+        name = next(
+            (
+                k
+                for k, v in vars(PythonEvalType).items()
+                if k.startswith("SQL_") and v == self.eval_type
+            ),
+            type(self).__name__,
+        )
+        return "{} UDF".format(name.removeprefix("SQL_").removesuffix("_UDF"))
 
     def _with_profiler(self, f: Callable[..., Any], result_id: int) -> Callable[..., Any]:
         """Return ``f`` profiled by the profiler its config selects, or ``f`` itself when none is
@@ -207,14 +241,20 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
         if self._iter_based:
 
             def profiling_func(*args: Any, **kwargs: Any) -> Any:
+                # Call f eagerly, as the unprofiled path does, so fail_on_stopiteration sees a
+                # StopIteration raised by the call; profile each next() lazily.
                 iterator = iter(f(*args, **kwargs))
-                while True:
-                    try:
-                        with WorkerPerfProfiler(accumulator, accumulator_v2, result_id):
-                            item = next(iterator)
-                        yield item
-                    except StopIteration:
-                        break
+
+                def profiled() -> Iterator[Any]:
+                    while True:
+                        try:
+                            with WorkerPerfProfiler(accumulator, accumulator_v2, result_id):
+                                item = next(iterator)
+                            yield item
+                        except StopIteration:
+                            break
+
+                return profiled()
 
         else:
 
@@ -248,18 +288,22 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
         if self._iter_based:
 
             def profiling_func(*args: Any, **kwargs: Any) -> Any:
+                # Call f eagerly, as in the perf profiler.
                 g = f(*args, **kwargs)
                 iterator = iter(g)
 
-                while True:
-                    try:
-                        with WorkerMemoryProfiler(
-                            accumulator, accumulator_v2, result_id, g.gi_code
-                        ):
-                            item = next(iterator)
-                        yield item
-                    except StopIteration:
-                        break
+                def profiled() -> Iterator[Any]:
+                    while True:
+                        try:
+                            with WorkerMemoryProfiler(
+                                accumulator, accumulator_v2, result_id, g.gi_code
+                            ):
+                                item = next(iterator)
+                            yield item
+                        except StopIteration:
+                            break
+
+                return profiled()
 
         else:
 
