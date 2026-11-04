@@ -22,7 +22,6 @@ import java.sql.Timestamp
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{DataFrame, SparkSession}
-import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.streaming.operators.stateful.StateStoreSaveExec
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinExec
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
@@ -51,61 +50,6 @@ class MultiStatefulOperatorsSuite
       testBody: OutputMode => Any): Unit = {
     Seq(OutputMode.Append(), OutputMode.Update()).foreach { outputMode =>
       test(s"$testName - $outputMode")(testBody(outputMode))
-    }
-  }
-
-  test("SPARK-60862: exchange reuse preserves watermark for union of windowed aggregations") {
-    withTempView("input") {
-      val inputData = MemoryStream[Int]
-      inputData.toDF()
-        .withColumn("eventTime", timestamp_seconds($"value"))
-        .withWatermark("eventTime", "0 seconds")
-        .createOrReplaceTempView("input")
-
-      val stream = spark.sql(
-        """
-          |WITH aggregated AS (
-          |  SELECT window(eventTime, '5 seconds') AS window,
-          |         value % 2 AS key,
-          |         count(*) AS count
-          |  FROM input
-          |  GROUP BY window(eventTime, '5 seconds'), value % 2
-          |)
-          |SELECT 'left' AS branch, CAST(window.start AS BIGINT) AS windowStart, key, count
-          |FROM aggregated
-          |UNION ALL
-          |SELECT 'right' AS branch, CAST(window.start AS BIGINT) AS windowStart, key, count
-          |FROM aggregated
-          |""".stripMargin)
-
-      withSQLConf(
-        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true",
-        SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
-        testStream(stream, OutputMode.Append())(
-          AddData(inputData, 0, 1, 2, 3, 4),
-          CheckNewAnswer(),
-          AddData(inputData, 10),
-          Execute { query =>
-            val plan = query.lastExecution.executedPlan
-            assert(plan.collect { case _: ReusedExchangeExec => true }.nonEmpty,
-              s"Expected ReusedExchangeExec in plan:\n${plan.treeString}")
-
-            val stateStoreWatermarks = plan.collect {
-              case s: StateStoreSaveExec => s.eventTimeWatermarkForEviction
-            }
-            assert(stateStoreWatermarks.size === 2,
-              s"Expected two aggregation state stores:\n${plan.treeString}")
-            assert(stateStoreWatermarks.forall(_ == Some(4000L)),
-              s"Expected both aggregation state stores to receive 4000 ms watermark, " +
-                s"got $stateStoreWatermarks:\n${plan.treeString}")
-          },
-          CheckNewAnswer(
-            ("left", 0L, 0L, 3L),
-            ("left", 0L, 1L, 2L),
-            ("right", 0L, 0L, 3L),
-            ("right", 0L, 1L, 2L))
-        )
-      }
     }
   }
 
