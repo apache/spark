@@ -26,6 +26,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, QueryStageExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
+import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.streaming.operators.stateful.{EventTimeWatermarkExec, StateStoreWriter}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
@@ -181,6 +182,7 @@ class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
         case s: InMemoryTableScanExec => watermarkForChild(s.relation.cachedPlan)
         case a: AdaptiveSparkPlanExec => watermarkForChild(a.executedPlan)
         case e: QueryStageExec => watermarkForChild(e.plan)
+        case r: ReusedExchangeExec => watermarkForChild(r.child)
         case _ =>
           nodeToOutputWatermark.getOrElse(child.id, {
             throw new IllegalStateException(
@@ -205,6 +207,7 @@ class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
         case s: InMemoryTableScanExec => traverseAndSimulate(s.relation.cachedPlan)
         case a: AdaptiveSparkPlanExec => traverseAndSimulate(a.executedPlan)
         case e: QueryStageExec => traverseAndSimulate(e.plan)
+        case r: ReusedExchangeExec => traverseAndSimulate(r.child)
         case node: EventTimeWatermarkExec =>
           val inputWatermarks = getInputWatermarks(node, nodeToOutputWatermark)
           if (inputWatermarks.nonEmpty) {
