@@ -20,9 +20,11 @@
 name: GitHub Pages deployment
 
 on:
-  push:
-    branches:
-      - master
+  # Deploy once a day instead of on every push to master, to save CI resources.
+  # This runs after the daily docs image refresh in build_infra_images_cache.yml (04:00 UTC).
+  schedule:
+    - cron: '30 12 * * *'
+  workflow_dispatch:
 
 concurrency:
   group: 'docs preview'

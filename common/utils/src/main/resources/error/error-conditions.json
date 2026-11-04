@@ -3109,6 +3109,12 @@
     ],
     "sqlState" : "42623"
   },
+  "GENERATOR_IN_CHECK_CONSTRAINT" : {
+    "message" : [
+      "The check constraint `<checkCondition>` calls a generator function. Check constraints compute one value for each row and cannot call functions that return multiple rows."
+    ],
+    "sqlState" : "42621"
+  },
   "GEO_ENCODER_SRID_MISMATCH_ERROR" : {
     "message" : [
       "Failed to encode <type> value because provided SRID <valueSrid> of a value to encode does not match type SRID: <typeSrid>."
@@ -4885,7 +4891,7 @@
       },
       "UNSUPPORTED_ABI_VERSION" : {
         "message" : [
-          "It requires version <version> of the native data source interface, but Spark supports version <supported>."
+          "It implements version <version> of the native data source interface, but Spark supports version <supported>."
         ]
       }
     },
@@ -4908,7 +4914,7 @@
       },
       "UNSUPPORTED_ABI_VERSION" : {
         "message" : [
-          "It requires version <version> of the native data source interface, but Spark supports version <supported>."
+          "It implements version <version> of the native data source interface, but Spark supports version <supported>."
         ]
       },
       "UNSUPPORTED_PLATFORM" : {
@@ -9304,6 +9310,16 @@
       "CREATE_PIPELINE_DATASET_QUERY_EXECUTION" : {
         "message" : [
           "Direct execution of a CREATE ... <pipelineDatasetType> query. To create a pipeline dataset, create and execute a pipeline with a SQL file containing your query attached in the pipeline definition."
+        ]
+      },
+      "DECOMPRESSION_CODEC_FOR_ARCHIVE" : {
+        "message" : [
+          "The <option> option for the archive file <path>. Archives are always decompressed based on their file name extension. Remove the option, or read the archive files separately from the other files."
+        ]
+      },
+      "DECOMPRESSION_CODEC_WITH_LEGACY_LINE_READER" : {
+        "message" : [
+          "The <option> option when <config> is false, because Hadoop's line reader infers the codec from the file name extension. Set <config> to true, or remove the option."
         ]
       },
       "DESC_TABLE_COLUMN_JSON" : {
