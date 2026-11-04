@@ -254,6 +254,36 @@ Project [next_day(cast(null as date), xx, false) AS next_day(NULL, xx)#x]
 
 
 -- !query
+select next_day(date'-5877641-06-23', 'MO'), next_day(date'-5877641-06-23', 'FR')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+select next_day(date'+5881580-07-04', 'FR')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+select next_day(date'+5881580-07-11', 'MO')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+select last_day(date'-5877641-06-23'), last_day(date'+5881580-06-30')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+select last_day(date'+5881580-07-11')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
 select date_add(date'2011-11-11', 1)
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]

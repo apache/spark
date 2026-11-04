@@ -20,7 +20,7 @@ package org.apache.spark.sql.errors
 import java.io.{File, IOException}
 import java.lang.reflect.InvocationTargetException
 import java.net.{URISyntaxException, URL}
-import java.time.DateTimeException
+import java.time.{DateTimeException, DayOfWeek}
 import java.util.Locale
 import java.util.concurrent.TimeoutException
 
@@ -2897,6 +2897,26 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "operation" -> (s"add ${toSQLValue(amount, LongType)} $unit to " +
           s"${toSQLValue(DateTimeUtils.microsToInstant(micros), TimestampType)}")),
+      context = Array.empty,
+      summary = "")
+  }
+
+  def nextDayOverflowError(days: Int, dayOfWeek: DayOfWeek): SparkArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Map(
+        "operation" -> (s"find the next $dayOfWeek after " +
+          s"${toSQLValue(DateTimeUtils.daysToLocalDate(days), DateType)}")),
+      context = Array.empty,
+      summary = "")
+  }
+
+  def lastDayOverflowError(days: Int): SparkArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Map(
+        "operation" -> (s"find the last day of the month of " +
+          s"${toSQLValue(DateTimeUtils.daysToLocalDate(days), DateType)}")),
       context = Array.empty,
       summary = "")
   }

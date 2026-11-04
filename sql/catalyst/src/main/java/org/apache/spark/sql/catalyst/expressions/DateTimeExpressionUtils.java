@@ -197,6 +197,8 @@ public final class DateTimeExpressionUtils {
    * thrown by {@code DateTimeUtils.getDayOfWeekFromString} for an invalid
    * day-of-week string propagates to the caller unchanged (in ANSI mode the
    * caller wants exactly that exception), so no try/catch wrapper is emitted.
+   * The {@code DATETIME_OVERFLOW} error of {@code getNextDateForDayOfWeek}
+   * propagates in both modes.
    */
   public static int getNextDateExact(int startDate, UTF8String dayOfWeek) {
     int dow = DateTimeUtils.getDayOfWeekFromString(dayOfWeek);

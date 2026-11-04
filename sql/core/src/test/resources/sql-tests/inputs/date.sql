@@ -59,6 +59,13 @@ select next_day(timestamp_ntz"2015-07-23 12:12:12", "Mon");
 select next_day("xx", "Mon");
 select next_day(null, "Mon");
 select next_day(null, "xx");
+-- next_day and last_day fail instead of wrapping around when the result is later than the
+-- maximum DATE +5881580-07-11 (a Friday), in both ANSI modes. -5877641-06-23 is the minimum DATE.
+select next_day(date'-5877641-06-23', 'MO'), next_day(date'-5877641-06-23', 'FR');
+select next_day(date'+5881580-07-04', 'FR');
+select next_day(date'+5881580-07-11', 'MO');
+select last_day(date'-5877641-06-23'), last_day(date'+5881580-06-30');
+select last_day(date'+5881580-07-11');
 
 -- date add
 select date_add(date'2011-11-11', 1);
