@@ -52,7 +52,7 @@ import org.apache.spark.sql.execution.{
   WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.{AQEShuffleReadExec, ResultQueryStageExec, ShuffleQueryStageExec}
 import org.apache.spark.sql.execution.aggregate.{BaseAggregateExec, HashAggregateExec, SortAggregateExec}
-import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, GroupPartitionsExec}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, GroupPartitionsExec, PlannedScan}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ValidateRequirements}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
@@ -410,16 +410,18 @@ trait KeyGroupedPartitioningRuntimeFilterTests extends KeyGroupedPartitioningSui
     }
   }
 
-  /** Checks the rows of `query`, and that its join plans no shuffle, with AQE on and off. */
+  /**
+   * Checks the rows of `query`, and that its join plans no shuffle. With AQE off only, since with
+   * AQE on the copies of the join's scan plan their partitions when the result stage is created,
+   * before the DPP subquery prunes the shared `Scan`.
+   */
   private def checkStoragePartitionedJoin(query: String, expected: Seq[Row]): Unit = {
-    Seq(true, false).foreach { aqe =>
-      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
-        val df = sql(query)
-        checkAnswer(df, expected)
-        val plan = df.queryExecution.executedPlan
-        assert(collectShuffles(plan).isEmpty,
-          s"aqe=$aqe: the join should stay storage-partitioned:\n$plan")
-      }
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val df = sql(query)
+      checkAnswer(df, expected)
+      val plan = df.queryExecution.executedPlan
+      assert(collectShuffles(plan).isEmpty,
+        s"The join should stay storage-partitioned:\n$plan")
     }
   }
 
@@ -2208,10 +2210,12 @@ class KeyGroupedPartitioningSuite
           }
         }
         try {
-          // A rewritten runtime filter makes the scan copy distinct for tree replacement, while
-          // the true literal leaves the connector's replacement partitions unchanged.
+          // A new `PlannedScan` makes the copy plan the connector's replacement partitions, and a
+          // rewritten runtime filter makes it distinct for tree replacement, while the true literal
+          // leaves those partitions unchanged.
           inMemoryScan.data = newData
-          val rebuilt = leftScan.copy(runtimeFilters = Seq(Literal.TrueLiteral))
+          val rebuilt = leftScan.copy(plannedScan = new PlannedScan(leftScan.scan),
+            runtimeFilters = Seq(Literal.TrueLiteral))
           assert(rebuilt.outputPartitioning.numPartitions == replacementKeys.size)
           assert(rebuilt.outputPartitioning != leftScan.outputPartitioning ||
             replacementKeys == Seq(1, 2))

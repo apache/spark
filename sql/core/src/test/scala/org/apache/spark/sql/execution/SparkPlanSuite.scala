@@ -333,18 +333,17 @@ class SparkPlanSuite extends SharedSparkSession {
           throw new UnsupportedOperationException()
       }
     }
-    def sharesPlanning(copy: SparkPlan, scan: BatchScanExec): Boolean = copy match {
+    val scan = BatchScanExec(Seq.empty, new PlannedScan(new NewBatchScan), Seq.empty, table = null)
+    def sharesPlanning(copy: SparkPlan): Boolean = copy match {
       case c: BatchScanExec =>
         (c.batch eq scan.batch) && (c.inputPartitions eq scan.inputPartitions)
       case _ => false
     }
 
-    val scan = BatchScanExec(Seq.empty, new PlannedScan(new NewBatchScan), Seq.empty, table = null)
     // Copies through `makeCopy`, `clone` or `copy` share what the node planned.
-    assert(sharesPlanning(scan.makeCopy(scan.productIterator.map(_.asInstanceOf[AnyRef]).toArray),
-      scan))
-    assert(sharesPlanning(scan.clone(), scan))
-    assert(sharesPlanning(scan.copy(runtimeFilters = Nil), scan))
+    assert(sharesPlanning(scan.makeCopy(scan.productIterator.map(_.asInstanceOf[AnyRef]).toArray)))
+    assert(sharesPlanning(scan.clone()))
+    assert(sharesPlanning(scan.copy(runtimeFilters = Nil)))
   }
 }
 

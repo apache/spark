@@ -125,7 +125,7 @@ case class BatchScanExec(
       reportedKeyedPartitioning,
       inputPartitions)
 
-  override lazy val readerFactory: PartitionReaderFactory = batch.createReaderFactory()
+  override def readerFactory: PartitionReaderFactory = plannedScan.readerFactory
 
   // What every task's readers get, the storage filters ANDed into one. A runtime bloom arrives as
   // a ScalarSubquery over the build side, which SparkPlan has computed by the time this is forced.
@@ -193,12 +193,12 @@ case class BatchScanExec(
  * whose runtime filter prunes it first, e.g. the build side of a DPP subquery (SPARK-60752). A
  * pushed runtime filter replans them from a new `Batch`, but keeps the planned `Batch`'s reader
  * factory.
+ *
+ * A rule that rebuilds a node over the same `Scan` passes on its `plannedScan`, or uses `copy`. A
+ * new `PlannedScan` is for a node that is planned again, or one over another `Scan`.
  */
 final class PlannedScan(val scan: Scan) {
   lazy val batch: Batch = scan.toBatch
   lazy val inputPartitions: Seq[InputPartition] = batch.planInputPartitions().toImmutableArraySeq
-}
-
-object PlannedScan {
-  def unapply(plannedScan: PlannedScan): Some[Scan] = Some(plannedScan.scan)
+  lazy val readerFactory: PartitionReaderFactory = batch.createReaderFactory()
 }
