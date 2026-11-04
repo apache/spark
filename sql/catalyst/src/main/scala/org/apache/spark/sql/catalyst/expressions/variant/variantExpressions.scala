@@ -176,7 +176,7 @@ case class ToVariantObject(child: Expression)
     copy(child = newChild)
 
   protected override def nullSafeEval(input: Any): Any =
-    VariantExpressionEvalUtils.castToVariant(input, child.dataType)
+    VariantExpressionEvalUtils.castToVariant(input, child.dataType, prettyName)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childCode = child.genCode(ctx)
@@ -189,7 +189,7 @@ case class ToVariantObject(child: Expression)
         boolean ${ev.isNull} = ${childCode.isNull};
         $javaType ${ev.value} = ${CodeGenerator.defaultValue(VariantType)};
         if (!${childCode.isNull}) {
-          ${ev.value} = $cls.castToVariant(${childCode.value}, $fromArg);
+          ${ev.value} = $cls.castToVariant(${childCode.value}, $fromArg, "$prettyName");
         }
       """
     ev.copy(code = code)
