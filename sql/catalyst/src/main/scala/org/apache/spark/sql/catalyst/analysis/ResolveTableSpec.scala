@@ -62,11 +62,17 @@ object ResolveTableSpec extends Rule[LogicalPlan] {
       input: LogicalPlan,
       tableSpec: TableSpecBase,
       withNewSpec: TableSpecBase => LogicalPlan): LogicalPlan = tableSpec match {
-    // Check this before `childrenResolved`: `ResolveSubquery` skips these commands, so the subquery
-    // may never resolve, and `toV2Constraint` below would drop one that needs no resolution.
-    case u: UnresolvedTableSpec if u.constraints.exists(SubqueryExpression.hasSubquery) =>
+    // Check this before `childrenResolved`: `ResolveSubquery` skips these commands, so a subquery
+    // may never resolve. One that needs no resolution would be dropped by `toV2Constraint` or
+    // evaluated as an option value below.
+    case u: UnresolvedTableSpec if SubqueryExpression.hasSubquery(u) =>
       u.constraints.foreach {
         case check: CheckConstraint => check.failIfContainsSubquery()
+        case _ =>
+      }
+      u.optionExpression.options.foreach {
+        case (key, value) if SubqueryExpression.hasSubquery(value) =>
+          throw QueryCompilationErrors.optionMustBeConstant(key)
         case _ =>
       }
       input
@@ -110,6 +116,12 @@ object ResolveTableSpec extends Rule[LogicalPlan] {
           }.foreach { call =>
             call.failAnalysis(
               errorClass = "AGGREGATE_OR_WINDOW_FUNCTION_IN_CHECK_CONSTRAINT",
+              messageParameters = Map("checkCondition" -> check.condition)
+            )
+          }
+          check.child.collectFirst { case g: Generator => g }.foreach { generator =>
+            generator.failAnalysis(
+              errorClass = "GENERATOR_IN_CHECK_CONSTRAINT",
               messageParameters = Map("checkCondition" -> check.condition)
             )
           }

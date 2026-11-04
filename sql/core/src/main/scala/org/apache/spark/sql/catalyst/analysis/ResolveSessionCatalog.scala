@@ -561,25 +561,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case AlterViewSchemaBinding(ResolvedViewIdentifier(ident), viewSchemaMode) =>
       AlterViewSchemaBindingCommand(ident, viewSchemaMode)
 
-    // The final `_, _, _` are CreateView.isAnalyzed, referredTempFunctions and
-    // referredTempVariablesUnderIdentifier. We drop them all: CreateViewCommand is a separate
-    // AnalysisOnlyCommand and gets its own markAsAnalyzed pass from HandleSpecialCommand after
-    // this rewrite.
-    case CreateView(CreateViewInSessionCatalog(ident), userSpecifiedColumns, comment,
-        collation, properties, originalText, query, allowExisting, replace, viewSchemaMode,
-        _, _, _) =>
-      CreateViewCommand(
-        name = ident,
-        userSpecifiedColumns = userSpecifiedColumns,
-        comment = comment,
-        collation = collation,
-        properties = properties,
-        originalText = originalText,
-        plan = query,
-        allowExisting = allowExisting,
-        replace = replace,
-        viewType = PersistedView,
-        viewSchemaMode = viewSchemaMode)
+    case createView: CreateView =>
+      ViewCommandHelper.rewriteCreateView(createView)
 
     // CREATE VIEW ... WITH METRICS on the session catalog -> V1 runnable command. Non-session
     // v2 catalogs leave [[CreateMetricView]] in place for `DataSourceV2Strategy` to dispatch
@@ -843,8 +826,6 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     )
   }
 
-  private object CreateViewInSessionCatalog
-    extends ResolvedIdentifierInSessionCatalog("CREATE", "VIEW")
   private object CreateFunctionInSessionCatalog
     extends ResolvedIdentifierInSessionCatalog("CREATE", "FUNCTION")
 
