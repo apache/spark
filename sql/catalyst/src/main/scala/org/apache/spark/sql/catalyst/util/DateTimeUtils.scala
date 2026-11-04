@@ -1120,7 +1120,8 @@ object DateTimeUtils extends SparkDateTimeUtils {
    * with the seconds given, truncated towards zero, or in full for a value between -1 and 0,
    * which the truncation would show as the valid 0. Any other value, such as 61 seconds, is
    * left to them, which check their fields in order, so an invalid date or hour is reported
-   * before such seconds, while a negative value or one above `Int.MaxValue` is reported first.
+   * before such seconds, while a negative value, or one whose whole seconds exceed
+   * `Int.MaxValue` (2147483648 or more; 2147483647.5 passes), is reported first.
    */
   def splitSecsAndMicros(secsAndMicros: Decimal): Long = {
     assert(secsAndMicros.scale == 6)

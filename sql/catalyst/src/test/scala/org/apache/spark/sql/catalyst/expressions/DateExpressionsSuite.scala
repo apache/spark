@@ -1631,11 +1631,13 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       (2020, 1, 1, 0, 0, "-9999999999.999999", secondOfMinute("-9999999999")),
       // A small out-of-range value, for comparison.
       (2020, 1, 1, 0, 0, "61", secondOfMinute("61")),
-      // With an invalid month: a negative value, or one above Int.MaxValue, is reported before
-      // the month, as make_time does, and any other out-of-range value after it.
+      // With an invalid month: a negative value, or one whose whole seconds exceed Int.MaxValue,
+      // is reported before the month, as make_time does, and any other out-of-range value after
+      // it, a value between 60 and 61 seconds excepted, whose fraction is reported first.
       (2020, 13, 1, 0, 0, "-1", secondOfMinute("-1")),
       (2020, 13, 1, 0, 0, "61", monthOfYear),
       (2020, 13, 1, 0, 0, "2147483647", monthOfYear),
+      (2020, 13, 1, 0, 0, "2147483647.5", monthOfYear),
       (2020, 13, 1, 0, 0, "2147483648", secondOfMinute("2147483648")))
     for {
       dataType <- Seq(TimestampType, TimestampNTZType)
