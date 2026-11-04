@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{AnalysisAwareExpression, AttributeReference, Cast, Expression, UnaryExpression, Unevaluable}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{ANALYSIS_AWARE_EXPRESSION, PLAN_EXPRESSION, TreePattern, VARIABLE_REFERENCE}
-import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
+import org.apache.spark.sql.catalyst.util.{StoredExpressionText, V2ExpressionBuilder}
 import org.apache.spark.sql.connector.catalog.GenerationExpression
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, TimeType}
@@ -59,6 +59,7 @@ case class GeneratedColumnExpression(
    * - No subquery expressions
    * - No references to session (temporary) variables
    * - No non-UTF8 binary collation
+   * - The text reads the same as it does under the settings a write reads it with
    */
   def validate(
       fieldName: String,
@@ -123,6 +124,16 @@ case class GeneratedColumnExpression(
     if (child.exists(e => SchemaUtils.hasNonUTF8BinaryCollation(e.dataType))) {
       throw unsupportedExpressionError(
         "generation expression cannot contain non utf8 binary collated string type")
+    }
+
+    // A write reads the stored text under fixed settings, so that a value does not depend on the
+    // session that writes it. The text has to read the same there. This also applies to a table
+    // that computes the values itself, so that the text means the same to any reader.
+    if (!StoredExpressionText.readsAsInSession(originalSQL)) {
+      throw unsupportedExpressionError(
+        "a write reads it with the default values of the parser configs, such as " +
+          "spark.sql.parser.escapedStringLiterals and spark.sql.ansi.enforceReservedKeywords, " +
+          "and this session reads it differently")
     }
   }
 

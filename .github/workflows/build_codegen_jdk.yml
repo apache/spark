@@ -25,7 +25,7 @@
 # javac is slower than Janino, so this runs on its own schedule rather than on
 # every push, skips the jobs that do not compile generated code (docs, lint, buf,
 # ui), and raises the timeout of the three jobs that no longer fit their default.
-name: "Build / Codegen JDK backend (master, Scala 2.13, JDK 17)"
+name: "Build / Codegen JDK backend (master, Scala 2.13, JDK 21)"
 
 on:
   schedule:
@@ -40,7 +40,7 @@ jobs:
     uses: ./.github/workflows/build_and_test.yml
     if: github.repository == 'apache/spark'
     with:
-      java: 17
+      java: 21
       branch: master
       hadoop: hadoop3
       # See SPARK-57411 for the measurements behind these three.
