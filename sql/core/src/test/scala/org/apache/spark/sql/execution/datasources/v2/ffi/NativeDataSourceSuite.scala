@@ -1549,15 +1549,26 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       (scan.readerFactory.asInstanceOf[SupportsArrowStreamRead], scan.inputPartitions)
     }
     // The batch scan of only some of the columns from a library that does not prune the others
-    // drops them from the batches itself, so its reader factory does not open streams, which
-    // would have all the columns. With all the columns, it does.
+    // projects the schema and the arrays of its streams to them, as it projects its batches.
     val readOnly = newSession(defaultPackage, createPackage(readOnlyLibrary, dataSources("ro_")))
-    def readsStreams(df: DataFrame): Boolean = {
-      df.queryExecution.executedPlan.collectFirst { case s: BatchScanExec => s }.get
-        .readerFactory.isInstanceOf[SupportsArrowStreamRead]
+    val (projectedFactory, projectedPartitions) =
+      plannedScan(readOnly.read.format("ro_native_range").option("end", "4").load().select("id"))
+    val projectedReads = readOnly.artifactManager.withResources {
+      readOnly.sparkContext.parallelize(Seq(0), 1).flatMap { _ =>
+        projectedPartitions.map { partition =>
+          val stream = ArrowArrayStream.allocateNew(ArrowUtils.rootAllocator)
+          try {
+            projectedFactory.openArrowStream(partition, stream.memoryAddress())
+            try TestArrowEngine.readNamesAndIdsInPlace(stream) finally stream.release()
+          } finally {
+            stream.close()
+          }
+        }
+      }.collect().toSeq
     }
-    val unpruned = readOnly.read.format("ro_native_range").option("end", "4").load()
-    assert(!readsStreams(unpruned.select("id")) && readsStreams(unpruned))
+    assert(projectedReads.map(_._1).distinct == Seq(Seq("id")))
+    assert(projectedReads.flatMap(_._2).sorted == (0L until 4L))
+    assert(NativeLibrary.openProjections() == 0 && NativeLibrary.openEngineStreams() == 0)
     // Runs `f` in a task that only gets the files of the session. It is the task of the partition
     // 1, so that the partition of the scan that a read gets is not the partition of its task.
     def inTask[T: ClassTag](f: => T): T = session.artifactManager.withResources {
@@ -1584,13 +1595,13 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         }
       }
     }
-    // Checks that `f` opens `delta` more task contexts than it closes. The count is global to the
-    // JVM, where the tasks of earlier tests may still close their contexts, so it is read right
-    // before `f`.
+    // Checks that `f` opens at most `delta` more task contexts than it closes. The count is global
+    // to the JVM, where the tasks of earlier tests may still close their contexts, so it is read
+    // right before `f`, and may be lower afterwards.
     def checkContexts[T](delta: Int)(f: => T): T = {
       val before = NativeLibrary.openTaskContexts()
       val result = f
-      assert(NativeLibrary.openTaskContexts() == before + delta)
+      assert(NativeLibrary.openTaskContexts() <= before + delta)
       result
     }
     // The size of struct ArrowArrayStream, which the layout test compares with the header.
@@ -1727,7 +1738,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     eventually(timeout(1.minute)) {
       assert(killedMarker.isFile && Files.readString(killedMarker.toPath) == "interrupted")
       assert(NativeLibrary.openEngineStreams() == 0)
-      assert(NativeLibrary.openTaskContexts() == contextsBeforeKill)
+      assert(NativeLibrary.openTaskContexts() <= contextsBeforeKill)
     }
 
     // So does the reader factory of a micro-batch scan, with the state of its micro-batch.
@@ -1829,10 +1840,22 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       .streamReader(StructType.fromDDL("id BIGINT"), Utils.createTempDir().getPath)
       .asInstanceOf[NativeDataSourceStreamReader]
     try {
-      assert(streamReader.partitions("{\"offset\":0}", "{\"offset\":2}").nonEmpty)
-      assert(streamReader.lastPlannedBroadcast.isDefined)
-      assert(streamReader.partitions("{\"offset\":2}", "{\"offset\":2}").isEmpty)
-      assert(streamReader.lastPlannedBroadcast.isEmpty)
+      def offset(i: Int): String = s"""{"offset":$i}"""
+      assert(streamReader.partitions(offset(0), offset(2)).nonEmpty)
+      val firstState = streamReader.uncommittedStates
+      assert(firstState.length == 1)
+      assert(streamReader.partitions(offset(2), offset(2)).isEmpty)
+      assert(streamReader.uncommittedStates == firstState)
+      // The broadcast of a micro-batch is destroyed once the micro-batch is committed, and those
+      // of the micro-batches after it stay.
+      assert(streamReader.partitions(offset(2), offset(4)).nonEmpty)
+      val states = streamReader.uncommittedStates
+      assert(states.length == 2 && states.forall(_.isValid))
+      streamReader.commit(offset(2))
+      assert(!states.head.isValid && states(1).isValid)
+      assert(streamReader.uncommittedStates == states.tail)
+      streamReader.stop()
+      assert(!states(1).isValid && streamReader.uncommittedStates.isEmpty)
     } finally {
       streamReader.stop()
     }
@@ -2004,7 +2027,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     // the contexts would otherwise count.
     eventually(timeout(1.minute)) {
       assert(marker.isFile && Files.readString(marker.toPath) == "interrupted")
-      assert(NativeLibrary.openTaskContexts() == contexts)
+      assert(NativeLibrary.openTaskContexts() <= contexts)
     }
   }
 
@@ -2014,7 +2037,10 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     val marker = new File(Utils.createTempDir(), "released")
     val reading = marker.getPath + ".reading"
     val df = range(session, "end" -> "10", "partitions" -> "1", "slow_read" -> marker.getPath)
-    val contexts = NativeLibrary.openTaskContexts()
+    // The contexts of the tasks of earlier tests are closed first, so that the counts below are
+    // exactly those of this test, also the one of the context that stays open.
+    eventually(timeout(1.minute))(assert(NativeLibrary.openTaskContexts() == 0))
+    val contexts = 0
     try {
       // PipedRDD reads the scan on a thread of its own, which the task does not wait for. The
       // task completes without reading the output of the command, once that thread is in
@@ -2700,7 +2726,10 @@ object TestArrowEngine {
    * Reads the ids of a stream to its end on the calling thread, without moving or releasing it, as
    * an engine that releases the stream later does.
    */
-  def readIdsInPlace(stream: ArrowArrayStream): Seq[Long] = {
+  def readIdsInPlace(stream: ArrowArrayStream): Seq[Long] = readNamesAndIdsInPlace(stream)._2
+
+  /** The names of the columns of a stream and its ids, read as `readIdsInPlace` reads them. */
+  def readNamesAndIdsInPlace(stream: ArrowArrayStream): (Seq[String], Seq[Long]) = {
     val allocator = ArrowUtils.rootAllocator.newChildAllocator("engine", 0, Long.MaxValue)
     val dictionaries = new CDataDictionaryProvider()
     try {
@@ -2730,7 +2759,7 @@ object TestArrowEngine {
             array.close()
           }
         }
-        ids.toSeq
+        (root.getSchema.getFields.asScala.map(_.getName).toSeq, ids.toSeq)
       } finally {
         root.close()
       }

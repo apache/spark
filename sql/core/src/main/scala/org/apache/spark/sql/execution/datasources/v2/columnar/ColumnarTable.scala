@@ -217,7 +217,13 @@ class ColumnarBatchScan(planner: ColumnarBatchPlanner, projection: Option[Array[
 
   override def createReaderFactory(): PartitionReaderFactory = {
     val factory = planned.get.readerFactory
-    projection.fold(factory)(new ColumnarProjectionReaderFactory(factory, _))
+    projection.fold(factory) { ordinals =>
+      factory match {
+        case streams: SupportsProjectedArrowStreamRead =>
+          new ColumnarArrowStreamProjectionReaderFactory(streams, ordinals)
+        case _ => new ColumnarProjectionReaderFactory(factory, ordinals)
+      }
+    }
   }
 }
 
@@ -348,6 +354,31 @@ class ColumnarProjectionReaderFactory(factory: PartitionReaderFactory, ordinals:
   extends ColumnarOnlyPartitionReaderFactory {
   override def createColumnarReader(partition: InputPartition): PartitionReader[ColumnarBatch] = {
     new ColumnarProjectionReader(factory.createColumnarReader(partition), ordinals)
+  }
+}
+
+/**
+ * A reader factory that opens the Arrow C streams of the partitions for an engine, see
+ * [[SupportsArrowStreamRead]], and can project them to some of their columns.
+ */
+trait SupportsProjectedArrowStreamRead extends SupportsArrowStreamRead {
+  /**
+   * Opens the stream of `partition`, as `openArrowStream(partition, streamAddress)` does, but its
+   * schema and its arrays only have the columns at `projection`, in that order.
+   */
+  def openArrowStream(partition: InputPartition, streamAddress: Long, projection: Array[Int]): Unit
+}
+
+/**
+ * A [[ColumnarProjectionReaderFactory]] whose Arrow C streams, which an engine opens, only have the
+ * columns that the scan reads too, as its batches do.
+ */
+class ColumnarArrowStreamProjectionReaderFactory(
+    factory: SupportsProjectedArrowStreamRead,
+    ordinals: Array[Int])
+  extends ColumnarProjectionReaderFactory(factory, ordinals) with SupportsArrowStreamRead {
+  override def openArrowStream(partition: InputPartition, streamAddress: Long): Unit = {
+    factory.openArrowStream(partition, streamAddress, ordinals)
   }
 }
 

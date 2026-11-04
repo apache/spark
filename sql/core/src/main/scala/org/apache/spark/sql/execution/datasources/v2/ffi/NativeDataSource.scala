@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 import java.util.function.BooleanSupplier
 import javax.annotation.concurrent.GuardedBy
 
+import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.reflect.{classTag, ClassTag}
 import scala.util.Try
@@ -31,6 +32,7 @@ import scala.util.control.NonFatal
 import com.fasterxml.jackson.core.JsonProcessingException
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.json.JsonMapper
+import com.google.common.collect.MapMaker
 import org.apache.arrow.c.{ArrowArray, ArrowArrayStream, ArrowSchema, CDataDictionaryProvider, Data}
 import org.apache.arrow.vector.{FieldVector, ValueVector, VectorSchemaRoot}
 import org.apache.arrow.vector.complex.{ListVector, MapVector, StructVector}
@@ -45,7 +47,7 @@ import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, BATCH
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory, SupportsArrowStreamRead}
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchPlanner, ColumnarDataSource, ColumnarOnlyPartitionReaderFactory, ColumnarPlannedBatch, ColumnarStreamReader, ColumnarStreamWriter, ColumnarWriter}
+import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchPlanner, ColumnarDataSource, ColumnarOnlyPartitionReaderFactory, ColumnarPlannedBatch, ColumnarStreamReader, ColumnarStreamWriter, ColumnarWriter, SupportsProjectedArrowStreamRead}
 import org.apache.spark.sql.execution.vectorized.ReusedArrowColumnVector
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -301,7 +303,8 @@ class NativeBatchPlanner(
 
 /**
  * Reads the partitions of a planned batch scan of a native data source, on the executors. An
- * engine can also get the Arrow C stream of a partition from it, see [[SupportsArrowStreamRead]].
+ * engine can also get the Arrow C stream of a partition from it, see [[SupportsArrowStreamRead]],
+ * with only some of its columns for a scan whose library did not prune the others.
  */
 class NativePartitionReaderFactory(
     location: NativeLibraryLocation,
@@ -309,16 +312,30 @@ class NativePartitionReaderFactory(
     readerState: Array[Byte],
     readSchema: StructType,
     timeZoneId: String)
-  extends ColumnarOnlyPartitionReaderFactory with SupportsArrowStreamRead {
+  extends ColumnarOnlyPartitionReaderFactory with SupportsProjectedArrowStreamRead {
   override def createColumnarReader(partition: InputPartition): PartitionReader[ColumnarBatch] = {
     new NativePartitionReader(location, name, NativeLibrary.READ_BATCH, readerState,
       partition.asInstanceOf[NativeInputPartition], readSchema, timeZoneId)
   }
 
   override def openArrowStream(partition: InputPartition, streamAddress: Long): Unit = {
+    open(partition, streamAddress, None)
+  }
+
+  override def openArrowStream(
+      partition: InputPartition,
+      streamAddress: Long,
+      projection: Array[Int]): Unit = {
+    open(partition, streamAddress, Some(projection))
+  }
+
+  private def open(
+      partition: InputPartition,
+      streamAddress: Long,
+      projection: Option[Array[Int]]): Unit = {
     NativePartitionReader.openEngineStream[NativeInputPartition](location, name,
-      NativeLibrary.READ_BATCH, partition, readSchema, timeZoneId, streamAddress) { partition =>
-      (readerState, partition)
+      NativeLibrary.READ_BATCH, partition, readSchema, timeZoneId, streamAddress, projection) {
+      partition => (readerState, partition)
     }
   }
 }
@@ -337,13 +354,15 @@ class NativeDataSourceStreamReader(
   extends ColumnarStreamReader {
   import NativeCalls._
 
-  // The range that was planned last, its partitions or the failure to plan them, and the broadcast
-  // of its state, if it was broadcast. All the scans of the source in a micro-batch plan the same
-  // range, such as both sides of a union of the source with itself, so they get the result of a
-  // single stream_partitions call, with the state that it returned.
+  // The range that was planned last and its partitions, or the failure to plan them. All the
+  // scans of the source in a micro-batch plan the same range, such as both sides of a union of the
+  // source with itself, so they get the result of a single stream_partitions call, with the state
+  // that it returned.
   private var plannedRange: (String, String) = _
   private var plannedPartitions: Try[Array[InputPartition]] = _
-  private var plannedBroadcast: Option[Broadcast[Array[Byte]]] = None
+  // The broadcasts of the states of the planned micro-batches that are not committed yet, by the
+  // end of their range, in the order in which they were planned.
+  private val uncommittedBroadcasts = mutable.LinkedHashMap.empty[String, Broadcast[Array[Byte]]]
 
   private lazy val library = NativeLibraries.get(location)
 
@@ -392,16 +411,15 @@ class NativeDataSourceStreamReader(
         val bytes = bytesOrEmpty(Option(planned.state))
         // A small state goes with each task, while the executors fetch a larger one once for the
         // micro-batch, as a broadcast. Spark only plans the next range once the micro-batch of the
-        // previous one finished, so the copies of its broadcast on the executors are removed then.
-        // The driver keeps its own copy, so that the partitions and the reader factories that an
-        // engine keeps can still fetch it, until the ContextCleaner removes it once nothing refers
-        // to them.
-        plannedBroadcast.foreach(_.unpersist(blocking = false))
-        plannedBroadcast = None
+        // previous one finished, so the copies of the previous broadcast on the executors are
+        // removed then. The broadcast itself is destroyed once its micro-batch is committed,
+        // whose partitions are not read anymore then, also by an engine.
+        uncommittedBroadcasts.lastOption.foreach(_._2.unpersist(blocking = false))
         val state = if (bytes.length > NativeDataSourceStreamReader.maxInlineStateBytes &&
             partitions.nonEmpty) {
           val broadcast = SparkSession.active.sparkContext.broadcast(bytes)
-          plannedBroadcast = Some(broadcast)
+          uncommittedBroadcasts.remove(end).foreach(_.destroy(blocking = false))
+          uncommittedBroadcasts.put(end, broadcast)
           Right(broadcast)
         } else {
           Left(bytes)
@@ -418,18 +436,28 @@ class NativeDataSourceStreamReader(
   }
 
   override def commit(end: String): Unit = synchronized {
+    // The broadcasts of the micro-batches up to the committed one, which are committed too.
+    if (uncommittedBroadcasts.contains(end)) {
+      val committed = uncommittedBroadcasts.keys.toSeq.takeWhile(_ != end) :+ end
+      committed.foreach(uncommittedBroadcasts.remove(_).foreach(_.destroy(blocking = false)))
+      if (plannedRange != null && plannedRange._2 == end) {
+        // The partitions of the committed range hold its destroyed broadcast.
+        plannedRange = null
+      }
+    }
     call(name, "commit an offset of")(optional(library.commitOffset(handle.get, end)))
   }
 
-  // The broadcast of the state of the last micro-batch that the reader planned, for tests.
-  private[ffi] def lastPlannedBroadcast: Option[Broadcast[Array[Byte]]] =
-    synchronized(plannedBroadcast)
+  // The broadcasts of the states of the planned micro-batches that are not committed yet, for
+  // tests.
+  private[ffi] def uncommittedStates: Seq[Broadcast[Array[Byte]]] =
+    synchronized(uncommittedBroadcasts.values.toSeq)
 
   override def stop(): Unit = synchronized {
-    // As for the state of a micro-batch once the next one is planned.
-    Utils.tryWithSafeFinally(plannedBroadcast.foreach(_.unpersist(blocking = false))) {
-      handle.close()
-    }
+    Utils.tryWithSafeFinally {
+      uncommittedBroadcasts.values.foreach(_.destroy(blocking = false))
+      uncommittedBroadcasts.clear()
+    }(handle.close())
   }
 }
 
@@ -466,7 +494,8 @@ class NativeMicroBatchPartitionReaderFactory(
 
   override def openArrowStream(partition: InputPartition, streamAddress: Long): Unit = {
     NativePartitionReader.openEngineStream[NativeMicroBatchPartition](location, name,
-      NativeLibrary.READ_MICRO_BATCH, partition, schema, timeZoneId, streamAddress) { partition =>
+      NativeLibrary.READ_MICRO_BATCH, partition, schema, timeZoneId, streamAddress,
+      projection = None) { partition =>
       (partition.readerState, partition.partition)
     }
   }
@@ -1028,6 +1057,9 @@ object NativePartitionReader {
    * must be a `P`, the class of the partitions of the scan of the reader factory. It then reads
    * the partition with the state and the partition of the library that `stateAndPartition`
    * returns for it.
+   *
+   * @param projection the columns of `schema` that the engine gets, in their order, if not all of
+   *                   them: the schema and the arrays of the stream then only have these children
    */
   private[ffi] def openEngineStream[P <: InputPartition: ClassTag](
       location: NativeLibraryLocation,
@@ -1036,7 +1068,8 @@ object NativePartitionReader {
       partition: InputPartition,
       schema: StructType,
       timeZoneId: String,
-      streamAddress: Long)(
+      streamAddress: Long,
+      projection: Option[Array[Int]])(
       stateAndPartition: P => (Array[Byte], NativeInputPartition)): Unit = {
     val context = TaskContext.get()
     if (context != null) {
@@ -1064,7 +1097,9 @@ object NativePartitionReader {
     try {
       // As a failure of read, a failure to create the callbacks of the streams of engines, such as
       // a link error, is an error of the data source.
-      call(name, "read")(NativeLibrary.wrapEngineStream(streamAddress, task, name))
+      call(name, "read") {
+        NativeLibrary.wrapEngineStream(streamAddress, task, name, projection.orNull)
+      }
     } catch {
       case e: Throwable =>
         releaseOnFailure(e, streamAddress, task)
@@ -1118,21 +1153,28 @@ object NativePartitionReader {
 
   /**
    * After `failure`, releases the stream at `streamAddress`, if the library initialized it, before
-   * the task that it may use, and marks it released in case its release callback did not. A
+   * the task that it may use, and marks it released in case its release callback did not. The
+   * stream is released through FFM, as the streams of engines are, without the JNI library of
+   * Arrow. If it cannot be released, the task is not closed either, since the library may still
+   * use it: both then leak, rather than letting the release of the stream use a freed task. A
    * failure to clean up is added to `failure`.
    */
   private def releaseOnFailure(
       failure: Throwable,
       streamAddress: Long,
       task: NativeLibrary.Task): Unit = {
-    try {
-      Utils.tryWithSafeFinally {
-        val stream = ArrowArrayStream.wrap(streamAddress)
-        stream.release()
-        stream.markReleased()
-      }(task.close())
+    val released = try {
+      NativeLibrary.releaseStream(streamAddress)
+      true
     } catch {
-      case e: Throwable => failure.addSuppressed(e)
+      case e: Throwable =>
+        failure.addSuppressed(e)
+        false
+    }
+    if (released) {
+      try task.close() catch {
+        case e: Throwable => failure.addSuppressed(e)
+      }
     }
   }
 }
@@ -1232,8 +1274,9 @@ private[ffi] object NativeTask {
   // pair of listeners for all its reads, which then also remove it: a task that reads many
   // partitions, as after a coalesce, registers them once. The contexts of the reads keep their
   // flag, so they still see it once it is removed. A task is the key rather than its attempt ID,
-  // which is 0 for each context of `TaskContext.empty()`.
-  private val endedTasks = new ConcurrentHashMap[TaskContext, AtomicBoolean]()
+  // which is 0 for each context of `TaskContext.empty()`. The keys are weak, compared by identity,
+  // so that a context that never ends, such as one that a test sets on its thread, does not stay.
+  private val endedTasks = new MapMaker().weakKeys().makeMap[TaskContext, AtomicBoolean]()
 
   /** Returns the flag that is set once the given task failed or completed. */
   private def endedFlag(taskContext: TaskContext): AtomicBoolean = {
