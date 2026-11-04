@@ -1018,6 +1018,21 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = e)
   }
 
+  def decompressionCodecForArchiveUnsupportedError(
+      path: String): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_FEATURE.DECOMPRESSION_CODEC_FOR_ARCHIVE",
+      messageParameters = Map("option" -> toDSOption("decompression"), "path" -> path))
+  }
+
+  def decompressionCodecWithLegacyLineReaderError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_FEATURE.DECOMPRESSION_CODEC_WITH_LEGACY_LINE_READER",
+      messageParameters = Map(
+        "option" -> toDSOption("decompression"),
+        "config" -> toSQLConf(SQLConf.HADOOP_LINE_RECORD_READER_ENABLED.key)))
+  }
+
   def cannotReadZipEntry(entry: String, path: String): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "CANNOT_READ_ZIP_ENTRY",

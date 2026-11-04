@@ -39,7 +39,7 @@ jobs:
       - name: Setup build environment
         uses: ./.github/actions/setup-build-env
         with:
-          java-version: '17'
+          java-version: '21'
       - name: Install Python 3.11
         uses: actions/setup-python@v7
         with:
