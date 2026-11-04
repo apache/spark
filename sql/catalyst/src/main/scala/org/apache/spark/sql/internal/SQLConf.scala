@@ -683,12 +683,16 @@ object SQLConf {
         "expression; otherwise it stays above in its written order, so it is only evaluated " +
         "where none of the conditions before it is false, and an error the condition itself " +
         "would raise on other rows (e.g. a division by zero or an invalid cast in ANSI mode, or " +
-        "an exception in a UDF) is not raised. The projection is not split then either. This " +
+        "an exception in a UDF) is not raised, unless it shares a subexpression with another " +
+        "condition or the optimizer infers an IS NOT NULL check for it. The projection is not " +
+        "split then either. This " +
         "covers the expensive elements evaluated in the projection, such as Scala UDFs, also " +
         "over Python UDFs, but not Python UDFs alone, which are evaluated below it. Otherwise, " +
         "the projection split may still compute the expensive element a later condition reads " +
         "ahead of the conditions before it. When false, a non-deterministic condition written " +
-        "after a condition over a Python UDF also stays above.")
+        "after a condition over a Python UDF also stays above, and the projection is not " +
+        "split when such a condition, or a throwable one, that reads no expensive element is " +
+        "kept above there.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf

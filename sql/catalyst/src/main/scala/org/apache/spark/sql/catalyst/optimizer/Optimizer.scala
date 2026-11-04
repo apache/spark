@@ -2620,7 +2620,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     // `canPushAhead` accepts (plain comparisons and the like) are pushed, and the projection is
     // not split when a part after that one is rejected by it, with only the cheap aliases
     // substituted. After a part only expensive through scalar Python UDFs, a non-deterministic
-    // part stays above too.
+    // part stays above too, and the projection is not split when a cheap part stays above
+    // there.
     // SPARK-13473: We can't push the predicate down when the underlying projection output non-
     // deterministic field(s).  Non-deterministic expressions are essentially stateful. This
     // implies that, for a given input row, the output are determined by the expression's initial
@@ -2690,7 +2691,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         // 2: after the first component held back.
         var strictness = 0
         // Whether a cheap component was kept above at strictness 1, i.e. one that is
-        // non-deterministic or throwable, before the first one held back.
+        // non-deterministic or throwable, before the first one held back, if any.
         var keptCheapBeforeHeld = false
         components.zipWithIndex.foreach { case (component @ (cond, used, replaced), index) =>
           val push = isCheap(used) && (strictness match {
@@ -2732,11 +2733,11 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         // tell nothing about an expensive one such as a UDF): e.g. a division over an expensive
         // alias, or a cheap condition held back above, which needs no expensive alias and so
         // would go lowest. The filter then stays above the projection as written, as without
-        // the split. So it does when a cheap component kept above after one over a Python UDF
-        // comes before the first one held back, as the split would compute the held ones
-        // ahead of it.
+        // the split. So it does when a cheap component is kept above after one over a Python
+        // UDF before the first one held back, or with none held back, as the split could
+        // evaluate the later expensive ones ahead of it.
         lazy val keepsWrittenOrder = !legacy &&
-            (keptCheapBeforeHeld && firstHeldIndex >= 0 || expensiveHeld.nonEmpty && {
+            (keptCheapBeforeHeld || expensiveHeld.nonEmpty && {
               val cheapAliasMap =
                 AttributeMap(aliasMap.filter { case (_, a) => !isExpensive(a.child) })
               expensiveHeld.exists {

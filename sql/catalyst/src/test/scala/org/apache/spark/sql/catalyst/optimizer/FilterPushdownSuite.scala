@@ -1049,7 +1049,7 @@ class FilterPushdownSuite extends PlanTest {
     "the conditions after it in their written order") {
     // `InferFiltersFromConstraints`, which this suite does not run, also puts the checks it
     // infers there. Before the first expensive condition, everything is pushed as written, so
-    // `isnotnull(a + 1)` still guards the division after it below the projection.
+    // `isnotnull(a + 1)` still comes before the division after it in the pushed filter.
     def project: LogicalPlan = testStringRelation
       .select($"a", expensiveRLike("magic") as "f", $"a" + 1 as "x", $"b")
     Seq(true, false).foreach { split =>
@@ -1119,8 +1119,8 @@ class FilterPushdownSuite extends PlanTest {
     val pythonUDF = PythonUDF("pythonUDF", null, IntegerType, Seq(attrA),
       PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
     def pythonProject: LogicalPlan = testStringRelation
-      .select($"a", pythonUDF.as("p"), expensiveRLike("magic") as "f", expensiveRLike("third")
-        as "h", $"b")
+      .select($"a", pythonUDF.as("p"), expensiveRLike("magic") as "f",
+        expensiveRLike("third") as "h", $"b")
     Seq[Expression](
       $"p" > 1 && Rand(10) > 0.5 && $"f" && $"h",
       $"p" > 1 && ($"b" > 1 || raiseError) && $"f" && $"h"
@@ -1131,6 +1131,15 @@ class FilterPushdownSuite extends PlanTest {
     // Other conditions over the Python UDF before it do not keep it from being split.
     val splitQuery = pythonProject.where($"p" > 1 && $"p" < 100 && $"f" && $"h").analyze
     assert(Optimize.execute(splitQuery).collect { case p: Project => p }.size > 1)
+    // Nor when nothing is held back, with the expensive aliases all over Python UDFs: the split
+    // would evaluate the conditions over q below the non-deterministic one.
+    val otherPythonUDF = PythonUDF("otherPythonUDF", null, IntegerType, Seq(attrB),
+      PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
+    val twoPythonQuery = testStringRelation
+      .select($"a", pythonUDF.as("p"), otherPythonUDF.as("q"), $"b")
+      .where($"p" > 1 && Rand(10) > 0.5 && $"q" > 1 && $"q" < 5)
+      .analyze
+    comparePlans(Optimize.execute(twoPythonQuery), twoPythonQuery)
   }
 
   test("SPARK-60730: the legacy config pushes a cheap condition that can fail ahead of an " +
@@ -1396,6 +1405,15 @@ class FilterPushdownSuite extends PlanTest {
         .where($"h")
         .analyze
       comparePlans(Optimize.execute(withThrowable), withThrowableAnswer)
+
+      // Nor does one kept above after a condition over a Python UDF.
+      def pythonUDF(name: String, input: Expression): PythonUDF = PythonUDF(name, null,
+        IntegerType, Seq(input), PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
+      val pythonQuery = testStringRelation
+        .select($"a", pythonUDF("p", attrA).as("p"), pythonUDF("q", attrB).as("q"), $"b")
+        .where($"p" > 1 && ($"b" > 1 || raiseError) && $"q" > 1 && $"q" < 5)
+        .analyze
+      assert(Optimize.execute(pythonQuery).collect { case p: Project => p }.size > 1)
     }
   }
 
