@@ -51,8 +51,8 @@ class NativeColumnVectorSuite extends SparkFunSuite {
   }
 
   /** The column vector of `vector`, refreshed as the reader refreshes it after an import. */
-  private def native(vector: ValueVector): NativeColumnVector = {
-    val column = NativeColumnVector.create(vector)
+  private def native(vector: ValueVector, nullable: Boolean = true): NativeColumnVector = {
+    val column = NativeColumnVector.create(vector, nullable)
     column.refresh()
     column
   }
@@ -141,7 +141,7 @@ class NativeColumnVectorSuite extends SparkFunSuite {
       def check(vector: FieldVector)(set: (Int, Array[Byte]) => Unit, setNull: Int => Unit)
           : Unit = {
         Using.resource(vector) { vector =>
-          val column = NativeColumnVector.create(vector)
+          val column = NativeColumnVector.create(vector, true)
           assert(column.getClass !== classOf[NativeColumnVector], vector.getClass.getName)
           // Batches without and with data buffers, with values of both kinds, and with values in
           // several data buffers.
@@ -292,7 +292,7 @@ class NativeColumnVectorSuite extends SparkFunSuite {
   test("reads the buffers of the batch that the reader imported last") {
     withAllocator { allocator =>
       Using.resource(new BigIntVector("id", allocator)) { vector =>
-        val column = NativeColumnVector.create(vector)
+        val column = NativeColumnVector.create(vector, true)
         // Each batch has other buffers: with nulls, without nulls, empty, and larger.
         val batches = Seq(
           Seq(Some(1L), None, Some(3L)),
@@ -310,6 +310,24 @@ class NativeColumnVectorSuite extends SparkFunSuite {
           column.refresh()
           checkSame(vector, column)(_.getLong(_))
         }
+      }
+    }
+  }
+
+  test("a column that the schema declares not nullable") {
+    withAllocator { allocator =>
+      Using.resource(new IntVector("k", allocator)) { vector =>
+        vector.allocateNew(rows.size)
+        rows.foreach(row => vector.set(row, row))
+        vector.setValueCount(rows.size)
+        val column = native(vector, nullable = false)
+        assert(column.getClass !== classOf[NativeColumnVector])
+        checkSame(vector, column)(_.getInt(_))
+        // The reader rejects a batch with a null in such a column before it refreshes the column
+        // vector, which therefore does not count the nulls of the batch.
+        vector.setNull(1)
+        column.refresh()
+        assert(!column.isNullAt(1))
       }
     }
   }

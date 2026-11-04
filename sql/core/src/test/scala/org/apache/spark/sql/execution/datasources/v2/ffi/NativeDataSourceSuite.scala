@@ -430,6 +430,34 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(scan(nested).readSchema() == StructType.fromDDL("st STRUCT<a: BIGINT, b: STRING>"))
   }
 
+  nativeTest("read the columns at the addresses of their buffers, and decimals as longs") {
+    val df = range(newSession(defaultPackage), "end" -> "10", "partitions" -> "1",
+      "extra" -> "decimal")
+    assert(df.schema("d").dataType == DecimalType(10, 2))
+    checkRows(df, (0L until 10L).map { id =>
+      Row.fromSeq(expectedRow(id).toSeq :+ java.math.BigDecimal.valueOf(id * 100, 2))
+    })
+    val batch = scan(df).toBatch
+    val reader = batch.createReaderFactory().createColumnarReader(batch.planInputPartitions().head)
+    try {
+      assert(reader.next())
+      val columns = (0 until reader.get().numCols()).map(reader.get().column)
+      // The columns of all these types read their buffers through a subclass of
+      // NativeColumnVector.
+      columns.foreach { column =>
+        assert(column.isInstanceOf[NativeColumnVector] &&
+          column.getClass != classOf[NativeColumnVector], column.getClass.getName)
+      }
+      // The decimals hold their unscaled longs, as those of Spark's own column vectors do.
+      (0 until reader.get().numRows()).foreach { row =>
+        assert(columns.last.getDecimal(row, 10, 2).toDebugString ===
+          s"Decimal(compact, ${row * 100}, 10, 2)")
+      }
+    } finally {
+      reader.close()
+    }
+  }
+
   nativeTest("reject the data that has nulls where the schema to read has none") {
     // The column name is null for the ids that are multiples of 5.
     val session = newSession(defaultPackage)

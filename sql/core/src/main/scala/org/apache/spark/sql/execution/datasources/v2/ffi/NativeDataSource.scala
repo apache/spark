@@ -525,7 +525,9 @@ class NativePartitionReader(
       openStream()
       root = VectorSchemaRoot.create(importSchema(), allocator)
       checkSchema()
-      columns = root.getFieldVectors.asScala.map(columnVector).toArray
+      columns = root.getFieldVectors.asScala.zip(schema.fields).map { case (vector, field) =>
+        columnVector(vector, field.nullable)
+      }.toArray
       batch = new ColumnarBatch(columns.toArray[ColumnVector])
     } catch {
       case e: Throwable =>
@@ -690,11 +692,12 @@ class NativePartitionReader(
    * `ReusedArrowColumnVector`s, it is not freeable between batches: Spark must not close it when
    * it moves to the next batch, as `ColumnarToRowExec` does with the column vectors that are
    * freeable, because closing a struct column also drops its child column vectors. The reader
-   * closes the Arrow vectors at the end.
+   * closes the Arrow vectors at the end. `nullable` is the nullability of the column in the schema
+   * to read, which `checkNulls` enforces on each batch before the column vector reads it.
    */
-  private def columnVector(vector: FieldVector): NativeColumnVector = {
+  private def columnVector(vector: FieldVector, nullable: Boolean): NativeColumnVector = {
     try {
-      NativeColumnVector.create(vector)
+      NativeColumnVector.create(vector, nullable)
     } catch {
       case NonFatal(e) =>
         throw QueryExecutionErrors.nativeDataSourceError("read", name,
