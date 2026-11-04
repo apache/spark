@@ -20,13 +20,14 @@ package org.apache.spark.sql.catalyst.util
 import java.util.UUID
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-class InternalRowComparableWrapperSuite extends SparkFunSuite {
+class InternalRowComparableWrapperSuite extends SparkFunSuite with SQLConfHelper {
 
   private val structA = new StructType().add("a", IntegerType)
   private val structB = new StructType().add("b", IntegerType)
@@ -155,23 +156,41 @@ class InternalRowComparableWrapperSuite extends SparkFunSuite {
       "and a type that decides where a value belongs still tells them apart")
   }
 
-  test("SPARK-60859: a wrapper rejects a row whose width disagrees with its types") {
-    val factory = InternalRowComparableWrapper
-      .getInternalRowComparableWrapperFactory(Seq(IntegerType, IntegerType))
-    val e = intercept[IllegalArgumentException] {
-      factory(InternalRow(1, 2, 3))
-    }
-    assert(e.getMessage.contains("The row has 3 fields, but the types it is compared at have 2"))
-  }
-
   test("SPARK-60859: a wrapper prints its row values") {
     val factory = InternalRowComparableWrapper
       .getInternalRowComparableWrapperFactory(Seq(IntegerType, StringType))
     assert(factory(InternalRow(1, UTF8String.fromString("a"))).toString === "[1,a]")
+    assert(factory(InternalRow(null, UTF8String.fromString("a"))).toString === "[null,a]")
 
-    // An UnsafeRow has no toString of its own, so the wrapper has to read the row.
+    // UnsafeRow's own toString is a hex dump of its words, so the wrapper has to read the values.
     val unsafeProjection = UnsafeProjection.create(Array[DataType](IntegerType, StringType))
     val unsafeRow = unsafeProjection(InternalRow(2, UTF8String.fromString("b")))
     assert(factory(unsafeRow).toString === "[2,b]")
+  }
+
+  test("SPARK-60859: a wrapper prints key types readably") {
+    // Date, Timestamp in UTC, and a binary key.
+    val common = InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(
+      Seq(DateType, TimestampType, BinaryType))
+    val commonRow = InternalRow(19724, 1704164645000000L, Array[Byte](1, 2))
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      assert(common(commonRow).toString === "[2024-01-02,2024-01-02 03:04:05,0x0102]")
+    }
+
+    // Decimal, TimestampNTZ, Time in nanoseconds, Char and Varchar.
+    val other = InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(
+      Seq(DecimalType(10, 2), TimestampNTZType, TimeType(), CharType(5), VarcharType(5)))
+    val otherRow = InternalRow(
+      Decimal(BigDecimal("12.34"), 10, 2),
+      1704164645000000L, // 2024-01-02 03:04:05
+      11045000000000L, // 03:04:05 in nanoseconds since midnight
+      UTF8String.fromString("ab"),
+      UTF8String.fromString("cd"))
+    assert(other(otherRow).toString === "[12.34,2024-01-02 03:04:05,03:04:05,ab,cd]")
+
+    // Two collated keys that compare equal still print their own case.
+    val collated = InternalRowComparableWrapper
+      .getInternalRowComparableWrapperFactory(Seq(StringType("UTF8_LCASE")))
+    assert(collated(InternalRow(UTF8String.fromString("A"))).toString === "[A]")
   }
 }

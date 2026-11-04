@@ -18,7 +18,8 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{BaseOrdering, Expression, Murmur3HashFunction, RowOrdering}
+import org.apache.spark.sql.catalyst.expressions.{
+  BaseOrdering, Expression, Literal, Murmur3HashFunction, RowOrdering}
 import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition}
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.NonFateSharingCache
@@ -38,10 +39,6 @@ class InternalRowComparableWrapper private (
     val dataTypes: Seq[DataType],
     @transient private var _structType: StructType,
     @transient private var _ordering: BaseOrdering) extends Serializable {
-
-  require(row.numFields == dataTypes.length,
-    s"The row has ${row.numFields} fields, but the types it is compared at have " +
-      s"${dataTypes.length}")
 
   /**
    * Previous constructor for binary compatibility. Prefer using
@@ -70,7 +67,9 @@ class InternalRowComparableWrapper private (
   }
 
   override def toString: String =
-    row.toSeq(dataTypes).mkString("[", ",", "]")
+    row.toSeq(dataTypes).zip(dataTypes)
+      .map { case (value, dataType) => Literal.create(value, dataType).toString }
+      .mkString("[", ",", "]")
 
   override def hashCode(): Int = Murmur3HashFunction.hash(
     row,

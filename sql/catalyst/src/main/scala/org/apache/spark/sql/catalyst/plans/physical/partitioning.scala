@@ -27,7 +27,7 @@ import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
+import org.apache.spark.sql.catalyst.util.{InternalRowComparableWrapper, truncatedString}
 import org.apache.spark.sql.connector.catalog.functions.Reducer
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, IntegerType}
@@ -748,31 +748,31 @@ case class KeyedPartitioning(
   override def dataType: DataType = IntegerType
 
   /**
-   * Prints the layout's contents where the value object would print, which keeps the plan string as
-   * it was before the layout held them. The list is curated rather than the layout's own fields,
-   * for two reasons. A partitioning can hold one key per split, so `partitionKeys` is summarized:
-   * as many keys as `spark.sql.debug.maxToStringFields` has room for, then their total. And
-   * `dataTypes` has its naming erased, so printing it would put a struct field name into a plan
-   * that appears nowhere in the query. A field the layout grows is therefore a decision here, and
-   * the default is to print it: the plan string is the only place a reader sees why a marked
-   * partitioning still shuffles.
+   * Prints the layout as the partition keys followed by the flags and origins, with the keys
+   * summarized when there are more than `maxFields` of them. `dataTypes` is left out because its
+   * naming is erased, so printing it would put a struct field name into a plan that appears
+   * nowhere in the query. Every other field of the layout is printed: the plan string is the only
+   * place a reader sees why a marked partitioning still shuffles. Keys print as values, so two
+   * keys that `equals` considers equal can print differently, e.g. `'a'` and `'A'` under
+   * `UTF8_LCASE`.
    */
-  override protected def stringArgs: Iterator[Any] = {
-    // `Expression.toString` truncates the flattened argument list at `maxToStringFields`. The
-    // expressions and the fields printed after the keys keep their slots, and the keys take what
-    // is left; when they cannot all fit, their total takes one key slot. When there is not even a
-    // slot left for that, the total still wins over a trailing field, which the outer truncation
-    // then drops.
+  override def toString: String = simpleString(SQLConf.get.maxToStringFields)
+
+  override def simpleString(maxFields: Int): String = {
     val trailing = Seq[Any](isGrouped, isCollapsed) ++ unknownKeysOrigin ++ ungroupingOrigin
-    val keyBudget = math.max(0, SQLConf.get.maxToStringFields - expressions.size - trailing.size)
-    val keys: Seq[Any] =
-      if (partitionKeys.length <= keyBudget) {
-        partitionKeys
-      } else {
-        partitionKeys.take(math.max(0, keyBudget - 1)) :+
-          s"... ${partitionKeys.length} partition keys in total"
-      }
-    Iterator(expressions, keys) ++ trailing
+    // The keys take the fields that the expressions and the trailing flags leave.
+    val keyBudget = maxFields - expressions.size - trailing.size
+    val keys = if (keyBudget < 1) {
+      Iterator.empty
+    } else if (partitionKeys == null) {
+      Iterator.single("null")
+    } else if (partitionKeys.isEmpty) {
+      Iterator.empty
+    } else {
+      Iterator.single(truncatedString(partitionKeys, "[", ", ", "]", keyBudget))
+    }
+    val args = expressions.map(_.toString) ++ keys ++ trailing.map(_.toString)
+    s"$prettyName" + truncatedString(args, "(", ", ", ")", maxFields)
   }
 
   override protected def withNewChildrenInternal(
