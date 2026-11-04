@@ -660,7 +660,9 @@ class CodegenContext extends Logging {
    *                     class, the name is not changed
    * @return the name of the mutable state variable, which is the original name or fresh name if
    *         the variable is inlined to the outer class, or an array access if the variable is to
-   *         be stored in an array of variables of the same type.
+   *         be stored in an array of variables of the same type. To hand it out as an
+   *         `ExprValue`, use `JavaCode.global` or `isNullGlobal`, not `JavaCode.variable`: an
+   *         array access cannot name a method parameter (`CodegenContext.collectInputs`).
    *         A variable will be inlined into the outer class when one of the following conditions
    *         are satisfied:
    *         1. forceInline is true
@@ -1344,7 +1346,7 @@ class CodegenContext extends Logging {
       case local: VariableValue =>
         val name = local.variableName
         val isName = isJavaName(name)
-        if (Utils.isTesting && policy.onlyNames) {
+        if (checkParameterNames && policy.onlyNames) {
           assert(isName, s"$name cannot name a parameter of a method this code moves into; " +
             nameFix(name))
         }
@@ -1422,13 +1424,18 @@ class CodegenContext extends Logging {
     }
   }
 
-  /** Whether `name` can name a parameter: a slot of a compacted array, `array[i]`, cannot. */
+  /**
+   * Whether `name` can name a parameter: a slot of a compacted array, `array[i]`, cannot, nor can
+   * a keyword or a literal such as `false`.
+   */
   private def isJavaName(name: String): Boolean =
     SourceVersion.isIdentifier(name) && !SourceVersion.isKeyword(name)
 
   /** How the producer of `name`, a value that cannot name a parameter, can hand it out instead. */
   private def nameFix(name: String): String = if (name == INPUT_ROW) {
     "set INPUT_ROW to a local or a field added with forceInline = true"
+  } else if (SourceVersion.isKeyword(name)) {
+    "hand out a literal as a LiteralValue, or give the variable another name"
   } else {
     "hand out a field with JavaCode.global or isNullGlobal"
   }
@@ -1940,6 +1947,13 @@ class CodegenContext extends Logging {
   }
 
   /**
+   * Whether to assert that each variable a method takes is a Java name, in `collectInputs` and
+   * `assertParametersAreNames`. On under testing; a test turns it off to check what production
+   * does with such a variable.
+   */
+  private[sql] var checkParameterNames: Boolean = Utils.isTesting
+
+  /**
    * Under testing, asserts what the method `method` an operator moves its code `body` into needs
    * of its `parameters`: each is a Java name (`assertParametersAreNames`), and each call to a split
    * function in `body` passes only those parameters (`assertSplitCallsWithin`).
@@ -1953,12 +1967,12 @@ class CodegenContext extends Logging {
   }
 
   /**
-   * Under testing, asserts that each of `parameters`, the parameters of the method `method` an
-   * operator moves its code into, is a Java name. The parameters are the variables
+   * Where `checkParameterNames`, asserts that each of `parameters`, the parameters of the method
+   * `method` an operator moves its code into, is a Java name. The parameters are the variables
    * `InputPolicy.operatorMethod` collects, which passes a `VariableValue` whatever its name.
    */
   private[sql] def assertParametersAreNames(parameters: Seq[String], method: String): Unit = {
-    if (Utils.isTesting) {
+    if (checkParameterNames) {
       parameters.foreach { p =>
         assert(isJavaName(p), s"$method takes $p, which cannot name a parameter; ${nameFix(p)}")
       }

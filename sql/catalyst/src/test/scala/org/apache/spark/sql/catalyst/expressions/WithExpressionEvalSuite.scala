@@ -91,8 +91,15 @@ class WithExpressionEvalSuite extends SparkFunSuite with SQLHelper {
   }
 
   /** Generates `e` against [[localInputContext]]: the code it emitted, and the methods added. */
-  private def generateWithLocalInput(e: Expression, inputs: ExprCode*): (String, String) = {
+  private def generateWithLocalInput(e: Expression, inputs: ExprCode*): (String, String) =
+    generateWithLocalInput(e, checkParameterNames = true, inputs: _*)
+
+  private def generateWithLocalInput(
+      e: Expression,
+      checkParameterNames: Boolean,
+      inputs: ExprCode*): (String, String) = {
     val ctx = localInputContext(inputs: _*)
+    ctx.checkParameterNames = checkParameterNames
     (e.genCode(ctx).code.toString, ctx.declareAddedFunctions())
   }
 
@@ -340,6 +347,10 @@ class WithExpressionEvalSuite extends SparkFunSuite with SQLHelper {
       val e = intercept[AssertionError](generateWithLocalInput(nested(2), slot))
       assert(e.getMessage.contains("mutableStateArray_0[3] cannot name a parameter"),
         e.getMessage)
+      // Without the check, as in production, the method is refused and the bodies stay inline.
+      val (body, methods) = generateWithLocalInput(nested(2), checkParameterNames = false, slot)
+      assert(!methods.contains("computeCommonExpr"), methods)
+      assert(markersIn(body + methods) == 4, body + methods)
     }
   }
 

@@ -171,6 +171,12 @@ class CollectInputsSuite extends SparkFunSuite with SQLHelper {
       assert(e.getMessage.contains(s"$slot cannot name a parameter") &&
         e.getMessage.contains("JavaCode.global"), e.getMessage)
     }
+    // Without the check, as in production, these policies refuse the method.
+    ctx.checkParameterNames = false
+    for (policy <- Seq(InputPolicy.wholeStageSplit, commonExpr)) {
+      assert(ctx.collectInputs(Seq(expr), policy, Map.empty).isEmpty, policy)
+    }
+    ctx.checkParameterNames = true
     // An operator may keep its code inline, so collecting does not check.
     val parameters = names(ctx.collectInputs(Seq(expr), operator, Map.empty).get)
     assert(parameters == Seq(slot))
@@ -178,6 +184,10 @@ class CollectInputsSuite extends SparkFunSuite with SQLHelper {
     assert(e.getMessage.contains(s"m takes $slot") && e.getMessage.contains("JavaCode.global"),
       e.getMessage)
     ctx.assertParametersAreNames(Seq("value_0", "isNull_0"), "m")
+    // A keyword or a literal cannot name a parameter either.
+    val keyword = intercept[AssertionError](ctx.assertParametersAreNames(Seq("false"), "m"))
+    assert(keyword.getMessage.contains("m takes false") &&
+      keyword.getMessage.contains("LiteralValue"), keyword.getMessage)
   }
 
   test("an INPUT_ROW that is a slot fails the testing check: while collecting for a common " +
@@ -188,6 +198,9 @@ class CollectInputsSuite extends SparkFunSuite with SQLHelper {
     ctx.currentVars = Seq(evaluated(0))
     val e1 = intercept[AssertionError](ctx.collectInputs(Seq(input(0)), commonExpr, Map.empty))
     assert(e1.getMessage.contains("set INPUT_ROW to a local"), e1.getMessage)
+    ctx.checkParameterNames = false
+    assert(ctx.collectInputs(Seq(input(0)), commonExpr, Map.empty).isEmpty)
+    ctx.checkParameterNames = true
     val parameters = names(ctx.collectInputs(Seq(input(0)), operator, Map.empty).get)
     assert(parameters.head == ctx.INPUT_ROW)
     val e2 = intercept[AssertionError](ctx.assertParametersAreNames(parameters, "m"))

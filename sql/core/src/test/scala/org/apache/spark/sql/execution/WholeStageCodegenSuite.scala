@@ -890,8 +890,10 @@ class WholeStageCodegenSuite extends SharedSparkSession
     wholeStageCodeGenExec.get.asInstanceOf[WholeStageCodegenExec].doCodeGen()._2
   }
 
-  def genCode(ds: Dataset[_]): Seq[CodeAndComment] = {
-    val plan = ds.queryExecution.executedPlan
+  def genCode(
+      ds: Dataset[_],
+      transform: SparkPlan => SparkPlan = identity): Seq[CodeAndComment] = {
+    val plan = transform(ds.queryExecution.executedPlan)
     val wholeStageCodeGenExecs = plan.collect { case p: WholeStageCodegenExec => p }
     assert(wholeStageCodeGenExecs.nonEmpty, "WholeStageCodegenExec is expected")
     wholeStageCodeGenExecs.map(_.doCodeGen()._2)
@@ -1992,24 +1994,15 @@ class WholeStageCodegenSuite extends SharedSparkSession
         }
       }
       withSQLConf(SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS.key -> "false") {
-        val e = intercept[AssertionError](genCodeWithLocalExpandOutput(df))
+        // The bottom `ExpandExec` hands out its output as local variables, as before SPARK-59589.
+        val e = intercept[AssertionError](genCode(df, _.transformUp {
+          case x: ExpandExec if !x.child.exists(_.isInstanceOf[ExpandExec]) => LocalOutputExec(x)
+        }))
         assert(s"\\w*$method\\w* takes \\w+\\[\\d+\\]".r.findFirstIn(e.getMessage).isDefined,
           e.getMessage)
       }
     }
   }
-
-  /**
-   * `genCode`, with the bottom `ExpandExec` of the plan handing out its output as local variables,
-   * as it did before SPARK-59589.
-   */
-  private def genCodeWithLocalExpandOutput(df: DataFrame): Seq[CodeAndComment] =
-    df.queryExecution.executedPlan.collect { case w: WholeStageCodegenExec => w }.map { w =>
-      val child = w.child.transformUp {
-        case e: ExpandExec if !e.child.exists(_.isInstanceOf[ExpandExec]) => LocalOutputExec(e)
-      }
-      w.withNewChildren(Seq(child)).asInstanceOf[WholeStageCodegenExec].doCodeGen()._2
-    }
 
   test("SPARK-33301: a CASE WHEN too large for one method is split under whole stage codegen") {
     // Inside a stage the inputs are local variables of the stage's method, and the branches were
