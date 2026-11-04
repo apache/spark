@@ -312,8 +312,9 @@ class ExpressionParserSuite extends AnalysisTest {
     // whitespace or comments separate the keyword from '<'.
     assertEqual("cast(a as array<array<int>>) = b >> 1",
       Cast($"a", ArrayType(ArrayType(IntegerType))) === ShiftRight($"b", 1))
-    // Each comment form precedes every type keyword, so the closers only split if skipping that
-    // comment form works: a single counted keyword would be enough to keep `>>` apart.
+    // Each comment form follows every type keyword and precedes its '<', the gap the lookahead
+    // has to skip, so the closers only split if skipping that comment form works: a single
+    // counted keyword would be enough to keep `>>` apart.
     Seq("/* c */", "/* a /* b */ c */", "-- c\n", "-- c\r\n", "-- c\r", "-- c \\\n c\n")
       .foreach { c =>
         assertEqual(s"cast(a as array $c<array $c<int>>) = b >> 1",
@@ -328,6 +329,18 @@ class ExpressionParserSuite extends AnalysisTest {
           Cast($"a", new StructType().add("x", MapType(IntegerType, ArrayType(IntegerType)))) ===
             ShiftRightUnsigned($"b", 1))
       }
+    // The WS rule also matches no-break spaces, which are matched by Character.isSpaceChar but
+    // not by Character.isWhitespace: only the former keeps the lookahead skipping them, so these
+    // cases fail if that disjunct is dropped or the check is narrowed.
+    // scalastyle:off nonascii
+    Seq("\u00A0", "\u2007", "\u202F").foreach { ws =>
+      assertEqual(s"cast(a as array$ws<array$ws<int>>) = b >> 1",
+        Cast($"a", ArrayType(ArrayType(IntegerType))) === ShiftRight($"b", 1))
+      assertEqual(s"cast(a as array$ws<array$ws<array$ws<int>>>) = b >>> 1",
+        Cast($"a", ArrayType(ArrayType(ArrayType(IntegerType)))) ===
+          ShiftRightUnsigned($"b", 1))
+    }
+    // scalastyle:on nonascii
   }
 
   test("binary arithmetic expressions") {

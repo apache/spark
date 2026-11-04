@@ -154,6 +154,10 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
     // admits that direct form (removing its allowlist arm would fail here).
     checkResolverGuard("""SELECT JSON_OBJECT('a' VALUE 1 RETURNING STRING)""")
     checkResolverGuard("""SELECT JSON_OBJECT('a' VALUE '[1]' FORMAT JSON)""")
+    // The parser-built IS [NOT] JSON predicate must pass the guard like its siblings above.
+    checkResolverGuard("""SELECT '{}' IS JSON""")
+    checkResolverGuard("""SELECT '{}' IS NOT JSON OBJECT""")
+    checkResolverGuard("""SELECT NULL IS JSON""")
   }
 
   test("Conditional expressions") {

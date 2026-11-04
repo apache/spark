@@ -148,7 +148,9 @@ public class JsonExpressionUtils {
    * same limits where {@code parse_json} fails -- but only if checking the input actually
    * requires going past a limit: a shape mismatch decided by the first token (including an
    * over-long root number under OBJECT or ARRAY, which cannot be an object or an array)
-   * returns false, like any other mismatch.
+   * returns false, like any other mismatch, and so does trailing content after a well-formed
+   * value, even when reading the trailing token goes past a limit (any trailing token already
+   * decides the answer).
    */
   public static boolean isJson(UTF8String json, int shape) {
     // The parser decodes the bytes through a UTF-8 reader that silently replaces malformed
@@ -164,10 +166,12 @@ public class JsonExpressionUtils {
         token = jsonParser.nextToken();
       } catch (StreamConstraintsException e) {
         // Jackson validates a number's length while producing its token, and no other limit can
-        // be reached while producing the first token (nesting needs a second token, and strings
-        // and field names are not decoded until getText), so the first value is an over-long
-        // number. It can never be an object or an array, so the shape is decided without
-        // classifying the number; the other shapes accept a number and still need it classified.
+        // be reached while producing the first token (nesting needs a second token, string values
+        // are not decoded until getText, and the first token is never a field name -- a field name
+        // is only produced inside an object, after START_OBJECT), so the first value is an
+        // over-long number. It can never be an object or an array, so the shape is decided
+        // without classifying the number; the other shapes accept a number and still need it
+        // classified.
         if (shape == SHAPE_OBJECT || shape == SHAPE_ARRAY) {
           return false;
         }
@@ -215,8 +219,15 @@ public class JsonExpressionUtils {
         return false;
       }
       // Reject trailing content after the first value, e.g. `1 2` or `{} []`, so only a single
-      // well-formed JSON value is accepted.
-      return jsonParser.nextToken() == null;
+      // well-formed JSON value is accepted. Any trailing token already decides the answer, so
+      // reading it is given its own handler: a trailing value that goes past a limit (e.g. a
+      // number longer than the maximum, which Jackson validates while producing its token)
+      // returns false rather than raising, like any other trailing content.
+      try {
+        return jsonParser.nextToken() == null;
+      } catch (StreamConstraintsException e) {
+        return false;
+      }
     } catch (StreamConstraintsException e) {
       throw limitError(e, json);
     } catch (IOException e) {

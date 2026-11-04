@@ -397,6 +397,10 @@ select concat(repeat('[', 1001), repeat(']', 1001)) IS JSON;
 -- a shape mismatch is decided by the first token even for over-limit input: an over-long root
 -- number is neither an object nor an array, so those shapes return false instead of raising
 select repeat('9', 1001) IS JSON OBJECT, repeat('9', 1001) IS JSON ARRAY;
+-- trailing content after a well-formed value returns false even when reading it goes past a
+-- limit, since any trailing token already decides the answer
+select concat('{} ', repeat('9', 1001)) IS JSON OBJECT,
+       concat('1 ', repeat('9', 1001)) IS NOT JSON;
 -- structurally malformed containers are rejected: truncated input, trailing commas, missing
 -- values, and a mismatched closer
 select '{' IS JSON, '[1,' IS JSON, '{"a"' IS JSON;
@@ -418,14 +422,17 @@ select 'bad' COLLATE UNICODE IS JSON;
 -- by default a CHAR/VARCHAR cast target is rewritten to STRING at parse time, so this case
 -- exercises a STRING operand
 select cast('[1]' AS VARCHAR(10)) IS JSON ARRAY;
--- with first-class CHAR/VARCHAR types (preserveCharVarcharTypeInfo or standard semantics), the
--- cast keeps its type, so IS JSON gets a real VARCHAR or CHAR operand
+-- under preserveCharVarcharTypeInfo the cast keeps its CHAR/VARCHAR type, so IS JSON gets a
+-- real VARCHAR or CHAR operand
 SET spark.sql.preserveCharVarcharTypeInfo=true;
 select cast('[1]' AS VARCHAR(10)) IS JSON ARRAY, cast('bad' AS VARCHAR(10)) IS JSON,
        cast('{"a":1}' AS CHAR(10)) IS JSON OBJECT;
 SET spark.sql.preserveCharVarcharTypeInfo=false;
+-- under standard semantics the cast also keeps its type, but type coercion promotes the
+-- operand to STRING, so IS JSON again sees a STRING operand (visible in the analyzed plan)
 SET spark.sql.charVarchar.standardSemantics.enabled=true;
-select cast('[1]' AS VARCHAR(10)) IS JSON ARRAY, cast('bad' AS VARCHAR(10)) IS JSON;
+select cast('[1]' AS VARCHAR(10)) IS JSON ARRAY, cast('bad' AS VARCHAR(10)) IS JSON,
+       cast('{"a":1}' AS CHAR(10)) IS JSON OBJECT;
 SET spark.sql.charVarchar.standardSemantics.enabled=false;
 -- an untyped NULL operand yields NULL
 select NULL IS JSON, NULL IS NOT JSON;
