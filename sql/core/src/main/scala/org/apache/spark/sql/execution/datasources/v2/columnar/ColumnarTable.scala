@@ -170,8 +170,9 @@ class ColumnarScan(
   extends Scan with SupportsMetadata {
 
   // Spark may call `toBatch` more than once for the same scan; the partitions are planned once,
-  // after the planner prunes the columns, if it does.
-  private lazy val batch = {
+  // after the planner prunes the columns, if it does. A failure is kept too, so that the planner
+  // is asked at most once, as the header promises.
+  private lazy val batch: Try[ColumnarBatchScan] = Try {
     val planner = pushedDownPlanner.getOrElse(dataSource.batchPlanner(fullSchema))
     // The ordinals in the full schema of the columns that the scan reads, if the planner does
     // not prune the others.
@@ -187,7 +188,7 @@ class ColumnarScan(
   override def columnarSupportMode(): Scan.ColumnarSupportMode =
     Scan.ColumnarSupportMode.SUPPORTED
 
-  override def toBatch: Batch = batch
+  override def toBatch: Batch = batch.get
 
   override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
     new ColumnarMicroBatchStream(
@@ -215,7 +216,8 @@ class ColumnarBatchScan(planner: ColumnarBatchPlanner, projection: Option[Array[
   override def planInputPartitions(): Array[InputPartition] = planned.get.partitions
 
   override def createReaderFactory(): PartitionReaderFactory = {
-    ColumnarProjection(planned.get.readerFactory, projection)
+    val factory = planned.get.readerFactory
+    projection.fold(factory)(new ColumnarProjectionReaderFactory(factory, _))
   }
 }
 
@@ -365,19 +367,6 @@ class ColumnarStreamPartitionReaderFactory(reader: ColumnarStreamReader)
   extends ColumnarOnlyPartitionReaderFactory {
   override def createColumnarReader(partition: InputPartition): PartitionReader[ColumnarBatch] = {
     reader.read(partition)
-  }
-}
-
-object ColumnarProjection {
-  /**
-   * Returns `factory`, or a factory whose readers only return the columns at `projection` of the
-   * batches of the readers of `factory`, if any.
-   */
-  def apply(
-      factory: PartitionReaderFactory,
-      projection: Option[Array[Int]]): PartitionReaderFactory = projection match {
-    case Some(ordinals) => new ColumnarProjectionReaderFactory(factory, ordinals)
-    case None => factory
   }
 }
 

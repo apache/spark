@@ -215,6 +215,17 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(e.getMessage == "injected planning failure")
     assert(intercept[IllegalStateException](failingBatch.createReaderFactory()) eq e)
     assert(failing.plans.get() == 1)
+
+    // So is a failure to prune the columns: the planner is asked to prune them once.
+    val failingPruning = new TestRangeDataSource(options("end" -> "4", "failPruning" -> "true"))
+    val prunedBuilder =
+      new ColumnarScanBuilder(format, failingPruning.schema(), () => failingPruning)
+    prunedBuilder.pruneColumns(StructType.fromDDL("id BIGINT"))
+    val prunedScan = prunedBuilder.build()
+    val pruningError = intercept[IllegalStateException](prunedScan.toBatch)
+    assert(pruningError.getMessage == "injected pruning failure")
+    assert(intercept[IllegalStateException](prunedScan.toBatch) eq pruningError)
+    assert(failingPruning.prunes.get() == 1 && failingPruning.batchPlanners.get() == 1)
   }
 
   test("a streaming scan reads only the columns that the query needs") {
@@ -353,10 +364,11 @@ class TestRangeProvider extends TableProvider with DataSourceRegister {
 class TestRangeDataSource(options: CaseInsensitiveStringMap) extends ColumnarDataSource {
   private val end = options.getLong("end", 10)
   private val table = options.getOrDefault("table", "default")
-  // The number of batch planners that this data source created, and of the batch scans that they
-  // planned.
+  // The number of batch planners that this data source created, of the batch scans that they
+  // planned, and of the times that their columns were pruned.
   val batchPlanners = new AtomicInteger()
   val plans = new AtomicInteger()
+  val prunes = new AtomicInteger()
 
   override def schema(): StructType = StructType.fromDDL("id BIGINT, name STRING")
 
@@ -371,8 +383,8 @@ class TestRangeDataSource(options: CaseInsensitiveStringMap) extends ColumnarDat
 
   override def batchPlanner(schema: StructType): ColumnarBatchPlanner = {
     batchPlanners.incrementAndGet()
-    new TestRangePlanner(end, schema, options.getBoolean("failPlanning", false), plans,
-      options.getBoolean("pruneColumns", true))
+    new TestRangePlanner(end, schema, options.getBoolean("failPlanning", false), plans, prunes,
+      options.getBoolean("failPruning", false), options.getBoolean("pruneColumns", true))
   }
 
   override def streamReader(
@@ -404,6 +416,8 @@ class TestRangePlanner(
     schema: StructType,
     fail: Boolean,
     plans: AtomicInteger,
+    prunes: AtomicInteger,
+    failPruning: Boolean,
     prunesColumns: Boolean)
   extends ColumnarBatchPlanner {
   private var limit = Long.MaxValue
@@ -415,6 +429,10 @@ class TestRangePlanner(
   }
 
   override def pruneColumns(requiredSchema: StructType): Boolean = {
+    prunes.incrementAndGet()
+    if (failPruning) {
+      throw new IllegalStateException("injected pruning failure")
+    }
     if (prunesColumns) {
       readSchema = requiredSchema
     }
