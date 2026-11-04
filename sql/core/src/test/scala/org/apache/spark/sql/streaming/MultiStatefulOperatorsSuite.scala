@@ -23,7 +23,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
-import org.apache.spark.sql.execution.streaming.operators.stateful.StateStoreSaveExec
+import org.apache.spark.sql.execution.streaming.operators.stateful.{EventTimeWatermarkExec, StateStoreSaveExec}
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinExec
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{HDFSBackedStateStoreProvider, RocksDBStateStoreProvider, StateStore}
@@ -94,6 +94,38 @@ class MultiStatefulOperatorsSuite
         )
       }
     }
+  }
+
+  test("SPARK-60862: independently applied watermarks remain distinct") {
+    val inputData = MemoryStream[Int]
+    val source = inputData.toDF()
+      .withColumn("eventTime", timestamp_seconds($"value"))
+
+    val left = source
+      .withWatermark("eventTime", "0 seconds")
+      .select($"value".as("leftValue"), $"eventTime".as("leftTime"))
+    val right = source
+      .withWatermark("eventTime", "0 seconds")
+      .select($"value".as("rightValue"), $"eventTime".as("rightTime"))
+    val stream = left.join(right,
+      $"leftValue" === $"rightValue" && $"leftTime" === $"rightTime")
+      .select($"leftValue", $"rightValue")
+      .as[(Int, Int)]
+
+    testStream(stream)(
+      AddData(inputData, 1, 2),
+      CheckNewAnswer((1, 1), (2, 2)),
+      AssertOnQuery { query =>
+        val plan = query.lastExecution.executedPlan
+        val watermarkNodes = plan.collect { case w: EventTimeWatermarkExec => w }
+        assert(watermarkNodes.size === 2, s"Expected two watermark nodes. Plan: $plan")
+        assert(watermarkNodes.map(_.nodeId).distinct.size === 2,
+          s"Expected distinct watermark node IDs. Plan: $plan")
+        assert(!plan.exists(_.isInstanceOf[ReusedExchangeExec]),
+          s"Exchange reuse must not cross distinct watermark nodes. Plan: $plan")
+        true
+      }
+    )
   }
 
   test("window agg -> window agg, append mode") {
