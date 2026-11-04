@@ -346,12 +346,14 @@ class ConstantFoldingSuite extends PlanTest {
     val t = LocalRelation($"i".int, $"d".dayTimeInterval())
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
       Seq(
-        // This cannot fail, as in SPARK-37392.
+        // These cannot fail: a LEGACY cast as in SPARK-37392, and a TRY cast that returns null.
         Cast($"i", StringType) -> true,
-        // These fail with CAST_OVERFLOW and EXCEED_LIMIT_LENGTH.
+        Cast($"d", ByteType, evalMode = EvalMode.TRY) -> true,
+        // These fail with CAST_OVERFLOW, EXCEED_LIMIT_LENGTH, and CAST_OVERFLOW in the child.
         Cast($"d", ByteType) -> false,
-        Cast($"i", VarcharType(2)) -> false).foreach { case (cast, foldable) =>
-        assert(cast.evalMode == EvalMode.LEGACY)
+        Cast($"i", VarcharType(2)) -> false,
+        Cast(Cast($"d", ByteType), StringType) -> false).foreach { case (cast, foldable) =>
+        assert(cast.evalMode != EvalMode.ANSI)
         val query = t.select(Size(CreateArray(Seq(cast))).as("s")).analyze
         val expected = if (foldable) t.select(Literal(1).as("s")).analyze else query
         comparePlans(Optimize.execute(query), expected)
