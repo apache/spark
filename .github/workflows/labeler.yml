@@ -18,10 +18,12 @@
 #
 
 # Scheduled to avoid pull_request_target; never check out or run PR code here.
-# Labels in .github/labeler.yml must already exist; this job cannot create them.
+# Labels in .github/labeler.yml are authoritative and must already exist.
+# Manually added configured labels are removed on the next scan if they do not
+# match the PR's changed files.
 #
-# To retry or backfill beyond the default 12-hour window:
-#   gh workflow run labeler.yml --repo apache/spark --ref master -f hours=24
+# To label all open PRs once, regardless of their last update:
+#   gh workflow run labeler.yml --repo apache/spark --ref master -f backfill=true
 
 name: Label pull requests
 
@@ -30,21 +32,23 @@ on:
   - cron: "5,20,35,50 * * * *"
   workflow_dispatch:
     inputs:
-      hours:
-        description: Label open PRs updated within this many hours
-        type: number
-        default: 12
+      backfill:
+        description: Label all open PRs regardless of their last update
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false
+  queue: max
 
 jobs:
   label:
     name: Label pull requests
     if: github.repository == 'apache/spark' && github.ref == 'refs/heads/master'
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: read
       pull-requests: write
     steps:
@@ -53,22 +57,32 @@ jobs:
         with:
           persist-credentials: false
           sparse-checkout: .github
-      - name: List recently updated PRs
+      - name: List PRs
         id: prs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HOURS: ${{ inputs.hours }}
+          BACKFILL: ${{ inputs.backfill }}
         run: |
-          hours=${HOURS:-12}
-          if ! [[ "$hours" =~ ^[1-9][0-9]*$ ]]; then
-            echo "::error::hours must be a positive integer"
-            exit 1
+          if [[ "$BACKFILL" == "true" ]]; then
+            filters=(-f state=open)
+            echo "Listing all open PRs"
+          else
+            last_success=$(gh run list --workflow labeler.yml --branch master \
+              --event schedule --status success --limit 1 --json startedAt \
+              --jq '.[0].startedAt // empty')
+            if [ -n "$last_success" ]; then
+              # Keep a one-hour overlap for PR updates during the previous run.
+              since=$(date -u -d "$last_success - 1 hour" +%Y-%m-%dT%H:%M:%SZ)
+            else
+              since=$(date -u -d "12 hours ago" +%Y-%m-%dT%H:%M:%SZ)
+            fi
+            filters=(-f state=all -f since="$since")
+            echo "Listing PRs updated since $since"
           fi
-          since=$(date -u -d "$hours hours ago" +%Y-%m-%dT%H:%M:%SZ)
-          numbers=$(gh api --method GET --paginate "repos/$GITHUB_REPOSITORY/pulls" \
-            -f state=open -f per_page=100 \
-            --jq ".[] | select(.updated_at >= \"$since\") | .number")
-          echo "Open PRs updated since $since: $(tr '\n' ' ' <<< "$numbers")"
+          numbers=$(gh api --method GET --paginate "repos/$GITHUB_REPOSITORY/issues" \
+            "${filters[@]}" -f sort=updated -f direction=asc \
+            -f per_page=100 --jq '.[] | select(.pull_request != null) | .number')
+          echo "PRs to label: $(tr '\n' ' ' <<< "$numbers")"
           if [ -n "$numbers" ]; then
             printf 'numbers<<EOF\n%s\nEOF\n' "$numbers" >> "$GITHUB_OUTPUT"
           fi
