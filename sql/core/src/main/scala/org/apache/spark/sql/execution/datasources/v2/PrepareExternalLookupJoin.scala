@@ -288,7 +288,8 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
       selectedPredicates.map(_.projectedField),
       selectedPredicates.map(_.comparison),
       join.joinType,
-      residual.reduceOption(And))
+      residual.reduceOption(And),
+      join.cacheOptions)
     joinFilter.reduceOption(And).map(Filter(_, prepared)).getOrElse(prepared)
   }
 

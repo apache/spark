@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.execution.joins
 
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
 import scala.collection.mutable
+
+import com.google.common.base.Ticker
+import com.google.common.cache.{Cache, CacheBuilder}
 
 import org.apache.spark.{PartitionEvaluator, PartitionEvaluatorFactory, SparkException,
   SparkIllegalStateException, TaskContext}
@@ -28,8 +31,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, GenericInternalRow,
   JoinedRow, Predicate, SpecializedGetters, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftAnti, LeftOuter, LeftSemi}
-import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupFilter, ExternalLookupProject,
-  ExternalLookupTransform}
+import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupCacheOptions,
+  ExternalLookupFilter, ExternalLookupProject, ExternalLookupTransform}
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.connector.metric.CustomTaskMetric
 import org.apache.spark.sql.connector.read.{ExternalLookupReader, ExternalLookupReaderFactory,
@@ -47,10 +50,12 @@ import org.apache.spark.util.Utils
  * An evaluator joins its partition one batch of up to `maxParameterRowsPerRequest` stream rows at
  * a time, or, with `oneKeyPerBatch`, of up to
  * [[ExternalLookupJoinExec.MAX_PARAMETER_ROWS_PER_REQUEST]] stream rows that share one key, whose
- * request holds one parameter row, whatever the source's limit. For each batch it sends
- * one request with the distinct parameters that can match, and streams the connector's result
- * rows into output rows. Parameters are deduplicated per request, that is within one batch: a key
- * repeated in a later batch is requested again.
+ * request holds one parameter row, whatever the source's limit. For each batch it sends one
+ * request with the distinct parameters that can match and are not cached, and streams the
+ * connector's result rows into output rows. Parameters are deduplicated within a batch. With the
+ * cache enabled, a key whose complete result an earlier request of the same input partition
+ * returned is served from the cache, within the cache's bounds; otherwise a key repeated in a
+ * later batch is requested again.
  *
  * Spark does not trust the connector with the selected lookup predicates: it evaluates
  * `lookupKeyCheck` on every row that the connector returns, against the request row that the row
@@ -79,6 +84,7 @@ class ExternalLookupJoinEvaluatorFactory(
     maxParameterRowsPerRequest: Int,
     oneKeyPerBatch: Boolean,
     maxBatchBytes: Long,
+    cacheOptions: ExternalLookupCacheOptions,
     metrics: ExternalLookupJoinMetrics,
     readerMetrics: ExternalLookupReaderMetrics)
   extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
@@ -106,6 +112,7 @@ class ExternalLookupJoinEvaluatorFactory(
     private val resultRows = new LookupResultRows
     private val transforms = new LookupTransforms(partitionIndex)
     private val joinOutput = new JoinOutput(partitionIndex)
+    private val cache = if (cacheOptions.enabled) Some(new LookupCache) else None
     private var batch: Iterator[InternalRow] = Iterator.empty
     private var inputExhausted = false
 
@@ -130,7 +137,7 @@ class ExternalLookupJoinEvaluatorFactory(
         val next = readBatch()
         if (next.rows.nonEmpty) {
           batch = new BatchJoinIterator(
-            next, parameters, resultRows, transforms, joinOutput, reader)
+            next, parameters, resultRows, transforms, joinOutput, cache, reader)
         }
         inputExhausted = !hasInput
       }
@@ -241,6 +248,9 @@ class ExternalLookupJoinEvaluatorFactory(
   /** The stream rows that share a key, and the one request row sent for them. */
   private case class KeyEntry(requestRow: UnsafeRow, rowIndexes: mutable.ArrayBuffer[Int])
 
+  /** The stream rows that share a key, and the cached lookup rows that they join. */
+  private case class CachedKey(lookupRows: Array[InternalRow], rowIndexes: mutable.ArrayBuffer[Int])
+
   /**
    * The stream rows of a batch, with one entry for each distinct request row that can match, in
    * the order of first occurrence, and the positions of the rows that a left outer or left anti
@@ -267,6 +277,7 @@ class ExternalLookupJoinEvaluatorFactory(
       resultRows: LookupResultRows,
       transforms: LookupTransforms,
       joinOutput: JoinOutput,
+      cache: Option[LookupCache],
       reader: LookupReader) extends Iterator[InternalRow] {
     private val rows = batch.rows
     metrics.inputRows += rows.length
@@ -279,7 +290,27 @@ class ExternalLookupJoinEvaluatorFactory(
 
     // A row that can never match is finished right away, and its parameters are not requested.
     batch.rowsThatCannotMatch.foreach(finish)
-    private val keyEntries = batch.keyEntries
+    // The keys of the batch, as cache hits and as keys to request, each in the order of first
+    // occurrence. Each request row is classified once, as a cache hit or a row to request: every
+    // path fans out to all the rows sharing it, so it must not be both, e.g. across a TTL boundary.
+    private val cachedKeys = mutable.ArrayBuffer.empty[CachedKey]
+    private val keyEntries = batch.keyEntries.filter { entry =>
+      cache.flatMap(_.get(entry.requestRow)) match {
+        case Some(lookupRows) =>
+          metrics.cacheHits += 1
+          cachedKeys += CachedKey(lookupRows, entry.rowIndexes)
+          false
+        case None => true
+      }
+    }
+    cachedKeys.foreach { cached =>
+      cached.rowIndexes.foreach { index =>
+        cached.lookupRows.foreach(joinMatch(index, _))
+        finish(index)
+      }
+    }
+
+    private val cacheWriter = cache.map(new CacheWriter(_, keyEntries.map(_.requestRow)))
 
     // No connector request, and no reader, when no key can match.
     private var cursor: ExternalLookupResultCursor =
@@ -326,6 +357,7 @@ class ExternalLookupJoinEvaluatorFactory(
           val resultRow = resultRows.validated(connectorRow)
           if (parameters.selectedPredicatesHold(entry.requestRow, resultRow)) {
             transforms(resultRow).foreach { lookupRow =>
+              cacheWriter.foreach(_.add(entry.requestRow, lookupRow))
               entry.rowIndexes.foreach { index =>
                 if (joinMatch(index, lookupRow)) undecidedRows -= 1
               }
@@ -391,11 +423,13 @@ class ExternalLookupJoinEvaluatorFactory(
     }
 
     /**
-     * Closes the cursor once. After a complete read, finishes every stream row that was waiting for
-     * its results. After a failure or a close, the results may be partial, so it finishes none:
-     * a row without a match could be a row whose match was never read. Nor does a semi or anti join
-     * that closes the cursor once every stream row has matched. Once the reader is closed, its
-     * close owns the cursor and the reader's metrics, so the join makes no further connector call.
+     * Closes the cursor once. After a complete read, caches the results and finishes every stream
+     * row that was waiting for them. After a failure or a close, the results may be partial, so it
+     * caches nothing and finishes no row: a row without a match could be a row whose match was
+     * never read. Nor does a semi or anti join that closes the cursor once every stream row has
+     * matched. A failure fails the task, which discards the cache, and the join never retries a
+     * request. Once the reader is closed, its close owns the cursor and the reader's metrics, so
+     * the join makes no further connector call.
      */
     private def finishCursor(completed: Boolean): Unit = if (cursor ne EmptyLookupCursor) {
       cursor = EmptyLookupCursor
@@ -406,7 +440,10 @@ class ExternalLookupJoinEvaluatorFactory(
           reader.updateMetrics()
         }
       }
-      if (completed) keyEntries.foreach(_.rowIndexes.foreach(finish))
+      if (completed) {
+        cacheWriter.foreach(_.write())
+        keyEntries.foreach(_.rowIndexes.foreach(finish))
+      }
     }
 
     private def finish(index: Int): Unit = if (!finished.contains(index)) {
@@ -417,6 +454,58 @@ class ExternalLookupJoinEvaluatorFactory(
     private def emit(index: Int, lookupRow: InternalRow): Unit = {
       pending.enqueue(index -> lookupRow)
       metrics.outputRows += 1
+    }
+  }
+
+  /**
+   * The lookup results by key, within a task, per input partition (a task that reads several input
+   * partitions, e.g. after coalesce, has one cache per partition). Beyond `maxEntries` keys, the
+   * least recently used entry is evicted; an entry expires once it is older than the TTL.
+   */
+  private class LookupCache {
+    // One segment, so that eviction is exactly least recently used.
+    private val entries: Cache[UnsafeRow, Array[InternalRow]] = {
+      val builder = CacheBuilder.newBuilder()
+        .concurrencyLevel(1)
+        .maximumSize(cacheOptions.maxEntries)
+        .ticker(new Ticker {
+          override def read(): Long = ExternalLookupJoinExec.cacheClock.nanoTime()
+        })
+      val expiring = if (cacheOptions.ttlMillis > 0) {
+        builder.expireAfterWrite(cacheOptions.ttlMillis, TimeUnit.MILLISECONDS)
+      } else {
+        builder
+      }
+      expiring.build[UnsafeRow, Array[InternalRow]]()
+    }
+
+    def get(key: UnsafeRow): Option[Array[InternalRow]] = Option(entries.getIfPresent(key))
+
+    def put(key: UnsafeRow, values: Array[InternalRow]): Unit = entries.put(key.copy(), values)
+  }
+
+  /**
+   * Collects the result rows of one request by key, and caches them once the cursor is done. A
+   * key with more than `maxRowsPerKey` result rows is not cached. The rows are the batch's own
+   * copies, which are never changed.
+   */
+  private class CacheWriter(cache: LookupCache, keys: Array[UnsafeRow]) {
+    private val resultsByKey = mutable.HashMap.from(
+      keys.map(_ -> mutable.ArrayBuffer.empty[InternalRow]))
+    private val uncacheable = mutable.HashSet.empty[UnsafeRow]
+
+    def add(key: UnsafeRow, lookupRow: InternalRow): Unit = if (!uncacheable.contains(key)) {
+      val results = resultsByKey(key)
+      if (results.length < cacheOptions.maxRowsPerKey) {
+        results += lookupRow
+      } else {
+        uncacheable += key
+        results.clear()
+      }
+    }
+
+    def write(): Unit = keys.foreach { key =>
+      if (!uncacheable.contains(key)) cache.put(key, resultsByKey(key).toArray)
     }
   }
 
