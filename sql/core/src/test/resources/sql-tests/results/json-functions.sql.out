@@ -2635,6 +2635,15 @@ false	false
 
 
 -- !query
+select concat('{} ', repeat('9', 1001)) IS JSON OBJECT,
+       concat('1 ', repeat('9', 1001)) IS NOT JSON
+-- !query schema
+struct<(concat({} , repeat(9, 1001)) IS JSON OBJECT):boolean,(NOT (concat(1 , repeat(9, 1001)) IS JSON)):boolean>
+-- !query output
+false	true
+
+
+-- !query
 select '{' IS JSON, '[1,' IS JSON, '{"a"' IS JSON
 -- !query schema
 struct<({ IS JSON):boolean,([1, IS JSON):boolean,({"a" IS JSON):boolean>
@@ -2772,11 +2781,12 @@ spark.sql.charVarchar.standardSemantics.enabled	true
 
 
 -- !query
-select cast('[1]' AS VARCHAR(10)) IS JSON ARRAY, cast('bad' AS VARCHAR(10)) IS JSON
+select cast('[1]' AS VARCHAR(10)) IS JSON ARRAY, cast('bad' AS VARCHAR(10)) IS JSON,
+       cast('{"a":1}' AS CHAR(10)) IS JSON OBJECT
 -- !query schema
-struct<(CAST([1] AS VARCHAR(10)) IS JSON ARRAY):boolean,(CAST(bad AS VARCHAR(10)) IS JSON):boolean>
+struct<(CAST([1] AS VARCHAR(10)) IS JSON ARRAY):boolean,(CAST(bad AS VARCHAR(10)) IS JSON):boolean,(CAST({"a":1} AS CHAR(10)) IS JSON OBJECT):boolean>
 -- !query output
-true	false
+true	false	true
 
 
 -- !query
