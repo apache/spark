@@ -56,7 +56,6 @@ import org.apache.spark.sql.execution.streaming.utils.StreamingUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.PartitionOffsetWithIndex
 import org.apache.spark.sql.streaming.Trigger
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{Clock, ErrorNotifier, SerializableConfiguration, Utils}
 
 class MicroBatchExecution(
@@ -196,10 +195,6 @@ class MicroBatchExecution(
   // in the query plan. It is populated by the first batch at planning time, and passed
   // into every subsequent batch's query plan.
   private val stateSchemaMetadatas = MutableMap[Long, StateSchemaBroadcast]()
-
-  // Value schemas restored for stream-stream joins whose checkpoints predate preservation of
-  // watermarked input columns. Reused by every batch so the physical input shape stays stable.
-  private val joinStateValueSchemas = MutableMap[Long, (StructType, StructType)]()
 
   /**
    * Cached result of the first `offsetLog.getLatest()` call. Reused by both
@@ -861,7 +856,6 @@ class MicroBatchExecution(
          * in the offset log */
         execCtx.batchId = latestBatchId
         execCtx.isCurrentBatchConstructed = true
-        execCtx.isCurrentBatchReExecution = true
         execCtx.endOffsets = nextOffsets.toStreamProgress(sources, sourceIdMap)
 
         // validate the integrity of offset log and get the previous offset from the offset log
@@ -914,7 +908,6 @@ class MicroBatchExecution(
               }
               execCtx.batchId = latestCommittedBatchId + 1
               execCtx.isCurrentBatchConstructed = false
-              execCtx.isCurrentBatchReExecution = false
               execCtx.startOffsets ++= execCtx.endOffsets
               watermarkTracker.setWatermark(
                 math.max(watermarkTracker.currentWatermark, commitMetadata.nextBatchWatermarkMs))
@@ -1382,8 +1375,6 @@ class MicroBatchExecution(
         execCtx.previousContext.isEmpty,
         currentStateStoreCkptId,
         stateSchemaMetadatas,
-        joinStateValueSchemas,
-        isCurrentBatchReExecution = execCtx.isCurrentBatchReExecution,
         isTerminatingTrigger = trigger.isInstanceOf[AvailableNowTrigger.type],
         isRealTimeMode = trigger.isInstanceOf[RealTimeTrigger])
       execCtx.executionPlan.executedPlan // Force the lazy generation of execution plan

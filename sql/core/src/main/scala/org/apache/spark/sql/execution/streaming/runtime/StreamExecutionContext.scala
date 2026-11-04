@@ -147,9 +147,6 @@ class MicroBatchExecutionContext(
    */
   var isCurrentBatchConstructed = false
 
-  /** Whether the current batch was recovered from the offset log without a matching commit. */
-  var isCurrentBatchReExecution = false
-
   // copying some of the state from the previous batch
   previousContext.foreach { ctx =>
     {
@@ -219,7 +216,6 @@ class MicroBatchExecutionContext(
 
   override def toString: String = s"MicroBatchExecutionContext(batchId=$batchId," +
     s" isCurrentBatchConstructed=$isCurrentBatchConstructed," +
-    s" isCurrentBatchReExecution=$isCurrentBatchReExecution," +
     s" offsetSeqMetadata=$offsetSeqMetadata," +
     s" sinkCommitProgress=$sinkCommitProgress," +
     s" endOffsets$endOffsets," +

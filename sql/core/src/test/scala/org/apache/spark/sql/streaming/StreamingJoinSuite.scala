@@ -375,6 +375,15 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
     testStream(joined)(
       MultiAddData(leftInput, (1, 1000000L))(rightInput, (1, 1000000L)),
       CheckNewAnswer(1),
+      Execute { query =>
+        val join = query.lastExecution.executedPlan.collectFirst {
+          case join: StreamingSymmetricHashJoinExec => join
+        }.get
+        assert(join.left.output.map(_.name) == Seq("key", "leftTime"))
+        assert(join.right.output.map(_.name) == Seq("key", "rightTime"))
+        assert(join.leftValueAttributes.map(_.name) == Seq("key"))
+        assert(join.rightValueAttributes.map(_.name) == Seq("key"))
+      },
       MultiAddData(leftInput, (3, 1000001L))(rightInput, (4, 1000001L)),
       CheckNewAnswer(),
       MultiAddData(leftInput, (2, 1000L))(rightInput, (2, 1000L)),
@@ -394,31 +403,33 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
         .select($"key", timestamp_seconds($"time").as("rightTime"))
         .withWatermark("rightTime", "10 seconds")
       val joined = left.join(right, "key").select($"key")
+      val legacyJoined = left.select($"key").join(right.select($"key"), "key")
+        .select($"key")
 
-      withSQLConf(SQLConf.STREAMING_JOIN_PRESERVE_WATERMARK_COLUMNS.key -> "false") {
-        testStream(joined)(
-          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
-          MultiAddData(leftInput, (1, 1000000L))(rightInput, (1, 1000000L)),
-          CheckNewAnswer(1),
-          MultiAddData(leftInput, (3, 1000001L))(rightInput, (4, 1000001L)),
-          CheckNewAnswer(),
-          StopStream)
-      }
+      testStream(legacyJoined)(
+        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+        MultiAddData(leftInput, (1, 1000000L))(rightInput, (1, 1000000L)),
+        CheckNewAnswer(1),
+        MultiAddData(leftInput, (3, 1000001L))(rightInput, (4, 1000001L)),
+        CheckNewAnswer(),
+        StopStream)
 
       testStream(joined)(
         StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
         MultiAddData(leftInput, (2, 1000L))(rightInput, (2, 1000L)),
-        CheckNewAnswer(2),
+        CheckNewAnswer(),
         Execute { query =>
           val joins = query.lastExecution.executedPlan.collect {
             case join: StreamingSymmetricHashJoinExec => join
           }
           assert(joins.size == 1)
-          assert(joins.head.left.output.map(_.name) == Seq("key"))
-          assert(joins.head.right.output.map(_.name) == Seq("key"))
+          assert(joins.head.left.output.map(_.name) == Seq("key", "leftTime"))
+          assert(joins.head.right.output.map(_.name) == Seq("key", "rightTime"))
+          assert(joins.head.leftValueAttributes.map(_.name) == Seq("key"))
+          assert(joins.head.rightValueAttributes.map(_.name) == Seq("key"))
         },
         MultiAddData(leftInput, (5, 1000L))(rightInput, (5, 1000L)),
-        CheckNewAnswer(5))
+        CheckNewAnswer())
 
       val changedOutput = left.join(right, "key").select($"leftTime")
       val ex = intercept[StreamingQueryException] {
@@ -447,11 +458,11 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
         .select($"key", timestamp_seconds($"time").as("rightTime"))
         .withWatermark("rightTime", "10 seconds")
       val joined = left.join(right, "key").select($"key")
+      val legacyJoined = left.select($"key").join(right.select($"key"), "key")
+        .select($"key")
 
-      withSQLConf(
-          SQLConf.STREAMING_JOIN_PRESERVE_WATERMARK_COLUMNS.key -> "false",
-          SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
-        testStream(joined)(
+      withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
+        testStream(legacyJoined)(
           StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
           MultiAddData(leftInput, (1, 1000000L))(rightInput, (1, 1000000L)),
           CheckNewAnswer(1),
@@ -471,8 +482,10 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
             case join: StreamingSymmetricHashJoinExec => join
           }
           assert(joins.size == 1)
-          assert(joins.head.left.output.map(_.name) == Seq("key"))
-          assert(joins.head.right.output.map(_.name) == Seq("key"))
+          assert(joins.head.left.output.map(_.name) == Seq("key", "leftTime"))
+          assert(joins.head.right.output.map(_.name) == Seq("key", "rightTime"))
+          assert(joins.head.leftValueAttributes.map(_.name) == Seq("key"))
+          assert(joins.head.rightValueAttributes.map(_.name) == Seq("key"))
         })
     }
   }
@@ -878,7 +891,7 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
         assert(query.lastExecution.executedPlan.collect {
           case j @ StreamingSymmetricHashJoinExec(_, _, _, _, _, _, _, _, _,
             ShuffleExchangeExec(opA: HashPartitioning, _, _, _, _),
-            ShuffleExchangeExec(opB: HashPartitioning, _, _, _, _), _)
+            ShuffleExchangeExec(opB: HashPartitioning, _, _, _, _), _, _, _)
               if partitionExpressionsColumns(opA.expressions) === Seq("a", "b")
                 && partitionExpressionsColumns(opB.expressions) === Seq("a", "b")
                 && opA.numPartitions == numPartitions && opB.numPartitions == numPartitions => j

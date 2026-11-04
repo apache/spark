@@ -37,7 +37,6 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{CommandExecutionMode, LocalLimitExec, ProjectExec, QueryExecution, SerializeFromObjectExec, SparkPlan, SparkPlanner, SparkStrategy => Strategy, UnaryExecNode}
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, MergingSessionsExec, ObjectHashAggregateExec, SortAggregateExec, UpdatingSessionsExec}
 import org.apache.spark.sql.execution.datasources.v2.RealTimeStreamScanExec
-import org.apache.spark.sql.execution.datasources.v2.state.StreamStreamJoinStateHelper
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
 import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.python.streaming.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPySparkExec}
@@ -46,13 +45,11 @@ import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileMan
 import org.apache.spark.sql.execution.streaming.operators.stateful.{SessionWindowStateStoreRestoreExec, SessionWindowStateStoreSaveExec, StatefulOperator, StatefulOperatorStateInfo, StateStoreRestoreExec, StateStoreSaveExec, StateStoreWriter, StreamingDeduplicateExec, StreamingDeduplicateWithinWatermarkExec, StreamingGlobalLimitExec, StreamingLocalLimitExec, UpdateEventTimeColumnExec}
 import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.FlatMapGroupsWithStateExec
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.{StreamingSymmetricHashJoinExec, StreamingSymmetricHashJoinHelper}
-import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.TransformWithStateExec
 import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSourceV1
 import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadata, OperatorStateMetadataReader, OperatorStateMetadataV1, OperatorStateMetadataV2, OperatorStateMetadataWriter, StateSchemaBroadcast, StateSchemaMetadata}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 /**
@@ -65,11 +62,6 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
  *                             It is passed in by reference from MicrobatchExecution, so it is
  *                             populated during planning in the first batch, and passed in to the
  *                             StatefulOperatorStateInfo on every subsequent batch
- * @param joinStateValueSchemas legacy stream-stream join value schemas restored on restart.
- *                              It is passed in by reference so every batch preserves the same
- *                              physical input shape.
- * @param isCurrentBatchReExecution whether the current batch was recovered from the offset log
- *                                  without a matching commit.
  */
 class IncrementalExecution(
     sparkSession: SparkSession,
@@ -90,9 +82,6 @@ class IncrementalExecution(
       MutableMap[Long, Array[Array[String]]] = MutableMap[Long, Array[Array[String]]](),
     val stateSchemaMetadatas: MutableMap[Long, StateSchemaBroadcast] =
       MutableMap[Long, StateSchemaBroadcast](),
-    val joinStateValueSchemas: MutableMap[Long, (StructType, StructType)] =
-      MutableMap[Long, (StructType, StructType)](),
-    val isCurrentBatchReExecution: Boolean = false,
     mode: CommandExecutionMode.Value = CommandExecutionMode.ALL,
     val isTerminatingTrigger: Boolean = false,
     val isRealTimeMode: Boolean = false)
@@ -481,157 +470,34 @@ class IncrementalExecution(
   }
 
   /**
-   * Before SPARK-60850, column pruning could remove watermarked attributes from stream-stream join
-   * inputs. On restart, retain that physical input shape when it is recorded in the checkpoint and
-   * the omitted attributes are otherwise unused. This preserves both the state schema and the old
-   * late-row behavior for existing queries, while new queries keep the fixed behavior.
+   * Watermarked attributes needed only for late-row filtering do not need to be buffered in join
+   * state. For the initial implementation, compact a join only when a direct parent projection
+   * proves which join outputs are used. Other plan shapes retain the full input schema.
    */
-  object JoinStateSchemaCompatibilityRule {
-    private def schemaFilePaths(join: StreamingSymmetricHashJoinExec): List[Path] = {
-      if (join.stateFormatVersion < 3) {
-        List.empty
-      } else {
-        val info = join.getStateInfo
-        val metadataBatchId =
-          if (isCurrentBatchReExecution) currentBatchId else currentBatchId - 1
-        OperatorStateMetadataReader.createReader(
-          new Path(checkpointLocation, info.operatorId.toString),
-          hadoopConf,
-          join.operatorStateMetadataVersion,
-          metadataBatchId,
-          createMetadataDir = false).read() match {
-          case Some(OperatorStateMetadataV2(_, stores, _)) =>
-            stores.flatMap(_.stateSchemaFilePaths).map(new Path(_)).toList
-          case _ => List.empty
-        }
+  object JoinStateValueAttributesRule extends Rule[SparkPlan] {
+    private def compactStateValues(
+        input: Seq[Attribute],
+        required: AttributeSet): Seq[Attribute] = {
+      val compacted = input.filter { attr =>
+        !attr.metadata.contains(EventTimeWatermark.delayKey) || required.contains(attr)
       }
+      if (compacted.nonEmpty) compacted else input
     }
 
-    private def readStateValueSchemas(
-        join: StreamingSymmetricHashJoinExec): (StructType, StructType) = {
-      val info = join.getStateInfo
-      val oldSchemaFilePaths = schemaFilePaths(join)
-      val leftSchema = StreamStreamJoinStateHelper.readKeyValueSchema(
-        sparkSession,
-        checkpointLocation,
-        info.operatorId.toInt,
-        LeftSide,
-        oldSchemaFilePaths,
-        joinStateFormatVersion = Some(join.stateFormatVersion))._2
-      val rightSchema = StreamStreamJoinStateHelper.readKeyValueSchema(
-        sparkSession,
-        checkpointLocation,
-        info.operatorId.toInt,
-        RightSide,
-        oldSchemaFilePaths,
-        joinStateFormatVersion = Some(join.stateFormatVersion))._2
-      (leftSchema, rightSchema)
-    }
-
-    private def attributesForStateSchema(
-        output: Seq[Attribute],
-        stateSchema: StructType,
-        requiredOutput: AttributeSet): Option[Seq[Attribute]] = {
-      var outputIndex = 0
-      val matched = stateSchema.fields.map { field =>
-        while (outputIndex < output.length &&
-            (output(outputIndex).name != field.name ||
-              output(outputIndex).metadata != field.metadata ||
-              !DataType.equalsIgnoreNullability(output(outputIndex).dataType, field.dataType))) {
-          outputIndex += 1
+    override def apply(plan: SparkPlan): SparkPlan = plan transformUp {
+      case project @ ProjectExec(projectList, join: StreamingSymmetricHashJoinExec) =>
+        val requiredByParent = AttributeSet(projectList.flatMap(_.references))
+        val required = requiredByParent ++ join.references
+        val leftValues = compactStateValues(join.left.output, required)
+        val rightValues = compactStateValues(join.right.output, required)
+        if (leftValues == join.leftValueAttributes &&
+            rightValues == join.rightValueAttributes) {
+          project
+        } else {
+          project.copy(child = join.copy(
+            leftStateValueAttributes = Some(leftValues),
+            rightStateValueAttributes = Some(rightValues)))
         }
-        if (outputIndex == output.length) {
-          return None
-        }
-        val attribute = output(outputIndex)
-        outputIndex += 1
-        attribute
-      }.toSeq
-      val matchedSet = matched.toSet
-      val dropped = output.filterNot(matchedSet.contains)
-      if (dropped.forall { attr =>
-          attr.metadata.contains(EventTimeWatermark.delayKey) && !requiredOutput.contains(attr)
-        }) {
-        Some(matched)
-      } else {
-        None
-      }
-    }
-
-    private def reconcile(
-        join: StreamingSymmetricHashJoinExec,
-        schemas: (StructType, StructType),
-        requiredOutput: AttributeSet): StreamingSymmetricHashJoinExec = {
-      val (leftSchema, rightSchema) = schemas
-      val leftAttributes = attributesForStateSchema(join.left.output, leftSchema, requiredOutput)
-      val rightAttributes = attributesForStateSchema(join.right.output, rightSchema, requiredOutput)
-      (leftAttributes, rightAttributes) match {
-        case (Some(newLeft), Some(newRight)) =>
-          val left = if (newLeft == join.left.output) {
-            join.left
-          } else {
-            ProjectExec(newLeft, join.left)
-          }
-          val right = if (newRight == join.right.output) {
-            join.right
-          } else {
-            ProjectExec(newRight, join.right)
-          }
-          join.copy(
-            left = left,
-            right = right)
-        case _ => join
-      }
-    }
-
-    private def requiredOutputByJoin(plan: SparkPlan): Map[Int, AttributeSet] = {
-      val requiredByJoin = MutableMap.empty[Int, AttributeSet]
-
-      def collect(node: SparkPlan, requiredOutput: AttributeSet): Unit = {
-        node match {
-          case join: StreamingSymmetricHashJoinExec =>
-            requiredByJoin.put(join.id, requiredOutput ++ join.references)
-          case _ =>
-        }
-        node.children.foreach { child =>
-          val childOutput = AttributeSet(child.output)
-          val requiredByOrdinal = if (node.output.length == child.output.length) {
-            AttributeSet(node.output.zip(child.output).collect {
-              case (output, childOutput) if requiredOutput.contains(output) => childOutput
-            })
-          } else {
-            AttributeSet.empty
-          }
-          val requiredChildOutput =
-            (requiredOutput ++ node.references).intersect(childOutput) ++ requiredByOrdinal
-          collect(child, requiredChildOutput)
-        }
-      }
-
-      collect(plan, AttributeSet(plan.output ++ plan.children.flatMap(_.output)))
-      requiredByJoin.toMap
-    }
-
-    def apply(plan: SparkPlan): SparkPlan = {
-      val requiredOutputs = requiredOutputByJoin(plan)
-      plan transform {
-        case join: StreamingSymmetricHashJoinExec if join.stateInfo.isDefined =>
-          val requiredOutput = requiredOutputs.getOrElse(join.id, AttributeSet(join.output))
-          val operatorId = join.getStateInfo.operatorId
-          joinStateValueSchemas.get(operatorId) match {
-            case Some(schemas) => reconcile(join, schemas, requiredOutput)
-            case None if isFirstBatch &&
-                (currentBatchId != 0 || isCurrentBatchReExecution) =>
-              val schemas = readStateValueSchemas(join)
-              val reconciled = reconcile(join, schemas, requiredOutput)
-              if (reconciled.left.output != join.left.output ||
-                  reconciled.right.output != join.right.output) {
-                joinStateValueSchemas.put(operatorId, schemas)
-              }
-              reconciled
-            case None => join
-          }
-      }
     }
   }
 
@@ -771,7 +637,8 @@ class IncrementalExecution(
           eventTimeWatermarkForEviction = iwEviction,
           stateWatermarkPredicates =
             StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
-              j.left.output, j.right.output, j.leftKeys, j.rightKeys, j.condition.full,
+              j.leftValueAttributes, j.rightValueAttributes,
+              j.leftKeys, j.rightKeys, j.condition.full,
               iwEviction, prevBatchLateEventsWm, !allowMultipleStatefulOperators)
         )
     }
@@ -879,16 +746,16 @@ class IncrementalExecution(
 
     override def apply(plan: SparkPlan): SparkPlan = {
       val planWithStateOpId = plan transform composedRule
-      val planWithCompatibleJoinState = JoinStateSchemaCompatibilityRule(planWithStateOpId)
       // Need to check before write to metadata because we need to detect add operator
       // Only check when streaming is restarting and is first batch
       if (isFirstBatch && currentBatchId != 0) {
-        checkOperatorValidWithMetadata(planWithCompatibleJoinState, currentBatchId - 1)
+        checkOperatorValidWithMetadata(planWithStateOpId, currentBatchId - 1)
       }
 
+      val planWithCompactJoinState = JoinStateValueAttributesRule(planWithStateOpId)
       stateStoreWritersWithMetadata = Some(Seq.empty)
       val planWithSchemas =
-        planWithCompatibleJoinState transform StateSchemaAndOperatorMetadataRule.rule
+        planWithCompactJoinState transform StateSchemaAndOperatorMetadataRule.rule
 
       simulateWatermarkPropagation(planWithSchemas)
       planWithSchemas transform WatermarkPropagationRule.rule

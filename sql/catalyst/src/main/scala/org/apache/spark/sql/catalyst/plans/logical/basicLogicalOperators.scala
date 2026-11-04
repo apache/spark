@@ -783,13 +783,25 @@ case class Join(
   }
 
   // Stream-stream joins filter late rows even when event time is not used by the join condition
-  // or selected downstream. Keep watermarked input attributes from being pruned away.
-  override def references: AttributeSet = super.references ++ AttributeSet(
-    if (isStateful && conf.getConf(SQLConf.STREAMING_JOIN_PRESERVE_WATERMARK_COLUMNS)) {
-      children.flatMap(_.output.filter(_.metadata.contains(EventTimeWatermark.delayKey)))
+  // or selected downstream. Keep an unambiguous watermarked input attribute from being pruned.
+  override def references: AttributeSet = {
+    val base = super.references
+    if (isStateful) {
+      base ++ AttributeSet(children.flatMap { child =>
+        val watermarkAttributes =
+          child.output.filter(_.metadata.contains(EventTimeWatermark.delayKey))
+        val hasReferencedWatermark = base.intersect(child.outputSet)
+          .exists(_.metadata.contains(EventTimeWatermark.delayKey))
+        if (!hasReferencedWatermark && watermarkAttributes.map(_.exprId).distinct.size == 1) {
+          watermarkAttributes.take(1)
+        } else {
+          Seq.empty
+        }
+      })
     } else {
-      Seq.empty
-    })
+      base
+    }
+  }
 
   override def metadataOutput: Seq[Attribute] = {
     joinType match {
