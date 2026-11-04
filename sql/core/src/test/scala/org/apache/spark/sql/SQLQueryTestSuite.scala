@@ -44,6 +44,12 @@ import org.apache.spark.util.Utils
  * Each case is loaded from a file in "spark/sql/core/src/test/resources/sql-tests/inputs".
  * Each case has a golden result file in "spark/sql/core/src/test/resources/sql-tests/results".
  *
+ * When adding new SQL syntax or a user-visible SQL feature, consider its behavior with streaming
+ * input. Unless the syntax or feature clearly cannot apply to streaming queries, add a test under
+ * "spark/sql/core/src/test/resources/sql-tests/inputs/streaming". The test should either verify
+ * that the feature works correctly with streaming input or verify the expected error when streaming
+ * use is unsupported.
+ *
  * To run the entire test suite:
  * {{{
  *   build/sbt "sql/testOnly org.apache.spark.sql.SQLQueryTestSuite"
