@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.optimizer.{ComputeCurrentTime, ReplaceExpressions, SpecialDatetimeValues}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
-import org.apache.spark.sql.catalyst.trees.TreePattern.{ANALYSIS_AWARE_EXPRESSION, CURRENT_LIKE, TreePattern, VARIABLE_REFERENCE}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, VARIABLE_REFERENCE}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, V2ExpressionBuilder}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
@@ -130,11 +130,8 @@ case class CheckConstraint(
     omitPredicate: Boolean = false)
   extends UnaryExpression
   with TableConstraint
-  with ImplicitCastInputTypes
-  with AnalysisAwareExpression[CheckConstraint] {
+  with ImplicitCastInputTypes {
 // scalastyle:on line.size.limit
-
-  final override val nodePatterns: Seq[TreePattern] = Seq(ANALYSIS_AWARE_EXPRESSION)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(BooleanType)
 
@@ -172,17 +169,22 @@ case class CheckConstraint(
   override def stringArgs: Iterator[Any] =
     Iterator(child, condition, userProvidedName, tableName, userProvidedCharacteristic)
 
-  // A write parses `condition` again, with its own settings. It cannot bind a parameter marker
-  // that the legacy parameter substitution leaves there, resolves an IDENTIFIER clause in its own
-  // session, and does not resolve a column qualified by the table name the way ALTER TABLE does.
-  // It also resolves a name such as `current_date` or `user` to the function or to a column,
-  // depending on its case sensitivity, its reserved keywords and the columns of the table at that
-  // time. None of them can be told apart after analysis, so the parser sets `keepPredicate` for
-  // them, and for any name with more than one part, since it cannot tell a table qualifier from a
-  // struct column. Such a condition, or one that `resolvesDifferentlyOnWrite`, keeps the predicate
-  // built from the optimized plan, as before. So does one that calls a user-defined function,
-  // which the analysis rejects next and which is not evaluated here.
-  override def markAsAnalyzed(): CheckConstraint = copy(omitPredicate =
+  /**
+   * Decides, once ALTER TABLE has analyzed the condition, whether to store the constraint without
+   * a predicate (`omitPredicate`).
+   *
+   * A write parses `condition` again, with its own settings. It cannot bind a parameter marker
+   * that the legacy parameter substitution leaves there, resolves an IDENTIFIER clause in its own
+   * session, and does not resolve a column qualified by the table name the way ALTER TABLE does.
+   * It also resolves a name such as `current_date` or `user` to the function or to a column,
+   * depending on its case sensitivity, its reserved keywords and the columns of the table at that
+   * time. None of them can be told apart after analysis, so the parser sets `keepPredicate` for
+   * them, and for any name with more than one part, since it cannot tell a table qualifier from a
+   * struct column. Such a condition, or one that `resolvesDifferentlyOnWrite`, keeps the predicate
+   * built from the optimized plan, as before. So does one that calls a user-defined function,
+   * which the analysis rejects next and which is not evaluated here.
+   */
+  def markAsAnalyzed(): CheckConstraint = copy(omitPredicate =
     !keepPredicate && userDefinedFunctionCall.isEmpty &&
       !CheckConstraint.resolvesDifferentlyOnWrite(child) &&
       CheckConstraint.readsCurrentContext(child))
@@ -192,9 +194,9 @@ case class CheckConstraint(
   // condition that `markAsAnalyzed` finds reading one is stored without a predicate, so that
   // writes check `predicateSql`.
   // The predicate is not built from the analyzed condition, as the default value of a column is,
-  // because `V2ExpressionBuilder` folds `CAST('today' AS DATE)` there as an ordinary cast. CREATE
-  // and REPLACE TABLE convert their constraints before analysis finishes, while `omitPredicate` is
-  // still false.
+  // because `V2ExpressionBuilder` folds `CAST('today' AS DATE)` there as an ordinary cast. Only
+  // ALTER TABLE calls `markAsAnalyzed`, so CREATE and REPLACE TABLE always store the predicate if
+  // there is one.
   def toV2Constraint: Constraint = {
     val predicate = if (omitPredicate) {
       null

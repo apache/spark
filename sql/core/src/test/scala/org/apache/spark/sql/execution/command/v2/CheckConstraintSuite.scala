@@ -410,6 +410,13 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         }
       }
     }
+    // `current_path` without parentheses parses as the function under any settings, so unlike
+    // `current_user` it is stored without a predicate.
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT, p STRING) $defaultUsing")
+      sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK (p = current_path)")
+      assert(getCheckConstraint(loadTable(nonPartitionCatalog, "ns", "tbl")).predicate() == null)
+    }
   }
 
   test("SPARK-60032: Check constraint added by ALTER TABLE resolving names in the session") {
@@ -560,14 +567,14 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
           s"CONSTRAINT c1 CHECK (owner = current_user OR owner = v)) $defaultUsing")
         checkError(
           exception = intercept[SparkRuntimeException] {
-            sql(s"INSERT INTO $t VALUES (1, 'nobody')")
+            sql(s"INSERT INTO $t VALUES (1, '')")
           },
           condition = "CHECK_CONSTRAINT_VIOLATION",
           sqlState = "23001",
           parameters = Map(
             "constraintName" -> "c1",
             "expression" -> "owner = current_user OR owner = v",
-            "values" -> " - owner : nobody"))
+            "values" -> " - owner : "))
       }
     }
   }
