@@ -484,8 +484,8 @@ case class StreamingDataSourceV2Relation(
  * @param prunedOutput the columns of `output` that the scan reads, in the order of its read schema,
  *                     if it was built to read fewer of them. The scan node of the physical plan
  *                     outputs these, so the plan must not read the other columns of `output`.
- * @param pushedFilters the filters that the scan got, over `output`, which the plan must still
- *                      apply over the relation
+ * @param pushedFilters the filters that the scan builder took, over `output`, which the filters of
+ *                      the plan over the relation must still imply
  */
 case class StreamingDataSourceV2ScanRelation(
     relation: StreamingDataSourceV2Relation,

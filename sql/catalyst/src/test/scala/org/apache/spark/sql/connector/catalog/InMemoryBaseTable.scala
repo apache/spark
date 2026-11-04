@@ -28,7 +28,7 @@ import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BoundReference, Cast, EvalMode, Expression => CatalystExpression, GenericInternalRow, GetStructField, JoinedRow, Literal, MetadataStructFieldWithLogicalName, Predicate => CatalystPredicate}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, GenericArrayData, MapData, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
@@ -689,7 +689,7 @@ abstract class InMemoryBaseTable(
       // rows of the table.
       val dataOrdinals = dataColumns.map(field => tableSchema.fieldIndex(field.name)).toArray
       new InMemoryMicroBatchReaderFactory(
-        metadataColNames.toArray, dataOrdinals, dataColumns.map(_.dataType).toArray,
+        metadataColNames.toArray, dataOrdinals, StructType(dataColumns.toSeq),
         dataOrdinals.toSeq == tableSchema.indices)
     }
     override def deserializeOffset(json: String): Offset = new InMemoryTableOffset(json.toLong)
@@ -1253,26 +1253,27 @@ class BufferedRows(val key: Seq[Any], val schema: StructType)
 
 /**
  * @param dataOrdinals the positions in the rows of the table of the data columns to read
+ * @param dataSchema the data columns to read
  * @param readsAllColumns whether these are all the columns of the table, in their order
  */
 private class InMemoryMicroBatchReaderFactory(
     metaNames: Array[String],
     dataOrdinals: Array[Int],
-    dataTypes: Array[DataType],
+    dataSchema: StructType,
     readsAllColumns: Boolean) extends PartitionReaderFactory with Serializable {
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val rows = partition.asInstanceOf[InMemoryMicroBatchPartition].rows
     new PartitionReader[InternalRow] {
       private var idx = -1
+      private val projection = ProjectingInternalRow(dataSchema, dataOrdinals.toSeq)
       override def next(): Boolean = { idx += 1; idx < rows.size }
       override def get(): InternalRow = {
         val tableRow = rows(idx)
         val rawRow = if (readsAllColumns) {
           tableRow
         } else {
-          new GenericInternalRow(dataOrdinals.indices.map { i =>
-            tableRow.get(dataOrdinals(i), dataTypes(i))
-          }.toArray[Any])
+          projection.project(tableRow)
+          projection
         }
         if (metaNames.isEmpty) rawRow
         else {

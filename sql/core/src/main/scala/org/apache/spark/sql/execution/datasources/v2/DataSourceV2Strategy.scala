@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
+import scala.util.Try
 
 import org.apache.hadoop.fs.Path
 
@@ -27,9 +28,9 @@ import org.apache.spark.internal.LogKeys.EXPR
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedPersistentView, ResolvedTable, ResolvedTempView}
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, AttributeSet, BloomFilterMightContain, Cast, DynamicPruning, Expression, ExpressionSet, InSet, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, AttributeReference, AttributeSet, BloomFilterMightContain, Cast, DynamicPruning, EqualNullSafe, EqualTo, Expression, ExpressionSet, InSet, Literal, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
-import org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison
+import org.apache.spark.sql.catalyst.optimizer.{BooleanSimplification, ConstantFolding, UnwrapCastInBinaryComparison}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.SCALAR_SUBQUERY
@@ -1107,7 +1108,7 @@ private[sql] object DataSourceV2Strategy extends Logging {
   /**
    * Returns the output of the scan node of a streaming relation: the columns that its scan reads.
    * The projections and the filters over the relation, which the scan node is planned with, must
-   * still apply the filters that the scan got, and read no column of the relation that the scan
+   * still imply the filters that the scan got, and read no column of the relation that the scan
    * does not read, if it was built to read fewer columns than the relation outputs (see
    * `StreamingV2ScanPushDown`).
    */
@@ -1115,7 +1116,7 @@ private[sql] object DataSourceV2Strategy extends Logging {
       relation: StreamingDataSourceV2ScanRelation,
       project: Seq[NamedExpression],
       filters: Seq[Expression]): Seq[AttributeReference] = {
-    val missingFilters = relation.pushedFilters.filterNot(ExpressionSet(filters).contains)
+    val missingFilters = relation.pushedFilters.filterNot(implies(filters, _))
     if (missingFilters.nonEmpty) {
       throw SparkException.internalError(
         s"The plan does not apply the filters ${missingFilters.map(_.sql).mkString(", ")} " +
@@ -1137,6 +1138,43 @@ private[sql] object DataSourceV2Strategy extends Logging {
       case None =>
         relation.output
     }
+  }
+
+  /**
+   * Returns whether `filters`, the filters over a streaming relation in a micro-batch, imply
+   * `pushed`, a filter that its scan got when the query started: they have it, or it holds for the
+   * values of the columns that they make equal to literals. The optimizer of a micro-batch puts
+   * these values in place of the columns in the other filters, with `ConstantPropagation`, for
+   * example with an equality that it infers through a join, and then drops a filter that becomes
+   * true, as `id > 1` does with `id = 5`.
+   */
+  private def implies(filters: Seq[Expression], pushed: Expression): Boolean = {
+    ExpressionSet(filters).contains(pushed) || {
+      val values = AttributeMap(filters.collect {
+        case EqualTo(column: AttributeReference, value: Literal) => column -> value
+        case EqualTo(value: Literal, column: AttributeReference) => column -> value
+        case EqualNullSafe(column: AttributeReference, value: Literal) => column -> value
+        case EqualNullSafe(value: Literal, column: AttributeReference) => column -> value
+      })
+      def withValues(e: Expression): Expression = e.transform {
+        case column: AttributeReference if values.contains(column) => values(column)
+      }
+      values.nonEmpty && {
+        val condition = withValues(pushed)
+        ExpressionSet(filters.map(withValues)).contains(condition) || isTrue(condition)
+      }
+    }
+  }
+
+  /** Returns whether `condition` is true for every row, once its constants are folded. */
+  private def isTrue(condition: Expression): Boolean = {
+    Try {
+      val simplified = Seq(ConstantFolding, BooleanSimplification, ConstantFolding).foldLeft(
+        Filter(condition, LocalRelation(condition.references.toSeq)): LogicalPlan) {
+        (plan, rule) => rule(plan)
+      }
+      simplified.asInstanceOf[Filter].condition == TrueLiteral
+    }.getOrElse(false)
   }
 }
 

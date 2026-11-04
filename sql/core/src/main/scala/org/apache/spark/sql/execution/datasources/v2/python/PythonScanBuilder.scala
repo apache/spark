@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2.python
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownLimit}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.connector.BatchOnlyFilterPushDown
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -31,7 +32,9 @@ class PythonScanBuilder(
     options: CaseInsensitiveStringMap)
     extends ScanBuilder
     with SupportsPushDownFilters
-    with SupportsPushDownLimit {
+    with SupportsPushDownLimit
+    // The filters are pushed down with the reader of a batch scan, see `pushFilters`.
+    with BatchOnlyFilterPushDown {
   private var supportedFilters: Array[Filter] = Array.empty
   // All filters handed to `pushFilters`, kept so that `pushLimit` can replay them and bring the
   // Python reader back to the same state before calling `pushLimit` on it.

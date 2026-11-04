@@ -25,8 +25,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow}
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -39,7 +38,7 @@ import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamExe
 import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
@@ -657,6 +656,84 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
+  test("plan the micro-batches whose filters imply the pushed filters in another form") {
+    val otherTable = "testcat.other"
+    withSourceTable() {
+      withTable(otherTable) {
+        sql(s"CREATE TABLE $otherTable (oid bigint, value string)")
+        sql(s"INSERT INTO $otherTable VALUES (1, 'x'), (2, 'y')")
+        // A micro-batch infers id = 2 from the equality of the static side, and puts its value in
+        // place of the column in the pushed filter id > 0, which it then drops: id = 2 implies it.
+        val source = spark.readStream.table(tbl)
+        val static = spark.range(1, 3).toDF("sid").where("sid = 2")
+        val joined = source.where("id > 0").join(static, source("id") === static("sid"))
+        testStream(joined.select("data"))(
+          ProcessAllAvailable(),
+          assertPushedFilters("GreaterThan(id,0)"),
+          CheckAnswer(Row("b")))
+        // So does a stream-stream join, in the micro-batches where both sources have data.
+        val other = spark.readStream.table(otherTable).where("oid = 2")
+        val streams = source.where("id > 0").join(other, source("id") === other("oid"))
+        testStream(streams.select("data", "value"))(
+          ProcessAllAvailable(),
+          CheckAnswer(Row("b", "y")),
+          insert("(2, 'bb', 22)"),
+          insert("(2, 'yy')", otherTable),
+          ProcessAllAvailable(),
+          CheckAnswer(Row("b", "y"), Row("b", "yy"), Row("bb", "y"), Row("bb", "yy")))
+      }
+    }
+  }
+
+  test("plan the micro-batches that fold a value of their own into a pushed filter") {
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (id bigint, owner string, d date)")
+      sql(s"INSERT INTO $tbl VALUES (1, current_user(), current_date()), (2, 'other', NULL)")
+      // A micro-batch folds current_user() and now() into literals, which it then puts in place
+      // of the columns in the pushed filters owner <> '' and d >= DATE'2020-01-01'.
+      testStream(spark.readStream.table(tbl).where("owner = current_user() AND owner <> ''")
+          .select("id"))(
+        ProcessAllAvailable(),
+        assertPushedFilters("Not(EqualTo(owner,))"),
+        CheckAnswer(Row(1L)))
+      testStream(spark.readStream.table(tbl)
+          .where("d = to_date(now()) AND d >= DATE'2020-01-01'").select("id"))(
+        ProcessAllAvailable(),
+        assertPushedFilters("GreaterThanOrEqual(d,2020-01-01)"))
+    }
+  }
+
+  test("push down only the filters that the scan builder takes") {
+    withSourceTable() {
+      // id + extra > 10 cannot be translated to a filter of the source.
+      testStream(spark.readStream.table(tbl).where("id + extra > 10 AND extra > 15")
+          .select("data"))(
+        ProcessAllAvailable(),
+        AssertOnQuery { query =>
+          val relation = query.logicalPlan.collectFirst {
+            case relation: StreamingDataSourceV2ScanRelation => relation
+          }.get
+          assert(relation.pushedFilters.map(_.references.map(_.name).toSet) === Seq(Set("extra")))
+          true
+        },
+        CheckAnswer(Row("b")))
+    }
+  }
+
+  test("push down the filters of a query that joins a source with an inline table") {
+    withSourceTable() {
+      val source = spark.readStream.table(tbl)
+      val inline = sql("SELECT * FROM VALUES (2, current_date()) AS s(k, d)")
+      val df = source.where("extra > 10").join(inline, source("id") === inline("k"))
+        .select("data", "d")
+      val reads = StreamingV2ScanPushDown.reads(spark, df.queryExecution.analyzed, None)
+      assert(reads.values.map(_.requiredColumns.map(_.name).toSet).toSeq ===
+        Seq(Set("id", "data", "extra")))
+      assert(reads.values.flatMap(_.filters).map(_.references.map(_.name).toSet).toSeq ===
+        Seq(Set("extra")))
+    }
+  }
+
   test("fail to plan a micro-batch that does not apply a filter that its scan got") {
     withSourceTable() {
       testStream(spark.readStream.table(tbl).where("extra > 10").select("data"))(
@@ -750,8 +827,7 @@ private class PruningContinuousTable(input: ContinuousMemoryStream[_])
         override def readSchema(): StructType = columns
 
         override def toContinuousStream(checkpointLocation: String): ContinuousStream = {
-          new PruningContinuousStream(
-            input, columns.fieldNames.map(schema().fieldIndex), columns.map(_.dataType).toArray)
+          new PruningContinuousStream(input, columns.fieldNames.map(schema().fieldIndex), columns)
         }
       }
     }
@@ -761,7 +837,7 @@ private class PruningContinuousTable(input: ContinuousMemoryStream[_])
 private class PruningContinuousStream(
     input: ContinuousStream,
     ordinals: Array[Int],
-    dataTypes: Array[DataType]) extends ContinuousStream {
+    columns: StructType) extends ContinuousStream {
 
   override def initialOffset(): Offset = input.initialOffset()
 
@@ -773,7 +849,7 @@ private class PruningContinuousStream(
     input.planInputPartitions(start)
 
   override def createContinuousReaderFactory(): ContinuousPartitionReaderFactory =
-    new PruningContinuousReaderFactory(input.createContinuousReaderFactory(), ordinals, dataTypes)
+    new PruningContinuousReaderFactory(input.createContinuousReaderFactory(), ordinals, columns)
 
   override def commit(end: Offset): Unit = input.commit(end)
 
@@ -783,18 +859,18 @@ private class PruningContinuousStream(
 private class PruningContinuousReaderFactory(
     input: ContinuousPartitionReaderFactory,
     ordinals: Array[Int],
-    dataTypes: Array[DataType]) extends ContinuousPartitionReaderFactory {
+    columns: StructType) extends ContinuousPartitionReaderFactory {
 
   override def createReader(partition: InputPartition): ContinuousPartitionReader[InternalRow] = {
     val reader = input.createReader(partition)
     new ContinuousPartitionReader[InternalRow] {
+      private val projection = ProjectingInternalRow(columns, ordinals.toSeq)
+
       override def next(): Boolean = reader.next()
 
       override def get(): InternalRow = {
-        val row = reader.get()
-        new GenericInternalRow(Array.tabulate[Any](ordinals.length) { i =>
-          row.get(ordinals(i), dataTypes(i))
-        })
+        projection.project(reader.get())
+        projection
       }
 
       override def getOffset: PartitionOffset = reader.getOffset
