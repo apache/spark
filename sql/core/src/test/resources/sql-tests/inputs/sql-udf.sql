@@ -748,6 +748,13 @@ SELECT foo3_2e1(
     ARRAY(STRUCT('2022-01-01 10:11:12', '1'), STRUCT('2022-01-01 10:11:15', '2')),
     '2022-01-01');
 
+-- Correlated scalar function whose body aggregates in a CTE
+CREATE FUNCTION foo3_2e2(x INT) RETURNS INT RETURN
+WITH t AS (SELECT c1, SUM(c2) AS s FROM t2 WHERE c1 = x GROUP BY c1)
+SELECT s FROM t;
+
+SELECT c1, foo3_2e2(c1) FROM t1;
+
 -- 3.3 Create and invoke function with different SQL configurations
 SET spark.sql.ansi.enabled=true;
 CREATE FUNCTION foo3_3a(x INT) RETURNS DOUBLE RETURN 1 / x;
@@ -997,6 +1004,7 @@ DROP FUNCTION IF EXISTS foo3_2c2;
 DROP FUNCTION IF EXISTS foo3_2d1;
 DROP FUNCTION IF EXISTS foo3_2d2;
 DROP FUNCTION IF EXISTS foo3_2e1;
+DROP FUNCTION IF EXISTS foo3_2e2;
 DROP FUNCTION IF EXISTS foo3_3a;
 DROP FUNCTION IF EXISTS foo3_3at;
 DROP FUNCTION IF EXISTS foo3_14a;

@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.{BooleanSimplification, DecorrelateInnerQuery}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.trees.TreePattern.CTE
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
@@ -38,6 +39,8 @@ object ValidateSubqueryExpression
       plan: LogicalPlan,
       expr: SubqueryExpression,
       skipOuterReferenceValidationInFilter: Boolean = false): Unit = {
+    lazy val referencedCtes = referencedCteDefinitions(expr.plan)
+
     def checkAggregateInScalarSubquery(
         conditions: Seq[Expression],
         query: LogicalPlan, agg: Aggregate): Unit = {
@@ -53,7 +56,7 @@ object ValidateSubqueryExpression
           messageParameters = Map.empty)
       }
 
-      val nonEquivalentGroupByExprs = nonEquivalentGroupbyCols(query, agg)
+      val nonEquivalentGroupByExprs = nonEquivalentGroupbyCols(query, agg, referencedCtes)
       val invalidCols = if (!SQLConf.get.getConf(
         SQLConf.LEGACY_SCALAR_SUBQUERY_ALLOW_GROUP_BY_NON_EQUALITY_CORRELATED_PREDICATE)) {
         nonEquivalentGroupByExprs
@@ -93,8 +96,12 @@ object ValidateSubqueryExpression
       }
     }
 
-    // Skip subquery aliases added by the Analyzer as well as hints.
-    // For projects, do the necessary mapping and skip to its child.
+    /**
+     * Skips subquery aliases added by the Analyzer as well as hints. For projects, does the
+     * necessary mapping and skips to its child. A [[CTERelationRef]] is followed into its
+     * definition's body, and a [[WithCTE]] is skipped only if all of its definitions are
+     * referenced, since inlining the CTEs keeps a [[WithCTE]] with an unreferenced definition.
+     */
     @scala.annotation.tailrec
     def cleanQueryInScalarSubquery(p: LogicalPlan): LogicalPlan = p match {
       case s: SubqueryAlias => cleanQueryInScalarSubquery(s.child)
@@ -102,6 +109,10 @@ object ValidateSubqueryExpression
       case s: SQLFunctionNode => cleanQueryInScalarSubquery(s.child)
       case p: Project => cleanQueryInScalarSubquery(p.child)
       case h: ResolvedHint => cleanQueryInScalarSubquery(h.child)
+      case withCte: WithCTE if withCte.cteDefs.forall(cte => referencedCtes.contains(cte.id)) =>
+        cleanQueryInScalarSubquery(withCte.plan)
+      case cteRef: CTERelationRef if referencedCtes.contains(cteRef.cteId) =>
+        cleanQueryInScalarSubquery(referencedCtes(cteRef.cteId).child)
       case child => child
     }
 
@@ -240,8 +251,36 @@ object ValidateSubqueryExpression
   }
 
   /**
+   * Returns the [[CTERelationDef]]s of `plan`'s [[WithCTE]]s that a [[CTERelationRef]] in `plan`
+   * references, keyed by CTE id. The single-pass resolver validates a subquery before its CTEs
+   * are inlined, so validation follows these references instead. References inside subquery
+   * expressions count only if `includeReferencesInSubqueries` is set.
+   */
+  private def referencedCteDefinitions(
+      plan: LogicalPlan,
+      includeReferencesInSubqueries: Boolean = true): Map[Long, CTERelationDef] = {
+    if (!plan.containsPattern(CTE)) {
+      Map.empty
+    } else {
+      val collectReferencedId: PartialFunction[LogicalPlan, Long] = {
+        case ref: CTERelationRef => ref.cteId
+      }
+      val referencedIds = if (includeReferencesInSubqueries) {
+        plan.collectWithSubqueries(collectReferencedId).toSet
+      } else {
+        plan.collect(collectReferencedId).toSet
+      }
+      plan.collect { case withCte: WithCTE => withCte.cteDefs }.flatten
+        .filter(cte => referencedIds.contains(cte.id))
+        .map(cte => cte.id -> cte)
+        .toMap
+    }
+  }
+
+  /**
    * Validates to make sure the outer references appearing inside the subquery
-   * are allowed.
+   * are allowed. A [[CTERelationRef]] to a CTE defined in `sub` is validated as that CTE's body
+   * in place of the reference, as if the CTE were inlined.
    */
   private def checkCorrelationsInSubquery(
       sub: LogicalPlan,
@@ -374,6 +413,13 @@ object ValidateSubqueryExpression
       }
     }
 
+    // Simplify the predicates before validating any unsupported correlation patterns in the plan.
+    val simplifiedSub = AnalysisHelper.allowInvokingTransformsInAnalyzer {
+      BooleanSimplification(sub)
+    }
+    val referencedCtes =
+      referencedCteDefinitions(simplifiedSub, includeReferencesInSubqueries = false)
+
     // Recursively check invalid outer references in the plan.
     def checkPlan(
         plan: LogicalPlan,
@@ -402,6 +448,9 @@ object ValidateSubqueryExpression
       // are on the path from the operator hosting the correlated expressions
       // up to the operator producing the correlated values.
       plan match {
+        case cteRef: CTERelationRef if referencedCtes.contains(cteRef.cteId) =>
+          checkPlan(referencedCtes(cteRef.cteId).child, aggregated, canContainOuter)
+
         // Category 1:
         // ResolvedHint, LeafNode, Repartition, and SubqueryAlias
         case p @ (_: ResolvedHint | _: LeafNode | _: Repartition | _: SubqueryAlias) =>
@@ -528,12 +577,16 @@ object ValidateSubqueryExpression
             aggregated,
             canContainOuter && SQLConf.get.getConf(SQLConf.DECORRELATE_OFFSET_ENABLED))
 
-        // We always inline CTE relations before analysis check, and only un-referenced CTE
-        // relations will be kept in the plan. Here we should simply skip them and check the
-        // children, as un-referenced CTE relations won't be executed anyway and doesn't need to
-        // be restricted by the current subquery correlation limitations.
-        case _: WithCTE | _: CTERelationDef =>
-          plan.children.foreach(p => checkPlan(p, aggregated, canContainOuter))
+        // Inlining CTE relations keeps only the un-referenced ones in the plan. Here we should
+        // simply skip them and check the children, as un-referenced CTE relations won't be
+        // executed anyway and doesn't need to be restricted by the current subquery correlation
+        // limitations. Referenced CTE relations are checked at their references instead.
+        case withCte: WithCTE =>
+          (withCte.cteDefs.filterNot(cte => referencedCtes.contains(cte.id)) :+ withCte.plan)
+            .foreach(child => checkPlan(child, aggregated, canContainOuter))
+
+        case cteDef: CTERelationDef =>
+          checkPlan(cteDef.child, aggregated, canContainOuter)
 
         // Category 4: Any other operators not in the above 3 categories
         // cannot be on a correlation path, that is they are allowed only
@@ -544,10 +597,7 @@ object ValidateSubqueryExpression
       }
     }
 
-    // Simplify the predicates before validating any unsupported correlation patterns in the plan.
-    AnalysisHelper.allowInvokingTransformsInAnalyzer {
-      checkPlan(BooleanSimplification(sub))
-    }
+    checkPlan(simplifiedSub)
   }
 
   private def exprsToString(exprs: Seq[Expression]): String = {
