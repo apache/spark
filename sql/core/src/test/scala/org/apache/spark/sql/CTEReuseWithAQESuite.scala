@@ -18,8 +18,10 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTEReuseRelation}
+import org.apache.spark.sql.execution.EmptyRelationExec
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
-import org.apache.spark.sql.execution.adaptive.CTEReuseQueryStageExec
+import org.apache.spark.sql.execution.adaptive.{CTEReuseQueryStageExec, ShuffleQueryStageExec}
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -208,6 +210,41 @@ class CTEReuseWithAQESuite
           val registry = aqe.context.cteAQERegistry
           assert(registry.nonEmpty,
             "Expected cteAQERegistry to contain inner AQE")
+        }
+      }
+    }
+  }
+
+  // A CTE stage whose inner AQE collapsed to an EmptyRelationExec must still execute as the
+  // number of partitions it advertises. With one shuffle partition the CTE seals as
+  // SinglePartition, which satisfies AllTuples, so each group-less count(*) reads its stage
+  // directly and no shuffle sits in between to absorb a 0-partition RDD.
+  test("count(*) over an empty forced CTE read directly returns 0 instead of no row") {
+    withCTEReuseEnabled {
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+        withTable("cte_empty_count_src") {
+          sql("CREATE TABLE cte_empty_count_src (id INT, batch_id INT) USING parquet")
+          val df = sqlWithForcedCTEReuse(
+            """WITH flagged AS (
+              |  SELECT batch_id, count(id) AS c FROM cte_empty_count_src GROUP BY batch_id
+              |)
+              |SELECT count(*) FROM flagged
+              |UNION ALL
+              |SELECT count(*) FROM flagged
+              |""".stripMargin)
+          checkAnswer(df, Seq(Row(0L), Row(0L)))
+          val plan = df.queryExecution.executedPlan
+          val stages = collectWithSubqueries(plan) { case s: CTEReuseQueryStageExec => s }
+          assert(stages.size == 2 &&
+              stages.forall(_.innerAQE.executedPlan.isInstanceOf[EmptyRelationExec]),
+            s"Expected both count(*) to read a collapsed-empty CTE stage.\n${plan.treeString}")
+          val shuffles = collectWithSubqueries(plan) {
+            case s: ShuffleQueryStageExec => s
+            case e: ShuffleExchangeLike => e
+          }
+          assert(shuffles.isEmpty,
+            s"Expected count(*) to read the CTE stages with no shuffle.\n${plan.treeString}")
+          assertInnerAQEShared(df)
         }
       }
     }

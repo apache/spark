@@ -340,7 +340,19 @@ case class CTEReuseQueryStageExec(
     }
   }
 
-  override protected def doExecute(): RDD[InternalRow] = innerAQE.executedPlan.execute()
+  /**
+   * Consumers are planned against this stage's fixed `outputPartitioning`, so the RDD handed out
+   * must have that many partitions. An inner AQE collapsed to an [[EmptyRelationExec]] executes as
+   * a 0-partition RDD, and a group-less aggregate fused directly on a single-partition stage would
+   * then run no task and drop its default row (count(*) over an empty CTE returning no row instead
+   * of 0), so emit the advertised number of empty partitions instead. `EmptyRelationExec` never
+   * reports `supportsColumnar`, so the columnar path cannot observe the collapsed plan.
+   */
+  override protected def doExecute(): RDD[InternalRow] = innerAQE.executedPlan match {
+    case _: EmptyRelationExec =>
+      sparkContext.parallelize(Seq.empty[InternalRow], outputPartitioning.numPartitions)
+    case p => p.execute()
+  }
 
   override protected def doExecuteColumnar(): RDD[ColumnarBatch] =
     innerAQE.executedPlan.executeColumnar()
