@@ -22,6 +22,7 @@ import java.sql.Timestamp
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.streaming.operators.stateful.StateStoreSaveExec
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinExec
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
@@ -50,6 +51,48 @@ class MultiStatefulOperatorsSuite
       testBody: OutputMode => Any): Unit = {
     Seq(OutputMode.Append(), OutputMode.Update()).foreach { outputMode =>
       test(s"$testName - $outputMode")(testBody(outputMode))
+    }
+  }
+
+  Seq(true, false).foreach { reuseEnabled =>
+    test("SPARK-60862: watermark propagates through reused exchange - " +
+        s"exchange reuse enabled: $reuseEnabled") {
+      withSQLConf(SQLConf.EXCHANGE_REUSE_ENABLED.key -> reuseEnabled.toString) {
+        val inputData = MemoryStream[Int]
+
+        val aggregated = inputData.toDF()
+          .withColumn("eventTime", timestamp_seconds($"value"))
+          .withWatermark("eventTime", "0 seconds")
+          .groupBy(window($"eventTime", "5 seconds").as("window"), ($"value" % 2).as("key"))
+          .agg(count("*").as("count"))
+          .select($"window.start".cast("long").as("windowStart"), $"key", $"count")
+
+        val stream = aggregated.select(lit("left").as("branch"), $"*")
+          .union(aggregated.select(lit("right").as("branch"), $"*"))
+          .as[(String, Long, Int, Long)]
+
+        testStream(stream)(
+          AddData(inputData, 0, 1, 2, 3, 4),
+          CheckNewAnswer(),
+          AddData(inputData, 10),
+          CheckNewAnswer(
+            ("left", 0L, 0, 3L), ("left", 0L, 1, 2L),
+            ("right", 0L, 0, 3L), ("right", 0L, 1, 2L)),
+          AssertOnQuery { query =>
+            val plan = query.lastExecution.executedPlan
+            val reusedExchanges = plan.collect { case r: ReusedExchangeExec => r }
+            assert(reusedExchanges.nonEmpty === reuseEnabled,
+              s"Expected ReusedExchangeExec only when reuse is enabled. Plan: $plan")
+
+            val evictionWatermarks = plan.collect {
+              case s: StateStoreSaveExec => s.eventTimeWatermarkForEviction
+            }
+            assert(evictionWatermarks === Seq(Some(10000L), Some(10000L)))
+            true
+          },
+          assertNumStateRows(Seq(1, 1))
+        )
+      }
     }
   }
 
