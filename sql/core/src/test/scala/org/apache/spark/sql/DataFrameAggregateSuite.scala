@@ -735,9 +735,11 @@ class DataFrameAggregateSuite extends SharedSparkSession
   test("collect_union function") {
     // Distinct union of array elements across rows.
     val df = Seq(Seq(1, 2), Seq(2, 3), Seq(1)).toDF("arr")
+    // The element order is unspecified, so sort before comparing. Do not compare as a Set:
+    // that would also hide duplicate elements, which collect_union must never return.
     checkDataset(
-      df.select(collect_union($"arr").as("u")).as[Set[Int]],
-      Set(1, 2, 3))
+      df.select(sort_array(collect_union($"arr")).as("u")).as[Seq[Int]],
+      Seq(1, 2, 3))
     checkAnswer(
       df.select(sort_array(collect_union($"arr"))),
       Seq(Row(Seq(1, 2, 3))))

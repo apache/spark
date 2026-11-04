@@ -404,6 +404,7 @@ private[aggregate] class CollationKeyedElement(val key: Array[Byte], val value: 
  *                    the result array. When false (RESPECT NULLS), a single null element is
  *                    kept.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage =
     "_FUNC_(expr) - Collects and returns the distinct union of the elements of array `expr`.",
@@ -413,7 +414,7 @@ private[aggregate] class CollationKeyedElement(val key: Array[Byte], val value: 
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_(col) FROM VALUES (array(1, 2)), (array(2, 3)), (array(1)) AS tab(col);
+      > SELECT sort_array(_FUNC_(col)) FROM VALUES (array(1, 2)), (array(2, 3)), (array(1)) AS tab(col);
        [1,2,3]
   """,
   note = """
@@ -422,6 +423,7 @@ private[aggregate] class CollationKeyedElement(val key: Array[Byte], val value: 
   """,
   group = "agg_funcs",
   since = "4.3.0")
+// scalastyle:on line.size.limit
 case class CollectUnion(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
