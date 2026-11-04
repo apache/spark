@@ -149,10 +149,12 @@ private class ArrowBackedScanBuilder(options: CaseInsensitiveStringMap)
     options.getInt("batchSize", ArrowBackedDataSourceV2.BATCH_SIZE)
   private val arrowIdColumn =
     options.getBoolean("arrowIdColumn", true)
+  private val emptyBatches =
+    options.getBoolean("emptyBatches", false)
 
   override def createReaderFactory(): PartitionReaderFactory = {
     new ArrowBackedReaderFactory(
-      columnar, reuseVectors, freshBatches, retainable, batchSize, arrowIdColumn)
+      columnar, reuseVectors, freshBatches, retainable, batchSize, arrowIdColumn, emptyBatches)
   }
 }
 
@@ -168,11 +170,14 @@ private case class ArrowPartition(start: Int, end: Int)
  *   This allows benchmarking the same data source with and without
  *   the columnar optimization.
  * @param freshBatches if `reuseVectors` is true, the number of batches that the reader returns
- *   with fresh vectors before it reuses its vectors for the rest.
+ *   with fresh vectors before the rest, whose `id` column is fresh and retainable while the
+ *   other columns are reused.
  * @param retainable whether the fresh vectors of a batch tell the consumer that it may hold them
  *   past the next batch, with [[ColumnVector.isRetainable]].
  * @param arrowIdColumn if false, the `id` column of the batches is not an
  *   [[ArrowColumnVector]], so that a batch is not entirely Arrow-backed.
+ * @param emptyBatches if true, the reader with fresh vectors also returns batches without rows,
+ *   first, in the middle and last.
  */
 private class ArrowBackedReaderFactory(
     columnar: Boolean,
@@ -180,7 +185,8 @@ private class ArrowBackedReaderFactory(
     freshBatches: Int,
     retainable: Boolean,
     batchSize: Int,
-    arrowIdColumn: Boolean)
+    arrowIdColumn: Boolean,
+    emptyBatches: Boolean)
   extends PartitionReaderFactory {
 
   override def supportColumnarReads(
@@ -211,11 +217,14 @@ private class ArrowBackedReaderFactory(
       val reuseStart = math.min(end, start + freshBatches * batchSize)
       new SwitchingArrowPartitionReader(
         new ArrowBackedPartitionReader(start, reuseStart, batchSize, arrowIdColumn, retainable),
-        new ReusingArrowPartitionReader(reuseStart, end, batchSize))
+        new MixedArrowPartitionReader(
+          new ArrowBackedPartitionReader(reuseStart, end, batchSize),
+          new ReusingArrowPartitionReader(reuseStart, end, batchSize)))
     } else if (reuseVectors) {
       new ReusingArrowPartitionReader(start, end, batchSize)
     } else {
-      new ArrowBackedPartitionReader(start, end, batchSize, arrowIdColumn, retainable)
+      new ArrowBackedPartitionReader(
+        start, end, batchSize, arrowIdColumn, retainable, emptyBatches)
     }
   }
 }
@@ -291,6 +300,36 @@ private class SwitchingArrowPartitionReader(
 }
 
 /**
+ * Reads the batches of `fresh` and `reused` in step, which cover the same rows, and returns the
+ * `id` column of the first with the other columns of the second: a batch whose first column is
+ * retainable while the others are not.
+ */
+private class MixedArrowPartitionReader(
+    fresh: PartitionReader[ColumnarBatch],
+    reused: PartitionReader[ColumnarBatch])
+  extends PartitionReader[ColumnarBatch] {
+
+  override def next(): Boolean = {
+    val hasNext = fresh.next()
+    assert(reused.next() == hasNext)
+    hasNext
+  }
+
+  override def get(): ColumnarBatch = {
+    val (freshBatch, reusedBatch) = (fresh.get(), reused.get())
+    assert(freshBatch.numRows() == reusedBatch.numRows())
+    new ColumnarBatch(
+      freshBatch.column(0) +: (1 until reusedBatch.numCols()).map(reusedBatch.column).toArray,
+      freshBatch.numRows())
+  }
+
+  override def close(): Unit = {
+    fresh.close()
+    reused.close()
+  }
+}
+
+/**
  * Partition reader that produces Arrow-backed [[ColumnarBatch]]es.
  *
  * Each batch contains up to `batchSize` rows with:
@@ -305,17 +344,25 @@ private class SwitchingArrowPartitionReader(
  * closed when the task completes. Their release is counted in [[ArrowBackedDataSourceV2]].
  *
  * If `arrowIdColumn` is false, the `id` column is a [[ColumnVector]] over its Arrow vector that is
- * not an [[ArrowColumnVector]].
+ * not an [[ArrowColumnVector]]. If `emptyBatches` is true, the reader also returns batches without
+ * rows, before the first batch, after half of the batches and after the last one.
  */
 private class ArrowBackedPartitionReader(
     start: Int,
     end: Int,
     batchSize: Int,
     arrowIdColumn: Boolean = true,
-    retainable: Boolean = true)
+    retainable: Boolean = true,
+    emptyBatches: Boolean = false)
   extends PartitionReader[ColumnarBatch] {
 
   private var current = start
+  // The positions before which the reader returns a batch without rows.
+  private val emptyBatchPositions = if (emptyBatches) {
+    scala.collection.mutable.Set(start, start + (end - start) / batchSize / 2 * batchSize, end)
+  } else {
+    scala.collection.mutable.Set.empty[Int]
+  }
   private var currentBatch: ColumnarBatch = _
 
   // Single allocator for the entire partition reader lifetime.
@@ -390,9 +437,13 @@ private class ArrowBackedPartitionReader(
   }
 
   override def next(): Boolean = {
-    if (current >= end) return false
-
-    val count = math.min(batchSize, end - current)
+    val count = if (emptyBatchPositions.remove(current)) {
+      0
+    } else if (current >= end) {
+      return false
+    } else {
+      math.min(batchSize, end - current)
+    }
 
     // Create Arrow vectors
     val idVector = createIntVector(allocator, "id", count)
