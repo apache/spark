@@ -107,8 +107,7 @@ private[sql] class SparkConnectClient(
     serverCapabilities.contains(SparkConnectClient.SERVER_SIDE_MAVEN_ARTIFACTS_CAPABILITY)
 
   private def serverSideMavenResolutionEnabled: Boolean =
-    conf
-      .getOption(ConnectCommon.CONNECT_SERVER_SIDE_MAVEN_RESOLUTION_ENABLED)
+    getArtifactConfigOption(ConnectCommon.CONNECT_SERVER_SIDE_MAVEN_RESOLUTION_ENABLED)
       .exists(_.trim.toBoolean)
 
   // Cached plan compression options.
@@ -608,21 +607,43 @@ private[sql] class SparkConnectClient(
    */
   def preferredArrowChunkSize: Option[Int] = configuration.preferredArrowChunkSize
 
-  private lazy val localIvySettingsPath: Option[String] =
-    new ConfigReader((key: String) => conf.getOption(key))
+  private def getArtifactConfigOption(key: String): Option[String] = {
+    try {
+      conf.getOption(key)
+    } catch {
+      case _: NoSuchElementException => None
+      case e: SparkThrowable
+          if e.getCondition == "SQL_CONF_NOT_FOUND"
+            || e.getCondition == "CONFIG_NOT_AVAILABLE" =>
+        None
+    }
+  }
+
+  private def localIvySettingsPath: Option[String] =
+    new ConfigReader((key: String) => getArtifactConfigOption(key))
       .get(MavenUtils.JAR_IVY_SETTING_PATH_KEY)
+      .filter(_.trim.nonEmpty)
       .flatMap { settingsPath =>
-        try {
-          val settingsUri = SparkFileUtils.resolveURI(settingsPath)
-          if (settingsUri.getScheme == "file") {
-            val path = Paths.get(settingsUri)
-            Option.when(Files.isRegularFile(path) && Files.isReadable(path))(settingsUri.toString)
-          } else {
-            None
+        val localPath =
+          try {
+            val settingsUri = SparkFileUtils.resolveURI(settingsPath)
+            if (settingsUri.getScheme == "file") {
+              val path = Paths.get(settingsUri)
+              Option.when(Files.isRegularFile(path) && Files.isReadable(path))(
+                settingsUri.toString)
+            } else {
+              None
+            }
+          } catch {
+            case NonFatal(_) => None
           }
-        } catch {
-          case NonFatal(_) => None
+        if (localPath.isEmpty) {
+          logWarning(
+            "Client-side Maven resolution cannot use the session's spark.jars.ivySettings; " +
+              "using default Ivy settings. Provide a readable local file or enable " +
+              "spark.connect.session.serverSideMavenResolution.enabled for URIs without repos.")
         }
+        localPath
       }
 
   private def ivySettingsPathForClientResolution(

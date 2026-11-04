@@ -131,9 +131,6 @@ class ArtifactManager(
   def addArtifact(uri: URI): Unit =
     addArtifact(uri, serverSideMavenArtifacts = false, ivySettingsPath = None)
 
-  private[client] def addArtifact(uri: URI, serverSideMavenArtifacts: Boolean): Unit =
-    addArtifact(uri, serverSideMavenArtifacts, ivySettingsPath = None)
-
   private[client] def addArtifact(
       uri: URI,
       serverSideMavenArtifacts: Boolean,
