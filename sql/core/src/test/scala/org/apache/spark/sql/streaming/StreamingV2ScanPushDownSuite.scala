@@ -18,7 +18,10 @@
 package org.apache.spark.sql.streaming
 
 import java.util
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
+
+import scala.jdk.CollectionConverters._
 
 import org.apache.logging.log4j.Level
 import org.scalatest.BeforeAndAfter
@@ -26,18 +29,20 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow}
-import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.catalyst.expressions.{Alias, And}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, Project}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryBaseTable, InMemoryTableCatalog, SupportsRead, Table, TableCapability}
-import org.apache.spark.sql.connector.read.{InputPartition, Scan, ScanBuilder, SupportsPushDownRequiredColumns}
+import org.apache.spark.sql.connector.read.{InputPartition, Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousPartitionReader, ContinuousPartitionReaderFactory, ContinuousStream, MicroBatchStream, Offset, PartitionOffset}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, MicroBatchScanExec, StreamingDataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamExecution, StreamingQueryWrapper, StreamingV2ScanPushDown}
 import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.{Filter => SourceFilter}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -347,9 +352,9 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
       }
       val warnings = logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
       assert(warnings.exists { message =>
-        message.contains("was asked to read the columns data") &&
+        message.contains("could not be built with the pushdowns (columns: data, filters: none)") &&
           message.contains("does not have the columns data") &&
-          message.contains("It reads all the columns instead")
+          message.contains("It reads all the columns with no filter instead")
       }, warnings)
     }
   }
@@ -640,7 +645,8 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
         testStream(df)(
           ProcessAllAvailable(),
           // The optimizer infers a filter on the id of the source from the one on the other
-          // source, but a micro-batch in which the other source has no data does not have it.
+          // source, which is not pushed down: a scan only gets the filters that the query applies
+          // to its own source.
           AssertOnQuery { query =>
             assert(pushedFilters(query).sortBy(_.mkString) === Seq(Nil, Seq("LessThan(oid,3)")))
             true
@@ -703,20 +709,156 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
-  test("push down only the filters that the scan builder takes") {
+  test("plan the micro-batches whose filters fold the pushed filters in part") {
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (id bigint, owner string, d date)")
+      sql(s"INSERT INTO $tbl VALUES (1, current_user(), current_date()), " +
+        "(6, current_user(), current_date()), (7, 'other', current_date())")
+      // A micro-batch folds current_user() into a literal, which it puts in place of the column
+      // in the pushed filter owner = '' OR id > 5, which it then folds into id > 5.
+      testStream(spark.readStream.table(tbl)
+          .where("owner = current_user() AND (owner = '' OR id > 5)").select("id"))(
+        ProcessAllAvailable(),
+        assertPushedFilters("Or(EqualTo(owner,),GreaterThan(id,5))"),
+        CheckAnswer(Row(6L)))
+      // So does a date that is not the date of the micro-batch, as on the day after the start.
+      // The micro-batch is planned whether the rows have its date or not.
+      testStream(spark.readStream.table(tbl)
+          .where("d = to_date(now()) AND (d < DATE'2000-01-01' OR id > 5)").select("id"))(
+        ProcessAllAvailable(),
+        assertPushedFilters("Or(LessThan(d,2000-01-01),GreaterThan(id,5))"))
+    }
+    // And an equality that a micro-batch infers through a stream-static join.
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (a bigint, b bigint)")
+      sql(s"INSERT INTO $tbl VALUES (2, 0), (0, 0), (5, 3)")
+      val source = spark.readStream.table(tbl).where("a > 1 OR b > 2")
+      val static = spark.range(0, 2).toDF("x").where("x = 0")
+      testStream(source.join(static, source("b") === static("x")).select("a"))(
+        ProcessAllAvailable(),
+        assertPushedFilters("Or(GreaterThan(a,1),GreaterThan(b,2))"),
+        CheckAnswer(Row(2L)))
+    }
+  }
+
+  test("read all the columns with no filter from a table without the capabilities") {
+    withSourceTable(s"TBLPROPERTIES ('${InMemoryBaseTable.STREAMING_PUSHDOWNS}' = '')") {
+      val df = spark.readStream.table(tbl).where("extra > 10").select("data")
+      testStream(df)(
+        ProcessAllAvailable(),
+        assertReadSchema("id", "data", "extra"),
+        assertScanOutputs(Seq("id", "data", "extra")),
+        assertPushedFilters(),
+        AssertOnQuery { query =>
+          // The plan of the query only applies the filter of the query.
+          val relations = query.logicalPlan.collect {
+            case relation: StreamingDataSourceV2ScanRelation => relation
+          }
+          relations.nonEmpty && relations.forall(_.pushedFilters.isEmpty)
+        },
+        CheckAnswer(Row("b")))
+    }
+  }
+
+  test("push down only what the capabilities of the table allow") {
+    val df = () => spark.readStream.table(tbl).where("extra > 10").select("data")
+    withSourceTable(s"TBLPROPERTIES ('${InMemoryBaseTable.STREAMING_PUSHDOWNS}' = 'columns')") {
+      testStream(df())(
+        ProcessAllAvailable(),
+        assertReadSchema("data", "extra"),
+        assertPushedFilters(),
+        CheckAnswer(Row("b")))
+    }
+    withSourceTable(s"TBLPROPERTIES ('${InMemoryBaseTable.STREAMING_PUSHDOWNS}' = 'filters')") {
+      testStream(df())(
+        ProcessAllAvailable(),
+        assertReadSchema("id", "data", "extra"),
+        assertPushedFilters("GreaterThan(extra,10)"),
+        CheckAnswer(Row("b")))
+    }
+  }
+
+  Seq("pushFilters", "pruneColumns", "build", "toMicroBatchStream").foreach { failingStep =>
+    test(s"read all the columns with no filter when the scan fails with the pushdowns: " +
+        failingStep) {
+      val input = MemoryStream[(Long, String, Int)]
+      val table = new FailingPushDownTable(input, failingStep)
+      val df = Dataset.ofRows(spark, StreamingRelationV2(None, "failing_push_down", table,
+        CaseInsensitiveStringMap.empty(), DataTypeUtils.toAttributes(table.schema()), None, None,
+        None)).toDF("id", "data", "extra").where("extra > 10").select("data")
+      val logs = new LogAppender("the fallback of a streaming scan")
+      withLogAppender(logs,
+          loggerNames = Seq(StreamingV2ScanPushDown.getClass.getName.stripSuffix("$")),
+          level = Some(Level.WARN)) {
+        testStream(df)(
+          StartStream(),
+          AddData(input, (1L, "a", 10), (2L, "b", 20)),
+          ProcessAllAvailable(),
+          // A new scan builder builds a scan of all the columns, with no filter, as without the
+          // pushdowns.
+          assertReadSchema("_1", "_2", "_3"),
+          AssertOnQuery(_ => table.streams.asScala.toSeq == Seq(Seq("_1", "_2", "_3") -> Nil)),
+          CheckAnswer(Row("b")))
+      }
+      val warnings = logs.loggingEvents.map(_.getMessage.getFormattedMessage)
+      assert(warnings.exists { message =>
+        message.contains("could not be built with the pushdowns (columns: _2, _3, filters: ") &&
+          message.contains(s"$failingStep failed with the pushdowns")
+      }, warnings)
+    }
+  }
+
+  test("keep the placeholders of the values that depend on when they are evaluated apart") {
     withSourceTable() {
-      // id + extra > 10 cannot be translated to a filter of the source.
+      val df = spark.readStream.table(tbl)
+        .select(current_user(), current_database(), current_catalog(), col("data"))
+      val placeholders = StreamingV2ScanPushDown.forStartup(df.queryExecution.analyzed)
+        .collectFirst { case project: Project => project.projectList.take(3) }.get
+        .map(_.asInstanceOf[Alias].child)
+      // The placeholders of different expressions differ, although they have the same type.
+      assert(placeholders.map(_.dataType).distinct.length === 1)
+      assert(placeholders.map(_.canonicalized).distinct.length === 3)
+    }
+  }
+
+  test("push down a filter on a cast that does not depend on when it is evaluated") {
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (id bigint, data string)")
+      val df = spark.readStream.table(tbl)
+        .where("CAST(data AS TIMESTAMP) < TIMESTAMP'2100-01-01 00:00:00'").select("id")
+      val reads = StreamingV2ScanPushDown.reads(spark, df.queryExecution.analyzed, None)
+      val filters = reads.values.flatMap(_.filters).toSeq
+      assert(filters.nonEmpty)
+      assert(filters.forall(_.references.map(_.name).toSet == Set("data")), filters)
+    }
+  }
+
+  test("apply all the filters that the scan builder got in the plan of each micro-batch") {
+    withSourceTable() {
+      // id + extra > 10 cannot be translated to a filter of the source, so the scan builder only
+      // takes extra > 15. Each micro-batch still applies both to the rows of the source, which
+      // the query applies anyway, so the scan cannot drop a row that the plan keeps, whatever it
+      // does with the filters.
       testStream(spark.readStream.table(tbl).where("id + extra > 10 AND extra > 15")
           .select("data"))(
         ProcessAllAvailable(),
+        assertPushedFilters("GreaterThan(extra,15)"),
         AssertOnQuery { query =>
-          val relation = query.logicalPlan.collectFirst {
-            case relation: StreamingDataSourceV2ScanRelation => relation
-          }.get
-          assert(relation.pushedFilters.map(_.references.map(_.name).toSet) === Seq(Set("extra")))
+          val filtered = query.logicalPlan.collect {
+            case Filter(condition, relation: StreamingDataSourceV2ScanRelation) =>
+              condition -> relation
+          }
+          assert(filtered.length === 1)
+          val (condition, relation) = filtered.head
+          assert(relation.pushedFilters.map(_.references.map(_.name).toSet) ===
+            Seq(Set("id", "extra"), Set("extra")))
+          assert(condition === relation.pushedFilters.reduce(And))
           true
         },
-        CheckAnswer(Row("b")))
+        CheckAnswer(Row("b")),
+        insert("(3, 'c', 5), (4, 'd', 30)"),
+        ProcessAllAvailable(),
+        CheckAnswer(Row("b"), Row("d")))
     }
   }
 
@@ -734,27 +876,34 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
-  test("fail to plan a micro-batch that does not apply a filter that its scan got") {
+  test("filter the rows of each read of a source with the filters that its scan builder got") {
     withSourceTable() {
-      testStream(spark.readStream.table(tbl).where("extra > 10").select("data"))(
+      val source = spark.readStream.table(tbl)
+      val df = source.where("extra > 10").select("data")
+        .union(source.where("extra > 10 AND id > 1").select("data"))
+      testStream(df)(
         ProcessAllAvailable(),
         AssertOnQuery { query =>
-          val relation = query.logicalPlan.collectFirst {
-            case relation: StreamingDataSourceV2ScanRelation => relation
-          }.get
-          assert(relation.pushedFilters.map(_.toString) === Seq(s"(${relation.output(2)} > 10)"))
-          assert(relation.simpleString(10).contains("PushedFilters: [(extra#"))
-          val offset = relation.stream.initialOffset()
-          val batch = relation.copy(startOffset = Some(offset), endOffset = Some(offset))
-          // Unlike the query, this plan does not filter the rows of the relation.
-          val e = intercept[SparkException] {
-            spark.sessionState.planner.plan(Project(relation.prunedOutput.get, batch)).next()
+          // Both reads of the relation are filtered with the filter that they both apply.
+          val filtered = query.logicalPlan.collect {
+            case Filter(condition, relation: StreamingDataSourceV2ScanRelation) =>
+              condition -> relation
           }
-          assert(e.getCondition === "INTERNAL_ERROR")
-          assert(e.getMessage.contains("does not apply the filters (testcat.t.extra > 10)"))
-          assert(e.getMessage.contains(SQLConf.STREAMING_V2_FILTER_PUSHDOWN_ENABLED.key))
+          assert(filtered.length === 2)
+          filtered.foreach { case (condition, relation) =>
+            assert(relation.pushedFilters.map(_.toString) ===
+              Seq(s"(${relation.output(2)} > 10)"))
+            assert(condition === relation.pushedFilters.head)
+          }
+          // So is each read of the relation in the optimized plan of a micro-batch.
+          val microBatchFilters = query.lastExecution.optimizedPlan.collect {
+            case Filter(condition, relation: StreamingDataSourceV2ScanRelation) =>
+              condition.exists(c => relation.pushedFilters.exists(c.semanticEquals))
+          }
+          assert(microBatchFilters === Seq(true, true))
           true
-        })
+        },
+        CheckAnswer(Row("b"), Row("b")))
     }
   }
 
@@ -813,7 +962,7 @@ private class PruningContinuousTable(input: ContinuousMemoryStream[_])
   override def schema(): StructType = input.fullSchema()
 
   override def capabilities(): util.Set[TableCapability] =
-    util.EnumSet.of(TableCapability.CONTINUOUS_READ)
+    util.EnumSet.of(TableCapability.CONTINUOUS_READ, TableCapability.STREAMING_COLUMN_PRUNING)
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     new ScanBuilder with SupportsPushDownRequiredColumns {
@@ -909,7 +1058,7 @@ private class NoPrunedReadSchemaTable(input: MemoryStream[_]) extends Table with
   override def schema(): StructType = input.fullSchema()
 
   override def capabilities(): util.Set[TableCapability] =
-    util.EnumSet.of(TableCapability.MICRO_BATCH_READ)
+    util.EnumSet.of(TableCapability.MICRO_BATCH_READ, TableCapability.STREAMING_COLUMN_PRUNING)
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     new ScanBuilder with SupportsPushDownRequiredColumns {
@@ -929,6 +1078,67 @@ private class NoPrunedReadSchemaTable(input: MemoryStream[_]) extends Table with
         override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
           streams.incrementAndGet()
           input
+        }
+      }
+    }
+  }
+}
+
+/**
+ * A table over a memory stream, whose scan builder fails in `failingStep` when it gets a pushdown
+ * of a streaming query: "pushFilters", "pruneColumns", "build" or "toMicroBatchStream". It records
+ * the read schema and the filters of each scan whose stream it creates.
+ */
+private class FailingPushDownTable(input: MemoryStream[_], failingStep: String)
+  extends Table with SupportsRead {
+  val streams = new ConcurrentLinkedQueue[(Seq[String], Seq[String])]()
+
+  override def name(): String = "failing_push_down"
+
+  override def schema(): StructType = input.fullSchema()
+
+  override def capabilities(): util.Set[TableCapability] = util.EnumSet.of(
+    TableCapability.MICRO_BATCH_READ,
+    TableCapability.STREAMING_COLUMN_PRUNING,
+    TableCapability.STREAMING_FILTER_PUSHDOWN)
+
+  private def failIf(step: String, pushedDown: Boolean): Unit = {
+    if (step == failingStep && pushedDown) {
+      throw new IllegalStateException(s"$step failed with the pushdowns")
+    }
+  }
+
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+    new ScanBuilder with SupportsPushDownRequiredColumns with SupportsPushDownFilters {
+      private var columns = schema()
+      private var filters = Array.empty[SourceFilter]
+
+      private def pushedDown: Boolean = columns.length < schema().length || filters.nonEmpty
+
+      override def pushFilters(filters: Array[SourceFilter]): Array[SourceFilter] = {
+        failIf("pushFilters", filters.nonEmpty)
+        this.filters = filters
+        filters
+      }
+
+      override def pushedFilters(): Array[SourceFilter] = filters
+
+      override def pruneColumns(requiredSchema: StructType): Unit = {
+        failIf("pruneColumns", requiredSchema.length < schema().length)
+        columns = requiredSchema
+      }
+
+      override def build(): Scan = {
+        failIf("build", pushedDown)
+        val (readColumns, readFilters, readPushedDown) = (columns, filters, pushedDown)
+        new Scan {
+          override def readSchema(): StructType = readColumns
+
+          override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
+            failIf("toMicroBatchStream", readPushedDown)
+            streams.add(readColumns.fieldNames.toSeq -> readFilters.map(_.toString).toSeq)
+            input
+          }
         }
       }
     }

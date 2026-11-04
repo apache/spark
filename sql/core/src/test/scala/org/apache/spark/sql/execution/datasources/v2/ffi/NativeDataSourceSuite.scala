@@ -992,6 +992,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     val ids = limited.collect().map(_.getLong(0))
     assert(ids.length == 3 && ids.forall(id => id >= 0 && id < 10))
     assert(scan(limited).readSchema() == StructType.fromDDL("id BIGINT"))
+    assert(scan(limited).getMetaData().get("SourceReadSchema") == Some(df.schema.simpleString))
     assert(!scan(limited).getMetaData().contains("PushedLimit"))
 
     def check(condition: String, parameters: Map[String, String])(f: => Unit): Unit = {

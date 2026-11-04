@@ -601,7 +601,8 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
     val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
     spark.dataSource.registerPython(dataSourceName, dataSource)
     // A Python data source pushes filters down with its batch reader, which this one does not
-    // have, so the filters of a streaming query are not pushed down to it.
+    // have. Its table does not have the capability STREAMING_FILTER_PUSHDOWN, so the filters of
+    // a streaming query are not pushed down to it.
     withSQLConf(SQLConf.PYTHON_FILTER_PUSHDOWN_ENABLED.key -> "true") {
       val df = spark.readStream.format(dataSourceName).load().where("id > 1")
       val stopSignal = new CountDownLatch(1)

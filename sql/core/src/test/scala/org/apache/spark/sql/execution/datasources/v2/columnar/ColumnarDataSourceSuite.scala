@@ -84,6 +84,20 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession {
       .load().select("name")
     checkAnswer(notPruned, (0L until 4L).map(id => Row(s"name$id")))
     assert(scan(notPruned).readSchema() == StructType.fromDDL("name STRING"))
+    // Its metadata also has the columns that the data source reads, unlike the one of a scan
+    // whose planner prunes the columns.
+    assert(scan(notPruned).getMetaData().get("SourceReadSchema") ==
+      Some("struct<id:bigint,name:string>"))
+    assert(!scan(pruned).getMetaData().contains("SourceReadSchema"))
+    // A reader of the scan returns the same batch until it moves to the next one.
+    val batch = scan(notPruned).toBatch
+    val reader = batch.createReaderFactory().createColumnarReader(batch.planInputPartitions().head)
+    try {
+      assert(reader.next() && (reader.get() eq reader.get()))
+      assert(reader.get().numCols() == 1)
+    } finally {
+      reader.close()
+    }
 
     val limited = spark.read.format(format).option("end", "10").load().limit(2)
     assert(limited.collect().length == 2)
@@ -193,6 +207,17 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(e.getMessage == "injected planning failure")
     assert(intercept[IllegalStateException](failingBatch.createReaderFactory()) eq e)
     assert(failing.plans.get() == 1)
+
+    // So is a failure to prune the columns, which the planner is asked for once.
+    val failingPruning = new TestRangeDataSource(options("failPruning" -> "true"))
+    val prunedBuilder =
+      new ColumnarScanBuilder(format, failingPruning.schema(), () => failingPruning)
+    prunedBuilder.pruneColumns(StructType.fromDDL("name STRING"))
+    val prunedScan = prunedBuilder.build()
+    val pruningError = intercept[IllegalStateException](prunedScan.toBatch)
+    assert(pruningError.getMessage == "injected pruning failure")
+    assert(intercept[IllegalStateException](prunedScan.toBatch) eq pruningError)
+    assert(failingPruning.prunings.get() == 1)
   }
 
   test("abort a failed write") {
@@ -238,6 +263,8 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession {
           .executedPlan.collect { case scan: MicroBatchScanExec => scan }
         assert(scans.map(_.output.map(_.name)) == Seq(Seq("name")))
         assert(scans.head.scan.readSchema() == StructType.fromDDL("name STRING"))
+        assert(scans.head.scan.asInstanceOf[ColumnarScan].getMetaData().get("SourceReadSchema") ==
+          Some("struct<id:bigint,name:string>"))
       } finally {
         query.stop()
       }
@@ -293,6 +320,8 @@ class TestRangeDataSource(options: CaseInsensitiveStringMap) extends ColumnarDat
   private val table = options.getOrDefault("table", "default")
   // The number of batch scans that the planners of this data source planned.
   val plans = new AtomicInteger()
+  // The number of times that the planners of this data source were asked to prune the columns.
+  val prunings = new AtomicInteger()
 
   override def schema(): StructType = StructType.fromDDL("id BIGINT, name STRING")
 
@@ -307,7 +336,7 @@ class TestRangeDataSource(options: CaseInsensitiveStringMap) extends ColumnarDat
 
   override def batchPlanner(schema: StructType): ColumnarBatchPlanner = {
     new TestRangePlanner(end, schema, options.getBoolean("failPlanning", false), plans,
-      options.getBoolean("pruneColumns", true))
+      options.getBoolean("pruneColumns", true), options.getBoolean("failPruning", false), prunings)
   }
 
   override def streamReader(schema: StructType): ColumnarStreamReader = {
@@ -336,7 +365,9 @@ class TestRangePlanner(
     schema: StructType,
     fail: Boolean,
     plans: AtomicInteger,
-    prunesColumns: Boolean)
+    prunesColumns: Boolean,
+    failPruning: Boolean,
+    prunings: AtomicInteger)
   extends ColumnarBatchPlanner {
   private var limit = Long.MaxValue
   private var readSchema = schema
@@ -347,6 +378,10 @@ class TestRangePlanner(
   }
 
   override def pruneColumns(requiredSchema: StructType): Boolean = {
+    prunings.incrementAndGet()
+    if (failPruning) {
+      throw new IllegalStateException("injected pruning failure")
+    }
     if (prunesColumns) {
       readSchema = requiredSchema
     }

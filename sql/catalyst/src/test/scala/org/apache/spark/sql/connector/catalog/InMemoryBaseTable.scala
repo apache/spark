@@ -217,6 +217,10 @@ abstract class InMemoryBaseTable(
   private val simulateReorderedColumnPruning = properties
     .getOrDefault(InMemoryBaseTable.SIMULATE_REORDERED_COLUMN_PRUNING, "false").toBoolean
 
+  private val streamingPushdowns = properties
+    .getOrDefault(InMemoryBaseTable.STREAMING_PUSHDOWNS, "columns,filters")
+    .split(",").map(_.trim).filter(_.nonEmpty).toSet
+
   private val acceptAnySchema = properties.getOrDefault("accept-any-schema", "false").toBoolean
   private val autoSchemaEvolution = properties.getOrDefault("auto-schema-evolution", "true")
     .toBoolean
@@ -545,6 +549,16 @@ abstract class InMemoryBaseTable(
   override def capabilities(): util.Set[TableCapability] =
     (baseCapabiilities ++
       (if (acceptAnySchema) Seq(TableCapability.ACCEPT_ANY_SCHEMA) else Seq.empty) ++
+      (if (streamingPushdowns.contains("columns")) {
+        Seq(TableCapability.STREAMING_COLUMN_PRUNING)
+      } else {
+        Seq.empty
+      }) ++
+      (if (streamingPushdowns.contains("filters")) {
+        Seq(TableCapability.STREAMING_FILTER_PUSHDOWN)
+      } else {
+        Seq.empty
+      }) ++
       (if (autoSchemaEvolution) Seq(TableCapability.AUTOMATIC_SCHEMA_EVOLUTION) else Seq.empty) ++
       (if (generateColumnValuesOnWrite) {
         Seq(TableCapability.GENERATE_COLUMN_VALUES_ON_WRITE)
@@ -1144,6 +1158,12 @@ object InMemoryBaseTable {
   // order than they were asked in, which `SupportsPushDownRequiredColumns` permits: when only some
   // of the data columns are required, `Scan.readSchema()` has them in the reverse order.
   val SIMULATE_REORDERED_COLUMN_PRUNING = "simulate-reordered-column-pruning"
+
+  // Test table property: the pushdowns of the scans of streaming reads that the table declares
+  // with its capabilities, as a comma-separated list of "columns" (STREAMING_COLUMN_PRUNING) and
+  // "filters" (STREAMING_FILTER_PUSHDOWN). The table declares both by default. Its streams return
+  // the columns of their read schemas, and its scan builders take the filters as for batch reads.
+  val STREAMING_PUSHDOWNS = "streaming-pushdowns"
 
   /**
    * Assigns fresh IDs to any top-level column or nested struct field that does not already

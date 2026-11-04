@@ -6263,10 +6263,11 @@ object SQLConf {
   val STREAMING_V2_COLUMN_PRUNING_ENABLED =
     buildConf("spark.sql.streaming.v2ColumnPruning.enabled")
       .internal()
-      .doc("When true, the scan of a Data Source V2 streaming source that supports column " +
-        "pruning only reads the top-level columns that the streaming query reads from it, which " +
-        "Spark takes from the plan of the query optimized when the query starts, as it does for " +
-        "batch scans. When false, it reads all the columns of the source.")
+      .doc("When true, the scan of a Data Source V2 streaming source whose table has the " +
+        "capability STREAMING_COLUMN_PRUNING only reads the top-level columns that the streaming " +
+        "query reads from it, which Spark takes from the plan of the query optimized when the " +
+        "query starts, as it does for batch scans. When false, it reads all the columns of the " +
+        "source.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
@@ -6275,11 +6276,12 @@ object SQLConf {
   val STREAMING_V2_FILTER_PUSHDOWN_ENABLED =
     buildConf("spark.sql.streaming.v2FilterPushdown.enabled")
       .internal()
-      .doc("When true, the scan of a Data Source V2 streaming source that supports filter " +
-        "pushdown gets the filters that the streaming query applies to all the rows that it " +
-        "reads from the source, which Spark takes from the plan of the query optimized when the " +
-        "query starts, as it does for batch scans. Spark still evaluates the filters after the " +
-        "scan. When false, the scan gets no filter.")
+      .doc("When true, the scan of a Data Source V2 streaming source whose table has the " +
+        "capability STREAMING_FILTER_PUSHDOWN gets the filters that the streaming query applies " +
+        "to all the rows that it reads from the source, which Spark takes from the plan of the " +
+        "query optimized when the query starts, as it does for batch scans. The query still " +
+        "applies the filters to the rows of the source and after the scan. When false, the scan " +
+        "gets no filter.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf

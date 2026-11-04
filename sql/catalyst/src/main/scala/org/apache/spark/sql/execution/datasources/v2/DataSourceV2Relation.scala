@@ -484,8 +484,10 @@ case class StreamingDataSourceV2Relation(
  * @param prunedOutput the columns of `output` that the scan reads, in the order of its read schema,
  *                     if it was built to read fewer of them. The scan node of the physical plan
  *                     outputs these, so the plan must not read the other columns of `output`.
- * @param pushedFilters the filters that the scan builder took, over `output`, which the filters of
- *                      the plan over the relation must still imply
+ * @param pushedFilters the filters that the scan builder got, over `output`, which the scan may
+ *                      apply in any form. The plan of the query applies them over the relation,
+ *                      as it applies them anyway, so that the scan cannot drop a row that the plan
+ *                      keeps.
  */
 case class StreamingDataSourceV2ScanRelation(
     relation: StreamingDataSourceV2Relation,
@@ -506,14 +508,8 @@ case class StreamingDataSourceV2ScanRelation(
     val pruned = prunedOutput.map { columns =>
       s", PrunedOutput: ${truncatedString(columns, "[", ", ", "]", maxFields)}"
     }
-    val filters = if (pushedFilters.nonEmpty) {
-      Some(s", PushedFilters: ${truncatedString(pushedFilters, "[", ", ", "]", maxFields)}")
-    } else {
-      None
-    }
     statePrefix + "StreamingDataSourceV2ScanRelation" +
-      s"${truncatedString(output, "[", ", ", "]", maxFields)} $name" +
-      pruned.getOrElse("") + filters.getOrElse("")
+      s"${truncatedString(output, "[", ", ", "]", maxFields)} $name" + pruned.getOrElse("")
   }
 
   override def isStreaming: Boolean = true
