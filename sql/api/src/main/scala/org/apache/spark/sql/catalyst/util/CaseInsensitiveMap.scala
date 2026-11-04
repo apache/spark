@@ -43,9 +43,13 @@ class CaseInsensitiveMap[T] private (val originalMap: Map[String, T])
 
   override def +[B1 >: T](kv: (String, B1)): CaseInsensitiveMap[B1] = this.updated(kv._1, kv._2)
 
-  def ++(xs: IterableOnce[(String, T)]): CaseInsensitiveMap[T] = {
-    xs.iterator.foldLeft(this) { (m, kv) => m.updated(kv._1, kv._2) }
+  override def concat[B1 >: T](xs: IterableOnce[(String, B1)]): CaseInsensitiveMap[B1] = {
+    xs.iterator.foldLeft(new CaseInsensitiveMap[B1](originalMap)) { (m, kv) =>
+      m.updated(kv._1, kv._2)
+    }
   }
+
+  override def ++[B1 >: T](xs: IterableOnce[(String, B1)]): CaseInsensitiveMap[B1] = concat(xs)
 
   override def iterator: Iterator[(String, T)] = keyLowerCasedMap.iterator
 
