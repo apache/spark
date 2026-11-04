@@ -326,7 +326,8 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
             "(SELECT * FROM empty_side_lookup WHERE 1 = 0) r ON l.id = r.id")).foreach { query =>
           SimpleExternalLookupDataSource.resetCounters()
           val joined = query()
-          assert(!runStream(joined).plan.exists(_.isInstanceOf[PreparedExternalLookupJoin]))
+          assert(
+            runStream(joined).plan.exists(_.isInstanceOf[PreparedExternalLookupJoin]) === false)
           checkStream(joined, expected)
           assert(SimpleExternalLookupDataSource.lookupCandidates.get() === Seq.empty)
           assert(SimpleExternalLookupDataSource.readerCount.get() === 0)
