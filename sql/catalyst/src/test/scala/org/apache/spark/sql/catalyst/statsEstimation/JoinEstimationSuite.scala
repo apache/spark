@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.{DateType, TimestampType, _}
-import org.apache.spark.unsafe.types.UTF8String
 
 
 class JoinEstimationSuite extends StatsEstimationTestBase {
@@ -565,8 +564,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
     // DSv2 connectors can report a histogram for any type; string keys have no bounds to
     // intersect, so the histogram path does not apply.
     val histogram = Histogram(height = 1, Array(HistogramBin(lo = 0, hi = 10, ndv = 10)))
-    val stat = ColumnStat(distinctCount = Some(10), min = Some(UTF8String.fromString("a")),
-      max = Some(UTF8String.fromString("j")), nullCount = Some(0), avgLen = Some(1),
+    val stat = ColumnStat(distinctCount = Some(10), nullCount = Some(0), avgLen = Some(1),
       maxLen = Some(1), histogram = Some(histogram))
     val left = AttributeReference("ls", StringType)()
     val right = AttributeReference("rs", StringType)()
