@@ -141,11 +141,9 @@ class Scd1LeafLevelReconciliationSuite extends QueryTest with SharedSparkSession
         .add("ID", IntegerType)
         .add("Selected", StringType)
         .add("Carried", StringType)
-        .add("profile", new StructType()
-          .add("City", StringType))
         .add(metadataColName, metadataSchema)
       val input = dataFrameOf(schema)(
-        Row(1, "value", null, null, Row(null, null), Row(null, 10L, null))
+        Row(1, "value", null, null, null, Row(null, 10L, null))
       )
 
       val result = extendMicrobatchRowsWithVersionMap(
@@ -159,7 +157,7 @@ class Scd1LeafLevelReconciliationSuite extends QueryTest with SharedSparkSession
         encodedPath("selected") -> 10L,
         encodedPath("carried") -> 10L,
         encodedPath("omitted") -> null,
-        encodedPath("profile", "city") -> 10L,
+        encodedPath("profile", "city") -> null,
         encodedPath("profile", "zip") -> null
       )
       checkAnswer(
