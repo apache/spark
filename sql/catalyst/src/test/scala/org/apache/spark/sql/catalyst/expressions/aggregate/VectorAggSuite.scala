@@ -48,8 +48,15 @@ class VectorAggSuite extends SparkFunSuite {
   }
 
   // Helper to create input row with float array
-  def createInputRow(values: Array[Float]): InternalRow = {
-    InternalRow(ArrayData.toArrayData(values))
+  def createInputRow(
+      values: Array[Float],
+      useGenericArray: Boolean = false): InternalRow = {
+    val array = if (useGenericArray) {
+      new GenericArrayData(values)
+    } else {
+      ArrayData.toArrayData(values)
+    }
+    InternalRow(array)
   }
 
   // Helper to create input row with null
@@ -86,7 +93,7 @@ class VectorAggSuite extends SparkFunSuite {
   // Asserts that two floats are approximately equal within a tolerance.
   def assertFloatEquals(actual: Float, expected: Float, tolerance: Float = 1e-5f): Unit = {
     assert(
-      JFloat.isNaN(expected) && JFloat.isNaN(actual) ||
+      actual == expected || JFloat.isNaN(expected) && JFloat.isNaN(actual) ||
         math.abs(actual - expected) <= tolerance,
       s"Expected $expected but got $actual (tolerance: $tolerance)"
     )
@@ -407,30 +414,36 @@ class VectorAggSuite extends SparkFunSuite {
 
   test("VectorAvg - opposite extreme values do not overflow") {
     val (agg, buffer, _) = createVectorAvg()
+    val expected = Array(0.0f, 0.0f).map(JFloat.floatToIntBits)
     agg.update(buffer, createInputRow(Array(Float.MaxValue, -Float.MaxValue)))
     agg.update(buffer, createInputRow(Array(-Float.MaxValue, Float.MaxValue)))
-    assertResult(Array(0.0f, 0.0f))(evalAsFloatArray(agg, buffer))
+    assertResult(expected)(evalAsFloatArray(agg, buffer).map(JFloat.floatToIntBits))
 
     val (_, buffer1, _) = createVectorAvg()
     val (_, buffer2, _) = createVectorAvg()
     agg.update(buffer1, createInputRow(Array(Float.MaxValue, -Float.MaxValue)))
     agg.update(buffer2, createInputRow(Array(-Float.MaxValue, Float.MaxValue)))
     agg.merge(buffer1, buffer2)
-    assertResult(Array(0.0f, 0.0f))(evalAsFloatArray(agg, buffer1))
+    assertResult(expected)(evalAsFloatArray(agg, buffer1).map(JFloat.floatToIntBits))
   }
 
   test("VectorAvg - finite overflow preserves cumulative weights") {
-    val (agg, buffer, _) = createVectorAvg()
-    val first = Array(Float.MaxValue, -Float.MaxValue)
-    agg.update(buffer, createInputRow(first))
-    agg.update(buffer, createInputRow(first))
-    // The third update overflows the delta. An unweighted midpoint would incorrectly return zero.
-    agg.update(buffer, createInputRow(first.map(-_)))
-    val expected = (Float.MaxValue.toDouble / 3).toFloat
-    assertFloatArrayEquals(
-      evalAsFloatArray(agg, buffer),
-      Array(expected, -expected),
-      tolerance = math.ulp(expected) * 2)
+    for {
+      dim <- Seq(2, 4, 5, 8)
+      useGenericArray <- Seq(false, true)
+    } {
+      val (agg, buffer, _) = createVectorAvg()
+      val first = Array.tabulate(dim)(i => if (i % 2 == 0) Float.MaxValue else -Float.MaxValue)
+      agg.update(buffer, createInputRow(first, useGenericArray))
+      agg.update(buffer, createInputRow(first, useGenericArray))
+      // The third update overflows the delta. An unweighted midpoint would incorrectly return zero.
+      agg.update(buffer, createInputRow(first.map(-_), useGenericArray))
+      val expected = (Float.MaxValue.toDouble / 3).toFloat
+      assertFloatArrayEquals(
+        evalAsFloatArray(agg, buffer),
+        Array.tabulate(dim)(i => if (i % 2 == 0) expected else -expected),
+        tolerance = math.ulp(expected) * 2)
+    }
   }
 
   test("VectorAvg - non-finite results do not depend on input order") {
@@ -438,10 +451,8 @@ class VectorAggSuite extends SparkFunSuite {
       Array(Float.PositiveInfinity, 1.0f, Float.NegativeInfinity, Float.PositiveInfinity)
     val second = Array(1.0f, Float.PositiveInfinity, 1.0f, Float.NegativeInfinity)
     def checkResult(result: Array[Float]): Unit = {
-      assertResult(Float.PositiveInfinity)(result(0))
-      assertResult(Float.PositiveInfinity)(result(1))
-      assertResult(Float.NegativeInfinity)(result(2))
-      assert(result(3).isNaN)
+      assertFloatArrayEquals(result,
+        Array(Float.PositiveInfinity, Float.PositiveInfinity, Float.NegativeInfinity, Float.NaN))
     }
 
     Seq(Seq(first, second), Seq(second, first)).foreach { vectors =>
@@ -471,19 +482,14 @@ class VectorAggSuite extends SparkFunSuite {
     Seq(false, true).foreach { useGenericArray =>
       val (agg, buffer, _) = createVectorAvg()
       Seq(first, second).foreach { values =>
-        val array = if (useGenericArray) {
-          new GenericArrayData(values)
-        } else {
-          ArrayData.toArrayData(values)
-        }
-        agg.update(buffer, InternalRow(array))
+        agg.update(buffer, createInputRow(values, useGenericArray))
       }
       assertResult(expected.map(JFloat.floatToIntBits))(
         evalAsFloatArray(agg, buffer).map(JFloat.floatToIntBits))
     }
   }
 
-  test("VectorAvg - finite updates preserve running-average rounding") {
+  test("VectorAvg - running-average rounding with and without infinity") {
     Seq(false, true).foreach { includeInfinity =>
       val (agg, buffer, _) = createVectorAvg()
       val first = Array.tabulate(17)(i => if (i % 2 == 0) 1.0f else -1.0f)
@@ -498,7 +504,7 @@ class VectorAggSuite extends SparkFunSuite {
       agg.update(buffer, createInputRow(first))
       agg.update(buffer, createInputRow(last))
       assertResult(expected)(
-        evalAsFloatArray(agg, buffer).map(JFloat.floatToRawIntBits))
+        evalAsFloatArray(agg, buffer).map(JFloat.floatToIntBits))
     }
   }
 
@@ -529,12 +535,7 @@ class VectorAggSuite extends SparkFunSuite {
       second(index) = value
       expected(index) = expectedValue
       val rows = Seq(first, second).map { values =>
-        val array = if (useGenericArray) {
-          new GenericArrayData(values)
-        } else {
-          ArrayData.toArrayData(values)
-        }
-        InternalRow(array)
+        createInputRow(values, useGenericArray)
       }
       rows.foreach(row => agg.update(buffer, row))
       assertResult(expected.map(JFloat.floatToIntBits))(

@@ -674,10 +674,11 @@ object VectorAvg {
         inputArray: ArrayData,
         dim: Int,
         newCount: Long): Unit = {
-      // Update running average: new_avg = old_avg + (new_value - old_avg) / new_count
+      // Finite deltas use: new_avg = old_avg + (new_value - old_avg) * invCount.
+      // The scalar path handles subtraction overflow and non-finite operands.
       val invCount = 1.0f / newCount
       if (dim < 4) {
-        updateRemainingElements(accBytes, inputArray, 0, dim, invCount)
+        updateElementsScalar(accBytes, inputArray, 0, dim, invCount)
       } else {
         updateElementsInBlocks(accBytes, inputArray, dim, invCount)
       }
@@ -702,7 +703,7 @@ object VectorAvg {
         // A finite sum guarantees finite deltas; sum overflow only triggers a scalar fallback.
         val deltaSum = (delta0 + delta1) + (delta2 + delta3)
         if (!JFloat.isFinite(deltaSum)) {
-          updateRemainingElements(accBytes, inputArray, i, dim, invCount)
+          updateElementsScalar(accBytes, inputArray, i, dim, invCount)
           return
         }
         Platform.putFloat(accBytes, off, oldAvg0 + delta0 * invCount)
@@ -712,11 +713,11 @@ object VectorAvg {
         i += 4
       }
       if (i < dim) {
-        updateRemainingElements(accBytes, inputArray, i, dim, invCount)
+        updateElementsScalar(accBytes, inputArray, i, dim, invCount)
       }
     }
 
-    private def updateRemainingElements(
+    private def updateElementsScalar(
         accBytes: Array[Byte],
         inputArray: ArrayData,
         start: Int,
@@ -736,7 +737,8 @@ object VectorAvg {
           // the delta is -Infinity, but scaling first gives the correct average of 0.0f.
           oldAvg + (value * invCount - oldAvg * invCount)
         } else {
-          // IEEE addition handles these cases in either operand order:
+          // At least one operand is non-finite. Addition gives the IEEE result
+          // regardless of which operand is the running average:
           // Inf + Inf -> Inf; -Inf + (-Inf) -> -Inf.
           // Inf + (-Inf) -> NaN.
           // NaN + any value -> NaN.
