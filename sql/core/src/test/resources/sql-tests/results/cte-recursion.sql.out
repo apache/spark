@@ -2143,6 +2143,31 @@ struct<lvl:int,arr:array<struct<a:bigint>>>
 
 
 -- !query
+WITH RECURSIVE t1(lvl, a, b, c) AS (
+    SELECT 0, ARRAY(id), ARRAY(id), ARRAY(id) FROM range(3)
+    UNION ALL
+    SELECT lvl + 1, IF(lvl = 0, ARRAY(CAST(NULL AS BIGINT)), a), a, ARRAY(b[0] + 1)
+    FROM t1 WHERE lvl < 3
+)
+SELECT * FROM t1
+-- !query schema
+struct<lvl:int,a:array<bigint>,b:array<bigint>,c:array<bigint>>
+-- !query output
+0	[0]	[0]	[0]
+0	[1]	[1]	[1]
+0	[2]	[2]	[2]
+1	[null]	[0]	[1]
+1	[null]	[1]	[2]
+1	[null]	[2]	[3]
+2	[null]	[null]	[1]
+2	[null]	[null]	[2]
+2	[null]	[null]	[3]
+3	[null]	[null]	[null]
+3	[null]	[null]	[null]
+3	[null]	[null]	[null]
+
+
+-- !query
 SET spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation=100
 -- !query schema
 struct<key:string,value:string>
@@ -2170,6 +2195,21 @@ struct<lvl:int,arr:array<bigint>>
 2	[null]
 2	[null]
 2	[null]
+
+
+-- !query
+WITH RECURSIVE t1(n, s) AS (
+    SELECT 1, NAMED_STRUCT('a', 1)
+    UNION ALL
+    SELECT n + 1, CAST(s AS STRUCT<a: INT NOT NULL>) FROM t1 WHERE n < 3
+)
+SELECT * FROM t1
+-- !query schema
+struct<n:int,s:struct<a:int>>
+-- !query output
+1	{"a":1}
+2	{"a":1}
+3	{"a":1}
 
 
 -- !query

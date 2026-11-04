@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType, StringType, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, IntegerType, MapType, StringType, StructType}
 
 class ResolveRecursiveCTESuite extends AnalysisTest {
   // Motivated by:
@@ -118,33 +118,54 @@ class ResolveRecursiveCTESuite extends AnalysisTest {
     comparePlans(analyzed, getAfterPlan())
   }
 
+  // Returns the analyzed self-reference and CTE output types of
+  // WITH RECURSIVE t AS (anchor UNION ALL recursion(t)) SELECT * FROM t.
+  private def selfReferenceAndOutputTypes(
+      anchor: LogicalPlan,
+      recursion: LogicalPlan => LogicalPlan): (Seq[DataType], Seq[DataType]) = {
+    val cteId = 0
+    val cteRef = CTERelationRef(cteId, _resolved = false, output = Seq(), isStreaming = false)
+    val plan = WithCTE(
+      cteRef.copy(recursive = false),
+      Seq(CTERelationDef(
+        anchor.union(recursion(cteRef.copy(recursive = true).subquery("t"))).subquery("t"),
+        cteId)))
+    val analyzed = getAnalyzer.execute(plan)
+    val refOutput = analyzed.collectFirst { case r: UnionLoopRef => r.output }.get
+    assert(refOutput.forall(_.nullable))
+    (refOutput.map(_.dataType), analyzed.output.map(_.dataType))
+  }
+
   // Motivated by:
   // WITH RECURSIVE t AS (SELECT array(1), map('k', 1), named_struct('f', 1) UNION ALL
   // SELECT * FROM t) SELECT * FROM t;
-  test("ResolveWithCTE marks nested types of UnionLoopRef output as nullable") {
-    val cteId = 0
+  test("ResolveWithCTE keeps the anchor's nested types if the recursion passes them through") {
     val anchor = Project(Seq(
       Alias(CreateArray(Seq(Literal(1))), "a")(),
       Alias(CreateMap(Seq(Literal("k"), Literal(1))), "m")(),
       Alias(CreateNamedStruct(Seq(Literal("f"), Literal(1))), "s")()), OneRowRelation())
-    assert(anchor.output.map(_.dataType) === Seq(
+    val anchorTypes = Seq(
       ArrayType(IntegerType, containsNull = false),
       MapType(StringType, IntegerType, valueContainsNull = false),
-      new StructType().add("f", IntegerType, nullable = false)))
+      new StructType().add("f", IntegerType, nullable = false))
+    assert(anchor.output.map(_.dataType) === anchorTypes)
 
-    val cteRef = CTERelationRef(cteId, _resolved = false, output = Seq(), isStreaming = false)
-    val recursion = cteRef.copy(recursive = true).subquery("t")
-    val plan = WithCTE(
-      cteRef.copy(recursive = false),
-      Seq(CTERelationDef(anchor.union(recursion).subquery("t"), cteId)))
+    assert(selfReferenceAndOutputTypes(anchor, identity) === (anchorTypes, anchorTypes))
+  }
 
-    val refOutput = getAnalyzer.execute(plan).collectFirst {
-      case r: UnionLoopRef => r.output
-    }.get
-    assert(refOutput.forall(_.nullable))
-    assert(refOutput.map(_.dataType) === Seq(
-      ArrayType(IntegerType, containsNull = true),
-      MapType(StringType, IntegerType, valueContainsNull = true),
-      new StructType().add("f", IntegerType, nullable = true)))
+  // Motivated by:
+  // WITH RECURSIVE t AS (SELECT array(1) AS a, array(1) AS b UNION ALL
+  // SELECT array(CAST(NULL AS INT)), a FROM t) SELECT * FROM t;
+  test("ResolveWithCTE widens nested types of UnionLoopRef output the recursion writes NULL to") {
+    val anchor = Project(Seq(
+      Alias(CreateArray(Seq(Literal(1))), "a")(),
+      Alias(CreateArray(Seq(Literal(1))), "b")()), OneRowRelation())
+    // `b` only becomes nullable after `a` is widened.
+    val recursion = (t: LogicalPlan) =>
+      t.select(CreateArray(Seq(Literal(null, IntegerType))).as("a"), $"a".as("b"))
+
+    val nullable = ArrayType(IntegerType, containsNull = true)
+    assert(selfReferenceAndOutputTypes(anchor, recursion) ===
+      (Seq(nullable, nullable), Seq(nullable, nullable)))
   }
 }

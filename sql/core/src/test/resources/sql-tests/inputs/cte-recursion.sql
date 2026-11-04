@@ -781,6 +781,15 @@ WITH RECURSIVE t1(lvl, arr) AS (
 )
 SELECT * FROM t1;
 
+-- `b` copies `a`, so it can only hold NULLs once `a` does
+WITH RECURSIVE t1(lvl, a, b, c) AS (
+    SELECT 0, ARRAY(id), ARRAY(id), ARRAY(id) FROM range(3)
+    UNION ALL
+    SELECT lvl + 1, IF(lvl = 0, ARRAY(CAST(NULL AS BIGINT)), a), a, ARRAY(b[0] + 1)
+    FROM t1 WHERE lvl < 3
+)
+SELECT * FROM t1;
+
 SET spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation=100;
 
 -- Same with small steps converted to local relations, kept in codegen by a join
@@ -792,7 +801,15 @@ WITH RECURSIVE t1(lvl, arr) AS (
 )
 SELECT * FROM t1;
 
--- Nested nullability differs from the anchor while another column needs a cast
+-- A struct passed through the recursion keeps the anchor's nested types
+WITH RECURSIVE t1(n, s) AS (
+    SELECT 1, NAMED_STRUCT('a', 1)
+    UNION ALL
+    SELECT n + 1, CAST(s AS STRUCT<a: INT NOT NULL>) FROM t1 WHERE n < 3
+)
+SELECT * FROM t1;
+
+-- An array passed through the recursion while another column needs a cast
 WITH RECURSIVE t1(s, arr) AS (
     SELECT 'a', ARRAY(1)
     UNION ALL
@@ -807,6 +824,7 @@ WITH RECURSIVE t1(n, m, arr) AS (
 )
 SELECT * FROM t1;
 
+-- The recursion writes a NULL element while another column needs a cast
 WITH RECURSIVE t1(n, m, arr) AS (
     SELECT 1, CAST(1 AS BIGINT), ARRAY(1)
     UNION ALL
@@ -814,6 +832,7 @@ WITH RECURSIVE t1(n, m, arr) AS (
 )
 SELECT * FROM t1;
 
+-- The recursion writes a NULL element into a column that needs a cast
 WITH RECURSIVE t1(n, arr) AS (
     SELECT 1, ARRAY(CAST(1 AS BIGINT))
     UNION ALL
