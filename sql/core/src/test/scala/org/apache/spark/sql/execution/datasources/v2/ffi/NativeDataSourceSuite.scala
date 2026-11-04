@@ -1247,12 +1247,13 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
 
   nativeTest("operations that a data source does not support") {
     val session = newSession(defaultPackage, createPackage(readOnlyLibrary, dataSources("ro_")))
-    // The library does not push anything down: it reads all the columns, and Spark applies the
-    // limit.
+    // The library does not push anything down: it reads all the columns, which the scan drops
+    // but the one that the query reads, and Spark applies the limit.
     val df = session.read.format("ro_native_range").option("end", "10").load()
     val limited = df.select("id").limit(3)
-    assert(limited.collect().length == 3)
-    assert(scan(limited).readSchema() == df.schema)
+    val ids = limited.collect().map(_.getLong(0))
+    assert(ids.length == 3 && ids.forall(id => id >= 0 && id < 10))
+    assert(scan(limited).readSchema() == StructType.fromDDL("id BIGINT"))
     assert(!scan(limited).getMetaData().contains("PushedLimit"))
 
     def check(condition: String, parameters: Map[String, String])(f: => Unit): Unit = {
