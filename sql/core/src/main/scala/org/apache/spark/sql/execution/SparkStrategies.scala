@@ -1228,16 +1228,17 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         // children. QueryPlanner.collectPlaceholders would never find a PlanLater
         // inside the subplan, leaving it unresolved.
         //
-        // sharedSubplan is a RepartitionByExpression wrapping the CTE body. Planning it produces a
-        // plain ShuffleExchangeExec; we re-stamp its origin as LOCAL_SHUFFLE_FOR_CTE(cteId) so the
-        // shuffle is recognized as a reuse boundary (`isCreatedForSubplanReuse`) by
-        // EnsureRequirements, the AQE-off unwrap path, and VerifyCTEReuse. We use this shuffle
-        // directly instead of adding a separate exchange -- the Repartition serves as the logical
-        // plan for the inner AQE, enabling correct re-optimization (broadcast stages are findable
-        // as descendants, and re-planning preserves the root exchange).
+        // sharedSubplan is a plan-reuse RepartitionByExpression wrapping the CTE body; the
+        // RepartitionByExpression strategy already stamps it as a ShuffleExchangeExec with a
+        // LOCAL_SHUFFLE_FOR_CTE origin (a reuse boundary via `isCreatedForSubplanReuse` for
+        // EnsureRequirements, the AQE-off unwrap path, and VerifyCTEReuse). Deriving the origin
+        // from the logical node keeps it across AQE re-planning. We use this shuffle directly
+        // instead of adding a separate exchange -- the Repartition serves as the logical plan for
+        // the inner AQE, enabling correct re-optimization (broadcast stages are findable as
+        // descendants, and re-planning preserves the root exchange).
         val physicalSubplan = SparkStrategies.this.plan(r.sharedSubplan).next()
         val shuffle = physicalSubplan match {
-          case s: ShuffleExchangeExec => s.copy(shuffleOrigin = LOCAL_SHUFFLE_FOR_CTE(r.cteId))
+          case s: ShuffleExchangeExec => s
           case other =>
             throw SparkException.internalError(
               s"Planning CTEReuseRelation(cteId=${r.cteId}) sharedSubplan was expected to " +
@@ -1316,7 +1317,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case r: logical.Range =>
         execution.RangeExec(r) :: Nil
       case r: logical.RepartitionByExpression =>
-        val shuffleOrigin = if (r.partitionExpressions.isEmpty && r.optNumPartitions.isEmpty) {
+        val shuffleOrigin = if (r.isForPlanReuse) {
+          // A plan-reuse RepartitionByExpression backs guaranteed CTE reuse; deriving the origin
+          // from the logical node here (rather than stamping it post-planning) keeps it across
+          // AQE re-planning, so the shared root shuffle stays a protected reuse boundary.
+          LOCAL_SHUFFLE_FOR_CTE(r.repartitionId)
+        } else if (r.partitionExpressions.isEmpty && r.optNumPartitions.isEmpty) {
           REBALANCE_PARTITIONS_BY_NONE
         } else if (r.optNumPartitions.isEmpty) {
           REPARTITION_BY_COL

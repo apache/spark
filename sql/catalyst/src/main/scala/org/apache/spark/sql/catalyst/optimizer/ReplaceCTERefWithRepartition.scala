@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Replaces CTE references that have not been previously inlined with [[Repartition]] operations
@@ -54,12 +55,14 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
     case WithCTE(child, cteDefs) =>
       cteDefs.foreach { cteDef =>
         val inlined = replaceWithRepartition(cteDef.child, cteMap)
-        // `forcePartitioning` is only honored together with `forceSkipInline`. A pin requests a
-        // sealed, guaranteed-reuse materialization, which only applies to definitions `InlineCTE`
-        // keeps (i.e. `forceSkipInline`). A pin on a non-`forceSkipInline` definition is ignored
-        // here, because such a definition may be inlined by `InlineCTE` before this rule runs, so
-        // honoring the pin would be inconsistent with the inlining decision.
-        val withRepartition = (cteDef.forceSkipInline, cteDef.forcePartitioning) match {
+        // The sealing-oriented lowering (plan-reuse id, pinned partitioning) only runs when
+        // guaranteed reuse is enabled; otherwise this rule must not change the plan shape (e.g.
+        // add an extra shuffle), so turning the flag off fully rolls the feature back. Sealing also
+        // requires `forceSkipInline`: a pin on a non-forceSkipInline definition is ignored because
+        // such a definition may be inlined by `InlineCTE` before this rule runs.
+        val sealForReuse = cteDef.forceSkipInline &&
+          SQLConf.get.getConf(SQLConf.REPLACE_CTE_REF_WITH_CTE_REUSE)
+        val withRepartition = (sealForReuse, cteDef.forcePartitioning) match {
           case (true, Some(h: HashPartitioning)) =>
             // A pinned partitioning materializes the CTE as a plan-reuse RepartitionByExpression
             // on the pinned expressions, so guaranteed CTE reuse can pick it up. It takes
@@ -87,9 +90,10 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
                   .addRepartitionId(reassign = true)
             }
           case _ =>
-            // Non-forceSkipInline CTEs keep the original OSS behavior: a plain repartition that
-            // is not sealed for guaranteed reuse (no repartitionId). Any forcePartitioning pin is
-            // ignored in this branch.
+            // Not sealing (a non-forceSkipInline CTE, or the reuse flag is off): keep the original
+            // OSS behavior -- a plain repartition that is not sealed for reuse (no repartitionId),
+            // and no extra shuffle when the body already repartitions or hosts a merged subquery.
+            // Any forcePartitioning pin is ignored in this branch.
             if (canSkipExtraRepartition(inlined) || cteDef.underSubquery) {
               inlined
             } else {

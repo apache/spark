@@ -19,8 +19,9 @@ package org.apache.spark.sql.execution.exchange
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKeys.{QUERY_ID, QUERY_PLAN}
+import org.apache.spark.internal.LogKeys.{CTE_ID, QUERY_PLAN}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE_REUSE_EXCHANGE, EXCHANGE}
 import org.apache.spark.sql.execution.SparkPlan
 
 /**
@@ -49,7 +50,9 @@ case object UnwrapCTEReuseExchange extends Rule[SparkPlan] with Logging {
     // separately by PlanSubqueries, which calls QueryExecution.prepareExecutedPlan ->
     // preparations(subquery = true), so this rule is applied recursively to each subquery's plan
     // on its own. We only need to handle CTEReuseExchange nodes in the current plan tree here.
-    plan.transformUp {
+    // Prune on CTE_REUSE_EXCHANGE so plans without a forced CTE (incl. every non-AQE query and
+    // streaming micro-batch) are not re-traversed.
+    plan.transformUpWithPruning(_.containsPattern(CTE_REUSE_EXCHANGE)) {
       case cte: CTEReuseExchange =>
         // Recursively unwrap nested CTEReuseExchange nodes inside the subplan
         // (e.g., cte_inner inside cte_outer's body).
@@ -59,14 +62,14 @@ case object UnwrapCTEReuseExchange extends Rule[SparkPlan] with Logging {
             // The cteId is already carried by the LOCAL_SHUFFLE_FOR_CTE origin (SparkStrategies set
             // it from the cteId in CTEReuseRelation); nothing extra to attach here.
             logDebug(log"CTE reuse (AQE off): unwrapped CTEReuseExchange for " +
-              log"cteId=${MDC(QUERY_ID, cte.cteId)}")
+              log"cteId=${MDC(CTE_ID, cte.cteId)}")
           case other =>
             // The CTEReuseExchange subplan should always be a LOCAL_SHUFFLE_FOR_CTE shuffle
             // (SparkStrategies builds it that way). If it isn't, guaranteed reuse cannot be
             // tracked -- log the error (it is still unwrapped so the query can run, just without
             // guaranteed reuse for this cteId).
             logError(log"CTE reuse (AQE off): expected a LOCAL_SHUFFLE_FOR_CTE shuffle under " +
-              log"CTEReuseExchange(cteId=${MDC(QUERY_ID, cte.cteId)}), but got " +
+              log"CTEReuseExchange(cteId=${MDC(CTE_ID, cte.cteId)}), but got " +
               log"${MDC(QUERY_PLAN, other.nodeName)}. Plan:\n${MDC(QUERY_PLAN, other.treeString)}")
         }
         unwrapped
@@ -99,6 +102,11 @@ case class VerifyCTEReuse(
     failOnReuseFailure: Boolean) extends Rule[SparkPlan] with Logging {
 
   override def apply(plan: SparkPlan): SparkPlan = {
+    // A LOCAL_SHUFFLE_FOR_CTE shuffle is a ShuffleExchangeExec; if the plan has no exchange at all
+    // (no forced CTE could have survived), skip the traversal entirely.
+    if (!plan.containsPattern(EXCHANGE)) {
+      return plan
+    }
     // Count live (non-reused) shuffles per cteId, keyed by the cteId carried in the
     // LOCAL_SHUFFLE_FOR_CTE origin. ReusedExchangeExec is a leaf whose canonical form is its child,
     // and it does not itself expose a LOCAL_SHUFFLE_FOR_CTE origin, so only un-deduplicated
@@ -127,9 +135,9 @@ case class VerifyCTEReuse(
       } else {
         notReused.foreach { case (cteId, _) =>
           logWarning(log"Guaranteed CTE shuffle reuse (AQE off) not applied for " +
-            log"cteId=${MDC(QUERY_ID, cteId)}.")
+            log"cteId=${MDC(CTE_ID, cteId)}.")
         }
-        logWarning(log"CTE reuse (AQE off) not applied: ${MDC(QUERY_PLAN, summary)}. " +
+        logWarning(log"CTE reuse (AQE off) not applied: ${MDC(CTE_ID, summary)}. " +
           log"Plan:\n${MDC(QUERY_PLAN, plan.treeString)}")
       }
     }

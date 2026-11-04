@@ -347,7 +347,7 @@ case class AdaptiveSparkPlanExec(
    * materialization: all references to a CTE wrap this same inner AQE, whose materialization runs
    * exactly once via the lazy `materializeFuture`.
    */
-  def materialize(): Future[Any] = materializeFuture
+  private[adaptive] def materialize(): Future[Any] = materializeFuture
 
   /**
    * Runs [[withFinalPlanUpdate]] (skipping the result stage) on the CTE materialization pool.
@@ -380,7 +380,7 @@ case class AdaptiveSparkPlanExec(
     scalaPromise.future
   }
 
-  def withFinalPlanUpdate[T](
+  private[adaptive] def withFinalPlanUpdate[T](
       fun: SparkPlan => T,
       skipResultStage: Boolean = false): T = lock.synchronized {
     _isFinalPlan = false

@@ -19,7 +19,6 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTEReuseRelation}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
-import org.apache.spark.sql.execution.adaptive.AQEShuffleReadExec
 import org.apache.spark.sql.execution.adaptive.CTEReuseQueryStageExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -134,6 +133,26 @@ class CTEReuseWithAQESuite
         checkAnswer(df, Seq.empty)
         // Any surviving CTE stages (empty-relation propagation may prune some) share one inner AQE.
         assertInnerAQEShared(df, allowEmpty = true)
+      }
+    }
+  }
+
+  test("forced CTE keeps its root reuse shuffle when the body satisfies the repartitioning") {
+    withCTEReuseEnabled {
+      withTable("cte_repart_src") {
+        sql("CREATE TABLE cte_repart_src (k INT, v INT) USING parquet")
+        sql("INSERT INTO cte_repart_src VALUES (1, 10), (1, 20), (2, 30), (3, 40)")
+        // The body's root REPARTITION(k) is already satisfied by the GROUP BY k below it, so on an
+        // AQE replan EnsureRequirements would elide it unless its LOCAL_SHUFFLE_FOR_CTE origin
+        // survives re-planning -- otherwise the inner AQE has no root shuffle stage and crashes.
+        val df = sqlWithForcedCTEReuse(
+          """WITH c AS (
+            |  SELECT /*+ REPARTITION(k) */ k, count(*) AS cnt FROM cte_repart_src GROUP BY k
+            |)
+            |SELECT c1.k, c1.cnt FROM c c1 JOIN c c2 ON c1.k = c2.k
+            |""".stripMargin)
+        checkAnswer(df, Seq(Row(1, 2), Row(2, 1), Row(3, 1)))
+        assertInnerAQEShared(df)
       }
     }
   }
@@ -439,46 +458,19 @@ class CTEReuseWithAQESuite
   // -----------------------------------------------------------------
 
   // -----------------------------------------------------------------
-  // LocalPartition CTE feeding a global aggregate
+  // Global aggregates over a forced CTE
   // -----------------------------------------------------------------
 
-  test("global aggregate directly over a LocalPartition CTE") {
-    // `LocalPartition.numPartitions` is 1 and it inherits the default `satisfies0`,
-    // under which `AllTuples` is satisfied when `numPartitions == 1`. So a
-    // LocalPartition CTE claims to satisfy the `AllTuples` requirement of a global
-    // aggregate, and the aggregate is planned directly on the CTE stage with no
-    // shuffle in between.
-    //
-    // That claim is truthful for the guaranteed-reuse path, because no local read is
-    // ever injected over the CTE shuffle: `CTEReuseQueryStageExec` is a
-    // `LeafExecNode`, so the outer AQE's `OptimizeShuffleWithLocalRead` does not
-    // descend into it, and the inner AQE is driven by `materialize()` with
-    // `skipResultStage = true`, so it never reaches `newResultQueryStage` -- the only
-    // caller of `optimizeQueryStage(isFinalStage = true)` on the root. The
-    // `RepartitionForCTEStage` hook in `OptimizeShuffleWithLocalRead` therefore never
-    // fires and the CTE shuffle keeps its single partition.
-    //
-    // TODO(SC-TBD): AQEShuffleRead local is not applied to the guaranteed shuffle
-    // reuse infra. A LocalPartition shuffle without a local read is equivalent to a
-    // single-partition shuffle, which is bad for performance. Once a local read IS
-    // injected over the CTE shuffle, the read produces one partition per mapper while
-    // `CTEReuseQueryStageExec.outputPartitioning` still reports
-    // `innerAQE.inputPlan.outputPartitioning` (the pre-optimization plan, i.e.
-    // LocalPartition) -- the `AllTuples` claim then becomes false and this global
-    // aggregate would emit one row per partition. Whoever enables the local read must
-    // stop `LocalPartition` from claiming `AllTuples` (and re-check this test).
+  test("global aggregates over a forced CTE share one inner AQE") {
     withCTEReuseEnabled {
       withTable("all_tuples_src") {
         sql("CREATE TABLE all_tuples_src (id INT, v INT) USING parquet")
-        // Separate inserts -> several files -> several mappers, so that a local read
-        // would produce more than one partition if one were injected.
         (1 to 8).foreach { i =>
           sql(s"INSERT INTO all_tuples_src VALUES ($i, ${i * 10})")
         }
-        // rand() keeps the CTE from being inlined; two refs trigger reuse. Each global
-        // aggregate (no GROUP BY -> AllTuples) sits DIRECTLY on a CTE ref: a join in
-        // between would mask the behavior, since the join does not accept
-        // LocalPartition either and would insert its own ENSURE_REQUIREMENTS shuffles.
+        // Two global aggregates (no GROUP BY) each reference the same forced CTE. rand() keeps the
+        // CTE from inlining; both references must resolve to one shared inner AQE and return
+        // consistent results.
         val df = sqlWithForcedCTEReuse(
           """WITH cte AS (
             |  SELECT id, v, rand() as r FROM all_tuples_src
@@ -488,17 +480,7 @@ class CTEReuseWithAQESuite
             |  (SELECT sum(v) FROM cte) as total
             |""".stripMargin)
         checkAnswer(df, Row(8, 360))
-
-        // The single-partition claim must be truthful: no local read over the CTE
-        // shuffle, and the shuffle really has one partition.
-        val plan = df.queryExecution.executedPlan
-        val localReads = collectWithSubqueries(plan) {
-          case r: AQEShuffleReadExec if r.isLocalRead => r
-        }
-        assert(localReads.isEmpty,
-          "A local read over the CTE shuffle invalidates the LocalPartition " +
-            "AllTuples claim; see the TODO above.\n" +
-            s"Plan:\n${plan.treeString}")
+        assertInnerAQEShared(df)
       }
     }
   }

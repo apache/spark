@@ -345,6 +345,16 @@ case class CTEReuseQueryStageExec(
   override protected def doExecuteColumnar(): RDD[ColumnarBatch] =
     innerAQE.executedPlan.executeColumnar()
 
+  // Run the collecting executions against the inner AQE's post-iteration `executedPlan`, like
+  // `doExecute`. The inherited `QueryStageExec` versions call these on `plan` (= innerAQE), which
+  // re-drives the shared inner AQE through `withFinalPlanUpdate` and wraps a `ResultQueryStageExec`
+  // at its root, breaking every other reference to the same CTE.
+  override def executeCollect(): Array[InternalRow] = innerAQE.executedPlan.executeCollect()
+  override def executeTake(n: Int): Array[InternalRow] = innerAQE.executedPlan.executeTake(n)
+  override def executeTail(n: Int): Array[InternalRow] = innerAQE.executedPlan.executeTail(n)
+  override def executeToIterator(): Iterator[InternalRow] =
+    innerAQE.executedPlan.executeToIterator()
+
   override def supportsColumnar: Boolean = innerAQE.executedPlan.supportsColumnar
 
   override def outputPartitioning: Partitioning = innerAQE.inputPlan.outputPartitioning match {
