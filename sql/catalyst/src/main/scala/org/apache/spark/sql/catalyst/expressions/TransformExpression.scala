@@ -243,22 +243,17 @@ case class TransformExpression(
       val typed = arguments.zip(declaredTypes).map { case (argument, declaredType) =>
         TransformExpression.atDeclaredType(argument, declaredType)
       }
-      if (arguments.length == declaredTypes.length && typed.forall(_.isDefined)) {
-        val call = V2ExpressionUtils.resolveScalarFunction(scalarFunc, typed.flatten)
-        // `Invoke` and `StaticInvoke` look the method up again from the arguments' classes, a
-        // user-defined type's being `Object`, so look it up here, where a failure is caught and
-        // logged, rather than in `eval`.
-        call match {
-          case i: objects.Invoke => i.method
-          case s: objects.StaticInvoke => s.method
-          case _ =>
-        }
-        Some(call)
+      val call = if (arguments.length == declaredTypes.length && typed.forall(_.isDefined)) {
+        Some(V2ExpressionUtils.resolveScalarFunction(scalarFunc, typed.flatten))
+          .filter(TransformExpression.methodTakesArguments)
       } else {
-        TransformExpression.logArgumentsMismatch(scalarFunc, arguments.map(_.dataType),
-          declaredTypes)
         None
       }
+      if (call.isEmpty) {
+        TransformExpression.logArgumentsMismatch(scalarFunc, arguments.map(_.dataType),
+          declaredTypes)
+      }
+      call
   }
 
   override def eval(input: InternalRow): Any = evaluableFunctionAttempt match {
@@ -273,29 +268,41 @@ case class TransformExpression(
 
 object TransformExpression extends Logging {
   /**
-   * The function classes and kinds of failure a failure to resolve a call was logged as a warning
-   * for, as `functionClass:failureClass`. A function class that fails in another way is warned
-   * about again.
+   * What was logged once, keyed by its kind: `notScalar:functionClass`,
+   * `mismatch:functionClass:argumentTypes:declaredTypes`, since one class can declare other input
+   * types per instance, e.g. one per column type, and `failure:functionClass:failureClass`, so
+   * that a function class that fails in another way is warned about again.
    */
-  private val failuresWarnedAbout: java.util.Set[String] = ConcurrentHashMap.newKeySet[String]()
+  private val loggedOnce: java.util.Set[String] = ConcurrentHashMap.newKeySet[String]()
 
-  /**
-   * The mismatches with a function's input types that were logged, as
-   * `functionClass:argumentTypes:declaredTypes`, since one class can declare other input types per
-   * instance, e.g. one per column type.
-   */
-  private val mismatchesLogged: java.util.Set[String] = ConcurrentHashMap.newKeySet[String]()
-
-  /** The classes of the functions that are not a `ScalarFunction` and were logged for. */
-  private val notScalarLogged: java.util.Set[String] = ConcurrentHashMap.newKeySet[String]()
+  /** Runs `log` the first time `key` is seen. */
+  private def logOnce(key: String)(log: => Unit): Unit = if (loggedOnce.add(key)) log
 
   /**
    * `text`, or `fallback` when it throws. `name()` and a failure's message are connector code,
    * which can throw as the call did, e.g. a `NoClassDefFoundError` for a missing dependency. A log
-   * line must not fail planning.
+   * line or an error message must not fail planning.
    */
-  private def orElse(text: => String, fallback: String): String =
+  private[sql] def orElse(text: => String, fallback: String): String =
     try text catch { case NonFatal(_) | _: LinkageError => fallback }
+
+  /**
+   * Whether the method `call` invokes takes its arguments. `Invoke` and `StaticInvoke` look it up
+   * again from the arguments' classes, a user-defined type's being `Object`, so a magic `invoke`
+   * the declared types found may not take them. Looked up here, so that such a call is refused as
+   * the argument mismatch it is, rather than failing in `eval`.
+   */
+  private def methodTakesArguments(call: Expression): Boolean =
+    try {
+      call match {
+        case i: objects.Invoke => i.method
+        case s: objects.StaticInvoke => s.method
+        case _ =>
+      }
+      true
+    } catch {
+      case NonFatal(_) => false
+    }
 
   /**
    * Logs that `function`'s input types do not take `argumentTypes`, see `evaluableFunction`.
@@ -307,9 +314,9 @@ object TransformExpression extends Logging {
     def typeList(types: Seq[DataType]): String = types.map(_.catalogString).mkString("(", ", ", ")")
     val functionClass = function.getClass.getName
     val arguments = typeList(argumentTypes)
-    if (mismatchesLogged.add(s"$functionClass:$arguments:${typeList(declaredTypes)}")) {
-      val functionName = orElse(function.name(), functionClass)
-      logInfo(log"The partition transform ${MDC(FUNCTION_NAME, functionName)} " +
+    logOnce(s"mismatch:$functionClass:$arguments:${typeList(declaredTypes)}") {
+      logInfo(log"The partition transform " +
+        log"${MDC(FUNCTION_NAME, orElse(function.name(), functionClass))} " +
         log"(${MDC(CLASS_NAME, functionClass)}) declares the input types " +
         log"${MDC(FUNCTION_PARAM, typeList(declaredTypes))}, which do not take arguments of " +
         log"types ${MDC(ARGS, arguments)}, so a storage-partitioned join does not evaluate it")
@@ -319,7 +326,7 @@ object TransformExpression extends Logging {
   /** Logs that `function` is not a `ScalarFunction`, so Spark cannot call it. */
   private def logNotScalar(function: BoundFunction): Unit = {
     val functionClass = function.getClass.getName
-    if (notScalarLogged.add(functionClass)) {
+    logOnce(s"notScalar:$functionClass") {
       logInfo(log"The partition transform " +
         log"${MDC(FUNCTION_NAME, orElse(function.name(), functionClass))} " +
         log"(${MDC(CLASS_NAME, functionClass)}) is not a ScalarFunction, so a " +
@@ -331,8 +338,9 @@ object TransformExpression extends Logging {
   private def logCannotResolve(function: BoundFunction, e: Throwable): Unit = {
     val functionClass = function.getClass.getName
     val failureClass = e.getClass.getName
+    // Named before `logOnce`, since the debug line below runs on every call.
     val functionName = orElse(function.name(), functionClass)
-    if (failuresWarnedAbout.add(s"$functionClass:$failureClass")) {
+    logOnce(s"failure:$functionClass:$failureClass") {
       logWarning(log"Cannot resolve a call of the partition transform " +
         log"${MDC(FUNCTION_NAME, functionName)} " +
         log"(${MDC(CLASS_NAME, functionClass)}), so a storage-partitioned join " +

@@ -1836,10 +1836,11 @@ class EnsureRequirementsSuite extends SharedSparkSession {
   }
 
   test("SPARK-60027: a cogroup shuffled from a key Spark cannot place fails while planning") {
-    // A cogroup does not coerce its keys (SPARK-60782), so its other key can have a type the
-    // layout's function does not take: a `BIGINT` against a function declaring `INT`, or a string
-    // of another collation, which master paired wrongly. Falling back to a hash shuffle would pair
-    // the groups wrongly too, so it fails, while planning, with an error that names the key's type.
+    // A Pandas or Arrow cogroup does not coerce its keys (SPARK-60782), so its other key can have
+    // a type the layout's function does not take: a `BIGINT` against a function declaring `INT`,
+    // or a string of another collation, which master paired wrongly. Falling back to a hash
+    // shuffle would pair the groups wrongly too, so it fails, while planning, with an error that
+    // names the key's type.
     def bucket(valueType: DataType): ScalarFunction[Int] = new ScalarFunction[Int] {
       override def inputTypes(): Array[DataType] = Array(IntegerType, valueType)
       override def resultType(): DataType = IntegerType

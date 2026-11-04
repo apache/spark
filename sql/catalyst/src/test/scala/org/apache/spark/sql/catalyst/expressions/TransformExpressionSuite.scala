@@ -287,7 +287,8 @@ class TransformExpressionSuite extends SparkFunSuite {
     // A user-defined type goes as its `sqlType`, and `resolveScalarFunction` finds a magic
     // `invoke` from the declared types. But `Invoke` and `StaticInvoke` look the method up again
     // from the arguments' classes, a user-defined type's being `Object`, so that call cannot be
-    // made and is refused. A `produceResult` reads the row, so it takes the value.
+    // made and is refused, as the argument mismatch it is: logged at info level, not warned about
+    // as a call that fails to resolve. A `produceResult` reads the row, so it takes the value.
     class IntUDT extends UserDefinedType[Integer] {
       override def sqlType: DataType = IntegerType
       override def serialize(obj: Integer): Any = obj
@@ -297,7 +298,7 @@ class TransformExpressionSuite extends SparkFunSuite {
     val withInvoke = new ScalarFunction[Int] {
       override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
       override def resultType(): DataType = IntegerType
-      override def name(): String = "bucket"
+      override def name(): String = "udt_bucket"
       override def canonicalName(): String = "test.bucket"
       def invoke(numBuckets: Int, value: Int): Int = Math.floorMod(value, numBuckets)
     }
@@ -310,7 +311,15 @@ class TransformExpressionSuite extends SparkFunSuite {
         Math.floorMod(input.getInt(1), input.getInt(0))
     }
     val argument = BoundReference(0, new IntUDT, nullable = true)
-    assert(bucket(withInvoke, argument).evaluableFunction.isEmpty, "a magic invoke")
+    val appender = new LogAppender("a user-defined type a magic invoke cannot take")
+    withLogAppender(appender, level = Some(Level.INFO)) {
+      assert(bucket(withInvoke, argument).evaluableFunction.isEmpty, "a magic invoke")
+    }
+    val logged = appender.loggingEvents
+      .filter(_.getLoggerName.endsWith("TransformExpression"))
+      .filter(_.getMessage.getFormattedMessage.contains("udt_bucket"))
+    assert(logged.map(_.getLevel) == Seq(Level.INFO), logged.map(_.getMessage.getFormattedMessage))
+    assert(logged.head.getMessage.getFormattedMessage.contains("which do not take arguments"))
     val transform = bucket(withProduceResult, argument)
     assert(transform.evaluableFunction.isDefined, "produceResult")
     assert(transform.eval(InternalRow(5)) == 1)

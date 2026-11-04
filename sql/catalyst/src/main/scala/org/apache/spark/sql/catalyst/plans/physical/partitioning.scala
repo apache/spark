@@ -22,6 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.annotation.tailrec
 import scala.collection.immutable.BitSet
 import scala.collection.mutable
+import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -1892,8 +1893,8 @@ trait LeafShuffleSpec extends ShuffleSpec {
    * that pairs with this layout as it stands evaluates nothing. A caller that shuffles a child onto
    * this layout has to ask it too. Only a [[KeyedShuffleSpec]] can answer false, and its
    * [[createPartitioning]] asserts it, so a caller that does not ask fails while planning. What it
-   * builds over a cogroup child's key of another type can still be one Spark cannot evaluate, and
-   * fails while planning too, with `STORAGE_PARTITION_JOIN_KEY_TYPE_MISMATCH`.
+   * builds over a Pandas or Arrow cogroup child's key of another type can still be one Spark
+   * cannot evaluate, and fails while planning too, with `STORAGE_PARTITION_JOIN_KEY_TYPE_MISMATCH`.
    */
   def canEvaluatePartitioning: Boolean = true
 
@@ -2439,11 +2440,11 @@ case class KeyedShuffleSpec(
    * equi-join pairs two keys only when their types are equal apart from nullability and field
    * names (`BinaryComparison.sameType`), which `evaluableFunction` does not tell apart either. So
    * for a join, asking this of the reported transform answers it for the rebuilt one, and the
-   * reported one keeps the answer. A cogroup does not coerce its keys, so a key of another type,
-   * e.g. a `BIGINT` against a transform over an `INT` column that declares `INT`, can still fail
-   * as it did before this check. A one-side shuffle fails while planning, in `createPartitioning`.
-   * A decimal key of the column's scale passes, since its precision does not change what the
-   * function reads.
+   * reported one keeps the answer. A Pandas or Arrow cogroup does not coerce its keys, so a key of
+   * another type, e.g. a `BIGINT` against a transform over an `INT` column that declares `INT`,
+   * can still fail as it did before this check. A one-side shuffle fails while planning, in
+   * `createPartitioning`. A decimal key of the column's scale passes, since its precision does not
+   * change what the function reads.
    *
    * A Scala class or object that extends `ScalarFunction` directly gets a mixin forwarder to the
    * default `produceResult`, which the lookup finds, so this is true even when the connector
@@ -2637,14 +2638,19 @@ case class KeyedShuffleSpec(
     // this layout's own keys, so a caller that does not is a bug.
     assert(canEvaluatePartitioning,
       s"Cannot shuffle a child onto a layout Spark cannot evaluate: ${partitioning.expressions}")
-    // A join's keys share their types, so that answers for what is built too. A cogroup's need not
-    // (SPARK-60782), e.g. a `BIGINT` key or a string of another collation, and falling back to a
-    // hash shuffle would pair its groups wrongly. So such a child fails here, while planning, with
-    // an error that names the key's type.
+    // A join's keys share their types, so that answers for what is built too. A Pandas or Arrow
+    // cogroup's need not (SPARK-60782), e.g. a `BIGINT` key or a string of another collation, and
+    // falling back to a hash shuffle would pair its groups wrongly. So such a child fails here,
+    // while planning, with an error that names the key's type.
     newExpressions.foreach {
       case t: TransformExpression if t.evaluableFunction.isEmpty =>
+        // `name()` and `inputTypes()` are connector code, which must not replace this error.
+        val functionClass = t.function.getClass.getName
+        val inputTypes =
+          try t.function.inputTypes().toSeq catch { case NonFatal(_) | _: LinkageError => Nil }
         throw QueryExecutionErrors.storagePartitionJoinKeyTypeMismatchError(
-          t.function.name(), t.function.inputTypes().toSeq, t.children.head.dataType)
+          TransformExpression.orElse(t.function.name(), functionClass), inputTypes,
+          t.children.head.dataType)
       case _ =>
     }
     // The shuffled side is laid out on this side's partitions, so it shares their layout, with one
