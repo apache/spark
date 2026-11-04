@@ -1270,10 +1270,10 @@ final class NativeLibrary {
     int fail(String callback, Throwable e) {
       try {
         clearError();
-        String message =
-          "The " + callback + " of the stream of the native data source " + name + " failed";
-        sparkError = toCString(message + ": " + rootCause(e));
-        LOGGER.error(message, e);
+        sparkError = toCString("The " + callback + " of the stream of the native data source " +
+          name + " failed: " + rootCause(e));
+        LOGGER.error("The {} of the stream of the native data source {} failed", e,
+          MDC.of(LogKeys.FUNCTION_NAME, callback), MDC.of(LogKeys.DATA_SOURCE, name));
       } catch (Throwable ignored) {
         // An upcall must not throw.
       }
@@ -1386,8 +1386,12 @@ final class NativeLibrary {
       }
     } catch (Throwable e) {
       try {
-        LOGGER.error("The release of the stream of the native data source " +
-          (wrapped == null ? "" : wrapped.name + " ") + "failed.", e);
+        if (wrapped == null) {
+          LOGGER.error("The release of the stream of a native data source failed", e);
+        } else {
+          LOGGER.error("The {} of the stream of the native data source {} failed", e,
+            MDC.of(LogKeys.FUNCTION_NAME, "release"), MDC.of(LogKeys.DATA_SOURCE, wrapped.name));
+        }
       } catch (Throwable ignored) {
         // An upcall must not throw.
       }

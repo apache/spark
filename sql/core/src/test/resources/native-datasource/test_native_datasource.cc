@@ -67,7 +67,8 @@
 //                   read to that file, and with "ranges_path", each call to stream_partitions
 //                   appends the start and the end offsets that it got to that file, as a line.
 //                   The partitions and the state that stream_partitions returns have the number of
-//                   the call, which read checks.
+//                   the call, which read checks. With the option "state_padding", the state has
+//                   that many more bytes.
 //
 // native_range supports batch reads, native_counter micro-batch streaming reads and native_sink
 // batch and streaming writes, which may replace the existing data. With the option
@@ -1166,6 +1167,8 @@ int createStreamReader(void* handle, struct ArrowSchema* schema,
           "initial_offsets_path", "ranges_path", "states", "stateless", "task_path", "fail"}) {
       reader->state[option] = get(source->options, option, "");
     }
+    std::string padding = get(source->options, "state_padding", "");
+    if (!padding.empty()) reader->state["padding"] = std::string(std::stoll(padding), 'x');
     *out = reader;
   });
 }

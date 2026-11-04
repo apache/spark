@@ -1548,6 +1548,16 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       val scan = df.queryExecution.executedPlan.collectFirst { case s: BatchScanExec => s }.get
       (scan.readerFactory.asInstanceOf[SupportsArrowStreamRead], scan.inputPartitions)
     }
+    // The batch scan of only some of the columns from a library that does not prune the others
+    // drops them from the batches itself, so its reader factory does not open streams, which
+    // would have all the columns. With all the columns, it does.
+    val readOnly = newSession(defaultPackage, createPackage(readOnlyLibrary, dataSources("ro_")))
+    def readsStreams(df: DataFrame): Boolean = {
+      df.queryExecution.executedPlan.collectFirst { case s: BatchScanExec => s }.get
+        .readerFactory.isInstanceOf[SupportsArrowStreamRead]
+    }
+    val unpruned = readOnly.read.format("ro_native_range").option("end", "4").load()
+    assert(!readsStreams(unpruned.select("id")) && readsStreams(unpruned))
     // Runs `f` in a task that only gets the files of the session. It is the task of the partition
     // 1, so that the partition of the scan that a read gets is not the partition of its task.
     def inTask[T: ClassTag](f: => T): T = session.artifactManager.withResources {
@@ -1598,6 +1608,24 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     }.toMap
     assert(tasks.keySet == Set(0, 1) && tasks.values.map(_(5)).toSet.size == 1, tasks)
     assert(NativeLibrary.openEngineStreams() == 0)
+    // The reads of a task share the flag that tells them that the task ended, with a single pair
+    // of listeners, which remove it once the task ended. The tasks of earlier tests may still
+    // be ending.
+    eventually(timeout(1.minute))(assert(NativeTask.tasksWithEndedFlags == 0))
+    val flagsInTask = inTask {
+      val ids = partitions.flatMap { partition =>
+        val stream = ArrowArrayStream.allocateNew(ArrowUtils.rootAllocator)
+        try {
+          factory.openArrowStream(partition, stream.memoryAddress())
+          try readIdsInPlace(stream) finally stream.release()
+        } finally {
+          stream.close()
+        }
+      }
+      assert(ids.sorted == (0L until 6L))
+      NativeTask.tasksWithEndedFlags
+    }
+    assert(flagsInTask == 1 && NativeTask.tasksWithEndedFlags == 0)
 
     // The engine may release the stream after its task ended, and on another thread: Spark frees
     // the context of the task once the library released the stream.
@@ -1737,19 +1765,23 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       def offset(i: Int): Offset = stream.deserializeOffset(s"""{"offset":$i}""")
       stream.planInputPartitions(offset(start), offset(end)).toSeq
     }
-    val stream = microBatchStream("max_offset" -> "4")
+    def serialized(partition: NativeMicroBatchPartition): Seq[Byte] = {
+      val bytes = new ByteArrayOutputStream()
+      Utils.tryWithResource(new ObjectOutputStream(bytes))(_.writeObject(partition))
+      bytes.toByteArray.toSeq
+    }
+    val padding = (NativeDataSourceStreamReader.maxInlineStateBytes + 1).toString
+    val stream = microBatchStream("max_offset" -> "4", "state_padding" -> padding)
     try {
       val first = plan(stream, 0, 2)
       val keptFactory = stream.createReaderFactory()
       val second = plan(stream, 2, 4)
-      // The executors get the state of a micro-batch once, as a broadcast that its partitions
-      // keep, rather than with the partition of each task.
+      // The executors get a state larger than 64 KiB once for the micro-batch, as a broadcast that
+      // its partitions keep, rather than with the partition of each task.
       Seq(first, second).foreach { partitions =>
         val partition = partitions.head.asInstanceOf[NativeMicroBatchPartition]
-        assert(partition.state.isDefined && partition.readerState.nonEmpty)
-        val serialized = new ByteArrayOutputStream()
-        Utils.tryWithResource(new ObjectOutputStream(serialized))(_.writeObject(partition))
-        assert(!serialized.toByteArray.toSeq.containsSlice(partition.readerState.toSeq))
+        assert(partition.state.isRight && partition.readerState.length > padding.toInt)
+        assert(!serialized(partition).containsSlice(partition.readerState.toSeq))
       }
       checkContexts(0) {
         assert(readAll(keptFactory.asInstanceOf[SupportsArrowStreamRead], first) == Seq(0L, 1L))
@@ -1774,27 +1806,41 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     } finally {
       stream.stop()
     }
+    // A smaller state, such as a few offsets, goes with the partition of each task, which costs
+    // less than a broadcast.
+    val small = microBatchStream("max_offset" -> "4")
+    try {
+      val partition = plan(small, 0, 2).head.asInstanceOf[NativeMicroBatchPartition]
+      assert(partition.state.isLeft && partition.readerState.nonEmpty)
+      assert(serialized(partition).containsSlice(partition.readerState.toSeq))
+      checkContexts(0) {
+        assert(readAll(small.createReaderFactory().asInstanceOf[SupportsArrowStreamRead],
+          Seq(partition)) == Seq(0L, 1L))
+      }
+    } finally {
+      small.stop()
+    }
     // A micro-batch without partitions broadcasts no state, although the stream reader returned
-    // one.
+    // a large one.
     val (counterName, counterLocation) =
       NativeDataSourceRegistry.lookup("native_counter", session.sessionState.conf).get
     val streamReader = new NativeDataSource(counterLocation, counterName,
-        new CaseInsensitiveStringMap(Map("max_offset" -> "4").asJava))
+        new CaseInsensitiveStringMap(Map("max_offset" -> "4", "state_padding" -> padding).asJava))
       .streamReader(StructType.fromDDL("id BIGINT"), Utils.createTempDir().getPath)
       .asInstanceOf[NativeDataSourceStreamReader]
     try {
       assert(streamReader.partitions("{\"offset\":0}", "{\"offset\":2}").nonEmpty)
-      assert(streamReader.lastPlannedState.isDefined)
+      assert(streamReader.lastPlannedBroadcast.isDefined)
       assert(streamReader.partitions("{\"offset\":2}", "{\"offset\":2}").isEmpty)
-      assert(streamReader.lastPlannedState.isEmpty)
+      assert(streamReader.lastPlannedBroadcast.isEmpty)
     } finally {
       streamReader.stop()
     }
-    // A micro-batch without a state is not broadcast.
+    // A micro-batch without a state has no bytes to read the partitions with.
     val stateless = microBatchStream("max_offset" -> "4", "states" -> "0")
     try {
-      assert(plan(stateless, 0, 2).map(_.asInstanceOf[NativeMicroBatchPartition].state) ==
-        Seq(None))
+      val partitions = plan(stateless, 0, 2).map(_.asInstanceOf[NativeMicroBatchPartition])
+      assert(partitions.map(_.state.isLeft) == Seq(true) && partitions.head.readerState.isEmpty)
     } finally {
       stateless.stop()
     }
@@ -1936,6 +1982,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       "wait_for_interrupt" -> marker.getPath)
     val jobGroup = s"native-data-source-${UUID.randomUUID()}"
     val error = new AtomicReference[Throwable]()
+    val contexts = NativeLibrary.openTaskContexts()
     val thread = new Thread(() => {
       session.sparkContext.setJobGroup(jobGroup, "a read that waits", interruptOnCancel = true)
       try df.collect() catch {
@@ -1952,9 +1999,12 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     thread.join(TimeUnit.MINUTES.toMillis(1))
     assert(!thread.isAlive)
     assert(error.get() != null)
-    // The job fails right away, and its task ends once the library sees that it was killed.
+    // The job fails right away, and its task ends once the library sees that it was killed. The
+    // test also waits until the task closed the context of its read, which the tests that count
+    // the contexts would otherwise count.
     eventually(timeout(1.minute)) {
       assert(marker.isFile && Files.readString(marker.toPath) == "interrupted")
+      assert(NativeLibrary.openTaskContexts() == contexts)
     }
   }
 

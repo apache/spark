@@ -24,17 +24,20 @@ import org.apache.spark.annotation.Evolving;
  * <a href="https://arrow.apache.org/docs/format/CStreamInterface.html">Arrow C stream</a>, for an
  * engine that processes Arrow data in native code: the engine imports the arrays of the stream
  * itself, instead of reading the {@link org.apache.spark.sql.vectorized.ColumnarBatch}es of
- * {@link #createColumnarReader(InputPartition)}. The reader factories of the batch and
- * micro-batch scans of native data sources implement it, with the stream that the library
- * returns.
+ * {@link #createColumnarReader(InputPartition)}. The reader factories of the micro-batch scans of
+ * native data sources implement it, with the stream that the library returns, and so do those of
+ * their batch scans, except for a scan that reads only some of the columns from a library that
+ * does not prune the other columns: Spark then drops them from the batches itself, which the
+ * arrays of the stream would still have.
  * <p>
  * Each array of the stream is a struct array whose fields are the columns of the read schema of
  * the scan. Spark only checks that the source initialized the callbacks of the stream, not its
  * arrays, while it checks the arrays of the streams that it reads itself, so the engine checks
  * what its import of the arrays requires, such as the schema of the stream against the read
  * schema, and the offsets and the lengths of the arrays. The callbacks of the stream can be called
- * from any thread, but never concurrently. They call into the JVM, so the engine releases the
- * stream before the JVM exits.
+ * from any thread, but never concurrently. Each call goes through the JVM, which then calls the
+ * callback of the stream of the source, so the engine releases the stream before the JVM exits.
+ * The first call on a native thread attaches the thread to the JVM, until the thread exits.
  *
  * @since 4.4.0
  */

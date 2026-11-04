@@ -338,12 +338,12 @@ class NativeDataSourceStreamReader(
   import NativeCalls._
 
   // The range that was planned last, its partitions or the failure to plan them, and the broadcast
-  // of its state, if it has one. All the scans of the source in a micro-batch plan the same range,
-  // such as both sides of a union of the source with itself, so they get the result of a single
-  // stream_partitions call, with the state that it returned.
+  // of its state, if it was broadcast. All the scans of the source in a micro-batch plan the same
+  // range, such as both sides of a union of the source with itself, so they get the result of a
+  // single stream_partitions call, with the state that it returned.
   private var plannedRange: (String, String) = _
   private var plannedPartitions: Try[Array[InputPartition]] = _
-  private var plannedState: Option[Broadcast[Array[Byte]]] = None
+  private var plannedBroadcast: Option[Broadcast[Array[Byte]]] = None
 
   private lazy val library = NativeLibraries.get(location)
 
@@ -389,16 +389,24 @@ class NativeDataSourceStreamReader(
           library.streamPartitions(handle.get, start, end)
         }
         val partitions = NativeInputPartition.from(planned.partitions)
-        // The executors fetch the state once for the micro-batch, as a broadcast, rather than with
-        // each of its tasks. Spark only plans the next range once the micro-batch of the previous
-        // one finished, so the copies of its state on the executors are removed then. The driver
-        // keeps its own copy, so that the partitions and the reader factories that an engine keeps
-        // can still fetch it, until the ContextCleaner removes it once nothing refers to them.
-        plannedState.foreach(_.unpersist(blocking = false))
-        plannedState = Option(planned.state).filter(_.nonEmpty && partitions.nonEmpty).map {
-          bytes => SparkSession.active.sparkContext.broadcast(bytes)
+        val bytes = bytesOrEmpty(Option(planned.state))
+        // A small state goes with each task, while the executors fetch a larger one once for the
+        // micro-batch, as a broadcast. Spark only plans the next range once the micro-batch of the
+        // previous one finished, so the copies of its broadcast on the executors are removed then.
+        // The driver keeps its own copy, so that the partitions and the reader factories that an
+        // engine keeps can still fetch it, until the ContextCleaner removes it once nothing refers
+        // to them.
+        plannedBroadcast.foreach(_.unpersist(blocking = false))
+        plannedBroadcast = None
+        val state = if (bytes.length > NativeDataSourceStreamReader.maxInlineStateBytes &&
+            partitions.nonEmpty) {
+          val broadcast = SparkSession.active.sparkContext.broadcast(bytes)
+          plannedBroadcast = Some(broadcast)
+          Right(broadcast)
+        } else {
+          Left(bytes)
         }
-        partitions.map[InputPartition](NativeMicroBatchPartition(_, plannedState))
+        partitions.map[InputPartition](NativeMicroBatchPartition(_, state))
       }
       plannedRange = (start, end)
     }
@@ -413,12 +421,15 @@ class NativeDataSourceStreamReader(
     call(name, "commit an offset of")(optional(library.commitOffset(handle.get, end)))
   }
 
-  // The state of the last micro-batch that the reader planned, for tests.
-  private[ffi] def lastPlannedState: Option[Broadcast[Array[Byte]]] = synchronized(plannedState)
+  // The broadcast of the state of the last micro-batch that the reader planned, for tests.
+  private[ffi] def lastPlannedBroadcast: Option[Broadcast[Array[Byte]]] =
+    synchronized(plannedBroadcast)
 
   override def stop(): Unit = synchronized {
     // As for the state of a micro-batch once the next one is planned.
-    Utils.tryWithSafeFinally(plannedState.foreach(_.unpersist(blocking = false)))(handle.close())
+    Utils.tryWithSafeFinally(plannedBroadcast.foreach(_.unpersist(blocking = false))) {
+      handle.close()
+    }
   }
 }
 
@@ -426,6 +437,12 @@ object NativeDataSourceStreamReader {
   // Parses the offsets of the libraries to check them, and rejects anything after the JSON value.
   private val mapper =
     JsonMapper.builder().enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS).build()
+
+  // The size of the largest state of a micro-batch that goes with each of its tasks, rather than
+  // as a broadcast, which costs more than it saves for a state of a few offsets, written to the
+  // block manager of the driver, fetched by each executor, and removed from them for each
+  // micro-batch.
+  private[ffi] val maxInlineStateBytes: Int = 64 * 1024
 }
 
 /**
@@ -548,15 +565,18 @@ object NativeInputPartition {
  * A partition of a micro-batch, with the state that the stream reader returned with the
  * partitions of the micro-batch, if any. The state changes with each micro-batch, so it goes with
  * the partitions rather than with the reader factory, which an engine may keep while Spark plans
- * the next micro-batch. It is broadcast, so that each executor fetches it once for the
- * micro-batch rather than with each task.
+ * the next micro-batch.
+ *
+ * @param state the bytes of the state, empty if the stream reader returned none, or for a state
+ *              larger than 64 KiB, their broadcast, so that each executor fetches it once for the
+ *              micro-batch rather than with each task
  */
 case class NativeMicroBatchPartition(
     partition: NativeInputPartition,
-    state: Option[Broadcast[Array[Byte]]])
+    state: Either[Array[Byte], Broadcast[Array[Byte]]])
   extends InputPartition {
   /** The state to read the partition with, empty if the stream reader returned none. */
-  def readerState: Array[Byte] = state.map(_.value).getOrElse(Array.emptyByteArray)
+  def readerState: Array[Byte] = state.fold(identity, _.value)
 }
 
 /** The message returned by the data writer of a task of a native library. */
@@ -1042,7 +1062,9 @@ object NativePartitionReader {
     val task = openStream(location, name, kind, readerState, nativePartition, schema, timeZoneId,
       streamAddress)
     try {
-      NativeLibrary.wrapEngineStream(streamAddress, task, name)
+      // As a failure of read, a failure to create the callbacks of the streams of engines, such as
+      // a link error, is an error of the data source.
+      call(name, "read")(NativeLibrary.wrapEngineStream(streamAddress, task, name))
     } catch {
       case e: Throwable =>
         releaseOnFailure(e, streamAddress, task)
@@ -1206,6 +1228,33 @@ class NativeDataWriter(
 
 /** Creates the `SparkDsTaskContext` of the running task. */
 private[ffi] object NativeTask {
+  // The flag of each running task that reads, set once the task failed or completed by a single
+  // pair of listeners for all its reads, which then also remove it: a task that reads many
+  // partitions, as after a coalesce, registers them once. The contexts of the reads keep their
+  // flag, so they still see it once it is removed. A task is the key rather than its attempt ID,
+  // which is 0 for each context of `TaskContext.empty()`.
+  private val endedTasks = new ConcurrentHashMap[TaskContext, AtomicBoolean]()
+
+  /** Returns the flag that is set once the given task failed or completed. */
+  private def endedFlag(taskContext: TaskContext): AtomicBoolean = {
+    Option(endedTasks.get(taskContext)).getOrElse {
+      val ended = new AtomicBoolean(false)
+      Option(endedTasks.putIfAbsent(taskContext, ended)).getOrElse {
+        // A listener runs right away if the task already failed or completed.
+        def end(): Unit = {
+          ended.set(true)
+          endedTasks.remove(taskContext, ended)
+        }
+        taskContext.addTaskFailureListener((_, _) => end())
+        taskContext.addTaskCompletionListener[Unit](_ => end())
+        ended
+      }
+    }
+  }
+
+  // The number of tasks whose reads have a flag, for tests.
+  private[ffi] def tasksWithEndedFlags: Int = endedTasks.size()
+
   /**
    * @param partitionId the `partition_id` of the context: the index of the partition in the scan
    *                    for a read, and by default the partition of the task
@@ -1226,9 +1275,7 @@ private[ffi] object NativeTask {
       case Some(taskContext) if read =>
         // Set once the task failed or completed, by listeners, so that a check only reads
         // volatile fields, unlike `isFailed()` and `isCompleted()`, which lock the task.
-        val ended = new AtomicBoolean(false)
-        taskContext.addTaskFailureListener((_, _) => ended.set(true))
-        taskContext.addTaskCompletionListener[Unit](_ => ended.set(true))
+        val ended = endedFlag(taskContext)
         val task = new WeakReference(taskContext)
         () => ended.get() || Option(task.get()).forall(_.isInterrupted())
       case Some(taskContext) =>
