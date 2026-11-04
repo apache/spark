@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.{DateType, TimestampType, _}
+import org.apache.spark.unsafe.types.UTF8String
 
 
 class JoinEstimationSuite extends StatsEstimationTestBase {
@@ -558,6 +559,21 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
       rowCount = Some(0),
       attributeStats = AttributeMap(Nil))
     assert(join.stats == expectedStats)
+  }
+
+  test("SPARK-60810: string join keys with reported histograms use the distinct count") {
+    // DSv2 connectors can report a histogram for any type; string keys have no bounds to
+    // intersect, so the histogram path does not apply.
+    val histogram = Histogram(height = 1, Array(HistogramBin(lo = 0, hi = 10, ndv = 10)))
+    val stat = ColumnStat(distinctCount = Some(10), min = Some(UTF8String.fromString("a")),
+      max = Some(UTF8String.fromString("j")), nullCount = Some(0), avgLen = Some(1),
+      maxLen = Some(1), histogram = Some(histogram))
+    val left = AttributeReference("ls", StringType)()
+    val right = AttributeReference("rs", StringType)()
+    val leftChild = StatsTestPlan(Seq(left), 10, AttributeMap(Seq(left -> stat)))
+    val rightChild = StatsTestPlan(Seq(right), 10, AttributeMap(Seq(right -> stat)))
+    val join = Join(leftChild, rightChild, Inner, Some(EqualTo(left, right)), JoinHint.NONE)
+    assert(join.stats.rowCount.contains(BigInt(10)))
   }
 
   test("SPARK-33018 Fix estimate statistics issue if child has 0 bytes") {

@@ -92,11 +92,19 @@ object EstimationUtils {
       // reads the table through it as well, so the statistics already describe padded values.
       // Statistics collected otherwise (with padding off, or reported by a connector) can
       // describe shorter values, and every non-null padded value has at least N characters.
+      // A distinct count of 0 means no non-null values, so there is nothing to pad (ANALYZE
+      // then stores the type's default size as the lengths). The distinct count is left as is.
+      // It is too high only when stored values differ just in trailing spaces, which the
+      // padding makes equal.
       case alias @ Alias(CharVarcharUtils.ReadSidePadding(attr: Attribute, Literal(n: Int, _)), _)
           if attributeStats.contains(attr) =>
         val stat = attributeStats(attr)
-        alias.toAttribute -> stat.copy(
-          avgLen = stat.avgLen.map(_.max(n)), maxLen = stat.maxLen.map(_.max(n)))
+        val padded = if (stat.distinctCount.contains(BigInt(0))) {
+          stat
+        } else {
+          stat.copy(avgLen = stat.avgLen.map(_.max(n)), maxLen = stat.maxLen.map(_.max(n)))
+        }
+        alias.toAttribute -> padded
       case alias @ Alias(expr: Expression, _) if expr.foldable && expr.deterministic =>
         val value = expr.eval(EmptyRow)
         val size = expr.dataType.defaultSize

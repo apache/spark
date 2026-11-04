@@ -984,10 +984,33 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       val filter = Filter(condition, child)
       assert(filter.stats.rowCount.contains(BigInt(expectedRows)), condition)
     }
-    // With no nulls IS NOT NULL keeps every row, which an unsupported predicate does too.
+    // With no nulls IS NOT NULL keeps every row, which an unsupported predicate does too, so
+    // use a child with nulls. The update lands on the column's own stat, which the padding
+    // Project above passes on: nullCount becomes 0, where scaling alone would give 3.
     val childWithNulls = childStatsTestPlan(Seq(attrString), tableRowCount = 10L,
       attributeMap = AttributeMap(Seq(attrString -> colStatString.copy(nullCount = Some(4)))))
-    assert(Filter(IsNotNull(padded), childWithNulls).stats.rowCount.contains(BigInt(6)))
+    validateEstimatedStats(
+      Filter(IsNotNull(padded), childWithNulls),
+      Seq(attrString -> colStatString.copy(distinctCount = Some(6), nullCount = Some(0))),
+      expectedRowCount = 6)
+    // Under Not the predicate is estimated without update; the output stat is only scaled to
+    // the 9 remaining rows.
+    validateEstimatedStats(
+      Filter(Not(EqualTo(padded, Literal("A0"))), child),
+      Seq(attrString -> colStatString.copy(distinctCount = Some(9))),
+      expectedRowCount = 9)
+  }
+
+  test("SPARK-60810: equality on a string column with a reported histogram") {
+    // DSv2 connectors can report a histogram for any type. Only numeric-like types have
+    // equi-height histograms, so a string column falls back to its distinct count.
+    val histogram = Histogram(height = 1, Array(HistogramBin(lo = 0, hi = 10, ndv = 10)))
+    val stat = colStatString.copy(min = Some(UTF8String.fromString("A0")),
+      max = Some(UTF8String.fromString("A9")), histogram = Some(histogram))
+    val child = childStatsTestPlan(Seq(attrString), tableRowCount = 10L,
+      attributeMap = AttributeMap(Seq(attrString -> stat)))
+    assert(Filter(EqualTo(attrString, Literal("A0")), child).stats.rowCount
+      .contains(BigInt(1)))
   }
 
   test("ColumnStatsMap tests") {

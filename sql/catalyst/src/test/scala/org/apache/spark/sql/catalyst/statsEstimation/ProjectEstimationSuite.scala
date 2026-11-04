@@ -185,6 +185,19 @@ class ProjectEstimationSuite extends StatsEstimationTestBase {
     val shortChild = child.copy(attributeStats = AttributeMap(Seq(c -> shortStat)))
     val shortProj = Project(Seq(Alias(padded, "c")()), shortChild)
     assert(shortProj.stats.attributeStats.get(shortProj.output.head).contains(colStat))
+
+    // An all-null column has no values to pad; ANALYZE stores the default size of the string
+    // type, 20, as its lengths, which a CHAR(30) floor must not raise.
+    val wide = DataTypeUtils.toAttribute(CharVarcharUtils.replaceCharVarcharWithStringInSchema(
+      StructType(Seq(StructField("w", CharType(30))))).head)
+    val nullStat = ColumnStat(distinctCount = Some(0), nullCount = Some(1000),
+      avgLen = Some(20), maxLen = Some(20))
+    val nullChild = StatsTestPlan(
+      outputList = Seq(wide),
+      rowCount = 1000,
+      attributeStats = AttributeMap(Seq(wide -> nullStat)))
+    val nullProj = Project(Seq(Alias(CharVarcharUtils.addPaddingForScan(wide), "w")()), nullChild)
+    assert(nullProj.stats.attributeStats.get(nullProj.output.head).contains(nullStat))
   }
 
   private def checkProjectStats(
