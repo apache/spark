@@ -122,7 +122,7 @@ can be faster in some cases (for example, with higher compression levels):
 The numbers below are illustrative results from one run on an Apple M4 Max (OpenJDK 21.0.8) and
 will vary with hardware, JDK, and compression settings. They are not a guarantee. For the
 authoritative, regularly regenerated numbers, see
-`sql/core/benchmarks/ArrowCacheBenchmark-jdk21-results.txt` and the `ArrowCacheBenchmark` suite.
+`sql/core/benchmarks/ArrowCacheBenchmark-results.txt` and the `ArrowCacheBenchmark` suite.
 
 | Workload | Default Cache | Arrow Cache | Speedup |
 |----------|--------------|-------------|---------|

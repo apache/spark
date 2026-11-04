@@ -18,20 +18,22 @@ package org.apache.spark.sql.execution.datasources.v2.ffi
 
 import java.io.File
 import java.nio.charset.StandardCharsets.UTF_8
-import java.nio.file.Files
+import java.nio.file.{AccessDeniedException, Files, NoSuchFileException, Paths}
 import java.nio.file.StandardCopyOption.REPLACE_EXISTING
+import java.nio.file.attribute.{PosixFileAttributeView, PosixFilePermission}
 import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDate}
 import java.util.UUID
-import java.util.concurrent.{Callable, CountDownLatch, TimeUnit}
+import java.util.concurrent.{Callable, CountDownLatch, ExecutionException, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
+import java.util.zip.{ZipException, ZipFile}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SPARK_VERSION, SparkClassNotFoundException, SparkFiles, SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException}
+import org.apache.spark.{SPARK_VERSION, SparkClassNotFoundException, SparkFiles, SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException, TestUtils}
 import org.apache.spark.api.python.{PythonBroadcast, SimplePythonFunction}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
@@ -1174,6 +1176,88 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  nativeTest("release a stream only once get_next returns") {
+    assume(TestUtils.testCommandAvailable("cat"))
+    val session = newSession(defaultPackage)
+    val marker = new File(Utils.createTempDir(), "released")
+    val reading = marker.getPath + ".reading"
+    val df = range(session, "end" -> "10", "partitions" -> "1", "slow_read" -> marker.getPath)
+    try {
+      // PipedRDD reads the scan on a thread of its own, which the task does not wait for. The
+      // task completes without reading the output of the command, once that thread is in
+      // get_next, which waits for the file .continue, and closes the reader then. The job runs
+      // with the artifacts of the session, as in a SQL execution: see checkRows.
+      val count = session.artifactManager.withResources {
+        df.rdd.pipe("cat").mapPartitions { _ =>
+          val deadline = System.nanoTime() + TimeUnit.MINUTES.toNanos(1)
+          while (!new File(reading).isFile && System.nanoTime() < deadline) {
+            Thread.sleep(10)
+          }
+          Iterator.empty[String]
+        }.count()
+      }
+      assert(count == 0)
+      assert(new File(reading).isFile, "get_next was not called.")
+      if (marker.isFile) fail(s"The stream was released: ${Files.readString(marker.toPath)}.")
+    } finally {
+      new File(marker.getPath + ".continue").createNewFile()
+    }
+    // The thread in get_next releases the stream once get_next returns.
+    eventually(timeout(1.minute)) {
+      assert(marker.isFile && Files.readString(marker.toPath) == "after get_next")
+    }
+    // The task context was still valid once get_next continued: Spark answers that a context
+    // that it freed is interrupted, and this task was not.
+    assert(Files.readString(new File(marker.getPath + ".interrupted").toPath) == "false")
+  }
+
+  nativeTest("close a reader while another thread reads it") {
+    val session = newSession(defaultPackage)
+    val pool = ThreadUtils.newDaemonSingleThreadExecutor("native-reader")
+    // Closes a reader while another thread is in get_next. The reader releases the stream once
+    // get_next returns, also when it fails, and then next returns false or throws.
+    def closeWhileReading(failing: Boolean): Either[Throwable, Boolean] = {
+      val marker = new File(Utils.createTempDir(), "released")
+      val options = Seq("end" -> "10", "partitions" -> "1", "slow_read" -> marker.getPath) ++
+        (if (failing) Seq("fail" -> "slow_read") else Nil)
+      val batch = scan(range(session, options: _*)).toBatch
+      val reader =
+        batch.createReaderFactory().createColumnarReader(batch.planInputPartitions().head)
+      try {
+        val read = pool.submit(new Callable[Boolean] {
+          override def call(): Boolean = reader.next()
+        })
+        eventually(timeout(1.minute)) {
+          assert(new File(marker.getPath + ".reading").isFile)
+        }
+        reader.close()
+        if (marker.isFile) fail(s"The stream was released: ${Files.readString(marker.toPath)}.")
+        new File(marker.getPath + ".continue").createNewFile()
+        val result = try Right(read.get(1, TimeUnit.MINUTES)) catch {
+          case e: ExecutionException => Left(e.getCause)
+        }
+        assert(Files.readString(marker.toPath) == "after get_next")
+        // The task context was still valid once get_next continued, as in the test above.
+        assert(Files.readString(new File(marker.getPath + ".interrupted").toPath) == "false")
+        // A reader that was closed reads nothing more, and closing it again does not fail.
+        assert(!reader.next())
+        reader.close()
+        result
+      } finally {
+        // Lets get_next continue, and does not hide a failure of the test if closing fails.
+        new File(marker.getPath + ".continue").createNewFile()
+        Utils.tryLogNonFatalError(reader.close())
+      }
+    }
+    try {
+      assert(closeWhileReading(failing = false) == Right(false))
+      val error = closeWhileReading(failing = true).swap.getOrElse(fail("next did not fail"))
+      assert(error.getMessage.contains("injected failure after a slow get_next"))
+    } finally {
+      pool.shutdown()
+    }
+  }
+
   nativeTest("load libraries that export the same functions side by side") {
     val session = newSession(
       defaultPackage, createPackage(negatingLibrary, dataSources("b_")))
@@ -1522,8 +1606,12 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "name" -> "native_range",
         "packages" -> Seq(first, second).map(_.getCanonicalPath).mkString(", ")))
-    // The same package found twice is not a conflict: here, in the configured paths and in the
-    // artifacts of the session.
+    // The same package found twice is not a conflict: here, listed both as a file and through
+    // its directory.
+    val only = Utils.createTempDir()
+    val pkg = createPackage(library, dataSources(""), dir = only, fileName = "c.sparkpkg")
+    checkRows(range(newSession(pkg, only), "end" -> "2"), Seq(expectedRow(0L), expectedRow(1L)))
+    // Nor is the same package, configured and also added by the session.
     val session = newSession(first)
     session.addArtifact(first.getPath)
     checkRows(range(session, "end" -> "2"), Seq(expectedRow(0L), expectedRow(1L)))
@@ -1553,6 +1641,184 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       .filter(_.contains("which the session added last"))
     assert(logged.size == 2, logged)
     assert(logged.forall(_.contains("for the data source native_range")), logged)
+  }
+
+  nativeTest("reject a package that a session adds when Spark cannot use it") {
+    // The package that a session added last takes precedence, so Spark rejects a package that it
+    // cannot use when the session adds it, rather than keep using what the session used before.
+    val session = newSession(defaultPackage)
+    def ids(): DataFrame = range(session, "end" -> "3").select("id")
+    val dir = Utils.createTempDir()
+    def check(pkg: File, subClass: String, params: Map[String, String]): Unit = {
+      // Also when the same file is added again.
+      (1 to 2).foreach { _ =>
+        checkError(
+          exception = intercept[SparkRuntimeException](session.addArtifact(pkg.getPath)),
+          condition = s"INVALID_NATIVE_DATA_SOURCE_PACKAGE.$subClass",
+          parameters = Map("path" -> pkg.getPath) ++ params)
+      }
+      // The session does not get it, and keeps using the configured package.
+      assert(session.artifactManager.getNativeDataSourcePackages._1.isEmpty)
+      assert(!session.artifactManager.hasFileArtifact(pkg.getName))
+      assert(!session.sparkContext.listFiles().exists(_.endsWith("/" + pkg.getName)))
+      checkRows(ids(), Seq(Row(0L), Row(1L), Row(2L)))
+    }
+    check(createPackage(renamedNegatingLibrary, dataSources(""), dir = dir,
+        fileName = "range-2.0.sparkpkg", abiVersion = 2),
+      "UNSUPPORTED_ABI_VERSION", Map("version" -> "2", "supported" -> "1"))
+    check(createZip(dir, "range-2.1.sparkpkg",
+        NativeDataSourcePackage.MANIFEST_NAME -> manifestJson(
+          dataSources(""), Map(NativePlatform.current -> "lib.so")).getBytes(UTF_8)),
+      "INVALID_MANIFEST", Map("reason" -> "The package does not contain the library lib.so."))
+    // ZipFile.getEntry("lib") also finds the directory entry "lib/", as for the manifest below.
+    check(createZip(dir, "range-2.7.sparkpkg",
+        NativeDataSourcePackage.MANIFEST_NAME -> manifestJson(
+          dataSources(""), Map(NativePlatform.current -> "lib")).getBytes(UTF_8),
+        "lib/" -> Array.emptyByteArray, "lib/x" -> "x".getBytes(UTF_8)),
+      "INVALID_MANIFEST", Map("reason" -> "The package does not contain the library lib."))
+    check(createZip(dir, "range-2.8.sparkpkg",
+        s"${NativeDataSourcePackage.MANIFEST_NAME}/" -> Array.emptyByteArray),
+      "INVALID_MANIFEST", Map("reason" ->
+        s"The package does not contain the manifest ${NativeDataSourcePackage.MANIFEST_NAME}."))
+    val notAZip = new File(dir, "range-2.2.sparkpkg")
+    Files.writeString(notAZip.toPath, "not a zip")
+    // The message of the ZipException names no file.
+    val notAZipReason =
+      s"The package is not a valid zip file: ${intercept[ZipException](new ZipFile(notAZip))}"
+    check(notAZip, "INVALID_MANIFEST", Map("reason" -> notAZipReason))
+    val directory = new File(dir, "range-2.3.sparkpkg")
+    assert(directory.mkdir())
+    check(directory, "INVALID_MANIFEST", Map("reason" -> "The package is a directory."))
+    // The driver loads the library to plan a query.
+    check(createPackage(library, dataSources(""), dir = dir, fileName = "range-2.4.sparkpkg",
+        platform = "other-platform"),
+      "UNSUPPORTED_PLATFORM", Map("platform" -> NativePlatform.current,
+        "platforms" -> "other-platform"))
+    // A file that does not exist, or that cannot be read, fails as for the other artifacts.
+    intercept[NoSuchFileException](session.addArtifact(new File(dir, "missing.sparkpkg").getPath))
+    val unreadable = createPackage(library, dataSources(""), dir = dir,
+      fileName = "range-2.5.sparkpkg")
+    try {
+      // Not when the user can read any file, as root.
+      if (unreadable.setReadable(false) && !Files.isReadable(unreadable.toPath)) {
+        intercept[AccessDeniedException](session.addArtifact(unreadable.getPath))
+      }
+    } finally {
+      unreadable.setReadable(true)
+    }
+    // A package that Spark staged, such as one added from bytes, is named after the artifact.
+    val staged = intercept[SparkRuntimeException] {
+      session.addArtifact(Files.readAllBytes(createPackage(library, dataSources(""),
+        abiVersion = 2).toPath), "range-2.6.sparkpkg")
+    }
+    checkError(
+      exception = staged,
+      condition = "INVALID_NATIVE_DATA_SOURCE_PACKAGE.UNSUPPORTED_ABI_VERSION",
+      parameters = Map(
+        "path" -> Paths.get("files", "range-2.6.sparkpkg").toString,
+        "version" -> "2",
+        "supported" -> "1"))
+    assert(session.artifactManager.getNativeDataSourcePackages._1.isEmpty)
+
+    // A valid package with the same file name as a rejected one can be added then.
+    val added = createPackage(renamedNegatingLibrary, dataSources(""),
+      fileName = "range-2.0.sparkpkg")
+    session.addArtifact(added.getPath)
+    checkRows(ids(), Seq(Row(0L), Row(-1L), Row(-2L)))
+    // Adding it again, from the file or from the same bytes, does nothing.
+    session.addArtifact(added.getPath)
+    session.addArtifact(Files.readAllBytes(added.toPath), added.getName)
+    assert(session.artifactManager.getNativeDataSourcePackages._1.map(_.getName) ==
+      Seq("range-2.0.sparkpkg"))
+    checkRows(ids(), Seq(Row(0L), Row(-1L), Row(-2L)))
+    // Another file with the name of an artifact fails as such, also if it is not a package, and
+    // the error names the artifact.
+    def checkExisting(e: SparkRuntimeException, fileName: String = "range-2.0.sparkpkg"): Unit = {
+      checkError(
+        exception = e,
+        condition = "ARTIFACT_ALREADY_EXISTS",
+        parameters = Map("normalizedRemoteRelativePath" -> Paths.get("files", fileName).toString))
+    }
+    val sameName = new File(Utils.createTempDir(), "range-2.0.sparkpkg")
+    Files.copy(notAZip.toPath, sameName.toPath)
+    checkExisting(intercept[SparkRuntimeException](session.addArtifact(sameName.getPath)))
+    val sameNameDirectory = new File(Utils.createTempDir(), "range-2.0.sparkpkg")
+    assert(sameNameDirectory.mkdir())
+    checkExisting(intercept[SparkRuntimeException](session.addArtifact(sameNameDirectory.getPath)))
+    val missing = new File(Utils.createTempDir(), "range-2.0.sparkpkg")
+    checkExisting(intercept[SparkRuntimeException](session.addArtifact(missing.getPath)))
+    // Also for a package that Spark staged, which is compared with the artifact before the check.
+    checkExisting(intercept[SparkRuntimeException] {
+      session.addArtifact("not a zip".getBytes(UTF_8), "range-2.0.sparkpkg")
+    })
+    // And for an artifact that is a directory, as files/range-5.0.sparkpkg is after this.
+    val inner = new File(Utils.createTempDir(), "inner.txt")
+    Files.writeString(inner.toPath, "inner")
+    session.artifactManager.addArtifact(Paths.get("files", "range-5.0.sparkpkg", inner.getName),
+      inner.toPath, None, deleteStagedFile = false)
+    checkExisting(intercept[SparkRuntimeException] {
+      session.addArtifact(createPackage(library, dataSources(""),
+        fileName = "range-5.0.sparkpkg").getPath)
+    }, "range-5.0.sparkpkg")
+
+    // A call that adds several artifacts adds the others, and reports all the rejected ones.
+    val valid = createPackage(library, dataSources(""), dir = dir, fileName = "range-3.0.sparkpkg")
+    val rejected = intercept[SparkRuntimeException] {
+      session.addArtifacts(sameName.toURI, notAZip.toURI, valid.toURI)
+    }
+    checkExisting(rejected)
+    assert(rejected.getSuppressed.length == 1)
+    checkError(
+      exception = rejected.getSuppressed.head.asInstanceOf[SparkRuntimeException],
+      condition = "INVALID_NATIVE_DATA_SOURCE_PACKAGE.INVALID_MANIFEST",
+      parameters = Map("path" -> notAZip.getPath, "reason" -> notAZipReason))
+    checkRows(ids(), Seq(Row(0L), Row(1L), Row(2L)))
+
+    // Only the file artifacts (files/) with the extension are packages, which Spark checks, and
+    // not other kinds of artifacts with it, which a Spark Connect client can add.
+    val pyFile = createPackage(library, dataSources(""), dir = dir,
+      fileName = "range-4.0.sparkpkg", abiVersion = 2)
+    session.artifactManager.addArtifact(
+      Paths.get("pyfiles", pyFile.getName), pyFile.toPath, None, deleteStagedFile = false)
+    assert(session.artifactManager.getNativeDataSourcePackages._1.map(_.getName) ==
+      Seq("range-2.0.sparkpkg", "range-3.0.sparkpkg"))
+  }
+
+  test("add any file with the extension when native data sources are disabled") {
+    val session = spark.newSession()
+    sessions += session
+    // A static configuration, which a session cannot set otherwise.
+    session.sessionState.conf.setConf(StaticSQLConf.NATIVE_DATA_SOURCE_ENABLED, false)
+    val file = new File(Utils.createTempDir(), "not_a_package.sparkpkg")
+    Files.writeString(file.toPath, "not a zip")
+    session.addArtifact(file.getPath)
+    assert(session.artifactManager.hasFileArtifact(file.getName))
+  }
+
+  test("add a read-only package as a writable artifact") {
+    // Spark checks a copy of the file of the user, which keeps its permissions, or on Windows its
+    // read-only attribute, so Spark makes it writable: the artifact, moved from it, is writable.
+    val session = spark.newSession()
+    sessions += session
+    val pkg = createZip(Utils.createTempDir(), "read_only.sparkpkg",
+      NativeDataSourcePackage.MANIFEST_NAME -> manifestJson(
+        dataSources(""), Map(NativePlatform.current -> "lib.so")).getBytes(UTF_8),
+      "lib.so" -> "lib".getBytes(UTF_8))
+    assert(pkg.setWritable(false))
+    try {
+      session.addArtifact(pkg.getPath)
+      val artifact = session.artifactManager.getNativeDataSourcePackages._1.head.toPath
+      // The permissions rather than Files.isWritable, which is true for root whatever they are.
+      Option(Files.getFileAttributeView(artifact, classOf[PosixFileAttributeView])) match {
+        case Some(view) =>
+          assert(view.readAttributes().permissions().contains(PosixFilePermission.OWNER_WRITE))
+        case None =>
+          // On Windows, Files.isWritable reads the read-only attribute.
+          assert(Files.isWritable(artifact))
+      }
+    } finally {
+      pkg.setWritable(true)
+    }
   }
 
   nativeTest("Java data sources take precedence") {
