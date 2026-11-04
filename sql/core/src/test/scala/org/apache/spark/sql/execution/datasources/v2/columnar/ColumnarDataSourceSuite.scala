@@ -216,6 +216,17 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(e.getMessage == "injected planning failure")
     assert(intercept[IllegalStateException](failingBatch.createReaderFactory()) eq e)
     assert(failing.plans.get() == 1)
+
+    // So is a failure to prune the columns: the planner is asked to prune them once.
+    val failingPruning = new TestRangeDataSource(options("end" -> "4", "failPruning" -> "true"))
+    val prunedBuilder =
+      new ColumnarScanBuilder(format, failingPruning.schema(), () => failingPruning)
+    prunedBuilder.pruneColumns(StructType.fromDDL("id BIGINT"))
+    val prunedScan = prunedBuilder.build()
+    val pruningError = intercept[IllegalStateException](prunedScan.toBatch)
+    assert(pruningError.getMessage == "injected pruning failure")
+    assert(intercept[IllegalStateException](prunedScan.toBatch) eq pruningError)
+    assert(failingPruning.prunes.get() == 1 && failingPruning.batchPlanners.get() == 1)
   }
 
   test("prune the columns of a scan once") {

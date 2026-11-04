@@ -227,7 +227,8 @@ class ColumnarBatchScan(planner: ColumnarBatchPlanner, projection: Option[Array[
   override def planInputPartitions(): Array[InputPartition] = planned.get.partitions
 
   override def createReaderFactory(): PartitionReaderFactory = {
-    ColumnarProjection(planned.get.readerFactory, projection)
+    val factory = planned.get.readerFactory
+    projection.fold(factory)(new ColumnarProjectionReaderFactory(factory, _))
   }
 }
 
@@ -356,19 +357,6 @@ class ColumnarStreamPartitionReaderFactory(reader: ColumnarStreamReader)
   extends ColumnarOnlyPartitionReaderFactory {
   override def createColumnarReader(partition: InputPartition): PartitionReader[ColumnarBatch] = {
     reader.read(partition)
-  }
-}
-
-object ColumnarProjection {
-  /**
-   * Returns `factory`, or a factory whose readers only return the columns at `projection` of the
-   * batches of the readers of `factory`, if any.
-   */
-  def apply(
-      factory: PartitionReaderFactory,
-      projection: Option[Array[Int]]): PartitionReaderFactory = projection match {
-    case Some(ordinals) => new ColumnarProjectionReaderFactory(factory, ordinals)
-    case None => factory
   }
 }
 
