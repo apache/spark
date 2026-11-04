@@ -610,7 +610,21 @@ def maybe_dispatch_ufunc_to_spark_func(
             args = [F.lit(inp) for inp in args]
             return np_spark_map_func(*args)
 
-        return column_op(convert_arguments)(*inputs)
+        if isinstance(inputs[0], IndexOpsMixin):
+            return column_op(convert_arguments)(*inputs)
+
+        # column_op takes the Series or Index as its first argument, but the left operand can be
+        # a scalar, e.g. np.gcd(2, psser). Move the Series or Index to the front for column_op and
+        # restore the original operand order before applying the function.
+        pos = next(i for i, inp in enumerate(inputs) if isinstance(inp, IndexOpsMixin))
+
+        @no_type_check
+        def convert_reordered_arguments(*args):
+            return convert_arguments(*args[1 : pos + 1], args[0], *args[pos + 1 :])
+
+        return column_op(convert_reordered_arguments)(
+            inputs[pos], *inputs[:pos], *inputs[pos + 1 :]
+        )
     else:
         return NotImplemented
 

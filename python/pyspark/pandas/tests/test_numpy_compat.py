@@ -983,6 +983,27 @@ class NumPyCompatTestsMixin:
         finally:
             reset_option("compute.ops_on_diff_frames")
 
+    def test_np_binary_ufunc_scalar_left_operand(self):
+        # The scalar is the left operand, so NumPy dispatches through the right-hand Series
+        # or Index, e.g. np.gcd(2, psser).
+        pdf = pd.DataFrame({"a": [1, 2, 4, 6, 9]}, index=[1, 2, 3, 5, 8])
+        psdf = ps.from_pandas(pdf)
+
+        for np_name in [
+            "arctan2",
+            "copysign",
+            "gcd",
+            "hypot",
+            "lcm",
+            "logaddexp",
+            "maximum",
+            "minimum",
+        ]:
+            np_func = getattr(np, np_name)
+            with self.subTest(np_name=np_name):
+                self.assert_eq(np_func(6, pdf.a), np_func(6, psdf.a), almost=True)
+                self.assert_eq(np_func(6, pdf.index), np_func(6, psdf.index), almost=True)
+
     def test_np_spark_compat_frame(self):
         from pyspark.pandas.numpy_compat import binary_np_spark_mappings, unary_np_spark_mappings
 
