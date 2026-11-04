@@ -24,8 +24,11 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
 /**
  * An internal mixin for a `Write`, or for the `StreamingWrite` of a micro-batch write, whose data
  * writers are [[ColumnarInputDataWriter]]s. When the query of an append or an overwrite, or of a
- * micro-batch, produces columnar batches, Spark passes them to the data writers instead of
- * converting them to rows first. It is internal: only the columnar adapter of Spark, which the
+ * micro-batch, only produces columnar batches, and the session has no columnar rules of
+ * extensions, Spark passes the batches to the data writers instead of converting them to rows
+ * first. Otherwise, the data writers get rows: for example for the scan of a cached DataFrame,
+ * which supports rows too, or for a query that adaptive query execution wraps (see
+ * `V2TableWriteExec.writesColumnar`). It is internal: only the columnar adapter of Spark, which the
  * native data sources use, implements it.
  */
 trait SupportsColumnarInput

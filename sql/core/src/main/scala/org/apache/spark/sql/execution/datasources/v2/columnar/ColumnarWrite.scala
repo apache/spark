@@ -58,8 +58,9 @@ class ColumnarWriteBuilder(
 }
 
 /**
- * A write to a [[ColumnarDataSource]]. Its data writers also take the batches of a columnar
- * query, which Spark then does not convert to rows (see [[ArrowBatchingDataWriter]]).
+ * A write to a [[ColumnarDataSource]]. Its data writers also take the batches of a query that only
+ * produces columnar batches, in a session without columnar rules of extensions, which Spark then
+ * does not convert to rows (see [[SupportsColumnarInput]] and [[ArrowBatchingDataWriter]]).
  */
 class ColumnarWrite(
     shortName: String,

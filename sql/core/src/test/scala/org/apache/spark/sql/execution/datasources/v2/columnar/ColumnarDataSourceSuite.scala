@@ -19,14 +19,15 @@ package org.apache.spark.sql.execution.datasources.v2.columnar
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util
 import java.util.Locale
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
+import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
+import scala.util.Try
 
 import org.apache.arrow.c.{ArrowArray, ArrowSchema, Data}
-import org.apache.arrow.vector.{BigIntVector, DecimalVector, FieldVector, FixedSizeBinaryVector, LargeVarCharVector, VectorSchemaRoot}
+import org.apache.arrow.vector.{BigIntVector, DecimalVector, FieldVector, FixedSizeBinaryVector, LargeVarCharVector, ValueVector, VectorSchemaRoot}
 import org.apache.arrow.vector.complex.ListVector
 import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType, Schema}
 
@@ -234,6 +235,35 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession
     }
   }
 
+  test("count the rows and release each batch of a columnar write") {
+    // The write node counts the rows of the batches that its data writers wrote.
+    val writes = QueryTest.withQueryExecutionsCaptured(spark) {
+      spark.read.format(format).option("end", "10").option("arrowBatchSize", "3").load()
+        .write.format(format).option("table", "counted_write").mode("append").save()
+    }.flatMap(_.executedPlan.collectFirst { case writeExec: V2TableWriteExec => writeExec })
+    assert(writes.head.writesColumnar, writes.head)
+    assert(writes.head.metrics("numOutputRows").value == 10)
+
+    // A scan whose batches have new Arrow vectors leaves them to the consumer, which releases each
+    // batch once its data writer took its data, also when the data writer fails on it.
+    Seq(false, true).foreach { fail =>
+      TestOwnedBatches.reset()
+      val table = s"owned_batches_write_$fail"
+      val write = Try {
+        spark.read.format(format).option("end", "10").option("arrowBatchSize", "3")
+          .option("ownedBatches", "true").load()
+          .write.format(format).option("table", table).option("fail", fail).mode("append").save()
+      }
+      assert(write.isFailure == fail, write)
+      if (!fail) {
+        assert(TestColumnarSink.rows(table) == (0L until 10L).map(id => (id, s"name$id")))
+      }
+      assert(!TestOwnedBatches.releases.isEmpty)
+      assert(TestOwnedBatches.releases.asScala.map(_.get()).toSet == Set(1))
+      assert(TestOwnedBatches.leakedBytes.get() == 0)
+    }
+  }
+
   test("write rows when an extension has columnar rules") {
     // The physical plan of a copy, before the transitions between rows and columns.
     val qe = QueryTest.withQueryExecutionsCaptured(spark) {
@@ -390,6 +420,47 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession
         // The size of the converted columns counts too.
         assert(writeAndRead(batch, overwrite, maxBytesPerBatch = 1) ==
           ((Seq.fill(7)(1), Seq.fill(7)("UTC"), Seq.fill(7)(utf8), expected)))
+      }
+
+      // The columns of a batch imported with the C data interface, as a native read imports them,
+      // are copied the same way, from any row, though their buffers are those of their producer:
+      // the batch is still readable afterwards, until its producer releases it.
+      Seq(3 -> Int.MaxValue.toLong, 10 -> 1L).foreach { case (maxRecordsPerBatch, maxBytes) =>
+        withArrowBatch(largeVarTypes = false) { (exported, _) =>
+          val vectors = (0 until exported.numCols()).map { i =>
+            exported.column(i).asInstanceOf[ArrowColumnVector].getValueVector
+              .asInstanceOf[FieldVector]
+          }
+          val importer = ArrowUtils.rootAllocator.newChildAllocator("importer", 0, Long.MaxValue)
+          try {
+            val array = ArrowArray.allocateNew(importer)
+            val arrowSchema = ArrowSchema.allocateNew(importer)
+            val imported = try {
+              Data.exportVectorSchemaRoot(allocator,
+                new VectorSchemaRoot(vectors.map(_.getField).asJava, vectors.asJava, rows.length),
+                null, array, arrowSchema)
+              Data.importVectorSchemaRoot(importer, array, arrowSchema, null)
+            } finally {
+              array.close()
+              arrowSchema.close()
+            }
+            try {
+              val batch = new ColumnarBatch(imported.getFieldVectors.asScala
+                .map(new ArrowColumnVector(_): ColumnVector).toArray, imported.getRowCount)
+              val sizes = if (maxBytes == 1L) Seq.fill(7)(1) else Seq(3, 3, 1)
+              assert(writeAndRead(batch, () => (), maxRecordsPerBatch = maxRecordsPerBatch,
+                maxBytesPerBatch = maxBytes) ==
+                ((sizes, Seq.fill(sizes.length)("UTC"), Seq.fill(sizes.length)(utf8), expected)))
+              val toUnsafe = UnsafeProjection.create(schema)
+              assert(batch.rowIterator().asScala.map(toUnsafe(_).copy()).toSeq == expected)
+            } finally {
+              imported.close()
+            }
+          } finally {
+            // Fails if the copy left any memory of the imported batch allocated.
+            importer.close()
+          }
+        }
       }
 
       // On-heap vectors are converted too. They do not support the null type.
@@ -732,6 +803,8 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession
         query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.executedPlan
       assert(plan.collectFirst { case write: V2TableWriteExec => write.query }
         .exists(_.isInstanceOf[MicroBatchScanExec]), plan)
+      // The progress of the micro-batch counts the rows of the batches that it wrote.
+      assert(query.recentProgress.map(_.sink.numOutputRows).sum == 5)
     } finally {
       query.stop()
     }
@@ -832,11 +905,13 @@ class TestRangeDataSource(options: CaseInsensitiveStringMap) extends ColumnarDat
     }.getOrElse(super.capabilities())
   }
 
-  // With the option "arrowBatchSize", the batch scans return Arrow batches of that size.
+  // With the option "arrowBatchSize", the batch scans return Arrow batches of that size, with new
+  // vectors for each batch with the option "ownedBatches".
   override def batchPlanner(schema: StructType): ColumnarBatchPlanner = {
     batchPlanners.incrementAndGet()
     new TestRangePlanner(end, schema, options.getBoolean("failPlanning", false), plans,
-      options.getInt("arrowBatchSize", 0), options.getBoolean("pruneColumns", true))
+      options.getInt("arrowBatchSize", 0), options.getBoolean("pruneColumns", true),
+      options.getBoolean("ownedBatches", false))
   }
 
   override def streamReader(
@@ -871,7 +946,8 @@ class TestRangePlanner(
     fail: Boolean,
     plans: AtomicInteger,
     arrowBatchSize: Int,
-    prunesColumns: Boolean)
+    prunesColumns: Boolean,
+    ownedBatches: Boolean)
   extends ColumnarBatchPlanner {
   private var limit = Long.MaxValue
   private var readSchema = schema
@@ -897,17 +973,20 @@ class TestRangePlanner(
     val mid = hi / 2
     ColumnarPlannedBatch(
       Array(TestRangePartition(0, mid), TestRangePartition(mid, hi)),
-      new TestRangeReaderFactory(readSchema, arrowBatchSize))
+      new TestRangeReaderFactory(readSchema, arrowBatchSize, ownedBatches))
   }
 }
 
-/** @param arrowBatchSize the size of the Arrow batches to return, or 0 for on-heap batches */
-class TestRangeReaderFactory(readSchema: StructType, arrowBatchSize: Int)
+/**
+ * @param arrowBatchSize the size of the Arrow batches to return, or 0 for on-heap batches
+ * @param ownedBatches whether each Arrow batch has new vectors, see [[TestArrowBatchReader]]
+ */
+class TestRangeReaderFactory(readSchema: StructType, arrowBatchSize: Int, ownedBatches: Boolean)
   extends ColumnarOnlyPartitionReaderFactory {
   override def createColumnarReader(partition: InputPartition): PartitionReader[ColumnarBatch] = {
     val range = partition.asInstanceOf[TestRangePartition]
     if (arrowBatchSize > 0) {
-      new TestArrowBatchReader(range.lo, range.hi, readSchema, arrowBatchSize)
+      new TestArrowBatchReader(range.lo, range.hi, readSchema, arrowBatchSize, owned = ownedBatches)
     } else {
       new TestBatchReader(range.lo, range.hi, readSchema)
     }
@@ -972,26 +1051,30 @@ class TestBatchReader(lo: Long, hi: Long, schema: StructType)
 
 /**
  * Returns the ids [lo, hi) and their names in Arrow batches of at most `batchSize` rows. It writes
- * each batch to the same Arrow vectors, over the previous one.
+ * each batch to the same Arrow vectors, over the previous one, unless `owned`.
+ *
+ * @param largeVarTypes whether the strings are `large_utf8`, which the writers convert
+ * @param owned whether each batch has new Arrow vectors, which the consumer releases with the
+ *              batch, see [[TestOwnedBatches]]
  */
-/** @param largeVarTypes whether the strings are `large_utf8`, which the writers convert */
 class TestArrowBatchReader(
     lo: Long,
     hi: Long,
     schema: StructType,
     batchSize: Int,
-    largeVarTypes: Boolean = false)
+    largeVarTypes: Boolean = false,
+    owned: Boolean = false)
   extends PartitionReader[ColumnarBatch] {
   private val allocator =
     ArrowUtils.rootAllocator.newChildAllocator("test arrow batch reader", 0, Long.MaxValue)
-  private val root = VectorSchemaRoot.create(
-    ArrowUtils.toArrowSchema(
-      schema, "UTC", errorOnDuplicatedFieldNames = true, largeVarTypes = largeVarTypes),
-    allocator)
-  private val arrowWriter = ArrowWriter.create(root)
-  // The vectors are reused, so a consumer does not release them.
-  private val batch = new ColumnarBatch(
-    root.getFieldVectors.asScala.map(new ReusedArrowColumnVector(_): ColumnVector).toArray)
+  private val arrowSchema = ArrowUtils.toArrowSchema(
+    schema, "UTC", errorOnDuplicatedFieldNames = true, largeVarTypes = largeVarTypes)
+  // The vectors of the batches: reused for each batch, which a consumer does not release, or new
+  // ones for each owned batch, which the consumer releases with the batch.
+  private var root: VectorSchemaRoot = _
+  private var arrowWriter: ArrowWriter = _
+  private var batch: ColumnarBatch = _
+  private val ownedRoots = ArrayBuffer.empty[VectorSchemaRoot]
   private var start = lo
 
   override def next(): Boolean = {
@@ -999,7 +1082,16 @@ class TestArrowBatchReader(
       false
     } else {
       val end = math.min(hi, start + batchSize)
-      arrowWriter.reset()
+      if (owned || root == null) {
+        root = VectorSchemaRoot.create(arrowSchema, allocator)
+        if (owned) ownedRoots += root
+        arrowWriter = ArrowWriter.create(root)
+        batch = new ColumnarBatch(root.getFieldVectors.asScala.map { vector =>
+          if (owned) TestOwnedBatches.vector(vector) else new ReusedArrowColumnVector(vector)
+        }.toArray[ColumnVector])
+      } else {
+        arrowWriter.reset()
+      }
       (start until end).foreach { id =>
         arrowWriter.write(InternalRow.fromSeq(schema.fieldNames.toSeq.map {
           case "id" => id
@@ -1016,8 +1108,37 @@ class TestArrowBatchReader(
   override def get(): ColumnarBatch = batch
 
   override def close(): Unit = {
-    root.close()
+    // What the consumer did not release of the owned batches leaks: it is recorded, and freed.
+    TestOwnedBatches.leakedBytes.addAndGet(
+      ownedRoots.flatMap(_.getFieldVectors.asScala).map(_.getBufferSize.toLong).sum)
+    ownedRoots.foreach(_.close())
+    if (!owned && root != null) root.close()
     allocator.close()
+  }
+}
+
+/** The Arrow vectors of the owned batches of [[TestArrowBatchReader]], and their releases. */
+object TestOwnedBatches {
+  // The number of times that each vector was released.
+  val releases = new ConcurrentLinkedQueue[AtomicInteger]()
+  // The bytes of the owned batches that the consumers did not release.
+  val leakedBytes = new AtomicLong()
+
+  def reset(): Unit = {
+    releases.clear()
+    leakedBytes.set(0)
+  }
+
+  /** Returns a column vector of `vector`, which counts its releases. */
+  def vector(vector: ValueVector): ArrowColumnVector = {
+    val released = new AtomicInteger()
+    releases.add(released)
+    new ArrowColumnVector(vector) {
+      override def close(): Unit = {
+        released.incrementAndGet()
+        super.close()
+      }
+    }
   }
 }
 
