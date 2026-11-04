@@ -56,9 +56,14 @@ object ConstantFolding extends Rule[LogicalPlan] {
     case _: Attribute => true
     case _: Literal => true
     // A cast keeps the eval mode it was analyzed with (for example, in a view), so check it as
-    // well. Keep the session check: some LEGACY casts can still fail, such as an interval
-    // overflow, and this should not start folding them in ANSI sessions.
-    case c: Cast if !conf.ansiEnabled && c.evalMode != EvalMode.ANSI => hasNoSideEffect(c.child)
+    // well. A TRY cast returns null instead of failing, and so do some LEGACY casts. Keep the
+    // session check so that this does not start folding casts in ANSI sessions.
+    case c: Cast if !conf.ansiEnabled => c.evalMode match {
+      case EvalMode.TRY => hasNoSideEffect(c.child)
+      case EvalMode.LEGACY if Cast.isNoThrowLegacyCast(c.child.dataType, c.dataType) =>
+        hasNoSideEffect(c.child)
+      case _ => false
+    }
     case _: NoThrow if e.deterministic => e.children.forall(hasNoSideEffect)
     case _ => false
   }
