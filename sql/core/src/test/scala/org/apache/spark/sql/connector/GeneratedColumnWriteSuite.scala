@@ -1099,23 +1099,28 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
   test("SPARK-60857: CREATE TABLE rejects a struct generation expression with other field names") {
     val tblName = "my_tab"
     withTable(s"testcat.$tblName") {
-      // An auto-filled value lines up the struct fields with the column type by name, while the
-      // check of a provided value lines them up by position. So a row that Spark auto-filled from
-      // this expression would fail the check when a later write carries it.
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(s"""CREATE TABLE testcat.$tblName(
-                 |  a INT,
-                 |  b INT,
-                 |  s STRUCT<x: INT, y: INT> GENERATED ALWAYS AS (named_struct('y', a, 'x', b))
-                 |) USING foo""".stripMargin)
-        },
-        condition = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
-        parameters = Map(
-          "fieldName" -> "s",
-          "expressionStr" -> "named_struct('y', a, 'x', b)",
-          "reason" -> ("generation expression data type struct<y:int,x:int> names its struct " +
-            "fields differently from column data type struct<x:int,y:int>")))
+      // An auto-filled value lines up the struct fields with the column type by name under the
+      // writer's resolver, while the check of a provided value lines them up by position. So a row
+      // that Spark auto-filled from the first expression would fail the check when a later write
+      // carries it, and a case-sensitive writer could not auto-fill the second one.
+      Seq(
+        "named_struct('y', a, 'x', b)" -> "struct<y:int,x:int>",
+        "named_struct('X', b, 'Y', a)" -> "struct<X:int,Y:int>").foreach { case (expr, exprType) =>
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"""CREATE TABLE testcat.$tblName(
+                   |  a INT,
+                   |  b INT,
+                   |  s STRUCT<x: INT, y: INT> GENERATED ALWAYS AS ($expr)
+                   |) USING foo""".stripMargin)
+          },
+          condition = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+          parameters = Map(
+            "fieldName" -> "s",
+            "expressionStr" -> expr,
+            "reason" -> (s"generation expression data type $exprType names its struct " +
+              "fields differently from column data type struct<x:int,y:int>")))
+      }
 
       sql(s"""CREATE TABLE testcat.$tblName(
              |  a INT,
