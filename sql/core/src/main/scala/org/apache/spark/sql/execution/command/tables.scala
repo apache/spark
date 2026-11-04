@@ -135,6 +135,7 @@ case class CreateTableLikeCommand(
         partitionColumnNames = sourceTableDesc.partitionColumnNames,
         bucketSpec = sourceTableDesc.bucketSpec,
         properties = properties,
+        collation = sourceTableDesc.collation,
         tracksPartitionsInCatalog = sourceTableDesc.tracksPartitionsInCatalog)
 
     catalog.createTable(newTableDesc, ifNotExists)

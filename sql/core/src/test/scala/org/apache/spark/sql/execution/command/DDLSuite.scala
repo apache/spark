@@ -250,6 +250,66 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
       }
     }
   }
+
+  Seq[Option[String]](
+    Some("UTF8_LCASE"),
+    Some("UTF8_BINARY"),
+    Some("UNICODE_CI"),
+    None).foreach { defaultCollation =>
+    val label = defaultCollation.getOrElse("unspecified")
+
+    test(s"SPARK-60130: CREATE TABLE LIKE preserves default collation $label") {
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+        val src = "clone_collation_src"
+        val dst = "clone_collation_dst"
+        val expectedCollation = defaultCollation.getOrElse("UTF8_BINARY")
+        val clause = defaultCollation.map(c => s" DEFAULT COLLATION $c").getOrElse("")
+        val expectedGroups =
+          if (Set("UTF8_LCASE", "UNICODE_CI").contains(expectedCollation)) 1L else 2L
+
+        withTable(src, dst) {
+          sql(
+            s"""CREATE TABLE $src (
+               |  s STRING,
+               |  explicit_s STRING COLLATE UTF8_BINARY,
+               |  id INT
+               |) USING PARQUET$clause
+               |""".stripMargin)
+
+          sql(s"CREATE TABLE $dst LIKE $src")
+
+          assert(spark.table(dst).schema("s").dataType === StringType(expectedCollation))
+          assert(spark.table(dst).schema("explicit_s").dataType === StringType("UTF8_BINARY"))
+          assert(spark.table(dst).schema("id").dataType === IntegerType)
+
+          sql(s"ALTER TABLE $dst ADD COLUMNS (t STRING)")
+          sql(
+            s"""INSERT INTO $dst VALUES
+               |  ('a', 'a', 1, 'a'),
+               |  ('A', 'A', 2, 'A')
+               |""".stripMargin)
+
+          checkAnswer(
+            sql(s"SELECT COUNT(*) FROM (SELECT t FROM $dst GROUP BY t) groups"),
+            Row(expectedGroups))
+
+          assert(spark.table(dst).schema("t").dataType === StringType(expectedCollation))
+
+          checkAnswer(
+            sql(
+              s"""SELECT COUNT(*)
+                 |FROM (SELECT explicit_s FROM $dst GROUP BY explicit_s) groups
+                 |""".stripMargin),
+            Row(2L))
+
+          val catalog = spark.sessionState.catalog
+          val source = catalog.getTableMetadata(TableIdentifier(src))
+          val target = catalog.getTableMetadata(TableIdentifier(dst))
+          assert(target.collation === source.collation)
+        }
+      }
+    }
+  }
 }
 
 trait DDLSuiteBase extends QueryTest {
