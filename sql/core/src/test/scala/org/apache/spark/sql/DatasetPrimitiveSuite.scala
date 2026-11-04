@@ -355,6 +355,9 @@ class DatasetPrimitiveSuite extends SharedSparkSession {
 
     checkDataset(Seq(Seq(Some(1), None), Seq(Some(2))).toDF("c").as[Set[Integer]],
       Seq(Set[Integer](1, null), Set[Integer](2)): _*)
+
+    // A decoded set keeps the element order of the source array, which must not matter.
+    checkDataset(Seq(Seq(3, 1, 2)).toDF("c").as[Set[Int]], Set(1, 2, 3))
   }
 
   test("nested sequences") {
