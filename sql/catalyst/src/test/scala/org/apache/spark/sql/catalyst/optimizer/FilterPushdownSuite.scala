@@ -1140,6 +1140,21 @@ class FilterPushdownSuite extends PlanTest {
       .where($"p" > 1 && Rand(10) > 0.5 && $"q" > 1 && $"q" < 5)
       .analyze
     comparePlans(Optimize.execute(twoPythonQuery), twoPythonQuery)
+    // Nor when a condition after the first one kept above, here one over a Python UDF, can
+    // fail: also when it is the first one held back, over an expensive expression over a
+    // Python UDF, and when the aliases are all Python UDFs.
+    val stringUDF = PythonUDF("stringUDF", null, StringType, Seq(attrB),
+      PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
+    val overPython = If(stringUDF.rlike(Concat(Seq($"e", Literal("magic")))), $"a", $"b")
+    def failableProject: LogicalPlan = testStringRelation
+      .select($"a", pythonUDF.as("p"), otherPythonUDF.as("q"), overPython as "s", $"b")
+    Seq[Expression](
+      $"p" > 1 && Literal(10) / ($"s" - 3) > 0 && $"s" < 100,
+      $"p" > 1 && Literal(10) / ($"q" - 3) > 0 && $"q" < 100
+    ).foreach { condition =>
+      val originalQuery = failableProject.where(condition).analyze
+      comparePlans(Optimize.execute(originalQuery), originalQuery)
+    }
   }
 
   test("SPARK-60730: the legacy config pushes a cheap condition that can fail ahead of an " +

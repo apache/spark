@@ -3118,6 +3118,37 @@ class DataFrameSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-60730: a filter condition that can fail is not evaluated ahead of a condition " +
+    "over a Python UDF") {
+    import IntegratedUDFTestUtils._
+    assume(shouldTestPythonUDFs)
+    val py1 = TestPythonUDF("py1", Some(LongType))
+    val py2 = TestPythonUDF("py2", Some(LongType))
+    val scalaUDF = udf((i: Long) => i)
+    for (avoid <- Seq("true", "false"); split <- Seq("true", "false")) {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
+          SQLConf.AVOID_DOUBLE_FILTER_EVAL.key -> avoid,
+          SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> split) {
+        // The division fails on id 1, which `p > 1` drops, also when it is the first condition
+        // over an alias the projection evaluates, and when the aliases are all Python UDFs.
+        val expected = (2L until 10L).map(Row(_))
+        checkAnswer(spark.range(0, 10, 1, 1)
+          .select($"id", py1($"id") as "p", scalaUDF(py2($"id")) as "s")
+          .where($"p" > 1 && lit(10L) / ($"s" - 1) > 0 && $"s" < 100)
+          .select($"id"), expected)
+        checkAnswer(spark.range(0, 10, 1, 1)
+          .select($"id", py1($"id") as "p", py2($"id") as "q")
+          .where($"p" > 1 && lit(10L) / ($"q" - 1) > 0 && $"q" < 100)
+          .select($"id"), expected)
+        // A non-deterministic condition sees the rows `p >= 50` keeps, as in Spark 4.1.
+        assert(spark.range(0, 100, 1, 1)
+          .select($"id", py1($"id") as "p")
+          .where($"p" >= 50 && rand(10) > 0.5)
+          .count() === 31)
+      }
+    }
+  }
+
   test("SPARK-60528: collect a nested empty struct") {
     val df = spark.range(1).selectExpr("id AS i", "named_struct('a', struct()) AS s")
     checkAnswer(df, Row(0L, Row(Row())))
