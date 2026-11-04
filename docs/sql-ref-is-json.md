@@ -99,7 +99,9 @@ If checking the input requires going beyond one of these limits, the predicate d
 beginning of the input. A shape mismatch, however, is decided by the first token alone: input
 whose first token already rules out the requested shape returns `false` even if classifying the
 rest would exceed a limit, so an over-long number under `IS JSON OBJECT` or `IS JSON ARRAY`
-returns `false` rather than failing the query.
+returns `false` rather than failing the query. Trailing content after a well-formed value also
+returns `false` even when reading it would exceed a limit, since any trailing token already
+decides the answer.
 
 ### Examples
 

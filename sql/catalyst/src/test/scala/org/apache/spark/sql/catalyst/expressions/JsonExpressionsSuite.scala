@@ -21,6 +21,7 @@ import java.text.{DecimalFormat, DecimalFormatSymbols, SimpleDateFormat}
 import java.time.{LocalDateTime, ZoneOffset}
 import java.util.{Calendar, Locale, TimeZone}
 
+import com.fasterxml.jackson.core.StreamReadConstraints
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.{SparkException, SparkFunSuite, SparkRuntimeException}
@@ -1219,6 +1220,13 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkLimit(s"""{"${"a" * 50001}":1}""", IsJsonShape.Object,
       "IS_JSON_INPUT_LIMIT_EXCEEDED.NAME_LENGTH",
       Map("maxNameLength" -> "50000"))
+    // A string value one past the string-length limit is an error too, so the token walk keeps
+    // decoding every string value (a walk that stopped decoding would return true) and the limit
+    // error is recognized as STRING_LENGTH rather than UNKNOWN.
+    checkLimit(s""""${"a" * (StreamReadConstraints.DEFAULT_MAX_STRING_LEN + 1)}"""",
+      IsJsonShape.Any,
+      "IS_JSON_INPUT_LIMIT_EXCEEDED.STRING_LENGTH",
+      Map("maxStringLength" -> StreamReadConstraints.DEFAULT_MAX_STRING_LEN.toString))
     // A shape mismatch is decided by the first token, before any limit is reached: an over-deep
     // array is not an object, and an over-long root number is neither an object nor an array
     // even though Jackson reports the limit while producing the first token.
@@ -1227,6 +1235,18 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(IsJson(Literal("1" * 1001), IsJsonShape.Array), false)
     // The negated predicate over the same input returns true rather than raising.
     checkEvaluation(Not(IsJson(Literal("1" * 1001), IsJsonShape.Object)), true)
+    // Trailing content after a well-formed value already decides the answer, so it returns
+    // false even when reading it goes past a limit (a trailing number longer than the maximum,
+    // which Jackson validates while producing its token), for every shape whose first token
+    // matches; the negated predicate returns true rather than raising.
+    val overlongNumber = "9" * 1001
+    checkEvaluation(IsJson(Literal("{} " + overlongNumber), IsJsonShape.Object), false)
+    checkEvaluation(IsJson(Literal("[1] " + overlongNumber), IsJsonShape.Array), false)
+    checkEvaluation(IsJson(Literal("1 " + overlongNumber), IsJsonShape.Any), false)
+    checkEvaluation(IsJson(Literal("1 " + overlongNumber), IsJsonShape.Value), false)
+    checkEvaluation(IsJson(Literal("\"a\" 0." + "1" * 1001), IsJsonShape.Scalar), false)
+    checkEvaluation(Not(IsJson(Literal("{} " + overlongNumber), IsJsonShape.Object)), true)
+    checkEvaluation(Not(IsJson(Literal("1 " + overlongNumber), IsJsonShape.Any)), true)
   }
 
   test("SPARK-58793: IS JSON rejects malformed UTF-8 and unpaired surrogates") {
