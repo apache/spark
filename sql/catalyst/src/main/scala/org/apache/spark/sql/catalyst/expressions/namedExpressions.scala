@@ -463,8 +463,8 @@ case class OuterReference(e: NamedExpression)
   extends LeafExpression with NamedExpression with Unevaluable {
   override def dataType: DataType = e.dataType
   override def nullable: Boolean = e.nullable
-  // Keep only the raw CHAR/VARCHAR type when this reference is aliased. Other keys are
-  // resolution markers of the outer scope (e.g. SQL UDF parameters) and must not leak.
+  // Forward only the raw CHAR/VARCHAR type when aliased. Other keys are not forwarded; some,
+  // such as the SQL UDF parameter and auto-generated alias markers, must not leak.
   override def metadata: Metadata = CharVarcharUtils.getRawTypeString(e.metadata) match {
     case Some(rawType) => new MetadataBuilder()
       .putString(CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, rawType).build()
