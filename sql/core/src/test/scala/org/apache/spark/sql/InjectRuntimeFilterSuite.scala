@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, BloomFilterMightContain
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, BloomFilterAggregate}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan}
 import org.apache.spark.sql.columnar.CachedBatch
+import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog
 import org.apache.spark.sql.execution.{FileSourceScanExec, InSubqueryExec, ProjectedBroadcastValueSubqueryExec, ReusedSubqueryExec, SubqueryBroadcastExec, SubqueryExec}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEPropagateEmptyRelation}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
@@ -348,6 +349,10 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
   def bloomFilterKeys(query: String): Seq[Expression] =
     sql(query).queryExecution.optimizedPlan.flatMap(_.expressions)
       .flatMap(_.collect { case BloomFilterMightContain(_, XxHash64(Seq(key), _)) => key })
+
+  // The names of the columns that the bloom filters of `query` check.
+  def bloomFilterKeyNames(query: String): Seq[String] =
+    bloomFilterKeys(query).flatMap(_.references.map(_.name))
 
   // Asserts that `query` gets `numBloomFilters` bloom filters without DPP, so that a test that sees
   // fewer with DPP shows that the rule kept them out.
@@ -1343,8 +1348,8 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     }
   }
 
-  test("SPARK-60702: do not add bloom filter if the dpp filter has a non-deterministic build " +
-    "plan") {
+  test("SPARK-60702: do not add bloom filter if the creation side that the subquery reads is not " +
+    "deterministic") {
     // The build plan of the DPP filter would be the creation side of the bloom filter. A bloom
     // filter would evaluate it again, apart from the join, and could drop rows (SPARK-60808).
     // Cleanup drops such a DPP filter.
@@ -1374,11 +1379,8 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       withDppTestConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
           SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key ->
             (nddSize + 1).toString) {
-        assert(getNumBloomFilters(sql(query).queryExecution.optimizedPlan) == 0)
-        withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false") {
-          // Without DPP, the key has no DPP filter, and the bloom filter comes as on master.
-          assert(getNumBloomFilters(sql(query).queryExecution.optimizedPlan) == 1)
-        }
+        assertBloomFilterWithoutDpp(query)
+        assert(bloomFilterKeys(query).isEmpty)
       }
     }
   }
@@ -1448,6 +1450,14 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-60702: add bloom filter whose creation filter has a coalesce, which cannot fail") {
+    val query = "select * from bf5part join bf2 on bf5part.f5 = bf2.c2 " +
+      "where coalesce(bf2.a2, 0) = 36"
+    withDppTestConf() {
+      assertRewroteWithBloomFilterForDroppedDpp(query)
+    }
+  }
+
   test("SPARK-60702: do not add bloom filter for a key with a dropped dpp filter under a " +
     "decimal to bigint cast") {
     // `Cast.canUpCast` takes `DECIMAL(19,0)` to `BIGINT`, but `9999999999999999999` overflows. The
@@ -1494,12 +1504,57 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     // DPP filter is not deterministic, so cleanup removes it.
     val query = "select * from bf5part p join (select c2, input_file_name() src from bf2 " +
       "where a2 = 36) d on p.f5 = d.c2"
-    withDppTestConf() {
-      assert(bloomFilterKeys(query).flatMap(_.references.map(_.name)) == Seq("f5"))
+    withDppTestConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      assert(bloomFilterKeyNames(query) == Seq("f5"))
       val expected = withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "false") {
         sql(query).collect()
       }
       checkAnswer(sql(query), expected)
+    }
+  }
+
+  test("SPARK-60702: do not add bloom filter whose creation side reads a cache that can give " +
+    "other rows when scanned again") {
+    // A cache that is not materialized can compute a partition twice, once for the join and once
+    // for the bloom filter's subquery. A materialized cache gives the same rows again.
+    val query = "select * from bf5part p join bf2c d on p.f5 = d.c2 where d.a2 = 36"
+    withTempView("bf2c") {
+      withCache("bf2c") {
+        spark.table("bf2").createOrReplaceTempView("bf2c")
+        spark.catalog.cacheTable("bf2c")
+        val confs = Seq(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false")
+        withDppTestConf(confs: _*) {
+          assertBloomFilterWithoutDpp(query)
+          assert(bloomFilterKeys(query).isEmpty)
+        }
+        spark.table("bf2c").count()
+        withDppTestConf(confs: _*) {
+          assert(bloomFilterKeyNames(query) == Seq("f5"))
+        }
+      }
+    }
+  }
+
+  test("SPARK-60702: do not add bloom filter for a key with a dropped dpp filter of a collated " +
+    "string type") {
+    // The bloom filter hashes the bytes of the key, so `'abc'` and `'ABC'` would not match.
+    withSQLConf("spark.sql.catalog.testcat" -> classOf[InMemoryTableCatalog].getName) {
+      withTable("testcat.cf", "testcat.cd") {
+        sql("create table testcat.cf (k string collate utf8_lcase, v int) partitioned by (k)")
+        sql("insert into testcat.cf values ('abc', 1)")
+        sql("create table testcat.cd (k string collate utf8_lcase, flag int)")
+        sql("insert into testcat.cd values ('ABC', 1), ('zzz', 0)")
+        val query = "select v from testcat.cf where k in (select k from testcat.cd where flag = 1)"
+        withDppTestConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+            SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "0") {
+          // Without DPP, the key gets the bloom filter as on master, which drops the row
+          // (SPARK-58486).
+          assertBloomFilterWithoutDpp(query)
+          assert(bloomFilterKeys(query).isEmpty)
+          checkAnswer(sql(query), Row(1))
+        }
+      }
     }
   }
 
@@ -1519,7 +1574,8 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
         "group by k) t on d.k = t.k where d.x = 1 union all select count(*), 0 from d"
       withDppTestConf(SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false",
           SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-          SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "1") {
+          SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "1",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
         assertBloomFilterWithoutDpp(query)
         assert(bloomFilterKeys(query).isEmpty)
       }
@@ -1558,7 +1614,16 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
         assertBloomFilterWithoutDpp(castInFilter, 2)
         // The bloom filter goes to `c.t` instead, from `ra`, where nothing can fail.
         assertRewroteWithBloomFilter(castInFilter)
-        assert(bloomFilterKeys(castInFilter).flatMap(_.references.map(_.name)) == Seq("t"))
+        assert(bloomFilterKeyNames(castInFilter) == Seq("t"))
+        // So it does with each of these filters, which can fail too.
+        Seq("(c.t > 5 or cast(c.s as int) > 0)", "not (cast(c.s as int) in (1, 2))",
+          "cast(c.s as int) is null", "cast(c.s as int) is not null",
+          s"cast(c.s as int) in (${(1 to 11).mkString(", ")})",
+          "cast(cast(c.s as int) as boolean)"
+        ).foreach { condition =>
+          val query = castInFilter.replace("cast(c.s as int) > 0", condition)
+          assert(bloomFilterKeyNames(query) == Seq("t"), query)
+        }
       }
       val query = "select f.v from ra f join rc c on f.a = cast(c.s as int) and f.b = c.q " +
         "where f.x = 1 and c.flag = 1 union all select /*+ broadcast(g) */ g.v from rx " +
@@ -1584,17 +1649,18 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       withDppTestConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
           SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "1") {
         assertBloomFilterWithoutDpp(query, 2)
-        assert(bloomFilterKeys(query).flatMap(_.references.map(_.name)) == Seq("y"))
+        assert(bloomFilterKeyNames(query) == Seq("y"))
         checkAnswer(sql(query), Seq(Row("10", 10), Row("20", 20)))
       }
     }
   }
 
-  test("SPARK-60702: add bloom filter whose creation side keeps a dpp filter that runs as its " +
-    "own subquery") {
+  test("SPARK-60702: do not add bloom filter whose creation side keeps a dpp filter that runs as " +
+    "its own subquery") {
     // `rc2` is large and `ra2` small, so with `reuseBroadcastOnly` off the DPP filter on `c.q` has
-    // a benefit, and the one on `f.a` does not. The first runs as its own subquery, also in the
-    // bloom filter's subquery, where it prunes the same partitions. So `f.a` gets the bloom filter.
+    // a benefit, and the one on `f.a` does not. The first would run as its own subquery in the
+    // bloom filter's subquery, though cleanup can drop it from the join. So `f.a` gets no bloom
+    // filter. `c.t` gets one, from `ra2`.
     withTable("ra2", "rc2") {
       sql("create table ra2 (v int, x int, b int, a int) using parquet partitioned by (a)")
       sql("insert into ra2 select cast(id as int), 1, 10 + 10 * cast(id % 2 as int), " +
@@ -1610,7 +1676,7 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
           SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "1",
           SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false") {
         assertRewroteWithBloomFilter(query)
-        assert(bloomFilterKeys(query).flatMap(_.references.map(_.name)) == Seq("a"))
+        assert(bloomFilterKeyNames(query) == Seq("t"))
       }
     }
   }

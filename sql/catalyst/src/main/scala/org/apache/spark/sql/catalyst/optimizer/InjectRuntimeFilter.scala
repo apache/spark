@@ -406,49 +406,37 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     case _ => plan
   }
 
-  // Whether evaluating `key` cannot fail: an attribute, a numeric up-cast of such a key, or the
-  // normalization that `NormalizeFloatingNumbers` puts around a floating point join key.
-  // `canUpCast` also takes `DECIMAL(19,0)` to `BIGINT`, which can overflow. So a decimal to an
-  // integral type does not count.
-  private def isSafeKey(key: Expression): Boolean = key match {
-    case _: Attribute => true
-    case c: Cast if c.child.dataType.isInstanceOf[NumericType] &&
-        c.dataType.isInstanceOf[NumericType] && Cast.canUpCast(c.child.dataType, c.dataType) &&
-        !(c.child.dataType.isInstanceOf[DecimalType] && c.dataType.isInstanceOf[IntegralType]) =>
-      isSafeKey(c.child)
-    case KnownFloatingPointNormalized(NormalizeNaNAndZero(child)) => isSafeKey(child)
-    case _ => false
+  // Whether evaluating `e` cannot fail, also on rows that the join does not read. It asks
+  // `ExprUtils.canEvaluateUnconditionally`, after it takes out two wrappers that cannot fail
+  // either: a numeric up-cast, and the normalization that `NormalizeFloatingNumbers` puts around a
+  // floating point join key. `canUpCast` also takes `DECIMAL(19,0)` to `BIGINT`, which can
+  // overflow. So a decimal to an integral type does not count. An `onlyInBroadcast` DPP filter
+  // counts too, since it finds no broadcast in the bloom filter's subquery and is `true` there.
+  private def cannotFail(e: Expression): Boolean = e match {
+    case dpp: DynamicPruningSubquery => dpp.onlyInBroadcast
+    case _ => ExprUtils.canEvaluateUnconditionally(e.transformUp {
+      case c: Cast if c.child.dataType.isInstanceOf[NumericType] &&
+          c.dataType.isInstanceOf[NumericType] && Cast.canUpCast(c.child.dataType, c.dataType) &&
+          !(c.child.dataType.isInstanceOf[DecimalType] && c.dataType.isInstanceOf[IntegralType]) =>
+        c.child
+      case KnownFloatingPointNormalized(NormalizeNaNAndZero(child)) => child
+    })
   }
-
-  // Whether evaluating `condition` cannot fail: comparisons of safe keys and literals, null
-  // checks, and their combinations. A DPP filter on a safe key counts too, since its own subquery,
-  // if it has one, runs in the join as well.
-  private def isSafeCondition(condition: Expression): Boolean = condition match {
-    case And(left, right) => isSafeCondition(left) && isSafeCondition(right)
-    case Or(left, right) => isSafeCondition(left) && isSafeCondition(right)
-    case Not(child) => isSafeCondition(child)
-    case IsNull(child) => isSafeValue(child)
-    case IsNotNull(child) => isSafeValue(child)
-    case c: BinaryComparison => isSafeValue(c.left) && isSafeValue(c.right)
-    case In(value, list) => isSafeValue(value) && list.forall(isSafeValue)
-    case InSet(value, _) => isSafeValue(value)
-    case dpp: DynamicPruningSubquery => isSafeKey(dpp.pruningKey)
-    case _ => isSafeValue(condition)
-  }
-
-  private def isSafeValue(e: Expression): Boolean = e.isInstanceOf[Literal] || isSafeKey(e)
 
   // Whether the bloom filter's subquery can evaluate `creationSide` again, apart from the join. The
-  // plan it reads must be deterministic (SPARK-60808) and read no CTE, whose reference hides the
-  // determinism of its plan. A part of the join side outside that plan can only drop rows from the
-  // join, so the bloom filter still holds every key that the join sees. Nothing in the plan may
-  // fail either: the filters, and the projections that the key and the filters need.
+  // plan it reads must give the same rows again (SPARK-60808). So it must read no CTE, whose
+  // reference hides the determinism of its plan, and a cache only if scanning it again gives the
+  // same rows. Its filters, and the projections that the key and the filters need, must pass
+  // `cannotFail`, which takes only expressions that are deterministic in the subquery and do not
+  // fail there. A part of the join side outside that plan can only drop rows from the join, so the
+  // bloom filter still holds every key that the join sees.
   private def canEvaluateAgain(creationSide: FilterCreationSide): Boolean = {
     val evaluated =
       ColumnPruning(Project(Seq(Alias(creationSide.key, "key")()), creationSide.plan))
-    evaluated.deterministic && !evaluated.containsPattern(CTE) && !evaluated.exists {
-      case Project(projectList, _) => !projectList.forall(e => isSafeKey(trimAliases(e)))
-      case Filter(condition, _) => !isSafeCondition(condition)
+    !evaluated.containsPattern(CTE) && !evaluated.exists {
+      case Project(projectList, _) => !projectList.forall(e => cannotFail(trimAliases(e)))
+      case Filter(condition, _) => !splitConjunctivePredicates(condition).forall(cannotFail)
+      case leaf: MaterializedLeafNode => !leaf.isOutputRepeatable
       case _: LeafNode => false
       case _ => true
     }
@@ -496,16 +484,16 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     //    later, where `PartitionPruning` puts a new DPP filter on the key, and this rule decides
     //    that one against all the broadcasts. A scalar subquery, which includes an uncorrelated
     //    EXISTS, is planned on its own, so a key there with a DPP filter gets no bloom filter.
-    // 3. Adds a bloom filter for a key whose DPP filters are all dropped only if
-    //    `canTakeBloomFilter` allows it: pushdown can take it down safely (`canPushDown`), and its
-    //    creation side is safe. Pushdown moves the bloom filter along its key, down to the leaves
-    //    the key comes from, and into every branch of a union. There it must not land in a plan in
-    //    `reused`. It would change the broadcast, and physical planning would drop the DPP filter
-    //    that reuses it. A reused broadcast elsewhere in the join side does not matter, such as a
-    //    broadcast dimension joined to the same fact table. The key must also be safe at every
-    //    leaf (`isSafeKey`). On a partition column, the bloom filter becomes a partition filter,
-    //    which evaluates the key on every partition before the data filters. So a key that can
-    //    fail could fail the query (SPARK-60809).
+    // 3. Adds a bloom filter for a key whose DPP filters are all dropped only if `creationSide`
+    //    allows it: pushdown can take it down safely (`canPushDown`), and the subquery can evaluate
+    //    the creation side again (`canEvaluateAgain`). Pushdown moves the bloom filter along its
+    //    key, down to the leaves the key comes from, and into every branch of a union. There it
+    //    must not land in a plan in `reused`. It would change the broadcast, and physical planning
+    //    would drop the DPP filter that reuses it. A reused broadcast elsewhere in the join side
+    //    does not matter, such as a broadcast dimension joined to the same fact table. The key must
+    //    also be safe at every leaf (`cannotFail`). On a partition column, the bloom filter becomes
+    //    a partition filter, which evaluates the key on every partition before the data filters. So
+    //    a key that can fail could fail the query (SPARK-60809).
     // Physical planning reuses a broadcast only with exchange reuse on.
     lazy val reused = if (conf.exchangeReuseEnabled) {
       // After the optimizer ran on an IN subquery on its own, a DPP filter there can be a conjunct
@@ -529,7 +517,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     def canPushDown(key: Expression, side: LogicalPlan): Boolean = {
       val lineages = findExpressionAndTrackAllLineagesDown(key, side, strict = true)
       lineages.nonEmpty && lineages.forall { case (leafKey, leaf) =>
-        isSafeKey(leafKey) && !reused.exists(_.exists(_.fastEquals(leaf)))
+        cannotFail(leafKey) && !reused.exists(_.exists(_.fastEquals(leaf)))
       }
     }
     plan transformUp {
@@ -545,33 +533,34 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             isSimpleExpression(l) && isSimpleExpression(r) && !keyDpps.exists(isKept)) {
             val oldLeft = newLeft
             val oldRight = newRight
-            // If the key has DPP filters, they are all dropped, so step 3 above applies.
-            val hasDroppedDpp = keyDpps.nonEmpty
-            // The creation side leaves out the key's own DPP filters, which physical planning
-            // drops. An expression such as a UDF or a `LIKE` in their build plan would also stop
-            // the search for the creation side, since `isSimpleExpression` sees the plan of a
-            // subquery too.
-            def creationPlan(side: LogicalPlan) = withoutDppFilters(side, keyDpps.contains)
-            // The bloom filter evaluates its creation side again, apart from the join. Its subquery
-            // can also read more of that side than the join does, since filters on other keys, DPP
-            // filters or bloom filters, can narrow only the join's side.
-            def canTakeBloomFilter(
-                key: Expression,
+            // The creation side for a bloom filter on `key` of `side`. It leaves out the key's own
+            // DPP filters, which physical planning drops. An expression such as a UDF or a `LIKE`
+            // in their build plan would also stop the search for the creation side, since
+            // `isSimpleExpression` sees the plan of a subquery too. If the key has DPP filters,
+            // they are all dropped, so step 3 above applies. The bloom filter evaluates its
+            // creation side again, apart from the join. Its subquery can also read more of that
+            // side than the join does, since filters on other keys, DPP filters or bloom filters,
+            // can narrow only the join's side. And the bloom filter hashes the bytes of the key, so
+            // its type must compare by its bytes, which a collated string does not.
+            def creationSide(
                 side: LogicalPlan,
-                creation: FilterCreationSide) =
-              !hasDroppedDpp || (canPushDown(key, side) && canEvaluateAgain(creation))
+                key: Expression,
+                other: LogicalPlan,
+                otherKey: Expression): Option[FilterCreationSide] =
+              extractBeneficialFilterCreatePlan(
+                side, withoutDppFilters(other, keyDpps.contains), key, otherKey).filter { c =>
+                keyDpps.isEmpty || (UnsafeRowUtils.isBinaryStable(key.dataType) &&
+                  canPushDown(key, side) && canEvaluateAgain(c))
+              }
             // Check if:
             // 1. The current join type supports prune the left side with runtime filter
             // 2. The current join is a shuffle join or a broadcast join that
             //    has a shuffle below it
             // 3. There is no bloom filter on the left key yet
-            // 4. The key has no dropped DPP filter, or step 3 above allows the bloom filter
             val hasShuffle = isProbablyShuffleJoin(left, right, hint)
             if (canPruneLeft(joinType) && (hasShuffle || probablyHasShuffle(left)) &&
               !hasBloomFilter(newLeft, l)) {
-              extractBeneficialFilterCreatePlan(left, creationPlan(right), l, r)
-                .filter(canTakeBloomFilter(l, left, _))
-                .foreach(creationSide => newLeft = injectFilter(l, newLeft, creationSide))
+              creationSide(left, l, right, r).foreach(c => newLeft = injectFilter(l, newLeft, c))
             }
             // Did we actually inject on the left? If not, try on the right
             // Check if:
@@ -579,12 +568,9 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             // 2. The current join is a shuffle join or a broadcast join that
             //    has a shuffle below it
             // 3. There is no bloom filter on the right key yet
-            // 4. The key has no dropped DPP filter, or step 3 above allows the bloom filter
             if (newLeft.fastEquals(oldLeft) && canPruneRight(joinType) &&
               (hasShuffle || probablyHasShuffle(right)) && !hasBloomFilter(newRight, r)) {
-              extractBeneficialFilterCreatePlan(right, creationPlan(left), r, l)
-                .filter(canTakeBloomFilter(r, right, _))
-                .foreach(creationSide => newRight = injectFilter(r, newRight, creationSide))
+              creationSide(right, r, left, l).foreach(c => newRight = injectFilter(r, newRight, c))
             }
             if (!newLeft.fastEquals(oldLeft) || !newRight.fastEquals(oldRight)) {
               filterCounter = filterCounter + 1
