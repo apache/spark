@@ -38,22 +38,25 @@ object GeneratePredicate extends CodeGenerator[Expression, BasePredicate] with P
     val ctx = newCodeGenContext()
 
     // Do sub-expression elimination for predicates.
-    val conjuncts = splitConjunctivePredicates(predicate)
-    // With a subexpression common to several top-level conjuncts, or within one of them, the
-    // conjuncts are generated one by one, and the subexpression is evaluated just before the
-    // first conjunct that references it, not before the whole condition, so that a FALSE
-    // conjunct before them stops the evaluation, as `And.eval` and the whole-stage codegen of a
-    // filter do (SPARK-60332). The conjuncts are evaluated like `And.eval`: a FALSE one stops
-    // the evaluation, a NULL one does not, and the condition is TRUE only if all of them are.
-    // Otherwise the condition is generated as a whole, as before.
-    val conjunctCodes = if (useSubexprElimination && conjuncts.length > 1) {
-      ctx.generateExpressionsWithSubexprCodes(conjuncts)
+    // With a subexpression common to the top-level conjuncts, whether several of them share it or
+    // one of them repeats it, the conjuncts are generated one by one, and the subexpression is
+    // evaluated just before the first conjunct that references it, not before the whole
+    // condition, so that a FALSE conjunct before them stops the evaluation, as `And.eval` and the
+    // whole-stage codegen of a filter do (SPARK-60332). The conjuncts are evaluated like
+    // `And.eval`: a FALSE one stops the evaluation, a NULL one does not, and the condition is TRUE
+    // only if all of them are. Otherwise the condition is generated as a whole, as before.
+    val severalConjuncts = splitConjunctivePredicates(predicate).length > 1
+    val conjunctCodes = if (useSubexprElimination && severalConjuncts) {
+      ctx.generateConjunctsWithSubexprCodes(predicate)
     } else {
       None
     }
     val evalCode = conjunctCodes match {
       case Some(codes) =>
-        val nullConjunct = ctx.freshName("nullConjunct")
+        // A field rather than a local variable, since the checks of the conjuncts are split into
+        // functions when their code is long, see `splitExpressions`, with a FALSE conjunct
+        // returning false from its function and from `eval`.
+        val nullConjunct = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "nullConjunct")
         val checks = codes.map { case (subexprs, ev) =>
           s"""
              |$subexprs
@@ -65,15 +68,22 @@ object GeneratePredicate extends CodeGenerator[Expression, BasePredicate] with P
              |}
            """.stripMargin
         }
+        val checksCode = ctx.splitExpressions(
+          checks,
+          "evalConjuncts",
+          Seq("InternalRow" -> ctx.INPUT_ROW),
+          returnType = "boolean",
+          makeSplitFunction = body => s"$body\nreturn true;",
+          foldFunctions = calls => calls.map(call => s"if (!$call) return false;").mkString("\n"))
         s"""
-           |boolean $nullConjunct = false;
-           |${checks.mkString("\n")}
+           |$nullConjunct = false;
+           |$checksCode
            |return !$nullConjunct;
          """.stripMargin
       case None =>
-        // The conjuncts have no common subexpression when they were looked at, so the elimination
-        // is not run again on them.
-        val eliminate = useSubexprElimination && conjuncts.length <= 1
+        // With more than one conjunct, no subexpression is eliminated when they were looked at, so
+        // the elimination is not run again on them.
+        val eliminate = useSubexprElimination && !severalConjuncts
         val eval = ctx.generateExpressions(Seq(predicate), eliminate).head
         s"""
            |${ctx.subexprFunctionsCode}

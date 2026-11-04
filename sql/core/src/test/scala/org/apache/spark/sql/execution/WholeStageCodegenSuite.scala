@@ -3199,6 +3199,32 @@ class WholeStageCodegenSuite extends SharedSparkSession
         }
       }
     }
+    // The optimizer filters local data through the same generated predicate. `(a + c) + b` in
+    // the IF branch of the first conjunct is `(a + b) + c`, common to the next two conjuncts,
+    // under the canonicalization of `+`, but holds no `a + b`, common to the last three. `a + b`
+    // is evaluated before the first conjunct, which the function of `(a + b) + c` reads, not
+    // before the second, or `(a + b) + c` would read the previous row's `a + b`.
+    checkAnswer(
+      sql("SELECT a FROM VALUES (3, 3, 1, 1, 0), (1, 1, 1, 1, 1), (3, 3, 1, 1, 0) " +
+        "AS t(a, b, c, d, x) WHERE IF(x > 0, a + c + b, d) > 0 AND a + b + c > 1 AND " +
+        "a + b + c < 10 AND a + b > 5"),
+      Seq(Row(3), Row(3)))
+    // The common subexpressions are found in the whole predicate, as before, so that a predicate
+    // with a subquery gets no elimination inside a task (SPARK-38333), and the conjuncts are not
+    // compared with a subquery plan on an executor.
+    withSQLConf(
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+        SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.CODEGEN_ONLY.toString) {
+      withTempView("u") {
+        spark.range(10).toDF("k").cache().createOrReplaceTempView("u")
+        spark.table("u").collect()
+        checkAnswer(
+          spark.range(10).selectExpr("id AS x", "id AS y")
+            .where("x > (SELECT max(k) - 20 FROM u) AND y + 1 > 0 AND y + 1 < 100")
+            .selectExpr("count(*)"),
+          Row(10))
+      }
+    }
   }
 
   test("SPARK-60403: full outer joins compile with their functions spilled to nested classes") {
