@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.LongAdder
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
-import org.mockito.ArgumentMatchers.any
+import org.mockito.ArgumentMatchers.{any, isA}
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.roaringbitmap.RoaringBitmap
@@ -206,6 +206,90 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
 
     masterTracker.stop()
     rpcEnv.shutdown()
+  }
+
+  // SPARK-60950: tests post directly to the master's MessageLoop, bypassing the endpoint, so
+  // that the exception is thrown on the dispatcher thread rather than inside the RPC Inbox (which
+  // already replies with a failure on its own).
+
+  /** Creates a master tracker that has shuffle 10 with a single registered map output. */
+  private def newTrackerMasterWithOneMapOutput(sparkConf: SparkConf): MapOutputTrackerMaster = {
+    val tracker = newTrackerMaster(sparkConf)
+    tracker.registerShuffle(10, 1, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
+    tracker.registerMapOutput(10, 0, MapStatus(
+      BlockManagerId("88", "mph", 1000), createArray(10, 0L), 5))
+    tracker
+  }
+
+  private def newCallContext(): RpcCallContext = {
+    val context = mock(classOf[RpcCallContext])
+    when(context.senderAddress).thenReturn(RpcAddress("localhost", 12345))
+    context
+  }
+
+  test("SPARK-60950: master replies with a failure when a map output request handler throws") {
+    val masterTracker = newTrackerMaster()
+    try {
+      // Shuffle 10 is not registered, so looking up its status throws NoSuchElementException.
+      val requests: Seq[RpcCallContext => MapOutputTrackerMasterMessage] = Seq(
+        GetMapOutputMessage(10, _),
+        GetMapAndMergeOutputMessage(10, _))
+      requests.foreach { request =>
+        val context = newCallContext()
+        val message = request(context)
+        masterTracker.post(message)
+        withClue(s"${message.getClass.getSimpleName}: ") {
+          verify(context, timeout(30000)).sendFailure(isA(classOf[NoSuchElementException]))
+          verify(context, never()).reply(any())
+        }
+      }
+    } finally {
+      masterTracker.stop()
+    }
+  }
+
+  test("SPARK-60950: master replies with a failure when sending the reply throws") {
+    val masterTracker = newTrackerMasterWithOneMapOutput(conf)
+    try {
+      // Models a reply that cannot be delivered, e.g. one that fails to serialize.
+      val replyError = new IllegalStateException("injected reply failure")
+      val requests: Seq[RpcCallContext => MapOutputTrackerMasterMessage] = Seq(
+        GetMapOutputMessage(10, _),
+        GetShufflePushMergersMessage(10, _))
+      requests.foreach { request =>
+        val context = newCallContext()
+        doThrow(replyError).when(context).reply(any())
+        val message = request(context)
+        masterTracker.post(message)
+        withClue(s"${message.getClass.getSimpleName}: ") {
+          verify(context, timeout(30000)).sendFailure(replyError)
+        }
+      }
+    } finally {
+      masterTracker.stop()
+    }
+  }
+
+  test("SPARK-60950: MessageLoop keeps serving requests when the failure reply also throws") {
+    // A single dispatcher thread, so the second request is served by the same MessageLoop that
+    // handled the failure.
+    val masterTracker = newTrackerMasterWithOneMapOutput(
+      new SparkConf().set(SHUFFLE_MAPOUTPUT_DISPATCHER_NUM_THREADS, 1))
+    try {
+      val failingContext = newCallContext()
+      doThrow(new IllegalStateException("injected sendFailure failure"))
+        .when(failingContext).sendFailure(any())
+      // Shuffle 11 is not registered, so the handler throws and the loop calls sendFailure.
+      masterTracker.post(GetMapOutputMessage(11, failingContext))
+      verify(failingContext, timeout(30000)).sendFailure(any())
+
+      val context = newCallContext()
+      masterTracker.post(GetMapOutputMessage(10, context))
+      verify(context, timeout(30000)).reply(any())
+      verify(context, never()).sendFailure(any())
+    } finally {
+      masterTracker.stop()
+    }
   }
 
   test("min broadcast size exceeds max RPC message size") {
