@@ -78,6 +78,66 @@ class PipelinedUDFTests(ReusedSQLTestCase):
             plan = plan.children().apply(0)
         self.assertEqual(plan.metrics().apply("pythonNumPipelinedTasks").value(), 1)
 
+    def test_detailed_timing_is_disabled(self):
+        phase_names = (
+            "pythonDataReadTime",
+            "pythonInputPreparationTime",
+            "pythonUDFExecutionTime",
+            "pythonOutputPreparationTime",
+            "pythonDataWriteTime",
+        )
+        detailed_names = (*phase_names, "pythonNumTimingReports", "pythonNumTimedBatches")
+
+        def check_untimed():
+            from pyspark.worker_metrics import WorkerMetrics
+
+            report = WorkerMetrics().to_dict()
+            assert report["pythonNumPipelinedTasks"] == 1
+            assert set(detailed_names).isdisjoint(report)
+            for name in ("bootTimestampMs", "initTimestampMs", "pythonExecutionDurationMs"):
+                assert name in report
+
+        def scalar(value):
+            check_untimed()
+            return value
+
+        def mapping(dfs):
+            check_untimed()
+            yield from dfs
+
+        with self.sql_conf(
+            {
+                "spark.sql.execution.pythonUDF.detailedTiming.enabled": "true",
+                "spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": "false",
+                "spark.sql.adaptive.enabled": "false",
+            }
+        ):
+            data = self.spark.range(2, numPartitions=1)
+            for name, build in (
+                ("arrow batched", lambda: data.select(udf(scalar, "long", useArrow=True)("id"))),
+                ("map pandas", lambda: data.mapInPandas(mapping, "id long")),
+            ):
+                with self.subTest(handler=name):
+                    result = build()
+                    self.assertEqual([row[0] for row in result.collect()], [0, 1])
+                    plan = result._jdf.queryExecution().executedPlan()
+                    while not plan.metrics().contains("pythonProcessingTime"):
+                        self.assertEqual(plan.children().size(), 1)
+                        plan = plan.children().apply(0)
+                    metrics = plan.metrics()
+                    self.assertEqual(metrics.apply("pythonNumPipelinedTasks").value(), 1)
+                    for metric in detailed_names:
+                        self.assertEqual(metrics.apply(metric).value(), 0, metric)
+                    for metric in phase_names:
+                        self.assertTrue(metrics.apply(metric).isZero(), metric)
+                    for metric in (
+                        "pythonBootTime",
+                        "pythonInitTime",
+                        "pythonTotalTime",
+                        "pythonProcessingTime",
+                    ):
+                        self.assertFalse(metrics.apply(metric).isZero(), metric)
+
     def test_scalar_arrow_udf(self):
         """Basic scalar Arrow UDF with pipelined mode."""
 
