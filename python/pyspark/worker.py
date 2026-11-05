@@ -363,6 +363,7 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
 
                 with WorkerSamplingProfiler(
                     sampling_interval=runner_conf.udf_profiler_sampling_interval,
+                    aggregation=runner_conf.udf_profiler_sampling_aggregation,
                     task_context=task_context,
                 ) as profiler:
                     run_process()
