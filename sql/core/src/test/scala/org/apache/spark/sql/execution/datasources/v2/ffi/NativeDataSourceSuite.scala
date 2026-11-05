@@ -1556,7 +1556,8 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       (scan.readerFactory.asInstanceOf[SupportsArrowStreamRead], scan.inputPartitions)
     }
     // The batch scan of only some of the columns from a library that does not prune the others
-    // projects the schema and the arrays of its streams to them, as it projects its batches.
+    // still reads only them through its streams, since read returns exactly the columns of its
+    // schema to read.
     val readOnly = newSession(defaultPackage, createPackage(readOnlyLibrary, dataSources("ro_")))
     val (projectedFactory, projectedPartitions) =
       plannedScan(readOnly.read.format("ro_native_range").option("end", "4").load().select("id"))
@@ -1575,7 +1576,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     }
     assert(projectedReads.map(_._1).distinct == Seq(Seq("id")))
     assert(projectedReads.flatMap(_._2).sorted == (0L until 4L))
-    assert(NativeLibrary.openProjections() == 0 && NativeLibrary.openEngineStreams() == 0)
+    assert(NativeLibrary.openEngineStreams() == 0)
     // Runs `f` in a task that only gets the files of the session. It is the task of the partition
     // 1, so that the partition of the scan that a read gets is not the partition of its task.
     def inTask[T: ClassTag](f: => T): T = session.artifactManager.withResources {
@@ -1848,21 +1849,30 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       .asInstanceOf[NativeDataSourceStreamReader]
     try {
       def offset(i: Int): String = s"""{"offset":$i}"""
-      assert(streamReader.partitions(offset(0), offset(2)).nonEmpty)
-      val firstState = streamReader.uncommittedStates
-      assert(firstState.length == 1)
-      assert(streamReader.partitions(offset(2), offset(2)).isEmpty)
-      assert(streamReader.uncommittedStates == firstState)
+      assert(streamReader.partitions(offset(0), offset(0)).isEmpty)
+      assert(streamReader.uncommittedStates.isEmpty)
       // The broadcast of a micro-batch is destroyed once the micro-batch is committed, and those
       // of the micro-batches after it stay.
+      assert(streamReader.partitions(offset(0), offset(2)).nonEmpty)
       assert(streamReader.partitions(offset(2), offset(4)).nonEmpty)
+      assert(streamReader.partitions(offset(4), offset(6)).nonEmpty)
       val states = streamReader.uncommittedStates
-      assert(states.length == 2 && states.forall(_.isValid))
+      assert(states.length == 3 && states.forall(_.isValid))
       streamReader.commit(offset(2))
-      assert(!states.head.isValid && states(1).isValid)
+      assert(states.map(_.isValid) == Seq(false, true, true))
       assert(streamReader.uncommittedStates == states.tail)
+      // Spark may not commit every micro-batch, as with async progress tracking, so a commit also
+      // destroys the broadcasts of the micro-batches before it, also when the committed one has no
+      // broadcast, as a micro-batch without partitions, here at an end not planned before.
+      assert(streamReader.partitions(offset(7), offset(7)).isEmpty)
+      streamReader.commit(offset(7))
+      assert(states.forall(!_.isValid) && streamReader.uncommittedStates.isEmpty)
+      // stop() destroys the broadcasts of the micro-batches that are not committed.
+      assert(streamReader.partitions(offset(7), offset(9)).nonEmpty)
+      val lastState = streamReader.uncommittedStates
+      assert(lastState.length == 1 && lastState.head.isValid)
       streamReader.stop()
-      assert(!states(1).isValid && streamReader.uncommittedStates.isEmpty)
+      assert(!lastState.head.isValid && streamReader.uncommittedStates.isEmpty)
     } finally {
       streamReader.stop()
     }

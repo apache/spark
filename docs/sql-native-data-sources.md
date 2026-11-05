@@ -256,20 +256,17 @@ Comet, can read a native data source without Spark importing its data on the JVM
 of a batch or micro-batch scan of a native data source implements
 `org.apache.spark.sql.connector.read.SupportsArrowStreamRead`: in the task that reads a partition,
 `openArrowStream` initializes an Arrow C stream that the engine allocated with the stream that
-`read` returns. For a batch scan of only some of the columns from a library that does not prune the
-other columns, the schema and the arrays of the stream only have the columns that the scan reads:
-Spark keeps the structs of the library, and gives the engine structs with only the children of these
-columns, whose release releases the structs of the library. The engine reads the stream in the task
-that opened it, and owns and releases the stream, which it may do after the task ended: Spark frees
-the `SparkDsTaskContext` of the read once the library released its stream. Once the task ended,
-`is_interrupted` returns true, so the library may stop reading then. The callbacks of the stream can
-be called from any thread, but never concurrently. Each call goes through the JVM, which then calls
-the callback of the stream of the library: this adds tens of nanoseconds to the call, while the
-import of a batch on the JVM takes microseconds. The first call on a native thread also attaches the
-thread to the JVM, which takes tens of microseconds, and the thread stays attached until it exits.
-Since the callbacks call into the JVM, the engine releases the stream before the JVM exits. Spark
-does not check the arrays of such a stream, unlike the streams that it reads itself, so the engine
-checks what its import of the arrays requires.
+`read` returns. The engine reads the stream in the task that opened it, and owns and releases the
+stream, which it may do after the task ended: Spark frees the `SparkDsTaskContext` of the read once
+the library released its stream. Once the task ended, `is_interrupted` returns true, so the library
+may stop reading then. The callbacks of the stream can be called from any thread, but never
+concurrently. Each call goes through the JVM, which then calls the callback of the stream of the
+library: this adds tens of nanoseconds to the call, while the import of a batch on the JVM takes
+microseconds. The first call on a native thread also attaches the thread to the JVM, which takes
+tens of microseconds, and the thread stays attached until it exits. Since the callbacks call into
+the JVM, the engine releases the stream before the JVM exits. Spark does not check the arrays of
+such a stream, unlike the streams that it reads itself, so the engine checks what its import of the
+arrays requires.
 
 ## Finding Native Data Sources
 

@@ -26,9 +26,7 @@ import org.apache.spark.annotation.Evolving;
  * itself, instead of reading the {@link org.apache.spark.sql.vectorized.ColumnarBatch}es of
  * {@link #createColumnarReader(InputPartition)}. The reader factories of the batch and
  * micro-batch scans of native data sources implement it, with the stream that the library
- * returns. For a batch scan of only some of the columns from a library that does not prune the
- * other columns, Spark projects the schema and the arrays of the stream to the columns of the read
- * schema, as it does with the batches.
+ * returns.
  * <p>
  * Each array of the stream is a struct array whose fields are the columns of the read schema of
  * the scan. Spark only checks that the source initialized the callbacks of the stream, not its

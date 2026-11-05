@@ -27,10 +27,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BooleanSupplier;
 
@@ -197,19 +195,6 @@ final class NativeLibrary {
   private static final long STREAM_RELEASE = 24;
   private static final long STREAM_PRIVATE_DATA = 32;
   private static final long STREAM_SIZE = 40;
-  // struct ArrowSchema and struct ArrowArray of the Arrow C data interface, whose children Spark
-  // projects in the streams of engines, see EngineStream.
-  private static final long SCHEMA_FORMAT = 0;
-  private static final long SCHEMA_N_CHILDREN = 32;
-  private static final long SCHEMA_CHILDREN = 40;
-  private static final long SCHEMA_RELEASE = 56;
-  private static final long SCHEMA_PRIVATE_DATA = 64;
-  private static final long SCHEMA_SIZE = 72;
-  private static final long ARRAY_N_CHILDREN = 32;
-  private static final long ARRAY_CHILDREN = 48;
-  private static final long ARRAY_RELEASE = 64;
-  private static final long ARRAY_PRIVATE_DATA = 72;
-  private static final long ARRAY_SIZE = 80;
 
   // The structs that only hold their size, which the library gets as const pointers. Until fields
   // are added to them, a single struct of each kind is allocated once, and never freed.
@@ -310,17 +295,6 @@ final class NativeLibrary {
     layout.put("ArrowArrayStream.get_last_error", STREAM_GET_LAST_ERROR);
     layout.put("ArrowArrayStream.release", STREAM_RELEASE);
     layout.put("ArrowArrayStream.private_data", STREAM_PRIVATE_DATA);
-    layout.put("ArrowSchema", SCHEMA_SIZE);
-    layout.put("ArrowSchema.format", SCHEMA_FORMAT);
-    layout.put("ArrowSchema.n_children", SCHEMA_N_CHILDREN);
-    layout.put("ArrowSchema.children", SCHEMA_CHILDREN);
-    layout.put("ArrowSchema.release", SCHEMA_RELEASE);
-    layout.put("ArrowSchema.private_data", SCHEMA_PRIVATE_DATA);
-    layout.put("ArrowArray", ARRAY_SIZE);
-    layout.put("ArrowArray.n_children", ARRAY_N_CHILDREN);
-    layout.put("ArrowArray.children", ARRAY_CHILDREN);
-    layout.put("ArrowArray.release", ARRAY_RELEASE);
-    layout.put("ArrowArray.private_data", ARRAY_PRIVATE_DATA);
     return layout;
   }
 
@@ -1181,11 +1155,11 @@ final class NativeLibrary {
   private static final int EIO = 5;
 
   /**
-   * The callbacks of the streams that Spark wraps for engines, see {@link EngineStream}, of the
-   * schemas and the arrays that it projects for them, and what the callbacks return for a stream
-   * that Spark does not know. They are created when the first stream is wrapped, so that a JVM
-   * that wraps no stream does not create them, and a failure to create them only fails the streams
-   * of engines.
+   * The callbacks of the streams that Spark wraps for engines, see {@link EngineStream}, the
+   * method handles that call the callbacks of the wrapped streams, and what the callbacks return
+   * for a stream that Spark does not know. They are created when the first stream is wrapped, so
+   * that a JVM that wraps no stream does not create them, and a failure to create them only fails
+   * the streams of engines.
    */
   private static final class EngineStreamCallbacks {
     // The addresses of the C functions that call Java, which live as long as the JVM.
@@ -1193,8 +1167,11 @@ final class NativeLibrary {
     static final long GET_NEXT;
     static final long GET_LAST_ERROR;
     static final long RELEASE;
-    static final long SCHEMA_RELEASE;
-    static final long ARRAY_RELEASE;
+    // The callbacks of struct ArrowArrayStream, called with the address of the function first:
+    // get_schema and get_next, get_last_error, and release.
+    static final MethodHandle INT_CALLBACK;
+    static final MethodHandle POINTER_CALLBACK;
+    static final MethodHandle VOID_CALLBACK;
     // The message of get_last_error for a stream that Spark does not know, which lives as long as
     // the JVM.
     static final long UNKNOWN_STREAM_ERROR;
@@ -1202,6 +1179,13 @@ final class NativeLibrary {
     static {
       try {
         MethodHandles.Lookup lookup = MethodHandles.lookup();
+        // Linker.downcallHandle(FunctionDescriptor, Linker.Option...), whose method handles take
+        // the address of the function to call as their first argument.
+        MethodHandle unboundDowncall = lookup.findVirtual(
+          Class.forName("java.lang.foreign.Linker"), "downcallHandle",
+          MethodType.methodType(MethodHandle.class,
+            Class.forName("java.lang.foreign.FunctionDescriptor"), Ffm.NO_OPTIONS.getClass()))
+          .asFixedArity();
         GET_SCHEMA = Ffm.upcall(
           lookup.findStatic(NativeLibrary.class, "engineStreamGetSchema",
             MethodType.methodType(int.class, long.class, long.class)),
@@ -1218,50 +1202,15 @@ final class NativeLibrary {
           lookup.findStatic(NativeLibrary.class, "engineStreamRelease",
             MethodType.methodType(void.class, long.class)),
           C.VOID, C.PTR);
-        SCHEMA_RELEASE = Ffm.upcall(
-          lookup.findStatic(NativeLibrary.class, "projectedSchemaRelease",
-            MethodType.methodType(void.class, long.class)),
-          C.VOID, C.PTR);
-        ARRAY_RELEASE = Ffm.upcall(
-          lookup.findStatic(NativeLibrary.class, "projectedArrayRelease",
-            MethodType.methodType(void.class, long.class)),
-          C.VOID, C.PTR);
+        INT_CALLBACK = callback(unboundDowncall, C.I32, C.PTR, C.PTR);
+        POINTER_CALLBACK = callback(unboundDowncall, C.PTR, C.PTR);
+        VOID_CALLBACK = callback(unboundDowncall, C.VOID, C.PTR);
         UNKNOWN_STREAM_ERROR = toCString("The stream was released, or is not a stream of Spark.");
       } catch (Throwable e) {
         // The message names the cause, because the JVM only keeps this message for the later
         // uses of the class.
         throw new IllegalStateException(
           "Cannot create the callbacks of the streams of engines: " + rootCause(e), e);
-      }
-    }
-  }
-
-  /**
-   * The method handles that call the callbacks of the structs of the Arrow C data and stream
-   * interfaces, with the address of the function first: get_schema and get_next, get_last_error,
-   * and release. They are apart from {@link EngineStreamCallbacks}, so that Spark can still release
-   * a stream if the upcalls of the callbacks cannot be created.
-   */
-  private static final class StreamCalls {
-    static final MethodHandle INT_CALLBACK;
-    static final MethodHandle POINTER_CALLBACK;
-    static final MethodHandle VOID_CALLBACK;
-
-    static {
-      try {
-        // Linker.downcallHandle(FunctionDescriptor, Linker.Option...), whose method handles take
-        // the address of the function to call as their first argument.
-        MethodHandle unboundDowncall = MethodHandles.lookup().findVirtual(
-          Class.forName("java.lang.foreign.Linker"), "downcallHandle",
-          MethodType.methodType(MethodHandle.class,
-            Class.forName("java.lang.foreign.FunctionDescriptor"), Ffm.NO_OPTIONS.getClass()))
-          .asFixedArity();
-        INT_CALLBACK = callback(unboundDowncall, C.I32, C.PTR, C.PTR);
-        POINTER_CALLBACK = callback(unboundDowncall, C.PTR, C.PTR);
-        VOID_CALLBACK = callback(unboundDowncall, C.VOID, C.PTR);
-      } catch (Throwable e) {
-        throw new IllegalStateException(
-          "Cannot call the callbacks of Arrow C streams: " + rootCause(e), e);
       }
     }
 
@@ -1275,21 +1224,6 @@ final class NativeLibrary {
         Ffm.LINKER, Ffm.descriptor(result, parameters), Ffm.NO_OPTIONS);
       handle = MethodHandles.filterArguments(handle, 0, Ffm.OF_ADDRESS);
       return Ffm.convertPointers(handle, 1, Ffm.OF_ADDRESS, Ffm.ADDRESS_OF, result, parameters);
-    }
-  }
-
-  /**
-   * Releases the stream at {@code stream} with its release callback, if it is not released yet,
-   * and marks it released, as the C stream interface requires of release, in case the callback
-   * did not. It calls the callback through FFM, as the rest of the streams of engines do, rather
-   * than through the JNI library of Arrow, which a JVM that only reads through engines may not
-   * have loaded.
-   */
-  static void releaseStream(long stream) throws Throwable {
-    long release = Platform.getLong(null, stream + STREAM_RELEASE);
-    if (release != 0) {
-      StreamCalls.VOID_CALLBACK.invokeExact(release, stream);
-      Platform.putLong(null, stream + STREAM_RELEASE, 0);
     }
   }
 
@@ -1311,19 +1245,15 @@ final class NativeLibrary {
     final Task task;
     // The name of the data source, for the errors.
     final String name;
-    // The children of the schema and of the arrays of the stream of the library that the stream of
-    // the engine has, in their order, or null for all of them, see project.
-    final int[] projection;
     // The message of the last error of Spark, rather than of the library, or 0 if the last call
     // returned an error of the library, or none. The callbacks never run concurrently, but may
     // run on different threads one after the other.
     volatile long sparkError;
 
-    EngineStream(long inner, Task task, String name, int[] projection) {
+    EngineStream(long inner, Task task, String name) {
       this.inner = inner;
       this.task = task;
       this.name = name;
-      this.projection = projection;
     }
 
     long callback(long offset) {
@@ -1362,10 +1292,8 @@ final class NativeLibrary {
    * is left as it is.
    *
    * @param name the name of the data source, for the errors of the stream
-   * @param projection the children of the schema and of the arrays of the stream that the engine
-   *                   gets, in their order, or null for all of them
    */
-  static void wrapEngineStream(long stream, Task task, String name, int[] projection) {
+  static void wrapEngineStream(long stream, Task task, String name) {
     // Creates the callbacks first, so that the stream is left as it is if that fails.
     long getSchema;
     long getNext;
@@ -1376,8 +1304,6 @@ final class NativeLibrary {
       getNext = EngineStreamCallbacks.GET_NEXT;
       getLastError = EngineStreamCallbacks.GET_LAST_ERROR;
       release = EngineStreamCallbacks.RELEASE;
-      // Creates the method handles of the callbacks too.
-      Objects.requireNonNull(StreamCalls.INT_CALLBACK);
     } catch (ExceptionInInitializerError | NoClassDefFoundError e) {
       // The first use of a class that failed to initialize gets the error, and the later ones a
       // NoClassDefFoundError, whose cause has its message: both name the root cause here, as the
@@ -1389,7 +1315,7 @@ final class NativeLibrary {
     long id = nextEngineStreamId.getAndIncrement();
     try {
       Platform.copyMemory(null, stream, null, inner, STREAM_SIZE);
-      engineStreams.put(id, new EngineStream(inner, task, name, projection));
+      engineStreams.put(id, new EngineStream(inner, task, name));
     } catch (Throwable e) {
       engineStreams.remove(id);
       Platform.freeMemory(inner);
@@ -1430,118 +1356,10 @@ final class NativeLibrary {
         return EINVAL;
       }
       wrapped.clearError();
-      int result = (int) StreamCalls.INT_CALLBACK.invokeExact(
+      return (int) EngineStreamCallbacks.INT_CALLBACK.invokeExact(
         wrapped.callback(offset), wrapped.inner, out);
-      if (result == 0 && wrapped.projection != null) {
-        project(out, offset == STREAM_GET_SCHEMA, wrapped.projection);
-      }
-      return result;
     } catch (Throwable e) {
       return wrapped == null ? EIO : wrapped.fail(callback, e);
-    }
-  }
-
-  /**
-   * Projects the struct at {@code out}, the schema or an array that the stream of a library
-   * returned, in place, to its children at {@code projection}, for a scan that reads only some of
-   * the columns from a library that does not prune the others. The struct of the library is moved
-   * to memory of Spark, and {@code out} keeps its fields, but has the projected children and a
-   * release of Spark, which releases the moved struct of the library, and so all its children.
-   * The children are not copied: an engine that moves a projected child marks it released where
-   * the library keeps it, as the Arrow C data interface requires. A released array, the end of
-   * the stream, stays as it is. If the projection fails, the struct of the library is released,
-   * so that the engine gets a released struct with the error.
-   */
-  private static void project(long out, boolean schema, int[] projection) throws Throwable {
-    long size = schema ? SCHEMA_SIZE : ARRAY_SIZE;
-    long releaseOffset = schema ? SCHEMA_RELEASE : ARRAY_RELEASE;
-    long childrenOffset = schema ? SCHEMA_CHILDREN : ARRAY_CHILDREN;
-    long nChildrenOffset = schema ? SCHEMA_N_CHILDREN : ARRAY_N_CHILDREN;
-    if (Platform.getLong(null, out + releaseOffset) == 0) {
-      return;
-    }
-    long moved = 0;
-    try {
-      long nChildren = Platform.getLong(null, out + nChildrenOffset);
-      long format = schema ? Platform.getLong(null, out + SCHEMA_FORMAT) : 0;
-      if (schema && (format == 0 || Platform.getByte(null, format) != '+' ||
-          Platform.getByte(null, format + 1) != 's' || Platform.getByte(null, format + 2) != 0)) {
-        throw new IllegalStateException("The schema of the stream is not a struct.");
-      }
-      for (int ordinal : projection) {
-        if (ordinal < 0 || ordinal >= nChildren) {
-          throw new IllegalStateException("The " + (schema ? "schema" : "array") +
-            " of the stream has " + nChildren + " children, but the scan reads the child " +
-            ordinal + ".");
-        }
-      }
-      moved = Platform.allocateMemory(size + 8L * projection.length);
-      Platform.copyMemory(null, out, null, moved, size);
-      long children = Platform.getLong(null, moved + childrenOffset);
-      long projected = moved + size;
-      for (int i = 0; i < projection.length; i++) {
-        Platform.putLong(null, projected + 8L * i,
-          Platform.getLong(null, children + 8L * projection[i]));
-      }
-      Platform.putLong(null, out + nChildrenOffset, projection.length);
-      Platform.putLong(null, out + childrenOffset, projected);
-      Platform.putLong(null, out + (schema ? SCHEMA_PRIVATE_DATA : ARRAY_PRIVATE_DATA), moved);
-      Platform.putLong(null, out + releaseOffset,
-        schema ? EngineStreamCallbacks.SCHEMA_RELEASE : EngineStreamCallbacks.ARRAY_RELEASE);
-      openProjections.incrementAndGet();
-    } catch (Throwable e) {
-      if (moved != 0) {
-        Platform.freeMemory(moved);
-      }
-      long release = Platform.getLong(null, out + releaseOffset);
-      if (release != 0) {
-        StreamCalls.VOID_CALLBACK.invokeExact(release, out);
-        Platform.putLong(null, out + releaseOffset, 0);
-      }
-      throw e;
-    }
-  }
-
-  // The schemas and the arrays that Spark projected for engines, which are not released yet.
-  private static final AtomicInteger openProjections = new AtomicInteger();
-
-  /** The number of the projected schemas and arrays that are not released yet, for tests. */
-  static int openProjections() {
-    return openProjections.get();
-  }
-
-  // The releases of the projected schemas and arrays. They must not throw either.
-
-  private static void projectedSchemaRelease(long schema) {
-    projectedRelease(schema, SCHEMA_RELEASE, SCHEMA_PRIVATE_DATA);
-  }
-
-  private static void projectedArrayRelease(long array) {
-    projectedRelease(array, ARRAY_RELEASE, ARRAY_PRIVATE_DATA);
-  }
-
-  private static void projectedRelease(long struct, long releaseOffset, long privateDataOffset) {
-    try {
-      long moved = Platform.getLong(null, struct + privateDataOffset);
-      try {
-        // Releases the struct of the library, and so the children that the engine did not move.
-        long release = Platform.getLong(null, moved + releaseOffset);
-        if (release != 0) {
-          StreamCalls.VOID_CALLBACK.invokeExact(release, moved);
-        }
-      } finally {
-        Platform.freeMemory(moved);
-        openProjections.decrementAndGet();
-      }
-    } catch (Throwable e) {
-      try {
-        LOGGER.error("The release of a projected array or schema of the stream of a native " +
-          "data source failed", e);
-      } catch (Throwable ignored) {
-        // An upcall must not throw.
-      }
-    } finally {
-      Platform.putLong(null, struct + releaseOffset, 0);
     }
   }
 
@@ -1554,7 +1372,7 @@ final class NativeLibrary {
       if (wrapped.sparkError != 0) {
         return wrapped.sparkError;
       }
-      return (long) StreamCalls.POINTER_CALLBACK.invokeExact(
+      return (long) EngineStreamCallbacks.POINTER_CALLBACK.invokeExact(
         wrapped.callback(STREAM_GET_LAST_ERROR), wrapped.inner);
     } catch (Throwable e) {
       return 0;
@@ -1567,7 +1385,7 @@ final class NativeLibrary {
       wrapped = engineStreams.remove(Platform.getLong(null, stream + STREAM_PRIVATE_DATA));
       if (wrapped != null) {
         try {
-          StreamCalls.VOID_CALLBACK.invokeExact(
+          EngineStreamCallbacks.VOID_CALLBACK.invokeExact(
             wrapped.callback(STREAM_RELEASE), wrapped.inner);
         } finally {
           // The library no longer uses the task once it released its stream.
