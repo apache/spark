@@ -63,7 +63,7 @@ import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.{SimpleTableProvider, SupportsPushDownCatalystFilters}
+import org.apache.spark.sql.internal.connector.{SimpleTableProvider, SupportsCatalystFilterGuarantees, SupportsPushDownCatalystFilters}
 import org.apache.spark.sql.sources.{BaseRelation, Filter, GreaterThan, TableScan}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
@@ -1857,6 +1857,33 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     }
   }
 
+  gridTest("guaranteed filters retain logical statistics without physical evaluation")(
+      Seq(false, true)) { keepResiduals =>
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+      val query = spark.read
+        .format(classOf[GuaranteedCatalystFilterDataSourceV2].getName)
+        .option(CatalystFilterScanBuilder.INFERRED_DERIVATION,
+          CatalystFilterScanBuilder.NEGATE_I_TO_J)
+        .option(CatalystFilterScanBuilder.USE_INFERRED_FILTER_ESTIMATION, "false")
+        .option(CatalystFilterScanBuilder.REPORTED_ROW_COUNT, "10")
+        .option(CatalystFilterScanBuilder.REPORT_COLUMN_STATS, "true")
+        .option(CatalystFilterScanBuilder.KEEP_RESIDUAL_FILTERS, keepResiduals.toString)
+        .load()
+        .filter($"i" > 7)
+
+      checkAnswer(query, Seq(Row(8, -8), Row(9, -9)))
+      val logical = query.queryExecution.optimizedPlan
+      val scan = getScanRelation(query)
+      assert(scan.stats.rowCount.contains(BigInt(10)))
+      assert(logical.stats.rowCount.contains(BigInt(1)))
+      assert(logical.exists {
+        case filter: LogicalFilter => containsFilter(filter.condition, "j < -7")
+        case _ => false
+      })
+      assert(!query.queryExecution.executedPlan.exists(_.isInstanceOf[FilterExec]))
+    }
+  }
+
   test("inferred filters do not retain pruned columns during execution") {
     withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
       val query = spark.read
@@ -2332,6 +2359,27 @@ class CatalystFilterDataSourceV2 extends TestingV2Source {
   }
 }
 
+class GuaranteedCatalystFilterDataSourceV2 extends TestingV2Source {
+
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
+    new SimpleBatchTable with SupportsCatalystFilterGuarantees {
+      override def isFilterGuaranteed(scan: Scan, filter: CatalystExpression): Boolean = {
+        scan match {
+          case source: CatalystFilterScanBuilder =>
+            (source.pushedCatalystFilters ++ source.inferredFilters).exists { known =>
+              source.bindToSourceOutput(known).semanticEquals(source.bindToSourceOutput(filter))
+            }
+          case _ => false
+        }
+      }
+
+      override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+        new CatalystFilterScanBuilder(options)
+      }
+    }
+  }
+}
+
 class CatalystFilterJoinDataSourceV2 extends TestingV2Source {
 
   override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
@@ -2443,7 +2491,7 @@ class CatalystFilterScanBuilder(options: CaseInsensitiveStringMap) extends Simpl
   with SupportsPushDownRequiredColumns
   with SupportsReportStatistics {
 
-  private var pushedCatalystFilters = Seq.empty[CatalystExpression]
+  private[connector] var pushedCatalystFilters: Seq[CatalystExpression] = Seq.empty
   private val deriveInferred = CatalystFilterScanBuilder.derivation(options)
   private val statsReflectFullyPushedDownFilters =
     Option(options.get(CatalystFilterScanBuilder.REFLECTS_FULLY_PUSHED_DOWN_FILTERS))
@@ -2454,6 +2502,7 @@ class CatalystFilterScanBuilder(options: CaseInsensitiveStringMap) extends Simpl
     options.getBoolean(CatalystFilterScanBuilder.REPORT_COLUMN_STATS, false)
   private val keepResidualFilters =
     options.getBoolean(CatalystFilterScanBuilder.KEEP_RESIDUAL_FILTERS, false)
+  private val sourceOutput = DataTypeUtils.toAttributes(TestingV2Source.schema)
   private var requiredSchema = TestingV2Source.schema
 
   override def readSchema(): StructType = requiredSchema
@@ -2502,19 +2551,21 @@ class CatalystFilterScanBuilder(options: CaseInsensitiveStringMap) extends Simpl
   override def useInferredFilterEstimation(): Boolean =
     options.getBoolean(CatalystFilterScanBuilder.USE_INFERRED_FILTER_ESTIMATION, true)
 
+  private[connector] def bindToSourceOutput(filter: CatalystExpression): CatalystExpression = {
+    filter.transformUp {
+      case attr: AttributeReference =>
+        sourceOutput.find(_.name == attr.name).getOrElse(
+          throw new IllegalArgumentException(s"Unknown column: ${attr.name}"))
+    }
+  }
+
   override def planInputPartitions(): Array[InputPartition] = {
     // This source enforces inferred filters and asks Spark to use them for stats adjustment.
     val enforcedFilters = pushedCatalystFilters ++ inferredFilters
     enforcedFilters.reduceLeftOption(CatalystAnd) match {
       case Some(filter) =>
-        val attrs = DataTypeUtils.toAttributes(TestingV2Source.schema)
-        val bound = filter.transformUp {
-          case attr: AttributeReference =>
-            attrs.find(_.name == attr.name).getOrElse(
-              throw new IllegalArgumentException(s"Unknown column: ${attr.name}"))
-        }
         val predicate = CatalystPredicate.createInterpreted(
-          BindReferences.bindReference(bound, attrs))
+          BindReferences.bindReference(bindToSourceOutput(filter), sourceOutput))
         Array(ValuesInputPartition((0 until 10).filter { i =>
           predicate.eval(InternalRow(i, -i))
         }))

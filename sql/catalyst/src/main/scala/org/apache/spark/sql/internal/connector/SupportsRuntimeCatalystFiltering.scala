@@ -30,7 +30,8 @@ import org.apache.spark.sql.connector.read.Scan
  * [[org.apache.spark.sql.connector.read.SupportsRuntimeFiltering]]; Spark rejects such a scan.
  *
  * Spark considers a runtime predicate fully pushed when all attributes referenced by the
- * predicate are returned by [[fullyPushedFilterAttributes]]. Fully pushed predicates are not
+ * predicate are returned by the table's
+ * [[SupportsCatalystFilterGuarantees.fullyPushedFilterAttributes]]. Fully pushed predicates are not
  * evaluated again after the scan.
  *
  * Note that Spark will push runtime filters only if they are beneficial.
@@ -45,31 +46,6 @@ trait SupportsRuntimeCatalystFiltering extends Scan {
    * pruned out of [[Scan.readSchema]] fail to resolve.
    */
   def filterAttributes(): Array[NamedReference]
-
-  /**
-   * Returns attributes for which this scan fully evaluates runtime predicates.
-   *
-   * Any runtime predicate that references only attributes in this set is considered fully pushed
-   * and will not be evaluated again after the scan. These attributes must also be returned by
-   * [[filterAttributes]]. Each attribute's value must therefore be fixed within every
-   * [[org.apache.spark.sql.connector.read.InputPartition]] the scan returns, since pruning
-   * partitions cannot fully evaluate a predicate on a column that varies within a partition.
-   *
-   * Spark relies on the scan alone here, so the scan must return only partitions it has proven
-   * satisfy such a predicate. Spark passes these expressions through as they are, leaving both
-   * translation and capability checking to the scan, so evaluating one can fail, for example on
-   * an ANSI cast or overflow error, or on a nested access that the scan matches differently
-   * against its partition layout. Declare an attribute only when the scan can evaluate every
-   * predicate over it.
-   *
-   * Each reference must be a top-level attribute present in [[Scan.readSchema]]. Nested
-   * references are rejected, and attributes pruned out of the read schema fail to resolve, when
-   * Spark builds the scan relation. Spark cannot currently represent an individual fully pushed
-   * nested path. A scan must not return the root struct as a substitute unless it can fully
-   * evaluate predicates over every nested field, since Spark would remove their post-scan
-   * evaluation as well.
-   */
-  def fullyPushedFilterAttributes(): Array[NamedReference] = Array.empty
 
   /**
    * Filters this scan using runtime Catalyst expressions.
