@@ -96,7 +96,7 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
 
   test("keep ordinary joins that cannot become external lookup joins") {
     val other = LocalRelation($"k".int, $"k2".int)
-    val dual = relation(BATCH_READ, EXTERNAL_LOOKUP)
+    val dual = tableWith(BATCH_READ, EXTERNAL_LOOKUP)
     Seq(
       innerJoinOnId(tableWith(BATCH_READ, EXTERNAL_LOOKUP)),
       innerJoinOnId(tableWith(BATCH_READ)),
@@ -109,11 +109,11 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
   }
 
   test("the hint opts a join in, and the lookup side is found beneath hints and aliases") {
-    val dual = relation(BATCH_READ, EXTERNAL_LOOKUP)
+    val dual = tableWith(BATCH_READ, EXTERNAL_LOOKUP)
     Seq(dual.hint("external_lookup").as("d"), lookupOnly.as("t").hint("external_lookup"))
       .foreach { right =>
         val analyzed =
-          analyze(left.join(right, LeftOuter, Some(left.output(1) === right.output(1))))
+          analyze(stream.join(right, LeftOuter, Some(stream.output(1) === right.output(1))))
         CheckExternalLookupJoin(analyzed)
         val formed = FormExternalLookupJoin(analyzed)
         assert(formed.isInstanceOf[ExternalLookupJoin])
@@ -127,7 +127,7 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
   }
 
   test("a lookup side with another operator above the table fails in validation") {
-    val dual = relation(BATCH_READ, EXTERNAL_LOOKUP)
+    val dual = tableWith(BATCH_READ, EXTERNAL_LOOKUP)
     // Projections and filters on the lookup side are not supported, so they fail in validation,
     // whether or not the optimizer would later remove them.
     Seq(
@@ -135,7 +135,7 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
       lookupOnly.as("t").where(lookupOnly.output(2) =!= "x"),
       dual.select(dual.output: _*).hint("external_lookup"),
       dual.hint("external_lookup").where(dual.output(2) =!= "x")).foreach { right =>
-      val analyzed = analyze(left.join(right, Inner, Some(left.output(1) === right.output(1))))
+      val analyzed = analyze(stream.join(right, Inner, Some(stream.output(1) === right.output(1))))
       Seq[LogicalPlan => Any](CheckExternalLookupJoin, FormExternalLookupJoin(_)).foreach { rule =>
         checkError(
           exception = intercept[AnalysisException] { rule(analyzed) },
