@@ -842,7 +842,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("SPARK-XXXXX: last_day near the DATE range bounds") {
+  test("SPARK-60929: last_day near the DATE range bounds") {
     val min = Int.MinValue // -5877641-06-23
     val max = Int.MaxValue // +5881580-07-11
     checkEvaluation(LastDay(Literal(min, DateType)), min + 7)
@@ -855,7 +855,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("SPARK-XXXXX: next_day near the DATE range bounds") {
+  test("SPARK-60929: next_day near the DATE range bounds") {
     val min = Int.MinValue // -5877641-06-23, a Tuesday
     val max = Int.MaxValue // +5881580-07-11, a Friday
     // `failOnError` only governs an invalid day of week. Codegen has a path for a foldable one.

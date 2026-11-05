@@ -549,7 +549,8 @@ object DateTimeUtils extends SparkDateTimeUtils {
   def getNextDateForDayOfWeek(startDay: Int, dayOfWeek: Int): Int = {
     val result = nextDateForDayOfWeek(startDay, dayOfWeek)
     if (result > Int.MaxValue) {
-      throw QueryExecutionErrors.nextDayOverflowError(startDay, DayOfWeek.THURSDAY.plus(dayOfWeek))
+      val dayName = DayOfWeek.THURSDAY.plus(dayOfWeek).toString
+      throw QueryExecutionErrors.nextDayOverflowError(startDay, dayName)
     }
     result.toInt
   }

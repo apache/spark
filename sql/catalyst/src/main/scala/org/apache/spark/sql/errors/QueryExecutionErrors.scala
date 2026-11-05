@@ -20,7 +20,7 @@ package org.apache.spark.sql.errors
 import java.io.{File, IOException}
 import java.lang.reflect.InvocationTargetException
 import java.net.{URISyntaxException, URL}
-import java.time.{DateTimeException, DayOfWeek}
+import java.time.DateTimeException
 import java.util.Locale
 import java.util.concurrent.TimeoutException
 
@@ -2901,7 +2901,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
-  def nextDayOverflowError(days: Int, dayOfWeek: DayOfWeek): SparkArithmeticException = {
+  def nextDayOverflowError(days: Int, dayOfWeek: String): SparkArithmeticException = {
     new SparkArithmeticException(
       errorClass = "DATETIME_OVERFLOW",
       messageParameters = Map(

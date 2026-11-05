@@ -1120,7 +1120,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       parameters = Map("string" -> "\"quote"))
   }
 
-  test("SPARK-XXXXX: getNextDateForDayOfWeek near the DATE range bounds") {
+  test("SPARK-60929: getNextDateForDayOfWeek near the DATE range bounds") {
     val min = Int.MinValue // -5877641-06-23, a Tuesday
     val max = Int.MaxValue // +5881580-07-11, a Friday
     def nextDay(startDay: Int, dayOfWeek: String): Int =
@@ -1152,7 +1152,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
   }
 
-  test("SPARK-XXXXX: getLastDayOfMonth near the DATE range bounds") {
+  test("SPARK-60929: getLastDayOfMonth near the DATE range bounds") {
     // -5877641-06-23 -> -5877641-06-30
     assert(getLastDayOfMonth(Int.MinValue) === Int.MinValue + 7)
     // +5881580-06-30 is the largest result that fits.
@@ -1167,7 +1167,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
   }
 
-  test("SPARK-XXXXX: trunc to WEEK in the first week of the DATE range") {
+  test("SPARK-60929: trunc to WEEK in the first week of the DATE range") {
     // Int.MinValue + 6 (-5877641-06-29) is the first Monday of the DATE range.
     assert(truncDate(Int.MinValue + 6, TRUNC_TO_WEEK) === Int.MinValue + 6)
     assert(truncDate(Int.MinValue + 10, TRUNC_TO_WEEK) === Int.MinValue + 6)
