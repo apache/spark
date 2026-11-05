@@ -22,10 +22,11 @@ import org.apache.spark.sql.catalyst.expressions.{Coalesce, Literal}
 import org.apache.spark.sql.catalyst.plans.FullOuter
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEShuffleReadExec}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.LongType
 
 class FullOuterJoinPartitioningSuite
   extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper {
@@ -48,6 +49,19 @@ class FullOuterJoinPartitioningSuite
   private val mixedJoins = Seq(
     s"$aggregated FULL OUTER JOIN b ON x.k = b.k" -> "coalesce(x.k, b.k)",
     s"b FULL OUTER JOIN $aggregated ON b.k = x.k" -> "coalesce(b.k, x.k)")
+
+  /** AQE coalescing that still leaves several partitions, so misplaced rows can show. */
+  private val aqeCoalescing = Seq(
+    SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+    SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+    SQLConf.SHUFFLE_PARTITIONS.key -> "10",
+    SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "1200")
+
+  private def assertCoalescedToSeveralPartitions(plan: SparkPlan): Unit = {
+    val reads = collect(plan) { case r: AQEShuffleReadExec => r }
+    assert(reads.nonEmpty, plan)
+    assert(reads.forall(r => (2 until 10).contains(r.outputPartitioning.numPartitions)), plan)
+  }
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -218,15 +232,12 @@ class FullOuterJoinPartitioningSuite
   }
 
   test("AQE coalesced partitions keep the claim") {
-    val aqe = Seq(
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
-      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "1g")
     val query = usingGroupBy
-    assert(compare(query, aqe: _*) == (2, 3))
-    withSQLConf(baseConfs ++ aqe: _*) {
+    assert(compare(query, aqeCoalescing: _*) == (2, 3))
+    withSQLConf(baseConfs ++ aqeCoalescing: _*) {
       val df = sql(query)
       df.collect()
+      assertCoalescedToSeveralPartitions(df.queryExecution.executedPlan)
       val ps = members(firstFullOuterJoin(df).outputPartitioning)
       assert(ps.size == 2 && ps.forall(_.isInstanceOf[CoalescedHashPartitioning]))
     }
@@ -344,6 +355,71 @@ class FullOuterJoinPartitioningSuite
     }
   }
 
+  test("a key that fails the guard on one side keeps the output partitioning unknown") {
+    // `coalesce(k, 0)` is 0 on a NULL-padded row. With the other side's key first, the merged key
+    // below is 0 on an unmatched row of that side whose own key is NULL, which sits on
+    // hash(NULL) rather than hash(0).
+    def partitionOf(v: Any): Int =
+      HashPartitioning(Seq(Literal.create(v, LongType)), numShufflePartitions)
+        .partitionIdExpression.eval().asInstanceOf[Int]
+    assert(partitionOf(0L) != partitionOf(null))
+
+    withTempView("x", "y") {
+      spark.range(0, 2).selectExpr("CAST(IF(id = 0, 0, NULL) AS BIGINT) AS k")
+        .createOrReplaceTempView("x")
+      spark.range(0, 2).selectExpr("CAST(IF(id = 0, 0, NULL) AS BIGINT) AS k")
+        .createOrReplaceTempView("y")
+      Seq(
+        "x.k = coalesce(y.k, 0)" -> "coalesce(x.k, coalesce(y.k, 0))",
+        "coalesce(x.k, 0) = y.k" -> "coalesce(y.k, coalesce(x.k, 0))").foreach {
+        case (condition, merged) =>
+          val join = s"x FULL OUTER JOIN y ON $condition"
+          assert(compare(s"SELECT $merged AS g, count(*) FROM $join GROUP BY 1") == (3, 3),
+            condition)
+          withSQLConf(baseConfs: _*) {
+            assert(firstFullOuterJoin(sql(s"SELECT * FROM $join")).outputPartitioning
+              .isInstanceOf[UnknownPartitioning], condition)
+          }
+      }
+    }
+  }
+
+  test("one key pair failing the guard keeps the output partitioning unknown") {
+    val join = "a FULL OUTER JOIN b ON a.k = b.k AND a.k2 = coalesce(b.k2, 0)"
+    val query =
+      s"""SELECT coalesce(a.k, b.k) AS g, coalesce(a.k2, coalesce(b.k2, 0)) AS g2, count(*)
+         |FROM $join GROUP BY 1, 2""".stripMargin
+    assert(compare(query) == (3, 3))
+    withSQLConf(baseConfs: _*) {
+      assert(firstFullOuterJoin(sql(s"SELECT * FROM $join")).outputPartitioning
+        .isInstanceOf[UnknownPartitioning])
+    }
+  }
+
+  test("changing the expand limit after the plan is prepared keeps its answer") {
+    /** Prepares `query`, sets `change`, then executes the prepared plan. */
+    def checkChangeAfterPreparation(
+        query: String, change: (String, String), confs: (String, String)*): Unit = {
+      withSQLConf(baseConfs ++ confs: _*) {
+        val expected = sql(query).collect().toSeq.map(_.toString).sorted
+        val df = sql(query)
+        df.queryExecution.executedPlan
+        withSQLConf(change) {
+          assert(df.collect().toSeq.map(_.toString).sorted == expected, change)
+        }
+      }
+    }
+
+    // A union of FULL OUTER legs is partitioning-aware, and the aggregate above it does not
+    // shuffle, so both rely on the legs keeping their claim at execution.
+    val union =
+      """SELECT k, count(*) FROM (
+        |  SELECT k FROM a FULL OUTER JOIN b USING (k) UNION ALL
+        |  SELECT k FROM b FULL OUTER JOIN c USING (k)) GROUP BY k""".stripMargin
+    assert(compare(union) == (3, 4))
+    checkChangeAfterPreparation(union, expandLimit -> "0")
+  }
+
   test("a null-safe equality keeps the output partitioning unknown") {
     // `a.k <=> b.k` plans as the keys (coalesce(k, 0), isnull(k)), which are 0 and true on a
     // NULL-padded row, so the coalesced key of an unmatched row is not its own key.
@@ -372,22 +448,20 @@ class FullOuterJoinPartitioningSuite
   }
 
   test("AQE: a strict hash side next to a null-aware side gives a coalesced null-aware output") {
-    val confs = Seq(
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
-      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "1g",
-      SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "true")
+    val confs = aqeCoalescing :+ (SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "true")
     val (join, merged) = mixedJoins.head
     assert(compare(s"SELECT * FROM $join FULL OUTER JOIN c ON $merged = c.k", confs: _*) == (3, 4))
     withSQLConf(baseConfs ++ confs: _*) {
-      val df = sql(s"SELECT * FROM $join")
+      val df = sql(s"SELECT * FROM $join FULL OUTER JOIN c ON $merged = c.k")
       df.collect()
-      val fullOuter = firstFullOuterJoin(df)
+      assertCoalescedToSeveralPartitions(df.queryExecution.executedPlan)
+      // The lower join, over the strict and the null-aware side.
+      val fullOuter = fullOuterJoins(df.queryExecution.executedPlan).last
       assert(fullOuter.left.outputPartitioning.isInstanceOf[CoalescedHashPartitioning])
       assert(fullOuter.right.outputPartitioning.isInstanceOf[CoalescedNullAwareHashPartitioning])
       assert(members(fullOuter.outputPartitioning).forall {
         case CoalescedNullAwareHashPartitioning(
-            NullAwareHashPartitioning(_, `numShufflePartitions`), _) => true
+            NullAwareHashPartitioning(_, 10), _) => true
         case _ => false
       })
     }

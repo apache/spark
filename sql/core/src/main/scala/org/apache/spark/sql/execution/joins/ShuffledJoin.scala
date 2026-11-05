@@ -30,6 +30,9 @@ import org.apache.spark.sql.internal.SQLConf
 trait ShuffledJoin extends JoinCodegenSupport {
   def isSkewJoin: Boolean
 
+  private val fullOuterExpandLimit =
+    conf.getConf(SQLConf.FULL_OUTER_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT)
+
   private lazy val canSpreadNullJoinKeys: Boolean = {
     // Only NULL keys on the preserved side of an outer or left anti join can create this skew:
     // they must be emitted, but cannot satisfy ordinary equi-join predicates. Non-preserved
@@ -150,17 +153,19 @@ trait ShuffledJoin extends JoinCodegenSupport {
    * in a `PartitioningCollection` when there is more than one.
    */
   private def fullOuterOutputPartitioning: Partitioning = {
-    val fallback = UnknownPartitioning(left.outputPartitioning.numPartitions)
-    val expandLimit = conf.getConf(SQLConf.FULL_OUTER_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT)
-    if (expandLimit == 0) {
+    val leftPartitioning = left.outputPartitioning
+    val fallback = UnknownPartitioning(leftPartitioning.numPartitions)
+    if (fullOuterExpandLimit == 0) {
       fallback
     } else {
       requiredChildDistribution match {
         case Seq(leftDist: ClusteredDistribution, rightDist: ClusteredDistribution) =>
+          val leftHashes = hashPartitionings(leftPartitioning)
+          val rightHashes = hashPartitionings(right.outputPartitioning)
           val coalesced = for {
-            l <- hashPartitionings(left.outputPartitioning)
-            r <- hashPartitionings(right.outputPartitioning)
-            p <- coalescedPartitionings(l, leftDist, r, rightDist, expandLimit)
+            l <- leftHashes
+            r <- rightHashes
+            p <- coalescedPartitionings(l, leftDist, r, rightDist)
           } yield p
           coalesced match {
             case Seq() => fallback
@@ -179,8 +184,7 @@ trait ShuffledJoin extends JoinCodegenSupport {
       leftPartitioning: HashPartitioningLike,
       leftDist: ClusteredDistribution,
       rightPartitioning: HashPartitioningLike,
-      rightDist: ClusteredDistribution,
-      expandLimit: Int): Seq[Partitioning] = {
+      rightDist: ClusteredDistribution): Seq[Partitioning] = {
     // Compatibility pairs the i-th expressions of the two sides by join key position, and for a
     // coalesced pair also requires the same reducer boundaries.
     val compatible = leftPartitioning.createShuffleSpec(leftDist)
@@ -197,21 +201,19 @@ trait ShuffledJoin extends JoinCodegenSupport {
       case _: NullAwareHashPartitioning | _: CoalescedNullAwareHashPartitioning => rightPartitioning
       case _ => leftPartitioning
     }
-    coalescedKeys(keyPairs, expandLimit).map { keys =>
+    coalescedKeys(keyPairs).map { keys =>
       candidatePartitioning.withNewChildren(keys).asInstanceOf[Partitioning]
     }
   }
 
   /**
-   * The coalesced keys of `keyPairs`, at most `expandLimit` of them. `Coalesce(l, r)` and
+   * The coalesced keys of `keyPairs`, at most `fullOuterExpandLimit` of them. `Coalesce(l, r)` and
    * `Coalesce(r, l)` agree on every output row: a matched row has equal keys, and an unmatched
    * row has a NULL on the other side. So each position may take either order. Every key left
    * first and every key right first come first, as a query usually writes all of its keys in one
    * order, and the mixed orders follow.
    */
-  private def coalescedKeys(
-      keyPairs: Seq[(Expression, Expression)],
-      expandLimit: Int): Seq[Seq[Expression]] = {
+  private def coalescedKeys(keyPairs: Seq[(Expression, Expression)]): Seq[Seq[Expression]] = {
     val alternatives = keyPairs.map { case (l, r) => Seq(Coalesce(Seq(l, r)), Coalesce(Seq(r, l))) }
     val leftFirst = alternatives.map(_.head)
     val rightFirst = alternatives.map(_.last)
@@ -219,7 +221,7 @@ trait ShuffledJoin extends JoinCodegenSupport {
       .filter(keys => keys != leftFirst && keys != rightFirst)
     // A strict `List`, as an unforced `LazyList` held by a plan node can overflow the stack.
     (leftFirst #:: rightFirst #:: mixed)
-      .take(expandLimit)
+      .take(fullOuterExpandLimit)
       .toList
   }
 
