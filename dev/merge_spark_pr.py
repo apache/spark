@@ -870,14 +870,14 @@ def append_post_merge_ci_skip(message):
     return "%s\n\n%s\n" % (message.rstrip(), POST_MERGE_CI_SKIP_TRAILER)
 
 
-def without_inherited_post_merge_ci_skip(message):
+def remove_inherited_post_merge_ci_skip(message):
     """Remove an inherited skip trailer found near the end of a cherry-pick message.
 
     >>> message = "Subject\\n\\nskip-checks: true\\n(cherry picked from commit abc)\\n"
-    >>> without_inherited_post_merge_ci_skip(message)
+    >>> remove_inherited_post_merge_ci_skip(message)
     'Subject\\n\\n(cherry picked from commit abc)\\n'
     >>> distant = "Subject\\n\\nskip-checks: true\\n" + "x" * 256 + "\\n"
-    >>> without_inherited_post_merge_ci_skip(distant) == distant
+    >>> remove_inherited_post_merge_ci_skip(distant) == distant
     True
     """
     tail = message[-POST_MERGE_CI_TRAILER_SEARCH_LENGTH:]
@@ -1034,7 +1034,10 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref):
             print("Cherry-pick already completed manually; continuing with the backport.")
 
     raw_message = git.run(["git", "log", "-1", "--format=%B"])
-    updated_message = without_inherited_post_merge_ci_skip(raw_message)
+    updated_message = raw_message
+    inherited_marker = "\n%s\n" % POST_MERGE_CI_SKIP_TRAILER
+    if inherited_marker in raw_message[-POST_MERGE_CI_TRAILER_SEARCH_LENGTH:]:
+        updated_message = remove_inherited_post_merge_ci_skip(raw_message)
     if skip_post_merge_ci:
         updated_message = append_post_merge_ci_skip(updated_message)
     if updated_message != raw_message:
