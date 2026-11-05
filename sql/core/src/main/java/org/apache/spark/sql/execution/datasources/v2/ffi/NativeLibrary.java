@@ -138,10 +138,11 @@ final class NativeLibrary {
   // struct starts with its size.
   private static final long TABLE_ABI_VERSION = 8;
   private static final long TABLE_FUNCTIONS = 16;
-  private static final long HOST_SIZE = 32;
+  private static final long HOST_SIZE = 40;
   private static final long HOST_ABI_VERSION = 8;
   private static final long HOST_SPARK_VERSION = 16;
   private static final long HOST_LOG = 24;
+  private static final long HOST_IS_LOG_ENABLED = 32;
   private static final long CREATE_INFO_SIZE = 40;
   private static final long CREATE_INFO_NAME = 8;
   private static final long CREATE_INFO_OPTION_KEYS = 16;
@@ -219,6 +220,7 @@ final class NativeLibrary {
     layout.put("SparkDsHost.abi_version", HOST_ABI_VERSION);
     layout.put("SparkDsHost.spark_version", HOST_SPARK_VERSION);
     layout.put("SparkDsHost.log", HOST_LOG);
+    layout.put("SparkDsHost.is_log_enabled", HOST_IS_LOG_ENABLED);
     layout.put("SparkDsCreateInfo", CREATE_INFO_SIZE);
     layout.put("SparkDsCreateInfo.size", 0L);
     layout.put("SparkDsCreateInfo.name", CREATE_INFO_NAME);
@@ -384,11 +386,13 @@ final class NativeLibrary {
     static final MethodHandle LOG;
     // The addresses of the C functions that call Java, which live as long as the JVM:
     // SparkDsSink, which calls NativeLibrary.sink, the SparkDsSink set_state of the functions
-    // that also return a state, which calls NativeLibrary.stateSink, and
-    // SparkDsTaskContext.is_interrupted, which calls NativeLibrary.isInterrupted.
+    // that also return a state, which calls NativeLibrary.stateSink,
+    // SparkDsTaskContext.is_interrupted, which calls NativeLibrary.isInterrupted, and
+    // SparkDsHost.is_log_enabled, which calls NativeLibrary.isLogEnabled.
     static final long SINK;
     static final long STATE_SINK;
     static final long IS_INTERRUPTED;
+    static final long IS_LOG_ENABLED;
 
     static {
       try {
@@ -447,6 +451,10 @@ final class NativeLibrary {
           lookup.findStatic(NativeLibrary.class, "isInterrupted",
             MethodType.methodType(boolean.class, long.class)),
           C.BOOL, C.PTR);
+        IS_LOG_ENABLED = upcall(
+          lookup.findStatic(NativeLibrary.class, "isLogEnabled",
+            MethodType.methodType(boolean.class, int.class)),
+          C.BOOL, C.I32);
       } catch (Throwable e) {
         // The message names the cause, because the JVM only keeps this message for the later
         // uses of the class.
@@ -528,6 +536,7 @@ final class NativeLibrary {
       Platform.putInt(null, host + HOST_ABI_VERSION, ABI_VERSION);
       Platform.putLong(null, host + HOST_SPARK_VERSION, versionAddress);
       Platform.putLong(null, host + HOST_LOG, log);
+      Platform.putLong(null, host + HOST_IS_LOG_ENABLED, IS_LOG_ENABLED);
       return host;
     }
   }
@@ -566,24 +575,60 @@ final class NativeLibrary {
   }
 
   /**
+   * The SPARK_DS_LOG_* levels, which {@link #log} and {@link #isLogEnabled} share: a level that
+   * is not one of them is treated as SPARK_DS_LOG_INFO.
+   */
+  private enum LogLevel {
+    ERROR, WARN, INFO, DEBUG, TRACE;
+
+    static LogLevel of(int level) {
+      return switch (level) {
+        case 1 -> ERROR;
+        case 2 -> WARN;
+        case 4 -> DEBUG;
+        case 5 -> TRACE;
+        default -> INFO;
+      };
+    }
+  }
+
+  /**
    * Called by the library, through {@code SparkDsHost.log}, with the path of the library. It must
    * not throw: an exception thrown by an upcall crashes the JVM.
    */
   private static void log(String path, int level, long message) {
     try {
       String text = message == 0 ? "" : new String(readCString(message), StandardCharsets.UTF_8);
-      switch (level) {
-        case 1 -> LOGGER.error("Native data source library {}: {}",
+      switch (LogLevel.of(level)) {
+        case ERROR -> LOGGER.error("Native data source library {}: {}",
           MDC.of(LogKeys.PATH, path), MDC.of(LogKeys.MESSAGE, text));
-        case 2 -> LOGGER.warn("Native data source library {}: {}",
+        case WARN -> LOGGER.warn("Native data source library {}: {}",
           MDC.of(LogKeys.PATH, path), MDC.of(LogKeys.MESSAGE, text));
-        case 4 -> LOGGER.debug("Native data source library {}: {}", path, text);
-        case 5 -> LOGGER.trace("Native data source library {}: {}", path, text);
-        default -> LOGGER.info("Native data source library {}: {}",
+        case DEBUG -> LOGGER.debug("Native data source library {}: {}", path, text);
+        case TRACE -> LOGGER.trace("Native data source library {}: {}", path, text);
+        case INFO -> LOGGER.info("Native data source library {}: {}",
           MDC.of(LogKeys.PATH, path), MDC.of(LogKeys.MESSAGE, text));
       }
     } catch (Throwable e) {
       // The message is lost.
+    }
+  }
+
+  /**
+   * Called by the library, through {@code SparkDsHost.is_log_enabled}, with the level of the
+   * messages of {@link #log}. It must not throw: an exception thrown by an upcall crashes the JVM.
+   */
+  private static boolean isLogEnabled(int level) {
+    try {
+      return switch (LogLevel.of(level)) {
+        case ERROR -> LOGGER.isErrorEnabled();
+        case WARN -> LOGGER.isWarnEnabled();
+        case INFO -> LOGGER.isInfoEnabled();
+        case DEBUG -> LOGGER.isDebugEnabled();
+        case TRACE -> LOGGER.isTraceEnabled();
+      };
+    } catch (Throwable e) {
+      return false;
     }
   }
 
