@@ -1225,6 +1225,22 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val FULL_OUTER_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT =
+    buildConf("spark.sql.join.fullOuter.outputPartitioningExpandLimit")
+      .internal()
+      .doc("The maximum number of hash partitionings on the COALESCE of the join keys that a " +
+        "shuffled FULL OUTER join reports per pair of co-partitioned children, so that a " +
+        "downstream operator clustered on that COALESCE does not shuffle the join output " +
+        "again. COALESCE(l, r) and COALESCE(r, l) of a join key pair agree on every output " +
+        "row, so each key position may take either order. The order with every key left " +
+        "first and the one with every key right first come first. Set to '0' to report an " +
+        "unknown partitioning instead.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .intConf
+      .checkValue(_ >= 0, "The value must be non-negative.")
+      .createWithDefault(8)
+
   val REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION =
     buildConf("spark.sql.requireAllClusterKeysForCoPartition")
       .internal()
