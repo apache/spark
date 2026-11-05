@@ -183,8 +183,8 @@ private[spark] object Python {
         "directions to overlap. This can improve throughput for some workloads " +
         "(e.g., multi-column UDFs or compute-heavy UDFs like ML inference); for light, " +
         "single-column UDFs the overhead of the extra thread may offset the gain. " +
-        "With detailed Python UDF timing, overlapping phase durations must not be summed " +
-        "as elapsed time. pythonNumPipelinedTasks counts tasks using this mode.")
+        "Detailed Python UDF phase timings are not collected in this mode. " +
+        "pythonNumPipelinedTasks counts tasks using this mode.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf

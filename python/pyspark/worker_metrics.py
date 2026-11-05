@@ -33,9 +33,8 @@ class _WorkerTimer:
     clock twice and updates the duration dictionary. In a hot batch loop, accumulate
     locally and call add_duration_ns once instead of entering this context per batch.
 
-    Pipelined reads can overlap UDF work on another thread. Do not sum the five phase
-    durations as elapsed time when pythonNumPipelinedTasks is nonzero. An additive
-    breakdown for that mode would require tracking those overlapping intervals.
+    Detailed phase timing is disabled in pipelined mode. The worker's overall processing
+    duration is still collected.
     """
 
     def __init__(self, shared_duration_totals_ns: dict[str, int], metric_name: str) -> None:

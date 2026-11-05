@@ -108,9 +108,20 @@ class EvalTypeHandlerTests(PySparkBaseTestCase):
             (_Grouped, ArrowStreamGroupSerializer),
             (_CoGrouped, ArrowStreamCoGroupSerializer),
         ):
-            for supported, enabled in ((False, True), (True, False), (True, True)):
-                with self.subTest(
-                    handler=handler_class.__name__, supported=supported, enabled=enabled
+            for supported, enabled, pipelined in (
+                (False, True, False),
+                (True, False, False),
+                (True, True, False),
+                (True, True, True),
+            ):
+                with (
+                    self.subTest(
+                        handler=handler_class.__name__,
+                        supported=supported,
+                        enabled=enabled,
+                        pipelined=pipelined,
+                    ),
+                    patch.dict(os.environ, {"SPARK_PIPELINED_UDF": str(int(pipelined))}),
                 ):
                     metrics.reset()
                     handler_class._supports_detailed_timing = supported
@@ -123,13 +134,12 @@ class EvalTypeHandlerTests(PySparkBaseTestCase):
                     )
                     handler = handler_class([], conf, None)
                     serializer = handler.serializer
+                    expected_timing = supported and enabled and not pipelined
                     self.assertIsInstance(serializer, serializer_class)
-                    self.assertEqual(serializer._detailed_timing_enabled, supported and enabled)
-                    self.assertEqual(
-                        handler._create_phase_timers() is not None, supported and enabled
-                    )
+                    self.assertEqual(serializer._detailed_timing_enabled, expected_timing)
+                    self.assertEqual(handler._create_phase_timers() is not None, expected_timing)
                     self.assertEqual(conf.detailed_timing_enabled, enabled)
-                    if not (supported and enabled):
+                    if not expected_timing:
                         self.assertEqual(metrics.to_dict(), {})
             # Pipelined mode flushes each output batch.
             for value, flush in (("0", False), ("1", True)):

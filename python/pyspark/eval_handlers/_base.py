@@ -176,7 +176,9 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
         self._runner_conf = runner_conf
         self._eval_conf = eval_conf
         self._detailed_timing_enabled = (
-            self._supports_detailed_timing and runner_conf.detailed_timing_enabled
+            self._supports_detailed_timing
+            and runner_conf.detailed_timing_enabled
+            and os.environ.get("SPARK_PIPELINED_UDF") != "1"
         )
         # Each UDF's functions chained into one before any wrapping, at the indexes of _udf_descs: a
         # single function is the pickled object itself (an incremental Aggregator) with its
