@@ -34,6 +34,11 @@ VALUES ( expression [ , ... ] ) [ table_alias ]
 * **expression**
 
     Specifies a combination of one or more values, operators and SQL functions that results in a value.
+    Since Spark 4.4, the expression does not need to be constant: nondeterministic functions such as
+    `rand()`, Scala and Java user-defined functions, and uncorrelated scalar subqueries are evaluated
+    when the query runs. Aggregate, window and generator functions, SQL and Python user-defined
+    functions, other kinds of subqueries, and references to columns of an outer query are not
+    supported.
 
 * **table_alias**
 
@@ -70,6 +75,15 @@ SELECT * FROM VALUES ("one", array(0, 1)), ("two", array(2, 3)) AS data(a, b);
 |one|[0, 1]|
 |two|[2, 3]|
 +---+------+
+
+-- expressions that are not constant, such as nondeterministic functions and scalar subqueries
+SELECT a, length(b) FROM VALUES (1, uuid()), ((SELECT max(id) FROM range(5)), uuid()) AS data(a, b);
++---+---------+
+|  a|length(b)|
++---+---------+
+|  1|       36|
+|  4|       36|
++---+---------+
 ```
 
 ### Related Statements

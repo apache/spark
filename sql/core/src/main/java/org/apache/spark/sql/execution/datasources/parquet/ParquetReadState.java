@@ -28,15 +28,13 @@ import java.util.PrimitiveIterator;
 /**
  * Helper class to store intermediate state while reading a Parquet column chunk.
  *
- * <p>There is one subclass per way of saying which rows to include, which is every row of the
- * chunk, the ranges the caller of the read already held, or the one row index per row that a page
- * store describes parquet's own filtering with. {@link #forRead} picks between them. Everything
- * else about a read is the same whichever it is, and lives here.
+ * <p>There is one subclass per way of saying which rows to include: every row of the chunk, the
+ * ranges the caller already held, or the row indexes of a store parquet filtered itself.
+ * {@link #forRead} picks between them.
  */
 abstract class ParquetReadState {
   /**
-   * The current row range, as its bounds rather than as whatever object they were read out of, so
-   * that the check the value readers make per run of levels touches nothing else. Inverted bounds
+   * The current row range, as plain bounds for the value readers' per-run check. Inverted bounds
    * say every row from here on is to be skipped.
    */
   private long currentRangeStart;
@@ -88,14 +86,9 @@ abstract class ParquetReadState {
   }
 
   /**
-   * The state for reading {@code descriptor}, told which rows to include the best way the caller
-   * can say it.
-   *
-   * <p>{@code rowRanges} is the rows the read was asked for, when whoever asked knew them. A caller
-   * that filtered the rows itself holds their ranges, and every column reader of the row group can
-   * then walk that one list. Null says it does not, and the page store is left to describe its
-   * rows, which it can only do as {@code rowIndexes}, one index per row. No row indexes in turn
-   * means every row of the chunk is included, which is why ranges without them are refused.
+   * The state for reading {@code descriptor}. {@code rowRanges} is the rows the read was asked for,
+   * when the caller knows them, or null to leave it to the store's {@code rowIndexes}. No row
+   * indexes means every row of the chunk is included, which is why ranges without them are refused.
    */
   static ParquetReadState forRead(
       ColumnDescriptor descriptor,
@@ -105,9 +98,8 @@ abstract class ParquetReadState {
     ParquetReadState state;
     if (rowRanges != null) {
       if (rowIndexes == null) {
-        // Only a store parquet filtered itself indexes its rows, and only its pages carry the first
-        // row index that places them in the row group. Pages read whole would each place their
-        // first row at 0, and the ranges would then select the wrong rows with no error.
+        // Pages read whole carry no first row index, so the ranges would select the wrong rows
+        // with no error.
         throw ParquetStorageFilter.internalError(String.format(
             "Row ranges were given for column %s, but its pages carry no row indexes to find "
                 + "those rows by", descriptor));
@@ -118,8 +110,7 @@ abstract class ParquetReadState {
     } else {
       state = new RowIndexState(descriptor, isRequired, rowIndexes);
     }
-    // Here rather than in the constructors, because reading the first range needs the state each
-    // subclass sets, and a constructor calling `nextRange` would be calling into its own subclass.
+    // Not in the constructors, since `nextRange` needs the state each subclass sets.
     state.nextRange();
     return state;
   }
@@ -183,10 +174,7 @@ abstract class ParquetReadState {
     }
   }
 
-  /**
-   * Walks the caller's range list with a cursor, so a range costs one lookup however many rows it
-   * covers, and the list itself is built once for the whole row group.
-   */
+  /** Walks the caller's range list with a cursor, one lookup per range. */
   private static final class RangeListState extends ParquetReadState {
     private final List<RowRanges.Range> ranges;
     private int nextRangeIndex;
@@ -210,9 +198,8 @@ abstract class ParquetReadState {
 
   /**
    * Coalesces the runs of ascending row indexes into one range each, so `[0, 1, 2, 4, 5, 7, 8, 9]`
-   * yields `[0-2]`, `[4-5]` and `[7-9]`. All of them are built up front, then walked in order.
-   * This is the plain read path's route. Coalescing lazily instead measured 2% to 8% slower in
-   * `VectorizedRleValuesReaderBenchmark`.
+   * yields `[0-2]`, `[4-5]` and `[7-9]`, all built up front. This is the plain read path's route,
+   * where coalescing lazily measured slower.
    */
   private static final class RowIndexState extends ParquetReadState {
     private final Iterator<RowRange> rowRanges;

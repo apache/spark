@@ -44,7 +44,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedIntEncoder,
 import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, Expression, GenericRowWithSchema}
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.trees.DataFrameQueryContext
-import org.apache.spark.sql.catalyst.util.sideBySide
+import org.apache.spark.sql.catalyst.util.{sideBySide, DateTimeUtils}
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
@@ -2436,6 +2436,15 @@ class DatasetSuite extends SharedSparkSession
   test("implicit encoder for LocalTime") {
     val localTime = java.time.LocalTime.of(19, 30, 30)
     assert(spark.range(1).map { _ => localTime }.head() === localTime)
+  }
+
+  test("SPARK-60346: collect an array of TIME(p)") {
+    val nanos = DateTimeUtils.localTimeToNanos(java.time.LocalTime.parse("12:00:00.123456789"))
+    (TimeType.MIN_PRECISION to TimeType.MAX_PRECISION).foreach { p =>
+      val df = sql(s"SELECT array(CAST(TIME '12:00:00.123456789' AS TIME($p)))")
+      val time = DateTimeUtils.nanosToLocalTime(DateTimeUtils.truncateTimeToPrecision(nanos, p))
+      checkAnswer(df, Row(Seq(time)))
+    }
   }
 
   val dotColumnTestModes = Table(

@@ -5250,6 +5250,223 @@ Aggregate [sum(a#x) AS total_a#xL]
 
 
 -- !query
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> select id
+|> select h.*
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "CANNOT_RESOLVE_STAR_EXPAND",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "columns" : "`h`, `id`",
+    "targetString" : "`h`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 86,
+    "stopIndex" : 88,
+    "fragment" : "h.*"
+  } ]
+}
+
+
+-- !query
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> select id
+|> select h.a
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`h`.`a`",
+    "proposal" : "`tab`.`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 86,
+    "stopIndex" : 88,
+    "fragment" : "h.a"
+  } ]
+}
+
+
+-- !query
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> drop h
+|> select h.*
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "CANNOT_RESOLVE_STAR_EXPAND",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "columns" : "`h`, `id`",
+    "targetString" : "`h`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 83,
+    "stopIndex" : 85,
+    "fragment" : "h.*"
+  } ]
+}
+
+
+-- !query
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> drop h
+|> select h.a
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`h`.`a`",
+    "proposal" : "`tab`.`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 83,
+    "stopIndex" : 85,
+    "fragment" : "h.a"
+  } ]
+}
+
+
+-- !query
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> aggregate count(*) as c group by id
+|> select h.a
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`h`.`a`",
+    "proposal" : "`c`, `tab`.`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 112,
+    "stopIndex" : 114,
+    "fragment" : "h.a"
+  } ]
+}
+
+
+-- !query
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> select id
+|> where h.a > 0
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`h`.`a`",
+    "proposal" : "`tab`.`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 85,
+    "stopIndex" : 87,
+    "fragment" : "h.a"
+  } ]
+}
+
+
+-- !query
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> select id
+|> extend h.a as z
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`h`.`a`",
+    "proposal" : "`tab`.`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 86,
+    "stopIndex" : 88,
+    "fragment" : "h.a"
+  } ]
+}
+
+
+-- !query
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> select id, h
+|> select h.*
+-- !query analysis
+Project [h#x.a AS a#x, h#x.b AS b#x]
++- Project [id#x, h#x]
+   +- SubqueryAlias tab
+      +- LocalRelation [id#x, h#x]
+
+
+-- !query
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> select h as g
+|> select g.*, g.a
+-- !query analysis
+Project [g#x.a AS a#x, g#x.b AS b#x, g#x.a AS a#x]
++- Project [h#x AS g#x]
+   +- SubqueryAlias tab
+      +- LocalRelation [id#x, h#x]
+
+
+-- !query
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> select h as g
+|> select h.a
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`h`.`a`",
+    "proposal" : "`g`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 90,
+    "stopIndex" : 92,
+    "fragment" : "h.a"
+  } ]
+}
+
+
+-- !query
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> as x
+|> select x.h.a
+-- !query analysis
+Project [h#x.a AS a#x]
++- SubqueryAlias x
+   +- SubqueryAlias tab
+      +- LocalRelation [id#x, h#x]
+
+
+-- !query
 drop table t
 -- !query analysis
 DropTable false, false

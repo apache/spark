@@ -1273,7 +1273,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
   }
 
   // Append mode is the one mode that drives the operator's eviction path: a windowed grouping key
-  // is emitted only once the watermark passes it, via EvictionIterator (which removes in hasNext).
+  // is emitted only once the watermark passes it, via EvictionIterator.
   // Mirrors the stateStoreSave Append test above so the streamline operator is held to the same
   // watermark/eviction behaviour.
   testWithAllStateVersions("streamline aggregation: append mode emits windows past the watermark",
@@ -1301,6 +1301,27 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     // operator writes state per input row rather than once per key per batch, so its counts
     // legitimately differ from the micro-batch stateStoreSave operator. Output correctness -- what
     // Append actually guarantees -- is covered by the CheckLastBatch assertions above.
+  }
+
+  test("SPARK-60150: streaming aggregations on float/double keys keep their stateful operators") {
+    // As before, a DISTINCT below a duplicate-insensitive aggregation is removed, also with a
+    // filter on the key, which stays below it. So these queries keep one stateful operator and can
+    // restart from existing checkpoints.
+    for (where <- Seq("", "WHERE cast(d AS STRING) = '0.0' ")) withTempView("s") {
+      val input = MemoryStream[(Long, Double)]
+      input.toDF().toDF("t", "d")
+        .withColumn("ts", timestamp_seconds($"t"))
+        .withWatermark("ts", "10 seconds")
+        .createOrReplaceTempView("s")
+      val query = spark.sql("SELECT w.start AS start, max(d) AS m FROM " +
+        s"(SELECT DISTINCT window(ts, '1 minute') AS w, d FROM s) ${where}GROUP BY w")
+      testStream(query, Append)(
+        AddData(input, (0L, -0.0d), (1L, 0.0d)),
+        ProcessAllAvailable(),
+        AssertOnQuery { q =>
+          q.lastExecution.executedPlan.collect { case s: StateStoreSaveExec => s }.size == 1
+        })
+    }
   }
 
   // The micro-batch aggregation operator (stateStoreSave) and the streamline operator share the
