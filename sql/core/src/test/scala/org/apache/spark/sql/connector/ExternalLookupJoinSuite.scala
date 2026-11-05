@@ -356,7 +356,8 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
         lookupJoin.child.output, Seq(InternalRow(1, true), InternalRow(2, false)), None))
       .executeCollect()
     assert(rows.map(row => row.getInt(0) -> row.isNullAt(2)).toSeq === Seq(1 -> true, 2 -> true))
-    assert(SimpleExternalLookupDataSource.requestedKeys.asScala.toSeq === Seq(1, 2))
+    // Each row is in its own partition, so the order of the requests can vary.
+    assert(SimpleExternalLookupDataSource.requestedKeys.asScala.toSeq.sorted === Seq(1, 2))
   }
 
   test("external lookup-only source joins without an explicit hint") {
