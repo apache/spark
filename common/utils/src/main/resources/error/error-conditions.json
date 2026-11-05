@@ -8296,6 +8296,12 @@
     },
     "sqlState" : "0A000"
   },
+  "STREAMING_SCAN_MISSING_COLUMNS" : {
+    "message" : [
+      "The streaming query reads the columns <columns> of the source <source>, which the scan of the source does not read. Spark builds the scan of a streaming source when the query starts, to read only the columns that the query reads from the source then, so the query cannot read other columns of the source later, for example, after the configuration of the optimizer changes in the session of the query. Set that configuration before the query starts, or set <config> to \"false\" so that the scans of streaming sources read all their columns."
+    ],
+    "sqlState" : "55019"
+  },
   "STREAMING_SHUFFLE_CHECKSUM_VERIFICATION_FAILED" : {
     "message" : [
       "Checksum verification failed for buffer from writer <writerId>. Expected: <expectedChecksum>, Calculated: <calculatedChecksum>, Data length: <dataLength>."

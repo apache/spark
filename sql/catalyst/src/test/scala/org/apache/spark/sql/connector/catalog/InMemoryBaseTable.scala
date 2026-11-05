@@ -217,9 +217,14 @@ abstract class InMemoryBaseTable(
   private val simulateReorderedColumnPruning = properties
     .getOrDefault(InMemoryBaseTable.SIMULATE_REORDERED_COLUMN_PRUNING, "false").toBoolean
 
-  private val streamingPushdowns = properties
-    .getOrDefault(InMemoryBaseTable.STREAMING_PUSHDOWNS, "columns")
-    .split(",").map(_.trim).filter(_.nonEmpty).toSet
+  private val simulateRetypedColumnPruning = properties
+    .getOrDefault(InMemoryBaseTable.SIMULATE_RETYPED_COLUMN_PRUNING, "false").toBoolean
+
+  private val simulateNonNullableColumnPruning = properties
+    .getOrDefault(InMemoryBaseTable.SIMULATE_NON_NULLABLE_COLUMN_PRUNING, "false").toBoolean
+
+  private val streamingColumnPruning = properties
+    .getOrDefault(InMemoryBaseTable.STREAMING_COLUMN_PRUNING, "false").toBoolean
 
   private val acceptAnySchema = properties.getOrDefault("accept-any-schema", "false").toBoolean
   private val autoSchemaEvolution = properties.getOrDefault("auto-schema-evolution", "true")
@@ -549,11 +554,7 @@ abstract class InMemoryBaseTable(
   override def capabilities(): util.Set[TableCapability] =
     (baseCapabiilities ++
       (if (acceptAnySchema) Seq(TableCapability.ACCEPT_ANY_SCHEMA) else Seq.empty) ++
-      (if (streamingPushdowns.contains("columns")) {
-        Seq(TableCapability.STREAMING_COLUMN_PRUNING)
-      } else {
-        Seq.empty
-      }) ++
+      (if (streamingColumnPruning) Seq(TableCapability.STREAMING_COLUMN_PRUNING) else Seq.empty) ++
       (if (autoSchemaEvolution) Seq(TableCapability.AUTOMATIC_SCHEMA_EVOLUTION) else Seq.empty) ++
       (if (generateColumnValuesOnWrite) {
         Seq(TableCapability.GENERATE_COLUMN_VALUES_ON_WRITE)
@@ -631,9 +632,18 @@ abstract class InMemoryBaseTable(
       } else if (simulateIncompleteColumnPruning && dataFields.length < tableSchema.length) {
         // Drop the first required data column when only some of them are required.
         StructType(prunedFields.filterNot(dataFields.headOption.contains))
-      } else if (simulateReorderedColumnPruning && dataFields.length < tableSchema.length) {
-        // Return the required data columns in the reverse order when only some of them are
-        // required.
+      } else if (simulateRetypedColumnPruning && dataFields.length < tableSchema.length) {
+        // Report the required data columns as binary columns when only some of them are required.
+        StructType(prunedFields.map { field =>
+          if (isRequiredMetadataField(field)) field else field.copy(dataType = BinaryType)
+        })
+      } else if (simulateNonNullableColumnPruning) {
+        // Report the required data columns as not nullable.
+        StructType(prunedFields.map { field =>
+          if (isRequiredMetadataField(field)) field else field.copy(nullable = false)
+        })
+      } else if (simulateReorderedColumnPruning) {
+        // Return the required data columns in the reverse order.
         StructType(dataFields.reverse ++ prunedFields.filter(isRequiredMetadataField))
       } else {
         StructType(prunedFields)
@@ -694,12 +704,17 @@ abstract class InMemoryBaseTable(
         case MetadataStructFieldWithLogicalName(_, name) => metadataColNames += name
         case field => dataColumns += field
       }
-      // The data columns that the scan reads, which Spark may prune, by their position in the
-      // rows of the table.
-      val dataOrdinals = dataColumns.map(field => tableSchema.fieldIndex(field.name)).toArray
+      // With STREAMING_COLUMN_PRUNING, the readers return the data columns of the read schema,
+      // which Spark may prune, by their position in the rows of the table. Otherwise, they return
+      // the rows of the table, as the streaming reads of in-memory tables did before the pruning.
+      val dataOrdinals = if (streamingColumnPruning) {
+        Some(dataColumns.map(field => tableSchema.fieldIndex(field.name)).toSeq)
+          .filterNot(_ == tableSchema.indices)
+      } else {
+        None
+      }
       new InMemoryMicroBatchReaderFactory(
-        metadataColNames.toArray, dataOrdinals, StructType(dataColumns.toSeq),
-        dataOrdinals.toSeq == tableSchema.indices)
+        metadataColNames.toArray, dataOrdinals.map(_.toArray), StructType(dataColumns.toSeq))
     }
     override def deserializeOffset(json: String): Offset = new InMemoryTableOffset(json.toLong)
     override def commit(end: Offset): Unit = {}
@@ -1150,14 +1165,24 @@ object InMemoryBaseTable {
   val SIMULATE_INCOMPLETE_COLUMN_PRUNING = "simulate-incomplete-column-pruning"
 
   // Test table property that simulates a connector that returns the required columns in another
-  // order than they were asked in, which `SupportsPushDownRequiredColumns` permits: when only some
-  // of the data columns are required, `Scan.readSchema()` has them in the reverse order.
+  // order than they were asked in, which `SupportsPushDownRequiredColumns` permits:
+  // `Scan.readSchema()` has the required data columns in the reverse order, also when all of them
+  // are required.
   val SIMULATE_REORDERED_COLUMN_PRUNING = "simulate-reordered-column-pruning"
 
-  // Test table property: the pushdowns of the scans of streaming reads that the table declares
-  // with its capabilities, as a comma-separated list of "columns" (STREAMING_COLUMN_PRUNING). The
-  // table declares it by default. Its streams return the columns of their read schemas.
-  val STREAMING_PUSHDOWNS = "streaming-pushdowns"
+  // Test table property that simulates a connector whose pruning reports a required column with
+  // another type, which `SupportsPushDownRequiredColumns` does not permit: when only some of the
+  // data columns are required, `Scan.readSchema()` has them as binary columns.
+  val SIMULATE_RETYPED_COLUMN_PRUNING = "simulate-retyped-column-pruning"
+
+  // Test table property that simulates a connector whose pruning reports the required data columns
+  // as not nullable, whatever the nullability of the columns of the table is.
+  val SIMULATE_NON_NULLABLE_COLUMN_PRUNING = "simulate-non-nullable-column-pruning"
+
+  // Test table property: whether the table declares STREAMING_COLUMN_PRUNING, so that the scans of
+  // its streaming reads only read the columns that the queries read. Its streams then return the
+  // columns of their read schemas. It does not by default.
+  val STREAMING_COLUMN_PRUNING = "streaming-column-pruning"
 
   /**
    * Assigns fresh IDs to any top-level column or nested struct field that does not already
@@ -1266,29 +1291,27 @@ class BufferedRows(val key: Seq[Any], val schema: StructType)
 }
 
 /**
- * @param dataOrdinals the positions in the rows of the table of the data columns to read
+ * @param dataOrdinals the positions in the rows of the table of the data columns to read, unless
+ *                     the readers return the rows of the table
  * @param dataSchema the data columns to read
- * @param readsAllColumns whether these are all the columns of the table, in their order
  */
 private class InMemoryMicroBatchReaderFactory(
     metaNames: Array[String],
-    dataOrdinals: Array[Int],
-    dataSchema: StructType,
-    readsAllColumns: Boolean) extends PartitionReaderFactory with Serializable {
+    dataOrdinals: Option[Array[Int]],
+    dataSchema: StructType) extends PartitionReaderFactory with Serializable {
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val rows = partition.asInstanceOf[InMemoryMicroBatchPartition].rows
     new PartitionReader[InternalRow] {
       private var idx = -1
-      private val projection = ProjectingInternalRow(dataSchema, dataOrdinals.toSeq)
+      private val projection =
+        dataOrdinals.map(ordinals => ProjectingInternalRow(dataSchema, ordinals.toSeq))
       override def next(): Boolean = { idx += 1; idx < rows.size }
       override def get(): InternalRow = {
         val tableRow = rows(idx)
-        val rawRow = if (readsAllColumns) {
-          tableRow
-        } else {
+        val rawRow = projection.map { projection =>
           projection.project(tableRow)
           projection
-        }
+        }.getOrElse(tableRow)
         if (metaNames.isEmpty) rawRow
         else {
           val metaRow = new GenericInternalRow(metaNames.map {

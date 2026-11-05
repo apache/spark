@@ -1146,25 +1146,28 @@ private[sql] object DataSourceV2Strategy extends Logging {
   }
 
   /**
-   * Returns the output of the scan node of a streaming relation: the columns that its scan reads.
-   * The projections and the filters over the relation, which the scan node is planned with, must
-   * read no column of the relation that the scan does not read, if it was built to read fewer
-   * columns than the relation outputs (see `StreamingV2ScanPushDown`).
+   * Returns the output of the scan node of a streaming relation: the columns that its scan reads,
+   * in the order of its read schema. The projections and the filters over the relation, which the
+   * scan node is planned with, must read no column of the relation that the scan does not read,
+   * if it was built to read fewer columns than the relation outputs (see
+   * `StreamingV2ScanPushDown`).
    */
   private def streamingScanOutput(
       relation: StreamingDataSourceV2ScanRelation,
       project: Seq[NamedExpression],
-      filters: Seq[Expression]): Seq[AttributeReference] = relation.prunedOutput match {
-    case Some(prunedOutput) =>
-      val missing = AttributeSet((project ++ filters).flatMap(_.references)) -- prunedOutput
+      filters: Seq[Expression]): Seq[AttributeReference] = relation.scanOutput match {
+    case Some(scanOutput) =>
+      val missing = AttributeSet((project ++ filters).flatMap(_.references)) -- scanOutput
       if (missing.nonEmpty) {
-        throw SparkException.internalError(
-          s"The scan of the streaming relation ${relation.name} does not read the columns " +
-            s"${missing.toSeq.map(_.name).mkString(", ")} that the plan reads from it. Set " +
-            s"${SQLConf.STREAMING_V2_COLUMN_PRUNING_ENABLED.key} to false to make the scans " +
-            "of streaming queries read all the columns of their sources.")
+        val source = (relation.catalog, relation.identifier) match {
+          case (Some(catalog), Some(identifier)) =>
+            (catalog.name +: identifier.namespace.toSeq) :+ identifier.name
+          case _ => Seq(relation.name)
+        }
+        throw QueryExecutionErrors.streamingScanMissingColumnsError(
+          source, relation.output.filter(missing.contains).map(_.name))
       }
-      prunedOutput
+      scanOutput
     case None =>
       relation.output
   }
