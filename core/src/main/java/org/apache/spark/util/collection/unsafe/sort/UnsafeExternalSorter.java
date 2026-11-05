@@ -240,7 +240,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     }
 
     logger.info("Thread {} spilling sort data of {} to disk ({} {} so far)",
-      MDC.of(LogKeys.THREAD_ID, Thread.currentThread().getId()),
+      MDC.of(LogKeys.THREAD_ID, Thread.currentThread().threadId()),
       MDC.of(LogKeys.MEMORY_SIZE, Utils.bytesToString(getMemoryUsage())),
       MDC.of(LogKeys.NUM_SPILL_WRITERS, spillWriters.size()),
       MDC.of(LogKeys.SPILL_TIMES, spillWriters.size() > 1 ? "times" : "time"));
