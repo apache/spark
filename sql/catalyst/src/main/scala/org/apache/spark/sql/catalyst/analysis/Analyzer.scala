@@ -48,7 +48,7 @@ import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, trimTempResolvedColumn, CharVarcharUtils, GeneratedColumn}
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, trimTempResolvedColumn, CharVarcharUtils, GeneratedColumn, StoredExpressionText}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 // `View` is aliased to `V2View` to avoid clashing with the logical-plan `View` imported via
 // `org.apache.spark.sql.catalyst.plans.logical._`.
@@ -715,7 +715,7 @@ class Analyzer(
       ResolveWindowFrame ::
       ResolveNaturalAndUsingJoin ::
       ResolveOutputRelation ::
-      new ResolveTableConstraints(catalogManager) ::
+      new ResolveTableConstraints(catalogManager, plan => execute(plan)) ::
       new ResolveSetVariable(catalogManager) ::
       new ResolveFetchCursor(catalogManager) ::
       new ResolveCursors() ::
@@ -4118,10 +4118,12 @@ class Analyzer(
             table.schemaAlignmentConfig()
           case _ => SchemaAlignmentConfig.DEFAULT
         }
-        val (projection, autoFilledGenCols) =
+        def resolveOutput(readGenerationExpr: String => Expression) =
           TableOutputResolver.resolveOutputColumnsWithGeneratedInfo(
             v2Write.table.name, expected, v2Write.query, v2Write.isByName, conf,
-            defaultValueFillMode, schemaAlignmentConfig.ansiStoreAssignmentCastCheck())
+            defaultValueFillMode, schemaAlignmentConfig.ansiStoreAssignmentCastCheck(),
+            readGenerationExpr)
+        val (projection, autoFilledGenCols) = resolveOutput(StoredExpressionText.parse)
         if (projection != v2Write.query) {
           val cleanedTable = v2Write.table match {
             case r: DataSourceV2Relation =>
@@ -4132,10 +4134,40 @@ class Analyzer(
               cleanedRelation
             case other => other
           }
-          v2Write.withNewQuery(projection).withNewTable(cleanedTable)
+          v2Write
+            .withNewQuery(analyzeAutoFilledGeneratedColumns(
+              projection,
+              autoFilledGenCols,
+              resolveOutput(StoredExpressionText.parseWithSessionAnsi)._1))
+            .withNewTable(cleanedTable)
         } else {
           v2Write
         }
+    }
+
+    /**
+     * Analyzes the auto-filled generated columns of a write under the settings their stored text
+     * is read under, so that the implicit casts and the functions of a generation expression do
+     * not follow the session that writes.
+     *
+     * A column these settings cannot resolve comes from `readInSession`, where its text is read
+     * with the ANSI value of the session, and the analysis of the write resolves it under the
+     * session. So does a text a catalog stores that analyzes to another plan.
+     */
+    private def analyzeAutoFilledGeneratedColumns(
+        projection: LogicalPlan,
+        autoFilled: Set[String],
+        readInSession: => LogicalPlan): LogicalPlan = projection match {
+      case p @ Project(projectList, child) if autoFilled.nonEmpty =>
+        lazy val sessionCols = readInSession.expressions.collect {
+          case c: NamedExpression => c.name -> c
+        }.toMap
+        p.copy(projectList = projectList.map {
+          case c if autoFilled.contains(c.name) =>
+            StoredExpressionText.analyze(c, sessionCols(c.name), child.output, execute)
+          case c => c
+        })
+      case other => other
     }
   }
 
