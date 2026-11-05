@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
 import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractSingleColumnNullAwareAntiJoin}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, INVOKE, JSON_TO_STRUCT, LIKE_FAMLIY, PYTHON_UDF, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, SCALA_UDF}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{INVOKE, JSON_TO_STRUCT, LIKE_FAMLIY, PYTHON_UDF, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, SCALA_UDF}
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DecimalType, IntegralType, NumericType}
@@ -407,38 +407,53 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   }
 
   // Whether evaluating `e` cannot fail, also on rows that the join does not read. It asks
-  // `ExprUtils.canEvaluateUnconditionally`, after it takes out two wrappers that cannot fail
-  // either: a numeric up-cast, and the normalization that `NormalizeFloatingNumbers` puts around a
-  // floating point join key. `canUpCast` also takes `DECIMAL(19,0)` to `BIGINT`, which can
-  // overflow. So a decimal to an integral type does not count. An `onlyInBroadcast` DPP filter
-  // counts too, since it finds no broadcast in the bloom filter's subquery and is `true` there.
+  // `ExprUtils.canEvaluateUnconditionally`, after it replaces two wrappers that cannot fail either,
+  // over a child that cannot fail: a numeric up-cast, and the normalization that
+  // `NormalizeFloatingNumbers` puts around a floating point join key. Each is checked against its
+  // own child before anything is replaced, and its stand-in keeps its type. An `onlyInBroadcast`
+  // DPP filter counts too, since it finds no broadcast in the bloom filter's subquery and is `true`
+  // there.
   private def cannotFail(e: Expression): Boolean = e match {
     case dpp: DynamicPruningSubquery => dpp.onlyInBroadcast
-    case _ => ExprUtils.canEvaluateUnconditionally(e.transformUp {
-      case c: Cast if c.child.dataType.isInstanceOf[NumericType] &&
-          c.dataType.isInstanceOf[NumericType] && Cast.canUpCast(c.child.dataType, c.dataType) &&
-          !(c.child.dataType.isInstanceOf[DecimalType] && c.dataType.isInstanceOf[IntegralType]) =>
-        c.child
-      case KnownFloatingPointNormalized(NormalizeNaNAndZero(child)) => child
+    case _ => ExprUtils.canEvaluateUnconditionally(e.transformDown {
+      case c: Cast if isNumericUpCast(c) && cannotFail(c.child) =>
+        AttributeReference("upCast", c.dataType, c.nullable)()
+      case n @ KnownFloatingPointNormalized(NormalizeNaNAndZero(child)) if cannotFail(child) =>
+        AttributeReference("normalized", n.dataType, n.nullable)()
     })
   }
 
+  // `canUpCast` also takes `DECIMAL(19,0)` to `BIGINT`, which can overflow. So a decimal to an
+  // integral type does not count.
+  private def isNumericUpCast(c: Cast): Boolean =
+    c.child.dataType.isInstanceOf[NumericType] && c.dataType.isInstanceOf[NumericType] &&
+      Cast.canUpCast(c.child.dataType, c.dataType) &&
+      !(c.child.dataType.isInstanceOf[DecimalType] && c.dataType.isInstanceOf[IntegralType])
+
   // Whether the bloom filter's subquery can evaluate `creationSide` again, apart from the join. The
   // plan it reads must give the same rows again (SPARK-60808). So it must read no CTE, whose
-  // reference hides the determinism of its plan, and a cache only if scanning it again gives the
-  // same rows. Its filters, and the projections that the key and the filters need, must pass
-  // `cannotFail`, which takes only expressions that are deterministic in the subquery and do not
-  // fail there. A part of the join side outside that plan can only drop rows from the join, so the
-  // bloom filter still holds every key that the join sees.
+  // reference hides the determinism of its plan, and a cache only if Spark can tell that scanning
+  // it again gives the same rows. It must not read a file metadata column either, such as
+  // `_metadata.file_block_start`, which depends on how the scan splits its files. The subquery can
+  // split them differently. Its filters, and the projections that the key and the filters need,
+  // must pass `cannotFail`, which takes only expressions that are deterministic in the subquery
+  // and do not fail there. A part of the join side outside that plan can only drop rows from the
+  // join, so the bloom filter still holds every key that the join sees.
   private def canEvaluateAgain(creationSide: FilterCreationSide): Boolean = {
     val evaluated =
       ColumnPruning(Project(Seq(Alias(creationSide.key, "key")()), creationSide.plan))
-    !evaluated.containsPattern(CTE) && !evaluated.exists {
-      case Project(projectList, _) => !projectList.forall(e => cannotFail(trimAliases(e)))
-      case Filter(condition, _) => !splitConjunctivePredicates(condition).forall(cannotFail)
-      case leaf: MaterializedLeafNode => !leaf.isOutputRepeatable
-      case _: LeafNode => false
-      case _ => true
+    !evaluated.exists { node =>
+      node.references.exists {
+        case FileSourceMetadataAttribute(_) => true
+        case _ => false
+      } || (node match {
+        case Project(projectList, _) => !projectList.forall(e => cannotFail(trimAliases(e)))
+        case Filter(condition, _) => !splitConjunctivePredicates(condition).forall(cannotFail)
+        case _: CTERelationRef => true
+        case leaf: MaterializedLeafNode => !leaf.isOutputRepeatable
+        case _: LeafNode => false
+        case _ => true
+      })
     }
   }
 
@@ -485,15 +500,16 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     //    that one against all the broadcasts. A scalar subquery, which includes an uncorrelated
     //    EXISTS, is planned on its own, so a key there with a DPP filter gets no bloom filter.
     // 3. Adds a bloom filter for a key whose DPP filters are all dropped only if `creationSide`
-    //    allows it: pushdown can take it down safely (`canPushDown`), and the subquery can evaluate
-    //    the creation side again (`canEvaluateAgain`). Pushdown moves the bloom filter along its
-    //    key, down to the leaves the key comes from, and into every branch of a union. There it
-    //    must not land in a plan in `reused`. It would change the broadcast, and physical planning
-    //    would drop the DPP filter that reuses it. A reused broadcast elsewhere in the join side
-    //    does not matter, such as a broadcast dimension joined to the same fact table. The key must
-    //    also be safe at every leaf (`cannotFail`). On a partition column, the bloom filter becomes
-    //    a partition filter, which evaluates the key on every partition before the data filters. So
-    //    a key that can fail could fail the query (SPARK-60809).
+    //    allows it: the key's type compares by its bytes (`isBinaryStable`), pushdown can take it
+    //    down safely (`canPushDown`), and the subquery can evaluate the creation side again
+    //    (`canEvaluateAgain`). Pushdown moves the bloom filter along its key, down to the leaves
+    //    the key comes from, and into every branch of a union. There it must not land in a plan in
+    //    `reused`. It would change the broadcast, and physical planning would drop the DPP filter
+    //    that reuses it. A reused broadcast elsewhere in the join side does not matter, such as a
+    //    broadcast dimension joined to the same fact table. The key must also be safe at every leaf
+    //    (`cannotFail`). On a partition column, the bloom filter becomes a partition filter, which
+    //    evaluates the key on every partition before the data filters. So a key that can fail could
+    //    fail the query (SPARK-60809).
     // Physical planning reuses a broadcast only with exchange reuse on.
     lazy val reused = if (conf.exchangeReuseEnabled) {
       // After the optimizer ran on an IN subquery on its own, a DPP filter there can be a conjunct
