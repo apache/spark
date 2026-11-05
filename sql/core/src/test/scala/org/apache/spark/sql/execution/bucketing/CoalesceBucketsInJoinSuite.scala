@@ -41,12 +41,20 @@ class CoalesceBucketsInJoinSuite extends QueryTest with SharedSparkSession
   case class RelationSetting(
       cols: Seq[Attribute],
       numBuckets: Int,
-      expectedCoalescedNumBuckets: Option[Int])
+      expectedCoalescedNumBuckets: Option[Int],
+      bucketCols: Seq[Attribute])
 
   object RelationSetting {
+    def apply(
+        cols: Seq[Attribute],
+        numBuckets: Int,
+        expectedCoalescedNumBuckets: Option[Int]): RelationSetting = {
+      RelationSetting(cols, numBuckets, expectedCoalescedNumBuckets, cols)
+    }
+
     def apply(numBuckets: Int, expectedCoalescedNumBuckets: Option[Int]): RelationSetting = {
       val cols = Seq(AttributeReference("i", IntegerType)())
-      RelationSetting(cols, numBuckets, expectedCoalescedNumBuckets)
+      RelationSetting(cols, numBuckets, expectedCoalescedNumBuckets, cols)
     }
   }
 
@@ -73,23 +81,17 @@ class CoalesceBucketsInJoinSuite extends QueryTest with SharedSparkSession
       location = new InMemoryFileIndex(spark, Nil, Map.empty, None),
       partitionSchema = PartitionSpec.emptySpec.partitionColumns,
       dataSchema = DataTypeUtils.fromAttributes(setting.cols),
-      bucketSpec = Some(BucketSpec(setting.numBuckets, setting.cols.map(_.name), Nil)),
+      bucketSpec = Some(BucketSpec(setting.numBuckets, setting.bucketCols.map(_.name), Nil)),
       fileFormat = new ParquetFileFormat(),
       options = Map.empty)(spark)
     FileSourceScanExec(relation, None, setting.cols, relation.dataSchema, Nil, None, None, Nil,
       None)
   }
 
+  // Buckets only on the first column, even when `cols` has more, so the scan's partitioning
+  // matches the outer join's key regardless of an inner broadcast join's own join key.
   private def testScan(cols: Seq[Attribute], numBuckets: Int): FileSourceScanExec = {
-    val relation = HadoopFsRelation(
-      location = new InMemoryFileIndex(spark, Nil, Map.empty, None),
-      partitionSchema = PartitionSpec.emptySpec.partitionColumns,
-      dataSchema = DataTypeUtils.fromAttributes(cols),
-      bucketSpec = Some(BucketSpec(numBuckets, Seq("i"), Nil)),
-      fileFormat = new ParquetFileFormat(),
-      options = Map.empty)(spark)
-    FileSourceScanExec(
-      relation, None, cols, relation.dataSchema, Nil, None, None, Nil, None)
+    newFileSourceScanExec(RelationSetting(cols, numBuckets, None, bucketCols = Seq(cols.head)))
   }
 
   private def coalescedBuckets(plan: SparkPlan): Seq[(Int, Option[Int])] = {
