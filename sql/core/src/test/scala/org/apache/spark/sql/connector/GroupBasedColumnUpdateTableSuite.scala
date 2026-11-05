@@ -19,10 +19,10 @@ package org.apache.spark.sql.connector
 
 import java.util.regex.Pattern
 
-import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.optimizer.ColumnPruning
-import org.apache.spark.sql.catalyst.plans.logical.Union
+import org.apache.spark.sql.catalyst.plans.logical.{ReplaceData, Union}
 import org.apache.spark.sql.connector.catalog.InMemoryRowLevelOperationTable
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.UPDATE
 import org.apache.spark.sql.internal.SQLConf
@@ -323,6 +323,24 @@ class GroupBasedColumnUpdateTableSuite extends UpdateTableSuiteBase
         Row(3, 3, "software", 300, 30, 1) :: Nil)
       checkReplacedPartitions(Seq("hr"))
     }
+  }
+
+  test("column-update ReplaceData: a stale projection ordinal fails the analysis check") {
+    createAndInitTableWithProps(reqAttrsTableProps("pk,dep,salary"))
+    val write = executeAndKeepAnalyzedWrite {
+      sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE pk = 1")
+    }.asInstanceOf[ReplaceData]
+    val numColumns = write.query.output.length
+    val stale = write.copy(projections = write.projections.remapOrdinals(_ => numColumns))
+
+    val message =
+      s"A projection of ReplaceData reads ordinal $numColumns of a query with $numColumns columns."
+
+    assert(stale.treeString.contains("ReplaceData"))
+    checkError(
+      exception = intercept[SparkException](spark.sessionState.analyzer.checkAnalysis(stale)),
+      condition = "INTERNAL_ERROR",
+      parameters = Map("message" -> message))
   }
 
   test("column-update ReplaceData: runtime filter attribute the scan doesn't read is rejected") {

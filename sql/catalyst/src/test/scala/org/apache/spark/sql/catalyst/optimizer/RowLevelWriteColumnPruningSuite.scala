@@ -21,7 +21,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ProjectingInternalRow
 import org.apache.spark.sql.catalyst.analysis.TestRelation
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, EqualNullSafe, Expression, If, Literal, Not}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, EqualNullSafe, Expression, If, Literal, Not}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -227,12 +227,20 @@ class RowLevelWriteColumnPruningSuite extends PlanTest {
       val projections = ReplaceDataProjections(
         ProjectingInternalRow(StructType(Seq(field)), IndexedSeq(ordinal)), None)
       val write = ReplaceData(tableRelation, cond(read), query, tableRelation, projections)
+      val message = s"A projection of ReplaceData reads ordinal $ordinal of a query with 8 columns."
 
+      // the plan can still be printed, to find the rule that left the ordinal behind
+      assert(write.references == AttributeSet(query.output.head))
+      assert(write.treeString.contains("ReplaceData"))
       checkError(
-        exception = intercept[SparkException](write.references),
+        exception = intercept[SparkException](write.checkProjectionOrdinals()),
         condition = "INTERNAL_ERROR",
-        parameters = Map("message" ->
-          s"A projection of ReplaceData reads ordinal $ordinal of a query with 8 columns."))
+        parameters = Map("message" -> message))
+      checkError(
+        exception = intercept[SparkException](
+          replaceData(query, writeColumns).withPrunedQuery(query, _ => ordinal)),
+        condition = "INTERNAL_ERROR",
+        parameters = Map("message" -> message))
     }
   }
 
