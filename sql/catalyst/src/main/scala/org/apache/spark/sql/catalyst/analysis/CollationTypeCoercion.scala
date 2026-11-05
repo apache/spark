@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{
   ArrayType, DataType, IndeterminateStringType, MapType, NullType, StringHelper,
-  StringType, StructType
+  StringType, StructType, VariantType
 }
 import org.apache.spark.sql.util.SchemaUtils
 
@@ -392,8 +392,12 @@ object CollationTypeCoercion extends SQLConfHelper {
     case collate: Collate =>
       Some(addContextToStringType(collate.dataType, Explicit))
 
+    // A cast from a string, or from VARIANT to an explicitly collated type (even UTF8_BINARY),
+    // keeps that collation like a column of that type; `v:a::STRING COLLATE X` is such a cast.
     case cast: Cast =>
-      val castStrength = if (hasStringType(cast.child.dataType)) {
+      val castStrength = if (hasStringType(cast.child.dataType) ||
+          (cast.child.dataType.isInstanceOf[VariantType] &&
+            DataTypeUtils.hasNonDefaultStringCharOrVarcharType(cast.dataType))) {
         Implicit
       } else {
         Default
@@ -401,8 +405,7 @@ object CollationTypeCoercion extends SQLConfHelper {
 
       Some(addContextToStringType(cast.dataType, castStrength))
 
-    // An explicitly collated target type (even UTF8_BINARY), not the path, decides the
-    // collation, like a column of that type.
+    // Likewise an explicitly collated target type, not the path, decides the collation.
     case v: VariantGet if DataTypeUtils.hasNonDefaultStringCharOrVarcharType(v.dataType) =>
       Some(addContextToStringType(v.dataType, Implicit))
 

@@ -492,6 +492,7 @@ class CollationTypePrecedenceSuite extends SharedSparkSession {
 
   testFixedPointAndSinglePass("variant_get with a collated target type has implicit strength") {
     val tableName = "variant_get_tbl"
+    val viewName = "variant_get_view"
     withTable(tableName) {
       sql(s"CREATE TABLE $tableName (id INT, c STRING COLLATE UNICODE_CI, p STRING, v VARIANT) " +
         s"USING $dataSource")
@@ -507,6 +508,7 @@ class CollationTypePrecedenceSuite extends SharedSparkSession {
         val lcase = s"$fn(v, '$$.s', 'STRING COLLATE UTF8_LCASE')"
         val lcaseMap = s"$fn(v, '$$', 'MAP<STRING, STRING COLLATE UTF8_LCASE>')"
         val mixedStruct = s"$fn(v, '$$', 'STRUCT<s: STRING, t: STRING COLLATE UTF8_LCASE>')"
+        val lcaseCast = s"CAST($fn(v, '$$.s') AS STRING COLLATE UTF8_LCASE)"
         checkAnswer(
           sql(s"SELECT DISTINCT COLLATION($lcase || 'a') FROM $tableName"),
           Row(UTF8_LCASE_COLLATION_NAME))
@@ -518,7 +520,12 @@ class CollationTypePrecedenceSuite extends SharedSparkSession {
           s"array_contains($fn(v, '$$.a', 'ARRAY<STRING COLLATE UTF8_LCASE>'), 'OPEN')",
           s"$fn(v, '$$', 'STRUCT<s: STRING COLLATE UTF8_LCASE>').s = 'OPEN'",
           s"$lcaseMap['s'] = 'OPEN'",
-          s"element_at($lcaseMap, 's') = 'OPEN'").foreach { cond =>
+          s"element_at($lcaseMap, 's') = 'OPEN'",
+          // The collation of the path does not take part.
+          s"$fn(v, '$$.s' COLLATE UNICODE, 'STRING COLLATE UTF8_LCASE') = 'OPEN'",
+          // A cast from VARIANT, including `v:s::STRING COLLATE ...`, follows the same rule.
+          s"$lcaseCast = 'OPEN'",
+          s"v:s::STRING COLLATE UTF8_LCASE = 'OPEN'").foreach { cond =>
           checkAnswer(sql(s"SELECT id FROM $tableName WHERE $cond"), Seq(Row(1), Row(2)))
         }
 
@@ -535,14 +542,41 @@ class CollationTypePrecedenceSuite extends SharedSparkSession {
           s"$lcase = p",
           s"$lcase IN (p, 'x')",
           s"$fn(v, '$$.s', 'STRING COLLATE UTF8_BINARY') = c",
-          s"$mixedStruct.s = c").foreach { cond =>
+          s"$mixedStruct.s = c",
+          s"$lcaseCast = p",
+          s"v:s::STRING COLLATE UTF8_LCASE = p",
+          s"$lcase || p = 'OPEN'",
+          s"(CASE WHEN id = 1 THEN $lcase ELSE p END) = 'OPEN'").foreach { cond =>
           assertIndeterminateCollation(sql(s"SELECT id FROM $tableName WHERE $cond"))
         }
+        // Combining them gives an indeterminate collation that fails when the result is stored.
+        withTable("variant_get_ctas") {
+          assertIndeterminateCollation(sql(s"CREATE TABLE variant_get_ctas USING $dataSource " +
+            s"AS SELECT coalesce($lcase, p) AS s FROM $tableName"))
+        }
 
-        // A plain STRING target keeps default strength.
-        checkAnswer(
-          sql(s"SELECT id FROM $tableName WHERE $fn(v, '$$.s', 'STRING') = c"),
-          Seq(Row(1), Row(2)))
+        // A target without an explicit collation keeps default strength.
+        Seq(
+          s"$fn(v, '$$.s', 'STRING') = c",
+          s"array_contains($fn(v, '$$.a', 'ARRAY<STRING>'), c)",
+          s"CAST($fn(v, '$$.s') AS STRING) = c",
+          s"v:s::STRING = c").foreach { cond =>
+          checkAnswer(sql(s"SELECT id FROM $tableName WHERE $cond"), Seq(Row(1), Row(2)))
+        }
+
+        // Under a default collation, an explicit UTF8_BINARY target keeps UTF8_BINARY.
+        withView(viewName) {
+          sql(
+            s"""
+               |CREATE VIEW $viewName DEFAULT COLLATION UTF8_LCASE AS SELECT
+               |  $fn(v, '$$.s', 'STRING') = 'OPEN' AS plain,
+               |  $fn(v, '$$.s', 'STRING COLLATE UTF8_BINARY') = 'OPEN' AS binary,
+               |  v:s::STRING = 'OPEN' AS plain_cast,
+               |  v:s::STRING COLLATE UTF8_BINARY = 'OPEN' AS binary_cast
+               |FROM $tableName WHERE id = 1
+               |""".stripMargin)
+          checkAnswer(sql(s"SELECT * FROM $viewName"), Row(true, false, true, false))
+        }
       }
     }
   }
