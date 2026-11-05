@@ -720,6 +720,9 @@ case class Union(
 }
 
 object Join {
+  private val stateValueOrdinalsTag = TreeNodeTag[(Seq[Int], Seq[Int])](
+    "streaming_join_state_value_ordinals")
+
   def computeOutput(
     joinType: JoinType,
     leftOutput: Seq[Attribute],
@@ -801,6 +804,20 @@ case class Join(
     } else {
       base
     }
+  }
+
+  /** Input ordinals retained in the buffered state of this stream-stream join. */
+  private[sql] def stateValueOrdinals: Option[(Seq[Int], Seq[Int])] =
+    getTagValue(Join.stateValueOrdinalsTag)
+
+  private[sql] def setStateValueOrdinals(
+      leftStateValueOrdinals: Seq[Int],
+      rightStateValueOrdinals: Seq[Int]): Unit = {
+    setTagValue(Join.stateValueOrdinalsTag, (leftStateValueOrdinals, rightStateValueOrdinals))
+  }
+
+  private[sql] def clearStateValueOrdinals(): Unit = {
+    unsetTagValue(Join.stateValueOrdinalsTag)
   }
 
   override def metadataOutput: Seq[Attribute] = {

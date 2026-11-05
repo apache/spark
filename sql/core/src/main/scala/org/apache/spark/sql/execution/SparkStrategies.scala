@@ -610,7 +610,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         case join @ ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, otherCondition, _,
               left, right, _) if left.isStreaming && right.isStreaming =>
           val stateVersion = conf.getConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION)
-          val stateValueAttributes = StreamingJoinStateValueAttributes.get(join)
+          val stateValueOrdinals = join.stateValueOrdinals
           new StreamingSymmetricHashJoinExec(
             leftKeys,
             rightKeys,
@@ -619,10 +619,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             stateVersion,
             planLater(left),
             planLater(right),
-            stateValueAttributes.map(value =>
-              attributesAtOrdinals(left.output, value.leftStateValueOrdinals)),
-            stateValueAttributes.map(value =>
-              attributesAtOrdinals(right.output, value.rightStateValueOrdinals))) :: Nil
+            stateValueOrdinals.map { case (leftOrdinals, _) =>
+              attributesAtOrdinals(left.output, leftOrdinals)
+            },
+            stateValueOrdinals.map { case (_, rightOrdinals) =>
+              attributesAtOrdinals(right.output, rightOrdinals)
+            }) :: Nil
 
         case Join(left, right, _, _, _) if left.isStreaming && right.isStreaming =>
           throw QueryCompilationErrors.streamJoinStreamWithoutEqualityPredicateUnsupportedError(

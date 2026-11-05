@@ -21,25 +21,6 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, Join, LogicalPlan, Project, Union}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreeNodeTag
-
-/** Attributes that a stream-stream join must retain in its buffered state. */
-private[sql] case class StreamingJoinStateValueAttributes(
-    leftStateValueOrdinals: Seq[Int],
-    rightStateValueOrdinals: Seq[Int])
-
-private[sql] object StreamingJoinStateValueAttributes {
-  private val tag = TreeNodeTag[StreamingJoinStateValueAttributes](
-    "streaming_join_state_value_attributes")
-
-  def get(join: Join): Option[StreamingJoinStateValueAttributes] = join.getTagValue(tag)
-
-  def set(join: Join, value: StreamingJoinStateValueAttributes): Unit = {
-    join.setTagValue(tag, value)
-  }
-
-  def clear(join: Join): Unit = join.unsetTagValue(tag)
-}
 
 /** Separates stream-stream join input attributes from the attributes buffered in state. */
 private[sql] object AnnotateStreamingJoinStateValueAttributes extends Rule[LogicalPlan] {
@@ -90,13 +71,12 @@ private[sql] object AnnotateStreamingJoinStateValueAttributes extends Rule[Logic
         val rightOrdinals = compactStateValueOrdinals(join.right.output, required)
         if (leftOrdinals == join.left.output.indices &&
             rightOrdinals == join.right.output.indices) {
-          StreamingJoinStateValueAttributes.clear(join)
+          join.clearStateValueOrdinals()
         } else {
-          StreamingJoinStateValueAttributes.set(join,
-            StreamingJoinStateValueAttributes(leftOrdinals, rightOrdinals))
+          join.setStateValueOrdinals(leftOrdinals, rightOrdinals)
         }
       case join: Join =>
-        StreamingJoinStateValueAttributes.clear(join)
+        join.clearStateValueOrdinals()
       case _ =>
     }
 

@@ -32,7 +32,6 @@ import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
-import org.apache.spark.sql.catalyst.optimizer.StreamingJoinStateValueAttributes
 import org.apache.spark.sql.catalyst.plans.{LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.Join
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
@@ -379,7 +378,7 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
       CheckNewAnswer(1),
       Execute { query =>
         assert(query.lastExecution.optimizedPlan.exists {
-          case join: Join => StreamingJoinStateValueAttributes.get(join).nonEmpty
+          case join: Join => join.stateValueOrdinals.nonEmpty
           case _ => false
         })
         val join = query.lastExecution.executedPlan.collectFirst {
