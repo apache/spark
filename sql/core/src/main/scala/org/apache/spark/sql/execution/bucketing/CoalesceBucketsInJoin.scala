@@ -43,7 +43,8 @@ object CoalesceBucketsInJoin extends Rule[SparkPlan] {
       targetScan: FileSourceScanExec,
       numCoalescedBuckets: Int): SparkPlan = {
     // Only the scan whose partitioning reaches this join. A broadcast build
-    // scan in the same subtree keeps its own bucket count.
+    // scan in the same subtree keeps its own bucket count. This relies on the
+    // scan instance not being shared across subtrees.
     plan transformUp {
       case f: FileSourceScanExec if f eq targetScan =>
         f.copy(optionalNumCoalescedBuckets = Some(numCoalescedBuckets))
@@ -110,10 +111,11 @@ object CoalesceBucketsInJoin extends Rule[SparkPlan] {
 }
 
 /**
- * An extractor that extracts `SortMergeJoinExec` and `ShuffledHashJoin`,
- * where both sides of the join have the bucketed tables,
- * are consisted of only the scan operation,
- * and numbers of buckets are not equal but divisible.
+ * An extractor that extracts `SortMergeJoinExec` and `ShuffledHashJoin` whose sides each
+ * reach a bucketed scan through filters, projects, and the streamed child of a broadcast
+ * join, and whose numbers of buckets are not equal but divisible. It returns the join, the
+ * bucketed scan of each side, which is the only scan the caller may coalesce, and the two
+ * numbers of buckets.
  */
 object ExtractJoinWithBuckets {
   private def streamedSide(
@@ -122,9 +124,10 @@ object ExtractJoinWithBuckets {
   }
 
   /**
-   * Bucketed scan whose partitioning this side exposes. Broadcast joins
-   * expose the streamed child, so a bucketed build scan is not the count
-   * the parent sort-merge or shuffled-hash join coalesces against.
+   * The bucketed scan whose partitioning can reach the parent join through this side, by
+   * walking through filters, projects, and the streamed child of a broadcast join. The
+   * caller still checks that this scan's partitioning satisfies the parent join's keys via
+   * `satisfiesOutputPartitioning`.
    */
   @tailrec
   private def findBucketedScan(plan: SparkPlan): Option[FileSourceScanExec] = {
