@@ -280,7 +280,6 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case PhysicalOperation(p, f, r: StreamingDataSourceV2ScanRelation)
       if r.startOffset.isDefined && r.endOffset.isEmpty =>
 
-        val output = DataSourceV2Strategy.streamingScanOutput(r, p, f)
         val scanExec = if (r.relation.realTimeModeDuration.isDefined) {
           if (!r.stream.isInstanceOf[SupportsRealTimeMode]) {
             throw new SparkIllegalArgumentException(
@@ -290,7 +289,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           }
           val microBatchStream = r.stream.asInstanceOf[MicroBatchStream]
           new RealTimeStreamScanExec(
-            output,
+            DataSourceV2Strategy.streamingScanOutput(r, p, f),
             r.scan,
             microBatchStream,
             r.startOffset.get,
@@ -298,7 +297,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           )
         } else {
           val continuousStream = r.stream.asInstanceOf[ContinuousStream]
-          val s = ContinuousScanExec(output, r.scan, continuousStream, r.startOffset.get)
+          val s = ContinuousScanExec(DataSourceV2Strategy.streamingScanOutput(r, p, f), r.scan,
+            continuousStream, r.startOffset.get)
           // initialize partitions
           s.inputPartitions
           s

@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Stati
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CAST, CURRENT_LIKE, RUNTIME_REPLACEABLE}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{SupportsRead, TableCapability}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownRequiredColumns}
@@ -40,9 +39,8 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, PushDownUtils, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetSeqMetadata, OffsetSeqMetadataBase}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, StringType, StructType, TimestampLTZNanosType, TimestampType}
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType, StructType, TimestampLTZNanosType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Pushes the top-level columns that the optimized plan of a streaming query reads from each Data
@@ -108,10 +106,11 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
    * The plan does not depend on when it is optimized:
    *  - The expressions whose values depend on when they are evaluated or on the state of the
    *    session, such as the current time, the casts of special strings such as 'today' or 'now'
-   *    to dates and timestamps, the casts of strings with only a time to timestamps, or the
-   *    current database, which each micro-batch gets the values of, become placeholders that the
-   *    optimizer does not take as deterministic, as the current time of a micro-batch, so the
-   *    columns that the plan reads do not depend on them.
+   *    to dates and timestamps, the casts of strings to timestamps with local time zone, which take
+   *    the current date for a string with only a time, or the current database, which each
+   *    micro-batch gets the values of, become placeholders that the optimizer does not take as
+   *    deterministic, as the current time of a micro-batch, so the columns that the plan reads do
+   *    not depend on them.
    *  - The relations of batch scans become placeholders, so that their scans are neither built
    *    nor planned: they do not change what the plan reads from its streaming relations.
    *
@@ -212,30 +211,36 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
         // So does a cast that ComputeCurrentTime or SpecialDatetimeValues rewrites: a cast of a
         // time to a timestamp, which takes the current date, or a cast of a special string, such
         // as 'today' or 'now', to a date or a timestamp. These rules only rewrite casts besides
-        // the expressions with the pattern CURRENT_LIKE. A cast of a string with only a time,
-        // such as '12:00:00', to a timestamp takes the current date too, which the optimizer
-        // folds in.
+        // the expressions with the pattern CURRENT_LIKE. A cast of a string to a timestamp with
+        // local time zone takes the current date too, for a string with only a time such as
+        // '12:00:00': the optimizer folds the date in once the string is a literal, which it may
+        // only become during the optimization, as when an alias or an equality propagates it, so
+        // such a cast is replaced whatever its child is.
         case cast: Cast if ComputeCurrentTime.applyForExpression(cast) != cast ||
-            SpecialDatetimeValues.applyForExpression(cast) != cast || castsTimeOnly(cast) =>
+            SpecialDatetimeValues.applyForExpression(cast) != cast ||
+            castsStringToTimestampLTZ(cast.child.dataType, cast.dataType) =>
           StartupValue(cast, cast.children)
       }
   }
 
   /**
-   * Returns whether `cast` casts a foldable string with only a time to a timestamp with local time
-   * zone, of any precision, which takes the date of when it is evaluated. A cast to a timestamp
-   * without time zone or to a date does not take the current date: it rejects such a string.
+   * Returns whether a cast from `from` to `to` casts a string to a timestamp with local time zone,
+   * of any precision, at any depth of the types: also the elements of an array, the keys or the
+   * values of a map, or the fields of a struct. Such a cast takes the date of when it is evaluated
+   * for a string with only a time. A cast to a timestamp without time zone or to a date does not:
+   * it rejects such a string.
    */
-  private def castsTimeOnly(cast: Cast): Boolean = {
-    val toTimestampLTZ = cast.dataType match {
-      case TimestampType | _: TimestampLTZNanosType => true
-      case _ => false
-    }
-    toTimestampLTZ && cast.child.dataType.isInstanceOf[StringType] && cast.child.foldable &&
-      Try(cast.child.eval()).toOption.exists {
-        case string: UTF8String => DateTimeUtils.parseTimestampString(string)._3
-        case _ => false
+  private def castsStringToTimestampLTZ(from: DataType, to: DataType): Boolean = (from, to) match {
+    case (_: StringType, TimestampType | _: TimestampLTZNanosType) => true
+    case (ArrayType(fromElement, _), ArrayType(toElement, _)) =>
+      castsStringToTimestampLTZ(fromElement, toElement)
+    case (MapType(fromKey, fromValue, _), MapType(toKey, toValue, _)) =>
+      castsStringToTimestampLTZ(fromKey, toKey) || castsStringToTimestampLTZ(fromValue, toValue)
+    case (StructType(fromFields), StructType(toFields)) =>
+      fromFields.zip(toFields).exists { case (fromField, toField) =>
+        castsStringToTimestampLTZ(fromField.dataType, toField.dataType)
       }
+    case _ => false
   }
 
   /**
@@ -246,8 +251,8 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
    * the columns of `output`, as the scans of streaming queries did before this pushdown.
    *
    * A pruned scan must read the required columns and only columns of `output`, each once, as
-   * `SupportsPushDownRequiredColumns` requires. Spark asks a scan for its read schema before it
-   * creates its stream, as for a batch. If the scan builder, the scan or its stream fails with the
+   * `SupportsPushDownRequiredColumns` requires. Spark asks a pruned scan for its read schema
+   * before it creates its stream. If the scan builder, the scan or its stream fails with the
    * pruning, or the read schema of a pruned scan cannot be read or does not follow
    * `SupportsPushDownRequiredColumns`, a scan of all the columns is built instead, from a new scan
    * builder, as without this pushdown.

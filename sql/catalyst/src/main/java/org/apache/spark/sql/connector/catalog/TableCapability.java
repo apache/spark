@@ -182,7 +182,7 @@ public enum TableCapability {
    * query optimized then, and creates the micro-batch or continuous stream of the read from that
    * scan. By returning this capability, a table declares that the partition readers of such a
    * stream return the columns of {@link org.apache.spark.sql.connector.read.Scan#readSchema()},
-   * as those of the batches of the scan do. Spark asks the scan for its read schema before it
+   * as those of the batches of the scan do. Spark asks a pruned scan for its read schema before it
    * creates the stream. Without this capability, the scans of streaming reads read all the
    * columns of the table.
    *

@@ -526,7 +526,13 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
 
   Seq(
     "CAST('today' AS DATE) < DATE'2100-01-01'",
-    "CAST('12:00:00' AS TIMESTAMP) < TIMESTAMP'2100-01-01 00:00:00'"
+    "CAST('12:00:00' AS TIMESTAMP) < TIMESTAMP'2100-01-01 00:00:00'",
+    // The casts of strings to arrays, structs and maps of timestamps cast each string.
+    "element_at(CAST(array('12:00:00') AS ARRAY<TIMESTAMP>), 1) < TIMESTAMP'2100-01-01 00:00:00'",
+    "CAST(named_struct('t', '12:00:00') AS STRUCT<t: TIMESTAMP>).t < " +
+      "TIMESTAMP'2100-01-01 00:00:00'",
+    "element_at(CAST(map('k', '12:00:00') AS MAP<STRING, TIMESTAMP>), 'k') < " +
+      "TIMESTAMP'2100-01-01 00:00:00'"
   ).foreach { condition =>
     test(s"read the columns of a condition on a string that depends on when it is cast: " +
         condition) {
@@ -542,6 +548,24 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
           assertReadSchema("data", "extra"),
           CheckAnswer(Row("a"), Row("b")))
       }
+    }
+  }
+
+  test("read the columns of a condition on a cast whose string is a literal only once optimized") {
+    withSourceTable() {
+      // The cast of `cutoff` is only foldable once the optimizer replaces the alias with the
+      // string, and then takes the date of the start of the query, so the condition would be
+      // folded with it if the cast stayed a cast.
+      val df = spark.readStream.table(tbl).withColumn("cutoff", lit("12:00:00"))
+        .select(expr("CASE WHEN CAST(cutoff AS TIMESTAMP) < TIMESTAMP'2100-01-01 00:00:00' " +
+          "THEN data ELSE CAST(extra AS STRING) END AS v"))
+      val reads = StreamingV2ScanPushDown.reads(spark, df.queryExecution.analyzed, None)
+      assert(reads.values.map(_.requiredColumns.map(_.name).toSet).toSeq ===
+        Seq(Set("data", "extra")))
+      testStream(df)(
+        ProcessAllAvailable(),
+        assertReadSchema("data", "extra"),
+        CheckAnswer(Row("a"), Row("b")))
     }
   }
 
@@ -597,18 +621,28 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
-  test("replace the casts of strings with only a time to timestamps with a local time zone") {
+  test("replace the casts of strings to timestamps with a local time zone") {
     withSourceTable() {
+      // Each cast, and whether it takes the current date for a string with only a time: those to
+      // timestamps with a local time zone, of any precision, at any depth of their types and
+      // whatever their child is, unlike a cast to a timestamp without time zone or to a date,
+      // which rejects such a string.
       val casts = Seq(
-        "CAST('12:00:00' AS TIMESTAMP)", "CAST('12:00:00' AS TIMESTAMP_LTZ(9))",
-        "CAST('12:00:00' AS TIMESTAMP_NTZ)", "CAST('2100-01-01 12:00:00' AS TIMESTAMP)")
-      val df = spark.readStream.table(tbl).select(casts.map(expr) :+ col("data"): _*)
+        "CAST('12:00:00' AS TIMESTAMP)" -> true,
+        "CAST('12:00:00' AS TIMESTAMP_LTZ(9))" -> true,
+        "CAST('2100-01-01 12:00:00' AS TIMESTAMP)" -> true,
+        "CAST(data AS TIMESTAMP)" -> true,
+        "CAST(array('12:00:00') AS ARRAY<TIMESTAMP>)" -> true,
+        "CAST(named_struct('t', '12:00:00') AS STRUCT<t: TIMESTAMP>)" -> true,
+        "CAST(map('k', '12:00:00') AS MAP<STRING, TIMESTAMP>)" -> true,
+        "CAST('12:00:00' AS TIMESTAMP_NTZ)" -> false,
+        "CAST('2100-01-01' AS DATE)" -> false,
+        "CAST(array(1) AS ARRAY<STRING>)" -> false)
+      val df = spark.readStream.table(tbl).select(casts.map(c => expr(c._1)) :+ col("data"): _*)
       val replaced = StreamingV2ScanPushDown.forStartup(df.queryExecution.analyzed)
         .collectFirst { case project: Project => project.projectList.take(casts.length) }.get
         .map(_.asInstanceOf[Alias].child)
-      // These casts take the current date, of any precision, unlike a cast to a timestamp without
-      // time zone, which rejects such a string, and a cast of a string with a date.
-      assert(replaced.map(_.isInstanceOf[Cast]) === Seq(false, false, true, true))
+      assert(replaced.map(!_.isInstanceOf[Cast]) === casts.map(_._2))
     }
   }
 
