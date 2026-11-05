@@ -1596,6 +1596,17 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       "VARIANT_CONSTRUCTOR_SIZE_LIMIT")
   }
 
+  test("canonicalize_variant size limit on nested shared payloads") {
+    val nested = (0 until 60).foldLeft(Array[Byte](primitiveHeader(INT1), 1)) { (child, _) =>
+      Array[Byte](arrayHeader(false, 4), 2) ++ Array.fill[Byte](8)(0) ++
+        Array[Byte](child.length.toByte, (child.length >> 8).toByte, 0, 0) ++ child
+    }
+    checkErrorInExpression[SparkRuntimeException](
+      CanonicalizeVariant(BoundReference(0, VariantType, nullable = true)),
+      InternalRow(new VariantVal(nested, Array[Byte](VERSION, 0, 0))),
+      "VARIANT_CONSTRUCTOR_SIZE_LIMIT")
+  }
+
   test("variant_delete") {
     def checkDelete(input: String, paths: Seq[String], expected: String): Unit = {
       val pathLits: Seq[Expression] = paths.map(p => Literal.create(p, StringType))

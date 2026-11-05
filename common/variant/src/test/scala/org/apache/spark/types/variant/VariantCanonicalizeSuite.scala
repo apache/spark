@@ -190,8 +190,11 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
 
     val decreasingOffsets = bytes(VERSION, 3, 0, 2, 1, 3) ++ utf8("abc")
     val outOfBoundsOffset = bytes(VERSION, 3, 0, 4, 2, 3) ++ utf8("abc")
-    Seq(decreasingOffsets, outOfBoundsOffset).foreach { invalidMetadata =>
-      assert(!VariantBuilder.isCanonical(new Variant(value, invalidMetadata)))
+    val outOfBoundsBeforeCompare = bytes(VERSION, 3, 0, 4, 4, 3) ++ utf8("abc")
+    Seq(decreasingOffsets, outOfBoundsOffset, outOfBoundsBeforeCompare).foreach { invalidMetadata =>
+      val variant = new Variant(value, invalidMetadata)
+      assert(!VariantBuilder.isCanonical(variant))
+      checkError("MALFORMED_VARIANT") { VariantBuilder.canonicalize(variant) }
     }
   }
 
@@ -319,6 +322,16 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
       obj(Seq(0 -> integer(7), 1 -> integer(7))), dictionary("a", "b"))
   }
 
+  test("nested shared payloads fail with the size limit before keys are collected") {
+    val nested = (0 until 60).foldLeft(integer(1)) { (child, _) =>
+      Array(arrayHeader(false, 4)) ++ bytes(2) ++ littleEndian(BigInt(0), 4) ++
+        littleEndian(BigInt(0), 4) ++ littleEndian(BigInt(child.length), 4) ++ child
+    }
+    val input = new Variant(nested, emptyMetadata)
+    assert(!VariantBuilder.isCanonical(input))
+    intercept[VariantSizeLimitException] { VariantBuilder.canonicalize(input) }
+  }
+
   test("container count and payload widths change at 255 and 256") {
     Seq((255, false, 1, 1), (256, true, 1, 2), (257, true, 2, 2)).foreach {
       case (count, largeSize, idWidth, offsetWidth) =>
@@ -394,6 +407,11 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
       ("100", 2, integer(1)),
       ("-100", 2, integer(-1)),
       ("100000", 2, integer(1000, INT2, 2)),
+      ("5", 0, integer(5)),
+      ("-5", 0, integer(-5)),
+      ("100", 0, integer(100)),
+      ("9223372036854775807", 0, integer(Long.MaxValue, INT8, 8)),
+      ("-9223372036854775808", 0, integer(Long.MinValue, INT8, 8)),
       ("1200", 3, decimal("12", 1, DECIMAL4, 4)),
       ("-1200", 3, decimal("-12", 1, DECIMAL4, 4)),
       ("999999999", 1, decimal("999999999", 1, DECIMAL4, 4)),

@@ -217,9 +217,11 @@ public class VariantBuilder {
    * <p>
    * A variant is canonical when all of the following hold.
    * <ul>
-   *   <li>Metadata header: version {@link VariantUtil#VERSION} and the minimal offset size for
+   *   <li>Metadata header: version {@link VariantUtil#VERSION}, the minimal offset size for
    *       {@code max(lastOffset, numKeys)}, i.e. 1, 2, 3 or 4 bytes as given by
-   *       {@code getIntegerSize}.</li>
+   *       {@code getIntegerSize}, and {@code sorted_strings} and the unused bit 5 clear.
+   *       {@code sorted_strings} stays clear although canonical keys are sorted, so that builder
+   *       output, which never sets it, is already canonical.</li>
    *   <li>Metadata dictionary: the first offset is 0, offsets are non-decreasing, the key bytes
    *       end exactly at the last offset (no trailing bytes), keys are strictly increasing under
    *       unsigned byte comparison (so they are unique), and every key is referenced by at least
@@ -228,10 +230,12 @@ public class VariantBuilder {
    *   <li>Object: field ids strictly increasing (fields are stored in key order and no key is
    *       repeated), field data stored contiguously in field order, the end offset equal to the
    *       data size, and the header using the minimal id size for the largest id, the minimal
-   *       offset size for the data size, and {@code is_large} only for more than 255 fields.</li>
+   *       offset size for the data size, {@code is_large} only for more than 255 fields, and the
+   *       reserved bit 7 clear.</li>
    *   <li>Array: element order preserved, element data stored contiguously in element order, the
    *       end offset equal to the data size, and the header using the minimal offset size for the
-   *       data size and {@code is_large} only for more than 255 elements.</li>
+   *       data size, {@code is_large} only for more than 255 elements, and the reserved bits 5 to
+   *       7 clear.</li>
    *   <li>Integer: the smallest of INT1, INT2, INT4 and INT8 that holds the value.</li>
    *   <li>Decimal: trailing zeros stripped and a negative scale raised to 0. An integral decimal
    *       that fits in a signed 64-bit integer is stored as an integer instead. Otherwise the
@@ -257,12 +261,14 @@ public class VariantBuilder {
     return doCanonicalize(v);
   }
 
-  /**
-   * Check whether {@code v} already satisfies every rule listed in {@link #canonicalize}. Return
-   * false at the first non-canonical encoding. Malformed bytes also return false so that the
-   * rebuild decides whether they fail, but an unreadable header may still throw. Returning false
-   * does not establish validity.
-   */
+  // Check whether `v` already satisfies every rule listed in `canonicalize`. Return false at the
+  // first non-canonical encoding. Malformed bytes that the check can reject without decoding them
+  // return false, and the rebuild then decides whether they fail. Malformed bytes that the check
+  // has to decode throw instead, for example `MALFORMED_VARIANT` for an unreadable metadata table,
+  // a container whose data runs past the value, or a decimal whose precision or scale is out of
+  // range, and `UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT` for an unknown type ID. The rebuild decodes the
+  // same bytes, so `canonicalize` fails with the same error either way. Returning false does not
+  // establish validity.
   static boolean isCanonical(Variant v) {
     if (v.pos != 0) {
       return false;
@@ -413,11 +419,9 @@ public class VariantBuilder {
     }
   }
 
-  /**
-   * Rebuild {@code v} so that it satisfies every rule listed in {@link #canonicalize}, without
-   * checking whether it already does. The result is a new root value, also when {@code v} is a
-   * nested value of a larger variant.
-   */
+  // Rebuild `v` so that it satisfies every rule listed in `canonicalize`, without checking
+  // whether it already does. The result is a new root value, also when `v` is a nested value of a
+  // larger variant.
   static Variant doCanonicalize(Variant v) {
     VariantBuilder builder = new VariantBuilder(false);
     builder.buildCanonicalized(v.value, v.metadata, v.pos);
@@ -867,7 +871,7 @@ public class VariantBuilder {
     int[] canonicalIds = new int[numKeys];
     Arrays.fill(canonicalIds, -1);
     TreeMap<byte[], Integer> keys = new TreeMap<>(VariantUtil::compareKeys);
-    collectAllObjectKeys(value, metadata, pos, canonicalIds, keys);
+    collectAllObjectKeys(value, metadata, pos, canonicalIds, keys, new int[1]);
     // Remap the IDs assigned during collection to unsigned byte order without decoding keys.
     int[] sortedIds = new int[keys.size()];
     for (java.util.Map.Entry<byte[], Integer> key : keys.entrySet()) {
@@ -882,8 +886,15 @@ public class VariantBuilder {
     appendVariantImpl(value, metadata, pos, canonicalIds);
   }
 
+  // Container offsets may point several entries at the same child, so a small value can reach far
+  // more values than its size. The rebuild writes at least one byte per reached value, so fail with
+  // `VariantSizeLimitException` once more than `SIZE_LIMIT` values are reached.
   private static void collectAllObjectKeys(
-      byte[] value, byte[] metadata, int pos, int[] canonicalIds, TreeMap<byte[], Integer> keys) {
+      byte[] value, byte[] metadata, int pos, int[] canonicalIds, TreeMap<byte[], Integer> keys,
+      int[] visitedValues) {
+    if (++visitedValues[0] > SIZE_LIMIT) {
+      throw new VariantSizeLimitException();
+    }
     checkIndex(pos, value.length);
     switch (value[pos] & BASIC_TYPE_MASK) {
       case OBJECT:
@@ -903,7 +914,8 @@ public class VariantBuilder {
               }
               canonicalIds[keyId] = id;
             }
-            collectAllObjectKeys(value, metadata, dataStart + offset, canonicalIds, keys);
+            collectAllObjectKeys(
+                value, metadata, dataStart + offset, canonicalIds, keys, visitedValues);
           }
           return null;
         });
@@ -912,7 +924,8 @@ public class VariantBuilder {
         handleArray(value, pos, (size, offsetSize, offsetStart, dataStart) -> {
           for (int elementIndex = 0; elementIndex < size; ++elementIndex) {
             int offset = readUnsigned(value, offsetStart + offsetSize * elementIndex, offsetSize);
-            collectAllObjectKeys(value, metadata, dataStart + offset, canonicalIds, keys);
+            collectAllObjectKeys(
+                value, metadata, dataStart + offset, canonicalIds, keys, visitedValues);
           }
           return null;
         });
