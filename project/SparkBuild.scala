@@ -1593,9 +1593,8 @@ object PySparkAssembly {
   import java.util.zip.{ZipOutputStream, ZipEntry}
 
   lazy val settings = Seq(
-    // Use a resource generator to copy all .py files from python/pyspark into a managed directory
-    // to be included in the assembly. We can't just add "python/" to the assembly's resource dir
-    // list since that will copy unneeded / unwanted files.
+    // Use a resource generator to zip python/pyspark into python/lib/pyspark.zip. It returns no
+    // files, so nothing from python/ is added to the assembly jar.
     (Compile / resourceGenerators) += Def.macroValueI((Compile / resourceManaged) map { outDir: File =>
       val src = new File(BuildCommons.sparkHome, "python/pyspark")
       val zipFile = new File(BuildCommons.sparkHome , "python/lib/pyspark.zip")
