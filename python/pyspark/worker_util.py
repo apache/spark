@@ -61,6 +61,15 @@ pickleSer = CPickleSerializer()
 utf8_deserializer = UTF8Deserializer()
 
 
+def add_path(path: str) -> bool:
+    # worker can be used, so do not add path multiple times
+    if path not in sys.path:
+        # overwrite system packages
+        sys.path.insert(1, path)
+        return True
+    return False
+
+
 def _zip_archive_of(module_name: str) -> Optional[str]:
     spec = importlib.util.find_spec(module_name)
     loader = spec.loader if spec is not None else None
@@ -72,24 +81,15 @@ def _zip_archive_of(module_name: str) -> Optional[str]:
 # not replaced while an application runs, so _invalidate_import_caches keeps their cached
 # directory listings. Other archives, including user archives on PYTHONPATH, may be replaced and
 # are not kept.
-_spark_archives = frozenset(
+_SPARK_ARCHIVES = frozenset(
     archive for archive in map(_zip_archive_of, ("pyspark", "py4j")) if archive is not None
 )
-
-
-def add_path(path: str) -> bool:
-    # worker can be used, so do not add path multiple times
-    if path not in sys.path:
-        # overwrite system packages
-        sys.path.insert(1, path)
-        return True
-    return False
 
 
 def _invalidate_import_caches() -> None:
     """
     Like importlib.invalidate_caches(), but keeps the zipimporters of Spark's own archives
-    (_spark_archives).
+    (_SPARK_ARCHIVES).
 
     Up to Python 3.12, invalidating a zipimporter re-reads the archive's whole directory, and an
     archive has one zipimporter per package imported from it, so pyspark.zip is re-read once for
@@ -103,7 +103,7 @@ def _invalidate_import_caches() -> None:
         # importlib.invalidate_caches() drops relative paths because the working directory may
         # have changed, so only keep absolute ones.
         if isinstance(finder, zipimport.zipimporter)
-        and finder.archive in _spark_archives
+        and finder.archive in _SPARK_ARCHIVES
         and os.path.isabs(path)
     }
     for path in kept:
