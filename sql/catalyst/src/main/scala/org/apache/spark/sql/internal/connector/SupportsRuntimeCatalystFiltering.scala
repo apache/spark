@@ -32,7 +32,8 @@ import org.apache.spark.sql.connector.read.Scan
  * Spark considers a runtime predicate fully pushed when all attributes referenced by the
  * predicate are returned by the table's
  * [[SupportsCatalystFilterGuarantees.fullyPushedFilterAttributes]]. Fully pushed predicates are not
- * evaluated again after the scan.
+ * evaluated again after the scan. If the table does not implement that interface, Spark uses this
+ * scan's [[fullyPushedFilterAttributes]] declaration.
  *
  * Note that Spark will push runtime filters only if they are beneficial.
  */
@@ -46,6 +47,22 @@ trait SupportsRuntimeCatalystFiltering extends Scan {
    * pruned out of [[Scan.readSchema]] fail to resolve.
    */
   def filterAttributes(): Array[NamedReference]
+
+  /**
+   * Returns attributes for which this scan fully evaluates runtime predicates.
+   *
+   * Spark uses this declaration when the table does not implement
+   * [[SupportsCatalystFilterGuarantees]].
+   * References must be top-level scan output columns also returned by [[filterAttributes]]. Each
+   * column's value must be fixed within each returned input partition, and the scan must fully
+   * evaluate every runtime predicate over these columns with Spark's semantics, including errors.
+   *
+   * @deprecated Implement [[SupportsCatalystFilterGuarantees]] on the table and declare the
+   *             attributes in [[SupportsCatalystFilterGuarantees.fullyPushedFilterAttributes]].
+   */
+  @deprecated("Use SupportsCatalystFilterGuarantees.fullyPushedFilterAttributes on the table",
+    "4.4.0")
+  def fullyPushedFilterAttributes(): Array[NamedReference] = Array.empty
 
   /**
    * Filters this scan using runtime Catalyst expressions.

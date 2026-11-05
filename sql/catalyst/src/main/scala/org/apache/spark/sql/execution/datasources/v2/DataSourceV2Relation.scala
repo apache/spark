@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.{Collections, Optional, OptionalLong}
 
+import scala.annotation.nowarn
+
 import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics}
@@ -220,7 +222,7 @@ case class DataSourceV2ScanRelation(
    * [[SupportsRuntimeV2Filtering.filterAttributes]] or
    * [[SupportsRuntimeCatalystFiltering.filterAttributes]]. Empty when the scan
    * implements neither interface or exposes no attributes. Accessing this value also validates
-   * attributes returned by the table's [[SupportsCatalystFilterGuarantees]].
+   * attributes declared fully pushed by the table or scan.
    */
   lazy val runtimeFilterAttrs: AttributeSet = {
     checkRuntimeFilteringInterfaces()
@@ -234,11 +236,14 @@ case class DataSourceV2ScanRelation(
     case _ => Array.empty
   }
 
+  @nowarn("cat=deprecation")
   private lazy val declaredFullyPushedRuntimeFilterAttrs: Array[NamedReference] = {
-    val declared = (scan, relation.table) match {
+    val (declared, referenceOutput) = (scan, relation.table) match {
       case (_: SupportsRuntimeCatalystFiltering, t: SupportsCatalystFilterGuarantees) =>
-        t.fullyPushedFilterAttributes()
-      case _ => Array.empty[NamedReference]
+        (t.fullyPushedFilterAttributes(), relation.output)
+      case (s: SupportsRuntimeCatalystFiltering, _) =>
+        (s.fullyPushedFilterAttributes(), output)
+      case _ => (Array.empty[NamedReference], output)
     }
     declared.find(_.fieldNames.length > 1).foreach { ref =>
       throw QueryCompilationErrors.nestedDataSourceFullyPushedRuntimeFilterAttributeError(
@@ -247,7 +252,7 @@ case class DataSourceV2ScanRelation(
         relationOutput = fromAttributes(output))
     }
     V2ExpressionUtils.resolveDataSourceRuntimeFilterRefs(
-      declared, relation.output, "fullyPushedFilterAttributes()", scan.getClass.getName)
+      declared, referenceOutput, "fullyPushedFilterAttributes()", scan.getClass.getName)
     declared.filter { ref =>
       output.exists(a => conf.resolver(a.name, ref.fieldNames.head))
     }
