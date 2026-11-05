@@ -43,7 +43,6 @@ import os
 import re
 import subprocess
 import sys
-import tempfile
 import traceback
 from typing import Iterator, List, Optional
 from urllib.error import HTTPError
@@ -911,26 +910,22 @@ def with_post_merge_ci_skip(message, skip):
 
 def amend_post_merge_ci_skip(skip):
     """Apply the branch-specific workflow-skip decision to the cherry-picked commit."""
-    message = git.run(["git", "log", "-1", "--format=%B"])
-    updated = with_post_merge_ci_skip(message, skip)
-    if updated == message:
+    raw_message = git.run(["git", "log", "-1", "--format=%B"])
+    updated = with_post_merge_ci_skip(raw_message, skip)
+    if updated == raw_message:
         return
 
-    # Pass the complete arbitrary multi-line message through -F so a cherry-pick can remove or
-    # relocate an inherited skip trailer without shell quoting or argument parsing changing it.
-    # NamedTemporaryFile also removes the message file automatically after the amend completes.
-    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as message_file:
-        message_file.write(updated)
-        message_file.flush()
-        git.run([
-            "git",
-            "commit",
-            "--amend",
-            "--allow-empty",
-            "--cleanup=verbatim",
-            "-F",
-            message_file.name,
-        ])
+    # The command is an argument list rather than a shell string, so -m safely receives the
+    # complete multi-line message. The helper appends the trailer only when this branch skips CI.
+    git.run([
+        "git",
+        "commit",
+        "--amend",
+        "--allow-empty",
+        "--cleanup=verbatim",
+        "-m",
+        updated,
+    ])
 
 
 # merge the requested PR and return the merge hash
