@@ -29,7 +29,6 @@ import org.apache.spark.sql.execution.dynamicpruning.{CleanupDynamicPruningFilte
 import org.apache.spark.sql.execution.externalUDF.{ExtractExternalUDFFromWindow, PlanExternalUDFs}
 import org.apache.spark.sql.execution.planmerging.MergeSubplans
 import org.apache.spark.sql.execution.python.{ExtractGroupingPythonUDFFromAggregate, ExtractPythonUDFFromAggregate, ExtractPythonUDFFromLambda, ExtractPythonUDFs, ExtractPythonUDTFs}
-import org.apache.spark.sql.execution.streaming.AnnotateStreamingJoinStateValueAttributes
 
 class SparkOptimizer(
     catalogManager: CatalogManager,
@@ -104,6 +103,7 @@ class SparkOptimizer(
       // The eval-python node may be between Project/Filter and the scan node, which breaks
       // column pruning and filter push-down. Here we rerun the related optimizer rules.
       ColumnPruning,
+      AnnotateStreamingJoinStateValueAttributes,
       LimitPushDown,
       PushPredicateThroughNonJoin,
       PushProjectionThroughLimitAndOffset,
@@ -120,9 +120,6 @@ class SparkOptimizer(
       EliminateLimits),
     Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*),
     Batch("Replace CTE with Repartition", Once, ReplaceCTERefWithRepartition),
-    // The annotations contain input ordinals, so derive them after all plan-shape rewrites.
-    Batch("Annotate Streaming Join State Value Attributes", Once,
-      AnnotateStreamingJoinStateValueAttributes),
     // Must run last: it inspects the final plan shape to mark scans that can run in a single task,
     // and no subsequent rule should reshape the plan or copy the marked scan nodes.
     Batch("MarkSingleTaskExecution", Once, MarkSingleTaskExecution)))
@@ -143,7 +140,6 @@ class SparkOptimizer(
       V2ScanPartitioningAndOrdering.ruleName,
       V2Writes.ruleName,
       ReplaceCTERefWithRepartition.ruleName,
-      AnnotateStreamingJoinStateValueAttributes.ruleName,
       // CleanupDynamicPruningFilters finalizes the DPP predicates inserted by PartitionPruning --
       // notably rewriting non-deterministic ones to `true` so they are not re-evaluated. That is
       // correctness behavior, not an optional optimization, so the rule must not be excludable.

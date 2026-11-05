@@ -32,12 +32,12 @@ import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.optimizer.StreamingJoinStateValueAttributes
 import org.apache.spark.sql.catalyst.plans.{LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.Join
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
-import org.apache.spark.sql.execution.streaming.StreamingJoinStateValueAttributes
 import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorStateInfo
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.{StreamingSymmetricHashJoinExec, StreamingSymmetricHashJoinHelper}
@@ -492,6 +492,41 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
           assert(joins.head.right.output.map(_.name) == Seq("key", "rightTime"))
           assert(joins.head.leftValueAttributes.map(_.name) == Seq("key"))
           assert(joins.head.rightValueAttributes.map(_.name) == Seq("key"))
+        })
+    }
+  }
+
+  test("stream stream inner join preserves legacy state schema through a filter") {
+    withTempDir { checkpointDir =>
+      val leftInput = MemoryStream[(Int, Long)]
+      val rightInput = MemoryStream[(Int, Long)]
+
+      val left = leftInput.toDF().toDF("key", "time")
+        .select($"key", timestamp_seconds($"time").as("leftTime"))
+        .withWatermark("leftTime", "10 seconds")
+      val right = rightInput.toDF().toDF("key", "time")
+        .select($"key", timestamp_seconds($"time").as("rightTime"))
+        .withWatermark("rightTime", "10 seconds")
+      val joined = left.join(right, "key").filter(rand(42) < 0.5).select($"key")
+      val legacyJoined = left.select($"key").join(right.select($"key"), "key")
+        .filter(rand(42) < 0.5).select($"key")
+
+      testStream(legacyJoined)(
+        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+        MultiAddData(leftInput, (1, 1000000L))(rightInput, (1, 1000000L)),
+        ProcessAllAvailable(),
+        StopStream)
+
+      testStream(joined)(
+        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+        MultiAddData(leftInput, (2, 1000001L))(rightInput, (2, 1000001L)),
+        ProcessAllAvailable(),
+        Execute { query =>
+          val join = query.lastExecution.executedPlan.collectFirst {
+            case join: StreamingSymmetricHashJoinExec => join
+          }.get
+          assert(join.leftValueAttributes.map(_.name) == Seq("key"))
+          assert(join.rightValueAttributes.map(_.name) == Seq("key"))
         })
     }
   }
@@ -2557,6 +2592,40 @@ abstract class StreamingLeftSemiJoinBase extends StreamingJoinSuite {
             case j: StreamingSymmetricHashJoinExec => j
           }.head
           assert(joinOperator.produceOutputWatermark(120000L) === expectedWatermark)
+        })
+    }
+  }
+
+  test("left semi join preserves legacy state schema without a projection") {
+    withTempDir { checkpointDir =>
+      val leftInput = MemoryStream[(Long, Long)]
+      val rightInput = MemoryStream[(Long, Long)]
+      val left = leftInput.toDF()
+        .select(timestamp_seconds($"_1").as("leftKey"))
+        .withWatermark("leftKey", "10 seconds")
+      val right = rightInput.toDF().toDF("key", "time")
+        .select(timestamp_seconds($"key").as("rightKey"),
+          timestamp_seconds($"time").as("rightTime"))
+        .withWatermark("rightTime", "10 seconds")
+      val joined = left.join(right, $"leftKey" === $"rightKey", "left_semi")
+      val legacyJoined = left.join(
+        right.select($"rightKey"), $"leftKey" === $"rightKey", "left_semi")
+
+      testStream(legacyJoined)(
+        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+        MultiAddData(leftInput, (1000000L, 0L))(rightInput, (1000000L, 1000000L)),
+        CheckNewAnswer(new Timestamp(1000000000L)),
+        StopStream)
+
+      testStream(joined)(
+        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+        MultiAddData(leftInput, (1000001L, 0L))(rightInput, (1000001L, 1000001L)),
+        CheckNewAnswer(new Timestamp(1000001000L)),
+        Execute { query =>
+          val join = query.lastExecution.executedPlan.collectFirst {
+            case join: StreamingSymmetricHashJoinExec => join
+          }.get
+          assert(join.rightValueAttributes.map(_.name) == Seq("rightKey"))
         })
     }
   }

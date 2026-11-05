@@ -113,6 +113,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         LimitPushDownThroughWindow,
         RewriteSizeOfArrayStruct,
         ColumnPruning,
+        AnnotateStreamingJoinStateValueAttributes,
         GenerateOptimization,
         // Operator combine
         CollapseRepartition,
@@ -296,6 +297,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       PushPredicateThroughJoin,
       LimitPushDown,
       ColumnPruning,
+      AnnotateStreamingJoinStateValueAttributes,
       CollapseProject,
       RemoveRedundantAliases,
       RemoveNoopOperators),
@@ -340,6 +342,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       ReplaceUpdateFieldsExpression.ruleName,
       RewriteLateralSubquery.ruleName,
       OptimizeSubqueries.ruleName,
+      AnnotateStreamingJoinStateValueAttributes.ruleName,
       // EliminateSerialization inserts an exprId-preserving Alias around an ObjectType
       // attribute when it collapses a DeserializeToObject/SerializeFromObject pair; excluding
       // RemoveRedundantAliases leaves that Alias in place and leaks an ObjectType projection
