@@ -314,10 +314,11 @@ class ExpressionIdAssigner {
   /**
    * Create mapping for the given `newOperator` that replaces the `oldOperator`. This is used by
    * the [[Resolver]] after a certain [[LeafNode]] is resolved to make sure that leaf node outputs
-   * in the query don't have conflicting expression IDs.
+   * in the query don't have conflicting expression IDs. Both `output` and `metadataOutput`
+   * attributes are registered in the mapping.
    *
    * `oldOperator` is present for already resolved subtrees (e.g. DataFrames), but for SQL queries
-   * is will be `None`, because that logical plan is analyzed for the first time.
+   * it will be `None`, because that logical plan is analyzed for the first time.
    */
   def createMappingForLeafOperator(
       newOperator: LeafNode,
@@ -346,8 +347,29 @@ class ExpressionIdAssigner {
 
             registerLeafOperatorAttribute(newOperator, newAttribute)
         }
+
+        if (newOperator.metadataOutput.length != oldOperator.metadataOutput.length) {
+          throw SparkException.internalError(
+            "Metadata outputs have different lengths. " +
+            s"New operator: $newOperator, old operator: $oldOperator"
+          )
+        }
+
+        newOperator.metadataOutput.zip(oldOperator.metadataOutput).foreach {
+          case (newAttribute, oldAttribute) =>
+            newMapping.put(oldAttribute.exprId, newAttribute.exprId)
+            newMapping.put(newAttribute.exprId, newAttribute.exprId)
+
+            registerLeafOperatorAttribute(newOperator, newAttribute)
+        }
       case None =>
         newOperator.output.foreach { newAttribute =>
+          newMapping.put(newAttribute.exprId, newAttribute.exprId)
+
+          registerLeafOperatorAttribute(newOperator, newAttribute)
+        }
+
+        newOperator.metadataOutput.foreach { newAttribute =>
           newMapping.put(newAttribute.exprId, newAttribute.exprId)
 
           registerLeafOperatorAttribute(newOperator, newAttribute)
@@ -355,6 +377,23 @@ class ExpressionIdAssigner {
     }
 
     setCurrentMapping(newMapping)
+  }
+
+  /** Runs `body` with an empty mapping for an expression resolved outside an operator tree. */
+  def withMappingForStandaloneExpression[T](body: => T): T = {
+    pushMapping()
+    try {
+      if (mappingStack.peek().mapping.isDefined) {
+        throw SparkException.internalError(
+          "Attempt to overwrite existing mapping for a standalone expression"
+        )
+      }
+
+      setCurrentMapping(new ExpressionIdAssigner.Mapping)
+      body
+    } finally {
+      popMapping()
+    }
   }
 
   /**
@@ -732,7 +771,7 @@ class ExpressionIdAssigner {
         s"""Expression ID mapping doesn't exist. Please first call
            |createMappingForLeafOperator(...) for leaf nodes or
            |createMappingFromChildMappings(...) for multi-child nodes.
-           |Original expression: $SubqueryExpression""".stripMargin
+           |Original expression: $subquery""".stripMargin
       )
     }
 

@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import java.util.{ArrayDeque, ArrayList, HashMap}
+import java.util.{ArrayDeque, HashMap}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, ExprId}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, ExprId}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.internal.SQLConf
 
@@ -35,9 +35,7 @@ import org.apache.spark.sql.internal.SQLConf
  * @param lcaEnabled Whether lateral column alias resolution is enabled.
  * @param groupByAliases Whether the group by aliases resolution is enabled.
  * @param sessionLocalTimeZone The session local time zone.
- * @param defaultCollation View's default collation if explicitly set.
- * @param invalidExpressionsInTheContextOfOperator The expressions that are invalid in the context
- *   of the current expression tree and its parent operator.
+ * @param defaultCollation Default collation active when this traversal started.
  * @param referencedAttributes All attributes that are referenced during the resolution of
  *   expression trees.
  * @param isFilterOnTopOfAggregate Whether the current expression tree is below a [[Filter]] on top
@@ -52,7 +50,6 @@ case class ExpressionTreeTraversal(
     groupByAliases: Boolean,
     sessionLocalTimeZone: String,
     defaultCollation: Option[String] = None,
-    invalidExpressionsInTheContextOfOperator: ArrayList[Expression] = new ArrayList[Expression],
     referencedAttributes: HashMap[ExprId, Attribute] = new HashMap[ExprId, Attribute],
     isFilterOnTopOfAggregate: Boolean = false,
     isSortOnTopOfAggregate: Boolean = false

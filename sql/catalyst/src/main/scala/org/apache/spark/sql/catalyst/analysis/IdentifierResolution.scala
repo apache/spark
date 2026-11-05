@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{AliasHelper, EvalHelper, Expression, SubqueryExpression, VariableReference}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.types.StringType
 
 object IdentifierResolution extends AliasHelper with EvalHelper {
@@ -48,6 +49,24 @@ object IdentifierResolution extends AliasHelper with EvalHelper {
             CatalystSqlParser.parseMultipartIdentifier(other.toString)
         }
     }
+  }
+
+  /**
+   * Builds the expression hidden behind `expressionWithUnresolvedIdentifier` by invoking its
+   * expression builder with `identifierParts`. The built expression inherits the origin and the
+   * tags of the placeholder.
+   */
+  def buildExpressionFromIdentifierParts(
+      expressionWithUnresolvedIdentifier: ExpressionWithUnresolvedIdentifier,
+      identifierParts: Seq[String]): Expression = {
+    val builtExpression = withOrigin(expressionWithUnresolvedIdentifier.origin) {
+      expressionWithUnresolvedIdentifier.exprBuilder(
+        identifierParts,
+        expressionWithUnresolvedIdentifier.otherExprs
+      )
+    }
+    builtExpression.copyTagsFrom(expressionWithUnresolvedIdentifier)
+    builtExpression
   }
 
   /**

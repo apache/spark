@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.expressions.NamedExpression
  *      that have aggregate functions in their subtrees.
  *  - hasLateralColumnAlias: True if there is a lateral column reference in the aggregate
  *      expressions list.
+ *  - hasWindowExpressions: True if there are window expressions in the aggregate expressions list.
  */
 case class ResolvedAggregateExpressions(
     expressions: Seq[NamedExpression],
@@ -42,5 +43,6 @@ case class ResolvedAggregateExpressions(
     hasAttributeOutsideOfAggregateExpressions: Boolean,
     hasStar: Boolean,
     expressionIndicesWithAggregateFunctions: HashSet[Int],
-    hasLateralColumnAlias: Boolean
+    hasLateralColumnAlias: Boolean,
+    hasWindowExpressions: Boolean
 )

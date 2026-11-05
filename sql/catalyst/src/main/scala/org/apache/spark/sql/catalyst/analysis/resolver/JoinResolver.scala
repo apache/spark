@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import java.util.{HashMap, HashSet}
+import java.util.HashMap
 
 import org.apache.spark.sql.catalyst.analysis.NaturalAndUsingJoinResolution
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, ExprId, NamedExpression}
@@ -48,16 +48,25 @@ class JoinResolver(
    *  and resolve join condition.
    *  - Return the resulting [[Project]] or [[Join]] with new children optionally wrapped in
    *    [[WithCTE]]. See [[CteScope]] scaladoc for more info.
+   *  - Since joins interact with Recursive CTEs in such a way that they disallow self references if
+   *    the self reference is on a specific side of the join operator, the appropriate [[CTEScope]]
+   *    is marked as disallowing self references according to the rules defined in
+   *    [[ResolveWithCTE.checkIfSelfReferenceIsPlacedCorrectly]]
    */
   override def resolve(unresolvedJoin: Join): LogicalPlan = {
+    val (allowLeftRecursiveCTE, allowRightRecursiveCTE) =
+      getRecursiveCteAllowance(unresolvedJoin.joinType)
+
     val (resolvedLeftOperator: LogicalPlan, leftNameScope: NameScope) = resolveJoinChild(
       unresolvedOperator = unresolvedJoin,
-      child = unresolvedJoin.left
+      child = unresolvedJoin.left,
+      shouldDisallowRecursiveCtes = !allowLeftRecursiveCTE
     )
 
     val (resolvedRightOperator: LogicalPlan, rightNameScope: NameScope) = resolveJoinChild(
       unresolvedOperator = unresolvedJoin,
-      child = unresolvedJoin.right
+      child = unresolvedJoin.right,
+      shouldDisallowRecursiveCtes = !allowRightRecursiveCTE
     )
 
     ExpressionIdAssigner.assertOutputsHaveNoConflictingExpressionIds(
@@ -135,13 +144,22 @@ class JoinResolver(
    *    aliased expressions (e.g. [[Coalesce]] for keys), so we need to run the output list through
    *    [[ExpressionIdAssigner.mapExpression]].
    *  - Resolve the new condition.
-   *  - Compute new `hiddenOutput` by appending elements from computed hidden list that are not
-   *  already in current `hiddenOutput`. Hidden list must be qualified access only.
-   *  - Overwrite current name scope with output list and newly computed hidden output.
+   *  - Filter metadata columns in the current `hiddenOutput` based on the join type via
+   *  [[filterHiddenOutputMetadataForJoin]] (e.g. right-side metadata columns are removed for
+   *  left-existence joins and become nullable for left outer joins).
+   *  - Compute new `hiddenOutput` by prepending the output attributes (so they remain available
+   *  for resolution in downstream operators like `Sort` or `Filter` even when not directly in the
+   *  `SELECT` list) and appending elements from computed hidden list that are not already in
+   *  current `hiddenOutput`. Hidden list must be qualified access only. Output attributes take
+   *  precedence over hidden attributes.
+   *  - Overwrite current name scope with output list, newly computed hidden output and the
+   *  [[NameScope.qualifiedAccessOnlyOutputIds]] of the [[Project]] (see
+   *  [[computeQualifiedAccessOnlyOutputIdsForJoinProject]]). If [[Join]] was not a top level
+   *  operator, these are the qualified access only attributes from the new hidden output that the
+   *  [[Join]] outputs.
    *  - Finally, put a [[Project]] node on top of the original [[Join]] by:
-   *    - New project list becomes output list.
-   *    - If [[Join]] was not a top level operator, append current hidden output to the project
-   *    list.
+   *    - New project list becomes output list, followed by
+   *    [[NameScope.qualifiedAccessOnlyOutput]].
    *    - Store the resolved [[Join]] as the [[OperatorResolutionContextStack.baseOperator]].
    *    - Add qualified access only attributes from new hidden output as a tag to project node in
    *    order to stay compatible with fixed-point. This should never be used in single-pass, but it
@@ -178,12 +196,30 @@ class JoinResolver(
     val resolvedCondition =
       resolveJoinCondition(unresolvedJoin, newCondition, leftNameScope, rightNameScope)
 
+    val newOutputAttributes = newOutputList.map(_.toAttribute)
+
+    val filteredHiddenOutput = filterHiddenOutputMetadataForJoin(
+      joinType = joinType,
+      oldHiddenOutput = scopes.current.hiddenOutput,
+      rightHiddenOutput = rightNameScope.hiddenOutput
+    )
+
+    val newHiddenOutput = computeHiddenOutputForJoin(
+      mainOutput = newOutputAttributes,
+      oldHiddenOutput = filteredHiddenOutput,
+      extraHiddenOutput = hiddenList
+    )
+
     scopes.overwriteCurrent(
-      output = Some(newOutputList.map(_.toAttribute)),
-      hiddenOutput = Some(
-        computeHiddenOutputForNaturalAndUsingJoin(
-          newHiddenOutput = hiddenList,
-          oldHiddenOutput = scopes.current.hiddenOutput
+      output = Some(newOutputAttributes),
+      hiddenOutput = Some(newHiddenOutput),
+      qualifiedAccessOnlyOutputIds = Some(
+        computeQualifiedAccessOnlyOutputIdsForJoinProject(
+          unresolvedJoin = unresolvedJoin,
+          hiddenOutput = newHiddenOutput,
+          joinType = joinType,
+          leftNameScope = leftNameScope,
+          rightNameScope = rightNameScope
         )
       )
     )
@@ -191,18 +227,11 @@ class JoinResolver(
     val qualifiedAccessOnlyColumnsFromHiddenOutput =
       scopes.current.hiddenOutput.filter(_.qualifiedAccessOnly)
 
-    val newProjectList =
-      if (!unresolvedJoin.containsTag(ResolverTag.TOP_LEVEL_OPERATOR)) {
-        newOutputList ++ qualifiedAccessOnlyColumnsFromHiddenOutput
-      } else {
-        newOutputList
-      }
-
     val resolvedJoin = Join(left, right, joinType, resolvedCondition, hint)
 
     operatorResolutionContextStack.current.baseOperator = Some(resolvedJoin)
 
-    val project = Project(newProjectList, resolvedJoin)
+    val project = Project(newOutputList ++ scopes.current.qualifiedAccessOnlyOutput, resolvedJoin)
 
     project.setTagValue(Project.hiddenOutputTag, qualifiedAccessOnlyColumnsFromHiddenOutput)
 
@@ -210,42 +239,15 @@ class JoinResolver(
   }
 
   /**
-   * Compute new hidden output for the resolved NATURAL and USING joins. This new output must
-   * contain unique attributes, and new versions of attributes from
-   * [[NaturalAndUsingJoinResolution.computeJoinOutputsAndNewCondition]] must take precedence.
-   * Consider the following query:
-   *
-   * {{{
-   * SELECT COUNT(DISTINCT col1) FROM v1 NATURAL JOIN v2 GROUP BY col1 ORDER BY MAX(col1);
-   * }}}
-   *
-   * Since ORDER BY references `col1` under aggregate expression `MAX`, both `v1.col1` and `v2.col2`
-   * will be considered as name resolution candidates. But `v2.col1` will have
-   * `QUALIFIED_ACCESS_ONLY` access metadata, so we must disambiguate in favor of `v1.col1`. For
-   * that disambiguation to work, new hidden output must be constructed from `newHiddenOutput`
-   * which has correct access qualifiers, and old versions of these attributes without new
-   * qualifiers must be thrown away.
-   */
-  private def computeHiddenOutputForNaturalAndUsingJoin(
-      newHiddenOutput: Seq[Attribute],
-      oldHiddenOutput: Seq[Attribute]
-  ): Seq[Attribute] = {
-    val newHiddenOutputLookup = new HashSet[ExprId](newHiddenOutput.size)
-    newHiddenOutput.foreach { attribute =>
-      newHiddenOutputLookup.add(attribute.exprId)
-    }
-
-    newHiddenOutput.map(_.markAsQualifiedAccessOnly()) ++ oldHiddenOutput.filter(
-      attribute => !newHiddenOutputLookup.contains(attribute.exprId)
-    )
-  }
-
-  /**
    * Resolve a join that is not [[NaturalJoin]] or [[UsingJoin]]. In order to resolve the join we
    * do the following:
    *  - Resolve join condition.
-   *  - Overwrite [[NameScope.output]] with join's output and overwrite [[NameScope.hiddenOutput]]
-   *    using the result of `computeHiddenOutputForRegularJoin` call.
+   *  - Filter metadata columns in the current `hiddenOutput` based on the join type via
+   *    [[filterHiddenOutputMetadataForJoin]].
+   *  - Overwrite [[NameScope.output]] with join's output, overwrite [[NameScope.hiddenOutput]]
+   *    using the result of `computeHiddenOutputForJoin` call and overwrite
+   *    [[NameScope.qualifiedAccessOnlyOutputIds]] using the result of
+   *    `computeQualifiedAccessOnlyOutputIdsForJoin` call.
    *  - Wrap a top-level [[Join]] in a [[Project]] with its output if necessary (see
    *    `retainTopLevelJoinOutput`).
    *  - Wrap the [[Join]] in [[WithCTE]] if necessary.
@@ -274,14 +276,27 @@ class JoinResolver(
       rightOutput = rightNameScope.output
     )
 
-    val newHiddenOutput = computeHiddenOutputForRegularJoin(
+    val filteredHiddenOutput = filterHiddenOutputMetadataForJoin(
+      joinType = partiallyResolvedJoin.joinType,
+      oldHiddenOutput = scopes.current.hiddenOutput,
+      rightHiddenOutput = rightNameScope.hiddenOutput
+    )
+
+    val newHiddenOutput = computeHiddenOutputForJoin(
       mainOutput = newOutput,
-      oldHiddenOutput = scopes.current.hiddenOutput
+      oldHiddenOutput = filteredHiddenOutput
     )
 
     scopes.overwriteCurrent(
       output = Some(newOutput),
-      hiddenOutput = Some(newHiddenOutput)
+      hiddenOutput = Some(newHiddenOutput),
+      qualifiedAccessOnlyOutputIds = Some(
+        computeQualifiedAccessOnlyOutputIdsForJoin(
+          joinType = partiallyResolvedJoin.joinType,
+          leftNameScope = leftNameScope,
+          rightNameScope = rightNameScope
+        )
+      )
     )
 
     val resolvedJoin = retainTopLevelJoinOutput(
@@ -331,66 +346,6 @@ class JoinResolver(
     } else {
       resolvedJoin
     }
-  }
-
-  /**
-   * Compute new hidden output for the regular [[Join]]s. This new output contains attributes from
-   * the main output (computed using the [[Join.computeOutput]]) the qualified access only
-   * attributes from the old hidden output. All the attributes must be unique and attributes from
-   * the main output take the precedence over the attributes from the old hidden output. Consider
-   * this query:
-   *
-   * {{{
-   * SELECT
-   *     col2 AS ltrl
-   * FROM
-   *     t1 AS t1_1
-   * LEFT SEMI JOIN
-   *     t1 AS t1_2
-   *     ON t1_1.col1 = t1_2.col1
-   * ORDER BY
-   *     col2;
-   * }}}
-   *
-   * In this example, hidden output would be `Seq(col1, col2)` which is the output of the [[Join]]
-   * itself (old hidden output attributes are filtered out as there are no qualified access only).
-   *
-   * Regarding qualified access only attributes, consider this query:
-   *
-   * {{{
-   *   SELECT
-   *     nt1.*,
-   *     nt2.*,
-   *     nt3.*
-   *   FROM
-   *     VALUES (1, 2) AS nt1(k, v)
-   *   NATURAL JOIN
-   *     VALUES (1, 2) AS nt2(k, v)
-   *   JOIN
-   *     VALUES (1, 2) AS nt3(k, v)
-   *   ON nt2.k = nt3.k;
-   * }}}
-   *
-   * In this example we have a regular [[Join]] on top of a natural [[Join]] which produces
-   * qualified access only attributes. These attributes have to be preserved so they can be queried
-   * aftewards in the project list and thus the hidden output of the regular join will be:
-   * [k, v, k, v, k, v] where the last to `k` and `v` are qualified access only attributes from the
-   * natural join.
-   */
-  private def computeHiddenOutputForRegularJoin(
-      mainOutput: Seq[Attribute],
-      oldHiddenOutput: Seq[Attribute]): Seq[Attribute] = {
-    val mainOutputLookup = new HashSet[ExprId](mainOutput.size)
-    mainOutput.foreach { attribute =>
-      mainOutputLookup.add(attribute.exprId)
-    }
-
-    val oldHiddenOutputQualifiedAccessOnlyAttributes = oldHiddenOutput.filter { attribute =>
-      !mainOutputLookup.contains(attribute.exprId) &&
-      attribute.qualifiedAccessOnly
-    }
-
-    mainOutput ++ oldHiddenOutputQualifiedAccessOnlyAttributes
   }
 
   /**

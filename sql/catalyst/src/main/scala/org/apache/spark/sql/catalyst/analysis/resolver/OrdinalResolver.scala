@@ -48,7 +48,7 @@ class OrdinalResolver(operatorResolver: Resolver)
 
   /**
    * Replaces the ordinals with the actual expressions from the resolved aggregate expression list
-   * or throws if any of aggregate expression are irregular. Handles following invalid cases:
+   * or throws if any of the aggregate expressions are irregular. Handles following invalid cases:
    *  - ordinal value is greater than output list size.
    *  - ordinal value refers to aggregate function.
    *  - star in aggregate expressions when grouping by ordinal.

@@ -111,6 +111,32 @@ class MetadataResolverSuite extends SharedSparkSession {
     }
   }
 
+  test("Relation inside a pipe SET replacement subquery") {
+    withTable("src", "other") {
+      spark.sql("CREATE TABLE src (key INT, value STRING);").collect()
+      spark.sql("CREATE TABLE other (key INT, value STRING);").collect()
+
+      checkResolve(
+        sqlText = "TABLE src |> SET value = (SELECT value FROM other LIMIT 1)",
+        expectedTableData = Seq(createTableData("src"), createTableData("other"))
+      )
+    }
+  }
+
+  test("Relation inside a pipe SET replacement subquery over a non-relation source") {
+    withTable("other") {
+      spark.sql("CREATE TABLE other (key INT, value STRING);").collect()
+
+      checkResolve(
+        sqlText = """
+          VALUES (1, 'a') AS t(key, value)
+          |> SET value = (SELECT value FROM other LIMIT 1)
+          """,
+        expectedTableData = Seq(createTableData("other"))
+      )
+    }
+  }
+
   test("Relation inside a CTE definition") {
     withTable("src") {
       spark.sql("CREATE TABLE src (key INT, value STRING);").collect()

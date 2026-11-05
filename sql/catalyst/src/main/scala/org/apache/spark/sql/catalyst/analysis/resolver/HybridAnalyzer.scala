@@ -19,6 +19,9 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import java.util.Random
 
+import scala.util.DynamicVariable
+import scala.util.control.NonFatal
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, Analyzer}
@@ -38,8 +41,9 @@ import org.apache.spark.sql.internal.SQLConf
  *      [[HybridAnalyzer]] will invoke the legacy analyzer and optionally _also_ the fixed-point
  *      one depending on the structure of the unresolved plan. This decision is based on which
  *      features are supported by the single-pass Analyzer, and the checking is implemented in the
- *      [[ResolverGuard]]. It's also determined if the query should be run in dual run mode by the
- *      [[SQLConf.ANALYZER_DUAL_RUN_SAMPLE_RATE]] flag value.
+ *      [[ResolverGuard]], which checks both the unresolved plan and the plan materialized by the
+ *      [[PlanPreprocessor]]. It's also determined if the query should be run in dual run mode by
+ *      the [[SQLConf.ANALYZER_DUAL_RUN_SAMPLE_RATE]] flag value.
  *      After that we validate the results using the following logic:
  *        - If the fixed-point Analyzer fails and the single-pass one succeeds, we throw an
  *          appropriate exception (please check the
@@ -53,10 +57,11 @@ import org.apache.spark.sql.internal.SQLConf
  * */
 class HybridAnalyzer(
     legacyAnalyzer: Analyzer,
-    resolverGuard: ResolverGuard,
+    resolverGuardFactory: ResolverGuardFactory,
     resolver: Resolver,
     tracker: QueryPlanningTracker,
-    extendedResolutionChecks: Seq[LogicalPlan => Unit] = Seq.empty)
+    extendedResolutionChecks: Seq[LogicalPlan => Unit] = Seq.empty,
+    validatorExtensions: Seq[ResolutionValidatorExtension] = Seq.empty)
     extends SQLConfHelper
     with Logging {
   private var singlePassResolutionDuration: Option[Long] = None
@@ -76,7 +81,8 @@ class HybridAnalyzer(
       !conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED) &&
       !conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY) &&
       checkResolverGuard(plan) &&
-      checkDualRunSampleRate()
+      checkDualRunSampleRate() &&
+      checkPreprocessedPlanWithResolverGuard(plan)
 
     withTrackedAnalyzerBridgeState(dualRun) {
       if (!restrictedMode && conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED)) {
@@ -210,11 +216,12 @@ class HybridAnalyzer(
   private def resolveInSinglePassTentatively(plan: LogicalPlan): LogicalPlan = {
     logInfo(log"trying to run single-pass analyzer in fallback (tentative) mode")
 
-    val singlePassResult = if (checkResolverGuard(plan)) {
-      tryRunSinglePassInTentativeMode(plan)
-    } else {
-      None
-    }
+    val singlePassResult =
+      if (checkResolverGuard(plan) && checkPreprocessedPlanWithResolverGuard(plan)) {
+        tryRunSinglePassInTentativeMode(plan)
+      } else {
+        None
+      }
 
     singlePassResult match {
       case Some(resolvedPlan) =>
@@ -263,14 +270,17 @@ class HybridAnalyzer(
   private def resolveInSinglePass(plan: LogicalPlan, inDualRun: Boolean = false): LogicalPlan = {
     val resolverRunner = new ResolverRunner(
       resolver = resolver,
-      extendedResolutionChecks = extendedResolutionChecks
+      extendedResolutionChecks = extendedResolutionChecks,
+      validatorExtensions = validatorExtensions
     )
 
-    resolverRunner.resolve(
-      plan = plan,
-      analyzerBridgeState = AnalysisContext.get.getSinglePassResolverBridgeState,
-      tracker = tracker
-    )
+    HybridAnalyzer.singlePassResolverInDualRun.withValue(inDualRun) {
+      resolverRunner.resolve(
+        plan = plan,
+        analyzerBridgeState = AnalysisContext.get.getSinglePassResolverBridgeState,
+        tracker = tracker
+      )
+    }
   }
 
   /**
@@ -320,7 +330,35 @@ class HybridAnalyzer(
 
   private def checkResolverGuard(plan: LogicalPlan): Boolean = {
     try {
-      resolverGuard.apply(plan).planUnsupportedReason.isEmpty
+      resolverGuardFactory.create().apply(plan).planUnsupportedReason.isEmpty
+    } catch {
+      case _: Throwable
+          if !conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_EXPOSE_RESOLVER_GUARD_FAILURE) =>
+        false
+    }
+  }
+
+  /**
+   * Rechecks the plan surface materialized by preprocessing with a fresh [[ResolverGuard]], so
+   * that a coverage gap revealed only after preprocessing - e.g. a relation IDENTIFIER that
+   * materializes into an unsupported operator - falls back to the fixed-point Analyzer instead of
+   * being run through single-pass. Expression IDENTIFIERs are materialized from root-scope names
+   * here, so the guard also checks a function named through a SQL variable, e.g.
+   * `IDENTIFIER(function_name)(col1)`. A preprocessing failure is treated as an unsupported plan.
+   */
+  private def checkPreprocessedPlanWithResolverGuard(plan: LogicalPlan): Boolean = {
+    try {
+      val planPreprocessor =
+        new PlanPreprocessor(resolver, resolveExpressionIdentifiersInRootScope = true)
+      val preprocessedPlan = try {
+        Some(planPreprocessor.substitutePlan(plan))
+      } catch {
+        case NonFatal(_) =>
+          None
+      }
+      preprocessedPlan.exists { preprocessedPlan =>
+        resolverGuardFactory.create().apply(preprocessedPlan).planUnsupportedReason.isEmpty
+      }
     } catch {
       case _: Throwable
           if !conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_EXPOSE_RESOLVER_GUARD_FAILURE) =>
@@ -347,6 +385,15 @@ class HybridAnalyzer(
 }
 
 object HybridAnalyzer {
+
+  /**
+   * Whether the single-pass resolver is currently running in dual-run mode, after the fixed-point
+   * Analyzer. In that case the single-pass resolver must not report user-facing notifications
+   * (e.g. hint warnings), because the fixed-point Analyzer already reported them.
+   */
+  private val singlePassResolverInDualRun = new DynamicVariable[Boolean](false)
+
+  def isSinglePassResolverInDualRun: Boolean = singlePassResolverInDualRun.value
 
   /**
    * Confs that views should inherit from current session rather then from their descriptor.
@@ -377,8 +424,9 @@ object HybridAnalyzer {
     val relationResolution = legacyAnalyzer.getRelationResolution
     new HybridAnalyzer(
       legacyAnalyzer = legacyAnalyzer,
-      resolverGuard = new ResolverGuard(
+      resolverGuardFactory = new ResolverGuardFactory(
         catalogManager = legacyAnalyzer.catalogManager,
+        resolverExtensions = legacyAnalyzer.singlePassResolverExtensions,
         tracker = Some(tracker)
       ),
       resolver = new Resolver(
@@ -387,11 +435,13 @@ object HybridAnalyzer {
         extensions = legacyAnalyzer.singlePassResolverExtensions,
         metadataResolverExtensions = legacyAnalyzer.singlePassMetadataResolverExtensions,
         externalRelationResolution = Some(relationResolution),
-        extendedRewriteRules = legacyAnalyzer.singlePassPostHocResolutionRules,
-        tracker = Some(tracker)
+        extendedRewriteRules = legacyAnalyzer.singlePassPostHocResolutionRules
       ),
       tracker = tracker,
-      extendedResolutionChecks = legacyAnalyzer.singlePassExtendedResolutionChecks
+      extendedResolutionChecks = legacyAnalyzer.singlePassExtendedResolutionChecks,
+      validatorExtensions = legacyAnalyzer.singlePassResolverExtensions.collect {
+        case extension: ResolutionValidatorExtension => extension
+      }
     )
   }
 }

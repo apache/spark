@@ -40,15 +40,12 @@ abstract class KeyTransformingMap[K, V] {
 
   def iterator: Iterator[Entry[K, V]] = impl.entrySet().iterator()
 
+  def keys: Collection[K] = impl.keySet()
+
   def values: Collection[V] = impl.values()
 
   def +=(kv: (K, V)): this.type = {
     impl.put(mapKey(kv._1), kv._2)
-    this
-  }
-
-  def -=(key: K): this.type = {
-    impl.remove(mapKey(key))
     this
   }
 

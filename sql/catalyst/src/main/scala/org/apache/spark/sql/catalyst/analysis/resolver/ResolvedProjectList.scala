@@ -17,24 +17,22 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, NamedExpression}
-import org.apache.spark.sql.catalyst.plans.logical.Aggregate
+import org.apache.spark.sql.catalyst.expressions.NamedExpression
 
 /**
- * Structure used to return results of the resolved project list.
+ * Structure used to return results of the resolved project list. Aggregate-related state (base
+ * [[org.apache.spark.sql.catalyst.plans.logical.Aggregate]] and aggregate-list aliases) is written
+ * directly to the current [[QueryBlockScope]] by the helper that built the [[Aggregate]].
+ *
  *  - expressions: The resolved expressions. It is resolved using the
  *                 `resolveExpressionTreeInOperator`.
  *  - hasAggregateExpressionsOutsideWindow: True if the resolved project list contains any aggregate
  *                                          expressions which are not window functions.
  *  - hasLateralColumnAlias: True if the resolved project list contains any lateral column aliases.
- *  - aggregateListAliases: List of aliases in aggregate list if there are aggregate expressions in
- *                          the [[Project]].
- *  - baseAggregate: Base [[Aggregate]] node constructed by [[LateralColumnAliasResolver]] while
- *                          resolving lateral column references in [[Aggregate]].
+ *  - hasWindowExpressions: True if the resolved project list contains any window expressions.
  */
 case class ResolvedProjectList(
     expressions: Seq[NamedExpression],
     hasAggregateExpressionsOutsideWindow: Boolean,
     hasLateralColumnAlias: Boolean,
-    aggregateListAliases: Seq[Alias],
-    baseAggregate: Option[Aggregate] = None)
+    hasWindowExpressions: Boolean)

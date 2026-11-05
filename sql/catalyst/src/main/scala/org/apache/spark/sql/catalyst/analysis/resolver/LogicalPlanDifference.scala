@@ -37,7 +37,10 @@ object LogicalPlanDifference {
    * - The mismatched line itself
    * - Up to contextSize lines after the mismatch
    *
-   * If the plans are identical, returns empty strings for both plans.
+   * If the treeStrings are identical (the plans differ only in fields the treeString omits, such
+   * as attribute nullability), returns the per-attribute difference from [[attributeDifference]]
+   * instead, so the caller never gets an empty diff for a real mismatch. Truly identical plans
+   * still return empty strings.
    *
    * This method performs a simple line-by-line comparison of the string representations of the
    * plans. It does not perform any semantic analysis or structural comparison. The semantic
@@ -80,7 +83,7 @@ object LogicalPlanDifference {
     }
 
     if (!mismatchFound) {
-      ("", "")
+      attributeDifference(lhsPlan, rhsPlan)
     } else {
       val lhsResult = new StringBuilder()
       val rhsResult = new StringBuilder()
@@ -102,6 +105,40 @@ object LogicalPlanDifference {
       (lhsResult.toString(), rhsResult.toString())
     }
   }
+
+  /**
+   * Compares the two plans' output attributes in lockstep and returns the left and right sides of
+   * the attributes that differ. Used when the treeStrings are identical: the difference then lives
+   * in fields the treeString does not print (attribute nullability, or dataType distinctions the
+   * type's string form collapses, e.g. string collation), which a line-by-line diff cannot show.
+   * Returns empty strings when the plans have no per-attribute difference.
+   */
+  private def attributeDifference(lhsPlan: LogicalPlan, rhsPlan: LogicalPlan): (String, String) = {
+    val differences = attributeSignatures(lhsPlan)
+      .zip(attributeSignatures(rhsPlan))
+      .collect {
+        case ((label, lhsValue), (_, rhsValue)) if lhsValue != rhsValue =>
+          (s"$label: $lhsValue", s"$label: $rhsValue")
+      }
+      .distinct
+    if (differences.isEmpty) {
+      ("", "")
+    } else {
+      (differences.map(_._1).mkString("\n"), differences.map(_._2).mkString("\n"))
+    }
+  }
+
+  /**
+   * Returns a (label, value) signature for each output attribute of each node in the plan, where
+   * the value captures the fields the treeString omits (nullability and the dataType's JSON form).
+   */
+  private def attributeSignatures(plan: LogicalPlan): Seq[(String, String)] =
+    plan.collect { case node =>
+      node.output.map { attribute =>
+        (s"${node.nodeName}.${attribute.name}",
+          s"nullable=${attribute.nullable} dataType=${attribute.dataType.json}")
+      }
+    }.flatten
 
   /**
    * Checks if two line positions represent different content by comparing the corresponding

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -26,12 +26,14 @@ import org.apache.spark.sql.internal.SQLConf
  * [[Aggregate]] node, based on whether there are aggregate expressions in the project list. When
  * LateralColumnAlias resolution is enabled, replaces the output operator with an appropriate
  * operator structure using information from the scope. Detailed explanation can be found in
- * [[buildProjectWithResolvedLCAs]] method.
+ * [[buildProjectWithLca]] method.
  */
 class ProjectResolver(operatorResolver: Resolver, expressionResolver: ExpressionResolver)
     extends TreeNodeResolver[Project, LogicalPlan]
-    with RetainsOriginalJoinOutput {
-  private val scopes = operatorResolver.getNameScopes
+    with RetainsOriginalJoinOutput
+    with ResolvesNameByHiddenOutput {
+  protected val scopes: NameScopeStack = operatorResolver.getNameScopes
+  private val queryBlockScopes = operatorResolver.getQueryBlockScopes
   private val cteRegistry = operatorResolver.getCteRegistry
   private val lcaResolver = expressionResolver.getLcaResolver
 
@@ -45,13 +47,13 @@ class ProjectResolver(operatorResolver: Resolver, expressionResolver: Expression
    *  - Else if the operator contains just the lateral alias references, delegate resolution to
    *  [[buildProjectWithLca]];
    *
-   * When resolving inside a recursive CTE definition, we pre-scan the unresolved project list to
-   * detect aggregate and window functions before resolving the child. This is necessary because we
-   * must disallow recursive CTE references before resolving the child, as the child resolution (or
-   * subquery resolution within the project list) may encounter recursive CTE references that should
-   * be disallowed in aggregates (always per SQL standard) or window functions (if the config flag
-   * is set). The pre-scan is skipped for non-recursive CTE contexts to avoid unnecessary overhead
-   * on the common path.
+   * Project-list expressions can reference hidden output attributes, for example qualified star
+   * expansion over a `USING` join. The resolver inserts those missing attributes into the child
+   * before building the final operator, while keeping the final output defined by the resolved
+   * project list.
+   *
+   * For projects that become aggregates, recursive references are forbidden in the child but may
+   * occur in expression subqueries.
    *
    * After the subtree and project-list expressions are resolved in the child scope we overwrite
    * current scope with resolved operators output to expose new names to the parent operators.
@@ -65,21 +67,35 @@ class ProjectResolver(operatorResolver: Resolver, expressionResolver: Expression
 
     val (resolvedOperator, resolvedProjectList) = try {
       val resolvedChild = operatorResolver.resolve(unresolvedProject.child)
+      val childHasRecursiveSelfReference = cteRegistry.currentScope.hasRecursiveSelfReference
 
       scopes.current.clearAvailableAliases()
 
       val childReferencedAttributes = expressionResolver.getLastReferencedAttributes
       val resolvedProjectList =
         expressionResolver.resolveProjectList(unresolvedProject.projectList, unresolvedProject)
+      val projectReferencedAttributes = expressionResolver.getLastReferencedAttributes
 
+      val missingAttributes: Seq[Attribute] =
+        scopes.current
+          .resolveMissingAttributesByHiddenOutputForProjectList(projectReferencedAttributes)
+
+      val resolvedChildWithMissingAttributes =
+        insertMissingExpressions(
+          operator = resolvedChild,
+          missingExpressions = missingAttributes
+        )
       val resolvedChildWithMetadataColumns = retainOriginalJoinOutput(
-        plan = resolvedChild,
+        plan = resolvedChildWithMissingAttributes,
         outputExpressions = resolvedProjectList.expressions,
         scopes = scopes,
         childReferencedAttributes = childReferencedAttributes
       )
 
       if (resolvedProjectList.hasAggregateExpressionsOutsideWindow) {
+        if (childHasRecursiveSelfReference) {
+          cteRegistry.currentScope.failIfScopeHasSelfReference()
+        }
         buildAggregate(
           resolvedProjectList = resolvedProjectList,
           resolvedChildWithMetadataColumns = resolvedChildWithMetadataColumns
@@ -87,7 +103,11 @@ class ProjectResolver(operatorResolver: Resolver, expressionResolver: Expression
       } else if (resolvedProjectList.hasLateralColumnAlias) {
         buildProjectWithLca(
           resolvedProjectList = resolvedProjectList,
-          resolvedChildWithMetadataColumns = resolvedChildWithMetadataColumns
+          resolvedChildWithMetadataColumns = resolvedChildWithMetadataColumns,
+          firstIterationProjectList = outputWithMissingAttributes(
+            output = scopes.current.output,
+            missingAttributes = missingAttributes
+          )
         )
       } else {
         val resolvedProject =
@@ -100,9 +120,7 @@ class ProjectResolver(operatorResolver: Resolver, expressionResolver: Expression
     }
 
     scopes.overwriteOutputAndExtendHiddenOutput(
-      output = resolvedProjectList.expressions.map(namedExpression => namedExpression.toAttribute),
-      aggregateListAliases = resolvedProjectList.aggregateListAliases,
-      baseAggregate = resolvedProjectList.baseAggregate
+      output = resolvedProjectList.expressions.map(namedExpression => namedExpression.toAttribute)
     )
 
     resolvedOperator
@@ -110,14 +128,15 @@ class ProjectResolver(operatorResolver: Resolver, expressionResolver: Expression
 
   /**
    * Resolve the original [[Project]] node with aggregate expressions to an appropriate node
-   * ([[Project]], [[Aggregate]] or [[Window]]).
+   * ([[Project]] or [[Aggregate]]).
    *
    *  - If the [[Aggregate]] contains lateral column references, delegate the resolution to
    *    [[LateralColumnAliasResolver.handleLcaInAggregate]];
    *  - Otherwise, validate the result [[Aggregate]] using [[AggregationValidator]];
    *
-   *  Note: Recursive CTE self references are disallowed before entering this method by the
-   *  pre-scan in [[resolve]].
+   *  Side effect: publishes the resolved [[Aggregate]] (and its alias list) to the current
+   *  [[QueryBlockScope]] via [[QueryBlockScope.registerBaseAggregate]] so that HAVING / ORDER BY
+   *  siblings can locate it.
    */
   private def buildAggregate(
       resolvedProjectList: ResolvedProjectList,
@@ -130,25 +149,21 @@ class ProjectResolver(operatorResolver: Resolver, expressionResolver: Expression
       hint = None
     )
 
+    queryBlockScopes.current.registerBaseAggregate(aggregate)
+
     if (resolvedProjectList.hasLateralColumnAlias) {
       val aggregateWithLcaResolutionResult = lcaResolver.handleLcaInAggregate(aggregate)
       val projectList = ResolvedProjectList(
-            expressions = aggregateWithLcaResolutionResult.outputList,
-            hasAggregateExpressionsOutsideWindow = false,
-            hasLateralColumnAlias = false,
-            aggregateListAliases = aggregateWithLcaResolutionResult.aggregateListAliases,
-            baseAggregate = Some(aggregateWithLcaResolutionResult.baseAggregate)
-          )
+        expressions = aggregateWithLcaResolutionResult.outputList,
+        hasAggregateExpressionsOutsideWindow = false,
+        hasLateralColumnAlias = false,
+        hasWindowExpressions = false
+      )
       (aggregateWithLcaResolutionResult.resolvedOperator, projectList)
     } else {
       AggregationValidator(aggregate)
 
-      val resolvedAggregateList = resolvedProjectList.copy(
-        aggregateListAliases = scopes.current.aggregateListAliases,
-        baseAggregate = Some(aggregate)
-      )
-
-      (aggregate, resolvedAggregateList)
+      (aggregate, resolvedProjectList)
     }
   }
 
@@ -159,18 +174,18 @@ class ProjectResolver(operatorResolver: Resolver, expressionResolver: Expression
    */
   private def buildProjectWithLca(
       resolvedProjectList: ResolvedProjectList,
-      resolvedChildWithMetadataColumns: LogicalPlan): (LogicalPlan, ResolvedProjectList) = {
+      resolvedChildWithMetadataColumns: LogicalPlan,
+      firstIterationProjectList: Seq[NamedExpression]): (LogicalPlan, ResolvedProjectList) = {
     val projectWithLca = if (conf.getConf(SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED)) {
       lcaResolver.buildOperatorWithResolvedLca(
         resolvedChild = resolvedChildWithMetadataColumns,
         scope = scopes.current,
         originalProjectList = resolvedProjectList.expressions,
-        firstIterationProjectList = scopes.current.output
+        firstIterationProjectList = firstIterationProjectList
       )
     } else {
       Project(resolvedProjectList.expressions, resolvedChildWithMetadataColumns)
     }
     (projectWithLca, resolvedProjectList)
   }
-
 }

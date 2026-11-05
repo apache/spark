@@ -30,7 +30,7 @@ import org.apache.spark.sql.types.Metadata
  * Attribute resolution:
  *
  * {{{
- * -- [[NameTarget]] with a single candidate `col1`. `aliasName` is be `None` in this case because
+ * -- [[NameTarget]] with a single candidate `col1`. `aliasName` is `None` in this case because
  * -- the name is not a field/value/item of some recursive type.
  * SELECT col1 FROM VALUES (1);
  * }}}
@@ -52,7 +52,7 @@ import org.apache.spark.sql.types.Metadata
  * }}}
  *
  * @param candidates A list of candidates that are possible matches for a given name.
- * @param aliasName If the candidates size is 1 and it's type is [[ExtractValue]] (which means that
+ * @param aliasName If the candidates size is 1 and its type is [[ExtractValue]] (which means that
  *   it's a field/value/item from a recursive type), then the `aliasName` should be the name with
  *   which the candidate needs to be aliased. Otherwise, `aliasName` is `None`.
  * @param aliasMetadata If the candidates were created out of expressions referenced by group by

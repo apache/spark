@@ -39,7 +39,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SupervisingComm
  */
 class NameParameterizedQueryResolver(
     operatorResolver: Resolver,
-    expressionResolver: ExpressionResolver) {
+    expressionResolver: ExpressionResolver)
+    extends ResolvesParameterizedQuery {
   private val operatorResolutionContextStack = operatorResolver.getOperatorResolutionContextStack
   private val scopes = operatorResolver.getNameScopes
 
@@ -62,49 +63,6 @@ class NameParameterizedQueryResolver(
   }
 
   /**
-   * Moves the [[NameParameterizedQuery]] below the given [[SupervisingCommand]].
-   * This is done to ensure that the parameters are resolved in the context of the actual plan,
-   * whereas the [[SupervisingCommand]] is expected to be a top-level node.
-   * [[NameParameterizedQuery]] should be pushed down through any nested [[SupervisingCommand]]s.
-   * Examples:
-   *
-   * 1. Parameters below EXPLAIN command:
-   * {{{
-   *  EXPLAIN SELECT :first;
-   *
-   *  -- Analyzed plan
-   *  -- ExplainCommand 'NameParameterizedQuery [first], [1], SimpleMode
-   * }}}
-   *
-   * 2. Parameters below DESCRIBE command:
-   * {{{
-   *  DESCRIBE QUERY SELECT :first;
-   *
-   *  -- Analyzed plan
-   *  -- DescribeQueryCommand 'NameParameterizedQuery [first], [1]
-   * }}}
-   *
-   * 3. Parameters below nested commands:
-   * {{{
-   *  EXPLAIN EXPLAIN SELECT :first;
-   *
-   *  -- Analyzed plan
-   *  -- ExplainCommand ExplainCommand 'NameParameterizedQuery [a], [1], SimpleMode, SimpleMode
-   * }}}
-   *
-   */
-  private def pushParameterizedQueryBelowCommand(
-      nameParameterizedQuery: NameParameterizedQuery,
-      command: SupervisingCommand): LogicalPlan = {
-    command.withTransformedSupervisedPlan {
-      case nestedCommand: SupervisingCommand =>
-        pushParameterizedQueryBelowCommand(nameParameterizedQuery, nestedCommand)
-      case supervisedPlan =>
-        nameParameterizedQuery.copy(child = supervisedPlan)
-    }
-  }
-
-  /**
    * Resolves a [[NameParameterizedQuery]] operator. It's done in the following steps:
    *
    * 1. Resolve the parameter expressions using the
@@ -118,6 +76,14 @@ class NameParameterizedQueryResolver(
    */
   private def resolveNameParameterizedQuery(
       nameParameterizedQuery: NameParameterizedQuery): LogicalPlan = {
+    withResolvedParameters(nameParameterizedQuery) {
+      operatorResolver.resolve(nameParameterizedQuery.child)
+    }
+  }
+
+  /** Resolves and installs named parameters for the duration of `body`. */
+  def withResolvedParameters[T](
+      nameParameterizedQuery: NameParameterizedQuery)(body: => T): T = {
     val parameterNames = nameParameterizedQuery.argNames
     val parameterValues = nameParameterizedQuery.argValues
 
@@ -136,21 +102,26 @@ class NameParameterizedQueryResolver(
 
     validateParameterNamesAndValuesSizes(parameterNames, parameterValues)
 
-    operatorResolutionContextStack.current.parameterNamesToValues = Some(
-      new LinkedHashMap[String, Expression]
-    )
+    val operatorResolutionContext = operatorResolutionContextStack.current
+    val previousParameterNamesToValues = operatorResolutionContext.parameterNamesToValues
+    val resolvedParameters = new LinkedHashMap[String, Expression]
+    operatorResolutionContext.parameterNamesToValues = Some(resolvedParameters)
 
-    parameterNames.zip(resolvedParameterValues).foreach {
-      case (name, value) if isNotAllowed(value) =>
-        value.failAnalysis(
-          errorClass = "INVALID_SQL_ARG",
-          messageParameters = Map("name" -> name)
-        )
-      case (name, value) =>
-        operatorResolutionContextStack.current.parameterNamesToValues.get.put(name, value)
+    try {
+      parameterNames.zip(resolvedParameterValues).foreach {
+        case (name, value) if isNotAllowed(value) =>
+          value.failAnalysis(
+            errorClass = "INVALID_SQL_ARG",
+            messageParameters = Map("name" -> name)
+          )
+        case (name, value) =>
+          resolvedParameters.put(name, value)
+      }
+
+      body
+    } finally {
+      operatorResolutionContext.parameterNamesToValues = previousParameterNamesToValues
     }
-
-    operatorResolver.resolve(nameParameterizedQuery.child)
   }
 
   private def validateParameterNamesAndValuesSizes(

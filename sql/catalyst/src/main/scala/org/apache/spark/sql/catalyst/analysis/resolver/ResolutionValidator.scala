@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.{
   MultiInstanceRelation,
   ResolvedInlineTable
 }
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, PipeOperator}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.BooleanType
@@ -36,7 +36,8 @@ import org.apache.spark.sql.types.BooleanType
  * conditions that must never be false no matter which SQL query or DataFrame program was provided.
  * The validation approach is single-pass, post-order, complementary to the resolution process.
  */
-class ResolutionValidator {
+class ResolutionValidator(
+    validatorExtensions: Seq[ResolutionValidatorExtension] = Seq.empty) {
   private val attributeScopeStack = new AttributeScopeStack
 
   private val expressionResolutionValidator = new ExpressionResolutionValidator(this)
@@ -97,6 +98,8 @@ class ResolutionValidator {
         validateRelation(range)
       case setOperationLike @ (_: Union | _: SetOperation) =>
         validateSetOperationLike(setOperationLike)
+      case unionLoop: UnionLoop =>
+        validateUnionLoop(unionLoop)
       case sort: Sort =>
         validateSort(sort)
       case join: Join =>
@@ -107,6 +110,8 @@ class ResolutionValidator {
         validateRepartition(repartition)
       case repartitionByExpression: RepartitionByExpression =>
         validateRepartitionByExpression(repartitionByExpression)
+      case rebalancePartitions: RebalancePartitions =>
+        validateRebalancePartitions(rebalancePartitions)
       case sample: Sample =>
         validateSample(sample)
       case generate: Generate =>
@@ -120,15 +125,28 @@ class ResolutionValidator {
         validateRelation(multiInstanceRelation)
       case supervisingCommand: SupervisingCommand =>
         validateSupervisingCommand(supervisingCommand)
+      case lateralJoin: LateralJoin =>
+        validateLateralJoin(lateralJoin)
+      case pipe: PipeOperator =>
+        validatePipeOperator(pipe)
+      case resolvedHint: ResolvedHint =>
+        validateResolvedHint(resolvedHint)
+      case operator =>
+        tryDelegateToValidatorExtension(operator)
     }
 
     operator match {
-      case withCte: WithCTE =>
+      case _: WithCTE =>
+      case _: LateralJoin =>
       case _ =>
         ExpressionIdAssigner.assertOutputsHaveNoConflictingExpressionIds(
           operator.children.map(_.output)
         )
     }
+  }
+
+  private def tryDelegateToValidatorExtension(operator: LogicalPlan): Unit = {
+    validatorExtensions.foreach(_.validateOperator(operator, this))
   }
 
   private def validateWith(withCte: WithCTE): Unit = {
@@ -284,6 +302,12 @@ class ResolutionValidator {
     handleOperatorOutput(plan)
   }
 
+  private def validateUnionLoop(plan: UnionLoop): Unit = {
+    plan.children.foreach(validate)
+
+    handleOperatorOutput(plan)
+  }
+
   private def validateSort(sort: Sort): Unit = {
     validate(sort.child)
     for (sortOrder <- sort.order) {
@@ -303,8 +327,55 @@ class ResolutionValidator {
     )
   }
 
+  private def validateRebalancePartitions(
+      rebalancePartitions: RebalancePartitions): Unit = {
+    validate(rebalancePartitions.child)
+    rebalancePartitions.partitionExpressions.foreach(
+      expression => expressionResolutionValidator.validate(expression)
+    )
+  }
+
   private def validateSample(sample: Sample): Unit = {
     validate(sample.child)
+  }
+
+  private def validateResolvedHint(resolvedHint: ResolvedHint): Unit = {
+    validate(resolvedHint.child)
+  }
+
+  private def validatePipeOperator(pipe: PipeOperator): Unit = {
+    validate(pipe.child)
+  }
+
+  private def validateLateralJoin(lateralJoin: LateralJoin): Unit = {
+    attributeScopeStack.pushScope()
+    try {
+      validate(lateralJoin.left)
+
+      attributeScopeStack.pushScope(isSubqueryRoot = true)
+      try {
+        validate(lateralJoin.right.plan)
+      } finally {
+        attributeScopeStack.popScope()
+      }
+
+      attributeScopeStack.overwriteCurrent(
+        lateralJoin.left.output ++ lateralJoin.right.plan.output
+      )
+
+      lateralJoin.condition match {
+        case Some(condition) => expressionResolutionValidator.validate(condition)
+        case None =>
+      }
+    } finally {
+      attributeScopeStack.popScope()
+    }
+
+    ExpressionIdAssigner.assertOutputsHaveNoConflictingExpressionIds(
+      Seq(lateralJoin.left.output, lateralJoin.right.plan.output)
+    )
+
+    handleOperatorOutput(lateralJoin)
   }
 
   private def validateGenerate(generate: Generate): Unit = {
@@ -383,7 +454,7 @@ class ResolutionValidator {
 
   private def validateSupervisingCommand(supervisingCommand: SupervisingCommand): Unit = {}
 
-  private def handleOperatorOutput(operator: LogicalPlan): Unit = {
+  def handleOperatorOutput(operator: LogicalPlan): Unit = {
     attributeScopeStack.overwriteCurrent(operator.output)
 
     operator.output.foreach(attribute => {

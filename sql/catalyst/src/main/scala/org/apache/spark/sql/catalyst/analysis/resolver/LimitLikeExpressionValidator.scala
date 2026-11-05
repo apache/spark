@@ -46,7 +46,11 @@ class LimitLikeExpressionValidator extends QueryErrorsBase {
       case LocalLimit(_, Offset(offsetExpr, _)) =>
         val offset = offsetExpr.eval().asInstanceOf[Int]
         if (Int.MaxValue - evaluatedExpression < offset) {
-          throw throwInvalidLimitWithOffsetSumExceedsMaxInt(evaluatedExpression, offset, plan)
+          throwInvalidLimitWithOffsetSumExceedsMaxInt(
+            limit = evaluatedExpression,
+            offset = offset,
+            plan = plan
+          )
         }
       case _ =>
     }

@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, IntegerLiteral}
 
 /**
  * Try to extract ordinal from an expression. Return `Some(ordinal)` if the type of the expression
- * is [[IntegerLitera]], `None` otherwise.
+ * is [[IntegerLiteral]], `None` otherwise.
  *
  * This logic is only relevant for the legacy ordinal replacement behavior.
  */
@@ -31,7 +31,7 @@ object TryExtractOrdinal {
     expression match {
       case IntegerLiteral(literal) =>
         Some(UnresolvedOrdinal(literal))
-      case other => None
+      case _ => None
     }
   }
 }

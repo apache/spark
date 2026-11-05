@@ -33,7 +33,8 @@ import org.apache.spark.sql.internal.SQLConf
  */
 class ResolverRunner(
     resolver: Resolver,
-    extendedResolutionChecks: Seq[LogicalPlan => Unit] = Seq.empty
+    extendedResolutionChecks: Seq[LogicalPlan => Unit] = Seq.empty,
+    validatorExtensions: Seq[ResolutionValidatorExtension] = Seq.empty
 ) extends ResolverMetricTracker
     with SQLConfHelper {
 
@@ -63,10 +64,18 @@ class ResolverRunner(
       analyzerBridgeState: Option[AnalyzerBridgeState],
       tracker: QueryPlanningTracker
   ): LogicalPlan = {
+    withResolutionScope(tracker) {
+      runResolution(plan, analyzerBridgeState)
+    }
+  }
+
+  /** Runs `body` in a fresh analysis context, recording top-level metrics and total latency. */
+  private def withResolutionScope[Result](
+      tracker: QueryPlanningTracker)(body: => Result): Result = {
     recordTopLevelMetrics(tracker) {
       recordProfileAndLatency("resolve", "SINGLE_PASS_ANALYZER_TOTAL_LATENCY") {
         AnalysisContext.withNewAnalysisContext {
-          runResolution(plan, analyzerBridgeState)
+          body
         }
       }
     }
@@ -84,7 +93,7 @@ class ResolverRunner(
    */
   private def runResolution(
       plan: LogicalPlan,
-      analyzerBridgeState: Option[AnalyzerBridgeState] = None): LogicalPlan = {
+      analyzerBridgeState: Option[AnalyzerBridgeState]): LogicalPlan = {
     val resolvedPlan = resolver.lookupMetadataAndResolve(plan, analyzerBridgeState)
 
     runValidator(resolvedPlan)
@@ -100,8 +109,10 @@ class ResolverRunner(
 
   private def runValidator(plan: LogicalPlan): Unit = {
     if (conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_VALIDATION_ENABLED)) {
-      val validator = new ResolutionValidator
-      validator.validatePlan(plan)
+      recordProfileAndLatency("runValidator", "SINGLE_PASS_ANALYZER_VALIDATOR_LATENCY") {
+        val validator = new ResolutionValidator(validatorExtensions)
+        validator.validatePlan(plan)
+      }
     }
   }
 
