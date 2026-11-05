@@ -19,6 +19,8 @@ package org.apache.spark.sql
 
 import java.time.{Instant, LocalDateTime}
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.expressions.EqualTo
 import org.apache.spark.sql.catalyst.plans.logical.Join
@@ -393,6 +395,66 @@ abstract class TimestampNanosJoinSuiteBase extends SharedSparkSession with Adapt
             .select(left("lid"), right("rid"))
           assertJoinUsed(leftOuter, execClass)
           checkAnswer(leftOuter, expectedMicroLeftOuter)
+        }
+      }
+    }
+  }
+
+  // The as-of join orders candidates by an internal timestamp subtraction, which stays allowed for
+  // nanosecond keys even though user-written nanosecond subtraction is rejected.
+  test("DataFrame as-of join over nanosecond keys") {
+    Seq[(DataType, String => Any)](
+      TimestampNTZNanosType(9) -> (s => LocalDateTime.parse(s)),
+      TimestampLTZNanosType(9) -> (s => Instant.parse(s + "Z"))).foreach { case (keyType, key) =>
+      val schema = new StructType().add("k", keyType).add("k2", keyType).add("v", IntegerType)
+      def df(rows: (String, Int)*): classic.DataFrame = spark.createDataFrame(
+        rows.map { case (k, v) => Row(key(k), key(k), v) }.asJava, schema)
+      val left = df("2020-01-01T00:00:01.000000500" -> 1)
+      val right = df("2020-01-01T00:00:00.000000100" -> 10, "2020-01-01T00:00:03.000000200" -> 20)
+      def asOf(l: Column, r: Column, joinExprs: Column, direction: String): classic.DataFrame =
+        left.joinAsOf(right, l, r, joinExprs, joinType = "inner", tolerance = null,
+          allowExactMatches = true, direction = direction)
+      // (left key, right rows, expected right value for backward / forward / nearest). The last two
+      // need the exact distance: their candidates differ from the left key below a microsecond.
+      val cases = Seq(
+        ("00:00:01.000000500", Seq("00:00:00.000000100" -> 10, "00:00:03.000000200" -> 20),
+          (10, 20, 10)),
+        ("00:00:00.000001900", Seq("00:00:00.000001100" -> 1, "00:00:00.000001800" -> 2,
+          "00:00:00.000002300" -> 3, "00:00:00.000002900" -> 4), (2, 3, 2)),
+        ("00:00:00.000000999", Seq("00:00:00.000000000" -> 1, "00:00:00.000001001" -> 2),
+          (1, 2, 2)))
+      Seq("false", "true").foreach { singlePass =>
+        withSQLConf(
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass,
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+            SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_ASOF_JOIN_RESOLUTION.key -> "true") {
+          for {
+            sortMerge <- Seq("false", "true")
+            (leftKey, rightRows, (backward, forward, nearest)) <- cases
+            (direction, expected) <-
+              Seq("backward" -> backward, "forward" -> forward, "nearest" -> nearest)
+          } withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> sortMerge) {
+            val l = df(s"2020-01-01T$leftKey" -> 0)
+            val r = df(rightRows.map { case (k, v) => s"2020-01-01T$k" -> v }: _*)
+            // The single-pass analyzer cannot resolve the deserializer `checkToRDD` adds.
+            QueryTest.checkAnswer(
+              df = l.joinAsOf(r, l("k"), r("k"), usingColumns = Seq.empty, joinType = "inner",
+                tolerance = null, allowExactMatches = true, direction = direction)
+                .select(r("v")),
+              expectedAnswer = Seq(Row(expected)),
+              checkToRDD = false)
+          }
+          // A nanosecond subtraction in an as-of key or in the join condition is still rejected.
+          Seq(
+            () => asOf(left("k") - left("k2"), right("k") - right("k2"), null, "nearest"),
+            () => asOf(left("k") - left("k2"), right("k") - right("k2"), null, "backward"),
+            () => asOf(left("k"), right("k"),
+              left("k") - right("k") < functions.expr("INTERVAL 5 SECONDS"), "backward")
+          ).foreach { join =>
+            val e = intercept[AnalysisException](join())
+            assert(e.getCondition == "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_SUBTRACTION")
+          }
         }
       }
     }

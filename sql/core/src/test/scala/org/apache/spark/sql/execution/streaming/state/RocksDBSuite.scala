@@ -4779,7 +4779,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       val db0 = new RocksDB(
         remoteDir, conf = conf, localRootDir = localDir0,
         hadoopConf = noOverwriteConf,
-        loggingId = s"[Thread-${Thread.currentThread.getId}]")
+        loggingId = s"[Thread-${Thread.currentThread.threadId}]")
       try {
         db0.load(0)
         db0.put("setup_key", "setup_value")
@@ -4807,7 +4807,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       val db1 = new RocksDB(
         remoteDir, conf = conf, localRootDir = localDir1,
         hadoopConf = noOverwriteConf,
-        loggingId = s"[Thread-${Thread.currentThread.getId}]")
+        loggingId = s"[Thread-${Thread.currentThread.threadId}]")
       try {
         db1.load(19)
         db1.put("key", "value_from_run1")
@@ -4839,7 +4839,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         conf = conf,
         localRootDir = localDir2,
         hadoopConf = noOverwriteConf,
-        loggingId = s"[Thread-${Thread.currentThread.getId}]")
+        loggingId = s"[Thread-${Thread.currentThread.threadId}]")
       try {
         db2.load(19)
         db2.put("key", "value_from_run2")
@@ -4879,7 +4879,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           conf = conf,
           localRootDir = localDir3,
           hadoopConf = noOverwriteConf,
-          loggingId = s"[Thread-${Thread.currentThread.getId}]")
+          loggingId = s"[Thread-${Thread.currentThread.threadId}]")
         try {
           db3.load(29)
           val value = new String(db3.get("key"), "UTF-8")
@@ -5206,7 +5206,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           conf = conf,
           localRootDir = localDir,
           hadoopConf = hadoopConf,
-          loggingId = s"[Thread-${Thread.currentThread.getId}]",
+          loggingId = s"[Thread-${Thread.currentThread.threadId}]",
           useColumnFamilies = useColumnFamilies,
           versionToUniqueId = versionToUniqueId)
       } else {
@@ -5215,7 +5215,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           conf = conf,
           localRootDir = localDir,
           hadoopConf = hadoopConf,
-          loggingId = s"[Thread-${Thread.currentThread.getId}]",
+          loggingId = s"[Thread-${Thread.currentThread.threadId}]",
           useColumnFamilies = useColumnFamilies)
       }
       db.load(version, versionToUniqueId.get(version))
@@ -5316,7 +5316,7 @@ object RocksDBSuite {
         dfsRootDir = Utils.createTempDir().getAbsolutePath,
         conf = RocksDBConf().copy(compactOnCommit = false, minVersionsToRetain = 100),
         hadoopConf = new Configuration(),
-        loggingId = s"[Thread-${Thread.currentThread.getId}]")
+        loggingId = s"[Thread-${Thread.currentThread.threadId}]")
 
       func
     } finally {
