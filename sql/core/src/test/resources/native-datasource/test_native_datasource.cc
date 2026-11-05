@@ -39,16 +39,17 @@
 //                   validity buffer, a null_count of -1 instead. With the option
 //                   "wait_for_interrupt", the stream of a partition creates the file
 //                   <wait_for_interrupt>.waiting, waits until its task is killed, and then creates
-//                   the file <wait_for_interrupt> and fails. With the option "slow_read", the
-//                   get_next that creates the file <slow_read>.reading, the first one, then waits
-//                   until the file <slow_read>.continue exists, for at most a minute; with the
-//                   option "fail" set to "slow_read", each get_next then fails. After the wait,
-//                   it creates the file <slow_read>.interrupted with what is_interrupted returns
-//                   for the task context, "true" for one that Spark freed meanwhile. Releasing
-//                   the stream creates the file <slow_read>, which says whether Spark released it
-//                   "during get_next", which it must not, or "after get_next" otherwise. With
-//                   the option "ignore_read_schema", read returns all the columns of the reader,
-//                   rather than only those of the schema to read.
+//                   the file <wait_for_interrupt> and fails. With the option "released_path",
+//                   releasing the stream of a partition creates that file. With the option
+//                   "slow_read", the get_next that creates the file <slow_read>.reading, the first
+//                   one, then waits until the file <slow_read>.continue exists, for at most a
+//                   minute; with the option "fail" set to "slow_read", each get_next then fails.
+//                   After the wait, it creates the file <slow_read>.interrupted with what
+//                   is_interrupted returns for the task context, "true" once the task ended.
+//                   Releasing the stream creates the file <slow_read>, which says
+//                   whether Spark released it "during get_next", which it must not, or "after
+//                   get_next" otherwise. With the option "ignore_read_schema", read returns all
+//                   the columns of the reader, rather than only those of the schema to read.
 //   native_sink     Writes the rows as CSV files under the directory in the option "path". With
 //                   the option "commit_messages", a data writer passes its commit message that
 //                   many times. Creating and closing a data writer create a file named after
@@ -67,7 +68,8 @@
 //                   read to that file, and with "ranges_path", each call to stream_partitions
 //                   appends the start and the end offsets that it got to that file, as a line.
 //                   The partitions and the state that stream_partitions returns have the number of
-//                   the call, which read checks.
+//                   the call, which read checks. With the option "state_padding", the state has
+//                   that many more bytes.
 //
 // native_range supports batch reads, native_counter micro-batch streaming reads and native_sink
 // batch and streaming writes, which may replace the existing data. With the option
@@ -919,6 +921,7 @@ struct Stream {
   const SparkDsTaskContext* task;
   std::string wait_for_interrupt;
   std::string last_error;
+  std::string released_path;
   std::string slow_read;
   bool fail_slow_read;
   // task->is_interrupted, kept to call it without reading the task context, which a regression
@@ -976,9 +979,8 @@ int streamGetNext(ArrowArrayStream* stream, ArrowArray* out) {
         for (int i = 0; i < 6000 && stat(go.c_str(), &info) != 0; i++) {
           std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
-        // The task context must still be valid, as a library that checks it here expects. Spark
-        // only looks its address up, and answers true for a context that it freed, unless a new
-        // one got the same address, which no other read in these tests creates meanwhile.
+        // The task context must still be valid, as a library that checks it here expects, and
+        // it tells a read that its task ended.
         bool interrupted = state->is_interrupted(state->task);
         writeFile(state->slow_read + ".interrupted", interrupted ? "true" : "false");
       }
@@ -1002,6 +1004,11 @@ const char* streamGetLastError(ArrowArrayStream* stream) {
 
 void streamRelease(ArrowArrayStream* stream) {
   auto* state = static_cast<Stream*>(stream->private_data);
+  try {
+    if (!state->released_path.empty()) writeFile(state->released_path, "");
+  } catch (...) {
+    // No exception may cross the interface, and release cannot fail.
+  }
   stream->release = nullptr;
   if (!state->slow_read.empty()) {
     bool during = state->in_get_next;
@@ -1200,7 +1207,7 @@ int createReader(void* handle, struct ArrowSchema* schema, const SparkDsReaderIn
     reader->state["partitions"] = get(source->options, "partitions", "2");
     reader->state["batch_size"] = get(source->options, "batch_size", "1000");
     for (const char* option : {"fail", "slice", "short", "null_rows", "wait_for_interrupt",
-                               "task_path", "states", "stateless", "slow_read",
+                               "task_path", "states", "stateless", "slow_read", "released_path",
                                "ignore_read_schema"}) {
       reader->state[option] = get(source->options, option, "");
     }
@@ -1246,9 +1253,11 @@ int createStreamReader(void* handle, struct ArrowSchema* schema,
     reader->state["batch_size"] = get(source->options, "batch_size", "1000");
     for (const char* option :
          {"commit_path", "bad_offset", "bad_initial_offset", "closed_path", "starts_path",
-          "initial_offsets_path", "ranges_path", "states", "stateless", "fail"}) {
+          "initial_offsets_path", "ranges_path", "states", "stateless", "task_path", "fail"}) {
       reader->state[option] = get(source->options, option, "");
     }
+    std::string padding = get(source->options, "state_padding", "");
+    if (!padding.empty()) reader->state["padding"] = std::string(std::stoll(padding), 'x');
     *out = reader;
   });
 }
@@ -1495,8 +1504,11 @@ int readPartition(const SparkDsTaskContext* task, const SparkDsReadInfo* info,
                                       get(state, "slice", "") == "true", get(state, "short", ""),
                                       get(state, "null_rows", ""), task,
                                       get(state, "wait_for_interrupt", ""), "",
+                                      get(state, "released_path", ""),
                                       get(state, "slow_read", ""),
                                       get(state, "fail", "") == "slow_read", task->is_interrupted};
+    // Initializes the stream without get_next, which Spark must reject, and release.
+    if (get(state, "fail", "") == "null_get_next") stream->get_next = nullptr;
   });
 }
 

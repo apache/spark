@@ -57,8 +57,9 @@
  * - Batch reads. On the driver, Spark creates a reader with create_reader, pushes operations down
  *   by calling, each at most once and in this order, push_limit and prune_columns, plans the
  *   partitions with partitions, which also returns the state of the reader, and closes it. Then it
- *   calls read on the executors, in one task for each partition, with the schema to read and the
- *   state of the reader. If Spark never plans the partitions, for example to only explain the plan
+ *   calls read on the executors for each partition, with the schema to read and the state of the
+ *   reader, in tasks that may each read several partitions, for example after a coalesce or a
+ *   union. If Spark never plans the partitions, for example to only explain the plan
  *   of the query, it closes the reader once the reader is no longer referenced.
  * - Streaming reads. On the driver, Spark creates a stream reader with create_stream_reader, with
  *   the columns to read and the location of the checkpoint of the source, and keeps it until the
@@ -408,7 +409,14 @@ typedef struct SparkDsCommitOffsetInfo {
 
 /*
  * The task that calls read or create_data_writer, on an executor. It stays valid until the stream
- * that read returns is released, or until the data writer is closed.
+ * that read returns is released, or until the data writer is closed. The stream of a read may be
+ * released once the task ended, from another thread: an engine that runs a query in native code
+ * may get the stream from Spark, read it in the task that opened it and release it later, and
+ * Spark itself may read a stream on a thread that the task does not wait for, for example the one
+ * of a PipedRDD. The task stays valid until then too, and for a read, is_interrupted then also
+ * returns true once the task failed or completed, so the library may stop reading then. Such an
+ * engine may also keep the arrays and the schemas of the stream after it released the stream, so
+ * the release of an array or a schema must not use the stream or the task.
  */
 typedef struct SparkDsTaskContext {
   /* The size of this struct in the header that Spark was built with, as in SparkDsHost. */
@@ -416,15 +424,23 @@ typedef struct SparkDsTaskContext {
   /* The ID of the stage of the task, and the attempt number of the stage. */
   int32_t stage_id;
   int32_t stage_attempt_number;
-  /* The partition that the task reads or writes, and the attempt number of the task. */
+  /*
+   * The partition: for read, the index of the partition in the list that partitions or
+   * stream_partitions returned, which is not the partition of the task when Spark reads several
+   * scans or partitions in one task, for example after a union or a coalesce. It is unique within
+   * a scan, but a task that reads several scans may get the same index for each. For
+   * create_data_writer, the partition of the task that writes. Then the attempt number of the
+   * task.
+   */
   int32_t partition_id;
   int32_t attempt_number;
   /* The ID of the task attempt, unique in the Spark application. */
   int64_t task_attempt_id;
   /*
-   * Returns whether the task was killed, for example because its query was canceled. Spark cannot
-   * interrupt native code, so a read or a write that runs for long, or blocks, should check it
-   * regularly, and fail once it is true.
+   * Returns whether the task was killed, for example because its query was canceled, and for read,
+   * also whether the task failed or completed, since the stream of a read may be read after its
+   * task ended. Spark cannot interrupt native code, so a read or a write that runs for long, or
+   * blocks, should check it regularly, and fail once it is true.
    */
   bool (*is_interrupted)(const struct SparkDsTaskContext* task);
 } SparkDsTaskContext;
@@ -640,7 +656,8 @@ typedef struct SparkDsLibrary {
   int (*prune_columns)(void* reader, const char* const* columns, int64_t count);
 
   /*
-   * Plans the partitions of the scan. Spark reads each partition in a separate task.
+   * Plans the partitions of the scan. Spark reads each partition with a call of read, in a task
+   * that may read several partitions, for example after a coalesce or a union.
    *
    * info: nothing yet but its size, so that inputs can be added within this version
    * add_partition: called with each partition, serialized in a format defined by the library
@@ -713,11 +730,13 @@ typedef struct SparkDsLibrary {
    * out: the stream to initialize. Each array of the stream is a struct array whose fields are the
    *      columns of the schema to read, info->schema. The callbacks of the stream can be called
    *      from any thread, but never concurrently. get_next may block, for example on network
-   *      I/O, but Spark cannot interrupt native code: when the task is killed, Spark only stops
-   *      reading once get_next returns, and then releases the stream. So a get_next that blocks
-   *      forever keeps the task running, unless the task reaper (spark.task.reaper.enabled and
-   *      spark.task.reaper.killTimeout) kills the executor. Use timeouts for blocking
-   *      operations, and check task->is_interrupted.
+   *      I/O, but Spark cannot interrupt native code: when Spark reads the stream itself and the
+   *      task is killed, Spark only stops reading once get_next returns, and then releases the
+   *      stream. So a get_next that blocks forever keeps the task running, unless the task reaper
+   *      (spark.task.reaper.enabled and spark.task.reaper.killTimeout) kills the executor. An
+   *      engine that gets the stream from Spark reads and releases it itself (see
+   *      SparkDsTaskContext). Use timeouts for blocking operations, and check
+   *      task->is_interrupted.
    */
   int (*read)(const SparkDsTaskContext* task, const SparkDsReadInfo* info,
               struct ArrowArrayStream* out);

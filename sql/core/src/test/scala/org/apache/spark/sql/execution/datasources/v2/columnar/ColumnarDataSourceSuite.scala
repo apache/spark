@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.connector.catalog.{Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
+import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.connector.read.streaming.{ReadLimit, SupportsAdmissionControl}
 import org.apache.spark.sql.connector.write.{DataWriter, PhysicalWriteInfoImpl, WriterCommitMessage}
 import org.apache.spark.sql.execution.{ApplyColumnarRulesAndInsertTransitions, ColumnarRule, ColumnarToRowExec, RowToColumnConverter, SparkPlan}
@@ -1110,10 +1110,8 @@ class TestRangeStreamReader(end: Long, schema: StructType, table: String)
     Array(TestRangePartition(offset(start), offset(end)))
   }
 
-  override def read(partition: InputPartition): PartitionReader[ColumnarBatch] = {
-    val range = partition.asInstanceOf[TestRangePartition]
-    new TestBatchReader(range.lo, range.hi, schema)
-  }
+  override def readerFactory(): PartitionReaderFactory =
+    new TestRangeReaderFactory(schema, arrowBatchSize = 0, ownedBatches = false)
 }
 
 object TestRangeStreamReader {
