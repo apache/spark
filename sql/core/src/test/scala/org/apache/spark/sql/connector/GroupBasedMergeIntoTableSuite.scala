@@ -225,6 +225,8 @@ class GroupBasedMergeIntoTableSuite extends MergeIntoTableSuiteBase {
         """{ "pk": 1, "salary": 100, "dep": "hr" }
           |{ "pk": 2, "salary": 200, "dep": "software" }
           |{ "pk": 3, "salary": 300, "dep": "finance" }
+          |{ "pk": 4, "salary": 400, "dep": "hr" }
+          |{ "pk": 5, "salary": 100, "dep": "hr" }
           |""".stripMargin)
 
       val sourceDF = Seq(1, 3, 6).toDF("pk")
@@ -243,11 +245,12 @@ class GroupBasedMergeIntoTableSuite extends MergeIntoTableSuiteBase {
              | UPDATE SET t.salary = t.salary + 1
              |WHEN NOT MATCHED THEN
              | INSERT (pk, salary, dep) VALUES (s.pk, 0, 'hr')
-             |WHEN NOT MATCHED BY SOURCE AND t.dep IN ('hr', 'finance') THEN
+             |WHEN NOT MATCHED BY SOURCE AND t.dep IN ('hr', 'finance') AND t.salary > 150 THEN
              | DELETE
              |""".stripMargin)
       }
 
+      // BooleanSimplification reduces the pushed `D OR (D AND t.salary > 150)` to `D`
       assert(cond.sql == "(t.dep IN ('hr', 'finance'))", s"unexpected pushable condition: $cond")
       assert(groupFilterCond.isEmpty, "runtime group filtering must stay disabled")
 
@@ -257,6 +260,7 @@ class GroupBasedMergeIntoTableSuite extends MergeIntoTableSuiteBase {
           Row(1, 101, "hr"), // update
           Row(2, 200, "software"), // unchanged, never read
           Row(3, 301, "finance"), // update
+          Row(5, 100, "hr"), // unchanged, read and carried over
           Row(6, 0, "hr"))) // insert
 
       // "software" can match neither the ON condition nor the NOT MATCHED BY SOURCE condition,
@@ -291,6 +295,7 @@ class GroupBasedMergeIntoTableSuite extends MergeIntoTableSuiteBase {
              |""".stripMargin)
       }
 
+      // constant folding and BooleanSimplification reduce the pushed `(1 = 0) OR D` to `D`
       assert(cond.sql == "(t.dep IN ('hr', 'finance'))", s"unexpected pushable condition: $cond")
       assert(groupFilterCond.isEmpty, "runtime group filtering must stay disabled")
 
@@ -331,6 +336,7 @@ class GroupBasedMergeIntoTableSuite extends MergeIntoTableSuiteBase {
              |""".stripMargin)
       }
 
+      // the pushed disjunction is kept as is, it is not rewritten into an IN list
       assert(
         cond.sql == "((t.dep = 'hr') OR (t.dep = 'finance'))",
         s"unexpected pushable condition: $cond")
@@ -341,6 +347,47 @@ class GroupBasedMergeIntoTableSuite extends MergeIntoTableSuiteBase {
         Seq(
           Row(1, 101, "hr"), // update
           Row(2, 200, "software"))) // unchanged
+    }
+  }
+
+  test("merge pushes target predicates implied by a disjunctive ON condition to target") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |{ "pk": 3, "salary": 300, "dep": "finance" }
+          |{ "pk": 4, "salary": 400, "dep": "it" }
+          |""".stripMargin)
+
+      val sourceDF = Seq(1, 2, 4).toDF("pk")
+      sourceDF.createOrReplaceTempView("source")
+
+      // the ON condition has no target-only conjunct, but every row it matches satisfies
+      // t.dep = 'hr' OR t.dep = 'it', so that predicate can take part in the disjunction
+      val (cond, groupFilterCond) = executeAndKeepConditions {
+        sql(
+          s"""MERGE INTO $tableNameAsString t
+             |USING source s
+             |ON (t.pk = s.pk AND t.dep = 'hr') OR (t.pk = s.pk AND t.dep = 'it')
+             |WHEN MATCHED THEN
+             | UPDATE SET t.salary = t.salary + 1
+             |WHEN NOT MATCHED BY SOURCE AND t.dep = 'finance' THEN
+             | DELETE
+             |""".stripMargin)
+      }
+
+      // the pushed disjunction is kept as is, it is not rewritten into an IN list
+      assert(
+        cond.sql == "(((t.dep = 'hr') OR (t.dep = 'it')) OR (t.dep = 'finance'))",
+        s"unexpected pushable condition: $cond")
+      assert(groupFilterCond.isEmpty, "runtime group filtering must stay disabled")
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 101, "hr"), // update
+          Row(2, 200, "software"), // unchanged, matches neither branch of the ON condition
+          Row(4, 401, "it"))) // update
     }
   }
 
@@ -372,6 +419,7 @@ class GroupBasedMergeIntoTableSuite extends MergeIntoTableSuiteBase {
              |""".stripMargin)
       }
 
+      // the pushed disjunction is kept as is, it is not rewritten into an IN list
       assert(
         cond.sql == "(((t.dep = 'hr') OR (t.dep = 'finance')) OR (t.dep = 'support'))",
         s"unexpected pushable condition: $cond")
@@ -453,6 +501,7 @@ class GroupBasedMergeIntoTableSuite extends MergeIntoTableSuiteBase {
              |""".stripMargin)
       }
 
+      // BooleanSimplification reduces the pushed `true OR D` to `true`
       assert(cond == TrueLiteral, s"unexpected pushable condition: $cond")
       assert(groupFilterCond.isEmpty, "runtime group filtering must stay disabled")
 
@@ -461,6 +510,47 @@ class GroupBasedMergeIntoTableSuite extends MergeIntoTableSuiteBase {
         Seq(
           Row(1, 101, "hr"), // update
           Row(2, 201, "software"))) // update outside of NOT MATCHED BY SOURCE condition
+
+      checkReplacedPartitions(Seq("hr", "software", "finance"))
+    }
+  }
+
+  test("merge does not push NOT MATCHED BY SOURCE predicates on CHAR columns") {
+    withTempView("source") {
+      createTable("pk INT NOT NULL, salary INT, dep CHAR(8)")
+
+      // CHAR values may be stored without padding, e.g. if they were written with the legacy
+      // conf below or by another engine; reads pad them on the Spark side
+      withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+        append("pk INT NOT NULL, salary INT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }
+            |{ "pk": 2, "salary": 200, "dep": "software" }
+            |{ "pk": 3, "salary": 300, "dep": "finance" }
+            |""".stripMargin)
+      }
+
+      Seq(1).toDF("pk").createOrReplaceTempView("source")
+
+      // the CHAR literals in a pushed condition would be padded while the stored values are not,
+      // so the condition would match no group and nothing would be deleted
+      val (cond, groupFilterCond) = executeAndKeepConditions {
+        sql(
+          s"""MERGE INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk AND t.dep IN ('hr', 'finance')
+             |WHEN MATCHED THEN
+             | DELETE
+             |WHEN NOT MATCHED BY SOURCE AND t.dep IN ('hr', 'finance') THEN
+             | DELETE
+             |""".stripMargin)
+      }
+
+      assert(cond == TrueLiteral, s"unexpected pushable condition: $cond")
+      assert(groupFilterCond.isEmpty, "runtime group filtering must stay disabled")
+
+      checkAnswer(
+        sql(s"SELECT pk FROM $tableNameAsString"),
+        Seq(Row(2))) // 1 deleted by MATCHED, 3 deleted by NOT MATCHED BY SOURCE
 
       checkReplacedPartitions(Seq("hr", "software", "finance"))
     }

@@ -25,13 +25,14 @@ import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, JoinType, LeftAnti
 import org.apache.spark.sql.catalyst.plans.logical.{DeleteAction, Filter, HintInfo, InsertAction, InsertOnlyMerge, Join, JoinHint, LogicalPlan, MergeAction, MergeIntoTable, MergeRows, NO_BROADCAST_AND_REPLICATION, Project, ReplaceData, UpdateAction, WriteDelta}
 import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Copy, Delete, Discard, Insert, Instruction, Keep, ROW_ID, Split, Update}
 import org.apache.spark.sql.catalyst.trees.TreePattern.MERGE_INTO_TABLE
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{COPY_OPERATION, INSERT_OPERATION, OPERATION_COLUMN, UPDATE_OPERATION}
 import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations
 import org.apache.spark.sql.connector.write.{RowLevelOperationTable, SupportsDelta}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.MERGE
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{CharType, IntegerType}
 
 /**
  * A rule that rewrites MERGE operations using plans that operate on individual or groups of rows.
@@ -179,16 +180,20 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
     //   match no action and are simply carried over, so the ON condition can filter the target
     // - if every NOT MATCHED BY SOURCE clause is conditional, a target row can be skipped only
     //   if it satisfies neither the ON condition nor any of those conditions, so the filter is
-    //   their disjunction; only the target-only part of the ON condition can take part, as a
-    //   disjunction that references the source is not a valid filter for the target table
+    //   their disjunction; the ON condition takes part through the strongest target-only
+    //   predicate it implies (which may itself be a disjunction), as a disjunction that
+    //   references the source is not a valid filter for the target table
     // - an unconditional NOT MATCHED BY SOURCE clause matches any target row and disables this
+    // - so does a disjunction that references a CHAR column, see `referencesCharColumn`
     val pushableCond = if (notMatchedBySourceActions.isEmpty) {
       cond
     } else if (notMatchedBySourceActions.exists(_.condition.isEmpty)) {
       TrueLiteral
     } else {
-      val (targetCond, _) = splitTargetPredicates(readRelation, cond)
-      (targetCond +: notMatchedBySourceActions.flatMap(_.condition)).reduce(Or)
+      val targetCond = extractPredicatesWithinOutputSet(cond, readRelation.outputSet)
+        .getOrElse(TrueLiteral)
+      val targetFilter = (targetCond +: notMatchedBySourceActions.flatMap(_.condition)).reduce(Or)
+      if (referencesCharColumn(targetFilter)) TrueLiteral else targetFilter
     }
 
     // predicates of the ON condition can be used to filter the target table at runtime
@@ -271,6 +276,20 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
       case OuterReference(e) => e
     }
     Exists(Filter(condWithOuterRefs, source), outerRefs)
+  }
+
+  // checks whether the given condition references a column whose type contains CHAR
+  // CHAR columns are padded on read by ApplyCharTypePadding, which runs after this rule, but the
+  // condition pushed to the target table keeps referencing the stored value while the literals
+  // it is compared with get padded; if CHAR values are stored without padding (e.g. written with
+  // spark.sql.legacy.charVarcharAsString or by another engine), such a condition can skip groups
+  // with rows that the rest of the plan would match
+  private def referencesCharColumn(cond: Expression): Boolean = {
+    cond.references.exists { attr =>
+      CharVarcharUtils.getRawType(attr.metadata).exists { rawType =>
+        rawType.existsRecursively(_.isInstanceOf[CharType])
+      }
+    }
   }
 
   // build a rewrite plan for sources that support row deltas
@@ -404,23 +423,13 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
       targetTable: LogicalPlan,
       cond: Expression): (LogicalPlan, Expression) = {
 
-    val (targetCond, joinCond) = splitTargetPredicates(targetTable, cond)
-    (Filter(targetCond, targetTable), joinCond)
-  }
-
-  // splits the given condition into a part that can be evaluated against the target table alone
-  // and a part that requires the source as well, each returned as a conjunction
-  private def splitTargetPredicates(
-      targetTable: LogicalPlan,
-      cond: Expression): (Expression, Expression) = {
-
     val predicates = splitConjunctivePredicates(cond)
     val (targetPredicates, joinPredicates) = predicates.partition { predicate =>
       predicate.references.subsetOf(targetTable.outputSet)
     }
     val targetCond = targetPredicates.reduceOption(And).getOrElse(TrueLiteral)
     val joinCond = joinPredicates.reduceOption(And).getOrElse(TrueLiteral)
-    (targetCond, joinCond)
+    (Filter(targetCond, targetTable), joinCond)
   }
 
   private def join(
