@@ -417,6 +417,12 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
         // Here we perform additional checks for them.
         checkIfSelfReferenceIsPlacedCorrectly(unionLoop, unionLoop.id)
 
+      // The child `Filter` holds the same condition. Check it first so that an error of the
+      // subquery in the `Filter` does not hide that the constraint cannot have a subquery. A
+      // missing table is still reported first, by the bottom-up traversal.
+      case AddCheckConstraint(Filter(_, relation), check, _) if relation.resolved =>
+        check.failIfContainsSubquery()
+
       case _ =>
     }
 
@@ -1031,13 +1037,11 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 // not built-in already fail earlier in analysis: unknown functions with
                 // UNRESOLVED_ROUTINE and persistent SQL functions with UNSUPPORTED_SQL_UDF_USAGE.
                 // Here we only need to reject user-defined functions (Scala/Python/Java/Hive UDFs
-                // and v2 catalog functions, all of which are `UserDefinedExpression`), which
-                // resolve successfully.
-                genExpr.child.foreach {
-                  case udf: UserDefinedExpression =>
+                // and v2 catalog functions), which resolve successfully.
+                StoredExpressionFunctions.findUserDefinedFunctionCall(genExpr.child).foreach {
+                  case (_, functionName) =>
                     throw unsupportedExpressionError(
-                      s"failed to resolve `${udf.name}` to a built-in function")
-                  case _ =>
+                      s"failed to resolve $functionName to a built-in function")
                 }
                 genExpr.validate(col.name, col.dataType, create.columns)
               }
@@ -1051,6 +1055,9 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               errorClass = "NON_DETERMINISTIC_CHECK_CONSTRAINT",
               messageParameters = Map("checkCondition" -> a.checkConstraint.condition)
             )
+
+          case a: AddCheckConstraint =>
+            a.checkConstraint.failIfCallsUserDefinedFunction()
 
           case alter: AlterTableCommand =>
             checkAlterTableCommand(alter)

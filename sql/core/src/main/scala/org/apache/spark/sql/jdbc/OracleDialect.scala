@@ -213,8 +213,9 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
       case BINARY_DOUBLE => Some(DoubleType) // Value for OracleTypes.BINARY_DOUBLE
       case INTERVAL_YM => Some(YearMonthIntervalType())
       case INTERVAL_DS => Some(DayTimeIntervalType())
-      case TIMESTAMP if !conf.legacyOracleTimestampNTZMappingEnabled && typeName != null &&
-          typeName.toUpperCase(Locale.ROOT).matches("DATE|TIMESTAMP") =>
+      case TIMESTAMP if typeName != null &&
+          typeName.toUpperCase(Locale.ROOT).matches("DATE|TIMESTAMP") &&
+          zonelessTimestampAsNTZ(md) =>
         val metadata = if (md != null) md.build() else Metadata.empty
         // Absent scale metadata: Oracle TIMESTAMP defaults to TIMESTAMP(6).
         val scale = if (metadata.contains("scale")) metadata.getLong("scale").toInt else 6
@@ -224,6 +225,16 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
           isTimestampNTZ = true, scale = scale, preferTimestampNanos = preferNanos)
         Some(resolved)
       case _ => None
+    }
+  }
+
+  // JdbcUtils.getSchema passes the zonelessTimestampAsNTZ option through the column metadata.
+  private def zonelessTimestampAsNTZ(md: MetadataBuilder): Boolean = {
+    val metadata = if (md != null) md.build() else Metadata.empty
+    if (metadata.contains(JDBCOptions.JDBC_ZONELESS_TIMESTAMP_AS_NTZ)) {
+      metadata.getBoolean(JDBCOptions.JDBC_ZONELESS_TIMESTAMP_AS_NTZ)
+    } else {
+      timestampNTZAsWallClock
     }
   }
 

@@ -954,6 +954,23 @@ object LimitPushDown extends Rule[LogicalPlan] {
     }
   }
 
+  // Pushes `LocalLimit(1)` below a group-only Aggregate under `LIMIT 1` and replaces the Aggregate
+  // with a Project of its child. If that Project would read float/double keys that the Aggregate
+  // normalizes, the Aggregate is kept, with the limit still pushed below it.
+  private def pushLimitOneThroughGroupOnlyAggregate(
+      limitExpr: Expression,
+      agg: Aggregate): LogicalPlan = {
+    if (!NormalizeFloatingNumbers.readsNormalizedKeys(agg, agg.aggregateExpressions)) {
+      val newAgg = EliminateSorts(agg.copy(child = LocalLimit(limitExpr, agg.child)))
+        .asInstanceOf[Aggregate]
+      Project(newAgg.aggregateExpressions, newAgg.child)
+    } else if (agg.child.maxRowsPerPartition.exists(_ <= 1)) {
+      agg
+    } else {
+      EliminateSorts(agg.copy(child = LocalLimit(limitExpr, agg.child)))
+    }
+  }
+
   private def pushLocalLimitThroughJoin(limitExpr: Expression, join: Join): Join = {
     join.joinType match {
       case RightOuter if join.condition.nonEmpty =>
@@ -1007,11 +1024,9 @@ object LimitPushDown extends Rule[LogicalPlan] {
       LocalLimit(exp, project.copy(child = pushLocalLimitThroughJoin(exp, join)))
     // Push down limit 1 through Aggregate and turn Aggregate into Project if it is group only.
     case Limit(le @ IntegerLiteral(1), a: Aggregate) if a.groupOnly =>
-      val newAgg = EliminateSorts(a.copy(child = LocalLimit(le, a.child))).asInstanceOf[Aggregate]
-      Limit(le, Project(newAgg.aggregateExpressions, newAgg.child))
+      Limit(le, pushLimitOneThroughGroupOnlyAggregate(le, a))
     case Limit(le @ IntegerLiteral(1), p @ Project(_, a: Aggregate)) if a.groupOnly =>
-      val newAgg = EliminateSorts(a.copy(child = LocalLimit(le, a.child))).asInstanceOf[Aggregate]
-      Limit(le, p.copy(child = Project(newAgg.aggregateExpressions, newAgg.child)))
+      Limit(le, p.copy(child = pushLimitOneThroughGroupOnlyAggregate(le, a)))
     // Merge offset value and limit value into LocalLimit and pushes down LocalLimit through Offset.
     case LocalLimit(le, Offset(oe, grandChild)) =>
       Offset(oe, LocalLimit(Add(le, oe), grandChild))
@@ -2633,19 +2648,16 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         // uses nothing at all, or only inexpensive items. Then we can push it because it might
         // eliminate more data quickly and it may also be something which could be evaluated at
         // the storage layer. We may wish to improve this heuristic in the future.
-        def isCheap(used: AttributeMap[Alias]): Boolean = !used.exists(_._2.child.expensive)
+        def isCheap(used: AttributeMap[Alias]): Boolean = !used.exists(a => isExpensive(a._2.child))
         // Split the filter's components into cheap and expensive while keeping track of
         // what each references from the projection. The cheap components written before the
         // first expensive one are all pushed. After it, a throwable component (e.g.
         // `raise_error`, possibly inside a projected alias) stays above with the expensive ones,
         // so it is not evaluated on rows the components before it would have filtered out.
-        val (leading, rest) = originalAndRewrittenConditionsWithUsedAlias.span {
-          case (_, used, _) => isCheap(used)
-        }
-        val (cheapRest, expensiveWithUsed) = rest.partition {
-          case (_, used, replaced) => isCheap(used) && !replaced.throwable
-        }
-        val cheapWithUsed = leading ++ cheapRest
+        val (cheapWithUsed, expensiveWithUsed) = splitPushable(
+          originalAndRewrittenConditionsWithUsedAlias)(
+          canPush = { case (_, used, _) => isCheap(used) },
+          throwable = { case (_, _, replaced) => replaced.throwable })
         // Cheap filters (cases 1 & 2) pushed below the projection.
         val baseChild: LogicalPlan = if (cheapWithUsed.nonEmpty) {
           val combinedCheapFilter = cheapWithUsed.map(_._3).reduce(And)
@@ -2697,24 +2709,18 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     // We can push down deterministic predicate through Aggregate, including throwable predicate.
     // If we can push down a filter through Aggregate, it means the filter only references the
     // grouping keys or constants. The Aggregate operator can't reduce distinct values of grouping
-    // keys so the filter won't see any new data after push down.
+    // keys so the filter won't see any new data after push down. Float/double grouping keys are
+    // normalized by the Aggregate, so the pushed filter reads them normalized wherever that could
+    // change its result (see `pushBelowAggregate`). A throwable predicate written after one that
+    // stays up is not pushed, though (see `splitPushable`). This includes a predicate over a
+    // throwable alias of the aggregate.
     case filter @ Filter(condition, aggregate: Aggregate)
       if aggregate.aggregateExpressions.forall(_.deterministic)
         && aggregate.groupingExpressions.nonEmpty =>
-      val aliasMap = getAliasMap(aggregate)
-
-      // For each filter, expand the alias and check if the filter can be evaluated using
-      // attributes produced by the aggregate operator's child operator.
-      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
-        val replaced = replaceAlias(cond, aliasMap)
-        cond.deterministic && cond.references.nonEmpty &&
-          replaced.references.subsetOf(aggregate.child.outputSet)
-      }
+      val (pushDown, stayUp) = pushBelowAggregate(splitConjunctivePredicates(condition), aggregate)
 
       if (pushDown.nonEmpty) {
-        val pushDownPredicate = pushDown.reduce(And)
-        val replaced = replaceAlias(pushDownPredicate, aliasMap)
-        val newAggregate = aggregate.copy(child = Filter(replaced, aggregate.child))
+        val newAggregate = aggregate.copy(child = Filter(pushDown.reduce(And), aggregate.child))
         // If there is no more filter to stay up, just eliminate the filter.
         // Otherwise, create "Filter(stayUp) <- Aggregate <- Filter(pushDownPredicate)".
         if (stayUp.isEmpty) newAggregate else Filter(stayUp.reduce(And), newAggregate)
@@ -2726,19 +2732,14 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     // pushed beneath must satisfy the following conditions:
     // 1. All the expressions are part of window partitioning key. The expressions can be compound.
     // 2. Deterministic.
-    // 3. Placed before any non-deterministic predicates.
+    // 3. Not throwable, if a predicate written before it stays up (see `splitPushable`).
     case filter @ Filter(condition, w: Window)
       if w.partitionSpec.forall(_.isInstanceOf[AttributeReference]) =>
       val partitionAttrs = AttributeSet(w.partitionSpec.flatMap(_.references))
 
-      val (candidates, nonDeterministic) =
-        splitConjunctivePredicates(condition).partition(_.deterministic)
-
-      val (pushDown, rest) = candidates.partition { cond =>
-        cond.references.subsetOf(partitionAttrs)
+      val (pushDown, stayUp) = splitPushableConjuncts(condition) { cond =>
+        cond.deterministic && cond.references.subsetOf(partitionAttrs)
       }
-
-      val stayUp = rest ++ nonDeterministic
 
       if (pushDown.nonEmpty) {
         val pushDownPredicate = pushDown.reduce(And)
@@ -2750,7 +2751,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
 
     case filter @ Filter(condition, union: Union) =>
       // Union could change the rows, so non-deterministic predicate can't be pushed down
-      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition(_.deterministic)
+      val (pushDown, stayUp) = splitPushableConjuncts(condition)(_.deterministic)
 
       if (pushDown.nonEmpty) {
         val pushDownCond = pushDown.reduceLeft(And)
@@ -2780,7 +2781,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       }
 
     case filter @ Filter(condition, watermark: EventTimeWatermark) =>
-      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { p =>
+      val (pushDown, stayUp) = splitPushableConjuncts(condition) { p =>
         p.deterministic && !p.references.contains(watermark.eventTime)
       }
 
@@ -2796,7 +2797,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
 
     case filter @ Filter(_, u: UnaryNode)
         if canPushThrough(u) && u.expressions.forall(_.deterministic) =>
-      pushDownPredicate(filter, u.child) { predicate =>
+      pushDownPredicate(filter, u.child, keepThrowableUp = canDropRows(u)) { predicate =>
         u.withNewChildren(Seq(Filter(predicate, u.child)))
       }
   }
@@ -2821,21 +2822,112 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     case _ => false
   }
 
+  /**
+   * Whether an operator of [[canPushThrough]] can output no row for an input row. Below such an
+   * operator, a pushed condition sees the input rows it drops, which the condition above it
+   * would never see.
+   */
+  private def canDropRows(p: UnaryNode): Boolean = p match {
+    case g: Generate => !g.outer
+    case _: ScriptTransformation => true
+    case _ => false
+  }
+
+  // Splits `conds`, the conjuncts of a filter on top of `aggregate`, into the ones to push below
+  // it, rewritten in terms of the aggregate's child, and the ones that stay above it. A conjunct
+  // can be pushed if it is deterministic and, after alias expansion, only reads the aggregate's
+  // child (that is, grouping keys and constants), unless it is throwable and a conjunct written
+  // before it stays above (see `splitPushable`). Expressions above the aggregate see its
+  // float/double grouping keys normalized (see NormalizeFloatingNumbers: -0.0 becomes 0.0 and every
+  // NaN becomes one canonical NaN), so a pushed conjunct reads them normalized too, wherever the
+  // raw value could change its result. If the form of the keys the aggregate outputs may still
+  // change (with grouped-agg pandas UDFs, see NormalizeFloatingNumbers.mayChangeKeyForm), a
+  // conjunct that normalizing would change stays above it instead, where it reads whatever the
+  // final plan outputs. Streaming aggregates keep the previous behavior, with conjuncts pushed
+  // below them unnormalized: rules can still replace them with a Project of the raw keys (see
+  // NormalizeFloatingNumbers.readsNormalizedKeys), and keeping a conjunct above one could separate
+  // two aggregates that RemoveRedundantAggregates would merge, adding a stateful operator. The CTE
+  // rule PushdownPredicatesAndPruneColumnsForCTEDef uses this too, to find the filters it pushed.
+  private[optimizer] def pushBelowAggregate(
+      conds: Seq[Expression],
+      aggregate: Aggregate): (Seq[Expression], Seq[Expression]) = {
+    val aliasMap = getAliasMap(aggregate)
+    val keys = if (aggregate.isStreaming) {
+      Nil
+    } else {
+      aggregate.groupingExpressions
+        .filter(e => NormalizeFloatingNumbers.needNormalize(e.dataType))
+        .map(trimAliases)
+    }
+    val mayChangeKeyForm = NormalizeFloatingNumbers.mayChangeKeyForm(aggregate)
+    // (condition, condition with aliases expanded, pushed form or None if it cannot be pushed)
+    val candidates = conds.map { cond =>
+      val replaced = replaceAlias(cond, aliasMap)
+      val pushable = cond.deterministic && cond.references.nonEmpty &&
+        replaced.references.subsetOf(aggregate.child.outputSet)
+      val normalized = if (pushable && keys.nonEmpty) {
+        normalizeGroupingExpressions(replaced, keys)
+      } else {
+        replaced
+      }
+      val canPush = pushable && (!mayChangeKeyForm || normalized.fastEquals(replaced))
+      (cond, replaced, if (canPush) Some(normalized) else None)
+    }
+    // The aliases are expanded in the pushed conjunct, so a conjunct over a throwable alias is
+    // throwable too.
+    val (pushDown, stayUp) = splitPushable(candidates)(
+      canPush = _._3.isDefined,
+      throwable = { case (_, replaced, _) => replaced.throwable })
+    (pushDown.map(_._3.get), stayUp.map(_._1))
+  }
+
+  // Rewrites `e` so that it gives the same result on the raw values of `grouping` as `e` gives on
+  // their normalized values (see NormalizeFloatingNumbers). Each occurrence of a grouping
+  // expression is wrapped in its normalized form, with one exception: a float/double attribute
+  // that is a direct operand of one of the comparisons matched below is left as is, and so is a
+  // float attribute widened to double (as when a FLOAT column is compared with a DOUBLE or
+  // DECIMAL value), since widening keeps -0.0 and NaN. Those comparisons already treat -0.0 and
+  // 0.0 as equal and all NaNs as equal (see SQLOrderingUtil.compareDoubles and
+  // CodegenContext.genEqual), and so does InSet, an IN list that OptimizeIn converted. IsNull,
+  // IsNotNull and IsNaN cannot tell normalized values apart either, nor can an IN subquery, which
+  // becomes a join on EqualTo conditions (whose keys NormalizeFloatingNumbers normalizes on both
+  // sides when it is an equi-join). So wrapping would not change the result, and leaving them as
+  // is keeps plain comparisons usable by data sources and partition pruning.
+  private[optimizer] def normalizeGroupingExpressions(
+      e: Expression,
+      grouping: Seq[Expression]): Expression = e match {
+    // A grouping key already normalized when the filter was pushed through an Aggregate above on
+    // the same key. Any other normalized expression may be computed from a grouping key (when the
+    // upper Aggregate groups by an expression of this one's key), so the key inside it still has
+    // to be normalized. This also matches array and map keys: `normalize` builds new lambda
+    // variables for them, but `semanticEquals` compares canonicalized trees, which renumber them.
+    case _: KnownFloatingPointNormalized
+        if grouping.exists(g => NormalizeFloatingNumbers.normalize(g).semanticEquals(e)) => e
+    case _: EqualTo | _: EqualNullSafe | _: LessThan | _: LessThanOrEqual | _: GreaterThan |
+         _: GreaterThanOrEqual | _: In | _: InSet | _: InSubquery | _: IsNull | _: IsNotNull |
+         _: IsNaN =>
+      e.mapChildren {
+        case a: Attribute if a.dataType == FloatType || a.dataType == DoubleType => a
+        case c @ Cast(a: Attribute, DoubleType, _, _) if a.dataType == FloatType => c
+        case c => normalizeGroupingExpressions(c, grouping)
+      }
+    case _ if grouping.exists(_.semanticEquals(e)) => NormalizeFloatingNumbers.normalize(e)
+    case _ => e.mapChildren(normalizeGroupingExpressions(_, grouping))
+  }
+
   private def pushDownPredicate(
       filter: Filter,
-      grandchild: LogicalPlan)(insertFilter: Expression => LogicalPlan): LogicalPlan = {
+      grandchild: LogicalPlan,
+      keepThrowableUp: Boolean)(insertFilter: Expression => LogicalPlan): LogicalPlan = {
     // Only push down the predicates that is deterministic and all the referenced attributes
-    // come from grandchild.
+    // come from grandchild. With `keepThrowableUp`, a throwable predicate is not pushed even when
+    // it is written first, as the operator in between can drop rows it would then see.
     // TODO: non-deterministic predicates could be pushed through some operators that do not change
     // the rows.
-    val (candidates, nonDeterministic) =
-      splitConjunctivePredicates(filter.condition).partition(_.deterministic)
-
-    val (pushDown, rest) = candidates.partition { cond =>
-      cond.references.subsetOf(grandchild.outputSet)
+    val (pushDown, stayUp) = splitPushableConjuncts(filter.condition) { cond =>
+      cond.deterministic && !(keepThrowableUp && cond.throwable) &&
+        cond.references.subsetOf(grandchild.outputSet)
     }
-
-    val stayUp = rest ++ nonDeterministic
 
     if (pushDown.nonEmpty) {
       val newChild = insertFilter(pushDown.reduceLeft(And))
@@ -2848,6 +2940,29 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       filter
     }
   }
+
+  /**
+   * Splits `conds`, the conjuncts of a filter in their written order, into the ones to push below
+   * an operator and the ones to keep above it. `canPush` tells whether the operator lets a
+   * conjunct through, and `throwable` whether it may throw (e.g. `raise_error`). Every conjunct
+   * written before the first one that cannot be pushed is pushed. After it, only the conjuncts
+   * that are not throwable are pushed, so a throwable conjunct is not evaluated on rows the
+   * conjuncts before it would have filtered out. Moving a non-throwable conjunct below a
+   * throwable one is fine, as it can only reduce the rows the throwable one sees. The conjuncts
+   * to keep above are returned in the order they were written.
+   */
+  private def splitPushable[T](conds: Seq[T])(
+      canPush: T => Boolean, throwable: T => Boolean): (Seq[T], Seq[T]) = {
+    val (leading, rest) = conds.span(canPush)
+    // The head of `rest`, if any, is the first conjunct that cannot be pushed.
+    val (pushedRest, stayUp) = rest.drop(1).partition(c => canPush(c) && !throwable(c))
+    (leading ++ pushedRest, rest.take(1) ++ stayUp)
+  }
+
+  /** [[splitPushable]] over the conjuncts of `condition`, checking each for `throwable`. */
+  private def splitPushableConjuncts(condition: Expression)(
+      canPush: Expression => Boolean): (Seq[Expression], Seq[Expression]) =
+    splitPushable(splitConjunctivePredicates(condition))(canPush, _.throwable)
 
   /**
    * Splits `project` into a stack of [[Project]]s with the expensive conditions in
@@ -2904,11 +3019,17 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       expensiveConds: Seq[(Expression, AttributeMap[Alias])])
     : (LogicalPlan, AttributeSet, Seq[Expression]) = {
     val expensiveAliases = AttributeSet(
-      aliasMap.collect { case (attr, alias) if alias.child.expensive => attr })
+      aliasMap.collect { case (attr, alias) if isExpensive(alias.child) => attr })
     // Expensive sub-expressions behind each expensive alias, to spot when two aliases are the
     // same piece of work. Cheap aliases have none, so we skip the (possibly wide) cheap rest.
+    // Two aliases share work exactly when they share a regex, so version 0 of the estimate
+    // collects the regex expressions and not their ancestors.
+    val regexIsExpensive = conf.getConf(SQLConf.REGEX_PATTERN_COST_ESTIMATE_VERSION) == 0
     val expensivePartsOf = AttributeMap(expensiveAliases.toSeq.map { attr =>
-      attr -> aliasMap(attr).child.collect { case e if e.expensive => e.canonicalized }.toSet
+      attr -> aliasMap(attr).child.collect {
+        case e if e.expensive || (regexIsExpensive && e.isInstanceOf[StringRegexExpression]) =>
+          e.canonicalized
+      }.toSet
     })
     def expensiveParts(attr: Attribute): Set[Expression] =
       expensivePartsOf.getOrElse(attr, Set.empty)
@@ -2971,6 +3092,15 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     }
     (plan, computed, conditionsOf(pending))
   }
+
+  /**
+   * Whether `e` is expensive. Version 0 of the regex pattern cost estimate treats every LIKE and
+   * RLIKE as expensive. It is checked here rather than in `StringRegexExpression.expensive`,
+   * because `hasExpensiveChild` caches the answer of a parent expression.
+   */
+  private def isExpensive(e: Expression): Boolean = e.expensive ||
+    (conf.getConf(SQLConf.REGEX_PATTERN_COST_ESTIMATE_VERSION) == 0 &&
+      e.exists(_.isInstanceOf[StringRegexExpression]))
 
   /**
    * Check if we can safely push a filter through a projection, by making sure that predicate
