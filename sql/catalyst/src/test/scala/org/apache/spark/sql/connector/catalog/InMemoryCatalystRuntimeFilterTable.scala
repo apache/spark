@@ -26,7 +26,6 @@ import org.apache.spark.sql.connector.distributions.{Distribution, Distributions
 import org.apache.spark.sql.connector.expressions.{NamedReference, SortOrder, Transform}
 import org.apache.spark.sql.connector.read.{InputPartition, Scan, ScanBuilder}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.SupportsCatalystFilterGuarantees
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -55,15 +54,7 @@ class InMemoryCatalystRuntimeFilterTable(
     numRowsPerSplit: Int = Int.MaxValue)
   extends InMemoryTableWithV2Filter(name, columns, partitioning, properties, constraints,
     distribution, ordering, numPartitions, advisoryPartitionSize, isDistributionStrictlyRequired,
-    numRowsPerSplit) with SupportsCatalystFilterGuarantees {
-
-  override def fullyPushedFilterAttributes(): Array[NamedReference] = {
-    val fullyPushed = Option(properties.get(FullyPushedFilterAttributesKey))
-      .map(_.split(",").map(_.trim).toSet).getOrElse(Set.empty)
-    identityPartitionReferences.distinct.filter { ref =>
-      fullyPushed.contains(ref.fieldNames.mkString("."))
-    }
-  }
+    numRowsPerSplit) {
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     new InMemoryCatalystRuntimeFilterScanBuilder(schema, options)
@@ -95,6 +86,11 @@ class InMemoryCatalystRuntimeFilterTable(
       Option(InMemoryCatalystRuntimeFilterTable.this.properties.get(FilterAttributesKey))
         .map(_.split(",").map(_.trim).toSet)
 
+    private val fullyPushedFilterAttrs: Set[String] = Option(
+      InMemoryCatalystRuntimeFilterTable.this.properties.get(FullyPushedFilterAttributesKey))
+      .map(_.split(",").map(_.trim).toSet)
+      .getOrElse(Set.empty)
+
     /** Partition source columns that are present in the scan read schema. */
     private def partitionAttrs: Array[NamedReference] = {
       partitioning.flatMap(_.references()).distinct
@@ -105,6 +101,14 @@ class InMemoryCatalystRuntimeFilterTable(
     override def filterAttributes(): Array[NamedReference] = {
       partitionAttrs.filter { ref =>
         restrictedFilterAttrs.forall(_.contains(ref.fieldNames.mkString(".")))
+      }
+    }
+
+    // Not intersected with `filterAttributes()`, so a table can declare a fully pushed attribute
+    // that is not a filter attribute, a combination the interface forbids.
+    override def fullyPushedFilterAttributes(): Array[NamedReference] = {
+      identityPartitionAttributes.filter { ref =>
+        fullyPushedFilterAttrs.contains(ref.fieldNames.mkString("."))
       }
     }
   }
