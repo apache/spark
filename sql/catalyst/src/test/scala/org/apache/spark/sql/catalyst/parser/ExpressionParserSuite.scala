@@ -653,14 +653,18 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("semi-structured extract paths") {
-    Seq("['']", """[""]""").foreach { path =>
-      assertEqual(s"c:$path", Alias(SemiStructuredExtract($"c", "$" + path), "")())
-    }
     Seq(false, true).foreach { legacy =>
       withSQLConf(SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL.key -> legacy.toString) {
+        Seq("['']", """[""]""").foreach { path =>
+          assertEqual(s"c:$path", Alias(SemiStructuredExtract($"c", "$" + path, legacy), "")())
+        }
+        assertEqual("c:a['*']",
+          Alias(SemiStructuredExtract($"c", "$.a['*']", legacy), "*")())
+        assertEqual("c:['*']",
+          Alias(SemiStructuredExtract($"c", "$['*']", legacy), "*")())
         val alias = if (legacy) """a\nb""" else "a\nb"
         assertEqual("""c:['a\nb']""",
-          Alias(SemiStructuredExtract($"c", """$['a\nb']"""), alias)())
+          Alias(SemiStructuredExtract($"c", """$['a\nb']""", legacy), alias)())
       }
     }
   }

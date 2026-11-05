@@ -63,7 +63,9 @@ class SemiStructuredExtractResolver(expressionResolver: ExpressionResolver)
             child = semiStructuredExtractWithResolvedChildren.child,
             path = Literal(UTF8String.fromString(semiStructuredExtractWithResolvedChildren.field)),
             targetType = VariantType,
-            failOnError = true
+            failOnError = true,
+            legacyPathBackslashAsLiteral =
+              semiStructuredExtractWithResolvedChildren.legacyPathBackslashAsLiteral
           )
           timezoneAwareExpressionResolver.resolve(extractResult)
         case _ =>

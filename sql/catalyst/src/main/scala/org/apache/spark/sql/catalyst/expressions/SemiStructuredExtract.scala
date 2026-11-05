@@ -30,9 +30,12 @@ import org.apache.spark.unsafe.types.UTF8String
  * semi-structured column can only be a Variant type for now.
  * @param child The semi-structured column
  * @param field The field to extract
+ * @param legacyPathBackslashAsLiteral The path mode captured when parsing the field
  */
 case class SemiStructuredExtract(
-    child: Expression, field: String) extends UnaryExpression with Unevaluable {
+    child: Expression,
+    field: String,
+    legacyPathBackslashAsLiteral: Boolean) extends UnaryExpression with Unevaluable {
   override lazy val resolved = false
   override def dataType: DataType = StringType
 
@@ -49,9 +52,10 @@ case class SemiStructuredExtract(
 case object ExtractSemiStructuredFields extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressionsWithPruning(
     _.containsPattern(SEMI_STRUCTURED_EXTRACT), ruleId) {
-    case SemiStructuredExtract(column, field) if column.resolved =>
+    case SemiStructuredExtract(column, field, legacyPathBackslashAsLiteral) if column.resolved =>
       if (column.dataType.isInstanceOf[VariantType]) {
-        VariantGet(column, Literal(UTF8String.fromString(field)), VariantType, failOnError = true)
+        VariantGet(column, Literal(UTF8String.fromString(field)), VariantType,
+          failOnError = true, legacyPathBackslashAsLiteral = legacyPathBackslashAsLiteral)
       } else {
         throw new AnalysisException(
           errorClass = "COLUMN_IS_NOT_VARIANT_TYPE", messageParameters = Map.empty)
