@@ -19,7 +19,7 @@ package org.apache.spark.sql.internal
 
 import java.util.{Locale, Properties, TimeZone}
 import java.util
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
 import java.util.regex.Pattern
 
@@ -66,8 +66,8 @@ object SQLConf {
 
   private[this] val sqlConfEntriesUpdateLock = new Object
 
-  @volatile
-  private[this] var sqlConfEntries: util.Map[String, ConfigEntry[_]] = util.Collections.emptyMap()
+  // Concurrent map so registration does not copy the whole registry and reads stay lock-free.
+  private[this] val sqlConfEntries = new ConcurrentHashMap[String, ConfigEntry[_]]()
 
   // Advanced after every `sqlConfEntries` update, so a reader that sees a version also sees the
   // entries it counts.
@@ -85,17 +85,13 @@ object SQLConf {
     require(!ConfigRegistry.containsConfig(entry.key),
       s"${entry.key} is defined in a .textproto config file. " +
         s"Use buildConfFromConfigFile instead of buildConf.")
-    val updatedMap = new java.util.HashMap[String, ConfigEntry[_]](sqlConfEntries)
-    updatedMap.put(entry.key, entry)
-    sqlConfEntries = updatedMap
+    sqlConfEntries.put(entry.key, entry)
     sqlConfEntriesVersion += 1
   }
 
   // For testing only
   private[sql] def unregister(entry: ConfigEntry[_]): Unit = sqlConfEntriesUpdateLock.synchronized {
-    val updatedMap = new java.util.HashMap[String, ConfigEntry[_]](sqlConfEntries)
-    updatedMap.remove(entry.key)
-    sqlConfEntries = updatedMap
+    sqlConfEntries.remove(entry.key)
     sqlConfEntriesVersion += 1
   }
 
@@ -134,8 +130,12 @@ object SQLConf {
       s"$settingsVersion, entriesVersion=$entriesVersion, keys=${retained.size})"
   }
 
+  // ConcurrentHashMap rejects null keys; treat a null key as unregistered.
+  private[this] def registeredEntry(key: String): ConfigEntry[_] =
+    if (key == null) null else sqlConfEntries.get(key)
+
   private[internal] def getConfigEntry(key: String): ConfigEntry[_] = {
-    Option(sqlConfEntries.get(key)).getOrElse(ConfigEntry.findProtoDefinedEntry(key))
+    Option(registeredEntry(key)).getOrElse(ConfigEntry.findProtoDefinedEntry(key))
   }
 
   private[sql] def isSessionBindingPolicy(key: String): Boolean = {
@@ -171,7 +171,7 @@ object SQLConf {
   }
 
   private[sql] def containsConfigKey(key: String): Boolean = {
-    sqlConfEntries.containsKey(key) || ConfigRegistry.containsConfig(key)
+    registeredEntry(key) != null || ConfigRegistry.containsConfig(key)
   }
 
   def registerStaticConfigKey(key: String): Unit = staticConfKeysUpdateLock.synchronized {
@@ -315,7 +315,7 @@ object SQLConf {
       val isSchedulerEventLoopThread = SparkContext.getActive
         .flatMap { sc => Option(sc.dagScheduler) }
         .map(_.eventProcessLoop.eventThread)
-        .exists(_.getId == Thread.currentThread().getId)
+        .exists(_.threadId == Thread.currentThread().threadId)
       if (isSchedulerEventLoopThread) {
         // DAGScheduler event loop thread does not have an active SparkSession, the `confGetter`
         // will return `fallbackConf` which is unexpected. Here we require the caller to get the
@@ -669,6 +669,20 @@ object SQLConf {
     .version("4.3.0")
     .booleanConf
     .createWithDefault(true)
+
+  val REGEX_PATTERN_COST_ESTIMATE_VERSION =
+    buildConf("spark.sql.optimizer.regexPatternCostEstimateVersion")
+    .internal()
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .doc(s"How ${AVOID_DOUBLE_FILTER_EVAL.key} decides whether a LIKE or RLIKE expression is " +
+      "expensive. 0: every LIKE and RLIKE expression is expensive, as in 4.2.0 for a subject " +
+      "that is not a literal. 1: only one whose pattern is likely to be expensive to match. A " +
+      "streaming query keeps the version recorded in its checkpoint, and one restarted from a " +
+      "checkpoint without it uses 0.")
+    .version("4.2.2")
+    .intConf
+    .checkValue(_ >= 0, "The version of the regex pattern cost estimate must be nonnegative.")
+    .createWithDefault(1)
 
   val ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS =
     buildConf("spark.sql.experimental.optimizer.transpilePyUDFs")
@@ -1558,6 +1572,18 @@ object SQLConf {
         "handles skew in shuffled join (sort-merge and shuffled hash) by splitting (and " +
         "replicating if needed) skewed partitions.")
       .version("3.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val SKEW_JOIN_PER_JOIN_FALLBACK_ENABLED =
+    buildConf("spark.sql.adaptive.skewJoin.perJoinFallback.enabled")
+      .internal()
+      .doc("When true, a plan whose all-at-once skew join optimization breaks a requirement " +
+        "keeps the splits the plan can still satisfy, instead of giving up the optimization for " +
+        "every join. When false, such a plan is left unchanged. Only takes effect when " +
+        "'spark.sql.adaptive.forceOptimizeSkewedJoin' is false.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(true)
 
@@ -3267,14 +3293,9 @@ object SQLConf {
         "supports it, such as a CASE WHEN with many branches, into methods that take the input " +
         "variables they read as parameters, the way code generation outside whole stage codegen " +
         "splits it. In a stage whose expressions are split, the methods that subexpression " +
-        "elimination's discarded first pass added are removed; and in every stage, a slot of " +
-        "a compacted mutable state array counts as the field it is when code moves into a " +
-        "method: an operator's method that took it as a parameter, and failed to compile, now " +
-        "compiles, and a common expression's definition reading one, which stayed inline, " +
-        "gets its method. When false, " +
-        "the code stays in the method of its operator, where a large enough expression goes " +
-        "past the JVM's 64KB method limit and fails to compile, and the generated code is what " +
-        "it was before this conf existed.")
+        "elimination's discarded first pass added are removed. When false, the code stays in " +
+        "the method of its operator, where a large enough expression goes past the JVM's 64KB " +
+        "method limit and fails to compile.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
@@ -4565,6 +4586,17 @@ object SQLConf {
       .doc("When true, SQL Configs of the current active SparkSession instead of the captured " +
         "ones will be applied during the parsing and analysis phases of the view resolution.")
       .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val USE_CURRENT_SQL_CONFIGS_FOR_GENERATED_COLUMN =
+    buildConf("spark.sql.legacy.useCurrentConfigsForGeneratedColumn")
+      .internal()
+      .doc("When true, a write parses and analyzes the SQL text of a generation expression of a " +
+        "Data Source V2 table under the SQL configs of the current active SparkSession, and " +
+        "CREATE TABLE and REPLACE TABLE do not reject a text that the session reads differently.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
@@ -7465,9 +7497,9 @@ object SQLConf {
     .doc("Comma-separated list of native data source packages (.sparkpkg files), and of " +
       "directories that contain them, on the local file system of the driver. Spark adds a " +
       "package to the artifacts of the session when one of its data sources is used, so that " +
-      "the executors get it too. Packages can also be added with spark.addArtifact. These " +
-      "packages take precedence over the native data source libraries installed in the native " +
-      "library path. See spark.sql.dataSource.native.enabled.")
+      "the executors get it too. Packages added with spark.addArtifact take precedence over " +
+      "these packages, which take precedence over the native data source libraries installed " +
+      "in the native library path. See spark.sql.dataSource.native.enabled.")
     .version("4.4.0")
     .withBindingPolicy(ConfigBindingPolicy.SESSION)
     .stringConf
@@ -10083,6 +10115,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def maxNestedViewDepth: Int = getConf(SQLConf.MAX_NESTED_VIEW_DEPTH)
 
   def useCurrentSQLConfigsForView: Boolean = getConf(SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_VIEW)
+
+  def useCurrentSQLConfigsForGeneratedColumn: Boolean =
+    getConf(SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_GENERATED_COLUMN)
 
   def storeAnalyzedPlanForView: Boolean = getConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW)
 
