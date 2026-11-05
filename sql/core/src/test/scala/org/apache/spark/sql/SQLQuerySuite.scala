@@ -4718,6 +4718,18 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     }
   }
 
+  test("SPARK-60943: Don't eliminate a cast from DECIMAL(19, 0) to BIGINT which can overflow") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable("dt") {
+        sql("create table dt using parquet as select 9999999999999999999BD as d")
+        val msg = intercept[SparkArithmeticException] {
+          sql("select cast(cast(d as bigint) as double) from dt").collect()
+        }.getMessage
+        assert(msg.contains("[CAST_OVERFLOW]"))
+      }
+    }
+  }
+
   test("SPARK-40903: Don't reorder Add for canonicalize if it is decimal type") {
     val tableName = "decimalTable"
     withTable(tableName) {

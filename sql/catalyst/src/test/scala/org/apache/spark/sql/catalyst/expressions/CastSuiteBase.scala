@@ -958,6 +958,11 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-60943: canUpCast: return false if casting DECIMAL(19, 0) to BIGINT can overflow") {
+    assert(Cast.canUpCast(DecimalType(18, 0), LongType))
+    assert(!Cast.canUpCast(DecimalType(19, 0), LongType))
+  }
+
   test("SPARK-27671: cast from nested null type in struct") {
     import DataTypeTestUtils._
 
