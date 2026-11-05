@@ -1,4 +1,4 @@
---SET spark.sql.sources.default=parquet
+--SET spark.sql.sources.default=json
 --SET spark.sql.catalog.testcat=org.apache.spark.sql.connector.catalog.InMemoryTableCatalog
 
 -- CREATE TABLE behavior in the session catalog and a V2 catalog.
@@ -32,6 +32,8 @@ CREATE TABLE ct_nested (
   arr_st ARRAY<STRUCT<x: INT, y: STRING>>
 ) USING parquet;
 DESCRIBE ct_nested;
+-- With spark.sql.fileSource.insert.enforceNotNull=false (the default), V1 file-source tables
+-- store a nullable schema, so SHOW CREATE TABLE renders c INT NOT NULL as c INT.
 CREATE TABLE ct_not_null (c INT NOT NULL, s STRING) USING parquet;
 SHOW CREATE TABLE ct_not_null;
 
@@ -58,14 +60,16 @@ CREATE SCHEMA ct_coll_schema DEFAULT COLLATION UTF8_LCASE;
 CREATE TABLE ct_coll_schema.ct_coll (s STRING) USING parquet;
 SHOW CREATE TABLE ct_coll_schema.ct_coll;
 
--- REPLACE requires an existing V2 table; V1 tables do not support replacement.
+-- Session-catalog REPLACE with a non-V2 provider such as parquet is unsupported, even
+-- when the table is missing. In a V2 catalog, REPLACE requires an existing table.
 REPLACE TABLE ct_repl_missing (c INT) USING parquet;
 REPLACE TABLE testcat.ns.ct_repl_missing (c INT) USING parquet;
 REPLACE TABLE testcat.ns.ct_v2 (c INT, d INT) USING parquet;
 DESCRIBE testcat.ns.ct_v2;
 REPLACE TABLE ct_v1 (c INT) USING parquet;
 
--- CREATE OR REPLACE creates a missing V2 table and replaces an existing V2 table.
+-- Session-catalog parquet statements fail because parquet is not a V2 provider.
+-- In a V2 catalog, CREATE OR REPLACE creates a missing table or replaces an existing one.
 CREATE OR REPLACE TABLE ct_cor_missing (c INT) USING parquet;
 CREATE OR REPLACE TABLE testcat.ns.ct_cor_missing (c INT) USING parquet;
 DESCRIBE testcat.ns.ct_cor_missing;

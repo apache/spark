@@ -38,7 +38,7 @@ struct<createtab_stmt:string>
 -- !query output
 CREATE TABLE spark_catalog.default.ct_default_provider (
   c INT)
-USING parquet
+USING json
 
 
 -- !query
