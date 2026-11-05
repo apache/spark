@@ -275,7 +275,7 @@ class SparkPlanSuite extends SharedSparkSession {
         if (!threadB.isAlive || System.currentTimeMillis() > deadline) {
           waiting = false
         } else {
-          val state = Option(bean.getThreadInfo(threadB.getId)).map(_.getThreadState).orNull
+          val state = Option(bean.getThreadInfo(threadB.threadId)).map(_.getThreadState).orNull
           if (state == Thread.State.BLOCKED) {
             threadBBlocked = true
             waiting = false

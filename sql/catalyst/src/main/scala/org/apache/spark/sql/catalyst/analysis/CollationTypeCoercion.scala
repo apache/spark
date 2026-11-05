@@ -507,8 +507,12 @@ object CollationTypeCoercion extends SQLConfHelper {
       case _: Throwable => NullType
     }
 
-    expression.children.exists(child =>
-      shouldFailWithIndeterminateCollation(expression, getDataTypeSafe(child)))
+    // Most expressions can contain indeterminate collation, so check the expression before
+    // typing its children. Some children have no data type and throw an internal error when
+    // asked for one, such as the WithField, DropField and UpdateNestedField operations of an
+    // UpdateFields.
+    !canContainIndeterminateCollation(expression) &&
+      expression.children.exists(child => hasIndeterminateCollation(getDataTypeSafe(child)))
   }
 
   /**
@@ -540,8 +544,7 @@ object CollationTypeCoercion extends SQLConfHelper {
     case _: BinaryComparison | _: StringPredicate | _: Upper | _: Lower | _: InitCap |
          _: FindInSet | _: StringInstr | _: StringReplace | _: StringLocate | _: SubstringIndex |
          _: StringTrim | _: StringTrimLeft | _: StringTrimRight | _: StringTranslate |
-         _: StringSplitSQL | _: In | _: InSubquery | _: FindInSet |
-         _: StringInstrWithOccurrence => false
+         _: StringSplitSQL | _: In | _: InSubquery | _: StringInstrWithOccurrence => false
     case _ => true
   }
 
