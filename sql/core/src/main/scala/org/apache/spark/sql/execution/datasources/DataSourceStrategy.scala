@@ -43,7 +43,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertIntoDir, I
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, StreamingSourceIdentifyingName, Unassigned}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{GeneratedColumn, IdentityColumn, PushableExpression, ResolveDefaultColumns}
+import org.apache.spark.sql.catalyst.util.PushableExpression
 import org.apache.spark.sql.classic.{SparkSession, Strategy}
 import org.apache.spark.sql.connector.catalog.{SupportsRead, V1Table}
 import org.apache.spark.sql.connector.catalog.TableCapability._
@@ -143,20 +143,7 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case CreateTable(tableDesc, mode, None) if DDLUtils.isDatasourceTable(tableDesc) =>
-      ResolveDefaultColumns.validateTableProviderForDefaultValue(
-        tableDesc.schema, tableDesc.provider, "CREATE TABLE", false)
-
-      if (GeneratedColumn.hasGeneratedColumns(tableDesc.schema)) {
-        throw QueryCompilationErrors.unsupportedTableOperationError(
-          tableDesc.identifier, "generated columns")
-      }
-
-      if (IdentityColumn.hasIdentityColumns(tableDesc.schema)) {
-        throw QueryCompilationErrors.unsupportedTableOperationError(
-          tableDesc.identifier, "identity columns")
-      }
-
-      CreateDataSourceTableCommand(tableDesc, ignoreIfExists = mode == SaveMode.Ignore)
+      CreateTableHelper.createDataSourceTableCommand(tableDesc, mode)
 
     case CreateTable(tableDesc, mode, Some(query))
         if query.resolved && DDLUtils.isDatasourceTable(tableDesc) =>
