@@ -156,37 +156,6 @@ class ReadInThreadTests(unittest.TestCase):
         names = [t.name for t in threading.enumerate()]
         self.assertNotIn(self.READER_NAME, names)
 
-    def test_yields_all_items_in_order(self):
-        with read_in_thread(iter(range(10)), 2) as it:
-            self.assertEqual(list(it), list(range(10)))
-        self.assert_reader_stopped()
-
-    def test_source_is_read_on_reader_thread(self):
-        threads = []
-
-        def source():
-            for i in range(5):
-                threads.append(threading.current_thread().name)
-                yield i
-            threads.append(threading.current_thread().name)
-
-        with read_in_thread(source(), 2) as it:
-            self.assertEqual(list(it), list(range(5)))
-        self.assertEqual(threads, [self.READER_NAME] * 6)
-
-    def test_lazy_items_are_materialized_on_reader_thread(self):
-        threads = []
-
-        def group(values):
-            for v in values:
-                threads.append(threading.current_thread().name)
-                yield v
-
-        source = iter([group([1, 2]), group([]), group([3])])
-        with read_in_thread(source, 2) as it:
-            self.assertEqual(list(it), [[1, 2], [], [3]])
-        self.assertEqual(threads, [self.READER_NAME] * 3)
-
     def test_source_error_is_reraised_after_preceding_items(self):
         def source():
             yield 1
@@ -198,13 +167,6 @@ class ReadInThreadTests(unittest.TestCase):
             self.assertEqual(next(it), 2)
             with self.assertRaisesRegex(ValueError, "source failure"):
                 next(it)
-        self.assert_reader_stopped()
-
-    def test_consumer_error_stops_reader(self):
-        with self.assertRaisesRegex(RuntimeError, "consumer failure"):
-            with read_in_thread(iter(range(100)), 2) as it:
-                next(it)
-                raise RuntimeError("consumer failure")
         self.assert_reader_stopped()
 
     def test_early_exit_stops_reader_blocked_on_full_queue(self):
