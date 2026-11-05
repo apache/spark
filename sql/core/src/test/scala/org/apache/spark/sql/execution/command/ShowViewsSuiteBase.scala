@@ -111,7 +111,7 @@ trait ShowViewsSuiteBase extends QueryTest with DDLCommandTestUtils {
     sql(s"CREATE VIEW $catalog.$namespace.v_json_match AS SELECT 1 AS x")
     sql(s"CREATE VIEW $catalog.$namespace.v_json_skip AS SELECT 1 AS x")
     val names = viewNames(
-      showViewsAsJson(s"SHOW VIEWS IN $catalog.$namespace LIKE 'v_json_match' AS JSON"))
+      showViewsAsJson(s"SHOW VIEWS IN $catalog.$namespace LIKE 'V_JSON_M*|no_such_view' AS JSON"))
     assert(names == Seq("v_json_match"), s"pattern did not filter: $names")
   }
 
@@ -138,7 +138,7 @@ trait ShowViewsSuiteBase extends QueryTest with DDLCommandTestUtils {
     sql(s"CREATE VIEW $catalog.$namespace.v_json_parity AS SELECT 1 AS x")
     val expected = sql(s"SHOW VIEWS IN $catalog.$namespace").collect()
       .map(r => (r.getString(0), r.getString(1), r.getBoolean(2))).toSet
-    // mkString(".") matches QuotingUtils.quoted only because these namespaces are single-part;
+    // mkString(".") matches QuotingUtils.quoted only because no namespace part needs quoting;
     // it is not a stand-in for quoted namespace rendering in general.
     val actual = showViewsAsJson(s"SHOW VIEWS IN $catalog.$namespace AS JSON").map { v =>
       ((v \ "namespace").extract[Seq[String]].mkString("."),
