@@ -31,7 +31,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.RowToColumnConverter
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
-import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
+import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, ReusedArrowColumnVector}
 import org.apache.spark.sql.types.{DataType, StructField, StructType, UserDefinedType}
 import org.apache.spark.sql.types.DataType.equalsIgnoreCompatibleCollation
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
@@ -43,7 +43,8 @@ import org.apache.spark.util.Utils
  * Three execution paths based on input characteristics:
  *
  * 1. '''Arrow columnar path''' (UDF inputs are simple column refs AND
- *    columns are [[ArrowColumnVector]]): Arrow FieldVectors are extracted
+ *    columns are [[ArrowColumnVector]], none of them a
+ *    [[ReusedArrowColumnVector]]): Arrow FieldVectors are extracted
  *    directly and serialized to IPC. Pass-through columns are kept as
  *    [[ColumnVector]] references, which is only correct if the batches stay
  *    valid until their results come back from Python: a columnar reader may
@@ -58,8 +59,9 @@ import org.apache.spark.util.Utils
  *    returns the next batches.
  *
  * 2. '''Non-Arrow columnar path''' (UDF inputs are simple column refs
- *    BUT columns are NOT [[ArrowColumnVector]]): Non-Arrow columnar
- *    readers (Parquet vectorized, InMemoryTableScan) reuse ColumnVector
+ *    BUT columns are NOT [[ArrowColumnVector]], or some are
+ *    [[ReusedArrowColumnVector]]s): Non-Arrow columnar readers (Parquet
+ *    vectorized, InMemoryTableScan) and native data sources reuse ColumnVector
  *    objects across batches. Uses [[HybridRowQueue]] for pass-through
  *    buffering and converts joined rows back to [[ColumnarBatch]].
  *
@@ -155,11 +157,15 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
 
       val inputColumnIndices = resolveColumnIndices(allInputs.toSeq)
 
-      // Peek at first batch to check if Arrow-backed.
+      // Peek at first batch to check if Arrow-backed. Path 1 holds the pass-through columns past
+      // the next batch, which a ReusedArrowColumnVector does not allow: its producer overwrites or
+      // releases it, so such batches take path 2, which copies them.
       val peekIter = new PeekableIterator(inputIter)
       val isArrow = peekIter.peek().exists { batch =>
         batch.numCols() > 0 &&
-          batch.column(0).isInstanceOf[ArrowColumnVector]
+          batch.column(0).isInstanceOf[ArrowColumnVector] &&
+          !(0 until batch.numCols()).exists(
+            i => batch.column(i).isInstanceOf[ReusedArrowColumnVector])
       }
 
       if (inputColumnIndices.isDefined && isArrow) {
