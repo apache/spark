@@ -117,6 +117,8 @@ MERGE_SCRIPT_REPO_PATH = "dev/merge_spark_pr.py"
 # See https://docs.github.com/en/actions/how-tos/manage-workflow-runs/skip-workflow-runs
 POST_MERGE_CI_INTERVALS = {"master": 10, "branch-4.x": 10}
 POST_MERGE_CI_SKIP_TRAILER = "skip-checks: true"
+# Covers the trailer plus the cherry-pick attribution and committer sign-off added by -sx.
+POST_MERGE_CI_TRAILER_SEARCH_LENGTH = 256
 
 
 def semver_branch_rank(name):
@@ -868,6 +870,28 @@ def append_post_merge_ci_skip(message):
     return "%s\n\n%s\n" % (message.rstrip(), POST_MERGE_CI_SKIP_TRAILER)
 
 
+def without_inherited_post_merge_ci_skip(message):
+    """Remove an inherited skip trailer found near the end of a cherry-pick message.
+
+    >>> message = "Subject\\n\\nskip-checks: true\\n(cherry picked from commit abc)\\n"
+    >>> without_inherited_post_merge_ci_skip(message)
+    'Subject\\n\\n(cherry picked from commit abc)\\n'
+    >>> distant = "Subject\\n\\nskip-checks: true\\n" + "x" * 256 + "\\n"
+    >>> without_inherited_post_merge_ci_skip(distant) == distant
+    True
+    """
+    tail = message[-POST_MERGE_CI_TRAILER_SEARCH_LENGTH:]
+    marker = "\n%s\n" % POST_MERGE_CI_SKIP_TRAILER
+    marker_index = tail.rfind(marker)
+    if marker_index == -1:
+        return message
+
+    marker_index += len(message) - len(tail)
+    before = message[:marker_index].rstrip()
+    after = message[marker_index + len(marker):].strip()
+    return "\n\n".join(part for part in (before, after) if part) + "\n"
+
+
 def amend_commit_message(message):
     """Replace the current commit's message with the in-memory multi-line ``message``."""
     # The command is an argument list rather than a shell string, so -m safely receives the
@@ -1009,11 +1033,11 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref):
         else:
             print("Cherry-pick already completed manually; continuing with the backport.")
 
+    raw_message = git.run(["git", "log", "-1", "--format=%B"])
+    updated_message = without_inherited_post_merge_ci_skip(raw_message)
     if skip_post_merge_ci:
-        # An inherited trailer is followed by cherry-pick and sign-off lines from -sx, so it is
-        # not GitHub's final skip-checks trailer. Append this branch's decision at the end.
-        raw_message = git.run(["git", "log", "-1", "--format=%B"])
-        updated_message = append_post_merge_ci_skip(raw_message)
+        updated_message = append_post_merge_ci_skip(updated_message)
+    if updated_message != raw_message:
         amend_commit_message(updated_message)
 
     continue_maybe(
