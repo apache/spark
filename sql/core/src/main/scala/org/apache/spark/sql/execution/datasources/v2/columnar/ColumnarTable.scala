@@ -37,7 +37,6 @@ import org.apache.spark.sql.execution.streaming.checkpointing.HDFSMetadataLog
 import org.apache.spark.sql.internal.connector.SupportsMetadata
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.Utils
 
 /**
@@ -306,9 +305,7 @@ class ColumnarMicroBatchStream(reader: ColumnarStreamReader, checkpointLocation:
     }
   }
 
-  override def createReaderFactory(): PartitionReaderFactory = {
-    new ColumnarStreamPartitionReaderFactory(reader)
-  }
+  override def createReaderFactory(): PartitionReaderFactory = reader.readerFactory()
 
   override def deserializeOffset(json: String): Offset = ColumnarStreamOffset(json)
 
@@ -367,11 +364,4 @@ abstract class ColumnarOnlyPartitionReaderFactory extends PartitionReaderFactory
   }
 
   override def supportColumnarReads(partition: InputPartition): Boolean = true
-}
-
-class ColumnarStreamPartitionReaderFactory(reader: ColumnarStreamReader)
-  extends ColumnarOnlyPartitionReaderFactory {
-  override def createColumnarReader(partition: InputPartition): PartitionReader[ColumnarBatch] = {
-    reader.read(partition)
-  }
 }

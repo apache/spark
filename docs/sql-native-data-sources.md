@@ -116,11 +116,12 @@ Spark calls the functions of the table as follows:
   not specify a schema, Spark asks for it with `schema`.
 - **Batch reads**: on the driver, Spark creates a reader with `create_reader`, pushes operations
   down with `push_limit` and `prune_columns`, and plans the partitions with `partitions`, which
-  also returns the state of the reader. Then it calls `read` on the executors, in one task for each
-  partition, with a `SparkDsReadInfo` that has the partition, the schema to read and the state of
-  the reader, and `read` exports an `ArrowArrayStream`. Its callbacks can be called from any
-  thread, but never concurrently. The schema to read has only the columns that the query needs,
-  which `prune_columns` got, and the arrays of the stream have exactly these columns, also when the
+  also returns the state of the reader. Then it calls `read` on the executors for each partition,
+  in tasks that may each read several partitions, for example after a coalesce or a union, with a
+  `SparkDsReadInfo` that has the partition, the schema to read and the state of the reader, and
+  `read` exports an `ArrowArrayStream`. Its callbacks can be called from any thread, but never
+  concurrently. The schema to read has only the columns that the query needs, which
+  `prune_columns` got, and the arrays of the stream have exactly these columns, also when the
   library does not implement `prune_columns`, which only lets it plan to read them.
 - **Streaming reads**: on the driver, Spark creates a stream reader with `create_stream_reader`,
   which gets the columns to read, which may be only those that the query needs, and the location of
@@ -201,13 +202,16 @@ to, but it cannot check that the buffers of the arrays hold those values, becaus
 interface does not carry the sizes of buffers: a library that exports a buffer that is too short
 makes Spark read past its end.
 
-`read` and `create_data_writer` get a `SparkDsTaskContext`, with the IDs of the task, and its
-partition and attempt, and an `is_interrupted` function that returns whether the task was killed,
-for example because its query was canceled. Spark cannot interrupt native code: when a task is
-killed, Spark stops reading only once the `get_next` function of the stream returns. So a read or
-a write that runs for long, or blocks, for example on network I/O, should check `is_interrupted`
-regularly and use timeouts. The task reaper, `spark.task.reaper.enabled` and
-`spark.task.reaper.killTimeout`, kills an executor whose killed task does not end.
+`read` and `create_data_writer` get a `SparkDsTaskContext`, with the IDs of the task, its
+attempt, and the partition: for `read`, the index of the partition in the list that the planning
+returned, which is unique within a scan but not across the scans that a task reads, and for
+`create_data_writer`, the partition of the task. It also has an `is_interrupted` function that
+returns whether the task was killed, for example because its query was canceled. Spark cannot
+interrupt native code: when a task is killed, Spark stops reading only once the `get_next` function
+of the stream returns. So a read or a write that runs for long, or blocks, for example on network
+I/O, should check `is_interrupted` regularly and use timeouts. The task reaper,
+`spark.task.reaper.enabled` and `spark.task.reaper.killTimeout`, kills an executor whose killed
+task does not end.
 
 ### Compatibility
 
@@ -268,6 +272,25 @@ out of the memory overhead of the driver and the executors, `spark.driver.memory
 Increase it for libraries that use much memory, and bound the memory that a library uses, for
 example with the size of its batches: on YARN or Kubernetes, an executor that uses more memory than
 it requested is killed.
+
+### Native Execution Engines
+
+An engine that runs queries in native code within Spark, such as Apache Gluten or Apache DataFusion
+Comet, can read a native data source without Spark importing its data on the JVM. The reader factory
+of a batch or micro-batch scan of a native data source implements
+`org.apache.spark.sql.connector.read.SupportsArrowStreamRead`: in the task that reads a partition,
+`openArrowStream` initializes an Arrow C stream that the engine allocated with the stream that
+`read` returns. The engine reads the stream in the task that opened it, and owns and releases the
+stream, which it may do after the task ended: Spark frees the `SparkDsTaskContext` of the read once
+the library released its stream. Once the task ended, `is_interrupted` returns true, so the library
+may stop reading then. The callbacks of the stream can be called from any thread, but never
+concurrently. Each call goes through the JVM, which then calls the callback of the stream of the
+library: this adds tens of nanoseconds to the call, while the import of a batch on the JVM takes
+microseconds. The first call on a native thread also attaches the thread to the JVM, which takes
+tens of microseconds, and the thread stays attached until it exits. Since the callbacks call into
+the JVM, the engine releases the stream before the JVM exits. Spark does not check the arrays of
+such a stream, unlike the streams that it reads itself, so the engine checks what its import of the
+arrays requires.
 
 ## Finding Native Data Sources
 
