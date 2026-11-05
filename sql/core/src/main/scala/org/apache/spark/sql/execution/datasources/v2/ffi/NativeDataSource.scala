@@ -498,7 +498,8 @@ class NativeDataSourceWriter(
     call(name, "commit a write to") {
       library.commit(handle.get, -1L, NativeWriterCommitMessage.toBytes(messages))
     }
-    // Not closed if the commit fails: Spark then aborts the write, which closes it.
+    // Not closed if the commit fails: Spark then aborts the write, which closes it. Spark does
+    // not abort a committed write, see ColumnarBatchWrite.
     handle.close()
   }
 
@@ -536,6 +537,7 @@ class NativeDataSourceStreamWriter(
       location, name, schema, timeZoneId, writerState, partitionId, taskId, epochId)
   }
 
+  // Spark does not abort a committed micro-batch, see ColumnarStreamingWrite.
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
     call(name, "commit a write to") {
       library.commit(handle.get, epochId, NativeWriterCommitMessage.toBytes(messages))
@@ -1181,11 +1183,26 @@ class NativeDataWriter(
   // even if Spark then fails the commit, for example because of an invalid message.
   private var finished = false
   private var closed = false
+  // Whether a write or a commit failed, after which the library only gets abort and close, as the
+  // header says.
+  private var failed = false
 
-  override def write(batch: ColumnarBatch): Unit = {
+  // Fails a write or a commit that the header rules out, and records a failure of `f`.
+  private def writeOrCommit[T](f: => T): T = {
     if (finished || closed) {
       throw SparkException.internalError("The data writer was already committed or aborted.")
     }
+    if (failed) {
+      throw SparkException.internalError("A write or a commit of the data writer failed.")
+    }
+    try f catch {
+      case e: Throwable =>
+        failed = true
+        throw e
+    }
+  }
+
+  override def write(batch: ColumnarBatch): Unit = writeOrCommit {
     val vectors = (0 until batch.numCols()).map { i =>
       batch.column(i) match {
         case vector: ArrowColumnVector => vector.getValueVector.asInstanceOf[FieldVector]
@@ -1207,10 +1224,7 @@ class NativeDataWriter(
     }
   }
 
-  override def commit(): WriterCommitMessage = {
-    if (finished || closed) {
-      throw SparkException.internalError("The data writer was already committed or aborted.")
-    }
+  override def commit(): WriterCommitMessage = writeOrCommit {
     val message = call(name, "write to")(library.commitDataWriter(handle, () => finished = true))
     NativeWriterCommitMessage(bytesOrEmpty(Some(message)))
   }
