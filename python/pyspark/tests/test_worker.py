@@ -460,6 +460,8 @@ class SetupSparkFilesImportCacheTests(unittest.TestCase):
             zf.writestr("_spark_user_b.py", "")
         worker_util.setup_spark_files(self.temp_dir, [])
 
+        # This is the check: it raises ModuleNotFoundError if setup_spark_files did not refresh
+        # the user archive's cached directory listing.
         importlib.import_module("_spark_user_b")
 
 
