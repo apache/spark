@@ -45,7 +45,7 @@ import org.apache.spark.sql.connector.write.PhysicalWriteInfoImpl
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
-import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchScan, ColumnarBatchWrite, ColumnarMicroBatchStream, ColumnarScan, ColumnarScanBuilder, ColumnarStreamOffset, ColumnarStreamingWrite}
+import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchScan, ColumnarBatchWrite, ColumnarMicroBatchStream, ColumnarScan, ColumnarScanBuilder, ColumnarStreamingWrite, ColumnarStreamOffset}
 import org.apache.spark.sql.execution.datasources.v2.python.{PythonDataSourceV2, UserDefinedPythonDataSource}
 import org.apache.spark.sql.execution.vectorized.ReusedArrowColumnVector
 import org.apache.spark.sql.functions.lit
