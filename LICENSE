@@ -228,7 +228,6 @@ BSD 3-Clause
 ------------
 
 python/lib/py4j-*-src.zip
-python/pyspark/cloudpickle/*.py
 python/pyspark/join.py
 
 The CSS style for the navigation sidebar of the documentation was originally

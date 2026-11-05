@@ -43,7 +43,6 @@ jquery.dataTables.min.js
 .*\.data
 .*\.log
 pyspark-coverage-site/*
-cloudpickle/*
 join.py
 tblib.py
 SparkILoop.scala

@@ -21,7 +21,6 @@ parallel = true
 data_file = ${COVERAGE_DIR}/coverage_data/coverage
 omit =
     # Not our code
-    */pyspark/cloudpickle/*
     */pyspark/sql/connect/proto/*
     */pyspark/loose_version.py
     # Tests

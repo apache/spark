@@ -205,11 +205,15 @@ Required dependencies
 
 PySpark requires the following dependencies.
 
-========================== ========================= =============================
+========================== ========================= ======================================
 Package                    Supported version         Note
-========================== ========================= =============================
+========================== ========================= ======================================
 `py4j`                     >=0.10.9.7,<0.10.9.10     Required to interact with JVM
-========================== ========================= =============================
+`cloudpickle-rust`         >=0.1.0                   Required to serialize Python functions
+========================== ========================= ======================================
+
+Note that ``cloudpickle-rust`` is a native extension, so it has to be installed in the Python
+environments of the executors too.
 
 Additional libraries that enhance functionality but are not included in the installation packages:
 

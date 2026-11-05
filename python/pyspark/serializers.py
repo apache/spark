@@ -20,10 +20,10 @@ PySpark supports custom serializers for transferring data; this can improve
 performance.
 
 By default, PySpark uses :class:`CPickleSerializer` to serialize objects. This is an alias
-that resolves to :class:`CloudPickleSerializer` (which uses the ``cloudpickle`` library and
-can serialize nearly any Python object); setting the ``PYSPARK_ENABLE_NAMEDTUPLE_PATCH=1``
-environment variable makes it resolve to :class:`PickleSerializer` (which uses the standard
-library ``pickle`` module) instead.
+that resolves to :class:`CloudPickleSerializer` (which uses ``cloudpickle-rust``, a Rust
+implementation of the ``cloudpickle`` library, and can serialize nearly any Python object);
+setting the ``PYSPARK_ENABLE_NAMEDTUPLE_PATCH=1`` environment variable makes it resolve to
+:class:`PickleSerializer` (which uses the standard library ``pickle`` module) instead.
 Other serializers, like :class:`MarshalSerializer`, support fewer datatypes but can be
 faster.
 

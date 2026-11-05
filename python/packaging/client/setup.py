@@ -139,6 +139,7 @@ try:
     _minimum_googleapis_common_protos_version = "1.71.0"
     _minimum_pyyaml_version = "3.11"
     _minimum_zstandard_version = "0.25.0"
+    _minimum_cloudpickle_rust_version = "0.1.0"
 
     with open("README.md", encoding="utf-8") as f:
         long_description = f.read()
@@ -213,6 +214,7 @@ try:
         # Don't forget to update python/docs/source/getting_started/install.rst
         # if you're updating the versions or dependencies.
         install_requires=[
+            "cloudpickle-rust>=%s" % _minimum_cloudpickle_rust_version,
             "pandas>=%s" % _minimum_pandas_version,
             "pyarrow>=%s" % _minimum_pyarrow_version,
             "grpcio>=%s" % _minimum_grpc_version,

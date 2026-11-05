@@ -1,5 +1,6 @@
 # PySpark dependencies (required)
 py4j>=0.10.9.9
+cloudpickle-rust>=0.1.0
 
 # PySpark dependencies (optional)
 numpy>=1.23.2

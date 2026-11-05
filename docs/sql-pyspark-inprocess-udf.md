@@ -110,7 +110,7 @@ executor then logs "Managed memory leak detected", or fails the task if
 `spark.unsafe.exceptionOnMemoryLeak` is `true`. Each row is copied before it is returned, so
 it remains valid after the task releases them.
 
-UDF deserialization uses PySpark's bundled cloudpickle. Each task registers its
+UDF deserialization uses cloudpickle-rust, a PySpark dependency. Each task registers its
 own function instance once and passes a small handle for subsequent batches.
 Exception text escapes NUL, surrogates and non-BMP characters for JEP's JNI exception
 transport. Other characters, including non-English BMP text, remain readable.
@@ -210,7 +210,7 @@ of sliced results still copy data.
 ### 1. Install dependencies
 
 ```bash
-pip install "jep>=4.3.2,<4.4" pyarrow cloudpickle
+pip install "jep>=4.3.2,<4.4" pyarrow cloudpickle-rust
 ```
 
 JEP is a provided dependency and is not bundled with Spark. Supply its JAR on the
@@ -341,7 +341,7 @@ def add_noise(x):
 | jep | 4.3.x, 4.3.2 or later (`pip install "jep>=4.3.2,<4.4"`); Spark is built and tested against 4.3.2, and the plugin uses JEP internals that later minor versions may change |
 | `arrow-c-data` JAR | Bundled with Spark |
 | PyArrow | 18.0.0+ |
-| cloudpickle | Bundled with PySpark |
+| cloudpickle-rust | 0.1.0+, a PySpark dependency |
 | Python concurrency | One invocation at a time per executor (see below) |
 
 ### Executor concurrency
@@ -393,7 +393,7 @@ venv on a machine that matches the executor OS and Python version:
 
 ```bash
 python3 -m venv myvenv
-myvenv/bin/pip install "jep>=4.3.2,<4.4" pyarrow cloudpickle my-custom-lib
+myvenv/bin/pip install "jep>=4.3.2,<4.4" pyarrow cloudpickle-rust my-custom-lib
 (cd myvenv && zip -r ../myvenv.zip .)
 ```
 

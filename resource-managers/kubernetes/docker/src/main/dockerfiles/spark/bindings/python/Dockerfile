@@ -33,6 +33,9 @@ RUN apt-get update && \
     apt install -y --no-install-recommends python3 python3-pip && \
     apt-get clean && \
     rm -rf /var/cache/apt/* /var/lib/apt/lists/*
+# PySpark pickles Python functions with cloudpickle-rust, a native extension that cannot be
+# imported from python/lib/pyspark.zip like the rest of PySpark.
+RUN PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install --no-cache-dir 'cloudpickle-rust>=0.1.0'
 
 COPY python/pyspark ${SPARK_HOME}/python/pyspark
 COPY python/lib ${SPARK_HOME}/python/lib

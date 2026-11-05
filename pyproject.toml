@@ -20,7 +20,6 @@ exclude = [
     "*/target/*",
     "**/*.ipynb",
     "docs/.local_ruby_bundle/",
-    "*python/pyspark/cloudpickle/*.py",
     "*python/pyspark/ml/deepspeed/tests/*.py",
     "*python/docs/build/*",
     "*python/docs/source/conf.py",
@@ -66,6 +65,7 @@ ignore = [
 
 [dependency-groups]
 internal_py4j = ["py4j>=0.10.9.9"]
+internal_cloudpickle_rust = ["cloudpickle-rust>=0.1.0"]
 
 internal_numpy = ["numpy>=1.23.2"]
 internal_pandas = ["pandas>=2.2.0,<3.0.0"]
@@ -82,6 +82,7 @@ internal_pyspark_devtool = [
 
 connect = [
     {include-group = "internal_py4j"},
+    {include-group = "internal_cloudpickle_rust"},
     {include-group = "internal_pandas"},
     {include-group = "internal_protobuf"},
     {include-group = "internal_pyarrow"},
@@ -94,12 +95,14 @@ connect = [
 
 sql = [
     {include-group = "internal_py4j"},
+    {include-group = "internal_cloudpickle_rust"},
     {include-group = "internal_pandas"},
     {include-group = "internal_pyarrow"},
 ]
 
 pandas_on_spark = [
     {include-group = "internal_py4j"},
+    {include-group = "internal_cloudpickle_rust"},
     {include-group = "internal_pandas"},
     {include-group = "internal_pyarrow"},
 ]
@@ -113,11 +116,13 @@ pandas_on_spark_extra = [
 
 ml = [
     {include-group = "internal_py4j"},
+    {include-group = "internal_cloudpickle_rust"},
     {include-group = "internal_numpy"},
 ]
 
 mllib = [
     {include-group = "internal_py4j"},
+    {include-group = "internal_cloudpickle_rust"},
     {include-group = "internal_numpy"},
 ]
 
@@ -265,6 +270,7 @@ ci_classic_minimum = [
 ci_classic_pandas_3 = [
     {include-group = "internal_numpy"},
     {include-group = "internal_py4j"},
+    {include-group = "internal_cloudpickle_rust"},
     {include-group = "internal_pyspark_devtool"},
     {include-group = "pandas_on_spark_extra"},
     # torch should be installed with ml_torch group

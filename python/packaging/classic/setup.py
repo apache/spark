@@ -177,6 +177,7 @@ _minimum_grpc_version = "1.84.1"
 _minimum_googleapis_common_protos_version = "1.71.0"
 _minimum_pyyaml_version = "3.11"
 _minimum_zstandard_version = "0.25.0"
+_minimum_cloudpickle_rust_version = "0.1.0"
 
 
 class InstallCommand(install):
@@ -363,7 +364,10 @@ try:
         license_files=["LICENSE", "NOTICE"],
         # Don't forget to update python/docs/source/getting_started/install.rst
         # if you're updating the versions or dependencies.
-        install_requires=["py4j>=0.10.9.7,<0.10.9.10"],
+        install_requires=[
+            "py4j>=0.10.9.7,<0.10.9.10",
+            "cloudpickle-rust>=%s" % _minimum_cloudpickle_rust_version,
+        ],
         extras_require={
             "ml": ["numpy>=%s" % _minimum_numpy_version],
             "mllib": ["numpy>=%s" % _minimum_numpy_version],
