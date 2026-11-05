@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{
   AbstractDataType,
   BinaryType,
@@ -393,9 +394,11 @@ case class BitmapXor(left: Expression, right: Expression) extends BitmapBinaryEx
       * bitmap - The bitmap to test.
         An expression that evaluates to a binary. A NULL bitmap produces a NULL result.
       * bit_position - The bucket-local bit position to test.
-        An expression that evaluates to a numeric value and is cast to a long. A NULL position
-        produces a NULL result. A negative position, a position at or above 32768, or a position
-        beyond the actual bitmap length returns false. To query an original value, use
+        A numeric expression cast to BIGINT using Spark's cast rules. A NULL position returns NULL.
+        After the cast, a negative position, a position at or above 32768, or a position beyond the
+        bitmap length returns false. With a non-NULL bitmap, ANSI casts raise CAST_OVERFLOW for
+        non-finite or overflowing values. Legacy casts truncate fractions, convert NaN to zero,
+        and can wrap overflowing decimals. To query an original value, use
         bitmap_bit_position(value) and match bitmap_bucket_number(value) to the bitmap bucket.
   """,
   examples = """
@@ -409,8 +412,16 @@ case class BitmapXor(left: Expression, right: Expression) extends BitmapBinaryEx
   """,
   since = "4.4.0",
   group = "misc_funcs")
-case class BitmapContains(left: Expression, right: Expression)
-  extends BinaryExpression with RuntimeReplaceable {
+case class BitmapContains(
+    left: Expression,
+    right: Expression,
+    evalMode: EvalMode.Value,
+    alwaysInlineCommonExpr: Boolean)
+  extends BinaryExpression with RuntimeReplaceable with EvalHelper {
+
+  def this(left: Expression, right: Expression) =
+    this(left, right, EvalMode.fromSQLConf(SQLConf.get),
+      SQLConf.get.getConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR))
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (left.dataType != BinaryType && left.dataType != NullType) {
@@ -449,17 +460,21 @@ case class BitmapContains(left: Expression, right: Expression)
         classOf[BitmapExpressionUtils],
         BooleanType,
         "bitmapContains",
-        Seq(bitmap, Cast(right, LongType)),
+        Seq(bitmap, Cast(right, LongType, evalMode = evalMode)),
         Seq(BinaryType, LongType),
         returnNullable = false)
 
-    if (bitmap.nullable) {
-      // Make the cast conditional for constant folding and subexpression elimination as well.
-      With(bitmap) { case Seq(ref) =>
-        If(IsNull(ref), Literal.create(null, BooleanType), invoke(ref))
-      }
-    } else {
+    // Keep the cast conditional through constant folding and subexpression elimination.
+    def guardedInvoke(bitmap: Expression): Expression =
+      If(IsNull(bitmap), Literal.create(null, BooleanType), invoke(bitmap))
+
+    if (!bitmap.nullable) {
       invoke(bitmap)
+    } else if (alwaysInlineCommonExpr || prepareForEval(bitmap).foldable) {
+      // Constant-only contexts check foldability before rewriting With.
+      guardedInvoke(bitmap)
+    } else {
+      With(bitmap) { case Seq(ref) => guardedInvoke(ref) }
     }
   }
 

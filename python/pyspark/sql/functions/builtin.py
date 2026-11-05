@@ -33763,8 +33763,7 @@ def bitmap_contains(bitmap: "ColumnOrName", bit_position: "ColumnOrName") -> Col
     bitmap : :class:`~pyspark.sql.Column` or column name
         The input bitmap. The column must evaluate to binary.
     bit_position : :class:`~pyspark.sql.Column` or column name
-        The numeric bit position to check. The value is cast to a long using Spark cast
-        semantics.
+        The numeric bit position to check. The value is cast to BIGINT using Spark's cast rules.
 
     Returns
     -------
@@ -33775,8 +33774,10 @@ def bitmap_contains(bitmap: "ColumnOrName", bit_position: "ColumnOrName") -> Col
     -----
     ``bit_position`` is local to one bitmap bucket. To query an original value, use
     :func:`bitmap_bit_position` and separately match :func:`bitmap_bucket_number` to the bitmap
-    bucket. A negative position, a position at or above 32768, or a position beyond the actual
-    bitmap length produces false.
+    bucket. After the cast, a negative position, a position at or above 32768, or a position
+    beyond the bitmap length returns false. With a non-NULL bitmap, ANSI casts raise
+    ``CAST_OVERFLOW`` for non-finite or overflowing values. Legacy casts truncate fractions,
+    convert NaN to zero, and can wrap overflowing decimals.
 
     See Also
     --------

@@ -7466,9 +7466,11 @@ object functions {
    * @param bitmap
    *   A column that evaluates to a binary bitmap. A NULL bitmap produces a NULL result.
    * @param bitPosition
-   *   A numeric column whose value is cast to a long bit position. A NULL position produces a
-   *   NULL result. A negative position, a position at or above 32768, or a position beyond the
-   *   actual bitmap length produces false.
+   *   A numeric column cast to BIGINT using Spark's cast rules. A NULL position returns NULL.
+   *   After the cast, a negative position, a position at or above 32768, or a position beyond the
+   *   bitmap length returns false. With a non-NULL bitmap, ANSI casts raise CAST_OVERFLOW for
+   *   non-finite or overflowing values. Legacy casts truncate fractions, convert NaN to zero, and
+   *   can wrap overflowing decimals.
    * @group misc_funcs
    * @since 4.4.0
    * @return

@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.SparkArithmeticException
 import org.apache.spark.SparkRuntimeException
+import org.apache.spark.sql.catalyst.expressions.{BitmapContains, With}
 import org.apache.spark.sql.functions.{
   bitmap_and,
   bitmap_and_agg,
@@ -321,12 +322,14 @@ class BitmapExpressionsQuerySuite extends SharedSparkSession {
       (codegenMode, wholeStageCodegenEnabled) <-
         Seq("CODEGEN_ONLY" -> "true", "NO_CODEGEN" -> "false")
       subexpressionElimination <- Seq("true", "false")
+      alwaysInline <- Seq("true", "false")
     } {
       withSQLConf(
         SQLConf.ANSI_ENABLED.key -> "true",
         SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStageCodegenEnabled,
         SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode,
-        SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> subexpressionElimination) {
+        SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> subexpressionElimination,
+        SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> alwaysInline) {
         checkAnswer(spark.sql(query), Seq(Row(null), Row(true), Row(true)))
         checkAnswer(spark.sql(sharedPositionQuery), Seq(Row(null, null), Row(true, false)))
         checkAnswer(spark.sql(constantPositionQuery), Seq(Row(null)))
@@ -349,6 +352,57 @@ class BitmapExpressionsQuerySuite extends SharedSparkSession {
       Seq(Row(null, null, null)))
   }
 
+  test("bitmap_contains with constant bitmaps in VALUES and DEFAULT") {
+    val bitmaps = Seq("unhex('01')", "to_binary('01', 'hex')", "CAST(NULL AS BINARY)")
+    val expressions = bitmaps.map(bitmap => s"bitmap_contains($bitmap, 0)")
+    val values = expressions.mkString(", ")
+    checkAnswer(sql(s"SELECT * FROM VALUES ($values)"), Row(true, true, null))
+
+    withTable("bitmap_defaults") {
+      val columns = expressions.zipWithIndex.map { case (expression, i) =>
+        s"b$i BOOLEAN DEFAULT $expression"
+      }.mkString(", ")
+      sql(s"CREATE TABLE bitmap_defaults (id INT, $columns) USING parquet")
+      sql(s"INSERT INTO bitmap_defaults VALUES (0, $values), (1, DEFAULT, DEFAULT, DEFAULT)")
+      checkAnswer(sql("TABLE bitmap_defaults"), Seq(Row(0, true, true, null),
+        Row(1, true, true, null)))
+    }
+  }
+
+  test("bitmap_contains respects alwaysInlineCommonExpr") {
+    val predicate = "bitmap_contains(to_binary(IF(id = 0, NULL, '01'), 'hex'), 0)"
+    Seq(false, true).foreach { inline =>
+      withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> inline.toString) {
+        val df = sql(s"SELECT $predicate, CASE WHEN id < 2 THEN $predicate ELSE false END " +
+          "FROM range(3)")
+        val calls = df.queryExecution.analyzed.expressions.flatMap(_.collect {
+          case e: BitmapContains => e
+        })
+        assert(calls.size == 2)
+        calls.foreach(e => assert(e.replacement.isInstanceOf[With] == !inline))
+        checkAnswer(df, Seq(Row(null, null), Row(true, true), Row(true, false)))
+      }
+    }
+  }
+
+  test("bitmap_contains uses the persisted view ANSI mode") {
+    val position = "IF(id = 0, CAST('NaN' AS DOUBLE), CAST(1 AS DOUBLE))"
+    withSQLConf(SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_VIEW.key -> "false") {
+      withView("bitmap_ansi_control", "bitmap_ansi_filter") {
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+          sql(s"CREATE VIEW bitmap_ansi_control AS SELECT id FROM range(2) " +
+            s"WHERE CAST($position AS BIGINT) = 0")
+          sql(s"CREATE VIEW bitmap_ansi_filter AS SELECT id FROM range(2) " +
+            s"WHERE bitmap_contains(X'01', $position)")
+        }
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+          checkAnswer(sql("TABLE bitmap_ansi_control"), Row(0L))
+          checkAnswer(sql("TABLE bitmap_ansi_filter"), Row(0L))
+        }
+      }
+    }
+  }
+
   test("bitmap_contains with numeric positions") {
     val bitmap = to_binary(lit("01"), lit("hex"))
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
@@ -360,11 +414,11 @@ class BitmapExpressionsQuerySuite extends SharedSparkSession {
         spark.range(1).select(bitmap_contains(bitmap, lit(Double.NaN))),
         Seq(Row(true)))
       checkAnswer(
-        spark.sql("SELECT bitmap_contains(X'01', CAST(0.9 AS DECIMAL(2, 1)))"),
+        spark.sql("SELECT bitmap_contains(X'01', CAST(-0.5 AS DECIMAL(2, 1)))"),
         Seq(Row(true)))
       checkAnswer(
-        spark.sql("SELECT bitmap_contains(X'01', 18446744073709551617)"),
-        Seq(Row(false)))
+        spark.sql("SELECT bitmap_contains(X'01', 18446744073709551616BD)"),
+        Seq(Row(true)))
       checkAnswer(
         spark.range(1).select(bitmap_contains(bitmap, lit(Float.PositiveInfinity))),
         Seq(Row(false)))
@@ -375,7 +429,7 @@ class BitmapExpressionsQuerySuite extends SharedSparkSession {
 
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       checkAnswer(
-        spark.sql("SELECT bitmap_contains(X'01', CAST(0.9 AS DECIMAL(2, 1)))"),
+        spark.sql("SELECT bitmap_contains(X'01', CAST(-0.5 AS DECIMAL(2, 1)))"),
         Seq(Row(true)))
       Seq(
         bitmap_contains(bitmap, lit(Float.NaN)),

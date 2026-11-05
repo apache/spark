@@ -127,6 +127,10 @@ class BitmapExpressionUtilsSuite extends SparkFunSuite {
     assert(!BitmapExpressionUtils.bitmapContains(bitmap, Long.MinValue))
     assert(!BitmapExpressionUtils.bitmapContains(bitmap, Long.MaxValue))
 
+    val oversized = bitmap :+ 1.toByte
+    assert(BitmapExpressionUtils.bitmapContains(oversized, BitmapExpressionUtils.NUM_BITS - 1))
+    assert(!BitmapExpressionUtils.bitmapContains(oversized, BitmapExpressionUtils.NUM_BITS))
+
     val allOnesBitmap = Array.fill[Byte](BitmapExpressionUtils.NUM_BYTES)(0xFF.toByte)
     assert(BitmapExpressionUtils.bitmapContains(allOnesBitmap, 0))
     assert(BitmapExpressionUtils.bitmapContains(allOnesBitmap, 32767))
