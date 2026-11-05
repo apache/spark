@@ -31,7 +31,11 @@ from contextlib import nullcontext
 from typing import Any, BinaryIO, Optional
 
 from pyspark import shuffle
-from pyspark.accumulators import _accumulatorRegistry
+from pyspark.accumulators import (
+    SpecialAccumulatorIds,
+    _accumulatorRegistry,
+    _deserialize_accumulator,
+)
 from pyspark.errors import PySparkRuntimeError
 from pyspark.eval_handlers._base import EvalTypeHandler, get_eval_type_handler
 from pyspark.eval_handlers._typing import UDF, UDTF
@@ -144,7 +148,8 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
         memory_limit_mb = int(os.environ.get("PYSPARK_EXECUTOR_MEMORY_MB", "-1"))
         setup_memory_limits(memory_limit_mb)
 
-        TaskContext._setTaskContext(init_info.task_context.to_task_context())
+        task_context = init_info.task_context.to_task_context()
+        TaskContext._setTaskContext(task_context)
 
         shuffle.MemoryBytesSpilled = 0
         shuffle.DiskBytesSpilled = 0
@@ -263,9 +268,24 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                     if hasattr(out_iter, "close"):
                         out_iter.close()
 
+        sampling_profiler_enabled = runner_conf.udf_profiler == "sampling"
+
         with metrics.measure("pythonExecutionDurationMs"), capture_outputs():
             if profiler:
                 profiler.profile(process)
+            elif sampling_profiler_enabled:
+                from pyspark.sql.profiler import ProfileResultsParamV2, WorkerSamplingProfiler
+
+                accumulator = _deserialize_accumulator(
+                    SpecialAccumulatorIds.SQL_UDF_PROFIER_V2, {}, ProfileResultsParamV2
+                )
+
+                with WorkerSamplingProfiler(
+                    sampling_interval=runner_conf.udf_profiler_sampling_interval,
+                    task_context=task_context,
+                ) as profiler:
+                    process()
+                profiler.save(accumulator)
             else:
                 process()
 

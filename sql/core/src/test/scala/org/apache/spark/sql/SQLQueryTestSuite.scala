@@ -623,15 +623,9 @@ class SQLQueryTestSuite extends SharedSparkSession
 
   protected def createTestCases(): Seq[TestCase] = {
     listFilesRecursively(new File(inputFilePath)).flatMap { file =>
-      var resultFile = resultFileForInputFile(file)
-      var analyzerResultFile =
+      val resultFile = resultFileForInputFile(file)
+      val analyzerResultFile =
         file.getAbsolutePath.replace(inputFilePath, analyzerGoldenFilePath) + ".out"
-      // JDK-4511638 changes 'toString' result of Float/Double
-      // JDK-8282081 changes DataTimeFormatter 'F' symbol
-      if (Utils.isJavaVersionAtLeast21) {
-        if (new File(resultFile + ".java21").exists()) resultFile += ".java21"
-        if (new File(analyzerResultFile + ".java21").exists()) analyzerResultFile += ".java21"
-      }
       val absPath = file.getAbsolutePath
       val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
 

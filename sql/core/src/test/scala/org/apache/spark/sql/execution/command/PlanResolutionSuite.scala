@@ -27,7 +27,7 @@ import org.mockito.invocation.InvocationOnMock
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, AsOfVersion, EmptyFunctionRegistry, NoSuchTableException, RelationCache, RelationResolution, ResolvedFieldName, ResolvedFieldPosition, ResolvedIdentifier, ResolvedTable, ResolveSessionCatalog, TimeTravelSpec, UnresolvedAttribute, UnresolvedFieldPosition, UnresolvedInlineTable, UnresolvedPartitionSpec, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, AsOfVersion, CreateTableHelper, EmptyFunctionRegistry, NoSuchTableException, RelationCache, RelationResolution, ResolvedFieldName, ResolvedFieldPosition, ResolvedIdentifier, ResolvedTable, ResolveSessionCatalog, TimeTravelSpec, UnresolvedAttribute, UnresolvedFieldPosition, UnresolvedInlineTable, UnresolvedPartitionSpec, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog, TempVariableManager}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
@@ -331,6 +331,33 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       parameters = parameters,
       context = context
     )
+  }
+
+  test("create table preprocessing preserves table metadata while normalizing column names") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val partition = StructField("Part", IntegerType)
+      val value = StructField("Value", IntegerType)
+      val table = CatalogTable(
+        identifier = TableIdentifier("table", Some("default")),
+        tableType = CatalogTableType.EXTERNAL,
+        storage = CatalogStorageFormat.empty.copy(locationUri = Some(new URI("file:/table"))),
+        schema = StructType(Seq(partition, value)),
+        provider = Some("parquet"),
+        partitionColumnNames = Seq("part"),
+        bucketSpec = Some(BucketSpec(4, Seq("VALUE"), Seq("value"))),
+        properties = Map("createdBy" -> "user"),
+        comment = Some("table comment"),
+        createTime = 123L,
+        lastAccessTime = 456L)
+      val create = CreateTableV1(table, SaveMode.Ignore, None)
+
+      val normalized = CreateTableHelper.normalizeCreateTableWithoutQuery(create)
+
+      assert(normalized == create.copy(tableDesc = table.copy(
+        schema = StructType(Seq(value, partition)),
+        partitionColumnNames = Seq("Part"),
+        bucketSpec = Some(BucketSpec(4, Seq("Value"), Seq("Value"))))))
+    }
   }
 
   test("create table - with partitioned by") {
