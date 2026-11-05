@@ -347,9 +347,9 @@ module.exports = async ({github, context, core, env = process.env, log = console
             // No usable run to show, or the PR is from fork master where new Build
             // checks are not supported. Tell the contributor how to fix it.
             check.output = {
-              title: 'Workflow run detection failed',
+              title: 'PR build setup requires attention',
               summary: `
-  Unable to detect the workflow run for testing the changes in your PR.
+  A supported Build check is not available for this PR head commit.
 
   1. If you did not enable GitHub Actions in your forked repository, please enable it by clicking the button as shown in the image below. See also [Managing GitHub Actions settings for a repository](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/enabling-features-for-your-repository/managing-github-actions-settings-for-a-repository) for more details.
   2. For PR build status, use a branch other than \`master\` in your fork.`
