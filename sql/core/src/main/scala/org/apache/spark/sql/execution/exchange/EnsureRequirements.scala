@@ -230,11 +230,11 @@ case class EnsureRequirements(
             !childrenIndexes.contains(idx) =>
           child
         case ((child, dist), idx) =>
-          // A nested one-side shuffle is already routed at its own partition count. Pushing join
-          // key positions into the scan beside it would regroup that scan and leave the shuffle
-          // behind, so this child is shuffled onto the best spec instead.
+          // A nested one-side shuffle keeps its own layout. Join key positions that narrow it
+          // would regroup the scan beside it and leave the shuffle behind, so this child is
+          // shuffled onto the best spec instead.
           if (bestMemberOpt.isDefined && matchedIndexes.contains(idx) &&
-              !hasKeyGroupedShuffleUnder(child)) {
+              !positionsRegroupBesideShuffle(child, specs(idx), bestMemberOpt.get)) {
             // The positions come from this child's own matching member, since they index into its
             // own partition expressions -- the chosen best member only says which member of it the
             // two sides agreed on.
@@ -704,12 +704,11 @@ case class EnsureRequirements(
         }
 
         // Now we need to push-down the common partition information to the scan in each child.
-        // A one-side shuffle under either child was planned at the old partition count. The push
-        // is sound only when that shuffle can be retargeted onto these values, or already has them.
-        if (nestedShufflesFollowPush(left, mergedPartValues, leftReducers,
-            applyPartialClustering) &&
-            nestedShufflesFollowPush(right, mergedPartValues, rightReducers,
-              applyPartialClustering)) {
+        // A one-side shuffle under either child was planned at its own values. The push is
+        // sound only when every such shuffle already has these values, in this order, and no
+        // reducer. Otherwise the outer join shuffles.
+        if (nestedShufflesFollowPush(left, mergedPartValues, leftReducers) &&
+            nestedShufflesFollowPush(right, mergedPartValues, rightReducers)) {
           newLeft = populateSpjParams(
             left, commonPartitionValues = Some(mergedPartValues),
             joinKeyPositions = leftSpec.joinKeyPositions, reducers = leftReducers,
@@ -933,74 +932,49 @@ case class EnsureRequirements(
       }
 
   /**
-   * A one-side shuffle can take `values` when it already has them, or when it evaluates the same
-   * keys and can be rewritten onto them. A reducer changes the value domain, and partial
-   * clustering replicates partitions, neither of which the shuffle's partitioner can follow.
-   * Anything other than [[ShuffleExchangeExec]] (a query stage, a reused exchange) cannot be
-   * rewritten, so it follows only when it already has `values`.
-   */
-  private def retargetKeyGroupedShuffle(
-      exchange: ShuffleExchangeExec,
-      values: Seq[(InternalRow, Int)],
-      reducers: Option[Seq[Option[Reducer[_, _]]]],
-      applyPartialClustering: Boolean): Option[ShuffleExchangeExec] = {
-    exchange.outputPartitioning match {
-      case k: KeyGroupedPartitioning if samePartitionValues(k, pushedPartitionRows(values)) =>
-        Some(exchange)
-      case k: KeyGroupedPartitioning if !applyPartialClustering &&
-          reducers.forall(_.forall(_.isEmpty)) &&
-          values.forall(_._2 == 1) &&
-          values.headOption.forall(_._1.numFields == k.expressions.length) =>
-        val rows = values.map(_._1)
-        Some(exchange.copy(outputPartitioning =
-          k.copy(numPartitions = rows.length, partitionValues = rows)))
-      case _ => None
-    }
-  }
-
-  private def outputFollowsPush(
-      partitioning: Partitioning,
-      values: Seq[(InternalRow, Int)]): Boolean = partitioning match {
-    case k: KeyGroupedPartitioning => samePartitionValues(k, pushedPartitionRows(values))
-    case _ => false
-  }
-
-  /**
-   * Whether every shuffle [[populateSpjParams]] would reach already has `values`, or is a
-   * [[ShuffleExchangeExec]] that can be retargeted onto them. The walk stops where the push stops.
+   * Whether every key-grouped shuffle [[populateSpjParams]] would reach below `plan` already has
+   * `values`. The push stops at such a shuffle, which was planned at its own values, so the push
+   * is sound only when it changes nothing there: the same values in the same order, and no
+   * reducer. The walk stops where the push stops.
    */
   private def nestedShufflesFollowPush(
       plan: SparkPlan,
       values: Seq[(InternalRow, Int)],
-      reducers: Option[Seq[Option[Reducer[_, _]]]],
-      applyPartialClustering: Boolean): Boolean = plan match {
+      reducers: Option[Seq[Option[Reducer[_, _]]]]): Boolean = plan match {
     case _: BroadcastExchangeLike => true
-    case s: ShuffleExchangeExec =>
-      retargetKeyGroupedShuffle(s, values, reducers, applyPartialClustering).isDefined
-    case s: ShuffleExchangeLike =>
-      outputFollowsPush(s.outputPartitioning, values)
-    case stage: ShuffleQueryStageExec =>
-      outputFollowsPush(stage.outputPartitioning, values)
-    case reused: ReusedExchangeExec =>
-      outputFollowsPush(reused.outputPartitioning, values)
-    case other =>
-      other.children.forall(
-        nestedShufflesFollowPush(_, values, reducers, applyPartialClustering))
+    case s @ (_: ShuffleExchangeLike | _: ShuffleQueryStageExec | _: ReusedExchangeExec) =>
+      s.outputPartitioning match {
+        case k: KeyGroupedPartitioning =>
+          reducers.forall(_.forall(_.isEmpty)) &&
+            samePartitionValues(k, pushedPartitionRows(values))
+        case _ => false
+      }
+    case other => other.children.forall(nestedShufflesFollowPush(_, values, reducers))
   }
 
-  /** A key-grouped shuffle strictly inside `plan`, not `plan` itself. */
-  private def hasKeyGroupedShuffleUnder(plan: SparkPlan): Boolean =
-    plan.children.exists(containsKeyGroupedShuffle)
-
-  private def containsKeyGroupedShuffle(plan: SparkPlan): Boolean = plan match {
-    case _: BroadcastExchangeLike => false
-    case s: ShuffleExchangeLike =>
-      s.outputPartitioning.isInstanceOf[KeyGroupedPartitioning]
-    case stage: ShuffleQueryStageExec =>
-      stage.outputPartitioning.isInstanceOf[KeyGroupedPartitioning]
-    case reused: ReusedExchangeExec =>
-      reused.outputPartitioning.isInstanceOf[KeyGroupedPartitioning]
-    case other => other.children.exists(containsKeyGroupedShuffle)
+  /**
+   * Whether pushing the join key positions of the member of `spec` that matches `bestMember`
+   * would regroup a scan beside a one-side shuffle below `plan`. The shuffle keeps its own
+   * layout, so only positions that select all of its partition expressions keep the two aligned.
+   * The walk stops where the push stops.
+   */
+  private def positionsRegroupBesideShuffle(
+      plan: SparkPlan,
+      spec: ShuffleSpec,
+      bestMember: ShuffleSpec): Boolean = {
+    def regroups(p: SparkPlan, positions: Seq[Int]): Boolean = p match {
+      case _: BroadcastExchangeLike => false
+      case s @ (_: ShuffleExchangeLike | _: ShuffleQueryStageExec | _: ReusedExchangeExec) =>
+        s.outputPartitioning match {
+          case k: KeyGroupedPartitioning => positions != k.expressions.indices
+          case _ => false
+        }
+      case other => other.children.exists(regroups(_, positions))
+    }
+    flattenSpec(spec).find(bestMember.isCompatibleWith) match {
+      case Some(KeyGroupedShuffleSpec(_, _, Some(positions))) => regroups(plan, positions)
+      case _ => false
+    }
   }
 
   /**
@@ -1036,11 +1010,7 @@ case class EnsureRequirements(
       )
     // A broadcast build side does not feed this join's partitioning.
     case b: BroadcastExchangeLike => b
-    // The input of a shuffle does not feed this join's partitioning. A one-side shuffle itself
-    // does: it was routed onto the old partition values, so retarget it onto the ones just pushed.
-    case s: ShuffleExchangeExec if commonPartitionValues.isDefined =>
-      retargetKeyGroupedShuffle(
-        s, commonPartitionValues.get, reducers, applyPartialClustering).getOrElse(s)
+    // Nor does the input of a shuffle.
     case s: ShuffleExchangeLike => s
     case node =>
       // Recurse through every child down to the scans.
