@@ -32,7 +32,7 @@ from pyspark.errors import (
     PySparkTypeError,
 )
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
-from pyspark.sql.types import DataType, StructType, _parse_datatype_string
+from pyspark.sql.types import DataType, StructType, _check_no_char_varchar, _parse_datatype_string
 from pyspark.sql.udf import _wrap_function
 from pyspark.util import PythonEvalType
 
@@ -369,6 +369,7 @@ class UserDefinedTableFunction:
                         "return_type": f"{parsed}",
                     },
                 )
+            _check_no_char_varchar(parsed, "Python UDTF return types")
             self._returnType_placeholder = parsed
         return self._returnType_placeholder
 

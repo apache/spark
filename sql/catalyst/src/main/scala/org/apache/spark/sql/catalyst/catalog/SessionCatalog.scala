@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import java.lang.reflect.InvocationTargetException
 import java.net.URI
 import java.util.Locale
 import java.util.concurrent.{Callable, ExecutionException, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
+import scala.util.control.NonFatal
 
 import com.google.common.cache.{Cache, CacheBuilder}
 import com.google.common.util.concurrent.UncheckedExecutionException
@@ -40,6 +42,7 @@ import org.apache.spark.sql.catalyst.catalog.SQLFunction.{padArgumentsWithDefaul
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Cast, Expression, ExpressionInfo, LateralSubquery, NamedArgumentExpression, NamedExpression, OuterReference, ScalarSubquery, UpCast}
 import org.apache.spark.sql.catalyst.expressions.NamedLambdaVariable
 import org.apache.spark.sql.catalyst.expressions.UnresolvedNamedLambdaVariable
+import org.apache.spark.sql.catalyst.expressions.V2ExpressionUtils
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter, LateralJoin, LogicalPlan, NamedParametersSupport, OneRowRelation, Project, SubqueryAlias, View}
@@ -47,6 +50,7 @@ import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
+import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
@@ -2073,17 +2077,69 @@ class SessionCatalog(
   }
 
   /**
-   * Constructs a [[FunctionBuilder]] based on the provided function metadata.
+   * Constructs a [[FunctionBuilder]] and the [[ExpressionInfo]] based on the provided function
+   * metadata.
    */
-  private def makeFunctionBuilder(func: CatalogFunction): FunctionBuilder = {
+  private def makeFunctionBuilderAndInfo(
+      func: CatalogFunction): (FunctionBuilder, ExpressionInfo) = {
+    val clazz = loadFunctionClass(func)
+    val name = func.identifier.unquotedString
+    if (isV2FunctionClass(clazz)) {
+      // A V2 function: bind it to the arguments at each call site. An aggregate function is
+      // returned as a bare `V2Aggregator`, which the caller wraps into an `AggregateExpression`
+      // carrying DISTINCT / FILTER. This check goes first so that a class also implementing a
+      // Hive UDF interface, for other engines sharing the metastore, runs as a V2 function in
+      // Spark. The alias makes errors and column names use the function name, like the Hive UDF
+      // wrappers do.
+      val unbound = newV2FunctionInstance(clazz, func.identifier)
+      val builder = (input: Seq[Expression]) => {
+        val expr = V2ExpressionUtils.bindFunction(
+          unbound, input, displayName = Some(func.identifier))
+        expr.setTagValue(FunctionRegistry.FUNC_ALIAS, name)
+        expr
+      }
+      (builder, makeExprInfoForV2Function(func, unbound))
+    } else {
+      val builder = (input: Seq[Expression]) =>
+        functionExpressionBuilder.makeExpression(name, clazz, input)
+      (builder, makeExprInfoForHiveFunction(func))
+    }
+  }
+
+  /**
+   * Loads the class a class-based function (`CREATE FUNCTION ... AS 'class'`) refers to.
+   */
+  private def loadFunctionClass(func: CatalogFunction): Class[_] = {
     val className = func.className
     if (!Utils.classIsLoadable(className)) {
       throw QueryCompilationErrors.cannotLoadClassWhenRegisteringFunctionError(
         className, func.identifier)
     }
-    val clazz = Utils.classForName(className)
-    val name = func.identifier.unquotedString
-    (input: Seq[Expression]) => functionExpressionBuilder.makeExpression(name, clazz, input)
+    Utils.classForName(className)
+  }
+
+  private def isV2FunctionClass(clazz: Class[_]): Boolean = {
+    classOf[UnboundFunction].isAssignableFrom(clazz)
+  }
+
+  private def newV2FunctionInstance(
+      clazz: Class[_],
+      ident: FunctionIdentifier): UnboundFunction = {
+    try {
+      clazz.getDeclaredConstructor().newInstance().asInstanceOf[UnboundFunction]
+    } catch {
+      case e: InvocationTargetException =>
+        val cause = e.getCause
+        if (NonFatal(cause) || cause.isInstanceOf[LinkageError]) {
+          throw QueryCompilationErrors.cannotInstantiateFunctionClassError(
+            clazz.getName, ident, cause)
+        } else {
+          throw cause
+        }
+      case NonFatal(e) =>
+        throw QueryCompilationErrors.cannotInstantiateFunctionClassError(
+          clazz.getName, ident, e)
+    }
   }
 
   private def makeUserDefinedScalarFuncBuilder(func: UserDefinedFunction): FunctionBuilder = {
@@ -2119,8 +2175,13 @@ class SessionCatalog(
       funcDefinition: CatalogFunction,
       overrideIfExists: Boolean,
       functionBuilder: Option[FunctionBuilder] = None): Unit = {
-    val builder = functionBuilder.getOrElse(makeFunctionBuilder(funcDefinition))
-    registerFunction(funcDefinition, overrideIfExists, functionRegistry, builder, info = None)
+    functionBuilder match {
+      case Some(builder) =>
+        registerFunction(funcDefinition, overrideIfExists, functionRegistry, builder, info = None)
+      case None =>
+        val (builder, info) = makeFunctionBuilderAndInfo(funcDefinition)
+        registerFunction(funcDefinition, overrideIfExists, functionRegistry, builder, Some(info))
+    }
   }
 
   private def registerFunction[T](
@@ -2171,6 +2232,28 @@ class SessionCatalog(
       }
     }
     registry.registerFunction(identToRegister, resolvedInfo, functionBuilder)
+  }
+
+  private def makeExprInfoForV2Function(
+      func: CatalogFunction,
+      unbound: UnboundFunction): ExpressionInfo = {
+    val description = try {
+      unbound.description()
+    } catch {
+      case NonFatal(_) | _: LinkageError => null
+    }
+    new ExpressionInfo(
+      func.className,
+      func.identifier.database.orNull,
+      func.identifier.funcName,
+      description,
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "v2_function")
   }
 
   private def makeExprInfoForHiveFunction(func: CatalogFunction): ExpressionInfo = {
@@ -2353,6 +2436,55 @@ class SessionCatalog(
   }
 
   /**
+   * Returns whether a temporary SCALAR function with this name exists (ignoring table functions).
+   * The scalar builtin star-handling probe must mirror `resolveScalarFunctionByIdentifier`, which
+   * consults only the scalar registry, so a temp table function of the same name is not a scalar
+   * shadow (its separate effect on ownership is probed via [[isTemporaryTableFunctionVisible]]).
+   */
+  private def isTemporaryScalarFunction(name: FunctionIdentifier): Boolean = {
+    if (name.database.isEmpty) {
+      functionRegistry.functionExists(tempFunctionIdentifier(name.funcName))
+    } else {
+      isTempFunctionIdentifier(name) && functionRegistry.functionExists(name)
+    }
+  }
+
+  /** Counterpart of [[isTemporaryScalarFunction]] for the table-function registry. */
+  private def isTemporaryTableFunction(name: FunctionIdentifier): Boolean = {
+    if (name.database.isEmpty) {
+      tableFunctionRegistry.functionExists(tempFunctionIdentifier(name.funcName))
+    } else {
+      isTempFunctionIdentifier(name) && tableFunctionRegistry.functionExists(name)
+    }
+  }
+
+  /**
+   * Whether a temp function of the given name is visible in the current resolution context,
+   * applying the same stored-view filtering as actual resolution ([[handleViewContext]]) but
+   * WITHOUT its side effect of recording the name as a referred temp function. Inside a stored view
+   * a temp function is visible only if the view captured it.
+   */
+  private def isTempFunctionVisibleInContext(name: FunctionIdentifier): Boolean =
+    AnalysisContext.get.catalogAndNamespace.isEmpty ||
+      AnalysisContext.get.referredTempFunctionNames.contains(name.funcName)
+
+  /**
+   * Whether a temporary scalar function is visible in the current context. Scalar builtin-ownership
+   * probes use this so they agree with `resolveScalarFunctionByIdentifier` on which routine owns a
+   * name.
+   */
+  def isTemporaryScalarFunctionVisible(name: FunctionIdentifier): Boolean =
+    isTemporaryScalarFunction(name) && isTempFunctionVisibleInContext(name)
+
+  /**
+   * Whether a temporary table function is visible in the current context. Builtin-ownership probes
+   * use this to detect that scalar resolution would terminate at this PATH entry with
+   * NOT_A_SCALAR_FUNCTION (a table-only match), so the name never reaches `system.builtin`.
+   */
+  def isTemporaryTableFunctionVisible(name: FunctionIdentifier): Boolean =
+    isTemporaryTableFunction(name) && isTempFunctionVisibleInContext(name)
+
+  /**
    * Return whether this function has been registered in the function registry of the current
    * session. If not existed, return false.
    */
@@ -2397,6 +2529,23 @@ class SessionCatalog(
   def isBuiltinFunction(name: String): Boolean = {
     FunctionRegistry.builtin.functionExists(FunctionIdentifier(name)) ||
       TableFunctionRegistry.builtin.functionExists(FunctionIdentifier(name))
+  }
+
+  /**
+   * Returns whether `system.builtin.<name>` still resolves to Spark's stock built-in, i.e. it has
+   * not been replaced by `SparkSessionExtensions.injectFunction`. The session `functionRegistry` is
+   * a clone of [[FunctionRegistry.builtin]] that shares each builder by reference, while
+   * `injectFunction` installs a fresh builder under the same identifier -- so builder identity
+   * tells them apart. Built-in-only syntax handling (e.g. the routed SQL/JSON direct-star
+   * rejection) must consult this, since resolution routes to the replacement when present.
+   */
+  def isStockBuiltinFunction(name: String): Boolean = {
+    val ident = FunctionRegistry.builtinFunctionIdentifier(name)
+    (functionRegistry.lookupFunctionBuilder(ident),
+        FunctionRegistry.builtin.lookupFunctionBuilder(ident)) match {
+      case (Some(sessionBuilder), Some(stockBuilder)) => sessionBuilder eq stockBuilder
+      case _ => false
+    }
   }
 
   protected[sql] def failFunctionLookup(name: FunctionIdentifier): Nothing = {
@@ -2670,12 +2819,7 @@ class SessionCatalog(
                 makeUserDefinedScalarFuncBuilder(udf))
             } else {
               loadFunctionResources(funcMetadata.resources)
-              registerFunction(
-                funcMetadata,
-                overrideIfExists = false,
-                functionRegistry,
-                makeFunctionBuilder(funcMetadata),
-                info = None)
+              registerFunction(funcMetadata, overrideIfExists = false)
             }
             functionRegistry.lookupFunctionBuilder(qualifiedIdent).get
           }

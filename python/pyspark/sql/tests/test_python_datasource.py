@@ -27,7 +27,7 @@ from decimal import Decimal
 from typing import Callable, Iterable, Iterator, List, Tuple, Union
 from unittest import mock
 
-from pyspark.errors import AnalysisException, PythonException
+from pyspark.errors import AnalysisException, PySparkNotImplementedError, PythonException
 from pyspark.memory_profiler_ext import has_memory_profiler
 from pyspark.sql.datasource import (
     CaseInsensitiveDict,
@@ -61,6 +61,7 @@ from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
 )
 from pyspark.testing.utils import (
+    eventually,
     have_pyarrow,
     pyarrow_requirement_message,
 )
@@ -151,6 +152,17 @@ class PythonDataSourceWorkerUtilsTests(unittest.TestCase):
             run_worker(None, regular_accumulator_id=1),
             (1, {1}, (0, 0), 1),
         )
+
+    @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+    def test_deserialize_unsupported_filter(self):
+        with mock.patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
+            from pyspark.sql.worker.data_source_pushdown_filters import deserializeFilter
+
+        with self.assertRaises(PySparkNotImplementedError) as pe:
+            deserializeFilter({"name": "UnknownFilter", "columnPath": ["x"], "isNegated": False})
+
+        self.assertEqual(pe.exception.getCondition(), "UNSUPPORTED_FILTER")
+        self.assertEqual(pe.exception.getMessageParameters(), {"name": "UnknownFilter"})
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
@@ -451,7 +463,10 @@ class BasePythonDataSourceTestsMixin:
 
         with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
             self.spark.dataSource.register(TestDataSource)
-            with self.assertRaisesRegex(Exception, "DATA_SOURCE_EXTRANEOUS_FILTERS"):
+            with self.assertRaisesRegex(
+                Exception,
+                "DATA_SOURCE_EXTRANEOUS_FILTERS.*returned filters that are not part of the input",
+            ):
                 self.spark.read.format("test").load().filter("x = 1").show()
 
     def test_filter_pushdown_error(self):
@@ -1649,49 +1664,56 @@ class BasePythonDataSourceTestsMixin:
                 ],
             )
 
-            logs = self.spark.tvf.python_worker_logs()
+            # Worker logs are captured asynchronously from the worker's stdout and only
+            # become visible once the trailing block is flushed, so they may not all be
+            # present immediately after the query completes. Poll until they show up.
+            @eventually(timeout=5, catch_assertions=True)
+            def check_logs():
+                logs = self.spark.tvf.python_worker_logs()
 
-            assertDataFrameEqual(
-                logs.select("level", "msg", "context", "logger"),
-                [
-                    Row(
-                        level="WARNING",
-                        msg=msg,
-                        context=context,
-                        logger="test_data_source_reader",
-                    )
-                    for msg, context in [
-                        (
-                            "TestJsonDataSource.__init__: ['path']",
-                            {"class_name": "TestJsonDataSource", "func_name": "__init__"},
-                        ),
-                        (
-                            "TestJsonDataSource.name",
-                            {"class_name": "TestJsonDataSource", "func_name": "name"},
-                        ),
-                        (
-                            "TestJsonDataSource.schema",
-                            {"class_name": "TestJsonDataSource", "func_name": "schema"},
-                        ),
-                        (
-                            "TestJsonDataSource.reader: ['name', 'age']",
-                            {"class_name": "TestJsonDataSource", "func_name": "reader"},
-                        ),
-                        (
-                            "TestJsonReader.__init__: ['path']",
-                            {"class_name": "TestJsonDataSource", "func_name": "reader"},
-                        ),
-                        (
-                            "TestJsonReader.partitions",
-                            {"class_name": "TestJsonReader", "func_name": "partitions"},
-                        ),
-                        (
-                            "TestJsonReader.read: InputPartition(value=None)",
-                            {"class_name": "TestJsonReader", "func_name": "read"},
-                        ),
-                    ]
-                ],
-            )
+                assertDataFrameEqual(
+                    logs.select("level", "msg", "context", "logger"),
+                    [
+                        Row(
+                            level="WARNING",
+                            msg=msg,
+                            context=context,
+                            logger="test_data_source_reader",
+                        )
+                        for msg, context in [
+                            (
+                                "TestJsonDataSource.__init__: ['path']",
+                                {"class_name": "TestJsonDataSource", "func_name": "__init__"},
+                            ),
+                            (
+                                "TestJsonDataSource.name",
+                                {"class_name": "TestJsonDataSource", "func_name": "name"},
+                            ),
+                            (
+                                "TestJsonDataSource.schema",
+                                {"class_name": "TestJsonDataSource", "func_name": "schema"},
+                            ),
+                            (
+                                "TestJsonDataSource.reader: ['name', 'age']",
+                                {"class_name": "TestJsonDataSource", "func_name": "reader"},
+                            ),
+                            (
+                                "TestJsonReader.__init__: ['path']",
+                                {"class_name": "TestJsonDataSource", "func_name": "reader"},
+                            ),
+                            (
+                                "TestJsonReader.partitions",
+                                {"class_name": "TestJsonReader", "func_name": "partitions"},
+                            ),
+                            (
+                                "TestJsonReader.read: InputPartition(value=None)",
+                                {"class_name": "TestJsonReader", "func_name": "read"},
+                            ),
+                        ]
+                    ],
+                )
+
+            check_logs()
 
     @unittest.skipIf(is_remote_only(), "Requires JVM access")
     def test_data_source_reader_pushdown_with_logging(self):
@@ -1756,53 +1778,60 @@ class BasePythonDataSourceTestsMixin:
                 ],
             )
 
-            logs = self.spark.tvf.python_worker_logs()
+            # Worker logs are captured asynchronously from the worker's stdout and only
+            # become visible once the trailing block is flushed, so they may not all be
+            # present immediately after the query completes. Poll until they show up.
+            @eventually(timeout=5, catch_assertions=True)
+            def check_logs():
+                logs = self.spark.tvf.python_worker_logs()
 
-            assertDataFrameEqual(
-                logs.select("level", "msg", "context", "logger"),
-                [
-                    Row(
-                        level="WARNING",
-                        msg=msg,
-                        context=context,
-                        logger="test_data_source_reader_pushdown",
-                    )
-                    for msg, context in [
-                        (
-                            "TestJsonDataSource.__init__: ['path']",
-                            {"class_name": "TestJsonDataSource", "func_name": "__init__"},
-                        ),
-                        (
-                            "TestJsonDataSource.name",
-                            {"class_name": "TestJsonDataSource", "func_name": "name"},
-                        ),
-                        (
-                            "TestJsonDataSource.schema",
-                            {"class_name": "TestJsonDataSource", "func_name": "schema"},
-                        ),
-                        (
-                            "TestJsonDataSource.reader: ['name', 'age']",
-                            {"class_name": "TestJsonDataSource", "func_name": "reader"},
-                        ),
-                        (
-                            "TestJsonReader.pushFilters: [IsNotNull(attribute=('age',))]",
-                            {"class_name": "TestJsonReader", "func_name": "pushFilters"},
-                        ),
-                        (
-                            "TestJsonReader.__init__: ['path']",
-                            {"class_name": "TestJsonDataSource", "func_name": "reader"},
-                        ),
-                        (
-                            "TestJsonReader.partitions",
-                            {"class_name": "TestJsonReader", "func_name": "partitions"},
-                        ),
-                        (
-                            "TestJsonReader.read: InputPartition(value=None)",
-                            {"class_name": "TestJsonReader", "func_name": "read"},
-                        ),
-                    ]
-                ],
-            )
+                assertDataFrameEqual(
+                    logs.select("level", "msg", "context", "logger"),
+                    [
+                        Row(
+                            level="WARNING",
+                            msg=msg,
+                            context=context,
+                            logger="test_data_source_reader_pushdown",
+                        )
+                        for msg, context in [
+                            (
+                                "TestJsonDataSource.__init__: ['path']",
+                                {"class_name": "TestJsonDataSource", "func_name": "__init__"},
+                            ),
+                            (
+                                "TestJsonDataSource.name",
+                                {"class_name": "TestJsonDataSource", "func_name": "name"},
+                            ),
+                            (
+                                "TestJsonDataSource.schema",
+                                {"class_name": "TestJsonDataSource", "func_name": "schema"},
+                            ),
+                            (
+                                "TestJsonDataSource.reader: ['name', 'age']",
+                                {"class_name": "TestJsonDataSource", "func_name": "reader"},
+                            ),
+                            (
+                                "TestJsonReader.pushFilters: [IsNotNull(attribute=('age',))]",
+                                {"class_name": "TestJsonReader", "func_name": "pushFilters"},
+                            ),
+                            (
+                                "TestJsonReader.__init__: ['path']",
+                                {"class_name": "TestJsonDataSource", "func_name": "reader"},
+                            ),
+                            (
+                                "TestJsonReader.partitions",
+                                {"class_name": "TestJsonReader", "func_name": "partitions"},
+                            ),
+                            (
+                                "TestJsonReader.read: InputPartition(value=None)",
+                                {"class_name": "TestJsonReader", "func_name": "read"},
+                            ),
+                        ]
+                    ],
+                )
+
+            check_logs()
 
     @unittest.skipIf(is_remote_only(), "Requires JVM access")
     def test_data_source_writer_with_logging(self):
@@ -1881,84 +1910,91 @@ class BasePythonDataSourceTestsMixin:
                 with self.assertRaises(Exception, msg="abort test"):
                     df.write.format("my-json").mode("append").option("abort", "true").save(d)
 
-                logs = self.spark.tvf.python_worker_logs()
+                # Worker logs are captured asynchronously from the worker's stdout and only
+                # become visible once the trailing block is flushed, so they may not all be
+                # present immediately after the query completes. Poll until they show up.
+                @eventually(timeout=5, catch_assertions=True)
+                def check_logs():
+                    logs = self.spark.tvf.python_worker_logs()
 
-                # We could get either 1 or 2 "TestJsonWriter.write: abort test" logs because
-                # the operation is time sensitive. When the first partition gets aborted,
-                # the executor will cancel the rest of the tasks. Whether we are able to get
-                # the second log depends on whether the second partition starts before the
-                # cancellation. When we use simple worker, the second log is often missing
-                # because the spawn overhead is large.
-                non_abort_logs = logs.select("level", "msg", "context", "logger").filter(
-                    "msg != 'TestJsonWriter.write: abort test'"
-                )
-                abort_logs = logs.select("level", "msg", "context", "logger").filter(
-                    "msg == 'TestJsonWriter.write: abort test'"
-                )
-                assertDataFrameEqual(
-                    non_abort_logs,
-                    [
-                        Row(
-                            level="WARNING",
-                            msg=msg,
-                            context=context,
-                            logger="test_datasource_writer",
-                        )
-                        for msg, context in [
-                            (
-                                "TestJsonDataSource.name",
-                                {"class_name": "TestJsonDataSource", "func_name": "name"},
-                            ),
-                            (
-                                "TestJsonDataSource.writer: (['name', 'age'], {True})",
-                                {"class_name": "TestJsonDataSource", "func_name": "writer"},
-                            ),
-                            (
-                                "TestJsonWriter.__init__: ['path']",
-                                {"class_name": "TestJsonDataSource", "func_name": "writer"},
-                            ),
-                            (
-                                "TestJsonWriter.write: 1, [{'name': 'Diana', 'age': 28}]",
-                                {"class_name": "TestJsonWriter", "func_name": "write"},
-                            ),
-                            (
-                                "TestJsonWriter.write: 1, [{'name': 'Charlie', 'age': 35}]",
-                                {"class_name": "TestJsonWriter", "func_name": "write"},
-                            ),
-                            (
-                                "TestJsonWriter.commit: 2",
-                                {"class_name": "TestJsonWriter", "func_name": "commit"},
-                            ),
-                            (
-                                "TestJsonDataSource.name",
-                                {"class_name": "TestJsonDataSource", "func_name": "name"},
-                            ),
-                            (
-                                "TestJsonDataSource.writer: (['name', 'age'], {False})",
-                                {"class_name": "TestJsonDataSource", "func_name": "writer"},
-                            ),
-                            (
-                                "TestJsonWriter.__init__: ['abort', 'path']",
-                                {"class_name": "TestJsonDataSource", "func_name": "writer"},
-                            ),
-                            (
-                                "TestJsonWriter.abort",
-                                {"class_name": "TestJsonWriter", "func_name": "abort"},
-                            ),
-                        ]
-                    ],
-                )
-                assertDataFrameEqual(
-                    abort_logs.dropDuplicates(["msg"]),
-                    [
-                        Row(
-                            level="WARNING",
-                            msg="TestJsonWriter.write: abort test",
-                            context={"class_name": "TestJsonWriter", "func_name": "write"},
-                            logger="test_datasource_writer",
-                        )
-                    ],
-                )
+                    # We could get either 1 or 2 "TestJsonWriter.write: abort test" logs because
+                    # the operation is time sensitive. When the first partition gets aborted,
+                    # the executor will cancel the rest of the tasks. Whether we are able to get
+                    # the second log depends on whether the second partition starts before the
+                    # cancellation. When we use simple worker, the second log is often missing
+                    # because the spawn overhead is large.
+                    non_abort_logs = logs.select("level", "msg", "context", "logger").filter(
+                        "msg != 'TestJsonWriter.write: abort test'"
+                    )
+                    abort_logs = logs.select("level", "msg", "context", "logger").filter(
+                        "msg == 'TestJsonWriter.write: abort test'"
+                    )
+                    assertDataFrameEqual(
+                        non_abort_logs,
+                        [
+                            Row(
+                                level="WARNING",
+                                msg=msg,
+                                context=context,
+                                logger="test_datasource_writer",
+                            )
+                            for msg, context in [
+                                (
+                                    "TestJsonDataSource.name",
+                                    {"class_name": "TestJsonDataSource", "func_name": "name"},
+                                ),
+                                (
+                                    "TestJsonDataSource.writer: (['name', 'age'], {True})",
+                                    {"class_name": "TestJsonDataSource", "func_name": "writer"},
+                                ),
+                                (
+                                    "TestJsonWriter.__init__: ['path']",
+                                    {"class_name": "TestJsonDataSource", "func_name": "writer"},
+                                ),
+                                (
+                                    "TestJsonWriter.write: 1, [{'name': 'Diana', 'age': 28}]",
+                                    {"class_name": "TestJsonWriter", "func_name": "write"},
+                                ),
+                                (
+                                    "TestJsonWriter.write: 1, [{'name': 'Charlie', 'age': 35}]",
+                                    {"class_name": "TestJsonWriter", "func_name": "write"},
+                                ),
+                                (
+                                    "TestJsonWriter.commit: 2",
+                                    {"class_name": "TestJsonWriter", "func_name": "commit"},
+                                ),
+                                (
+                                    "TestJsonDataSource.name",
+                                    {"class_name": "TestJsonDataSource", "func_name": "name"},
+                                ),
+                                (
+                                    "TestJsonDataSource.writer: (['name', 'age'], {False})",
+                                    {"class_name": "TestJsonDataSource", "func_name": "writer"},
+                                ),
+                                (
+                                    "TestJsonWriter.__init__: ['abort', 'path']",
+                                    {"class_name": "TestJsonDataSource", "func_name": "writer"},
+                                ),
+                                (
+                                    "TestJsonWriter.abort",
+                                    {"class_name": "TestJsonWriter", "func_name": "abort"},
+                                ),
+                            ]
+                        ],
+                    )
+                    assertDataFrameEqual(
+                        abort_logs.dropDuplicates(["msg"]),
+                        [
+                            Row(
+                                level="WARNING",
+                                msg="TestJsonWriter.write: abort test",
+                                context={"class_name": "TestJsonWriter", "func_name": "write"},
+                                logger="test_datasource_writer",
+                            )
+                        ],
+                    )
+
+                check_logs()
 
     def test_data_source_perf_profiler(self):
         with self.sql_conf({"spark.sql.pyspark.dataSource.profiler": "perf"}):

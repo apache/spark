@@ -37,8 +37,22 @@ Spark SQL and DataFrames support the following data types:
   - `DecimalType`: Represents arbitrary-precision signed decimal numbers. Backed internally by `java.math.BigDecimal`. A `BigDecimal` consists of an arbitrary precision integer unscaled value and a 32-bit integer scale.
 * String type
   - `StringType`: Represents character string values.
-  - `VarcharType(length)`: A variant of `StringType` which has a length limitation. Data writing will fail if the input string exceeds the length limitation. Note: this type can only be used in table schema, not functions/operators.
-  - `CharType(length)`: A variant of `VarcharType(length)` which is fixed length. Reading column of type `CharType(n)` always returns string values of length `n`. Char type column comparison will pad the short one to the longer length.
+  - `VarcharType(length)`: A length-limited overlay on `StringType` used in table schemas.
+    Inserts fail with `EXCEED_LIMIT_LENGTH` if non-space content exceeds `length`; excess
+    trailing spaces are trimmed. By default this type is not first-class: analyzed plans and
+    DataFrame schemas rewrite it to `STRING` (with type metadata on table columns). `CAST` to
+    `VARCHAR` is treated as `CAST` to `STRING`. Function schemas, `createDataFrame`, and
+    `read.schema` raise `UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING`.
+  - `CharType(length)`: A fixed-length overlay on `VarcharType(length)`. With
+    `spark.sql.readSideCharPadding` (default `true`), reads pad values to `length` characters.
+    Comparisons of CHAR columns pad the shorter operand to the longer length.
+
+  Preview: set `spark.sql.charVarchar.standardSemantics.enabled` to `true` to treat `CHAR`,
+  `VARCHAR`, and `STRING` as a first-class type family (`CHAR -> VARCHAR -> STRING`) in schemas
+  and query plans. This is a preview feature and may change in future releases. Enable it with
+  `SET spark.sql.charVarchar.standardSemantics.enabled=true;` before relying on CAST targets,
+  least-common-type, function schemas, or Dataset APIs that keep CHAR/VARCHAR. See
+  [Character String Types](sql-ref-character-string-types.html).
 * Binary type
   - `BinaryType`: Represents byte sequence values.
 * Boolean type
@@ -56,7 +70,9 @@ Spark SQL and DataFrames support the following data types:
   hour, minute, and second. All operations are performed without taking any time zone into account.
     - Note: TIMESTAMP in Spark is a user-specified alias associated with one of the TIMESTAMP_LTZ and TIMESTAMP_NTZ variations.  Users can set the default timestamp type as `TIMESTAMP_LTZ`(default value) or `TIMESTAMP_NTZ` via the configuration `spark.sql.timestampType`.
   - `TimestampNTZNanosType(precision)` / `TimestampLTZNanosType(precision)`: Preview nanosecond-capable variants of `TIMESTAMP_NTZ` and `TIMESTAMP_LTZ` with fractional seconds precision `precision` in `[7, 9]`. Unparameterized `TIMESTAMP`, `TIMESTAMP_NTZ`, and `TIMESTAMP_LTZ` remain microsecond types. In schema-driven Dataset/DataFrame conversion, Spark maps `TimestampNTZNanosType` to `java.time.LocalDateTime` and `TimestampLTZNanosType` to `java.time.Instant`; values with more sub-micro digits than declared by `precision` are floor-truncated to that precision. Enable the preview feature with `SET spark.sql.timestampNanosTypes.enabled=true;` before using these types in schemas or SQL.
-    - Note: Nanosecond precision is only available through the schema-driven APIs above. Typed encoders derived from `java.time.Instant`/`java.time.LocalDateTime` (for example `ds.as[T]` for a case class and `spark.createDataFrame(Seq(...))` without an explicit schema) bind these types to the microsecond `TIMESTAMP_LTZ`/`TIMESTAMP_NTZ` types, and typed Scala/Java UDFs such as `udf((i: java.time.Instant) => ...)` coerce their inputs to microsecond precision at the UDF boundary. Kryo encoders bypass the SQL type system entirely and likewise do not preserve nanoseconds. To retain nanoseconds, use a schema that declares `TimestampLTZNanosType`/`TimestampNTZNanosType` together with the schema-driven `Row`/`Encoders.row(schema)` path.
+    - Note: Nanosecond precision is only available through the schema-driven APIs above. Typed encoders derived from `java.time.Instant`/`java.time.LocalDateTime` (for example `ds.as[T]` for a case class and `spark.createDataFrame(Seq(...))` without an explicit schema) bind these types to the microsecond `TIMESTAMP_LTZ`/`TIMESTAMP_NTZ` types, and typed Scala/Java UDFs such as `udf((i: java.time.Instant) => ...)` take microsecond inputs, so a nanosecond argument needs an explicit `CAST` to the microsecond type. Kryo encoders bypass the SQL type system entirely and likewise do not preserve nanoseconds. To retain nanoseconds, use a schema that declares `TimestampLTZNanosType`/`TimestampNTZNanosType` together with the schema-driven `Row`/`Encoders.row(schema)` path.
+    - Note: The supported range is `0001-01-01` to `9999-12-31`, as for the microsecond types. Adding an interval (`+ INTERVAL`, `timestampadd`) past the internal limit of about years -290308 to +294247 (epoch microseconds in a 64-bit long) raises `DATETIME_OVERFLOW`, and casting a string past it returns `NULL`, or raises `CAST_INVALID_INPUT` under ANSI mode. Parquet `TIMESTAMP(NANOS)` and Avro `timestamp-nanos`/`local-timestamp-nanos` store a 64-bit count of epoch nanoseconds, so they only hold `1677-09-21 00:12:43.145224192` to `2262-04-11 23:47:16.854775807` UTC. Arrow `timestamp[ns]`, as used by pandas conversion and Spark Connect, starts one nanosecond later, at `1677-09-21 00:12:43.145224193` UTC, because pandas reserves the 64-bit minimum for `NaT`. Writing a value outside these ranges raises `DATETIME_OVERFLOW`.
+    - Note: Subtracting timestamps when either operand has nanosecond precision is not supported yet, because the interval result has microsecond precision. Cast both operands to `TIMESTAMP_LTZ` or `TIMESTAMP_NTZ` to subtract at microsecond precision, or cast them to `TIMESTAMP_LTZ(9)` or `TIMESTAMP_NTZ(9)` and use `unix_nanos(end) - unix_nanos(start)` for the elapsed time in nanoseconds.
 
 * Interval types
   - `YearMonthIntervalType(startField, endField)`: Represents a year-month interval which is made up of a contiguous subset of the following fields:

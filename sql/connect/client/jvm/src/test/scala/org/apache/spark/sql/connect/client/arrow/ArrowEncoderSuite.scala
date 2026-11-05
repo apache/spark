@@ -19,7 +19,7 @@ package org.apache.spark.sql.connect.client.arrow
 import java.io.{ByteArrayOutputStream, File}
 import java.math.BigInteger
 import java.net.URLClassLoader
-import java.time.{Duration, Period, ZoneOffset}
+import java.time.{Duration, LocalTime, Period, ZoneOffset}
 import java.time.temporal.ChronoUnit
 import java.util
 import java.util.{Collections, Objects}
@@ -48,7 +48,7 @@ import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils._
 import org.apache.spark.sql.catalyst.util.SparkIntervalUtils._
 import org.apache.spark.sql.connect.client.arrow.FooEnum.FooEnum
 import org.apache.spark.sql.connect.test.ConnectFunSuite
-import org.apache.spark.sql.types.{ArrayType, CharType, DataType, DayTimeIntervalType, Decimal, DecimalType, Geography, Geometry, IntegerType, Metadata, SQLUserDefinedType, StringType, StructType, UserDefinedType, VarcharType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{ArrayType, CharType, DataType, DayTimeIntervalType, Decimal, DecimalType, Geography, Geometry, IntegerType, Metadata, SQLUserDefinedType, StringType, StructType, TimeType, UserDefinedType, VarcharType, YearMonthIntervalType}
 import org.apache.spark.sql.util.CloseableIterator
 import org.apache.spark.unsafe.types.VariantVal
 import org.apache.spark.util.{MaybeNull, SparkStringUtils}
@@ -309,14 +309,14 @@ class ArrowEncoderSuite extends ConnectFunSuite {
     }
   }
 
-  test("SPARK-58794: char/varchar round trip") {
+  test("SPARK-58794, SPARK-59276: char/varchar round trip") {
     // The client cannot see the server's charVarchar configuration, so a result schema carrying
     // CHAR/VARCHAR must be decodable regardless of the local one. Values are padded and length
     // checked by the server, so the client passes them through unchanged.
     val encoder = toResultRowEncoder(
       new StructType()
-        .add("c", CharType(4))
-        .add("v", VarcharType(6))
+        .add("c", CharType(4, "UTF8_LCASE"))
+        .add("v", VarcharType(6, "UNICODE_CI"))
         .add("s", new StructType().add("c", CharType(4)))
         .add("a", ArrayType(VarcharType(6))))
     roundTripAndCheckIdentical(encoder) { () =>
@@ -329,6 +329,26 @@ class ArrowEncoderSuite extends ConnectFunSuite {
           maybeNull(mutable.ArraySeq.make[String](Array("gh"))))
       }
     }
+  }
+
+  test("SPARK-60346: TIME(p) round trip keeps the precision") {
+    val nanos = localTimeToNanos(LocalTime.parse("12:00:00.123456789"))
+    (TimeType.MIN_PRECISION to TimeType.MAX_PRECISION).foreach { p =>
+      val schema = new StructType().add("t", TimeType(p)).add("a", ArrayType(TimeType(p)))
+      val encoder = toResultRowEncoder(schema)
+      assert(encoder.schema === schema)
+      val time = nanosToLocalTime(truncateTimeToPrecision(nanos, p))
+      roundTripAndCheckIdentical(encoder) { () =>
+        Iterator.single(Row(time, mutable.ArraySeq.make(Array(time))))
+      }
+    }
+  }
+
+  test("SPARK-59276: local data physical schema does not unwrap UDTs") {
+    val schema = new StructType().add("udt", new UDTNotSupported)
+    val physicalSchema =
+      DataType.replaceCharVarcharWithCollationPreservingString(schema).asInstanceOf[StructType]
+    assert(physicalSchema === schema)
   }
 
   test("single batch") {
@@ -1202,6 +1222,37 @@ class ArrowEncoderSuite extends ConnectFunSuite {
           DayTimeIntervalType.DEFAULT.startField,
           DayTimeIntervalType.DEFAULT.endField)
       })
+
+  for (micros <- Seq(Long.MinValue, Long.MaxValue, -1L, 0L, 1L, 10000000000000000L)) {
+    test(s"day-time intervals retain full microsecond range: $micros") {
+      val duration = Duration.of(micros, ChronoUnit.MICROS)
+      val values = Seq(duration, null, Duration.ZERO)
+      val result = roundTrip(DayTimeIntervalEncoder, values.iterator)
+      try {
+        assert(result.toSeq == values)
+      } finally {
+        result.close()
+      }
+      val strings =
+        roundTripWithDifferentIOEncoders(DayTimeIntervalEncoder, StringEncoder, values.iterator)
+      try {
+        assert(strings.toSeq == values.map { value =>
+          if (value == null) {
+            null
+          } else {
+            toDayTimeIntervalString(
+              durationToMicros(value),
+              ANSI_STYLE,
+              DayTimeIntervalType.DEFAULT.startField,
+              DayTimeIntervalType.DEFAULT.endField)
+          }
+        })
+      } finally {
+        strings.close()
+      }
+    }
+  }
+
   UpCastTestCase(YearMonthIntervalEncoder, i => Period.ofMonths(i))
     .test(
       StringEncoder,

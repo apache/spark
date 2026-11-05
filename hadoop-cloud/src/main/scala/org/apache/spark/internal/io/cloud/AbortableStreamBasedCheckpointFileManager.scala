@@ -16,7 +16,6 @@
  */
 package org.apache.spark.internal.io.cloud
 
-import java.nio.file.FileAlreadyExistsException
 import java.util.EnumSet
 
 import scala.util.control.NonFatal
@@ -74,6 +73,7 @@ class AbortableStreamBasedCheckpointFileManager(path: Path, hadoopConf: Configur
           case NonFatal(e) =>
             logWarning(log"Error closing ${MDC(LogKeys.PATH, path)} " +
               log"(stream: ${MDC(LogKeys.FS_DATA_OUTPUT_STREAM, fsDataOutputStream)})", e)
+            throw e
       } finally {
         terminated = true
       }

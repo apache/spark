@@ -96,6 +96,18 @@ EXPLAIN FORMATTED
   )
   SELECT * FROM cte1 a, cte1 b WHERE a.key = b.key;
 
+-- CTE + MATERIALIZED
+EXPLAIN FORMATTED
+  WITH cte1 AS MATERIALIZED (
+    SELECT key, max(val)
+    FROM explain_temp1
+    WHERE key > 10
+    GROUP BY key
+  )
+  SELECT * FROM cte1 a WHERE a.key > 20
+  UNION ALL
+  SELECT * FROM cte1 b WHERE b.key < 15;
+
 -- Recursion
 EXPLAIN FORMATTED
   WITH RECURSIVE r(level) AS (

@@ -513,5 +513,73 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
   private def encodeFileAsBase64(secretFile: File) = {
     Base64.getEncoder.encodeToString(Files.readAllBytes(secretFile.toPath))
   }
+
+  // ========== SecurityManager.isRpcEncryptionEnabled (shared RPC-encryption predicate) ==========
+  //
+  // This predicate is distinct from the instance method isEncryptionEnabled(): it treats SSL RPC
+  // as encryption (rather than as disabling AES/SASL) and requires spark.authenticate for the
+  // AES/SASL path. The cases below pin that contract, including the combinations that the OIDC
+  // credential-propagation warning and the direct-credential-provider require() both depend on.
+
+  test("isRpcEncryptionEnabled: false when nothing is configured") {
+    assert(!SecurityManager.isRpcEncryptionEnabled(new SparkConf(loadDefaults = false)))
+  }
+
+  test("isRpcEncryptionEnabled: true with SSL RPC encryption") {
+    val conf = new SparkConf(loadDefaults = false).set(SecurityManager.SSL_RPC_ENABLED_CONF, "true")
+    assert(SecurityManager.isRpcEncryptionEnabled(conf))
+  }
+
+  test("isRpcEncryptionEnabled: true with authentication + network crypto") {
+    val conf = new SparkConf(loadDefaults = false)
+      .set(NETWORK_AUTH_ENABLED, true)
+      .set(Network.NETWORK_CRYPTO_ENABLED, true)
+    assert(SecurityManager.isRpcEncryptionEnabled(conf))
+  }
+
+  test("isRpcEncryptionEnabled: true with authentication + SASL encryption") {
+    val conf = new SparkConf(loadDefaults = false)
+      .set(NETWORK_AUTH_ENABLED, true)
+      .set(SASL_ENCRYPTION_ENABLED, true)
+    assert(SecurityManager.isRpcEncryptionEnabled(conf))
+  }
+
+  test("isRpcEncryptionEnabled: true with SSL RPC encryption together with authentication + " +
+      "network crypto") {
+    // SSL RPC is a sufficient condition on its own; combining it with the AES path must stay true.
+    val conf = new SparkConf(loadDefaults = false)
+      .set(SecurityManager.SSL_RPC_ENABLED_CONF, "true")
+      .set(NETWORK_AUTH_ENABLED, true)
+      .set(Network.NETWORK_CRYPTO_ENABLED, true)
+    assert(SecurityManager.isRpcEncryptionEnabled(conf))
+  }
+
+  test("isRpcEncryptionEnabled: true with SSL RPC encryption and network crypto but no auth") {
+    // SSL RPC alone encrypts the channel; the missing spark.authenticate only gates the AES/SASL
+    // path, so the disjunction is still true via SSL.
+    val conf = new SparkConf(loadDefaults = false)
+      .set(SecurityManager.SSL_RPC_ENABLED_CONF, "true")
+      .set(Network.NETWORK_CRYPTO_ENABLED, true)
+    assert(SecurityManager.isRpcEncryptionEnabled(conf))
+  }
+
+  test("isRpcEncryptionEnabled: false when authentication is enabled without encryption") {
+    // Authentication alone (without crypto/SASL encryption) does not encrypt the channel.
+    val conf = new SparkConf(loadDefaults = false).set(NETWORK_AUTH_ENABLED, true)
+    assert(!SecurityManager.isRpcEncryptionEnabled(conf))
+  }
+
+  test("isRpcEncryptionEnabled: false when network crypto is enabled without authentication") {
+    // spark.network.crypto.enabled only takes effect with spark.authenticate=true; on its own it
+    // does not encrypt anything, so it must not be treated as RPC encryption. (This is also where
+    // isEncryptionEnabled() would differ: it returns true here even though nothing is encrypted.)
+    val conf = new SparkConf(loadDefaults = false).set(Network.NETWORK_CRYPTO_ENABLED, true)
+    assert(!SecurityManager.isRpcEncryptionEnabled(conf))
+  }
+
+  test("isRpcEncryptionEnabled: false when SASL encryption is enabled without authentication") {
+    val conf = new SparkConf(loadDefaults = false).set(SASL_ENCRYPTION_ENABLED, true)
+    assert(!SecurityManager.isRpcEncryptionEnabled(conf))
+  }
 }
 

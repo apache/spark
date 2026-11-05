@@ -241,6 +241,8 @@ class PartitioningSuite extends SparkFunSuite with SharedSparkContext with Priva
       exception = intercept[SparkException](arrPairs.countByKeyApprox(1)),
       condition = "_LEGACY_ERROR_TEMP_3015")
     verify("HASH_PARTITIONER")(arrPairs.cogroup(arrPairs))
+    verify("HASH_PARTITIONER")(arrPairs.cogroup(arrPairs, arrPairs))
+    verify("HASH_PARTITIONER")(arrPairs.cogroup(arrPairs, arrPairs, arrPairs))
     verify("REDUCE_BY_KEY_LOCALLY")(arrPairs.reduceByKeyLocally(_ + _))
     verify("MAP_SIDE_COMBINE")(arrPairs.reduceByKey(_ + _))
   }

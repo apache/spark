@@ -33,8 +33,8 @@ import org.apache.spark.sql.execution.command.{CreateViewCommand, DescribeQueryC
 import org.apache.spark.sql.execution.datasources.CreateTempViewUsing
 
 /**
- * Parses a SQL statement string and returns a compact JSON description of the
- * unresolved plan (parse-only; no catalog resolution).
+ * Parses a SQL batch string and returns a compact JSON array describing its
+ * unresolved statements (parse-only; no catalog resolution).
  *
  * Uses a stock [[SparkSqlParser]] (ThreadLocal) so statement coverage matches
  * the default production parser (EXPLAIN / SET / ADD JAR / temp views / etc.).
@@ -43,47 +43,74 @@ import org.apache.spark.sql.execution.datasources.CreateTempViewUsing
  * executors without a session, so only the stock parser is available under
  * distributed eval.
  *
- * On success the JSON always includes `parse_success`, the statement
+ * Every statement object includes its 1-based Unicode code-point `start` in the
+ * original batch and its code-point `length`, excluding surrounding whitespace
+ * and the terminating semicolon. On success it also includes
+ * `parse_success`, the statement
  * identifier/code (ISO/IEC 9075-2:2023 Table 39), and omits unused optional
  * fields (`target_table_references`, `source_table_references`,
- * `function_references`, `select_list`, `parameter_markers`) when empty. On parse
- * failure it returns `parse_success: false` with source location and a nested
- * STANDARD-format error object, and does not throw. Only [[ParseException]] /
- * [[SqlScriptingException]] are converted to JSON; unexpected / internal
- * failures propagate so the function fails.
+ * `function_references`, `select_list`, `parameter_markers`) when empty. On
+ * parse failure the statement object contains `parse_success: false` with
+ * source location and a nested STANDARD-format error object, and parsing
+ * continues with later statements. Nested error locations are relative to the
+ * individual statement, while `start` is relative to the original batch; error
+ * `queryContext` indexes are code points as well. An
+ * empty or closed-comment-only batch produces an empty array. Only
+ * [[ParseException]] / [[SqlScriptingException]] are converted to JSON;
+ * unexpected / internal failures propagate so the function fails.
  */
 object ParseSqlResult {
 
   private val parser: ThreadLocal[SparkSqlParser] =
     ThreadLocal.withInitial(() => new SparkSqlParser())
 
-  /** Parse `sql` and render the JSON result string. */
+  /** Parse `sql` as a batch and render the JSON result array. */
   def fromSql(sql: String): String = {
+    val split = parser.get().splitStatementsWithPositions(sql)
+    val statements = split.completeStatements ++ split.partialStatement
+    val starts = charStarts(sql, statements)
+    compact(render(JArray(statements.zip(starts).map {
+      case (segment, start) => parseStatement(segment, start)
+    }.toList)))
+  }
+
+  private def parseStatement(segment: PositionedSqlStatement, charStart: Int): JObject = {
+    val sql = segment.statement
+    val length = sql.codePointCount(0, sql.length)
     try {
       // Do not inherit the outer query's origin from the parse_sql expression.
-      // Errors and parsed nodes must refer to the SQL string passed to this function.
+      // Errors and parsed nodes refer to the individual statement. Parser
+      // origins are code-point offsets, so this one is too.
       val origin = if (sql.nonEmpty) {
-        Origin(startIndex = Some(0), stopIndex = Some(sql.length - 1), sqlText = Some(sql))
+        Origin(
+          startIndex = Some(0),
+          stopIndex = Some(length - 1),
+          sqlText = Some(sql))
       } else {
         Origin(sqlText = Some(sql))
       }
       CurrentOrigin.withOrigin(origin) {
         val plan = parser.get().parsePlan(sql)
-        fromPlan(plan)
+        successJson(plan, charStart, length)
       }
     } catch {
       // User-facing parse / scripting failures become JSON; everything else fails.
       case e: ParseException =>
-        errorJson(e)
+        errorJson(e, segment, charStart, length)
       case e: SqlScriptingException =>
-        errorJson(e)
+        errorJson(e, segment, charStart, length)
     }
   }
 
   /** Build success JSON from an already-parsed unresolved plan. */
-  def fromPlan(plan: LogicalPlan): String = {
+  private def successJson(
+      plan: LogicalPlan,
+      charStart: Int,
+      length: Int): JObject = {
     val classification = SqlStatementCodes.classify(plan)
     val fields = mutable.ListBuffer.empty[JField]
+    fields += "start" -> JInt(charStart)
+    fields += "length" -> JInt(length)
     fields += "parse_success" -> JBool(true)
     fields += "statement_identifier" -> JString(classification.statementIdentifier)
     fields += "statement_code" -> JInt(classification.statementCode)
@@ -105,10 +132,79 @@ object ParseSqlResult {
       fields += "select_list" -> JArray(selectList.toList)
     }
     refs.parameterMarkers.foreach(markers => fields += "parameter_markers" -> markers)
-    compact(render(JObject(fields.toList)))
+    JObject(fields.toList)
   }
 
-  private def errorJson(e: SparkThrowable with Throwable): String = {
+  /**
+   * 1-based Unicode code-point starts for `statements` in `batch`. Statements
+   * are in ascending UTF-16 start order, so one left-to-right pass is enough:
+   * each count covers only the gap since the previous start.
+   */
+  private def charStarts(
+      batch: String,
+      statements: Seq[PositionedSqlStatement]): Seq[Int] = {
+    var utf16 = 0
+    var codePoints = 0
+    statements.map { segment =>
+      val startUtf16 = math.max(0, math.min(segment.start, batch.length))
+      if (startUtf16 >= utf16) {
+        codePoints += batch.codePointCount(utf16, startUtf16)
+      } else {
+        codePoints = batch.codePointCount(0, startUtf16)
+      }
+      utf16 = startUtf16
+      codePoints + 1
+    }
+  }
+
+  /**
+   * Keep statement-level `queryContext` indexes inside the statement.
+   * In-range contexts keep the shared renderer's fragment. A context that
+   * falls outside the statement is widened to cover all of it. Contexts of
+   * another object (a view body) are left as is.
+   */
+  private def rewriteErrorCharIndexes(
+      errorObj: JObject,
+      statement: String,
+      length: Int): JObject = {
+    JObject(errorObj.obj.map {
+      case ("queryContext", JArray(contexts)) =>
+        "queryContext" -> JArray(contexts.map {
+          case ctx: JObject => rewriteQueryContextIndexes(ctx, statement, length)
+          case other => other
+        }.toList)
+      case other => other
+    })
+  }
+
+  private def rewriteQueryContextIndexes(
+      ctx: JObject,
+      statement: String,
+      length: Int): JObject = {
+    val objectType = ctx.obj.collectFirst { case ("objectType", JString(t)) => t }
+    val start = ctx.obj.collectFirst { case ("startIndex", JInt(n)) => n.toInt }
+    val stop = ctx.obj.collectFirst { case ("stopIndex", JInt(n)) => n.toInt }
+    (objectType, start, stop) match {
+      case (Some(""), Some(from), Some(to)) =>
+        if (from >= 1 && to >= from && to <= length) {
+          ctx
+        } else {
+          JObject(ctx.obj.map {
+            case ("startIndex", _) => "startIndex" -> JInt(1)
+            case ("stopIndex", _) => "stopIndex" -> JInt(length)
+            case ("fragment", _) => "fragment" -> JString(statement)
+            case other => other
+          })
+        }
+      case _ => ctx
+    }
+  }
+
+  private def errorJson(
+      e: SparkThrowable with Throwable,
+      segment: PositionedSqlStatement,
+      charStart: Int,
+      length: Int): JObject = {
     val errorObj = parseJson(
       SparkThrowableHelper.getMessage(e, ErrorMessageFormat.STANDARD)).asInstanceOf[JObject]
     val origin = e match {
@@ -122,10 +218,15 @@ object ParseSqlResult {
     } else {
       origin.toSeq.flatMap(queryContextField)
     }
-    compact(render(JObject(
+    JObject(
+      "start" -> JInt(charStart),
+      "length" -> JInt(length),
       "parse_success" -> JBool(false),
-      "error" -> JObject(errorObj.obj ++ contextFields ++ locationFields)
-    )))
+      "error" -> rewriteErrorCharIndexes(
+        JObject(errorObj.obj ++ contextFields ++ locationFields),
+        segment.statement,
+        length)
+    )
   }
 
   private def queryContextField(origin: Origin): Option[JField] = origin.context match {
@@ -187,7 +288,7 @@ object ParseSqlResult {
     name.toLowerCase(java.util.Locale.ROOT)
 
   private def childScope(parent: LogicalPlan, scope: CteScope): CteScope = parent match {
-    case w: UnresolvedWith => scope ++ w.cteRelations.map(r => normalizeCteName(r._1))
+    case w: UnresolvedWith => scope ++ w.cteRelations.map(r => normalizeCteName(r.name))
     case _ => scope
   }
 
@@ -226,6 +327,8 @@ object ParseSqlResult {
       case i: UnresolvedInsert =>
         visitPlan(i.table, scope, TableRefRole.Target)(f)
         visitPlan(i.query, nextScope, TableRefRole.Source)(f)
+      case i: InsertIntoStatement =>
+        visitPlan(i.query, nextScope, TableRefRole.Source)(f)
       case c: CreateTableAsSelect =>
         visitPlan(c.name, scope, TableRefRole.Target)(f)
         visitPlan(c.query, nextScope, TableRefRole.Source)(f)
@@ -262,13 +365,16 @@ object ParseSqlResult {
         // name when the clause is RECURSIVE. Later aliases are not in scope,
         // so a definition naming one refers to the real table.
         var definitionScope = scope
-        w.cteRelations.foreach { case (name, ctePlan, _) =>
-          val normalized = normalizeCteName(name)
+        w.cteRelations.foreach { cteRelation =>
+          val normalized = normalizeCteName(cteRelation.name)
           val bodyScope =
             if (w.allowRecursion) definitionScope + normalized else definitionScope
-          visitPlan(ctePlan, bodyScope, TableRefRole.Source)(f)
+          visitPlan(cteRelation.plan, bodyScope, TableRefRole.Source)(f)
           definitionScope += normalized
         }
+      // An INSERT target is never resolved against a CTE, so no alias shadows it.
+      case i: InsertIntoStatement =>
+        visitPlan(i.table, Set.empty, TableRefRole.Target)(f)
       case c: CacheTable if c.multipartIdentifier.isEmpty =>
         visitPlan(c.table, scope, TableRefRole.Target)(f)
       case c: CompoundBody =>
@@ -341,7 +447,6 @@ object ParseSqlResult {
       foreachExpressionDeep(p)(visitExpr)
       def add(parts: Seq[String]): Unit = addTable(parts, scope, role)
       p match {
-        case u: UnresolvedInsertTarget => addTarget(u.multipartIdentifier)
         case u: UnresolvedRelation => add(u.multipartIdentifier)
         case u: UnresolvedTable => add(u.multipartIdentifier)
         case u: UnresolvedView => add(u.multipartIdentifier)
@@ -387,6 +492,8 @@ object ParseSqlResult {
   private def primaryQueryPlan(plan: LogicalPlan): LogicalPlan = plan match {
     case UnresolvedWith(child, _, _) => primaryQueryPlan(child)
     case UnresolvedInsert(_, _, _, query, _, _, _, _, _) =>
+      primaryQueryPlan(query)
+    case InsertIntoStatement(_, _, _, query, _, _, _, _, _) =>
       primaryQueryPlan(query)
     case c: CreateTableAsSelect => primaryQueryPlan(c.query)
     case r: ReplaceTableAsSelect => primaryQueryPlan(r.query)

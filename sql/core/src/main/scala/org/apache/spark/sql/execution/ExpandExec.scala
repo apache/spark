@@ -147,9 +147,11 @@ case class ExpandExec(
     // Tracks whether a column has the same output for all rows.
     // Size of sameOutput array should equal N.
     // If sameOutput(i) is true, then the i-th column has the same value for all output rows given
-    // an input row.
+    // an input row. Equal nondeterministic expressions can still produce a different value for
+    // every output row.
     val sameOutput: Array[Boolean] = output.indices.map { colIndex =>
-      projections.map(p => p(colIndex)).toSet.size == 1
+      val column = projections.map(p => p(colIndex))
+      column.toSet.size == 1 && column.head.deterministic
     }.toArray
 
     // Bind all the branch expressions once up front, so that identical expressions appearing in
@@ -187,9 +189,15 @@ case class ExpandExec(
             "resultValue",
             v => s"$v = ${CodeGenerator.defaultValue(firstExpr.dataType)};")
 
+          // `addMutableState` hands back a field: a name of its own, or a slot in a compacted array
+          // (`mutableStateArray_0[3]`) for a state not inlined. Either is reachable from every
+          // method of the generated class and is not a local variable, so a consumer collecting
+          // local variables to pass into a split function must not take it for one -- a slot
+          // expression is not a legal parameter name. Whole-stage subexpression elimination wraps
+          // its own mutable state the same way.
           ExprCode(
-            JavaCode.isNullVariable(isNull),
-            JavaCode.variable(value, firstExpr.dataType))
+            JavaCode.isNullGlobal(isNull),
+            JavaCode.global(value, firstExpr.dataType))
         }
       }
     }
@@ -230,17 +238,18 @@ case class ExpandExec(
         val paramLength = CodeGenerator.calculateParamLengthFromExprValues(inputVars)
         val maybeSplitUpdateCode = if (CodeGenerator.isValidParamLength(paramLength)) {
           val switchCaseFunc = ctx.freshName("switchCaseCode")
+          ctx.assertMethodParameters(updateCode, inputVars.map(_.variableName), switchCaseFunc)
           val argList = inputVars.map { v =>
             s"${CodeGenerator.typeName(v.javaType)} ${v.variableName}"
           }
-          ctx.addNewFunction(switchCaseFunc,
+          val switchCaseFuncName = ctx.addNewFunction(switchCaseFunc,
             s"""
                |private void $switchCaseFunc(${argList.mkString(", ")}) {
                |  $updateCode
                |}
              """.stripMargin)
 
-          s"$switchCaseFunc(${inputVars.map(_.variableName).mkString(", ")});"
+          s"$switchCaseFuncName(${inputVars.map(_.variableName).mkString(", ")});"
         } else {
           updateCode
         }

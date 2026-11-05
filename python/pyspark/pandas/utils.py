@@ -1089,7 +1089,7 @@ def _floor_divide_integral(c1: Column, c2: Column) -> Column:
     truncated = F.call_function("div", c1_long, c2_long)
     remainder = F.try_mod(c1_long, c2_long)
     return F.when(
-        # The one quotient a long cannot hold, where NumPy wraps around and `div` would raise.
+        # Match NumPy 1.24+ for the one quotient a long cannot hold; `div` would raise.
         (c1_long == F.lit(-(2**63))) & (c2_long == F.lit(-1)),
         F.lit(float(-(2**63))),
     ).otherwise(
