@@ -869,16 +869,17 @@ def without_post_merge_ci_skip(message):
     >>> without_post_merge_ci_skip(message)
     'Subject\\n\\nBody\\n\\nSigned-off-by: A <a@b>\\n'
     """
-    matches = list(
-        re.finditer(r"(?im)^skip-checks:[ \t]*true[ \t]*(?:\n|$)", message)
-    )
-    if matches:
-        marker = matches[-1]
-        before = message[:marker.start()].rstrip()
-        after = message[marker.end():].strip()
+    lines = message.rstrip().splitlines()
+    marker_indexes = [
+        index for index, line in enumerate(lines) if line == POST_MERGE_CI_SKIP_TRAILER
+    ]
+    if marker_indexes:
+        marker_index = marker_indexes[-1]
+        before = "\n".join(lines[:marker_index]).rstrip()
+        after = "\n".join(lines[marker_index + 1:]).strip()
         message = "\n\n".join(part for part in (before, after) if part)
     else:
-        message = message.rstrip()
+        message = "\n".join(lines)
     return message + "\n"
 
 
