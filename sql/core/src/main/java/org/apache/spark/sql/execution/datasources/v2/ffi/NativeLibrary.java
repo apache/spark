@@ -101,7 +101,7 @@ final class NativeLibrary {
     CREATE_WRITER("create_writer", C.I32, C.PTR, C.PTR, C.PTR, C.PTR, C.PTR, C.PTR),
     CLOSE("close", C.VOID, C.PTR),
     PUSH_LIMIT("push_limit", C.I32, C.PTR, C.I32, C.PTR),
-    PRUNE_COLUMNS("prune_columns", C.I32, C.PTR, C.PTR, C.I64, C.PTR),
+    PRUNE_COLUMNS("prune_columns", C.I32, C.PTR, C.PTR, C.I64),
     PARTITIONS("partitions", C.I32, C.PTR, C.PTR, C.PTR, C.PTR, C.PTR),
     CLOSE_READER("close_reader", C.VOID, C.PTR),
     INITIAL_OFFSET("initial_offset", C.I32, C.PTR, C.PTR, C.PTR, C.PTR),
@@ -805,13 +805,11 @@ final class NativeLibrary {
     }
   }
 
-  boolean pruneColumns(long reader, String[] columnNames) throws Throwable {
+  void pruneColumns(long reader, String[] columnNames) throws Throwable {
     MethodHandle f = function(Function.PRUNE_COLUMNS);
     try (Memory memory = new Memory()) {
-      long pruned = memory.zeroed(1);
-      check((int) f.invokeExact(reader, memory.strings(columnNames), (long) columnNames.length,
-        pruned), Function.PRUNE_COLUMNS);
-      return Platform.getByte(null, pruned) != 0;
+      check((int) f.invokeExact(reader, memory.strings(columnNames), (long) columnNames.length),
+        Function.PRUNE_COLUMNS);
     }
   }
 

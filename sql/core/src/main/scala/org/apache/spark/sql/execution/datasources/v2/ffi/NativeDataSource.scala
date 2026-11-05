@@ -26,7 +26,6 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.reflect.{classTag, ClassTag}
-import scala.util.Try
 import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core.JsonProcessingException
@@ -47,7 +46,7 @@ import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, BATCH
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory, SupportsArrowStreamRead}
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchPlanner, ColumnarDataSource, ColumnarOnlyPartitionReaderFactory, ColumnarPlannedBatch, ColumnarStreamReader, ColumnarStreamWriter, ColumnarWriter, SupportsProjectedArrowStreamRead}
+import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchPlanner, ColumnarDataSource, ColumnarOnlyPartitionReaderFactory, ColumnarPlannedBatch, ColumnarStreamReader, ColumnarStreamWriter, ColumnarWriter}
 import org.apache.spark.sql.execution.vectorized.ReusedArrowColumnVector
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -277,14 +276,13 @@ class NativeBatchPlanner(
     call(name, "plan a scan of")(optional(library.pushLimit(handle.get, limit))).getOrElse(false)
   }
 
-  override def pruneColumns(requiredSchema: StructType): Boolean = {
-    val pruned = call(name, "plan a scan of") {
+  override def pruneColumns(requiredSchema: StructType): Unit = {
+    // read gets the columns to read as its schema, and returns exactly them, so a library that
+    // does not implement prune_columns, which only lets it plan to read them, reads them too.
+    call(name, "plan a scan of") {
       optional(library.pruneColumns(handle.get, requiredSchema.fieldNames))
-    }.getOrElse(false)
-    if (pruned) {
-      readSchema = requiredSchema
     }
-    pruned
+    readSchema = requiredSchema
   }
 
   override def plan(): ColumnarPlannedBatch = {
@@ -303,8 +301,7 @@ class NativeBatchPlanner(
 
 /**
  * Reads the partitions of a planned batch scan of a native data source, on the executors. An
- * engine can also get the Arrow C stream of a partition from it, see [[SupportsArrowStreamRead]],
- * with only some of its columns for a scan whose library did not prune the others.
+ * engine can also get the Arrow C stream of a partition from it, see [[SupportsArrowStreamRead]].
  */
 class NativePartitionReaderFactory(
     location: NativeLibraryLocation,
@@ -312,30 +309,17 @@ class NativePartitionReaderFactory(
     readerState: Array[Byte],
     readSchema: StructType,
     timeZoneId: String)
-  extends ColumnarOnlyPartitionReaderFactory with SupportsProjectedArrowStreamRead {
+  extends ColumnarOnlyPartitionReaderFactory with SupportsArrowStreamRead {
   override def createColumnarReader(partition: InputPartition): PartitionReader[ColumnarBatch] = {
     new NativePartitionReader(location, name, NativeLibrary.READ_BATCH, readerState,
       partition.asInstanceOf[NativeInputPartition], readSchema, timeZoneId)
   }
 
   override def openArrowStream(partition: InputPartition, streamAddress: Long): Unit = {
-    open(partition, streamAddress, None)
-  }
-
-  override def openArrowStream(
-      partition: InputPartition,
-      streamAddress: Long,
-      projection: Array[Int]): Unit = {
-    open(partition, streamAddress, Some(projection))
-  }
-
-  private def open(
-      partition: InputPartition,
-      streamAddress: Long,
-      projection: Option[Array[Int]]): Unit = {
     NativePartitionReader.openEngineStream[NativeInputPartition](location, name,
-      NativeLibrary.READ_BATCH, partition, readSchema, timeZoneId, streamAddress, projection) {
-      partition => (readerState, partition)
+      NativeLibrary.READ_BATCH, partition, readSchema, timeZoneId, streamAddress,
+      projection = None) { partition =>
+      (readerState, partition)
     }
   }
 }
@@ -354,14 +338,10 @@ class NativeDataSourceStreamReader(
   extends ColumnarStreamReader {
   import NativeCalls._
 
-  // The range that was planned last and its partitions, or the failure to plan them. All the
-  // scans of the source in a micro-batch plan the same range, such as both sides of a union of the
-  // source with itself, so they get the result of a single stream_partitions call, with the state
-  // that it returned.
-  private var plannedRange: (String, String) = _
-  private var plannedPartitions: Try[Array[InputPartition]] = _
   // The broadcasts of the states of the planned micro-batches that are not committed yet, by the
-  // end of their range, in the order in which they were planned.
+  // end of their range, in the order in which they were planned. Spark plans each range once (see
+  // ColumnarMicroBatchStream), so the scans of a micro-batch get the partitions of a single
+  // stream_partitions call, with the state that it returned.
   private val uncommittedBroadcasts = mutable.LinkedHashMap.empty[String, Broadcast[Array[Byte]]]
 
   private lazy val library = NativeLibraries.get(location)
@@ -402,33 +382,25 @@ class NativeDataSourceStreamReader(
   }
 
   override def partitions(start: String, end: String): Array[InputPartition] = synchronized {
-    if (plannedRange != (start, end)) {
-      plannedPartitions = Try {
-        val planned = call(name, "plan a scan of") {
-          library.streamPartitions(handle.get, start, end)
-        }
-        val partitions = NativeInputPartition.from(planned.partitions)
-        val bytes = bytesOrEmpty(Option(planned.state))
-        // A small state goes with each task, while the executors fetch a larger one once for the
-        // micro-batch, as a broadcast. Spark only plans the next range once the micro-batch of the
-        // previous one finished, so the copies of the previous broadcast on the executors are
-        // removed then. The broadcast itself is destroyed once its micro-batch is committed,
-        // whose partitions are not read anymore then, also by an engine.
-        uncommittedBroadcasts.lastOption.foreach(_._2.unpersist(blocking = false))
-        val state = if (bytes.length > NativeDataSourceStreamReader.maxInlineStateBytes &&
-            partitions.nonEmpty) {
-          val broadcast = SparkSession.active.sparkContext.broadcast(bytes)
-          uncommittedBroadcasts.remove(end).foreach(_.destroy(blocking = false))
-          uncommittedBroadcasts.put(end, broadcast)
-          Right(broadcast)
-        } else {
-          Left(bytes)
-        }
-        partitions.map[InputPartition](NativeMicroBatchPartition(_, state))
-      }
-      plannedRange = (start, end)
+    val planned = call(name, "plan a scan of")(library.streamPartitions(handle.get, start, end))
+    val partitions = NativeInputPartition.from(planned.partitions)
+    val bytes = bytesOrEmpty(Option(planned.state))
+    // A small state goes with each task, while the executors fetch a larger one once for the
+    // micro-batch, as a broadcast. Spark only plans the next range once the micro-batch of the
+    // previous one finished, so the copies of the previous broadcast on the executors are removed
+    // then. The broadcast itself is destroyed once its micro-batch is committed, whose partitions
+    // are not read anymore then, also by an engine.
+    uncommittedBroadcasts.lastOption.foreach(_._2.unpersist(blocking = false))
+    val state = if (bytes.length > NativeDataSourceStreamReader.maxInlineStateBytes &&
+        partitions.nonEmpty) {
+      val broadcast = SparkSession.active.sparkContext.broadcast(bytes)
+      uncommittedBroadcasts.remove(end).foreach(_.destroy(blocking = false))
+      uncommittedBroadcasts.put(end, broadcast)
+      Right(broadcast)
+    } else {
+      Left(bytes)
     }
-    plannedPartitions.get
+    partitions.map[InputPartition](NativeMicroBatchPartition(_, state))
   }
 
   override def readerFactory(): PartitionReaderFactory = {
@@ -440,10 +412,6 @@ class NativeDataSourceStreamReader(
     if (uncommittedBroadcasts.contains(end)) {
       val committed = uncommittedBroadcasts.keys.toSeq.takeWhile(_ != end) :+ end
       committed.foreach(uncommittedBroadcasts.remove(_).foreach(_.destroy(blocking = false)))
-      if (plannedRange != null && plannedRange._2 == end) {
-        // The partitions of the committed range hold its destroyed broadcast.
-        plannedRange = null
-      }
     }
     call(name, "commit an offset of")(optional(library.commitOffset(handle.get, end)))
   }
@@ -511,7 +479,7 @@ class NativeDataSourceWriter(
     location: NativeLibraryLocation,
     name: String,
     schema: StructType,
-    override val timeZoneId: String,
+    timeZoneId: String,
     @transient private val handle: NativeHandle,
     writerState: Array[Byte])
   extends ColumnarWriter {
@@ -550,7 +518,7 @@ class NativeDataSourceStreamWriter(
     location: NativeLibraryLocation,
     name: String,
     schema: StructType,
-    override val timeZoneId: String,
+    timeZoneId: String,
     @transient private val handle: NativeHandle,
     writerState: Array[Byte])
   extends ColumnarStreamWriter {
