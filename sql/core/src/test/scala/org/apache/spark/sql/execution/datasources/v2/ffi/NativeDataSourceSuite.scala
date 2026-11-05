@@ -24,7 +24,7 @@ import java.nio.file.attribute.{PosixFileAttributeView, PosixFilePermission}
 import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDate}
 import java.util.UUID
-import java.util.concurrent.{Callable, CountDownLatch, ExecutionException, TimeUnit}
+import java.util.concurrent.{Callable, CountDownLatch, CyclicBarrier, ExecutionException, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
 import java.util.zip.{ZipException, ZipFile}
 
@@ -37,11 +37,15 @@ import org.apache.spark.{SPARK_VERSION, SparkClassNotFoundException, SparkFiles,
 import org.apache.spark.api.python.{PythonBroadcast, SimplePythonFunction}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
+import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
+import org.apache.spark.sql.connector.catalog.SupportsRead
+import org.apache.spark.sql.connector.read.SupportsPushDownRequiredColumns
+import org.apache.spark.sql.connector.read.streaming.{Offset, ReadLimit, SupportsAdmissionControl}
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
-import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchScan, ColumnarScan}
+import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchScan, ColumnarMicroBatchStream, ColumnarScan, ColumnarStreamOffset}
 import org.apache.spark.sql.execution.datasources.v2.python.{PythonDataSourceV2, UserDefinedPythonDataSource}
 import org.apache.spark.sql.execution.vectorized.ReusedArrowColumnVector
 import org.apache.spark.sql.functions.lit
@@ -286,12 +290,27 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
   test("the bindings match the layout of spark_datasource.h") {
     assume(compiler.isDefined, "A C++ compiler is required.")
     val layout = NativeLibrary.layout().asScala.map { case (key, value) => key -> value.longValue }
+    // The values of the macros of the header that the bindings check or pass, such as the
+    // capabilities of a data source.
+    val constants = Map(
+      "SPARK_DS_BATCH_READ" -> NativeLibrary.BATCH_READ,
+      "SPARK_DS_MICRO_BATCH_READ" -> NativeLibrary.MICRO_BATCH_READ,
+      "SPARK_DS_BATCH_WRITE" -> NativeLibrary.BATCH_WRITE,
+      "SPARK_DS_STREAMING_WRITE" -> NativeLibrary.STREAMING_WRITE,
+      "SPARK_DS_BATCH_TRUNCATE" -> NativeLibrary.BATCH_TRUNCATE,
+      "SPARK_DS_STREAMING_TRUNCATE" -> NativeLibrary.STREAMING_TRUNCATE,
+      "SPARK_DS_WRITE_APPEND" -> NativeLibrary.WRITE_APPEND.toLong,
+      "SPARK_DS_WRITE_TRUNCATE" -> NativeLibrary.WRITE_TRUNCATE.toLong,
+      "SPARK_DS_READ_BATCH" -> NativeLibrary.READ_BATCH.toLong,
+      "SPARK_DS_READ_MICRO_BATCH" -> NativeLibrary.READ_MICRO_BATCH.toLong)
     val prints = layout.keys.map { key =>
       val value = key.split('.') match {
         case Array(struct) => s"sizeof($struct)"
         case Array(struct, field) => s"offsetof($struct, $field)"
       }
       s"""  std::printf("%s %zu\\n", "$key", $value);"""
+    } ++ constants.keys.map { name =>
+      s"""  std::printf("%s %lld\\n", "$name", static_cast<long long>($name));"""
     }
     val output = runProgram("layout",
       s"""#include <cstddef>
@@ -307,7 +326,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       val Array(key, value) = line.split(" ")
       key -> value.toLong
     }.toMap
-    assert(actual == layout.toMap)
+    assert(actual == layout.toMap ++ constants)
   }
 
   nativeTest("disable native data sources") {
@@ -363,6 +382,39 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         "msg" -> "The data has the schema id BIGINT, but the expected schema is id INT."))
   }
 
+  nativeTest("export the schemas of a scan with the time zone of the session that planned it") {
+    val session = newSession(defaultPackage)
+    session.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "Asia/Tokyo")
+    val df = range(session, "end" -> "4").select("id", "ts")
+    // The reader gets the column ts as a timestamp of this time zone. The query then runs with
+    // another one, which the executors get too: read fails unless the schema to read that they
+    // export has the time zone that the reader got.
+    df.queryExecution.executedPlan
+    session.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "UTC")
+    checkRows(df, (0L until 4L).map(id => Row(id, Timestamp.from(Instant.ofEpochSecond(id)))))
+  }
+
+  nativeTest("create the data writers with the time zone of their writer") {
+    val session = newSession(defaultPackage)
+    val (name, location) =
+      NativeDataSourceRegistry.lookup("native_sink", session.sessionState.conf).get
+    val dir = Utils.createTempDir()
+    session.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "Asia/Tokyo")
+    val writer = session.withActive {
+      new NativeDataSource(location, name,
+          new CaseInsensitiveStringMap(Map("path" -> dir.getPath).asJava))
+        .writer(StructType.fromDDL("id BIGINT, ts TIMESTAMP"), overwrite = false)
+    }
+    // A data writer gets the schema that its writer got, with the time zone of its timestamps,
+    // also when the session that creates it has another one: create_data_writer fails otherwise.
+    session.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "UTC")
+    session.withActive {
+      val dataWriter = writer.createWriter(0, 0)
+      Utils.tryWithSafeFinally(dataWriter.abort())(dataWriter.close())
+    }
+    writer.abort(Array.empty)
+  }
+
   nativeTest("prune columns") {
     val df = range(newSession(defaultPackage), "end" -> "10").select("name", "id")
     checkRows(df, (0L until 10L).map(id => Row(if (id % 5 == 0) null else s"n$id", id)))
@@ -394,6 +446,14 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     val filtered = range(newSession(defaultPackage), "end" -> "100").filter("id > 5").limit(3)
     assert(filtered.collect().length == 3)
     assert(!scan(filtered).getMetaData().contains("PushedLimit"))
+
+    // The reader that the limit was pushed down to is also asked to prune the columns, after the
+    // limit, and returns only the column that the query reads.
+    val pruned = range(newSession(defaultPackage), "end" -> "100").select("id").limit(3)
+    assert(pruned.collect().map(_.getLong(0)).toSeq == Seq(0L, 1L, 2L))
+    assert(scan(pruned).readSchema() == StructType.fromDDL("id BIGINT"))
+    assert(scan(pruned).getMetaData()("PushedLimit") == "LIMIT 3")
+    assert(scan(pruned).toBatch.createReaderFactory().isInstanceOf[NativePartitionReaderFactory])
   }
 
   nativeTest("read maps whose entry fields have other names") {
@@ -548,6 +608,11 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       check("The column m contains an array with a length of 1, but its parent refers to 2 " +
         "values.", "extra" -> "map", "short" -> array)
     }
+    // Spark reads the last offset of a map through the pointer to its buffers, and the validity
+    // of a batch through the one of the batch.
+    check("The column m has 2 buffers, but a NULL pointer to them.", "extra" -> "map",
+      "short" -> "buffers")
+    check("The batch has 1 buffers, but a NULL pointer to them.", "short" -> "batch_buffers")
     check("The column dec contains the Arrow type Decimal(10, 2, 256), which is not supported.",
       "extra" -> "decimal256")
     // Arrow Java would also extend the elements of a list view with nulls, and Spark does not
@@ -620,7 +685,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     val session = newSession(defaultPackage)
     val dir = Utils.createTempDir()
     val e = intercept[Exception] {
-      session.range(10).write.format("native_sink").option("path", dir.getPath)
+      session.range(10).repartition(2).write.format("native_sink").option("path", dir.getPath)
         .option("fail", "write").mode("append").save()
     }
     checkError(
@@ -630,7 +695,8 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         "action" -> "write to",
         "name" -> "native_sink",
         "msg" -> "injected failure in write"))
-    assert(new File(dir, "_ABORTED").isFile)
+    // Spark aborted the write with a null message for each of the two tasks, which both failed.
+    assert(Files.readString(new File(dir, "_ABORTED").toPath) == "2,2,0")
     assert(new File(dir, "_CLOSED").isFile)
     assert(!dir.listFiles().exists(_.getName.startsWith("part-")))
   }
@@ -655,7 +721,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     val session = newSession(defaultPackage)
     val dir = Utils.createTempDir()
     val e = intercept[Exception] {
-      session.range(10).write.format("native_sink").option("path", dir.getPath)
+      session.range(10).repartition(2).write.format("native_sink").option("path", dir.getPath)
         .option("fail", "commit").mode("append").save()
     }
     checkError(
@@ -666,8 +732,9 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         "name" -> "native_sink",
         "msg" -> "injected failure in commit"))
     assert(e.getSuppressed.isEmpty)
-    // Spark aborted the write with the writer, which it closed afterwards.
-    assert(new File(dir, "_ABORTED").isFile)
+    // Spark aborted the write with the writer, which it closed afterwards, with the messages of
+    // the two tasks, which both committed: the library removes the data that they point to.
+    assert(Files.readString(new File(dir, "_ABORTED").toPath) == "0,2,0")
     assert(new File(dir, "_CLOSED").isFile)
   }
 
@@ -686,8 +753,8 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         "name" -> "native_sink",
         "msg" -> "injected failure in commitDataWriter"))
     // abort_data_writer removed the temporary files of the tasks, whose data writers were then
-    // closed.
-    assert(new File(dir, "_ABORTED").isFile)
+    // closed, and Spark aborted the write with a null message for each of them.
+    assert(Files.readString(new File(dir, "_ABORTED").toPath) == "2,2,0")
     assert(new File(dir, "_temporary").listFiles().isEmpty)
     assert(!dir.listFiles().exists(_.getName.startsWith("part-")))
     checkDataWritersClosed(dir)
@@ -712,7 +779,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     // aborted the write.
     assert(!new File(dir, "_ABORTED_COMMITTED_DATA_WRITER").exists())
     checkDataWritersClosed(dir)
-    assert(new File(dir, "_ABORTED").isFile)
+    assert(Files.readString(new File(dir, "_ABORTED").toPath) == "1,1,0")
     assert(!dir.listFiles().exists(_.getName.startsWith("part-")))
   }
 
@@ -737,7 +804,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         "name" -> "native_sink",
         "msg" -> "injected failure in write"))
     // Spark aborted the first epoch, with a null message for its task, which did not commit.
-    assert(Files.readString(new File(dir, "_ABORTED_0").toPath) == "1")
+    assert(Files.readString(new File(dir, "_ABORTED_0").toPath) == "1,1,0")
     assert(!new File(dir, "_EPOCH_0").exists())
   }
 
@@ -791,7 +858,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     } finally {
       query.stop()
     }
-    // Each call to latestOffset makes 5 more rows available: [0, 5), [5, 10) and [10, 12).
+    // Each micro-batch makes 5 more rows available after its start: [0, 5), [5, 10) and [10, 12).
     assert((0 to 2).forall(epoch => new File(dir, s"_EPOCH_$epoch").isFile))
     // Each micro-batch creates a new stream writer, which closes the one of the previous
     // micro-batch. The last one is closed once it is no longer referenced.
@@ -815,12 +882,220 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  nativeTest("pass the checkpoint location and the start of a micro-batch to the stream reader") {
+    val session = newSession(defaultPackage)
+    val checkpoint = Utils.createTempDir()
+    val dir = Utils.createTempDir()
+    // Runs the query until it processed the rows [0, maxOffset), 5 more rows in each micro-batch,
+    // and returns the checkpoint location and the start offsets that the stream reader got.
+    def run(maxOffset: Int): (String, Seq[Long]) = {
+      val checkpointPath = new File(dir, s"checkpoint_$maxOffset")
+      val startsPath = new File(dir, s"starts_$maxOffset")
+      val query = session.readStream.format("native_counter")
+        .option("max_offset", maxOffset.toString).option("step", "5")
+        .option("checkpoint_path", checkpointPath.getPath)
+        .option("starts_path", startsPath.getPath)
+        .load()
+        .writeStream
+        .format("noop")
+        .option("checkpointLocation", checkpoint.getPath)
+        .start()
+      try query.processAllAvailable() finally query.stop()
+      val starts = Files.readAllLines(startsPath.toPath).asScala.toSeq
+        .map(_.stripPrefix("{\"offset\":").stripSuffix("}").toLong)
+      (Files.readString(checkpointPath.toPath), starts)
+    }
+    // The first micro-batch starts after the initial offset, and the next ones after the end of
+    // the previous one, until no more rows are available.
+    val (location, starts) = run(12)
+    assert(location.endsWith(s"${checkpoint.getCanonicalPath}/sources/0"), location)
+    assert(starts.take(4) == Seq(0L, 5L, 10L, 12L) && starts.drop(4).forall(_ == 12L), starts)
+    // A query that restarts from its checkpoint starts after the end of its last micro-batch, with
+    // the same checkpoint location.
+    val (restartedLocation, restartedStarts) = run(15)
+    assert(restartedLocation == location)
+    assert(restartedStarts.take(2) == Seq(12L, 15L), restartedStarts)
+  }
+
+  nativeTest("read up to the latest offset with Trigger.AvailableNow, also after a restart") {
+    val session = newSession(defaultPackage)
+    // Spark does not wrap the stream of a native data source, which supports the trigger itself,
+    // even with the internal flag that wraps the others.
+    session.conf.set("spark.sql.streaming.triggerAvailableNowWrapper.enabled", "true")
+    val checkpoint = Utils.createTempDir()
+    val dir = Utils.createTempDir()
+    val out = Utils.createTempDir()
+    // Runs the query with Trigger.AvailableNow, and returns the start offsets that the stream
+    // reader got.
+    def run(name: String): Seq[String] = {
+      val startsPath = new File(dir, name)
+      val query = session.readStream.format("native_counter")
+        .option("max_offset", "12").option("step", "5").option("starts_path", startsPath.getPath)
+        .load()
+        .writeStream
+        .format("native_sink")
+        .option("path", out.getPath)
+        .option("checkpointLocation", checkpoint.getPath)
+        .trigger(Trigger.AvailableNow())
+        .start()
+      try query.awaitTermination() finally query.stop()
+      Files.readAllLines(startsPath.toPath).asScala.toSeq
+    }
+    // Each run asks for the latest offset once, after the end of the last micro-batch, and reads
+    // up to it: a restart neither reads the same rows again nor goes back to the initial offset.
+    assert(run("first") == Seq("""{"offset":0}"""))
+    assert(run("second") == Seq("""{"offset":5}"""))
+    val written = out.listFiles().filter(_.getName.startsWith("part-"))
+      .flatMap(file => Files.readAllLines(file.toPath).asScala)
+    assert(written.map(_.toLong).sorted.toSeq == (0L until 10L))
+  }
+
+  nativeTest("ask for the initial offset once, and keep it in the checkpoint") {
+    val session = newSession(defaultPackage)
+    val checkpoint = Utils.createTempDir()
+    val dir = Utils.createTempDir()
+    // The initial offset of the stream reader is the number of times that it was asked before, as
+    // for an initial offset that depends on when it is asked.
+    val initialOffsets = new File(Utils.createTempDir(), "initial_offsets")
+    def run(fail: Boolean): Unit = {
+      val writer = session.readStream.format("native_counter")
+        .option("max_offset", "4").option("initial_offsets_path", initialOffsets.getPath)
+        .load()
+        .writeStream
+        .format("native_sink")
+        .option("path", dir.getPath)
+        .option("checkpointLocation", checkpoint.getPath)
+      val query = (if (fail) writer.option("fail", "write") else writer).start()
+      try query.processAllAvailable() finally query.stop()
+    }
+    // The first micro-batch fails, so it is not committed. A query that starts without a
+    // checkpoint asks for the initial offset once, for the start of the first latest offset and
+    // of the first micro-batch.
+    val e = intercept[Exception](run(fail = true))
+    findError(e, "NATIVE_DATA_SOURCE_ERROR")
+    assert(Files.readAllLines(initialOffsets.toPath).size == 1)
+    assert(new File(checkpoint, s"sources/0/${ColumnarMicroBatchStream.InitialOffsetLog}")
+      .isDirectory)
+    // The restarted query plans the first micro-batch again from the initial offset that the
+    // checkpoint kept, without asking the stream reader.
+    run(fail = false)
+    assert(Files.readAllLines(initialOffsets.toPath).size == 1)
+    val written = dir.listFiles().filter(_.getName.startsWith("part-"))
+      .flatMap(file => Files.readAllLines(file.toPath).asScala)
+    assert(written.map(_.toLong).sorted.toSeq == (0L until 4L))
+  }
+
+  nativeTest("pass only the columns to read to the stream reader") {
+    val session = newSession(defaultPackage)
+    val columnsPath = new File(Utils.createTempDir(), "columns")
+    val relation = session.readStream.format("native_counter").schema("id BIGINT, mod INT")
+      .option("columns_path", columnsPath.getPath).load()
+      .queryExecution.analyzed.collectFirst { case relation: StreamingRelationV2 => relation }.get
+    val builder = relation.table.asInstanceOf[SupportsRead].newScanBuilder(relation.extraOptions)
+    builder.asInstanceOf[SupportsPushDownRequiredColumns]
+      .pruneColumns(StructType.fromDDL("mod INT"))
+    val scan = builder.build()
+    val stream = scan.toMicroBatchStream(Utils.createTempDir().getPath)
+    try {
+      assert(Files.readString(columnsPath.toPath) == "mod")
+      assert(scan.readSchema() == StructType.fromDDL("mod INT"))
+      // read gets these columns as the schema to read, which the test library checks, and its
+      // batches only have them.
+      val start = stream.initialOffset()
+      val end = stream.asInstanceOf[SupportsAdmissionControl]
+        .latestOffset(start, ReadLimit.allAvailable())
+      val factory = stream.createReaderFactory()
+      val mods = stream.planInputPartitions(start, end).toSeq.flatMap { partition =>
+        val reader = factory.createColumnarReader(partition)
+        try {
+          Iterator.continually(reader.next()).takeWhile(identity).flatMap { _ =>
+            val batch = reader.get()
+            assert(batch.numCols() == 1)
+            (0 until batch.numRows()).map(batch.column(0).getInt)
+          }.toList
+        } finally {
+          reader.close()
+        }
+      }
+      assert(mods == (0 until 10).map(_ % 3))
+    } finally {
+      stream.stop()
+    }
+  }
+
+  nativeTest("plan each micro-batch once, also when a query reads a source twice") {
+    val session = newSession(defaultPackage)
+    val ranges = new File(Utils.createTempDir(), "ranges")
+    val counter = session.readStream.format("native_counter")
+      .option("max_offset", "6").option("step", "3").option("ranges_path", ranges.getPath)
+      .load()
+    // Both sides of the union read the stream of the source. The partitions and the state of each
+    // stream_partitions call have the number of the call, so read fails if it gets a partition of
+    // a call with the state of another.
+    val query = counter.union(counter).writeStream.format("memory")
+      .queryName("native_counter_self_union").start()
+    try {
+      query.processAllAvailable()
+      checkRows(session.table("native_counter_self_union"),
+        (0L until 6L).flatMap(id => Seq(Row(id), Row(id))))
+    } finally {
+      query.stop()
+    }
+    // stream_partitions is called once for each micro-batch.
+    assert(Files.readAllLines(ranges.toPath).asScala.toSeq ==
+      Seq("""{"offset":0} {"offset":3}""", """{"offset":3} {"offset":6}"""))
+
+    // Spark may plan the scans of a micro-batch on several threads at the same time, such as the
+    // side of a broadcast join, and they still get the partitions of a single call: the stream of
+    // a columnar data source plans each range once.
+    val (counterName, counterLocation) =
+      NativeDataSourceRegistry.lookup("native_counter", session.sessionState.conf).get
+    def stream(options: (String, String)*): ColumnarMicroBatchStream = {
+      val checkpoint = Utils.createTempDir().getPath
+      val reader = new NativeDataSource(counterLocation, counterName,
+          new CaseInsensitiveStringMap(options.toMap.asJava))
+        .streamReader(StructType.fromDDL("id BIGINT"), checkpoint)
+      new ColumnarMicroBatchStream(reader, checkpoint)
+    }
+    def offset(i: Int): Offset = ColumnarStreamOffset(s"""{"offset":$i}""")
+    val concurrentRanges = new File(Utils.createTempDir(), "ranges")
+    val concurrent = stream("max_offset" -> "100", "ranges_path" -> concurrentRanges.getPath)
+    try {
+      (0 until 20).foreach { i =>
+        val planning = new CyclicBarrier(2)
+        val planned = ThreadUtils.parmap(1 to 2, "plan-micro-batch", 2) { _ =>
+          planning.await()
+          concurrent.planInputPartitions(offset(i), offset(i + 1))
+        }
+        assert(planned.head eq planned.last)
+      }
+    } finally {
+      concurrent.stop()
+    }
+    assert(Files.readAllLines(concurrentRanges.toPath).size == 20)
+    // So does a failure: planning the range again fails with the same error, without calling the
+    // library again on the handle whose call failed.
+    val failing = stream("fail" -> "stream_partitions")
+    try {
+      val failure = intercept[SparkRuntimeException] {
+        failing.planInputPartitions(offset(0), offset(1))
+      }
+      assert(failure.getMessage.contains("injected failure in stream_partitions"))
+      assert(intercept[SparkRuntimeException] {
+        failing.planInputPartitions(offset(0), offset(1))
+      } eq failure)
+    } finally {
+      failing.stop()
+    }
+  }
+
   nativeTest("reject offsets that are not JSON on a single line") {
-    // Spark writes each offset as a line of the offset log of the checkpoint.
-    def check(badOffset: String, msg: String): Unit = {
+    // Spark writes each offset as a line of the offset log of the checkpoint, and the initial
+    // offset in the checkpoint of the source.
+    def check(option: String, badOffset: String, msg: String): Unit = {
       val e = intercept[Exception] {
         val query = newSession(defaultPackage).readStream.format("native_counter")
-          .option("bad_offset", badOffset).load()
+          .option(option, badOffset).load()
           .writeStream
           .format("noop")
           .option("checkpointLocation", Utils.createTempDir().getPath)
@@ -832,10 +1107,14 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         condition = "NATIVE_DATA_SOURCE_ERROR",
         parameters = Map("action" -> "plan a scan of", "name" -> "native_counter", "msg" -> msg))
     }
-    check("none", "latest_offset returned no offset.")
-    check("multiline", "latest_offset returned an offset with a line break, but an " +
-      "offset must be JSON on a single line.")
-    check("invalid", "latest_offset returned an offset that is not valid JSON: offset 10")
+    Seq(("bad_offset", "latest_offset", 10), ("bad_initial_offset", "initial_offset", 0)).foreach {
+      case (option, function, offset) =>
+        check(option, "none", s"$function returned no offset.")
+        check(option, "multiline", s"$function returned an offset with a line break, but an " +
+          "offset must be JSON on a single line.")
+        check(option, "invalid",
+          s"$function returned an offset that is not valid JSON: offset $offset")
+    }
   }
 
   nativeTest("pass the ID of a streaming query to its stream writers") {
@@ -913,6 +1192,78 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         "msg" -> "create failed with the error code 1."))
   }
 
+  nativeTest("reject a state returned more than once") {
+    def check(action: String, name: String, function: String)(f: SparkSession => Unit): Unit = {
+      val e = intercept[Exception](f(newSession(defaultPackage)))
+      checkError(
+        exception = findError(e, "NATIVE_DATA_SOURCE_ERROR"),
+        condition = "NATIVE_DATA_SOURCE_ERROR",
+        parameters = Map("action" -> action, "name" -> name,
+          "msg" -> s"$function returned 2 states instead of one."))
+    }
+    check("plan a scan of", "native_range", "partitions") { session =>
+      range(session, "states" -> "2").collect()
+    }
+    check("plan a scan of", "native_counter", "stream_partitions") { session =>
+      val query = session.readStream.format("native_counter").option("states", "2").load()
+        .writeStream.format("noop").start()
+      try query.processAllAvailable() finally query.stop()
+    }
+    val dir = Utils.createTempDir()
+    check("plan a write to", "native_sink", "create_writer") { session =>
+      session.range(2).write.format("native_sink").option("path", dir.getPath)
+        .option("states", "2").mode("append").save()
+    }
+    // The rejected writer is aborted, as rejected and with no messages, so that the library can
+    // undo what create_writer prepared, and released.
+    assert(Files.readString(new File(dir, "_ABORTED").toPath) == "0,0,1")
+    assert(new File(dir, "_CLOSED").isFile)
+    // So is the rejected writer of a micro-batch, with an epoch ID of -1, before its epoch.
+    val streamDir = Utils.createTempDir()
+    check("plan a write to", "native_sink", "create_writer") { session =>
+      val query = session.readStream.format("native_counter").option("max_offset", "4").load()
+        .writeStream
+        .format("native_sink")
+        .option("path", streamDir.getPath)
+        .option("states", "2")
+        .option("checkpointLocation", Utils.createTempDir().getPath)
+        .start()
+      try query.processAllAvailable() finally query.stop()
+    }
+    assert(Files.readString(new File(streamDir, "_ABORTED").toPath) == "0,0,1")
+    assert(!new File(streamDir, "_ABORTED_0").exists())
+    assert(new File(streamDir, "_CLOSED").isFile)
+  }
+
+  nativeTest("read and write without a state") {
+    // A reader or a writer without a state does not call set_state. read then fails unless it
+    // gets a state of length 0, and takes the columns from the schema to read. A data writer that
+    // gets a state of length 0 passes its rows in its message, and commit fails unless the
+    // messages have rows.
+    val session = newSession(defaultPackage)
+    checkRows(range(session, "end" -> "10", "stateless" -> "true"),
+      (0L until 10L).map(expectedRow))
+    checkRows(range(session, "end" -> "10", "stateless" -> "true").select("name", "id"),
+      (0L until 10L).map(id => Row(if (id % 5 == 0) null else s"n$id", id)))
+    val query = session.readStream.format("native_counter")
+      .option("max_offset", "6").option("step", "3").option("stateless", "true").load()
+      .writeStream.format("memory").queryName("native_counter_stateless").start()
+    try {
+      query.processAllAvailable()
+      checkRows(session.table("native_counter_stateless"), (0L until 6L).map(Row(_)))
+    } finally {
+      query.stop()
+    }
+    val dir = Utils.createTempDir()
+    range(session, "end" -> "4", "stateless" -> "true").select("id", "name")
+      .write.format("native_sink").option("path", dir.getPath).option("stateless", "true")
+      .mode("append").save()
+    val written = dir.listFiles().filter(_.getName.startsWith("part-"))
+      .flatMap(file => Files.readAllLines(file.toPath).asScala)
+    assert(written.sorted.toSeq == Seq("0,null", "1,n1", "2,n2", "3,n3"))
+    assert(Files.readString(new File(dir, "_SUCCESS").toPath) == "2")
+  }
+
   nativeTest("a scan whose planning failed fails again with the same error") {
     // The reader is released after planning, even if it failed. The query execution of a
     // DataFrame keeps the failure of its plan, but a scan can be planned again, for example by
@@ -985,13 +1336,22 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
 
   nativeTest("operations that a data source does not support") {
     val session = newSession(defaultPackage, createPackage(readOnlyLibrary, dataSources("ro_")))
-    // The library does not push anything down: it reads all the columns, and Spark applies the
-    // limit.
+    // The library does not push anything down, but read still gets only the column that the
+    // query reads, which it returns as the contract requires, and Spark applies the limit.
     val df = session.read.format("ro_native_range").option("end", "10").load()
     val limited = df.select("id").limit(3)
-    assert(limited.collect().length == 3)
-    assert(scan(limited).readSchema() == df.schema)
+    val ids = limited.collect().map(_.getLong(0))
+    assert(ids.length == 3 && ids.forall(id => id >= 0 && id < 10))
+    assert(scan(limited).readSchema() == StructType.fromDDL("id BIGINT"))
     assert(!scan(limited).getMetaData().contains("PushedLimit"))
+    assert(scan(limited).toBatch.createReaderFactory().isInstanceOf[NativePartitionReaderFactory])
+    // A read that returns other columns than those of the schema to read fails.
+    val allColumns = intercept[Exception] {
+      session.read.format("ro_native_range").option("end", "10")
+        .option("ignore_read_schema", "true").load().select("id").collect()
+    }
+    assert(Utils.exceptionString(allColumns).contains("NATIVE_DATA_SOURCE_ERROR"))
+    assert(Utils.exceptionString(allColumns).contains("but the expected schema is id BIGINT"))
 
     def check(condition: String, parameters: Map[String, String])(f: => Unit): Unit = {
       val e = intercept[Exception](f)
@@ -1034,13 +1394,17 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       session.range(1).write.format("ro_native_sink")
         .option("capabilities", NativeLibrary.BATCH_WRITE.toString).mode("append").save()
     }
-    // Replacing the existing data requires the capability SPARK_DS_TRUNCATE.
+    // Replacing the existing data requires the capability SPARK_DS_BATCH_TRUNCATE for a batch
+    // write, and SPARK_DS_STREAMING_TRUNCATE for a streaming write: either is not enough for the
+    // other.
     val dir = Utils.createTempDir()
-    val noTruncate = (NativeLibrary.BATCH_WRITE | NativeLibrary.STREAMING_WRITE).toString
+    val writes = NativeLibrary.BATCH_WRITE | NativeLibrary.STREAMING_WRITE
+    val batchTruncate = (writes | NativeLibrary.BATCH_TRUNCATE).toString
+    val streamingTruncate = (writes | NativeLibrary.STREAMING_TRUNCATE).toString
     check("UNSUPPORTED_FEATURE.TABLE_OPERATION",
         Map("tableName" -> "`native_sink`", "operation" -> "truncate in batch mode")) {
       session.range(1).write.format("native_sink").option("path", dir.getPath)
-        .option("capabilities", noTruncate).mode("overwrite").save()
+        .option("capabilities", streamingTruncate).mode("overwrite").save()
     }
     // The table has the capabilities that the data source declares with the options of the table,
     // which the options of a write to a table in a catalog can override: the write checks them
@@ -1055,25 +1419,34 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       check("NATIVE_DATA_SOURCE_ERROR", Map("action" -> "plan a write to",
           "name" -> "native_sink",
           "msg" -> "The data source does not support the save mode overwrite.")) {
-        session.range(1).writeTo("native_sink_table").option("capabilities", noTruncate)
+        session.range(1).writeTo("native_sink_table").option("capabilities", streamingTruncate)
           .overwrite(lit(true))
       }
     } finally {
       session.sql("DROP TABLE IF EXISTS native_sink_table")
     }
+    def completeWrite(dir: File, capabilities: String): Unit = runStream {
+      session.readStream.format("native_counter").load().groupBy().count().writeStream
+        .outputMode("complete")
+        .format("native_sink")
+        .option("path", dir.getPath)
+        .option("capabilities", capabilities)
+        .option("checkpointLocation", Utils.createTempDir().getPath)
+        .start()
+    }
     check("NATIVE_DATA_SOURCE_ERROR", Map("action" -> "plan a write to", "name" -> "native_sink",
         "msg" -> "The data source does not support the output mode complete.")) {
-      runStream {
-        session.readStream.format("rate").load().groupBy().count().writeStream
-          .outputMode("complete")
-          .format("native_sink")
-          .option("path", dir.getPath)
-          .option("capabilities", noTruncate)
-          .option("checkpointLocation", Utils.createTempDir().getPath)
-          .start()
-      }
+      completeWrite(dir, batchTruncate)
     }
     assert(!new File(dir, "_CREATED").exists())
+    // Each capability replaces the existing data in its own kind of write.
+    val overwritten = Utils.createTempDir()
+    session.range(1).write.format("native_sink").option("path", overwritten.getPath)
+      .option("capabilities", batchTruncate).mode("overwrite").save()
+    assert(new File(overwritten, "_SUCCESS").isFile)
+    val completed = Utils.createTempDir()
+    completeWrite(completed, streamingTruncate)
+    assert(new File(completed, "_EPOCH_0").isFile)
   }
 
   nativeTest("read only the functions that fit in the table of a library") {
