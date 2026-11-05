@@ -206,3 +206,17 @@ select trim_array(array(1, 2, 3), 4);
 -- trim_array with NULL array or NULL n returns NULL
 select trim_array(CAST(null AS ARRAY<INT>), 1);
 select trim_array(array(1, 2, 3), CAST(null AS INT));
+
+-- SPARK-54698: Confirm 0.0, -0.0, and NaN are handled appropriately for complex types.
+select array_union(
+  array(named_struct('a', -0.0D), named_struct('a', DOUBLE('NaN'))),
+  array(named_struct('a', 0.0D), named_struct('a', DOUBLE('NaN')), named_struct('a', 1.0D)));
+select array_distinct(
+  array(named_struct('a', -0.0D), named_struct('a', 0.0D),
+    named_struct('a', DOUBLE('NaN')), named_struct('a', DOUBLE('NaN'))));
+select array_except(
+  array(named_struct('a', -0.0D), named_struct('a', DOUBLE('NaN')), named_struct('a', 1.0D)),
+  array(named_struct('a', 0.0D), named_struct('a', DOUBLE('NaN'))));
+select array_intersect(
+  array(named_struct('a', -0.0D), named_struct('a', DOUBLE('NaN')), named_struct('a', 1.0D)),
+  array(named_struct('a', 0.0D), named_struct('a', DOUBLE('NaN')), named_struct('a', 2.0D)));
