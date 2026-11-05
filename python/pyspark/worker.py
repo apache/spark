@@ -26,8 +26,9 @@ through the handler registered for their eval type in pyspark.eval_handlers.
 import json
 import os
 import sys
+import traceback
 import warnings
-from typing import Any, BinaryIO, Callable
+from typing import Any, BinaryIO, Optional
 
 from pyspark import shuffle
 from pyspark.accumulators import _accumulatorRegistry
@@ -41,15 +42,15 @@ from pyspark.messages import (
     SparkSocketMessageReceiver,
 )
 from pyspark.serializers import (
-    FramedSerializer,
     SpecialLengths,
     write_int,
     write_with_length,
 )
-from pyspark.sql.types import DataType, StructType, _parse_datatype_json_string
+from pyspark.sql.types import StructType, _parse_datatype_json_string
 from pyspark.taskcontext import BarrierTaskContext, TaskContext
 from pyspark.util import (
     PythonEvalType,
+    format_worker_exception,
     handle_worker_exception,
     start_faulthandler_periodic_traceback,
     with_faulthandler,
@@ -77,21 +78,39 @@ def report_metrics(outfile: BinaryIO, metrics: dict[str, int]) -> None:
     write_with_length(payload, outfile)
 
 
-def chain(f: Callable[..., Any], g: Callable[..., Any]) -> Callable[..., Any]:
-    """chain two functions together"""
-    return lambda *a: g(f(*a))
+def _exception_message(e: BaseException) -> str:
+    """``str(e)``, or the placeholder ``traceback`` uses when the conversion fails."""
+    try:
+        return str(e)
+    except BaseException:
+        return "<exception str() failed>"
 
 
-def unpickle_and_chain(
-    pickleSer: FramedSerializer, pickled_udfs: list[memoryview]
-) -> tuple[Callable[..., Any], DataType]:
-    """Unpickle the functions applied in turn to one column and chain them into one; returns the
-    chained function and the return type of the last one."""
-    chained_func, return_type = read_command(pickleSer, pickled_udfs[0])
-    for udf in pickled_udfs[1:]:
-        f, return_type = read_command(pickleSer, udf)
-        chained_func = chain(chained_func, f)
-    return chained_func, return_type
+def report_init_response(
+    outfile: BinaryIO, error: Optional[BaseException] = None, is_payload_error: bool = False
+) -> None:
+    """
+    Write the init response as a length-prefixed JSON object after START_OF_INIT_RESPONSE.
+
+    It is sent exactly once per task, before any output: ``{}`` once the task is initialized, or
+    ``{"error": {...}}`` if initialization failed, in which case no output follows. An init error
+    carries the exception message, the traceback as the JVM reports it, the exception class name,
+    and whether the worker could not deserialize the UDF payload (``isPayloadError``), e.g. the
+    command does not unpickle or a UDTF declares a non-struct return type. Setting up the task,
+    including constructing the eval type handler and its dependency and connection checks, is not
+    payload loading. Must be called while handling ``error``.
+    """
+    response: dict[str, Any] = {}
+    if error is not None:
+        response["error"] = {
+            "message": _exception_message(error),
+            "traceback": format_worker_exception(error),
+            "errorClass": type(error).__name__,
+            "isPayloadError": is_payload_error,
+        }
+    payload = json.dumps(response, separators=(",", ":")).encode("utf-8")
+    write_int(SpecialLengths.START_OF_INIT_RESPONSE, outfile)
+    write_with_length(payload, outfile)
 
 
 def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
@@ -102,7 +121,13 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
     This method goes through three phases:
 
     Initialization -> Processing -> Finish/Cleanup
+
+    Initialization ends with the init response (see ``report_init_response``); a failure before
+    it is reported there, and a failure while processing data after it as
+    PYTHON_EXCEPTION_THROWN.
     """
+    initialized = False
+    loading_payload = False
     try:
         metrics = WorkerMetrics()
         metrics.reset()
@@ -140,7 +165,9 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
         profiler = None
         if eval_type == PythonEvalType.NON_UDF:
             assert isinstance(init_info.udf_info, (bytes, memoryview))
+            loading_payload = True
             func, profiler, deserializer, serializer = read_command(pickleSer, init_info.udf_info)
+            loading_payload = False
         else:
             # UDF and UDTF runners dispatch through the eval type's registered handler, which
             # provides both the function and the single serializer for input and output.
@@ -150,6 +177,7 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
             handler: EvalTypeHandler
             if isinstance(init_info.udf_info, UDTFInfo):
                 assert issubclass(handler_cls, UDTFHandlerBase)
+                loading_payload = True
                 udtf_cls = read_command(pickleSer, init_info.udf_info.handler)
                 return_type = _parse_datatype_json_string(init_info.udf_info.return_type)
                 if not isinstance(return_type, StructType):
@@ -170,22 +198,31 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                     analyze_result=analyze_result,
                     name=init_info.udf_info.name,
                 )
-                handler = handler_cls(udfs=[udtf], runner_conf=runner_conf, eval_conf=eval_conf)
+                loading_payload = False
+                handler = handler_cls(
+                    udf_descs=[udtf], runner_conf=runner_conf, eval_conf=eval_conf
+                )
             else:
                 assert isinstance(init_info.udf_info, list)
-                udfs = []
+                loading_payload = True
+                udf_descs = []
                 for udf_info in init_info.udf_info:
-                    chained_func, return_type = unpickle_and_chain(pickleSer, udf_info.udfs)
-                    udfs.append(
+                    # The functions applied in turn to one column; the last one's return type
+                    # is the UDF's.
+                    funcs, return_types = zip(*(read_command(pickleSer, c) for c in udf_info.udfs))
+                    udf_descs.append(
                         UDF(
-                            raw_func=chained_func,
+                            funcs=list(funcs),
                             args_offsets=udf_info.args,
                             kwargs_offsets=udf_info.kwargs,
-                            return_type=return_type,
+                            return_type=return_types[-1],
                             result_id=udf_info.result_id,
                         )
                     )
-                handler = handler_cls(udfs=udfs, runner_conf=runner_conf, eval_conf=eval_conf)
+                loading_payload = False
+                handler = handler_cls(
+                    udf_descs=udf_descs, runner_conf=runner_conf, eval_conf=eval_conf
+                )
             func, serializer = handler.run, handler.serializer
             deserializer = serializer
 
@@ -193,6 +230,8 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
         del init_info
 
         metrics.set_current_timestamp("initTimestampMs")
+        report_init_response(outfile)
+        initialized = True
 
         # Processing
 
@@ -317,7 +356,18 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
         TaskContext._setTaskContext(None)
         BarrierTaskContext._setTaskContext(None)
     except BaseException as e:
-        handle_worker_exception(e, outfile)
+        if initialized:
+            handle_worker_exception(e, outfile)
+        else:
+            try:
+                report_init_response(outfile, e, loading_payload)
+            except IOError:
+                # JVM close the socket
+                pass
+            except BaseException:
+                # Write the error to stderr if it happened while serializing
+                print("PySpark worker failed with exception:", file=sys.stderr)
+                print(traceback.format_exc(), file=sys.stderr)
         sys.exit(-1)
     metrics.set_current_timestamp("finishTimestampMs")
     # Spill totals are byte counts already expressed in their reporting unit.

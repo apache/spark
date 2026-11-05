@@ -53,7 +53,7 @@ import org.apache.spark.memory.{MemoryConsumer, MemoryManager, MemoryMode, TaskM
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.{classic, sources, DataFrame, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, BloomFilterMightContain, BoundReference, Cast, Coalesce, CodegenObjectFactoryMode, EqualTo, Expression, GreaterThanOrEqual, If, In, IsNotNull, IsNull, LessThan, LessThanOrEqual, Literal, Or, Predicate, Rand, Remainder, SecondsToTimestamp, Substring, UnaryExpression, XxHash64}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, BloomFilterMightContain, BoundReference, Cast, Coalesce, CodegenObjectFactoryMode, EqualTo, Expression, GetStructField, GreaterThanOrEqual, If, In, IsNotNull, IsNull, LessThan, LessThanOrEqual, Literal, Or, Predicate, Rand, Remainder, SecondsToTimestamp, Substring, UnaryExpression, XxHash64}
 import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
@@ -65,6 +65,7 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector, WritableColumnVector}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.connector.StorageFilterErrors
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
@@ -705,7 +706,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     def under(levels: Int, fatal: Throwable): Throwable =
       (0 until levels).foldLeft(fatal)((cause, _) => new IllegalStateException("wraps", cause))
     def rethrow(e: Throwable, fromRead: Boolean): Unit =
-      ParquetStorageFilter.rethrowIfMustPropagate(e, fromRead)
+      StorageFilterErrors.rethrowIfMustPropagate(e, fromRead)
     def fallsBack(e: Throwable, fromRead: Boolean): Unit =
       try rethrow(e, fromRead) catch {
         // ScalaTest would abort the whole suite on these rather than fail this test.
@@ -1053,6 +1054,49 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
             s"and the query must still return the joined row; got ${rows.mkString(", ")}")
           // The three assertions above hold whether or not the reader honored the filter, since
           // the post-scan Filter answers the query either way. The metrics are what say it did.
+          val excluded = rowsExcludedByStorageFilters(plan)
+          assert(excluded > 0, s"the reader must have excluded rows; the metrics say $excluded")
+        }
+      }
+    }
+  }
+
+  Seq(false, true).foreach { aqe =>
+    test(s"a two-key join ships each bloom to the reader once (AQE $aqe)") {
+      // `MergeSubplans` merges the two blooms' aggregates into one subquery returning both blooms.
+      withTable("bf3", "bf4") {
+        spark.range(600).selectExpr("id AS k", "id * 10 AS v", "id * 100 AS w")
+          .write.format("parquet").saveAsTable("bf3")
+        spark.range(30).selectExpr("id AS k", "id * 10 AS v", "id AS flag")
+          .write.format("parquet").saveAsTable("bf4")
+        withSQLConf(
+            SQLConf.PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED.key -> "true",
+            SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "1000",
+            SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
+          val df = spark.sql(
+            "SELECT bf3.k, bf3.v, bf3.w FROM bf3 JOIN bf4 ON bf3.k = bf4.k AND bf3.v = bf4.v " +
+              "WHERE bf4.flag = 5")
+          val rows = df.collect().map(r => (r.getLong(0), r.getLong(1), r.getLong(2))).toSeq
+          assert(rows == Seq((5L, 50L, 500L)), s"got $rows")
+          val plan = df.queryExecution.executedPlan
+          val scan = collectFirst(plan) {
+            case s: FileSourceScanExec if s.storageFilters.nonEmpty => s
+          }.getOrElse(fail(s"no scan with storage filters:\n$plan"))
+          assert(scan.storageFilters.size == 2 && scan.storageFilters.forall(_.exists {
+            case GetStructField(_: ExecSubqueryExpression, _, _) => true
+            case _ => false
+          }), s"test setup: both blooms must come from one merged subquery:\n$plan")
+          val bloomBytes = scan.storageFilters.map(_.collectFirst {
+            case m: BloomFilterMightContain =>
+              m.bloomFilterExpression.eval().asInstanceOf[Array[Byte]].length
+          }.get).sum
+          // The reader's function ships with the scan's RDD, and the blooms with it.
+          val shipped = Utils.serialize(scan.inputRDD).length
+          assert(shipped < bloomBytes * 3 / 2,
+            s"each bloom must ship once; the RDD takes $shipped bytes for $bloomBytes bytes of " +
+              "blooms")
+          // The bound above holds without any bloom too. The metrics say the reader used them.
           val excluded = rowsExcludedByStorageFilters(plan)
           assert(excluded > 0, s"the reader must have excluded rows; the metrics say $excluded")
         }

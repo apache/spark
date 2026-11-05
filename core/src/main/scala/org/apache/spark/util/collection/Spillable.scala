@@ -153,7 +153,7 @@ private[spark] abstract class Spillable[C](taskMemoryManager: TaskMemoryManager)
    * @param elements number of elements read from input since last spill
    */
   @inline private def logSpillage(size: Long, elements: Int): Unit = {
-    val threadId = Thread.currentThread().getId
+    val threadId = Thread.currentThread().threadId
     logInfo(log"Thread ${MDC(LogKeys.THREAD_ID, threadId)} " +
       log"spilling in-memory map of ${MDC(LogKeys.BYTE_SIZE,
         org.apache.spark.util.Utils.bytesToString(size))} " +

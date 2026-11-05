@@ -60,7 +60,7 @@ import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.classic.{Catalog, DataFrameWriter, Dataset, MergeIntoWriter, RelationalGroupedDataset, SparkSession, TypedAggUtils, UserDefinedFunctionUtils}
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
-import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket, UdfSerialization}
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket, UdfSerialization}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
 import org.apache.spark.sql.connect.ml.MLHandler
 import org.apache.spark.sql.connect.pipelines.PipelinesHandler
@@ -3274,10 +3274,15 @@ class SparkConnectPlanner(
           timeZoneId = timeZoneId,
           errorOnDuplicatedFieldNames = false,
           largeVarTypes = largeVarTypes)
-        assert(batches.hasNext)
-        val bytes = batches.next()
-        assert(!batches.hasNext, s"remaining batches: ${batches.size}")
-        bytes
+        // On the driver, nothing else closes the converter if the conversion fails.
+        Utils.tryWithSafeFinally {
+          assert(batches.hasNext)
+          val bytes = batches.next()
+          assert(!batches.hasNext, s"remaining batches: ${batches.size}")
+          bytes
+        } {
+          batches.close()
+        }
       }
 
       result.setRelation(
@@ -4187,6 +4192,14 @@ class SparkConnectPlanner(
   private def handleCheckpointCommand(
       checkpointCommand: CheckpointCommand,
       responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
+    val dfId = if (checkpointCommand.hasRelationId) {
+      if (checkpointCommand.getRelationId.isEmpty) {
+        throw InvalidPlanInput("CONNECT_INVALID_PLAN.CHECKPOINT_RELATION_ID_EMPTY", Map.empty)
+      }
+      checkpointCommand.getRelationId
+    } else {
+      UUID.randomUUID().toString
+    }
     val target = Dataset
       .ofRows(session, transformRelation(checkpointCommand.getRelation))
     val checkpointed = if (checkpointCommand.getLocal) {
@@ -4202,9 +4215,12 @@ class SparkConnectPlanner(
       target.checkpoint(eager = checkpointCommand.getEager)
     }
 
-    val dfId = UUID.randomUUID().toString
     logInfo(log"Caching DataFrame with id ${MDC(DATAFRAME_ID, dfId)}")
-    sessionHolder.cacheDataFrameById(dfId, checkpointed)
+    if (sessionHolder.dataFrameCache.putIfAbsent(dfId, checkpointed) != null) {
+      throw InvalidPlanInput(
+        "CONNECT_INVALID_PLAN.DATAFRAME_ALREADY_EXISTS",
+        Map("dfId" -> dfId, "sessionId" -> sessionId))
+    }
 
     executeHolder.eventsManager.postFinished()
     responseObserver.onNext(

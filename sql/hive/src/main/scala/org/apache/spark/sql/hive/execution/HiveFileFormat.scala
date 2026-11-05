@@ -41,7 +41,7 @@ import org.apache.spark.sql.execution.datasources.{FileFormat, OutputWriter, Out
 import org.apache.spark.sql.hive.{HiveInspectors, HiveTableUtil}
 import org.apache.spark.sql.internal.SessionStateHelper
 import org.apache.spark.sql.sources.DataSourceRegister
-import org.apache.spark.sql.types.{AnyTimestampNanoType, ArrayType, DataType, GeographyType, GeometryType, MapType, StructType, TimeType, UserDefinedType}
+import org.apache.spark.sql.types.{AnyTimestampNanoType, ArrayType, DataType, GeographyType, GeometryType, MapType, StructType, TimestampNTZType, TimeType, UserDefinedType}
 import org.apache.spark.util.SerializableJobConf
 
 /**
@@ -126,6 +126,9 @@ case class HiveFileFormat(fileSinkConf: FileSinkDesc)
 
     // Hive has no geospatial types, so they cannot be stored in a Hive serde table.
     case _: GeometryType | _: GeographyType => false
+
+    // Hive has no TIMESTAMP_NTZ type, so it cannot be stored in a Hive serde table.
+    case _: TimestampNTZType => false
 
     case st: StructType => st.forall { f => supportDataType(f.dataType) }
 
