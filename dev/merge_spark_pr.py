@@ -115,6 +115,7 @@ MERGE_SCRIPT_REPO_PATH = "dev/merge_spark_pr.py"
 
 # Run the push-triggered post-merge workflows at each branch's configured commit interval.
 # Other commits get GitHub's documented workflow-skip trailer after a visible warning.
+# See https://docs.github.com/en/actions/how-tos/manage-workflow-runs/skip-workflow-runs
 POST_MERGE_CI_INTERVALS = {"master": 10, "branch-4.x": 10}
 POST_MERGE_CI_SKIP_TRAILER = "skip-checks: true"
 
