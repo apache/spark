@@ -1037,13 +1037,11 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 // not built-in already fail earlier in analysis: unknown functions with
                 // UNRESOLVED_ROUTINE and persistent SQL functions with UNSUPPORTED_SQL_UDF_USAGE.
                 // Here we only need to reject user-defined functions (Scala/Python/Java/Hive UDFs
-                // and v2 catalog functions, all of which are `UserDefinedExpression`), which
-                // resolve successfully.
-                genExpr.child.foreach {
-                  case udf: UserDefinedExpression =>
+                // and v2 catalog functions), which resolve successfully.
+                StoredExpressionFunctions.findUserDefinedFunctionCall(genExpr.child).foreach {
+                  case (_, functionName) =>
                     throw unsupportedExpressionError(
-                      s"failed to resolve `${udf.name}` to a built-in function")
-                  case _ =>
+                      s"failed to resolve $functionName to a built-in function")
                 }
                 genExpr.validate(col.name, col.dataType, create.columns)
               }
