@@ -27,7 +27,7 @@ import org.apache.spark.internal.LogKeys.EXPR
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedPersistentView, ResolvedTable, ResolvedTempView}
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, AttributeSet, BloomFilterMightContain, Cast, DynamicPruning, DynamicPruningSubquery, Expression, InSet, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, AttributeSet, BloomFilterMightContain, Cast, DynamicPruning, DynamicPruningSubquery, Expression, InSet, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -55,7 +55,6 @@ import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.internal.connector.SupportsCatalystFilterGuarantees
 import org.apache.spark.sql.metricview.logical.CreateMetricView
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
-import org.apache.spark.sql.types.BooleanType
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkStringUtils
@@ -156,30 +155,18 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       AttributeSet(dataColumns), _.isInstanceOf[BloomFilterMightContain])
   }
 
-  private def removeGuaranteedFilters(
-      project: Seq[NamedExpression],
+  private def removeFullyPushedFilters(
       filters: Seq[Expression],
-      relation: DataSourceV2ScanRelation): (Seq[NamedExpression], Seq[Expression]) = {
+      relation: DataSourceV2ScanRelation): Seq[Expression] = {
+    if (relation.inferredFilters.isEmpty) return filters
     relation.relation.table match {
-      case source: SupportsCatalystFilterGuarantees =>
-        val scan = relation.scan match {
-          case V1ScanWrapper(wrapped, _, _) => wrapped
-          case other => other
+      case _: SupportsCatalystFilterGuarantees =>
+        val attributes = relation.fullyPushedFilterAttrs
+        filters.filterNot { filter =>
+          filter.references.nonEmpty && filter.references.subsetOf(attributes) &&
+            PushDownUtils.isPushablePartitionFilter(filter)
         }
-        def isGuaranteed(expr: Expression): Boolean = {
-          expr.deterministic && !SubqueryExpression.hasSubquery(expr) &&
-            source.isFilterGuaranteed(scan, expr)
-        }
-        // MergeSubplans can place inferred predicates inside projected Boolean aliases.
-        val simplifiedProject = project.map {
-          case alias: Alias if alias.dataType == BooleanType =>
-            val remaining = splitConjunctivePredicates(alias.child).filterNot(isGuaranteed)
-            alias.withNewChild(remaining.reduceOption(And).getOrElse(TrueLiteral))
-          case other => other
-        }
-        // PhysicalOperation already split the filters into conjuncts.
-        (simplifiedProject, filters.filterNot(isGuaranteed))
-      case _ => (project, filters)
+      case _ => filters
     }
   }
 
@@ -207,22 +194,22 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         v1Relation,
         None,
         tableIdentifier)
-      val (scanProject, scanFilters) = removeGuaranteedFilters(project, filters, relation)
+      val scanFilters = removeFullyPushedFilters(filters, relation)
       DataSourceV2Strategy.withProjectAndFilter(
-        scanProject, scanFilters, dsScan, needsUnsafeConversion = false) :: Nil
+        project, scanFilters, dsScan, needsUnsafeConversion = false) :: Nil
 
     case PhysicalOperation(project, filters,
         relation @ ExtractV2ScanInfo(_, scan: LocalScan, output)) =>
       val localScanExec = LocalTableScanExec(output, scan.rows().toImmutableArraySeq, None)
-      val (scanProject, scanFilters) = removeGuaranteedFilters(project, filters, relation)
+      val scanFilters = removeFullyPushedFilters(filters, relation)
       DataSourceV2Strategy.withProjectAndFilter(
-        scanProject, scanFilters, localScanExec, needsUnsafeConversion = false) :: Nil
+        project, scanFilters, localScanExec, needsUnsafeConversion = false) :: Nil
 
     case PhysicalOperation(project, filters, relation: DataSourceV2ScanRelation) =>
       // projection and filters were already pushed down in the optimizer.
       // this uses PhysicalOperation to get the projection and ensure that if the batch scan does
       // not support columnar, a projection is added to convert the rows to UnsafeRow.
-      val (scanProject, scanFilters) = removeGuaranteedFilters(project, filters, relation)
+      val scanFilters = removeFullyPushedFilters(filters, relation)
       val (dynamicFilters, postScanFilters) = scanFilters.partition {
         case _: DynamicPruning => true
         case _ => false
@@ -296,7 +283,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         runtimeFilters, relation.ordering, relation.relation.table, keyGroupedPartitioning,
         storageFilters, checked.isDefined)
       // With the checked column the scan's output differs from `project`, so a Project drops it.
-      DataSourceV2Strategy.withProjectAndFilter(scanProject,
+      DataSourceV2Strategy.withProjectAndFilter(project,
         StorageFilterPlanning.skipCheckedRows(filtersAbove, storageFilters, checked),
         batchExec, !batchExec.supportsColumnar) :: Nil
 

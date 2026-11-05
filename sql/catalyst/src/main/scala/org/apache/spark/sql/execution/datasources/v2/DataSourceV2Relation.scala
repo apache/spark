@@ -237,9 +237,9 @@ case class DataSourceV2ScanRelation(
   }
 
   @nowarn("cat=deprecation")
-  private lazy val declaredFullyPushedRuntimeFilterAttrs: Array[NamedReference] = {
+  private lazy val declaredFullyPushedFilterAttrs: Array[NamedReference] = {
     val (declared, referenceOutput) = (scan, relation.table) match {
-      case (_: SupportsRuntimeCatalystFiltering, t: SupportsCatalystFilterGuarantees) =>
+      case (_, t: SupportsCatalystFilterGuarantees) =>
         (t.fullyPushedFilterAttributes(), relation.output)
       case (s: SupportsRuntimeCatalystFiltering, _) =>
         (s.fullyPushedFilterAttributes(), output)
@@ -262,12 +262,18 @@ case class DataSourceV2ScanRelation(
     resolveFilterAttrs(declaredRuntimeFilterAttrs, "filterAttributes()")
   }
 
-  private lazy val resolvedFullyPushedRuntimeFilterAttrs: AttributeSet = {
-    val resolvedAttrs = resolveFilterAttrs(
-      declaredFullyPushedRuntimeFilterAttrs, "fullyPushedFilterAttributes()")
-    resolvedRuntimeFilterAttrs
-    checkFullyPushedFilterAttrsAreFilterable()
-    resolvedAttrs
+  /** The scan output attributes whose Catalyst filters the source fully evaluates. */
+  lazy val fullyPushedFilterAttrs: AttributeSet = {
+    resolveFilterAttrs(declaredFullyPushedFilterAttrs, "fullyPushedFilterAttributes()")
+  }
+
+  private lazy val resolvedFullyPushedRuntimeFilterAttrs: AttributeSet = scan match {
+    case _: SupportsRuntimeCatalystFiltering =>
+      val resolvedAttrs = fullyPushedFilterAttrs
+      resolvedRuntimeFilterAttrs
+      checkFullyPushedFilterAttrsAreFilterable()
+      resolvedAttrs
+    case _ => AttributeSet.empty
   }
 
   /**
@@ -418,7 +424,7 @@ case class DataSourceV2ScanRelation(
   }
 
   private def checkFullyPushedFilterAttrsAreFilterable(): Unit = {
-    declaredFullyPushedRuntimeFilterAttrs.find { fullyPushedRef =>
+    declaredFullyPushedFilterAttrs.find { fullyPushedRef =>
       !declaredRuntimeFilterAttrs.exists { filterRef =>
         fullyPushedRef.fieldNames.length == filterRef.fieldNames.length &&
           fullyPushedRef.fieldNames.lazyZip(filterRef.fieldNames).forall(conf.resolver)

@@ -17,47 +17,32 @@
 
 package org.apache.spark.sql.internal.connector
 
-import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.expressions.NamedReference
-import org.apache.spark.sql.connector.read.Scan
 
 /** A table that declares when its scans fully evaluate Catalyst predicates. */
 trait SupportsCatalystFilterGuarantees extends Table {
 
   /**
-   * Returns attributes for which this table's Catalyst runtime-filtering scans fully evaluate
-   * runtime predicates.
+   * Returns attributes for which this table's scans fully evaluate Catalyst filters.
    *
-   * Spark omits post-scan evaluation of eligible runtime predicates referencing only these
-   * attributes. Each attribute's value must be fixed within every returned input partition,
-   * and the scan must return only partitions proven to satisfy the predicates passed to
-   * [[SupportsRuntimeCatalystFiltering.filter]]. The scan must be able to evaluate every
-   * predicate over these attributes with Spark's semantics, including error behavior.
+   * For scans reporting inferred filters, Spark omits executable static filter conjuncts that
+   * reference only these attributes. The source must fully enforce the query filters over these
+   * attributes during pushdown. Logical filters remain available for statistics estimation.
+   * Boolean projections retain their evaluation, including aliases created by MergeSubplans.
    *
-   * References must be top-level table columns. Spark ignores columns pruned from the scan;
-   * remaining columns must also be returned by
-   * [[SupportsRuntimeCatalystFiltering.filterAttributes]].
-   * A root struct declares support for predicates over every nested field.
+   * Catalyst runtime-filtering scans also omit post-scan evaluation of eligible runtime predicates
+   * referencing only these attributes. Each attribute's value must be fixed within every returned
+   * input partition, and the scan must return only partitions satisfying the predicates passed to
+   * [[SupportsRuntimeCatalystFiltering.filter]]. These attributes must also be returned by
+   * [[SupportsRuntimeCatalystFiltering.filterAttributes]] when present in the scan output.
+   *
+   * References must be top-level table columns. Spark ignores columns pruned from the scan.
+   * The source must evaluate every eligible predicate over these attributes with Spark's semantics,
+   * including error behavior. A root struct declares support for every nested field.
    *
    * This declaration takes precedence over
    * [[SupportsRuntimeCatalystFiltering.fullyPushedFilterAttributes]].
    */
   def fullyPushedFilterAttributes(): Array[NamedReference] = Array.empty
-
-  /**
-   * Returns whether `filter` evaluates to SQL `true` for every row returned by `scan`.
-   *
-   * Spark calls this read-only method during physical planning. A `true` result allows Spark to
-   * omit the conjunct from executable filters and Boolean projections. Logical filters remain
-   * available for statistics estimation. Return `false` when the predicate can evaluate to
-   * `false` or `null`, or the table cannot prove it true for the supplied scan.
-   *
-   * Spark checks deterministic, subquery-free top-level conjuncts, including optimizer-generated
-   * expressions. Column references are bound to the scan output and may have different expression
-   * IDs from those passed during pushdown. The guarantee must hold for the supplied scan,
-   * including after scan rebuilding, and must not depend on filters evaluated above it. This
-   * method must not change the table or scan, push filters, or plan input partitions.
-   */
-  def isFilterGuaranteed(scan: Scan, filter: Expression): Boolean = false
 }

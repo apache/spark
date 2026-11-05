@@ -1872,6 +1872,7 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
         .filter($"i" > 7)
 
       checkAnswer(query, Seq(Row(8, -8), Row(9, -9)))
+      checkAnswer(query.select(($"j" < -8).as("flag")), Seq(Row(false), Row(true)))
       val logical = query.queryExecution.optimizedPlan
       val scan = getScanRelation(query)
       assert(scan.stats.rowCount.contains(BigInt(10)))
@@ -2363,15 +2364,8 @@ class GuaranteedCatalystFilterDataSourceV2 extends TestingV2Source {
 
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     new SimpleBatchTable with SupportsCatalystFilterGuarantees {
-      override def isFilterGuaranteed(scan: Scan, filter: CatalystExpression): Boolean = {
-        scan match {
-          case source: CatalystFilterScanBuilder =>
-            (source.pushedCatalystFilters ++ source.inferredFilters).exists { known =>
-              source.bindToSourceOutput(known).semanticEquals(source.bindToSourceOutput(filter))
-            }
-          case _ => false
-        }
-      }
+      override def fullyPushedFilterAttributes(): Array[NamedReference] =
+        Array(FieldReference.column("i"), FieldReference.column("j"))
 
       override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
         new CatalystFilterScanBuilder(options)
@@ -2491,7 +2485,7 @@ class CatalystFilterScanBuilder(options: CaseInsensitiveStringMap) extends Simpl
   with SupportsPushDownRequiredColumns
   with SupportsReportStatistics {
 
-  private[connector] var pushedCatalystFilters: Seq[CatalystExpression] = Seq.empty
+  private var pushedCatalystFilters = Seq.empty[CatalystExpression]
   private val deriveInferred = CatalystFilterScanBuilder.derivation(options)
   private val statsReflectFullyPushedDownFilters =
     Option(options.get(CatalystFilterScanBuilder.REFLECTS_FULLY_PUSHED_DOWN_FILTERS))
@@ -2551,7 +2545,7 @@ class CatalystFilterScanBuilder(options: CaseInsensitiveStringMap) extends Simpl
   override def useInferredFilterEstimation(): Boolean =
     options.getBoolean(CatalystFilterScanBuilder.USE_INFERRED_FILTER_ESTIMATION, true)
 
-  private[connector] def bindToSourceOutput(filter: CatalystExpression): CatalystExpression = {
+  private def bindToSourceOutput(filter: CatalystExpression): CatalystExpression = {
     filter.transformUp {
       case attr: AttributeReference =>
         sourceOutput.find(_.name == attr.name).getOrElse(
