@@ -113,11 +113,10 @@ SKIP_VERSION_CHECK = os.environ.get("SKIP_VERSION_CHECK", "")
 # Path of this script relative to the repo root, used to fetch the canonical copy from master.
 MERGE_SCRIPT_REPO_PATH = "dev/merge_spark_pr.py"
 
-# Run the push-triggered post-merge workflows once every this many commits on the branches
-# below. Other commits get GitHub's documented workflow-skip trailer, unless the committer
-# explicitly enforces CI at the prompt.
-POST_MERGE_CI_INTERVAL = 10
-POST_MERGE_CI_BRANCHES = ("master", "branch-4.x")
+# Run the push-triggered post-merge workflows at each branch's configured commit interval.
+# Other commits get GitHub's documented workflow-skip trailer, unless the committer chooses
+# not to skip CI at the prompt.
+POST_MERGE_CI_INTERVALS = {"master": 10, "branch-4.x": 10}
 POST_MERGE_CI_SKIP_TRAILER = "skip-checks: true"
 
 
@@ -845,8 +844,14 @@ def should_skip_post_merge_ci(target_ref, commit_count):
     [True, False]
     >>> should_skip_post_merge_ci("branch-4.3", 21)
     False
+    >>> from unittest.mock import patch
+    >>> with patch.dict(POST_MERGE_CI_INTERVALS, {"master": 3, "branch-4.x": 5}, clear=True):
+    ...     [should_skip_post_merge_ci(branch, count) for branch, count in
+    ...      (("master", 3), ("master", 4), ("branch-4.x", 5), ("branch-4.x", 6))]
+    [False, True, False, True]
     """
-    return target_ref in POST_MERGE_CI_BRANCHES and commit_count % POST_MERGE_CI_INTERVAL != 0
+    interval = POST_MERGE_CI_INTERVALS.get(target_ref)
+    return interval is not None and commit_count % interval != 0
 
 
 def prompt_to_skip_post_merge_ci(target_ref):
@@ -855,25 +860,27 @@ def prompt_to_skip_post_merge_ci(target_ref):
     The branch history count matches the check formerly performed in ``build_main.yml``.
     A committer can enforce CI for a commit which deterministic sampling would skip.
     """
-    if target_ref not in POST_MERGE_CI_BRANCHES:
+    interval = POST_MERGE_CI_INTERVALS.get(target_ref)
+    if interval is None:
         return False
 
     commit_count = int(git.run(["git", "rev-list", "--count", "HEAD"]).strip()) + 1
     if not should_skip_post_merge_ci(target_ref, commit_count):
         print(
             "Post-merge CI will run on %s: commit count %s is divisible by %s."
-            % (target_ref, commit_count, POST_MERGE_CI_INTERVAL)
+            % (target_ref, commit_count, interval)
         )
         return False
 
     print(
         "Post-merge CI is sampled out on %s: commit count %s is not divisible by %s."
-        % (target_ref, commit_count, POST_MERGE_CI_INTERVAL)
+        % (target_ref, commit_count, interval)
     )
-    enforce = get_input(
-        "Would you like to enforce post-merge CI for this commit? (y/N): ", ["y", "n", ""]
+    skip = get_input(
+        "Would you like to skip post-merge CI for this commit? (Y/n): ",
+        {"y": ["y", ""], "n": ["n"]},
     )
-    if enforce == "y":
+    if skip == "n":
         print("Post-merge CI will run because the committer enforced it.")
         return False
 
