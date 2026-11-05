@@ -353,6 +353,75 @@ trait JoinSelectionHelper extends Logging {
     }
   }
 
+  /**
+   * How `JoinSelection` plans `join` when it has no equi-join keys: the side a broadcast nested
+   * loop join builds, or `None` for a Cartesian product. Rules that need to know or price the plan
+   * a non-equi join gets can share it.
+   *
+   * With hints, it builds a hinted side, or else plans a Cartesian product under a
+   * shuffle-replicate hint. Otherwise, or if no hint applies, it builds a side small enough to
+   * broadcast, or else plans a Cartesian product for an inner join, or else builds the side the
+   * join requires or prefers, however large. Of two candidate sides, it builds the smaller for an
+   * inner or full join, the left for a right join, and the right for a left join.
+   */
+  def getNonEquiJoinBuildSide(join: Join, conf: SQLConf): Option[BuildSide] = {
+    val Join(left, right, joinType, _, hint) = join
+    val desiredBuildSide = if (joinType.isInstanceOf[InnerLike] || joinType == FullOuter) {
+      getSmallerSide(left, right)
+    } else {
+      // For perf reasons, `BroadcastNestedLoopJoinExec` prefers to broadcast left side if
+      // it's a right join, and broadcast right side if it's a left join.
+      // TODO: revisit it. If left side is much smaller than the right side, it may be better
+      // to broadcast the left side even if it's a left join.
+      if (canBuildBroadcastLeft(joinType)) BuildLeft else BuildRight
+    }
+
+    // The side to broadcast by hint, or by size, if any.
+    def broadcastSide(onlyLookingAtHint: Boolean): Option[BuildSide] = {
+      val buildLeft = if (onlyLookingAtHint) {
+        hintToBroadcastLeft(hint)
+      } else {
+        canBroadcastBySize(left, conf) && !hintToNotBroadcastAndReplicateLeft(hint)
+      }
+      val buildRight = if (onlyLookingAtHint) {
+        hintToBroadcastRight(hint)
+      } else {
+        canBroadcastBySize(right, conf) && !hintToNotBroadcastAndReplicateRight(hint)
+      }
+      if (buildLeft && buildRight) {
+        Some(desiredBuildSide)
+      } else if (buildLeft) {
+        Some(BuildLeft)
+      } else if (buildRight) {
+        Some(BuildRight)
+      } else {
+        None
+      }
+    }
+
+    val cartesianProduct =
+      joinType.isInstanceOf[InnerLike] && !hintToNotBroadcastAndReplicate(hint)
+    // The last resort could be very slow or OOM. It builds the desired side unless the join
+    // requires a particular build side (e.g. NO_BROADCAST_AND_REPLICATION hint).
+    def withoutHint: Option[BuildSide] = broadcastSide(onlyLookingAtHint = false).orElse {
+      if (cartesianProduct) {
+        None
+      } else {
+        Some(getBroadcastNestedLoopJoinBuildSide(hint, joinType).getOrElse(desiredBuildSide))
+      }
+    }
+
+    if (hint.isEmpty) {
+      withoutHint
+    } else {
+      broadcastSide(onlyLookingAtHint = true) match {
+        case hinted @ Some(_) => hinted
+        case None if hintToShuffleReplicateNL(hint) && cartesianProduct => None
+        case None => withoutHint
+      }
+    }
+  }
+
   def getSmallerSide(left: LogicalPlan, right: LogicalPlan): BuildSide = {
     if (right.stats.sizeInBytes <= left.stats.sizeInBytes) BuildRight else BuildLeft
   }
