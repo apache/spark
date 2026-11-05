@@ -219,8 +219,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         dynamicFilters ++ scalarSubqueryFilters
       }
 
-      val batchExec = BatchScanExec(relation.output, relation.scan, runtimeFilters,
-        relation.ordering, relation.relation.table, relation.keyGroupedPartitioning)
+      val batchExec = BatchScanExec(relation.output, new PlannedScan(relation.scan),
+        runtimeFilters, relation.ordering, relation.relation.table, relation.keyGroupedPartitioning)
       DataSourceV2Strategy.withProjectAndFilter(
         project, postScanFilters.diff(fullyPushedRuntimeFilters),
         batchExec, !batchExec.supportsColumnar) :: Nil
