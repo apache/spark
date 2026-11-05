@@ -29,7 +29,7 @@ import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.DELETE
 import org.apache.spark.sql.connector.write.RowLevelOperationTable
-import org.apache.spark.sql.execution.EmptyRDDWithPartitions
+import org.apache.spark.sql.execution.{EmptyRDDWithPartitions, SparkPlan}
 import org.apache.spark.sql.execution.metric.{SQLLastAttemptMetrics, SQLMetric, SQLMetrics}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -45,7 +45,13 @@ case class BatchScanExec(
     keyGroupedPartitioning: Option[Seq[Expression]] = None
   ) extends DataSourceV2ScanExecBase {
 
-  @transient lazy val batch: Batch = if (scan == null) null else scan.toBatch
+  // What this node plans from `scan`, see [[PlannedScan]]. `makeCopy` and `clone` hand it over to a
+  // copy over the same `Scan`. Any other new node plans its own, including one the case-class
+  // `copy` makes.
+  @transient private var plannedScan: PlannedScan =
+    if (scan == null) null else new PlannedScan(scan)
+
+  def batch: Batch = if (scan == null) null else plannedScan.batch
 
   override protected lazy val sparkMetrics: Map[String, SQLMetric] = {
     val name = "number of output rows"
@@ -73,8 +79,7 @@ case class BatchScanExec(
 
   override def hashCode(): Int = Objects.hash(batch, runtimeFilters, keyGroupedPartitioning)
 
-  @transient override lazy val inputPartitions: Seq[InputPartition] =
-    batch.planInputPartitions().toImmutableArraySeq
+  override def inputPartitions: Seq[InputPartition] = plannedScan.inputPartitions
 
   // Visible for testing
   @transient private[sql] lazy val filteredPartitions: Seq[Option[InputPartition]] =
@@ -86,7 +91,7 @@ case class BatchScanExec(
       outputPartitioning,
       inputPartitions)
 
-  override lazy val readerFactory: PartitionReaderFactory = batch.createReaderFactory()
+  override def readerFactory: PartitionReaderFactory = plannedScan.readerFactory
 
   override lazy val inputRDD: RDD[InternalRow] = {
     val rdd = if (filteredPartitions.isEmpty && outputPartitioning == SinglePartition) {
@@ -98,6 +103,19 @@ case class BatchScanExec(
     }
     postDriverMetrics(scan.reportDriverMetrics())
     rdd
+  }
+
+  override def makeCopy(newArgs: Array[AnyRef]): SparkPlan = sharePlanning(super.makeCopy(newArgs))
+
+  // `TreeNode.clone` does not go through `makeCopy`.
+  override def clone(): SparkPlan = sharePlanning(super.clone())
+
+  private def sharePlanning(node: SparkPlan): SparkPlan = {
+    node match {
+      case c: BatchScanExec if c.scan eq scan => c.plannedScan = plannedScan
+      case _ =>
+    }
+    node
   }
 
   override def doCanonicalize(): BatchScanExec = {
@@ -120,4 +138,19 @@ case class BatchScanExec(
   override def nodeName: String = {
     s"BatchScan ${table.name()}".trim
   }
+}
+
+/**
+ * A `Scan`, with the `Batch` and the input partitions a [[BatchScanExec]] plans from it once, when
+ * a node first asks for them. The node hands it over to the copies `makeCopy` and `clone` make of
+ * it, so they read the partitions the first node planned, with a reader factory from the `Batch`
+ * that planned them. The partitions have to be the planned ones, because the `Scan` can be shared
+ * with another node whose runtime filter prunes it first, e.g. the build side of a DPP subquery
+ * (SPARK-60752). A pushed runtime filter replans them from a new `Batch`, but keeps the planned
+ * `Batch`'s reader factory.
+ */
+private[v2] final class PlannedScan(val scan: Scan) {
+  lazy val batch: Batch = scan.toBatch
+  lazy val inputPartitions: Seq[InputPartition] = batch.planInputPartitions().toImmutableArraySeq
+  lazy val readerFactory: PartitionReaderFactory = batch.createReaderFactory()
 }
