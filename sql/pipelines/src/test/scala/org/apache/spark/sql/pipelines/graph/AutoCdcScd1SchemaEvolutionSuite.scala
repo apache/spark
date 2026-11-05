@@ -746,4 +746,34 @@ class AutoCdcScd1SchemaEvolutionSuite
       )
     )
   }
+
+  test("TEMPVOID a void column against an existing struct target column") {
+    spark.sql(
+      s"CREATE TABLE $catalog.$namespace.target " +
+      s"(id INT NOT NULL, profile STRUCT<city: STRING>, version BIGINT NOT NULL, " +
+      s"$scd1MetadataDdl)"
+    )
+    val stream = MemoryStream[(Int, Long)]
+    stream.addData((1, 2L))
+    val ctx = singleAutoCdcFlowPipeline(
+      flowName = "auto_cdc_flow",
+      target = "target",
+      sourceDf = stream.toDF().toDF("id", "version")
+        .withColumn("profile", functions.lit(null)),
+      keys = Seq("id"),
+      sequencing = functions.col("version"))
+    val ex = intercept[Throwable] { runPipeline(ctx) }
+    var t: Throwable = ex
+    while (t != null) {
+      // scalastyle:off println
+      println(s"TEMPVOID-CAUSE ${t.getClass.getName}: ${t.getMessage}")
+      // scalastyle:on println
+      t = t.getCause
+    }
+    checkErrorInPipelineFailure(
+      failure = ex,
+      condition = "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
+      sqlState = Some("42825"),
+      parameters = Map("left" -> "\"STRUCT<city: STRING>\"", "right" -> "\"VOID\""))
+  }
 }

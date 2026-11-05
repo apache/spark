@@ -126,7 +126,8 @@ class Scd1LeafLevelReconciliationSuite extends QueryTest with SharedSparkSession
     )
   }
 
-  test("extendMicrobatchRowsWithVersionMap leaves the leaves that alignment added unauthored") {
+  test("extendMicrobatchRowsWithVersionMap leaves only the leaves that alignment added " +
+    "unauthored") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       val schema = new StructType()
         .add("id", IntegerType)
@@ -136,14 +137,18 @@ class Scd1LeafLevelReconciliationSuite extends QueryTest with SharedSparkSession
         .add("profile", new StructType()
           .add("city", StringType)
           .add("zip", StringType))
+        .add("address", new StructType()
+          .add("city", StringType))
         .add(metadataColName, metadataSchema)
       val unalignedSchema = new StructType()
         .add("ID", IntegerType)
         .add("Selected", StringType)
         .add("Carried", StringType)
+        .add("Address", new StructType()
+          .add("City", StringType))
         .add(metadataColName, metadataSchema)
       val input = dataFrameOf(schema)(
-        Row(1, "value", null, null, null, Row(null, 10L, null))
+        Row(1, "value", null, null, null, null, Row(null, 10L, null))
       )
 
       val result = extendMicrobatchRowsWithVersionMap(
@@ -158,7 +163,8 @@ class Scd1LeafLevelReconciliationSuite extends QueryTest with SharedSparkSession
         encodedPath("carried") -> 10L,
         encodedPath("omitted") -> null,
         encodedPath("profile", "city") -> null,
-        encodedPath("profile", "zip") -> null
+        encodedPath("profile", "zip") -> null,
+        encodedPath("address", "city") -> 10L
       )
       checkAnswer(
         result.select(F.col(metadataColName)),
