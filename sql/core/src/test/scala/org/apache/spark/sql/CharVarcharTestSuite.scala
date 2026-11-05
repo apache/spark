@@ -866,18 +866,22 @@ trait CharVarcharTestSuite extends QueryTest {
     }
   }
 
-  test("SPARK-XXXXX: char type comparison: outer reference returned by a LATERAL subquery") {
+  test("SPARK-60876: char type comparison: outer reference returned by a LATERAL subquery") {
     withTable("t1", "t2") {
       sql(s"CREATE TABLE t1(c CHAR(5), s STRING, v VARCHAR(3)) USING $format")
       sql("INSERT INTO t1 VALUES ('ab', 'x', 'v1'), ('cd', 'y', 'v2')")
       sql(s"CREATE TABLE t2(c CHAR(8)) USING $format")
       sql("INSERT INTO t2 VALUES ('ab')")
-      Seq(
-        "LATERAL (SELECT t1.c) l WHERE l.c = 'ab'",
-        "LATERAL (SELECT t1.c AS k) l WHERE l.k = 'ab'",
-        "LATERAL (SELECT t1.*) l WHERE l.c IN ('ab', 'xyz')",
-        "LATERAL (SELECT t1.c AS k) l, t2 WHERE l.k = t2.c").foreach { q =>
-        checkAnswer(sql(s"SELECT t1.s FROM t1, $q"), Row("x"))
+      Seq("true", "false").foreach { readSidePadding =>
+        withSQLConf(SQLConf.READ_SIDE_CHAR_PADDING.key -> readSidePadding) {
+          Seq(
+            "LATERAL (SELECT t1.c) l WHERE l.c = 'ab'",
+            "LATERAL (SELECT t1.c AS k) l WHERE l.k = 'ab'",
+            "LATERAL (SELECT t1.*) l WHERE l.c IN ('ab', 'xyz')",
+            "LATERAL (SELECT t1.c AS k) l, t2 WHERE l.k = t2.c").foreach { q =>
+            checkAnswer(sql(s"SELECT t1.s FROM t1, $q"), Row("x"))
+          }
+        }
       }
       Seq(
         "SELECT l.c FROM t1, LATERAL (SELECT t1.c) l",
@@ -890,7 +894,7 @@ trait CharVarcharTestSuite extends QueryTest {
     }
   }
 
-  test("SPARK-XXXXX: char type comparison: outer reference returned by a correlated subquery") {
+  test("SPARK-60876: char type comparison: outer reference returned by a correlated subquery") {
     withTable("t1", "t2") {
       sql(s"CREATE TABLE t1(c CHAR(5), s STRING) USING $format")
       sql("INSERT INTO t1 VALUES ('ab', 'x'), ('cd', 'y')")
@@ -910,6 +914,23 @@ trait CharVarcharTestSuite extends QueryTest {
         """SELECT s, (SELECT max(x.k) FROM (SELECT t1.c AS k) x WHERE x.k = 'ab') FROM t1
         """.stripMargin),
         Seq(Row("x", "ab   "), Row("y", null)))
+    }
+  }
+
+  test("SPARK-60876: CTAS over an outer reference returned by a LATERAL subquery") {
+    withTable("t1", "ct", "ct_str") {
+      sql(s"CREATE TABLE t1(c CHAR(5), v VARCHAR(3)) USING $format")
+      sql("INSERT INTO t1 VALUES ('ab', 'xy')")
+      sql(s"CREATE TABLE ct USING $format AS SELECT l.k, l.w " +
+        "FROM t1, LATERAL (SELECT t1.c AS k, t1.v AS w) l")
+      checkColType(spark.table("ct").schema(0), CharType(5))
+      checkColType(spark.table("ct").schema(1), VarcharType(3))
+      checkAnswer(sql("SELECT k FROM ct WHERE k = 'ab'"), Row("ab   "))
+      assertLengthCheckFailure("INSERT INTO ct VALUES ('abcdefgh', 'xy')")
+      // A cast in the query keeps STRING.
+      sql(s"CREATE TABLE ct_str USING $format AS SELECT l.k " +
+        "FROM t1, LATERAL (SELECT CAST(t1.c AS STRING) AS k) l")
+      assert(CharVarcharUtils.getRawType(spark.table("ct_str").schema.head.metadata).isEmpty)
     }
   }
 

@@ -465,7 +465,7 @@ case class OuterReference(e: NamedExpression)
   override def nullable: Boolean = e.nullable
   // Forward only the raw CHAR/VARCHAR type when aliased. Other keys are not forwarded; some,
   // such as the SQL UDF parameter and auto-generated alias markers, must not leak.
-  override def metadata: Metadata = CharVarcharUtils.getRawTypeString(e.metadata) match {
+  override lazy val metadata: Metadata = CharVarcharUtils.getRawTypeString(e.metadata) match {
     case Some(rawType) => new MetadataBuilder()
       .putString(CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, rawType).build()
     case None => Metadata.empty
