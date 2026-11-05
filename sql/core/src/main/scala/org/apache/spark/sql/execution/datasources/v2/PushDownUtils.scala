@@ -43,6 +43,32 @@ import org.apache.spark.util.collection.Utils
 
 object PushDownUtils extends Logging {
 
+  /** Returns whether [[pushFilters]] may push filters down to `scanBuilder`. */
+  def supportsFilters(scanBuilder: ScanBuilder): Boolean = scanBuilder match {
+    case _: SupportsPushDownFilters | _: SupportsPushDownV2Filters |
+        _: SupportsPushDownCatalystFilters => true
+    case _ => false
+  }
+
+  /**
+   * Returns the filters of `filters` that [[pushFilters]] gives to `scanBuilder` in some form, in
+   * their order: those that it translates to data source filters or predicates, or the
+   * deterministic ones for a [[SupportsPushDownCatalystFilters]] builder. The others are only
+   * evaluated after the scan.
+   */
+  def filtersOfScanBuilder(
+      scanBuilder: ScanBuilder,
+      filters: Seq[Expression]): Seq[Expression] = scanBuilder match {
+    case _: SupportsPushDownFilters =>
+      filters.filter { filter =>
+        DataSourceStrategy.translateFilter(filter, supportNestedPredicatePushdown = true).isDefined
+      }
+    case _: SupportsPushDownV2Filters =>
+      filters.filter(f => f.deterministic && DataSourceV2Strategy.translateFilterV2(f).isDefined)
+    case _: SupportsPushDownCatalystFilters => filters.filter(_.deterministic)
+    case _ => Nil
+  }
+
   /**
    * Pushes down filters to the data source reader.
    *

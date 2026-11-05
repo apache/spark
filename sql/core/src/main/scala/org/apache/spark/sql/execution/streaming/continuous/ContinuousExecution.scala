@@ -77,10 +77,10 @@ class ContinuousExecution(
     val v2ToRelationMap = MutableMap[StreamingRelationV2, StreamingDataSourceV2ScanRelation]()
     var nextSourceId = 0
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
-    // The columns that the query reads from each Data Source V2 source, which the scan of the
-    // source reads if its table has the capability STREAMING_COLUMN_PRUNING and its scan builder
-    // supports the pruning, from the plan of the query optimized once as it is when it runs. The
-    // plan is only optimized for such a source.
+    // The columns and the filters that the query reads from each Data Source V2 source, which the
+    // scan of the source gets if its table has the capability for them and its scan builder
+    // supports them, from the plan of the query optimized once as it is when it runs. The plan is
+    // only optimized for such a source.
     val streamConf = sparkSessionForStream.sessionState.conf
     lazy val sourceReads = StreamingV2ScanPushDown.reads(sparkSessionForStream, analyzedPlan, None)
     val _logicalPlan = analyzedPlan.transform {
@@ -91,13 +91,13 @@ class ContinuousExecution(
           throw QueryExecutionErrors.continuousProcessingUnsupportedByDataSourceError(sourceName)
         }
 
-        v2ToRelationMap.getOrElseUpdate(s, {
+        val scanRelation = v2ToRelationMap.getOrElseUpdate(s, {
           val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
           nextSourceId += 1
           logInfo(log"Reading table [${MDC(STREAMING_TABLE, table)}] " +
             log"from DataSourceV2 named '${MDC(STREAMING_DATA_SOURCE_NAME, sourceName)}' " +
             log"${MDC(STREAMING_DATA_SOURCE_DESCRIPTION, dsStr)}")
-          // The scan reads the columns that the query reads from the source, see
+          // The scan gets the columns and the filters that the query reads from the source, see
           // StreamingV2ScanPushDown. The output includes the metadata columns that the query
           // reads, so that connectors implementing SupportsMetadataColumns include them in
           // readSchema().
@@ -108,6 +108,9 @@ class ContinuousExecution(
               table, output, catalog, identifier, options, metadataPath)
           streamingScan.toRelation(relation)
         })
+        // The query applies the filters that the scan builder got to the rows of the source, see
+        // StreamingV2ScanPushDown.
+        StreamingV2ScanPushDown.withPushedFilters(scanRelation)
     }
 
     sources = _logicalPlan.collect {

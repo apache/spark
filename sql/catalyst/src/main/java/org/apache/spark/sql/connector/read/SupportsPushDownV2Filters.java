@@ -60,6 +60,10 @@ public interface SupportsPushDownV2Filters extends ScanBuilder {
    * partition spec evolution may return predicates that reference later-added partition
    * transforms (incompletely partitioned data) so Spark evaluates them after the scan, while
    * predicates that reference only initially-added partition transforms may be fully pushed.
+   * <p>
+   * The scans of streaming queries get the predicates too, since 4.4.0, if the table returns
+   * {@link org.apache.spark.sql.connector.catalog.TableCapability#STREAMING_FILTER_PUSHDOWN}.
+   * Spark evaluates all of them after a streaming scan, also those that this does not return.
    */
   Predicate[] pushPredicates(Predicate[] predicates);
 

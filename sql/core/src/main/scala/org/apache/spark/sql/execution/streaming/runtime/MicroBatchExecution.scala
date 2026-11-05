@@ -260,10 +260,10 @@ class MicroBatchExecution(
     }
 
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
-    // The columns that the query reads from each Data Source V2 source, which the scan of the
-    // source reads if its table has the capability STREAMING_COLUMN_PRUNING and its scan builder
-    // supports the pruning, from the plan of the query optimized once as its micro-batches are.
-    // The plan is only optimized for such a source.
+    // The columns and the filters that the query reads from each Data Source V2 source, which the
+    // scan of the source gets if its table has the capability for them and its scan builder
+    // supports them, from the plan of the query optimized once as its micro-batches are. The plan
+    // is only optimized for such a source.
     lazy val sourceReads = StreamingV2ScanPushDown.reads(
       sparkSessionForStream, planWithDedupKeys, initialLatestOffsetSeq.flatMap(_._2.metadataOpt))
     val _logicalPlan = planWithDedupKeys.transform {
@@ -286,14 +286,14 @@ class MicroBatchExecution(
         val dsStr = if (src.nonEmpty) s"[${src.get}]" else ""
         val v2Disabled = disabledSources.contains(src.getOrElse(None).getClass.getCanonicalName)
         if (!v2Disabled && table.supports(TableCapability.MICRO_BATCH_READ)) {
-          v2ToRelationMap.getOrElseUpdate(s, {
+          val scanRelation = v2ToRelationMap.getOrElseUpdate(s, {
             // Materialize source to avoid creating it in every batch
             val metadataPath = StreamingUtils.getMetadataPath(
               sourceIdentifyingName, nextSourceId, resolvedCheckpointRoot)
             logInfo(log"Reading table [${MDC(LogKeys.STREAMING_TABLE, table)}] " +
               log"from DataSourceV2 named '${MDC(LogKeys.STREAMING_DATA_SOURCE_NAME, srcName)}' " +
               log"${MDC(LogKeys.STREAMING_DATA_SOURCE_DESCRIPTION, dsStr)}")
-            // The scan reads the columns that the query reads from the source, see
+            // The scan gets the columns and the filters that the query reads from the source, see
             // StreamingV2ScanPushDown. The output includes the metadata columns that the query
             // reads, so that connectors implementing SupportsMetadataColumns include them in
             // readSchema().
@@ -315,6 +315,9 @@ class MicroBatchExecution(
               )
             streamingScan.toRelation(relation)
           })
+          // Each micro-batch applies the filters that the scan builder got to the rows of the
+          // source, see StreamingV2ScanPushDown.
+          StreamingV2ScanPushDown.withPushedFilters(scanRelation)
         } else if (v1.isEmpty) {
           throw QueryExecutionErrors.microBatchUnsupportedByDataSourceError(
             srcName, sparkSession.sessionState.conf.disabledV2StreamingMicroBatchReaders, table)
