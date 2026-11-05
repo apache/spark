@@ -1628,6 +1628,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
                     s" for shuffle $shuffleId: " + e.getCause)
             }
             logInfo("Got the map/merge output locations")
+            MapStatusChecksum.verify(shuffleId, fetchedMapStatuses, conf)
             mapStatuses.put(shuffleId, fetchedMapStatuses)
             mergeStatuses.put(shuffleId, fetchedMergeStatuses)
           }
@@ -1660,6 +1661,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
                     e.getCause)
             }
             logInfo("Got the map output locations")
+            MapStatusChecksum.verify(shuffleId, fetchedStatuses, conf)
             mapStatuses.put(shuffleId, fetchedStatuses)
           }
           logDebug(s"Fetching map output statuses for shuffle $shuffleId took " +
@@ -1981,35 +1983,6 @@ private[spark] object MapOutputTracker extends Logging {
       // scalastyle:on
       logError(errorMessage)
       throw new MetadataFetchFailedException(shuffleId, partition, errorMessage.message)
-    } else {
-      val checksumConf = Option(SparkEnv.get).map(_.conf).orNull
-      val checksumEnabled =
-        checksumConf != null && checksumConf.get(SHUFFLE_MAP_STATUS_CHECKSUM_ENABLED)
-      val checksumAlgorithm = if (checksumEnabled) {
-        checksumConf.get(SHUFFLE_MAP_STATUS_CHECKSUM_ALGORITHM)
-      } else {
-        null
-      }
-      if (checksumEnabled) {
-        status match {
-          case mapStatus: MapStatus =>
-            mapStatus.nonEmptyChecksum.foreach { stored =>
-              val actual = MapStatusChecksum.recompute(mapStatus, checksumAlgorithm)
-              if (!actual.contains(stored)) {
-                val errorMessage =
-                  log"MapStatus checksum verification failed: " +
-                  log"shuffleId=${MDC(SHUFFLE_ID, shuffleId)} " +
-                  log"mapId=${MDC(MAP_ID, mapStatus.mapId)} " +
-                  log"mapper=${MDC(BLOCK_MANAGER_ID, mapStatus.location)} " +
-                  log"numPartitions=${MDC(NUM_PARTITIONS, mapStatus.numPartitions)}. " +
-                  log"This indicates MapStatus was corrupted between the mapper and this reducer."
-                logError(errorMessage)
-                throw new MetadataFetchFailedException(shuffleId, partition, errorMessage.message)
-              }
-            }
-          case _ =>
-        }
-      }
     }
   }
 }

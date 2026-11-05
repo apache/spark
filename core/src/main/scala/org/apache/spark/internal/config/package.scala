@@ -2063,10 +2063,10 @@ package object config {
 
   private[spark] val SHUFFLE_MAP_STATUS_CHECKSUM_ENABLED =
     ConfigBuilder("spark.shuffle.mapStatus.checksum.enabled")
-      .doc("When true, the mapper computes an integrity checksum over the non-empty partition " +
-        "indices of each MapStatus. Each reducer verifies the checksum on receipt; a mismatch " +
-        "raises a FetchFailedException that triggers stage retry via Spark's standard fetch-" +
-        "failure recovery path.")
+      .doc("When true, the mapper computes an integrity checksum over the shuffle metadata " +
+        "each MapStatus carries. Every reducer verifies it once per shuffle, right after " +
+        "fetching the statuses from the driver; a mismatch raises a FetchFailedException that " +
+        "triggers stage retry via Spark's standard fetch-failure recovery path.")
       .version("4.4.0")
       .internal()
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
