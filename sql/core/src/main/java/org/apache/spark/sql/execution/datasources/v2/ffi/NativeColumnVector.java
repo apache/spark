@@ -93,8 +93,8 @@ class NativeColumnVector extends ReusedArrowColumnVector {
       return new Decimals(decimalVector, nullable);
     } else if (vector instanceof VarCharVector) {
       return new Strings(vector, nullable);
-    } else if (vector instanceof ViewVarCharVector viewVector) {
-      return new StringViews(viewVector, nullable);
+    } else if (vector instanceof ViewVarCharVector) {
+      return new StringViews(vector, nullable);
     } else {
       return new NativeColumnVector(vector);
     }
@@ -113,7 +113,6 @@ class NativeColumnVector extends ReusedArrowColumnVector {
 
   /** A vector that reads its values and their validity at the addresses of its buffers. */
   private abstract static class Direct extends NativeColumnVector {
-    final ValueVector vector;
     // Whether the schema to read declares the column nullable. The reader checks that the batches
     // of a column that it does not declare nullable have no null.
     private final boolean nullable;
@@ -124,12 +123,12 @@ class NativeColumnVector extends ReusedArrowColumnVector {
 
     Direct(ValueVector vector, boolean nullable) {
       super(vector);
-      this.vector = vector;
       this.nullable = nullable;
     }
 
     @Override
     void refresh(long nullCount) {
+      ValueVector vector = getValueVector();
       // The C data interface requires a null_count other than -1 to be exact, so the nulls are
       // only counted, which Arrow Java does in the validity bitmap on each call, for a negative
       // one.
@@ -271,7 +270,7 @@ class NativeColumnVector extends ReusedArrowColumnVector {
     @Override
     void refresh(long nullCount) {
       super.refresh(nullCount);
-      offsets = vector.getOffsetBuffer().memoryAddress();
+      offsets = getValueVector().getOffsetBuffer().memoryAddress();
     }
 
     @Override
@@ -285,19 +284,17 @@ class NativeColumnVector extends ReusedArrowColumnVector {
   }
 
   private static final class StringViews extends Direct {
-    private final ViewVarCharVector views;
     // The addresses of the data buffers of the batch, which hold the values that a view does not.
     private long[] buffers = new long[0];
 
-    StringViews(ViewVarCharVector vector, boolean nullable) {
+    StringViews(ValueVector vector, boolean nullable) {
       super(vector, nullable);
-      this.views = vector;
     }
 
     @Override
     void refresh(long nullCount) {
       super.refresh(nullCount);
-      List<ArrowBuf> dataBuffers = views.getDataBuffers();
+      List<ArrowBuf> dataBuffers = ((ViewVarCharVector) getValueVector()).getDataBuffers();
       if (buffers.length != dataBuffers.size()) {
         buffers = new long[dataBuffers.size()];
       }
