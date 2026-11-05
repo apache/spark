@@ -3016,7 +3016,10 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     // Expensive sub-expressions behind each expensive alias, to spot when two aliases are the
     // same piece of work. Cheap aliases have none, so we skip the (possibly wide) cheap rest.
     // Two aliases share work exactly when they share a regex, so version 0 of the estimate
-    // collects the regex expressions and not their ancestors.
+    // collects the regex expressions and not their ancestors. A Python UDF counts here even with
+    // `avoidDoubleFilterEvalForPythonUDF` off, so two aliases sharing one stay in one layer and
+    // do not run it twice. The split only stacks layers above `baseChild`, so a restart from a
+    // checkpoint does not depend on it.
     val regexIsExpensive = conf.getConf(SQLConf.REGEX_PATTERN_COST_ESTIMATE_VERSION) == 0
     val expensivePartsOf = AttributeMap(expensiveAliases.toSeq.map { attr =>
       attr -> aliasMap(attr).child.collect {
@@ -3093,14 +3096,16 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
    * `hasExpensiveChild` caches the answer of a parent expression.
    */
   private def isExpensive(e: Expression): Boolean = {
-    val classified = if (conf.getConf(SQLConf.AVOID_DOUBLE_FILTER_EVAL_FOR_PYTHON_UDF)) {
-      e
-    } else {
-      // The stand-in is not foldable either, so a LIKE/RLIKE pattern from a UDF stays expensive.
-      e.transformUp {
-        case p: PythonFuncExpression => PrettyPythonUDF(p.name, p.dataType, p.children)
+    // The stand-in below can only make `e` cheaper, so a cheap `e` needs no rewrite.
+    val classified =
+      if (!e.expensive || conf.getConf(SQLConf.AVOID_DOUBLE_FILTER_EVAL_FOR_PYTHON_UDF)) {
+        e
+      } else {
+        // The stand-in is not foldable either, so a LIKE/RLIKE pattern from a UDF stays expensive.
+        e.transformUp {
+          case p: PythonFuncExpression => PrettyPythonUDF(p.name, p.dataType, p.children)
+        }
       }
-    }
     classified.expensive ||
       (conf.getConf(SQLConf.REGEX_PATTERN_COST_ESTIMATE_VERSION) == 0 &&
         e.exists(_.isInstanceOf[StringRegexExpression]))

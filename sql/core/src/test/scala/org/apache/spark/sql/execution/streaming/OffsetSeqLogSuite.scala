@@ -95,7 +95,8 @@ class OffsetSeqLogSuite extends SharedSparkSession {
 
   test("SPARK-60905: Python UDFs are expensive only for checkpoints that record it") {
     val entry = SQLConf.AVOID_DOUBLE_FILTER_EVAL_FOR_PYTHON_UDF
-    val (_, offsetSeq) = readFromResource("offset-log-version-2.1.0")
+    val (_, offsetSeq) = readFromResource(
+      "checkpoint-version-4.2.0-deduplication-metadata-boundary/offsets")
     assert(OffsetSeqMetadata.readValue(offsetSeq.metadataOpt.get, entry) == "false")
     val metadata = OffsetSeqMetadata(batchWatermarkMs = 0, batchTimestampMs = 0, spark.conf)
     assert(metadata.conf.get(entry.key).contains("true"))
