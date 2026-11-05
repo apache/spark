@@ -1019,7 +1019,8 @@ class RewriteWithExpressionSuite extends PlanTest {
     val lookup = LocalRelation($"id".int, $"department".string)
     val keysEqual = stream.output.head === lookup.output.head
     val department = Upper(lookup.output(1))
-    val noCache = ExternalLookupCacheOptions(enabled = false, 1, 0, 1)
+    val noCache = ExternalLookupCacheOptions(enabled = false, maxEntries = 1, ttlMillis = 0,
+      maxRowsPerKey = 1)
     val join = ExternalLookupJoin(stream, lookup, Inner,
       Some(keysEqual && With(department) { case Seq(ref) => ref >= "A" && ref <= "Z" }),
       noCache, lookup.output)

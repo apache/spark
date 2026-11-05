@@ -3278,7 +3278,7 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
 
   test("oversized one-to-many results are streamed but not cached") {
     SimpleExternalLookupDataSource.resetCounters()
-    SimpleExternalLookupDataSource.values.set(Map(1 -> Seq("engineering", "research")))
+    SimpleExternalLookupDataSource.departmentsById.set(Map(1 -> Seq("engineering", "research")))
     val lookup = spark.read
       .format(classOf[SimpleExternalLookupDataSource].getName)
       .option("maxBatchSize", 1)
@@ -3308,7 +3308,7 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     val nan2 = java.lang.Double.longBitsToDouble(0x7ff8000000000002L)
     // Put equivalent keys in different input batches to exercise cache identity as well.
     val left = streamOf(Seq(-0.0d, nan1, 0.0d, nan2).toDF("key"))
-    val lookup = semanticLookup("double")
+    val lookup = semanticKeyLookup("double")
 
     assert(runStream(left.join(lookup, left("key") === lookup("key"))).rows.size === 4)
     assert(SemanticKeyExternalLookupDataSource.requestSizes.asScala.toSeq === Seq(2))
