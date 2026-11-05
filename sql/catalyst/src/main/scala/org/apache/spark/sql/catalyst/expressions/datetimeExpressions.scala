@@ -3779,11 +3779,12 @@ case class DateDiff(endDate: Expression, startDate: Expression)
   override def dataType: DataType = IntegerType
 
   override def nullSafeEval(end: Any, start: Any): Any = {
-    end.asInstanceOf[Int] - start.asInstanceOf[Int]
+    DateTimeUtils.daysBetween(end.asInstanceOf[Int], start.asInstanceOf[Int])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (end, start) => s"$end - $start")
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, (end, start) => s"$dtu.daysBetween($end, $start)")
   }
 
   override protected def withNewChildrenInternal(
@@ -5062,8 +5063,7 @@ case class SubtractDates(
   private lazy val evalFunc: (Int, Int) => Any = if (legacyInterval) {
     (leftDays: Int, rightDays: Int) => subtractDates(leftDays, rightDays)
   } else {
-    (leftDays: Int, rightDays: Int) =>
-      Math.multiplyExact(Math.subtractExact(leftDays, rightDays), MICROS_PER_DAY)
+    (leftDays: Int, rightDays: Int) => subtractDatesToMicros(leftDays, rightDays)
   }
 
   override def nullSafeEval(leftDays: Any, rightDays: Any): Any = {
@@ -5076,9 +5076,10 @@ case class SubtractDates(
       s"$dtu.subtractDates($leftDays, $rightDays)"
     })
   } else {
-    val m = classOf[Math].getName
-    defineCodeGen(ctx, ev, (leftDays, rightDays) =>
-      s"$m.multiplyExact($m.subtractExact($leftDays, $rightDays), ${MICROS_PER_DAY}L)")
+    defineCodeGen(ctx, ev, (leftDays, rightDays) => {
+      val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+      s"$dtu.subtractDatesToMicros($leftDays, $rightDays)"
+    })
   }
 
   override def toString: String = s"($left - $right)"
