@@ -31,10 +31,11 @@ import org.apache.spark.sql.catalyst.expressions.{
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.logical.Deduplicate
 import org.apache.spark.sql.catalyst.trees.LeafLike
+import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionReaderFactory, Scan}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
+import org.apache.spark.sql.types.{DataType, IntegerType, StringType, StructType}
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.ThreadUtils
 
@@ -255,6 +256,31 @@ class SparkPlanSuite extends SharedSparkSession {
         s"original types=$originalTypes, canonicalized types=$canonicalizedTypes")
     assert(canonicalizedTypes == Seq(IntegerType, StringType),
       s"Expected [IntegerType, StringType] but got $canonicalizedTypes")
+  }
+
+  test("SPARK-60752: copies of a BatchScanExec share its Batch and the partitions it planned") {
+    // A `Scan` that returns a new `Batch` from each `toBatch`, which a connector may do.
+    class NewBatchScan extends Scan {
+      override def readSchema(): StructType = new StructType()
+      override def toBatch: Batch = new Batch {
+        override def planInputPartitions(): Array[InputPartition] = Array(new InputPartition {})
+        override def createReaderFactory(): PartitionReaderFactory =
+          throw new UnsupportedOperationException()
+      }
+    }
+    val scan = BatchScanExec(Seq.empty, new NewBatchScan, Seq.empty, table = null)
+    def sharesPlanning(copy: SparkPlan): Boolean = copy match {
+      case c: BatchScanExec =>
+        (c.batch eq scan.batch) && (c.inputPartitions eq scan.inputPartitions)
+      case _ => false
+    }
+    val args = scan.productIterator.map(_.asInstanceOf[AnyRef]).toArray
+
+    // Copies through `makeCopy` or `clone` share what the node planned, but not over another
+    // `Scan`.
+    assert(sharesPlanning(scan.makeCopy(args)))
+    assert(sharesPlanning(scan.clone()))
+    assert(!sharesPlanning(scan.makeCopy(args.updated(1, new NewBatchScan))))
   }
 }
 
