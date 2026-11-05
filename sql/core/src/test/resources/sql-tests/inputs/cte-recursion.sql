@@ -790,6 +790,46 @@ WITH RECURSIVE t1(lvl, a, b, c) AS (
 )
 SELECT * FROM t1;
 
+-- The definition starts with an inner WITH, with and without a column list
+WITH RECURSIVE t1(lvl, arr) AS (
+    WITH x AS (SELECT id FROM range(3))
+    SELECT 0, ARRAY(id) FROM x
+    UNION ALL
+    SELECT lvl + 1, IF(lvl = 0, ARRAY(CAST(NULL AS BIGINT)), ARRAY(arr[0] + 1))
+    FROM t1 WHERE lvl < 2
+)
+SELECT * FROM t1;
+
+WITH RECURSIVE t1 AS (
+    WITH x AS (SELECT id FROM range(3))
+    SELECT 0 AS lvl, ARRAY(id) AS arr FROM x
+    UNION ALL
+    SELECT lvl + 1, IF(lvl = 0, ARRAY(CAST(NULL AS BIGINT)), ARRAY(arr[0] + 1))
+    FROM t1 WHERE lvl < 2
+)
+SELECT * FROM t1;
+
+-- The widened column is read in the outer query
+WITH RECURSIVE t1(lvl, arr) AS (
+    SELECT 0, ARRAY(id) FROM range(3)
+    UNION ALL
+    SELECT lvl + 1, IF(lvl = 0, ARRAY(CAST(NULL AS BIGINT)), ARRAY(arr[0] + 1))
+    FROM t1 WHERE lvl < 2
+)
+SELECT lvl, EXISTS(arr, x -> x IS NULL), arr[0] IS NULL FROM t1;
+
+SET spark.sql.ansi.enabled=false;
+
+WITH RECURSIVE t1(lvl, arr) AS (
+    SELECT 0, ARRAY(id) FROM range(3)
+    UNION ALL
+    SELECT lvl + 1, IF(lvl = 0, ARRAY(CAST(NULL AS BIGINT)), ARRAY(arr[0] + 1))
+    FROM t1 WHERE lvl < 2
+)
+SELECT * FROM t1;
+
+SET spark.sql.ansi.enabled=true;
+
 SET spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation=100;
 
 -- Same with small steps converted to local relations, kept in codegen by a join
@@ -837,6 +877,14 @@ WITH RECURSIVE t1(n, arr) AS (
     SELECT 1, ARRAY(CAST(1 AS BIGINT))
     UNION ALL
     SELECT n + 1, ARRAY(CAST(NULL AS INT)) FROM t1 WHERE n < 3
+)
+SELECT * FROM t1;
+
+-- Struct field names that differ only in case keep the anchor's names
+WITH RECURSIVE t1(n, m, s) AS (
+    SELECT 1, CAST(1 AS BIGINT), NAMED_STRUCT('A', 1)
+    UNION ALL
+    SELECT n + 1, n + 1, NAMED_STRUCT('a', CAST(NULL AS INT)) FROM t1 WHERE n < 3
 )
 SELECT * FROM t1;
 

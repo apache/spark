@@ -2168,6 +2168,112 @@ struct<lvl:int,a:array<bigint>,b:array<bigint>,c:array<bigint>>
 
 
 -- !query
+WITH RECURSIVE t1(lvl, arr) AS (
+    WITH x AS (SELECT id FROM range(3))
+    SELECT 0, ARRAY(id) FROM x
+    UNION ALL
+    SELECT lvl + 1, IF(lvl = 0, ARRAY(CAST(NULL AS BIGINT)), ARRAY(arr[0] + 1))
+    FROM t1 WHERE lvl < 2
+)
+SELECT * FROM t1
+-- !query schema
+struct<lvl:int,arr:array<bigint>>
+-- !query output
+0	[0]
+0	[1]
+0	[2]
+1	[null]
+1	[null]
+1	[null]
+2	[null]
+2	[null]
+2	[null]
+
+
+-- !query
+WITH RECURSIVE t1 AS (
+    WITH x AS (SELECT id FROM range(3))
+    SELECT 0 AS lvl, ARRAY(id) AS arr FROM x
+    UNION ALL
+    SELECT lvl + 1, IF(lvl = 0, ARRAY(CAST(NULL AS BIGINT)), ARRAY(arr[0] + 1))
+    FROM t1 WHERE lvl < 2
+)
+SELECT * FROM t1
+-- !query schema
+struct<lvl:int,arr:array<bigint>>
+-- !query output
+0	[0]
+0	[1]
+0	[2]
+1	[null]
+1	[null]
+1	[null]
+2	[null]
+2	[null]
+2	[null]
+
+
+-- !query
+WITH RECURSIVE t1(lvl, arr) AS (
+    SELECT 0, ARRAY(id) FROM range(3)
+    UNION ALL
+    SELECT lvl + 1, IF(lvl = 0, ARRAY(CAST(NULL AS BIGINT)), ARRAY(arr[0] + 1))
+    FROM t1 WHERE lvl < 2
+)
+SELECT lvl, EXISTS(arr, x -> x IS NULL), arr[0] IS NULL FROM t1
+-- !query schema
+struct<lvl:int,exists(arr, lambdafunction((namedlambdavariable() IS NULL), namedlambdavariable())):boolean,(arr[0] IS NULL):boolean>
+-- !query output
+0	false	false
+0	false	false
+0	false	false
+1	true	true
+1	true	true
+1	true	true
+2	true	true
+2	true	true
+2	true	true
+
+
+-- !query
+SET spark.sql.ansi.enabled=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.ansi.enabled	false
+
+
+-- !query
+WITH RECURSIVE t1(lvl, arr) AS (
+    SELECT 0, ARRAY(id) FROM range(3)
+    UNION ALL
+    SELECT lvl + 1, IF(lvl = 0, ARRAY(CAST(NULL AS BIGINT)), ARRAY(arr[0] + 1))
+    FROM t1 WHERE lvl < 2
+)
+SELECT * FROM t1
+-- !query schema
+struct<lvl:int,arr:array<bigint>>
+-- !query output
+0	[0]
+0	[1]
+0	[2]
+1	[null]
+1	[null]
+1	[null]
+2	[null]
+2	[null]
+2	[null]
+
+
+-- !query
+SET spark.sql.ansi.enabled=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.ansi.enabled	true
+
+
+-- !query
 SET spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation=100
 -- !query schema
 struct<key:string,value:string>
@@ -2269,6 +2375,21 @@ struct<n:int,arr:array<bigint>>
 1	[1]
 2	[null]
 3	[null]
+
+
+-- !query
+WITH RECURSIVE t1(n, m, s) AS (
+    SELECT 1, CAST(1 AS BIGINT), NAMED_STRUCT('A', 1)
+    UNION ALL
+    SELECT n + 1, n + 1, NAMED_STRUCT('a', CAST(NULL AS INT)) FROM t1 WHERE n < 3
+)
+SELECT * FROM t1
+-- !query schema
+struct<n:int,m:bigint,s:struct<A:int>>
+-- !query output
+1	1	{"A":1}
+2	2	{"A":null}
+3	3	{"A":null}
 
 
 -- !query

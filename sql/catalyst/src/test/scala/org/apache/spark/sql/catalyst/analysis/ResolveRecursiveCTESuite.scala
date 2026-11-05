@@ -18,6 +18,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, Literal}
@@ -167,5 +168,23 @@ class ResolveRecursiveCTESuite extends AnalysisTest {
     val nullable = ArrayType(IntegerType, containsNull = true)
     assert(selfReferenceAndOutputTypes(anchor, recursion) ===
       (Seq(nullable, nullable), Seq(nullable, nullable)))
+  }
+
+  test("ResolveWithCTE fails if a self-reference needs wider types but the loop has no origin") {
+    val cteId = 0
+    val anchor = Project(Seq(Alias(CreateArray(Seq(Literal(1))), "a")()), OneRowRelation())
+    val ref = UnionLoopRef(
+      cteId, anchor.output.map(_.newInstance().withNullability(true)), accumulated = false)
+    // The recursion writes NULL elements, which the self-reference does not allow.
+    val recursion = ref.select(CreateArray(Seq(Literal(null, IntegerType))).as("a"))
+    val loop = UnionLoop(cteId, anchor, recursion, anchor.output.map(_.newInstance().exprId))
+    val cteDef = CTERelationDef(loop.subquery("t"), cteId)
+    val plan = WithCTE(
+      CTERelationRef(cteId, _resolved = true, output = cteDef.output, isStreaming = false),
+      Seq(cteDef))
+
+    val e = intercept[SparkException](ResolveWithCTE(plan))
+    assert(e.getCondition == "INTERNAL_ERROR")
+    assert(e.getMessage.contains("has no origin to rebuild it from"))
   }
 }

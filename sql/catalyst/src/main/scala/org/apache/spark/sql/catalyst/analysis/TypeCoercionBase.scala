@@ -240,12 +240,13 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
           // type to match the anchor type.
           // On the other hand, we cannot cast the anchor type into a wider recursion type, as at
           // this point the UnionLoopRefs inside the recursion are already resolved with the
-          // narrower anchor type. Nullability may differ, as UnionLoop's output merges it.
+          // narrower anchor type. Nullability and the case of struct field names may differ, as
+          // UnionLoop's output merges them.
           val projectList = s.recursion.output.zip(s.anchor.output.map(_.dataType)).map {
             case (attr, dt) =>
               val widerType = findWiderTypeForTwo(attr.dataType, dt)
-              if (widerType.isDefined && DataTypeUtils.equalsIgnoreNullability(widerType.get, dt)) {
-                if (!DataTypeUtils.equalsIgnoreNullability(attr.dataType, dt)) {
+              if (widerType.isDefined && DataTypeUtils.sameType(widerType.get, dt)) {
+                if (!DataTypeUtils.sameType(attr.dataType, dt)) {
                   Alias(Cast(attr, widerType.get), attr.name)()
                 } else {
                   attr
