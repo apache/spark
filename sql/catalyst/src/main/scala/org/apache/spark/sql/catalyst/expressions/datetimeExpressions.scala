@@ -2643,6 +2643,7 @@ case class NextDay(
       DateTimeExpressionUtils.getNextDateExact(
         start.asInstanceOf[Int], dayOfW.asInstanceOf[UTF8String])
     } else {
+      // NULL only for an invalid day of week; DATETIME_OVERFLOW propagates in both modes.
       try {
         val dow = DateTimeUtils.getDayOfWeekFromString(dayOfW.asInstanceOf[UTF8String])
         DateTimeUtils.getNextDateForDayOfWeek(start.asInstanceOf[Int], dow)
