@@ -752,10 +752,9 @@ class IncrementalExecution(
         checkOperatorValidWithMetadata(planWithStateOpId, currentBatchId - 1)
       }
 
-      val planWithCompactJoinState = JoinStateValueAttributesRule(planWithStateOpId)
       stateStoreWritersWithMetadata = Some(Seq.empty)
       val planWithSchemas =
-        planWithCompactJoinState transform StateSchemaAndOperatorMetadataRule.rule
+        planWithStateOpId transform StateSchemaAndOperatorMetadataRule.rule
 
       simulateWatermarkPropagation(planWithSchemas)
       planWithSchemas transform WatermarkPropagationRule.rule
@@ -876,9 +875,10 @@ class IncrementalExecution(
   }
 
   override def preparations: Seq[Rule[SparkPlan]] =
-    state +: (super.preparations :+
-      PrepareTransformWithStateInitialStateForRealTimeMode :+
-      MarkPipelinedShuffleForRealTimeMode)
+    Seq(JoinStateValueAttributesRule, state) ++
+      super.preparations ++
+      Seq(PrepareTransformWithStateInitialStateForRealTimeMode,
+        MarkPipelinedShuffleForRealTimeMode)
 
   /** no need to try-catch again as this is already done once */
   override def assertAnalyzed(): Unit = analyzed
