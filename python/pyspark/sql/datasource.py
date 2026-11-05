@@ -670,9 +670,15 @@ class DataSourceReader(ABC):
         Returns an iterator of partitions for this data source.
 
         Partitions are used to split data reading operations into parallel tasks.
-        If this method returns N partitions, the query planner will create N tasks.
+        By default, if this method returns N partitions, the query planner will create N tasks.
         Each task will execute :meth:`DataSourceReader.read` in parallel, using the respective
-        partition value to read the data.
+        partition value to read the data. When
+        `spark.sql.sources.v2.scanPartitionPacking.enabled` is true and
+        `spark.sql.sources.v2.scanPartitionPacking.maxPartitionNum` is set, Spark can group
+        consecutive partitions into at most that many tasks if no operator above the read needs
+        them kept apart; see "DataSource V2 Scan Partition Packing" in the SQL performance tuning
+        guide. Such a task calls :meth:`DataSourceReader.read` once for each of its partitions,
+        one after another.
 
         This method is called once during query planning. By default, it returns a
         single partition with the value `InputPartition(None)`. Subclasses can override

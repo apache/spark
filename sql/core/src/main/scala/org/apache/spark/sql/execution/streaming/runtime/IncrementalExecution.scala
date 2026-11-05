@@ -840,6 +840,11 @@ class IncrementalExecution(
 
   }
 
+  // A micro-batch's output layout reaches its sink, e.g. a file sink that checks the ordering or,
+  // when the micro-batch runs without AQE, a foreachBatch Dataset, so scan packing keeps the claims
+  // that reach the root.
+  override private[sql] def keepsRootLayout: Boolean = true
+
   override def preparations: Seq[Rule[SparkPlan]] =
     state +: (super.preparations :+
       PrepareTransformWithStateInitialStateForRealTimeMode :+

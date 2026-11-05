@@ -32,9 +32,11 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, LazyExpression, NameParameterizedQuery, UnsupportedOperationChecker}
+import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CompoundBody, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer, Union, UnresolvedInsert, UnresolvedWith, WithCTE}
+import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.transactions.TransactionUtils
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
@@ -45,9 +47,9 @@ import org.apache.spark.sql.connector.catalog.transactions.Transaction
 import org.apache.spark.sql.execution.SQLExecution.EXECUTION_ROOT_ID_KEY
 import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, AdaptiveSparkPlanExec, InsertAdaptiveSparkPlan, QueryStageExec}
 import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
-import org.apache.spark.sql.execution.datasources.v2.{TransactionalExec, V2TableRefreshUtil}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, PackV2ScanPartitions, TransactionalExec, V2TableRefreshUtil}
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
-import org.apache.spark.sql.execution.exchange.{EnablePipelinedShuffle, EnsureRequirements, PipelinedShuffleEligibility, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange.{EnablePipelinedShuffle, EnsureRequirements, Exchange, PipelinedShuffleEligibility, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
 import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqMetadata
 import org.apache.spark.sql.execution.streaming.runtime.{IncrementalExecution, WatermarkPropagator}
@@ -382,6 +384,9 @@ class QueryExecution(
 
   def assertSparkPlanPrepared(): Unit = sparkPlan
 
+  // Whether `executedPlan` has been prepared, with whatever settings applied at the time.
+  @volatile private var executedPlanPrepared = false
+
   private val lazyExecutedPlan = LazyTry {
     // We need to materialize the optimizedPlan here, before tracking the planning phase, to ensure
     // that the optimization time is not counted as part of the planning phase.
@@ -396,6 +401,7 @@ class QueryExecution(
     // Note: For eagerly executed command it might have already been called in
     // `eagerlyExecutedCommand` and is a noop here.
     tracker.setReadyForExecution()
+    executedPlanPrepared = true
     plan
   }
 
@@ -435,6 +441,71 @@ class QueryExecution(
 
   private[sql] def withRegularShuffle: QueryExecution = lazyRegularShuffle.get
 
+  /**
+   * A checkpoint reports its plan's output partitioning and ordering to the queries that read it
+   * later, see `LogicalRDD.fromDataset`. Its root has no consumer when it is planned, so scan
+   * packing can withdraw a keyed partitioning or an ordering those queries could use. So a
+   * checkpoint puts back, without packing, the packed scans that reach a non-adaptive root without
+   * crossing an exchange, when that changes the root's layout. They report what was planned for
+   * them before runtime filtering, though one with runtime filters applies them to its `Scan` once
+   * more, and the rest of this execution's plan, which may have run already, is shared.
+   */
+  private val lazyCheckpointPlan = LazyTry {
+    def unpackRootScans(plan: SparkPlan): SparkPlan = plan match {
+      case s: BatchScanExec if s.partitionPacking.isDefined => s.withoutPacking
+      case _: Exchange | _: AdaptiveSparkPlanExec | _: QueryStageExec => plan
+      case other => other.withNewChildren(other.children.map(unpackRootScans))
+    }
+    // Later planning uses the count of an unknown partitioning only when it is 1, apart from the
+    // internal local pipelined shuffle, which keeps regular shuffles when it is not known.
+    def layout(plan: SparkPlan): (Partitioning, Seq[SortOrder]) = {
+      val partitioning = plan.outputPartitioning match {
+        case u: UnknownPartitioning if u.numPartitions != 1 => UnknownPartitioning(0)
+        case p => p
+      }
+      (partitioning, plan.outputOrdering)
+    }
+    // Decided by the plan, which can have been prepared with packing on while the session's
+    // setting is off now. A planning failure is left to the checkpoint's own execution, which
+    // reports it.
+    try {
+      // Plan nodes capture the active session when they are built.
+      sparkSession.withActive {
+        val plan = executedPlan
+        Some(unpackRootScans(plan)).filter(kept => (kept ne plan) && layout(kept) != layout(plan))
+      }
+    } catch {
+      case NonFatal(_) => None
+    }
+  }
+
+  /**
+   * The execution a checkpoint runs: `withRegularShuffle`, with its packed root scans put back
+   * when packing withdrew a layout the checkpoint would record. With packing on, this prepares a
+   * plan that is not prepared yet, before the checkpoint's execution starts, as `explain()` does.
+   */
+  private[sql] def forCheckpoint: QueryExecution = {
+    val origin = withRegularShuffle
+    // A plan prepared from now on packs nothing while packing is off, so its planning is left to
+    // the checkpoint's own execution, as without packing.
+    val packedPlanPossible = origin.executedPlanPrepared ||
+      origin.sparkSession.sessionState.conf.v2ScanPartitionPackingEnabled
+    val checkpointPlan = if (packedPlanPossible) origin.lazyCheckpointPlan.get else None
+    checkpointPlan match {
+      case Some(plan) =>
+        new QueryExecution(origin.sparkSession, origin.logical, origin.tracker, mode = mode,
+            shuffleCleanupModeOpt = shuffleCleanupModeOpt, refreshPhaseEnabled = false,
+            analyzerOpt = Some(analyzer)) {
+          override def analyzed: LogicalPlan = origin.analyzed
+          override def commandExecuted: LogicalPlan = origin.commandExecuted
+          override def optimizedPlan: LogicalPlan = origin.optimizedPlan
+          override def sparkPlan: SparkPlan = origin.sparkPlan
+          override def executedPlan: SparkPlan = plan
+        }
+      case None => origin
+    }
+  }
+
   val lazyToRdd = LazyTry {
     new SQLExecutionRDD(
       executedPlan.execute(),
@@ -464,9 +535,19 @@ class QueryExecution(
     CollectMetricsExec.collect(executedPlan)
   }
 
+  /**
+   * Whether the output partitioning and ordering of this execution's root plan reach a consumer,
+   * as a streaming micro-batch's reach its sink, so that scan packing keeps the claims that reach
+   * that root. Only the plan prepared for that root is affected, not the plans prepared for its
+   * subqueries or for dynamic partition pruning.
+   */
+  private[sql] def keepsRootLayout: Boolean = false
+
   protected def preparations: Seq[Rule[SparkPlan]] = {
-    QueryExecution.preparations(sparkSession,
-      Option(InsertAdaptiveSparkPlan(AdaptiveExecutionContext(sparkSession, this))), false)
+    val adaptiveExecutionRule =
+      InsertAdaptiveSparkPlan(AdaptiveExecutionContext(sparkSession, this), keepsRootLayout)
+    QueryExecution.preparations(sparkSession, Option(adaptiveExecutionRule), false,
+      keepRootLayout = keepsRootLayout)
   }
 
   protected def executePhase[T](phase: String)(block: => T): T = sparkSession.withActive {
@@ -829,7 +910,8 @@ object QueryExecution {
   private[execution] def preparations(
       sparkSession: SparkSession,
       adaptiveExecutionRule: Option[InsertAdaptiveSparkPlan] = None,
-      subquery: Boolean): Seq[Rule[SparkPlan]] = {
+      subquery: Boolean,
+      keepRootLayout: Boolean = false): Seq[Rule[SparkPlan]] = {
     // Read once here so that both union barriers below, and the codegen gate they stamp for, answer
     // from the same values however long preparation takes.
     val unionConf = UnionConfSnapshot(sparkSession.sessionState.conf)
@@ -849,6 +931,9 @@ object QueryExecution {
       // Must run after `EnsureRequirements`: it fixes each `UnionExec`'s partitioning decision, and
       // the answer to fix is the one the exchanges around it were planned against.
       new StampUnionDecisions(unionConf),
+      // Must run after `EnsureRequirements`, which plans the exchanges that decide whether a V2
+      // scan's partitioning and ordering are used, and before the rules below read scan ordering.
+      PackV2ScanPartitions(keepRootLayout = keepRootLayout),
       // This rule must be run after `EnsureRequirements`.
       InsertSortForLimitAndOffset,
       // `PushDownLocalSort` pushes a wider local sort down onto a narrower one below it, so a

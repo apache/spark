@@ -96,7 +96,7 @@ abstract class PrunePartitionSuiteBase extends StatisticsCollectionTestBase {
 
     val collectFn: PartialFunction[SparkPlan, Seq[Expression]] =
       collectPartitionFiltersFn() orElse {
-        case BatchScanExec(_, PlannedScan(scan: FileScan), _, _, _, _, _, _) =>
+        case BatchScanExec(_, PlannedScan(scan: FileScan), _, _, _, _, _, _, _) =>
           scan.partitionFilters
       }
     val pushedDownPartitionFilters = plan.collectFirst(collectFn)

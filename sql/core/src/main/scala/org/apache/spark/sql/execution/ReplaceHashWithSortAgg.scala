@@ -55,17 +55,20 @@ object ReplaceHashWithSortAgg extends Rule[SparkPlan] {
    */
   private def replaceHashAgg(plan: SparkPlan): SparkPlan = {
     plan.transformUp {
-      case hashAgg: BaseAggregateExec if isHashBasedAggWithKeys(hashAgg) =>
-        val sortAgg = hashAgg.toSortAggregate
-        if (SortOrder.orderingSatisfies(
-            hashAgg.child.outputOrdering, sortAgg.requiredChildOrdering.head)) {
-          sortAgg
-        } else {
-          hashAgg
-        }
+      case hashAgg: BaseAggregateExec if canReplace(hashAgg) => hashAgg.toSortAggregate
       case other => other
     }
   }
+
+  /**
+   * Whether this rule replaces `agg`: a hash-based aggregate with grouping keys whose child's
+   * ordering satisfies the corresponding sort aggregate. `PackV2ScanPartitions` runs before this
+   * rule and keeps a scan's ordering that this rule would use.
+   */
+  private[execution] def canReplace(agg: BaseAggregateExec): Boolean =
+    conf.getConf(SQLConf.REPLACE_HASH_WITH_SORT_AGG_ENABLED) && isHashBasedAggWithKeys(agg) &&
+      SortOrder.orderingSatisfies(
+        agg.child.outputOrdering, agg.toSortAggregate.requiredChildOrdering.head)
 
   /**
    * Check if `agg` is [[HashAggregateExec]] or [[ObjectHashAggregateExec]],

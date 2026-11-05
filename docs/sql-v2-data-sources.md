@@ -353,7 +353,7 @@ representation of a batch read. It has two methods:
 
 | Method | Description |
 |--------|-------------|
-| `planInputPartitions()` | Returns an array of `InputPartition` objects; each partition maps to one Spark task |
+| `planInputPartitions()` | Returns an array of `InputPartition` objects; Spark may group multiple inputs into one task |
 | `createReaderFactory()` | Returns a `PartitionReaderFactory` that is serialized and sent to executors |
 
 ### InputPartition and PartitionReader
@@ -361,6 +361,21 @@ representation of a batch read. It has two methods:
 [`InputPartition`](api/java/org/apache/spark/sql/connector/read/InputPartition.html) is a
 serializable handle representing a data split. It may optionally declare `preferredLocations()`
 for data locality.
+
+Inputs can also implement
+[`HasPartitionStatistics`](api/java/org/apache/spark/sql/connector/read/HasPartitionStatistics.html)
+to report their estimated `sizeInBytes()`: the bytes the input reads from storage, such as a
+file's length, without any opening cost. With `spark.sql.sources.v2.scanPartitionPacking.enabled`,
+Spark can pack adjacent inputs by size when the physical plan does not need the scan's partitioning
+or ordering. This applies to keyed and unkeyed batch scans and is disabled by default. Inputs are
+packed in the order the scan reads them, which for a keyed scan with V2 bucketing enabled is the
+order of their partition keys. Return `OptionalLong.empty()` when the size is unknown. If any input
+of a scan reports no size, Spark leaves the scan's inputs unchanged, unless
+`spark.sql.sources.v2.scanPartitionPacking.maxPartitionNum` is set, in which case Spark groups them
+by count.
+See [DataSource V2 Scan Partition Packing](sql-performance-tuning.html#datasource-v2-scan-partition-packing)
+for size limits, opening costs and parallelism settings. Packing uses the existing inputs and
+reader factory; the connector does not need to implement a separate packed scan.
 
 [`PartitionReaderFactory`](api/java/org/apache/spark/sql/connector/read/PartitionReaderFactory.html)
 is serialized to executors and creates a
@@ -571,12 +586,16 @@ public class JavaSimpleDataSourceV2 implements TestingV2Source {
 }
 {% endhighlight %}
 
-`planInputPartitions()` runs once on the driver and returns one `InputPartition` per task. Each
-partition is serialized to an executor, so it should hold only what identifies the split (here a
-range of integers; for a file source, a path and a byte range). The `PartitionReaderFactory` is
-serialized the same way and creates a `PartitionReader` on the executor. The reader is a cursor:
-`next()` advances, `get()` returns the current row, `close()` releases any handle. The one in
-`JavaSimpleReaderFactory` counts through the partition's range:
+`planInputPartitions()` runs on the driver. By default, each `InputPartition` in this example runs
+in its own task. Spark can combine inputs into fewer tasks, for example to group a keyed scan for a
+storage-partitioned join, or with scan partition packing: by size when every input reports one, as
+described above, and otherwise by count when
+`spark.sql.sources.v2.scanPartitionPacking.maxPartitionNum` is set. Each partition is serialized to
+an executor, so it should hold only what identifies the split (here a range of integers; for a file
+source, a path and a byte range). The `PartitionReaderFactory` is serialized the same way and
+creates a `PartitionReader` on the executor. The reader is a cursor: `next()` advances, `get()`
+returns the current row, `close()` releases any handle. The one in `JavaSimpleReaderFactory` counts
+through the partition's range:
 
 {% highlight java %}
 return new PartitionReader<InternalRow>() {

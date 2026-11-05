@@ -46,6 +46,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec._
 import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanLike
+import org.apache.spark.sql.execution.datasources.v2.PackV2ScanPartitions
 import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLAdaptiveSQLMetricUpdates, SQLPlanMetric}
 import org.apache.spark.sql.internal.SQLConf
@@ -73,7 +74,11 @@ case class AdaptiveSparkPlanExec(
     @transient context: AdaptiveExecutionContext,
     @transient preprocessingRules: Seq[Rule[SparkPlan]],
     @transient isSubquery: Boolean,
-    @transient override val supportsColumnar: Boolean = false)
+    @transient override val supportsColumnar: Boolean = false,
+    // Whether this is the root plan of a query execution whose root layout reaches a consumer,
+    // see `QueryExecution.keepsRootLayout`. The plans built for its subqueries and dynamic
+    // partition pruning, which share its context, are not.
+    @transient keepRootLayout: Boolean = false)
   extends LeafExecNode {
 
   @transient private val lock = new Object()
@@ -153,6 +158,9 @@ case class AdaptiveSparkPlanExec(
       // every rule below and the execution itself read the answer the exchanges above it were
       // planned against.
       new StampUnionDecisions(unionConf),
+      // Must run after `EnsureRequirements`, which plans the exchanges that decide whether a V2
+      // scan's partitioning and ordering are used, and before the rules below read scan ordering.
+      PackV2ScanPartitions(requiredDistribution, keepRootLayout),
       // This rule must be run after `EnsureRequirements`.
       InsertSortForLimitAndOffset,
       AdjustShuffleExchangePosition,

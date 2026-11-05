@@ -568,7 +568,8 @@ class Dataset[T] private[sql](
       reliableCheckpoint: Boolean,
       storageLevel: Option[StorageLevel]): Dataset[T] = {
     val actionName = if (reliableCheckpoint) "checkpoint" else "localCheckpoint"
-    withAction(actionName, queryExecution.withRegularShuffle) { physicalPlan =>
+    val execution = queryExecution.forCheckpoint
+    withAction(actionName, execution) { physicalPlan =>
       val internalRdd = physicalPlan.execute().map(_.copy())
       if (reliableCheckpoint) {
         assert(storageLevel.isEmpty, "StorageLevel should not be defined for reliableCheckpoint")
@@ -587,7 +588,9 @@ class Dataset[T] private[sql](
           rdd = internalRdd,
           originDataset = this,
           isStreaming = isStreaming,
-          fromCheckpoint = true)
+          fromCheckpoint = true,
+          // Describe the execution that produced `internalRdd`, not this Dataset's own plan.
+          producedBy = Some(execution))
       }
     }
   }

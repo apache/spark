@@ -178,14 +178,17 @@ case class LogicalRDD(
 
 object LogicalRDD extends Logging {
   /**
-   * Create a new LogicalRDD based on existing Dataset. Stats and constraints are inherited from
-   * origin Dataset.
+   * Create a new LogicalRDD based on existing Dataset. Stats, constraints, output partitioning and
+   * ordering are inherited from the execution that produced `rdd`: `producedBy` when given, such as
+   * the execution a checkpoint runs, which can differ from the origin Dataset's, and otherwise the
+   * origin Dataset's.
    */
   private[sql] def fromDataset(
       rdd: RDD[InternalRow],
       originDataset: Dataset[_],
       isStreaming: Boolean,
-      fromCheckpoint: Boolean = false): LogicalRDD = {
+      fromCheckpoint: Boolean = false,
+      producedBy: Option[QueryExecution] = None): LogicalRDD = {
     // Takes the first leaf partitioning whenever we see a `PartitioningCollection`. Otherwise the
     // size of `PartitioningCollection` may grow exponentially for queries involving deep inner
     // joins.
@@ -197,17 +200,18 @@ object LogicalRDD extends Logging {
       }
     }
 
+    val execution = producedBy.getOrElse(originDataset.queryExecution)
     val logicalPlan = originDataset.logicalPlan
-    val optimizedPlan = originDataset.queryExecution.optimizedPlan
-    val executedPlan = originDataset.queryExecution.executedPlan
+    val optimizedPlan = execution.optimizedPlan
+    val layoutPlan = execution.executedPlan
 
     val (stats, constraints) = rewriteStatsAndConstraints(logicalPlan, optimizedPlan)
 
     LogicalRDD(
       originDataset.logicalPlan.output,
       rdd,
-      firstLeafPartitioning(executedPlan.outputPartitioning),
-      executedPlan.outputOrdering,
+      firstLeafPartitioning(layoutPlan.outputPartitioning),
+      layoutPlan.outputOrdering,
       isStreaming,
       None
     )(originDataset.sparkSession, stats, constraints, fromCheckpoint)

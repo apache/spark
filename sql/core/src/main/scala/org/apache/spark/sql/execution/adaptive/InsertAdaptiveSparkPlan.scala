@@ -40,9 +40,14 @@ import org.apache.spark.sql.internal.SQLConf
  * and re-optimize the plan during execution based on runtime data statistics.
  *
  * Note that this rule is stateful and thus should not be reused across query executions.
+ *
+ * @param keepRootLayout whether the adaptive plans this rule creates for the plans it is applied
+ *                       to, not for their subqueries, keep the layout that reaches their root, see
+ *                       `QueryExecution.keepsRootLayout`
  */
 case class InsertAdaptiveSparkPlan(
-    adaptiveExecutionContext: AdaptiveExecutionContext) extends Rule[SparkPlan] {
+    adaptiveExecutionContext: AdaptiveExecutionContext,
+    keepRootLayout: Boolean = false) extends Rule[SparkPlan] {
 
   override def conf: SQLConf = adaptiveExecutionContext.session.sessionState.conf
 
@@ -83,7 +88,8 @@ case class InsertAdaptiveSparkPlan(
             preprocessingRules,
             "AQE Preprocessing")
           logDebug(s"Adaptive execution enabled for plan: $plan")
-          AdaptiveSparkPlanExec(newPlan, adaptiveExecutionContext, preprocessingRules, isSubquery)
+          AdaptiveSparkPlanExec(newPlan, adaptiveExecutionContext, preprocessingRules, isSubquery,
+            keepRootLayout = keepRootLayout && !isSubquery)
         } catch {
           case SubqueryAdaptiveNotSupportedException(subquery) =>
             logWarning(log"${MDC(CONFIG, SQLConf.ADAPTIVE_EXECUTION_ENABLED.key)} is enabled " +
