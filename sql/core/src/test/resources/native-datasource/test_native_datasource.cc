@@ -46,7 +46,9 @@
 //                   it creates the file <slow_read>.interrupted with what is_interrupted returns
 //                   for the task context, "true" for one that Spark freed meanwhile. Releasing
 //                   the stream creates the file <slow_read>, which says whether Spark released it
-//                   "during get_next", which it must not, or "after get_next" otherwise.
+//                   "during get_next", which it must not, or "after get_next" otherwise. With
+//                   the option "ignore_read_schema", read returns all the columns of the reader,
+//                   rather than only those of the schema to read.
 //   native_sink     Writes the rows as CSV files under the directory in the option "path". With
 //                   the option "commit_messages", a data writer passes its commit message that
 //                   many times. Creating and closing a data writer create a file named after
@@ -84,9 +86,10 @@
 // read. A data writer that gets a state of length 0 passes its rows to commit in its message,
 // and commit fails unless the messages have rows.
 //
-// read fails unless it gets the kind of read of its reader and the schema to read, the columns
-// that the reader returns, with the names and the formats that the reader got them with, and for
-// a micro-batch, the state of the stream_partitions call that returned the partition.
+// read fails unless it gets the kind of read of its reader and a schema to read whose columns
+// are columns of the reader, with the names and the formats that the reader got them with, and
+// for a micro-batch, the state of the stream_partitions call that returned the partition. It
+// returns exactly the columns of the schema to read.
 // create_data_writer fails unless it gets the schema that create_writer got, with the same names
 // and formats, and write fails unless its batches have the columns of that schema.
 //
@@ -827,11 +830,10 @@ Options fieldsOf(const ArrowSchema* schema) {
   return fields;
 }
 
-// The names and the formats of the columns that a reader returns, as the reader got them, which
-// the schema to read of read must have.
-std::string readerFields(const Options& state) {
+// The names and the formats of the given columns of a reader, as the reader got them.
+std::string readerFields(const Options& state, const std::vector<std::string>& columns) {
   std::vector<std::string> fields;
-  for (const auto& column : split(get(state, "columns", ""))) {
+  for (const auto& column : columns) {
     fields.push_back(get(state, "field." + column, ""));
   }
   return join(fields);
@@ -1111,7 +1113,8 @@ int createReader(void* handle, struct ArrowSchema* schema, const SparkDsReaderIn
     reader->state["partitions"] = get(source->options, "partitions", "2");
     reader->state["batch_size"] = get(source->options, "batch_size", "1000");
     for (const char* option : {"fail", "slice", "short", "null_rows", "wait_for_interrupt",
-                               "task_path", "states", "stateless", "slow_read"}) {
+                               "task_path", "states", "stateless", "slow_read",
+                               "ignore_read_schema"}) {
       reader->state[option] = get(source->options, option, "");
     }
     *out = reader;
@@ -1173,12 +1176,11 @@ int pushLimit(void* handle, int32_t limit, bool* applied) {
   });
 }
 
-int pruneColumns(void* handle, const char* const* columns, int64_t count, bool* pruned) {
+int pruneColumns(void* handle, const char* const* columns, int64_t count) {
   return guarded([&] {
     auto names = toStrings(columns, count);
     for (const auto& column : names) findColumn(column);
     fromHandle<Reader>(handle)->state["columns"] = join(names);
-    *pruned = true;
   });
 }
 
@@ -1349,10 +1351,24 @@ int readPartition(const SparkDsTaskContext* task, const SparkDsReadInfo* info,
         throw std::runtime_error("read got the kind " + std::to_string(info->kind) +
                                  " for a reader of the kind " + get(state, "kind", ""));
       }
-      if (fields != readerFields(state)) {
-        throw std::runtime_error("read got the schema to read (" + fields +
-                                 "), but the reader returns (" + readerFields(state) + ")");
+      // The schema to read has only columns of the reader, with the names and the formats that
+      // the reader got them with: all of them, those that prune_columns got, or, for a reader
+      // without prune_columns, those that the scan reads. read returns exactly these columns.
+      auto readerColumns = split(get(state, "columns", ""));
+      for (const auto& column : columns) {
+        if (std::find(readerColumns.begin(), readerColumns.end(), column) == readerColumns.end()) {
+          throw std::runtime_error("read got the column " + column +
+                                   " to read, which the reader does not return");
+        }
       }
+      if (fields != readerFields(state, columns)) {
+        throw std::runtime_error("read got the schema to read (" + fields +
+                                 "), but the reader returns (" + readerFields(state, columns) +
+                                 ")");
+      }
+      // With the option "ignore_read_schema", read returns all the columns of the reader, against
+      // the contract, which Spark must reject.
+      if (get(state, "ignore_read_schema", "") != "true") state["columns"] = join(columns);
     }
     if (info->kind == SPARK_DS_READ_MICRO_BATCH) {
       if (bounds.size() != 3) throw std::runtime_error("invalid partition");

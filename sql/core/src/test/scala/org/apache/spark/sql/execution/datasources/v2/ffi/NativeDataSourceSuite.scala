@@ -39,11 +39,11 @@ import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.connector.catalog.SupportsRead
 import org.apache.spark.sql.connector.read.SupportsPushDownRequiredColumns
-import org.apache.spark.sql.connector.read.streaming.{ReadLimit, SupportsAdmissionControl}
+import org.apache.spark.sql.connector.read.streaming.{Offset, ReadLimit, SupportsAdmissionControl}
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
-import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchScan, ColumnarMicroBatchStream, ColumnarProjectionReaderFactory, ColumnarScan}
+import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchScan, ColumnarMicroBatchStream, ColumnarScan, ColumnarStreamOffset}
 import org.apache.spark.sql.execution.datasources.v2.python.{PythonDataSourceV2, UserDefinedPythonDataSource}
 import org.apache.spark.sql.execution.vectorized.ReusedArrowColumnVector
 import org.apache.spark.sql.functions.lit
@@ -446,14 +446,12 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(!scan(filtered).getMetaData().contains("PushedLimit"))
 
     // The reader that the limit was pushed down to is also asked to prune the columns, after the
-    // limit, and returns only the column that the query reads: the reader factory of the scan is
-    // the one of the library, rather than one that drops the other columns.
+    // limit, and returns only the column that the query reads.
     val pruned = range(newSession(defaultPackage), "end" -> "100").select("id").limit(3)
     assert(pruned.collect().map(_.getLong(0)).toSeq == Seq(0L, 1L, 2L))
     assert(scan(pruned).readSchema() == StructType.fromDDL("id BIGINT"))
     assert(scan(pruned).getMetaData()("PushedLimit") == "LIMIT 3")
-    assert(!scan(pruned).toBatch.createReaderFactory()
-      .isInstanceOf[ColumnarProjectionReaderFactory])
+    assert(scan(pruned).toBatch.createReaderFactory().isInstanceOf[NativePartitionReaderFactory])
   }
 
   nativeTest("read maps whose entry fields have other names") {
@@ -1046,42 +1044,43 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       Seq("""{"offset":0} {"offset":3}""", """{"offset":3} {"offset":6}"""))
 
     // Spark may plan the scans of a micro-batch on several threads at the same time, such as the
-    // side of a broadcast join, and they still get the partitions of a single call.
+    // side of a broadcast join, and they still get the partitions of a single call: the stream of
+    // a columnar data source plans each range once.
     val (counterName, counterLocation) =
       NativeDataSourceRegistry.lookup("native_counter", session.sessionState.conf).get
-    def streamReader(options: (String, String)*): NativeDataSourceStreamReader = {
-      new NativeDataSource(counterLocation, counterName,
+    def stream(options: (String, String)*): ColumnarMicroBatchStream = {
+      val checkpoint = Utils.createTempDir().getPath
+      val reader = new NativeDataSource(counterLocation, counterName,
           new CaseInsensitiveStringMap(options.toMap.asJava))
-        .streamReader(StructType.fromDDL("id BIGINT"), Utils.createTempDir().getPath)
-        .asInstanceOf[NativeDataSourceStreamReader]
+        .streamReader(StructType.fromDDL("id BIGINT"), checkpoint)
+      new ColumnarMicroBatchStream(reader, checkpoint)
     }
+    def offset(i: Int): Offset = ColumnarStreamOffset(s"""{"offset":$i}""")
     val concurrentRanges = new File(Utils.createTempDir(), "ranges")
-    val reader = streamReader("max_offset" -> "100", "ranges_path" -> concurrentRanges.getPath)
+    val concurrent = stream("max_offset" -> "100", "ranges_path" -> concurrentRanges.getPath)
     try {
       (0 until 20).foreach { i =>
-        val start = s"""{"offset":$i}"""
-        val end = s"""{"offset":${i + 1}}"""
         val planning = new CyclicBarrier(2)
         val planned = ThreadUtils.parmap(1 to 2, "plan-micro-batch", 2) { _ =>
           planning.await()
-          reader.partitions(start, end)
+          concurrent.planInputPartitions(offset(i), offset(i + 1))
         }
         assert(planned.head eq planned.last)
       }
     } finally {
-      reader.stop()
+      concurrent.stop()
     }
     assert(Files.readAllLines(concurrentRanges.toPath).size == 20)
     // So does a failure: planning the range again fails with the same error, without calling the
     // library again on the handle whose call failed.
-    val failing = streamReader("fail" -> "stream_partitions")
+    val failing = stream("fail" -> "stream_partitions")
     try {
       val failure = intercept[SparkRuntimeException] {
-        failing.partitions("""{"offset":0}""", """{"offset":1}""")
+        failing.planInputPartitions(offset(0), offset(1))
       }
       assert(failure.getMessage.contains("injected failure in stream_partitions"))
       assert(intercept[SparkRuntimeException] {
-        failing.partitions("""{"offset":0}""", """{"offset":1}""")
+        failing.planInputPartitions(offset(0), offset(1))
       } eq failure)
     } finally {
       failing.stop()
@@ -1335,14 +1334,22 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
 
   nativeTest("operations that a data source does not support") {
     val session = newSession(defaultPackage, createPackage(readOnlyLibrary, dataSources("ro_")))
-    // The library does not push anything down: it reads all the columns, which the scan drops
-    // but the one that the query reads, and Spark applies the limit.
+    // The library does not push anything down, but read still gets only the column that the
+    // query reads, which it returns as the contract requires, and Spark applies the limit.
     val df = session.read.format("ro_native_range").option("end", "10").load()
     val limited = df.select("id").limit(3)
     val ids = limited.collect().map(_.getLong(0))
     assert(ids.length == 3 && ids.forall(id => id >= 0 && id < 10))
     assert(scan(limited).readSchema() == StructType.fromDDL("id BIGINT"))
     assert(!scan(limited).getMetaData().contains("PushedLimit"))
+    assert(scan(limited).toBatch.createReaderFactory().isInstanceOf[NativePartitionReaderFactory])
+    // A read that returns other columns than those of the schema to read fails.
+    val allColumns = intercept[Exception] {
+      session.read.format("ro_native_range").option("end", "10")
+        .option("ignore_read_schema", "true").load().select("id").collect()
+    }
+    assert(Utils.exceptionString(allColumns).contains("NATIVE_DATA_SOURCE_ERROR"))
+    assert(Utils.exceptionString(allColumns).contains("but the expected schema is id BIGINT"))
 
     def check(condition: String, parameters: Map[String, String])(f: => Unit): Unit = {
       val e = intercept[Exception](f)
