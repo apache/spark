@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.adaptive.ShuffleQueryStageExec
 import org.apache.spark.sql.execution.datasources.v2.GroupPartitionsExec
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
@@ -657,10 +658,9 @@ case class EnsureRequirements(
       l.joinKeyPositions.isEmpty && r.joinKeyPositions.isEmpty
 
     // Whether the merged key list below may be narrowed to what the join type allows. Not when
-    // either side is marked. Narrowing drops groups that side holds, so its regrouping stops being
-    // the identity, and `GroupPartitionsExec` gives up a marked claim it does not regroup
-    // identically. That costs the pair its join at the gate at the end of this method, which is a
-    // poor trade for pruning a few groups.
+    // either side is marked. Narrowing drops groups that side holds, so the expected-key alignment
+    // is non-identity and `GroupPartitionsExec` gives up the marked claim. That costs the pair its
+    // join at the final gate, a poor trade for pruning a few groups.
     //
     // Narrowing is the only thing here that can shrink the list below a marked side's own keys: the
     // merging arms take the union, and `KeyedShuffleSpec.areKeysCompatible` pairs a marked layout
@@ -808,6 +808,7 @@ case class EnsureRequirements(
       var replicateLeftSide = false
       var replicateRightSide = false
       var applyPartialClustering = false
+      var replicateSideChosen = false
 
       // This means we allow partitions that are not clustered on their values,
       // that is, multiple partitions with the same partition value. In the
@@ -830,6 +831,7 @@ case class EnsureRequirements(
           logInfo(log"Skipping partially clustered distribution as it cannot be applied for " +
             log"join type '${MDC(LogKeys.JOIN_TYPE, joinType)}'")
         } else {
+          replicateSideChosen = true
           // The statistics and the original partition keys come from the pre-alignment plans,
           // which is what both sides already are here.
           val leftLink = rawLeft.logicalLink
@@ -914,7 +916,8 @@ case class EnsureRequirements(
         }
       }
 
-      // Now we need to push-down the common partition information to the `GroupPartitionsExec`s.
+      // Push the common partition information to the sides that need it. An identity alignment
+      // whose leaves are shuffle stages can keep its child instead (see `regroupOrIdentity` below).
       //
       // Where `applyPartialClustering` holds, exactly one side repeats: `replicateRightSide` is
       // the negation of `replicateLeftSide`, and the branch above is taken only when the side it
@@ -925,22 +928,47 @@ case class EnsureRequirements(
       // them. Each side stamps why it is left ungrouped (`UngroupingOrigin`), so a reader of the
       // finished plan judges the pair on the layouts it holds; the stamp also decides the node's
       // routing (`GroupPartitionsExec.distributePartitions`).
-      (
-        GroupPartitionsExec(rawLeft, leftSpec.joinKeyPositions,
-          Some(mergedPartitionKeys), leftReducers,
+
+      def canSkipIdentityGroup(gpe: GroupPartitionsExec): Boolean = {
+        val child = gpe.child
+        // Keep both nodes when a replicate side is chosen, including when the join type declines
+        // it, so a re-run can peel the local sorts and reproduce the choice. This also guards a
+        // plan with existing keyed shuffle stages: the planner does not create keyed shuffles when
+        // partially clustered distribution is enabled.
+        // Shuffle stages report their exchanges' fixed partitioning. Keep the node when any leaf
+        // is not a stage: if a scan is rebuilt with different partitioning after alignment, the
+        // node checks its child against the planned partitioning and fails instead of letting the
+        // join silently pair mismatched partitions and produce incorrect results.
+        !replicateSideChosen &&
+          child.collectLeaves().forall(_.isInstanceOf[ShuffleQueryStageExec]) &&
+          gpe.outputPartitioning == child.outputPartitioning
+      }
+
+      def regroupOrIdentity(
+          child: SparkPlan,
+          spec: KeyedShuffleSpec,
+          reducers: Option[Seq[Option[KeyReducer]]],
+          replicates: Boolean): SparkPlan = {
+        val gpe = GroupPartitionsExec(child, spec.joinKeyPositions,
+          Some(mergedPartitionKeys), reducers,
           ungroupingOrigin = Option.when(applyPartialClustering)(
-            if (replicateLeftSide) REPLICATED_FOR_JOIN else SPLIT_FOR_JOIN)),
-        GroupPartitionsExec(rawRight, rightSpec.joinKeyPositions,
-          Some(mergedPartitionKeys), rightReducers,
-          ungroupingOrigin = Option.when(applyPartialClustering)(
-            if (replicateRightSide) REPLICATED_FOR_JOIN else SPLIT_FOR_JOIN)))
+            if (replicates) REPLICATED_FOR_JOIN else SPLIT_FOR_JOIN))
+        if (canSkipIdentityGroup(gpe)) {
+          child
+        } else {
+          gpe
+        }
+      }
+      (regroupOrIdentity(rawLeft, leftSpec, leftReducers, replicateLeftSide),
+        regroupOrIdentity(rawRight, rightSpec, rightReducers, replicateRightSide))
     }
 
     // The pairing is only worth committing to if both children still declare the same aligned key
     // sequence once the grouping has been pushed into them. A `GroupPartitionsExec` gives up its
-    // keyed claim when it turns out to regroup a layout that pins undeclared rows to
-    // `hash(key) % numPartitions` (see `KeyLayout.mayContainUnknownPartitionKeys`), and only the
-    // node knows the permutation it performs, so that answer arrives after the pairing was chosen.
+    // keyed claim when the grouping re-labels the keys or replicates them into expected slots,
+    // which a layout holding undeclared rows cannot survive (see `KeyLayout.unknownKeysOrigin`),
+    // and only the node knows the permutation it performs, so that answer arrives after the pairing
+    // was chosen.
     // Asking before returning is what keeps the join from skipping both shuffles for a child that
     // no longer satisfies its distribution, which is a plan `ValidateRequirements` rejects and
     // every AQE rule that needs a valid plan then refuses to touch.
@@ -952,10 +980,8 @@ case class EnsureRequirements(
     // `KeyLayout.describesSameKeys` asks exactly that, and it compares the key types as well as
     // the rows.
     //
-    // Both routes to `newLeft`/`newRight` build, so both are asked. On the base this was the push
-    // branch's question alone, because the other route left the children exactly as the pairing
-    // read them. Here `groupIfNeeded` can wrap a side that is not grouped, and that node gives up
-    // the claim for the same reason the pushed one does.
+    // Check both pushed alignment and plain grouping. Plain grouping retains a marked keyed claim
+    // but loses routing; pushed key rewrites or non-identity expected alignment drop the claim.
     val (newLeft, newRight) =
       pushed.getOrElse((groupIfNeeded(rawLeft), groupIfNeeded(rawRight)))
     def declaredLayout(plan: SparkPlan): Option[KeyLayout] =
@@ -967,11 +993,11 @@ case class EnsureRequirements(
     // Announced here rather than where the branch runs, since the gate can still discard what it
     // built, and a log that names a pushdown should name one that happens.
     if (pushCommonValues) {
-      if (committed) {
-        logInfo("Pushing common partition values for storage-partitioned join")
-      } else {
+      if (!committed) {
         logInfo("Not storage-partitioning this join after all: the two sides no longer declare " +
           "the same partition keys once regrouped onto the merged partition values")
+      } else if ((newLeft ne rawLeft) || (newRight ne rawRight)) {
+        logInfo("Pushing common partition values for storage-partitioned join")
       }
     }
     Option.when(committed)(Seq(newLeft, newRight))

@@ -442,7 +442,7 @@ trait QueryTestBase
     val originalLocale = Locale.getDefault
     try {
       // Add Locale setting
-      Locale.setDefault(new Locale(language))
+      Locale.setDefault(Locale.of(language))
       f
     } finally {
       Locale.setDefault(originalLocale)

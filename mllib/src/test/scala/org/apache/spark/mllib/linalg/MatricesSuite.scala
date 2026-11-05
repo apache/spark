@@ -174,6 +174,20 @@ class MatricesSuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-60491: Matrix.hashCode depends on the shape and the positions of the entries") {
+    val values = Array(1.0, 2.0, 3.0, 4.0, 5.0, 6.0)
+    val matrices = Seq(new DenseMatrix(2, 3, values), new DenseMatrix(3, 2, values),
+      new DenseMatrix(3, 2, Array(1.0, 0.0, 2.0, 0.0, 3.0, 0.0)),
+      new DenseMatrix(3, 2, Array(1.0, 2.0, 0.0, 3.0, 0.0, 0.0)))
+    assert(matrices.map(_.hashCode).distinct.length === matrices.length)
+    matrices.foreach { m =>
+      assert(m.toSparse === m)
+      assert(m.toSparse.hashCode === m.hashCode)
+      assert(m.toSparse.transpose === m.transpose)
+      assert(m.toSparse.transpose.hashCode === m.transpose.hashCode)
+    }
+  }
+
   test("matrix indexing and updating") {
     val m = 3
     val n = 2

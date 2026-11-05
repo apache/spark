@@ -48,6 +48,7 @@ import org.apache.spark.util.SparkClassUtils
  *   - `LateMaterializationParquetRecordReader`'s scratch vectors and queued survivor sets, the
  *     column readers and row indexes a reader still holds, and a vector's byte-child capacity
  *     (private state a test checks the reader's memory by)
+ *   - `VectorizedParquetRecordReader.columnVectors` (field).
  */
 object ParquetTestAccess {
 
@@ -232,16 +233,30 @@ object ParquetTestAccess {
     f
   }
 
+  private lazy val survivorBatchVectorsMethod = {
+    val m = SparkClassUtils.classForName[Any](
+      classOf[LateMaterializationParquetRecordReader].getName + "$SurvivorBatch")
+      .getDeclaredMethod("vectors")
+    m.setAccessible(true)
+    m
+  }
+
   /** The survivor sets phase 1 queued and the reader has not emitted yet, oldest first. */
   def queuedSurvivorSets(
       reader: LateMaterializationParquetRecordReader): Seq[Seq[WritableColumnVector]] =
-    survivorBatchesField.get(reader)
-      .asInstanceOf[java.util.ArrayDeque[Array[WritableColumnVector]]].asScala.map(_.toSeq).toSeq
+    survivorBatchesField.get(reader).asInstanceOf[java.util.ArrayDeque[AnyRef]].asScala.map {
+      batch => survivorBatchVectorsMethod.invoke(batch).asInstanceOf[Array[WritableColumnVector]]
+        .toSeq
+    }.toSeq
 
   private lazy val columnVectorsField = {
     val f = classOf[VectorizedParquetRecordReader].getDeclaredField("columnVectors")
     f.setAccessible(true)
     f
+  }
+
+  def columnVectors(reader: VectorizedParquetRecordReader): Array[AnyRef] = {
+    columnVectorsField.get(reader).asInstanceOf[Array[AnyRef]]
   }
 
   private lazy val columnVectorCls = SparkClassUtils.classForName[Any](

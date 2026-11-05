@@ -22,10 +22,11 @@ import java.sql.Timestamp
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{DataFrame, SparkSession}
-import org.apache.spark.sql.execution.streaming.operators.stateful.StateStoreSaveExec
+import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
+import org.apache.spark.sql.execution.streaming.operators.stateful.{EventTimeWatermarkExec, StateStoreSaveExec}
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinExec
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
-import org.apache.spark.sql.execution.streaming.state.StateStore
+import org.apache.spark.sql.execution.streaming.state.{HDFSBackedStateStoreProvider, RocksDBStateStoreProvider, StateStore}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.tags.SlowSQLTest
@@ -51,6 +52,80 @@ class MultiStatefulOperatorsSuite
     Seq(OutputMode.Append(), OutputMode.Update()).foreach { outputMode =>
       test(s"$testName - $outputMode")(testBody(outputMode))
     }
+  }
+
+  Seq(true, false).foreach { reuseEnabled =>
+    test("SPARK-60862: watermark propagates through reused exchange - " +
+        s"exchange reuse enabled: $reuseEnabled") {
+      withSQLConf(SQLConf.EXCHANGE_REUSE_ENABLED.key -> reuseEnabled.toString) {
+        val inputData = MemoryStream[Int]
+
+        val aggregated = inputData.toDF()
+          .withColumn("eventTime", timestamp_seconds($"value"))
+          .withWatermark("eventTime", "0 seconds")
+          .groupBy(window($"eventTime", "5 seconds").as("window"), ($"value" % 2).as("key"))
+          .agg(count("*").as("count"))
+          .select($"window.start".cast("long").as("windowStart"), $"key", $"count")
+
+        val stream = aggregated.select(lit("left").as("branch"), $"*")
+          .union(aggregated.select(lit("right").as("branch"), $"*"))
+          .as[(String, Long, Int, Long)]
+
+        testStream(stream)(
+          AddData(inputData, 0, 1, 2, 3, 4),
+          CheckNewAnswer(),
+          AddData(inputData, 10),
+          CheckNewAnswer(
+            ("left", 0L, 0, 3L), ("left", 0L, 1, 2L),
+            ("right", 0L, 0, 3L), ("right", 0L, 1, 2L)),
+          AssertOnQuery { query =>
+            val plan = query.lastExecution.executedPlan
+            val reusedExchanges = plan.collect { case r: ReusedExchangeExec => r }
+            assert(reusedExchanges.nonEmpty === reuseEnabled,
+              s"Expected ReusedExchangeExec only when reuse is enabled. Plan: $plan")
+
+            val evictionWatermarks = plan.collect {
+              case s: StateStoreSaveExec => s.eventTimeWatermarkForEviction
+            }
+            assert(evictionWatermarks === Seq(Some(10000L), Some(10000L)))
+            true
+          },
+          assertNumStateRows(Seq(1, 1))
+        )
+      }
+    }
+  }
+
+  test("SPARK-60862: independently applied watermarks remain distinct") {
+    val inputData = MemoryStream[Int]
+    val source = inputData.toDF()
+      .withColumn("eventTime", timestamp_seconds($"value"))
+
+    val left = source
+      .withWatermark("eventTime", "0 seconds")
+      .select($"value".as("leftValue"), $"eventTime".as("leftTime"))
+    val right = source
+      .withWatermark("eventTime", "0 seconds")
+      .select($"value".as("rightValue"), $"eventTime".as("rightTime"))
+    val stream = left.join(right,
+      $"leftValue" === $"rightValue" && $"leftTime" === $"rightTime")
+      .select($"leftValue", $"rightValue")
+      .as[(Int, Int)]
+
+    testStream(stream)(
+      AddData(inputData, 1, 2),
+      CheckNewAnswer((1, 1), (2, 2)),
+      AssertOnQuery { query =>
+        val plan = query.lastExecution.executedPlan
+        val watermarkNodes = plan.collect { case w: EventTimeWatermarkExec => w }
+        assert(watermarkNodes.size === 2, s"Expected two watermark nodes. Plan: $plan")
+        assert(watermarkNodes.map(_.nodeId).distinct.size === 2,
+          s"Expected distinct watermark node IDs. Plan: $plan")
+        assert(!plan.exists(_.isInstanceOf[ReusedExchangeExec]),
+          s"Exchange reuse must not cross distinct watermark nodes. Plan: $plan")
+        true
+      }
+    )
   }
 
   test("window agg -> window agg, append mode") {
@@ -885,6 +960,65 @@ class MultiStatefulOperatorsSuite
     // right row should wait for additional 40 seconds (+ 1 ms) to be matched with right rows
     // taking minimum of both criteria - 40 seconds (+ 1 ms)
     testOutputWatermarkInJoin(join3, input1, -40L * 1000 - 1)
+  }
+
+  Seq(
+    (2, classOf[HDFSBackedStateStoreProvider], false),
+    (2, classOf[RocksDBStateStoreProvider], false),
+    (3, classOf[RocksDBStateStoreProvider], false),
+    (3, classOf[RocksDBStateStoreProvider], true),
+    (4, classOf[RocksDBStateStoreProvider], false),
+    (4, classOf[RocksDBStateStoreProvider], true)
+  ).foreach { case (stateFormatVersion, provider, changelogEnabled) =>
+    test("left semi output watermark closes downstream windows across restart: " +
+        s"state format=$stateFormatVersion, ${provider.getSimpleName}, " +
+        s"changelog=$changelogEnabled") {
+      val leftInput = MemoryStream[(Int, Int)]
+      val rightInput = MemoryStream[(Int, Int)]
+      val left = leftInput.toDF()
+        .select($"_1".as("leftKey"), timestamp_seconds($"_2").as("leftTime"))
+        .withWatermark("leftTime", "0 seconds")
+      val right = rightInput.toDF()
+        .select($"_1".as("rightKey"), timestamp_seconds($"_2").as("rightTime"))
+        .withWatermark("rightTime", "0 seconds")
+      val result = left.join(right, expr(
+        "leftKey = rightKey AND leftTime > rightTime - INTERVAL 5 SECONDS AND " +
+          "leftTime < rightTime + INTERVAL 30 SECONDS"), "left_semi")
+        .groupBy(window($"leftTime", "10 seconds"))
+        .count()
+        .select($"window.start".cast("long"), $"count")
+
+      withSQLConf(
+          SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> stateFormatVersion.toString,
+          SQLConf.STATE_STORE_PROVIDER_CLASS.key -> provider.getName,
+          "spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled" ->
+            changelogEnabled.toString,
+          SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> "true",
+          SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
+        withTempDir { checkpointDir =>
+          // Watermarks below are in seconds and describe the bounds used in each batch.
+          // inputW is the join's eviction watermark; leftW/rightW are its state bounds;
+          // outputW is the downstream aggregation's eviction watermark.
+          // Join rows are (key, event time); aggregation state is [window start, end): count.
+          testStream(result)(
+            StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+            // Batch 0: inputW=0, leftW=-5, rightW=-30; propagation starts at outputW=0.
+            // Join emits (1, 105); aggregation buffers [100, 110): 1.
+            MultiAddData(leftInput, (1, 105))(rightInput, (1, 105)),
+            CheckNewAnswer(),
+            // Batch 1: inputW=105, leftW=100, rightW=75, outputW=100.
+            // Join emits (2, 120); aggregation buffers [100, 110): 1 and [120, 130): 1.
+            MultiAddData(leftInput, (2, 120))(rightInput, (2, 120)),
+            CheckNewAnswer(),
+            StopStream,
+            StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+            // Batch 2: inputW=120, leftW=115, rightW=90, outputW=115 (after restart).
+            // Join emits nothing; aggregation emits [100, 110): 1 and keeps [120, 130): 1.
+            AddData(rightInput, (9, 120)),
+            CheckNewAnswer((100L, 1L)))
+        }
+      }
+    }
   }
 
   test("SPARK-49829 time window agg per each source followed by stream-stream join") {

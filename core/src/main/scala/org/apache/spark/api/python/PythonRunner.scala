@@ -29,8 +29,8 @@ import scala.jdk.CollectionConverters._
 import scala.util.{Success, Try}
 import scala.util.control.NonFatal
 
-import com.fasterxml.jackson.core.{JsonParser, JsonProcessingException}
-import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
+import com.fasterxml.jackson.core.{JsonParser, JsonProcessingException, StreamReadConstraints}
+import com.fasterxml.jackson.databind.{DeserializationFeature, JsonNode, ObjectMapper}
 
 import org.apache.spark._
 import org.apache.spark.api.python.PythonFunction.PythonAccumulator
@@ -103,6 +103,9 @@ private[spark] object PythonEvalType {
   // worker, which folds them with `reduce` (from `zero`) and produces the value with `finish`.
   val SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF = 257
 
+  // Scalar Arrow UDF evaluated by embedded CPython in the executor JVM.
+  val SQL_SCALAR_ARROW_INPROCESS_UDF = 258
+
   val SQL_TABLE_UDF = 300
   val SQL_ARROW_TABLE_UDF = 301
   val SQL_ARROW_UDTF = 302
@@ -151,6 +154,7 @@ private[spark] object PythonEvalType {
     case SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF =>
       "SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF"
     case SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF => "SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF"
+    case SQL_SCALAR_ARROW_INPROCESS_UDF => "SQL_SCALAR_ARROW_INPROCESS_UDF"
   }
 
   // The eval types produced by ExtractPythonUDFFromLambda: a scalar UDF lifted out of a
@@ -374,7 +378,8 @@ private[spark] object BasePythonRunner extends Logging {
       // An interrupt of this thread that arrives during the wait (e.g. a task kill) does not stop
       // it and is not passed on (see stopAndAwaitExit): the kill is already recorded in the
       // TaskContext, and the flag would make the blocking channel and lock operations of the
-      // completion listeners that run next fail and skip cleanup.
+      // completion listeners that run next fail and skip cleanup (see also
+      // TaskContextImpl.awaitListenerInvocationHandover, which passes interrupts on).
       val intervalNs = TimeUnit.MILLISECONDS.toNanos(warnIntervalMs)
       val startNs = System.nanoTime()
       var nextWarningNs = startNs + intervalNs
@@ -473,28 +478,25 @@ private[spark] object BasePythonRunner extends Logging {
     }
   }
 
-  // Values used to update the existing Python SQL metrics and task spill metrics.
-  private[python] case class WorkerMetrics(
-      bootTimestampMs: Long,
-      initTimestampMs: Long,
-      finishTimestampMs: Long,
-      pythonExecutionDurationMs: Long,
-      memoryBytesSpilled: Long,
-      diskBytesSpilled: Long)
+  private lazy val workerJsonMapper = {
+    val mapper = new ObjectMapper()
+      .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
+      .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+    // An init error carries the full worker traceback, which may exceed Jackson's default limit.
+    mapper.getFactory.setStreamReadConstraints(
+      StreamReadConstraints.builder().maxStringLength(Int.MaxValue).build())
+    mapper
+  }
 
-  private lazy val workerMetricsMapper = new ObjectMapper()
-    .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
-    .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
-
-  /** Read and validate worker metrics after METRICS_DATA; ignore additional fields. */
-  private[python] def readWorkerMetrics(stream: DataInputStream): WorkerMetrics = {
+  /** Decode every METRICS_DATA field as a named int64; reject other values. */
+  private[python] def readWorkerMetrics(stream: DataInputStream): Map[String, Long] = {
     val length = stream.readInt()
     if (length <= 0) {
       throw new SparkException(s"Invalid Python worker report length: $length")
     }
     val json = PythonWorkerUtils.readUTF(length, stream)
     val report = try {
-      workerMetricsMapper.readTree(json)
+      workerJsonMapper.readTree(json)
     } catch {
       case e: JsonProcessingException =>
         throw new SparkException("Malformed Python worker report JSON", e)
@@ -503,21 +505,52 @@ private[spark] object BasePythonRunner extends Logging {
       throw new SparkException("Expected a Python worker JSON object")
     }
 
-    def metricValue(name: String): Long = {
-      val value = report.get(name)
-      if (value == null || !value.isIntegralNumber || !value.canConvertToLong) {
-        throw new SparkException(s"Missing or invalid Python worker metric: $name")
+    report.fields().asScala.map { entry =>
+      val value = entry.getValue
+      if (!value.isIntegralNumber || !value.canConvertToLong) {
+        throw new SparkException(s"Invalid Python worker metric: ${entry.getKey}")
       }
-      value.longValue()
-    }
+      entry.getKey -> value.longValue()
+    }.toMap
+  }
 
-    WorkerMetrics(
-      metricValue("bootTimestampMs"),
-      metricValue("initTimestampMs"),
-      metricValue("finishTimestampMs"),
-      metricValue("pythonExecutionDurationMs"),
-      metricValue("memoryBytesSpilled"),
-      metricValue("diskBytesSpilled"))
+  /**
+   * Decode the init response that follows START_OF_INIT_RESPONSE: a length-prefixed JSON object
+   * that is `{}` once the worker is initialized, or carries an `error` if initialization failed.
+   * Unknown fields are ignored.
+   */
+  private[python] def readInitResponse(stream: DataInputStream): Option[PythonWorkerInitError] = {
+    val length = stream.readInt()
+    if (length <= 0) {
+      throw new SparkException(s"Invalid Python worker init response length: $length")
+    }
+    val json = PythonWorkerUtils.readUTF(length, stream)
+    val response = try {
+      workerJsonMapper.readTree(json)
+    } catch {
+      case e: JsonProcessingException =>
+        throw new SparkException("Malformed Python worker init response JSON", e)
+    }
+    if (response == null || !response.isObject) {
+      throw new SparkException("Expected a Python worker init response JSON object")
+    }
+    Option(response.get("error")).map { error =>
+      def field(name: String, isValid: JsonNode => Boolean): JsonNode = {
+        val value = error.get(name)
+        if (value == null || !isValid(value)) {
+          throw new SparkException(s"Invalid Python worker init error field: $name")
+        }
+        value
+      }
+      if (!error.isObject) {
+        throw new SparkException("Expected a Python worker init error JSON object")
+      }
+      PythonWorkerInitError(
+        message = field("message", _.isTextual).asText(),
+        traceback = field("traceback", _.isTextual).asText(),
+        errorClass = field("errorClass", _.isTextual).asText(),
+        isPayloadError = field("isPayloadError", _.isBoolean).asBoolean())
+    }
   }
 
   /**
@@ -1118,6 +1151,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
     private var nextObj: OUT = _
     private var eos = false
+    private var initialized = false
 
     // Track batches and data size for logging
     protected var batchesProcessed: Long = 0
@@ -1125,6 +1159,9 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
     override def hasNext: Boolean = nextObj != null || {
       if (!eos) {
+        if (!initialized) {
+          handleInitResponse()
+        }
         nextObj = read()
         hasNext
       } else {
@@ -1149,19 +1186,58 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
      */
     protected def read(): OUT
 
+    /**
+     * Waits for the worker's init response, which precedes all of its output, and throws the
+     * error the worker reports if it failed to initialize. No output follows an init error.
+     */
+    private def handleInitResponse(): Unit = {
+      if (writer.exception.isDefined) {
+        throw writer.exception.get
+      }
+      try {
+        stream.readInt() match {
+          case SpecialLengths.START_OF_INIT_RESPONSE =>
+            BasePythonRunner.readInitResponse(stream).foreach { error =>
+              logDebug(s"Python worker failed to initialize with ${error.errorClass} " +
+                s"(payload error: ${error.isPayloadError}) - ${taskIdentifier(context)}")
+              throw newPythonException(error.traceback)
+            }
+          case other =>
+            throw SparkException.internalError(
+              s"Expected the Python worker init response, but got $other")
+        }
+      } catch handleException
+      initialized = true
+    }
+
     protected def handleMetricsData(): Unit = {
       val workerMetrics = BasePythonRunner.readWorkerMetrics(stream)
-      val bootTime = workerMetrics.bootTimestampMs
-      val initTime = workerMetrics.initTimestampMs
-      val finishTime = workerMetrics.finishTimestampMs
-      val pythonExecutionDurationMs = workerMetrics.pythonExecutionDurationMs
+      def requiredMetric(name: String): Long = workerMetrics.getOrElse(name,
+        throw new SparkException(s"Missing Python worker metric: $name"))
+
+      // Read required inputs before updating any SQL or task metrics.
+      val bootTime = requiredMetric("bootTimestampMs")
+      val initTime = requiredMetric("initTimestampMs")
+      val finishTime = requiredMetric("finishTimestampMs")
+      val pythonExecutionDurationMs = requiredMetric("pythonExecutionDurationMs")
+      val memoryBytesSpilled = requiredMetric("memoryBytesSpilled")
+      val diskBytesSpilled = requiredMetric("diskBytesSpilled")
+
       // A reused Python worker records bootTime before waiting for this task, so it can precede
       // startTime. Use the later timestamp to exclude the worker's idle time from initialization.
       val pythonWorkerInitializationStartTime = math.max(startTime, bootTime)
       val boot = pythonWorkerInitializationStartTime - startTime
       val init = initTime - pythonWorkerInitializationStartTime
-      val finish = finishTime - initTime
       val total = finishTime - startTime
+      val finish = finishTime - initTime
+      val calculatedMetrics = Map(
+        "pythonBootTime" -> boot,
+        "pythonInitTime" -> init,
+        "pythonTotalTime" -> total,
+        "pythonProcessingTime" -> pythonExecutionDurationMs)
+      // Select registered report values; calculated timings take precedence over raw aliases.
+      val sqlMetrics = workerMetrics.filter { case (name, _) => metrics.contains(name) } ++
+        calculatedMetrics
 
       // Format data size for readability
       val dataKB = totalDataReceived / 1024.0
@@ -1177,17 +1253,19 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         log"finish = ${MDC(TIME, finish)} - " +
         log"Batches: ${MDC(COUNT, batchesProcessed)}, Data: ${MDC(SIZE, dataStr)} - " +
         log"${MDC(TASK_NAME, taskIdentifier(context))}")
-      metrics.get("pythonBootTime").foreach(_.add(boot))
-      metrics.get("pythonInitTime").foreach(_.add(init))
-      metrics.get("pythonTotalTime").foreach(_.add(total))
-      metrics.get("pythonProcessingTime").foreach(_.add(pythonExecutionDurationMs))
-      context.taskMetrics().incMemoryBytesSpilled(workerMetrics.memoryBytesSpilled)
-      context.taskMetrics().incDiskBytesSpilled(workerMetrics.diskBytesSpilled)
+      sqlMetrics.foreach { case (name, value) =>
+        metrics.get(name).foreach(_.add(value))
+      }
+      context.taskMetrics().incMemoryBytesSpilled(memoryBytesSpilled)
+      context.taskMetrics().incDiskBytesSpilled(diskBytesSpilled)
     }
 
     protected def handlePythonException(): PythonException = {
       // Signals that an exception has been thrown in python
-      val traceback = PythonWorkerUtils.readUTF(stream)
+      newPythonException(PythonWorkerUtils.readUTF(stream))
+    }
+
+    private def newPythonException(traceback: String): PythonException = {
       val msg = "An exception was thrown from the Python worker"
       new PythonException(
         errorClass = "PYTHON_EXCEPTION",
@@ -1760,7 +1838,24 @@ private[spark] object SpecialLengths {
   val START_ARROW_STREAM = -6
   val END_OF_MICRO_BATCH = -7
   val START_OF_INIT_MESSAGE = -8
+  val START_OF_INIT_RESPONSE = -9
 }
+
+/**
+ * An initialization failure reported by the Python worker in its init response.
+ *
+ * @param message the exception message
+ * @param traceback the formatted exception, as reported for a failure while processing data
+ * @param errorClass the Python exception class name, e.g. "ValueError"
+ * @param isPayloadError whether the worker could not deserialize the UDF payload (e.g. it does
+ *                       not unpickle); setting up the task, including constructing the eval type
+ *                       handler and its dependency and connection checks, is not payload loading
+ */
+private[spark] case class PythonWorkerInitError(
+    message: String,
+    traceback: String,
+    errorClass: String,
+    isPayloadError: Boolean)
 
 private[spark] object BarrierTaskContextMessageProtocol {
   val BARRIER_FUNCTION = 1

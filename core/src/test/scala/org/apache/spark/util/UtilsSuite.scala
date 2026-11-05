@@ -552,14 +552,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     // 6. Symbolic link
     val scenario6 = Files.createSymbolicLink(new File(testDir, "scenario6")
       .toPath, scenario1.toPath).toFile
-    if (Utils.isJavaVersionAtLeast21) {
-      assert(Utils.createDirectory(scenario6))
-    } else if (Runtime.version().feature() == 17 && Runtime.version().update() >= 14) {
-      // SPARK-50946: Java 17.0.14 includes JDK-8294193, so scenario6 can succeed.
-      assert(Utils.createDirectory(scenario6))
-    } else {
-      assert(!Utils.createDirectory(scenario6))
-    }
+    assert(Utils.createDirectory(scenario6))
     assert(scenario6.exists())
 
     // 7. Directory exists

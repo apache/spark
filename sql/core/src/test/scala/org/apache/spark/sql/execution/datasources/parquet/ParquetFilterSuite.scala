@@ -2689,6 +2689,24 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
       s"Expected an isNull(leaf) guard arm in $s")
   }
 
+  gridTest("shredded variant filter: quoted paths use the captured parser mode")(
+      Seq(false, true)) { legacy =>
+    val leafType = new StructType().add("value", BinaryType).add("typed_value", LongType)
+    val keys = new StructType().add("a\nb", leafType).add("a\\nb", leafType)
+    val variant = new StructType().add("value", BinaryType).add("typed_value", keys)
+    val parquetSchema = new SparkToParquetSchemaConverter(conf)
+      .convert(new StructType().add("v", variant))
+    val metadata = VariantMetadata(
+      "$['a\\nb']", failOnError = true, "UTC", legacyPathBackslashAsLiteral = legacy).toMetadata
+    val extraction = variantExtractionSchema("v", StructField("0", LongType, metadata = metadata))
+    withSQLConf(SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL.key -> (!legacy).toString) {
+      val pf = createParquetFilters(parquetSchema, variantExtractionSchema = Some(extraction))
+      val filter = pf.createFilter(sources.GreaterThan("v.`0`", 1L))
+      val key = if (legacy) "a\\nb" else "a\nb"
+      assert(filter.exists(_.toString.contains(s"gt(v.typed_value.$key.typed_value, 1)")))
+    }
+  }
+
   test("shredded variant filter: without variantExtractionSchema the logical path is unknown") {
     val parquetSchema =
       """message spark_schema {
