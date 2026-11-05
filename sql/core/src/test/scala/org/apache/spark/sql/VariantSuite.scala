@@ -127,14 +127,30 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
     }
   }
 
-  test("variant colon paths with legacy literal backslashes") {
-    val df = Seq("""{"a\nb":1,"a\\nb":2}""").toDF("json")
-      .select(parse_json($"json").as("v"))
-    Seq(false, true).foreach { legacy =>
-      withSQLConf(SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL.key -> legacy.toString) {
-        val expected = if (legacy) 2 else 1
-        checkAnswer(df.selectExpr("""v:['a\nb']::int""", """v:["a\nb"]::int"""),
-          Row(expected, expected))
+  test("variant colon paths retain the parse-time legacy mode") {
+    for (legacy <- Seq(false, true); singlePass <- Seq(false, true)) {
+      val plan = withSQLConf(
+          SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL.key -> legacy.toString) {
+        spark.sessionState.sqlParser.parsePlan(
+          """SELECT v:['a\nb'], v:["a\nb"]
+            |FROM (SELECT parse_json(r'{"a\nb":1,"a\\nb":2}') AS v)
+            |""".stripMargin)
+      }
+      // Reuse the parsed plan with both the original setting and the opposite setting.
+      Seq(false, true).foreach { analysisLegacy =>
+        withSQLConf(
+          SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL.key -> analysisLegacy.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+          val result = classic.Dataset.ofRows(spark, plan)
+          val name = if (legacy) """a\nb""" else "a\nb"
+          assert(result.columns.toSeq == Seq(name, name))
+          val expected = VariantExpressionEvalUtils.parseJson(
+            UTF8String.fromString(if (legacy) "2" else "1"))
+          // The single-pass analyzer does not support the RDD deserializer.
+          QueryTest.checkAnswer(result, Seq(Row(expected, expected)), checkToRDD = false)
+        }
       }
     }
   }

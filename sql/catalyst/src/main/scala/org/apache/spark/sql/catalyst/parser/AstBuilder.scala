@@ -4773,8 +4773,9 @@ class AstBuilder extends DataTypeAstBuilder
     // When `field` starts with a bracket, do not add a `.` as the bracket already implies nesting
     // Also the bracket will imply case sensitive field extraction.
     val path = if (field.startsWith("[")) "$" + field else s"$$.$field"
-    val parsedPath = VariantPathParser.parse(
-      path, conf.getConf(SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL))
+    val legacyPathBackslashAsLiteral =
+      conf.getConf(SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL)
+    val parsedPath = VariantPathParser.parse(path, legacyPathBackslashAsLiteral)
     if (parsedPath.isEmpty) {
       throw new ParseException(
         errorClass = "PARSE_SYNTAX_ERROR",
@@ -4782,7 +4783,7 @@ class AstBuilder extends DataTypeAstBuilder
         ctx = ctx)
     }
     val potentialAlias = parsedPath.get.collect { case ObjectExtraction(name) => name }.lastOption
-    val node = SemiStructuredExtract(expression(ctx.col), path)
+    val node = SemiStructuredExtract(expression(ctx.col), path, legacyPathBackslashAsLiteral)
     potentialAlias.map { colName => Alias(node, colName)() }.getOrElse(node)
   }
 
