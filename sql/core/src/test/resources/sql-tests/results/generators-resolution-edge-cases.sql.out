@@ -810,6 +810,32 @@ keep	1	keep
 
 
 -- !query
+SELECT explode(array(k)) AS generated_k,
+       RANK() OVER (ORDER BY k) AS rank,
+       COUNT(*) OVER () AS group_count
+FROM VALUES ('a', 1), ('b', 2) AS input(k, v)
+GROUP BY k
+HAVING rank = 1
+-- !query schema
+struct<generated_k:string,rank:int,group_count:bigint>
+-- !query output
+a	1	2
+
+
+-- !query
+SELECT explode(array(k)) AS generated_k,
+       COUNT(*) OVER () AS group_count,
+       RANK() OVER (ORDER BY k) AS rank
+FROM VALUES ('a', 1), ('b', 2) AS input(k, v)
+GROUP BY k
+HAVING rank = 1
+-- !query schema
+struct<generated_k:string,group_count:bigint,rank:int>
+-- !query output
+a	2	1
+
+
+-- !query
 SET spark.sql.legacy.evaluateHavingAfterInnerWindow=true
 -- !query schema
 struct<key:string,value:string>
@@ -828,6 +854,32 @@ HAVING k = 'keep'
 struct<generated_k:string,rank_sum:bigint,k:string>
 -- !query output
 keep	2	keep
+
+
+-- !query
+SELECT explode(array(k)) AS generated_k,
+       RANK() OVER (ORDER BY k) AS rank,
+       COUNT(*) OVER () AS group_count
+FROM VALUES ('a', 1), ('b', 2) AS input(k, v)
+GROUP BY k
+HAVING rank = 1
+-- !query schema
+struct<generated_k:string,rank:int,group_count:bigint>
+-- !query output
+a	1	2
+
+
+-- !query
+SELECT explode(array(k)) AS generated_k,
+       COUNT(*) OVER () AS group_count,
+       RANK() OVER (ORDER BY k) AS rank
+FROM VALUES ('a', 1), ('b', 2) AS input(k, v)
+GROUP BY k
+HAVING rank = 1
+-- !query schema
+struct<generated_k:string,group_count:bigint,rank:int>
+-- !query output
+a	2	1
 
 
 -- !query

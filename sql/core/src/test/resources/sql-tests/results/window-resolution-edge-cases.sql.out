@@ -314,6 +314,106 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT
+  k,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k = 'keep'
+ORDER BY k
+-- !query schema
+struct<k:string,rank_sum:bigint>
+-- !query output
+keep	1
+
+
+-- !query
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY GROUPING SETS ((k), ())
+HAVING k = 'keep'
+ORDER BY k
+-- !query schema
+struct<k:string,group_count:bigint>
+-- !query output
+keep	1
+
+
+-- !query
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY GROUPING SETS ((k), ())
+HAVING group_count = 3
+ORDER BY k
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
+  "sqlState" : "XX000",
+  "messageParameters" : {
+    "input" : "\"k\"",
+    "missingAttributes" : "\"group_count\"",
+    "operator" : "!Filter (group_count#xL = cast(3 as bigint))"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 153,
+    "fragment" : "SELECT\n  k,\n  COUNT(*) OVER () AS group_count\nFROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)\nGROUP BY GROUPING SETS ((k), ())\nHAVING group_count = 3"
+  } ]
+}
+
+
+-- !query
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY GROUPING SETS ((k), ())
+HAVING GROUPING_ID() = 1
+ORDER BY k
+-- !query schema
+struct<k:string,group_count:bigint>
+-- !query output
+NULL	1
+
+
+-- !query
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING SUM(v) = 1
+ORDER BY k
+-- !query schema
+struct<k:string,group_count:bigint>
+-- !query output
+keep	1
+
+
+-- !query
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k = (SELECT 'keep')
+ORDER BY k
+-- !query schema
+struct<k:string,group_count:bigint>
+-- !query output
+keep	1
+
+
+-- !query
 SET spark.sql.legacy.evaluateHavingAfterInnerWindow=true
 -- !query schema
 struct<key:string,value:string>
@@ -333,6 +433,64 @@ ORDER BY k
 struct<k:string,rank_sum:bigint>
 -- !query output
 keep	2
+
+
+-- !query
+SELECT
+  k,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k = 'keep'
+ORDER BY k
+-- !query schema
+struct<k:string,rank_sum:bigint>
+-- !query output
+keep	6
+
+
+-- !query
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY GROUPING SETS ((k), ())
+HAVING k = 'keep'
+ORDER BY k
+-- !query schema
+struct<k:string,group_count:bigint>
+-- !query output
+keep	3
+
+
+-- !query
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY GROUPING SETS ((k), ())
+HAVING group_count = 3
+ORDER BY k
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
+  "sqlState" : "XX000",
+  "messageParameters" : {
+    "input" : "\"k\"",
+    "missingAttributes" : "\"group_count\"",
+    "operator" : "!Filter (group_count#xL = cast(3 as bigint))"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 153,
+    "fragment" : "SELECT\n  k,\n  COUNT(*) OVER () AS group_count\nFROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)\nGROUP BY GROUPING SETS ((k), ())\nHAVING group_count = 3"
+  } ]
+}
 
 
 -- !query

@@ -222,7 +222,7 @@ FROM VALUES (1), (2), (3), (NULL) AS t(a)
 GROUP BY a
 HAVING a IS NOT NULL;
 
--- HAVING should be evaluated before every nested window with a generator
+-- HAVING should be evaluated before every nested window with a generator.
 SELECT explode(array(k)) AS generated_k,
        SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum,
        k
@@ -230,7 +230,23 @@ FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
 GROUP BY k
 HAVING k = 'keep';
 
--- The legacy configuration preserves evaluation after the inner window with a generator
+-- HAVING on a window alias must stay above every window with a generator.
+SELECT explode(array(k)) AS generated_k,
+       RANK() OVER (ORDER BY k) AS rank,
+       COUNT(*) OVER () AS group_count
+FROM VALUES ('a', 1), ('b', 2) AS input(k, v)
+GROUP BY k
+HAVING rank = 1;
+
+-- Reordering window expressions must not change their inputs.
+SELECT explode(array(k)) AS generated_k,
+       COUNT(*) OVER () AS group_count,
+       RANK() OVER (ORDER BY k) AS rank
+FROM VALUES ('a', 1), ('b', 2) AS input(k, v)
+GROUP BY k
+HAVING rank = 1;
+
+-- The legacy configuration preserves evaluation after the inner window with a generator.
 SET spark.sql.legacy.evaluateHavingAfterInnerWindow=true;
 
 SELECT explode(array(k)) AS generated_k,
@@ -239,6 +255,20 @@ SELECT explode(array(k)) AS generated_k,
 FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
 GROUP BY k
 HAVING k = 'keep';
+
+SELECT explode(array(k)) AS generated_k,
+       RANK() OVER (ORDER BY k) AS rank,
+       COUNT(*) OVER () AS group_count
+FROM VALUES ('a', 1), ('b', 2) AS input(k, v)
+GROUP BY k
+HAVING rank = 1;
+
+SELECT explode(array(k)) AS generated_k,
+       COUNT(*) OVER () AS group_count,
+       RANK() OVER (ORDER BY k) AS rank
+FROM VALUES ('a', 1), ('b', 2) AS input(k, v)
+GROUP BY k
+HAVING rank = 1;
 
 RESET spark.sql.legacy.evaluateHavingAfterInnerWindow;
 

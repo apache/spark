@@ -150,6 +150,60 @@ FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
 GROUP BY k
 HAVING rank_sum = 1;
 
+-- Grouping analytics HAVING must be evaluated before every nested window layer.
+SELECT
+  k,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k = 'keep'
+ORDER BY k;
+
+-- Grouping analytics HAVING must also precede a single window layer.
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY GROUPING SETS ((k), ())
+HAVING k = 'keep'
+ORDER BY k;
+
+-- Grouping analytics HAVING on a window alias keeps its existing analysis behavior.
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY GROUPING SETS ((k), ())
+HAVING group_count = 3
+ORDER BY k;
+
+-- Grouping functions must still be rewritten when HAVING is moved before the window.
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY GROUPING SETS ((k), ())
+HAVING GROUPING_ID() = 1
+ORDER BY k;
+
+-- Aggregates used only by HAVING must remain available until the filter is evaluated.
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING SUM(v) = 1
+ORDER BY k;
+
+-- Subqueries in grouping analytics HAVING must remain resolved after the filter is moved.
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k = (SELECT 'keep')
+ORDER BY k;
+
 -- The legacy configuration preserves evaluation after the inner window.
 SET spark.sql.legacy.evaluateHavingAfterInnerWindow=true;
 
@@ -159,6 +213,30 @@ SELECT
 FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
 GROUP BY k
 HAVING k = 'keep'
+ORDER BY k;
+
+SELECT
+  k,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k = 'keep'
+ORDER BY k;
+
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY GROUPING SETS ((k), ())
+HAVING k = 'keep'
+ORDER BY k;
+
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY GROUPING SETS ((k), ())
+HAVING group_count = 3
 ORDER BY k;
 
 RESET spark.sql.legacy.evaluateHavingAfterInnerWindow;
