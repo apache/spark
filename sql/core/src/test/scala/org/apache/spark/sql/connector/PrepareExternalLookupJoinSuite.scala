@@ -460,7 +460,7 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
   test("an external UDF over lookup columns in the join condition") {
     val lookup = lookupRelation(PlanningExternalLookupTable())
     val lookupId = lookup.output.head
-    val udf = ExternalUserDefinedFunction(
+    val lookupUDF = ExternalUserDefinedFunction(
       name = Some("lookup_udf"),
       workerSpec = UDFWorkerSpecification.getDefaultInstance,
       payload = Array.emptyByteArray,
@@ -468,13 +468,13 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
       children = Seq(lookupId),
       udfDeterministic = true,
       udfNullable = false)
-    val condition = stream.output.head === lookupId && udf
+    val condition = stream.output.head === lookupId && lookupUDF
 
     // An inner join evaluates it above the lookup join, where PlanExternalUDFs extracts it.
     val prepared = PrepareExternalLookupJoin(lookupJoin(lookup, condition))
     prepared match {
       case Filter(filterCondition, join: PreparedExternalLookupJoin) =>
-        assert(filterCondition == udf)
+        assert(filterCondition == lookupUDF)
         assert(join.residualCondition.isEmpty)
       case other => fail(s"Expected a filter above a prepared external lookup join: $other")
     }

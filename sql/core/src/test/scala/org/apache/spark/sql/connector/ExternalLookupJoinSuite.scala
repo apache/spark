@@ -32,6 +32,7 @@ import org.apache.spark.sql.IntegratedUDFTestUtils.{shouldTestPythonUDFs, TestPy
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+import org.apache.spark.sql.catalyst.expressions.{Add, Cast, LessThan, Literal, Rand}
 import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, LogicalPlan,
   PreparedExternalLookupJoin}
 import org.apache.spark.sql.classic.Dataset
@@ -52,11 +53,12 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.StreamingDedu
 import org.apache.spark.sql.execution.streaming.runtime.{IncrementalExecution, MemoryStream,
   StreamingQueryWrapper}
 import org.apache.spark.sql.execution.streaming.sources.LowLatencyMemoryStream
-import org.apache.spark.sql.functions.{coalesce, col, concat, expr, length, lit, to_json}
+import org.apache.spark.sql.functions.{coalesce, col, concat, expr, length, lit, raise_error,
+  to_json, when}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{StreamingQueryException, StreamRealTimeModeE2ESuiteBase}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DataType, IntegerType, StringType, StructType}
+import org.apache.spark.sql.types.{DataType, DoubleType, IntegerType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -66,7 +68,7 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
 
   private val EXTERNAL_LOOKUP_CATALOG_NAME = "external_lookup_cat"
 
-  private val streamRuns = new AtomicInteger()
+  private val streamRunCount = new AtomicInteger()
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -90,7 +92,7 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
 
   /** Runs the streaming `df` on a memory sink until it has processed all of its input. */
   private def runStream(df: DataFrame): StreamRun = {
-    val queryName = s"external_lookup_stream_${streamRuns.incrementAndGet()}"
+    val queryName = s"external_lookup_stream_${streamRunCount.incrementAndGet()}"
     val query = df.writeStream.format("memory").queryName(queryName).start()
     try {
       query.processAllAvailable()
@@ -298,7 +300,8 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
         Row(2, "two", 2, "sales"), Row(3, "three", null, null)))
 
     // Only comparisons of a lookup field with a stream-side value are offered. The connector
-    // selects `id = ?`, and Spark evaluates the other conjuncts on the joined rows.
+    // selects `id = ?`, and Spark evaluates the other conjuncts: the stream-side one on each stream
+    // row before the lookup, and the others on the joined rows.
     SimpleExternalLookupDataSource.resetCounters()
     val flagged = streamOf(Seq((1, true), (2, true), (1, false)).toDF("id", "flag"))
     checkStream(
@@ -310,6 +313,50 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       Seq(Row(1, true, 1, "engineering"), Row(2, true, null, null), Row(1, false, null, null)))
     assert(SimpleExternalLookupDataSource.lookupCandidates.get() ===
       Seq(("=", "id", IntegerType), ("=", "department", StringType)))
+  }
+
+  test("a stream row that fails a stream-side conjunct of the condition is not looked up") {
+    val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    val left = streamOf(
+      Seq((1, Some(true)), (2, Some(false)), (3, Some(true)), (4, None)).toDF("id", "flag"))
+    val key = left("id") === lookup("id")
+    // The join checks `flag` on each stream row before the lookup. A row where it is false or null
+    // cannot match, so its key is not requested: an inner join drops the row, and a left outer
+    // join pads it with nulls.
+    val matched = Seq(Row(1, true, 1, "engineering"), Row(1, true, 1, "research"))
+    val unmatched =
+      Seq(Row(2, false, null, null), Row(3, true, null, null), Row(4, null, null, null))
+    Seq("inner" -> matched, "left_outer" -> (matched ++ unmatched)).foreach {
+      case (joinType, expected) =>
+        SimpleExternalLookupDataSource.resetCounters()
+        checkStream(left.join(lookup, key && left("flag"), joinType), expected)
+        assert(SimpleExternalLookupDataSource.requestedKeys.asScala.toSeq === Seq(1, 3))
+    }
+
+    // A conjunct that can throw is not checked early: it is evaluated on the joined rows only, so
+    // never for id 3, which has no match, and every key is requested.
+    SimpleExternalLookupDataSource.resetCounters()
+    val throwing = when(left("id") === 3, raise_error(lit("evaluated for id 3"))).otherwise(true)
+    checkStream(
+      left.join(lookup, key && throwing, "left_outer"),
+      matched ++ Seq(Row(2, false, 2, "sales"), Row(3, true, null, null), Row(4, null, null, null)))
+    assert(SimpleExternalLookupDataSource.requestedKeys.asScala.toSeq === Seq(1, 2, 3, 4))
+
+    // A conjunct that is not deterministic is not checked early either. Analysis rejects one in a
+    // join condition, so the physical join gets one directly: `id + rand(0) < 0`. It is false for
+    // every row, but it is evaluated on the joined rows only, so every key is requested.
+    val lookupJoin = runStream(left.join(lookup, key, "left_outer")).lookupJoin
+    val streamId = lookupJoin.child.output.head
+    val nonDeterministic =
+      LessThan(Add(Cast(streamId, DoubleType), Rand(Literal(0L))), Literal(0.0))
+    SimpleExternalLookupDataSource.resetCounters()
+    val rows = lookupJoin.copy(
+      residualCondition = Some(nonDeterministic),
+      child = LocalTableScanExec(
+        lookupJoin.child.output, Seq(InternalRow(1, true), InternalRow(2, false)), None))
+      .executeCollect()
+    assert(rows.map(row => row.getInt(0) -> row.isNullAt(2)).toSeq === Seq(1 -> true, 2 -> true))
+    assert(SimpleExternalLookupDataSource.requestedKeys.asScala.toSeq === Seq(1, 2))
   }
 
   test("external lookup-only source joins without an explicit hint") {
@@ -500,7 +547,7 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
   }
 
   test("an upstream limit stops one-to-many cursor consumption") {
-    SimpleExternalLookupDataSource.values.set(Map(1 -> (1 to 2000).map(_.toString)))
+    SimpleExternalLookupDataSource.departmentsById.set(Map(1 -> (1 to 2000).map(_.toString)))
     val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
     val left = streamOf(Seq(1).toDF("id"))
 
@@ -512,7 +559,7 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
   }
 
   test("external lookup samples connector metrics while consuming a large response") {
-    SimpleExternalLookupDataSource.values.set(Map(1 -> (1 to 250).map(_.toString)))
+    SimpleExternalLookupDataSource.departmentsById.set(Map(1 -> (1 to 250).map(_.toString)))
     val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
     val left = streamOf(Seq(1).toDF("id"))
 
@@ -527,7 +574,7 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     val nan2 = java.lang.Double.longBitsToDouble(0x7ff8000000000002L)
     // Requests hold two rows, so each pair of equivalent keys shares one request row.
     val left = streamOf(Seq(-0.0d, 0.0d, nan1, nan2).toDF("key"))
-    val lookup = semanticLookup("double")
+    val lookup = semanticKeyLookup("double")
 
     assert(runStream(left.join(lookup, left("key") === lookup("key"))).rows.size === 4)
     assert(SemanticKeyExternalLookupDataSource.requestSizes.asScala.toSeq === Seq(1, 1))
@@ -536,13 +583,13 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
   test("external lookup deduplicates keys using Spark collation equality") {
     val left = streamOf(Seq("lookup", "LOOKUP").toDF("key"))
       .selectExpr("CAST(key AS STRING COLLATE UTF8_LCASE) AS key")
-    val lookup = semanticLookup("string collate utf8_lcase")
+    val lookup = semanticKeyLookup("string collate utf8_lcase")
 
     assert(runStream(left.join(lookup, left("key") === lookup("key"))).rows.size === 2)
     assert(SemanticKeyExternalLookupDataSource.requestSizes.asScala.toSeq === Seq(1))
   }
 
-  private def semanticLookup(keyType: String): DataFrame = {
+  private def semanticKeyLookup(keyType: String): DataFrame = {
     spark.read
       .format(classOf[SemanticKeyExternalLookupDataSource].getName)
       .option("keyType", keyType)
@@ -956,10 +1003,10 @@ object SimpleExternalLookupDataSource {
   val outputSchema: StructType = new StructType()
     .add("id", "int", nullable = true)
     .add("department", "string", nullable = false)
-  private val INITIAL_VALUES: Map[Int, Seq[String]] = Map(
+  private val INITIAL_DEPARTMENTS_BY_ID: Map[Int, Seq[String]] = Map(
     1 -> Seq("engineering", "research"),
     2 -> Seq("sales"))
-  val values = new AtomicReference(INITIAL_VALUES)
+  val departmentsById = new AtomicReference(INITIAL_DEPARTMENTS_BY_ID)
 
   def resetCounters(): Unit = {
     requestCount.set(0)
@@ -979,7 +1026,7 @@ object SimpleExternalLookupDataSource {
     beforeLookupReturns.set(() => ())
     lookupCandidates.set(Seq.empty)
     lookupCandidateDescriptions.set(Seq.empty)
-    values.set(INITIAL_VALUES)
+    departmentsById.set(INITIAL_DEPARTMENTS_BY_ID)
   }
 }
 
@@ -1106,7 +1153,7 @@ case class SimpleExternalLookupBatchReaderFactory(
     excludeResearch: Boolean) extends PartitionReaderFactory {
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] =
     new PartitionReader[InternalRow] {
-      private val rows = SimpleExternalLookupDataSource.values.get().toSeq
+      private val rows = SimpleExternalLookupDataSource.departmentsById.get().toSeq
         .sortBy(_._1)
         .iterator
         .flatMap { case (id, departments) =>
@@ -1164,8 +1211,8 @@ case class SimpleExternalLookupReaderFactory(
           val value = key.getInt(0)
           SimpleExternalLookupDataSource.requestedKeys.add(value)
         }
-        val values = SimpleExternalLookupDataSource.values.get().toSeq.map { case (id, values) =>
-          Some(id) -> values
+        val values = SimpleExternalLookupDataSource.departmentsById.get().toSeq.map {
+          case (id, values) => Some(id) -> values
         } :+ (None -> Seq("unknown"))
         values.iterator.filter { case (id, _) =>
           selectedLookupPredicates.zipWithIndex.forall { case (predicate, index) =>
@@ -1189,7 +1236,7 @@ case class SimpleExternalLookupReaderFactory(
         }
       }.toArray.iterator
       if (mutateAfterRequest) {
-        SimpleExternalLookupDataSource.values.updateAndGet { current =>
+        SimpleExternalLookupDataSource.departmentsById.updateAndGet { current =>
           current.updated(2, Seq("sales-v2"))
         }
       }

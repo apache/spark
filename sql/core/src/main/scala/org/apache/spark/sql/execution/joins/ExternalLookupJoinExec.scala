@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeSet,
-  Expression}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, AttributeSet,
+  Expression, PredicateHelper}
 import org.apache.spark.sql.catalyst.plans.{JoinType, LeftOuter}
 import org.apache.spark.sql.connector.metric.CustomTaskMetric
 import org.apache.spark.sql.connector.read.{ExternalLookupReaderFactory, Scan}
@@ -44,7 +44,7 @@ case class ExternalLookupJoinExec(
     @transient scan: Scan,
     readerFactory: ExternalLookupReaderFactory,
     maxParameterRowsPerRequest: Int,
-    child: SparkPlan) extends UnaryExecNode with SupportsCustomDriverMetrics {
+    child: SparkPlan) extends UnaryExecNode with SupportsCustomDriverMetrics with PredicateHelper {
 
   // The connector's value rows follow the read schema, which `lookupInput` describes. The lookup
   // columns keep their analyzed order, and take the read schema's types and nullability, which can
@@ -55,6 +55,21 @@ case class ExternalLookupJoinExec(
   override def output: Seq[Attribute] = joinType match {
     case LeftOuter => child.output ++ lookupColumns.map(_.withNullability(true))
     case _ => child.output ++ lookupColumns
+  }
+
+  // The conjuncts of the residual condition that read only stream columns, and the rest. A stream
+  // row that fails the first cannot match, so the join checks them on each stream row before the
+  // lookup, and does not request the row's key. Only conjuncts that are deterministic and cannot
+  // throw are checked early, as in predicate pushdown, because the join then evaluates them for
+  // rows without a match too, and before the conjuncts written ahead of them. A conjunct that reads
+  // no column stays with the rest: the optimizer has already folded it if it could.
+  private def splitResidualCondition: (Option[Expression], Option[Expression]) = {
+    val (streamConjuncts, joinedConjuncts) =
+      residualCondition.toSeq.flatMap(splitConjunctivePredicates).partition { conjunct =>
+        conjunct.references.nonEmpty && conjunct.references.subsetOf(child.outputSet) &&
+          conjunct.deterministic && !conjunct.throwable
+      }
+    (streamConjuncts.reduceOption(And), joinedConjuncts.reduceOption(And))
   }
 
   override def references: AttributeSet =
@@ -86,6 +101,7 @@ case class ExternalLookupJoinExec(
         override def value(): Long = metric.value()
       }
     })
+    val (streamCondition, joinedCondition) = splitResidualCondition
     val evaluatorFactory = new ExternalLookupJoinEvaluatorFactory(
       tableName,
       lookupParameters,
@@ -94,7 +110,8 @@ case class ExternalLookupJoinExec(
       lookupInput,
       output,
       joinType,
-      residualCondition.map(_.transform {
+      streamCondition,
+      joinedCondition.map(_.transform {
         case attr: Attribute => inputByLookupOutput.getOrElse(attr, attr)
       }),
       readerFactory,

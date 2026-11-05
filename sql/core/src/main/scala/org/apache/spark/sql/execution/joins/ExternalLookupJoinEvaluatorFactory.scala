@@ -44,6 +44,11 @@ import org.apache.spark.util.Utils
  * a time. For each batch it sends one request with the distinct parameters that can match, and
  * streams the connector's result rows into output rows. Parameters are deduplicated per request,
  * that is within one batch: a key repeated in a later batch is requested again.
+ *
+ * The join condition comes in two parts: `streamCondition` reads only stream columns and is
+ * evaluated on each stream row before the request, and `residualCondition` is evaluated on the
+ * joined rows. A stream row that fails `streamCondition` cannot match, so its parameters are not
+ * sent.
  */
 class ExternalLookupJoinEvaluatorFactory(
     tableName: String,
@@ -53,6 +58,7 @@ class ExternalLookupJoinEvaluatorFactory(
     lookupInput: Seq[Attribute],
     output: Seq[Attribute],
     joinType: JoinType,
+    streamCondition: Option[Expression],
     residualCondition: Option[Expression],
     readerFactory: ExternalLookupReaderFactory,
     maxParameterRowsPerRequest: Int,
@@ -145,11 +151,12 @@ class ExternalLookupJoinEvaluatorFactory(
     private val pending = mutable.Queue.empty[(Int, InternalRow)]
 
     // One entry for each distinct key that can match, in the order of first occurrence. A row
-    // that can never match is finished right away, and its key is not requested.
+    // that can never match, because of a null parameter or because it fails the stream condition,
+    // is finished right away, and its key is not requested.
     private val keyEntries = mutable.LinkedHashMap.empty[UnsafeRow, KeyEntry]
     rows.indices.foreach { index =>
       val key = parameters.key(rows(index))
-      if (parameters.matchesNothing(key)) {
+      if (parameters.matchesNothing(key) || !joinOutput.canMatch(rows(index))) {
         finish(index)
       } else {
         keyEntries.get(key) match {
@@ -283,18 +290,26 @@ class ExternalLookupJoinEvaluatorFactory(
       }
   }
 
-  /** Evaluates the residual condition on joined rows and builds output rows per join type. */
+  /**
+   * Evaluates the stream condition on stream rows and the residual condition on joined rows, and
+   * builds output rows per join type.
+   */
   private class JoinOutput(partitionIndex: Int) {
     // Value rows follow the read schema, and the residual and output are bound to its fields.
     private val joinedLookupInput =
       if (joinType == LeftOuter) lookupInput.map(_.withNullability(true)) else lookupInput
     private val joinedInput = streamOutput ++ joinedLookupInput
     private val joinedRow = new JoinedRow()
+    private val streamPredicate = streamCondition.map(Predicate.create(_, streamOutput))
     private val residual = residualCondition.map(Predicate.create(_, joinedInput))
     private val projection = UnsafeProjection.create(output, joinedInput)
     private val nullLookupRow = new GenericInternalRow(lookupInput.length)
+    streamPredicate.foreach(_.initialize(partitionIndex))
     residual.foreach(_.initialize(partitionIndex))
     projection.initialize(partitionIndex)
+
+    /** Whether a stream row passes the stream condition; a row that fails it matches nothing. */
+    def canMatch(streamRow: InternalRow): Boolean = streamPredicate.forall(_.eval(streamRow))
 
     def matches(streamRow: InternalRow, lookupRow: InternalRow): Boolean =
       residual.forall(_.eval(joinedRow(streamRow, lookupRow)))
