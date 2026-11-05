@@ -85,11 +85,13 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assert(ResolveTableSpec.resolveTableSpec(unresolved) eq unresolved)
   }
 
-  test("table specification rejects a root subquery option before evaluating it") {
+  gridTest("table specification rejects root subquery options before evaluation")(
+      Seq(false, true)) { resolved =>
+    val subqueryPlan = if (resolved) OneRowRelation() else UnresolvedRelation(Seq("missing"))
     val specification = UnresolvedTableSpec(
       properties = Map.empty,
       provider = Some("parquet"),
-      optionExpression = OptionList(Seq("answer" -> ScalarSubquery(OneRowRelation()))),
+      optionExpression = OptionList(Seq("answer" -> ScalarSubquery(subqueryPlan))),
       location = None,
       comment = None,
       collation = None,
@@ -97,12 +99,14 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       external = false,
       constraints = Nil)
 
+    val error = intercept[AnalysisException] {
+      ResolveTableSpec.resolveTableSpec(specification)
+    }
     checkError(
-      exception = intercept[AnalysisException] {
-        ResolveTableSpec.resolveTableSpec(specification)
-      },
+      exception = error,
       condition = "INVALID_SQL_SYNTAX.OPTION_IS_INVALID",
       parameters = Map("key" -> "answer", "supported" -> "constant expressions"))
+    assert(error.getCause == null)
   }
 
   test("fail for unresolved plan") {
