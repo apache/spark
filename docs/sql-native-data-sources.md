@@ -70,7 +70,9 @@ A native data source library exports a single C function, `spark_ds_init`, which
 of function pointers, a `SparkDsLibrary`, that implements the data source: it needs no JVM headers
 or bindings. Each library has its own table, so any number of native data sources can be loaded
 side by side. When Spark loads a library, it calls `spark_ds_init` with a `SparkDsHost`, which
-gives the library the version of Spark and a function to log messages to the log of Spark.
+gives the library the version of Spark, a function to log messages to the log of Spark, and a
+function that tells whether Spark logs the messages of a level, so that a library follows the log
+level of Spark.
 
 A Spark distribution contains the header in its `include` directory, as
 `$SPARK_HOME/include/spark_datasource.h`, and the `spark-sql` JAR contains it as
@@ -130,17 +132,21 @@ Spark calls the functions of the table as follows:
   irreversible work, such as removing the existing data for an overwrite, in `commit`. On the
   executors, each task creates a data writer with `create_data_writer`, which gets the schema of the
   data and the state of the writer in a `SparkDsDataWriterInfo`, writes the batches of its data with
-  `write`, and calls `commit_data_writer`, or `abort_data_writer` if the task or the commit fails.
-  Then the driver calls `commit` with the messages of the tasks, or `abort` if the write failed.
+  `write`, and calls `commit_data_writer`, or `abort_data_writer` if the task or the commit fails
+  before `commit_data_writer` succeeded. Then the driver calls `commit` with the messages of the
+  tasks, or `abort` if the write failed. A data writer whose task failed after
+  `commit_data_writer` succeeded is neither aborted nor passed to `commit`, so `commit` or `abort`
+  cleans up the output of the data writers whose messages it does not get.
   When Spark rejects what `create_writer` returned, such as a state set more than once, it calls
   `abort` with the field `rejected` of `SparkDsFinishWriteInfo` set to 1, and an epoch ID of -1 also
   for a streaming write, before `close_writer`. A streaming write commits each micro-batch with its
   epoch ID, and the ID of the query stays the same when the query restarts from its checkpoint:
   together, they identify the output of a micro-batch, so that a library can skip an epoch that it
-  already committed. A micro-batch streaming query creates a new stream writer for each micro-batch,
-  and Spark closes the previous one when it creates the next one. Because Spark is not told when a
-  streaming query stops, the last stream writer of a query is closed once it is no longer
-  referenced, or when the query is restarted.
+  already committed. A restarted query may also abort such an epoch, so an abort only removes what
+  the data writers of its own writer wrote. A micro-batch streaming query creates a new stream
+  writer for each micro-batch, and Spark closes the previous one when it creates the next one.
+  Because Spark is not told when a streaming query stops, the last stream writer of a query is
+  closed once it is no longer referenced, or when the query is restarted.
 
 The library defines the format of the partitions, of the state of its readers and writers, and of
 the commit messages, which Spark sends to the executors and back as byte arrays. The library
@@ -151,7 +157,12 @@ function reports an error by returning a non-zero value, with the message return
 `last_error`, and Spark reports it as a `NATIVE_DATA_SOURCE_ERROR`. A C++ exception or a Rust panic
 must not cross the interface. Each handle that a `create` function returns is released exactly
 once, by the `close` function of its kind. The close functions cannot fail, and they can run after
-the query, so do the work that can fail, such as flushing data, in `commit`. Strings are UTF-8.
+the query, so do the work that can fail, such as flushing data, in `commit`. After a function on
+a handle fails, Spark only closes the handle, except that it aborts a writer whose commit failed
+and a data writer whose write or commit failed, and it never aborts one whose commit succeeded.
+Spark may read a partition more than once, also at the same time, in several attempts of its task,
+such as after a failure or with speculative execution. The header lists the order of the calls
+that a library can rely on. Strings are UTF-8.
 
 A library only sets the functions of the operations it supports, and leaves the others `NULL`. A
 data source must not declare a capability whose functions are `NULL`:
