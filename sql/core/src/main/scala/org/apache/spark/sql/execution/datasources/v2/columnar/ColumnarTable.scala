@@ -20,6 +20,7 @@ import java.io.{InputStream, OutputStream}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util
 import java.util.Locale
+import javax.annotation.concurrent.GuardedBy
 
 import scala.util.Try
 
@@ -29,7 +30,6 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
-import org.apache.spark.sql.connector.metric.CustomTaskMetric
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset, ReadLimit, SupportsTriggerAvailableNow}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
@@ -134,9 +134,9 @@ class ColumnarScanBuilder(
 
   override def pruneColumns(requiredSchema: StructType): Unit = {
     // Only top-level columns are pruned by the data source. Spark prunes the nested fields of the
-    // columns it reads. The required columns are only recorded here: a batch scan asks its planner
-    // to prune the others, and a streaming scan, which has no planner, passes the required
-    // columns to its stream reader.
+    // columns it reads. The required columns are only recorded here: a batch scan prunes its
+    // planner to them, and a streaming scan, which has no planner, passes them to its stream
+    // reader.
     val required =
       StructType(requiredSchema.fieldNames.flatMap(name => schema.find(_.name == name)))
     if (!pruned) {
@@ -162,9 +162,9 @@ class ColumnarScanBuilder(
 
 /**
  * A scan of a [[ColumnarDataSource]]. It reads the top-level columns that the query needs, the
- * columns of its read schema: a batch scan asks its planner to prune the other columns when it
- * plans its partitions, and drops them from the batches of the reader if the planner does not,
- * while the stream reader of a streaming scan reads only these columns.
+ * columns of its read schema: a batch scan prunes its planner to them when it plans its
+ * partitions, and the stream reader of a streaming scan gets them, so that the batches of both
+ * have exactly these columns.
  *
  * @param requiredSchema the top-level columns that the query needs, if fewer than those of the
  *                       full schema
@@ -181,15 +181,12 @@ class ColumnarScan(
   extends Scan with SupportsMetadata {
 
   // Spark may call `toBatch` more than once for the same scan; the partitions are planned once,
-  // after the planner prunes the columns, if it does. A failure is kept too, so that the planner
-  // is asked at most once, as the header promises.
+  // after the planner is pruned to the columns that the scan reads. A failure is kept too, so that
+  // the planner is pruned at most once, as the header promises.
   private lazy val batch: Try[ColumnarBatchScan] = Try {
     val planner = pushedDownPlanner.getOrElse(dataSource.batchPlanner(fullSchema))
-    // The ordinals in the full schema of the columns that the scan reads, if the planner does
-    // not prune the others.
-    val projection = requiredSchema.filterNot(planner.pruneColumns)
-      .map(_.fieldNames.map(fullSchema.fieldIndex))
-    new ColumnarBatchScan(planner, projection)
+    requiredSchema.foreach(planner.pruneColumns)
+    new ColumnarBatchScan(planner)
   }
 
   override def readSchema(): StructType = requiredSchema.getOrElse(fullSchema)
@@ -216,20 +213,13 @@ class ColumnarScan(
  * The batch of a scan, which plans it once, when Spark first asks for its partitions or its reader
  * factory. A failure is planned once too: the physical plan can ask again, for example from a lazy
  * value, and gets the same error.
- *
- * @param projection the ordinals of the columns that the scan reads, if the partitions return
- *                   more columns
  */
-class ColumnarBatchScan(planner: ColumnarBatchPlanner, projection: Option[Array[Int]] = None)
-  extends Batch {
+class ColumnarBatchScan(planner: ColumnarBatchPlanner) extends Batch {
   private lazy val planned: Try[ColumnarPlannedBatch] = Try(planner.plan())
 
   override def planInputPartitions(): Array[InputPartition] = planned.get.partitions
 
-  override def createReaderFactory(): PartitionReaderFactory = {
-    val factory = planned.get.readerFactory
-    projection.fold(factory)(new ColumnarProjectionReaderFactory(factory, _))
-  }
+  override def createReaderFactory(): PartitionReaderFactory = planned.get.readerFactory
 }
 
 case class ColumnarStreamOffset(json: String) extends Offset
@@ -247,6 +237,16 @@ case class ColumnarStreamOffset(json: String) extends Offset
  */
 class ColumnarMicroBatchStream(reader: ColumnarStreamReader, checkpointLocation: String)
   extends MicroBatchStream with SupportsTriggerAvailableNow {
+
+  // The range that was planned last, and its partitions or the failure to plan them. All the
+  // scans of the source in a micro-batch plan the same range, such as both sides of a union of the
+  // source with itself, so they get the result of a single call of the reader, which may plan a
+  // range differently each time, also on several threads at the same time, such as the side of a
+  // broadcast join.
+  @GuardedBy("this")
+  private var plannedRange: (String, String) = _
+  @GuardedBy("this")
+  private var plannedPartitions: Try[Array[InputPartition]] = _
 
   // The offset that the reader returned last, which the progress of the query reports.
   @volatile private var lastLatestOffset: Offset = _
@@ -296,7 +296,14 @@ class ColumnarMicroBatchStream(reader: ColumnarStreamReader, checkpointLocation:
   override def reportLatestOffset(): Offset = lastLatestOffset
 
   override def planInputPartitions(start: Offset, end: Offset): Array[InputPartition] = {
-    reader.partitions(start.json(), end.json())
+    synchronized {
+      val range = (start.json(), end.json())
+      if (plannedRange != range) {
+        plannedPartitions = Try(reader.partitions(range._1, range._2))
+        plannedRange = range
+      }
+      plannedPartitions.get
+    }
   }
 
   override def createReaderFactory(): PartitionReaderFactory = {
@@ -305,7 +312,16 @@ class ColumnarMicroBatchStream(reader: ColumnarStreamReader, checkpointLocation:
 
   override def deserializeOffset(json: String): Offset = ColumnarStreamOffset(json)
 
-  override def commit(end: Offset): Unit = reader.commit(end.json())
+  override def commit(end: Offset): Unit = {
+    synchronized {
+      // Spark does not plan a committed range again.
+      if (plannedRange != null && plannedRange._2 == end.json()) {
+        plannedRange = null
+        plannedPartitions = null
+      }
+    }
+    reader.commit(end.json())
+  }
 
   override def stop(): Unit = reader.stop()
 }
@@ -358,48 +374,4 @@ class ColumnarStreamPartitionReaderFactory(reader: ColumnarStreamReader)
   override def createColumnarReader(partition: InputPartition): PartitionReader[ColumnarBatch] = {
     reader.read(partition)
   }
-}
-
-/**
- * Reads only the columns at `ordinals` of the batches of the readers of `factory`, for a scan
- * whose partitions return more columns than the scan reads.
- */
-class ColumnarProjectionReaderFactory(factory: PartitionReaderFactory, ordinals: Array[Int])
-  extends ColumnarOnlyPartitionReaderFactory {
-  override def createColumnarReader(partition: InputPartition): PartitionReader[ColumnarBatch] = {
-    new ColumnarProjectionReader(factory.createColumnarReader(partition), ordinals)
-  }
-}
-
-private class ColumnarProjectionReader(
-    reader: PartitionReader[ColumnarBatch],
-    ordinals: Array[Int])
-  extends PartitionReader[ColumnarBatch] {
-
-  // The projection of the current batch of the reader, which `get` returns until `next`.
-  private var batch: ColumnarBatch = _
-
-  override def next(): Boolean = {
-    val hasNext = reader.next()
-    batch = if (hasNext) new ProjectedColumnarBatch(reader.get(), ordinals) else null
-    hasNext
-  }
-
-  override def get(): ColumnarBatch = batch
-
-  override def close(): Unit = reader.close()
-
-  override def currentMetricsValues(): Array[CustomTaskMetric] = reader.currentMetricsValues()
-}
-
-/**
- * The columns at `ordinals` of `batch`. Releasing it releases all the columns of `batch`, which a
- * consumer that releases each batch would not release otherwise.
- */
-private class ProjectedColumnarBatch(batch: ColumnarBatch, ordinals: Array[Int])
-  extends ColumnarBatch(ordinals.map(batch.column), batch.numRows()) {
-
-  override def close(): Unit = batch.close()
-
-  override def closeIfFreeable(): Unit = batch.closeIfFreeable()
 }
