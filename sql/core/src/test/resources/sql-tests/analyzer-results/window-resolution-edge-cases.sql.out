@@ -464,6 +464,145 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT
+  k,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k = 'keep'
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, rank_sum#xL]
+   +- Project [k#x, _w0#xL, _w0#x, _w0#x, rank_sum#xL, rank_sum#xL]
+      +- Window [sum(_w0#x) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS rank_sum#xL]
+         +- Project [k#x, _w0#xL, _w0#x, _w0#x]
+            +- Window [rank(_w0#xL) windowspecdefinition(_w0#xL DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS _w0#x], [_w0#xL DESC NULLS LAST]
+               +- Filter (k#x = keep)
+                  +- Aggregate [k#x, spark_grouping_id#xL], [k#x, sum(v#x) AS _w0#xL]
+                     +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                        +- Project [k#x, v#x, k#x AS k#x]
+                           +- SubqueryAlias input
+                              +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY GROUPING SETS ((k), ())
+HAVING k = 'keep'
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, group_count#xL]
+   +- Project [k#x, group_count#xL, group_count#xL]
+      +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+         +- Filter (k#x = keep)
+            +- Aggregate [k#x, spark_grouping_id#xL], [k#x]
+               +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                  +- Project [k#x, v#x, k#x AS k#x]
+                     +- SubqueryAlias input
+                        +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY GROUPING SETS ((k), ())
+HAVING group_count = 3
+ORDER BY k
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
+  "sqlState" : "XX000",
+  "messageParameters" : {
+    "input" : "\"k\"",
+    "missingAttributes" : "\"group_count\"",
+    "operator" : "!Filter (group_count#xL = cast(3 as bigint))"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 153,
+    "fragment" : "SELECT\n  k,\n  COUNT(*) OVER () AS group_count\nFROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)\nGROUP BY GROUPING SETS ((k), ())\nHAVING group_count = 3"
+  } ]
+}
+
+
+-- !query
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY GROUPING SETS ((k), ())
+HAVING GROUPING_ID() = 1
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, group_count#xL]
+   +- Project [k#x, group_count#xL, group_count#xL]
+      +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+         +- Project [k#x]
+            +- Filter (spark_grouping_id#xL = cast(1 as bigint))
+               +- Aggregate [k#x, spark_grouping_id#xL], [k#x, spark_grouping_id#xL]
+                  +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                     +- Project [k#x, v#x, k#x AS k#x]
+                        +- SubqueryAlias input
+                           +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING SUM(v) = 1
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, group_count#xL]
+   +- Project [k#x, group_count#xL, group_count#xL]
+      +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+         +- Project [k#x]
+            +- Filter (sum(v)#xL = cast(1 as bigint))
+               +- Aggregate [k#x, spark_grouping_id#xL], [k#x, sum(v#x) AS sum(v)#xL]
+                  +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                     +- Project [k#x, v#x, k#x AS k#x]
+                        +- SubqueryAlias input
+                           +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k = (SELECT 'keep')
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, group_count#xL]
+   +- Project [k#x, group_count#xL, group_count#xL]
+      +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+         +- Filter (k#x = scalar-subquery#x [])
+            :  +- Project [keep AS keep#x]
+            :     +- OneRowRelation
+            +- Aggregate [k#x, spark_grouping_id#xL], [k#x]
+               +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                  +- Project [k#x, v#x, k#x AS k#x]
+                     +- SubqueryAlias input
+                        +- LocalRelation [k#x, v#x]
+
+
+-- !query
 SET spark.sql.legacy.evaluateHavingAfterInnerWindow=true
 -- !query analysis
 SetCommand (spark.sql.legacy.evaluateHavingAfterInnerWindow,Some(true))
@@ -489,6 +628,79 @@ Sort [k#x ASC NULLS FIRST], true
                      +- Aggregate [k#x], [k#x, sum(v#x) AS _w0#xL]
                         +- SubqueryAlias input
                            +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  k,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k = 'keep'
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Filter (k#x = keep)
+   +- Project [k#x, rank_sum#xL]
+      +- Project [k#x, _w0#x, rank_sum#xL, rank_sum#xL]
+         +- Window [sum(_w0#x) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS rank_sum#xL]
+            +- Project [k#x, _w0#x]
+               +- Project [k#x, _w0#xL, _w0#x, _w0#x]
+                  +- Window [rank(_w0#xL) windowspecdefinition(_w0#xL DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS _w0#x], [_w0#xL DESC NULLS LAST]
+                     +- Aggregate [k#x, spark_grouping_id#xL], [k#x, sum(v#x) AS _w0#xL]
+                        +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                           +- Project [k#x, v#x, k#x AS k#x]
+                              +- SubqueryAlias input
+                                 +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY GROUPING SETS ((k), ())
+HAVING k = 'keep'
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Filter (k#x = keep)
+   +- Project [k#x, group_count#xL]
+      +- Project [k#x, group_count#xL, group_count#xL]
+         +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+            +- Aggregate [k#x, spark_grouping_id#xL], [k#x]
+               +- Expand [[k#x, v#x, k#x, 0], [k#x, v#x, null, 1]], [k#x, v#x, k#x, spark_grouping_id#xL]
+                  +- Project [k#x, v#x, k#x AS k#x]
+                     +- SubqueryAlias input
+                        +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY GROUPING SETS ((k), ())
+HAVING group_count = 3
+ORDER BY k
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
+  "sqlState" : "XX000",
+  "messageParameters" : {
+    "input" : "\"k\"",
+    "missingAttributes" : "\"group_count\"",
+    "operator" : "!Filter (group_count#xL = cast(3 as bigint))"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 153,
+    "fragment" : "SELECT\n  k,\n  COUNT(*) OVER () AS group_count\nFROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)\nGROUP BY GROUPING SETS ((k), ())\nHAVING group_count = 3"
+  } ]
+}
 
 
 -- !query

@@ -1035,11 +1035,23 @@ class Analyzer(
         case a: AttributeReference => attrMap.getOrElse(a, a)
       }
 
-      if (extraAggExprs.isEmpty) {
+      val windowOutputSet = AttributeSet(
+        aggregate.aggregateExpressions.zip(newChild.output).collect {
+          case (expr, output) if expr.containsPattern(WINDOW_EXPRESSION) => output
+        })
+      val withHaving = if (
+        !conf.getConf(SQLConf.LEGACY_EVALUATE_HAVING_AFTER_INNER_WINDOW) &&
+          windowOutputSet.nonEmpty && newCond.references.intersect(windowOutputSet).isEmpty) {
+        UnresolvedHaving(newCond, newChild)
+      } else {
         Filter(newCond, newChild)
+      }
+
+      if (extraAggExprs.isEmpty) {
+        withHaving
       } else {
         Project(newChild.output.dropRight(extraAggExprs.length),
-          Filter(newCond, newChild))
+          withHaving)
       }
     }
 
@@ -3999,7 +4011,9 @@ class Analyzer(
     } // end of addWindow
 
     /**
-     * Extracts all nested window expressions and places the HAVING filter below every Window.
+     * Extracts all nested window expressions and places the HAVING filter below every Window,
+     * unless LEGACY_EVALUATE_HAVING_AFTER_INNER_WINDOW is true: then only the outermost layer is
+     * extracted here, and the inner windows are later extracted below the HAVING filter.
      */
     private def addWindowWithHaving(
         aggregateExpressions: Seq[NamedExpression],
@@ -5107,7 +5121,8 @@ object ResolveUnresolvedHaving extends Rule[LogicalPlan] {
     case window: Window if filter.condition.references.subsetOf(window.child.outputSet) =>
       insertFilterBeforeAllWindows(filter.copy(child = window.child), foundWindow = true)
         .map(child => window.withNewChildren(Seq(child)))
-    case _ if foundWindow && filter.condition.references.subsetOf(filter.child.outputSet) =>
+    case _ if foundWindow && !filter.child.containsPattern(WINDOW) &&
+        filter.condition.references.subsetOf(filter.child.outputSet) =>
       Some(filter)
     case _ =>
       None

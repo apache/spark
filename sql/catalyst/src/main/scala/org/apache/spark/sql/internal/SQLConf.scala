@@ -7120,9 +7120,10 @@ object SQLConf {
   val LEGACY_EVALUATE_HAVING_AFTER_INNER_WINDOW =
     buildConf("spark.sql.legacy.evaluateHavingAfterInnerWindow")
       .internal()
-      .doc("When true, HAVING may be evaluated after an inner window expression when window " +
-        "expressions are nested in the SELECT list, preserving the behavior before Spark 4.4. " +
-        "When false, HAVING is evaluated before every nested window expression.")
+      .doc("When true, HAVING may be evaluated after an inner window expression or after window " +
+        "expressions over grouping analytics, preserving the behavior before Spark 4.4. When " +
+        "false, HAVING is evaluated before window expressions, including nested windows and " +
+        "windows over grouping analytics.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
