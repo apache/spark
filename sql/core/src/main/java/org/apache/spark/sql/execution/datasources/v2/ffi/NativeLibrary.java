@@ -77,6 +77,7 @@ final class NativeLibrary {
   static final long STREAMING_WRITE = 8;
   static final long BATCH_TRUNCATE = 16;
   static final long STREAMING_TRUNCATE = 32;
+  static final long ADMISSION_CONTROL = 64;
 
   // The modes of a write, SPARK_DS_WRITE_APPEND and SPARK_DS_WRITE_TRUNCATE.
   static final int WRITE_APPEND = 0;
@@ -85,6 +86,10 @@ final class NativeLibrary {
   // The kinds of a read, SPARK_DS_READ_BATCH and SPARK_DS_READ_MICRO_BATCH.
   static final int READ_BATCH = 0;
   static final int READ_MICRO_BATCH = 1;
+
+  // The kinds of read limits, SPARK_DS_READ_ALL_AVAILABLE and SPARK_DS_READ_MAX_ROWS.
+  static final int READ_ALL_AVAILABLE = 0;
+  static final int READ_MAX_ROWS = 1;
 
   // The C types of the parameters and the results of the functions.
   private enum C { VOID, BOOL, I32, I64, PTR }
@@ -115,7 +120,8 @@ final class NativeLibrary {
     WRITE("write", C.I32, C.PTR, C.PTR),
     COMMIT_DATA_WRITER("commit_data_writer", C.I32, C.PTR, C.PTR, C.PTR, C.PTR),
     ABORT_DATA_WRITER("abort_data_writer", C.I32, C.PTR, C.PTR),
-    CLOSE_DATA_WRITER("close_data_writer", C.VOID, C.PTR);
+    CLOSE_DATA_WRITER("close_data_writer", C.VOID, C.PTR),
+    DEFAULT_READ_LIMIT("default_read_limit", C.I32, C.PTR, C.PTR);
 
     /** The name of the field of the function in the table. */
     final String fieldName;
@@ -158,8 +164,13 @@ final class NativeLibrary {
   private static final long COMMIT_OFFSET_INFO_END = 8;
   private static final long STREAM_READER_INFO_SIZE = 16;
   private static final long STREAM_READER_INFO_CHECKPOINT_LOCATION = 8;
-  private static final long LATEST_OFFSET_INFO_SIZE = 16;
+  private static final long LATEST_OFFSET_INFO_SIZE = 32;
   private static final long LATEST_OFFSET_INFO_START = 8;
+  private static final long LATEST_OFFSET_INFO_LIMIT = 16;
+  private static final long LATEST_OFFSET_INFO_RUN_END = 24;
+  private static final long READ_LIMIT_SIZE = 24;
+  private static final long READ_LIMIT_KIND = 8;
+  private static final long READ_LIMIT_MAX_ROWS = 16;
   private static final long TASK_SIZE = 40;
   private static final long TASK_STAGE_ID = 8;
   private static final long TASK_STAGE_ATTEMPT_NUMBER = 12;
@@ -254,6 +265,12 @@ final class NativeLibrary {
     layout.put("SparkDsLatestOffsetInfo", LATEST_OFFSET_INFO_SIZE);
     layout.put("SparkDsLatestOffsetInfo.size", 0L);
     layout.put("SparkDsLatestOffsetInfo.start", LATEST_OFFSET_INFO_START);
+    layout.put("SparkDsLatestOffsetInfo.limit", LATEST_OFFSET_INFO_LIMIT);
+    layout.put("SparkDsLatestOffsetInfo.run_end", LATEST_OFFSET_INFO_RUN_END);
+    layout.put("SparkDsReadLimit", READ_LIMIT_SIZE);
+    layout.put("SparkDsReadLimit.size", 0L);
+    layout.put("SparkDsReadLimit.kind", READ_LIMIT_KIND);
+    layout.put("SparkDsReadLimit.max_rows", READ_LIMIT_MAX_ROWS);
     layout.put("SparkDsTaskContext", TASK_SIZE);
     layout.put("SparkDsTaskContext.size", 0L);
     layout.put("SparkDsTaskContext.stage_id", TASK_STAGE_ID);
@@ -866,19 +883,59 @@ final class NativeLibrary {
     }
   }
 
+  /** A limit on the data of a micro-batch, as in SparkDsReadLimit. */
+  static final class ReadLimitInfo {
+    /** {@link #READ_ALL_AVAILABLE} or {@link #READ_MAX_ROWS}, or what the library set. */
+    final int kind;
+    /** The maximum number of rows with {@link #READ_MAX_ROWS}. */
+    final long maxRows;
+
+    ReadLimitInfo(int kind, long maxRows) {
+      this.kind = kind;
+      this.maxRows = maxRows;
+    }
+  }
+
   /**
    * Returns the latest offset.
    *
    * @param start the offset that the next micro-batch starts after
+   * @param limit the limit on the data after start
+   * @param runEnd the offset that a run of Trigger.AvailableNow reads up to, or null
    */
-  String latestOffset(long streamReader, String start) throws Throwable {
+  String latestOffset(long streamReader, String start, ReadLimitInfo limit, String runEnd)
+      throws Throwable {
     MethodHandle f = function(Function.LATEST_OFFSET);
     try (Memory memory = new Memory(); Sink sink = new Sink()) {
+      long readLimit = memory.zeroed(READ_LIMIT_SIZE);
+      Platform.putLong(null, readLimit, READ_LIMIT_SIZE);
+      Platform.putInt(null, readLimit + READ_LIMIT_KIND, limit.kind);
+      Platform.putLong(null, readLimit + READ_LIMIT_MAX_ROWS, limit.maxRows);
       long info = memory.zeroed(LATEST_OFFSET_INFO_SIZE);
       Platform.putLong(null, info, LATEST_OFFSET_INFO_SIZE);
       Platform.putLong(null, info + LATEST_OFFSET_INFO_START, memory.string(start));
+      Platform.putLong(null, info + LATEST_OFFSET_INFO_LIMIT, readLimit);
+      Platform.putLong(null, info + LATEST_OFFSET_INFO_RUN_END,
+        runEnd == null ? 0 : memory.string(runEnd));
       check((int) f.invokeExact(streamReader, info, Ffm.SINK, sink.id), Function.LATEST_OFFSET);
       return offset(Function.LATEST_OFFSET, sink);
+    }
+  }
+
+  /**
+   * Returns the default read limit of a stream reader, whose kind is {@link #READ_ALL_AVAILABLE}
+   * if the library sets nothing.
+   */
+  ReadLimitInfo defaultReadLimit(long streamReader) throws Throwable {
+    MethodHandle f = function(Function.DEFAULT_READ_LIMIT);
+    try (Memory memory = new Memory()) {
+      long limit = memory.zeroed(READ_LIMIT_SIZE);
+      Platform.putLong(null, limit, READ_LIMIT_SIZE);
+      Platform.putInt(null, limit + READ_LIMIT_KIND, READ_ALL_AVAILABLE);
+      check((int) f.invokeExact(streamReader, limit), Function.DEFAULT_READ_LIMIT);
+      return new ReadLimitInfo(
+        Platform.getInt(null, limit + READ_LIMIT_KIND),
+        Platform.getLong(null, limit + READ_LIMIT_MAX_ROWS));
     }
   }
 

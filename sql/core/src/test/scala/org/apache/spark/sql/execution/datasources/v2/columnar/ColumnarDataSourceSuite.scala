@@ -1101,7 +1101,7 @@ class TestRangeStreamReader(end: Long, schema: StructType, table: String)
 
   override def initialOffset(): String = "{\"offset\":0}"
 
-  override def latestOffset(start: String): String = {
+  override def latestOffset(start: String, limit: ReadLimit, runEnd: Option[String]): String = {
     TestRangeStreamReader.starts.compute(table, (_, old) => Option(old).getOrElse(Nil) :+ start)
     s"""{"offset":$end}"""
   }

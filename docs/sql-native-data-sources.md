@@ -128,14 +128,37 @@ Spark calls the functions of the table as follows:
   the checkpoint of the source in a `SparkDsStreamReaderInfo`. When the checkpoint does not have the
   initial offset of the source yet, Spark asks for it with `initial_offset`, and keeps it in the
   checkpoint, so a query that restarts before its first micro-batch is committed starts from the
-  same offset. For each micro-batch, or only once, before the first micro-batch that it plans, with
-  `Trigger.AvailableNow`, it asks for the `latest_offset`, with the offset that the micro-batch
-  starts after, plans the partitions with `stream_partitions`, which also returns the state of the
-  stream reader, and calls `read` on the executors. Offsets are defined by the library, as compact
-  JSON on a single line: Spark stores each offset as a line of the offset log of the checkpoint,
-  and rejects an offset that is not valid JSON or contains a line break, such as pretty-printed
-  JSON. Spark keeps what it needs in the checkpoint of the source under the names that start with
-  `_spark`, which the library must not use.
+  same offset. For each micro-batch, it asks for the `latest_offset`, with the offset that the
+  micro-batch starts after, plans the partitions with `stream_partitions`, which also returns the
+  state of the stream reader, and calls `read` on the executors. With `Trigger.AvailableNow`, a run
+  reads the data that was available when it started: Spark asks for the `latest_offset` without a
+  limit once, before the first micro-batch that it plans, and reads up to it. Offsets are defined
+  by the library, as compact JSON on a single line: Spark stores each offset as a line of the
+  offset log of the checkpoint, and rejects an offset that is not valid JSON or contains a line
+  break, such as pretty-printed JSON. Spark finds new data by comparing the latest offset with the
+  start as strings, so the same position must always have the same JSON. Spark keeps what it needs
+  in the checkpoint of the source under the names that start with `_spark`, which the library must
+  not use. A data source with the capability
+  `SPARK_DS_ADMISSION_CONTROL` limits the data of each micro-batch, for example with an option for
+  a maximum number of rows: Spark asks for the limit once with `default_read_limit`, which sets a
+  `SparkDsReadLimit`, and passes it to the `latest_offset` that ends each micro-batch, in the
+  `limit` of its `SparkDsLatestOffsetInfo`, which then returns the end of the data of the next
+  micro-batch within the limit. When there is data after the start, the latest offset must be after
+  the start, even if the next unit of data, such as a file, is larger than the limit: Spark sees no
+  new data otherwise. With `Trigger.AvailableNow`, the latest offset without a limit that Spark asks
+  for first is the end of the run: Spark passes it as the `run_end` that the limited latest offsets
+  must not go beyond, so that the run reads the data that was available when it started in
+  micro-batches within the limit. A query that restarts starts a new run, with a new end. So with a
+  limit, Spark calls `latest_offset` twice for some micro-batches: with `Trigger.AvailableNow`, for
+  the first one, first without a limit for the end of the run, and with the other triggers, for each
+  one, first with `SPARK_DS_READ_ALL_AVAILABLE` only for the progress of the query. Spark does not
+  ask again with the limit when the latest offset without a limit is the same as the start, such as
+  while a query waits for new data: there is no data to limit then. So a library must not count the
+  calls as micro-batches. `Trigger.Once` ignores the limit, and so does `Trigger.AvailableNow` when
+  another source of the query does not support it and
+  `spark.sql.streaming.triggerAvailableNowWrapper.enabled` is false, as by default, where Spark
+  reads all the available data in a single micro-batch. Spark still asks for the limit then, and
+  fails the query if it is not valid.
 - **Writes**: on the driver, right before the tasks of the write (or of a micro-batch) start, Spark
   creates a writer with `create_writer`, which gets a `SparkDsWriteInfo` with the mode of the write,
   `SPARK_DS_WRITE_APPEND` or `SPARK_DS_WRITE_TRUNCATE`, and the ID of the query of a streaming
@@ -185,6 +208,7 @@ data source must not declare a capability whose functions are `NULL`:
 | All | `create`, `close` | `last_error`, `schema` |
 | `SPARK_DS_BATCH_READ` | `create_reader`, `partitions`, `read`, `close_reader` | `push_limit`, `prune_columns` |
 | `SPARK_DS_MICRO_BATCH_READ` | `create_stream_reader`, `initial_offset`, `latest_offset`, `stream_partitions`, `read`, `close_stream_reader` | `commit_offset` |
+| `SPARK_DS_ADMISSION_CONTROL`, with `SPARK_DS_MICRO_BATCH_READ` | `default_read_limit` | |
 | `SPARK_DS_BATCH_WRITE`, `SPARK_DS_STREAMING_WRITE` | `create_writer`, `commit`, `abort`, `close_writer`, `create_data_writer`, `write`, `commit_data_writer`, `abort_data_writer`, `close_data_writer` | |
 
 `SPARK_DS_BATCH_TRUNCATE` declares that a data source supports `SPARK_DS_WRITE_TRUNCATE` in batch
@@ -216,8 +240,8 @@ task does not end.
 ### Compatibility
 
 The function table, `SparkDsLibrary`, and the structs that Spark passes to the library,
-`SparkDsHost`, `SparkDsTaskContext` and those whose names end with `Info`, such as
-`SparkDsCreateInfo`, start with their size, so that they can grow. The version of the interface,
+`SparkDsHost`, `SparkDsTaskContext`, `SparkDsReadLimit` and those whose names end with `Info`, such
+as `SparkDsCreateInfo`, start with their size, so that they can grow. The version of the interface,
 1, is `SPARK_DS_ABI_VERSION`, which the table and the manifest of a package declare. Within a
 version:
 
@@ -226,7 +250,9 @@ version:
 - Spark only reads the functions that fit in the size of the table of a library, so a library built
   against an earlier header keeps working with later releases of Spark, with the functions that it
   does not know as `NULL`. A library must only read the fields that fit in the size of a struct
-  that Spark passes, so that it also runs on earlier releases of Spark that support its version;
+  that Spark passes, and only set those of a struct that it fills, such as the `SparkDsReadLimit`
+  of `default_read_limit`, so that it also runs on earlier releases of Spark that support its
+  version;
 - Spark only uses a new capability, write mode or kind of read with a data source that declares
   it.
 
@@ -246,7 +272,6 @@ later as functions or fields appended to the structs of the interface:
   hint. Adaptive query execution can still broadcast it at run time, from the size of a shuffle of
   the scan;
 - custom metrics, shown in the Spark UI;
-- admission control for streaming reads, such as a maximum number of rows for each micro-batch;
 - continuous processing (`Trigger.Continuous`): a continuous query that reads from or writes to a
   native data source fails when it starts;
 - the pushdown of aggregates and of top-N queries (`ORDER BY` with `LIMIT`), and reporting the

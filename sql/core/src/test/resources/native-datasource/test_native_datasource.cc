@@ -61,15 +61,20 @@
 //                   "closed_path", closing the stream reader creates that file. With the option
 //                   "checkpoint_path", creating the stream reader writes its checkpoint location to
 //                   that file, and with "starts_path", each call to latest_offset appends its start
-//                   offset to that file, as a line. With "initial_offsets_path", each call to
-//                   initial_offset appends a line to that file, and returns the number of calls
-//                   before it as the offset, as an initial offset that depends on when it is asked
-//                   does. With "columns_path", creating the stream reader writes the columns to
-//                   read to that file, and with "ranges_path", each call to stream_partitions
-//                   appends the start and the end offsets that it got to that file, as a line.
-//                   The partitions and the state that stream_partitions returns have the number of
-//                   the call, which read checks. With the option "state_padding", the state has
-//                   that many more bytes.
+//                   offset to that file, as a line. With the option "max_rows_per_trigger", it
+//                   declares the capability SPARK_DS_ADMISSION_CONTROL, and its default read limit
+//                   is that many rows, or with "bad_read_limit", an unknown "kind" of limit or a
+//                   maximum of 0 "rows". With "limits_path", each call to latest_offset appends its
+//                   start, its limit, "all" or the maximum number of rows, and its end of the run
+//                   or "-" to that file, as a line, such as "0 5 12". With "initial_offsets_path",
+//                   each call to initial_offset appends a line to that file, and returns the number
+//                   of calls before it as the offset, as an initial offset that depends on when it
+//                   is asked does. With "columns_path", creating the stream reader writes the
+//                   columns to read to that file, and with "ranges_path", each call to
+//                   stream_partitions appends the start and the end offsets that it got to that
+//                   file, as a line. The partitions and the state that stream_partitions returns
+//                   have the number of the call, which read checks. With the option
+//                   "state_padding", the state has that many more bytes.
 //
 // native_range supports batch reads, native_counter micro-batch streaming reads and native_sink
 // batch and streaming writes, which may replace the existing data. With the option
@@ -1130,7 +1135,11 @@ uint64_t capabilitiesOf(const DataSource& source) {
   if (!declared.empty()) return std::stoull(declared);
   if (source.name == name("native_range")) return SPARK_DS_BATCH_READ;
 #ifndef READ_ONLY
-  if (source.name == name("native_counter")) return SPARK_DS_MICRO_BATCH_READ;
+  if (source.name == name("native_counter")) {
+    bool limited = !get(source.options, "max_rows_per_trigger", "").empty() ||
+                   !get(source.options, "bad_read_limit", "").empty();
+    return SPARK_DS_MICRO_BATCH_READ | (limited ? SPARK_DS_ADMISSION_CONTROL : 0);
+  }
   if (source.name == name("native_sink")) {
     return SPARK_DS_BATCH_WRITE | SPARK_DS_STREAMING_WRITE | SPARK_DS_BATCH_TRUNCATE |
            SPARK_DS_STREAMING_TRUNCATE;
@@ -1253,7 +1262,8 @@ int createStreamReader(void* handle, struct ArrowSchema* schema,
     reader->state["batch_size"] = get(source->options, "batch_size", "1000");
     for (const char* option :
          {"commit_path", "bad_offset", "bad_initial_offset", "closed_path", "starts_path",
-          "initial_offsets_path", "ranges_path", "states", "stateless", "task_path", "fail"}) {
+          "initial_offsets_path", "ranges_path", "states", "stateless", "task_path",
+          "max_rows_per_trigger", "bad_read_limit", "limits_path", "fail"}) {
       reader->state[option] = get(source->options, option, "");
     }
     std::string padding = get(source->options, "state_padding", "");
@@ -1379,6 +1389,26 @@ int latestOffset(void* handle, const SparkDsLatestOffsetInfo* info, SparkDsSink 
     auto start = static_cast<int64_t>(JsonParser(info->start).parse()["offset"].number);
     int64_t latest =
         std::min(getLong(state, "max_offset", 10), start + getLong(state, "step", 10));
+    // Within the limit, and up to the end of a run of Trigger.AvailableNow.
+    if (info->limit == nullptr) throw std::runtime_error("no read limit");
+    checkSize("SparkDsReadLimit", info->limit->size, sizeof(SparkDsReadLimit));
+    std::string limit = "all";
+    if (info->limit->kind == SPARK_DS_READ_MAX_ROWS) {
+      latest = std::min(latest, start + info->limit->max_rows);
+      limit = std::to_string(info->limit->max_rows);
+    } else if (info->limit->kind != SPARK_DS_READ_ALL_AVAILABLE) {
+      throw std::runtime_error("unknown kind of read limit " + std::to_string(info->limit->kind));
+    }
+    std::string run_end = "-";
+    if (info->run_end != nullptr) {
+      auto end = static_cast<int64_t>(JsonParser(info->run_end).parse()["offset"].number);
+      latest = std::min(latest, end);
+      run_end = std::to_string(end);
+    }
+    std::string limits_path = get(state, "limits_path", "");
+    if (!limits_path.empty()) {
+      appendLine(limits_path, std::to_string(start) + " " + limit + " " + run_end);
+    }
     sendOffset(state, "bad_offset", set_offset, sink, latest);
   });
 }
@@ -1773,6 +1803,23 @@ int abortDataWriter(void* handle, const SparkDsFinishDataWriterInfo* info) {
   });
 }
 
+int defaultReadLimit(void* handle, SparkDsReadLimit* limit) {
+  return guarded([&] {
+    checkSize("SparkDsReadLimit", limit->size, sizeof(SparkDsReadLimit));
+    const Options& state = fromHandle<Reader>(handle)->state;
+    std::string bad = get(state, "bad_read_limit", "");
+    if (bad == "kind") {
+      limit->kind = 7;
+    } else if (bad == "rows") {
+      limit->kind = SPARK_DS_READ_MAX_ROWS;
+      limit->max_rows = 0;
+    } else if (!get(state, "max_rows_per_trigger", "").empty()) {
+      limit->kind = SPARK_DS_READ_MAX_ROWS;
+      limit->max_rows = getLong(state, "max_rows_per_trigger", 0);
+    }
+  });
+}
+
 void closeDataWriter(void* handle) {
   if (usedAfterClose(handle)) return;
   std::unique_ptr<DataWriter> writer(fromHandle<DataWriter>(handle));
@@ -1825,6 +1872,7 @@ void closeDataWriter(void* handle) {
   table.commit_data_writer = commitDataWriter;
   table.abort_data_writer = abortDataWriter;
   table.close_data_writer = closeDataWriter;
+  table.default_read_limit = defaultReadLimit;
 #endif
   return table;
 }

@@ -224,12 +224,12 @@ class ColumnarBatchScan(planner: ColumnarBatchPlanner) extends Batch {
 case class ColumnarStreamOffset(json: String) extends Offset
 
 /**
- * The micro-batch stream of a [[ColumnarDataSource]]. It supports admission control only so that
- * the reader gets the offset that each micro-batch starts after, the end of the last one, for
- * every trigger: its default read limit reads all the available data. With
- * `Trigger.AvailableNow`, Spark runs micro-batches up to the first latest offset that Spark asks
- * for, rather than wrapping the stream in one that asks for the latest offset from the initial
- * offset.
+ * The micro-batch stream of a [[ColumnarDataSource]]. The reader gets the offset that each
+ * micro-batch starts after, the end of the last one, for every trigger, and the limit on the data
+ * of a micro-batch, its default read limit, all the available data unless it limits it. With
+ * `Trigger.AvailableNow`, Spark runs micro-batches up to the first latest offset without a limit
+ * that Spark asks for, rather than wrapping the stream in one that asks for the latest offset from
+ * the initial offset: in one micro-batch, or within the limit in several.
  *
  * @param checkpointLocation the location of the checkpoint of the source, where the stream keeps
  *                           the initial offset, under `ColumnarMicroBatchStream.InitialOffsetLog`
@@ -247,11 +247,22 @@ class ColumnarMicroBatchStream(reader: ColumnarStreamReader, checkpointLocation:
   @GuardedBy("this")
   private var plannedPartitions: Try[Array[InputPartition]] = _
 
-  // The offset that the reader returned last, which the progress of the query reports.
+  // The latest offset without a limit that the reader returned last, which the progress of the
+  // query reports.
   @volatile private var lastLatestOffset: Offset = _
+  // The limit on the data of each micro-batch, asked once, when the query starts. Spark asks for
+  // it before it records the streams to stop when the query stops, so a stream whose limit fails
+  // stops its reader itself.
+  private lazy val readLimit = try {
+    reader.defaultReadLimit()
+  } catch {
+    case e: Throwable =>
+      try reader.stop() catch { case stopError: Throwable => e.addSuppressed(stopError) }
+      throw e
+  }
   // Whether the trigger is Trigger.AvailableNow.
   @volatile private var availableNow = false
-  // The end of the run with Trigger.AvailableNow: the first latest offset asked.
+  // The end of the run with Trigger.AvailableNow: the first latest offset without a limit asked.
   @volatile private var availableNowEnd: Offset = _
   // Spark asks for the initial offset for the start of the first latest offset, and again to plan
   // the first micro-batch, which both get the same offset. The reader is only asked when the
@@ -275,17 +286,27 @@ class ColumnarMicroBatchStream(reader: ColumnarStreamReader, checkpointLocation:
       "latestOffset(Offset, ReadLimit) should be called instead of latestOffset().")
   }
 
+  override def getDefaultReadLimit: ReadLimit = readLimit
+
   override def latestOffset(start: Offset, limit: ReadLimit): Offset = {
-    val latest = if (availableNow && availableNowEnd != null) {
-      availableNowEnd
+    def ask(limit: ReadLimit, runEnd: Option[Offset]): Offset =
+      ColumnarStreamOffset(reader.latestOffset(start.json(), limit, runEnd.map(_.json())))
+    // The latest offset without a limit, which the progress reports: with Trigger.AvailableNow,
+    // the end of the run, asked once, and otherwise asked for each micro-batch.
+    val latest = if (!availableNow) {
+      ask(ReadLimit.allAvailable(), None)
     } else {
-      ColumnarStreamOffset(reader.latestOffset(start.json()))
-    }
-    if (availableNow) {
-      availableNowEnd = latest
+      if (availableNowEnd == null) availableNowEnd = ask(ReadLimit.allAvailable(), None)
+      availableNowEnd
     }
     lastLatestOffset = latest
-    latest
+    // When the latest offset without a limit is the start, as Spark compares offsets, there is no
+    // data after the start to limit, so the reader is not asked again with the limit.
+    if (limit == ReadLimit.allAvailable() || latest.json() == start.json()) {
+      latest
+    } else {
+      ask(limit, Option(availableNowEnd))
+    }
   }
 
   override def prepareForTriggerAvailableNow(): Unit = {
