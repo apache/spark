@@ -684,6 +684,18 @@ object SQLConf {
     .checkValue(_ >= 0, "The version of the regex pattern cost estimate must be nonnegative.")
     .createWithDefault(1)
 
+  val AVOID_DOUBLE_FILTER_EVAL_FOR_PYTHON_UDF =
+    buildConf("spark.sql.optimizer.avoidDoubleFilterEvalForPythonUDF")
+    .internal()
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .doc(s"When true, ${AVOID_DOUBLE_FILTER_EVAL.key} treats a Python UDF as expensive. When " +
+      "false, a Python UDF is only as expensive as its arguments, as before 4.4.0. A streaming " +
+      "query keeps the value recorded in its checkpoint, and one restarted from a checkpoint " +
+      "without it uses false.")
+    .version("4.4.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS =
     buildConf("spark.sql.experimental.optimizer.transpilePyUDFs")
     .withBindingPolicy(ConfigBindingPolicy.SESSION)
