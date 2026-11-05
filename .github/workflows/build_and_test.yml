@@ -43,7 +43,13 @@ on:
         description: Additional environment variables to set when running the tests. Should be in JSON format.
         required: false
         type: string
-        default: '{"PYSPARK_IMAGE_TO_TEST": "python-312", "PYTHON_TO_TEST": "python3.12"}'
+        # Temporarily exercise the Python 3.15 no-GIL image in PR CI.
+        default: >-
+          {
+            "PYSPARK_IMAGE_TO_TEST": "python-315-nogil",
+            "PYTHON_TO_TEST": "python3.15t",
+            "PYTHON_GIL": "0"
+          }
       jobs:
         description: >-
           Jobs to run, and should be in JSON format. The values should be matched with the job's key defined
