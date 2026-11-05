@@ -40,7 +40,7 @@ import org.apache.spark.sql.execution.datasources.v2.RealTimeStreamScanExec
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
 import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.python.streaming.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPySparkExec}
-import org.apache.spark.sql.execution.streaming.{AnnotateStreamingJoinStateValueAttributes, ProjectAggregationBufferExec, StatefulStreamlineAggregateExec, StreamingErrors, StreamingQueryPlanTraverseHelper}
+import org.apache.spark.sql.execution.streaming.{ProjectAggregationBufferExec, StatefulStreamlineAggregateExec, StreamingErrors, StreamingQueryPlanTraverseHelper}
 import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, OffsetSeqMetadata, OffsetSeqMetadataBase}
 import org.apache.spark.sql.execution.streaming.operators.stateful.{SessionWindowStateStoreRestoreExec, SessionWindowStateStoreSaveExec, StatefulOperator, StatefulOperatorStateInfo, StateStoreRestoreExec, StateStoreSaveExec, StateStoreWriter, StreamingDeduplicateExec, StreamingDeduplicateWithinWatermarkExec, StreamingGlobalLimitExec, StreamingLocalLimitExec, UpdateEventTimeColumnExec}
 import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.FlatMapGroupsWithStateExec
@@ -150,8 +150,7 @@ class IncrementalExecution(
         ts.toLiteral
       case e: ExpressionWithRandomSeed => e.withNewSeed(Utils.random.nextLong())
     }
-    AnnotateStreamingJoinStateValueAttributes(
-      WidenStatefulOperatorAttributeNullability(optimized))
+    WidenStatefulOperatorAttributeNullability(optimized)
   }
 
   // Use `this` for explain so the already-open transaction and executedPlan are reused.
