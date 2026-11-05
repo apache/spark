@@ -817,7 +817,11 @@ case class Cast(
   }
 
   override def nullable: Boolean = if (!isTryCast) {
-    child.nullable || Cast.forceNullable(child.dataType, dataType)
+    child.nullable || ((child.dataType, dataType) match {
+      // Decimal-to-timestamp overflow raises CAST_OVERFLOW in ANSI mode.
+      case (_: DecimalType, TimestampType) if evalMode == EvalMode.ANSI => false
+      case (from, to) => Cast.forceNullable(from, to)
+    })
   } else {
     (child.dataType, dataType) match {
       case (_: StringType, BinaryType) => child.nullable

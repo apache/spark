@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.SparkArithmeticException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DecimalType, StructField, StructType}
+import org.apache.spark.sql.types.{DecimalType, StructField, StructType, TimestampType}
 
 class DecimalTimestampCastSuite extends QueryTest with SharedSparkSession {
 
@@ -90,6 +90,19 @@ class DecimalTimestampCastSuite extends QueryTest with SharedSparkSession {
           }
         }
       }
+    }
+  }
+
+  test("SPARK-58217: ANSI decimal to timestamp preserves input nullability") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val timestamps = spark.range(3).selectExpr(
+        "CAST(CAST(id AS DECIMAL(20, 0)) AS TIMESTAMP) AS ts",
+        "CAST(CAST(IF(id = 0, NULL, id) AS DECIMAL(20, 0)) AS TIMESTAMP) AS nullable_ts")
+      val schema = new StructType()
+        .add("ts", TimestampType, nullable = false)
+        .add("nullable_ts", TimestampType, nullable = true)
+      assert(timestamps.schema("nullable_ts").nullable)
+      assert(timestamps.to(schema).schema == schema)
     }
   }
 
