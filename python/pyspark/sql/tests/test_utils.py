@@ -57,7 +57,6 @@ from pyspark.testing.utils import (
 
 
 class UtilsTestsMixin:
-
     def test_assert_dataframe_equal_float_exact_match_reassignment(self):
         # An exact match must be reassignable to obtain a complete matching.
         actual = [
