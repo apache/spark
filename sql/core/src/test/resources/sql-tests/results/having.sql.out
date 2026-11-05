@@ -701,7 +701,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`k`",
-    "proposal" : "`k`, `a`"
+    "proposal" : "`a`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -726,7 +726,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`k`",
-    "proposal" : "`k`, `a`"
+    "proposal" : "`a`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -734,6 +734,202 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "startIndex" : 139,
     "stopIndex" : 139,
     "fragment" : "k"
+  } ]
+}
+
+
+-- !query
+SELECT k, sum(rank() OVER (ORDER BY sum(v))) OVER () AS n
+FROM VALUES (1, 10), (2, 20), (3, 30) AS t(k, v)
+GROUP BY k HAVING k = 2 ORDER BY 1
+-- !query schema
+struct<k:int,n:bigint>
+-- !query output
+2	1
+
+
+-- !query
+SELECT k + 10 AS k, sum(rank() OVER (ORDER BY sum(v))) OVER () AS n
+FROM VALUES (1, 10), (2, 20), (3, 30) AS t(k, v)
+GROUP BY k HAVING k = 2 ORDER BY 1
+-- !query schema
+struct<k:int,n:bigint>
+-- !query output
+12	1
+
+
+-- !query
+SELECT k + 10 AS k, count(*) OVER () AS n
+FROM VALUES (1), (2), (3) AS t(k)
+GROUP BY k HAVING k >= 2 QUALIFY k > 12 ORDER BY 1
+-- !query schema
+struct<k:int,n:bigint>
+-- !query output
+13	2
+
+
+-- !query
+SELECT sum(v) AS s, count(*) OVER () AS n
+FROM VALUES (1, 10), (2, 20) AS t(k, v)
+GROUP BY k HAVING k > 0 QUALIFY k = 2 ORDER BY 1
+-- !query schema
+struct<s:bigint,n:bigint>
+-- !query output
+20	2
+
+
+-- !query
+SELECT sum(v) AS s, count(*) OVER () AS n
+FROM VALUES (1, 10), (2, 20) AS t(k, v)
+GROUP BY k HAVING k > 0 QUALIFY t.k = 2 ORDER BY 1
+-- !query schema
+struct<s:bigint,n:bigint>
+-- !query output
+20	2
+
+
+-- !query
+SELECT sum(v) AS s, count(*) OVER () AS n
+FROM VALUES (named_struct('x', 1), 10), (named_struct('x', 2), 20) AS t(k, v)
+GROUP BY k HAVING k.x > 0 QUALIFY k.x = 2 ORDER BY 1
+-- !query schema
+struct<s:bigint,n:bigint>
+-- !query output
+20	2
+
+
+-- !query
+SELECT sum(v) AS a, count(*) OVER () AS n
+FROM VALUES (1, 10), (2, 20) AS t(k, v)
+GROUP BY k + 1 HAVING sum(v) > 0 ORDER BY `(k + 1)`
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`(k + 1)`",
+    "proposal" : "`a`, `n`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 125,
+    "stopIndex" : 133,
+    "fragment" : "`(k + 1)`"
+  } ]
+}
+
+
+-- !query
+SELECT sum(v) AS a, count(*) OVER () AS n
+FROM VALUES (1, 10), (2, 20) AS t(k, v)
+GROUP BY k + 1 HAVING sum(v) > 0 ORDER BY `(k + 1)`.x
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`(k + 1)`.`x`",
+    "proposal" : "`a`, `n`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 125,
+    "stopIndex" : 135,
+    "fragment" : "`(k + 1)`.x"
+  } ]
+}
+
+
+-- !query
+SELECT sum(v) AS s, count(*) OVER () AS n
+FROM VALUES (10), (20) AS t(v)
+GROUP BY NULL HAVING sum(v) > 0 ORDER BY `NULL`.x
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`NULL`.`x`",
+    "proposal" : "`n`, `s`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 115,
+    "stopIndex" : 122,
+    "fragment" : "`NULL`.x"
+  } ]
+}
+
+
+-- !query
+SELECT NULL AS k, sum(v) AS s, count(*) OVER () AS n
+FROM VALUES (10), (20) AS t(v)
+GROUP BY v HAVING sum(v) > 0 ORDER BY k.x, s
+-- !query schema
+struct<k:void,s:bigint,n:bigint>
+-- !query output
+NULL	10	2
+NULL	20	2
+
+
+-- !query
+SELECT sum(v) AS a, count(*) OVER () AS n
+FROM VALUES (1, 10), (2, 20) AS t(k, v)
+GROUP BY k + 1 HAVING missing > 0 ORDER BY 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`missing`",
+    "proposal" : "`a`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 105,
+    "stopIndex" : 111,
+    "fragment" : "missing"
+  } ]
+}
+
+
+-- !query
+SELECT k + 10 AS a, count(*) OVER () AS n
+FROM VALUES (1), (2) AS t(k)
+GROUP BY k HAVING k >= 2 QUALIFY missing > 0 ORDER BY 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`missing`",
+    "proposal" : "`n`, `a`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 105,
+    "stopIndex" : 111,
+    "fragment" : "missing"
   } ]
 }
 
@@ -764,6 +960,82 @@ struct<k:int,n:bigint>
 11	3
 12	3
 13	3
+
+
+-- !query
+SELECT k + 10 AS k, sum(rank() OVER (ORDER BY sum(v))) OVER () AS n
+FROM VALUES (1, 10), (2, 20), (3, 30) AS t(k, v)
+GROUP BY k HAVING k = 2 ORDER BY 1
+-- !query schema
+struct<k:int,n:bigint>
+-- !query output
+
+
+
+-- !query
+SELECT k + 10 AS k, count(*) OVER () AS n
+FROM VALUES (1), (2), (3) AS t(k)
+GROUP BY k HAVING k >= 2 QUALIFY k > 12 ORDER BY 1
+-- !query schema
+struct<k:int,n:bigint>
+-- !query output
+13	3
+
+
+-- !query
+SELECT sum(v) AS s, count(*) OVER () AS n
+FROM VALUES (1, 10), (2, 20) AS t(k, v)
+GROUP BY k HAVING k > 0 QUALIFY k = 2 ORDER BY 1
+-- !query schema
+struct<s:bigint,n:bigint>
+-- !query output
+20	2
+
+
+-- !query
+SELECT sum(v) AS s, count(*) OVER () AS n
+FROM VALUES (named_struct('x', 1), 10), (named_struct('x', 2), 20) AS t(k, v)
+GROUP BY k HAVING k.x > 0 QUALIFY k.x = 2 ORDER BY 1
+-- !query schema
+struct<s:bigint,n:bigint>
+-- !query output
+20	2
+
+
+-- !query
+SELECT sum(v) AS s, count(*) OVER () AS n
+FROM VALUES (10), (20) AS t(v)
+GROUP BY NULL HAVING sum(v) > 0 ORDER BY `NULL`.x
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`NULL`.`x`",
+    "proposal" : "`n`, `s`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 115,
+    "stopIndex" : 122,
+    "fragment" : "`NULL`.x"
+  } ]
+}
+
+
+-- !query
+SELECT NULL AS k, sum(v) AS s, count(*) OVER () AS n
+FROM VALUES (10), (20) AS t(v)
+GROUP BY v HAVING sum(v) > 0 ORDER BY k.x, s
+-- !query schema
+struct<k:void,s:bigint,n:bigint>
+-- !query output
+NULL	10	2
+NULL	20	2
 
 
 -- !query
