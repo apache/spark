@@ -1002,9 +1002,10 @@ object ParseSqlResult {
       name: String,
       session: ClassicSparkSession): Boolean = {
     val mgr = session.sessionState.catalogManager
+    // The session catalog name matches case-insensitively, as CatalogManager.catalog does.
+    // Other catalogs are stored and loaded by their exact name.
     name.equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME) ||
-      name.equalsIgnoreCase(mgr.currentCatalog.name()) ||
-      // Same exact-name lookup that catalog loading uses.
+      name == mgr.currentCatalog.name() ||
       session.sessionState.conf.contains("spark.sql.catalog." + name)
   }
 
