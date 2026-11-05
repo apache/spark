@@ -121,7 +121,7 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
    * Runs `f` in ANSI mode, so a division by zero or a bad cast throws. Runs it with compiled
    * and with interpreted conditions, each with subexpression elimination on and off.
    */
-  private def withGuardedOnConditionConfs(f: => Unit): Unit = {
+  private def withGuardedConditionConfs(f: => Unit): Unit = {
     val factoryModes =
       Seq(CodegenObjectFactoryMode.CODEGEN_ONLY, CodegenObjectFactoryMode.NO_CODEGEN)
     for (factoryMode <- factoryModes; subexprElimination <- Seq("true", "false")) {
@@ -1210,7 +1210,7 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
   }
 
   test("ON condition does not divide when an AND guard before it is FALSE") {
-    withGuardedOnConditionConfs {
+    withGuardedConditionConfs {
       // The closer right row has the same y, so `t.y <> r.y` must stop the division by zero.
       checkSortMergeAsOf(
         sql(
@@ -1226,7 +1226,7 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
   }
 
   test("ON condition does not divide when an OR guard before it is TRUE") {
-    withGuardedOnConditionConfs {
+    withGuardedConditionConfs {
       // The closer right row has the same y, so `t.y = r.y` must match it without the division.
       checkSortMergeAsOf(
         sql(
@@ -1242,7 +1242,7 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
   }
 
   test("LEFT ASOF JOIN ON condition does not cast when a left-only guard is FALSE") {
-    withGuardedOnConditionConfs {
+    withGuardedConditionConfs {
       // Left row 2 fails `t.kind <> 'text'`, so its candidate 'abc' must never be cast to INT.
       // The guard is not `t.kind = 'num'`, which the planner would make a join key.
       checkSortMergeAsOf(
@@ -1255,6 +1255,23 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
             |  ON t.kind <> 'text' AND CAST(r.v AS INT) >= t.lo AND CAST(r.v AS INT) <= t.hi
             |""".stripMargin),
         Seq(Row(1, "42"), Row(2, null)))
+    }
+  }
+
+  test("MATCH_CONDITION does not divide when an AND guard inside an IF is FALSE") {
+    withGuardedConditionConfs {
+      // Row 1 has y = 0, so its IF must take t.b without the division. Row 2 takes t.a, which
+      // is below every right row.
+      checkSortMergeAsOf(
+        sql(
+          """
+            |SELECT t.id, r.v
+            |FROM VALUES (1, 1, 6, 0, 10, 20), (2, 1, 6, 2, 10, 20) AS t(id, k, x, y, a, b)
+            |ASOF JOIN VALUES (1, 15, 'm') AS r(k, ts, v)
+            |  MATCH_CONDITION (IF(t.y <> 0 AND t.x / t.y > 1 AND t.x / t.y < 5, t.a, t.b) >= r.ts)
+            |  ON t.k = r.k
+            |""".stripMargin),
+        Row(1, "m") :: Nil)
     }
   }
 

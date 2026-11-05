@@ -171,12 +171,12 @@ private[joins] class SortMergeAsOfJoinScanner(
     UnsafeProjection.create(nullableRefs, joinedOutput)
   }
 
-  // Compiled once, so a check runs generated code instead of walking the expression tree.
-  // The scan checks the as-of condition for every right row it reads. Its repeated parts are
-  // the match keys, which its first comparison always computes, so sharing them is safe.
-  private val boundAsOfCond = Predicate.create(asOfCondition, joinedOutput)
-  // The residual can guard a part that throws, as in `y <> 0 AND x / y > 1`.
-  private val boundResidualCond =
+  // Compiled, so a check runs generated code instead of walking the expression tree. Both skip
+  // subexpression elimination, which runs a repeated part before the guard in front of it:
+  // `y <> 0 AND x / y > 1 AND x / y < 10` would divide by zero when y is 0. Both are built on
+  // first use, so a task that checks no right row compiles nothing.
+  private lazy val boundAsOfCond = ShortCircuitPredicate.create(asOfCondition, joinedOutput)
+  private lazy val boundResidualCond =
     residualCondition.map(ShortCircuitPredicate.create(_, joinedOutput))
 
   private val equiKeyOrdering: Option[BaseOrdering] =
