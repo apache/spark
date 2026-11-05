@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.parser.{ParseSqlMode, ParseSqlResult}
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{PARSE_SQL, TreePattern}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
@@ -142,6 +143,8 @@ case class ParseSql(
   // Foldable so constant SQL is evaluated on the driver, where ANALYZE can see the session.
   override def foldable: Boolean = children.forall(_.foldable)
 
+  override val nodePatterns: Seq[TreePattern] = Seq(PARSE_SQL)
+
   override def nullIntolerant: Boolean = true
 
   override def dataType: DataType = StringType
@@ -195,22 +198,36 @@ case class ParseSql(
     }
   }
 
+  /**
+   * The normalized mode, or `None` when the mode is NULL. `mode` is foldable (checked in
+   * [[checkInputDataTypes]]), so it is evaluated once rather than per row.
+   */
+  @transient private lazy val constantMode: Option[String] =
+    Option(mode.eval()).map { value =>
+      ParseSqlMode.parse(value.asInstanceOf[UTF8String].toString).getOrElse {
+        throw SparkException.internalError(
+          s"parse_sql mode passed analysis but is not PARSE or ANALYZE: $value")
+      }
+    }
+
+  /**
+   * Whether this is a constant ANALYZE call. Such a call needs the driver session, so
+   * [[org.apache.spark.sql.catalyst.optimizer.EvaluateParseSql]] folds only these.
+   */
+  private[sql] def isConstantAnalyze: Boolean =
+    children.forall(_.foldable) && constantMode.contains(ParseSqlMode.Analyze)
+
   override def eval(input: InternalRow): Any = {
     val sqlInput = sqlStmt.eval(input)
     if (sqlInput == null) {
       return null
     }
-    val modeInput = mode.eval(input)
-    if (modeInput == null) {
-      return null
+    constantMode match {
+      case None => null
+      case Some(parsedMode) =>
+        val sqlText = sqlInput.asInstanceOf[UTF8String].toString
+        UTF8String.fromString(ParseSqlResult.fromSql(sqlText, parsedMode))
     }
-    val sqlText = sqlInput.asInstanceOf[UTF8String].toString
-    val modeStr = modeInput.asInstanceOf[UTF8String].toString
-    val parsedMode = ParseSqlMode.parse(modeStr).getOrElse {
-      throw SparkException.internalError(
-        s"parse_sql mode passed analysis but is not PARSE or ANALYZE: $modeStr")
-    }
-    UTF8String.fromString(ParseSqlResult.fromSql(sqlText, parsedMode))
   }
 
   override protected def withNewChildrenInternal(

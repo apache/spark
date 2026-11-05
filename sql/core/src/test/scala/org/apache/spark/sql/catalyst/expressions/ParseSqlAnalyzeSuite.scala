@@ -25,7 +25,9 @@ import org.json4s.jackson.JsonMethods.parse
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryCatalog}
+import org.apache.spark.sql.connector.catalog.{
+  Identifier, InMemoryCatalog, InMemoryRowLevelOperationTableCatalog
+}
 import org.apache.spark.sql.connector.catalog.procedures.{
   BoundProcedure,
   ProcedureParameter,
@@ -35,6 +37,7 @@ import org.apache.spark.sql.connector.read.Scan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataTypes, StructType}
+import org.apache.spark.util.Utils
 
 class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
 
@@ -575,6 +578,193 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
         "SELECT (SELECT parse_sql('SELECT 1 AS a', 'ANALYZE'))")
       assert(scalar.head \ "analyze_success" === JBool(true))
       assert(scalar.head \ "select_list" === typedColumns("a" -> jsonInt))
+    }
+  }
+
+  test("ANALYZE still works when ConstantFolding and EvaluateParseSql are excluded") {
+    // EvaluateParseSql is not excludable, so this must match the test above. The rule is
+    // what runs a constant ANALYZE on the driver; if it were dropped, a task would fail.
+    withSQLConf(
+        SQLConf.PARSE_SQL_ENABLED.key -> "true",
+        SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+          ("org.apache.spark.sql.catalyst.optimizer.ConstantFolding," +
+            "org.apache.spark.sql.catalyst.optimizer.EvaluateParseSql")) {
+      val j = evalStatement("SELECT 1 AS a")
+      assert(j \ "analyze_success" === JBool(true))
+      assert(j \ "select_list" === typedColumns("a" -> jsonInt))
+    }
+  }
+
+  test("PARSE keeps a failing constant in an untaken CASE branch under ANSI") {
+    withSQLConf(
+        SQLConf.PARSE_SQL_ENABLED.key -> "true",
+        SQLConf.ANSI_ENABLED.key -> "true") {
+      val rows = sql(
+        "SELECT CASE WHEN id > 0 THEN parse_sql(CAST(1/0 AS STRING)) END FROM range(1)")
+        .collect()
+      assert(rows.length === 1)
+      assert(rows.head.isNullAt(0))
+    }
+  }
+
+  test("ANALYZE of a failing constant in an untaken CASE branch does not fail the query") {
+    withSQLConf(
+        SQLConf.PARSE_SQL_ENABLED.key -> "true",
+        SQLConf.ANSI_ENABLED.key -> "true") {
+      val rows = sql(
+        "SELECT CASE WHEN id > 0 THEN parse_sql(CAST(1/0 AS STRING), 'ANALYZE') END " +
+          "FROM range(1)").collect()
+      assert(rows.length === 1)
+      assert(rows.head.isNullAt(0))
+    }
+  }
+
+  test("ANALYZE attributes a MERGE source to the table it names, not the row-level target") {
+    val catalog = "parse_sql_rl"
+    withSQLConf(
+        SQLConf.PARSE_SQL_ENABLED.key -> "true",
+        s"spark.sql.catalog.$catalog" -> classOf[InMemoryRowLevelOperationTableCatalog].getName) {
+      try {
+        sql(s"CREATE NAMESPACE $catalog.prod")
+        sql(s"CREATE NAMESPACE $catalog.staging")
+        sql(s"CREATE TABLE $catalog.prod.t (id INT, v INT)")
+        sql(s"CREATE TABLE $catalog.staging.t (id INT, v INT)")
+        sql(s"USE $catalog.staging")
+        val j = evalStatement(
+          s"""MERGE INTO $catalog.prod.t AS tgt USING t AS src ON tgt.id = src.id
+             |WHEN MATCHED THEN DELETE""".stripMargin)
+        assert(j \ "analyze_success" === JBool(true))
+        assert(j \ "target_table_references" === JArray(List(ref(catalog, "prod", "t"))))
+        assert(j \ "source_table_references" === JArray(List(ref(catalog, "staging", "t"))))
+      } finally {
+        sql("USE spark_catalog.default")
+        spark.sessionState.catalogManager.reset()
+        spark.sessionState.conf.unsetConf(s"spark.sql.catalog.$catalog")
+      }
+    }
+  }
+
+  test("ANALYZE does not report a SQL table function body as the statement's source") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      sql("CREATE DATABASE IF NOT EXISTS parse_sql_tvf_db")
+      try {
+        withTable("parse_sql_tvf_db.t", "t") {
+          sql("CREATE TABLE parse_sql_tvf_db.t (x INT) USING parquet")
+          sql("CREATE TABLE t (x INT) USING parquet")
+          withUserDefinedFunction("parse_sql_tvf" -> false) {
+            sql("CREATE FUNCTION parse_sql_tvf() RETURNS TABLE (x INT) " +
+              "RETURN SELECT x FROM parse_sql_tvf_db.t")
+            val j = evalStatement("SELECT * FROM parse_sql_tvf() JOIN t")
+            assert(j \ "analyze_success" === JBool(true))
+            assert(j \ "source_table_references" === JArray(List(
+              ref("spark_catalog", "default", "t"))))
+          }
+        }
+      } finally {
+        sql("DROP DATABASE IF EXISTS parse_sql_tvf_db CASCADE")
+      }
+    }
+  }
+
+  test("ANALYZE reports the stored identity of a table named in another case") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      withTable("parse_sql_case_t") {
+        sql("CREATE TABLE parse_sql_case_t (a INT) USING parquet")
+        val j = evalStatement("SELECT a FROM PARSE_SQL_CASE_T")
+        assert(j \ "analyze_success" === JBool(true))
+        assert(j \ "source_table_references" === JArray(List(
+          ref("spark_catalog", "default", "parse_sql_case_t"))))
+      }
+    }
+  }
+
+  test("ANALYZE reports relative path-based datasource tables as format plus path") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val dir = s"parse_sql_rel_${java.util.UUID.randomUUID()}"
+      try {
+        spark.range(1).write.mode("overwrite").parquet(dir)
+        val j = evalStatement(s"SELECT id FROM parquet.`$dir`")
+        assert(j \ "analyze_success" === JBool(true))
+        assert(j \ "source_table_references" === JArray(List(ref("parquet", dir))))
+      } finally {
+        Utils.deleteRecursively(new java.io.File(dir))
+      }
+    }
+  }
+
+  test("ANALYZE reports the owner of a routine that a temp function shadows") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      // The temp and persistent functions share a name, so clean up both explicitly.
+      try {
+        sql("CREATE FUNCTION parse_sql_ord_f() RETURNS INT RETURN 1")
+        sql("CREATE TEMPORARY FUNCTION parse_sql_ord_f() RETURNS INT RETURN 2")
+        val second = evalStatement("SELECT parse_sql_ord_f()")
+        assert(second \ "function_references" === JArray(List(
+          ref("system", "session", "parse_sql_ord_f"))))
+        withSQLConf(SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "last") {
+          // With `last`, the persistent function in the current schema is found first.
+          val last = evalStatement("SELECT parse_sql_ord_f()")
+          assert(last \ "function_references" === JArray(List(
+            ref("spark_catalog", "default", "parse_sql_ord_f"))))
+        }
+      } finally {
+        sql("DROP TEMPORARY FUNCTION IF EXISTS parse_sql_ord_f")
+        sql("DROP FUNCTION IF EXISTS parse_sql_ord_f")
+      }
+    }
+  }
+
+  test("ANALYZE reports statement-relative code points for an error after an emoji") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      // The emoji is one code point, so `nope` starts at code point 13 (1-based).
+      val emoji = new String(Character.toChars(0x1F600))
+      val j = evalStatement(s"SELECT '$emoji', nope")
+      assert(j \ "analyze_success" === JBool(false))
+      val context = (j \ "error" \ "queryContext")(0)
+      assert(context \ "startIndex" === JInt(13))
+      assert(context \ "stopIndex" === JInt(16))
+      assert(context \ "fragment" === JString("nope"))
+    }
+  }
+
+  test("ANALYZE reports CHAR and VARCHAR lengths in select_list") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      withTable("parse_sql_cv") {
+        sql("CREATE TABLE parse_sql_cv (c CHAR(3), v VARCHAR(10)) USING parquet")
+        val j = evalStatement("SELECT c, v FROM parse_sql_cv")
+        assert(j \ "select_list" === JArray(List(
+          JObject("name" -> ref("c"),
+            "type" -> JObject("name" -> JString("char"), "length" -> JInt(3))),
+          JObject("name" -> ref("v"),
+            "type" -> JObject("name" -> JString("varchar"), "length" -> JInt(10))))))
+      }
+    }
+  }
+
+  test("ANALYZE of row-level DELETE, UPDATE and MERGE reports no rewrite columns") {
+    val catalog = "parse_sql_rl2"
+    withSQLConf(
+        SQLConf.PARSE_SQL_ENABLED.key -> "true",
+        s"spark.sql.catalog.$catalog" -> classOf[InMemoryRowLevelOperationTableCatalog].getName) {
+      try {
+        sql(s"CREATE NAMESPACE $catalog.ns")
+        sql(s"CREATE TABLE $catalog.ns.rl (id INT, v INT)")
+        sql(s"CREATE TABLE $catalog.ns.src (id INT, v INT)")
+        val statements = Seq(
+          s"DELETE FROM $catalog.ns.rl WHERE id = 1",
+          s"UPDATE $catalog.ns.rl SET v = 2 WHERE id = 1",
+          s"MERGE INTO $catalog.ns.rl AS t USING $catalog.ns.src AS s ON t.id = s.id " +
+            "WHEN MATCHED THEN DELETE")
+        statements.foreach { statement =>
+          val j = evalStatement(statement)
+          assert(j \ "analyze_success" === JBool(true), statement)
+          assert(j \ "target_table_references" === JArray(List(ref(catalog, "ns", "rl"))))
+          assert(j \ "select_list" === JNothing, statement)
+        }
+      } finally {
+        spark.sessionState.catalogManager.reset()
+        spark.sessionState.conf.unsetConf(s"spark.sql.catalog.$catalog")
+      }
     }
   }
 

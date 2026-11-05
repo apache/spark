@@ -17,19 +17,36 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.expressions.{Literal, ParseSql}
+import scala.util.control.NonFatal
+
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, ParseSql}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.PARSE_SQL
 import org.apache.spark.sql.types.StringType
 
 /**
- * Evaluates constant `parse_sql` calls on the driver. ANALYZE needs the
- * session catalog, so this must run even when `ConstantFolding` is excluded.
+ * Evaluates constant ANALYZE `parse_sql` calls on the driver, where the session catalog is
+ * available. ANALYZE must run here even when `ConstantFolding` is excluded. PARSE calls are
+ * left to `ConstantFolding`, which keeps its tolerance for failing constants in untaken
+ * branches.
+ *
+ * A constant ANALYZE call whose SQL argument fails to evaluate is left in place. The error
+ * then surfaces when the expression runs, so a failure in an untaken branch stays unobserved.
  */
 object EvaluateParseSql extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan =
-    plan.transformAllExpressionsWithSubqueries {
-      case p: ParseSql if p.children.forall(_.foldable) =>
-        Literal.create(p.eval(), StringType)
+    plan.transformDownWithSubqueriesAndPruning(_.containsPattern(PARSE_SQL)) {
+      case subQuery =>
+        subQuery.transformAllExpressionsWithPruning(_.containsPattern(PARSE_SQL)) {
+          case p: ParseSql if p.isConstantAnalyze => evaluate(p)
+        }
+    }
+
+  private def evaluate(p: ParseSql): Expression =
+    try {
+      Literal.create(p.eval(), StringType)
+    } catch {
+      case NonFatal(_) => p
     }
 }

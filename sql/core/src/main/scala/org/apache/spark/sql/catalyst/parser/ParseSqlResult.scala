@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 
 import scala.collection.mutable
+import scala.util.Try
 
 import org.json4s._
 import org.json4s.jackson.JsonMethods.{compact, parse => parseJson, render}
@@ -27,6 +28,7 @@ import org.json4s.jackson.JsonMethods.{compact, parse => parseJson, render}
 import org.apache.spark.{ErrorMessageFormat, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SqlScriptingContextManager, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.analysis.SQLFunctionNode
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -50,7 +52,9 @@ import org.apache.spark.sql.execution.command.{
   ExplainCommand,
   LeafRunnableCommand
 }
-import org.apache.spark.sql.execution.datasources.{CreateTempViewUsing, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{
+  CreateTempViewUsing, DataSource, LogicalRelation
+}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf
@@ -126,7 +130,7 @@ object ParseSqlResult {
       JArray(statements.zip(spans).map { case (segment, span) =>
         parsePlanOrError(segment, span) match {
           case ParseFailed(errorObj) => errorObj
-          case Parsed(_, plan) =>
+          case Parsed(plan) =>
             successJson(plan, analyzed = None, analyzeError = None, None, span)
         }
       }.toList)
@@ -135,8 +139,7 @@ object ParseSqlResult {
   }
 
   private sealed trait ParsedStatement
-  private case class Parsed(segment: PositionedSqlStatement, plan: LogicalPlan)
-    extends ParsedStatement
+  private case class Parsed(plan: LogicalPlan) extends ParsedStatement
   private case class ParseFailed(errorObj: JObject) extends ParsedStatement
 
   /**
@@ -158,7 +161,7 @@ object ParseSqlResult {
       InvokeProcedures.withoutInvocation {
         JArray(parsed.zip(spans).map {
           case (ParseFailed(errorObj), _) => errorObj
-          case (Parsed(_, plan), span) =>
+          case (Parsed(plan), span) =>
             val (analyzed, error) = analyze(session, plan)
             successJson(plan, analyzed, error, Some(session), span)
         }.toList)
@@ -218,13 +221,13 @@ object ParseSqlResult {
       val origin = if (sql.nonEmpty) {
         Origin(
           startIndex = Some(0),
-          stopIndex = Some(sql.codePointCount(0, sql.length) - 1),
+          stopIndex = Some(span.length - 1),
           sqlText = Some(sql))
       } else {
         Origin(sqlText = Some(sql))
       }
       CurrentOrigin.withOrigin(origin) {
-        Parsed(segment, parser.get().parsePlan(sql))
+        Parsed(parser.get().parsePlan(sql))
       }
     } catch {
       case e: ParseException =>
@@ -276,14 +279,17 @@ object ParseSqlResult {
       session.map { s =>
         val analyzedTargets = analyzedRefs.map(_.targetTables).getOrElse(Nil)
         val analyzedSources = analyzedRefs.map(_.sourceTables).getOrElse(Nil)
+        val analysisSucceeded = analyzed.isDefined
         (
           uniqueIdentities(
             qualifyParseIdentities(
-              parseRefs.targetTables, analyzedTargets, qualifyTarget(_, plan, s)),
+              parseRefs.targetTables, analyzedTargets, analysisSucceeded, s,
+              qualifyTarget(_, plan, s)),
             s),
           uniqueIdentities(
             qualifyParseIdentities(
-              parseRefs.sourceTables, analyzedSources, qualifySource(_, s)),
+              parseRefs.sourceTables, analyzedSources, analysisSucceeded, s,
+              qualifySource(_, s)),
             s),
           uniqueIdentities(parseRefs.functions.map(qualifyRoutine(_, s)), s)
         )
@@ -472,14 +478,32 @@ object ParseSqlResult {
         visitPlan(w.plan, nextScope, role)(f)
       case SubqueryAlias(_, child) =>
         visitPlan(child, nextScope, role)(f)
+      case _: SQLFunctionNode =>
+        // The body of a SQL table function is the routine's own text, not this statement's.
       case _ =>
-        parent.subqueries.foreach(sq => visitPlan(sq, nextScope, TableRefRole.Source)(f))
+        statementSubqueries(parent).foreach(sq => visitPlan(sq, nextScope, TableRefRole.Source)(f))
         parent.children.foreach { child =>
           val childRole =
             if (isTargetTableChild(parent)) TableRefRole.Target else role
           visitPlan(child, nextScope, childRole)(f)
         }
     }
+  }
+
+  /**
+   * Subquery plans of `plan` that belong to the statement. Subqueries inside the body of a SQL
+   * scalar function belong to the routine, so only that function's arguments are kept.
+   */
+  private def statementSubqueries(plan: LogicalPlan): Seq[LogicalPlan] = {
+    def visit(e: Expression): Seq[LogicalPlan] = e match {
+      case p: PlanExpression[_] => p.plan match {
+        case sub: LogicalPlan => Seq(sub)
+        case _ => Nil
+      }
+      case s: SQLScalarFunction => s.inputs.flatMap(visit)
+      case other => other.children.flatMap(visit)
+    }
+    plan.expressions.flatMap(visit)
   }
 
   /** Visit plan slots that are not exposed via `children` / subqueries. */
@@ -548,6 +572,9 @@ object ParseSqlResult {
     val targetTables = mutable.LinkedHashSet.empty[Seq[String]]
     val sourceTables = mutable.LinkedHashSet.empty[Seq[String]]
     val functions = mutable.LinkedHashSet.empty[Seq[String]]
+    // Targets of row-level rewrites. The rewritten query reads the target again, so a
+    // source read of one of these is that re-read, not a table the statement names.
+    val rewriteTargets = mutable.HashSet.empty[Seq[String]]
     val namedParams = mutable.LinkedHashSet.empty[String]
     var unnamedCount = 0
 
@@ -604,8 +631,12 @@ object ParseSqlResult {
         case c: CacheTable if c.multipartIdentifier.nonEmpty =>
           addTarget(c.multipartIdentifier)
         case u: UnresolvedTableValuedFunction => addFunction(u.name)
+        case w: ReplaceData => rewriteTargets ++= rewriteTargetParts(w.table)
+        case w: WriteDelta => rewriteTargets ++= rewriteTargetParts(w.table)
         case r: DataSourceV2Relation =>
-          v2RelationParts(r).foreach(add)
+          v2RelationParts(r)
+            .filterNot(parts => role == TableRefRole.Source && rewriteTargets.contains(parts))
+            .foreach(add)
         case r: LogicalRelation =>
           logicalRelationParts(r).foreach(add)
         case h: HiveTableRelation =>
@@ -696,6 +727,11 @@ object ParseSqlResult {
       case _ => None
     }
 
+  private def rewriteTargetParts(table: NamedRelation): Option[Seq[String]] = table match {
+    case d: DataSourceV2Relation => v2RelationParts(d)
+    case _ => None
+  }
+
   private def logicalRelationParts(r: LogicalRelation): Option[Seq[String]] =
     r.catalogTable.map { t =>
       val id = t.identifier
@@ -748,6 +784,8 @@ object ParseSqlResult {
   private def qualifyParseIdentities(
       parseIds: Seq[Seq[String]],
       analyzedIds: Seq[Seq[String]],
+      analysisSucceeded: Boolean,
+      session: ClassicSparkSession,
       fallback: Seq[String] => Seq[String]): Seq[Seq[String]] = {
     val remaining = analyzedIds.to(mutable.ArrayBuffer)
     val assigned = Array.fill[Option[Seq[String]]](parseIds.length)(None)
@@ -765,7 +803,12 @@ object ParseSqlResult {
             assigned(i) = Some(matched)
           case None =>
             val ident =
-              if (isPathReference(parts)) parts else fallback(parts)
+              if (isPathReference(parts) ||
+                  (analysisSucceeded && isFileReference(parts, session))) {
+                parts
+              } else {
+                fallback(parts)
+              }
             assigned(i) = Some(ident)
         }
     }
@@ -784,11 +827,26 @@ object ParseSqlResult {
     }
   }
 
+  /** Absolute or URI-like path written in the statement text. */
   private def isPathReference(parts: Seq[String]): Boolean = parts match {
     case Seq(_, path) => path.contains("/") || path.contains(":")
     case Seq(path) => path.contains("/") || path.startsWith("file:")
     case _ => false
   }
+
+  /**
+   * A `format`.`path` reference that analysis resolved to a file relation without a catalog
+   * table. With `spark.sql.runSQLOnFiles` (default on), any two-part name whose first part is a
+   * data source and not a database is read as a path, relative or not. The analyzed plan carries
+   * no identity for it, so the name is reported as written.
+   */
+  private def isFileReference(parts: Seq[String], session: ClassicSparkSession): Boolean =
+    parts match {
+      case Seq(format, _) =>
+        Try(DataSource.lookupDataSource(format, session.sessionState.conf)).isSuccess &&
+          !session.sessionState.catalog.databaseExists(format)
+      case _ => false
+    }
 
   private def qualifyTarget(
       parts: Seq[String],
@@ -833,10 +891,14 @@ object ParseSqlResult {
       parts: Seq[String],
       session: ClassicSparkSession): Seq[String] = {
     val catalog = session.sessionState.catalog
-    val tempFirst =
-      session.sessionState.conf.getConf(SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER) == "first"
+    // Same order as FunctionResolution: `first` is session, builtin, persistent;
+    // `second` (default) is builtin, session, persistent; `last` is builtin, persistent, session.
+    val sessionOrder =
+      session.sessionState.conf.getConf(SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER)
     def isTemp(name: String): Boolean =
       catalog.isTemporaryFunction(FunctionIdentifier(name))
+    def isPersistent(name: String): Boolean =
+      catalog.isPersistentFunction(FunctionIdentifier(name))
     def isBuiltin(name: String): Boolean = {
       val id = FunctionIdentifier(name)
       FunctionRegistry.builtin.functionExists(id) ||
@@ -851,10 +913,12 @@ object ParseSqlResult {
     def builtinIdent(name: String): Seq[String] =
       FunctionRegistry.builtinFunctionIdentifier(name).nameParts
     parts match {
-      case Seq(name) if tempFirst && isTemp(name) =>
+      case Seq(name) if sessionOrder == "first" && isTemp(name) =>
         sessionIdent(name)
       case Seq(name) if isBuiltin(name) || isSessionBuiltin(name) =>
         builtinIdent(name)
+      case Seq(name) if sessionOrder == "last" && isPersistent(name) =>
+        qualifyWithCurrentNamespace(parts, session)
       case Seq(name) if isTemp(name) =>
         sessionIdent(name)
       case Seq(ns, name) if isSystemNamespace(ns) =>
