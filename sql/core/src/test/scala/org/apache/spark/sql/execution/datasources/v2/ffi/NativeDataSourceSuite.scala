@@ -16,42 +16,52 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.ffi
 
-import java.io.File
+import java.io.{ByteArrayOutputStream, File, ObjectOutputStream}
 import java.nio.charset.StandardCharsets.UTF_8
-import java.nio.file.Files
+import java.nio.file.{AccessDeniedException, Files, NoSuchFileException, Paths}
 import java.nio.file.StandardCopyOption.REPLACE_EXISTING
+import java.nio.file.attribute.{PosixFileAttributeView, PosixFilePermission}
 import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDate}
 import java.util.UUID
 import java.util.concurrent.{Callable, CountDownLatch, CyclicBarrier, ExecutionException, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
+import java.util.zip.{ZipException, ZipFile}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
+import scala.reflect.ClassTag
 
+import org.apache.arrow.c.{ArrowArray, ArrowArrayStream, ArrowSchema, CDataDictionaryProvider, Data}
+import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.vector.{BigIntVector, VectorSchemaRoot}
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SPARK_VERSION, SparkClassNotFoundException, SparkFiles, SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException, TestUtils}
+import org.apache.spark.{SPARK_VERSION, SparkClassNotFoundException, SparkException, SparkFiles, SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException, TaskContext, TaskKilledException, TestUtils}
 import org.apache.spark.api.python.{PythonBroadcast, SimplePythonFunction}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.{AnalysisException, Dataset, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.connector.catalog.SupportsRead
-import org.apache.spark.sql.connector.read.SupportsPushDownRequiredColumns
-import org.apache.spark.sql.connector.read.streaming.{Offset, ReadLimit, SupportsAdmissionControl}
+import org.apache.spark.sql.connector.read.{InputPartition, SupportsArrowStreamRead, SupportsPushDownRequiredColumns}
+import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset, ReadLimit, SupportsAdmissionControl}
+import org.apache.spark.sql.connector.write.PhysicalWriteInfoImpl
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
-import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchScan, ColumnarMicroBatchStream, ColumnarScan, ColumnarStreamOffset}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, MicroBatchScanExec, V2TableWriteExec}
+import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchScan, ColumnarBatchWrite, ColumnarMicroBatchStream, ColumnarScan, ColumnarScanBuilder, ColumnarStreamingWrite, ColumnarStreamOffset}
 import org.apache.spark.sql.execution.datasources.v2.python.{PythonDataSourceV2, UserDefinedPythonDataSource}
+import org.apache.spark.sql.execution.streaming.runtime.StreamingQueryWrapper
 import org.apache.spark.sql.execution.vectorized.ReusedArrowColumnVector
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.streaming.{StreamingQuery, Trigger}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.util.{ArrowUtils, CaseInsensitiveStringMap}
+import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
@@ -107,9 +117,11 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     session
   }
 
+  // The test libraries record the calls that the order of the calls of the header rules out,
+  // which fail the test that made them.
   private def nativeTest(name: String)(f: => Unit): Unit = test(name) {
     assume(toolchain.isDefined, "A C++ compiler and Java 22 or later are required.")
-    try f finally SparkSession.setActiveSession(spark)
+    try checkingOrderOfCalls(f) finally SparkSession.setActiveSession(spark)
   }
 
   // Checks the answer without converting the DataFrame to an RDD: a job outside of a SQL
@@ -651,9 +663,13 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     write("overwrite", 10 until 12)
     assert(written() == (10 until 12).map(i => s"$i,v$i").toSet)
 
-    // Nulls and the other types of the test library.
-    range(session, "end" -> "6").write.format("native_sink").option("path", dir.getPath)
-      .mode("overwrite").save()
+    // Nulls and the other types of the test library, from the Arrow batches of a native scan,
+    // which the write gets without a transition to rows.
+    val plans = QueryTest.withQueryExecutionsCaptured(session) {
+      range(session, "end" -> "6").write.format("native_sink").option("path", dir.getPath)
+        .mode("overwrite").save()
+    }.flatMap(_.executedPlan.collectFirst { case write: V2TableWriteExec => write.query })
+    assert(plans.length == 1 && plans.head.isInstanceOf[BatchScanExec], plans)
     assert(written() == (0 until 6).map { id =>
       val name = if (id % 5 == 0) "null" else s"n$id"
       s"$id,${id % 3},$name,${format(id * 0.5)},${id % 2 == 0},$id,${id * 1000000L}"
@@ -776,12 +792,85 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         "action" -> "write to",
         "name" -> "native_sink",
         "msg" -> "commit_data_writer returned 2 values instead of one."))
-    // The task failed without aborting the committed data writer, which it closed, and the driver
-    // aborted the write.
-    assert(!new File(dir, "_ABORTED_COMMITTED_DATA_WRITER").exists())
+    // The task failed without aborting the committed data writer, which the test library would
+    // record as a violation of the order of the calls, and closed it. The driver aborted the write.
     checkDataWritersClosed(dir)
     assert(Files.readString(new File(dir, "_ABORTED").toPath) == "1,1,0")
     assert(!dir.listFiles().exists(_.getName.startsWith("part-")))
+  }
+
+  nativeTest("keep the order of the calls whatever the callers of the adapter do") {
+    val session = newSession(defaultPackage)
+    def dataSource(name: String, options: (String, String)*): NativeDataSource = {
+      val (resolved, location) =
+        NativeDataSourceRegistry.lookup(name, session.sessionState.conf).get
+      new NativeDataSource(location, resolved, new CaseInsensitiveStringMap(options.toMap.asJava))
+    }
+    val schema = StructType.fromDDL("id BIGINT")
+    // The test library records each call that the header rules out, which fails the test.
+
+    // A write or a micro-batch that committed is not aborted.
+    val batchDir = Utils.createTempDir()
+    val batchWrite = new ColumnarBatchWrite(
+      () => dataSource("native_sink", "path" -> batchDir.getPath).writer(schema, false), schema)
+    batchWrite.createBatchWriterFactory(PhysicalWriteInfoImpl(1))
+    batchWrite.commit(Array.empty)
+    batchWrite.abort(Array.empty)
+    assert(new File(batchDir, "_SUCCESS").isFile && !new File(batchDir, "_ABORTED").exists())
+    val streamDir = Utils.createTempDir()
+    val streamWrite = new ColumnarStreamingWrite("native_sink",
+      () => dataSource("native_sink", "path" -> streamDir.getPath)
+        .streamWriter(schema, false, UUID.randomUUID().toString),
+      schema)
+    streamWrite.createStreamingWriterFactory(PhysicalWriteInfoImpl(1))
+    streamWrite.commit(0, Array.empty)
+    streamWrite.abort(0, Array.empty)
+    assert(new File(streamDir, "_EPOCH_0").isFile && !new File(streamDir, "_ABORTED_0").exists())
+
+    // After a write fails, a data writer only aborts and closes the data writer of the library.
+    val failingDir = Utils.createTempDir()
+    val writer = dataSource("native_sink", "path" -> failingDir.getPath, "fail" -> "write")
+      .writer(schema, false)
+    val dataWriter = writer.createWriter(0, 0)
+    val allocator = ArrowUtils.rootAllocator.newChildAllocator("test", 0, Long.MaxValue)
+    val vector = new BigIntVector("id", allocator)
+    try {
+      vector.allocateNew(1)
+      vector.set(0, 1L)
+      vector.setValueCount(1)
+      val batch = new ColumnarBatch(Array(new ArrowColumnVector(vector)), 1)
+      val writeError = intercept[Exception](dataWriter.write(batch))
+      assert(findError(writeError, "NATIVE_DATA_SOURCE_ERROR").getMessageParameters
+        .get("msg") == "injected failure in write")
+      Seq(() => dataWriter.write(batch), () => dataWriter.commit()).foreach { call =>
+        checkError(
+          exception = intercept[SparkException](call()),
+          condition = "INTERNAL_ERROR",
+          parameters = Map("message" -> "A write or a commit of the data writer failed."))
+      }
+      dataWriter.abort()
+    } finally {
+      dataWriter.close()
+      vector.close()
+      allocator.close()
+      writer.abort(Array.empty)
+    }
+
+    // The reader of a scan prunes its columns once.
+    val rangeSource = dataSource("native_range")
+    val builder = new ColumnarScanBuilder("native_range", rangeSource.schema(), () => rangeSource)
+    builder.pruneColumns(StructType.fromDDL("id BIGINT"))
+    builder.pruneColumns(StructType.fromDDL("id BIGINT"))
+    checkError(
+      exception = intercept[SparkException] {
+        builder.pruneColumns(StructType.fromDDL("name STRING"))
+      },
+      condition = "INTERNAL_ERROR",
+      parameters = Map(
+        "message" ->
+          "The columns of a scan were pruned again, with columns that it does not read."))
+    // Plans the scan, which releases the reader.
+    builder.build().toBatch.planInputPartitions()
   }
 
   nativeTest("abort a micro-batch whose write failed") {
@@ -856,6 +945,11 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       .start()
     try {
       query.processAllAvailable()
+      // A micro-batch writes the Arrow batches of the scan, without a transition to rows.
+      val plan =
+        query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.executedPlan
+      assert(plan.collectFirst { case write: V2TableWriteExec => write.query }
+        .exists(_.isInstanceOf[MicroBatchScanExec]), plan)
     } finally {
       query.stop()
     }
@@ -1369,6 +1463,38 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(new File(streamDir, "_CLOSED").isFile)
   }
 
+  nativeTest("call no other function on a reader whose call failed than its close function") {
+    def checkFailure(step: String)(f: => Unit): Unit = {
+      val e = intercept[Exception](f)
+      assert(findError(e, "NATIVE_DATA_SOURCE_ERROR").getMessageParameters.get("msg") ==
+        s"injected failure in $step")
+    }
+    // The test library records the calls after a failed one, which fail the test.
+    Seq("push_limit" -> ((df: DataFrame) => df.limit(1)),
+        "prune_columns" -> ((df: DataFrame) => df.select("id"))).foreach { case (step, query) =>
+      checkFailure(step) {
+        query(range(newSession(defaultPackage), "fail" -> step)).collect()
+      }
+    }
+    // A stream reader is closed after one of its functions failed, when the query stops. The
+    // offsets of the first micro-batch are committed when the second one runs.
+    Seq("initial_offset", "latest_offset", "stream_partitions", "commit_offset").foreach { step =>
+      val closedPath = new File(Utils.createTempDir(), "closed")
+      checkFailure(step) {
+        val query = newSession(defaultPackage).readStream.format("native_counter")
+          .option("max_offset", "12").option("step", "5").option("fail", step)
+          .option("closed_path", closedPath.getPath)
+          .load()
+          .writeStream
+          .format("noop")
+          .option("checkpointLocation", Utils.createTempDir().getPath)
+          .start()
+        try query.processAllAvailable() finally query.stop()
+      }
+      assert(closedPath.isFile, s"the stream reader is not closed after $step failed")
+    }
+  }
+
   nativeTest("read and write without a state") {
     // A reader or a writer without a state does not call set_state. read then fails unless it
     // gets a state of length 0, and takes the columns from the schema to read. A data writer that
@@ -1614,15 +1740,46 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
           "interface")))
 
     val logAppender = new LogAppender("native data source logs")
+    // The library records each call of log, with its level, in a file.
+    val logCalls = new File(Utils.createTempDir(), "log_calls")
     withLogAppender(logAppender, loggerNames = Seq(classOf[NativeLibrary].getName)) {
-      range(session, "log" -> "a message from native code")
+      range(session, "log" -> "a message from native code", "log_calls_path" -> logCalls.getPath)
     }
+    // Each data source that the read creates logs, at SPARK_DS_LOG_WARN.
+    assert(Files.readAllLines(logCalls.toPath).asScala.toSet == Set("2"))
     assert(logAppender.loggingEvents.exists { event =>
       val message = event.getMessage.getFormattedMessage
       event.getLevel == org.apache.logging.log4j.Level.WARN &&
         message.contains("a message from native code") &&
         message.contains(System.mapLibraryName("test_native_datasource"))
     })
+    // The library does not even call log for a warning when Spark logs errors only.
+    val errorAppender = new LogAppender("native data source error logs")
+    val errorLogCalls = new File(Utils.createTempDir(), "log_calls")
+    withLogAppender(errorAppender, loggerNames = Seq(classOf[NativeLibrary].getName),
+        level = Some(org.apache.logging.log4j.Level.ERROR)) {
+      range(session, "log" -> "a message that Spark does not log",
+        "log_calls_path" -> errorLogCalls.getPath)
+    }
+    assert(!errorLogCalls.exists())
+    assert(!errorAppender.loggingEvents.exists(
+      _.getMessage.getFormattedMessage.contains("a message that Spark does not log")))
+
+    // is_log_enabled follows the level of the log of Spark: the library gets whether Spark logs
+    // each level, from error to trace.
+    val levels = new File(Utils.createTempDir(), "levels")
+    Seq(
+      org.apache.logging.log4j.Level.TRACE -> "1,1,1,1,1",
+      org.apache.logging.log4j.Level.DEBUG -> "1,1,1,1,0",
+      org.apache.logging.log4j.Level.INFO -> "1,1,1,0,0",
+      org.apache.logging.log4j.Level.WARN -> "1,1,0,0,0",
+      org.apache.logging.log4j.Level.ERROR -> "1,0,0,0,0").foreach { case (level, expected) =>
+      withLogAppender(new LogAppender("native data source log levels"),
+          loggerNames = Seq(classOf[NativeLibrary].getName), level = Some(level)) {
+        range(session, "log_levels_path" -> levels.getPath)
+      }
+      assert(Files.readString(levels.toPath) == expected, level)
+    }
   }
 
   nativeTest("pass the task to reads and data writers") {
@@ -1652,6 +1809,497 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       .mode("append")
       .save()
     check(writeTasks)
+
+    // A read gets the index of its partition in the scan, also when a task reads several
+    // partitions, or the partitions of several scans: the task attempt that read each partition.
+    def readers(dir: File): Map[Int, Long] = dir.listFiles().map { file =>
+      file.getName.toInt -> Files.readString(file.toPath).split(",")(5).toLong
+    }.toMap
+    val (first, second) = (Utils.createTempDir(), Utils.createTempDir())
+    checkRows(
+      range(session, "end" -> "6", "task_path" -> first.getPath).select("id")
+        .union(range(session, "end" -> "6", "task_path" -> second.getPath).select("id")),
+      (0L until 6L).flatMap(i => Seq(Row(i), Row(i))))
+    assert(readers(first).keySet == Set(0, 1) && readers(second).keySet == Set(0, 1))
+    val coalesced = Utils.createTempDir()
+    checkRows(range(session, "end" -> "6", "task_path" -> coalesced.getPath).select("id")
+      .coalesce(1), (0L until 6L).map(Row(_)))
+    assert(readers(coalesced).keySet == Set(0, 1) && readers(coalesced).values.toSet.size == 1)
+    // So does a read of a micro-batch.
+    val (firstStream, secondStream) = (Utils.createTempDir(), Utils.createTempDir())
+    def counter(dir: File): DataFrame = session.readStream.format("native_counter")
+      .option("max_offset", "4").option("task_path", dir.getPath).load()
+    val query = counter(firstStream).union(counter(secondStream)).writeStream.format("noop").start()
+    try query.processAllAvailable() finally query.stop()
+    assert(readers(firstStream).keySet == Set(0) && readers(secondStream).keySet == Set(0))
+  }
+
+  nativeTest("open the partitions of batch and micro-batch scans as Arrow C streams") {
+    val session = newSession(defaultPackage)
+    // The reader factory and the partitions of the batch scan of a query, which an engine gets
+    // from its plan.
+    def plannedScan(df: DataFrame): (SupportsArrowStreamRead, Seq[InputPartition]) = {
+      val scan = df.queryExecution.executedPlan.collectFirst { case s: BatchScanExec => s }.get
+      (scan.readerFactory.asInstanceOf[SupportsArrowStreamRead], scan.inputPartitions)
+    }
+    // The batch scan of only some of the columns from a library that does not prune the others
+    // still reads only them through its streams, since read returns exactly the columns of its
+    // schema to read.
+    val readOnly = newSession(defaultPackage, createPackage(readOnlyLibrary, dataSources("ro_")))
+    val (projectedFactory, projectedPartitions) =
+      plannedScan(readOnly.read.format("ro_native_range").option("end", "4").load().select("id"))
+    val projectedReads = readOnly.artifactManager.withResources {
+      readOnly.sparkContext.parallelize(Seq(0), 1).flatMap { _ =>
+        projectedPartitions.map { partition =>
+          val stream = ArrowArrayStream.allocateNew(ArrowUtils.rootAllocator)
+          try {
+            projectedFactory.openArrowStream(partition, stream.memoryAddress())
+            try TestArrowEngine.readNamesAndIdsInPlace(stream) finally stream.release()
+          } finally {
+            stream.close()
+          }
+        }
+      }.collect().toSeq
+    }
+    assert(projectedReads.map(_._1).distinct == Seq(Seq("id")))
+    assert(projectedReads.flatMap(_._2).sorted == (0L until 4L))
+    assert(NativeLibrary.openEngineStreams() == 0)
+    // Runs `f` in a task that only gets the files of the session. It is the task of the partition
+    // 1, so that the partition of the scan that a read gets is not the partition of its task.
+    def inTask[T: ClassTag](f: => T): T = session.artifactManager.withResources {
+      session.sparkContext.parallelize(Seq(0, 1), 2).flatMap(i => if (i == 1) Seq(f) else Nil)
+        .collect().head
+    }
+    import TestArrowEngine.{callbacks, readIds, readIdsInPlace}
+    // Reads the given partitions in a single task, as an engine does.
+    def readAll(factory: SupportsArrowStreamRead, partitions: Seq[InputPartition]): Seq[Long] = {
+      inTask {
+        partitions.flatMap { partition =>
+          val allocator = ArrowUtils.rootAllocator.newChildAllocator("engine", 0, Long.MaxValue)
+          try {
+            val stream = ArrowArrayStream.allocateNew(allocator)
+            try factory.openArrowStream(partition, stream.memoryAddress()) catch {
+              case e: Throwable =>
+                stream.close()
+                throw e
+            }
+            readIds(stream, allocator)
+          } finally {
+            allocator.close()
+          }
+        }
+      }
+    }
+    // Checks that `f` opens at most `delta` more task contexts than it closes. The count is global
+    // to the JVM, where the tasks of earlier tests may still close their contexts, so it is read
+    // right before `f`, and may be lower afterwards.
+    def checkContexts[T](delta: Int)(f: => T): T = {
+      val before = NativeLibrary.openTaskContexts()
+      val result = f
+      assert(NativeLibrary.openTaskContexts() <= before + delta)
+      result
+    }
+    // The size of struct ArrowArrayStream, which the layout test compares with the header.
+    val streamSize = NativeLibrary.layout().get("ArrowArrayStream").longValue
+
+    // An engine reads both partitions of the scan in a single task.
+    val taskDir = Utils.createTempDir()
+    val (factory, partitions) =
+      plannedScan(range(session, "end" -> "6", "task_path" -> taskDir.getPath).select("id"))
+    assert(partitions.length == 2)
+    assert(readAll(factory, partitions).sorted == (0L until 6L))
+    // The library got the partition of the scan that it reads, not the one of the task.
+    val tasks = taskDir.listFiles().map { file =>
+      file.getName.toInt -> Files.readString(file.toPath).split(",").map(_.toLong).toSeq
+    }.toMap
+    assert(tasks.keySet == Set(0, 1) && tasks.values.map(_(5)).toSet.size == 1, tasks)
+    assert(NativeLibrary.openEngineStreams() == 0)
+    // The reads of a task share the flag that tells them that the task ended, with a single pair
+    // of listeners, which remove it once the task ended. The tasks of earlier tests may still
+    // be ending.
+    eventually(timeout(1.minute))(assert(NativeTask.tasksWithEndedFlags == 0))
+    val flagsInTask = inTask {
+      val ids = partitions.flatMap { partition =>
+        val stream = ArrowArrayStream.allocateNew(ArrowUtils.rootAllocator)
+        try {
+          factory.openArrowStream(partition, stream.memoryAddress())
+          try readIdsInPlace(stream) finally stream.release()
+        } finally {
+          stream.close()
+        }
+      }
+      assert(ids.sorted == (0L until 6L))
+      NativeTask.tasksWithEndedFlags
+    }
+    assert(flagsInTask == 1 && NativeTask.tasksWithEndedFlags == 0)
+
+    // The engine may release the stream after its task ended, and on another thread: Spark frees
+    // the context of the task once the library released the stream.
+    val released = new File(Utils.createTempDir(), "released")
+    val (laterFactory, laterPartitions) =
+      plannedScan(range(session, "end" -> "6", "released_path" -> released.getPath).select("id"))
+    // Opens a stream in a task, and returns it unreleased, with what `read` returned from it in
+    // the task.
+    def openInTask[T: ClassTag](factory: SupportsArrowStreamRead, partition: InputPartition)(
+        read: ArrowArrayStream => T): (Long, T) = inTask {
+      val stream = Platform.allocateMemory(streamSize)
+      Platform.setMemory(stream, 0.toByte, streamSize)
+      factory.openArrowStream(partition, stream)
+      (stream, read(ArrowArrayStream.wrap(stream)))
+    }
+    // The engine reads the stream to its end in the task, but releases it later.
+    val (address, readInTask) =
+      checkContexts(1)(openInTask(laterFactory, laterPartitions.head)(readIdsInPlace))
+    // A copy of the stream, as an engine that moves the stream may leave behind.
+    val copy = Platform.allocateMemory(streamSize)
+    Utils.tryWithSafeFinally {
+      Platform.copyMemory(null, address, null, copy, streamSize)
+      assert(readInTask == (0L until 3L))
+      assert(NativeLibrary.openEngineStreams() == 1 && !released.exists())
+      checkContexts(-1) {
+        ArrowArrayStream.wrap(address).release()
+        assert(NativeLibrary.openEngineStreams() == 0 && released.exists())
+      }
+      // Once the stream is released, the callbacks of the copy fail with EINVAL, and its release
+      // only marks it released.
+      checkContexts(0) {
+        val array = ArrowArray.allocateNew(ArrowUtils.rootAllocator)
+        val stale = try intercept[Exception](ArrowArrayStream.wrap(copy).getNext(array)) finally {
+          array.close()
+        }
+        assert(Utils.exceptionString(stale)
+          .contains("The stream was released, or is not a stream of Spark."))
+        ArrowArrayStream.wrap(copy).release()
+        assert(ArrowArrayStream.wrap(copy).snapshot().release == 0)
+        assert(NativeLibrary.openEngineStreams() == 0)
+      }
+    } {
+      // A failure above may leave the stream open, which would keep the context of its task.
+      if (ArrowArrayStream.wrap(address).snapshot().release != 0) {
+        ArrowArrayStream.wrap(address).release()
+      }
+      Platform.freeMemory(address)
+      Platform.freeMemory(copy)
+    }
+
+    // Once the task ended, its context tells the library that it was interrupted, so that the
+    // library stops waiting.
+    val marker = new File(Utils.createTempDir(), "interrupted")
+    val (waitingFactory, waitingPartitions) = plannedScan(
+      range(session, "end" -> "6", "wait_for_interrupt" -> marker.getPath).select("id"))
+    checkContexts(0) {
+      val (waiting, _) = openInTask(waitingFactory, waitingPartitions.head)(_ => ())
+      val error = intercept[Exception] {
+        readIds(ArrowArrayStream.wrap(waiting), ArrowUtils.rootAllocator)
+      }
+      assert(Utils.exceptionString(error).contains("the task was killed"))
+      assert(Files.readString(marker.toPath) == "interrupted")
+      assert(NativeLibrary.openEngineStreams() == 0)
+      Platform.freeMemory(waiting)
+    }
+
+    // So does the context of a stream that an engine reads in its task once the task is killed,
+    // although the task did not end.
+    val killedMarker = new File(Utils.createTempDir(), "interrupted")
+    val (killedFactory, killedPartitions) = plannedScan(range(session, "end" -> "6",
+      "partitions" -> "1", "wait_for_interrupt" -> killedMarker.getPath).select("id"))
+    val contextsBeforeKill = NativeLibrary.openTaskContexts()
+    val jobGroup = s"native-data-source-${UUID.randomUUID()}"
+    val killError = new AtomicReference[Throwable]()
+    val engineThread = new Thread(() => {
+      session.sparkContext.setJobGroup(jobGroup, "an engine that waits", interruptOnCancel = true)
+      try {
+        inTask {
+          // Reads the stream on the thread of the task, which waits in get_next.
+          val stream = ArrowArrayStream.allocateNew(ArrowUtils.rootAllocator)
+          try {
+            killedFactory.openArrowStream(killedPartitions.head, stream.memoryAddress())
+            try readIdsInPlace(stream) finally stream.release()
+          } finally {
+            stream.close()
+          }
+        }
+      } catch {
+        case e: Throwable => killError.set(e)
+      }
+    })
+    engineThread.start()
+    eventually(timeout(1.minute)) {
+      assert(new File(killedMarker.getPath + ".waiting").isFile)
+    }
+    session.sparkContext.cancelJobGroup(jobGroup)
+    engineThread.join(TimeUnit.MINUTES.toMillis(1))
+    assert(!engineThread.isAlive && killError.get() != null)
+    eventually(timeout(1.minute)) {
+      assert(killedMarker.isFile && Files.readString(killedMarker.toPath) == "interrupted")
+      assert(NativeLibrary.openEngineStreams() == 0)
+      assert(NativeLibrary.openTaskContexts() <= contextsBeforeKill)
+    }
+
+    // So does the reader factory of a micro-batch scan, with the state of its micro-batch.
+    val streamTaskDir = Utils.createTempDir()
+    val query = session.readStream.format("native_counter").option("max_offset", "4")
+      .option("task_path", streamTaskDir.getPath).load()
+      .writeStream.format("noop").start()
+    val microBatchScan = try {
+      query.processAllAvailable()
+      query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.executedPlan
+        .collectFirst { case s: MicroBatchScanExec => s }.get
+    } finally {
+      query.stop()
+    }
+    // Only the reads of the engine record their tasks from now on.
+    streamTaskDir.listFiles().foreach(_.delete())
+    val streamFactory = microBatchScan.readerFactory.asInstanceOf[SupportsArrowStreamRead]
+    val streamPartitions = microBatchScan.inputPartitions.toSeq
+    checkContexts(0) {
+      assert(readAll(streamFactory, streamPartitions).sorted == (0L until 4L))
+    }
+    assert(NativeLibrary.openEngineStreams() == 0)
+    // The library got the partition of the scan, the only one of the micro-batch.
+    assert(streamTaskDir.listFiles().map(_.getName.toInt).toSet == Set(0))
+    // The partitions of a micro-batch keep the state that the stream reader returned with them:
+    // a reader factory that an engine keeps reads them with it, also once Spark planned the next
+    // micro-batch, and so does the reader of Spark.
+    def microBatchStream(options: (String, String)*): MicroBatchStream = {
+      val relation = session.readStream.format("native_counter").options(options.toMap).load()
+        .queryExecution.analyzed.collectFirst { case relation: StreamingRelationV2 => relation }.get
+      relation.table.asInstanceOf[SupportsRead].newScanBuilder(relation.extraOptions)
+        .build().toMicroBatchStream(Utils.createTempDir().getPath)
+    }
+    def plan(stream: MicroBatchStream, start: Int, end: Int): Seq[InputPartition] = {
+      def offset(i: Int): Offset = stream.deserializeOffset(s"""{"offset":$i}""")
+      stream.planInputPartitions(offset(start), offset(end)).toSeq
+    }
+    def serialized(partition: NativeMicroBatchPartition): Seq[Byte] = {
+      val bytes = new ByteArrayOutputStream()
+      Utils.tryWithResource(new ObjectOutputStream(bytes))(_.writeObject(partition))
+      bytes.toByteArray.toSeq
+    }
+    val padding = (NativeDataSourceStreamReader.maxInlineStateBytes + 1).toString
+    val stream = microBatchStream("max_offset" -> "4", "state_padding" -> padding)
+    try {
+      val first = plan(stream, 0, 2)
+      val keptFactory = stream.createReaderFactory()
+      val second = plan(stream, 2, 4)
+      // The executors get a state larger than 64 KiB once for the micro-batch, as a broadcast that
+      // its partitions keep, rather than with the partition of each task.
+      Seq(first, second).foreach { partitions =>
+        val partition = partitions.head.asInstanceOf[NativeMicroBatchPartition]
+        assert(partition.state.isRight && partition.readerState.length > padding.toInt)
+        assert(!serialized(partition).containsSlice(partition.readerState.toSeq))
+      }
+      checkContexts(0) {
+        assert(readAll(keptFactory.asInstanceOf[SupportsArrowStreamRead], first) == Seq(0L, 1L))
+        assert(readAll(keptFactory.asInstanceOf[SupportsArrowStreamRead], second) == Seq(2L, 3L))
+        val read = inTask {
+          first.flatMap { partition =>
+            val reader = keptFactory.createColumnarReader(partition)
+            try {
+              val ids = ArrayBuffer.empty[Long]
+              while (reader.next()) {
+                val batch = reader.get()
+                (0 until batch.numRows()).foreach(i => ids += batch.column(0).getLong(i))
+              }
+              ids.toSeq
+            } finally {
+              reader.close()
+            }
+          }
+        }
+        assert(read == Seq(0L, 1L))
+      }
+    } finally {
+      stream.stop()
+    }
+    // A smaller state, such as a few offsets, goes with the partition of each task, which costs
+    // less than a broadcast.
+    val small = microBatchStream("max_offset" -> "4")
+    try {
+      val partition = plan(small, 0, 2).head.asInstanceOf[NativeMicroBatchPartition]
+      assert(partition.state.isLeft && partition.readerState.nonEmpty)
+      assert(serialized(partition).containsSlice(partition.readerState.toSeq))
+      checkContexts(0) {
+        assert(readAll(small.createReaderFactory().asInstanceOf[SupportsArrowStreamRead],
+          Seq(partition)) == Seq(0L, 1L))
+      }
+    } finally {
+      small.stop()
+    }
+    // A micro-batch without partitions broadcasts no state, although the stream reader returned
+    // a large one.
+    val (counterName, counterLocation) =
+      NativeDataSourceRegistry.lookup("native_counter", session.sessionState.conf).get
+    val streamReader = new NativeDataSource(counterLocation, counterName,
+        new CaseInsensitiveStringMap(Map("max_offset" -> "4", "state_padding" -> padding).asJava))
+      .streamReader(StructType.fromDDL("id BIGINT"), Utils.createTempDir().getPath)
+      .asInstanceOf[NativeDataSourceStreamReader]
+    try {
+      def offset(i: Int): String = s"""{"offset":$i}"""
+      assert(streamReader.partitions(offset(0), offset(0)).isEmpty)
+      assert(streamReader.uncommittedStates.isEmpty)
+      // The broadcast of a micro-batch is destroyed once the micro-batch is committed, and those
+      // of the micro-batches after it stay.
+      assert(streamReader.partitions(offset(0), offset(2)).nonEmpty)
+      assert(streamReader.partitions(offset(2), offset(4)).nonEmpty)
+      assert(streamReader.partitions(offset(4), offset(6)).nonEmpty)
+      val states = streamReader.uncommittedStates
+      assert(states.length == 3 && states.forall(_.isValid))
+      streamReader.commit(offset(2))
+      assert(states.map(_.isValid) == Seq(false, true, true))
+      assert(streamReader.uncommittedStates == states.tail)
+      // Spark may not commit every micro-batch, as with async progress tracking, so a commit also
+      // destroys the broadcasts of the micro-batches before it, also when the committed one has no
+      // broadcast, as a micro-batch without partitions, here at an end not planned before.
+      assert(streamReader.partitions(offset(7), offset(7)).isEmpty)
+      streamReader.commit(offset(7))
+      assert(states.forall(!_.isValid) && streamReader.uncommittedStates.isEmpty)
+      // stop() destroys the broadcasts of the micro-batches that are not committed.
+      assert(streamReader.partitions(offset(7), offset(9)).nonEmpty)
+      val lastState = streamReader.uncommittedStates
+      assert(lastState.length == 1 && lastState.head.isValid)
+      streamReader.stop()
+      assert(!lastState.head.isValid && streamReader.uncommittedStates.isEmpty)
+    } finally {
+      streamReader.stop()
+    }
+    // A micro-batch without a state has no bytes to read the partitions with.
+    val stateless = microBatchStream("max_offset" -> "4", "states" -> "0")
+    try {
+      val partitions = plan(stateless, 0, 2).map(_.asInstanceOf[NativeMicroBatchPartition])
+      assert(partitions.map(_.state.isLeft) == Seq(true) && partitions.head.readerState.isEmpty)
+    } finally {
+      stateless.stop()
+    }
+
+    // It runs in the running task, with a stream whose release callback is NULL.
+    val outside = intercept[IllegalStateException] {
+      factory.openArrowStream(partitions.head, 0)
+    }
+    assert(outside.getMessage.contains("must be called in the running task"))
+    val completed = intercept[Exception] {
+      session.artifactManager.withResources {
+        session.sparkContext.parallelize(Seq(0), 1).foreach { _ =>
+          TaskContext.get().addTaskCompletionListener[Unit] { _ =>
+            factory.openArrowStream(partitions.head, 0)
+          }
+        }
+      }
+    }
+    assert(Utils.exceptionString(completed).contains("must be called in the running task"))
+    // Nor in a task that failed, while its failure listeners run.
+    val failed = intercept[Exception] {
+      session.artifactManager.withResources {
+        session.sparkContext.parallelize(Seq(0), 1).foreach { _ =>
+          TaskContext.get().addTaskFailureListener { (_, _) =>
+            factory.openArrowStream(partitions.head, 0)
+          }
+          throw new IllegalStateException("injected failure of the task")
+        }
+      }
+    }
+    assert(Utils.exceptionString(failed).contains("injected failure of the task"))
+    assert(Utils.exceptionString(failed).contains("must be called in the running task"))
+    // A task that was killed gets the error of its kill.
+    val killedContext = TaskContext.empty()
+    killedContext.markInterrupted("killed for the test")
+    TaskContext.setTaskContext(killedContext)
+    val killed = try intercept[TaskKilledException] {
+      factory.openArrowStream(partitions.head, 0)
+    } finally {
+      TaskContext.unset()
+    }
+    assert(killed.reason == "killed for the test")
+    val noStream = intercept[Exception](inTask(factory.openArrowStream(partitions.head, 0)))
+    assert(Utils.exceptionString(noStream).contains("whose release callback is NULL"))
+    // The arguments are checked before the partition, which must be of the kind of the scan of the
+    // factory: a partition of a micro-batch fails for a batch scan, and the other way around.
+    val outsideWithOtherKind = intercept[IllegalStateException] {
+      streamFactory.openArrowStream(partitions.head, 0)
+    }
+    assert(outsideWithOtherKind.getMessage.contains("must be called in the running task"))
+    val otherKinds = checkContexts(0) {
+      inTask {
+        Seq(streamFactory -> partitions.head, factory -> streamPartitions.head).map {
+          case (kindFactory, partition) =>
+            val stream = Platform.allocateMemory(streamSize)
+            try {
+              Platform.setMemory(stream, 0.toByte, streamSize)
+              kindFactory.openArrowStream(partition, stream)
+              None
+            } catch {
+              case e: IllegalArgumentException => Some(e.getMessage)
+            } finally {
+              Platform.freeMemory(stream)
+            }
+        }
+      }
+    }
+    assert(otherKinds == Seq(
+      Some("openArrowStream needs a partition of the scan of the reader factory, a " +
+        s"NativeMicroBatchPartition, but got ${classOf[NativeInputPartition].getName}."),
+      Some("openArrowStream needs a partition of the scan of the reader factory, a " +
+        s"NativeInputPartition, but got ${classOf[NativeMicroBatchPartition].getName}.")))
+    // A stream whose release callback is not NULL, such as an open one, is left as it is.
+    val (rejected, unchanged, ids) = checkContexts(0) {
+      inTask {
+        val allocator = ArrowUtils.rootAllocator.newChildAllocator("engine", 0, Long.MaxValue)
+        try {
+          val stream = ArrowArrayStream.allocateNew(allocator)
+          factory.openArrowStream(partitions.head, stream.memoryAddress())
+          val before = callbacks(stream)
+          val rejected = try {
+            factory.openArrowStream(partitions.head, stream.memoryAddress())
+            None
+          } catch {
+            case e: IllegalArgumentException => Some(e.getMessage)
+          }
+          (rejected, callbacks(stream) == before, readIds(stream, allocator))
+        } finally {
+          allocator.close()
+        }
+      }
+    }
+    assert(rejected.exists(_.contains("whose release callback is NULL")), rejected)
+    assert(unchanged && ids == (0L until 3L))
+
+    // If it fails, the stream is released, including the stream of the library that Spark rejects.
+    Seq(
+      "open" -> "injected failure in open",
+      "uninitialized" ->
+        "The library did not initialize the stream, or a callback of the stream is NULL.",
+      "null_get_next" ->
+        "The library did not initialize the stream, or a callback of the stream is NULL."
+    ).foreach { case (fail, msg) =>
+      val failReleased = new File(Utils.createTempDir(), "released")
+      val (failing, failingPartitions) =
+        plannedScan(range(session, "fail" -> fail, "released_path" -> failReleased.getPath))
+      val e = checkContexts(0) {
+        intercept[Exception] {
+          inTask {
+            val stream = ArrowArrayStream.allocateNew(ArrowUtils.rootAllocator)
+            try {
+              failing.openArrowStream(failingPartitions.head, stream.memoryAddress())
+            } catch {
+              // Keeps the failure, but not as the cause, which findError would find.
+              case e: Throwable if stream.snapshot().release != 0 =>
+                val notReleased = new IllegalStateException(
+                  s"The stream is not released after the failure $fail.")
+                notReleased.addSuppressed(e)
+                throw notReleased
+            } finally {
+              stream.close()
+            }
+          }
+        }
+      }
+      checkError(
+        exception = findError(e, "NATIVE_DATA_SOURCE_ERROR"),
+        condition = "NATIVE_DATA_SOURCE_ERROR",
+        parameters = Map("action" -> "read", "name" -> "native_range", "msg" -> msg))
+      assert(failReleased.exists() == (fail == "null_get_next"), fail)
+      assert(NativeLibrary.openEngineStreams() == 0)
+    }
   }
 
   nativeTest("tell a read that its task was killed") {
@@ -1661,6 +2309,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       "wait_for_interrupt" -> marker.getPath)
     val jobGroup = s"native-data-source-${UUID.randomUUID()}"
     val error = new AtomicReference[Throwable]()
+    val contexts = NativeLibrary.openTaskContexts()
     val thread = new Thread(() => {
       session.sparkContext.setJobGroup(jobGroup, "a read that waits", interruptOnCancel = true)
       try df.collect() catch {
@@ -1677,9 +2326,12 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     thread.join(TimeUnit.MINUTES.toMillis(1))
     assert(!thread.isAlive)
     assert(error.get() != null)
-    // The job fails right away, and its task ends once the library sees that it was killed.
+    // The job fails right away, and its task ends once the library sees that it was killed. The
+    // test also waits until the task closed the context of its read, which the tests that count
+    // the contexts would otherwise count.
     eventually(timeout(1.minute)) {
       assert(marker.isFile && Files.readString(marker.toPath) == "interrupted")
+      assert(NativeLibrary.openTaskContexts() <= contexts)
     }
   }
 
@@ -1689,6 +2341,10 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     val marker = new File(Utils.createTempDir(), "released")
     val reading = marker.getPath + ".reading"
     val df = range(session, "end" -> "10", "partitions" -> "1", "slow_read" -> marker.getPath)
+    // The contexts of the tasks of earlier tests are closed first, so that the counts below are
+    // exactly those of this test, also the one of the context that stays open.
+    eventually(timeout(1.minute))(assert(NativeLibrary.openTaskContexts() == 0))
+    val contexts = 0
     try {
       // PipedRDD reads the scan on a thread of its own, which the task does not wait for. The
       // task completes without reading the output of the command, once that thread is in
@@ -1706,16 +2362,18 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       assert(count == 0)
       assert(new File(reading).isFile, "get_next was not called.")
       if (marker.isFile) fail(s"The stream was released: ${Files.readString(marker.toPath)}.")
+      // The task completed, but its context stays valid until the stream is released.
+      assert(NativeLibrary.openTaskContexts() == contexts + 1)
     } finally {
       new File(marker.getPath + ".continue").createNewFile()
     }
-    // The thread in get_next releases the stream once get_next returns.
+    // The thread in get_next releases the stream once get_next returns, and then the context.
     eventually(timeout(1.minute)) {
       assert(marker.isFile && Files.readString(marker.toPath) == "after get_next")
+      assert(NativeLibrary.openTaskContexts() == contexts)
     }
-    // The task context was still valid once get_next continued: Spark answers that a context
-    // that it freed is interrupted, and this task was not.
-    assert(Files.readString(new File(marker.getPath + ".interrupted").toPath) == "false")
+    // The read learned that its task ended, so that it may stop reading.
+    assert(Files.readString(new File(marker.getPath + ".interrupted").toPath) == "true")
   }
 
   nativeTest("close a reader while another thread reads it") {
@@ -1744,7 +2402,8 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
           case e: ExecutionException => Left(e.getCause)
         }
         assert(Files.readString(marker.toPath) == "after get_next")
-        // The task context was still valid once get_next continued, as in the test above.
+        // The context was still valid once get_next continued: Spark answers that a context that
+        // it freed is interrupted, and a read outside of a task never is.
         assert(Files.readString(new File(marker.getPath + ".interrupted").toPath) == "false")
         // A reader that was closed reads nothing more, and closing it again does not fail.
         assert(!reader.next())
@@ -2113,8 +2772,12 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "name" -> "native_range",
         "packages" -> Seq(first, second).map(_.getCanonicalPath).mkString(", ")))
-    // The same package found twice is not a conflict: here, in the configured paths and in the
-    // artifacts of the session.
+    // The same package found twice is not a conflict: here, listed both as a file and through
+    // its directory.
+    val only = Utils.createTempDir()
+    val pkg = createPackage(library, dataSources(""), dir = only, fileName = "c.sparkpkg")
+    checkRows(range(newSession(pkg, only), "end" -> "2"), Seq(expectedRow(0L), expectedRow(1L)))
+    // Nor is the same package, configured and also added by the session.
     val session = newSession(first)
     session.addArtifact(first.getPath)
     checkRows(range(session, "end" -> "2"), Seq(expectedRow(0L), expectedRow(1L)))
@@ -2144,6 +2807,184 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       .filter(_.contains("which the session added last"))
     assert(logged.size == 2, logged)
     assert(logged.forall(_.contains("for the data source native_range")), logged)
+  }
+
+  nativeTest("reject a package that a session adds when Spark cannot use it") {
+    // The package that a session added last takes precedence, so Spark rejects a package that it
+    // cannot use when the session adds it, rather than keep using what the session used before.
+    val session = newSession(defaultPackage)
+    def ids(): DataFrame = range(session, "end" -> "3").select("id")
+    val dir = Utils.createTempDir()
+    def check(pkg: File, subClass: String, params: Map[String, String]): Unit = {
+      // Also when the same file is added again.
+      (1 to 2).foreach { _ =>
+        checkError(
+          exception = intercept[SparkRuntimeException](session.addArtifact(pkg.getPath)),
+          condition = s"INVALID_NATIVE_DATA_SOURCE_PACKAGE.$subClass",
+          parameters = Map("path" -> pkg.getPath) ++ params)
+      }
+      // The session does not get it, and keeps using the configured package.
+      assert(session.artifactManager.getNativeDataSourcePackages._1.isEmpty)
+      assert(!session.artifactManager.hasFileArtifact(pkg.getName))
+      assert(!session.sparkContext.listFiles().exists(_.endsWith("/" + pkg.getName)))
+      checkRows(ids(), Seq(Row(0L), Row(1L), Row(2L)))
+    }
+    check(createPackage(renamedNegatingLibrary, dataSources(""), dir = dir,
+        fileName = "range-2.0.sparkpkg", abiVersion = 2),
+      "UNSUPPORTED_ABI_VERSION", Map("version" -> "2", "supported" -> "1"))
+    check(createZip(dir, "range-2.1.sparkpkg",
+        NativeDataSourcePackage.MANIFEST_NAME -> manifestJson(
+          dataSources(""), Map(NativePlatform.current -> "lib.so")).getBytes(UTF_8)),
+      "INVALID_MANIFEST", Map("reason" -> "The package does not contain the library lib.so."))
+    // ZipFile.getEntry("lib") also finds the directory entry "lib/", as for the manifest below.
+    check(createZip(dir, "range-2.7.sparkpkg",
+        NativeDataSourcePackage.MANIFEST_NAME -> manifestJson(
+          dataSources(""), Map(NativePlatform.current -> "lib")).getBytes(UTF_8),
+        "lib/" -> Array.emptyByteArray, "lib/x" -> "x".getBytes(UTF_8)),
+      "INVALID_MANIFEST", Map("reason" -> "The package does not contain the library lib."))
+    check(createZip(dir, "range-2.8.sparkpkg",
+        s"${NativeDataSourcePackage.MANIFEST_NAME}/" -> Array.emptyByteArray),
+      "INVALID_MANIFEST", Map("reason" ->
+        s"The package does not contain the manifest ${NativeDataSourcePackage.MANIFEST_NAME}."))
+    val notAZip = new File(dir, "range-2.2.sparkpkg")
+    Files.writeString(notAZip.toPath, "not a zip")
+    // The message of the ZipException names no file.
+    val notAZipReason =
+      s"The package is not a valid zip file: ${intercept[ZipException](new ZipFile(notAZip))}"
+    check(notAZip, "INVALID_MANIFEST", Map("reason" -> notAZipReason))
+    val directory = new File(dir, "range-2.3.sparkpkg")
+    assert(directory.mkdir())
+    check(directory, "INVALID_MANIFEST", Map("reason" -> "The package is a directory."))
+    // The driver loads the library to plan a query.
+    check(createPackage(library, dataSources(""), dir = dir, fileName = "range-2.4.sparkpkg",
+        platform = "other-platform"),
+      "UNSUPPORTED_PLATFORM", Map("platform" -> NativePlatform.current,
+        "platforms" -> "other-platform"))
+    // A file that does not exist, or that cannot be read, fails as for the other artifacts.
+    intercept[NoSuchFileException](session.addArtifact(new File(dir, "missing.sparkpkg").getPath))
+    val unreadable = createPackage(library, dataSources(""), dir = dir,
+      fileName = "range-2.5.sparkpkg")
+    try {
+      // Not when the user can read any file, as root.
+      if (unreadable.setReadable(false) && !Files.isReadable(unreadable.toPath)) {
+        intercept[AccessDeniedException](session.addArtifact(unreadable.getPath))
+      }
+    } finally {
+      unreadable.setReadable(true)
+    }
+    // A package that Spark staged, such as one added from bytes, is named after the artifact.
+    val staged = intercept[SparkRuntimeException] {
+      session.addArtifact(Files.readAllBytes(createPackage(library, dataSources(""),
+        abiVersion = 2).toPath), "range-2.6.sparkpkg")
+    }
+    checkError(
+      exception = staged,
+      condition = "INVALID_NATIVE_DATA_SOURCE_PACKAGE.UNSUPPORTED_ABI_VERSION",
+      parameters = Map(
+        "path" -> Paths.get("files", "range-2.6.sparkpkg").toString,
+        "version" -> "2",
+        "supported" -> "1"))
+    assert(session.artifactManager.getNativeDataSourcePackages._1.isEmpty)
+
+    // A valid package with the same file name as a rejected one can be added then.
+    val added = createPackage(renamedNegatingLibrary, dataSources(""),
+      fileName = "range-2.0.sparkpkg")
+    session.addArtifact(added.getPath)
+    checkRows(ids(), Seq(Row(0L), Row(-1L), Row(-2L)))
+    // Adding it again, from the file or from the same bytes, does nothing.
+    session.addArtifact(added.getPath)
+    session.addArtifact(Files.readAllBytes(added.toPath), added.getName)
+    assert(session.artifactManager.getNativeDataSourcePackages._1.map(_.getName) ==
+      Seq("range-2.0.sparkpkg"))
+    checkRows(ids(), Seq(Row(0L), Row(-1L), Row(-2L)))
+    // Another file with the name of an artifact fails as such, also if it is not a package, and
+    // the error names the artifact.
+    def checkExisting(e: SparkRuntimeException, fileName: String = "range-2.0.sparkpkg"): Unit = {
+      checkError(
+        exception = e,
+        condition = "ARTIFACT_ALREADY_EXISTS",
+        parameters = Map("normalizedRemoteRelativePath" -> Paths.get("files", fileName).toString))
+    }
+    val sameName = new File(Utils.createTempDir(), "range-2.0.sparkpkg")
+    Files.copy(notAZip.toPath, sameName.toPath)
+    checkExisting(intercept[SparkRuntimeException](session.addArtifact(sameName.getPath)))
+    val sameNameDirectory = new File(Utils.createTempDir(), "range-2.0.sparkpkg")
+    assert(sameNameDirectory.mkdir())
+    checkExisting(intercept[SparkRuntimeException](session.addArtifact(sameNameDirectory.getPath)))
+    val missing = new File(Utils.createTempDir(), "range-2.0.sparkpkg")
+    checkExisting(intercept[SparkRuntimeException](session.addArtifact(missing.getPath)))
+    // Also for a package that Spark staged, which is compared with the artifact before the check.
+    checkExisting(intercept[SparkRuntimeException] {
+      session.addArtifact("not a zip".getBytes(UTF_8), "range-2.0.sparkpkg")
+    })
+    // And for an artifact that is a directory, as files/range-5.0.sparkpkg is after this.
+    val inner = new File(Utils.createTempDir(), "inner.txt")
+    Files.writeString(inner.toPath, "inner")
+    session.artifactManager.addArtifact(Paths.get("files", "range-5.0.sparkpkg", inner.getName),
+      inner.toPath, None, deleteStagedFile = false)
+    checkExisting(intercept[SparkRuntimeException] {
+      session.addArtifact(createPackage(library, dataSources(""),
+        fileName = "range-5.0.sparkpkg").getPath)
+    }, "range-5.0.sparkpkg")
+
+    // A call that adds several artifacts adds the others, and reports all the rejected ones.
+    val valid = createPackage(library, dataSources(""), dir = dir, fileName = "range-3.0.sparkpkg")
+    val rejected = intercept[SparkRuntimeException] {
+      session.addArtifacts(sameName.toURI, notAZip.toURI, valid.toURI)
+    }
+    checkExisting(rejected)
+    assert(rejected.getSuppressed.length == 1)
+    checkError(
+      exception = rejected.getSuppressed.head.asInstanceOf[SparkRuntimeException],
+      condition = "INVALID_NATIVE_DATA_SOURCE_PACKAGE.INVALID_MANIFEST",
+      parameters = Map("path" -> notAZip.getPath, "reason" -> notAZipReason))
+    checkRows(ids(), Seq(Row(0L), Row(1L), Row(2L)))
+
+    // Only the file artifacts (files/) with the extension are packages, which Spark checks, and
+    // not other kinds of artifacts with it, which a Spark Connect client can add.
+    val pyFile = createPackage(library, dataSources(""), dir = dir,
+      fileName = "range-4.0.sparkpkg", abiVersion = 2)
+    session.artifactManager.addArtifact(
+      Paths.get("pyfiles", pyFile.getName), pyFile.toPath, None, deleteStagedFile = false)
+    assert(session.artifactManager.getNativeDataSourcePackages._1.map(_.getName) ==
+      Seq("range-2.0.sparkpkg", "range-3.0.sparkpkg"))
+  }
+
+  test("add any file with the extension when native data sources are disabled") {
+    val session = spark.newSession()
+    sessions += session
+    // A static configuration, which a session cannot set otherwise.
+    session.sessionState.conf.setConf(StaticSQLConf.NATIVE_DATA_SOURCE_ENABLED, false)
+    val file = new File(Utils.createTempDir(), "not_a_package.sparkpkg")
+    Files.writeString(file.toPath, "not a zip")
+    session.addArtifact(file.getPath)
+    assert(session.artifactManager.hasFileArtifact(file.getName))
+  }
+
+  test("add a read-only package as a writable artifact") {
+    // Spark checks a copy of the file of the user, which keeps its permissions, or on Windows its
+    // read-only attribute, so Spark makes it writable: the artifact, moved from it, is writable.
+    val session = spark.newSession()
+    sessions += session
+    val pkg = createZip(Utils.createTempDir(), "read_only.sparkpkg",
+      NativeDataSourcePackage.MANIFEST_NAME -> manifestJson(
+        dataSources(""), Map(NativePlatform.current -> "lib.so")).getBytes(UTF_8),
+      "lib.so" -> "lib".getBytes(UTF_8))
+    assert(pkg.setWritable(false))
+    try {
+      session.addArtifact(pkg.getPath)
+      val artifact = session.artifactManager.getNativeDataSourcePackages._1.head.toPath
+      // The permissions rather than Files.isWritable, which is true for root whatever they are.
+      Option(Files.getFileAttributeView(artifact, classOf[PosixFileAttributeView])) match {
+        case Some(view) =>
+          assert(view.readAttributes().permissions().contains(PosixFilePermission.OWNER_WRITE))
+        case None =>
+          // On Windows, Files.isWritable reads the read-only attribute.
+          assert(Files.isWritable(artifact))
+      }
+    } finally {
+      pkg.setWritable(true)
+    }
   }
 
   nativeTest("Java data sources take precedence") {
@@ -2355,5 +3196,81 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     } == 1)
     check(noTableLibrary, "nt_", "spark_ds_init returned no function table.")
     check(noInitLibrary, "ni_", "The library does not export the function spark_ds_init.")
+  }
+}
+
+/** What an engine does with the Arrow C stream of a partition of a native scan. */
+object TestArrowEngine {
+  /** The callbacks and the private data of a stream. */
+  def callbacks(stream: ArrowArrayStream): Seq[Long] = {
+    val snapshot = stream.snapshot()
+    Seq(snapshot.get_schema, snapshot.get_next, snapshot.get_last_error, snapshot.release,
+      snapshot.private_data)
+  }
+
+  /**
+   * Reads the ids of a stream to its end on the calling thread, without moving or releasing it, as
+   * an engine that releases the stream later does.
+   */
+  def readIdsInPlace(stream: ArrowArrayStream): Seq[Long] = readNamesAndIdsInPlace(stream)._2
+
+  /** The names of the columns of a stream and its ids, read as `readIdsInPlace` reads them. */
+  def readNamesAndIdsInPlace(stream: ArrowArrayStream): (Seq[String], Seq[Long]) = {
+    val allocator = ArrowUtils.rootAllocator.newChildAllocator("engine", 0, Long.MaxValue)
+    val dictionaries = new CDataDictionaryProvider()
+    try {
+      val schema = ArrowSchema.allocateNew(allocator)
+      val root = try {
+        stream.getSchema(schema)
+        VectorSchemaRoot.create(Data.importSchema(allocator, schema, dictionaries), allocator)
+      } finally {
+        schema.close()
+      }
+      try {
+        val ids = ArrayBuffer.empty[Long]
+        var more = true
+        while (more) {
+          // A new array for each batch, since the import closes it, as in NativePartitionReader.
+          val array = ArrowArray.allocateNew(allocator)
+          try {
+            stream.getNext(array)
+            // The stream ends with a released array.
+            more = array.snapshot().release != 0
+            if (more) {
+              Data.importIntoVectorSchemaRoot(allocator, array, root, dictionaries)
+              val vector = root.getVector("id").asInstanceOf[BigIntVector]
+              (0 until root.getRowCount).foreach(i => ids += vector.get(i))
+            }
+          } finally {
+            array.close()
+          }
+        }
+        (root.getSchema.getFields.asScala.map(_.getName).toSeq, ids.toSeq)
+      } finally {
+        root.close()
+      }
+    } finally {
+      dictionaries.close()
+      allocator.close()
+    }
+  }
+
+  /** Reads the ids of a stream on another thread, as an engine may, and releases the stream. */
+  def readIds(stream: ArrowArrayStream, allocator: BufferAllocator): Seq[Long] = {
+    // Moves the stream into a reader, which releases it once closed.
+    val reader = Data.importArrayStream(allocator, stream)
+    try {
+      ThreadUtils.runInNewThread("engine") {
+        val ids = ArrayBuffer.empty[Long]
+        while (reader.loadNextBatch()) {
+          val root = reader.getVectorSchemaRoot
+          val vector = root.getVector("id").asInstanceOf[BigIntVector]
+          (0 until root.getRowCount).foreach(i => ids += vector.get(i))
+        }
+        ids.toSeq
+      }
+    } finally {
+      reader.close()
+    }
   }
 }

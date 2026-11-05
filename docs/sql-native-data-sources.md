@@ -37,7 +37,19 @@ package, and loads it when a query uses the data source. Spark adapts it to
 
 Data is exchanged only as columnar batches, through the
 [Arrow C data interface](https://arrow.apache.org/docs/format/CDataInterface.html), so Spark reads
-the data that a library returns without copying it.
+the data that a library returns without copying it. When a write gets the batches of a scan as
+they are, as in a plain copy from one native data source to another, Spark writes them without
+converting them to rows: it copies the buffers of their columns, since a library may keep the data
+that it writes until it closes its data writer, and converts value by value the columns of other
+Arrow types than those of the schema, such as `utf8_view` strings, and those that Arrow Java cannot
+slice, such as a column of a fixed width with 2 GiB of values or more. The copied values are written
+as the scan returned them, without the checks of a conversion, such as the precision of a decimal.
+The batches that Spark copies end with the batches of the scan, so a library may get smaller
+batches than `spark.sql.execution.arrow.maxRecordsPerBatch` rows then. The data of a query in which
+Spark also filters, projects or shuffles the rows is still converted to rows, and with adaptive
+query execution, so is the data of a query with a subquery. So is the data of every query when an
+extension of the session (`spark.sql.extensions`) has columnar rules, which may replace the
+conversions to rows with their own, such as those of an engine that runs queries in native code.
 
 Spark calls native data sources with the
 [Foreign Function and Memory API](https://openjdk.org/jeps/454) of Java, which is final from Java
@@ -70,7 +82,9 @@ A native data source library exports a single C function, `spark_ds_init`, which
 of function pointers, a `SparkDsLibrary`, that implements the data source: it needs no JVM headers
 or bindings. Each library has its own table, so any number of native data sources can be loaded
 side by side. When Spark loads a library, it calls `spark_ds_init` with a `SparkDsHost`, which
-gives the library the version of Spark and a function to log messages to the log of Spark.
+gives the library the version of Spark, a function to log messages to the log of Spark, and a
+function that tells whether Spark logs the messages of a level, so that a library follows the log
+level of Spark.
 
 A Spark distribution contains the header in its `include` directory, as
 `$SPARK_HOME/include/spark_datasource.h`, and the `spark-sql` JAR contains it as
@@ -102,11 +116,12 @@ Spark calls the functions of the table as follows:
   not specify a schema, Spark asks for it with `schema`.
 - **Batch reads**: on the driver, Spark creates a reader with `create_reader`, pushes operations
   down with `push_limit` and `prune_columns`, and plans the partitions with `partitions`, which
-  also returns the state of the reader. Then it calls `read` on the executors, in one task for each
-  partition, with a `SparkDsReadInfo` that has the partition, the schema to read and the state of
-  the reader, and `read` exports an `ArrowArrayStream`. Its callbacks can be called from any
-  thread, but never concurrently. The schema to read has only the columns that the query needs,
-  which `prune_columns` got, and the arrays of the stream have exactly these columns, also when the
+  also returns the state of the reader. Then it calls `read` on the executors for each partition,
+  in tasks that may each read several partitions, for example after a coalesce or a union, with a
+  `SparkDsReadInfo` that has the partition, the schema to read and the state of the reader, and
+  `read` exports an `ArrowArrayStream`. Its callbacks can be called from any thread, but never
+  concurrently. The schema to read has only the columns that the query needs, which
+  `prune_columns` got, and the arrays of the stream have exactly these columns, also when the
   library does not implement `prune_columns`, which only lets it plan to read them.
 - **Streaming reads**: on the driver, Spark creates a stream reader with `create_stream_reader`,
   which gets the columns to read, which may be only those that the query needs, and the location of
@@ -153,17 +168,21 @@ Spark calls the functions of the table as follows:
   irreversible work, such as removing the existing data for an overwrite, in `commit`. On the
   executors, each task creates a data writer with `create_data_writer`, which gets the schema of the
   data and the state of the writer in a `SparkDsDataWriterInfo`, writes the batches of its data with
-  `write`, and calls `commit_data_writer`, or `abort_data_writer` if the task or the commit fails.
-  Then the driver calls `commit` with the messages of the tasks, or `abort` if the write failed.
+  `write`, and calls `commit_data_writer`, or `abort_data_writer` if the task or the commit fails
+  before `commit_data_writer` succeeded. Then the driver calls `commit` with the messages of the
+  tasks, or `abort` if the write failed. A data writer whose task failed after
+  `commit_data_writer` succeeded is neither aborted nor passed to `commit`, so `commit` or `abort`
+  cleans up the output of the data writers whose messages it does not get.
   When Spark rejects what `create_writer` returned, such as a state set more than once, it calls
   `abort` with the field `rejected` of `SparkDsFinishWriteInfo` set to 1, and an epoch ID of -1 also
   for a streaming write, before `close_writer`. A streaming write commits each micro-batch with its
   epoch ID, and the ID of the query stays the same when the query restarts from its checkpoint:
   together, they identify the output of a micro-batch, so that a library can skip an epoch that it
-  already committed. A micro-batch streaming query creates a new stream writer for each micro-batch,
-  and Spark closes the previous one when it creates the next one. Because Spark is not told when a
-  streaming query stops, the last stream writer of a query is closed once it is no longer
-  referenced, or when the query is restarted.
+  already committed. A restarted query may also abort such an epoch, so an abort only removes what
+  the data writers of its own writer wrote. A micro-batch streaming query creates a new stream
+  writer for each micro-batch, and Spark closes the previous one when it creates the next one.
+  Because Spark is not told when a streaming query stops, the last stream writer of a query is
+  closed once it is no longer referenced, or when the query is restarted.
 
 The library defines the format of the partitions, of the state of its readers and writers, and of
 the commit messages, which Spark sends to the executors and back as byte arrays. The library
@@ -174,7 +193,12 @@ function reports an error by returning a non-zero value, with the message return
 `last_error`, and Spark reports it as a `NATIVE_DATA_SOURCE_ERROR`. A C++ exception or a Rust panic
 must not cross the interface. Each handle that a `create` function returns is released exactly
 once, by the `close` function of its kind. The close functions cannot fail, and they can run after
-the query, so do the work that can fail, such as flushing data, in `commit`. Strings are UTF-8.
+the query, so do the work that can fail, such as flushing data, in `commit`. After a function on
+a handle fails, Spark only closes the handle, except that it aborts a writer whose commit failed
+and a data writer whose write or commit failed, and it never aborts one whose commit succeeded.
+Spark may read a partition more than once, also at the same time, in several attempts of its task,
+such as after a failure or with speculative execution. The header lists the order of the calls
+that a library can rely on. Strings are UTF-8.
 
 A library only sets the functions of the operations it supports, and leaves the others `NULL`. A
 data source must not declare a capability whose functions are `NULL`:
@@ -202,13 +226,16 @@ to, but it cannot check that the buffers of the arrays hold those values, becaus
 interface does not carry the sizes of buffers: a library that exports a buffer that is too short
 makes Spark read past its end.
 
-`read` and `create_data_writer` get a `SparkDsTaskContext`, with the IDs of the task, and its
-partition and attempt, and an `is_interrupted` function that returns whether the task was killed,
-for example because its query was canceled. Spark cannot interrupt native code: when a task is
-killed, Spark stops reading only once the `get_next` function of the stream returns. So a read or
-a write that runs for long, or blocks, for example on network I/O, should check `is_interrupted`
-regularly and use timeouts. The task reaper, `spark.task.reaper.enabled` and
-`spark.task.reaper.killTimeout`, kills an executor whose killed task does not end.
+`read` and `create_data_writer` get a `SparkDsTaskContext`, with the IDs of the task, its
+attempt, and the partition: for `read`, the index of the partition in the list that the planning
+returned, which is unique within a scan but not across the scans that a task reads, and for
+`create_data_writer`, the partition of the task. It also has an `is_interrupted` function that
+returns whether the task was killed, for example because its query was canceled. Spark cannot
+interrupt native code: when a task is killed, Spark stops reading only once the `get_next` function
+of the stream returns. So a read or a write that runs for long, or blocks, for example on network
+I/O, should check `is_interrupted` regularly and use timeouts. The task reaper,
+`spark.task.reaper.enabled` and `spark.task.reaper.killTimeout`, kills an executor whose killed
+task does not end.
 
 ### Compatibility
 
@@ -263,12 +290,32 @@ Spark does not manage the memory of native data sources. The memory that a libra
 the Arrow buffers that it exports, which Spark reads without copying them, are not accounted by the
 memory manager of Spark, nor limited by `spark.memory.offHeap.size`. Neither are the Arrow batches
 that Spark writes, which end at `spark.sql.execution.arrow.maxRecordsPerBatch` rows or once they
-hold `spark.sql.execution.arrow.maxBytesPerBatch` bytes, while the size of the batches that a
-library reads is up to the library. This memory comes out of the memory overhead of the driver and
-the executors, `spark.driver.memoryOverhead` and `spark.executor.memoryOverhead`, which are 10% of
-their memory, and at least 384 MiB, by default. Increase it for libraries that use much memory, and
-bound the memory that a library uses, for example with the size of its batches: on YARN or
-Kubernetes, an executor that uses more memory than it requested is killed.
+hold `spark.sql.execution.arrow.maxBytesPerBatch` bytes, or earlier when Spark copies the batches of
+a scan, while the size of the batches that a library reads is up to the library. This memory comes
+out of the memory overhead of the driver and the executors, `spark.driver.memoryOverhead` and
+`spark.executor.memoryOverhead`, which are 10% of their memory, and at least 384 MiB, by default.
+Increase it for libraries that use much memory, and bound the memory that a library uses, for
+example with the size of its batches: on YARN or Kubernetes, an executor that uses more memory than
+it requested is killed.
+
+### Native Execution Engines
+
+An engine that runs queries in native code within Spark, such as Apache Gluten or Apache DataFusion
+Comet, can read a native data source without Spark importing its data on the JVM. The reader factory
+of a batch or micro-batch scan of a native data source implements
+`org.apache.spark.sql.connector.read.SupportsArrowStreamRead`: in the task that reads a partition,
+`openArrowStream` initializes an Arrow C stream that the engine allocated with the stream that
+`read` returns. The engine reads the stream in the task that opened it, and owns and releases the
+stream, which it may do after the task ended: Spark frees the `SparkDsTaskContext` of the read once
+the library released its stream. Once the task ended, `is_interrupted` returns true, so the library
+may stop reading then. The callbacks of the stream can be called from any thread, but never
+concurrently. Each call goes through the JVM, which then calls the callback of the stream of the
+library: this adds tens of nanoseconds to the call, while the import of a batch on the JVM takes
+microseconds. The first call on a native thread also attaches the thread to the JVM, which takes
+tens of microseconds, and the thread stays attached until it exits. Since the callbacks call into
+the JVM, the engine releases the stream before the JVM exits. Spark does not check the arrays of
+such a stream, unlike the streams that it reads itself, so the engine checks what its import of the
+arrays requires.
 
 ## Finding Native Data Sources
 
@@ -349,9 +396,9 @@ is a zip file with the extension `.sparkpkg`, which contains a manifest named
 - `dataSources` lists the names of the data sources that the library implements. The names are
   case-insensitive, and Spark passes the name to `create`.
 - `libraries` maps each platform, `<os>-<arch>` with an `os` of `linux`, `osx` or `windows` and an
-  `arch` of `x86_64` or `aarch64`, to the path of the library in the package. `linux` is Linux with
-  glibc: Linux with musl, as Alpine Linux, is `linux-<arch>-musl`, such as `linux-x86_64-musl`, on
-  which native data sources do not run yet.
+  `arch` of `x86_64` or `aarch64`, to the path of the library file in the package. `linux` is Linux
+  with glibc: Linux with musl, as Alpine Linux, is `linux-<arch>-musl`, such as `linux-x86_64-musl`,
+  on which native data sources do not run yet.
 
 A session finds the packages in two places, and the executors get them automatically:
 
@@ -369,12 +416,31 @@ A session finds the packages in two places, and the executors get them automatic
 
 The packages of a session take precedence over the installed libraries, and the package that a
 session added last over its other packages, also the configured ones: a session cannot remove an
-artifact, or add a file with the same name again, so it upgrades a package by adding the new
-version under another file name, such as `rust_range-1.1.sparkpkg`. Distinct file names are also
-needed because the sessions that are not isolated share the files they add. A query fails if more
-than one configured package provides its data source. Spark ignores, and logs, a package that it
-cannot read or whose version it does not support, unless its manifest lists the data source that a
-query uses and no other package or installed library provides it.
+artifact, or add another file with the name of one that it added, so it upgrades a package by adding
+the new version under another file name, such as `rust_range-1.1.sparkpkg`. Distinct file names are
+also needed because the sessions that are not isolated share the files they add.
+
+A query fails if more than one configured package provides its data source. Spark ignores, and logs,
+a configured package that it cannot read or whose version it does not support, unless its manifest
+lists the data source that a query uses and no other package or installed library provides it.
+
+Unless `spark.sql.dataSource.native.enabled` is false, `spark.addArtifact` fails for a file that is
+not a valid package, or for a package whose version Spark does not support, or that has no library
+for the platform of the driver, which loads the library to plan a query, instead of adding a package
+that the session could not use: the session would ignore it and silently keep using the package or
+library that it used before, or fail every query on its data sources. After the failure, the session
+keeps the packages that it had, and a call that adds several artifacts in Scala or Java still adds
+the others. In Python, a rejected package stops the rest of the call: without Spark Connect,
+`spark.addArtifacts` adds the packages first, one at a time, so only the packages before it are
+added; with Spark Connect, it adds the paths one at a time, so the paths before the package are
+added. A file that does not exist or cannot be read stops the call, as for the other artifacts.
+
+Spark does not load the library when it checks a package, so a library that fails to load fails the
+queries that use it. Nor does it check that the driver can run native data sources at all: before
+Java 22, a valid package is added, and the queries fail with
+`NATIVE_DATA_SOURCE_UNSUPPORTED_JAVA_VERSION`; on a platform where the C data interface of Arrow
+Java does not load, such as Linux with musl, only a package with a library for that platform is
+added, and the queries fail with `NATIVE_DATA_SOURCE_UNSUPPORTED_PLATFORM`.
 
 ## Example in Rust
 
@@ -826,8 +892,8 @@ statically, or install them on the nodes.
 
 | Property Name | Default | Meaning |
 |---------------|---------|---------|
-| `spark.sql.dataSource.native.enabled` | true | Whether Spark loads native data sources. It is a static configuration, so it can only be set when the Spark application starts. |
-| `spark.sql.dataSource.native.paths` | (none) | Comma-separated list of native data source packages, and of directories that contain them, on the local file system of the driver. They take precedence over the installed libraries. |
+| `spark.sql.dataSource.native.enabled` | true | Whether Spark loads native data sources. It is a static configuration, so it can only be set when the Spark application starts. When false, `spark.addArtifact` adds a `.sparkpkg` file as a file of the session, without checking it as a package. |
+| `spark.sql.dataSource.native.paths` | (none) | Comma-separated list of native data source packages, and of directories that contain them, on the local file system of the driver. They take precedence over the installed libraries, and the packages that a session adds with `spark.addArtifact` take precedence over them. |
 
 ## Security
 

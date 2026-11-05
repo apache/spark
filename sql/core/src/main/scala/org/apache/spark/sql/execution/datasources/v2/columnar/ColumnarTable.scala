@@ -37,7 +37,6 @@ import org.apache.spark.sql.execution.streaming.checkpointing.HDFSMetadataLog
 import org.apache.spark.sql.internal.connector.SupportsMetadata
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.Utils
 
 /**
@@ -105,6 +104,8 @@ class ColumnarScanBuilder(
   private var limitResult: Option[(Int, Boolean)] = None
   // The top-level columns that the query needs, if fewer than those of the schema.
   private var requiredSchema: Option[StructType] = None
+  // Whether the columns were pruned.
+  private var pruned = false
 
   private def batchPlanner: ColumnarBatchPlanner = {
     if (planner == null) {
@@ -137,8 +138,17 @@ class ColumnarScanBuilder(
     // reader.
     val required =
       StructType(requiredSchema.fieldNames.flatMap(name => schema.find(_.name == name)))
-    if (required.length < schema.length) {
-      this.requiredSchema = Some(required)
+    if (!pruned) {
+      // The columns are pruned at most once, since the scan asks the reader once, as the header
+      // promises, though Spark prunes the columns of a scan builder once anyway.
+      pruned = true
+      if (required.length < schema.length) {
+        this.requiredSchema = Some(required)
+      }
+    } else if (!required.fieldNames.toSet.subsetOf(
+        this.requiredSchema.getOrElse(schema).fieldNames.toSet)) {
+      throw SparkException.internalError(
+        "The columns of a scan were pruned again, with columns that it does not read.")
     }
   }
 
@@ -316,9 +326,7 @@ class ColumnarMicroBatchStream(reader: ColumnarStreamReader, checkpointLocation:
     }
   }
 
-  override def createReaderFactory(): PartitionReaderFactory = {
-    new ColumnarStreamPartitionReaderFactory(reader)
-  }
+  override def createReaderFactory(): PartitionReaderFactory = reader.readerFactory()
 
   override def deserializeOffset(json: String): Offset = ColumnarStreamOffset(json)
 
@@ -377,11 +385,4 @@ abstract class ColumnarOnlyPartitionReaderFactory extends PartitionReaderFactory
   }
 
   override def supportColumnarReads(partition: InputPartition): Boolean = true
-}
-
-class ColumnarStreamPartitionReaderFactory(reader: ColumnarStreamReader)
-  extends ColumnarOnlyPartitionReaderFactory {
-  override def createColumnarReader(partition: InputPartition): PartitionReader[ColumnarBatch] = {
-    reader.read(partition)
-  }
 }
