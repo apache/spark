@@ -5594,6 +5594,20 @@ object SQLConf {
       .checkValue(v => v > 0L, "The sampling interval must be at least 1 millisecond.")
       .createWithDefault(100)
 
+  val PYTHON_UDF_PROFILER_SAMPLING_AGGREGATION =
+    buildConf("spark.sql.pyspark.udf.profiler.samplingAggregation")
+      .doc("The level at which the sampling profiler aggregates the sampled call stacks: " +
+        "\"query\" merges samples from the same SQL query (samples outside a SQL query are " +
+        "merged under \"unknown\"), \"stage\" merges samples from the same stage, and " +
+        "\"task\" keeps one result per task attempt. A finer level uses more driver memory. " +
+        "This takes effect only when spark.sql.pyspark.udf.profiler is set to \"sampling\".")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .stringConf
+      .transform(_.toLowerCase(Locale.ROOT))
+      .checkValues(Set("query", "stage", "task"))
+      .createWithDefault("stage")
+
   val PYTHON_UDF_WORKER_FAULTHANLDER_ENABLED =
     buildConf("spark.sql.execution.pyspark.udf.faulthandler.enabled")
       .doc(
@@ -10307,6 +10321,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def pythonUDFProfiler: Option[String] = getConf(PYTHON_UDF_PROFILER)
 
   def pythonUDFProfilerSamplingInterval: Long = getConf(PYTHON_UDF_PROFILER_SAMPLING_INTERVAL)
+
+  def pythonUDFProfilerSamplingAggregation: String =
+    getConf(PYTHON_UDF_PROFILER_SAMPLING_AGGREGATION)
 
   def pythonDataSourceProfiler: Option[String] = getConf(PYTHON_DATA_SOURCE_PROFILER)
 
