@@ -1032,6 +1032,12 @@ class ExpressionResolver(
 
       val nameTarget: NameTarget = resolveMultipartNameFromAttribute(unresolvedAttribute)
 
+      if (nameTarget.candidates.isEmpty &&
+          ResolveDefaultColumns.isExplicitDefaultColumn(unresolvedAttribute) &&
+          operatorResolutionContextStack.isResolvingSetVariableSource) {
+        throw new ExplicitlyUnsupportedResolverFeature(ResolutionGap.DefaultReferencesInSetVariable)
+      }
+
       val candidate = nameTarget.pickCandidate(unresolvedAttribute)
 
       // An optional reference that resolved to a static NULL does not reference any attribute.
