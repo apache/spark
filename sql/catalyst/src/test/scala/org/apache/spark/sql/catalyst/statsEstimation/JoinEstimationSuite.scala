@@ -466,6 +466,57 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
     }
   }
 
+  test("existence join") {
+    // table2 (key-1-2 int, key-2-4 int): (1, 2), (2, 3), (2, 4)
+    // table3 (key-1-2 int, key-2-3 int): (1, 2), (2, 3)
+    // An existence join returns every row of its left child with one extra Boolean attribute, so
+    // its cardinality is the left child's and its width is the left child's plus that attribute.
+    // The right child's cardinality must not enter either, as the generic product estimate would
+    // have it, since that can disqualify a broadcast of an otherwise small build side.
+    val exists = AttributeReference("exists", BooleanType, nullable = false)()
+    val join = Join(table2, table3, ExistenceJoin(exists),
+      Some(EqualTo(nameToAttr("key-2-4"), nameToAttr("key-2-3"))), JoinHint.NONE)
+
+    val expectedStats = Statistics(
+      // Three rows of the left child, each widened by the Boolean, whose default size is 1.
+      sizeInBytes = 3 * (8 + 4 * 2 + 1),
+      rowCount = Some(3),
+      // Only the left child's column stats: the right child's describe attributes that an
+      // existence join does not output.
+      attributeStats = AttributeMap(Seq(nameToColInfo("key-1-2"), nameToColInfo("key-2-4"))))
+    assert(join.stats == expectedStats)
+  }
+
+  test("existence join with a right child that has no row count or no statistics") {
+    // Only the left child's row count enters the estimate, so a right child that reports no row
+    // count at all must not stop it: that is the left-only precondition
+    // `estimateExistenceJoin` documents, and `rowCountsExist(join.left, join.right)` would break
+    // it. `StatsTestPlan` always reports a row count, so the no-row-count case needs a plan whose
+    // `computeStats` omits it.
+    case class NoRowCountPlan(outputList: Seq[Attribute]) extends LeafNode {
+      override def output: Seq[Attribute] = outputList
+      override def computeStats(): Statistics = Statistics(sizeInBytes = 1000)
+    }
+    val exists = AttributeReference("exists", BooleanType, nullable = false)()
+    val rightAttrs = Seq("key-1-2", "key-2-3").map(nameToAttr)
+    // No row count at all.
+    val noRowCountRight = NoRowCountPlan(rightAttrs)
+    // A row count of zero, and no column statistics.
+    val emptyRight = StatsTestPlan(
+      outputList = rightAttrs,
+      rowCount = 0,
+      attributeStats = AttributeMap(Nil))
+    val expectedStats = Statistics(
+      sizeInBytes = 3 * (8 + 4 * 2 + 1),
+      rowCount = Some(3),
+      attributeStats = AttributeMap(Seq(nameToColInfo("key-1-2"), nameToColInfo("key-2-4"))))
+    Seq(table3, noRowCountRight, emptyRight).foreach { right =>
+      val join = Join(table2, right, ExistenceJoin(exists),
+        Some(EqualTo(nameToAttr("key-2-4"), nameToAttr("key-2-3"))), JoinHint.NONE)
+      assert(join.stats == expectedStats, s"unexpected stats with right child\n$right")
+    }
+  }
+
   test("test join keys of different types") {
     /** Columns in a table with only one row */
     def genColumnData: mutable.LinkedHashMap[Attribute, ColumnStat] = {
