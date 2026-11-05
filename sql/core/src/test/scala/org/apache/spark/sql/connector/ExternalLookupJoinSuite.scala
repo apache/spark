@@ -2432,20 +2432,20 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
 
   test("external lookup evaluates semi and anti residuals on the pruned response layout") {
     val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
-    val left = streamOf(Seq((1, "engineering"), (1, "missing"), (3, "missing"))
-      .toDF("id", "department"))
-    val condition = left("id") === lookup("id") &&
-      left("department") === lookup("department")
+    val claims = streamOf(Seq((1, "engineering"), (1, "missing"), (3, "missing"))
+      .toDF("id", "costCenter"))
+    val condition = claims("id") === lookup("id") &&
+      claims("costCenter") === lookup("department")
 
     SimpleExternalLookupDataSource.resetCounters()
     checkStream(
-      left.join(lookup, condition, "left_semi"),
+      claims.join(lookup, condition, "left_semi"),
       Seq(Row(1, "engineering")))
     assert(SimpleExternalLookupDataSource.requiredColumns.get() === Seq("department"))
 
     SimpleExternalLookupDataSource.resetCounters()
     checkStream(
-      left.join(lookup, condition, "left_anti"),
+      claims.join(lookup, condition, "left_anti"),
       Seq(Row(1, "missing"), Row(3, "missing")))
     assert(SimpleExternalLookupDataSource.requiredColumns.get() === Seq("department"))
   }
@@ -2630,16 +2630,16 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     val lookup = spark.read
       .format(classOf[SimpleExternalLookupDataSource].getName)
       .load()
-    val left = streamOf(Seq(
+    val runs = streamOf(Seq(
       (1, 3, "sales"),
       (1, 3, "research"),
-      (1, 2, "missing")).toDF("start", "end", "department"))
-    val condition = lookup("id") >= left("start") &&
-      lookup("id") < left("end") &&
-      lookup("department") === left("department")
+      (1, 2, "missing")).toDF("start", "end", "costCenter"))
+    val condition = lookup("id") >= runs("start") &&
+      lookup("id") < runs("end") &&
+      lookup("department") === runs("costCenter")
 
     checkStream(
-      left.join(lookup, condition, "left_semi"),
+      runs.join(lookup, condition, "left_semi"),
       Seq(Row(1, 3, "sales"), Row(1, 3, "research")))
     assert(SimpleExternalLookupDataSource.lookupCandidates.get() === Seq(
       (">=", "id", IntegerType),
