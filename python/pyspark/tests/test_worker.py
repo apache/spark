@@ -23,6 +23,7 @@ import tempfile
 import threading
 import time
 import unittest
+import warnings
 from typing import Any, Optional
 from unittest.mock import patch
 
@@ -171,24 +172,32 @@ class ReadInThreadTests(unittest.TestCase):
 
     def test_early_exit_stops_reader_blocked_on_full_queue(self):
         produced = []
+        release = threading.Event()
 
         def source():
-            i = 0
-            while True:
+            for i in range(3):
                 produced.append(i)
                 yield i
-                i += 1
+            # Simulates a next read of the input stream that does not return; the reader must
+            # not get here once the consumer has stopped.
+            release.wait()
+            produced.append(3)
+            yield 3
 
-        with read_in_thread(source(), 1) as it:
-            self.assertEqual(next(it), 0)
-            # The reader fills the queue and then blocks on putting the next item.
-            eventually(timeout=10, catch_assertions=True)(
-                lambda: self.assertGreaterEqual(len(produced), 3)
-            )()
+        try:
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                with read_in_thread(source(), 1) as it:
+                    self.assertEqual(next(it), 0)
+                    # The reader fills the queue and then blocks on putting the next item.
+                    eventually(timeout=10, catch_assertions=True)(
+                        lambda: self.assertEqual(len(produced), 3)
+                    )()
+        finally:
+            release.set()
+        self.assertEqual([w for w in caught if issubclass(w.category, RuntimeWarning)], [])
         self.assert_reader_stopped()
-        # Draining on exit can let the pending put through, after which the reader reads one
-        # more item before it sees the stop.
-        self.assertLessEqual(len(produced), 4)
+        self.assertEqual(len(produced), 3)
 
     def test_warns_when_reader_does_not_exit(self):
         release = threading.Event()

@@ -314,7 +314,7 @@ def read_in_thread(
             for item in iterator:
                 if hasattr(item, "__next__"):
                     item = list(item)
-                if not _put(item):
+                if not _put(item) or stop_event.is_set():
                     return
         except Exception as e:
             error = e
