@@ -47,8 +47,17 @@ trait ColumnarDataSource {
   /** Returns the planner of a batch scan of the given schema. */
   def batchPlanner(schema: StructType): ColumnarBatchPlanner
 
-  /** Returns a reader for a micro-batch streaming scan of the given schema. */
-  def streamReader(schema: StructType): ColumnarStreamReader
+  /**
+   * Returns a reader for a micro-batch streaming scan of the given schema: the columns to read,
+   * which may be only the top-level columns of the schema of the data that the query needs. The
+   * partitions return exactly these columns.
+   *
+   * @param checkpointLocation the location of a directory in the checkpoint of the streaming
+   *                           query that is reserved for this source. It stays the same when the
+   *                           query restarts from its checkpoint. The names that start with
+   *                           `_spark` are reserved for Spark there.
+   */
+  def streamReader(schema: StructType, checkpointLocation: String): ColumnarStreamReader
 
   /**
    * Returns a writer for a batch write.
@@ -81,11 +90,12 @@ trait ColumnarBatchPlanner {
   def pushLimit(limit: Int): Boolean = false
 
   /**
-   * Returns whether the partitions return exactly the columns of `requiredSchema`, the top-level
-   * columns that the query needs, including the columns that it filters on, instead of all the
-   * columns of the read schema.
+   * Prunes the columns to read to `requiredSchema`, the top-level columns that the query needs,
+   * including the columns that it filters on: the batches of the partitions then have exactly
+   * these columns, in this order. Spark calls it only when the query needs fewer columns than the
+   * read schema.
    */
-  def pruneColumns(requiredSchema: StructType): Boolean = false
+  def pruneColumns(requiredSchema: StructType): Unit
 
   /**
    * Plans the partitions of the scan, after the pushdown. The reader factory reads them on the
@@ -105,11 +115,24 @@ case class ColumnarPlannedBatch(
  * to the executors, where `read` is called for each partition.
  */
 trait ColumnarStreamReader extends Serializable {
+  /**
+   * Returns the offset to start from when the streaming query has no checkpoint. Spark keeps it in
+   * the checkpoint of the source, and only asks for it when the checkpoint does not have it yet.
+   */
   def initialOffset(): String
 
-  def latestOffset(): String
+  /**
+   * Returns the latest offset available.
+   *
+   * @param start the offset that the next micro-batch starts after: the end of the last
+   *              micro-batch, or the initial offset before the first one
+   */
+  def latestOffset(start: String): String
 
-  /** Plans the partitions that read the data after `start` up to and including `end`. */
+  /**
+   * Plans the partitions that read the data after `start` up to and including `end`. Spark plans
+   * each range once, also for a micro-batch that reads the source several times.
+   */
   def partitions(start: String, end: String): Array[InputPartition]
 
   def read(partition: InputPartition): PartitionReader[ColumnarBatch]
