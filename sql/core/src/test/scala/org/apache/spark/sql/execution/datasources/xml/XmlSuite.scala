@@ -3909,7 +3909,7 @@ object XmlSuiteDebugFileSystem {
   }
 
   def open() : Unit = {
-    val threadId = Thread.currentThread().getId
+    val threadId = Thread.currentThread().threadId
     // assert that there are no open files for this executor
     assert(openCounterPerThread.getOrDefault(threadId, 0) == 0)
     openCounterPerThread.put(threadId, 1)
@@ -3917,7 +3917,7 @@ object XmlSuiteDebugFileSystem {
   }
 
   def close(): Unit = {
-    val threadId = Thread.currentThread().getId
+    val threadId = Thread.currentThread().threadId
     if (openCounterPerThread.get(threadId) == 1) {
       openCounterPerThread.put(threadId, 0)
     }

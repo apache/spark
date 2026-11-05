@@ -315,7 +315,7 @@ object SQLConf {
       val isSchedulerEventLoopThread = SparkContext.getActive
         .flatMap { sc => Option(sc.dagScheduler) }
         .map(_.eventProcessLoop.eventThread)
-        .exists(_.getId == Thread.currentThread().getId)
+        .exists(_.threadId == Thread.currentThread().threadId)
       if (isSchedulerEventLoopThread) {
         // DAGScheduler event loop thread does not have an active SparkSession, the `confGetter`
         // will return `fallbackConf` which is unexpected. Here we require the caller to get the
@@ -683,6 +683,18 @@ object SQLConf {
     .intConf
     .checkValue(_ >= 0, "The version of the regex pattern cost estimate must be nonnegative.")
     .createWithDefault(1)
+
+  val AVOID_DOUBLE_FILTER_EVAL_FOR_PYTHON_UDF =
+    buildConf("spark.sql.optimizer.avoidDoubleFilterEvalForPythonUDF")
+    .internal()
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .doc(s"When true, ${AVOID_DOUBLE_FILTER_EVAL.key} treats a Python UDF as expensive. When " +
+      "false, a Python UDF is only as expensive as its arguments, as before 4.4.0. A streaming " +
+      "query keeps the value recorded in its checkpoint, and one restarted from a checkpoint " +
+      "without it uses false.")
+    .version("4.4.0")
+    .booleanConf
+    .createWithDefault(true)
 
   val ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS =
     buildConf("spark.sql.experimental.optimizer.transpilePyUDFs")
@@ -3293,14 +3305,9 @@ object SQLConf {
         "supports it, such as a CASE WHEN with many branches, into methods that take the input " +
         "variables they read as parameters, the way code generation outside whole stage codegen " +
         "splits it. In a stage whose expressions are split, the methods that subexpression " +
-        "elimination's discarded first pass added are removed; and in every stage, a slot of " +
-        "a compacted mutable state array counts as the field it is when code moves into a " +
-        "method: an operator's method that took it as a parameter, and failed to compile, now " +
-        "compiles, and a common expression's definition reading one, which stayed inline, " +
-        "gets its method. When false, " +
-        "the code stays in the method of its operator, where a large enough expression goes " +
-        "past the JVM's 64KB method limit and fails to compile, and the generated code is what " +
-        "it was before this conf existed.")
+        "elimination's discarded first pass added are removed. When false, the code stays in " +
+        "the method of its operator, where a large enough expression goes past the JVM's 64KB " +
+        "method limit and fails to compile.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
@@ -4591,6 +4598,17 @@ object SQLConf {
       .doc("When true, SQL Configs of the current active SparkSession instead of the captured " +
         "ones will be applied during the parsing and analysis phases of the view resolution.")
       .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val USE_CURRENT_SQL_CONFIGS_FOR_GENERATED_COLUMN =
+    buildConf("spark.sql.legacy.useCurrentConfigsForGeneratedColumn")
+      .internal()
+      .doc("When true, a write parses and analyzes the SQL text of a generation expression of a " +
+        "Data Source V2 table under the SQL configs of the current active SparkSession, and " +
+        "CREATE TABLE and REPLACE TABLE do not reject a text that the session reads differently.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
@@ -7491,9 +7509,9 @@ object SQLConf {
     .doc("Comma-separated list of native data source packages (.sparkpkg files), and of " +
       "directories that contain them, on the local file system of the driver. Spark adds a " +
       "package to the artifacts of the session when one of its data sources is used, so that " +
-      "the executors get it too. Packages can also be added with spark.addArtifact. These " +
-      "packages take precedence over the native data source libraries installed in the native " +
-      "library path. See spark.sql.dataSource.native.enabled.")
+      "the executors get it too. Packages added with spark.addArtifact take precedence over " +
+      "these packages, which take precedence over the native data source libraries installed " +
+      "in the native library path. See spark.sql.dataSource.native.enabled.")
     .version("4.4.0")
     .withBindingPolicy(ConfigBindingPolicy.SESSION)
     .stringConf
@@ -10109,6 +10127,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def maxNestedViewDepth: Int = getConf(SQLConf.MAX_NESTED_VIEW_DEPTH)
 
   def useCurrentSQLConfigsForView: Boolean = getConf(SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_VIEW)
+
+  def useCurrentSQLConfigsForGeneratedColumn: Boolean =
+    getConf(SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_GENERATED_COLUMN)
 
   def storeAnalyzedPlanForView: Boolean = getConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW)
 

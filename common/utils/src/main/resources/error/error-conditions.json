@@ -4891,7 +4891,7 @@
       },
       "UNSUPPORTED_ABI_VERSION" : {
         "message" : [
-          "It requires version <version> of the native data source interface, but Spark supports version <supported>."
+          "It implements version <version> of the native data source interface, but Spark supports version <supported>."
         ]
       }
     },
@@ -4914,7 +4914,7 @@
       },
       "UNSUPPORTED_ABI_VERSION" : {
         "message" : [
-          "It requires version <version> of the native data source interface, but Spark supports version <supported>."
+          "It implements version <version> of the native data source interface, but Spark supports version <supported>."
         ]
       },
       "UNSUPPORTED_PLATFORM" : {
@@ -9812,12 +9812,6 @@
     },
     "sqlState" : "0A000"
   },
-  "UNSUPPORTED_HIVE_METASTORE_VERSION_FOR_JAVA" : {
-    "message" : [
-      "Hive metastore version <version> requires Java <requiredJavaVersion> or later, but the current JVM is Java <currentJavaVersion>. Please upgrade your Java version or use an earlier Hive metastore version."
-    ],
-    "sqlState" : "0A000"
-  },
   "UNSUPPORTED_HIVE_TYPE" : {
     "message" : [
       "Cannot read the Hive type <fieldType> of the column <fieldName> because Spark SQL does not support this data type."
@@ -10314,7 +10308,7 @@
   },
   "VARIANT_CONSTRUCTOR_SIZE_LIMIT" : {
     "message" : [
-      "Cannot construct a Variant larger than 16 MiB. The maximum allowed size of a Variant value is 16 MiB."
+      "Cannot construct a Variant larger than <sizeLimit>. The maximum allowed size of a Variant value is <sizeLimit>."
     ],
     "sqlState" : "22023"
   },
