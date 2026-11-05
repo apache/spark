@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-from collections import deque
 import difflib
 import faulthandler
 import functools
@@ -24,6 +23,7 @@ import signal
 import struct
 import sys
 import unittest
+from collections import deque
 from decimal import Decimal
 from itertools import zip_longest
 from time import sleep, time
