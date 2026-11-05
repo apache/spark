@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, View}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.metricview.logical.MetricViewPlaceholder
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 object ViewResolution {
@@ -33,31 +35,54 @@ object ViewResolution {
     // operator.
 
     // Resolve all the UnresolvedRelations and Views in the child.
-    val newChild = AnalysisContext.withAnalysisContext(view.desc) {
-      val nestedViewDepth = AnalysisContext.get.nestedViewDepth
-      val maxNestedViewDepth = AnalysisContext.get.maxNestedViewDepth
-      if (nestedViewDepth > maxNestedViewDepth) {
-        throw QueryCompilationErrors.viewDepthExceedsMaxResolutionDepthError(
-          view.desc.fullIdent,
-          maxNestedViewDepth,
-          view
-        )
-      }
-      SQLConf.withExistingConf(
-        View.effectiveSQLConf(
-          configs = view.desc.viewSQLConfigs,
-          isTempView = view.isTempView,
-          createSparkVersion = view.desc.createVersion
-        )
-      ) {
-        resolveChild(view.child)
-      }
-    }
+    val newChild = resolveInViewContext(view.desc, view.isTempView, view, view.child, resolveChild)
 
     // Fail the analysis eagerly because outside AnalysisContext, the unresolved operators
     // inside a view maybe resolved incorrectly.
     checkAnalysis(newChild)
 
     view.copy(child = newChild, options = options)
+  }
+
+  /**
+   * Resolves the source of a metric view read from the catalog. Like a view's child, it resolves
+   * in the catalog and namespace the metric view was created in, with its captured SQL configs.
+   */
+  def resolveMetricView(
+      metricView: MetricViewPlaceholder,
+      resolveChild: LogicalPlan => LogicalPlan,
+      checkAnalysis: LogicalPlan => Unit): MetricViewPlaceholder = {
+    val newChild = resolveInViewContext(
+      metricView.metadata, isTempView = false, metricView, metricView.child, resolveChild)
+    checkAnalysis(newChild)
+    metricView.copy(child = newChild)
+  }
+
+  private def resolveInViewContext(
+      desc: CatalogTable,
+      isTempView: Boolean,
+      viewPlan: LogicalPlan,
+      child: LogicalPlan,
+      resolveChild: LogicalPlan => LogicalPlan): LogicalPlan = {
+    AnalysisContext.withAnalysisContext(desc) {
+      val nestedViewDepth = AnalysisContext.get.nestedViewDepth
+      val maxNestedViewDepth = AnalysisContext.get.maxNestedViewDepth
+      if (nestedViewDepth > maxNestedViewDepth) {
+        throw QueryCompilationErrors.viewDepthExceedsMaxResolutionDepthError(
+          desc.fullIdent,
+          maxNestedViewDepth,
+          viewPlan
+        )
+      }
+      SQLConf.withExistingConf(
+        View.effectiveSQLConf(
+          configs = desc.viewSQLConfigs,
+          isTempView = isTempView,
+          createSparkVersion = desc.createVersion
+        )
+      ) {
+        resolveChild(child)
+      }
+    }
   }
 }

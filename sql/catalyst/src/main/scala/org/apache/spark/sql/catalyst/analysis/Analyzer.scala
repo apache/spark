@@ -573,6 +573,21 @@ class Analyzer(
     }
   }
 
+  /**
+   * Analyzes `plan` and returns the temporary functions it refers to, recorded the same way as
+   * for a view's query. Used to reject temporary functions in a metric view's source, which is
+   * resolved in the metric view's own context when it is read. It runs the fixed-point analyzer
+   * without `checkAnalysis`, so call it after `plan` has been analyzed successfully.
+   */
+  private[sql] def referredTempFunctions(plan: LogicalPlan): Seq[String] = {
+    AnalysisContext.withNewAnalysisContext {
+      AnalysisHelper.markInAnalyzer {
+        executeSameContext(plan)
+      }
+      AnalysisContext.get.referredTempFunctionNames.toSeq
+    }
+  }
+
   def resolver: Resolver = conf.resolver
 
   /**
@@ -1258,6 +1273,9 @@ class Analyzer(
         view.copy(child = resolveTableReferencesInTempView(view.child))
       case p @ SubqueryAlias(_, view: View) =>
         p.copy(child = resolveViews(view, options))
+      case mv: MetricViewPlaceholder if !mv.isCreate && !mv.child.resolved =>
+        ViewResolution.resolveMetricView(
+          mv, resolveChild = executeSameContext, checkAnalysis = checkAnalysis)
       case _ => plan
     }
 
