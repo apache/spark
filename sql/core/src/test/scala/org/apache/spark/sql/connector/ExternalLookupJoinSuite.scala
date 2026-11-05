@@ -228,15 +228,15 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
 
   test("a hinted dual-capability source fails when no lookup access path exists") {
     val lookup = spark.read.format(classOf[DualCapabilityExternalLookupDataSource].getName).load()
-    val left = streamOf(Seq((1, "sales")).toDF("id", "department"))
+    val invoices = streamOf(Seq((1, "sales")).toDF("invoice", "costCenter"))
 
     checkStream(
-      left.join(lookup, left("department") === lookup("department")),
+      invoices.join(lookup, invoices("costCenter") === lookup("department")),
       Seq(Row(1, "sales", 2, "sales")))
     val hinted = lookup.hint("external_lookup")
     checkError(
       exception = streamFailure[AnalysisException](
-        left.join(hinted, left("department") === hinted("department"))),
+        invoices.join(hinted, invoices("costCenter") === hinted("department"))),
       condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_PREDICATE",
       parameters = Map("table" -> "`DualCapabilityExternalLookupTable`"))
   }
@@ -622,18 +622,18 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
   }
 
   test("external lookup reports lookup sides and conditions it cannot plan") {
-    val left = streamOf(Seq((1, "sales")).toDF("id", "department"))
+    val claims = streamOf(Seq((1, "sales")).toDF("id", "costCenter"))
     def planningError(lookup: DataFrame, condition: Column): AnalysisException =
-      streamFailure[AnalysisException](left.join(lookup, condition))
+      streamFailure[AnalysisException](claims.join(lookup, condition))
     def analysisError(lookup: DataFrame, condition: Column): AnalysisException =
-      intercept[AnalysisException](left.join(lookup, condition))
+      intercept[AnalysisException](claims.join(lookup, condition))
 
     // A hinted lookup side fails when the DataFrame is built: with LOOKUP_PLAN when it reads no
     // DSv2 table, as a local relation does, and with TABLE for a DSv2 table that does not support
     // external lookup.
     val local = Seq(1).toDF("id").hint("external_lookup")
     checkError(
-      exception = analysisError(local, left("id") === local("id")),
+      exception = analysisError(local, claims("id") === local("id")),
       condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.LOOKUP_PLAN",
       parameters = Map.empty)
 
@@ -643,7 +643,7 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       .load()
       .hint("external_lookup")
     checkError(
-      exception = analysisError(batchOnly, left("id") === batchOnly("id")),
+      exception = analysisError(batchOnly, claims("id") === batchOnly("id")),
       condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.TABLE",
       parameters = Map("table" -> "`MisconfiguredExternalLookupTable`"))
 
@@ -652,13 +652,13 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       .option("kind", "noLookupBuilder")
       .load()
     checkError(
-      exception = planningError(noLookupBuilder, left("id") === noLookupBuilder("id")),
+      exception = planningError(noLookupBuilder, claims("id") === noLookupBuilder("id")),
       condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.SCAN_BUILDER",
       parameters = Map("table" -> "`MisconfiguredExternalLookupTable`"))
 
     val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
     checkError(
-      exception = planningError(lookup, left("department") === lookup("department")),
+      exception = planningError(lookup, claims("costCenter") === lookup("department")),
       condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_PREDICATE",
       parameters = Map("table" -> "`SimpleExternalLookupTable`"))
   }
