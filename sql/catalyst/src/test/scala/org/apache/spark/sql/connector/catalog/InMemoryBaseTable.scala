@@ -28,7 +28,7 @@ import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ProjectingInternalRow}
+import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BoundReference, Cast, EvalMode, Expression => CatalystExpression, GenericInternalRow, GetStructField, JoinedRow, Literal, MetadataStructFieldWithLogicalName, Predicate => CatalystPredicate}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, GenericArrayData, MapData, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
@@ -218,11 +218,8 @@ abstract class InMemoryBaseTable(
     .getOrDefault(InMemoryBaseTable.SIMULATE_REORDERED_COLUMN_PRUNING, "false").toBoolean
 
   private val streamingPushdowns = properties
-    .getOrDefault(InMemoryBaseTable.STREAMING_PUSHDOWNS, "columns,filters")
+    .getOrDefault(InMemoryBaseTable.STREAMING_PUSHDOWNS, "columns")
     .split(",").map(_.trim).filter(_.nonEmpty).toSet
-
-  private val simulateStreamingFilters = properties
-    .getOrDefault(InMemoryBaseTable.SIMULATE_STREAMING_FILTERS, "false").toBoolean
 
   private val acceptAnySchema = properties.getOrDefault("accept-any-schema", "false").toBoolean
   private val autoSchemaEvolution = properties.getOrDefault("auto-schema-evolution", "true")
@@ -557,11 +554,6 @@ abstract class InMemoryBaseTable(
       } else {
         Seq.empty
       }) ++
-      (if (streamingPushdowns.contains("filters")) {
-        Seq(TableCapability.STREAMING_FILTER_PUSHDOWN)
-      } else {
-        Seq.empty
-      }) ++
       (if (autoSchemaEvolution) Seq(TableCapability.AUTOMATIC_SCHEMA_EVOLUTION) else Seq.empty) ++
       (if (generateColumnValuesOnWrite) {
         Seq(TableCapability.GENERATE_COLUMN_VALUES_ON_WRITE)
@@ -685,13 +677,7 @@ abstract class InMemoryBaseTable(
   // The number of the micro-batch streams that the scans of the table created.
   val createdMicroBatchStreams = new AtomicLong()
 
-  /**
-   * @param filters the filters that the rows of the stream pass, see SIMULATE_STREAMING_FILTERS
-   */
-  class InMemoryMicroBatchStream(
-      readSchema: StructType,
-      tableSchema: StructType,
-      filters: Array[Filter] = Array.empty)
+  class InMemoryMicroBatchStream(readSchema: StructType, tableSchema: StructType)
       extends MicroBatchStream {
     override def initialOffset(): Offset = new InMemoryTableOffset(0)
     override def latestOffset(): Offset =
@@ -699,9 +685,7 @@ abstract class InMemoryBaseTable(
     override def planInputPartitions(start: Offset, end: Offset): Array[InputPartition] = {
       val s = start.asInstanceOf[InMemoryTableOffset].rowCount.toInt
       val e = end.asInstanceOf[InMemoryTableOffset].rowCount.toInt
-      Array(InMemoryMicroBatchPartition(InMemoryBaseTable.this.rows.slice(s, e).filter { row =>
-        filters.forall(InMemoryBaseTable.passes(_, row, tableSchema))
-      }))
+      Array(InMemoryMicroBatchPartition(InMemoryBaseTable.this.rows.slice(s, e)))
     }
     override def createReaderFactory(): PartitionReaderFactory = {
       val metadataColNames = new mutable.ArrayBuffer[String]()
@@ -816,11 +800,7 @@ abstract class InMemoryBaseTable(
 
     override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
       createdMicroBatchStreams.incrementAndGet()
-      val filters = this match {
-        case scan: InMemoryBatchScan if simulateStreamingFilters => scan.pushedFilters
-        case _ => Array.empty[Filter]
-      }
-      new InMemoryMicroBatchStream(readSchema, tableSchema, filters)
+      new InMemoryMicroBatchStream(readSchema, tableSchema)
     }
   }
 
@@ -1174,63 +1154,10 @@ object InMemoryBaseTable {
   // of the data columns are required, `Scan.readSchema()` has them in the reverse order.
   val SIMULATE_REORDERED_COLUMN_PRUNING = "simulate-reordered-column-pruning"
 
-  // Test table property that simulates a connector whose micro-batch streams drop the rows that
-  // fail the filters that their scan builder took, which `STREAMING_FILTER_PUSHDOWN` permits:
-  // the streams of the table only return the rows that pass the pushed filters, see `passes`.
-  val SIMULATE_STREAMING_FILTERS = "simulate-streaming-filters"
-
   // Test table property: the pushdowns of the scans of streaming reads that the table declares
-  // with its capabilities, as a comma-separated list of "columns" (STREAMING_COLUMN_PRUNING) and
-  // "filters" (STREAMING_FILTER_PUSHDOWN). The table declares both by default. Its streams return
-  // the columns of their read schemas, and its scan builders take the filters as for batch reads.
+  // with its capabilities, as a comma-separated list of "columns" (STREAMING_COLUMN_PRUNING). The
+  // table declares it by default. Its streams return the columns of their read schemas.
   val STREAMING_PUSHDOWNS = "streaming-pushdowns"
-
-  /**
-   * Returns whether `row`, a row of a table with `schema`, may pass `filter`, for the filters of
-   * the tests: comparisons of a top-level column with a value, null checks, and their
-   * conjunctions, disjunctions and negations. It only returns false for a row that does not pass
-   * the filter, so that a stream that drops the other rows drops no row that Spark keeps.
-   */
-  def passes(filter: Filter, row: InternalRow, schema: StructType): Boolean = {
-    // Whether the row passes the filter: Some(false) for false or null, None if unknown.
-    def eval(filter: Filter): Option[Boolean] = {
-      def value(column: String): Any = {
-        val ordinal = schema.fieldIndex(column)
-        val dataType = schema(ordinal).dataType
-        CatalystTypeConverters.convertToScala(row.get(ordinal, dataType), dataType)
-      }
-      def compare(column: String, other: Any)(f: Int => Boolean): Option[Boolean] = {
-        (value(column), other) match {
-          case (null, _) | (_, null) => Some(false)
-          case (v: Comparable[_], o) => Some(f(v.asInstanceOf[Comparable[Any]].compareTo(o)))
-          case _ => None
-        }
-      }
-      filter match {
-        case EqualTo(column, v) => compare(column, v)(_ == 0)
-        case GreaterThan(column, v) => compare(column, v)(_ > 0)
-        case GreaterThanOrEqual(column, v) => compare(column, v)(_ >= 0)
-        case LessThan(column, v) => compare(column, v)(_ < 0)
-        case LessThanOrEqual(column, v) => compare(column, v)(_ <= 0)
-        case IsNotNull(column) => Some(value(column) != null)
-        case IsNull(column) => Some(value(column) == null)
-        case And(left, right) => (eval(left), eval(right)) match {
-          case (Some(false), _) | (_, Some(false)) => Some(false)
-          case (Some(true), Some(true)) => Some(true)
-          case _ => None
-        }
-        case Or(left, right) => (eval(left), eval(right)) match {
-          case (Some(true), _) | (_, Some(true)) => Some(true)
-          case (Some(false), Some(false)) => Some(false)
-          case _ => None
-        }
-        // A null makes a comparison false here, but its negation is not true in SQL.
-        case Not(child) => eval(child).filter(identity).map(_ => false)
-        case _ => None
-      }
-    }
-    !eval(filter).contains(false)
-  }
 
   /**
    * Assigns fresh IDs to any top-level column or nested struct field that does not already

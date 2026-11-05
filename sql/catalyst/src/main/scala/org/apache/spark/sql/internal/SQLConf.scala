@@ -6268,20 +6268,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val STREAMING_V2_FILTER_PUSHDOWN_ENABLED =
-    buildConf("spark.sql.streaming.v2FilterPushdown.enabled")
-      .internal()
-      .doc("When true, the scan of a Data Source V2 streaming source whose table has the " +
-        "capability STREAMING_FILTER_PUSHDOWN gets the filters that the streaming query applies " +
-        "first to all the rows that it reads from the source, which Spark takes from the plan of " +
-        "the query optimized when the query starts, as it does for batch scans. The query still " +
-        "applies the filters to the rows of the source and after the scan. When false, the scan " +
-        "gets no filter.")
-      .version("4.4.0")
-      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
-      .booleanConf
-      .createWithDefault(true)
-
   val DISABLE_MAP_KEY_NORMALIZATION =
     buildConf("spark.sql.legacy.disableMapKeyNormalization")
       .internal()
@@ -10292,8 +10278,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(DISABLED_V2_STREAMING_MICROBATCH_READERS)
 
   def streamingV2ColumnPruningEnabled: Boolean = getConf(STREAMING_V2_COLUMN_PRUNING_ENABLED)
-
-  def streamingV2FilterPushdownEnabled: Boolean = getConf(STREAMING_V2_FILTER_PUSHDOWN_ENABLED)
 
   def fastFailFileFormatOutput: Boolean = getConf(FASTFAIL_ON_FILEFORMAT_OUTPUT)
 

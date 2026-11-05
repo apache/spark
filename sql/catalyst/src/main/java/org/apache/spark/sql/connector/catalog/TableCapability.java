@@ -188,26 +188,5 @@ public enum TableCapability {
    *
    * @since 4.4.0
    */
-  STREAMING_COLUMN_PRUNING,
-
-  /**
-   * Signals that the scans of the streaming reads of the table may get the filters that the
-   * streaming query applies first to all the rows that it reads from the table, before any other
-   * filter, which Spark pushes to a scan builder that implements
-   * {@link org.apache.spark.sql.connector.read.SupportsPushDownFilters} or
-   * {@link org.apache.spark.sql.connector.read.SupportsPushDownV2Filters}, as it does for the
-   * scans of batch reads.
-   * <p>
-   * Spark builds the scan of a streaming read once, when the query starts, from the plan of the
-   * query optimized then, and creates the micro-batch or continuous stream of the read from that
-   * scan. By returning this capability, a table declares that its scan builders can take filters
-   * for such a scan, as for the scan of a batch read. The stream may then drop the rows that fail
-   * the filters that the builder took: the query applies all the filters that the builder got to
-   * the rows that it reads from the table, and Spark evaluates all the filters of the query after
-   * the scan. The progress of the query only counts the rows that the stream returns. Without this
-   * capability, the scans of streaming reads get no filter.
-   *
-   * @since 4.4.0
-   */
-  STREAMING_FILTER_PUSHDOWN
+  STREAMING_COLUMN_PRUNING
 }

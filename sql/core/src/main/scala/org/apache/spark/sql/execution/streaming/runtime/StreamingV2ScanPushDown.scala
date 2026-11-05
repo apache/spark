@@ -24,10 +24,10 @@ import scala.util.control.NonFatal
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, ResolvedInlineTable}
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, AttributeSet, Cast, Expression, SubqueryExpression, Unevaluable}
-import org.apache.spark.sql.catalyst.optimizer.{ComputeCurrentTime, InferFiltersFromConstraints, ReplaceExpressions, SpecialDatetimeValues}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Cast, Expression, Unevaluable}
+import org.apache.spark.sql.catalyst.optimizer.{ComputeCurrentTime, ReplaceExpressions, SpecialDatetimeValues}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CAST, CURRENT_LIKE, RUNTIME_REPLACEABLE}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -36,7 +36,7 @@ import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{SupportsRead, TableCapability}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
-import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, PushDownUtils, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetSeqMetadata, OffsetSeqMetadataBase}
 import org.apache.spark.sql.internal.SQLConf
@@ -45,24 +45,22 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * Pushes the top-level columns and the filters that the optimized plan of a streaming query reads
- * from each Data Source V2 streaming source down to the scan of the source, as
- * `V2ScanRelationPushDown` does for the scans of batch queries, if the table of the source has the
- * capability `STREAMING_COLUMN_PRUNING` or `STREAMING_FILTER_PUSHDOWN`.
+ * Pushes the top-level columns that the optimized plan of a streaming query reads from each Data
+ * Source V2 streaming source down to the scan of the source, as `V2ScanRelationPushDown` does for
+ * the scans of batch queries, if the table of the source has the capability
+ * `STREAMING_COLUMN_PRUNING`.
  *
  * The stream of a source is created from its scan, and has to exist before any micro-batch is
  * planned, so the scan is built when the query starts. The query is optimized once at that point,
  * by the optimizer of its micro-batches and with their configuration, and the scan of each source
- * gets what the planner takes from the optimized plan for the relation of the source (see
- * `DataSourceV2Strategy`): the projections and the filters over each occurrence of the relation.
+ * reads the columns that the planner takes from the optimized plan for the relation of the source
+ * (see `DataSourceV2Strategy`): those of the projections and the filters over each occurrence of
+ * the relation.
  *
- * The plan of each micro-batch is the one without these pushdowns, but for a filter of the rows
- * of the relation with the filters that the scan builder got, which the query applies anyway, so
- * that the scan cannot drop a row that the plan keeps (see `withPushedFilters`). The optimizer
- * keeps deciding which columns every operator gets, and in which order, including the stateful
- * ones, and Spark still evaluates all the filters over the relation. Only the scan node of the
- * physical plan outputs the columns that the scan reads, and the planner checks that the
- * micro-batch reads no other column of the relation.
+ * The plan of each micro-batch is the one without this pushdown: the optimizer keeps deciding
+ * which columns every operator gets, and in which order, including the stateful ones. Only the
+ * scan node of the physical plan outputs the columns that the scan reads, and the planner checks
+ * that the micro-batch reads no other column of the relation.
  *
  * The other operations that the scans of batch queries can apply, such as aggregates and limits,
  * apply to the data of all the micro-batches of a streaming query, which the scan of a micro-batch
@@ -74,56 +72,46 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
    * What the optimized plan of a streaming query reads from a streaming relation.
    *
    * @param requiredColumns the columns of the relation that the plan reads
-   * @param filters the filters that the scan of the relation may get, in the order in which the
-   *                plan evaluates them: those that every occurrence of the relation applies first,
-   *                see `pushableFilters`
    */
-  case class Reads(requiredColumns: AttributeSet, filters: Seq[Expression])
+  case class Reads(requiredColumns: AttributeSet)
 
   /**
    * The scan of a streaming source, and its stream.
    *
    * @param prunedOutput the columns of the relation that the scan reads, in the order of its read
    *                     schema, unless these are all its columns
-   * @param pushedFilters the filters that the scan builder got, which the scan may apply in any
-   *                      form, so the plan of each micro-batch applies them over the relation
    */
   case class StreamingScan(
       scan: Scan,
       stream: SparkDataStream,
-      prunedOutput: Option[Seq[AttributeReference]],
-      pushedFilters: Seq[Expression]) {
+      prunedOutput: Option[Seq[AttributeReference]]) {
 
     /** Returns the scan relation of the source whose relation is `relation`. */
     def toRelation(
         relation: StreamingDataSourceV2Relation): StreamingDataSourceV2ScanRelation = {
       StreamingDataSourceV2ScanRelation(relation, scan, relation.output, stream,
-        prunedOutput = prunedOutput, pushedFilters = pushedFilters)
+        prunedOutput = prunedOutput)
     }
   }
 
   /**
    * Returns what the optimized `plan` reads from each of its streaming relations of Data Source
-   * V2: what the planner takes from the projections and the filters over each occurrence of the
-   * relation, or all its columns and no filter where nothing is projected or filtered over it. A
-   * relation that the optimized plan does not have has no entry, so that its scan reads all its
-   * columns and gets no filter, as no relation has if the optimizer fails, or if the optimized
-   * plan has a streaming relation that `plan` does not have.
+   * V2: the columns that the planner takes from the projections and the filters over each
+   * occurrence of the relation, or all its columns where nothing is projected or filtered over it.
+   * A relation that the optimized plan does not have has no entry, so that its scan reads all its
+   * columns, as no relation has if the optimizer fails, or if the optimized plan has a streaming
+   * relation that `plan` does not have.
    *
    * The plan is optimized as the micro-batches are: with the optimizer and the configuration of
    * the stream, the values of the configurations that the offset log of a restarted query pins, and
    * without the cost-based reordering of joins, which `StreamExecution` disables for its queries.
-   * The plan does not depend on when it is optimized, and the scan of a relation only gets what the
-   * query reads from that relation:
+   * The plan does not depend on when it is optimized:
    *  - The expressions whose values depend on when they are evaluated or on the state of the
    *    session, such as the current time, the casts of special strings such as 'today' or 'now'
    *    to dates and timestamps, the casts of strings with only a time to timestamps, or the
    *    current database, which each micro-batch gets the values of, become placeholders that the
-   *    optimizer does not take as deterministic, as the current time of a micro-batch, so neither
-   *    its filters nor its columns depend on them, and no filter on them is pushed down.
-   *  - The filters that the optimizer infers from the constraints of the plan, such as those of the
-   *    filters over another relation joined with the relation, are not inferred, so that the scan
-   *    only gets the filters that the query applies to the relation itself.
+   *    optimizer does not take as deterministic, as the current time of a micro-batch, so the
+   *    columns that the plan reads do not depend on them.
    *  - The relations of batch scans become placeholders, so that their scans are neither built
    *    nor planned: they do not change what the plan reads from its streaming relations.
    *
@@ -137,8 +125,6 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
     val conf = session.sessionState.conf.clone()
     offsetLogMetadata.foreach(OffsetSeqMetadata.setSessionConf(_, conf, logChanges = false))
     conf.setConf(SQLConf.CBO_ENABLED, false)
-    conf.setConfString(SQLConf.OPTIMIZER_EXCLUDED_RULES.key,
-      (conf.optimizerExcludedRules.toSeq :+ InferFiltersFromConstraints.ruleName).mkString(","))
     session.withActive {
       SQLConf.withExistingConf(conf) {
         try {
@@ -156,8 +142,7 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
           def visit(node: LogicalPlan): Unit = node match {
             case PhysicalOperation(project, filters, relation: StreamingRelationV2) =>
               occurrences += relation -> Reads(
-                AttributeSet((project ++ filters).flatMap(_.references)),
-                pushableFilters(filters))
+                AttributeSet((project ++ filters).flatMap(_.references)))
             case _ =>
               node.children.foreach(visit)
           }
@@ -171,16 +156,15 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
             // the micro-batches, so the scan would have to read what the copy reads too.
             logWarning(log"The optimized streaming query reads the streaming relations " +
               log"${MDC(LogKeys.STREAMING_TABLE, unknown.distinct.mkString(", "))} that its " +
-              log"plan does not have, so the scans of its sources read all their columns with " +
-              log"no filter.")
+              log"plan does not have, so the scans of its sources read all their columns.")
             Map.empty
           } else {
             combine(occurrences.toSeq)
           }
         } catch {
           case NonFatal(e) =>
-            logWarning(log"Could not optimize the streaming query to push down what it reads " +
-              log"to the scans of its sources, which read all their columns with no filter.", e)
+            logWarning(log"Could not optimize the streaming query to push down the columns " +
+              log"that it reads to the scans of its sources, which read all their columns.", e)
             Map.empty
         }
       }
@@ -189,34 +173,12 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
 
   /**
    * Returns what the occurrences of each relation read, combined: the scan of a relation reads the
-   * rows of all its occurrences, so it reads the columns that any of them reads, and can only
-   * apply the filters that all of them apply. Each occurrence evaluates the pushed filters before
-   * its own, so the pushed filters are those that all the occurrences evaluate first, in the same
-   * order: the longest common prefix of their filters, see `pushableFilters`.
+   * rows of all its occurrences, so it reads the columns that any of them reads.
    */
   private def combine(
       occurrences: Seq[(StreamingRelationV2, Reads)]): Map[StreamingRelationV2, Reads] = {
     occurrences.groupBy(_._1).map { case (relation, reads) =>
-      val filters = reads.map(_._2.filters).reduce { (left, right) =>
-        left.zip(right).takeWhile { case (l, r) => l.semanticEquals(r) }.map(_._1)
-      }
-      relation -> Reads(AttributeSet.fromAttributeSets(reads.map(_._2.requiredColumns)), filters)
-    }
-  }
-
-  /**
-   * Returns the filters that the scan of a relation may get of `filters`, the filters over an
-   * occurrence of the relation in the order in which the plan evaluates them: the deterministic
-   * ones without subqueries or placeholders, up to the first filter that is not, which is not
-   * pushed down, and neither are those after it. The plan of each micro-batch evaluates the pushed
-   * filters first, over the relation (see `withPushedFilters`), so a pushed filter does not see a
-   * row that a filter written before it drops: it could fail on such a row, as a filter with a
-   * cast or a division does under ANSI, or with `raise_error`.
-   */
-  private def pushableFilters(filters: Seq[Expression]): Seq[Expression] = {
-    filters.takeWhile { filter =>
-      filter.deterministic && !SubqueryExpression.hasSubquery(filter) &&
-        !filter.exists(_.isInstanceOf[StartupValue])
+      relation -> Reads(AttributeSet.fromAttributeSets(reads.map(_._2.requiredColumns)))
     }
   }
 
@@ -278,19 +240,17 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
 
   /**
    * Builds the scan of a streaming source, and creates its stream with `createStream`. If the
-   * table of the source has the capability `STREAMING_COLUMN_PRUNING` or
-   * `STREAMING_FILTER_PUSHDOWN`, its scan builder supports the pushdown, and `conf` enables it,
-   * the scan only reads the columns of `output` that the query reads, or gets the filters that
-   * the query applies to all the rows that it reads from the source (see `reads`). `reads` is only
-   * evaluated for such a scan. Otherwise, the scan reads all the columns of `output` with no
-   * filter, as the scans of streaming queries did before these pushdowns.
+   * table of the source has the capability `STREAMING_COLUMN_PRUNING`, its scan builder supports
+   * the pushdown, and `conf` enables it, the scan only reads the columns of `output` that the query
+   * reads (see `reads`). `reads` is only evaluated for such a scan. Otherwise, the scan reads all
+   * the columns of `output`, as the scans of streaming queries did before this pushdown.
    *
    * A pruned scan must read the required columns and only columns of `output`, each once, as
    * `SupportsPushDownRequiredColumns` requires. Spark asks a scan for its read schema before it
    * creates its stream, as for a batch. If the scan builder, the scan or its stream fails with the
-   * pushdowns, or the read schema of a pruned scan cannot be read or does not follow
-   * `SupportsPushDownRequiredColumns`, a scan of all the columns with no filter is built instead,
-   * from a new scan builder, as without these pushdowns.
+   * pruning, or the read schema of a pruned scan cannot be read or does not follow
+   * `SupportsPushDownRequiredColumns`, a scan of all the columns is built instead, from a new scan
+   * builder, as without this pushdown.
    *
    * @param output the output of the relation of the source, with the metadata columns that the
    *               query reads, which the analyzer added to it, so that connectors implementing
@@ -306,42 +266,15 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
       reads: => Option[Reads])(
       createStream: Scan => SparkDataStream): StreamingScan = {
     val builder = table.newScanBuilder(options)
-    val capabilities = table.capabilities()
     val prunesColumns = conf.streamingV2ColumnPruningEnabled &&
-      capabilities.contains(TableCapability.STREAMING_COLUMN_PRUNING) &&
+      table.capabilities().contains(TableCapability.STREAMING_COLUMN_PRUNING) &&
       builder.isInstanceOf[SupportsPushDownRequiredColumns]
-    val pushesFilters = conf.streamingV2FilterPushdownEnabled &&
-      capabilities.contains(TableCapability.STREAMING_FILTER_PUSHDOWN) &&
-      PushDownUtils.supportsFilters(builder)
-    val known = if (prunesColumns || pushesFilters) reads else None
-    val requiredOutput = known.filter(_ => prunesColumns)
+    val requiredOutput = (if (prunesColumns) reads else None)
       .map(r => output.filter(r.requiredColumns.contains))
       .getOrElse(output)
-    // The filters that the scan builder gets in some form, which each micro-batch applies first:
-    // the others, such as a filter with a UDF that cannot be translated to a filter of the source,
-    // are evaluated after them, as for the scans of batch queries, rather than on all the rows of
-    // the source.
-    val filters = known.filter(_ => pushesFilters)
-      .map { r =>
-        PushDownUtils.filtersOfScanBuilder(builder,
-          DataSourceStrategy.normalizeExprs(r.filters, output))
-      }
-      .getOrElse(Nil)
 
-    // Builds the scan of `columns` with `builder`, once it pushed `filters` down to it.
-    def build(
-        builder: ScanBuilder,
-        columns: Seq[AttributeReference],
-        filters: Seq[Expression]): Scan = {
-      if (filters.nonEmpty) {
-        // The plan of each micro-batch applies these filters to the rows of the source, see
-        // `withPushedFilters`, so the scan may apply any of them, in any form.
-        val (pushed, _) = PushDownUtils.pushFilters(builder, filters, partitionFields = None)
-        val taken = pushed.fold(_.mkString(", "), _.mkString(", "))
-        logInfo(log"The scan builder of the streaming table " +
-          log"${MDC(LogKeys.STREAMING_TABLE, table)} took the filters " +
-          log"${MDC(LogKeys.PUSHED_FILTERS, taken)}.")
-      }
+    // Builds the scan of `columns` with `builder`.
+    def build(builder: ScanBuilder, columns: Seq[AttributeReference]): Scan = {
       builder match {
         case pruning: SupportsPushDownRequiredColumns =>
           pruning.pruneColumns(DataTypeUtils.fromAttributes(columns))
@@ -349,66 +282,44 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
       }
       builder.build()
     }
-    // The scan of all the columns with no filter, as without these pushdowns.
+    // The scan of all the columns, as without this pushdown.
     def scanOfAllColumns(builder: ScanBuilder): StreamingScan = {
-      val scan = build(builder, output, Nil)
-      StreamingScan(scan, createStream(scan), None, Nil)
+      val scan = build(builder, output)
+      StreamingScan(scan, createStream(scan), None)
     }
 
-    if (requiredOutput.length == output.length && filters.isEmpty) {
+    if (requiredOutput.length == output.length) {
       scanOfAllColumns(builder)
     } else {
-      // Logs why the scan with the pushdowns could not be built, and builds the scan of all the
-      // columns with no filter instead.
+      // Logs why the pruned scan could not be built, and builds the scan of all the columns
+      // instead.
       def fallBack(reason: String, cause: Option[Throwable]): StreamingScan = {
-        val columns = if (requiredOutput.length < output.length) {
-          requiredOutput.map(_.name).mkString(", ")
-        } else {
-          "all"
-        }
-        val filterList = if (filters.nonEmpty) filters.map(_.sql).mkString(", ") else "none"
         val message = log"The scan of the streaming table " +
-          log"${MDC(LogKeys.STREAMING_TABLE, table)} could not be built with the pushdowns " +
-          log"(columns: ${MDC(LogKeys.COLUMN_NAMES, columns)}, filters: " +
-          log"${MDC(LogKeys.FILTER, filterList)}): ${MDC(LogKeys.REASON, reason)}. It reads all " +
-          log"the columns with no filter instead."
+          log"${MDC(LogKeys.STREAMING_TABLE, table)} could not be built to read only the columns " +
+          log"${MDC(LogKeys.COLUMN_NAMES, requiredOutput.map(_.name).mkString(", "))}: " +
+          log"${MDC(LogKeys.REASON, reason)}. It reads all the columns instead."
         cause match {
           case Some(e) => logWarning(message, e)
           case None => logWarning(message)
         }
         scanOfAllColumns(table.newScanBuilder(options))
       }
-      // The scan with the pushdowns and its stream, or why the read schema of the pruned scan
-      // does not follow `SupportsPushDownRequiredColumns`.
-      val pushedDown = Try {
-        val scan = build(builder, requiredOutput, filters)
-        val prunedOutput = if (requiredOutput.length == output.length) {
-          Right(None)
-        } else {
-          prunedScanOutput(scan.readSchema(), output, requiredOutput).map { scanOutput =>
+      // The pruned scan and its stream, or why its read schema does not follow
+      // `SupportsPushDownRequiredColumns`.
+      val pruned = Try {
+        val scan = build(builder, requiredOutput)
+        prunedScanOutput(scan.readSchema(), output, requiredOutput).map { scanOutput =>
+          val prunedOutput =
             if (scanOutput.map(_.exprId) == output.map(_.exprId)) None else Some(scanOutput)
-          }
+          StreamingScan(scan, createStream(scan), prunedOutput)
         }
-        prunedOutput.map(StreamingScan(scan, createStream(scan), _, filters))
       }
-      pushedDown match {
+      pruned match {
         case Success(Right(streamingScan)) => streamingScan
         case Success(Left(reason)) => fallBack(s"its read schema $reason", None)
         case Failure(e) => fallBack(s"it failed with $e", Some(e))
       }
     }
-  }
-
-  /**
-   * Returns `relation`, the relation of a streaming source in the plan of the query, with the
-   * filters that its scan builder got applied to its rows. The query applies them anyway, as they
-   * are the filters that it applies to all the rows that it reads from the source, so the plan of
-   * each micro-batch has the same result with them. With them, it also applies all the filters
-   * that the scan may apply, in any form, however the plan of the micro-batch is optimized, so the
-   * scan cannot drop a row that the plan keeps.
-   */
-  def withPushedFilters(relation: StreamingDataSourceV2ScanRelation): LogicalPlan = {
-    relation.pushedFilters.reduceOption(And).map(Filter(_, relation)).getOrElse(relation)
   }
 
   /**
