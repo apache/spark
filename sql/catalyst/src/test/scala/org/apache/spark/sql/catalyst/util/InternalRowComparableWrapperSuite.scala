@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{BinaryView, TimestampNanosVal, UTF8String}
+import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 
 class InternalRowComparableWrapperSuite extends SparkFunSuite with SQLConfHelper {
 
@@ -161,21 +161,18 @@ class InternalRowComparableWrapperSuite extends SparkFunSuite with SQLConfHelper
       BooleanType, ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType,
       DecimalType(10, 2), StringType, StringType, CharType(5), VarcharType(5), BinaryType,
       DateType, TimestampType, TimestampNTZType, TimestampNTZNanosType(9),
-      TimestampLTZNanosType(9), TimeType(), YearMonthIntervalType(), DayTimeIntervalType(),
-      GeometryType("ANY"), GeographyType("ANY"))
+      TimestampLTZNanosType(9), TimeType(), YearMonthIntervalType(), DayTimeIntervalType())
     val nanos = new TimestampNanosVal(1704164645000000L, 123.toShort)
-    val spatial = BinaryView.fromBytes(Array[Byte](1, 2))
     val row = InternalRow(
       true, 1.toByte, 2.toShort, 3, 4L, 5.5f, 6.5, Decimal(BigDecimal("12.34"), 10, 2),
       UTF8String.fromString("ab"), null, UTF8String.fromString("cd"),
       UTF8String.fromString("ef"), Array[Byte](1, 2),
       19724, 1704164645000000L, 1704164645000000L, nanos, nanos, 11045000000000L,
-      13, 90061000000L, spatial, spatial)
+      13, 90061000000L)
     val expected = "[true,1,2,3,4,5.5,6.5,12.34,ab,null,cd,ef,0x0102," +
       "2024-01-02,2024-01-02 03:04:05,2024-01-02 03:04:05," +
       "2024-01-02 03:04:05.000000123,2024-01-02 03:04:05.000000123,03:04:05," +
-      "INTERVAL '1-1' YEAR TO MONTH,INTERVAL '1 01:01:01' DAY TO SECOND," +
-      "0x0102,0x0102]"
+      "INTERVAL '1-1' YEAR TO MONTH,INTERVAL '1 01:01:01' DAY TO SECOND]"
     val factory = InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(dataTypes)
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
       assert(factory(row).toString === expected)

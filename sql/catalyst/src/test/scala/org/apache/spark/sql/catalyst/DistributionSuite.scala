@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-/* Implicit conversions */
 import org.apache.spark.serializer.JavaSerializer
+/* Implicit conversions */
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, CollationAwareMurmur3Hash, Expression, Literal, Pmod, SortOrder, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.SQLHelper

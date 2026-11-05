@@ -17,16 +17,12 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.util.HexFormat
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{
   BaseOrdering, Expression, Literal, Murmur3HashFunction, RowOrdering}
 import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition}
 import org.apache.spark.sql.types.{
-  ArrayType, DataType, GeographyType, GeometryType, MapType, StructField, StructType,
-  UserDefinedType}
-import org.apache.spark.unsafe.types.BinaryView
+  ArrayType, DataType, MapType, StructField, StructType, UserDefinedType}
 import org.apache.spark.util.NonFateSharingCache
 
 /**
@@ -154,9 +150,6 @@ object InternalRowComparableWrapper {
               render(m.valueArray().get(i, valueType), valueType)
           }.mkString("{", ",", "}")
         case udt: UserDefinedType[_] => render(value, udt.sqlType)
-        case _: GeometryType | _: GeographyType =>
-          val view = value.asInstanceOf[BinaryView]
-          "0x" + HexFormat.of().withUpperCase().formatHex(view.getBytes())
         case _ => Literal(value, dataType).toString
       }
     }

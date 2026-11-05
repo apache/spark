@@ -750,11 +750,12 @@ case class KeyedPartitioning(
   /**
    * Prints the layout as the partition keys followed by the flags and origins. The keys are
    * summarized once they exceed the fields that `maxFields` leaves after the expressions and the
-   * trailing fields, which are always printed. `dataTypes` is left out because its naming is
-   * erased, so printing it would put a struct field name into a plan that appears nowhere in the
-   * query. The plan string is the only place a reader sees why a marked partitioning still
-   * shuffles. Keys print as values, so two keys that `equals` considers equal can print
-   * differently, e.g. `'a'` and `'A'` under `UTF8_LCASE`.
+   * trailing fields; when those fields alone exceed the budget, the argument list is truncated
+   * from the end as usual. `dataTypes` is left out because its naming is erased, so printing it
+   * would put a struct field name into a plan that appears nowhere in the query. The plan string
+   * is the only place a reader sees why a marked partitioning still shuffles. Keys print as
+   * values, so two keys that `equals` considers equal can print differently, e.g. `'a'` and `'A'`
+   * under `UTF8_LCASE`.
    */
   override def toString: String = simpleString(SQLConf.get.maxToStringFields)
 
