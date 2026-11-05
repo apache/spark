@@ -198,15 +198,8 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
           replaceTable.copy(tableSpec = tableSpec.copy(
             collation = getCollationFromSchemaMetadata(catalog, identifier.namespace())))
 
-        case createView@CreateView(ResolvedIdentifier(
-        catalog: SupportsNamespaces, identifier), _, _, _, _, _, _, _, _, _, _, _, _)
-          if createView.collation.isEmpty =>
-          val newCreateView = CurrentOrigin.withOrigin(createView.origin) {
-            createView.copy(
-              collation = getCollationFromSchemaMetadata(catalog, identifier.namespace()))
-          }
-          newCreateView.copyTagsFrom(createView)
-          newCreateView
+        case createView: CreateView =>
+          resolveCreateViewCollation(createView)
 
         case createUserDefinedFunction@CreateUserDefinedFunction(
         ResolvedIdentifier(catalog: SupportsNamespaces, identifier),
@@ -225,6 +218,30 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
     } catch {
       case NonFatal(_) =>
         plan
+    }
+  }
+
+  /**
+   * Fills an unspecified view collation from the target schema, preserving origin and tags.
+   * Returns the original command if the target is unresolved or metadata lookup fails.
+   */
+  def resolveCreateViewCollation(createView: CreateView): CreateView = {
+    try {
+      createView.child match {
+        case ResolvedIdentifier(catalog: SupportsNamespaces, identifier)
+            if createView.collation.isEmpty =>
+          val newCreateView = CurrentOrigin.withOrigin(createView.origin) {
+            createView.copy(
+              collation = getCollationFromSchemaMetadata(catalog, identifier.namespace()))
+          }
+          newCreateView.copyTagsFrom(createView)
+          newCreateView
+        case _ =>
+          createView
+      }
+    } catch {
+      case NonFatal(_) =>
+        createView
     }
   }
 

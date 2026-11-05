@@ -73,9 +73,7 @@ case class JsonScan(
       readDataSchema.head.name == parsedOptions.columnNameOfCorruptRecord) {
       throw QueryCompilationErrors.queryFromRawFilesIncludeCorruptRecordColumnError()
     }
-    val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
-    // Hadoop Configurations are case sensitive.
-    val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
+    val hadoopConf = newReadHadoopConf()
     val broadcastedConf =
       SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     // The partition values are already truncated in `FileScan.partitions`.
