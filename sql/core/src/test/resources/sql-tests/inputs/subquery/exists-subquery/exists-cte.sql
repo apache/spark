@@ -137,12 +137,3 @@ WHERE  NOT EXISTS (SELECT dept_id,
                    GROUP  BY dept_id 
                    HAVING count(*) < 1) 
 GROUP  BY emp_name; 
-
--- Correlated CTE inside the subquery, used on the right side of a left join
-SELECT *
-FROM   emp
-WHERE  EXISTS (WITH dept_cte AS (SELECT * FROM dept WHERE dept.dept_id = emp.dept_id)
-               SELECT *
-               FROM   bonus
-                      LEFT JOIN dept_cte
-                             ON bonus.emp_name = dept_cte.dept_name);
