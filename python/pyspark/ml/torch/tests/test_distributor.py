@@ -27,7 +27,7 @@ import tempfile
 import threading
 from typing import Callable, Dict, Any
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from pyspark import SparkConf, SparkContext
 from pyspark.ml.torch.distributor import TorchDistributor, _get_gpus_owned
@@ -256,6 +256,30 @@ class TorchDistributorBaselineUnitTestsMixin:
         with self.assertRaisesRegex(RuntimeError, "abcdef"):
             error_command = ["bash", "-c", "'abc''def'"]
             TorchDistributor._execute_command(error_command)
+
+    def test_log_streaming_server_start_failure_warns(self) -> None:
+        """A failure to start the log streaming server must only emit a warning."""
+
+        class StopTraining(Exception):
+            pass
+
+        dist = TorchDistributor(num_processes=2, local_mode=False, use_gpu=False)
+        with (
+            patch(
+                "pyspark.ml.torch.distributor.LogStreamingServer.start",
+                side_effect=OSError("Address already in use"),
+            ),
+            patch.object(dist, "_get_spark_task_function", side_effect=StopTraining),
+            self.assertLogs(dist.logger, level="WARNING") as logs,
+            self.assertRaises(StopTraining),
+        ):
+            dist._run_distributed_training(MagicMock(), MagicMock(), None, None)
+
+        self.assertEqual(dist.log_streaming_server_port, -1)
+        self.assertEqual(len(logs.records), 1)
+        message = logs.records[0].getMessage()
+        self.assertIn("Start torch distributor log streaming server failed", message)
+        self.assertIn("Address already in use", message)
 
     def test_create_torchrun_command(self) -> None:
         train_path = "train.py"

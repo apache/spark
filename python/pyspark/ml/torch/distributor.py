@@ -800,8 +800,9 @@ class TorchDistributor(Distributor):
             self.log_streaming_server_port = -1
             self.logger.warning(
                 "Start torch distributor log streaming server failed, "
-                "You cannot receive logs sent from distributor workers, ",
-                f"error: {repr(e)}.",
+                "You cannot receive logs sent from distributor workers, "
+                "error: %r.",
+                e,
             )
 
         try:
