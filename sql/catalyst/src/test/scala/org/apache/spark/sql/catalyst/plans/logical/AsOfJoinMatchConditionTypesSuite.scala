@@ -46,7 +46,7 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite with SQLConfHelper 
     } {
       val leftOperand = AttributeReference("l", keyType(leftType))()
       val rightOperand = AttributeReference("r", keyType(rightType))()
-      val (condition, _, leftKeys, rightKeys) =
+      val (condition, leftKeys, rightKeys) =
         withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
           AsOfJoin.materializeMatchComparison(
             leftOperand = leftOperand,
@@ -75,7 +75,7 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite with SQLConfHelper 
         name = "ts", dataType = rightType, metadata = metadata)()
       val leftNumber = AttributeReference("n", IntegerType)()
       val rightNumber = AttributeReference("n", LongType)()
-      val (_, _, leftKeys, rightKeys) =
+      val (_, leftKeys, rightKeys) =
         withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
           AsOfJoin.materializeMatchComparison(
             leftOperand = CreateNamedStruct(Seq(
@@ -114,7 +114,7 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite with SQLConfHelper 
     val expectedRight = ArrayType(
       StructType(timestampField.copy(dataType = TimestampType) +: rightFields.tail),
       containsNull = false)
-    val (_, _, leftKeys, rightKeys) =
+    val (_, leftKeys, rightKeys) =
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
         AsOfJoin.materializeMatchComparison(
           leftOperand = AttributeReference("l", leftType)(),
@@ -128,8 +128,7 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite with SQLConfHelper 
 
   test("scalar types widen via TypeCoercion") {
     assert(MatchConditionTypes.areOperandsCompatible(IntegerType, LongType))
-    assert(!MatchConditionTypes.usesArrayOrderExpression(IntegerType, LongType))
-    assert(!MatchConditionTypes.usesStructDecomposition(IntegerType, LongType))
+    assert(!MatchConditionTypes.areArrayElementsCompatible(IntegerType, LongType))
   }
 
   test("scalar string and temporal types coerce, matching the comparison operator") {
@@ -220,7 +219,6 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite with SQLConfHelper 
         StructField("y", LongType) ::
         Nil)
     assert(MatchConditionTypes.areOperandsCompatible(leftStruct, rightStruct))
-    assert(MatchConditionTypes.usesStructDecomposition(leftStruct, rightStruct))
   }
 
   test("nested struct operands are compatible when fields match positionally") {
@@ -229,7 +227,6 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite with SQLConfHelper 
     val leftStruct = StructType(StructField("outer", innerLeft) :: Nil)
     val rightStruct = StructType(StructField("other", innerRight) :: Nil)
     assert(MatchConditionTypes.areOperandsCompatible(leftStruct, rightStruct))
-    assert(MatchConditionTypes.usesStructDecomposition(leftStruct, rightStruct))
   }
 
   test("struct operands with different field names and coercible types are rejected") {
@@ -268,7 +265,7 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite with SQLConfHelper 
     val leftArray = ArrayType(IntegerType)
     val rightArray = ArrayType(IntegerType)
     assert(MatchConditionTypes.areOperandsCompatible(leftArray, rightArray))
-    assert(MatchConditionTypes.usesArrayOrderExpression(leftArray, rightArray))
+    assert(MatchConditionTypes.areArrayElementsCompatible(leftArray, rightArray))
   }
 
   test("array operands with coercible element types are compatible") {
@@ -276,7 +273,7 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite with SQLConfHelper 
     val intArray = ArrayType(IntegerType)
     val longArray = ArrayType(LongType)
     assert(MatchConditionTypes.areOperandsCompatible(intArray, longArray))
-    assert(MatchConditionTypes.usesArrayOrderExpression(intArray, longArray))
+    assert(MatchConditionTypes.areArrayElementsCompatible(intArray, longArray))
     assert(MatchConditionTypes.areOperandsCompatible(longArray, intArray))
     assert(MatchConditionTypes.areOperandsCompatible(intArray, ArrayType(DoubleType)))
   }
@@ -286,14 +283,14 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite with SQLConfHelper 
     val intArray = ArrayType(IntegerType)
     val stringArray = ArrayType(StringType)
     assert(!MatchConditionTypes.areOperandsCompatible(intArray, stringArray))
-    assert(!MatchConditionTypes.usesArrayOrderExpression(intArray, stringArray))
+    assert(!MatchConditionTypes.areArrayElementsCompatible(intArray, stringArray))
   }
 
   test("nested array operands with coercible element types are compatible") {
     val leftArray = ArrayType(ArrayType(IntegerType))
     val rightArray = ArrayType(ArrayType(LongType))
     assert(MatchConditionTypes.areOperandsCompatible(leftArray, rightArray))
-    assert(MatchConditionTypes.usesArrayOrderExpression(leftArray, rightArray))
+    assert(MatchConditionTypes.areArrayElementsCompatible(leftArray, rightArray))
   }
 
   test("array operands with different struct element field names are compatible") {
@@ -308,7 +305,7 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite with SQLConfHelper 
           StructField("q", IntegerType, nullable = false) ::
           Nil))
     assert(MatchConditionTypes.areOperandsCompatible(leftArray, rightArray))
-    assert(MatchConditionTypes.usesArrayOrderExpression(leftArray, rightArray))
+    assert(MatchConditionTypes.areArrayElementsCompatible(leftArray, rightArray))
   }
 
   test("array operands with non-coercible element types are rejected") {
@@ -316,7 +313,7 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite with SQLConfHelper 
     val leftArray = ArrayType(IntegerType)
     val rightArray = ArrayType(BinaryType)
     assert(!MatchConditionTypes.areOperandsCompatible(leftArray, rightArray))
-    assert(!MatchConditionTypes.usesArrayOrderExpression(leftArray, rightArray))
+    assert(!MatchConditionTypes.areArrayElementsCompatible(leftArray, rightArray))
   }
 
   test("array struct elements coerce only when field names match") {
@@ -324,27 +321,24 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite with SQLConfHelper 
     // Same field name, coercible field type: elements widen to struct<a:bigint>, so accepted.
     val sameNameArray = ArrayType(StructType(StructField("a", LongType) :: Nil))
     assert(MatchConditionTypes.areOperandsCompatible(leftArray, sameNameArray))
-    assert(MatchConditionTypes.usesArrayOrderExpression(leftArray, sameNameArray))
+    assert(MatchConditionTypes.areArrayElementsCompatible(leftArray, sameNameArray))
     // Different field name, coercible field type: no tightest common type, so rejected.
     // Fails if the rule fell back to positional struct matching, which ignores field names.
     val diffNameArray = ArrayType(StructType(StructField("b", LongType) :: Nil))
     assert(!MatchConditionTypes.areOperandsCompatible(leftArray, diffNameArray))
-    assert(!MatchConditionTypes.usesArrayOrderExpression(leftArray, diffNameArray))
+    assert(!MatchConditionTypes.areArrayElementsCompatible(leftArray, diffNameArray))
   }
 
   test("empty struct operands are valid and compare as a whole value") {
     val emptyStruct = StructType(Nil)
     assert(MatchConditionTypes.isValidOperandType(emptyStruct))
     assert(MatchConditionTypes.areOperandsCompatible(emptyStruct, emptyStruct))
-    // Splitting into zero fields would compare two empty literals, so a NULL operand would match.
-    assert(!MatchConditionTypes.usesStructDecomposition(emptyStruct, emptyStruct))
   }
 
   test("nested empty struct operands are valid") {
     val nestedEmptyStruct = StructType(StructField("x", StructType(Nil)) :: Nil)
     assert(MatchConditionTypes.isValidOperandType(nestedEmptyStruct))
     assert(MatchConditionTypes.areOperandsCompatible(nestedEmptyStruct, nestedEmptyStruct))
-    assert(MatchConditionTypes.usesStructDecomposition(nestedEmptyStruct, nestedEmptyStruct))
   }
 
   test("empty struct and non-empty struct operands are incompatible") {
@@ -358,7 +352,7 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite with SQLConfHelper 
     val emptyArray = ArrayType(emptyStruct)
     val nonEmptyArray = ArrayType(nonEmptyStruct)
     assert(!MatchConditionTypes.areOperandsCompatible(emptyArray, nonEmptyArray))
-    assert(!MatchConditionTypes.usesArrayOrderExpression(emptyArray, nonEmptyArray))
+    assert(!MatchConditionTypes.areArrayElementsCompatible(emptyArray, nonEmptyArray))
   }
 
   test("struct field count mismatch is not decomposable") {
@@ -367,7 +361,6 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite with SQLConfHelper 
       StructField("a", IntegerType) ::
         StructField("b", IntegerType) ::
         Nil)
-    assert(!MatchConditionTypes.usesStructDecomposition(leftStruct, rightStruct))
     assert(!MatchConditionTypes.areOperandsCompatible(leftStruct, rightStruct))
   }
 
@@ -381,7 +374,7 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite with SQLConfHelper 
     val arrayOfMap = ArrayType(MapType(StringType, IntegerType))
     assert(!MatchConditionTypes.isValidOperandType(arrayOfMap))
     assert(!MatchConditionTypes.areOperandsCompatible(arrayOfMap, arrayOfMap))
-    assert(!MatchConditionTypes.usesArrayOrderExpression(arrayOfMap, arrayOfMap))
+    assert(!MatchConditionTypes.areArrayElementsCompatible(arrayOfMap, arrayOfMap))
   }
 
   test("struct operands with a non-orderable field are invalid") {
@@ -402,9 +395,7 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite with SQLConfHelper 
       StructField("x", IntegerType) ::
         StructField("y", BooleanType) ::
         Nil)
-    // Same field count, so the operands are structurally decomposable ...
-    assert(MatchConditionTypes.usesStructDecomposition(leftStruct, rightStruct))
-    // ... but the second field pair (TIMESTAMP vs BOOLEAN) is not comparable.
+    // The second field pair (TIMESTAMP vs BOOLEAN) is not comparable.
     assert(!MatchConditionTypes.areOperandsCompatible(leftStruct, rightStruct))
   }
 
@@ -412,7 +403,7 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite with SQLConfHelper 
     val arrayOfEmptyStruct = ArrayType(StructType(Nil))
     assert(MatchConditionTypes.isValidOperandType(arrayOfEmptyStruct))
     assert(MatchConditionTypes.areOperandsCompatible(arrayOfEmptyStruct, arrayOfEmptyStruct))
-    assert(MatchConditionTypes.usesArrayOrderExpression(arrayOfEmptyStruct, arrayOfEmptyStruct))
+    assert(MatchConditionTypes.areArrayElementsCompatible(arrayOfEmptyStruct, arrayOfEmptyStruct))
   }
 
   test("array operands with incompatible struct element field types are rejected") {

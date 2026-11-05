@@ -74,6 +74,7 @@ private[pipelines] trait Scd1ReconciliationStrategy {
       Scd1BatchProcessor.constructCdcMetadataCol(
         deleteSequence = rowDeleteSequence,
         upsertSequence = rowUpsertSequence,
+        versionMap = F.lit(null),
         sequencingType = resolvedSequencingType
       )
     )

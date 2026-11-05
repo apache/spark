@@ -55,7 +55,15 @@ object ConstantFolding extends Rule[LogicalPlan] {
   private def hasNoSideEffect(e: Expression): Boolean = e match {
     case _: Attribute => true
     case _: Literal => true
-    case c: Cast if !conf.ansiEnabled => hasNoSideEffect(c.child)
+    // A cast keeps the eval mode it was analyzed with (for example, in a view), so check it as
+    // well. A TRY cast returns null instead of failing, and so do some LEGACY casts. Keep the
+    // session check so that this does not start folding casts in ANSI sessions.
+    case c: Cast if !conf.ansiEnabled => c.evalMode match {
+      case EvalMode.TRY => hasNoSideEffect(c.child)
+      case EvalMode.LEGACY if Cast.isNoThrowLegacyCast(c.child.dataType, c.dataType) =>
+        hasNoSideEffect(c.child)
+      case _ => false
+    }
     case _: NoThrow if e.deterministic => e.children.forall(hasNoSideEffect)
     case _ => false
   }
@@ -89,8 +97,6 @@ object ConstantFolding extends Rule[LogicalPlan] {
 
     case Size(c: CreateArray, _) if c.children.forall(hasNoSideEffect) =>
       Literal(c.children.length)
-    case Size(c: CreateMap, _) if c.children.forall(hasNoSideEffect) =>
-      Literal(c.children.length / 2)
 
     case e if e.containsTag(FAILED_TO_EVALUATE) => e
 
