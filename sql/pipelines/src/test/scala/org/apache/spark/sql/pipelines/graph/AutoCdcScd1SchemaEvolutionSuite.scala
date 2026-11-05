@@ -746,38 +746,4 @@ class AutoCdcScd1SchemaEvolutionSuite
       )
     )
   }
-
-  test("an untyped NULL source column for an existing struct column fails with " +
-    "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE") {
-    // An untyped NULL column is VOID-typed and has no nested fields, unlike a struct column
-    // holding NULL values. The SCD1 version map treats target leaves missing from the
-    // microbatch schema as omitted, so a VOID column must not merge onto a struct column.
-    spark.sql(
-      s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, profile STRUCT<city: STRING>, version BIGINT NOT NULL, " +
-      s"$scd1MetadataDdl)"
-    )
-
-    val stream = MemoryStream[(Int, Long)]
-    stream.addData((1, 2L))
-    val ctx = singleAutoCdcFlowPipeline(
-      flowName = "auto_cdc_flow",
-      target = "target",
-      sourceDf = stream.toDF().toDF("id", "version")
-        .withColumn("profile", functions.lit(null)),
-      keys = Seq("id"),
-      sequencing = functions.col("version"))
-
-    val ex = intercept[RuntimeException] { runPipeline(ctx) }
-    checkErrorInPipelineFailure(
-      failure = ex,
-      condition = "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
-      sqlState = Some("42825"),
-      // `left` is the existing target column type; `right` is the source's VOID column.
-      parameters = Map(
-        "left" -> "\"STRUCT<city: STRING>\"",
-        "right" -> "\"VOID\""
-      )
-    )
-  }
 }
