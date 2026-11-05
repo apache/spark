@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.physical.{KeyGroupedPartitioning, Par
 import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparableWrapper}
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.read._
-import org.apache.spark.sql.execution.KeyGroupedPartitionedScan
+import org.apache.spark.sql.execution.{KeyGroupedPartitionedScan, SparkPlan}
 import org.apache.spark.sql.execution.joins.StoragePartitionJoinParams
 import org.apache.spark.util.ArrayImplicits._
 
@@ -44,7 +44,13 @@ case class BatchScanExec(
     spjParams: StoragePartitionJoinParams = StoragePartitionJoinParams()
   ) extends DataSourceV2ScanExecBase with KeyGroupedPartitionedScan[InputPartition] {
 
-  @transient lazy val batch: Batch = if (scan == null) null else scan.toBatch
+  // What this node plans from `scan`, see [[PlannedScan]]. `makeCopy` and `clone` hand it over to a
+  // copy over the same `Scan`. Any other new node plans its own, including one the case-class
+  // `copy` makes.
+  @transient private var plannedScan: PlannedScan =
+    if (scan == null) null else new PlannedScan(scan)
+
+  def batch: Batch = if (scan == null) null else plannedScan.batch
 
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
   override def equals(other: Any): Boolean = other match {
@@ -58,8 +64,7 @@ case class BatchScanExec(
 
   override def hashCode(): Int = Objects.hash(batch, runtimeFilters)
 
-  @transient override lazy val inputPartitions: Seq[InputPartition] =
-    batch.planInputPartitions().toImmutableArraySeq
+  override def inputPartitions: Seq[InputPartition] = plannedScan.inputPartitions
 
   @transient private lazy val filteredPartitions: Seq[Seq[InputPartition]] = {
     val dataSourceFilters = runtimeFilters.flatMap {
@@ -129,7 +134,7 @@ case class BatchScanExec(
     }
   }
 
-  override lazy val readerFactory: PartitionReaderFactory = batch.createReaderFactory()
+  override def readerFactory: PartitionReaderFactory = plannedScan.readerFactory
 
   override lazy val inputRDD: RDD[InternalRow] = {
     val rdd = if (filteredPartitions.isEmpty && outputPartitioning == SinglePartition) {
@@ -152,6 +157,19 @@ case class BatchScanExec(
   override def keyGroupedPartitioning: Option[Seq[Expression]] =
     spjParams.keyGroupedPartitioning
 
+  override def makeCopy(newArgs: Array[AnyRef]): SparkPlan = sharePlanning(super.makeCopy(newArgs))
+
+  // `TreeNode.clone` does not go through `makeCopy`.
+  override def clone(): SparkPlan = sharePlanning(super.clone())
+
+  private def sharePlanning(node: SparkPlan): SparkPlan = {
+    node match {
+      case c: BatchScanExec if c.scan eq scan => c.plannedScan = plannedScan
+      case _ =>
+    }
+    node
+  }
+
   override def doCanonicalize(): BatchScanExec = {
     this.copy(
       output = output.map(QueryPlan.normalizeExpressions(_, output)),
@@ -170,4 +188,19 @@ case class BatchScanExec(
   override def nodeName: String = {
     s"BatchScan ${table.name()}".trim
   }
+}
+
+/**
+ * A `Scan`, with the `Batch` and the input partitions a [[BatchScanExec]] plans from it once, when
+ * a node first asks for them. The node hands it over to the copies `makeCopy` and `clone` make of
+ * it, so they read the partitions the first node planned, with a reader factory from the `Batch`
+ * that planned them. The partitions have to be the planned ones, because the `Scan` can be shared
+ * with another node whose runtime filter prunes it first, e.g. the build side of a DPP subquery
+ * (SPARK-60752). A pushed runtime filter replans them from a new `Batch`, but keeps the planned
+ * `Batch`'s reader factory.
+ */
+private[v2] final class PlannedScan(val scan: Scan) {
+  lazy val batch: Batch = scan.toBatch
+  lazy val inputPartitions: Seq[InputPartition] = batch.planInputPartitions().toImmutableArraySeq
+  lazy val readerFactory: PartitionReaderFactory = batch.createReaderFactory()
 }
