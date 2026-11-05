@@ -31,7 +31,7 @@ import org.apache.spark.sql.connector.expressions.{Expressions, FieldReference, 
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
-import org.apache.spark.sql.internal.connector.{SupportsCatalystFilterGuarantees, SupportsRuntimeCatalystFiltering}
+import org.apache.spark.sql.internal.connector.SupportsRuntimeCatalystFiltering
 import org.apache.spark.sql.types.{BooleanType, DataType, LongType, StructField, StructType, VariantType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
@@ -166,7 +166,7 @@ object StorageFilterTestSource {
 }
 
 class StorageFilterTestTable(tableSchema: StructType, tableOptions: CaseInsensitiveStringMap)
-  extends Table with SupportsRead with SupportsCatalystFilterGuarantees {
+  extends Table with SupportsRead {
 
   override def name(): String = "storage_filter_test"
 
@@ -181,9 +181,6 @@ class StorageFilterTestTable(tableSchema: StructType, tableOptions: CaseInsensit
 
   override def capabilities(): util.Set[TableCapability] =
     Set(TableCapability.BATCH_READ).asJava
-
-  override def fullyPushedFilterAttributes(): Array[NamedReference] =
-    Array(FieldReference.column("k"))
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
     new StorageFilterTestScanBuilder(tableSchema, options)
@@ -245,6 +242,7 @@ class StorageFilterTestScanBuilder(tableSchema: StructType, options: CaseInsensi
       case "catalyst" => new StorageFilterTestScan(schema, factory, declared, numPartitions)
           with SupportsRuntimeCatalystFiltering {
         override def filterAttributes(): Array[NamedReference] = Array(FieldReference.column("k"))
+        override def fullyPushedFilterAttributes(): Array[NamedReference] = filterAttributes()
         override def filter(expressions: Array[Expression]): Unit =
           if (expressions.exists(_.references.nonEmpty)) {
             StorageFilterTestSource.runtimeFilterCalls.incrementAndGet()

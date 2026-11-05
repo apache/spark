@@ -162,8 +162,13 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     relation.relation.table match {
       case _: SupportsCatalystFilterGuarantees =>
         val attributes = relation.fullyPushedFilterAttrs
+        def fullyPushed(expression: Expression): Boolean = expression match {
+          case e if attributes.contains(e) => true
+          case _: Attribute => false
+          case e => e.children.forall(fullyPushed)
+        }
         filters.filterNot { filter =>
-          filter.references.nonEmpty && filter.references.subsetOf(attributes) &&
+          filter.references.nonEmpty && fullyPushed(filter) &&
             PushDownUtils.isPushablePartitionFilter(filter)
         }
       case _ => filters

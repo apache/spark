@@ -19,12 +19,10 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.{Collections, Optional, OptionalLong}
 
-import scala.annotation.nowarn
-
 import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics}
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, AttributeReference, AttributeSeq, AttributeSet, Expression, ExpressionSet, Literal, ProjectionOverSchema, SortOrder, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSeq, AttributeSet, Expression, ExpressionSet, Literal, NamedExpression, ProjectionOverSchema, SortOrder, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.{EstimationUtils, FilterEstimation}
@@ -43,6 +41,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.{SupportsCatalystFilterGuarantees, SupportsRuntimeCatalystFiltering, V2StatisticsUtils}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -217,12 +216,32 @@ case class DataSourceV2ScanRelation(
   // skip adding IsNotNull when the scan already implies it, or infer new filters across
   // joins), so plan stability testing is needed first.
 
+  /** Resolved table fields whose static Catalyst filters the source fully evaluates. */
+  lazy val fullyPushedFilterAttrs: ExpressionSet = relation.table match {
+    case table: SupportsCatalystFilterGuarantees =>
+      val refs = table.fullyPushedFilterAttributes().toImmutableArraySeq
+      // Validate against the table before ignoring fields pruned from this scan.
+      V2ExpressionUtils.resolveRefs[NamedExpression](refs, relation)
+      val schema = fromAttributes(output)
+      val available = refs.filter { ref =>
+        schema.findNestedField(ref.fieldNames.toImmutableArraySeq, resolver = conf.resolver)
+          .isDefined
+      }
+      ExpressionSet(available.map { ref =>
+        V2ExpressionUtils.resolveRef[NamedExpression](ref, this) match {
+          case Alias(child, _) => child
+          case expression => expression
+        }
+      })
+    case _ => ExpressionSet()
+  }
+
   /**
    * Resolved attributes that the scan declares for runtime filtering via
    * [[SupportsRuntimeV2Filtering.filterAttributes]] or
    * [[SupportsRuntimeCatalystFiltering.filterAttributes]]. Empty when the scan
    * implements neither interface or exposes no attributes. Accessing this value also validates
-   * attributes declared fully pushed by the table or scan.
+   * attributes returned by [[SupportsRuntimeCatalystFiltering.fullyPushedFilterAttributes]].
    */
   lazy val runtimeFilterAttrs: AttributeSet = {
     checkRuntimeFilteringInterfaces()
@@ -236,44 +255,22 @@ case class DataSourceV2ScanRelation(
     case _ => Array.empty
   }
 
-  @nowarn("cat=deprecation")
-  private lazy val declaredFullyPushedFilterAttrs: Array[NamedReference] = {
-    val (declared, referenceOutput) = (scan, relation.table) match {
-      case (_, t: SupportsCatalystFilterGuarantees) =>
-        (t.fullyPushedFilterAttributes(), relation.output)
-      case (s: SupportsRuntimeCatalystFiltering, _) =>
-        (s.fullyPushedFilterAttributes(), output)
-      case _ => (Array.empty[NamedReference], output)
-    }
-    declared.find(_.fieldNames.length > 1).foreach { ref =>
-      throw QueryCompilationErrors.nestedDataSourceFullyPushedRuntimeFilterAttributeError(
-        attribute = ref.fieldNames,
-        scanClass = scan.getClass.getName,
-        relationOutput = fromAttributes(output))
-    }
-    V2ExpressionUtils.resolveDataSourceRuntimeFilterRefs(
-      declared, referenceOutput, "fullyPushedFilterAttributes()", scan.getClass.getName)
-    declared.filter { ref =>
-      output.exists(a => conf.resolver(a.name, ref.fieldNames.head))
-    }
+  private lazy val declaredFullyPushedRuntimeFilterAttrs: Array[NamedReference] = scan match {
+    case s: SupportsRuntimeCatalystFiltering => s.fullyPushedFilterAttributes()
+    case _ => Array.empty
   }
 
   private lazy val resolvedRuntimeFilterAttrs: AttributeSet = {
     resolveFilterAttrs(declaredRuntimeFilterAttrs, "filterAttributes()")
   }
 
-  /** The scan output attributes whose Catalyst filters the source fully evaluates. */
-  lazy val fullyPushedFilterAttrs: AttributeSet = {
-    resolveFilterAttrs(declaredFullyPushedFilterAttrs, "fullyPushedFilterAttributes()")
-  }
-
-  private lazy val resolvedFullyPushedRuntimeFilterAttrs: AttributeSet = scan match {
-    case _: SupportsRuntimeCatalystFiltering =>
-      val resolvedAttrs = fullyPushedFilterAttrs
-      resolvedRuntimeFilterAttrs
-      checkFullyPushedFilterAttrsAreFilterable()
-      resolvedAttrs
-    case _ => AttributeSet.empty
+  private lazy val resolvedFullyPushedRuntimeFilterAttrs: AttributeSet = {
+    checkFullyPushedFilterAttrsAreTopLevel()
+    val resolvedAttrs = resolveFilterAttrs(
+      declaredFullyPushedRuntimeFilterAttrs, "fullyPushedFilterAttributes()")
+    resolvedRuntimeFilterAttrs
+    checkFullyPushedFilterAttrsAreFilterable()
+    resolvedAttrs
   }
 
   /**
@@ -423,8 +420,17 @@ case class DataSourceV2ScanRelation(
     }
   }
 
+  private def checkFullyPushedFilterAttrsAreTopLevel(): Unit = {
+    declaredFullyPushedRuntimeFilterAttrs.find(_.fieldNames.length > 1).foreach { ref =>
+      throw QueryCompilationErrors.nestedDataSourceFullyPushedRuntimeFilterAttributeError(
+        attribute = ref.fieldNames,
+        scanClass = scan.getClass.getName,
+        relationOutput = fromAttributes(output))
+    }
+  }
+
   private def checkFullyPushedFilterAttrsAreFilterable(): Unit = {
-    declaredFullyPushedFilterAttrs.find { fullyPushedRef =>
+    declaredFullyPushedRuntimeFilterAttrs.find { fullyPushedRef =>
       !declaredRuntimeFilterAttrs.exists { filterRef =>
         fullyPushedRef.fieldNames.length == filterRef.fieldNames.length &&
           fullyPushedRef.fieldNames.lazyZip(filterRef.fieldNames).forall(conf.resolver)

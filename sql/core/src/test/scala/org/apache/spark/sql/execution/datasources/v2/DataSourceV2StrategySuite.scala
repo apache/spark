@@ -1542,6 +1542,68 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     assert(remaining.size == 1 && remaining.head.semanticEquals(residual))
   }
 
+  gridTest("guaranteed nested filter attributes distinguish siblings and dotted names")(
+      Seq("s.part", "`s.part`", "s")) { declared =>
+    val nestedType = new StructType().add("other", LongType).add("part", LongType)
+    val schema = new StructType().add("s", nestedType).add("s.part", LongType)
+    val inferred = IsNotNull(AttributeReference("s", nestedType)())
+    val table = new InMemoryCatalystFilterTable(schema, inferred,
+      estimateInferred = false, fullyPushedColumns = Seq(declared))
+    val relation = DataSourceV2Relation.create(table, None, None, CaseInsensitiveStringMap.empty)
+    val scan = DataSourceV2ScanRelation(relation, table.newScanBuilder(relation.options).build(),
+      relation.output, inferredFilters = Seq(inferred))
+    val root = relation.output.head
+    val nested = EqualTo(Add(GetStructField(root, 1), Literal(1L)), Literal(2L))
+    val sibling = EqualTo(GetStructField(root, 0), Literal(2L))
+    val dotted = EqualTo(relation.output(1), Literal(3L))
+    val wholeStruct = IsNotNull(root)
+    val predicates = Seq(nested, sibling, dotted, wholeStruct)
+    val expected = declared match {
+      case "s.part" => Seq(sibling, dotted, wholeStruct)
+      case "`s.part`" => Seq(nested, sibling, wholeStruct)
+      case "s" => Seq(dotted)
+    }
+    val physical = new DataSourceV2Strategy(spark)
+      .apply(Filter(predicates.reduceLeft(And), scan)).head
+    val remaining = physical.collect { case FilterExec(condition, _) => condition }
+    assert(remaining.size == 1)
+    assert(remaining.head.semanticEquals(expected.reduceLeft(And)))
+  }
+
+  gridTest("guaranteed nested filter attributes resolve against the pruned scan schema")(
+      Seq("S.NESTED.PART", "S.NESTED")) { declared =>
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val nestedType = new StructType()
+        .add("unused", LongType).add("part", LongType).add("other", LongType)
+      val structType = new StructType().add("unused", LongType).add("nested", nestedType)
+      val schema = new StructType().add("id", LongType).add("s", structType)
+      val inferred = IsNotNull(AttributeReference("s", structType)())
+      val table = new InMemoryCatalystFilterTable(schema, inferred,
+        estimateInferred = false,
+        fullyPushedColumns = Seq(declared, "id", "s.unused", "s.nested.unused"))
+      val relation = DataSourceV2Relation.create(table, None, None, CaseInsensitiveStringMap.empty)
+      val prunedNested = new StructType().add("part", LongType).add("other", LongType)
+      val prunedStruct = new StructType().add("nested", prunedNested)
+      val output = Seq(relation.output(1).withDataType(prunedStruct))
+      val scan = new Scan {
+        override def readSchema(): StructType = new StructType().add("s", prunedStruct)
+        override def toBatch: Batch = emptyBatch
+      }
+      val scanRelation = DataSourceV2ScanRelation(relation, scan, output,
+        inferredFilters = Seq(inferred))
+      val nested = GetStructField(output.head, 0)
+      val part = EqualTo(GetStructField(nested, 0), Literal(1L))
+      val other = EqualTo(GetStructField(nested, 1), Literal(2L))
+      val wholeStruct = IsNotNull(output.head)
+      val physical = new DataSourceV2Strategy(spark)
+        .apply(Filter(And(part, And(other, wholeStruct)), scanRelation)).head
+      val remaining = physical.collect { case FilterExec(condition, _) => condition }
+      val expected = if (declared == "S.NESTED") wholeStruct else And(other, wholeStruct)
+      assert(remaining.size == 1)
+      assert(remaining.head.semanticEquals(expected))
+    }
+  }
+
   test("guaranteed filter attributes preserve Boolean projection aliases") {
     val schema = StructType(Seq(StructField("value", LongType, nullable = true)))
     val inferred = GreaterThanOrEqual(AttributeReference("value", LongType)(), Literal(0L))
@@ -1896,7 +1958,7 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       EnumSet.of(TableCapability.BATCH_READ)
 
     override def fullyPushedFilterAttributes(): Array[NamedReference] =
-      fullyPushedColumns.map(FieldReference.column).toArray[NamedReference]
+      fullyPushedColumns.map(FieldReference(_)).toArray[NamedReference]
 
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
       new InMemoryCatalystFilterScanBuilder(

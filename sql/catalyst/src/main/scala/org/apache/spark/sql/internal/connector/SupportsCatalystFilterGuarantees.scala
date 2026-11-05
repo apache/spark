@@ -31,18 +31,9 @@ trait SupportsCatalystFilterGuarantees extends Table {
    * attributes during pushdown. Logical filters remain available for statistics estimation.
    * Boolean projections retain their evaluation, including aliases created by MergeSubplans.
    *
-   * Catalyst runtime-filtering scans also omit post-scan evaluation of eligible runtime predicates
-   * referencing only these attributes. Each attribute's value must be fixed within every returned
-   * input partition, and the scan must return only partitions satisfying the predicates passed to
-   * [[SupportsRuntimeCatalystFiltering.filter]]. These attributes must also be returned by
-   * [[SupportsRuntimeCatalystFiltering.filterAttributes]] when present in the scan output.
-   *
-   * References must be top-level table columns. Spark ignores columns pruned from the scan.
-   * The source must evaluate every eligible predicate over these attributes with Spark's semantics,
-   * including error behavior. A root struct declares support for every nested field.
-   *
-   * This declaration takes precedence over
-   * [[SupportsRuntimeCatalystFiltering.fullyPushedFilterAttributes]].
+   * References may name top-level columns or nested struct fields. Declaring a struct covers all
+   * of its nested fields. Spark ignores fields pruned from the scan. The source must evaluate every
+   * eligible predicate over these fields with Spark's semantics, including error behavior.
    */
   def fullyPushedFilterAttributes(): Array[NamedReference] = Array.empty
 }
