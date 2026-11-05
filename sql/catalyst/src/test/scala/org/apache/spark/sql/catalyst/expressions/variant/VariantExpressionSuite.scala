@@ -1544,7 +1544,9 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     valid(Array(arrayHeader(false, 1),
       /* size */ 2,
       /* offset list */ 0, 2, 3,
-      /* element data */ primitiveHeader(TRUE), /* unused */ 0, primitiveHeader(FALSE)))
+      /* element data */ primitiveHeader(TRUE),
+      /* unused */ 0,
+      primitiveHeader(FALSE)))
 
     // Valid object: field data is not required to be in the order of the offset list.
     valid(Array(objectHeader(false, 1, 1),
