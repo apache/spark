@@ -1706,7 +1706,8 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkErrorInExpression[SparkRuntimeException](
       CanonicalizeVariant(BoundReference(0, VariantType, nullable = true)),
       InternalRow(new VariantVal(value, Array[Byte](VERSION, 0, 0))),
-      "VARIANT_CONSTRUCTOR_SIZE_LIMIT")
+      "VARIANT_CONSTRUCTOR_SIZE_LIMIT",
+      Map("sizeLimit" -> "16 MiB"))
   }
 
   test("canonicalize_variant size limit on nested shared payloads") {
@@ -1717,7 +1718,8 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkErrorInExpression[SparkRuntimeException](
       CanonicalizeVariant(BoundReference(0, VariantType, nullable = true)),
       InternalRow(new VariantVal(nested, Array[Byte](VERSION, 0, 0))),
-      "VARIANT_CONSTRUCTOR_SIZE_LIMIT")
+      "VARIANT_CONSTRUCTOR_SIZE_LIMIT",
+      Map("sizeLimit" -> "16 MiB"))
   }
 
   test("variant_delete") {

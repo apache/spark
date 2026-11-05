@@ -204,7 +204,7 @@ public class VariantUtil {
   // An exception indicating that an external caller tried to call the Variant constructor with
   // value or metadata exceeding `SIZE_LIMIT`. We will never construct a Variant this large, so it
   // should only be possible to encounter this exception when reading a Variant produced by another
-  // tool.
+  // tool. Canonicalization reports the same condition when its rebuild would exceed `SIZE_LIMIT`.
   static SparkRuntimeException variantConstructorSizeLimit() {
     return new SparkRuntimeException("VARIANT_CONSTRUCTOR_SIZE_LIMIT",
         new scala.collection.immutable.Map.Map1<>("sizeLimit",

@@ -34,6 +34,7 @@ import org.codehaus.commons.compiler.{CompileException, InternalCompilerExceptio
 import org.apache.spark._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.memory.SparkOutOfMemoryError
+import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
@@ -3365,10 +3366,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "invalidValue" -> pos.toString))
   }
 
-  def variantConstructorSizeLimitError(): Throwable = {
+  def variantConstructorSizeLimitError(sizeLimit: Int): Throwable = {
     new SparkRuntimeException(
       errorClass = "VARIANT_CONSTRUCTOR_SIZE_LIMIT",
-      messageParameters = Map.empty)
+      messageParameters = Map("sizeLimit" -> s"${ByteUnit.BYTE.toMiB(sizeLimit)} MiB"))
   }
 
   def variantSizeLimitError(sizeLimit: Int, functionName: String): Throwable = {

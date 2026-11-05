@@ -82,7 +82,7 @@ object VariantExpressionEvalUtils {
       VariantBuilder.canonicalize(variant)
     } catch {
       case _: VariantSizeLimitException =>
-        throw QueryExecutionErrors.variantConstructorSizeLimitError()
+        throw QueryExecutionErrors.variantConstructorSizeLimitError(VariantUtil.SIZE_LIMIT)
     }
     if (canonicalized eq variant) {
       input
