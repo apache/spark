@@ -335,8 +335,10 @@ class ExternalLookupJoinEvaluatorFactory(
    * The connector reader of one partition and its active cursor. The reader is opened by the
    * first request, and closed once, after the last batch or when the task completes. A thread
    * other than the task's may still drive the join then: closing may overlap the one connector
-   * call in progress, but no request, cursor advance or new reader follows it. Nothing is locked,
-   * so closing never waits for a slow connector call.
+   * call in progress, but no request, cursor advance or new reader follows it. Requests and cursor
+   * calls take no lock, so closing does not wait for them. Metrics reads do: closing keeps the
+   * reader's final metrics under the lock of the task's `TaskLookupReaders`, so it can wait for
+   * a metrics read in progress, which calls `currentMetricsValues()` on the task's readers.
    */
   private class LookupReader {
     private val taskReaders = readerMetrics.forCurrentTask()
