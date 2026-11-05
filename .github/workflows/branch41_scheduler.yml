@@ -55,60 +55,65 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     permissions:
       actions: write
+      contents: read
     steps:
+      - name: Checkout Spark repository
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: dev
       - name: Maven Build
         if: >-
           github.event.schedule == '0 13 */2 * *' ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'maven' || inputs.target == 'all'))
         run: |
-          gh workflow run build_maven.yml --repo ${{ github.repository }} --ref branch-4.1
+          ./dev/dispatch-if-changed.sh build_maven.yml branch-4.1
       - name: Maven Java 21 Build
         if: >-
           github.event.schedule == '0 15 */2 * *' ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'maven_java21' || inputs.target == 'all'))
         run: |
-          gh workflow run build_maven_java21.yml --repo ${{ github.repository }} --ref branch-4.1
+          ./dev/dispatch-if-changed.sh build_maven_java21.yml branch-4.1
       - name: Java 17 Build
         if: >-
           github.event.schedule == '0 12 */2 * *' ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'java17' || inputs.target == 'all'))
         run: |
-          gh workflow run build_java17.yml --repo ${{ github.repository }} --ref branch-4.1
+          ./dev/dispatch-if-changed.sh build_java17.yml branch-4.1
       - name: Java 21 Build
         if: >-
           github.event.schedule == '0 5 */2 * *' ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'java21' || inputs.target == 'all'))
         run: |
-          gh workflow run build_java21.yml --repo ${{ github.repository }} --ref branch-4.1
+          ./dev/dispatch-if-changed.sh build_java21.yml branch-4.1
       - name: Non-ANSI Build
         if: >-
           github.event.schedule == '0 2 */2 * *' ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'non_ansi' || inputs.target == 'all'))
         run: |
-          gh workflow run build_non_ansi.yml --repo ${{ github.repository }} --ref branch-4.1
+          ./dev/dispatch-if-changed.sh build_non_ansi.yml branch-4.1
       - name: Python 3.11 Build
         if: >-
           github.event.schedule == '0 9 */2 * *' ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'python_3.11' || inputs.target == 'all'))
         run: |
-          gh workflow run build_python_3.11.yml --repo ${{ github.repository }} --ref branch-4.1
+          ./dev/dispatch-if-changed.sh build_python_3.11.yml branch-4.1
       - name: Python 3.14 Build
         if: >-
           github.event.schedule == '0 10 */2 * *' ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'python_3.14' || inputs.target == 'all'))
         run: |
-          gh workflow run build_python_3.14.yml --repo ${{ github.repository }} --ref branch-4.1
+          ./dev/dispatch-if-changed.sh build_python_3.14.yml branch-4.1
       - name: Python PyPy 3.10 Build
         if: >-
           github.event.schedule == '0 17 */2 * *' ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'python_pypy3.10' || inputs.target == 'all'))
         run: |
-          gh workflow run build_python_pypy3.10.yml --repo ${{ github.repository }} --ref branch-4.1
+          ./dev/dispatch-if-changed.sh build_python_pypy3.10.yml branch-4.1
