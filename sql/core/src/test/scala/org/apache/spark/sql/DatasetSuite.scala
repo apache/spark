@@ -1935,6 +1935,31 @@ class DatasetSuite extends SharedSparkSession
         checkDataset(cp, (9L to 6L by -1L).map(java.lang.Long.valueOf): _*)
       }
 
+      // The recursive-CTE opt-in must not change ordinary checkpoint statistics and constraints.
+      testCheckpointing("SPARK-60860: exact nested nullability matching") {
+        Seq(false, true).foreach { legacy =>
+          withSQLConf(
+            SQLConf.LEGACY_RECURSIVE_CTE_USE_ANCHOR_NESTED_NULLABILITY.key -> legacy.toString) {
+            val ds = spark.range(3).select(
+              array($"id").cast(ArrayType(LongType, containsNull = true)).as("arr"))
+            assert(ds.schema.head.dataType == ArrayType(LongType, containsNull = true))
+            assert(ds.queryExecution.optimizedPlan.output.head.dataType ==
+              ArrayType(LongType, containsNull = false))
+            val appender = new LogAppender("checkpoint nested nullability")
+            withLogAppender(appender, loggerNames = Seq(classOf[LogicalRDD].getName)) {
+              val cp = if (reliable) ds.checkpoint(eager) else ds.localCheckpoint(eager)
+              val logicalRDD = cp.logicalPlan.asInstanceOf[LogicalRDD]
+              assert(logicalRDD.stats.rowCount.isEmpty)
+              assert(logicalRDD.stats.sizeInBytes == spark.sessionState.conf.defaultSizeInBytes)
+              assert(logicalRDD.constraints.isEmpty)
+              checkAnswer(cp, Seq(Row(Seq(0L)), Row(Seq(1L)), Row(Seq(2L))))
+            }
+            assert(appender.loggingEvents.exists(_.getMessage.getFormattedMessage
+              .contains("The output columns are expected to the same")))
+          }
+        }
+      }
+
       testCheckpointing("should preserve partitioning information") {
         val ds = spark.range(10).repartition($"id" % 2)
         val cp = if (reliable) ds.checkpoint(eager) else ds.localCheckpoint(eager)

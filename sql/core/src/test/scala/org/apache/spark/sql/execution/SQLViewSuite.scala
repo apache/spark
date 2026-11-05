@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{ArrayType, IntegerType}
 
 class SimpleSQLViewSuite extends SQLViewSuite with SharedSparkSession
 
@@ -48,6 +49,45 @@ abstract class SQLViewSuite extends QueryTest {
       spark.sql(s"DROP TABLE IF EXISTS jt")
     } finally {
       super.afterAll()
+    }
+  }
+
+  // Old views have no saved legacy setting, so their rollback must follow the reading session.
+  test("SPARK-60860: session legacy nullability restores old recursive view schemas") {
+    val legacyKey = LEGACY_RECURSIVE_CTE_USE_ANCHOR_NESTED_NULLABILITY.key
+    for (schemaMode <- Seq("COMPENSATION", "BINDING")) {
+      withView("recursive_nested_view") {
+        withSQLConf(legacyKey -> "true") {
+          sql(
+            s"""CREATE VIEW recursive_nested_view WITH SCHEMA $schemaMode AS
+               |WITH RECURSIVE r(n, a, b) AS (
+               |  SELECT 0 AS n, array(1) AS a, array(1) AS b
+               |  UNION ALL
+               |  SELECT n + 1, b, array(CAST(NULL AS INT)) FROM r WHERE n < 2
+               |)
+               |SELECT n, a FROM r
+               |""".stripMargin)
+        }
+        val catalog = spark.sessionState.catalog
+        val ident = TableIdentifier("recursive_nested_view", Some("default"))
+        val storedView = catalog.getTableMetadata(ident)
+        assert(storedView.schema("a").dataType == ArrayType(IntegerType, containsNull = false))
+        catalog.alterTable(storedView.copy(properties = storedView.properties -
+          s"${CatalogTable.VIEW_SQL_CONFIG_PREFIX}$legacyKey"))
+        assert(!catalog.getTableMetadata(ident).viewSQLConfigs.contains(legacyKey))
+
+        assert(!spark.conf.get(legacyKey).toBoolean)
+        val error = intercept[AnalysisException](sql("SELECT * FROM recursive_nested_view"))
+        assert(error.getCondition == (if (schemaMode == "BINDING") {
+          "CANNOT_UP_CAST_DATATYPE"
+        } else {
+          "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION"
+        }))
+        withSQLConf(legacyKey -> "true") {
+          assert(sql("SELECT * FROM recursive_nested_view").schema == storedView.schema)
+          checkAnswer(sql("SELECT n FROM recursive_nested_view"), Seq(Row(0), Row(1), Row(2)))
+        }
+      }
     }
   }
 

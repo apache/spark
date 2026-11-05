@@ -51,6 +51,7 @@ import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.connector.catalog.procedures.BoundProcedure
 import org.apache.spark.sql.errors.DataTypeErrors.cannotMergeIncompatibleDataTypesError
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataType
 
 abstract class TypeCoercionBase extends TypeCoercionHelper {
@@ -240,17 +241,27 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
           // On the other hand, we cannot cast the anchor type into a wider recursion type, as at
           // this point the UnionLoopRefs inside the recursion are already resolved with the
           // narrower anchor type.
+          // Nested nullability may widen because UnionLoopRefs already allow nested nulls.
+          val useAnchorNullability =
+            conf.getConf(SQLConf.LEGACY_RECURSIVE_CTE_USE_ANCHOR_NESTED_NULLABILITY)
           val projectList = s.recursion.output.zip(s.anchor.output.map(_.dataType)).map {
             case (attr, dt) =>
-              val widerType = findWiderTypeForTwo(attr.dataType, dt)
-              if (widerType.isDefined && widerType.get == dt) {
-                if (attr.dataType != dt) {
-                  Alias(Cast(attr, dt), attr.name)()
-                } else {
-                  attr
-                }
+              // Preserve the anchor's field names when merging structs case-insensitively.
+              val widerType = if (useAnchorNullability) {
+                findWiderTypeForTwo(attr.dataType, dt)
               } else {
-                throw cannotMergeIncompatibleDataTypesError(dt, attr.dataType)
+                findWiderTypeForTwo(dt, attr.dataType)
+              }
+              widerType match {
+                case Some(targetType) if targetType == dt || (!useAnchorNullability &&
+                    DataType.equalsIgnoreNullability(targetType, dt)) =>
+                  if (attr.dataType != targetType) {
+                    Alias(Cast(attr, targetType), attr.name)()
+                  } else {
+                    attr
+                  }
+                case _ =>
+                  throw cannotMergeIncompatibleDataTypesError(dt, attr.dataType)
               }
           }
           s.copy(recursion = Project(projectList, s.recursion)) -> Nil
