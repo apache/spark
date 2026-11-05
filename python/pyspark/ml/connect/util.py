@@ -166,7 +166,7 @@ def transform_dataframe_column(
             dataframe.insert(len(dataframe.columns), col_name, result_data[col_name])
         return dataframe
 
-    @pandas_udf(returnType=spark_udf_return_type)  # type: ignore[call-overload]
+    @pandas_udf(returnType=spark_udf_return_type)
     def transform_fn_pandas_udf(*s: "pd.Series") -> "pd.Series":
         return transform_fn(*s)
 
