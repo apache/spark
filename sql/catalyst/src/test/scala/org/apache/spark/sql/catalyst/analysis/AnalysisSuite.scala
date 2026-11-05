@@ -656,7 +656,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     if (!bean.isThreadAllocatedMemoryEnabled) {
       bean.setThreadAllocatedMemoryEnabled(true)
     }
-    val threadId = Thread.currentThread().getId
+    val threadId = Thread.currentThread().threadId
     val sharedOutput = (0 until 26).map(i => AttributeReference(s"c$i", IntegerType)())
 
     def allocatedBytes(branchCount: Int): Long = {
@@ -696,7 +696,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     if (!bean.isThreadAllocatedMemoryEnabled) {
       bean.setThreadAllocatedMemoryEnabled(true)
     }
-    val threadId = Thread.currentThread().getId
+    val threadId = Thread.currentThread().threadId
 
     def allocatedBytes(width: Int, useDirectPath: Boolean): Long = {
       val plan = wideProject(width)

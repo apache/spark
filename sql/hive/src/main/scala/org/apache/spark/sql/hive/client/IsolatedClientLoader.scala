@@ -220,14 +220,6 @@ private[hive] class IsolatedClientLoader(
     val barrierPrefixes: Seq[String] = Seq.empty)
   extends Logging {
 
-  // Hive 4.2 requires Java 21 or later. The guard lives on the client-construction path rather
-  // than in IsolatedClientLoader.hiveVersion, which is also used for version-string validation,
-  // so the actionable message reaches the user instead of being swallowed.
-  if (version == hive.v4_2 && !Utils.isJavaVersionAtLeast21) {
-    throw QueryExecutionErrors.unsupportedHiveMetastoreVersionForJavaError(
-      version.fullVersion, 21, Runtime.version().feature())
-  }
-
   /**
    * This controls whether the generated clients maintain an independent/isolated copy of the
    * Hive `SessionState`. If false, the Hive will leverage the global/static copy of
