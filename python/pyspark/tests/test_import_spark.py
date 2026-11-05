@@ -27,10 +27,11 @@ class ImportSparkTest(unittest.TestCase):
         workers and it provides a good user experience.
 
         It's difficult to compare the exact time, for this test, we test if any
-        unnecessary 3rd party libraries are imported. We only expect py4j to
-        be imported when we do "import pyspark".
+        unnecessary 3rd party libraries are imported. We only expect py4j and
+        cloudpickle_rust, the required dependencies, to be imported when we do
+        "import pyspark".
         """
-        ALLOWED_PACKAGES = set(sys.stdlib_module_names) | set(["py4j"])
+        ALLOWED_PACKAGES = set(sys.stdlib_module_names) | set(["py4j", "cloudpickle_rust"])
 
         stdout = subprocess.check_output(
             ["python", "-X", "importtime", "-c", "import pyspark"],
