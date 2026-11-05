@@ -117,7 +117,9 @@ Spark calls the functions of the table as follows:
   also returns the state of the reader. Then it calls `read` on the executors, in one task for each
   partition, with a `SparkDsReadInfo` that has the partition, the schema to read and the state of
   the reader, and `read` exports an `ArrowArrayStream`. Its callbacks can be called from any
-  thread, but never concurrently.
+  thread, but never concurrently. The schema to read has only the columns that the query needs,
+  which `prune_columns` got, and the arrays of the stream have exactly these columns, also when the
+  library does not implement `prune_columns`, which only lets it plan to read them.
 - **Streaming reads**: on the driver, Spark creates a stream reader with `create_stream_reader`,
   which gets the columns to read, which may be only those that the query needs, and the location of
   the checkpoint of the source in a `SparkDsStreamReaderInfo`. When the checkpoint does not have the

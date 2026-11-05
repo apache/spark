@@ -100,7 +100,7 @@ class ColumnarBatchWrite(createWriter: () => ColumnarWriter, schema: StructType)
     if (writer == null) {
       writer = createWriter()
     }
-    new ColumnarDataWriterFactory(writer, ArrowBatchingOptions(schema, writer.timeZoneId))
+    new ColumnarDataWriterFactory(writer, ArrowBatchingOptions(schema))
   }
 
   override def commit(messages: Array[WriterCommitMessage]): Unit = writer.commit(messages)
@@ -140,7 +140,7 @@ class ColumnarStreamingWrite(
     if (writer == null) {
       writer = createWriter()
     }
-    new ColumnarStreamingDataWriterFactory(writer, ArrowBatchingOptions(schema, writer.timeZoneId))
+    new ColumnarStreamingDataWriterFactory(writer, ArrowBatchingOptions(schema))
   }
 
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
@@ -175,7 +175,9 @@ class ColumnarStreamingDataWriterFactory(
 
 /**
  * How [[ArrowBatchingDataWriter]] converts rows to Arrow, captured on the driver from the
- * session configuration. Like the other Arrow batches of Spark, a batch ends when it reaches
+ * session configuration, such as the session time zone of the timestamps that it converts. The
+ * timestamps that it copies from the Arrow batches of a scan keep the time zone of the scan. Like
+ * the other Arrow batches of Spark, a batch ends when it reaches
  * `spark.sql.execution.arrow.maxRecordsPerBatch` rows or, after a row, holds at least
  * `spark.sql.execution.arrow.maxBytesPerBatch` bytes.
  */
@@ -186,13 +188,12 @@ case class ArrowBatchingOptions(
     maxBytesPerBatch: Long)
 
 object ArrowBatchingOptions {
-  /** @param timeZoneId the time zone of the writer of the data source */
-  def apply(schema: StructType, timeZoneId: String): ArrowBatchingOptions = {
+  def apply(schema: StructType): ArrowBatchingOptions = {
     val conf = SQLConf.get
     val maxRecords = conf.arrowMaxRecordsPerBatch
     ArrowBatchingOptions(
       schema,
-      timeZoneId,
+      conf.sessionLocalTimeZone,
       if (maxRecords > 0) maxRecords else Int.MaxValue,
       conf.arrowMaxBytesPerBatch)
   }

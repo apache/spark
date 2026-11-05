@@ -23,7 +23,6 @@ import java.util.concurrent.atomic.AtomicLong
 import javax.annotation.concurrent.GuardedBy
 
 import scala.jdk.CollectionConverters._
-import scala.util.Try
 import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core.JsonProcessingException
@@ -271,14 +270,13 @@ class NativeBatchPlanner(
     call(name, "plan a scan of")(optional(library.pushLimit(handle.get, limit))).getOrElse(false)
   }
 
-  override def pruneColumns(requiredSchema: StructType): Boolean = {
-    val pruned = call(name, "plan a scan of") {
+  override def pruneColumns(requiredSchema: StructType): Unit = {
+    // read gets the columns to read as its schema, and returns exactly them, so a library that
+    // does not implement prune_columns, which only lets it plan to read them, reads them too.
+    call(name, "plan a scan of") {
       optional(library.pruneColumns(handle.get, requiredSchema.fieldNames))
-    }.getOrElse(false)
-    if (pruned) {
-      readSchema = requiredSchema
     }
-    pruned
+    readSchema = requiredSchema
   }
 
   override def plan(): ColumnarPlannedBatch = {
@@ -324,14 +322,10 @@ class NativeDataSourceStreamReader(
   import NativeCalls._
 
   // Set on the driver whenever the partitions of a micro-batch are planned, and serialized to
-  // the executors with the partitions of that micro-batch.
+  // the executors with the partitions of that micro-batch. Spark plans each range once (see
+  // ColumnarMicroBatchStream), so the scans of a micro-batch get the partitions of a single
+  // stream_partitions call, whose state this is.
   private var readerState: Array[Byte] = Array.emptyByteArray
-  // The range that was planned last, and its partitions or the failure to plan them, which only
-  // the driver keeps. All the scans of the source in a micro-batch plan the same range, such as
-  // both sides of a union of the source with itself, so they get the result of a single
-  // stream_partitions call, whose state readerState is.
-  @transient private var plannedRange: (String, String) = _
-  @transient private var plannedPartitions: Try[Array[InputPartition]] = _
 
   @transient private lazy val library = NativeLibraries.get(location)
 
@@ -371,17 +365,9 @@ class NativeDataSourceStreamReader(
   }
 
   override def partitions(start: String, end: String): Array[InputPartition] = synchronized {
-    if (plannedRange != (start, end)) {
-      plannedPartitions = Try {
-        val planned = call(name, "plan a scan of") {
-          library.streamPartitions(handle.get, start, end)
-        }
-        readerState = bytesOrEmpty(Option(planned.state))
-        NativeInputPartition.from(planned.partitions)
-      }
-      plannedRange = (start, end)
-    }
-    plannedPartitions.get
+    val planned = call(name, "plan a scan of")(library.streamPartitions(handle.get, start, end))
+    readerState = bytesOrEmpty(Option(planned.state))
+    NativeInputPartition.from(planned.partitions)
   }
 
   override def read(partition: InputPartition): PartitionReader[ColumnarBatch] = {
@@ -412,7 +398,7 @@ class NativeDataSourceWriter(
     location: NativeLibraryLocation,
     name: String,
     schema: StructType,
-    override val timeZoneId: String,
+    timeZoneId: String,
     @transient private val handle: NativeHandle,
     writerState: Array[Byte])
   extends ColumnarWriter {
@@ -451,7 +437,7 @@ class NativeDataSourceStreamWriter(
     location: NativeLibraryLocation,
     name: String,
     schema: StructType,
-    override val timeZoneId: String,
+    timeZoneId: String,
     @transient private val handle: NativeHandle,
     writerState: Array[Byte])
   extends ColumnarStreamWriter {

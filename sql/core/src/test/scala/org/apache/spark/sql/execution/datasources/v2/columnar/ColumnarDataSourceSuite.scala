@@ -94,33 +94,11 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession
     checkAnswer(pruned, (0L until 4L).map(id => Row(s"name$id")))
     assert(scan(pruned).readSchema() == StructType.fromDDL("name STRING"))
 
-    // A planner that does not prune the columns reads all of them, and the scan drops the others
-    // from its batches.
-    val notPruned = spark.read.format(format).option("end", "4").option("pruneColumns", "false")
-      .load().select("name")
-    checkAnswer(notPruned, (0L until 4L).map(id => Row(s"name$id")))
-    assert(scan(notPruned).readSchema() == StructType.fromDDL("name STRING"))
-
-    // The planner that a limit is pushed down to also prunes the columns, if it does.
-    Seq(true, false).foreach { prunes =>
-      val both = spark.read.format(format).option("end", "10")
-        .option("pruneColumns", prunes.toString).load().select("name").limit(2)
-      checkAnswer(both, Seq(Row("name0"), Row("name1")))
-      assert(scan(both).readSchema() == StructType.fromDDL("name STRING"))
-      assert(scan(both).getMetaData()("PushedLimit") == "LIMIT 2")
-      // The scan drops the other columns itself only if the planner does not prune them.
-      assert(scan(both).toBatch.createReaderFactory()
-        .isInstanceOf[ColumnarProjectionReaderFactory] == !prunes)
-      // A reader returns the same batch until it moves to the next one.
-      val batch = scan(both).toBatch
-      val reader =
-        batch.createReaderFactory().createColumnarReader(batch.planInputPartitions().head)
-      try {
-        assert(reader.next() && (reader.get() eq reader.get()))
-      } finally {
-        reader.close()
-      }
-    }
+    // The planner that a limit is pushed down to also prunes the columns.
+    val both = spark.read.format(format).option("end", "10").load().select("name").limit(2)
+    checkAnswer(both, Seq(Row("name0"), Row("name1")))
+    assert(scan(both).readSchema() == StructType.fromDDL("name STRING"))
+    assert(scan(both).getMetaData()("PushedLimit") == "LIMIT 2")
 
     val limited = spark.read.format(format).option("end", "10").load().limit(2)
     assert(limited.collect().length == 2)
@@ -944,7 +922,7 @@ class TestRangeDataSource(options: CaseInsensitiveStringMap) extends ColumnarDat
     batchPlanners.incrementAndGet()
     new TestRangePlanner(end, schema, options.getBoolean("failPlanning", false), plans, prunes,
       options.getBoolean("failPruning", false), options.getInt("arrowBatchSize", 0),
-      options.getBoolean("pruneColumns", true), options.getBoolean("ownedBatches", false))
+      options.getBoolean("ownedBatches", false))
   }
 
   override def streamReader(
@@ -981,7 +959,6 @@ class TestRangePlanner(
     prunes: AtomicInteger,
     failPruning: Boolean,
     arrowBatchSize: Int,
-    prunesColumns: Boolean,
     ownedBatches: Boolean)
   extends ColumnarBatchPlanner {
   private var limit = Long.MaxValue
@@ -992,15 +969,12 @@ class TestRangePlanner(
     true
   }
 
-  override def pruneColumns(requiredSchema: StructType): Boolean = {
+  override def pruneColumns(requiredSchema: StructType): Unit = {
     prunes.incrementAndGet()
     if (failPruning) {
       throw new IllegalStateException("injected pruning failure")
     }
-    if (prunesColumns) {
-      readSchema = requiredSchema
-    }
-    prunesColumns
+    readSchema = requiredSchema
   }
 
   override def plan(): ColumnarPlannedBatch = {

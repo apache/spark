@@ -414,9 +414,10 @@ typedef struct SparkDsReadInfo {
    */
   int32_t kind;
   /*
-   * The schema to read: the schema that create_reader got, or only the columns that prune_columns
-   * pruned it to, or the schema that create_stream_reader got. The stream that read initializes
-   * has this schema.
+   * The schema to read: the columns of the schema that create_reader got that the scan reads,
+   * which prune_columns got too, or the schema that create_stream_reader got. The stream that
+   * read initializes has exactly this schema, also if the library does not implement
+   * prune_columns: the arrays of the stream have exactly these columns, in this order.
    */
   struct ArrowSchema* schema;
   /* The state that partitions or stream_partitions returned with the partition, or empty. */
@@ -600,15 +601,14 @@ typedef struct SparkDsLibrary {
   int (*push_limit)(void* reader, int32_t limit, bool* applied);
 
   /*
-   * Prunes the columns to read.
+   * Tells the reader the columns that the scan reads, so that it can plan to read only these
+   * columns. read gets them as its schema to read either way, and returns exactly them.
    *
    * columns: the names of the count top-level columns that the query needs, which include the
    *          columns that it filters on. There may be none, for example for SELECT count(*):
    *          then the batches only have a number of rows.
-   * pruned: set to whether read returns exactly these columns, in this order. If not, it returns
-   *         all the columns of the schema to read.
    */
-  int (*prune_columns)(void* reader, const char* const* columns, int64_t count, bool* pruned);
+  int (*prune_columns)(void* reader, const char* const* columns, int64_t count);
 
   /*
    * Plans the partitions of the scan. Spark reads each partition in a separate task.
