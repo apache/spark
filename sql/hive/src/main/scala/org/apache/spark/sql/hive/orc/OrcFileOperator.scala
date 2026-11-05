@@ -28,8 +28,8 @@ import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.PATH
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ThreadUtils
 
@@ -105,7 +105,7 @@ private[hive] object OrcFileOperator extends Logging {
         val readerInspector = reader.getObjectInspector.asInstanceOf[StructObjectInspector]
         val schema = readerInspector.getTypeName
         logDebug(s"Reading schema from file $paths, got Hive schema string: $schema")
-        CatalystSqlParser.parseDataType(schema).asInstanceOf[StructType]
+        HiveClientImpl.parseHiveType(schema).asInstanceOf[StructType]
     }
   }
 
@@ -123,7 +123,7 @@ private[hive] object OrcFileOperator extends Logging {
         val readerInspector = reader.getObjectInspector.asInstanceOf[StructObjectInspector]
         val schema = readerInspector.getTypeName
         logDebug(s"Reading schema from file $file., got Hive schema string: $schema")
-        CatalystSqlParser.parseDataType(schema).asInstanceOf[StructType]
+        HiveClientImpl.parseHiveType(schema).asInstanceOf[StructType]
       })
     }.flatten
   }

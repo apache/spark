@@ -341,6 +341,6 @@ case class AcquiredThreadInfo(
       s", task: $taskDetails"
     } else ""
 
-    s"[ThreadId: ${threadRef.get.map(_.getId)}$taskStr]"
+    s"[ThreadId: ${threadRef.get.map(_.threadId)}$taskStr]"
   }
 }

@@ -74,7 +74,10 @@ object RewriteDeleteFromTable extends RewriteRowLevelCommand {
     val metadataAttrs = resolveRequiredMetadataAttrs(relation, operationTable.operation)
 
     // construct a read relation and include all required metadata columns
-    val readRelation = buildRelationWithAttrs(relation, operationTable, metadataAttrs)
+    // as well as metadata columns referenced in the condition
+    val referencedMetadataAttrs = resolveReferencedMetadataAttrs(relation, Seq(cond))
+    val readRelation = buildRelationWithAttrs(
+      relation, operationTable, metadataAttrs ++ referencedMetadataAttrs)
 
     // construct a plan that contains unmatched rows in matched groups that must be carried over
     // such rows do not match the condition but have to be copied over as the source can replace
@@ -105,7 +108,10 @@ object RewriteDeleteFromTable extends RewriteRowLevelCommand {
     val metadataAttrs = resolveRequiredMetadataAttrs(relation, operation)
 
     // construct a read relation and include all required metadata columns
-    val readRelation = buildRelationWithAttrs(relation, operationTable, metadataAttrs, rowIdAttrs)
+    // as well as metadata columns referenced in the condition
+    val referencedMetadataAttrs = resolveReferencedMetadataAttrs(relation, Seq(cond))
+    val readRelation = buildRelationWithAttrs(
+      relation, operationTable, metadataAttrs ++ referencedMetadataAttrs, rowIdAttrs)
 
     // construct a plan that only contains records to delete
     val deletedRowsPlan = Filter(cond, readRelation)

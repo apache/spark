@@ -17,28 +17,94 @@
 
 package org.apache.spark.sql.execution
 
+import java.io.{ObjectOutputStream, OutputStream}
 import java.lang.management.ManagementFactory
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 
-import org.apache.spark.{SparkEnv, SparkException, SparkUnsupportedOperationException}
-import org.apache.spark.rdd.RDD
+import org.apache.spark.{SparkEnv, SparkException, SparkUnsupportedOperationException, TaskContext}
+import org.apache.spark.rdd.{EmptyRDD, RDD}
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{
   Attribute, AttributeReference, Expression, ExprId, Literal}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.logical.Deduplicate
 import org.apache.spark.sql.catalyst.trees.LeafLike
-import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionReaderFactory, Scan}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, PlannedScan}
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
+import org.apache.spark.sql.types.{DataType, IntegerType, StringType, StructType}
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.ThreadUtils
 
 class SparkPlanSuite extends SharedSparkSession {
+
+  test("SPARK-59884: columnar execution cache is not serialized with a plan") {
+    val source = ColumnarCacheSerializationSource(Seq(AttributeReference("id", IntegerType)()))
+    val rdd = source.executeColumnar()
+    assert(source.executeColumnar() eq rdd)
+    val serializer = SparkEnv.get.closureSerializer.newInstance()
+    // Plans can be captured by task closures, but their execution caches belong to the driver.
+    serializer.deserialize[ColumnarToRowExec](serializer.serialize(ColumnarToRowExec(source)))
+  }
+
+  test("SPARK-59884: columnar execution cache does not cross a shuffle in the task binary") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+      SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
+      SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
+      withTempPath { path =>
+        spark.range(0, 8, 1, 2).selectExpr("id % 2 AS key").write.parquet(path.getAbsolutePath)
+        val query = spark.read.parquet(path.getAbsolutePath).groupBy("key").count()
+        QueryTest.checkAnswer(query, Seq(Row(0L, 4L), Row(1L, 4L)), checkToRDD = false)
+
+        val plan = query.queryExecution.executedPlan
+        val exchanges = plan.collect { case exchange: ShuffleExchangeExec => exchange }
+        assert(exchanges.size == 1)
+        val scan = exchanges.head.child.collectFirst {
+          case scan: FileSourceScanExec => scan
+        }.get
+        assert(scan.supportsColumnar)
+        val columnarRDD = scan.executeColumnar()
+        def lineage(rdd: RDD[_]): Seq[RDD[_]] = {
+          rdd +: rdd.dependencies.flatMap(d => lineage(d.rdd))
+        }
+        assert(lineage(exchanges.head.inputRDD).exists(_ eq columnarRDD),
+          "the job must create the columnar RDD, or the test exercises nothing")
+        val stageRDD = plan.execute()
+
+        var serializedScan = false
+        var serializedColumnarRDD = false
+        val out = new ObjectOutputStream(OutputStream.nullOutputStream()) {
+          enableReplaceObject(true)
+          override protected def replaceObject(obj: AnyRef): AnyRef = {
+            serializedScan ||= obj eq scan
+            serializedColumnarRDD ||= obj eq columnarRDD
+            obj
+          }
+        }
+        try {
+          // DAGScheduler serializes the complete (stage.rdd, stage.func) tuple for a result task.
+          // The scan's columnar wrapper RDD is outside the downstream stage's input lineage.
+          // The captured plan must not reintroduce it through its columnar execution cache.
+          // FileSourceScanExec.inputRDD is a separate cache and is not covered by this fix.
+          val taskFunc = (_: TaskContext, rows: Iterator[InternalRow]) => rows.size
+          out.writeObject((stageRDD, taskFunc))
+        } finally {
+          out.close()
+        }
+        assert(serializedScan, "the downstream stage no longer captures the upstream plan")
+        assert(!serializedColumnarRDD, "upstream columnar RDD was captured across the shuffle")
+      }
+    }
+  }
 
   test("SPARK-21619 execution of a canonicalized plan should fail") {
     val plan = spark.range(10).queryExecution.executedPlan.canonicalized
@@ -143,14 +209,14 @@ class SparkPlanSuite extends SharedSparkSession {
     // violating the contract that equal objects must have equal hash codes.
     val exec1 = BatchScanExec(
       output = Seq.empty,
-      scan = null,
+      plannedScan = null,
       runtimeFilters = Seq.empty,
       table = null,
       keyGroupedPartitioning = Some(Seq(Literal(1)))
     )
     val exec2 = BatchScanExec(
       output = Seq.empty,
-      scan = null,
+      plannedScan = null,
       runtimeFilters = Seq.empty,
       table = null,
       keyGroupedPartitioning = Some(Seq(Literal(2)))
@@ -210,7 +276,7 @@ class SparkPlanSuite extends SharedSparkSession {
         if (!threadB.isAlive || System.currentTimeMillis() > deadline) {
           waiting = false
         } else {
-          val state = Option(bean.getThreadInfo(threadB.getId)).map(_.getThreadState).orNull
+          val state = Option(bean.getThreadInfo(threadB.threadId)).map(_.getThreadState).orNull
           if (state == Thread.State.BLOCKED) {
             threadBBlocked = true
             waiting = false
@@ -241,7 +307,7 @@ class SparkPlanSuite extends SharedSparkSession {
     val data = AttributeReference("data", StringType)(ExprId(1))
     val scan = BatchScanExec(
       output = Seq(id, data),
-      scan = null,
+      plannedScan = null,
       runtimeFilters = Seq.empty,
       table = null,
       keyGroupedPartitioning = Some(Seq(id, data)))
@@ -256,6 +322,29 @@ class SparkPlanSuite extends SharedSparkSession {
     assert(canonicalizedTypes == Seq(IntegerType, StringType),
       s"Expected [IntegerType, StringType] but got $canonicalizedTypes")
   }
+
+  test("SPARK-60752: copies of a BatchScanExec share its Batch and the partitions it planned") {
+    // A `Scan` that returns a new `Batch` from each `toBatch`, which a connector may do.
+    class NewBatchScan extends Scan {
+      override def readSchema(): StructType = new StructType()
+      override def toBatch: Batch = new Batch {
+        override def planInputPartitions(): Array[InputPartition] = Array(new InputPartition {})
+        override def createReaderFactory(): PartitionReaderFactory =
+          throw new UnsupportedOperationException()
+      }
+    }
+    val scan = BatchScanExec(Seq.empty, new PlannedScan(new NewBatchScan), Seq.empty, table = null)
+    def sharesPlanning(copy: SparkPlan): Boolean = copy match {
+      case c: BatchScanExec =>
+        (c.batch eq scan.batch) && (c.inputPartitions eq scan.inputPartitions)
+      case _ => false
+    }
+
+    // Copies through `makeCopy`, `clone` or `copy` share what the node planned.
+    assert(sharesPlanning(scan.makeCopy(scan.productIterator.map(_.asInstanceOf[AnyRef]).toArray)))
+    assert(sharesPlanning(scan.clone()))
+    assert(sharesPlanning(scan.copy(runtimeFilters = Nil)))
+  }
 }
 
 case class ColumnarOp(child: SparkPlan) extends UnaryExecNode {
@@ -266,6 +355,18 @@ case class ColumnarOp(child: SparkPlan) extends UnaryExecNode {
   override def output: Seq[Attribute] = child.output
   override protected def withNewChildInternal(newChild: SparkPlan): ColumnarOp =
     copy(child = newChild)
+}
+
+case class ColumnarCacheSerializationSource(output: Seq[Attribute]) extends LeafExecNode {
+  override val supportsColumnar: Boolean = true
+
+  override protected def doExecuteColumnar(): RDD[ColumnarBatch] = {
+    new EmptyRDD[ColumnarBatch](sparkContext) {
+      val driverOnlyState: AnyRef = new Object
+    }
+  }
+
+  override protected def doExecute(): RDD[InternalRow] = throw SparkUnsupportedOperationException()
 }
 
 private case class TestSubqueryExec(child: SparkPlan) extends BaseSubqueryExec {

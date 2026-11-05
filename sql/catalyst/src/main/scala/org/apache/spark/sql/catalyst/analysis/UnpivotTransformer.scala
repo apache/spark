@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{
   AttributeReference,
   Expression,
@@ -24,12 +25,13 @@ import org.apache.spark.sql.catalyst.expressions.{
   NamedExpression
 }
 import org.apache.spark.sql.catalyst.plans.logical.{Expand, LogicalPlan}
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{DataType, StringType, StructType}
 
 /**
  * Object used to transform the given [[Unpivot]] node to an [[Expand]] node.
  */
-object UnpivotTransformer {
+object UnpivotTransformer extends SQLConfHelper {
 
   /**
    * Construct an [[Expand]] node from the given [[Unpivot]] node. Do that by:
@@ -64,7 +66,7 @@ object UnpivotTransformer {
       case (valueColumnName, index) =>
         AttributeReference(
           valueColumnName,
-          values.head(index).dataType,
+          valueDataType(values.map(_(index).dataType)),
           values.map(_(index)).exists(_.nullable)
         )()
     }
@@ -72,5 +74,19 @@ object UnpivotTransformer {
     val output = (ids.map(_.toAttribute) :+ variableAttribute) ++ valueAttributes
 
     Expand(expressions, output, child)
+  }
+
+  /**
+   * Get the data type of a value column out of the data types of its values, which are the same
+   * up to nullability. Like [[Union]], merge the nested nullability of all values without casting
+   * them, keeping the field names and metadata of the first value. In the legacy mode, take the
+   * data type of the first value.
+   */
+  private def valueDataType(dataTypes: Seq[DataType]): DataType = {
+    if (conf.getConf(SQLConf.LEGACY_UNPIVOT_USE_FIRST_VALUE_NESTED_NULLABILITY)) {
+      dataTypes.head
+    } else {
+      dataTypes.reduce(StructType.unionLikeMerge)
+    }
   }
 }

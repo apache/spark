@@ -337,46 +337,37 @@ object Vectors {
   def norm(vector: Vector, p: Double): Double = {
     require(p >= 1.0, "To compute the p-norm of the vector, we require that you specify a p>=1. " +
       s"You specified p=$p.")
-    val values = vector match {
-      case DenseVector(vs) => vs
-      case SparseVector(n, ids, vs) => vs
-      case v => throw new IllegalArgumentException("Do not support vector type " + v.getClass)
-    }
-    val size = values.length
 
     if (p == 1) {
-      var sum = 0.0
-      var i = 0
-      while (i < size) {
-        sum += math.abs(values(i))
-        i += 1
-      }
-      sum
+      BLAS.asum(vector)
     } else if (p == 2) {
-      var sum = 0.0
-      var i = 0
-      while (i < size) {
-        sum += values(i) * values(i)
-        i += 1
-      }
-      math.sqrt(sum)
-    } else if (p == Double.PositiveInfinity) {
-      var max = 0.0
-      var i = 0
-      while (i < size) {
-        val value = math.abs(values(i))
-        if (value > max) max = value
-        i += 1
-      }
-      max
+      BLAS.nrm2(vector)
     } else {
-      var sum = 0.0
-      var i = 0
-      while (i < size) {
-        sum += math.pow(math.abs(values(i)), p)
-        i += 1
+      val values = vector match {
+        case DenseVector(vs) => vs
+        case SparseVector(n, ids, vs) => vs
+        case v => throw new IllegalArgumentException("Do not support vector type " + v.getClass)
       }
-      math.pow(sum, 1.0 / p)
+      val size = values.length
+
+      if (p == Double.PositiveInfinity) {
+        var max = 0.0
+        var i = 0
+        while (i < size) {
+          val value = math.abs(values(i))
+          if (value > max) max = value
+          i += 1
+        }
+        max
+      } else {
+        var sum = 0.0
+        var i = 0
+        while (i < size) {
+          sum += math.pow(math.abs(values(i)), p)
+          i += 1
+        }
+        math.pow(sum, 1.0 / p)
+      }
     }
   }
 

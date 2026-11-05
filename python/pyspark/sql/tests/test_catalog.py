@@ -527,6 +527,25 @@ class CatalogTestsMixin:
             spark.catalog.dropDatabase(db, ifExists=False, cascade=True)
             self.assertFalse(spark.catalog.databaseExists(db))
 
+    def test_catalog_create_database_with_properties(self):
+        spark = self.spark
+        db = "py_catalog_api_props_db"
+        with self.database(db):
+            spark.catalog.createDatabase(
+                db,
+                properties={
+                    "comment": "py catalog api comment",
+                    "py_catalog_api_k": "py_catalog_api_v",
+                },
+            )
+            self.assertEqual(spark.catalog.getDatabase(db).description, "py catalog api comment")
+            info = {
+                r.info_name: r.info_value
+                for r in spark.sql(f"DESCRIBE NAMESPACE EXTENDED {db}").collect()
+            }
+            self.assertIn("py_catalog_api_k", info["Properties"])
+            self.assertIn("py_catalog_api_v", info["Properties"])
+
     def test_catalog_list_partitions(self):
         spark = self.spark
         t = "py_catalog_api_part_t"
