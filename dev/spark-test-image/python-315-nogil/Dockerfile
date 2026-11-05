@@ -52,6 +52,7 @@ RUN apt-get update && apt-get install -y \
 # Install Python 3.15 (no GIL)
 RUN add-apt-repository ppa:deadsnakes/ppa
 RUN apt-get update && apt-get install -y \
+    python3.15-dev \
     python3.15-nogil \
     python3.15-venv \
     && apt-get autoremove --purge -y \
