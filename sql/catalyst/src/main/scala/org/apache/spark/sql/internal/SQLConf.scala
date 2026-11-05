@@ -7323,6 +7323,18 @@ object SQLConf {
       .intConf
       .createWithDefault(100)
 
+  val LEGACY_RECURSIVE_CTE_USE_ANCHOR_NESTED_NULLABILITY =
+    buildConf("spark.sql.legacy.recursiveCTE.useAnchorNestedNullability")
+      .internal()
+      .doc("When true, recursive CTE references inherit the anchor's nested nullability " +
+        "and recursive type coercion uses the legacy rules. This can return incorrect results " +
+        "or fail when later iterations introduce null array elements, map values, or struct " +
+        "fields. When false, recursive references allow nested nulls.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_INLINE_CTE_IN_COMMANDS = buildConf("spark.sql.legacy.inlineCTEInCommands")
     .internal()
     .doc("If true, always inline the CTE relations for the queries in commands. This is the " +
