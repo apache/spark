@@ -316,6 +316,46 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
     }
   }
 
+  test("SPARK-60379: duplicate union output exprIds retain the requirement exchange") {
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+        SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> "false",
+        SQLConf.ENFORCE_TYPE_COERCION_BEFORE_UNION_DEDUPLICATION.key -> "false") {
+      val first = spark.range(1000).selectExpr("id a", "id v").repartition($"a")
+      val second = spark.range(1000, 11000)
+        .selectExpr("id % 1000 b", "id c", "id v")
+      Seq(false, true).foreach { duplicate =>
+        val left = if (duplicate) {
+          first.select($"a", $"a", $"v")
+        } else {
+          first.select($"a", $"a".as("other"), $"v")
+        }
+        def result(enabled: Boolean): DataFrame = {
+          withSQLConf(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key -> enabled.toString) {
+            val union = left.union(second)
+            val df = union.withColumn("rn", org.apache.spark.sql.functions.row_number().over(
+              org.apache.spark.sql.expressions.Window.partitionBy(first.col("a")).orderBy("v")))
+            df.queryExecution.executedPlan
+            df
+          }
+        }
+        val baseline = result(enabled = false).collect().toSeq
+        val df = result(enabled = true)
+        val initial = aqeInitialPlan(df)
+        val union = initial.collectFirst { case u: UnionExec => u }.get
+        assert((union.output.map(_.exprId).distinct.size != union.output.size) === duplicate,
+          s"the fixture must retain the requested output identities:\n$initial")
+        val actual = df.collect().toSeq
+        assert(actual.count(_.getInt(3) == 1) === 1000)
+        checkAnswer(df, baseline)
+        assert(numShufflesOnUnion(initial) === (if (duplicate) 1 else 0),
+          s"only ambiguous union outputs should block push-down:\n$initial")
+      }
+    }
+  }
+
   test("SPARK-60379: do not push down when no child is co-located with the target") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
       withTempView("t1", "t2") {
