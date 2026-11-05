@@ -1179,6 +1179,12 @@ object InMemoryBaseTable {
   // the streams of the table only return the rows that pass the pushed filters, see `passes`.
   val SIMULATE_STREAMING_FILTERS = "simulate-streaming-filters"
 
+  // Test table property: the pushdowns of the scans of streaming reads that the table declares
+  // with its capabilities, as a comma-separated list of "columns" (STREAMING_COLUMN_PRUNING) and
+  // "filters" (STREAMING_FILTER_PUSHDOWN). The table declares both by default. Its streams return
+  // the columns of their read schemas, and its scan builders take the filters as for batch reads.
+  val STREAMING_PUSHDOWNS = "streaming-pushdowns"
+
   /**
    * Returns whether `row`, a row of a table with `schema`, may pass `filter`, for the filters of
    * the tests: comparisons of a top-level column with a value, null checks, and their
@@ -1225,12 +1231,6 @@ object InMemoryBaseTable {
     }
     !eval(filter).contains(false)
   }
-
-  // Test table property: the pushdowns of the scans of streaming reads that the table declares
-  // with its capabilities, as a comma-separated list of "columns" (STREAMING_COLUMN_PRUNING) and
-  // "filters" (STREAMING_FILTER_PUSHDOWN). The table declares both by default. Its streams return
-  // the columns of their read schemas, and its scan builders take the filters as for batch reads.
-  val STREAMING_PUSHDOWNS = "streaming-pushdowns"
 
   /**
    * Assigns fresh IDs to any top-level column or nested struct field that does not already

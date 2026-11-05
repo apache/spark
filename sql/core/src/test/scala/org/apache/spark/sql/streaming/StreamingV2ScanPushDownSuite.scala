@@ -29,7 +29,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow}
-import org.apache.spark.sql.catalyst.expressions.{Alias, And}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Cast}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Project}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -577,7 +577,10 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
     "ts < 'now'" -> "ts",
     "d = to_date('today')" -> "d",
     "d < CAST('tomorrow' AS DATE)" -> "d",
-    "CAST(ts AS TIMESTAMP_NTZ) > CAST('yesterday' AS TIMESTAMP_NTZ)" -> "ts"
+    "CAST(ts AS TIMESTAMP_NTZ) > CAST('yesterday' AS TIMESTAMP_NTZ)" -> "ts",
+    // The casts of strings with only a time to timestamps, which take the current date.
+    "ts < '12:00:00'" -> "ts",
+    "ts > CAST('T09:30:00' AS TIMESTAMP)" -> "ts"
   ).foreach { case (condition, column) =>
     test(s"do not push down a filter on a value that depends on when it is evaluated: $condition") {
       withTable(tbl) {
@@ -602,7 +605,7 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
       // Each micro-batch has its own current time, so the time when the query started cannot be
       // pushed down in its place.
       Seq("current_timestamp()", "now()").foreach { time =>
-        val df = spark.readStream.table(tbl).where(s"ts < $time AND id > 0").select("data")
+        val df = spark.readStream.table(tbl).where(s"id > 0 AND ts < $time").select("data")
         testStream(df)(
           ProcessAllAvailable(),
           assertPushedFilters("GreaterThan(id,0)"),
@@ -703,60 +706,70 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
       sql(s"INSERT INTO $tbl VALUES (1, current_user(), current_date()), (2, 'other', NULL)")
       // A micro-batch folds current_user() and now() into literals, which it then puts in place
       // of the columns in the pushed filters owner <> '' and d >= DATE'2020-01-01'.
-      testStream(spark.readStream.table(tbl).where("owner = current_user() AND owner <> ''")
+      testStream(spark.readStream.table(tbl).where("owner <> '' AND owner = current_user()")
           .select("id"))(
         ProcessAllAvailable(),
         assertPushedFilters("Not(EqualTo(owner,))"),
         CheckAnswer(Row(1L)))
       testStream(spark.readStream.table(tbl)
-          .where("d = to_date(now()) AND d >= DATE'2020-01-01'").select("id"))(
+          .where("d >= DATE'2020-01-01' AND d = to_date(now())").select("id"))(
         ProcessAllAvailable(),
         assertPushedFilters("GreaterThanOrEqual(d,2020-01-01)"))
     }
   }
 
-  test("read the columns of a condition on a special string that depends on when it is cast") {
-    withSourceTable() {
-      // The condition takes the date of each micro-batch, so the scan reads both columns.
-      val df = spark.readStream.table(tbl).select(expr("CASE WHEN CAST('today' AS DATE) < " +
-        "DATE'2100-01-01' THEN data ELSE CAST(extra AS STRING) END AS v"))
-      val reads = StreamingV2ScanPushDown.reads(spark, df.queryExecution.analyzed, None)
-      assert(reads.values.map(_.requiredColumns.map(_.name).toSet).toSeq ===
-        Seq(Set("data", "extra")))
-      testStream(df)(
-        ProcessAllAvailable(),
-        assertReadSchema("data", "extra"),
-        CheckAnswer(Row("a"), Row("b")))
+  Seq(
+    "CAST('today' AS DATE) < DATE'2100-01-01'",
+    "CAST('12:00:00' AS TIMESTAMP) < TIMESTAMP'2100-01-01 00:00:00'"
+  ).foreach { condition =>
+    test(s"read the columns of a condition on a string that depends on when it is cast: " +
+        condition) {
+      withSourceTable() {
+        // The condition takes the date of each micro-batch, so the scan reads both columns.
+        val df = spark.readStream.table(tbl).select(expr(s"CASE WHEN $condition THEN data " +
+          "ELSE CAST(extra AS STRING) END AS v"))
+        val reads = StreamingV2ScanPushDown.reads(spark, df.queryExecution.analyzed, None)
+        assert(reads.values.map(_.requiredColumns.map(_.name).toSet).toSeq ===
+          Seq(Set("data", "extra")))
+        testStream(df)(
+          ProcessAllAvailable(),
+          assertReadSchema("data", "extra"),
+          CheckAnswer(Row("a"), Row("b")))
+      }
     }
   }
 
-  test("push down no filter that may throw after a filter that is not pushed down") {
+  test("push down no filter after a filter that is not pushed down") {
     withTable(tbl) {
-      sql(s"CREATE TABLE $tbl (id bigint, owner string, qty int)")
-      sql(s"INSERT INTO $tbl VALUES (1, current_user(), 1), (2, 'other', 0)")
+      sql(s"CREATE TABLE $tbl (id bigint, owner string, qty int, payload string)")
+      sql(s"INSERT INTO $tbl VALUES (1, current_user(), 1, '1'), (2, 'other', 0, 'abc')")
       val raise = "CASE WHEN qty <= 0 THEN raise_error('bad qty') ELSE true END"
-      // The filter on the owner has a value of each micro-batch, so it is not pushed down, and
-      // the filter that raises an error for the quantity 0, written after it, is not pushed down
-      // either: each micro-batch evaluates the pushed filters first, which would raise the error
-      // for the row of the other owner.
-      testStream(spark.readStream.table(tbl).where(s"owner = current_user() AND $raise")
-          .select("id"))(
-        ProcessAllAvailable(),
-        assertPushedFilters(),
-        CheckAnswer(Row(1L)))
-      // A filter that cannot throw is still pushed down after it, and so is one that may throw
-      // before it, as the query evaluates it first anyway.
       def pushed(df: DataFrame): Seq[Set[String]] = {
         StreamingV2ScanPushDown.reads(spark, df.queryExecution.analyzed, None).values.toSeq
           .flatMap(_.filters).map(_.references.map(_.name).toSet)
       }
       val source = spark.readStream.table(tbl)
-      assert(pushed(source.where(s"$raise AND owner = current_user() AND id > 0")) ===
+      // The filter on the owner has a value of each micro-batch, so it is not pushed down, and
+      // neither is any filter written after it: each micro-batch evaluates the pushed filters
+      // first, so a filter that fails on the row of the other owner, as the cast of its payload
+      // does with ANSI, or the error raised for its quantity 0, would fail the query.
+      Seq(raise, "CAST(payload AS INT) > 0", "id > 0").foreach { filter =>
+        val df = source.where(s"owner = current_user() AND $filter")
+        assert(pushed(df) === Nil, filter)
+        testStream(df.select("id"))(
+          ProcessAllAvailable(),
+          assertPushedFilters(),
+          CheckAnswer(Row(1L)))
+      }
+      // The filters written before it are pushed down, as the query evaluates them first anyway.
+      assert(pushed(source.where(s"$raise AND id > 0 AND owner = current_user() AND qty > 0")) ===
         Seq(Set("qty"), Set("id")))
-      // With several reads of the relation, a filter that may throw is not pushed down: each read
-      // evaluates the pushed filters before its own.
+      // With several reads of the relation, the pushed filters are those that all of them
+      // evaluate first, in the same order.
       val read = source.where(s"$raise AND id > 0")
-      assert(pushed(read.union(read)) === Seq(Set("id")))
+      assert(pushed(read.union(read)) === Seq(Set("qty"), Set("id")))
+      assert(pushed(read.union(source.where(s"$raise AND qty > 0"))) === Seq(Set("qty")))
+      assert(pushed(read.union(source.where(s"id > 0 AND $raise"))) === Nil)
     }
   }
 
@@ -817,14 +830,14 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
       // A micro-batch folds current_user() into a literal, which it puts in place of the column
       // in the pushed filter owner = '' OR id > 5, which it then folds into id > 5.
       testStream(spark.readStream.table(tbl)
-          .where("owner = current_user() AND (owner = '' OR id > 5)").select("id"))(
+          .where("(owner = '' OR id > 5) AND owner = current_user()").select("id"))(
         ProcessAllAvailable(),
         assertPushedFilters("Or(EqualTo(owner,),GreaterThan(id,5))"),
         CheckAnswer(Row(6L)))
       // So does a date that is not the date of the micro-batch, as on the day after the start.
       // The micro-batch is planned whether the rows have its date or not.
       testStream(spark.readStream.table(tbl)
-          .where("d = to_date(now()) AND (d < DATE'2000-01-01' OR id > 5)").select("id"))(
+          .where("(d < DATE'2000-01-01' OR id > 5) AND d = to_date(now())").select("id"))(
         ProcessAllAvailable(),
         assertPushedFilters("Or(LessThan(d,2000-01-01),GreaterThan(id,5))"))
     }
@@ -921,24 +934,45 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
-  test("push down a filter on a cast that does not depend on when it is evaluated") {
-    withTable(tbl) {
-      sql(s"CREATE TABLE $tbl (id bigint, data string)")
-      val df = spark.readStream.table(tbl)
-        .where("CAST(data AS TIMESTAMP) < TIMESTAMP'2100-01-01 00:00:00'").select("id")
-      val reads = StreamingV2ScanPushDown.reads(spark, df.queryExecution.analyzed, None)
-      val filters = reads.values.flatMap(_.filters).toSeq
-      assert(filters.nonEmpty)
-      assert(filters.forall(_.references.map(_.name).toSet == Set("data")), filters)
+  test("replace the casts of strings with only a time to timestamps with a local time zone") {
+    withSourceTable() {
+      val casts = Seq(
+        "CAST('12:00:00' AS TIMESTAMP)", "CAST('12:00:00' AS TIMESTAMP_LTZ(9))",
+        "CAST('12:00:00' AS TIMESTAMP_NTZ)", "CAST('2100-01-01 12:00:00' AS TIMESTAMP)")
+      val df = spark.readStream.table(tbl).select(casts.map(expr) :+ col("data"): _*)
+      val replaced = StreamingV2ScanPushDown.forStartup(df.queryExecution.analyzed)
+        .collectFirst { case project: Project => project.projectList.take(casts.length) }.get
+        .map(_.asInstanceOf[Alias].child)
+      // These casts take the current date, of any precision, unlike a cast to a timestamp without
+      // time zone, which rejects such a string, and a cast of a string with a date.
+      assert(replaced.map(_.isInstanceOf[Cast]) === Seq(false, false, true, true))
     }
   }
 
-  test("apply all the filters that the scan builder got in the plan of each micro-batch") {
+  test("push down a filter on a cast that does not depend on when it is evaluated") {
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (id bigint, data string, ts timestamp)")
+      Seq(
+        "CAST(data AS TIMESTAMP) < TIMESTAMP'2100-01-01 00:00:00'" -> "data",
+        // A string with a date and a time, unlike one with only a time.
+        "ts < '2100-01-01 12:00:00'" -> "ts"
+      ).foreach { case (condition, column) =>
+        val df = spark.readStream.table(tbl).where(condition).select("id")
+        val reads = StreamingV2ScanPushDown.reads(spark, df.queryExecution.analyzed, None)
+        val filters = reads.values.flatMap(_.filters).toSeq
+        assert(filters.nonEmpty, condition)
+        assert(filters.forall(_.references.map(_.name).toSet == Set(column)), filters)
+      }
+    }
+  }
+
+  test("apply the filters that the scan builder got in the plan of each micro-batch") {
     withSourceTable() {
       // id + extra > 10 cannot be translated to a filter of the source, so the scan builder only
-      // takes extra > 15. Each micro-batch still applies both to the rows of the source, which
-      // the query applies anyway, so the scan cannot drop a row that the plan keeps, whatever it
-      // does with the filters.
+      // gets extra > 15. Each micro-batch applies it to the rows of the source, which the query
+      // applies anyway, so the scan cannot drop a row that the plan keeps, whatever it does with
+      // the filter. The filter that the scan builder does not get is evaluated after it, as for
+      // a batch scan, rather than on every row of the source.
       testStream(spark.readStream.table(tbl).where("id + extra > 10 AND extra > 15")
           .select("data"))(
         ProcessAllAvailable(),
@@ -950,9 +984,8 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
           }
           assert(filtered.length === 1)
           val (condition, relation) = filtered.head
-          assert(relation.pushedFilters.map(_.references.map(_.name).toSet) ===
-            Seq(Set("id", "extra"), Set("extra")))
-          assert(condition === relation.pushedFilters.reduce(And))
+          assert(relation.pushedFilters.map(_.references.map(_.name).toSet) === Seq(Set("extra")))
+          assert(condition === relation.pushedFilters.head)
           true
         },
         CheckAnswer(Row("b")),

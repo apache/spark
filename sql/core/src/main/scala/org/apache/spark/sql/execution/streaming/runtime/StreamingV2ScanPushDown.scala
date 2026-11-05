@@ -24,24 +24,25 @@ import scala.util.control.NonFatal
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, ResolvedInlineTable}
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, AttributeSet, Cast, Expression, ExpressionSet, SubqueryExpression, Unevaluable}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, AttributeSet, Cast, Expression, SubqueryExpression, Unevaluable}
 import org.apache.spark.sql.catalyst.optimizer.{ComputeCurrentTime, InferFiltersFromConstraints, ReplaceExpressions, SpecialDatetimeValues}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CAST, CURRENT_LIKE, RUNTIME_REPLACEABLE}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{SupportsRead, TableCapability}
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns, SupportsPushDownV2Filters}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, PushDownUtils, StreamingDataSourceV2ScanRelation}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, PushDownUtils, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetSeqMetadata, OffsetSeqMetadataBase}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.{DataType, StringType, StructType, TimestampLTZNanosType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Pushes the top-level columns and the filters that the optimized plan of a streaming query reads
@@ -73,8 +74,9 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
    * What the optimized plan of a streaming query reads from a streaming relation.
    *
    * @param requiredColumns the columns of the relation that the plan reads
-   * @param filters the deterministic filters without subqueries that the plan applies over every
-   *                occurrence of the relation, which its scan may apply too
+   * @param filters the filters that the scan of the relation may get, in the order in which the
+   *                plan evaluates them: those that every occurrence of the relation applies first,
+   *                see `pushableFilters`
    */
   case class Reads(requiredColumns: AttributeSet, filters: Seq[Expression])
 
@@ -90,7 +92,15 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
       scan: Scan,
       stream: SparkDataStream,
       prunedOutput: Option[Seq[AttributeReference]],
-      pushedFilters: Seq[Expression])
+      pushedFilters: Seq[Expression]) {
+
+    /** Returns the scan relation of the source whose relation is `relation`. */
+    def toRelation(
+        relation: StreamingDataSourceV2Relation): StreamingDataSourceV2ScanRelation = {
+      StreamingDataSourceV2ScanRelation(relation, scan, relation.output, stream,
+        prunedOutput = prunedOutput, pushedFilters = pushedFilters)
+    }
+  }
 
   /**
    * Returns what the optimized `plan` reads from each of its streaming relations of Data Source
@@ -107,10 +117,10 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
    * query reads from that relation:
    *  - The expressions whose values depend on when they are evaluated or on the state of the
    *    session, such as the current time, the casts of special strings such as 'today' or 'now'
-   *    to dates and timestamps, or the current database, which each micro-batch gets the values
-   *    of, become placeholders that the optimizer does not take as deterministic, as the current
-   *    time of a micro-batch, so neither its filters nor its columns depend on them, and no filter
-   *    on them is pushed down.
+   *    to dates and timestamps, the casts of strings with only a time to timestamps, or the
+   *    current database, which each micro-batch gets the values of, become placeholders that the
+   *    optimizer does not take as deterministic, as the current time of a micro-batch, so neither
+   *    its filters nor its columns depend on them, and no filter on them is pushed down.
    *  - The filters that the optimizer infers from the constraints of the plan, such as those of the
    *    filters over another relation joined with the relation, are not inferred, so that the scan
    *    only gets the filters that the query applies to the relation itself.
@@ -180,38 +190,34 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
   /**
    * Returns what the occurrences of each relation read, combined: the scan of a relation reads the
    * rows of all its occurrences, so it reads the columns that any of them reads, and can only
-   * apply the filters that all of them apply. With several occurrences, the filters that may throw
-   * are left out: each occurrence evaluates the pushed filters before its own, in the order of the
-   * first occurrence, so such a filter could see the rows that another occurrence drops with a
-   * filter written before it, which is not pushed down.
+   * apply the filters that all of them apply. Each occurrence evaluates the pushed filters before
+   * its own, so the pushed filters are those that all the occurrences evaluate first, in the same
+   * order: the longest common prefix of their filters, see `pushableFilters`.
    */
   private def combine(
       occurrences: Seq[(StreamingRelationV2, Reads)]): Map[StreamingRelationV2, Reads] = {
     occurrences.groupBy(_._1).map { case (relation, reads) =>
-      val filters = reads.map(r => ExpressionSet(r._2.filters)).reduce { (left, right) =>
-        ExpressionSet(left.filter(right.contains))
-      }.toSeq
-      relation -> Reads(
-        AttributeSet.fromAttributeSets(reads.map(_._2.requiredColumns)),
-        if (reads.length == 1) filters else filters.filterNot(_.throwable))
+      val filters = reads.map(_._2.filters).reduce { (left, right) =>
+        left.zip(right).takeWhile { case (l, r) => l.semanticEquals(r) }.map(_._1)
+      }
+      relation -> Reads(AttributeSet.fromAttributeSets(reads.map(_._2.requiredColumns)), filters)
     }
   }
 
   /**
    * Returns the filters that the scan of a relation may get of `filters`, the filters over an
    * occurrence of the relation in the order in which the plan evaluates them: the deterministic
-   * ones without subqueries or placeholders. The plan of each micro-batch evaluates the pushed
-   * filters first, over the relation (see `withPushedFilters`), so once a filter is not pushed
-   * down, only the filters after it that cannot throw are, as `PushPredicateThroughNonJoin` splits
-   * the filters that it pushes: a filter that throws, such as one with `raise_error`, does not see
-   * the rows that a filter written before it drops.
+   * ones without subqueries or placeholders, up to the first filter that is not, which is not
+   * pushed down, and neither are those after it. The plan of each micro-batch evaluates the pushed
+   * filters first, over the relation (see `withPushedFilters`), so a pushed filter does not see a
+   * row that a filter written before it drops: it could fail on such a row, as a filter with a
+   * cast or a division does under ANSI, or with `raise_error`.
    */
   private def pushableFilters(filters: Seq[Expression]): Seq[Expression] = {
-    def canPush(filter: Expression): Boolean = filter.deterministic &&
-      !SubqueryExpression.hasSubquery(filter) && !filter.exists(_.isInstanceOf[StartupValue])
-    val (leading, rest) = filters.span(canPush)
-    // The head of `rest`, if any, is the first filter that is not pushed down.
-    leading ++ rest.drop(1).filter(filter => canPush(filter) && !filter.throwable)
+    filters.takeWhile { filter =>
+      filter.deterministic && !SubqueryExpression.hasSubquery(filter) &&
+        !filter.exists(_.isInstanceOf[StartupValue])
+    }
   }
 
   /**
@@ -244,10 +250,29 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
         // So does a cast that ComputeCurrentTime or SpecialDatetimeValues rewrites: a cast of a
         // time to a timestamp, which takes the current date, or a cast of a special string, such
         // as 'today' or 'now', to a date or a timestamp. These rules only rewrite casts besides
-        // the expressions with the pattern CURRENT_LIKE.
+        // the expressions with the pattern CURRENT_LIKE. A cast of a string with only a time,
+        // such as '12:00:00', to a timestamp takes the current date too, which the optimizer
+        // folds in.
         case cast: Cast if ComputeCurrentTime.applyForExpression(cast) != cast ||
-            SpecialDatetimeValues.applyForExpression(cast) != cast =>
+            SpecialDatetimeValues.applyForExpression(cast) != cast || castsTimeOnly(cast) =>
           StartupValue(cast, cast.children)
+      }
+  }
+
+  /**
+   * Returns whether `cast` casts a foldable string with only a time to a timestamp with local time
+   * zone, of any precision, which takes the date of when it is evaluated. A cast to a timestamp
+   * without time zone or to a date does not take the current date: it rejects such a string.
+   */
+  private def castsTimeOnly(cast: Cast): Boolean = {
+    val toTimestampLTZ = cast.dataType match {
+      case TimestampType | _: TimestampLTZNanosType => true
+      case _ => false
+    }
+    toTimestampLTZ && cast.child.dataType.isInstanceOf[StringType] && cast.child.foldable &&
+      Try(cast.child.eval()).toOption.exists {
+        case string: UTF8String => DateTimeUtils.parseTimestampString(string)._3
+        case _ => false
       }
   }
 
@@ -286,13 +311,21 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
       capabilities.contains(TableCapability.STREAMING_COLUMN_PRUNING) &&
       builder.isInstanceOf[SupportsPushDownRequiredColumns]
     val pushesFilters = conf.streamingV2FilterPushdownEnabled &&
-      capabilities.contains(TableCapability.STREAMING_FILTER_PUSHDOWN) && supportsFilters(builder)
+      capabilities.contains(TableCapability.STREAMING_FILTER_PUSHDOWN) &&
+      PushDownUtils.supportsFilters(builder)
     val known = if (prunesColumns || pushesFilters) reads else None
     val requiredOutput = known.filter(_ => prunesColumns)
       .map(r => output.filter(r.requiredColumns.contains))
       .getOrElse(output)
+    // The filters that the scan builder gets in some form, which each micro-batch applies first:
+    // the others, such as a filter with a UDF that cannot be translated to a filter of the source,
+    // are evaluated after them, as for the scans of batch queries, rather than on all the rows of
+    // the source.
     val filters = known.filter(_ => pushesFilters)
-      .map(r => DataSourceStrategy.normalizeExprs(r.filters, output))
+      .map { r =>
+        PushDownUtils.filtersOfScanBuilder(builder,
+          DataSourceStrategy.normalizeExprs(r.filters, output))
+      }
       .getOrElse(Nil)
 
     // Builds the scan of `columns` with `builder`, once it pushed `filters` down to it.
@@ -301,7 +334,7 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
         columns: Seq[AttributeReference],
         filters: Seq[Expression]): Scan = {
       if (filters.nonEmpty) {
-        // The plan of each micro-batch applies all the filters to the rows of the source, see
+        // The plan of each micro-batch applies these filters to the rows of the source, see
         // `withPushedFilters`, so the scan may apply any of them, in any form.
         val (pushed, _) = PushDownUtils.pushFilters(builder, filters, partitionFields = None)
         val taken = pushed.fold(_.mkString(", "), _.mkString(", "))
@@ -376,13 +409,6 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
    */
   def withPushedFilters(relation: StreamingDataSourceV2ScanRelation): LogicalPlan = {
     relation.pushedFilters.reduceOption(And).map(Filter(_, relation)).getOrElse(relation)
-  }
-
-  /** Returns whether the scan builder of a streaming source takes filters. */
-  private def supportsFilters(builder: ScanBuilder): Boolean = builder match {
-    case _: SupportsPushDownFilters | _: SupportsPushDownV2Filters |
-        _: SupportsPushDownCatalystFilters => true
-    case _ => false
   }
 
   /**

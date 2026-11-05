@@ -313,9 +313,7 @@ class MicroBatchExecution(
                 },
                 sourceIdentifyingName
               )
-            StreamingDataSourceV2ScanRelation(relation, streamingScan.scan, output,
-              streamingScan.stream, prunedOutput = streamingScan.prunedOutput,
-              pushedFilters = streamingScan.pushedFilters)
+            streamingScan.toRelation(relation)
           })
           // Each micro-batch applies the filters that the scan builder got to the rows of the
           // source, see StreamingV2ScanPushDown.

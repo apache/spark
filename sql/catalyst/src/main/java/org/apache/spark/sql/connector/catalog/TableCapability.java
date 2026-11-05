@@ -192,8 +192,8 @@ public enum TableCapability {
 
   /**
    * Signals that the scans of the streaming reads of the table may get the filters that the
-   * streaming query applies to all the rows that it reads from the table, which Spark pushes to a
-   * scan builder that implements
+   * streaming query applies first to all the rows that it reads from the table, before any other
+   * filter, which Spark pushes to a scan builder that implements
    * {@link org.apache.spark.sql.connector.read.SupportsPushDownFilters} or
    * {@link org.apache.spark.sql.connector.read.SupportsPushDownV2Filters}, as it does for the
    * scans of batch reads.

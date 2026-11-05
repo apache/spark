@@ -106,9 +106,7 @@ class ContinuousExecution(
             _.toContinuousStream(metadataPath))
           val relation = StreamingDataSourceV2Relation(
               table, output, catalog, identifier, options, metadataPath)
-          StreamingDataSourceV2ScanRelation(relation, streamingScan.scan, output,
-            streamingScan.stream, prunedOutput = streamingScan.prunedOutput,
-            pushedFilters = streamingScan.pushedFilters)
+          streamingScan.toRelation(relation)
         })
         // The query applies the filters that the scan builder got to the rows of the source, see
         // StreamingV2ScanPushDown.
