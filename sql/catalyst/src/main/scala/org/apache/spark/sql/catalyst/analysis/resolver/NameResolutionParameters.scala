@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.Expression
 
 /**
@@ -35,7 +36,8 @@ import org.apache.spark.sql.catalyst.expressions.Expression
  * @param shouldPreferHiddenOutput Whether hidden output should be preferred over main output.
  * @param canReferenceAggregatedAccessOnlyAttributes Whether aggregated access only attributes can
  *  be referenced.
- * @param resolvingView Whether we are currently resolving a view (including nested views).
+ * @param restrictTempVariableResolutionToReferredNames Whether temporary-variable resolution is
+ *  restricted to `referredTempVariableNames`.
  * @param resolvingExecuteImmediate Whether we are currently resolving an EXECUTE IMMEDIATE.
  * @param referredTempVariableNames The names of the temporary variables that are referred to in
  *  the view that we are currently resolving.
@@ -44,6 +46,9 @@ import org.apache.spark.sql.catalyst.expressions.Expression
  * @param optionalNamePartIndices Indices of the name parts of the multipart name that are optional
  *  references (followed by `?`). Empty for a name without optional references.
  * @param resolvingSortOrder Whether the name is in the ordering of a [[Sort]].
+ * @param planIdTaggedAttribute The DataFrame plan-id-tagged [[UnresolvedAttribute]] to resolve
+ *  against the scope's [[PlanIdTargetRegistry]] before normal name resolution. Set when the
+ *  attribute carries the DataFrame plan-id tag; None otherwise.
  */
 case class NameResolutionParameters(
     canLaterallyReferenceColumn: Boolean = false,
@@ -52,9 +57,10 @@ case class NameResolutionParameters(
     canResolveNameByHiddenOutputInSubquery: Boolean = false,
     shouldPreferHiddenOutput: Boolean = false,
     canReferenceAggregatedAccessOnlyAttributes: Boolean = false,
-    resolvingView: Boolean = false,
+    restrictTempVariableResolutionToReferredNames: Boolean = false,
     resolvingExecuteImmediate: Boolean = false,
     referredTempVariableNames: Seq[Seq[String]] = Seq.empty,
     extractValueExtractionKey: Option[Expression] = None,
     optionalNamePartIndices: Set[Int] = Set.empty,
-    resolvingSortOrder: Boolean = false) {}
+    resolvingSortOrder: Boolean = false,
+    planIdTaggedAttribute: Option[UnresolvedAttribute] = None)

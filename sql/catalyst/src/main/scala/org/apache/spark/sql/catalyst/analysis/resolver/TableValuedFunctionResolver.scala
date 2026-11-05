@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis.resolver
 
 import org.apache.spark.sql.catalyst.analysis.{FunctionResolution, UnresolvedTableValuedFunction}
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /**
@@ -68,13 +69,28 @@ class TableValuedFunctionResolver(
    *  }}}
    */
   def resolve(unresolvedTVF: UnresolvedTableValuedFunction): LogicalPlan = {
-    val resolvedArguments = unresolvedTVF.functionArgs.map(
-      expressionResolver.resolveExpressionTreeInOperator(_, unresolvedTVF)
-    )
+    val resolvedArguments = resolveArguments(unresolvedTVF)
     val unresolvedTVFWithResolvedArguments =
       unresolvedTVF.copy(functionArgs = resolvedArguments)
     val resolvedTVF =
       functionResolution.resolveTableValuedFunction(unresolvedTVFWithResolvedArguments)
     resolver.resolve(resolvedTVF)
   }
+
+  /**
+   * Resolves the function arguments in an isolated [[ExpressionIdAssigner]] mapping.
+   *
+   * Arguments are resolved before the function is resolved into a [[LogicalPlan]], so no leaf
+   * operator has created a mapping in the current [[ExpressionIdAssigner]] scope yet. A top-level
+   * [[Alias]] argument, such as the one the `:` semi-structured extraction produces for
+   * `f(column:field)`, would otherwise reach [[ExpressionIdAssigner.mapExpression]] with no
+   * current mapping and fail with an internal error.
+   */
+  private def resolveArguments(
+      unresolvedTVF: UnresolvedTableValuedFunction): Seq[Expression] =
+    expressionResolver.getExpressionIdAssigner.withMappingForStandaloneExpression {
+      unresolvedTVF.functionArgs.map(
+        expressionResolver.resolveExpressionTreeInOperator(_, unresolvedTVF)
+      )
+    }
 }

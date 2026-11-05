@@ -17,18 +17,14 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import java.util.HashSet
-
-import org.apache.spark.sql.catalyst.expressions.{Alias, ExprId, NamedExpression}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
+import org.apache.spark.sql.catalyst.expressions.NamedExpression
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /**
- * Stores the resulting operator, output list, grouping attributes, list of aliases from
- * aggregate list and base [[Aggregate]], obtained by resolving an [[Aggregate]] operator.
+ * Stores the resulting operator and output list from resolving an [[Aggregate]] operator. The
+ * base [[Aggregate]] and aggregate-list aliases are written directly to the current
+ * [[QueryBlockScope]] by [[AggregateResolver]].
  */
 case class AggregateResolutionResult(
     operator: LogicalPlan,
-    outputList: Seq[NamedExpression],
-    groupingAttributeIds: HashSet[ExprId],
-    aggregateListAliases: Seq[Alias],
-    baseAggregate: Aggregate)
+    outputList: Seq[NamedExpression])
