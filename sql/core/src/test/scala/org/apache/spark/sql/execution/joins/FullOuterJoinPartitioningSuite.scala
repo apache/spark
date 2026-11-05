@@ -192,6 +192,16 @@ class FullOuterJoinPartitioningSuite
     }
   }
 
+  test("a chain of FULL OUTER joins on explicit merged keys keeps the claim") {
+    // The second join's left key is the first join's merged key.
+    val query =
+      """SELECT coalesce(coalesce(a.k, b.k), c.k) AS g, count(*), sum(va), sum(vb), sum(vc)
+        |FROM a FULL OUTER JOIN b ON a.k = b.k
+        |FULL OUTER JOIN c ON coalesce(a.k, b.k) = c.k
+        |GROUP BY 1""".stripMargin
+    assert(compare(query) == (3, 5))
+  }
+
   test("chained FULL OUTER JOIN USING shuffles only the new side") {
     val query =
       """SELECT k, count(*), sum(va), sum(vb), sum(vc)
@@ -418,6 +428,9 @@ class FullOuterJoinPartitioningSuite
         |  SELECT k FROM b FULL OUTER JOIN c USING (k)) GROUP BY k""".stripMargin
     assert(compare(union) == (3, 4))
     checkChangeAfterPreparation(union, expandLimit -> "0")
+    checkChangeAfterPreparation(union, expandLimit -> "0", aqeCoalescing: _*)
+    checkChangeAfterPreparation(union, expandLimit -> "0",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true")
   }
 
   test("a null-safe equality keeps the output partitioning unknown") {

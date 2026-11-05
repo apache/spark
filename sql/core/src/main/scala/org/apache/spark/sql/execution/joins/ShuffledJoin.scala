@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.joins
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Coalesce, Expression}
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, FullOuter, InnerLike, JoinType, LeftAnti, LeftExistence, LeftOuter, LeftSingle, RightOuter}
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, CoalescedNullAwareHashPartitioning, Distribution, HashPartitioningLike, KeyedPartitioning, NullAwareHashPartitioning, Partitioning, PartitioningCollection, UnknownPartitioning, UnspecifiedDistribution}
-import org.apache.spark.sql.catalyst.trees.MultiTransform
+import org.apache.spark.sql.catalyst.trees.{MultiTransform, TreeNodeTag}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -30,8 +30,15 @@ import org.apache.spark.sql.internal.SQLConf
 trait ShuffledJoin extends JoinCodegenSupport {
   def isSkewJoin: Boolean
 
-  private val fullOuterExpandLimit =
-    conf.getConf(SQLConf.FULL_OUTER_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT)
+  // Read on the first `outputPartitioning` call, which is during preparation, and carried through
+  // node copies in a tag, so a copy made at execution keeps the value its exchanges were planned
+  // against.
+  private lazy val fullOuterExpandLimit: Int =
+    getTagValue(ShuffledJoin.FULL_OUTER_EXPAND_LIMIT).getOrElse {
+      val limit = conf.getConf(SQLConf.FULL_OUTER_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT)
+      setTagValue(ShuffledJoin.FULL_OUTER_EXPAND_LIMIT, limit)
+      limit
+    }
 
   private lazy val canSpreadNullJoinKeys: Boolean = {
     // Only NULL keys on the preserved side of an outer or left anti join can create this skew:
@@ -144,7 +151,7 @@ trait ShuffledJoin extends JoinCodegenSupport {
    *  - the two sides are co-partitioned hash layouts, so the i-th expressions of the two sides are
    *    the two sides of one join key pair and hash into the same partition space;
    *  - every key evaluates to NULL on a NULL-padded row (see `isNullOnNullPadding`);
-   *  - every key is deterministic.
+   *  - every key is deterministic, which holds as a join condition cannot be non-deterministic.
    * A null-aware side may have spread its NULL-keyed rows, and those are exactly the rows whose
    * coalesced key contains a NULL, so the output is null-aware whenever either side is.
    *
@@ -227,21 +234,22 @@ trait ShuffledJoin extends JoinCodegenSupport {
 
   /**
    * Whether `Coalesce(leftKey, rightKey)` places every output row where its side placed it: both
-   * keys are deterministic and NULL on the rows that pad their side.
+   * keys are NULL on the rows that pad their side.
    */
   private def canCoalesce(leftKey: Expression, rightKey: Expression): Boolean =
-    leftKey.deterministic && rightKey.deterministic &&
-      isNullOnNullPadding(leftKey, left.outputSet) && isNullOnNullPadding(rightKey, right.outputSet)
+    isNullOnNullPadding(leftKey, left.outputSet) && isNullOnNullPadding(rightKey, right.outputSet)
 
   /**
    * Whether `e` is NULL whenever every attribute of `side` is NULL, as on the rows FULL OUTER
-   * pads with NULLs for that side. Conservative: an attribute of `side` is, and so is a
-   * null-intolerant expression over at least one such child. `coalesce(a.x, 0)` is not, since it
-   * is 0 on a padded row, which would put the coalesced key of an unmatched row of the other side
-   * on the wrong partition.
+   * pads with NULLs for that side. Conservative: an attribute of `side` is, so is a
+   * null-intolerant expression over at least one such child, and so is a `Coalesce` all of whose
+   * children are, such as the merged key of a lower FULL OUTER join. `coalesce(a.x, 0)` is not,
+   * since it is 0 on a padded row, which would put the coalesced key of an unmatched row of the
+   * other side on the wrong partition.
    */
   private def isNullOnNullPadding(e: Expression, side: AttributeSet): Boolean = e match {
     case a: Attribute => side.contains(a)
+    case c: Coalesce => c.children.forall(isNullOnNullPadding(_, side))
     case _ => e.nullIntolerant && e.children.exists(isNullOnNullPadding(_, side))
   }
 
@@ -267,6 +275,8 @@ trait ShuffledJoin extends JoinCodegenSupport {
 }
 
 object ShuffledJoin {
+  private val FULL_OUTER_EXPAND_LIMIT = TreeNodeTag[Int]("fullOuterExpandLimit")
+
   /**
    * Whether replicating the right side over splits of the left cannot change the result. The
    * right partition then reaches every left split, so no output row may come from a right row
