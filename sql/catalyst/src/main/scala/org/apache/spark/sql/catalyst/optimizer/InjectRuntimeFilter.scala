@@ -407,18 +407,19 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   }
 
   // Whether evaluating `e` cannot fail, also on rows that the join does not read. It asks
-  // `ExprUtils.canEvaluateUnconditionally`, after it replaces two wrappers that cannot fail either,
-  // over a child that cannot fail: a numeric up-cast, and the normalization that
-  // `NormalizeFloatingNumbers` puts around a floating point join key. Each is checked against its
-  // own child before anything is replaced, and its stand-in keeps its type. An `onlyInBroadcast`
-  // DPP filter counts too, since it finds no broadcast in the bloom filter's subquery and is `true`
-  // there.
+  // `ExprUtils.canEvaluateUnconditionally`, after it replaces, bottom-up, two wrappers that cannot
+  // fail either over a child that it takes: a numeric up-cast, and the normalization that
+  // `NormalizeFloatingNumbers` puts around a floating point join key. A stand-in keeps the type of
+  // what it replaces, so each wrapper is checked against a child of its own type. An
+  // `onlyInBroadcast` DPP filter counts too, since it finds no broadcast in the bloom filter's
+  // subquery and is `true` there.
   private def cannotFail(e: Expression): Boolean = e match {
     case dpp: DynamicPruningSubquery => dpp.onlyInBroadcast
-    case _ => ExprUtils.canEvaluateUnconditionally(e.transformDown {
-      case c: Cast if isNumericUpCast(c) && cannotFail(c.child) =>
+    case _ => ExprUtils.canEvaluateUnconditionally(e.transformUp {
+      case c: Cast if isNumericUpCast(c) && ExprUtils.canEvaluateUnconditionally(c.child) =>
         AttributeReference("upCast", c.dataType, c.nullable)()
-      case n @ KnownFloatingPointNormalized(NormalizeNaNAndZero(child)) if cannotFail(child) =>
+      case n @ KnownFloatingPointNormalized(NormalizeNaNAndZero(child))
+          if ExprUtils.canEvaluateUnconditionally(child) =>
         AttributeReference("normalized", n.dataType, n.nullable)()
     })
   }
@@ -442,18 +443,15 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   private def canEvaluateAgain(creationSide: FilterCreationSide): Boolean = {
     val evaluated =
       ColumnPruning(Project(Seq(Alias(creationSide.key, "key")()), creationSide.plan))
-    !evaluated.exists { node =>
-      node.references.exists {
-        case FileSourceMetadataAttribute(_) => true
-        case _ => false
-      } || (node match {
-        case Project(projectList, _) => !projectList.forall(e => cannotFail(trimAliases(e)))
-        case Filter(condition, _) => !splitConjunctivePredicates(condition).forall(cannotFail)
-        case _: CTERelationRef => true
-        case leaf: MaterializedLeafNode => !leaf.isOutputRepeatable
-        case _: LeafNode => false
-        case _ => true
-      })
+    !evaluated.exists {
+      case node if node.references.exists(a => FileSourceMetadataAttribute.isValid(a.metadata)) =>
+        true
+      case Project(projectList, _) => !projectList.forall(e => cannotFail(trimAliases(e)))
+      case Filter(condition, _) => !splitConjunctivePredicates(condition).forall(cannotFail)
+      case _: CTERelationRef => true
+      case leaf: MaterializedLeafNode => !leaf.isOutputRepeatable
+      case _: LeafNode => false
+      case _ => true
     }
   }
 

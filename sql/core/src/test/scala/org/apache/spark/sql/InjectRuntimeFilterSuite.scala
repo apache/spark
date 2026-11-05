@@ -358,7 +358,8 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
   // fewer with DPP shows that the rule kept them out. In the tests for a key or a creation side
   // that is not safe, that is master's bloom filter for a key without a DPP filter, which can fail
   // the query or drop rows there: SPARK-58486 (a collated key), SPARK-60808 (a creation side that
-  // can give other rows again) and SPARK-60809 (a key that can fail).
+  // can give other rows again), SPARK-60809 (a key that can fail) and SPARK-60842 (a creation side
+  // that can fail on rows that only the join's side drops).
   def assertBloomFilterWithoutDpp(query: String, numBloomFilters: Int = 1): Unit =
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false") {
       assert(bloomFilterKeys(query).size == numBloomFilters)
@@ -1146,7 +1147,7 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
         withSQLConf(SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
           assertRewroteWithBloomFilterForDroppedDpp(query)
         }
-        assertDidNotRewriteWithBloomFilter(query)
+        assert(bloomFilterKeys(query).isEmpty)
         assert(dynamicPruningFilters(query) == Seq(classOf[SubqueryBroadcastExec]))
       }
     }
@@ -1162,7 +1163,7 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     withDppTestConf() {
       // Without DPP, both `p.f5` and `t.f5` get a bloom filter.
       assertBloomFilterWithoutDpp(query, 2)
-      assertDidNotRewriteWithBloomFilter(query)
+      assert(bloomFilterKeys(query).isEmpty)
       // One of the DPP filters can read the broadcast through a reused subquery.
       val reuses = Set[Any](classOf[SubqueryBroadcastExec], classOf[ReusedSubqueryExec])
       val filters = dynamicPruningFilters(query)
@@ -1183,7 +1184,7 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       withDppTestConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "500",
           SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
         assertBloomFilterWithoutDpp(query)
-        assertDidNotRewriteWithBloomFilter(query)
+        assert(bloomFilterKeys(query).isEmpty)
         assert(dynamicPruningFilters(query).contains(classOf[SubqueryBroadcastExec]))
       }
     }
@@ -1205,7 +1206,7 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
         withDppTestConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
           // Without DPP, pushdown puts a bloom filter into each branch.
           assertBloomFilterWithoutDpp(query, 2)
-          assertDidNotRewriteWithBloomFilter(query)
+          assert(bloomFilterKeys(query).isEmpty)
           assert(dynamicPruningFilters(query).contains(classOf[SubqueryBroadcastExec]))
         }
       }
@@ -1249,7 +1250,7 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
           SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "1.0",
           SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
         assertBloomFilterWithoutDpp(query)
-        assertDidNotRewriteWithBloomFilter(query)
+        assert(bloomFilterKeys(query).isEmpty)
         assert(dynamicPruningFilters(query).contains(classOf[SubqueryBroadcastExec]))
       }
     }
@@ -1316,7 +1317,7 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       if (conf.adaptiveExecutionEnabled) {
         assertRewroteWithBloomFilterForDroppedDpp(query)
       } else {
-        assertDidNotRewriteWithBloomFilter(query)
+        assert(bloomFilterKeys(query).isEmpty)
         assert(dynamicPruningFilters(query) == Seq(classOf[SubqueryBroadcastExec]))
       }
     }
@@ -1354,16 +1355,16 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       "cast(reflect('java.lang.Math', 'random') as double) < 2.0) d on bf5part.f5 = d.c2"
     withDppTestConf() {
       assertBloomFilterWithoutDpp(query)
-      assertDidNotRewriteWithBloomFilter(query)
+      assert(bloomFilterKeys(query).isEmpty)
       assert(dynamicPruningFilters(query).isEmpty)
     }
   }
 
   test("SPARK-60702: do not add bloom filter whose creation side is a non-deterministic pruned " +
     "side") {
-    // The DPP filter on `d.k` has the deterministic build plan `f`, so it is dropped. `d` is too
-    // small to take a bloom filter, so `f` would take one, built from `d`, which is not
-    // deterministic (SPARK-60808).
+    // Nothing broadcasts `f`, the deterministic build plan of the DPP filter on `d.k`, so that
+    // filter is dropped. `d` is too small to take a bloom filter, so `f` would take one, built
+    // from `d`, which is not deterministic (SPARK-60808).
     withTable("ndd", "ndf") {
       spark.range(40).selectExpr("id as k", "id as w").write.partitionBy("k").saveAsTable("ndd")
       spark.range(40000).selectExpr("id % 40 as k", "id as v").write.saveAsTable("ndf")
@@ -1389,7 +1390,7 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     // at the join, since pushdown rewrites the bloom filter through it. And `coalesce` cannot be
     // null, so no inferred `isnotnull` evaluates the key on every partition first.
     // Through a union, every branch counts, and without DPP each gets a bloom filter. A narrowing
-    // cast can fail too, also over an up-cast.
+    // cast can fail too, also over an up-cast or under the normalization of a floating point key.
     Seq(
       "select * from bf5part join bf2 on bf5part.f5 + 1 = bf2.c2 where bf2.a2 = 36" -> 1,
       "select * from (select coalesce(f5 + 1, 0) as k, a5 from bf5part) p " +
@@ -1400,11 +1401,13 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       "select * from bf5part join bf2 on cast(bf5part.f5 as tinyint) = bf2.c2 " +
         "where bf2.a2 = 36" -> 1,
       "select * from bf5part join bf2 on cast(cast(bf5part.f5 as float) as int) = bf2.c2 " +
-        "where bf2.a2 = 36" -> 1
+        "where bf2.a2 = 36" -> 1,
+      "select * from bf5part join (select cast(c2 as double) k, a2 from bf2) d " +
+        "on cast(bf5part.f5 as tinyint) = d.k where d.a2 = 36" -> 1
     ).foreach { case (query, numBloomFilters) =>
       withDppTestConf() {
         assertBloomFilterWithoutDpp(query, numBloomFilters)
-        assertDidNotRewriteWithBloomFilter(query)
+        assert(bloomFilterKeys(query).isEmpty)
         val filters = dynamicPruningFilters(query)
         assert(filters.nonEmpty && filters.forall(_ == Literal.TrueLiteral), filters)
       }
@@ -1465,7 +1468,7 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       "where coalesce(bf2.a2, 0L) > 35.5D"
     withDppTestConf() {
       assertBloomFilterWithoutDpp(narrow)
-      assertDidNotRewriteWithBloomFilter(narrow)
+      assert(bloomFilterKeys(narrow).isEmpty)
       assertRewroteWithBloomFilterForDroppedDpp(wide)
     }
   }
@@ -1514,7 +1517,8 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       withDppTestConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
           SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "1") {
         assertBloomFilterWithoutDpp(query)
-        assertDidNotRewriteWithBloomFilter(query)
+        assert(bloomFilterKeys(query).isEmpty)
+        sql(query).collect()
       }
     }
   }
@@ -1535,7 +1539,8 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       withDppTestConf() {
         // Without DPP, pushdown puts a bloom filter into each of the three branches.
         assertBloomFilterWithoutDpp(query, 3)
-        assertDidNotRewriteWithBloomFilter(query)
+        assert(bloomFilterKeys(query).isEmpty)
+        sql(query).collect()
       }
     }
   }
@@ -1656,7 +1661,7 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       withDppTestConf(confs: _*) {
         // Without DPP, `f.a` and `c.q` get a bloom filter.
         assertBloomFilterWithoutDpp(castInKey, 2)
-        assertDidNotRewriteWithBloomFilter(castInKey)
+        assert(bloomFilterKeys(castInKey).isEmpty)
         assertBloomFilterWithoutDpp(castInFilter, 2)
         // The bloom filter goes to `c.t` instead, from `ra`, where nothing can fail.
         assertRewroteWithBloomFilter(castInFilter)
@@ -1676,7 +1681,7 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
         "join (select * from ra where x = 1) g on rx.k1 = g.a and rx.k2 = g.b"
       withDppTestConf(confs :+ (SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false"): _*) {
         assertBloomFilterWithoutDpp(query, 2)
-        assertDidNotRewriteWithBloomFilter(query)
+        assert(bloomFilterKeys(query).isEmpty)
       }
     }
   }
@@ -1759,13 +1764,13 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       assertRewroteWithBloomFilterForDroppedDpp(query("bf2"))
     }
     withDppTestConf(projection, SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
-      assertDidNotRewriteWithBloomFilter(query("bf3"))
+      assert(bloomFilterKeys(query("bf3")).isEmpty)
       assert(dynamicPruningFilters(query("bf3")) ==
         Seq(classOf[ProjectedBroadcastValueSubqueryExec]))
     }
     // AQE plans the projected filter as `true`, see SPARK-60703.
     withDppTestConf(projection, SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
-      assertDidNotRewriteWithBloomFilter(query("bf3"))
+      assert(bloomFilterKeys(query("bf3")).isEmpty)
       assert(dynamicPruningFilters(query("bf3")) == Seq(Literal.TrueLiteral))
     }
   }
