@@ -28,19 +28,19 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{BATCH_TIMESTAMP, ERROR}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.analysis.WidenStatefulOperatorAttributeNullability
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, CurrentBatchTimestamp, ExpressionWithRandomSeed}
+import org.apache.spark.sql.catalyst.expressions.{CurrentBatchTimestamp, ExpressionWithRandomSeed}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.{CommandExecutionMode, LocalLimitExec, ProjectExec, QueryExecution, SerializeFromObjectExec, SparkPlan, SparkPlanner, SparkStrategy => Strategy, UnaryExecNode}
+import org.apache.spark.sql.execution.{CommandExecutionMode, LocalLimitExec, QueryExecution, SerializeFromObjectExec, SparkPlan, SparkPlanner, SparkStrategy => Strategy, UnaryExecNode}
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, MergingSessionsExec, ObjectHashAggregateExec, SortAggregateExec, UpdatingSessionsExec}
 import org.apache.spark.sql.execution.datasources.v2.RealTimeStreamScanExec
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
 import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.python.streaming.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPySparkExec}
-import org.apache.spark.sql.execution.streaming.{ProjectAggregationBufferExec, StatefulStreamlineAggregateExec, StreamingErrors, StreamingQueryPlanTraverseHelper}
+import org.apache.spark.sql.execution.streaming.{AnnotateStreamingJoinStateValueAttributes, ProjectAggregationBufferExec, StatefulStreamlineAggregateExec, StreamingErrors, StreamingQueryPlanTraverseHelper}
 import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, OffsetSeqMetadata, OffsetSeqMetadataBase}
 import org.apache.spark.sql.execution.streaming.operators.stateful.{SessionWindowStateStoreRestoreExec, SessionWindowStateStoreSaveExec, StatefulOperator, StatefulOperatorStateInfo, StateStoreRestoreExec, StateStoreSaveExec, StateStoreWriter, StreamingDeduplicateExec, StreamingDeduplicateWithinWatermarkExec, StreamingGlobalLimitExec, StreamingLocalLimitExec, UpdateEventTimeColumnExec}
 import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.FlatMapGroupsWithStateExec
@@ -150,7 +150,8 @@ class IncrementalExecution(
         ts.toLiteral
       case e: ExpressionWithRandomSeed => e.withNewSeed(Utils.random.nextLong())
     }
-    WidenStatefulOperatorAttributeNullability(optimized)
+    AnnotateStreamingJoinStateValueAttributes(
+      WidenStatefulOperatorAttributeNullability(optimized))
   }
 
   // Use `this` for explain so the already-open transaction and executedPlan are reused.
@@ -466,38 +467,6 @@ class IncrementalExecution(
         l.copy(
           stateInfo = Some(nextStatefulOperationStateInfo()),
           outputMode = Some(outputMode))
-    }
-  }
-
-  /**
-   * Watermarked attributes needed only for late-row filtering do not need to be buffered in join
-   * state. For the initial implementation, compact a join only when a direct parent projection
-   * proves which join outputs are used. Other plan shapes retain the full input schema.
-   */
-  object JoinStateValueAttributesRule extends Rule[SparkPlan] {
-    private def compactStateValues(
-        input: Seq[Attribute],
-        required: AttributeSet): Seq[Attribute] = {
-      val compacted = input.filter { attr =>
-        !attr.metadata.contains(EventTimeWatermark.delayKey) || required.contains(attr)
-      }
-      if (compacted.nonEmpty) compacted else input
-    }
-
-    override def apply(plan: SparkPlan): SparkPlan = plan transformUp {
-      case project @ ProjectExec(projectList, join: StreamingSymmetricHashJoinExec) =>
-        val requiredByParent = AttributeSet(projectList.flatMap(_.references))
-        val required = requiredByParent ++ join.references
-        val leftValues = compactStateValues(join.left.output, required)
-        val rightValues = compactStateValues(join.right.output, required)
-        if (leftValues == join.leftValueAttributes &&
-            rightValues == join.rightValueAttributes) {
-          project
-        } else {
-          project.copy(child = join.copy(
-            leftStateValueAttributes = Some(leftValues),
-            rightStateValueAttributes = Some(rightValues)))
-        }
     }
   }
 
@@ -875,10 +844,9 @@ class IncrementalExecution(
   }
 
   override def preparations: Seq[Rule[SparkPlan]] =
-    Seq(JoinStateValueAttributesRule, state) ++
-      super.preparations ++
-      Seq(PrepareTransformWithStateInitialStateForRealTimeMode,
-        MarkPipelinedShuffleForRealTimeMode)
+    state +: (super.preparations :+
+      PrepareTransformWithStateInitialStateForRealTimeMode :+
+      MarkPipelinedShuffleForRealTimeMode)
 
   /** no need to try-catch again as this is already done once */
   override def assertAnalyzed(): Unit = analyzed

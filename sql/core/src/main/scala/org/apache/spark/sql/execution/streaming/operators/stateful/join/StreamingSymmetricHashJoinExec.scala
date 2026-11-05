@@ -159,14 +159,37 @@ case class StreamingSymmetricHashJoinExec(
       condition: Option[Expression],
       stateFormatVersion: Int,
       left: SparkPlan,
-      right: SparkPlan) = {
+      right: SparkPlan,
+      leftStateValueAttributes: Option[Seq[Attribute]],
+      rightStateValueAttributes: Option[Seq[Attribute]]) = {
 
     this(
       leftKeys, rightKeys, joinType, JoinConditionSplitPredicates(condition, left, right),
       stateInfo = None,
       eventTimeWatermarkForLateEvents = None, eventTimeWatermarkForEviction = None,
       stateWatermarkPredicates = JoinStateWatermarkPredicates(), stateFormatVersion, left, right,
-      None, None, None)
+      None, leftStateValueAttributes, rightStateValueAttributes)
+  }
+
+  def this(
+      leftKeys: Seq[Expression],
+      rightKeys: Seq[Expression],
+      joinType: JoinType,
+      condition: Option[Expression],
+      stateFormatVersion: Int,
+      left: SparkPlan,
+      right: SparkPlan) = {
+
+    this(
+      leftKeys,
+      rightKeys,
+      joinType,
+      condition,
+      stateFormatVersion,
+      left,
+      right,
+      None,
+      None)
   }
 
   val leftValueAttributes: Seq[Attribute] = leftStateValueAttributes.getOrElse(left.output)

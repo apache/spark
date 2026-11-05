@@ -33,9 +33,11 @@ import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.plans.{LeftOuter, RightOuter}
+import org.apache.spark.sql.catalyst.plans.logical.Join
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.execution.streaming.StreamingJoinStateValueAttributes
 import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorStateInfo
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.{StreamingSymmetricHashJoinExec, StreamingSymmetricHashJoinHelper}
@@ -376,6 +378,10 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
       MultiAddData(leftInput, (1, 1000000L))(rightInput, (1, 1000000L)),
       CheckNewAnswer(1),
       Execute { query =>
+        assert(query.lastExecution.optimizedPlan.exists {
+          case join: Join => StreamingJoinStateValueAttributes.get(join).nonEmpty
+          case _ => false
+        })
         val join = query.lastExecution.executedPlan.collectFirst {
           case join: StreamingSymmetricHashJoinExec => join
         }.get

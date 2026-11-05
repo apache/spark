@@ -44,6 +44,7 @@ import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, Stre
 import org.apache.spark.sql.execution.exchange.{REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.python._
 import org.apache.spark.sql.execution.python.streaming.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPySparkExec}
+import org.apache.spark.sql.execution.streaming.StreamingJoinStateValueAttributes
 import org.apache.spark.sql.execution.streaming.operators.stateful.{EventTimeWatermarkExec, StreamingDeduplicateExec, StreamingDeduplicateWithinWatermarkExec, StreamingGlobalLimitExec, StreamingLocalLimitExec, UpdateEventTimeColumnExec}
 import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.FlatMapGroupsWithStateExec
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinExec
@@ -597,13 +598,31 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   }
 
   object StreamingJoinStrategy extends Strategy {
+    private def attributesAtOrdinals(
+        output: Seq[Attribute],
+        stateValueOrdinals: Seq[Int]): Seq[Attribute] = {
+      require(stateValueOrdinals.forall(ordinal => ordinal >= 0 && ordinal < output.length))
+      stateValueOrdinals.map(output)
+    }
+
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = {
       plan match {
-        case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, otherCondition, _,
+        case join @ ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, otherCondition, _,
               left, right, _) if left.isStreaming && right.isStreaming =>
           val stateVersion = conf.getConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION)
-          new StreamingSymmetricHashJoinExec(leftKeys, rightKeys, joinType, otherCondition,
-            stateVersion, planLater(left), planLater(right)) :: Nil
+          val stateValueAttributes = StreamingJoinStateValueAttributes.get(join)
+          new StreamingSymmetricHashJoinExec(
+            leftKeys,
+            rightKeys,
+            joinType,
+            otherCondition,
+            stateVersion,
+            planLater(left),
+            planLater(right),
+            stateValueAttributes.map(value =>
+              attributesAtOrdinals(left.output, value.leftStateValueOrdinals)),
+            stateValueAttributes.map(value =>
+              attributesAtOrdinals(right.output, value.rightStateValueOrdinals))) :: Nil
 
         case Join(left, right, _, _, _) if left.isStreaming && right.isStreaming =>
           throw QueryCompilationErrors.streamJoinStreamWithoutEqualityPredicateUnsupportedError(
