@@ -78,12 +78,12 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
       // subexpression elimination
       val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(exprs)
       val genVars = ctx.withSubExprEliminationExprs(subExprs.states) {
-        exprs.map(_.genCode(ctx))
+        ctx.generateOutputsWithWholeStageSplit(exprs)
       }
       (ctx.evaluateSubExprEliminationState(subExprs.states.values), genVars,
         subExprs.exprCodesNeedEvaluate)
     } else {
-      ("", exprs.map(_.genCode(ctx)), Seq.empty)
+      ("", ctx.generateOutputsWithWholeStageSplit(exprs), Seq.empty)
     }
 
     // Evaluation of non-deterministic expressions can't be deferred.

@@ -2397,18 +2397,24 @@ class WholeStageCodegenSuite extends SharedSparkSession
     // reading only `k` could be and the CASE WHEN is recorded. The common subexpressions beside
     // it take the split pass of subexpression elimination, whose discarded first pass leaves
     // helpers in the code in one piece that the split generation removes, so the two differ;
-    // still only the code in one piece is compiled, and kept.
+    // still only the code in one piece is compiled, and kept. They are all one output, so the
+    // projection has no outputs to split either.
     withTempPath { path =>
       spark.range(10).selectExpr("id % 300 AS k" +: (0 to 75).map(i => s"id + $i AS c$i"): _*)
         .write.parquet(path.getCanonicalPath)
       val branches = (0 until 150).map { i =>
         if (i % 2 == 0) s"WHEN k = $i THEN k * ${1000 + i}" else s"WHEN k = $i THEN c${i / 2}"
       }.mkString(" ")
-      val common = commonSubexprColumns("k", "s")
+      val common = (0 until 8).map { i =>
+        val repeated = s"cast(array(k, k + $i, k * 2) AS STRING)"
+        s"concat($repeated, $repeated)"
+      }
       // So that no decision is remembered for this code yet.
       val salt = System.nanoTime()
-      def df: DataFrame = spark.read.parquet(path.getCanonicalPath)
-        .selectExpr(s"CASE $branches ELSE c75 END AS v" +: s"${salt}L AS salt" +: common: _*)
+      def df: DataFrame = spark.read.parquet(path.getCanonicalPath).selectExpr(
+        s"concat_ws(',', CAST(CASE $branches ELSE c75 END AS STRING), ${common.mkString(", ")}) " +
+          "AS v",
+        s"${salt}L AS salt")
       val stage = stageOf(df)
       val recorded = stage.generate(WholeStageSplit.Record)
       assert(recorded._1.wholeStageSplitsRecorded.nonEmpty)
@@ -2813,8 +2819,11 @@ class WholeStageCodegenSuite extends SharedSparkSession
           def df: DataFrame = sql(s"SELECT id, CASE $branches ELSE length(value) END AS v " +
             "FROM t UNPIVOT (value FOR name IN (a, b))")
           assert(splitsCaseWhen(df))
+          // The slot is in the compacted array of its type, which is named after the operator
+          // that added the first state of that type: `ExpandExec`, or the projection below it,
+          // whose string outputs are split too.
           assert(genCode(df).exists { c =>
-            methodsHolding(c, "expand_mutableStateArray").exists(_.contains("caseWhen"))
+            methodsHolding(c, "_mutableStateArray").exists(_.contains("caseWhen"))
           })
           assert(splitCaseWhenParameters(df).flatten.forall(!_.contains("mutableStateArray")))
           checkAnswer(df, withoutWholeStage(df))
@@ -2844,6 +2853,142 @@ class WholeStageCodegenSuite extends SharedSparkSession
       checkAnswer(df, withoutWholeStage(df))
       withSQLConf(SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS.key -> "false") {
         assert(genCode(df).exists(c => stringParameter.findFirstIn(c.body).nonEmpty))
+      }
+    }
+  }
+
+  /** The parameters of each method a projection's output of `df`'s stages was split into. */
+  private def splitOutputParameters(df: DataFrame): Seq[Seq[String]] = genCode(df).flatMap { c =>
+    "private void \\w*output_\\d+\\(([^)]*)\\)".r.findAllMatchIn(c.body).map { m =>
+      m.group(1).split(",").map(_.trim).filter(_.nonEmpty).toSeq
+    }
+  }
+
+  /**
+   * `n` string columns `c1` to `cn` over the columns `id` and `s`, each an ordinary expression
+   * reading both, whose code adds up past HotSpot's 8000 bytes in one method from about 40.
+   */
+  private def wideProjection(n: Int): Seq[String] = (1 to n).map { i =>
+    s"concat_ws('-', upper(s), lower(s), cast(id + $i as string), substring(s, $i, 3), " +
+      s"cast(id * $i % 7 as string)) AS c$i"
+  }
+
+  /**
+   * Runs `body` with the columns `id` and `s` of ten rows read from a file, so that a projection
+   * over them is a single operator.
+   */
+  private def withIdAndS(body: (() => DataFrame) => Unit): Unit = withTempPath { path =>
+    spark.range(10).selectExpr("id", "cast(id as string) AS s").write.parquet(path.getCanonicalPath)
+    body(() => spark.read.parquet(path.getCanonicalPath))
+  }
+
+  test("SPARK-60431: a wide projection is split into a method per output") {
+    // No output is large, but the stage generates all of them into one method, which at 50
+    // outputs is past the 8000 bytes HotSpot compiles: the stage runs interpreted, several times
+    // slower than without whole stage codegen. Split, every method of the stage is compiled.
+    withIdAndS { input =>
+      def df: DataFrame = input().selectExpr(wideProjection(50): _*)
+      assert(splitOutputParameters(df).length == 50)
+      assert(maxStageMethodSize(df) <= CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT)
+      checkAnswer(df, withoutWholeStage(df))
+      withSQLConf(SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS.key -> "false") {
+        assert(splitOutputParameters(df).isEmpty)
+        assert(maxStageMethodSize(df) > CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT)
+      }
+    }
+  }
+
+  test("SPARK-60431: a projection the JIT compiles whole keeps the code it had") {
+    withIdAndS { input =>
+      def df: DataFrame = input().selectExpr(wideProjection(5): _*)
+      val off = withSQLConf(SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS.key -> "false") {
+        genCode(df).map(_.body)
+      }
+      assert(genCode(df).map(_.body) === off)
+      assert(recordedSplits(df) == 1)
+      assert(withSplitAlways(splitOutputParameters(df)).length == 5)
+      checkAnswer(df, withoutWholeStage(df))
+    }
+  }
+
+  test("SPARK-60431: an output that only passes on an input or a literal stays in place") {
+    withSplitAlways {
+      withIdAndS { input =>
+        def df: DataFrame = input().selectExpr("id", "s", "42 AS k", "upper(s) AS u", "id + 1 AS n")
+        assert(splitOutputParameters(df).length == 2)
+        checkAnswer(df, withoutWholeStage(df))
+      }
+    }
+  }
+
+  test("SPARK-60431: a split output is evaluated no earlier than without the split") {
+    // The projection is nondeterministic, so the filter stays above it, and evaluates `d` only
+    // for the rows it keeps. Evaluating `d` for every row, as a method computing several outputs
+    // ahead of the filter would, divides by zero.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withSplitAlways {
+        def df: DataFrame = spark.range(10)
+          .selectExpr("id", "rand(1) AS r", "10 DIV (id - 5) AS d",
+            "upper(cast(id as string)) AS u")
+          .where("id != 5")
+          .select("id", "d", "u")
+        assert(df.queryExecution.executedPlan.exists(_.isInstanceOf[FilterExec]))
+        assert(splitOutputParameters(df).nonEmpty)
+        checkAnswer(df, (0L until 10L).filter(_ != 5).map { i =>
+          Row(i, 10 / (i - 5), i.toString)
+        })
+      }
+    }
+  }
+
+  test("SPARK-60431: a split output's method takes the inputs it reads") {
+    withSplitAlways {
+      // Read from a file, so the inputs are nullable columns the projection evaluates only where
+      // an output reads them: each output's method takes the one column it reads, evaluated
+      // ahead of its call. `upper(s)`, in two outputs, is a common subexpression, whose local
+      // variables the methods of both take.
+      withTempPath { path =>
+        spark.range(100)
+          .selectExpr("if(id % 7 = 0, null, cast(id as string)) AS s",
+            "if(id % 11 = 0, null, id) AS k", "id AS j")
+          .write.parquet(path.getCanonicalPath)
+        def df: DataFrame = spark.read.parquet(path.getCanonicalPath)
+          .selectExpr("k * 2 AS a", "concat(upper(s), 'x') AS b", "concat(upper(s), 'y') AS c",
+            "j + 1 AS d")
+        val params = splitOutputParameters(df)
+        assert(params.length == 4)
+        assert(params.forall(p => p.nonEmpty && p.length <= 3), params)
+        checkAnswer(df, withoutWholeStage(df))
+      }
+    }
+  }
+
+  test("SPARK-60431: split outputs under the operators consuming them") {
+    // The consumer decides where each output is evaluated: at the end of the stage, in an
+    // aggregate's update, a join's probe, an expand's projections, or a generator's loop.
+    withSplitAlways {
+      withTempView("w", "dim") {
+        spark.range(200).selectExpr("id", "cast(id as string) AS s")
+          .selectExpr(wideProjection(12) :+ "id % 10 AS g" :+ "id": _*)
+          .createOrReplaceTempView("w")
+        spark.range(10).selectExpr("id AS g", "cast(id * 3 as string) AS name")
+          .createOrReplaceTempView("dim")
+        val queries = Seq(
+          "SELECT * FROM w",
+          "SELECT g, count(c1), max(c7), sum(length(c12)) FROM w GROUP BY g",
+          "SELECT w.c3, w.c9, dim.name FROM w JOIN dim ON w.g = dim.g",
+          "SELECT /*+ SHUFFLE_MERGE(dim) */ w.c2, dim.name FROM w JOIN dim ON w.g = dim.g",
+          "SELECT g, c1, count(*) FROM w GROUP BY ROLLUP(g, c1)",
+          "SELECT c4, explode(array(c5, c6)) FROM w",
+          "SELECT c1, c2 FROM w WHERE c3 LIKE '%-1%' ORDER BY c1 LIMIT 5")
+        queries.foreach { q =>
+          checkAnswer(sql(q), withoutWholeStage(sql(q)))
+        }
+        withSQLConf(SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "false") {
+          queries.foreach { q =>
+            checkAnswer(sql(q), withoutWholeStage(sql(q)))
+          }
+        }
       }
     }
   }
