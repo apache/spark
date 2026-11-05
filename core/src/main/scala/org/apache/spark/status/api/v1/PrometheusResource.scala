@@ -113,7 +113,18 @@ private[spark] object PrometheusResource {
     val jerseyContext = new ServletContextHandler(ServletContextHandler.NO_SESSIONS)
     jerseyContext.setContextPath("/metrics")
     val holder: ServletHolder = new ServletHolder(classOf[ServletContainer])
-    holder.setInitParameter(ServerProperties.PROVIDER_PACKAGES, "org.apache.spark.status.api.v1")
+    // Register the JAX-RS resources explicitly by class name instead of scanning
+    // the package. Package scanning (PROVIDER_PACKAGES) relies on the classpath
+    // being enumerable from the filesystem, which fails when spark-core is loaded
+    // from a non-scannable location (e.g. an OSGi bundle where resources are
+    // exposed as "bundleresource://" URLs, or a shaded/modular classpath). The
+    // root resource PrometheusResource and the JacksonMessageWriter provider are
+    // sufficient for this endpoint.
+    holder.setInitParameter(
+      ServerProperties.PROVIDER_CLASSNAMES,
+      Seq(
+        classOf[PrometheusResource].getName,
+        classOf[JacksonMessageWriter].getName).mkString(","))
     UIRootFromServletContext.setUiRoot(jerseyContext, uiRoot)
     jerseyContext.addServlet(holder, "/*")
     jerseyContext
