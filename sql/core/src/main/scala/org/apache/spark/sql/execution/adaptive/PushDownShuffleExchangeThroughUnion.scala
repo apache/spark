@@ -216,6 +216,9 @@ case class PushDownShuffleExchangeThroughUnion(
       case shuffle @ ShuffleExchangeExec(partitioning, child, ENSURE_REQUIREMENTS, _, _)
           if found.isEmpty && supportPushDown(partitioning) =>
         findPushableShuffle(child, lookThrough, Some(shuffle))
+      // AttributeMap keeps the last duplicate exprId, while runtime binding uses the first.
+      // Positional rebinding is ambiguous for these unions, so retain their exchange.
+      case union: UnionExec if union.output.map(_.exprId).distinct.size != union.output.size => None
       // Below it: the operators this rule can cross, down to the union the shuffle is moved past.
       case union: UnionExec =>
         found.map(PushableChild(_, union))
