@@ -39,6 +39,9 @@ trait SupportsCatalystFilterGuarantees extends Table {
    * remaining columns must also be returned by
    * [[SupportsRuntimeCatalystFiltering.filterAttributes]].
    * A root struct declares support for predicates over every nested field.
+   *
+   * This declaration takes precedence over
+   * [[SupportsRuntimeCatalystFiltering.fullyPushedFilterAttributes]].
    */
   def fullyPushedFilterAttributes(): Array[NamedReference] = Array.empty
 

@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, DynamicPruning, DynamicPruningExpression, EqualTo, Expression, GetStructField, GreaterThan, Literal, RLike}
+import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, AttributeSet, DynamicPruning, DynamicPruningExpression, EqualTo, Expression, GetStructField, GreaterThan, Literal, RLike}
 import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
 import org.apache.spark.sql.connector.catalog.{
   Column,
@@ -182,6 +182,37 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
       val pruned = relation.copy(scan = scan, output = relation.output.filter(_.name == "id"))
       assert(pruned.runtimeFilterAttrs.isEmpty)
       assert(pruned.fullyPushedRuntimeFilterAttrs.isEmpty)
+    }
+  }
+
+  test("deprecated scan fully pushed filter attributes are a fallback for the table declaration") {
+    val tbl = s"$catalogName.tbl_scan_fully_pushed"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Source PARTITIONED BY (part)")
+      val relation = sql(s"SELECT * FROM $tbl").queryExecution.optimizedPlan.collectFirst {
+        case r: DataSourceV2ScanRelation => r
+      }.getOrElse(fail("Expected a DataSourceV2ScanRelation"))
+      val source = relation.relation.table
+      val table = new Table {
+        override def name(): String = source.name()
+        override def columns(): Array[Column] = source.columns()
+        override def capabilities() = source.capabilities()
+      }
+      val scan = new SupportsRuntimeCatalystFiltering {
+        override def readSchema(): StructType = relation.scan.readSchema()
+        override def filterAttributes(): Array[NamedReference] =
+          Array(FieldReference("id"), FieldReference("part"))
+        override def fullyPushedFilterAttributes(): Array[NamedReference] =
+          Array(FieldReference("id"))
+        override def filter(expressions: Array[Expression]): Unit = {}
+      }
+      val legacy = relation.copy(relation = relation.relation.copy(table = table), scan = scan)
+      assert(legacy.fullyPushedRuntimeFilterAttrs ==
+        AttributeSet(relation.output.filter(_.name == "id")))
+      val migrated = withFullyPushedFilterAttributes(legacy, FieldReference("part"))
+      assert(migrated.fullyPushedRuntimeFilterAttrs ==
+        AttributeSet(relation.output.filter(_.name == "part")))
+      assert(withFullyPushedFilterAttributes(legacy).fullyPushedRuntimeFilterAttrs.isEmpty)
     }
   }
 
