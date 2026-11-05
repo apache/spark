@@ -654,6 +654,19 @@ def find_merge_commit(pr_num, pr_events):
     survives only as a `referenced` event. Prefer the `closed` commit, which GitHub itself
     linked; otherwise fall back to `referenced` events, which are also raised by any commit
     merely mentioning the PR, so confirm each against the merge footer `merge_pr` generates.
+
+    A GitHub squash-button merge, e.g. #52460 or #47309, links its commit to the `merged`
+    event, which is not read; its `closed` event has no commit, and its message has no merge
+    footer, so a `referenced` event for the commit, as #47309 has, does not count either:
+
+    >>> from unittest.mock import patch
+    >>> events = [{"event": "merged", "commit_id": "s", "created_at": "t1"},
+    ...           {"event": "closed", "commit_id": None, "created_at": "t1"},
+    ...           {"event": "referenced", "commit_id": "s", "created_at": "t2"}]
+    >>> squash = {"commit": {"message": "[SPARK-1][SQL] Fix (#1)\\n\\nBody"}}
+    >>> with patch.dict(find_merge_commit.__globals__, get_json=lambda url: squash):
+    ...     find_merge_commit(1, events)
+    (None, None)
     """
 
     def message_of(commit_hash):
@@ -676,14 +689,18 @@ def committed_title(pr_num: Union[int, str], message: Optional[str]) -> Optional
     That is the title that was committed, and a backport run reads it for the JIRA update
     instead of the current PR title, which may have been edited since the merge. It is
     used only when the merge footer of ``message`` closes ``pr_num``; otherwise this
-    returns None, and the PR title is used as before, e.g. for a commit made with the GitHub
-    squash button, whose subject ends with ``(#N)``, or a commit of another PR.
+    returns None, and the PR title is used as before, e.g. for a commit of another PR that
+    :func:`find_merge_commit` takes from the PR's ``closed`` event. A commit made with the
+    GitHub squash button, whose subject ends with ``(#N)``, does not get here: GitHub links
+    it to the PR's ``merged`` event, not its ``closed`` event, and it has no merge footer,
+    so :func:`find_merge_commit` does not find it.
 
     >>> footer = "\\n\\nBody\\n\\nCloses #1 from a/b.\\n\\nAuthored-by: A <a@e.org>"
     >>> committed_title(1, 'Revert "Revert "[SPARK-1][SQL] Fix"" \\r' + footer)
     'Revert "Revert "[SPARK-1][SQL] Fix""'
     >>> committed_title("1", "[SPARK-1][SQL] Fix" + footer)
     '[SPARK-1][SQL] Fix'
+    >>> # A squash-button message has no merge footer, so it gives None.
     >>> committed_title(1, 'Revert "[SPARK-1][SQL] Fix" (#1)\\n\\nBody') is None
     True
     >>> committed_title(1, "[SPARK-2][SQL] Other" + footer.replace("#1", "#2")) is None
@@ -2099,8 +2116,10 @@ def committed_title_notice(subject: str, pr_title: str) -> Optional[str]:
     Both are compared by :func:`jira_action`: whether JIRA is skipped, and if not, which
     tickets and in which direction. The components are not compared: they differ whenever
     one was entered at the merge prompt, and are only reconciled with an unresolved ticket.
-    A resolve of a ticket that is already resolved as Fixed only adds fix versions, and a
-    ticket resolved other than as Fixed is left as is (see :func:`get_jira_issue`).
+    A resolve of a ticket that is already resolved as Fixed offers to add fix versions, and
+    may offer to correct the Affects Version/s, without reconciling components (see
+    :func:`resolve_jira_issue`); a ticket resolved other than as Fixed is left as is (see
+    :func:`get_jira_issue`).
 
     >>> print(committed_title_notice(
     ...     'Revert "Revert "[SPARK-1][SQL] Fix""', ' Revert "[SPARK-1][SQL] Fix" '))
@@ -2175,17 +2194,17 @@ def jira_title_for_backport(
     """Return the title that the JIRA update of a backport reads, given ``title`` from
     :func:`title_for_run` and the merge commit ``message``.
 
-    When the commit has no merge footer of the PR, ``title`` is the prepared PR title and
-    is returned silently. Otherwise ``title`` is the committed subject (see
-    :func:`committed_title`). When the current PR title would update JIRA differently (see
-    :func:`committed_title_notice`), e.g. because it was edited after the merge, or because
-    a tag such as [FOLLOWUP] was entered at the merge prompt, the notice is printed, and the
-    committer may choose the PR title instead, e.g. after fixing a wrong JIRA id in it. The
-    PR title is then used as is, apart from surrounding whitespace: it is not prepared, so
-    no component is asked for, and it is not checked with :func:`check_wrapped_title`; the
-    notice has shown what it would do. When JIRA is disabled, the notice is printed without
-    the question, so the committer knows which title to reconcile by hand. In every other
-    case ``title`` is returned silently.
+    When the commit has no merge footer of the PR, e.g. another PR's merge commit, ``title``
+    is the prepared PR title and is returned silently. Otherwise ``title`` is the committed
+    subject (see :func:`committed_title`). When the current PR title would update JIRA
+    differently (see :func:`committed_title_notice`), e.g. because it was edited after the
+    merge, or because a tag such as [FOLLOWUP] was entered at the merge prompt, the notice
+    is printed, and the committer may choose the PR title instead, e.g. after fixing a wrong
+    JIRA id in it. The PR title is then used as is, apart from surrounding whitespace: it is
+    not prepared, so no component is asked for, and it is not checked with
+    :func:`check_wrapped_title`; the notice has shown what it would do. When JIRA is
+    disabled, the notice is printed without the question, so the committer knows which title
+    to reconcile by hand. In every other case ``title`` is returned silently.
 
     >>> from unittest.mock import Mock, patch
     >>> footer = "\\n\\nBody\\n\\nCloses #1 from a/b.\\n\\nAuthored-by: A <a@e.org>"
@@ -2210,7 +2229,8 @@ def jira_title_for_backport(
     ('[SPARK-1][SQL] Fix', True)
     >>> choose("y", "[SPARK-1][sql] Fixed")
     ('[SPARK-1][SQL] Fix', False)
-    >>> choose("y", "[SPARK-2][SQL] Fix", message="[SPARK-1][SQL] Fix (#1)\\n\\nBody")
+    >>> other_pr = "[SPARK-3][SQL] Other" + footer.replace("#1", "#3")
+    >>> choose("y", "[SPARK-2][SQL] Fix", message=other_pr)
     ('[SPARK-1][SQL] Fix', False)
     >>> choose("y", "[SPARK-2][SQL] Fix", disabled=True)  # doctest: +ELLIPSIS
     <BLANKLINE>
@@ -2867,7 +2887,7 @@ def title_for_run(pr_num: Union[int, str], raw_title: str, message: Optional[str
     ('prepared', True, True)
     >>> run("[SPARK-1][CORE] Fix" + footer)
     ('[SPARK-1][CORE] Fix', False, False)
-    >>> run("[SPARK-1][CORE] Fix (#1)\\n\\nBody")
+    >>> run("[SPARK-3][SQL] Other" + footer.replace("#1", "#3"))
     ('prepared', True, False)
     """
     subject = committed_title(pr_num, message)
@@ -3795,6 +3815,120 @@ __test__ = {
     pass
     pass
     pass
+    """,
+    "main_titles": """
+    main() hands the title that title_for_run() returns to the commit, the JIRA checks, and
+    the JIRA update: on a merge the prepared title, with a component entered at the prompt;
+    on a backport of a commit with the PR's merge footer, the committed subject, or, when
+    the current PR title would update JIRA differently and the committer answers y at the
+    question printed after the cherry-picks, right before the JIRA update, the current PR
+    title; and on a backport without that footer, the prepared current PR title. Every
+    GitHub, git, and JIRA call is mocked. Each run prints what it does, and returns the
+    title that update_jira_for_pr() receives, the title committed and checked against
+    JIRA (None on a backport), whether a component was asked for, and the exit code.
+
+    >>> import sys
+    >>> from unittest.mock import Mock, patch
+    >>> footer = "\\n\\nBody\\n\\nCloses #1 from x/h.\\n\\nAuthored-by: X <x@x>"
+    >>> def run(pr_title, message=None, answer="n"):
+    ...     pr = {"url": "u", "title": pr_title, "draft": False, "body": "b",
+    ...           "base": {"ref": "master"}, "user": {"login": "x"}, "head": {"ref": "h"},
+    ...           "state": "open" if message is None else "closed", "mergeable": True}
+    ...     def get_json(url):
+    ...         if url.endswith("/branches"):
+    ...             return [{"name": "master"}, {"name": "branch-4.x"}]
+    ...         if url.endswith("/pulls/1"):
+    ...             return pr
+    ...         if url.endswith("/users/x"):
+    ...             return {"name": "X", "email": "x@x", "id": 1}
+    ...         return []
+    ...     def ask(prompt, *args, **kwargs):
+    ...         if prompt.startswith("Update JIRA from the current PR title"):
+    ...             print("asked: use the current PR title?")
+    ...             return answer
+    ...         if "into another branch" in prompt and message is not None:
+    ...             print("asked: pick another?")
+    ...         return "n"
+    ...     prompt = Mock(return_value=["CORE"])
+    ...     update = Mock(side_effect=lambda *args: print("JIRA update"))
+    ...     merge, check = Mock(return_value="abc"), Mock()
+    ...     pick = Mock(side_effect=lambda *a, **k: print("picked") or [("branch-4.x", "d")])
+    ...     found = (None, None) if message is None else ("abc", message)
+    ...     with (
+    ...         patch.object(sys, "argv", ["merge_spark_pr.py", "1"]), patch("os.chdir"),
+    ...         patch.dict(main.__globals__, DRY_RUN_ENV=False, check_script_up_to_date=Mock(),
+    ...                    initialize_jira=Mock(), asf_jira=Mock(), jira_disabled=False,
+    ...                    clean_up=Mock(), get_current_ref=Mock(return_value="master"),
+    ...                    get_json=get_json, find_merge_commit=Mock(return_value=found),
+    ...                    git=Mock(), github=Mock(), check_linked_jira_issues=check,
+    ...                    continue_maybe=Mock(), get_input=ask, merge_pr=merge,
+    ...                    post_merge_comment=Mock(), prompt_for_components=prompt,
+    ...                    branches_with_merge_footer=Mock(return_value=[]),
+    ...                    default_pick_branch=Mock(return_value="branch-4.x"),
+    ...                    cherry_pick=pick, update_jira_for_pr=update, print=Mock(),
+    ...                    print_error=lambda msg: print(msg.splitlines()[0])),
+    ...     ):
+    ...         code = None
+    ...         try:
+    ...             main()
+    ...         except SystemExit as e:
+    ...             code = e.code
+    ...     committed = merge.call_args.args[2] if merge.called else None
+    ...     assert committed == (check.call_args.args[1] if check.called else None)
+    ...     return update.call_args.args[1], committed, prompt.called, code
+
+    A merge commits, checks, and updates JIRA from the prepared title:
+
+    >>> run("[SPARK-1] Fix")
+    JIRA update
+    ('[SPARK-1][CORE] Fix', '[SPARK-1][CORE] Fix', True, None)
+
+    A backport of a commit with the PR's merge footer reads the committed subject without
+    preparing the current PR title, whether the PR title is the same, differs only in how a
+    tag is spelled, or also lacks the component entered at the merge prompt:
+
+    >>> run("[SPARK-1][SQL] Fix", "[SPARK-1][SQL] Fix" + footer)
+    picked
+    asked: pick another?
+    JIRA update
+    ('[SPARK-1][SQL] Fix', None, False, 0)
+    >>> run("[SPARK-1][CORE][TESTS] Fix", "[SPARK-1][CORE][TEST] Fix" + footer)
+    picked
+    asked: pick another?
+    JIRA update
+    ('[SPARK-1][CORE][TEST] Fix', None, False, 0)
+    >>> run("[SPARK-1][TESTS] Fix", "[SPARK-1][CORE][TEST] Fix" + footer)
+    picked
+    asked: pick another?
+    JIRA update
+    ('[SPARK-1][CORE][TEST] Fix', None, False, 0)
+
+    For a PR title edited to another id since, the notice and the question come after the
+    cherry-picks, right before the JIRA update:
+
+    >>> run("[SPARK-2][SQL] Fix", "[SPARK-1][SQL] Fix" + footer)
+    picked
+    asked: pick another?
+    The merge commit subject and the current PR title would update JIRA differently:
+    asked: use the current PR title?
+    JIRA update
+    ('[SPARK-1][SQL] Fix', None, False, 0)
+    >>> run("[SPARK-2][SQL] Fix", "[SPARK-1][SQL] Fix" + footer, answer="y")
+    picked
+    asked: pick another?
+    The merge commit subject and the current PR title would update JIRA differently:
+    asked: use the current PR title?
+    JIRA update
+    ('[SPARK-2][SQL] Fix', None, False, 0)
+
+    A backport of a commit without the PR's merge footer, e.g. another PR's merge commit
+    linked to the PR's closed event, prepares the current PR title, as before:
+
+    >>> run("[SPARK-2] Fix", "[SPARK-3][SQL] Other" + footer.replace("#1", "#3"))
+    picked
+    asked: pick another?
+    JIRA update
+    ('[SPARK-2][CORE] Fix', None, True, 0)
     """,
     "check_linked_jira_issues": """
     Only the leading ids are fetched and checked, so an Epic that the title body mentions
