@@ -23,7 +23,6 @@ import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, BATCH
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.connector.read.streaming.ReadLimit
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
@@ -92,11 +91,12 @@ trait ColumnarBatchPlanner {
   def pushLimit(limit: Int): Boolean = false
 
   /**
-   * Returns whether the partitions return exactly the columns of `requiredSchema`, the top-level
-   * columns that the query needs, including the columns that it filters on, instead of all the
-   * columns of the read schema.
+   * Prunes the columns to read to `requiredSchema`, the top-level columns that the query needs,
+   * including the columns that it filters on: the batches of the partitions then have exactly
+   * these columns, in this order. Spark calls it only when the query needs fewer columns than the
+   * read schema.
    */
-  def pruneColumns(requiredSchema: StructType): Boolean = false
+  def pruneColumns(requiredSchema: StructType): Unit
 
   /**
    * Plans the partitions of the scan, after the pushdown. The reader factory reads them on the
@@ -141,7 +141,10 @@ trait ColumnarStreamReader extends Serializable {
    */
   def latestOffset(start: String, limit: ReadLimit, runEnd: Option[String]): String
 
-  /** Plans the partitions that read the data after `start` up to and including `end`. */
+  /**
+   * Plans the partitions that read the data after `start` up to and including `end`. Spark plans
+   * each range once, also for a micro-batch that reads the source several times.
+   */
   def partitions(start: String, end: String): Array[InputPartition]
 
   def read(partition: InputPartition): PartitionReader[ColumnarBatch]
@@ -164,12 +167,6 @@ trait ColumnarWriter extends Serializable {
   def commit(messages: Array[WriterCommitMessage]): Unit
 
   def abort(messages: Array[WriterCommitMessage]): Unit
-
-  /**
-   * The time zone of the timestamps of the Arrow batches that the data writers get, read on the
-   * driver: by default, the session time zone when the data writers are planned.
-   */
-  def timeZoneId: String = SQLConf.get.sessionLocalTimeZone
 }
 
 /** Writes data to a [[ColumnarDataSource]] for a streaming write, one micro-batch at a time. */
@@ -179,7 +176,4 @@ trait ColumnarStreamWriter extends Serializable {
   def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit
 
   def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit
-
-  /** As for [[ColumnarWriter.timeZoneId]]. */
-  def timeZoneId: String = SQLConf.get.sessionLocalTimeZone
 }
