@@ -20,10 +20,30 @@ package org.apache.spark.ui
 import scala.xml.{Node, Text}
 import scala.xml.Utility.trim
 
+import jakarta.servlet.http.HttpServletRequest
+import org.mockito.Mockito.{mock, when}
+
 import org.apache.spark.{ErrorMessageFormat, SparkException, SparkFunSuite, SparkThrowableHelper}
 
 class UIUtilsSuite extends SparkFunSuite {
   import UIUtils._
+
+  test("SPARK-33552: Spark UI pages declare their document language") {
+    val request = mock(classOf[HttpServletRequest])
+    val tab = mock(classOf[SparkUITab])
+    when(tab.appName).thenReturn("test")
+    when(tab.basePath).thenReturn("")
+    when(tab.headerTabs).thenReturn(Seq.empty)
+
+    val pages = Seq(
+      headerSparkPage(request, "test", Seq.empty, tab),
+      basicSparkPage(request, Seq.empty, "test"))
+
+    pages.foreach { page =>
+      assert(page.head.label === "html")
+      assert((page.head \@ "lang") === "en")
+    }
+  }
 
   test("makeDescription(plainText = false)") {
     verify(
