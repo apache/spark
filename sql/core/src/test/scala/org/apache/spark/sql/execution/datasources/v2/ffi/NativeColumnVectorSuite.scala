@@ -52,7 +52,7 @@ class NativeColumnVectorSuite extends SparkFunSuite {
 
   /** The column vector of `vector`, refreshed as the reader refreshes it after an import. */
   private def native(vector: ValueVector, nullable: Boolean = true): NativeColumnVector = {
-    val column = NativeColumnVector.create(vector, nullable)
+    val column = NativeColumnVector.create(vector, nullable, null)
     column.refresh(-1)
     column
   }
@@ -141,7 +141,7 @@ class NativeColumnVectorSuite extends SparkFunSuite {
       def check(vector: FieldVector)(set: (Int, Array[Byte]) => Unit, setNull: Int => Unit)
           : Unit = {
         Using.resource(vector) { vector =>
-          val column = NativeColumnVector.create(vector, true)
+          val column = NativeColumnVector.create(vector, true, null)
           assert(column.getClass !== classOf[NativeColumnVector], vector.getClass.getName)
           // Batches without and with data buffers, with values of both kinds, and with values in
           // several data buffers.
@@ -314,7 +314,7 @@ class NativeColumnVectorSuite extends SparkFunSuite {
   test("reads the buffers of the batch that the reader imported last") {
     withAllocator { allocator =>
       Using.resource(new BigIntVector("id", allocator)) { vector =>
-        val column = NativeColumnVector.create(vector, true)
+        val column = NativeColumnVector.create(vector, true, null)
         // Each batch has other buffers: with nulls, without nulls, empty, and larger.
         val batches = Seq(
           Seq(Some(1L), None, Some(3L)),
@@ -343,7 +343,7 @@ class NativeColumnVectorSuite extends SparkFunSuite {
         vector.set(0, 1)
         vector.setNull(1)
         vector.setValueCount(2)
-        val column = NativeColumnVector.create(vector, true)
+        val column = NativeColumnVector.create(vector, true, null)
         column.refresh(1)
         assert(column.isNullAt(1))
         // The C data interface requires a null_count of 0 to be exact, so the column vector does

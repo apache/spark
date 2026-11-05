@@ -471,8 +471,10 @@ typedef struct SparkDsCommitOffsetInfo {
  * Spark itself may read a stream on a thread that the task does not wait for, for example the one
  * of a PipedRDD. The task stays valid until then too, and for a read, is_interrupted then also
  * returns true once the task failed or completed, so the library may stop reading then. Such an
- * engine may also keep the arrays and the schemas of the stream after it released the stream, so
- * the release of an array or a schema must not use the stream or the task.
+ * engine may also keep the arrays and the schemas of the stream after it released the stream, and
+ * so may Spark: when a query stops reading a stream before its end, as with a LIMIT, Spark may
+ * release the last array that it read only once it no longer references the batch, from a JVM
+ * Cleaner thread. So the release of an array or a schema must not use the stream or the task.
  */
 typedef struct SparkDsTaskContext {
   /* The size of this struct in the header that Spark was built with, as in SparkDsHost. */

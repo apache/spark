@@ -33,6 +33,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.json.JsonMapper
 import com.google.common.collect.MapMaker
 import org.apache.arrow.c.{ArrowArray, ArrowArrayStream, ArrowSchema, CDataDictionaryProvider, Data}
+import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.{FieldVector, ValueVector, VectorSchemaRoot}
 import org.apache.arrow.vector.complex.{ListVector, MapVector, StructVector}
 import org.apache.arrow.vector.types.pojo.{ArrowType, Field, Schema}
@@ -53,7 +54,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.{ArrowUtils, CaseInsensitiveStringMap}
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 import org.apache.spark.unsafe.Platform
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.Utils
 
 /**
  * A [[ColumnarDataSource]] implemented by a native library, through the C interface in
@@ -640,15 +641,21 @@ object NativeWriterCommitMessage {
  * not get the release of the stream during get_next, and the task context must stay valid until
  * then, so [[close]] then leaves the release to [[next]], once get_next returns, rather than wait
  * for it and keep the task from completing. That [[next]] then returns false, or throws the error
- * of its read. A [[next]] called once the reader is closed returns false without reading from
- * the library, and releases the stream if the release is left to it, as described below.
+ * of its read. A [[next]] called once the reader is closed fails without reading from the
+ * library, so that such a thread does not take the close for the end of the data: script
+ * transformation, for example, then destroys its process.
  *
- * Such a thread also reads the rows of the batch that [[next]] returned to it after [[next]]
- * returns, and the column vectors read the buffers of the batch at their addresses. So a
- * [[close]] on a thread other than the one that called [[next]] last leaves the release to the
- * next call of that thread to [[next]] or [[close]], or, once that thread ends, to a thread that
- * waits for it. A thread that stops reading without calling either again, and does not end, keeps
- * the resources of the reader allocated.
+ * Such a thread may also still read the batch that [[next]] returned last when another thread
+ * closes the reader: script transformation gets its first batch on the task thread, and reads its
+ * rows on a thread of its own. The column vectors read the buffers of the batch at their
+ * addresses, so [[close]] frees these buffers at once only if [[next]] was called again since it
+ * returned the batch, as at the end of the stream, after which consumers no longer read the
+ * batch. Otherwise, it releases the stream, the dictionaries and the task at once, since the
+ * arrays of a stream may outlive it, and their release does not use the task (see
+ * `SparkDsTaskContext` in the header). A Cleaner then frees the buffers of the batch and the
+ * allocator once the reader is unreachable, which each of its column vectors keeps it from being.
+ * So a reader closed before the end of its stream, as with a LIMIT, holds the buffers of one batch
+ * until a garbage collection, which these buffers do not trigger: the JVM does not count them.
  *
  * @param kind the kind of the scan, `NativeLibrary.READ_BATCH` or `READ_MICRO_BATCH`
  * @param partition the partition, whose index in the scan the library gets as `partition_id`
@@ -682,15 +689,14 @@ class NativePartitionReader(
   private var closed = false
   // Whether a thread is in next. While it is, only that thread uses the stream and the vectors,
   // and it releases them if the reader was closed meanwhile. Otherwise, they are only released
-  // under the lock.
+  // under the lock, except for the buffers of a batch that may still be read when the reader is
+  // closed, which a Cleaner frees once no thread can use them (see close).
   @GuardedBy("this")
   private var reading = false
-  // The thread that called next last, which may still read the batch that next returned to it.
+  // Whether next returned the batch and was not called again since, so that a consumer may still
+  // read the batch.
   @GuardedBy("this")
-  private var consumer: Thread = _
-  // Whether the stream and the vectors were released.
-  @GuardedBy("this")
-  private var released = false
+  private var batchReturned = false
 
   // Synchronized so that a close on another thread sees the task and the vectors.
   synchronized {
@@ -848,17 +854,19 @@ class NativePartitionReader(
 
   /**
    * Wraps a vector of the root, into which every batch is imported, in a `NativeColumnVector`,
-   * which reads the buffers of the batch that `readNext` imported last. Like the other
-   * `ReusedArrowColumnVector`s, it is not freeable between batches: Spark must not close it when
-   * it moves to the next batch, as `ColumnarToRowExec` does with the column vectors that are
-   * freeable, because closing a struct column also drops its child column vectors. The reader
-   * closes the Arrow vectors at the end. `nullable` is the nullability of the column in the schema
-   * to read, which `checkNulls` enforces on each batch after the column vector is refreshed: the
-   * batch has no rows until the check passes.
+   * which reads the buffers of the batch that `readNext` imported last, and keeps the reader
+   * reachable, so that a Cleaner frees these buffers only once the column vector is unreachable
+   * too (see the class doc). Like the other `ReusedArrowColumnVector`s, it is not freeable
+   * between batches: Spark must not close it when it moves to the next batch, as
+   * `ColumnarToRowExec` does with the column vectors that are freeable, because closing a struct
+   * column also drops its child column vectors. The reader closes the Arrow vectors at the end.
+   * `nullable` is the nullability of the column in the schema to read, which `checkNulls` enforces
+   * on each batch after the column vector is refreshed: the batch has no rows until the check
+   * passes.
    */
   private def columnVector(vector: FieldVector, nullable: Boolean): NativeColumnVector = {
     try {
-      NativeColumnVector.create(vector, nullable)
+      NativeColumnVector.create(vector, nullable, this)
     } catch {
       case NonFatal(e) =>
         throw QueryExecutionErrors.nativeDataSourceError("read", name,
@@ -868,41 +876,35 @@ class NativePartitionReader(
   }
 
   override def next(): Boolean = {
-    // A reader that was closed while it read has released the batch that it read.
-    startReading() && Utils.tryWithSafeFinally(readNext())(stopReading()) && synchronized(!closed)
+    startReading()
+    val hasBatch = Utils.tryWithSafeFinally(readNext())(stopReading())
+    synchronized {
+      // A reader that was closed while it read has released the batch that it read.
+      batchReturned = hasBatch && !closed
+      batchReturned
+    }
   }
 
-  private def startReading(): Boolean = synchronized {
+  /**
+   * Fails once the reader is closed. Otherwise, the caller no longer reads the batch that next
+   * returned last, if any.
+   */
+  private def startReading(): Unit = synchronized {
     if (closed) {
-      // A close on another thread may have left the release to the thread that read last.
-      if (consumerDone) {
-        releaseClosed()
-      }
-    } else {
-      consumer = Thread.currentThread()
+      throw new IllegalStateException(
+        s"The partition reader of the native data source $name is closed.")
     }
-    reading = !closed
-    reading
+    reading = true
+    batchReturned = false
   }
 
   private def stopReading(): Unit = synchronized {
     reading = false
     if (closed) {
-      releaseClosed()
-    }
-  }
-
-  /** Whether the thread that called next last, if any, no longer reads the batch. */
-  private def consumerDone: Boolean = synchronized {
-    consumer == null || consumer == Thread.currentThread() || !consumer.isAlive
-  }
-
-  /** Releases the resources of a reader that another thread closed, once. */
-  private def releaseClosed(): Unit = synchronized {
-    if (!released) {
-      released = true
-      // The thread that closed the reader no longer gets a failure from here.
-      Utils.tryLogNonFatalError(closeResources())
+      // The reader was closed by another thread, which no longer gets a failure from here. No
+      // consumer reads the batch: next does not return the one that it read, and it was called
+      // since it returned the previous one.
+      Utils.tryLogNonFatalError(closeResources(freeBatch = true))
     }
   }
 
@@ -1078,31 +1080,23 @@ class NativePartitionReader(
   override def close(): Unit = synchronized {
     if (!closed) {
       closed = true
-      // Another thread may be in next, or still read the batch that next returned to it.
-      if (!reading && consumerDone) {
-        released = true
-        closeResources()
-      } else if (!reading) {
-        // That thread may not call next or close again, so the reader is released once it ends.
-        val thread = consumer
-        NativePartitionReader.releaser.execute(() => {
-          // Stops waiting as well once that thread released the reader itself.
-          while (thread.isAlive && !synchronized(released)) {
-            thread.join(NativePartitionReader.ReleaseCheckIntervalMs)
-          }
-          releaseClosed()
-        })
+      // A thread in next releases the reader once get_next returns, see stopReading. Otherwise, a
+      // consumer may still read the batch that next returned, unless next was called since.
+      if (!reading) {
+        closeResources(freeBatch = !batchReturned)
       }
-    } else if (!reading && consumerDone) {
-      // A close on another thread may have left the release to this thread, which read last.
-      releaseClosed()
     }
   }
 
-  private def closeResources(): Unit = {
+  /**
+   * Releases the stream, the dictionaries and the task, and frees the buffers of the batch and then
+   * the allocator: at once with `freeBatch`, and otherwise once the reader is unreachable, as a
+   * consumer may still read the batch (see the class doc).
+   */
+  private def closeResources(freeBatch: Boolean): Unit = {
     Utils.tryWithSafeFinally {
       Utils.tryWithSafeFinally {
-        if (root != null) {
+        if (freeBatch && root != null) {
           root.close()
         }
         dictionaries.close()
@@ -1116,7 +1110,12 @@ class NativePartitionReader(
       if (task != null) {
         task.close()
       }
-      Utils.tryLogNonFatalError(allocator.close())
+      if (freeBatch) {
+        Utils.tryLogNonFatalError(allocator.close())
+      } else {
+        NativePartitionReader.cleaner.register(this,
+          new NativePartitionReader.BatchRelease(root, allocator))
+      }
     }
   }
 }
@@ -1124,10 +1123,19 @@ class NativePartitionReader(
 object NativePartitionReader {
   import NativeCalls._
 
-  // Waits for the threads that may still read the batch of a closed reader, and then releases it.
-  private val releaser = ThreadUtils.newDaemonCachedThreadPool("native-partition-reader-release")
-  // How often a releaser checks whether the thread that it waits for released the reader itself.
-  private val ReleaseCheckIntervalMs = 100L
+  // Frees the buffers of the batches that may still be read when their readers are closed.
+  private val cleaner = Cleaner.create()
+
+  /**
+   * Frees the buffers of the last batch of a closed reader, which `root` holds, and then the
+   * allocator of the reader, once the reader is unreachable. It must not refer to the reader,
+   * which would then never become unreachable.
+   */
+  private class BatchRelease(root: VectorSchemaRoot, allocator: BufferAllocator) extends Runnable {
+    override def run(): Unit = {
+      Utils.tryLogNonFatalError(Utils.tryWithSafeFinally(root.close())(allocator.close()))
+    }
+  }
 
   /**
    * Initializes the stream at `streamAddress` with the data of a partition for an engine, see
