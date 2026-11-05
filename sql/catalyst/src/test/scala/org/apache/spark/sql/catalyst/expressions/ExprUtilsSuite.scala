@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
-import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CharType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType, StructField, StructType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType, VarcharType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CharType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType, StructField, StructType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType, VarcharType, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.UTF8String
 
 class ExprUtilsSuite extends SparkFunSuite {
@@ -192,11 +192,19 @@ class ExprUtilsSuite extends SparkFunSuite {
     Seq(legacy, tryMode).foreach { ctx =>
       assert(Divide(big, small, ctx).eval() == null)
     }
-    // Arithmetic over intervals overflows in every mode.
+    // Arithmetic over intervals overflows in every mode, also UnaryMinus and Abs.
     val maxInterval = Literal(Long.MaxValue, DayTimeIntervalType())
     val intervalAdd = Add(maxInterval, maxInterval, legacy)
     assert(!ExprUtils.canEvaluateUnconditionally(intervalAdd))
     intercept[ArithmeticException](intervalAdd.eval())
+    Seq(Literal(Long.MinValue, DayTimeIntervalType()),
+        Literal(Int.MinValue, YearMonthIntervalType())).foreach { minInterval =>
+      Seq(UnaryMinus(minInterval, failOnError = false), Abs(minInterval, failOnError = false))
+        .foreach { e =>
+          assert(!ExprUtils.canEvaluateUnconditionally(e), e)
+          intercept[ArithmeticException](e.eval())
+        }
+    }
 
     // None of the accepted ones raises, also on the values that do in ANSI mode.
     val longs = (LongType, Seq(Long.MinValue, -1L, 0L, 1L, Long.MaxValue))
@@ -274,6 +282,12 @@ class ExprUtilsSuite extends SparkFunSuite {
       assert(ExprUtils.canEvaluateUnconditionally(cast(e, to, EvalMode.LEGACY)), (e, to))
       assert(!ExprUtils.canEvaluateUnconditionally(cast(e, to, EvalMode.ANSI)), (e, to))
     }
+    // And the other casts `Cast.isNoThrowLegacyCast` accepts.
+    Seq[(Expression, DataType)]((AttributeReference("b", BooleanType)(), IntegerType),
+        (a, BooleanType), (s, StringType("UNICODE_CI"))).foreach { case (e, to) =>
+      assert(Cast.isNoThrowLegacyCast(e.dataType, to), (e, to))
+      assert(ExprUtils.canEvaluateUnconditionally(cast(e, to, EvalMode.LEGACY)), (e, to))
+    }
     // A date to a timestamp can overflow for a date far from the epoch, also in LEGACY mode,
     // although it is an up-cast.
     assert(Cast.canUpCast(DateType, TimestampType))
@@ -311,9 +325,16 @@ class ExprUtilsSuite extends SparkFunSuite {
           TimestampNTZType)) {
         evalEach(StringType, strings)(cast(_, to, mode))
       }
-      for ((from, values) <- numbers ++ integrals; to <- Seq(ByteType, ShortType, IntegerType,
-          LongType, FloatType, DoubleType, DecimalType(5, 2))) {
+      for ((from, values) <- numbers ++ integrals :+ ((BooleanType, Seq(true, false)));
+          to <- Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType,
+            DecimalType(5, 2), DecimalType(1, 1), BooleanType)) {
         evalEach(from, values)(cast(_, to, mode))
+      }
+      // From and to strings of other collations and from a VARCHAR.
+      evalEach(StringType, strings)(cast(_, StringType("UNICODE_CI"), mode))
+      for (from <- Seq(StringType("UTF8_LCASE"), VarcharType(3)); to <- Seq(IntegerType,
+          DateType, StringType)) {
+        evalEach(from, strings)(cast(_, to, mode))
       }
     }
     // The numeric widening casts in ANSI mode.

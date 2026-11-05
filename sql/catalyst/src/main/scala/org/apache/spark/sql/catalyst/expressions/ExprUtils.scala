@@ -269,15 +269,16 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
    *     cast of a number or a boolean to a STRING, not to a CHAR or VARCHAR, which checks the
    *     length;
    *   - outside ANSI mode, the casts that return NULL, wrap or clamp for a value they can not
-   *     convert: in LEGACY mode, between numbers and from a string to a number, a boolean, a
-   *     date or a timestamp; in TRY mode (`try_cast`), every cast, which either catches the
-   *     errors of the cast or, from a string to a fractional or datetime type, runs the LEGACY
-   *     cast;
+   *     convert: in LEGACY mode, the ones `Cast.isNoThrowLegacyCast` accepts, between numbers,
+   *     booleans and strings, except to a CHAR or VARCHAR, and from a string to a date or a
+   *     timestamp; in TRY mode (`try_cast`), every cast, which either catches the errors of the
+   *     cast or, from a string to a fractional or datetime type, runs the LEGACY cast;
    *   - outside ANSI mode, numeric arithmetic, which returns NULL on a division by zero or a
-   *     decimal overflow and wraps an integral overflow: in LEGACY mode, Add, Subtract,
-   *     Multiply, Divide, IntegralDivide, Remainder and Pmod, UnaryMinus and Abs; in TRY mode,
-   *     which only catches the errors of Add, Subtract and Multiply, and in which Divide and
-   *     Remainder behave as in LEGACY mode, those five. IntegralDivide, Remainder and Pmod
+   *     decimal overflow, and wraps an integral overflow in LEGACY mode and returns NULL for it
+   *     in TRY mode: in LEGACY mode, Add, Subtract, Multiply, Divide, IntegralDivide, Remainder
+   *     and Pmod, UnaryMinus and Abs; in TRY mode, which only catches the errors of Add,
+   *     Subtract and Multiply, and in which Divide and Remainder behave as in LEGACY mode, those
+   *     five. IntegralDivide, Remainder and Pmod
    *     over decimals are left out, as `Decimal.quot` and `Decimal.%` raise when the integral
    *     quotient has more digits than their MathContext holds, e.g. for DECIMAL(38, 0) and
    *     DECIMAL(3, 3), and so is arithmetic over intervals, which can overflow in every mode.
@@ -311,12 +312,12 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
     // A CHAR or VARCHAR target checks the length of the string.
     case (_: NumericType | BooleanType, s: StringType) if StringHelper.isPlainString(s) => true
     case _ if c.evalMode == EvalMode.TRY => true
-    case (from, to) if c.evalMode == EvalMode.LEGACY => (from, to) match {
-      case (_: NumericType, _: NumericType) => true
-      case (_: StringType, _: NumericType | BooleanType | DateType | TimestampType |
-          TimestampNTZType) => true
-      case _ => false
-    }
+    // `Cast.isNoThrowLegacyCast` covers the numbers, booleans and strings. A string to a date or
+    // a timestamp does not raise in LEGACY mode either: the parsers catch the errors and return
+    // None, which becomes NULL.
+    case (_: StringType, DateType | TimestampType | TimestampNTZType)
+        if c.evalMode == EvalMode.LEGACY => true
+    case (from, to) if c.evalMode == EvalMode.LEGACY => Cast.isNoThrowLegacyCast(from, to)
     case _ => false
   }
 

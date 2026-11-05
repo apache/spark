@@ -809,7 +809,7 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
       Divide(Symbol("c"), Symbol("b"), NumericEvalContext(EvalMode.ANSI)),
       // Cast may throw under ANSI mode.
       Cast(Symbol("d"), IntegerType, evalMode = EvalMode.ANSI),
-      // String functions are not in the branch-safe allowlist.
+      // Lower is not in the branch-safe allowlist.
       Lower(Symbol("d")))
     unsafeBases.foreach { base =>
       assertNotCanonicalized(conditionalTestRelation, base)
