@@ -117,7 +117,10 @@ class UnpivotResolver(operatorResolver: Resolver, expressionResolver: Expression
 
     val finalOperator = resolvedOperator.copy(output = mappedOutput)
 
-    scopes.overwriteOutputAndExtendHiddenOutput(output = mappedOutput)
+    scopes.overwriteOutputAndExtendHiddenOutput(
+      output = mappedOutput,
+      stripMetadataFromHiddenOutput = true
+    )
 
     finalOperator
   }

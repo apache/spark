@@ -23,13 +23,13 @@ import org.apache.spark.sql.catalyst.expressions.NamedExpression
 import org.apache.spark.sql.catalyst.plans.logical.Sort
 
 /**
- * Common trait used to store expression that are candidates to replace ordinals in grouping or
+ * Common trait used to store expressions that are candidates to replace ordinals in grouping or
  * sorting expressions.
  */
 sealed trait OrdinalReplacementExpressions
 
 /**
- * Wrapper object used to store expression that are candidates to replace ordinals in grouping
+ * Wrapper object used to store expressions that are candidates to replace ordinals in grouping
  * expressions.
  */
 case class OrdinalReplacementGroupingExpressions(
@@ -39,7 +39,7 @@ case class OrdinalReplacementGroupingExpressions(
     extends OrdinalReplacementExpressions
 
 /**
- * Wrapper object used to store expression that are candidates to replace ordinals in sorting
+ * Wrapper object used to store expressions that are candidates to replace ordinals in sorting
  * expressions.
  */
 case class OrdinalReplacementSortOrderExpressions(

@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.spark.sql.catalyst.analysis.resolver.{
   ExplicitlyUnsupportedResolverFeature,
   LogicalPlanResolver,
+  ResolutionGap,
   ResolverExtension
 }
 import org.apache.spark.sql.catalyst.catalog.UnresolvedCatalogRelation
@@ -49,11 +50,11 @@ class DataSourceResolver(sparkSession: SparkSession) extends ResolverExtension {
       Some(result match {
         case streamingRelation: StreamingRelation =>
           throw new ExplicitlyUnsupportedResolverFeature(
-            s"unsupported operator: ${streamingRelation.getClass.getName}"
+            ResolutionGap.UnsupportedOperator(streamingRelation.getClass)
           )
         case streamingRelationV2: StreamingRelationV2 =>
           throw new ExplicitlyUnsupportedResolverFeature(
-            s"unsupported operator: ${streamingRelationV2.getClass.getName}"
+            ResolutionGap.UnsupportedOperator(streamingRelationV2.getClass)
           )
         case other =>
           other

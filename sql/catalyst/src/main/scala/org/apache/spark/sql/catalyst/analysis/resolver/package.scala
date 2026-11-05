@@ -17,10 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-
 package object resolver {
-
-  type LogicalPlanResolver = TreeNodeResolver[LogicalPlan, LogicalPlan]
 
 }

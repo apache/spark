@@ -98,7 +98,7 @@ class GroupingAndAggregateExpressionsExtractor(
         case (Some(expression), None) =>
           throw SparkException.internalError(
             s"No parent alias for expression $expression while extracting aggregate" +
-            s"expressions in an operator."
+            " expressions in an operator."
           )
         case _ =>
           expression match {
