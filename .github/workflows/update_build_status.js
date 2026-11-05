@@ -75,7 +75,7 @@ module.exports = async ({github, context, core, env = process.env, log = console
                     checkRuns(first: 10,
                         filterBy: {checkName: "Build", checkType: LATEST}) {
                       pageInfo { hasNextPage }
-                      nodes { databaseId status conclusion title summary text }
+                      nodes { databaseId status conclusion text }
                     }
                   }
                 }
@@ -131,8 +131,8 @@ module.exports = async ({github, context, core, env = process.env, log = console
     }
   }
 
-  // Flatten a PR from a page into its number, updatedAt, head sha, fork owner and repo,
-  // and:
+  // Flatten a PR from a page into its number, updatedAt, head sha, fork owner, repo and
+  // branch, and:
   // - buildChecks: the head commit's Build checks.
   // - forkRuns: the fork's workflow runs for the head commit, by run ID, and
   //   forkRunsTruncated: whether the page held only some of them.
@@ -170,25 +170,26 @@ module.exports = async ({github, context, core, env = process.env, log = console
       sha: node.headRefOid,
       forkOwner: node.headRef.repository.owner.login,
       forkRepo: node.headRef.repository.name,
+      branch: node.headRef.name,
       buildChecks: suites.flatMap(s => s.checkRuns.nodes).map(cr => ({
         id: cr.databaseId,
         status: lower(cr.status),
         conclusion: lower(cr.conclusion),
-        output: {title: cr.title, summary: cr.summary, text: cr.text}
+        text: cr.text
       })),
       forkRuns: new Map(runs.map(run => [String(run.id), run])),
       forkRunsTruncated: target.checkSuites.pageInfo.hasNextPage,
-      buildRun: runs.filter(run => run.workflow == BUILD_WORKFLOW
-        && run.branch == node.headRef.name).pop()
+      buildRun: runs.findLast(run => run.workflow == BUILD_WORKFLOW
+        && run.branch == node.headRef.name)
     }
   }
 
   // The fork run ID a Build check points at, stored as JSON in its output text, or
-  // undefined if the text is not that JSON (e.g. a check from an older version, a
-  // manual run, or another app).
+  // undefined if the text is not that JSON (e.g. a check from an older version or a
+  // manual run).
   const runIdOf = (cr) => {
     try {
-      return JSON.parse(cr.output.text).run_id
+      return JSON.parse(cr.text).run_id
     } catch {
       return undefined
     }
@@ -213,8 +214,8 @@ module.exports = async ({github, context, core, env = process.env, log = console
   const sameState = (a, b) => a.status == b.status
     && (a.status != 'completed' || a.conclusion == b.conclusion)
 
-  // PRs whose sync failed on this pass. A failure skips only that PR, which the next
-  // pass retries, and fails the step at the end so a recurring error stays visible.
+  // Record PR-specific failures and fail the step after syncing the rest.
+  // A failed page query instead aborts the pass.
   const failedPRs = new Set()
 
   // The log lists only the Build checks a pass creates or updates, and errors, each
@@ -277,7 +278,6 @@ module.exports = async ({github, context, core, env = process.env, log = console
           const {data: updated} = await github.rest.checks.update({
             ...context.repo,
             check_run_id: cr.id,
-            output: cr.output,
             ...state
           })
           // A successful request can leave the state unchanged, notably when trying
@@ -299,12 +299,14 @@ module.exports = async ({github, context, core, env = process.env, log = console
 
       // No syncable Build check: none was created yet, only an action_required one
       // exists, or the existing one points at a fork run that is gone. Create one
-      // from the fork's build_main.yml run for the PR branch (see toPR). A PR opened
-      // from the fork's master only has a skipped run, which has nothing to show.
+      // from the fork's build_main.yml run for the PR branch (see toPR). A skipped run
+      // has nothing to show, and build_main.yml skips every push to a fork's master,
+      // so a run there has nothing to show even before it concludes.
       if (!syncableBuildCheck) {
-        const run = pr.buildRun?.conclusion == 'skipped' ? undefined : pr.buildRun
+        const run = pr.branch == 'master' || pr.buildRun?.conclusion == 'skipped'
+          ? undefined : pr.buildRun
         if (!run) {
-          if (!pr.buildRun && pr.forkRunsTruncated) {
+          if (!pr.buildRun && pr.forkRunsTruncated && pr.branch != 'master') {
             // The run may be among the fork's check suites the page left out.
             log.error(ref + ': no build_main.yml run in the first fork check '
               + 'suites; raise the limits in prPageQuery')
@@ -327,46 +329,44 @@ module.exports = async ({github, context, core, env = process.env, log = console
           if (run) {
             const actions_url = 'https://github.com/' + pr.forkOwner + '/' + pr.forkRepo
               + '/actions/runs/' + run.id
-            await github.rest.checks.create({
-              ...check,
-              output: {
-                title: 'Test results',
-                summary: '[See test results](' + actions_url + ')\n\n'
-                  + 'If the tests fail for reasons unrelated to this pull request, '
-                  + 'please rerun the workflow in your forked repository.\n'
-                  + 'If the failures are related to this pull request, '
-                  + 'please investigate them and push follow-up changes.',
-                text: JSON.stringify({
-                  owner: pr.forkOwner,
-                  repo: pr.forkRepo,
-                  run_id: run.id
-                })
-              },
-              details_url: actions_url
-            })
+            check.output = {
+              title: 'Test results',
+              summary: '[See test results](' + actions_url + ')\n\n'
+                + 'If the tests fail for reasons unrelated to this pull request, '
+                + 'please rerun the workflow in your forked repository.\n'
+                + 'If the failures are related to this pull request, '
+                + 'please investigate them and push follow-up changes.',
+              text: JSON.stringify({
+                owner: pr.forkOwner,
+                repo: pr.forkRepo,
+                run_id: run.id
+              })
+            }
+            check.details_url = actions_url
           } else {
             // No build_main.yml run to show for the PR branch: Actions is disabled,
             // the PR is from the fork's master, or the commit never triggered a run.
             // Tell the contributor how to fix it.
-            await github.rest.checks.create({
-              ...check,
-              output: {
-                title: 'Workflow run detection failed',
-                summary: `
+            check.output = {
+              title: 'Workflow run detection failed',
+              summary: `
   Unable to detect the workflow run for testing the changes in your PR.
 
   1. If you did not enable GitHub Actions in your forked repository, please enable it by clicking the button as shown in the image below. See also [Managing GitHub Actions settings for a repository](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/enabling-features-for-your-repository/managing-github-actions-settings-for-a-repository) for more details.
   2. If you opened this PR from the \`master\` branch of your fork, the build does not run there.
-  Please push your changes to another branch and open a new PR from it.`,
-                images: [
-                  {
-                    alt: 'enabling workflows button',
-                    image_url: 'https://raw.githubusercontent.com/apache/spark/master/.github/workflows/images/workflow-enable-button.png'
-                  }
-                ]
-              }
-            })
+  Please push your changes to another branch and open a new PR from it.`
+                + (pr.branch == 'master' ? '' : `
+
+  After fixing the cause, push a new commit to your PR branch to start the build.`),
+              images: [
+                {
+                  alt: 'enabling workflows button',
+                  image_url: 'https://raw.githubusercontent.com/apache/spark/master/.github/workflows/images/workflow-enable-button.png'
+                }
+              ]
+            }
           }
+          await github.rest.checks.create(check)
           log.log(ref + ': ' + change)
           count.created++
         } catch (error) {
