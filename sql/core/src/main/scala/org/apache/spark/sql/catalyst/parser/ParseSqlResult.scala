@@ -28,18 +28,18 @@ import org.json4s.jackson.JsonMethods.{compact, parse => parseJson, render}
 import org.apache.spark.{ErrorMessageFormat, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SqlScriptingContextManager, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.analysis.SQLFunctionNode
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, SQLQueryContext}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.{SparkSession => ClassicSparkSession}
-import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, FunctionCatalog, Identifier}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.execution.{CommandExecutionMode, SparkSqlParser}
 import org.apache.spark.sql.execution.command.{
+  AlterViewAsCommand,
   CreateDataSourceTableAsSelectCommand,
   CreateDataSourceTableCommand,
   CreateTableCommand,
@@ -53,7 +53,8 @@ import org.apache.spark.sql.execution.command.{
   LeafRunnableCommand
 }
 import org.apache.spark.sql.execution.datasources.{
-  CreateTempViewUsing, DataSource, LogicalRelation
+  CreateTempViewUsing, DataSource, InsertIntoDataSourceCommand,
+  InsertIntoHadoopFsRelationCommand, LogicalRelation
 }
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
@@ -408,6 +409,9 @@ object ParseSqlResult {
   private object TableRefRole {
     case object Target extends TableRefRole
     case object Source extends TableRefRole
+    // The query of a row-level rewrite or insert-only MERGE. It re-reads the write target, so
+    // the role marks the re-read for the walk. Subqueries in the query are Source again.
+    case object RewriteRead extends TableRefRole
   }
 
   private def normalizeCteName(name: String): String =
@@ -472,13 +476,20 @@ object ParseSqlResult {
         // The named object is the reference; do not collect tables from its body.
       case w: V2WriteCommand =>
         visitPlan(w.table, scope, TableRefRole.Target)(f)
-        visitPlan(w.query, nextScope, TableRefRole.Source)(f)
+        val queryRole = w match {
+          case _: ReplaceData | _: WriteDelta | _: InsertOnlyMerge => TableRefRole.RewriteRead
+          case _ => TableRefRole.Source
+        }
+        visitPlan(w.query, nextScope, queryRole)(f)
+      case a: AlterViewAs =>
+        visitPlan(a.child, scope, TableRefRole.Target)(f)
+        visitPlan(a.query, nextScope, TableRefRole.Source)(f)
       case w: WithCTE =>
         w.cteDefs.foreach(d => visitPlan(d, nextScope, TableRefRole.Source)(f))
         visitPlan(w.plan, nextScope, role)(f)
       case SubqueryAlias(_, child) =>
         visitPlan(child, nextScope, role)(f)
-      case _: SQLFunctionNode =>
+      case _: org.apache.spark.sql.catalyst.analysis.SQLFunctionNode =>
         // The body of a SQL table function is the routine's own text, not this statement's.
       case _ =>
         statementSubqueries(parent).foreach(sq => visitPlan(sq, nextScope, TableRefRole.Source)(f))
@@ -527,8 +538,19 @@ object ParseSqlResult {
       // An INSERT target is never resolved against a CTE, so no alias shadows it.
       case i: InsertIntoStatement =>
         visitPlan(i.table, Set.empty, TableRefRole.Target)(f)
-      case c: CacheTable if c.multipartIdentifier.isEmpty =>
+      case c: CacheTable if c.multipartIdentifier.isEmpty || c.isAnalyzed =>
         visitPlan(c.table, scope, TableRefRole.Target)(f)
+      // The query of a v1 CTAS, CREATE VIEW, ALTER VIEW or INSERT is not a child after analysis.
+      case c: CreateDataSourceTableAsSelectCommand =>
+        visitPlan(c.query, scope, TableRefRole.Source)(f)
+      case c: CreateViewCommand =>
+        visitPlan(c.plan, scope, TableRefRole.Source)(f)
+      case c: AlterViewAsCommand =>
+        visitPlan(c.query, scope, TableRefRole.Source)(f)
+      case i: InsertIntoHadoopFsRelationCommand =>
+        visitPlan(i.query, scope, TableRefRole.Source)(f)
+      case i: InsertIntoDataSourceCommand =>
+        visitPlan(i.query, scope, TableRefRole.Source)(f)
       case c: CompoundBody =>
         c.handlers.foreach(h => visitPlan(h, scope, TableRefRole.Source)(f))
       case s: SimpleCaseStatement =>
@@ -572,8 +594,9 @@ object ParseSqlResult {
     val targetTables = mutable.LinkedHashSet.empty[Seq[String]]
     val sourceTables = mutable.LinkedHashSet.empty[Seq[String]]
     val functions = mutable.LinkedHashSet.empty[Seq[String]]
-    // Targets of row-level rewrites. The rewritten query reads the target again, so a
-    // source read of one of these is that re-read, not a table the statement names.
+    // Targets of row-level rewrites. The rewritten query reads the target again in a
+    // RewriteRead position, so that read is not a table the statement names. A subquery in the
+    // same statement that reads the target is still a source.
     val rewriteTargets = mutable.HashSet.empty[Seq[String]]
     val namedParams = mutable.LinkedHashSet.empty[String]
     var unnamedCount = 0
@@ -587,7 +610,7 @@ object ParseSqlResult {
       if (parts.nonEmpty && !isCteName(parts, scope)) {
         role match {
           case TableRefRole.Target => targetTables += parts
-          case TableRefRole.Source => sourceTables += parts
+          case TableRefRole.Source | TableRefRole.RewriteRead => sourceTables += parts
         }
       }
     }
@@ -628,14 +651,19 @@ object ParseSqlResult {
           addTarget(tableIdentifierParts(c.tableName))
         case c: DropTempViewCommand =>
           addTarget(tempViewParts(c.ident))
-        case c: CacheTable if c.multipartIdentifier.nonEmpty =>
+        case c: CacheTable if c.multipartIdentifier.nonEmpty && !c.isAnalyzed =>
           addTarget(c.multipartIdentifier)
+        case i: InsertIntoHadoopFsRelationCommand =>
+          i.catalogTable.foreach(t => addTarget(persistedTableParts(t.identifier)))
+        case i: InsertIntoDataSourceCommand =>
+          i.logicalRelation.catalogTable.foreach(t => addTarget(persistedTableParts(t.identifier)))
         case u: UnresolvedTableValuedFunction => addFunction(u.name)
         case w: ReplaceData => rewriteTargets ++= rewriteTargetParts(w.table)
         case w: WriteDelta => rewriteTargets ++= rewriteTargetParts(w.table)
+        case w: InsertOnlyMerge => rewriteTargets ++= rewriteTargetParts(w.table)
         case r: DataSourceV2Relation =>
           v2RelationParts(r)
-            .filterNot(parts => role == TableRefRole.Source && rewriteTargets.contains(parts))
+            .filterNot(parts => role == TableRefRole.RewriteRead && rewriteTargets.contains(parts))
             .foreach(add)
         case r: LogicalRelation =>
           logicalRelationParts(r).foreach(add)
@@ -836,22 +864,34 @@ object ParseSqlResult {
 
   /**
    * A `format`.`path` reference that analysis resolved to a file relation without a catalog
-   * table. With `spark.sql.runSQLOnFiles` (default on), any two-part name whose first part is a
-   * data source and not a database is read as a path, relative or not. The analyzed plan carries
-   * no identity for it, so the name is reported as written.
+   * table. With `spark.sql.runSQLOnFiles` (default on) and the session catalog current, a
+   * two-part name whose first part is a data source and not a session database is read as a
+   * path, relative or not. The analyzed plan carries no identity for it, so the name is
+   * reported as written.
    */
-  private def isFileReference(parts: Seq[String], session: ClassicSparkSession): Boolean =
+  private def isFileReference(parts: Seq[String], session: ClassicSparkSession): Boolean = {
+    val mgr = session.sessionState.catalogManager
     parts match {
-      case Seq(format, _) =>
-        Try(DataSource.lookupDataSource(format, session.sessionState.conf)).isSuccess &&
-          !session.sessionState.catalog.databaseExists(format)
+      case Seq(format, _)
+          if mgr.currentCatalog.name().equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME) =>
+        val isDataSource =
+          try {
+            DataSource.lookupDataSource(format, session.sessionState.conf)
+            true
+          } catch {
+            case _: ClassNotFoundException => false
+          }
+        isDataSource && !session.sessionState.catalog.databaseExists(format)
       case _ => false
     }
+  }
 
   private def qualifyTarget(
       parts: Seq[String],
       plan: LogicalPlan,
       session: ClassicSparkSession): Seq[String] = plan match {
+    case ExplainCommand(inner, _) =>
+      qualifyTarget(parts, inner, session)
     case c: CreateViewCommand if c.viewType == LocalTempView =>
       sessionIdent(parts.last)
     case c: CreateViewCommand if c.viewType == GlobalTempView =>
@@ -861,11 +901,8 @@ object ParseSqlResult {
     case _: CreateTempViewUsing =>
       sessionIdent(parts.last)
     case _: CreateTableAsSelect | _: ReplaceTableAsSelect | _: CreateTable |
-         _: ReplaceTable | _: CreateView |
-         _: org.apache.spark.sql.execution.datasources.CreateTable =>
+         _: ReplaceTable | _: CreateView =>
       // Persistent DDL never names a temp view, even if one shares the name.
-      qualifyWithCurrentNamespace(parts, session)
-    case c: CreateViewCommand if c.viewType == PersistedView =>
       qualifyWithCurrentNamespace(parts, session)
     case _ =>
       qualifySource(parts, session)
@@ -874,7 +911,10 @@ object ParseSqlResult {
   private def qualifySource(
       parts: Seq[String],
       session: ClassicSparkSession): Seq[String] = {
-    if (session.sessionState.catalog.isTempView(parts)) {
+    if (CatalogManager.isSessionQualifiedViewName(parts)) {
+      // `session.v` and `system.session.v` name a temp view even when it does not exist.
+      sessionIdent(parts.last)
+    } else if (session.sessionState.catalog.isTempView(parts)) {
       val globalTemp = SQLConf.get.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
       val last = parts.last
       if (parts.exists(_.equalsIgnoreCase(globalTemp))) {
@@ -897,8 +937,17 @@ object ParseSqlResult {
       session.sessionState.conf.getConf(SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER)
     def isTemp(name: String): Boolean =
       catalog.isTemporaryFunction(FunctionIdentifier(name))
-    def isPersistent(name: String): Boolean =
-      catalog.isPersistentFunction(FunctionIdentifier(name))
+    // Persistent in the catalog the statement resolves names in, as FunctionResolution does.
+    def isPersistent(name: String): Boolean = {
+      val mgr = session.sessionState.catalogManager
+      mgr.currentCatalog match {
+        case _ if mgr.currentCatalog.name().equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME) =>
+          catalog.isPersistentFunction(FunctionIdentifier(name))
+        case fc: FunctionCatalog =>
+          Try(fc.functionExists(Identifier.of(mgr.currentNamespace, name))).getOrElse(false)
+        case _ => false
+      }
+    }
     def isBuiltin(name: String): Boolean = {
       val id = FunctionIdentifier(name)
       FunctionRegistry.builtin.functionExists(id) ||
@@ -955,9 +1004,8 @@ object ParseSqlResult {
     val mgr = session.sessionState.catalogManager
     name.equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME) ||
       name.equalsIgnoreCase(mgr.currentCatalog.name()) ||
-      session.sessionState.conf.getAllConfs.exists { case (key, _) =>
-        key.equalsIgnoreCase("spark.sql.catalog." + name)
-      }
+      // Same exact-name lookup that catalog loading uses.
+      session.sessionState.conf.contains("spark.sql.catalog." + name)
   }
 
   private def isSystemNamespace(ns: String): Boolean =

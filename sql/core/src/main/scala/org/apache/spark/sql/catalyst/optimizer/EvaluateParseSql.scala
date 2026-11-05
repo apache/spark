@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, ParseSql}
+import org.apache.spark.sql.catalyst.expressions.{Literal, ParseSql}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.PARSE_SQL
@@ -31,22 +31,27 @@ import org.apache.spark.sql.types.StringType
  * left to `ConstantFolding`, which keeps its tolerance for failing constants in untaken
  * branches.
  *
- * A constant ANALYZE call whose SQL argument fails to evaluate is left in place. The error
- * then surfaces when the expression runs, so a failure in an untaken branch stays unobserved.
+ * Only the SQL argument is evaluated under the guard. If it fails, the call is left in place
+ * and the error surfaces when the expression runs. Failures of ANALYZE itself are not guarded,
+ * so they are not hidden from the query.
  */
 object EvaluateParseSql extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan =
     plan.transformDownWithSubqueriesAndPruning(_.containsPattern(PARSE_SQL)) {
       case subQuery =>
-        subQuery.transformAllExpressionsWithPruning(_.containsPattern(PARSE_SQL)) {
-          case p: ParseSql if p.isConstantAnalyze => evaluate(p)
+        // Per node: only this node's own expressions. A subtree rewrite would re-run
+        // the call once per enclosing operator.
+        subQuery.transformExpressionsWithPruning(_.containsPattern(PARSE_SQL)) {
+          case p: ParseSql if p.isConstantAnalyze && sqlArgumentEvaluates(p) =>
+            Literal.create(p.eval(), StringType)
         }
     }
 
-  private def evaluate(p: ParseSql): Expression =
+  private def sqlArgumentEvaluates(p: ParseSql): Boolean =
     try {
-      Literal.create(p.eval(), StringType)
+      p.sqlStmt.eval()
+      true
     } catch {
-      case NonFatal(_) => p
+      case NonFatal(_) => false
     }
 }

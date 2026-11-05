@@ -140,7 +140,8 @@ case class ParseSql(
 
   override def nullable: Boolean = sqlStmt.nullable || mode.nullable
 
-  // Foldable so constant SQL is evaluated on the driver, where ANALYZE can see the session.
+  // Foldable lets ConstantFolding fold constant PARSE calls. Constant ANALYZE calls are
+  // evaluated on the driver by EvaluateParseSql, which needs the session.
   override def foldable: Boolean = children.forall(_.foldable)
 
   override val nodePatterns: Seq[TreePattern] = Seq(PARSE_SQL)

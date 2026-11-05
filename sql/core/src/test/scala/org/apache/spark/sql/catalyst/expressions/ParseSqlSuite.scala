@@ -68,6 +68,13 @@ class ParseSqlSuite extends SparkFunSuite with ExpressionEvalHelper with SQLHelp
     }
   }
 
+  test("parse_sql returns NULL for a NULL mode") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      checkEvaluation(
+        ParseSql(Literal("SELECT 1"), Literal.create(null, StringType)), null)
+    }
+  }
+
   test("parse_sql rejects an invalid mode") {
     withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
       checkError(

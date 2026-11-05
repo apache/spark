@@ -56,7 +56,6 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
   private def jsonType(name: String): JObject = JObject("name" -> JString(name))
   private val jsonInt: JObject = jsonType("int")
   private val jsonBigint: JObject = jsonType("bigint")
-  private val jsonBoolean: JObject = jsonType("boolean")
   private val jsonString: JObject = JObject(
     "name" -> JString("string"),
     "collation" -> JString("UTF8_BINARY"))
@@ -119,8 +118,7 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
         JString("default"),
         JString("missing_parse_sql_analyze_t"))))))
       val errorClass = (j \ "error" \ "errorClass").asInstanceOf[JString].s
-      assert(errorClass == "TABLE_OR_VIEW_NOT_FOUND" ||
-        errorClass.contains("TABLE_OR_VIEW_NOT_FOUND"))
+      assert(errorClass === "TABLE_OR_VIEW_NOT_FOUND")
     }
   }
 
@@ -380,8 +378,7 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
         val missing = evalStatement("EXPLAIN SELECT nope FROM missing_t")
         assert(missing \ "analyze_success" === JBool(false))
         val missingClass = (missing \ "error" \ "errorClass").asInstanceOf[JString].s
-        assert(missingClass == "TABLE_OR_VIEW_NOT_FOUND" ||
-          missingClass.contains("TABLE_OR_VIEW_NOT_FOUND"))
+        assert(missingClass === "TABLE_OR_VIEW_NOT_FOUND")
         val nested = evalStatement("EXPLAIN EXPLAIN SELECT nope FROM missing_t")
         assert(nested \ "analyze_success" === JBool(false))
       }
@@ -409,7 +406,7 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
       assert(j \ "parse_success" === JBool(true))
       assert(j \ "analyze_success" === JBool(false))
       val cls = (j \ "error" \ "errorClass").asInstanceOf[JString].s
-      assert(cls == "UNRESOLVED_ROUTINE" || cls.contains("UNRESOLVED_ROUTINE"))
+      assert(cls === "UNRESOLVED_ROUTINE")
     }
   }
 
@@ -765,6 +762,162 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
         spark.sessionState.catalogManager.reset()
         spark.sessionState.conf.unsetConf(s"spark.sql.catalog.$catalog")
       }
+    }
+  }
+
+
+  test("ANALYZE reports temp view targets for global, USING and EXPLAIN forms") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val globalDb = spark.sharedState.globalTempDB
+      val asGlobal = evalStatement("CREATE GLOBAL TEMP VIEW parse_sql_gtv AS SELECT 1 AS a")
+      assert(asGlobal \ "target_table_references" === JArray(List(
+        ref("spark_catalog", globalDb, "parse_sql_gtv"))))
+      val usingLocal = evalStatement(
+        "CREATE TEMPORARY VIEW parse_sql_tu USING parquet OPTIONS (path '/tmp/parse_sql_tu')")
+      assert(usingLocal \ "analyze_success" === JBool(true))
+      assert(usingLocal \ "target_table_references" === JArray(List(
+        ref("system", "session", "parse_sql_tu"))))
+      val usingGlobal = evalStatement(
+        "CREATE GLOBAL TEMPORARY VIEW parse_sql_tug USING parquet " +
+          "OPTIONS (path '/tmp/parse_sql_tug')")
+      assert(usingGlobal \ "target_table_references" === JArray(List(
+        ref("spark_catalog", globalDb, "parse_sql_tug"))))
+      val explain = evalStatement("EXPLAIN CREATE TEMPORARY VIEW parse_sql_etv AS SELECT 1 AS a")
+      assert(explain \ "analyze_success" === JBool(true))
+      assert(explain \ "target_table_references" === JArray(List(
+        ref("system", "session", "parse_sql_etv"))))
+      assert(!spark.catalog.tableExists("parse_sql_gtv"))
+      assert(!spark.catalog.tableExists("parse_sql_etv"))
+    }
+  }
+
+  test("ANALYZE does not report a SQL scalar function body as the statement's source") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      sql("CREATE DATABASE IF NOT EXISTS parse_sql_fn_db")
+      try {
+        withTable("parse_sql_fn_db.t", "t") {
+          sql("CREATE TABLE parse_sql_fn_db.t (x INT) USING parquet")
+          sql("CREATE TABLE t (x INT) USING parquet")
+          withUserDefinedFunction("parse_sql_fn_f" -> false) {
+            sql("CREATE FUNCTION parse_sql_fn_f() RETURNS INT " +
+              "RETURN (SELECT max(x) FROM parse_sql_fn_db.t)")
+            val j = evalStatement("SELECT parse_sql_fn_f() FROM t")
+            assert(j \ "analyze_success" === JBool(true))
+            assert(j \ "source_table_references" === JArray(List(
+              ref("spark_catalog", "default", "t"))))
+            assert(j \ "function_references" === JArray(List(
+              ref("spark_catalog", "default", "parse_sql_fn_f"))))
+          }
+        }
+      } finally {
+        sql("DROP DATABASE IF EXISTS parse_sql_fn_db CASCADE")
+      }
+    }
+  }
+
+  test("ANALYZE does not report a view body as the statement's source") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      sql("CREATE DATABASE IF NOT EXISTS parse_sql_vw_db")
+      try {
+        withTable("parse_sql_vw_db.t", "t") {
+          sql("CREATE TABLE parse_sql_vw_db.t (x INT) USING parquet")
+          sql("CREATE TABLE t (x INT) USING parquet")
+          withView("parse_sql_vw_v") {
+            sql("CREATE VIEW parse_sql_vw_v AS SELECT x FROM parse_sql_vw_db.t")
+            val j = evalStatement("SELECT * FROM parse_sql_vw_v JOIN t")
+            assert(j \ "analyze_success" === JBool(true))
+            assert(j \ "source_table_references" === JArray(List(
+              ref("spark_catalog", "default", "parse_sql_vw_v"),
+              ref("spark_catalog", "default", "t"))))
+          }
+        }
+      } finally {
+        sql("DROP DATABASE IF EXISTS parse_sql_vw_db CASCADE")
+      }
+    }
+  }
+
+  test("ANALYZE qualifies CACHE and UNCACHE TABLE targets") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      withTable("parse_sql_cache_t") {
+        sql("CREATE TABLE parse_sql_cache_t (a INT) USING parquet")
+        val cache = evalStatement("CACHE TABLE parse_sql_cache_t")
+        assert(cache \ "analyze_success" === JBool(true))
+        assert(cache \ "target_table_references" === JArray(List(
+          ref("spark_catalog", "default", "parse_sql_cache_t"))))
+        val uncache = evalStatement("UNCACHE TABLE parse_sql_cache_t")
+        assert(uncache \ "target_table_references" === JArray(List(
+          ref("spark_catalog", "default", "parse_sql_cache_t"))))
+      }
+    }
+  }
+
+  test("ANALYZE qualifies CREATE VIEW and ALTER VIEW sources and targets") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      withTable("parse_sql_vs_t") {
+        sql("CREATE TABLE parse_sql_vs_t (a INT) USING parquet")
+        withView("parse_sql_vs_v") {
+          sql("CREATE VIEW parse_sql_vs_v AS SELECT a FROM parse_sql_vs_t")
+          val create = evalStatement("CREATE VIEW parse_sql_vs_w AS SELECT a FROM PARSE_SQL_VS_T")
+          assert(create \ "analyze_success" === JBool(true))
+          assert(create \ "target_table_references" === JArray(List(
+            ref("spark_catalog", "default", "parse_sql_vs_w"))))
+          assert(create \ "source_table_references" === JArray(List(
+            ref("spark_catalog", "default", "parse_sql_vs_t"))))
+          val alter = evalStatement("ALTER VIEW parse_sql_vs_v AS SELECT a FROM parse_sql_vs_t")
+          assert(alter \ "analyze_success" === JBool(true))
+          assert(alter \ "target_table_references" === JArray(List(
+            ref("spark_catalog", "default", "parse_sql_vs_v"))))
+          assert(alter \ "source_table_references" === JArray(List(
+            ref("spark_catalog", "default", "parse_sql_vs_t"))))
+        }
+      }
+    }
+  }
+
+  test("ANALYZE of row-level DELETE and insert-only MERGE keeps real source reads") {
+    val catalog = "parse_sql_rl3"
+    withSQLConf(
+        SQLConf.PARSE_SQL_ENABLED.key -> "true",
+        s"spark.sql.catalog.$catalog" -> classOf[InMemoryRowLevelOperationTableCatalog].getName) {
+      try {
+        sql(s"CREATE NAMESPACE $catalog.ns")
+        sql(s"CREATE TABLE $catalog.ns.rl (id INT, v INT)")
+        sql(s"CREATE TABLE $catalog.ns.src (id INT, v INT)")
+        val delete = evalStatement(
+          s"DELETE FROM $catalog.ns.rl WHERE id IN (SELECT id FROM $catalog.ns.src)")
+        assert(delete \ "analyze_success" === JBool(true))
+        assert(delete \ "target_table_references" === JArray(List(ref(catalog, "ns", "rl"))))
+        assert(delete \ "source_table_references" === JArray(List(ref(catalog, "ns", "src"))))
+        val self = evalStatement(
+          s"DELETE FROM $catalog.ns.rl WHERE id IN (SELECT id FROM $catalog.ns.rl)")
+        assert(self \ "source_table_references" === JArray(List(ref(catalog, "ns", "rl"))))
+        val insertOnly = evalStatement(
+          s"MERGE INTO $catalog.ns.rl AS t USING $catalog.ns.src AS s ON t.id = s.id " +
+            "WHEN NOT MATCHED THEN INSERT *")
+        assert(insertOnly \ "analyze_success" === JBool(true))
+        assert(insertOnly \ "source_table_references" === JArray(List(ref(catalog, "ns", "src"))))
+        assert(insertOnly \ "select_list" === typedColumns("id" -> jsonInt, "v" -> jsonInt))
+      } finally {
+        spark.sessionState.catalogManager.reset()
+        spark.sessionState.conf.unsetConf(s"spark.sql.catalog.$catalog")
+      }
+    }
+  }
+
+  test("ANALYZE of a constant whose SQL text depends on a special datetime value") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true", SQLConf.ANSI_ENABLED.key -> "false") {
+      // The text is built from CAST('epoch' AS DATE), which only becomes a date after
+      // SpecialDatetimeValues runs, so the ANALYZE call must run after Finish Analysis.
+      val json = spark.sql(
+        "SELECT parse_sql(concat('SELECT DATE''', CAST(CAST('epoch' AS DATE) AS STRING), " +
+          "''' AS d'), 'ANALYZE')").head().getString(0)
+      val statement = parse(json) match {
+        case JArray(List(value: JObject)) => value
+        case other => fail(s"expected one statement object, got: $other")
+      }
+      assert(statement \ "analyze_success" === JBool(true))
+      assert(statement \ "select_list" === typedColumns("d" -> jsonType("date")))
     }
   }
 
