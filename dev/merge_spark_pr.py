@@ -114,8 +114,7 @@ SKIP_VERSION_CHECK = os.environ.get("SKIP_VERSION_CHECK", "")
 MERGE_SCRIPT_REPO_PATH = "dev/merge_spark_pr.py"
 
 # Run the push-triggered post-merge workflows at each branch's configured commit interval.
-# Other commits get GitHub's documented workflow-skip trailer, unless the committer chooses
-# not to skip CI at the prompt.
+# Other commits get GitHub's documented workflow-skip trailer after a visible warning.
 POST_MERGE_CI_INTERVALS = {"master": 10, "branch-4.x": 10}
 POST_MERGE_CI_SKIP_TRAILER = "skip-checks: true"
 
@@ -854,11 +853,10 @@ def should_skip_post_merge_ci(target_ref, commit_count):
     return interval is not None and commit_count % interval != 0
 
 
-def prompt_to_skip_post_merge_ci(target_ref):
+def skip_post_merge_ci_for_next_commit(target_ref):
     """Select post-merge CI for the next commit on ``target_ref``.
 
     The branch history count matches the check formerly performed in ``build_main.yml``.
-    A committer can enforce CI for a commit which deterministic sampling would skip.
     """
     interval = POST_MERGE_CI_INTERVALS.get(target_ref)
     if interval is None:
@@ -872,21 +870,10 @@ def prompt_to_skip_post_merge_ci(target_ref):
         )
         return False
 
-    print(
-        "Post-merge CI is sampled out on %s: commit count %s is not divisible by %s."
-        % (target_ref, commit_count, interval)
-    )
-    skip = get_input(
-        "Would you like to skip post-merge CI for this commit? (Y/n): ",
-        {"y": ["y", ""], "n": ["n"]},
-    )
-    if skip == "n":
-        print("Post-merge CI will run because the committer enforced it.")
-        return False
-
-    print(
-        "Post-merge CI will be skipped with GitHub's %r trailer."
-        % POST_MERGE_CI_SKIP_TRAILER
+    print_error(
+        "WARNING: Post-merge CI will be skipped on %s because commit count %s is not "
+        "divisible by %s. GitHub's %r trailer will be added."
+        % (target_ref, commit_count, interval, POST_MERGE_CI_SKIP_TRAILER)
     )
     return True
 
@@ -949,7 +936,7 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
     git.run("git fetch %s pull/%s/head:%s" % (PR_REMOTE_NAME, pr_num, pr_branch_name))
     git.run("git fetch %s %s:%s" % (PUSH_REMOTE_NAME, target_ref, target_branch_name))
     git.run("git checkout %s" % target_branch_name)
-    skip_post_merge_ci = prompt_to_skip_post_merge_ci(target_ref)
+    skip_post_merge_ci = skip_post_merge_ci_for_next_commit(target_ref)
 
     had_conflicts = False
     try:
@@ -1034,7 +1021,7 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref):
     git.run("git fetch %s %s:%s" % (PUSH_REMOTE_NAME, pick_ref, pick_branch_name))
     git.run("git checkout %s" % pick_branch_name)
     pick_head = git.run("git rev-parse HEAD").strip()
-    skip_post_merge_ci = prompt_to_skip_post_merge_ci(pick_ref)
+    skip_post_merge_ci = skip_post_merge_ci_for_next_commit(pick_ref)
 
     try:
         git.run(
