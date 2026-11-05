@@ -858,12 +858,16 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       Seq((1, Some(true)), (2, Some(false)), (3, Some(true)), (4, None)).toDF("id", "flag"))
     val key = left("id") === lookup("id")
     // The join checks `flag` on each stream row before the lookup. A row where it is false or null
-    // cannot match, so its key is not requested: an inner join drops the row, and a left outer
-    // join pads it with nulls.
+    // cannot match, so its key is not requested: an inner or left semi join drops the row, a left
+    // outer join pads it with nulls, and a left anti join returns it.
     val matched = Seq(Row(1, true, 1, "engineering"), Row(1, true, 1, "research"))
     val unmatched =
       Seq(Row(2, false, null, null), Row(3, true, null, null), Row(4, null, null, null))
-    Seq("inner" -> matched, "left_outer" -> (matched ++ unmatched)).foreach {
+    Seq(
+      "inner" -> matched,
+      "left_outer" -> (matched ++ unmatched),
+      "left_semi" -> Seq(Row(1, true)),
+      "left_anti" -> Seq(Row(2, false), Row(3, true), Row(4, null))).foreach {
       case (joinType, expected) =>
         SimpleExternalLookupDataSource.resetCounters()
         checkStream(left.join(lookup, key && left("flag"), joinType), expected)
