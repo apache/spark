@@ -33,7 +33,6 @@ import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.json.JsonMapper
 import com.google.common.collect.MapMaker
 import org.apache.arrow.c.{ArrowArray, ArrowArrayStream, ArrowSchema, CDataDictionaryProvider, Data}
-import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.{FieldVector, ValueVector, VectorSchemaRoot}
 import org.apache.arrow.vector.complex.{ListVector, MapVector, StructVector}
 import org.apache.arrow.vector.types.pojo.{ArrowType, Field, Schema}
@@ -1113,8 +1112,11 @@ class NativePartitionReader(
       if (freeBatch) {
         Utils.tryLogNonFatalError(allocator.close())
       } else {
-        NativePartitionReader.cleaner.register(this,
-          new NativePartitionReader.BatchRelease(root, allocator))
+        // The action must not refer to the reader, which would then never become unreachable.
+        val (batchRoot, batchAllocator) = (root, allocator)
+        NativePartitionReader.cleaner.register(this, () =>
+          Utils.tryLogNonFatalError(
+            Utils.tryWithSafeFinally(batchRoot.close())(batchAllocator.close())))
       }
     }
   }
@@ -1125,17 +1127,6 @@ object NativePartitionReader {
 
   // Frees the buffers of the batches that may still be read when their readers are closed.
   private val cleaner = Cleaner.create()
-
-  /**
-   * Frees the buffers of the last batch of a closed reader, which `root` holds, and then the
-   * allocator of the reader, once the reader is unreachable. It must not refer to the reader,
-   * which would then never become unreachable.
-   */
-  private class BatchRelease(root: VectorSchemaRoot, allocator: BufferAllocator) extends Runnable {
-    override def run(): Unit = {
-      Utils.tryLogNonFatalError(Utils.tryWithSafeFinally(root.close())(allocator.close()))
-    }
-  }
 
   /**
    * Initializes the stream at `streamAddress` with the data of a partition for an engine, see
