@@ -51,6 +51,8 @@ trait SupportsPushDownCatalystFilters extends ScanBuilder {
    * enabled, Spark estimates the original and inferred groups against the same scan statistics
    * and takes the smaller estimate. Columns are not retained solely for statistics adjustment,
    * and filters that reference pruned columns are dropped.
+   * Logical adjustment filters can be omitted from physical evaluation when
+   * [[SupportsCatalystFilterGuarantees.isFilterGuaranteed]] proves them true for the built scan.
    *
    * Spark discards inferred filters if a join, aggregate, or variant extraction replaces the scan
    * output.

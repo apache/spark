@@ -28,6 +28,7 @@ import org.apache.spark.sql.connector.catalog.{
   InMemoryCatalystRuntimeFilterTable,
   InMemoryTable,
   InMemoryTableCatalystRuntimeFilterCatalog,
+  Table,
   TableCatalog}
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference, Transform}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
@@ -36,7 +37,7 @@ import org.apache.spark.sql.execution.{FilterExec, ScalarSubquery => ExecScalarS
 import org.apache.spark.sql.execution.ExplainUtils.stripAQEPlan
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, DataSourceV2Strategy, PushDownUtils}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.SupportsRuntimeCatalystFiltering
+import org.apache.spark.sql.internal.connector.{SupportsCatalystFilterGuarantees, SupportsRuntimeCatalystFiltering}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
@@ -165,6 +166,25 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
     }
   }
 
+  test("table fully pushed filter attributes ignore columns pruned from the scan") {
+    val tbl = s"$catalogName.tbl_pruned_fully_pushed"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Source PARTITIONED BY (part) " +
+        "TBLPROPERTIES('fully-pushed-filter-attributes' = 'part')")
+      val relation = sql(s"SELECT * FROM $tbl").queryExecution.optimizedPlan.collectFirst {
+        case r: DataSourceV2ScanRelation => r
+      }.getOrElse(fail("Expected a DataSourceV2ScanRelation"))
+      val scan = new SupportsRuntimeCatalystFiltering {
+        override def readSchema(): StructType = new StructType().add("id", IntegerType)
+        override def filterAttributes(): Array[NamedReference] = Array.empty
+        override def filter(expressions: Array[Expression]): Unit = {}
+      }
+      val pruned = relation.copy(scan = scan, output = relation.output.filter(_.name == "id"))
+      assert(pruned.runtimeFilterAttrs.isEmpty)
+      assert(pruned.fullyPushedRuntimeFilterAttrs.isEmpty)
+    }
+  }
+
   test("fully pushed root attribute outside filterAttributes -> rejected") {
     val tbl = s"$catalogName.tbl_fully_pushed_root"
     withTable(tbl) {
@@ -174,7 +194,8 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
       }.getOrElse(fail("Expected a DataSourceV2ScanRelation"))
       val scan = new FullyPushedRootAttributeScan
       val e = intercept[AnalysisException] {
-        scanRelation.copy(scan = scan).runtimeFilterAttrs
+        withFullyPushedFilterAttributes(scanRelation, FieldReference("s"))
+          .copy(scan = scan).runtimeFilterAttrs
       }
       checkError(
         exception = e,
@@ -253,10 +274,9 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
         case r: DataSourceV2ScanRelation => r
       }.getOrElse(fail("Expected a DataSourceV2ScanRelation"))
       val e = intercept[AnalysisException] {
-        scanRelation.copy(scan = new MissingFullyPushedFilterAttributeScan)
-          .runtimeFilterAttrs
+        withFullyPushedFilterAttributes(scanRelation, FieldReference("missing")).runtimeFilterAttrs
       }
-      val scanClass = classOf[MissingFullyPushedFilterAttributeScan].getName
+      val scanClass = scanRelation.scan.getClass.getName
       checkError(
         exception = e,
         condition = "DATA_SOURCE_INVALID_RUNTIME_FILTER_ATTRIBUTE.CANNOT_RESOLVE",
@@ -712,6 +732,19 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
   // Helper methods
   // ---------------------------------------------------------------------------
 
+  private def withFullyPushedFilterAttributes(
+      relation: DataSourceV2ScanRelation,
+      attributes: NamedReference*): DataSourceV2ScanRelation = {
+    val source = relation.relation.table
+    val table = new Table with SupportsCatalystFilterGuarantees {
+      override def name(): String = source.name()
+      override def columns(): Array[Column] = source.columns()
+      override def capabilities() = source.capabilities()
+      override def fullyPushedFilterAttributes(): Array[NamedReference] = attributes.toArray
+    }
+    relation.copy(relation = relation.relation.copy(table = table))
+  }
+
   private def assertDPPRuntimeFilters(
       df: DataFrame, expectedCount: Int = 1): Unit = {
     val batchScan = collectBatchScan(df)
@@ -836,20 +869,7 @@ private class MissingFilterAttributeScan extends SupportsRuntimeCatalystFilterin
   override def filter(expressions: Array[Expression]): Unit = {}
 }
 
-/** A scan declaring a fully pushed filter attribute that its relation output does not contain. */
-private class MissingFullyPushedFilterAttributeScan extends SupportsRuntimeCatalystFiltering {
-
-  override def readSchema(): StructType = new StructType().add("part", IntegerType)
-
-  override def filterAttributes(): Array[NamedReference] = Array(FieldReference("part"))
-
-  override def fullyPushedFilterAttributes(): Array[NamedReference] =
-    Array(FieldReference("missing"))
-
-  override def filter(expressions: Array[Expression]): Unit = {}
-}
-
-/** A scan declaring a root struct fully pushed without declaring it filterable. */
+/** A scan declaring only a nested field filterable. */
 private class FullyPushedRootAttributeScan extends SupportsRuntimeCatalystFiltering {
 
   override def readSchema(): StructType =
@@ -857,9 +877,6 @@ private class FullyPushedRootAttributeScan extends SupportsRuntimeCatalystFilter
 
   override def filterAttributes(): Array[NamedReference] =
     Array(FieldReference(Seq("s", "part")))
-
-  override def fullyPushedFilterAttributes(): Array[NamedReference] =
-    Array(FieldReference("s"))
 
   override def filter(expressions: Array[Expression]): Unit = {}
 }
