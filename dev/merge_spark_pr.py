@@ -916,6 +916,9 @@ def amend_post_merge_ci_skip(skip):
     if updated == message:
         return
 
+    # Pass the complete arbitrary multi-line message through -F so a cherry-pick can remove or
+    # relocate an inherited skip trailer without shell quoting or argument parsing changing it.
+    # NamedTemporaryFile also removes the message file automatically after the amend completes.
     with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as message_file:
         message_file.write(updated)
         message_file.flush()
