@@ -21,6 +21,8 @@ private[sql] object ConnectCommon {
   val CONNECT_GRPC_PORT_MAX_RETRIES: Int = 0
   val CONNECT_GRPC_MAX_MESSAGE_SIZE: Int = 128 * 1024 * 1024
   val CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT: Int = 1024
+  val CONNECT_SERVER_SIDE_MAVEN_RESOLUTION_ENABLED: String =
+    "spark.connect.session.serverSideMavenResolution.enabled"
   // Detects a silently-dead connection (e.g. a NAT gateway/load balancer dropping an idle
   // connection mapping without sending a TCP RST/FIN) via gRPC/HTTP2 keepalive PINGs, so a
   // blocked RPC surfaces as UNAVAILABLE instead of hanging forever. Guarded by
