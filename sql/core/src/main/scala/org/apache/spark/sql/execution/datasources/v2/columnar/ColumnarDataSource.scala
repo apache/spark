@@ -146,17 +146,17 @@ trait ColumnarStreamReader extends Serializable {
 /**
  * Writes data to a [[ColumnarDataSource]] for a batch write. Spark serializes the writer to the
  * executors, where `createWriter` is called for each task, and then commits or aborts the write
- * on the driver. The batches passed to the data writers are backed by new Arrow vectors, with the
- * Arrow types of the schema, except for the time zones of timestamps and the `keysSorted` flag of
- * maps, though not necessarily with its names, nullability and metadata, nor the Spark types that
- * `ArrowColumnVector` infers from them. A batch is only valid during the call, but nothing else
- * writes to the buffers of its vectors, so a data writer may take ownership of them to keep its
- * data, until it is closed: the buffers belong to the data writer, which must release them by
- * the time its `close` returns. The columns that Spark copies from the Arrow batches of a scan
- * have the values that the scan returned: they are not checked as converted values are, for
- * example against the precision of a decimal. The batches have at most
- * `spark.sql.execution.arrow.maxRecordsPerBatch` rows, and may have fewer, since the batches that
- * Spark copies end with the batches of the scan.
+ * on the driver. Spark does not abort a write whose commit succeeded. The batches passed to the
+ * data writers are backed by new Arrow vectors, with the Arrow types of the schema, except for the
+ * time zones of timestamps and the `keysSorted` flag of maps, though not necessarily with its
+ * names, nullability and metadata, nor the Spark types that `ArrowColumnVector` infers from them. A
+ * batch is only valid during the call, but nothing else writes to the buffers of its vectors, so a
+ * data writer may take ownership of them to keep its data, until it is closed: the buffers belong
+ * to the data writer, which must release them by the time its `close` returns. The columns that
+ * Spark copies from the Arrow batches of a scan have the values that the scan returned: they are
+ * not checked as converted values are, for example against the precision of a decimal. The batches
+ * have at most `spark.sql.execution.arrow.maxRecordsPerBatch` rows, and may have fewer, since the
+ * batches that Spark copies end with the batches of the scan.
  */
 trait ColumnarWriter extends Serializable {
   def createWriter(partitionId: Int, taskId: Long): DataWriter[ColumnarBatch]
@@ -166,7 +166,11 @@ trait ColumnarWriter extends Serializable {
   def abort(messages: Array[WriterCommitMessage]): Unit
 }
 
-/** Writes data to a [[ColumnarDataSource]] for a streaming write, one micro-batch at a time. */
+/**
+ * Writes data to a [[ColumnarDataSource]] for a streaming write, one micro-batch at a time. Spark
+ * does not abort a micro-batch once the writer committed it, but a restarted query may abort a
+ * micro-batch that a writer of an earlier run of the query committed.
+ */
 trait ColumnarStreamWriter extends Serializable {
   def createWriter(partitionId: Int, taskId: Long, epochId: Long): DataWriter[ColumnarBatch]
 

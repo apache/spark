@@ -83,20 +83,25 @@
  *   executors, each task creates a data writer with create_data_writer, with the schema of the data
  *   and the state of the writer, and calls write for each batch. A batch has at most
  *   spark.sql.execution.arrow.maxRecordsPerBatch rows, and also ends once it holds
- *   spark.sql.execution.arrow.maxBytesPerBatch bytes, or earlier when Spark copies the batches of
- *   a scan, which end with them. The task then calls commit_data_writer, or abort_data_writer if
- *   the task or the commit fails, before it closes the data writer. Then the
- *   driver calls commit with the messages of the tasks if they all succeeded, or abort otherwise,
- *   including when commit fails, and closes the writer. Several attempts of a task may write the
- *   same partition, after a failure or with speculative execution, each with a data writer of its
- *   own. Spark lets the attempts of a partition commit one at a time, and passes to commit the
- *   message of one committed attempt for each partition, so the write consists of the data of these
- *   attempts only. It aborts the data writers of the other attempts, except on an executor that is
- *   lost, where a data writer is neither committed nor aborted, and may even have committed before
- *   its message reached the driver. A streaming write commits or aborts each micro-batch (epoch).
- *   Spark may commit the same epoch more than once, for example when a streaming query restarts
- *   after a failure, so committing an epoch that is already committed must have no effect, for
- *   exactly-once output. The ID of the query, which create_writer gets for a streaming write, stays
+ *   spark.sql.execution.arrow.maxBytesPerBatch bytes, or earlier when Spark copies the batches of a
+ *   scan, which end with them. The task then calls commit_data_writer, or abort_data_writer if the
+ *   task or the commit fails before commit_data_writer succeeded, before it closes the data writer.
+ *   Then the driver calls commit with the messages of the tasks if they all succeeded, or abort
+ *   otherwise, including when commit fails, and closes the writer. Several attempts of a task may
+ *   write the same partition, after a failure or with speculative execution, each with a data
+ *   writer of its own. Spark lets the attempts of a partition commit one at a time, and passes to
+ *   commit the message of one committed attempt for each partition, so the write consists of the
+ *   data of these attempts only. It aborts the data writers of the other attempts, except two: one
+ *   whose commit_data_writer succeeded before its task failed, which is not aborted, and one on an
+ *   executor that is lost, which is neither committed nor aborted, and may even have committed
+ *   before its message reached the driver. Neither is passed to commit, so the commit or the abort
+ *   of the writer cleans up the output of the data writers whose messages it does not get. A
+ *   streaming write commits or aborts each micro-batch (epoch). Spark may commit the same epoch
+ *   more than once, for example when a streaming query restarts after a failure, so committing an
+ *   epoch that is already committed must have no effect, for exactly-once output. A restarted query
+ *   may also abort an epoch that an earlier run of the query committed, so an abort must only
+ *   remove what the data writers of its own writer wrote, not the output that an earlier writer
+ *   committed. The ID of the query, which create_writer gets for a streaming write, stays
  *   the same when the query restarts from its checkpoint, so the ID of the query and the epoch ID
  *   identify the output of a micro-batch, also when other queries write to the same destination. A
  *   micro-batch streaming query creates a new stream writer for each micro-batch, and Spark closes
@@ -122,6 +127,18 @@
  *   released once they are no longer referenced (see Lifecycle above). A reader or writer handle
  *   must not depend on the data source handle it was created from, because Spark closes the data
  *   source handle right after creating it.
+ * - Order of the calls. After a function on a handle fails, Spark calls no other function on the
+ *   handle than its close function, except that it aborts a writer whose commit failed and a data
+ *   writer whose write or commit failed. It does not abort a writer or a data writer whose commit
+ *   succeeded, though the writer of a restarted streaming query may abort an epoch that an earlier
+ *   writer committed (see Writes above). It calls each function of a batch reader at most once,
+ *   but it may call read more than once for the same partition, also at the same time, in several
+ *   attempts of its task: after a failure, with speculative execution, or when it recomputes lost
+ *   data. It calls commit and abort at most once each for a writer, and commit_data_writer and
+ *   abort_data_writer at most once each for a data writer, with all the calls to write before
+ *   them. The data writers of the task attempts that Spark kills, such as speculative ones, may
+ *   still be written to, aborted and closed after Spark committed or aborted their writer and
+ *   closed it.
  * - Memory. What Spark passes to a function, such as strings, byte arrays and the structs whose
  *   names end with Info, is only valid during the call, except for SparkDsHost and
  *   SparkDsTaskContext, which document how long they live. Strings are UTF-8 and NUL-terminated:
@@ -270,7 +287,7 @@ typedef void (*SparkDsSink)(void* sink, const uint8_t* data, int64_t length);
  * What Spark passes to the library
  * --------------------------------------------------------------------------------------------- */
 
-/* The levels of the messages that a library logs with SparkDsHost.log. */
+/* The levels of the messages of SparkDsHost.log and SparkDsHost.is_log_enabled. */
 #define SPARK_DS_LOG_ERROR 1
 #define SPARK_DS_LOG_WARN 2
 #define SPARK_DS_LOG_INFO 3
@@ -290,9 +307,21 @@ typedef struct SparkDsHost {
   const char* spark_version;
   /*
    * Logs a message, a NUL-terminated UTF-8 string, at one of the SPARK_DS_LOG_* levels: in the log
-   * of the driver or of the executor, with the path of the library.
+   * of the driver or of the executor, with the path of the library. Another level is treated as
+   * SPARK_DS_LOG_INFO.
    */
   void (*log)(int32_t level, const char* message);
+  /*
+   * Returns whether the logger of Spark that log writes to is enabled for one of the
+   * SPARK_DS_LOG_* levels, another level being treated as SPARK_DS_LOG_INFO, so that the library
+   * only formats the messages that Spark may write, and can log at the levels that it would not log
+   * by default, such as debug, when Spark does. The configuration of the log can still drop a
+   * message of an enabled level, for example with a filter. It follows the level of the
+   * logger, which can change while Spark runs, but each call is a call into the JVM: a library
+   * may keep the answer for a while, and ask again from time to time. It is never NULL in a struct
+   * whose size holds it.
+   */
+  bool (*is_log_enabled)(int32_t level);
 } SparkDsHost;
 
 /* A data source, as create gets it. */
