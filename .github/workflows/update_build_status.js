@@ -137,8 +137,8 @@ module.exports = async ({github, context, core, env = process.env, log = console
   // - forkRuns: the fork's workflow runs for the head commit, by run ID, and
   //   forkRunsTruncated: whether the page held only some of them.
   // - buildRun: the fork's newest build_main.yml run for the PR branch, if any. The
-  //   branch matters: build_main.yml skips fork pushes to master ("Sync fork"), so the
-  //   same commit can also carry a skipped run on another branch.
+  //   branch matters because the same commit can have runs from pushes to different
+  //   branches, including a skipped master run and a build on the PR branch.
   // Statuses and conclusions are lowercased to match the check-runs REST API.
   // Return null if the fork branch is gone or not at the PR head commit (the branch
   // was just pushed to and the PR has yet to follow). Throw if the page does not hold
@@ -300,8 +300,8 @@ module.exports = async ({github, context, core, env = process.env, log = console
       // No syncable Build check: none was created yet, only an action_required one
       // exists, or the existing one points at a fork run that is gone. Create one
       // from the fork's build_main.yml run for the PR branch (see toPR). A skipped run
-      // has nothing to show, and build_main.yml skips every push to a fork's master,
-      // so a run there has nothing to show even before it concludes.
+      // has no result to show. New Build checks are only created for non-master fork
+      // branches; existing run-linked checks are still synchronized above.
       if (!syncableBuildCheck) {
         const run = pr.branch == 'master' || pr.buildRun?.conclusion == 'skipped'
           ? undefined : pr.buildRun
@@ -344,17 +344,15 @@ module.exports = async ({github, context, core, env = process.env, log = console
             }
             check.details_url = actions_url
           } else {
-            // No build_main.yml run to show for the PR branch: Actions is disabled,
-            // the PR is from the fork's master, or the commit never triggered a run.
-            // Tell the contributor how to fix it.
+            // No usable run to show, or the PR is from fork master where new Build
+            // checks are not supported. Tell the contributor how to fix it.
             check.output = {
               title: 'Workflow run detection failed',
               summary: `
   Unable to detect the workflow run for testing the changes in your PR.
 
   1. If you did not enable GitHub Actions in your forked repository, please enable it by clicking the button as shown in the image below. See also [Managing GitHub Actions settings for a repository](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/enabling-features-for-your-repository/managing-github-actions-settings-for-a-repository) for more details.
-  2. If you opened this PR from the \`master\` branch of your fork, the build does not run there.
-  Please push your changes to another branch and open a new PR from it.`
+  2. For PR build status, use a branch other than \`master\` in your fork.`
                 + (pr.branch == 'master' ? '' : `
 
   After fixing the cause, push a new commit to your PR branch to start the build.`),
