@@ -1896,6 +1896,45 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-60916: Pushdown IN predicate on a BOOLEAN column") {
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> "1") {
+      val parquetFilters = createParquetFilters(
+        new SparkToParquetSchemaConverter(conf).convert(StructType.fromDDL("b boolean")))
+
+      val set = new HashSet[java.lang.Boolean]()
+      set.add(true)
+      set.add(false)
+      assertResult(Some(FilterApi.in(booleanColumn("b"), set))) {
+        parquetFilters.createFilter(sources.In("b", Array(true, false)))
+      }
+
+      set.remove(false)
+      // The pushed filter must keep both parts: `b = NULL` alone is stricter than the IN.
+      assertResult(Some(or(
+        FilterApi.eq(booleanColumn("b"), null: java.lang.Boolean),
+        FilterApi.in(booleanColumn("b"), set)))) {
+        parquetFilters.createFilter(sources.In("b", Array(true, null)))
+      }
+    }
+  }
+
+  test("SPARK-60916: IN with NULL on a BOOLEAN column above the IN filter threshold") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      // Two files: one without NULLs, and one with only a NULL.
+      sql("SELECT * FROM VALUES (true), (false) AS t(b)").coalesce(1)
+        .write.parquet(path)
+      sql("SELECT CAST(NULL AS BOOLEAN) AS b").write.mode("append").parquet(path)
+      Seq(1, 10).foreach { threshold =>
+        withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
+          val df = spark.read.parquet(path)
+          checkAnswer(df.where("b IN (true, NULL)"), Row(true))
+          checkAnswer(df.where("b IN (true, false, NULL)"), Seq(Row(true), Row(false)))
+        }
+      }
+    }
+  }
+
   test("SPARK-25207: Case-insensitive field resolution for pushdown when reading parquet") {
     def testCaseInsensitiveResolution(
         schema: StructType,
