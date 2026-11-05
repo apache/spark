@@ -3088,12 +3088,23 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
 
   /**
    * Whether `e` is expensive. Version 0 of the regex pattern cost estimate treats every LIKE and
-   * RLIKE as expensive. It is checked here rather than in `StringRegexExpression.expensive`,
-   * because `hasExpensiveChild` caches the answer of a parent expression.
+   * RLIKE as expensive, and with `avoidDoubleFilterEvalForPythonUDF` off a Python UDF is only as
+   * expensive as its arguments. Both are checked here rather than in `expensive`, because
+   * `hasExpensiveChild` caches the answer of a parent expression.
    */
-  private def isExpensive(e: Expression): Boolean = e.expensive ||
-    (conf.getConf(SQLConf.REGEX_PATTERN_COST_ESTIMATE_VERSION) == 0 &&
-      e.exists(_.isInstanceOf[StringRegexExpression]))
+  private def isExpensive(e: Expression): Boolean = {
+    val classified = if (conf.getConf(SQLConf.AVOID_DOUBLE_FILTER_EVAL_FOR_PYTHON_UDF)) {
+      e
+    } else {
+      // The stand-in is not foldable either, so a LIKE/RLIKE pattern from a UDF stays expensive.
+      e.transformUp {
+        case p: PythonFuncExpression => PrettyPythonUDF(p.name, p.dataType, p.children)
+      }
+    }
+    classified.expensive ||
+      (conf.getConf(SQLConf.REGEX_PATTERN_COST_ESTIMATE_VERSION) == 0 &&
+        e.exists(_.isInstanceOf[StringRegexExpression]))
+  }
 
   /**
    * Check if we can safely push a filter through a projection, by making sure that predicate
