@@ -476,14 +476,19 @@ private[yarn] class YarnAllocator(
     // Some of the nodes are put in decommissioning state where RM did allocate
     // resources on those nodes for earlier allocateResource calls, so notifying driver
     // to put those executors in decommissioning state
-    allocateResponse.getUpdatedNodes.asScala.filter (node =>
-      node.getNodeState == NodeState.DECOMMISSIONING &&
-        !decommissioningNodesCache.containsKey(getHostAddress(node)))
-      .foreach { node =>
-        val host = getHostAddress(node)
-        driverRef.send(DecommissionExecutorsOnHost(host))
-        decommissioningNodesCache.put(host, true)
+    allocateResponse.getUpdatedNodes.asScala.foreach { node =>
+      val host = getHostAddress(node)
+      node.getNodeState match {
+        case NodeState.DECOMMISSIONING if !decommissioningNodesCache.containsKey(host) =>
+          driverRef.send(DecommissionExecutorsOnHost(host))
+          decommissioningNodesCache.put(host, true)
+        case NodeState.RUNNING =>
+          // The node was recommissioned (YARN-10538 reports it as RUNNING again). Forget it so
+          // that a later decommissioning of the same node is notified to the driver again.
+          decommissioningNodesCache.remove(host)
+        case _ =>
       }
+    }
   }
 
   private def getHostAddress(nodeReport: NodeReport): String = nodeReport.getNodeId.getHost
