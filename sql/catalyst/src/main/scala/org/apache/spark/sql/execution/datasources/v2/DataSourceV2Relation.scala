@@ -508,8 +508,25 @@ case class StreamingDataSourceV2ScanRelation(
     val pruned = prunedOutput.map { columns =>
       s", PrunedOutput: ${truncatedString(columns, "[", ", ", "]", maxFields)}"
     }
+    // The plan of each micro-batch applies the pushed filters with those of the query, which
+    // explain shows together, so the relation shows the filters that the source got.
+    val filters = if (pushedFilters.nonEmpty) {
+      s", PushedFilters: ${truncatedString(pushedFilters, "[", ", ", "]", maxFields)}"
+    } else {
+      ""
+    }
     statePrefix + "StreamingDataSourceV2ScanRelation" +
-      s"${truncatedString(output, "[", ", ", "]", maxFields)} $name" + pruned.getOrElse("")
+      s"${truncatedString(output, "[", ", ", "]", maxFields)} $name" + pruned.getOrElse("") +
+      filters
+  }
+
+  // The default canonicalization renumbers the attributes of `output` and `prunedOutput`, but not
+  // those inside `pushedFilters`, which are over `output`: they are normalized against `output`,
+  // so that two copies of the same scan, such as the relation and its `newInstance()`, have the
+  // same result.
+  override def doCanonicalize(): StreamingDataSourceV2ScanRelation = {
+    super.doCanonicalize().asInstanceOf[StreamingDataSourceV2ScanRelation]
+      .copy(pushedFilters = pushedFilters.map(QueryPlan.normalizeExpressions(_, output)))
   }
 
   override def isStreaming: Boolean = true

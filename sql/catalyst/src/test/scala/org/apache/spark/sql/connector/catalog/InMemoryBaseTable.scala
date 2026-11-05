@@ -30,6 +30,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ProjectingInternalRow}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BoundReference, Cast, EvalMode, Expression => CatalystExpression, GenericInternalRow, GetStructField, JoinedRow, Literal, MetadataStructFieldWithLogicalName, Predicate => CatalystPredicate}
+import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, GenericArrayData, MapData, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.functions.{FlipLowBitFunction, SelfReduceFunction}
@@ -218,7 +219,7 @@ abstract class InMemoryBaseTable(
     .getOrDefault(InMemoryBaseTable.SIMULATE_REORDERED_COLUMN_PRUNING, "false").toBoolean
 
   private val streamingPushdowns = properties
-    .getOrDefault(InMemoryBaseTable.STREAMING_PUSHDOWNS, "columns,filters")
+    .getOrDefault(InMemoryBaseTable.STREAMING_PUSHDOWNS, "columns")
     .split(",").map(_.trim).filter(_.nonEmpty).toSet
 
   private val simulateStreamingFilters = properties
@@ -1181,8 +1182,10 @@ object InMemoryBaseTable {
 
   // Test table property: the pushdowns of the scans of streaming reads that the table declares
   // with its capabilities, as a comma-separated list of "columns" (STREAMING_COLUMN_PRUNING) and
-  // "filters" (STREAMING_FILTER_PUSHDOWN). The table declares both by default. Its streams return
-  // the columns of their read schemas, and its scan builders take the filters as for batch reads.
+  // "filters" (STREAMING_FILTER_PUSHDOWN). The table only declares the column pruning by default,
+  // so that the streaming reads of the other suites keep the path without the filter pushdown. Its
+  // streams return the columns of their read schemas, and its scan builders take the filters as
+  // for batch reads.
   val STREAMING_PUSHDOWNS = "streaming-pushdowns"
 
   /**
@@ -1194,16 +1197,25 @@ object InMemoryBaseTable {
   def passes(filter: Filter, row: InternalRow, schema: StructType): Boolean = {
     // Whether the row passes the filter: Some(false) for false or null, None if unknown.
     def eval(filter: Filter): Option[Boolean] = {
-      def value(column: String): Any = {
-        val ordinal = schema.fieldIndex(column)
-        val dataType = schema(ordinal).dataType
-        CatalystTypeConverters.convertToScala(row.get(ordinal, dataType), dataType)
+      // The Catalyst value of a column and its type, or None if the row does not have it: a
+      // name that is not a top-level field, such as a nested or a quoted one, or a column added
+      // after the row was written, with a schema of fewer fields.
+      def value(column: String): Option[(Any, DataType)] = {
+        schema.getFieldIndex(column).filter(_ < row.numFields).map { ordinal =>
+          val dataType = schema(ordinal).dataType
+          (row.get(ordinal, dataType), dataType)
+        }
       }
+      // Compares as Spark does, with the ordering of the type on the Catalyst values: for
+      // example, -0.0 is equal to 0.0, and strings are ordered by code point.
       def compare(column: String, other: Any)(f: Int => Boolean): Option[Boolean] = {
-        (value(column), other) match {
-          case (null, _) | (_, null) => Some(false)
-          case (v: Comparable[_], o) => Some(f(v.asInstanceOf[Comparable[Any]].compareTo(o)))
-          case _ => None
+        value(column).flatMap {
+          case (null, _) => Some(false)
+          case _ if other == null => Some(false)
+          case (v, dataType) => scala.util.Try {
+            f(PhysicalDataType.ordering(dataType)
+              .compare(v, CatalystTypeConverters.convertToCatalyst(other)))
+          }.toOption
         }
       }
       filter match {
@@ -1212,8 +1224,8 @@ object InMemoryBaseTable {
         case GreaterThanOrEqual(column, v) => compare(column, v)(_ >= 0)
         case LessThan(column, v) => compare(column, v)(_ < 0)
         case LessThanOrEqual(column, v) => compare(column, v)(_ <= 0)
-        case IsNotNull(column) => Some(value(column) != null)
-        case IsNull(column) => Some(value(column) == null)
+        case IsNotNull(column) => value(column).map(_._1 != null)
+        case IsNull(column) => value(column).map(_._1 == null)
         case And(left, right) => (eval(left), eval(right)) match {
           case (Some(false), _) | (_, Some(false)) => Some(false)
           case (Some(true), Some(true)) => Some(true)

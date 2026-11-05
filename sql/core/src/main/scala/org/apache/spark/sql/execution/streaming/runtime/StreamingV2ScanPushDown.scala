@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, AttributeSet, Cast, Expression, SubqueryExpression, Unevaluable}
 import org.apache.spark.sql.catalyst.optimizer.{ComputeCurrentTime, InferFiltersFromConstraints, ReplaceExpressions, SpecialDatetimeValues}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, LeafNode, LogicalPlan, Project, SetOperation, Statistics}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CAST, CURRENT_LIKE, RUNTIME_REPLACEABLE}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -138,6 +138,17 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
     conf.setConf(SQLConf.CBO_ENABLED, false)
     conf.setConfString(SQLConf.OPTIMIZER_EXCLUDED_RULES.key,
       (conf.optimizerExcludedRules.toSeq :+ InferFiltersFromConstraints.ruleName).mkString(","))
+    // Without a source that prunes its columns, the scans can only get filters, which come from a
+    // condition of the plan: without one, nothing can be pushed down, and the plan is not
+    // optimized.
+    val prunesColumns = conf.streamingV2ColumnPruningEnabled && plan.exists {
+      case relation: StreamingRelationV2 =>
+        relation.table.capabilities().contains(TableCapability.STREAMING_COLUMN_PRUNING)
+      case _ => false
+    }
+    if (!prunesColumns && !mayHaveConditions(plan)) {
+      return Map.empty
+    }
     session.withActive {
       SQLConf.withExistingConf(conf) {
         try {
@@ -156,7 +167,7 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
             case PhysicalOperation(project, filters, relation: StreamingRelationV2) =>
               occurrences += relation -> Reads(
                 AttributeSet((project ++ filters).flatMap(_.references)),
-                pushableFilters(filters))
+                pushableFilters(filtersEvaluatedOnce(node, filters, conf)))
             case _ =>
               node.children.foreach(visit)
           }
@@ -200,6 +211,44 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
         left.zip(right).takeWhile { case (l, r) => l.semanticEquals(r) }.map(_._1)
       }
       relation -> Reads(AttributeSet.fromAttributeSets(reads.map(_._2.requiredColumns)), filters)
+    }
+  }
+
+  /**
+   * Returns whether `plan` has a node with a condition that the optimizer could push down to a
+   * relation: a filter, or a join or a set operation, which it may turn into one.
+   */
+  private def mayHaveConditions(plan: LogicalPlan): Boolean = plan.exists {
+    case _: Filter | _: Join | _: SetOperation => true
+    case _ => false
+  }
+
+  /**
+   * Returns the filters of `filters`, those of the projections and the filters of `node` over a
+   * relation, that each micro-batch evaluates once if they are pushed down. A micro-batch keeps a
+   * filter above a projection of a value of its own, such as `current_timestamp()`, which is not
+   * deterministic until its optimization ends, so it cannot merge it with the filter of the pushed
+   * filters below the projection, and only the propagation of the constraints of the plan prunes
+   * the copy above. Without it, the filters above such a projection are not pushed down.
+   */
+  private def filtersEvaluatedOnce(
+      node: LogicalPlan,
+      filters: Seq[Expression],
+      conf: SQLConf): Seq[Expression] = {
+    if (conf.constraintPropagationEnabled) {
+      filters
+    } else {
+      // The lowest projection of a placeholder, the nodes of `node` being projections and
+      // filters over the relation, from the top.
+      node.collect {
+        case project: Project
+            if project.projectList.exists(_.exists(_.isInstanceOf[StartupValue])) =>
+          project.child
+      }.lastOption match {
+        case Some(PhysicalOperation(_, below, _: StreamingRelationV2)) => below
+        case Some(_) => Nil
+        case None => filters
+      }
     }
   }
 
@@ -301,7 +350,8 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
    *               query reads, which the analyzer added to it, so that connectors implementing
    *               `SupportsMetadataColumns` include them in `readSchema()`
    * @param conf the configuration of the query
-   * @param reads what the query reads from the relation, or None to read all its columns
+   * @param reads what the query reads from the relation, or None to read all its columns with no
+   *              filter
    */
   def buildScan(
       table: SupportsRead,

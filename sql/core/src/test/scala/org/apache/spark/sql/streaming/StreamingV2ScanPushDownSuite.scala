@@ -29,7 +29,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Cast}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Cast, Expression, IsNotNull}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Project}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -45,6 +45,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{Filter => SourceFilter}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.unsafe.types.UTF8String
 
 class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
   import testImplicits._
@@ -60,7 +61,16 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
     spark.conf.unset("spark.sql.catalog.testcat")
   }
 
-  private def withSourceTable(properties: String = "")(f: => Unit): Unit = {
+  // The in-memory tables only declare the column pruning by default: the tables of this suite
+  // declare the filter pushdown too.
+  private val bothPushdowns = s"'${InMemoryBaseTable.STREAMING_PUSHDOWNS}' = 'columns,filters'"
+  private val pushdowns = s"TBLPROPERTIES ($bothPushdowns)"
+  // Both pushdowns, with streams that drop the rows that fail the pushed filters.
+  private val filtering =
+    s"TBLPROPERTIES ($bothPushdowns, '${InMemoryBaseTable.SIMULATE_STREAMING_FILTERS}' = 'true')"
+
+  private def withSourceTable(properties: String = pushdowns)(
+      f: => Unit): Unit = {
     withTable(tbl) {
       sql(s"CREATE TABLE $tbl (id bigint, data string, extra int) $properties")
       sql(s"INSERT INTO $tbl VALUES (1, 'a', 10), (2, 'b', 20)")
@@ -194,7 +204,7 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
   ).foreach { case (name, query) =>
     test(s"read only the parsed column of $name") {
       withTable(tbl) {
-        sql(s"CREATE TABLE $tbl (id bigint, json string, extra int)")
+        sql(s"CREATE TABLE $tbl (id bigint, json string, extra int) $pushdowns")
         sql(s"""INSERT INTO $tbl VALUES (1, '{"a": 1}', 10), (2, '{"a": 2}', 20)""")
         val expected = query(spark.read.table(tbl)).collect().toSeq
         testStream(query(spark.readStream.table(tbl)))(
@@ -223,7 +233,7 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
 
   test("read only the event-time column of a time window") {
     withTable(tbl) {
-      sql(s"CREATE TABLE $tbl (id bigint, data string, ts timestamp)")
+      sql(s"CREATE TABLE $tbl (id bigint, data string, ts timestamp) $pushdowns")
       sql(s"INSERT INTO $tbl VALUES " +
         "(1, 'a', timestamp_seconds(0)), (2, 'b', timestamp_seconds(15))")
       val df = spark.readStream.table(tbl).groupBy(window($"ts", "10 seconds")).count()
@@ -361,7 +371,7 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
 
   test("read the event-time column of a watermark that the query does not output") {
     withTable(tbl) {
-      sql(s"CREATE TABLE $tbl (id bigint, data string, ts timestamp)")
+      sql(s"CREATE TABLE $tbl (id bigint, data string, ts timestamp) $pushdowns")
       sql(s"INSERT INTO $tbl VALUES " +
         "(1, 'a', timestamp_seconds(0)), (2, 'b', timestamp_seconds(10))")
       val df = spark.readStream.table(tbl).withWatermark("ts", "5 seconds").select("data")
@@ -417,7 +427,7 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
       withTable(leftTable, rightTable) {
         sql(s"CREATE TABLE $leftTable (k bigint, v bigint, unused int) TBLPROPERTIES " +
           s"('${InMemoryBaseTable.SIMULATE_REORDERED_COLUMN_PRUNING}' = 'true')")
-        sql(s"CREATE TABLE $rightTable (rk bigint, w int)")
+        sql(s"CREATE TABLE $rightTable (rk bigint, w int) $pushdowns")
         // The left row is kept in the state of the join, which is written without pruning first.
         sql(s"INSERT INTO $leftTable VALUES (1, 100, 0)")
         val left = spark.readStream.table(leftTable)
@@ -589,7 +599,8 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
   ).foreach { case (condition, column) =>
     test(s"do not push down a filter on a value that depends on when it is evaluated: $condition") {
       withTable(tbl) {
-        sql(s"CREATE TABLE $tbl (id bigint, data string, ts timestamp, tod time, d date)")
+        sql(s"CREATE TABLE $tbl (id bigint, data string, ts timestamp, tod time, d date) " +
+          pushdowns)
         val df = spark.readStream.table(tbl).where(s"id > 1 AND $condition").select("id")
         val reads = StreamingV2ScanPushDown.reads(spark, df.queryExecution.analyzed, None)
         assert(reads.size === 1)
@@ -604,7 +615,7 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
 
   test("do not push down a filter on the current time of a micro-batch") {
     withTable(tbl) {
-      sql(s"CREATE TABLE $tbl (id bigint, data string, ts timestamp)")
+      sql(s"CREATE TABLE $tbl (id bigint, data string, ts timestamp) $pushdowns")
       sql(s"INSERT INTO $tbl VALUES " +
         "(1, 'a', timestamp_seconds(0)), (2, 'b', timestamp_seconds(10))")
       // Each micro-batch has its own current time, so the time when the query started cannot be
@@ -652,7 +663,7 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
     val otherTable = "testcat.other"
     withSourceTable() {
       withTable(otherTable) {
-        sql(s"CREATE TABLE $otherTable (oid bigint, value string)")
+        sql(s"CREATE TABLE $otherTable (oid bigint, value string) $pushdowns")
         val source = spark.readStream.table(tbl)
         val other = spark.readStream.table(otherTable).where("oid < 3")
         val df = source.join(other, source("id") === other("oid")).select("data", "value")
@@ -680,7 +691,7 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
     val otherTable = "testcat.other"
     withSourceTable() {
       withTable(otherTable) {
-        sql(s"CREATE TABLE $otherTable (oid bigint, value string)")
+        sql(s"CREATE TABLE $otherTable (oid bigint, value string) $pushdowns")
         sql(s"INSERT INTO $otherTable VALUES (1, 'x'), (2, 'y')")
         // A micro-batch infers id = 2 from the equality of the static side, and puts its value in
         // place of the column in the pushed filter id > 0, which it then drops: id = 2 implies it.
@@ -707,7 +718,7 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
 
   test("plan the micro-batches that fold a value of their own into a pushed filter") {
     withTable(tbl) {
-      sql(s"CREATE TABLE $tbl (id bigint, owner string, d date)")
+      sql(s"CREATE TABLE $tbl (id bigint, owner string, d date) $pushdowns")
       sql(s"INSERT INTO $tbl VALUES (1, current_user(), current_date()), (2, 'other', NULL)")
       // A micro-batch folds current_user() and now() into literals, which it then puts in place
       // of the columns in the pushed filters owner <> '' and d >= DATE'2020-01-01'.
@@ -770,7 +781,7 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
 
   test("push down no filter after a filter that is not pushed down") {
     withTable(tbl) {
-      sql(s"CREATE TABLE $tbl (id bigint, owner string, qty int, payload string)")
+      sql(s"CREATE TABLE $tbl (id bigint, owner string, qty int, payload string) $pushdowns")
       sql(s"INSERT INTO $tbl VALUES (1, current_user(), 1, '1'), (2, 'other', 0, 'abc')")
       val raise = "CASE WHEN qty <= 0 THEN raise_error('bad qty') ELSE true END"
       def pushed(df: DataFrame): Seq[Set[String]] = {
@@ -803,7 +814,7 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
   }
 
   test("drop the rows that fail the pushed filters in the stream of a source") {
-    withSourceTable(s"TBLPROPERTIES ('${InMemoryBaseTable.SIMULATE_STREAMING_FILTERS}' = 'true')") {
+    withSourceTable(filtering) {
       // The stream only returns the rows that pass the pushed filter, so the progress of the query
       // only counts them.
       def inputRows(query: StreamExecution): Long = query.recentProgress.map(_.numInputRows).sum
@@ -851,7 +862,6 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
 
   test("plan the micro-batches whose filters fold the pushed filters in part") {
     // The streams drop the rows that fail the pushed filters, so the answers depend on them.
-    val filtering = s"TBLPROPERTIES ('${InMemoryBaseTable.SIMULATE_STREAMING_FILTERS}' = 'true')"
     withTable(tbl) {
       sql(s"CREATE TABLE $tbl (id bigint, owner string, d date) $filtering")
       sql(s"INSERT INTO $tbl VALUES (1, current_user(), current_date()), " +
@@ -1102,6 +1112,107 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
           CheckAnswer(Row("a"), Row("b")))
       }
     }
+  }
+
+  test("canonicalize and show the pushed filters of a streaming scan relation") {
+    withSourceTable() {
+      testStream(spark.readStream.table(tbl).where("extra > 10").select("data"))(
+        ProcessAllAvailable(),
+        AssertOnQuery { query =>
+          val relation = query.logicalPlan.collectFirst {
+            case relation: StreamingDataSourceV2ScanRelation => relation
+          }.get
+          assert(relation.pushedFilters.nonEmpty)
+          // A copy of the relation has new attributes, also in its pushed filters, and the same
+          // result.
+          val copy = relation.newInstance().asInstanceOf[StreamingDataSourceV2ScanRelation]
+          assert(copy.pushedFilters.flatMap(_.references).map(_.exprId).toSet
+            .intersect(relation.output.map(_.exprId).toSet).isEmpty)
+          assert(copy.sameResult(relation))
+          // The plan applies the pushed filters with those of the query, so the relation shows
+          // the filters that the source got.
+          val string = relation.simpleString(100)
+          assert(string.contains("PushedFilters: [") && string.contains(" > 10)]"), string)
+          true
+        },
+        CheckAnswer(Row("b")))
+    }
+  }
+
+  test("push down no filter above a projection of a value of each micro-batch without " +
+      "constraint propagation") {
+    withSourceTable() {
+      def pushed(df: DataFrame): Seq[Set[String]] = {
+        StreamingV2ScanPushDown.reads(spark, df.queryExecution.analyzed, None).values.toSeq
+          .flatMap(_.filters).map(_.references.map(_.name).toSet)
+      }
+      val source = spark.readStream.table(tbl)
+      // The query outputs the value, so that the optimizer keeps its projection.
+      val df = source.withColumn("pt", current_timestamp()).where("extra > 10")
+        .select("data", "pt")
+      assert(pushed(df) === Seq(Set("extra")))
+      // The propagation of the constraints prunes the copy of the filter of the query that each
+      // micro-batch keeps above the projection, so it evaluates the filter once.
+      testStream(df)(
+        ProcessAllAvailable(),
+        AssertOnQuery { query =>
+          def conjuncts(e: Expression): Seq[Expression] = e match {
+            case And(left, right) => conjuncts(left) ++ conjuncts(right)
+            case other => Seq(other)
+          }
+          val conditions = query.lastExecution.optimizedPlan.collect {
+            case filter: Filter => filter.condition
+          }.flatMap(conjuncts).filter(_.references.map(_.name).toSet == Set("extra"))
+            .filterNot(_.isInstanceOf[IsNotNull])
+          assert(conditions.length === 1, conditions)
+          true
+        })
+      withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
+        // Without it, the filter above the projection would be evaluated twice: it is not pushed
+        // down, but the filters below the projection still are.
+        assert(pushed(df) === Nil)
+        assert(pushed(source.where("id > 0").withColumn("pt", current_timestamp())
+          .where("extra > 10")) === Seq(Set("id")))
+      }
+    }
+  }
+
+  test("do not optimize a query without conditions when no source prunes its columns") {
+    def reads(df: DataFrame): Map[StreamingRelationV2, StreamingV2ScanPushDown.Reads] =
+      StreamingV2ScanPushDown.reads(spark, df.queryExecution.analyzed, None)
+    withSourceTable(s"TBLPROPERTIES ('${InMemoryBaseTable.STREAMING_PUSHDOWNS}' = 'filters')") {
+      val source = spark.readStream.table(tbl)
+      // Nothing can be pushed down without a condition, so the query is not optimized, and its
+      // scan gets no filter.
+      assert(reads(source.select("data")).isEmpty)
+      assert(reads(source.union(source)).isEmpty)
+      assert(reads(source.where("extra > 10")).nonEmpty)
+      assert(reads(source.join(spark.range(3).toDF("id"), "id")).nonEmpty)
+    }
+    // A source that prunes its columns needs the optimized query either way.
+    withSourceTable() {
+      assert(reads(spark.readStream.table(tbl).select("data")).nonEmpty)
+    }
+  }
+
+  test("keep the rows of the test table that a pushed filter keeps, or cannot tell") {
+    import org.apache.spark.sql.sources.{EqualTo, GreaterThanOrEqual, LessThan}
+    val schema = StructType.fromDDL("d double, s string")
+    // A character outside the BMP, which UTF-16 code units order before U+FFFD.
+    val emoji = new String(Character.toChars(0x1F600))
+    val replacement = new String(Character.toChars(0xFFFD))
+    val row = InternalRow(-0.0, UTF8String.fromString(emoji))
+    // -0.0 is equal to 0.0 in Spark.
+    assert(InMemoryBaseTable.passes(EqualTo("d", 0.0), row, schema))
+    assert(InMemoryBaseTable.passes(GreaterThanOrEqual("d", 0.0), row, schema))
+    // Strings are ordered by code point: a character outside the BMP is after U+FFFD.
+    assert(InMemoryBaseTable.passes(GreaterThanOrEqual("s", replacement), row, schema))
+    assert(!InMemoryBaseTable.passes(LessThan("s", replacement), row, schema))
+    // A filter on a nested or quoted column, or on a column added after the row was written,
+    // keeps the row.
+    assert(InMemoryBaseTable.passes(EqualTo("s.x", 1), row, schema))
+    assert(InMemoryBaseTable.passes(EqualTo("added", 1), row,
+      StructType.fromDDL("d double, s string, added int")))
   }
 }
 
