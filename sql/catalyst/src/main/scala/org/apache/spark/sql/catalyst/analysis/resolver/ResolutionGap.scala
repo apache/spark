@@ -29,6 +29,8 @@ object ResolutionGap {
   case object SQLFunctions extends ResolutionGap("SQL function expression")
   case object ViewBody extends ResolutionGap("View body")
   case object NonSQLFunction extends ResolutionGap("non-SQL function")
+  case object DefaultReferencesInSetVariable
+      extends ResolutionGap("DEFAULT references in SET VARIABLE")
   case object NonFoldableInlineTable
       extends ResolutionGap("VALUES lists with expressions that are evaluated when the query runs")
   case object ScalarSubqueryInInlineTable

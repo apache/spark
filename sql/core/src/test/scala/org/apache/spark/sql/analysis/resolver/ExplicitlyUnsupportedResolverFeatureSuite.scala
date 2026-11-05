@@ -206,6 +206,33 @@ class ExplicitlyUnsupportedResolverFeatureSuite extends SharedSparkSession {
     )
   }
 
+  gridTest("SET VARIABLE rejects unmatched DEFAULT during resolution")(
+    Seq(
+      "SET VAR default_target = DEFAULT",
+      "SET VAR (default_target) = (VALUES(DEFAULT))",
+      "SET VAR (default_target) = (SELECT (SELECT DEFAULT))")) { statement =>
+    withSessionVariable("default_target") {
+      sql("DECLARE VARIABLE default_target INT DEFAULT 7")
+      checkResolution(
+        statement,
+        expectedMessage = Some("DEFAULT references in SET VARIABLE")
+      )
+    }
+  }
+
+  gridTest("SET VARIABLE resolves real default names")(
+    Seq(
+      "SET VAR (default_target) = (SELECT default FROM VALUES(11) AS t(default))",
+      "SET VAR (default_target) = " +
+        "(SELECT (SELECT default) FROM VALUES(12) AS t(default))",
+      "SET VAR default_target = default")) { statement =>
+    withSessionVariable("default_target", "default") {
+      sql("DECLARE VARIABLE default_target INT DEFAULT 7")
+      sql("DECLARE VARIABLE default INT DEFAULT 13")
+      checkResolution(statement, shouldPass = true)
+    }
+  }
+
   test("non-SQL user-defined function falls back") {
     spark.udf.register("scala_udf", (x: Int) => x + 1)
     try {

@@ -26,6 +26,8 @@ import org.apache.spark.sql.catalyst.{
 }
 import org.apache.spark.sql.catalyst.analysis.{
   ExpressionWithUnresolvedIdentifier,
+  FakeLocalCatalog,
+  FakeSystemCatalog,
   FunctionRegistry,
   FunctionResolution,
   GetViewColumnByNameAndOrdinal,
@@ -33,6 +35,7 @@ import org.apache.spark.sql.catalyst.analysis.{
   NamedParameter,
   NameParameterizedQuery,
   PlanWithUnresolvedIdentifier,
+  PosParameterizedQuery,
   ResolvedInlineTable,
   Star,
   TableFunctionRegistry,
@@ -50,7 +53,8 @@ import org.apache.spark.sql.catalyst.analysis.{
   UnresolvedStarExceptOrReplace,
   UnresolvedSubqueryColumnAliases,
   UnresolvedTableValuedFunction,
-  UnresolvedTVFAliases
+  UnresolvedTVFAliases,
+  VariableResolution
 }
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.NamePlaceholder
@@ -61,6 +65,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{
   Last
 }
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, UNRESOLVED_WITH}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
@@ -89,6 +94,10 @@ class ResolverGuard(
     tracker: Option[QueryPlanningTracker] = None
 ) extends SQLConfHelper {
   private val v1SessionCatalog = catalogManager.v1SessionCatalog
+  private lazy val variableResolution = new VariableResolution(
+    tempVariableManager = catalogManager.tempVariableManager,
+    catalogManager = catalogManager
+  )
 
   /**
    * Check the top level operator of the parsed operator.
@@ -174,6 +183,8 @@ class ResolverGuard(
         checkSort(sort)
       case supervisingCommand: SupervisingCommand =>
         None
+      case setVariable: SetVariable =>
+        checkSetVariable(setVariable)
       case repartition: Repartition =>
         checkRepartition(repartition)
       case unresolvedHint: UnresolvedHint =>
@@ -190,6 +201,8 @@ class ResolverGuard(
         checkUnresolvedTVFAliases(unresolvedTVFAliases)
       case nameParameterizedQuery: NameParameterizedQuery =>
         checkNameParameterizedQuery(nameParameterizedQuery)
+      case posParameterizedQuery: PosParameterizedQuery =>
+        checkPosParameterizedQuery(posParameterizedQuery)
       case repartitionByExpression: RepartitionByExpression =>
         checkRepartitionByExpression(repartitionByExpression)
       case pipeOperator: PipeOperator =>
@@ -202,6 +215,8 @@ class ResolverGuard(
         checkPlanWithUnresolvedIdentifier(planWithUnresolvedIdentifier)
       case lateralJoin: LateralJoin =>
         checkLateralJoin(lateralJoin)
+      case unresolvedBinBy: UnresolvedBinBy =>
+        checkBinBy(unresolvedBinBy)
       case _ =>
         tryDelegateToGuardExtension(operator)
     }
@@ -752,6 +767,67 @@ class ResolverGuard(
 
   private def checkUnresolvedTVFAliases(unresolvedTVFAliases: UnresolvedTVFAliases) = {
     checkOperator(unresolvedTVFAliases.child)
+  }
+
+  /**
+   * Checks the [[SetVariable]] target variables and source query. Only session and scripting
+   * (local) variables are supported as targets. A source query with CTEs is not supported.
+   */
+  private def checkSetVariable(setVariable: SetVariable): Option[String] = {
+    setVariable.targetVariables.iterator
+      .map(checkSetVariableTarget)
+      .collectFirst { case Some(reason) => reason }
+      .orElse {
+        if (setVariable.sourceQuery.containsAnyPattern(UNRESOLVED_WITH, CTE)) {
+          Some("SET VARIABLE with a CTE source")
+        } else {
+          checkOperator(setVariable.sourceQuery)
+        }
+      }
+  }
+
+  private def checkSetVariableTarget(target: Expression): Option[String] = target match {
+    case unresolvedAttribute: UnresolvedAttribute =>
+      variableResolution
+        .lookupVariable(nameParts = unresolvedAttribute.nameParts)
+        .flatMap { variableReference =>
+          variableReference.catalog match {
+            case FakeLocalCatalog | FakeSystemCatalog =>
+              None
+            case _ =>
+              Some("SET VARIABLE with an unsupported target catalog")
+          }
+        }
+    case _ =>
+      None
+  }
+
+  /**
+   * [[PosParameterizedQuery]] may wrap an unresolved plan with already-bound parameters that
+   * need to be removed during analysis. If the child plan contains [[PosParameter]] nodes
+   * (i.e., unbound positional parameters), the guard will reject the expression and we fall
+   * back to the fixed-point analyzer. Note that when
+   * [[SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY]] is true, positional parameters
+   * are not bound before analysis, so the child plan will contain [[PosParameter]] nodes and
+   * the guard will reject on the expression-level check instead.
+   */
+  private def checkPosParameterizedQuery(posParameterizedQuery: PosParameterizedQuery) = {
+    checkOperator(posParameterizedQuery.child)
+      .orElse {
+        posParameterizedQuery.args.collectFirst { case CheckExpression(reason) => reason }
+      }
+  }
+
+  private def checkBinBy(unresolvedBinBy: UnresolvedBinBy): Option[String] = {
+    checkOperator(unresolvedBinBy.child)
+      .orElse(checkExpression(unresolvedBinBy.binWidthExpr))
+      .orElse(checkExpression(unresolvedBinBy.rangeStartCol))
+      .orElse(checkExpression(unresolvedBinBy.rangeEndCol))
+      .orElse(unresolvedBinBy.originExpr.flatMap(checkExpression))
+      .orElse(unresolvedBinBy.distributeColumns match {
+        case CheckExpressionSeq(reason) => Some(reason)
+        case _ => None
+      })
   }
 
   private def checkNameParameterizedQuery(nameParameterizedQuery: NameParameterizedQuery) = {

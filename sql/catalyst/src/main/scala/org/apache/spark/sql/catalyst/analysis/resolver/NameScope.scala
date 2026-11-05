@@ -1258,7 +1258,8 @@ class NameScopeStack(
    *  [[Aggregate]], [[Pivot]]) where propagating raw metadata columns would be incorrect.
    *
    *  `qualifiedAccessOnlyOutputIds` is cleared, because the previous output stays only in hidden
-   *  output.
+   *  output, unless `retainQualifiedAccessOnlyOutput` is `true`. Operators that output all
+   *  attributes of their child (e.g. [[BinBy]]) set it.
    *
    *  Query-block-scoped state ([[Aggregate]] context, aggregate-list aliases) is held
    *  separately by [[QueryBlockScope]] and is not affected by this call.
@@ -1270,7 +1271,8 @@ class NameScopeStack(
   def overwriteOutputAndExtendHiddenOutput(
       output: Seq[Attribute],
       groupingModifier: GroupingModifier = GroupingModifier.NoGrouping,
-      stripMetadataFromHiddenOutput: Boolean = false): Unit = {
+      stripMetadataFromHiddenOutput: Boolean = false,
+      retainQualifiedAccessOnlyOutput: Boolean = false): Unit = {
     val prevScope = stack.pop
 
     val outputLookup = new HashMap[ExprId, Attribute](output.size)
@@ -1323,7 +1325,11 @@ class NameScopeStack(
       output = Some(output),
       hiddenOutput = Some(resultHiddenOutput),
       unaggregatedAccessOnlyIds = newUnaggregatedAccessOnlyIds,
-      qualifiedAccessOnlyOutputIds = Some(new HashSet[ExprId])
+      qualifiedAccessOnlyOutputIds = if (retainQualifiedAccessOnlyOutput) {
+        None
+      } else {
+        Some(new HashSet[ExprId])
+      }
     )
 
     stack.push(newScope)

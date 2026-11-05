@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.{
 import org.apache.spark.sql.catalyst.plans.logical.{
   LimitAll,
   LogicalPlan,
+  SetVariable,
   SubqueryAlias,
   UnresolvedWith,
   View
@@ -52,6 +53,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{
  *     operator don't change as we put another [[Project]] on top of the original one.
  * @param isResolvingTreeUnderHaving flag indicates that we are currently resolving the operator
  *     tree below [[UnresolvedHaving]] operator. Resets to false when entering new subquery scope.
+ * @param isResolvingSetVariableSource Whether this operator is within a [[SetVariable]] assignment,
+ *     including nested subqueries.
  * @param parameterNamesToValues Optional map of parameter names to values. Used to resolve
  *     [[NamedParameter]]s in the context of [[NameParameterizedQuery]]. Lazily created only when
  *     parameters are present to avoid overhead for non-parameterized queries.
@@ -77,6 +80,7 @@ class OperatorResolutionContext(
     var ordinalReplacementExpressions: Option[OrdinalReplacementExpressions] = None,
     var baseOperator: Option[LogicalPlan] = None,
     val isResolvingTreeUnderHaving: Boolean = false,
+    val isResolvingSetVariableSource: Boolean = false,
     var parameterNamesToValues: Option[LinkedHashMap[String, Expression]] = None,
     val resolvingLimitAll: Boolean = false,
     var hasGroupingAnalytics: Boolean = false,
@@ -195,6 +199,10 @@ class OperatorResolutionContextStack {
     stack.peek()
   }
 
+  /** Whether the operator ancestry contains an enclosing SET VARIABLE assignment. */
+  def isResolvingSetVariableSource: Boolean =
+    current.isResolvingSetVariableSource
+
   /**
    * Pushes a new resolution context onto the stack. The new context shares the
    * `parameterNamesToValues` map instance and `isResolvingTreeUnderHaving` from the current
@@ -208,10 +216,15 @@ class OperatorResolutionContextStack {
       case _: UnresolvedHaving => true
       case _ => current.isResolvingTreeUnderHaving
     }
+    val isResolvingSetVariableSource = unresolvedPlan match {
+      case _: SetVariable => true
+      case _ => current.isResolvingSetVariableSource
+    }
     stack.push(
       new OperatorResolutionContext(
         unresolvedPlan = Some(unresolvedPlan),
         isResolvingTreeUnderHaving = isResolvingTreeUnderHaving,
+        isResolvingSetVariableSource = isResolvingSetVariableSource,
         parameterNamesToValues = current.parameterNamesToValues,
         resolvingLimitAll = currentContextIsResolvingLimitAll(unresolvedPlan),
         enclosingHintApplicationContexts = enclosingHintApplicationContextsForChild(isSubqueryRoot),

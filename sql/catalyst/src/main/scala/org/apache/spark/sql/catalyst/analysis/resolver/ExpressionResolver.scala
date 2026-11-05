@@ -1029,6 +1029,12 @@ class ExpressionResolver(
 
       val nameTarget: NameTarget = resolveMultipartNameFromAttribute(unresolvedAttribute)
 
+      if (nameTarget.candidates.isEmpty &&
+          ResolveDefaultColumns.isExplicitDefaultColumn(unresolvedAttribute) &&
+          operatorResolutionContextStack.isResolvingSetVariableSource) {
+        throw new ExplicitlyUnsupportedResolverFeature(ResolutionGap.DefaultReferencesInSetVariable)
+      }
+
       val candidate = nameTarget.pickCandidate(unresolvedAttribute)
 
       if (nameTarget.lateralAttributeReference.isEmpty) {

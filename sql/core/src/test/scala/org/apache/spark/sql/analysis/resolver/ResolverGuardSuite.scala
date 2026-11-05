@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttrib
 import org.apache.spark.sql.catalyst.analysis.resolver.{
   AnalyzerBridgeState,
   ExplicitlyUnsupportedResolverFeature,
+  PlanPreprocessor,
   ResolutionGap,
   Resolver,
   ResolverGuard
@@ -836,6 +837,99 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase with SqlScriptingTestUti
         checkResolverGuard("SELECT scripting_variable")
         checkResolverGuard("SELECT 1")
       }
+    }
+  }
+
+  test("SET VARIABLE") {
+    withSessionVariable("set_variable_target") {
+      sql("DECLARE VARIABLE set_variable_target INT DEFAULT 0")
+      checkResolverGuard("SET VAR set_variable_target = 1")
+      checkResolverGuard("SET VAR (set_variable_target) = (SELECT col1 FROM VALUES (2))")
+    }
+  }
+
+  test("SET VARIABLE scripting targets") {
+    val compoundBody = spark.sessionState.sqlParser.parsePlan("""
+      BEGIN
+      SELECT 1;
+      END
+      """).asInstanceOf[CompoundBody]
+    withSqlScriptingContextManager(spark, compoundBody) { _ =>
+      withScriptingVariable("set_variable_target", "value") {
+        checkResolverGuardOnly("SET VAR set_variable_target = 'other_value'")
+      }
+    }
+  }
+
+  gridTest("SET VARIABLE with an unknown target")(
+    Seq(
+      "SET VAR missing_set_variable_target = 1",
+      "SET VAR missing_set_variable_target = source_variable")) { statement =>
+    checkResolverGuardOnly(statement)
+  }
+
+  test("SET VARIABLE rejects nested raw and preprocessed CTE sources") {
+    withSessionVariable("set_variable_target") {
+      sql("DECLARE VARIABLE set_variable_target INT")
+      val parsedPlan = spark.sessionState.sqlParser.parsePlan(
+        "SET VAR (set_variable_target) = " +
+          "(SELECT value FROM " +
+          "(WITH source(value) AS (VALUES(1)) SELECT value FROM source) nested_source)")
+      val preprocessedPlan = new PlanPreprocessor(
+        resolver = new Resolver(spark.sessionState.catalogManager),
+        resolveExpressionIdentifiersInRootScope = true).substitutePlan(parsedPlan)
+      val unsupportedReason = Some("SET VARIABLE with a CTE source")
+
+      checkResolverGuard(parsedPlan, unsupportedReason)
+      checkResolverGuard(preprocessedPlan, unsupportedReason)
+    }
+  }
+
+  test("EXECUTE IMMEDIATE is unsupported") {
+    val unsupportedReason = Some(
+      "class org.apache.spark.sql.catalyst.analysis.UnresolvedExecuteImmediate " +
+      "operator resolution"
+    )
+    checkResolverGuard("EXECUTE IMMEDIATE 'SELECT 1'", unsupportedReason)
+    withSessionVariable("execute_immediate_target") {
+      sql("DECLARE VARIABLE execute_immediate_target INT")
+      checkResolverGuard(
+        "EXECUTE IMMEDIATE 'SELECT 1' INTO execute_immediate_target",
+        unsupportedReason
+      )
+    }
+  }
+
+  test("Positional parameters") {
+    checkResolverGuard(
+      plan = spark.sql("SELECT ?", Array(1)).queryExecution.logical,
+      unsupportedReason = None
+    )
+    withSQLConf(SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY.key -> "true") {
+      checkResolverGuard(
+        plan = spark.sql("SELECT ?", Array(1)).queryExecution.logical,
+        unsupportedReason = Some(
+          "class org.apache.spark.sql.catalyst.analysis.PosParameter expression resolution"
+        )
+      )
+    }
+  }
+
+  test("BIN BY") {
+    withSQLConf(SQLConf.BIN_BY_ENABLED.key -> "true") {
+      checkResolverGuard(
+        plan = spark
+          .sql(
+            """SELECT * FROM VALUES
+              |  (TIMESTAMP'2024-01-01 00:00:00', TIMESTAMP'2024-01-01 01:00:00', 1.0D)
+              |  AS t(ts_start, ts_end, value)
+              |BIN BY (RANGE ts_start TO ts_end BIN WIDTH INTERVAL '5' MINUTE
+              |  DISTRIBUTE UNIFORM (value))
+              |""".stripMargin)
+          .queryExecution
+          .logical,
+        unsupportedReason = None
+      )
     }
   }
 

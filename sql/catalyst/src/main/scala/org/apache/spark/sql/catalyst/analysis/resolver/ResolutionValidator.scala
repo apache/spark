@@ -24,7 +24,11 @@ import org.apache.spark.sql.catalyst.analysis.{
   MultiInstanceRelation,
   ResolvedInlineTable
 }
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, PipeOperator}
+import org.apache.spark.sql.catalyst.expressions.{
+  AttributeReference,
+  PipeOperator,
+  VariableReference
+}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.BooleanType
@@ -129,6 +133,10 @@ class ResolutionValidator(
         validateLateralJoin(lateralJoin)
       case pipe: PipeOperator =>
         validatePipeOperator(pipe)
+      case binBy: BinBy =>
+        validateBinBy(binBy)
+      case setVariable: SetVariable =>
+        validateSetVariable(setVariable)
       case resolvedHint: ResolvedHint =>
         validateResolvedHint(resolvedHint)
       case operator =>
@@ -337,6 +345,27 @@ class ResolutionValidator(
 
   private def validateSample(sample: Sample): Unit = {
     validate(sample.child)
+  }
+
+  private def validateBinBy(binBy: BinBy): Unit = {
+    validate(binBy.child)
+
+    expressionResolutionValidator.validate(binBy.rangeStart)
+    expressionResolutionValidator.validate(binBy.rangeEnd)
+    binBy.distributeColumns.foreach(expressionResolutionValidator.validate)
+
+    handleOperatorOutput(binBy)
+  }
+
+  private def validateSetVariable(setVariable: SetVariable): Unit = {
+    validate(setVariable.sourceQuery)
+    setVariable.targetVariables.foreach {
+      case variableReference: VariableReference =>
+        expressionResolutionValidator.validate(variableReference)
+      case other =>
+        assert(assertion = false, s"Unexpected SET VARIABLE target: $other")
+    }
+    handleOperatorOutput(setVariable)
   }
 
   private def validateResolvedHint(resolvedHint: ResolvedHint): Unit = {
