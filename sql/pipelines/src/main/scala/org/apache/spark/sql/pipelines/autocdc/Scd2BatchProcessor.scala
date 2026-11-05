@@ -1024,7 +1024,7 @@ case class Scd2BatchProcessor(
           resolver = resolver
         )
         val activeIgnoreNullLeafPaths =
-          Scd2VersionMap.resolveIgnoreNullLeafPaths(
+          AutoCdcSchemaUtils.resolveIgnoreNullLeafPaths(
             userDataColumnSchema, ignoreNullSelection, resolver)
 
         val cdcMetadataCol = F.col(AutoCdcReservedNames.cdcMetadataColName)

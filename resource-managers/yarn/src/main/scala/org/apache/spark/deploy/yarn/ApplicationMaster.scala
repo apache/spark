@@ -549,7 +549,7 @@ private[spark] class ApplicationMaster(
     try {
       val dumps = Utils.getThreadDump()
       val sorted = Option(userClassThread) match {
-        case Some(t) => dumps.sortBy(d => if (d.threadId == t.getId) 0 else 1)
+        case Some(t) => dumps.sortBy(d => if (d.threadId == t.threadId) 0 else 1)
         case None => dumps
       }
       logError(log"Thread dump on SparkContext initialization timeout:\n" +

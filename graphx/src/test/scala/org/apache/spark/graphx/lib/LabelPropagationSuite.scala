@@ -41,4 +41,27 @@ class LabelPropagationSuite extends SparkFunSuite with LocalSparkContext {
       assert(clique1Labels(0) != clique2Labels(0))
     }
   }
+
+  gridTest("Label propagation breaks label ties with the lowest vertex ID")(
+    Seq((1L, 2L), (-2L, -1L), (Long.MinValue, Long.MaxValue))) { case (label1, label2) =>
+    withSpark { sc =>
+      val edges = Seq(Edge(0L, label1, 1), Edge(0L, label2, 1))
+      val graph = Graph.fromEdges(sc.parallelize(edges), 1)
+
+      val labels = LabelPropagation.run(graph, 1).vertices.collect().toSet
+
+      assert(labels === Set((0L, math.min(label1, label2)), (label1, 0L), (label2, 0L)))
+    }
+  }
+
+  test("Label propagation chooses the most frequent label before breaking ties") {
+    withSpark { sc =>
+      val edges = Seq(Edge(0L, 1L, 1), Edge(0L, 2L, 1), Edge(0L, 2L, 1))
+      val graph = Graph.fromEdges(sc.parallelize(edges), 1)
+
+      val labels = LabelPropagation.run(graph, 1).vertices.collect().toSet
+
+      assert(labels === Set((0L, 2L), (1L, 0L), (2L, 0L)))
+    }
+  }
 }
