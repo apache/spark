@@ -25,7 +25,7 @@ CreateViewCommand `variant_test_data`, SELECT
 -- !query
 select int_price_variant:price from variant_test_data
 -- !query analysis
-Project [variant_get(int_price_variant#x, $.price, VariantType, true, Some(America/Los_Angeles)) AS price#x]
+Project [variant_get(int_price_variant#x, $.price, VariantType, true, Some(America/Los_Angeles), false) AS price#x]
 +- SubqueryAlias variant_test_data
    +- View (`variant_test_data`, [int_price_variant#x, double_price_variant#x, multi_field_variant#x, array_value_variant#x, array_variant#x, nested_variant#x, special_chars_variant#x])
       +- Project [cast(int_price_variant#x as variant) AS int_price_variant#x, cast(double_price_variant#x as variant) AS double_price_variant#x, cast(multi_field_variant#x as variant) AS multi_field_variant#x, cast(array_value_variant#x as variant) AS array_value_variant#x, cast(array_variant#x as variant) AS array_variant#x, cast(nested_variant#x as variant) AS nested_variant#x, cast(special_chars_variant#x as variant) AS special_chars_variant#x]
@@ -36,7 +36,7 @@ Project [variant_get(int_price_variant#x, $.price, VariantType, true, Some(Ameri
 -- !query
 select int_price_variant:price::decimal(5, 2) from variant_test_data
 -- !query analysis
-Project [cast(variant_get(int_price_variant#x, $.price, VariantType, true, Some(America/Los_Angeles)) as decimal(5,2)) AS price#x]
+Project [cast(variant_get(int_price_variant#x, $.price, VariantType, true, Some(America/Los_Angeles), false) as decimal(5,2)) AS price#x]
 +- SubqueryAlias variant_test_data
    +- View (`variant_test_data`, [int_price_variant#x, double_price_variant#x, multi_field_variant#x, array_value_variant#x, array_variant#x, nested_variant#x, special_chars_variant#x])
       +- Project [cast(int_price_variant#x as variant) AS int_price_variant#x, cast(double_price_variant#x as variant) AS double_price_variant#x, cast(multi_field_variant#x as variant) AS multi_field_variant#x, cast(array_value_variant#x as variant) AS array_value_variant#x, cast(array_variant#x as variant) AS array_variant#x, cast(nested_variant#x as variant) AS nested_variant#x, cast(special_chars_variant#x as variant) AS special_chars_variant#x]
@@ -47,7 +47,7 @@ Project [cast(variant_get(int_price_variant#x, $.price, VariantType, true, Some(
 -- !query
 select int_price_variant:price::string from variant_test_data
 -- !query analysis
-Project [cast(variant_get(int_price_variant#x, $.price, VariantType, true, Some(America/Los_Angeles)) as string) AS price#x]
+Project [cast(variant_get(int_price_variant#x, $.price, VariantType, true, Some(America/Los_Angeles), false) as string) AS price#x]
 +- SubqueryAlias variant_test_data
    +- View (`variant_test_data`, [int_price_variant#x, double_price_variant#x, multi_field_variant#x, array_value_variant#x, array_variant#x, nested_variant#x, special_chars_variant#x])
       +- Project [cast(int_price_variant#x as variant) AS int_price_variant#x, cast(double_price_variant#x as variant) AS double_price_variant#x, cast(multi_field_variant#x as variant) AS multi_field_variant#x, cast(array_value_variant#x as variant) AS array_value_variant#x, cast(array_variant#x as variant) AS array_variant#x, cast(nested_variant#x as variant) AS nested_variant#x, cast(special_chars_variant#x as variant) AS special_chars_variant#x]
@@ -58,7 +58,7 @@ Project [cast(variant_get(int_price_variant#x, $.price, VariantType, true, Some(
 -- !query
 select double_price_variant:price::decimal(3, 2) from variant_test_data
 -- !query analysis
-Project [cast(variant_get(double_price_variant#x, $.price, VariantType, true, Some(America/Los_Angeles)) as decimal(3,2)) AS price#x]
+Project [cast(variant_get(double_price_variant#x, $.price, VariantType, true, Some(America/Los_Angeles), false) as decimal(3,2)) AS price#x]
 +- SubqueryAlias variant_test_data
    +- View (`variant_test_data`, [int_price_variant#x, double_price_variant#x, multi_field_variant#x, array_value_variant#x, array_variant#x, nested_variant#x, special_chars_variant#x])
       +- Project [cast(int_price_variant#x as variant) AS int_price_variant#x, cast(double_price_variant#x as variant) AS double_price_variant#x, cast(multi_field_variant#x as variant) AS multi_field_variant#x, cast(array_value_variant#x as variant) AS array_value_variant#x, cast(array_variant#x as variant) AS array_variant#x, cast(nested_variant#x as variant) AS nested_variant#x, cast(special_chars_variant#x as variant) AS special_chars_variant#x]
@@ -69,7 +69,7 @@ Project [cast(variant_get(double_price_variant#x, $.price, VariantType, true, So
 -- !query
 select multi_field_variant:name, multi_field_variant:age, multi_field_variant:city from variant_test_data
 -- !query analysis
-Project [variant_get(multi_field_variant#x, $.name, VariantType, true, Some(America/Los_Angeles)) AS name#x, variant_get(multi_field_variant#x, $.age, VariantType, true, Some(America/Los_Angeles)) AS age#x, variant_get(multi_field_variant#x, $.city, VariantType, true, Some(America/Los_Angeles)) AS city#x]
+Project [variant_get(multi_field_variant#x, $.name, VariantType, true, Some(America/Los_Angeles), false) AS name#x, variant_get(multi_field_variant#x, $.age, VariantType, true, Some(America/Los_Angeles), false) AS age#x, variant_get(multi_field_variant#x, $.city, VariantType, true, Some(America/Los_Angeles), false) AS city#x]
 +- SubqueryAlias variant_test_data
    +- View (`variant_test_data`, [int_price_variant#x, double_price_variant#x, multi_field_variant#x, array_value_variant#x, array_variant#x, nested_variant#x, special_chars_variant#x])
       +- Project [cast(int_price_variant#x as variant) AS int_price_variant#x, cast(double_price_variant#x as variant) AS double_price_variant#x, cast(multi_field_variant#x as variant) AS multi_field_variant#x, cast(array_value_variant#x as variant) AS array_value_variant#x, cast(array_variant#x as variant) AS array_variant#x, cast(nested_variant#x as variant) AS nested_variant#x, cast(special_chars_variant#x as variant) AS special_chars_variant#x]
@@ -80,7 +80,7 @@ Project [variant_get(multi_field_variant#x, $.name, VariantType, true, Some(Amer
 -- !query
 select multi_field_variant:name::string, multi_field_variant:age::int, multi_field_variant:active::boolean from variant_test_data
 -- !query analysis
-Project [cast(variant_get(multi_field_variant#x, $.name, VariantType, true, Some(America/Los_Angeles)) as string) AS name#x, cast(variant_get(multi_field_variant#x, $.age, VariantType, true, Some(America/Los_Angeles)) as int) AS age#x, cast(variant_get(multi_field_variant#x, $.active, VariantType, true, Some(America/Los_Angeles)) as boolean) AS active#x]
+Project [cast(variant_get(multi_field_variant#x, $.name, VariantType, true, Some(America/Los_Angeles), false) as string) AS name#x, cast(variant_get(multi_field_variant#x, $.age, VariantType, true, Some(America/Los_Angeles), false) as int) AS age#x, cast(variant_get(multi_field_variant#x, $.active, VariantType, true, Some(America/Los_Angeles), false) as boolean) AS active#x]
 +- SubqueryAlias variant_test_data
    +- View (`variant_test_data`, [int_price_variant#x, double_price_variant#x, multi_field_variant#x, array_value_variant#x, array_variant#x, nested_variant#x, special_chars_variant#x])
       +- Project [cast(int_price_variant#x as variant) AS int_price_variant#x, cast(double_price_variant#x as variant) AS double_price_variant#x, cast(multi_field_variant#x as variant) AS multi_field_variant#x, cast(array_value_variant#x as variant) AS array_value_variant#x, cast(array_variant#x as variant) AS array_variant#x, cast(nested_variant#x as variant) AS nested_variant#x, cast(special_chars_variant#x as variant) AS special_chars_variant#x]
@@ -91,7 +91,7 @@ Project [cast(variant_get(multi_field_variant#x, $.name, VariantType, true, Some
 -- !query
 select multi_field_variant:['name'] from variant_test_data
 -- !query analysis
-Project [variant_get(multi_field_variant#x, $['name'], VariantType, true, Some(America/Los_Angeles)) AS name#x]
+Project [variant_get(multi_field_variant#x, $['name'], VariantType, true, Some(America/Los_Angeles), false) AS name#x]
 +- SubqueryAlias variant_test_data
    +- View (`variant_test_data`, [int_price_variant#x, double_price_variant#x, multi_field_variant#x, array_value_variant#x, array_variant#x, nested_variant#x, special_chars_variant#x])
       +- Project [cast(int_price_variant#x as variant) AS int_price_variant#x, cast(double_price_variant#x as variant) AS double_price_variant#x, cast(multi_field_variant#x as variant) AS multi_field_variant#x, cast(array_value_variant#x as variant) AS array_value_variant#x, cast(array_variant#x as variant) AS array_variant#x, cast(nested_variant#x as variant) AS nested_variant#x, cast(special_chars_variant#x as variant) AS special_chars_variant#x]
@@ -102,7 +102,7 @@ Project [variant_get(multi_field_variant#x, $['name'], VariantType, true, Some(A
 -- !query
 select multi_field_variant:['age'] from variant_test_data
 -- !query analysis
-Project [variant_get(multi_field_variant#x, $['age'], VariantType, true, Some(America/Los_Angeles)) AS age#x]
+Project [variant_get(multi_field_variant#x, $['age'], VariantType, true, Some(America/Los_Angeles), false) AS age#x]
 +- SubqueryAlias variant_test_data
    +- View (`variant_test_data`, [int_price_variant#x, double_price_variant#x, multi_field_variant#x, array_value_variant#x, array_variant#x, nested_variant#x, special_chars_variant#x])
       +- Project [cast(int_price_variant#x as variant) AS int_price_variant#x, cast(double_price_variant#x as variant) AS double_price_variant#x, cast(multi_field_variant#x as variant) AS multi_field_variant#x, cast(array_value_variant#x as variant) AS array_value_variant#x, cast(array_variant#x as variant) AS array_variant#x, cast(nested_variant#x as variant) AS nested_variant#x, cast(special_chars_variant#x as variant) AS special_chars_variant#x]
@@ -113,7 +113,7 @@ Project [variant_get(multi_field_variant#x, $['age'], VariantType, true, Some(Am
 -- !query
 select array_value_variant:item[0].model from variant_test_data
 -- !query analysis
-Project [variant_get(array_value_variant#x, $.item[0].model, VariantType, true, Some(America/Los_Angeles)) AS model#x]
+Project [variant_get(array_value_variant#x, $.item[0].model, VariantType, true, Some(America/Los_Angeles), false) AS model#x]
 +- SubqueryAlias variant_test_data
    +- View (`variant_test_data`, [int_price_variant#x, double_price_variant#x, multi_field_variant#x, array_value_variant#x, array_variant#x, nested_variant#x, special_chars_variant#x])
       +- Project [cast(int_price_variant#x as variant) AS int_price_variant#x, cast(double_price_variant#x as variant) AS double_price_variant#x, cast(multi_field_variant#x as variant) AS multi_field_variant#x, cast(array_value_variant#x as variant) AS array_value_variant#x, cast(array_variant#x as variant) AS array_variant#x, cast(nested_variant#x as variant) AS nested_variant#x, cast(special_chars_variant#x as variant) AS special_chars_variant#x]
@@ -124,7 +124,7 @@ Project [variant_get(array_value_variant#x, $.item[0].model, VariantType, true, 
 -- !query
 select array_value_variant:item[0].price from variant_test_data
 -- !query analysis
-Project [variant_get(array_value_variant#x, $.item[0].price, VariantType, true, Some(America/Los_Angeles)) AS price#x]
+Project [variant_get(array_value_variant#x, $.item[0].price, VariantType, true, Some(America/Los_Angeles), false) AS price#x]
 +- SubqueryAlias variant_test_data
    +- View (`variant_test_data`, [int_price_variant#x, double_price_variant#x, multi_field_variant#x, array_value_variant#x, array_variant#x, nested_variant#x, special_chars_variant#x])
       +- Project [cast(int_price_variant#x as variant) AS int_price_variant#x, cast(double_price_variant#x as variant) AS double_price_variant#x, cast(multi_field_variant#x as variant) AS multi_field_variant#x, cast(array_value_variant#x as variant) AS array_value_variant#x, cast(array_variant#x as variant) AS array_variant#x, cast(nested_variant#x as variant) AS nested_variant#x, cast(special_chars_variant#x as variant) AS special_chars_variant#x]
@@ -135,7 +135,7 @@ Project [variant_get(array_value_variant#x, $.item[0].price, VariantType, true, 
 -- !query
 select array_value_variant:item[1].model from variant_test_data
 -- !query analysis
-Project [variant_get(array_value_variant#x, $.item[1].model, VariantType, true, Some(America/Los_Angeles)) AS model#x]
+Project [variant_get(array_value_variant#x, $.item[1].model, VariantType, true, Some(America/Los_Angeles), false) AS model#x]
 +- SubqueryAlias variant_test_data
    +- View (`variant_test_data`, [int_price_variant#x, double_price_variant#x, multi_field_variant#x, array_value_variant#x, array_variant#x, nested_variant#x, special_chars_variant#x])
       +- Project [cast(int_price_variant#x as variant) AS int_price_variant#x, cast(double_price_variant#x as variant) AS double_price_variant#x, cast(multi_field_variant#x as variant) AS multi_field_variant#x, cast(array_value_variant#x as variant) AS array_value_variant#x, cast(array_variant#x as variant) AS array_variant#x, cast(nested_variant#x as variant) AS nested_variant#x, cast(special_chars_variant#x as variant) AS special_chars_variant#x]
@@ -146,7 +146,7 @@ Project [variant_get(array_value_variant#x, $.item[1].model, VariantType, true, 
 -- !query
 select array_value_variant:item[1].price from variant_test_data
 -- !query analysis
-Project [variant_get(array_value_variant#x, $.item[1].price, VariantType, true, Some(America/Los_Angeles)) AS price#x]
+Project [variant_get(array_value_variant#x, $.item[1].price, VariantType, true, Some(America/Los_Angeles), false) AS price#x]
 +- SubqueryAlias variant_test_data
    +- View (`variant_test_data`, [int_price_variant#x, double_price_variant#x, multi_field_variant#x, array_value_variant#x, array_variant#x, nested_variant#x, special_chars_variant#x])
       +- Project [cast(int_price_variant#x as variant) AS int_price_variant#x, cast(double_price_variant#x as variant) AS double_price_variant#x, cast(multi_field_variant#x as variant) AS multi_field_variant#x, cast(array_value_variant#x as variant) AS array_value_variant#x, cast(array_variant#x as variant) AS array_variant#x, cast(nested_variant#x as variant) AS nested_variant#x, cast(special_chars_variant#x as variant) AS special_chars_variant#x]
@@ -157,7 +157,7 @@ Project [variant_get(array_value_variant#x, $.item[1].price, VariantType, true, 
 -- !query
 select array_variant:[0].id from variant_test_data
 -- !query analysis
-Project [variant_get(array_variant#x, $[0].id, VariantType, true, Some(America/Los_Angeles)) AS id#x]
+Project [variant_get(array_variant#x, $[0].id, VariantType, true, Some(America/Los_Angeles), false) AS id#x]
 +- SubqueryAlias variant_test_data
    +- View (`variant_test_data`, [int_price_variant#x, double_price_variant#x, multi_field_variant#x, array_value_variant#x, array_variant#x, nested_variant#x, special_chars_variant#x])
       +- Project [cast(int_price_variant#x as variant) AS int_price_variant#x, cast(double_price_variant#x as variant) AS double_price_variant#x, cast(multi_field_variant#x as variant) AS multi_field_variant#x, cast(array_value_variant#x as variant) AS array_value_variant#x, cast(array_variant#x as variant) AS array_variant#x, cast(nested_variant#x as variant) AS nested_variant#x, cast(special_chars_variant#x as variant) AS special_chars_variant#x]
@@ -168,7 +168,7 @@ Project [variant_get(array_variant#x, $[0].id, VariantType, true, Some(America/L
 -- !query
 select array_variant:[0].name from variant_test_data
 -- !query analysis
-Project [variant_get(array_variant#x, $[0].name, VariantType, true, Some(America/Los_Angeles)) AS name#x]
+Project [variant_get(array_variant#x, $[0].name, VariantType, true, Some(America/Los_Angeles), false) AS name#x]
 +- SubqueryAlias variant_test_data
    +- View (`variant_test_data`, [int_price_variant#x, double_price_variant#x, multi_field_variant#x, array_value_variant#x, array_variant#x, nested_variant#x, special_chars_variant#x])
       +- Project [cast(int_price_variant#x as variant) AS int_price_variant#x, cast(double_price_variant#x as variant) AS double_price_variant#x, cast(multi_field_variant#x as variant) AS multi_field_variant#x, cast(array_value_variant#x as variant) AS array_value_variant#x, cast(array_variant#x as variant) AS array_variant#x, cast(nested_variant#x as variant) AS nested_variant#x, cast(special_chars_variant#x as variant) AS special_chars_variant#x]
@@ -179,7 +179,7 @@ Project [variant_get(array_variant#x, $[0].name, VariantType, true, Some(America
 -- !query
 select array_variant:[1].id from variant_test_data
 -- !query analysis
-Project [variant_get(array_variant#x, $[1].id, VariantType, true, Some(America/Los_Angeles)) AS id#x]
+Project [variant_get(array_variant#x, $[1].id, VariantType, true, Some(America/Los_Angeles), false) AS id#x]
 +- SubqueryAlias variant_test_data
    +- View (`variant_test_data`, [int_price_variant#x, double_price_variant#x, multi_field_variant#x, array_value_variant#x, array_variant#x, nested_variant#x, special_chars_variant#x])
       +- Project [cast(int_price_variant#x as variant) AS int_price_variant#x, cast(double_price_variant#x as variant) AS double_price_variant#x, cast(multi_field_variant#x as variant) AS multi_field_variant#x, cast(array_value_variant#x as variant) AS array_value_variant#x, cast(array_variant#x as variant) AS array_variant#x, cast(nested_variant#x as variant) AS nested_variant#x, cast(special_chars_variant#x as variant) AS special_chars_variant#x]
@@ -190,7 +190,7 @@ Project [variant_get(array_variant#x, $[1].id, VariantType, true, Some(America/L
 -- !query
 select array_variant:[1].name from variant_test_data
 -- !query analysis
-Project [variant_get(array_variant#x, $[1].name, VariantType, true, Some(America/Los_Angeles)) AS name#x]
+Project [variant_get(array_variant#x, $[1].name, VariantType, true, Some(America/Los_Angeles), false) AS name#x]
 +- SubqueryAlias variant_test_data
    +- View (`variant_test_data`, [int_price_variant#x, double_price_variant#x, multi_field_variant#x, array_value_variant#x, array_variant#x, nested_variant#x, special_chars_variant#x])
       +- Project [cast(int_price_variant#x as variant) AS int_price_variant#x, cast(double_price_variant#x as variant) AS double_price_variant#x, cast(multi_field_variant#x as variant) AS multi_field_variant#x, cast(array_value_variant#x as variant) AS array_value_variant#x, cast(array_variant#x as variant) AS array_variant#x, cast(nested_variant#x as variant) AS nested_variant#x, cast(special_chars_variant#x as variant) AS special_chars_variant#x]
@@ -201,7 +201,7 @@ Project [variant_get(array_variant#x, $[1].name, VariantType, true, Some(America
 -- !query
 select nested_variant:metadata.version from variant_test_data
 -- !query analysis
-Project [variant_get(nested_variant#x, $.metadata.version, VariantType, true, Some(America/Los_Angeles)) AS version#x]
+Project [variant_get(nested_variant#x, $.metadata.version, VariantType, true, Some(America/Los_Angeles), false) AS version#x]
 +- SubqueryAlias variant_test_data
    +- View (`variant_test_data`, [int_price_variant#x, double_price_variant#x, multi_field_variant#x, array_value_variant#x, array_variant#x, nested_variant#x, special_chars_variant#x])
       +- Project [cast(int_price_variant#x as variant) AS int_price_variant#x, cast(double_price_variant#x as variant) AS double_price_variant#x, cast(multi_field_variant#x as variant) AS multi_field_variant#x, cast(array_value_variant#x as variant) AS array_value_variant#x, cast(array_variant#x as variant) AS array_variant#x, cast(nested_variant#x as variant) AS nested_variant#x, cast(special_chars_variant#x as variant) AS special_chars_variant#x]
@@ -212,7 +212,7 @@ Project [variant_get(nested_variant#x, $.metadata.version, VariantType, true, So
 -- !query
 select nested_variant:metadata.tags[0] from variant_test_data
 -- !query analysis
-Project [variant_get(nested_variant#x, $.metadata.tags[0], VariantType, true, Some(America/Los_Angeles)) AS tags#x]
+Project [variant_get(nested_variant#x, $.metadata.tags[0], VariantType, true, Some(America/Los_Angeles), false) AS tags#x]
 +- SubqueryAlias variant_test_data
    +- View (`variant_test_data`, [int_price_variant#x, double_price_variant#x, multi_field_variant#x, array_value_variant#x, array_variant#x, nested_variant#x, special_chars_variant#x])
       +- Project [cast(int_price_variant#x as variant) AS int_price_variant#x, cast(double_price_variant#x as variant) AS double_price_variant#x, cast(multi_field_variant#x as variant) AS multi_field_variant#x, cast(array_value_variant#x as variant) AS array_value_variant#x, cast(array_variant#x as variant) AS array_variant#x, cast(nested_variant#x as variant) AS nested_variant#x, cast(special_chars_variant#x as variant) AS special_chars_variant#x]
@@ -223,7 +223,7 @@ Project [variant_get(nested_variant#x, $.metadata.tags[0], VariantType, true, So
 -- !query
 select nested_variant:metadata.nested.level from variant_test_data
 -- !query analysis
-Project [variant_get(nested_variant#x, $.metadata.nested.level, VariantType, true, Some(America/Los_Angeles)) AS level#x]
+Project [variant_get(nested_variant#x, $.metadata.nested.level, VariantType, true, Some(America/Los_Angeles), false) AS level#x]
 +- SubqueryAlias variant_test_data
    +- View (`variant_test_data`, [int_price_variant#x, double_price_variant#x, multi_field_variant#x, array_value_variant#x, array_variant#x, nested_variant#x, special_chars_variant#x])
       +- Project [cast(int_price_variant#x as variant) AS int_price_variant#x, cast(double_price_variant#x as variant) AS double_price_variant#x, cast(multi_field_variant#x as variant) AS multi_field_variant#x, cast(array_value_variant#x as variant) AS array_value_variant#x, cast(array_variant#x as variant) AS array_variant#x, cast(nested_variant#x as variant) AS nested_variant#x, cast(special_chars_variant#x as variant) AS special_chars_variant#x]
@@ -234,7 +234,7 @@ Project [variant_get(nested_variant#x, $.metadata.nested.level, VariantType, tru
 -- !query
 select nested_variant:metadata.nested.value from variant_test_data
 -- !query analysis
-Project [variant_get(nested_variant#x, $.metadata.nested.value, VariantType, true, Some(America/Los_Angeles)) AS value#x]
+Project [variant_get(nested_variant#x, $.metadata.nested.value, VariantType, true, Some(America/Los_Angeles), false) AS value#x]
 +- SubqueryAlias variant_test_data
    +- View (`variant_test_data`, [int_price_variant#x, double_price_variant#x, multi_field_variant#x, array_value_variant#x, array_variant#x, nested_variant#x, special_chars_variant#x])
       +- Project [cast(int_price_variant#x as variant) AS int_price_variant#x, cast(double_price_variant#x as variant) AS double_price_variant#x, cast(multi_field_variant#x as variant) AS multi_field_variant#x, cast(array_value_variant#x as variant) AS array_value_variant#x, cast(array_variant#x as variant) AS array_variant#x, cast(nested_variant#x as variant) AS nested_variant#x, cast(special_chars_variant#x as variant) AS special_chars_variant#x]
@@ -245,7 +245,7 @@ Project [variant_get(nested_variant#x, $.metadata.nested.value, VariantType, tru
 -- !query
 select nested_variant:metadata['version'] from variant_test_data
 -- !query analysis
-Project [variant_get(nested_variant#x, $.metadata['version'], VariantType, true, Some(America/Los_Angeles)) AS version#x]
+Project [variant_get(nested_variant#x, $.metadata['version'], VariantType, true, Some(America/Los_Angeles), false) AS version#x]
 +- SubqueryAlias variant_test_data
    +- View (`variant_test_data`, [int_price_variant#x, double_price_variant#x, multi_field_variant#x, array_value_variant#x, array_variant#x, nested_variant#x, special_chars_variant#x])
       +- Project [cast(int_price_variant#x as variant) AS int_price_variant#x, cast(double_price_variant#x as variant) AS double_price_variant#x, cast(multi_field_variant#x as variant) AS multi_field_variant#x, cast(array_value_variant#x as variant) AS array_value_variant#x, cast(array_variant#x as variant) AS array_variant#x, cast(nested_variant#x as variant) AS nested_variant#x, cast(special_chars_variant#x as variant) AS special_chars_variant#x]
@@ -256,7 +256,7 @@ Project [variant_get(nested_variant#x, $.metadata['version'], VariantType, true,
 -- !query
 select nested_variant:metadata['tags'] from variant_test_data
 -- !query analysis
-Project [variant_get(nested_variant#x, $.metadata['tags'], VariantType, true, Some(America/Los_Angeles)) AS tags#x]
+Project [variant_get(nested_variant#x, $.metadata['tags'], VariantType, true, Some(America/Los_Angeles), false) AS tags#x]
 +- SubqueryAlias variant_test_data
    +- View (`variant_test_data`, [int_price_variant#x, double_price_variant#x, multi_field_variant#x, array_value_variant#x, array_variant#x, nested_variant#x, special_chars_variant#x])
       +- Project [cast(int_price_variant#x as variant) AS int_price_variant#x, cast(double_price_variant#x as variant) AS double_price_variant#x, cast(multi_field_variant#x as variant) AS multi_field_variant#x, cast(array_value_variant#x as variant) AS array_value_variant#x, cast(array_variant#x as variant) AS array_variant#x, cast(nested_variant#x as variant) AS nested_variant#x, cast(special_chars_variant#x as variant) AS special_chars_variant#x]
@@ -267,7 +267,7 @@ Project [variant_get(nested_variant#x, $.metadata['tags'], VariantType, true, So
 -- !query
 select special_chars_variant:`field-name`::string from variant_test_data
 -- !query analysis
-Project [cast(variant_get(special_chars_variant#x, $.field-name, VariantType, true, Some(America/Los_Angeles)) as string) AS field-name#x]
+Project [cast(variant_get(special_chars_variant#x, $.field-name, VariantType, true, Some(America/Los_Angeles), false) as string) AS field-name#x]
 +- SubqueryAlias variant_test_data
    +- View (`variant_test_data`, [int_price_variant#x, double_price_variant#x, multi_field_variant#x, array_value_variant#x, array_variant#x, nested_variant#x, special_chars_variant#x])
       +- Project [cast(int_price_variant#x as variant) AS int_price_variant#x, cast(double_price_variant#x as variant) AS double_price_variant#x, cast(multi_field_variant#x as variant) AS multi_field_variant#x, cast(array_value_variant#x as variant) AS array_value_variant#x, cast(array_variant#x as variant) AS array_variant#x, cast(nested_variant#x as variant) AS nested_variant#x, cast(special_chars_variant#x as variant) AS special_chars_variant#x]
@@ -278,7 +278,7 @@ Project [cast(variant_get(special_chars_variant#x, $.field-name, VariantType, tr
 -- !query
 select special_chars_variant:['field-name']::string from variant_test_data
 -- !query analysis
-Project [cast(variant_get(special_chars_variant#x, $['field-name'], VariantType, true, Some(America/Los_Angeles)) as string) AS field-name#x]
+Project [cast(variant_get(special_chars_variant#x, $['field-name'], VariantType, true, Some(America/Los_Angeles), false) as string) AS field-name#x]
 +- SubqueryAlias variant_test_data
    +- View (`variant_test_data`, [int_price_variant#x, double_price_variant#x, multi_field_variant#x, array_value_variant#x, array_variant#x, nested_variant#x, special_chars_variant#x])
       +- Project [cast(int_price_variant#x as variant) AS int_price_variant#x, cast(double_price_variant#x as variant) AS double_price_variant#x, cast(multi_field_variant#x as variant) AS multi_field_variant#x, cast(array_value_variant#x as variant) AS array_value_variant#x, cast(array_variant#x as variant) AS array_variant#x, cast(nested_variant#x as variant) AS nested_variant#x, cast(special_chars_variant#x as variant) AS special_chars_variant#x]
@@ -289,7 +289,7 @@ Project [cast(variant_get(special_chars_variant#x, $['field-name'], VariantType,
 -- !query
 select special_chars_variant:field_name::string from variant_test_data
 -- !query analysis
-Project [cast(variant_get(special_chars_variant#x, $.field_name, VariantType, true, Some(America/Los_Angeles)) as string) AS field_name#x]
+Project [cast(variant_get(special_chars_variant#x, $.field_name, VariantType, true, Some(America/Los_Angeles), false) as string) AS field_name#x]
 +- SubqueryAlias variant_test_data
    +- View (`variant_test_data`, [int_price_variant#x, double_price_variant#x, multi_field_variant#x, array_value_variant#x, array_variant#x, nested_variant#x, special_chars_variant#x])
       +- Project [cast(int_price_variant#x as variant) AS int_price_variant#x, cast(double_price_variant#x as variant) AS double_price_variant#x, cast(multi_field_variant#x as variant) AS multi_field_variant#x, cast(array_value_variant#x as variant) AS array_value_variant#x, cast(array_variant#x as variant) AS array_variant#x, cast(nested_variant#x as variant) AS nested_variant#x, cast(special_chars_variant#x as variant) AS special_chars_variant#x]
@@ -300,7 +300,7 @@ Project [cast(variant_get(special_chars_variant#x, $.field_name, VariantType, tr
 -- !query
 select special_chars_variant:['field_name']::string from variant_test_data
 -- !query analysis
-Project [cast(variant_get(special_chars_variant#x, $['field_name'], VariantType, true, Some(America/Los_Angeles)) as string) AS field_name#x]
+Project [cast(variant_get(special_chars_variant#x, $['field_name'], VariantType, true, Some(America/Los_Angeles), false) as string) AS field_name#x]
 +- SubqueryAlias variant_test_data
    +- View (`variant_test_data`, [int_price_variant#x, double_price_variant#x, multi_field_variant#x, array_value_variant#x, array_variant#x, nested_variant#x, special_chars_variant#x])
       +- Project [cast(int_price_variant#x as variant) AS int_price_variant#x, cast(double_price_variant#x as variant) AS double_price_variant#x, cast(multi_field_variant#x as variant) AS multi_field_variant#x, cast(array_value_variant#x as variant) AS array_value_variant#x, cast(array_variant#x as variant) AS array_variant#x, cast(nested_variant#x as variant) AS nested_variant#x, cast(special_chars_variant#x as variant) AS special_chars_variant#x]
@@ -311,7 +311,7 @@ Project [cast(variant_get(special_chars_variant#x, $['field_name'], VariantType,
 -- !query
 select special_chars_variant:`field.name`::string from variant_test_data
 -- !query analysis
-Project [cast(variant_get(special_chars_variant#x, $.field.name, VariantType, true, Some(America/Los_Angeles)) as string) AS name#x]
+Project [cast(variant_get(special_chars_variant#x, $.field.name, VariantType, true, Some(America/Los_Angeles), false) as string) AS name#x]
 +- SubqueryAlias variant_test_data
    +- View (`variant_test_data`, [int_price_variant#x, double_price_variant#x, multi_field_variant#x, array_value_variant#x, array_variant#x, nested_variant#x, special_chars_variant#x])
       +- Project [cast(int_price_variant#x as variant) AS int_price_variant#x, cast(double_price_variant#x as variant) AS double_price_variant#x, cast(multi_field_variant#x as variant) AS multi_field_variant#x, cast(array_value_variant#x as variant) AS array_value_variant#x, cast(array_variant#x as variant) AS array_variant#x, cast(nested_variant#x as variant) AS nested_variant#x, cast(special_chars_variant#x as variant) AS special_chars_variant#x]
@@ -322,7 +322,7 @@ Project [cast(variant_get(special_chars_variant#x, $.field.name, VariantType, tr
 -- !query
 select special_chars_variant:['field.name']::string from variant_test_data
 -- !query analysis
-Project [cast(variant_get(special_chars_variant#x, $['field.name'], VariantType, true, Some(America/Los_Angeles)) as string) AS field.name#x]
+Project [cast(variant_get(special_chars_variant#x, $['field.name'], VariantType, true, Some(America/Los_Angeles), false) as string) AS field.name#x]
 +- SubqueryAlias variant_test_data
    +- View (`variant_test_data`, [int_price_variant#x, double_price_variant#x, multi_field_variant#x, array_value_variant#x, array_variant#x, nested_variant#x, special_chars_variant#x])
       +- Project [cast(int_price_variant#x as variant) AS int_price_variant#x, cast(double_price_variant#x as variant) AS double_price_variant#x, cast(multi_field_variant#x as variant) AS multi_field_variant#x, cast(array_value_variant#x as variant) AS array_value_variant#x, cast(array_variant#x as variant) AS array_variant#x, cast(nested_variant#x as variant) AS nested_variant#x, cast(special_chars_variant#x as variant) AS special_chars_variant#x]
@@ -333,7 +333,7 @@ Project [cast(variant_get(special_chars_variant#x, $['field.name'], VariantType,
 -- !query
 select multi_field_variant:scores[0]::int + multi_field_variant:scores[1]::int from variant_test_data
 -- !query analysis
-Project [(cast(variant_get(multi_field_variant#x, $.scores[0], VariantType, true, Some(America/Los_Angeles)) as int) + cast(variant_get(multi_field_variant#x, $.scores[1], VariantType, true, Some(America/Los_Angeles)) as int)) AS (CAST(variant_get(multi_field_variant, $.scores[0]) AS scores AS INT) + CAST(variant_get(multi_field_variant, $.scores[1]) AS scores AS INT))#x]
+Project [(cast(variant_get(multi_field_variant#x, $.scores[0], VariantType, true, Some(America/Los_Angeles), false) as int) + cast(variant_get(multi_field_variant#x, $.scores[1], VariantType, true, Some(America/Los_Angeles), false) as int)) AS (CAST(variant_get(multi_field_variant, $.scores[0]) AS scores AS INT) + CAST(variant_get(multi_field_variant, $.scores[1]) AS scores AS INT))#x]
 +- SubqueryAlias variant_test_data
    +- View (`variant_test_data`, [int_price_variant#x, double_price_variant#x, multi_field_variant#x, array_value_variant#x, array_variant#x, nested_variant#x, special_chars_variant#x])
       +- Project [cast(int_price_variant#x as variant) AS int_price_variant#x, cast(double_price_variant#x as variant) AS double_price_variant#x, cast(multi_field_variant#x as variant) AS multi_field_variant#x, cast(array_value_variant#x as variant) AS array_value_variant#x, cast(array_variant#x as variant) AS array_variant#x, cast(nested_variant#x as variant) AS nested_variant#x, cast(special_chars_variant#x as variant) AS special_chars_variant#x]
@@ -347,7 +347,7 @@ select count(*) from (select explode(cast(multi_field_variant:scores as array<in
 Aggregate [count(1) AS count(1)#xL]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Project [score#x]
-      +- Generate explode(cast(variant_get(multi_field_variant#x, $.scores, VariantType, true, Some(America/Los_Angeles)) as array<int>)), false, [score#x]
+      +- Generate explode(cast(variant_get(multi_field_variant#x, $.scores, VariantType, true, Some(America/Los_Angeles), false) as array<int>)), false, [score#x]
          +- SubqueryAlias variant_test_data
             +- View (`variant_test_data`, [int_price_variant#x, double_price_variant#x, multi_field_variant#x, array_value_variant#x, array_variant#x, nested_variant#x, special_chars_variant#x])
                +- Project [cast(int_price_variant#x as variant) AS int_price_variant#x, cast(double_price_variant#x as variant) AS double_price_variant#x, cast(multi_field_variant#x as variant) AS multi_field_variant#x, cast(array_value_variant#x as variant) AS array_value_variant#x, cast(array_variant#x as variant) AS array_variant#x, cast(nested_variant#x as variant) AS nested_variant#x, cast(special_chars_variant#x as variant) AS special_chars_variant#x]
@@ -374,7 +374,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
-    "error" : "'*'",
+    "error" : "':'",
     "hint" : ""
   }
 }
@@ -383,7 +383,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 select typeof(multi_field_variant:name) from variant_test_data
 -- !query analysis
-Project [typeof(variant_get(multi_field_variant#x, $.name, VariantType, true, Some(America/Los_Angeles))) AS typeof(variant_get(multi_field_variant, $.name) AS name)#x]
+Project [typeof(variant_get(multi_field_variant#x, $.name, VariantType, true, Some(America/Los_Angeles), false)) AS typeof(variant_get(multi_field_variant, $.name) AS name)#x]
 +- SubqueryAlias variant_test_data
    +- View (`variant_test_data`, [int_price_variant#x, double_price_variant#x, multi_field_variant#x, array_value_variant#x, array_variant#x, nested_variant#x, special_chars_variant#x])
       +- Project [cast(int_price_variant#x as variant) AS int_price_variant#x, cast(double_price_variant#x as variant) AS double_price_variant#x, cast(multi_field_variant#x as variant) AS multi_field_variant#x, cast(array_value_variant#x as variant) AS array_value_variant#x, cast(array_variant#x as variant) AS array_variant#x, cast(nested_variant#x as variant) AS nested_variant#x, cast(special_chars_variant#x as variant) AS special_chars_variant#x]
@@ -394,7 +394,7 @@ Project [typeof(variant_get(multi_field_variant#x, $.name, VariantType, true, So
 -- !query
 select typeof(multi_field_variant:age) from variant_test_data
 -- !query analysis
-Project [typeof(variant_get(multi_field_variant#x, $.age, VariantType, true, Some(America/Los_Angeles))) AS typeof(variant_get(multi_field_variant, $.age) AS age)#x]
+Project [typeof(variant_get(multi_field_variant#x, $.age, VariantType, true, Some(America/Los_Angeles), false)) AS typeof(variant_get(multi_field_variant, $.age) AS age)#x]
 +- SubqueryAlias variant_test_data
    +- View (`variant_test_data`, [int_price_variant#x, double_price_variant#x, multi_field_variant#x, array_value_variant#x, array_variant#x, nested_variant#x, special_chars_variant#x])
       +- Project [cast(int_price_variant#x as variant) AS int_price_variant#x, cast(double_price_variant#x as variant) AS double_price_variant#x, cast(multi_field_variant#x as variant) AS multi_field_variant#x, cast(array_value_variant#x as variant) AS array_value_variant#x, cast(array_variant#x as variant) AS array_variant#x, cast(nested_variant#x as variant) AS nested_variant#x, cast(special_chars_variant#x as variant) AS special_chars_variant#x]
@@ -405,7 +405,7 @@ Project [typeof(variant_get(multi_field_variant#x, $.age, VariantType, true, Som
 -- !query
 select typeof(multi_field_variant:active) from variant_test_data
 -- !query analysis
-Project [typeof(variant_get(multi_field_variant#x, $.active, VariantType, true, Some(America/Los_Angeles))) AS typeof(variant_get(multi_field_variant, $.active) AS active)#x]
+Project [typeof(variant_get(multi_field_variant#x, $.active, VariantType, true, Some(America/Los_Angeles), false)) AS typeof(variant_get(multi_field_variant, $.active) AS active)#x]
 +- SubqueryAlias variant_test_data
    +- View (`variant_test_data`, [int_price_variant#x, double_price_variant#x, multi_field_variant#x, array_value_variant#x, array_variant#x, nested_variant#x, special_chars_variant#x])
       +- Project [cast(int_price_variant#x as variant) AS int_price_variant#x, cast(double_price_variant#x as variant) AS double_price_variant#x, cast(multi_field_variant#x as variant) AS multi_field_variant#x, cast(array_value_variant#x as variant) AS array_value_variant#x, cast(array_variant#x as variant) AS array_variant#x, cast(nested_variant#x as variant) AS nested_variant#x, cast(special_chars_variant#x as variant) AS special_chars_variant#x]
@@ -416,7 +416,7 @@ Project [typeof(variant_get(multi_field_variant#x, $.active, VariantType, true, 
 -- !query
 select typeof(multi_field_variant:scores) from variant_test_data
 -- !query analysis
-Project [typeof(variant_get(multi_field_variant#x, $.scores, VariantType, true, Some(America/Los_Angeles))) AS typeof(variant_get(multi_field_variant, $.scores) AS scores)#x]
+Project [typeof(variant_get(multi_field_variant#x, $.scores, VariantType, true, Some(America/Los_Angeles), false)) AS typeof(variant_get(multi_field_variant, $.scores) AS scores)#x]
 +- SubqueryAlias variant_test_data
    +- View (`variant_test_data`, [int_price_variant#x, double_price_variant#x, multi_field_variant#x, array_value_variant#x, array_variant#x, nested_variant#x, special_chars_variant#x])
       +- Project [cast(int_price_variant#x as variant) AS int_price_variant#x, cast(double_price_variant#x as variant) AS double_price_variant#x, cast(multi_field_variant#x as variant) AS multi_field_variant#x, cast(array_value_variant#x as variant) AS array_value_variant#x, cast(array_variant#x as variant) AS array_variant#x, cast(nested_variant#x as variant) AS nested_variant#x, cast(special_chars_variant#x as variant) AS special_chars_variant#x]
@@ -427,7 +427,7 @@ Project [typeof(variant_get(multi_field_variant#x, $.scores, VariantType, true, 
 -- !query
 select isnull(multi_field_variant:missing_field) from variant_test_data
 -- !query analysis
-Project [isnull(variant_get(multi_field_variant#x, $.missing_field, VariantType, true, Some(America/Los_Angeles))) AS (variant_get(multi_field_variant, $.missing_field) AS missing_field IS NULL)#x]
+Project [isnull(variant_get(multi_field_variant#x, $.missing_field, VariantType, true, Some(America/Los_Angeles), false)) AS (variant_get(multi_field_variant, $.missing_field) AS missing_field IS NULL)#x]
 +- SubqueryAlias variant_test_data
    +- View (`variant_test_data`, [int_price_variant#x, double_price_variant#x, multi_field_variant#x, array_value_variant#x, array_variant#x, nested_variant#x, special_chars_variant#x])
       +- Project [cast(int_price_variant#x as variant) AS int_price_variant#x, cast(double_price_variant#x as variant) AS double_price_variant#x, cast(multi_field_variant#x as variant) AS multi_field_variant#x, cast(array_value_variant#x as variant) AS array_value_variant#x, cast(array_variant#x as variant) AS array_variant#x, cast(nested_variant#x as variant) AS nested_variant#x, cast(special_chars_variant#x as variant) AS special_chars_variant#x]
@@ -438,7 +438,7 @@ Project [isnull(variant_get(multi_field_variant#x, $.missing_field, VariantType,
 -- !query
 select isnotnull(multi_field_variant:name) from variant_test_data
 -- !query analysis
-Project [isnotnull(variant_get(multi_field_variant#x, $.name, VariantType, true, Some(America/Los_Angeles))) AS (variant_get(multi_field_variant, $.name) AS name IS NOT NULL)#x]
+Project [isnotnull(variant_get(multi_field_variant#x, $.name, VariantType, true, Some(America/Los_Angeles), false)) AS (variant_get(multi_field_variant, $.name) AS name IS NOT NULL)#x]
 +- SubqueryAlias variant_test_data
    +- View (`variant_test_data`, [int_price_variant#x, double_price_variant#x, multi_field_variant#x, array_value_variant#x, array_variant#x, nested_variant#x, special_chars_variant#x])
       +- Project [cast(int_price_variant#x as variant) AS int_price_variant#x, cast(double_price_variant#x as variant) AS double_price_variant#x, cast(multi_field_variant#x as variant) AS multi_field_variant#x, cast(array_value_variant#x as variant) AS array_value_variant#x, cast(array_variant#x as variant) AS array_variant#x, cast(nested_variant#x as variant) AS nested_variant#x, cast(special_chars_variant#x as variant) AS special_chars_variant#x]
@@ -449,7 +449,7 @@ Project [isnotnull(variant_get(multi_field_variant#x, $.name, VariantType, true,
 -- !query
 select coalesce(multi_field_variant:missing_field, 'default_value') from variant_test_data
 -- !query analysis
-Project [coalesce(variant_get(multi_field_variant#x, $.missing_field, VariantType, true, Some(America/Los_Angeles)), cast(default_value as variant)) AS coalesce(variant_get(multi_field_variant, $.missing_field) AS missing_field, default_value)#x]
+Project [coalesce(variant_get(multi_field_variant#x, $.missing_field, VariantType, true, Some(America/Los_Angeles), false), cast(default_value as variant)) AS coalesce(variant_get(multi_field_variant, $.missing_field) AS missing_field, default_value)#x]
 +- SubqueryAlias variant_test_data
    +- View (`variant_test_data`, [int_price_variant#x, double_price_variant#x, multi_field_variant#x, array_value_variant#x, array_variant#x, nested_variant#x, special_chars_variant#x])
       +- Project [cast(int_price_variant#x as variant) AS int_price_variant#x, cast(double_price_variant#x as variant) AS double_price_variant#x, cast(multi_field_variant#x as variant) AS multi_field_variant#x, cast(array_value_variant#x as variant) AS array_value_variant#x, cast(array_variant#x as variant) AS array_variant#x, cast(nested_variant#x as variant) AS nested_variant#x, cast(special_chars_variant#x as variant) AS special_chars_variant#x]

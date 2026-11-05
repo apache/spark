@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import java.util.Locale
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, AnalysisException}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -115,6 +116,11 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           CollectLimitExec(limit = offset + limit, child = planLater(child), offset = offset)
         case Limit(IntegerLiteral(limit), child) =>
           CollectLimitExec(limit = limit, child = planLater(child))
+        case logical.Offset(IntegerLiteral(0), child) =>
+          // OFFSET 0 is a no-op. It is normally removed by the EliminateOffsets optimizer rule,
+          // but that rule is excludable, so handle it defensively here to avoid constructing a
+          // CollectLimitExec with no limit and a zero offset (which fails its assertion).
+          planLater(child)
         case logical.Offset(IntegerLiteral(offset), child) =>
           CollectLimitExec(child = planLater(child), offset = offset)
         case Tail(IntegerLiteral(limit), child) =>
@@ -437,29 +443,27 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
-  /**
-   * Plans AS-OF joins using a dedicated sort-merge operator when enabled for the
-   * DataFrame API, or implicitly for SQL ASOF JOIN (`requiresSortMergeAsOfJoin`).
-   */
+  /** Plans AS-OF joins whose analyzed node selects the sort-merge operator. */
   object AsOfJoinSelection extends Strategy with PredicateHelper {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case j: AsOfJoin if conf.useSortMergeAsOfJoinOperator(j.requiresSortMergeAsOfJoin) =>
+      case j: AsOfJoin if j.requiresSortMergeAsOfJoin =>
         val (leftKeys, rightKeys, residual) = j.condition match {
           case Some(cond) => extractEquiJoinKeys(cond, j.left, j.right)
           case None => (Seq.empty[Expression], Seq.empty[Expression], None)
         }
-        val (leftSort, rightSort) =
-          if (j.leftSortExprs.nonEmpty && j.rightSortExprs.nonEmpty) {
-            (j.leftSortExprs, j.rightSortExprs)
-          } else {
-            val (leftAsOf, rightAsOf) = extractAsOfExprs(j.orderExpression, j.left, j.right)
-            (Seq(leftAsOf), Seq(rightAsOf))
-          }
 
         joins.SortMergeAsOfJoinExec(
-          leftKeys, rightKeys, leftSort, rightSort,
-          j.asOfCondition, j.orderExpression, j.joinType, residual,
-          planLater(j.left), planLater(j.right)) :: Nil
+          leftKeys = leftKeys,
+          rightKeys = rightKeys,
+          leftSortExprs = j.leftSortExprs,
+          rightSortExprs = j.rightSortExprs,
+          asOfCondition = j.asOfCondition,
+          direction = j.direction,
+          joinType = j.joinType,
+          condition = residual,
+          left = planLater(j.left),
+          right = planLater(j.right)
+        ) :: Nil
       case _ => Nil
     }
 
@@ -497,51 +501,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       }
       val residual = residuals.reduceOption(And)
       (leftKeys.toSeq, rightKeys.toSeq, residual)
-    }
-
-    /**
-     * Extract the left and right as-of key expressions.
-     *
-     * We always extract from orderExpression rather than asOfCondition
-     * because orderExpression is direction-unique by construction
-     * (Subtract(left, right) for Backward, Subtract(right, left) for
-     * Forward, If(...) for Nearest) and is unaffected by tolerance or
-     * allowExactMatches variations that complicate asOfCondition's shape.
-     */
-    private def extractAsOfExprs(
-        orderExpression: Expression,
-        left: LogicalPlan,
-        right: LogicalPlan): (Expression, Expression) = {
-      val leftAttrs = left.outputSet
-      val rightAttrs = right.outputSet
-
-      findFromOrder(orderExpression, leftAttrs, rightAttrs).getOrElse {
-        throw new IllegalStateException(
-          "Cannot extract as-of keys from order expression: " +
-          s"$orderExpression")
-      }
-    }
-
-    /** Extract as-of key pair from orderExpression (distance metric). */
-    private def findFromOrder(
-        expr: Expression,
-        leftAttrs: AttributeSet,
-        rightAttrs: AttributeSet): Option[(Expression, Expression)] = {
-      expr match {
-        // Backward: Subtract(leftAsOf, rightAsOf)
-        // Forward: Subtract(rightAsOf, leftAsOf)
-        case Subtract(l, r, _)
-            if l.references.subsetOf(leftAttrs) &&
-              r.references.subsetOf(rightAttrs) =>
-          Some((l, r))
-        case Subtract(l, r, _)
-            if l.references.subsetOf(rightAttrs) &&
-              r.references.subsetOf(leftAttrs) =>
-          Some((r, l))
-        // Nearest: If(GT(left, right), Sub(left, right), Sub(right, left))
-        case If(_, thenExpr, _) => findFromOrder(thenExpr, leftAttrs, rightAttrs)
-        case _ => None
-      }
     }
   }
 
@@ -1028,6 +987,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object PythonEvals extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case ArrowEvalPython(udfs, output, child, PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF) =>
+        InProcessPythonUDFBuilder.checkConfiguration(conf)
+        InProcessArrowEvalPythonExec(udfs, output, planLater(child)) :: Nil
       case ArrowEvalPython(udfs, output, child, evalType) =>
         ArrowEvalPythonExec(udfs, output, planLater(child), evalType) :: Nil
       case BatchEvalPython(udfs, output, child) =>
@@ -1243,6 +1205,11 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.LocalLimitExec(limit, planLater(child)) :: Nil
       case logical.GlobalLimit(IntegerLiteral(limit), child) =>
         execution.GlobalLimitExec(limit, planLater(child)) :: Nil
+      case logical.Offset(IntegerLiteral(0), child) =>
+        // OFFSET 0 is a no-op; see the note in SpecialLimits. Excluding EliminateOffsets leaves
+        // the Offset node in place, so avoid building a GlobalLimitExec with no limit and a zero
+        // offset (which fails its assertion).
+        planLater(child) :: Nil
       case logical.Offset(IntegerLiteral(offset), child) =>
         GlobalLimitExec(child = planLater(child), offset = offset) :: Nil
       case union: logical.Union =>

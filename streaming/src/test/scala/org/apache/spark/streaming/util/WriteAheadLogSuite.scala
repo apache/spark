@@ -476,13 +476,9 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
     val batchedWal = new BatchedWriteAheadLog(wal, sparkConf)
 
     val e = intercept[SparkException] {
-      val buffer = if (Utils.isJavaVersionAtMost17) {
-        mock[ByteBuffer]
-      } else {
-        // SPARK-40731: Use a 0 size `ByteBuffer` instead of `mock[ByteBuffer]`
-        // for Java 17+ due to mockito 4 can't mock/spy sealed class
-        ByteBuffer.allocate(0)
-      }
+      // SPARK-40731: Use a 0 size `ByteBuffer` instead of `mock[ByteBuffer]`
+      // because mockito can't mock/spy a sealed class
+      val buffer = ByteBuffer.allocate(0)
       batchedWal.write(buffer, 2L)
     }
     assert(e.getCause.getMessage === "Hello!")
@@ -552,13 +548,9 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
     batchedWal.close()
     verify(wal, times(1)).close()
 
-    val buffer = if (Utils.isJavaVersionAtMost17) {
-      mock[ByteBuffer]
-    } else {
-      // SPARK-40731: Use a 0 size `ByteBuffer` instead of `mock[ByteBuffer]`
-      // for Java 17+ due to mockito 4 can't mock/spy sealed class
-      ByteBuffer.allocate(0)
-    }
+    // SPARK-40731: Use a 0 size `ByteBuffer` instead of `mock[ByteBuffer]`
+    // because mockito can't mock/spy a sealed class
+    val buffer = ByteBuffer.allocate(0)
     intercept[IllegalStateException](batchedWal.write(buffer, 12L))
   }
 
