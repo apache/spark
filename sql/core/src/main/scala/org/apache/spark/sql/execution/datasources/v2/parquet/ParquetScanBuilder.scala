@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Count}
 import org.apache.spark.sql.connector.read.{SupportsPushDownAggregates, SupportsPushDownVariantExtractions, VariantExtraction}
 import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, PartitioningAwareFileIndex}
-import org.apache.spark.sql.execution.datasources.parquet.{ParquetFilters, SparkToParquetSchemaConverter}
+import org.apache.spark.sql.execution.datasources.parquet.{ParquetFilters, ParquetUtils, SparkToParquetSchemaConverter}
 import org.apache.spark.sql.execution.datasources.v2.{FileScanBuilder, V2ColumnUtils}
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy
 import org.apache.spark.sql.sources.Filter
@@ -95,7 +95,14 @@ case class ParquetScanBuilder(
   }
 
   override def pushAggregation(aggregation: Aggregation): Boolean = {
-    if (!sparkSession.sessionState.conf.parquetAggregatePushDown) {
+    val sqlConf = sparkSession.sessionState.conf
+    if (!sqlConf.parquetAggregatePushDown) {
+      return false
+    }
+    // With field ID reading, the reader matches columns by field ID rather than by name (see
+    // `ParquetReadSupport.clipParquetGroupFields`), but the footer statistics are looked up by
+    // name, so the two could pick different columns.
+    if (sqlConf.parquetFieldIdReadEnabled && ParquetUtils.hasFieldIds(dataSchema)) {
       return false
     }
     // The footer only has statistics for leaf columns, and the null count of a leaf of a nested
@@ -104,7 +111,9 @@ case class ParquetScanBuilder(
     // answered from the footer.
     val countsNestedColumn = aggregation.aggregateExpressions.exists {
       case count: Count => V2ColumnUtils.extractV2Column(count.column).exists { colName =>
-        schema.getFieldIndex(colName).exists(i => isNestedType(schema(i).dataType))
+        // `colName` is the name of the resolved column, so match it exactly: `getFieldIndex` is
+        // case-insensitive and could pick another column that differs only in case.
+        schema.fields.find(_.name == colName).exists(f => isNestedType(f.dataType))
       }
       case _ => false
     }

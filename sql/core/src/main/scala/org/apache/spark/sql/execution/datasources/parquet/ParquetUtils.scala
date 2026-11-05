@@ -335,7 +335,8 @@ object ParquetUtils extends Logging {
     // chunk index by matching the column name against the top-level leaves of the file schema.
     // Returns -1 if the file does not have the column.
     val leafColumns = footer.getFileMetaData.getSchema.getColumns
-    def columnIndex(colName: String): Int = {
+    val columnIndexes = mutable.HashMap.empty[String, Int]
+    def columnIndex(colName: String): Int = columnIndexes.getOrElseUpdate(colName, {
       val matches = (0 until leafColumns.size).filter { i =>
         val path = leafColumns.get(i).getPath
         path.length == 1 &&
@@ -346,7 +347,7 @@ object ParquetUtils extends Logging {
           colName, matches.map(i => leafColumns.get(i).getPath.head).mkString("[", ", ", "]"))
       }
       matches.headOption.getOrElse(-1)
-    }
+    })
     val blocks = footer.getBlocks
     val primitiveTypeBuilder = mutable.ArrayBuilder.make[PrimitiveType]
     val valuesBuilder = mutable.ArrayBuilder.make[Any]
