@@ -36,27 +36,28 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class FormExternalLookupJoinSuite extends AnalysisTest {
   // The stream side of a stream-static join.
-  private val left = LocalRelation(Seq($"tenant".int, $"id".int), isStreaming = true)
+  private val stream = LocalRelation(Seq($"streamTenant".int, $"streamId".int), isStreaming = true)
   // A lookup-only table has no batch scan, so it reaches the join as this placeholder.
-  private val lookupOnly = ExternalLookupRelation(relation(EXTERNAL_LOOKUP))
-  private val idCondition = left.output(1) === lookupOnly.output(1)
+  private val lookupOnly = ExternalLookupRelation(tableWith(EXTERNAL_LOOKUP))
+  private val idsEqual = stream.output(1) === lookupOnly.output(1)
 
-  private def relation(capabilities: TableCapability*): DataSourceV2Relation =
+  private def tableWith(capabilities: TableCapability*): DataSourceV2Relation =
     DataSourceV2Relation.create(
       LookupCapabilityTable(capabilities.toSet), None, None, CaseInsensitiveStringMap.empty)
 
-  private def join(right: LogicalPlan): Join =
-    Join(left, right, Inner, Some(left.output(1) === right.output(1)), JoinHint.NONE)
+  // An inner join of the stream with `right`, on the id column of each.
+  private def innerJoinOnId(right: LogicalPlan): Join =
+    Join(stream, right, Inner, Some(stream.output(1) === right.output(1)), JoinHint.NONE)
 
   // Hints become ResolvedHint nodes, which only Finish Analysis moves into the join.
   private def analyze(plan: LogicalPlan): LogicalPlan =
     getAnalyzer.executeAndCheck(plan, new QueryPlanningTracker)
 
   test("an eligible join stays a Join in analysis and is converted when optimization starts") {
-    val Seq(tenant, id) = left.output
-    val compositeKey = tenant === lookupOnly.output(0) && idCondition
-    for (condition <- Seq(idCondition, compositeKey); joinType <- Seq(Inner, LeftOuter)) {
-      val analyzed = analyze(left.join(lookupOnly, joinType, Some(condition)))
+    val Seq(tenant, id) = stream.output
+    val compositeKey = tenant === lookupOnly.output(0) && idsEqual
+    for (condition <- Seq(idsEqual, compositeKey); joinType <- Seq(Inner, LeftOuter)) {
+      val analyzed = analyze(stream.join(lookupOnly, joinType, Some(condition)))
       assert(analyzed.isInstanceOf[Join])
       CheckExternalLookupJoin(analyzed)
       FormExternalLookupJoin(analyzed) match {
@@ -75,10 +76,10 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
   test("keep ordinary joins that cannot become external lookup joins") {
     val other = LocalRelation($"k".int, $"k2".int)
     Seq(
-      join(relation(BATCH_READ, EXTERNAL_LOOKUP)),
-      join(relation(BATCH_READ)),
-      join(other),
-      join(Project(lookupOnly.output, lookupOnly))).foreach { join =>
+      innerJoinOnId(tableWith(BATCH_READ, EXTERNAL_LOOKUP)),
+      innerJoinOnId(tableWith(BATCH_READ)),
+      innerJoinOnId(other),
+      innerJoinOnId(Project(lookupOnly.output, lookupOnly))).foreach { join =>
       CheckExternalLookupJoin(join)
       assert(FormExternalLookupJoin(join) == join)
     }
@@ -87,23 +88,23 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
   test("validation and conversion reject a lookup-only join with the same reason") {
     Seq(
       // Only a stream-static join, with the lookup-only table on the right side.
-      (left.copy(isStreaming = false).join(lookupOnly, Inner, Some(idCondition)),
+      (stream.copy(isStreaming = false).join(lookupOnly, Inner, Some(idsEqual)),
         "STATIC_LEFT_SIDE", Map.empty[String, String]),
-      (lookupOnly.join(left, Inner, Some(idCondition)), "LOOKUP_TABLE_ON_LEFT",
+      (lookupOnly.join(stream, Inner, Some(idsEqual)), "LOOKUP_TABLE_ON_LEFT",
         Map.empty[String, String]),
-      (left.join(lookupOnly, RightOuter, Some(idCondition)), "JOIN_TYPE",
+      (stream.join(lookupOnly, RightOuter, Some(idsEqual)), "JOIN_TYPE",
         Map("joinType" -> "RIGHT OUTER")),
       // A cross join fails with its join type, with or without a later filter.
-      (left.join(lookupOnly, Cross), "JOIN_TYPE", Map("joinType" -> "CROSS")),
-      (left.join(lookupOnly, Cross).where(idCondition), "JOIN_TYPE", Map("joinType" -> "CROSS")),
+      (stream.join(lookupOnly, Cross), "JOIN_TYPE", Map("joinType" -> "CROSS")),
+      (stream.join(lookupOnly, Cross).where(idsEqual), "JOIN_TYPE", Map("joinType" -> "CROSS")),
       // No join strategy hint applies to an external lookup join; sort merge is named MERGE.
-      (left.hint("broadcast").join(lookupOnly, Inner, Some(idCondition)),
+      (stream.hint("broadcast").join(lookupOnly, Inner, Some(idsEqual)),
         "CONFLICTING_JOIN_STRATEGY", Map("strategy" -> "BROADCAST")),
-      (left.hint("merge").join(lookupOnly, Inner, Some(idCondition)),
+      (stream.hint("merge").join(lookupOnly, Inner, Some(idsEqual)),
         "CONFLICTING_JOIN_STRATEGY", Map("strategy" -> "MERGE")),
-      (left.hint("shuffle_hash").join(lookupOnly, Inner, Some(idCondition)),
+      (stream.hint("shuffle_hash").join(lookupOnly, Inner, Some(idsEqual)),
         "CONFLICTING_JOIN_STRATEGY", Map("strategy" -> "SHUFFLE_HASH")),
-      (left.hint("shuffle_replicate_nl").join(lookupOnly, Inner, Some(idCondition)),
+      (stream.hint("shuffle_replicate_nl").join(lookupOnly, Inner, Some(idsEqual)),
         "CONFLICTING_JOIN_STRATEGY", Map("strategy" -> "SHUFFLE_REPLICATE_NL"))).foreach {
       case (plan, subClass, parameters) =>
         val analyzed = analyze(plan)
@@ -121,8 +122,8 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
   test("a strategy hint inside a nested join on the stream side belongs to that join") {
     val static = LocalRelation($"k".int)
     val nested =
-      left.hint("broadcast").join(static, Inner, Some(left.output(1) === static.output(0)))
-    val analyzed = analyze(nested.join(lookupOnly, Inner, Some(idCondition)))
+      stream.hint("broadcast").join(static, Inner, Some(stream.output(1) === static.output(0)))
+    val analyzed = analyze(nested.join(lookupOnly, Inner, Some(idsEqual)))
     CheckExternalLookupJoin(analyzed)
     assert(FormExternalLookupJoin(analyzed).isInstanceOf[ExternalLookupJoin])
   }
@@ -131,8 +132,8 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
     // Even when a later filter holds the condition, which operator optimization would push
     // into the join.
     Seq(
-      left.join(lookupOnly),
-      left.join(lookupOnly).where(idCondition)).foreach { plan =>
+      stream.join(lookupOnly),
+      stream.join(lookupOnly).where(idsEqual)).foreach { plan =>
       val analyzed = analyze(plan)
       // The classic Dataset API analyzes a USING join first as a join without a condition.
       CheckExternalLookupJoin(analyzed)
@@ -147,7 +148,7 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
     // Each join would otherwise fail with JOIN_TYPE.
     val sharedIds = LocalRelation(lookupOnly.output, isStreaming = true)
     Seq(
-      Join(left, lookupOnly, RightOuter, Some(left.output(1)), JoinHint.NONE),
+      Join(stream, lookupOnly, RightOuter, Some(stream.output(1)), JoinHint.NONE),
       Join(sharedIds, lookupOnly, RightOuter, Some(sharedIds.output(1) === lookupOnly.output(1)),
         JoinHint.NONE)).foreach { join =>
       assert(!join.resolved)
@@ -156,7 +157,8 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
   }
 
   test("an external lookup join node rejects an unsupported join type (internal invariant)") {
-    val lookupJoin = FormExternalLookupJoin(join(lookupOnly)).asInstanceOf[ExternalLookupJoin]
+    val lookupJoin =
+      FormExternalLookupJoin(innerJoinOnId(lookupOnly)).asInstanceOf[ExternalLookupJoin]
     checkError(
       exception = intercept[SparkException] { lookupJoin.copy(joinType = FullOuter).output },
       condition = "INTERNAL_ERROR",
@@ -168,6 +170,7 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
 private case class LookupCapabilityTable(capabilitySet: Set[TableCapability]) extends Table {
   override def name(): String = "LookupCapabilityTable"
   override def schema(): StructType =
-    StructType.fromDDL("tenant INT NOT NULL, id INT NOT NULL, value STRING NOT NULL")
+    StructType.fromDDL(
+      "lookupTenant INT NOT NULL, lookupId INT NOT NULL, lookupValue STRING NOT NULL")
   override def capabilities(): java.util.Set[TableCapability] = capabilitySet.asJava
 }
