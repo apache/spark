@@ -2495,8 +2495,9 @@ class ProtobufFunctionsSuite extends SharedSparkSession with ProtobufTestBase
   }
 
   Seq("FROM_PROTOBUF", "TO_PROTOBUF").foreach { functionName =>
-    test(s"SPARK-60945: $functionName options survive overlapping canonicalization") {
-      withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> "EXCEPTION") {
+    gridTest(s"SPARK-60945: $functionName options survive overlapping canonicalization")(
+      Seq("EXCEPTION", "LAST_WIN")) { policy =>
+      withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> policy) {
         val firstEvaluationPaused = new CountDownLatch(1)
         val resumeFirstEvaluation = new CountDownLatch(1)
         val pauseOnNextEval = new AtomicBoolean(true)
@@ -2517,7 +2518,7 @@ class ProtobufFunctionsSuite extends SharedSparkSession with ProtobufTestBase
         try {
           val firstEvaluation = Future {
             SQLConf.withExistingConf(sqlConf) {
-              assert(canonicalizedOptions(expression, data) == expectedOptions)
+              canonicalizedOptions(expression, data)
             }
           }(executionContext)
           assert(firstEvaluationPaused.await(1, TimeUnit.MINUTES),
@@ -2525,7 +2526,7 @@ class ProtobufFunctionsSuite extends SharedSparkSession with ProtobufTestBase
           // The first evaluation has inserted key1 and is paused while evaluating key2.
           assert(canonicalizedOptions(expression, data) == expectedOptions)
           resumeFirstEvaluation.countDown()
-          ThreadUtils.awaitResult(firstEvaluation, 1.minute)
+          assert(ThreadUtils.awaitResult(firstEvaluation, 1.minute) == expectedOptions)
         } finally {
           resumeFirstEvaluation.countDown()
           executor.shutdownNow()
