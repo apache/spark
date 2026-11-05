@@ -862,12 +862,12 @@ def should_skip_post_merge_ci(target_ref):
 
 
 def append_post_merge_ci_skip(message):
-    """Append the workflow-skip trailer to ``message``.
+    """Append the workflow-skip trailer after GitHub's required two empty lines.
 
     >>> append_post_merge_ci_skip("Subject\\n")
-    'Subject\\n\\nskip-checks: true\\n'
+    'Subject\\n\\n\\nskip-checks: true\\n'
     """
-    return "%s\n\n%s\n" % (message.rstrip(), POST_MERGE_CI_SKIP_TRAILER)
+    return "%s\n\n\n%s\n" % (message.rstrip(), POST_MERGE_CI_SKIP_TRAILER)
 
 
 def remove_inherited_post_merge_ci_skip(message):
@@ -963,7 +963,9 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
     merge_message_flags += ["-m", authors]
 
     if skip_post_merge_ci:
-        merge_message_flags += ["-m", POST_MERGE_CI_SKIP_TRAILER]
+        # A leading newline plus git's paragraph separator leaves the two empty lines which
+        # GitHub requires before the skip-checks trailer. --cleanup=verbatim preserves them.
+        merge_message_flags += ["-m", "\n%s" % POST_MERGE_CI_SKIP_TRAILER]
 
     git.run(
         ["git", "commit", "--cleanup=verbatim", '--author="%s"' % primary_author]
