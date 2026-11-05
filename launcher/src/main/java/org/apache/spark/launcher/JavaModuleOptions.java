@@ -19,7 +19,7 @@ package org.apache.spark.launcher;
 
 /**
  * This helper class is used to place some JVM runtime options(eg: `--add-opens`)
- * required by Spark when using Java 17. `DEFAULT_MODULE_OPTIONS` has added
+ * required by Spark when using Java 21. `DEFAULT_MODULE_OPTIONS` has added
  * `-XX:+IgnoreUnrecognizedVMOptions` to be robust.
  *
  * @since 3.3.0
