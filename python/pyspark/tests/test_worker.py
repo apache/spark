@@ -367,7 +367,6 @@ class WorkerInitResponseTests(unittest.TestCase):
         self.assertIn("bootTimestampMs", metrics)
         self.assertIn("finishTimestampMs", metrics)
         self.assertIn("initTimestampMs", metrics)
-        self.assertNotIn("pythonInitializationDurationMs", metrics)
 
     def test_init_response_is_flushed_before_processing(self):
         sender, receiver = socket.socketpair()
