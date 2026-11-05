@@ -11195,7 +11195,7 @@ def minute(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def second(col: "ColumnOrName") -> Column:
     """
-    Extract the seconds of a given date as integer.
+    Extract the seconds of a given date as integer, discarding fractional seconds.
 
     .. versionadded:: 1.5.0
 
@@ -11216,6 +11216,8 @@ def second(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         `seconds` part of the timestamp as integer.
         Returns a column that evaluates to an integer.
+        To include fractional seconds in a decimal result, use :func:`extract`,
+        :func:`date_part`, or :func:`datepart` with the ``SECOND`` field instead.
 
     See Also
     --------
@@ -11673,6 +11675,8 @@ def extract(field: Column, source: "ColumnOrName") -> Column:
         a part of the date/timestamp or interval source.
         Returns a column whose type depends on the field to extract, e.g. an integer
         for ``YEAR`` and a decimal for ``SECOND``.
+        The ``SECOND`` field includes fractional seconds, unlike :func:`second`,
+        which returns an integer and discards fractional seconds.
 
     See Also
     --------
@@ -11737,6 +11741,8 @@ def date_part(field: Column, source: "ColumnOrName") -> Column:
         a part of the date/timestamp or interval source.
         Returns a column whose type depends on the field to extract, e.g. an integer
         for ``YEAR`` and a decimal for ``SECOND``.
+        The ``SECOND`` field includes fractional seconds, unlike :func:`second`,
+        which returns an integer and discards fractional seconds.
 
     See Also
     --------
@@ -11801,6 +11807,8 @@ def datepart(field: Column, source: "ColumnOrName") -> Column:
         a part of the date/timestamp or interval source.
         Returns a column whose type depends on the field to extract, e.g. an integer
         for ``YEAR`` and a decimal for ``SECOND``.
+        The ``SECOND`` field includes fractional seconds, unlike :func:`second`,
+        which returns an integer and discards fractional seconds.
 
     See Also
     --------
