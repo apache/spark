@@ -44,6 +44,7 @@ import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.TableCapability
 import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, BATCH_WRITE, MICRO_BATCH_READ, STREAMING_WRITE, TRUNCATE}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory, SupportsArrowStreamRead}
+import org.apache.spark.sql.connector.read.streaming.{ReadAllAvailable, ReadLimit, ReadMaxRows}
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchPlanner, ColumnarDataSource, ColumnarOnlyPartitionReaderFactory, ColumnarPlannedBatch, ColumnarStreamReader, ColumnarStreamWriter, ColumnarWriter}
@@ -128,15 +129,20 @@ class NativeDataSource(
     NativeArrow.checkSupported(schema, name, "plan a scan of")
     val executorLocation = NativeDataSourceRegistry.distribute(location)
     val library = NativeLibraries.get(location)
-    val handle = create(library, "plan a scan of", NativeLibrary.MICRO_BATCH_READ,
-        "DATA_SOURCE_MICRO_BATCH_SCAN_NOT_SUPPORTED", NativeDataSource.MicroBatchReadFunctions) {
-      dataSource =>
-        NativeArrow.exportSchema(schema, timeZoneId) { address =>
-          library.createStreamReader(dataSource.handle, address, checkpointLocation)
-        }
+    val (handle, admissionControl) = create(library, "plan a scan of",
+        NativeLibrary.MICRO_BATCH_READ, "DATA_SOURCE_MICRO_BATCH_SCAN_NOT_SUPPORTED",
+        NativeDataSource.MicroBatchReadFunctions) { dataSource =>
+      val admissionControl = (dataSource.capabilities & NativeLibrary.ADMISSION_CONTROL) != 0
+      if (admissionControl) {
+        requireFunctions(library, "plan a scan of", Seq(NativeLibrary.Function.DEFAULT_READ_LIMIT))
+      }
+      val handle = NativeArrow.exportSchema(schema, timeZoneId) { address =>
+        library.createStreamReader(dataSource.handle, address, checkpointLocation)
+      }
+      (handle, admissionControl)
     }
     new NativeDataSourceStreamReader(executorLocation, name, schema, timeZoneId,
-      new NativeHandle(handle, library.closeStreamReader))
+      new NativeHandle(handle, library.closeStreamReader), admissionControl)
   }
 
   override def writer(schema: StructType, overwrite: Boolean): ColumnarWriter = {
@@ -333,7 +339,8 @@ class NativeDataSourceStreamReader(
     name: String,
     schema: StructType,
     timeZoneId: String,
-    handle: NativeHandle)
+    handle: NativeHandle,
+    admissionControl: Boolean)
   extends ColumnarStreamReader {
   import NativeCalls._
 
@@ -357,9 +364,41 @@ class NativeDataSourceStreamReader(
     checkOffset("initial_offset", call(name, "plan a scan of")(library.initialOffset(handle.get)))
   }
 
-  override def latestOffset(start: String): String = synchronized {
-    checkOffset("latest_offset",
-      call(name, "plan a scan of")(library.latestOffset(handle.get, start)))
+  /** The limit that the library returns, with the capability SPARK_DS_ADMISSION_CONTROL. */
+  override def defaultReadLimit(): ReadLimit = synchronized {
+    if (!admissionControl) {
+      ReadLimit.allAvailable()
+    } else {
+      val limit = call(name, "plan a scan of")(library.defaultReadLimit(handle.get))
+      val (kind, maxRows) = (limit.kind, limit.maxRows)
+      kind match {
+        case NativeLibrary.READ_ALL_AVAILABLE => ReadLimit.allAvailable()
+        case NativeLibrary.READ_MAX_ROWS if maxRows >= 1 => ReadLimit.maxRows(maxRows)
+        case NativeLibrary.READ_MAX_ROWS =>
+          throw error(name, "plan a scan of", s"default_read_limit returned a maximum of " +
+            s"$maxRows rows, but a micro-batch reads at least 1 row.")
+        case _ =>
+          throw error(name, "plan a scan of", s"default_read_limit returned the unknown kind " +
+            s"of read limit $kind.")
+      }
+    }
+  }
+
+  override def latestOffset(
+      start: String,
+      limit: ReadLimit,
+      runEnd: Option[String]): String = synchronized {
+    val info = limit match {
+      case _: ReadAllAvailable =>
+        new NativeLibrary.ReadLimitInfo(NativeLibrary.READ_ALL_AVAILABLE, 0L)
+      case maxRows: ReadMaxRows =>
+        new NativeLibrary.ReadLimitInfo(NativeLibrary.READ_MAX_ROWS, maxRows.maxRows())
+      case other => throw SparkException.internalError(
+        s"A native data source does not support the read limit $other.")
+    }
+    checkOffset("latest_offset", call(name, "plan a scan of") {
+      library.latestOffset(handle.get, start, info, runEnd.orNull)
+    })
   }
 
   /**
