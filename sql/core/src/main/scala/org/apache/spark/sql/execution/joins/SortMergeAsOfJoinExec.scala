@@ -653,6 +653,10 @@ private[execution] object SortMergeAsOfJoinScanner {
    * only compares the two sort keys. Both sides are sorted on exactly those keys, so the right
    * rows that pass the condition move forward as the left key grows. Anything else, such as a
    * tolerance, a tuple, or an operand cast that the sort key does not have, keeps the buffer.
+   *
+   * The condition must name the left side first, since the cursor evaluates the left key first.
+   * With the right side first, a NULL right key ends the condition before the left key, which
+   * can fail under ANSI. Only a DataFrame join with reversed keys builds such a condition.
    */
   def supportsCursorScan(
       direction: AsOfJoinDirection,
@@ -660,18 +664,12 @@ private[execution] object SortMergeAsOfJoinScanner {
       residualCondition: Option[Expression],
       leftSortExprs: Seq[Expression],
       rightSortExprs: Seq[Expression]): Boolean = {
-    // The operands as (lesser, greater).
-    val ordered = asOfCondition match {
-      case LessThan(lesser, greater) => Some((lesser, greater))
-      case LessThanOrEqual(lesser, greater) => Some((lesser, greater))
-      case GreaterThan(greater, lesser) => Some((lesser, greater))
-      case GreaterThanOrEqual(greater, lesser) => Some((lesser, greater))
-      case _ => None
-    }
     // The operands as (left, right): backward needs left >= right, forward left <= right.
-    val operands = (direction, ordered) match {
-      case (Backward, Some((lesser, greater))) => Some((greater, lesser))
-      case (Forward, Some((lesser, greater))) => Some((lesser, greater))
+    val operands = (direction, asOfCondition) match {
+      case (Backward, GreaterThanOrEqual(left, right)) => Some((left, right))
+      case (Backward, GreaterThan(left, right)) => Some((left, right))
+      case (Forward, LessThanOrEqual(left, right)) => Some((left, right))
+      case (Forward, LessThan(left, right)) => Some((left, right))
       case _ => None
     }
     (leftSortExprs, rightSortExprs, operands) match {
@@ -686,8 +684,9 @@ private[execution] object SortMergeAsOfJoinScanner {
   }
 
   /**
-   * The key types the cursor scan supports. STRUCT, ARRAY, TIME and nanosecond timestamp keys
-   * keep the buffered scan for now, since the cursor scan has no tests for them yet.
+   * The key types the cursor scan supports. STRUCT, ARRAY, TIME, nanosecond timestamp and
+   * user-defined type keys keep the buffered scan for now, since the cursor scan has no tests
+   * for them yet.
    */
   private def supportsCursorKey(dataType: DataType): Boolean = dataType match {
     case _: NumericType | BooleanType | _: StringType | BinaryType | NullType => true

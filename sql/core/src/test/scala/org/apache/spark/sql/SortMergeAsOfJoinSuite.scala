@@ -262,7 +262,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
           right, left.col("ts"), right.col("ts"), usingColumns = Seq.empty,
           joinType = "inner", tolerance = null,
           allowExactMatches = true, direction = directionName)
-        checkCursorScan(joined, expected :: Nil)
+        checkAnswer(joined, expected :: Nil)
         val op = collectFirst(joined.queryExecution.executedPlan) {
           case s: SortMergeAsOfJoinExec => s
         }.get
@@ -1650,6 +1650,31 @@ class SortMergeAsOfJoinSuite extends QueryTest
             df = reversed, expectedAnswer = Seq(Row(10, expected), Row(20, null)),
             checkToRDD = false
           )
+        }
+      }
+    }
+  }
+
+  test("reversed join keys keep the buffered scan, which skips a failing left key") {
+    // The reversed condition reads the right key first and stops at its NULL, so v * 1000 never
+    // overflows. The cursor reads the left key first, so it would fail the query under ANSI.
+    withSQLConf(
+        SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+        SQLConf.ANSI_ENABLED.key -> "true") {
+      val left = spark.sql("SELECT * FROM VALUES ('B', 9223372036854775807L) AS t(k, v)")
+      val right = spark.sql("SELECT * FROM VALUES ('B', CAST(NULL AS BIGINT)) AS t(k, v)")
+      for (direction <- Seq("backward", "forward")) {
+        withClue(s"$direction: ") {
+          val reversed = left.joinAsOf(
+            other = right, leftAsOf = right.col("v"), rightAsOf = left.col("v") * 1000,
+            usingColumns = Seq("k"), joinType = "left", tolerance = null,
+            allowExactMatches = true, direction = direction)
+          checkAnswer(reversed, Row("B", Long.MaxValue, null, null) :: Nil)
+          val op = collectFirst(reversed.queryExecution.executedPlan) {
+            case s: SortMergeAsOfJoinExec => s
+          }
+          assert(op.exists(_.metrics("numAsOfCursorTasks").value == 0),
+            s"Expected the buffered scan:\n${reversed.queryExecution.executedPlan}")
         }
       }
     }

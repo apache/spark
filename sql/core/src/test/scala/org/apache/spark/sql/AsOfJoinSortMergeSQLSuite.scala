@@ -1452,6 +1452,43 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
         Row("D", 5, "d2") :: Row(null, 3, null) :: Nil)
   }
 
+  test("cursor scan: two ON keys, with NULL parts, start a new group on either key") {
+    // (1, 1) and (1, 2) differ only in the second key. A cursor that compared only the first
+    // key would give trade 5 the quote q1n, and trade 1 the later quote q12.
+    checkCursorScan(
+      sql(
+        """
+          |SELECT t.id, q.tag
+          |FROM VALUES (1, 1, 1, 10), (2, 1, 2, 10), (3, 1, NULL, 10), (4, 2, 1, 10), (5, 1, 1, 3)
+          |  AS t(id, a, b, ts)
+          |LEFT ASOF JOIN VALUES (1, 1, 5, 'q11'), (1, 2, 6, 'q12'), (1, NULL, 1, 'q1n'),
+          |  (2, 2, 1, 'q22') AS q(a, b, ts, tag)
+          |  MATCH_CONDITION (t.ts >= q.ts)
+          |  ON t.a = q.a AND t.b = q.b
+          |""".stripMargin),
+      Row(1, "q11") :: Row(2, "q12") :: Row(3, null) :: Row(4, null) :: Row(5, null) :: Nil)
+  }
+
+  test("cursor scan: a MATCH_CONDITION with the right side first still uses the cursor scan") {
+    // The analyzer puts the left side first, so q.ts <= t.ts runs as t.ts >= q.ts.
+    Seq(
+      "q.ts <= t.ts" -> Seq(Row(2, "q1"), Row(6, "q5")),
+      "q.ts >= t.ts" -> Seq(Row(2, "q3"), Row(6, null))
+    ).foreach { case (condition, expected) =>
+      withClue(s"$condition: ") {
+        checkCursorScan(
+          sql(
+            s"""
+               |SELECT t.ts, q.tag
+               |FROM VALUES (2), (6) AS t(ts)
+               |LEFT ASOF JOIN VALUES (1, 'q1'), (3, 'q3'), (5, 'q5') AS q(ts, tag)
+               |  MATCH_CONDITION ($condition)
+               |""".stripMargin),
+          expected)
+      }
+    }
+  }
+
   test("cursor scan: forward match is kept while later trades still pass it") {
     // A3 reuses q4, A6 must drop it, and B1 must not reuse q7 from key A.
     checkCursorScan(
@@ -1645,7 +1682,12 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       Seq(
         ("('A', 'bad')", "('A', 1)", "t.v", "CAST_INVALID_INPUT"),
-        ("('A', 9223372036854775807L)", "('A', 1L)", "t.v * 1000", "ARITHMETIC_OVERFLOW")
+        ("('A', 9223372036854775807L)", "('A', 1L)", "t.v * 1000", "ARITHMETIC_OVERFLOW"),
+        // A right row with a NULL as-of key still counts, since the buffered scan evaluates the
+        // as-of condition on it.
+        ("('A', 'bad')", "('A', CAST(NULL AS INT))", "t.v", "CAST_INVALID_INPUT"),
+        ("('A', 9223372036854775807L)", "('A', CAST(NULL AS BIGINT))", "t.v * 1000",
+          "ARITHMETIC_OVERFLOW")
       ).foreach { case (leftRows, rightRows, leftSide, errorCondition) =>
         for {
           op <- Seq(">=", "<=")

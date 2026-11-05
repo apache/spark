@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.joins
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.sql.YearUDT
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
@@ -117,18 +118,15 @@ class SortMergeAsOfJoinScannerSuite extends SparkFunSuite with LocalSparkContext
     }
   }
 
-  test("cursor scan accepts each comparison of the sort keys in the join direction") {
+  test("cursor scan accepts each comparison of the sort keys in the join direction, left " +
+      "side first") {
     val l = AttributeReference("l", IntegerType)()
     val r = AttributeReference("r", IntegerType)()
     Seq(
       Backward -> GreaterThanOrEqual(l, r),
       Backward -> GreaterThan(l, r),
-      Backward -> LessThanOrEqual(r, l),
-      Backward -> LessThan(r, l),
       Forward -> LessThanOrEqual(l, r),
-      Forward -> LessThan(l, r),
-      Forward -> GreaterThanOrEqual(r, l),
-      Forward -> GreaterThan(r, l)
+      Forward -> LessThan(l, r)
     ).foreach { case (direction, condition) =>
       assert(supportsCursorScan(direction, condition, None, Seq(l), Seq(r)),
         s"$direction $condition")
@@ -141,7 +139,8 @@ class SortMergeAsOfJoinScannerSuite extends SparkFunSuite with LocalSparkContext
       Backward, GreaterThanOrEqual(longL, longR), None, Seq(longL), Seq(longR)))
   }
 
-  test("cursor scan accepts scalar sort keys except TIME and nanosecond timestamps") {
+  test("cursor scan accepts scalar sort keys except TIME, nanosecond timestamps and " +
+      "user-defined types") {
     def supportsType(dataType: DataType): Boolean = {
       val l = AttributeReference("l", dataType)()
       val r = AttributeReference("r", dataType)()
@@ -154,7 +153,7 @@ class SortMergeAsOfJoinScannerSuite extends SparkFunSuite with LocalSparkContext
     ).foreach(dataType => assert(supportsType(dataType), dataType))
     Seq(
       StructType(Seq(StructField("a", IntegerType))), ArrayType(IntegerType), TimeType(),
-      TimestampLTZNanosType(9), TimestampNTZNanosType(9)
+      TimestampLTZNanosType(9), TimestampNTZNanosType(9), new YearUDT
     ).foreach(dataType => assert(!supportsType(dataType), dataType))
   }
 
@@ -178,6 +177,15 @@ class SortMergeAsOfJoinScannerSuite extends SparkFunSuite with LocalSparkContext
         supportsCursorScan(Forward, GreaterThanOrEqual(l, r), None, Seq(l), Seq(r)),
       "swapped as-of columns" ->
         supportsCursorScan(Backward, GreaterThanOrEqual(r, l), None, Seq(l), Seq(r)),
+      // A NULL right key would end these before the left key, which the cursor evaluates first.
+      "a backward condition with the right side first" ->
+        supportsCursorScan(Backward, LessThanOrEqual(r, l), None, Seq(l), Seq(r)),
+      "a strict backward condition with the right side first" ->
+        supportsCursorScan(Backward, LessThan(r, l), None, Seq(l), Seq(r)),
+      "a forward condition with the right side first" ->
+        supportsCursorScan(Forward, GreaterThanOrEqual(r, l), None, Seq(l), Seq(r)),
+      "a strict forward condition with the right side first" ->
+        supportsCursorScan(Forward, GreaterThan(r, l), None, Seq(l), Seq(r)),
       "a tolerance" ->
         supportsCursorScan(Backward, And(backward, GreaterThanOrEqual(r, Subtract(l, Literal(1)))),
           None, Seq(l), Seq(r)),
