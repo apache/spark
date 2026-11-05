@@ -185,10 +185,11 @@ private[joins] class SortMergeAsOfJoinScanner(
     UnsafeProjection.create(nullableRefs, joinedOutput)
   }
 
-  // Compiled, so a check runs generated code instead of walking the expression tree. Both skip
-  // subexpression elimination, which runs a repeated part before the guard in front of it:
-  // `y <> 0 AND x / y > 1 AND x / y < 10` would divide by zero when y is 0. Both are built on
-  // first use, so a task that checks no right row compiles nothing.
+  // A repeated part must not run before its guard: `y <> 0 AND x / y > 1 AND x / y < 10` would
+  // divide by zero when y is 0. So the generated predicates skip subexpression elimination. The
+  // interpreted fallback keeps it, but runs a shared part only when an operand reaches it, so
+  // AND, OR and IF still short-circuit. Both are lazy, so a task that checks no right row
+  // compiles neither condition.
   private lazy val boundAsOfCond = ShortCircuitPredicate.create(asOfCondition, joinedOutput)
   private lazy val boundResidualCond =
     residualCondition.map(ShortCircuitPredicate.create(_, joinedOutput))
@@ -704,8 +705,10 @@ private[execution] object SortMergeAsOfJoinScanner {
 }
 
 /**
- * Compiles a predicate without subexpression elimination, so AND and OR still skip the parts
- * they do not need.
+ * Builds a predicate whose AND, OR and IF still skip the parts they do not need. The generated
+ * predicate skips subexpression elimination, which would run a repeated part first. The
+ * interpreted fallback, used when code generation is off or fails, keeps subexpression
+ * elimination, but runs a shared part only when an operand reaches it.
  */
 private[joins] object ShortCircuitPredicate
     extends CodeGeneratorWithInterpretedFallback[Expression, BasePredicate] {
