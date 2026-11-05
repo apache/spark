@@ -859,30 +859,6 @@ def should_skip_post_merge_ci(target_ref):
     return True
 
 
-def without_post_merge_ci_skip(message):
-    """Remove this script's workflow-skip trailer from a commit message.
-
-    A master merge can be sampled out while its branch-4.x cherry-pick is selected, or vice
-    versa, so a cherry-pick starts from the message without the source branch's decision.
-
-    >>> message = "Subject\\n\\nBody\\n\\nskip-checks: true\\n\\nSigned-off-by: A <a@b>\\n"
-    >>> without_post_merge_ci_skip(message)
-    'Subject\\n\\nBody\\n\\nSigned-off-by: A <a@b>\\n'
-    """
-    lines = message.rstrip().splitlines()
-    marker_indexes = [
-        index for index, line in enumerate(lines) if line == POST_MERGE_CI_SKIP_TRAILER
-    ]
-    if marker_indexes:
-        marker_index = marker_indexes[-1]
-        before = "\n".join(lines[:marker_index]).rstrip()
-        after = "\n".join(lines[marker_index + 1:]).strip()
-        message = "\n\n".join(part for part in (before, after) if part)
-    else:
-        message = "\n".join(lines)
-    return message + "\n"
-
-
 def append_post_merge_ci_skip(message):
     """Append the workflow-skip trailer to ``message``.
 
@@ -1033,11 +1009,11 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref):
         else:
             print("Cherry-pick already completed manually; continuing with the backport.")
 
-    raw_message = git.run(["git", "log", "-1", "--format=%B"])
-    updated_message = without_post_merge_ci_skip(raw_message)
     if skip_post_merge_ci:
-        updated_message = append_post_merge_ci_skip(updated_message)
-    if updated_message != raw_message:
+        # An inherited trailer is followed by cherry-pick and sign-off lines from -sx, so it is
+        # not GitHub's final skip-checks trailer. Append this branch's decision at the end.
+        raw_message = git.run(["git", "log", "-1", "--format=%B"])
+        updated_message = append_post_merge_ci_skip(raw_message)
         amend_commit_message(updated_message)
 
     continue_maybe(
