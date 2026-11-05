@@ -57,6 +57,18 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
     plan.resolve(ref.fieldNames.toImmutableArraySeq, conf.resolver)
   }
 
+  def resolveRef[T <: NamedExpression](ref: NamedReference, plan: LogicalPlan): T = {
+    resolveRefOpt(ref, plan).getOrElse {
+      val name = ref.fieldNames.toImmutableArraySeq.quoted
+      val outputString = plan.output.map(_.name).mkString(",")
+      throw QueryCompilationErrors.cannotResolveAttributeError(name, outputString)
+    }.asInstanceOf[T]
+  }
+
+  def resolveRefs[T <: NamedExpression](refs: Seq[NamedReference], plan: LogicalPlan): Seq[T] = {
+    refs.map(ref => resolveRef[T](ref, plan))
+  }
+
   /**
    * Returns the names of the columns referenced by the given expressions that cannot be resolved
    * against the plan, at any depth, including inside transform arguments.
@@ -93,7 +105,7 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
     exprs.flatMap(collectReferences).flatMap { ref =>
       val parts = ref.fieldNames.toImmutableArraySeq
       if (parts.isEmpty) {
-        // An empty name can be neither quoted nor resolved: both throw.
+        // Resolving an empty name throws, so it is reported unresolved without trying.
         Some(parts -> None)
       } else {
         try {
@@ -105,18 +117,6 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
         }
       }
     }.distinct
-  }
-
-  def resolveRef[T <: NamedExpression](ref: NamedReference, plan: LogicalPlan): T = {
-    resolveRefOpt(ref, plan).getOrElse {
-      val name = ref.fieldNames.toImmutableArraySeq.quoted
-      val outputString = plan.output.map(_.name).mkString(",")
-      throw QueryCompilationErrors.cannotResolveAttributeError(name, outputString)
-    }.asInstanceOf[T]
-  }
-
-  def resolveRefs[T <: NamedExpression](refs: Seq[NamedReference], plan: LogicalPlan): Seq[T] = {
-    refs.map(ref => resolveRef[T](ref, plan))
   }
 
   /**

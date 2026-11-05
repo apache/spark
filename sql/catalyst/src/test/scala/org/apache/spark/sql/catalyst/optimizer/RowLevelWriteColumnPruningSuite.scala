@@ -22,17 +22,17 @@ import org.apache.spark.sql.catalyst.ProjectingInternalRow
 import org.apache.spark.sql.catalyst.analysis.TestRelation
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, EqualNullSafe, Expression, If, Literal, Not}
-import org.apache.spark.sql.catalyst.plans.{LeftOuter, PlanTest}
+import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Copy, Keep, Update}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.{ReplaceDataProjections, WriteDeltaProjections}
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils._
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 /**
- * Tests the [[ColumnPruning]] case that prunes the query columns of a [[RowLevelWrite]] that its
- * projections don't read and moves the projections to the ordinals of the pruned query.
+ * Tests the [[ColumnPruning]] case that, for a [[RowLevelWrite]] whose write relation differs from
+ * the table, prunes the query columns its projections don't read and moves the projections to the
+ * ordinals of the pruned query.
  */
 class RowLevelWriteColumnPruningSuite extends PlanTest {
 
@@ -46,18 +46,25 @@ class RowLevelWriteColumnPruningSuite extends PlanTest {
     $"pk".int.notNull, $"id".int, $"dep".string, $"salary".int, $"bonus".int, $"extra".int,
     $"_partition".string.notNull)
 
-  // the write and original table relations; the pruning never inspects them
-  private val tableRelation = TestRelation(Nil)
-
   private val dataColumns = Seq("pk", "id", "dep", "salary", "bonus", "extra")
 
   // the data columns of a write that receives pk and salary
   private val writeColumns = Seq("pk", "salary")
+
+  // the original table, and the write relation that the rewrite narrows to `writeColumns`
+  private val tableRelation = TestRelation(relationColumns(dataColumns))
+  private val narrowRelation = TestRelation(relationColumns(writeColumns))
   private val queryColumns = dataColumns :+ "_partition"
 
+  // the columns of `read` that `SET salary = salary + bonus WHERE dep = 'hr'` needs
+  private val updateScanColumns = Set("pk", "dep", "salary", "bonus", "_partition")
+
   private def column(plan: LogicalPlan, name: String): Attribute = {
-    plan.output.find(_.name == name).get
+    plan.output.find(_.name == name).getOrElse(fail(s"no column $name in ${plan.output}"))
   }
+
+  private def relationColumns(names: Seq[String]): Seq[AttributeReference] =
+    names.map(column(read, _).asInstanceOf[AttributeReference])
 
   private def cond(plan: LogicalPlan): Expression = column(plan, "dep") === "hr"
 
@@ -101,7 +108,7 @@ class RowLevelWriteColumnPruningSuite extends PlanTest {
     val projections = ReplaceDataProjections(
       projection(query, rowNames: _*),
       Some(projection(query, "_partition")))
-    ReplaceData(tableRelation, cond(read), query, tableRelation, projections)
+    ReplaceData(narrowRelation, cond(read), query, tableRelation, projections)
   }
 
   private def writeDelta(query: LogicalPlan): WriteDelta = {
@@ -109,7 +116,7 @@ class RowLevelWriteColumnPruningSuite extends PlanTest {
       Some(projection(query, writeColumns: _*)),
       projection(query, "pk"),
       Some(projection(query, "_partition")))
-    WriteDelta(tableRelation, cond(read), query, tableRelation, projections)
+    WriteDelta(narrowRelation, cond(read), query, tableRelation, projections)
   }
 
   private def scannedColumns(plan: LogicalPlan, relation: LogicalPlan): Set[String] = {
@@ -138,7 +145,7 @@ class RowLevelWriteColumnPruningSuite extends PlanTest {
     val optimized = Optimize.execute(write).asInstanceOf[ReplaceData]
 
     checkPruned(optimized, write)
-    assert(scannedColumns(optimized, read) == Set("pk", "dep", "salary", "bonus", "_partition"))
+    assert(scannedColumns(optimized, read) == updateScanColumns)
   }
 
   test("ReplaceData: move the projections to the ordinals of the pruned query") {
@@ -175,11 +182,12 @@ class RowLevelWriteColumnPruningSuite extends PlanTest {
     val optimized = Optimize.execute(write).asInstanceOf[ReplaceData]
 
     checkPruned(optimized, write)
-    val union = optimized.query.collectFirst { case u: Union => u }.get
+    val union = optimized.query.collectFirst { case u: Union => u }
+      .getOrElse(fail(s"no Union in ${optimized.query}"))
     union.children.foreach { child =>
       assert(child.output.map(_.name) == OPERATION_COLUMN +: writeColumns :+ "_partition")
     }
-    assert(scannedColumns(optimized, read) == Set("pk", "dep", "salary", "bonus", "_partition"))
+    assert(scannedColumns(optimized, read) == updateScanColumns)
     assert(scannedColumns(optimized, read2) == Set("pk", "dep", "salary", "_partition"))
   }
 
@@ -188,7 +196,7 @@ class RowLevelWriteColumnPruningSuite extends PlanTest {
     val optimized = Optimize.execute(write).asInstanceOf[WriteDelta]
 
     checkPruned(optimized, write)
-    assert(scannedColumns(optimized, read) == Set("pk", "dep", "salary", "bonus", "_partition"))
+    assert(scannedColumns(optimized, read) == updateScanColumns)
   }
 
   test("WriteDelta: prune the Expand built for delete and reinsert") {
@@ -205,10 +213,11 @@ class RowLevelWriteColumnPruningSuite extends PlanTest {
     val optimized = Optimize.execute(write).asInstanceOf[WriteDelta]
 
     checkPruned(optimized, write)
-    val expand = optimized.query.collectFirst { case e: Expand => e }.get
+    val expand = optimized.query.collectFirst { case e: Expand => e }
+      .getOrElse(fail(s"no Expand in ${optimized.query}"))
     assert(expand.output.map(_.name) == OPERATION_COLUMN +: writeColumns :+ "_partition")
     assert(expand.projections.forall(_.size == 4))
-    assert(scannedColumns(optimized, read) == Set("pk", "dep", "salary", "bonus", "_partition"))
+    assert(scannedColumns(optimized, read) == updateScanColumns)
   }
 
   test("a projection that reads outside the query output is an internal error") {
@@ -227,41 +236,12 @@ class RowLevelWriteColumnPruningSuite extends PlanTest {
     }
   }
 
-  test("no change when the projections read every query column") {
-    // DELETE and an UPDATE that is not a column update read every data column
-    val update = replaceData(updateQuery(read), dataColumns)
-    comparePlans(Optimize.execute(update), update, checkAnalysis = false)
-
-    val delete = replaceData(
-      Project(Alias(Literal(COPY_OPERATION), OPERATION_COLUMN)() +: read.output,
-        Filter(Not(EqualNullSafe(cond(read), Literal.TrueLiteral)), read)),
-      dataColumns)
-    comparePlans(Optimize.execute(delete), delete, checkAnalysis = false)
-
-    // MERGE reads every target column through MergeRows
-    val source = LocalRelation($"spk".int, $"ssalary".int, $"present".boolean)
-    val Seq(spk, ssalary, present) = source.output
-    val joined = Join(read, source, LeftOuter, Some(column(read, "pk") === spk), JoinHint.NONE)
-    def target(name: String): Expression = column(read, name)
-    val updateOutput = Literal(UPDATE_OPERATION) +:
-      dataColumns.map(name => if (name == "salary") ssalary else target(name)) :+
-      target("_partition")
-    val copyOutput = Literal(COPY_OPERATION) +: dataColumns.map(target) :+ target("_partition")
-    val mergeOutput = AttributeReference(OPERATION_COLUMN, IntegerType, nullable = false)() +:
-      read.output.map(_.newInstance())
-    val mergeRows = MergeRows(
-      isSourceRowPresent = present,
-      isTargetRowPresent = Literal.TrueLiteral,
-      matchedInstructions = Seq(Keep(Update, Literal.TrueLiteral, updateOutput)),
-      notMatchedInstructions = Nil,
-      notMatchedBySourceInstructions = Seq(Keep(Copy, Literal.TrueLiteral, copyOutput)),
-      checkCardinality = false,
-      output = mergeOutput,
-      child = joined)
-    val merge = replaceData(mergeRows, dataColumns)
-    val optimizedMerge = Optimize.execute(merge).asInstanceOf[ReplaceData]
-    assert(optimizedMerge.query.isInstanceOf[MergeRows])
-    assert(optimizedMerge.query.output == mergeRows.output)
-    assert(optimizedMerge.projections == merge.projections)
+  test("no change when the write relation is not narrowed") {
+    // a full-width write without a metadata projection keeps `_partition`, which only the
+    // condition reads and its distribution can use
+    val query = updateQuery(read)
+    val projections = ReplaceDataProjections(projection(query, dataColumns: _*), None)
+    val write = ReplaceData(tableRelation, cond(read), query, tableRelation, projections)
+    comparePlans(Optimize.execute(write), write, checkAnalysis = false)
   }
 }

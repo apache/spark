@@ -88,7 +88,8 @@ class InMemoryRowLevelOperationTable private (
   private final val COLUMN_UPDATE_REQ_ATTRS = "column-update-req-attrs"
   private final val COLUMN_UPDATE_COW = "column-update-cow"
   private final val COLUMN_UPDATE_COW_REQ_ATTRS = "column-update-cow-req-attrs"
-  // makes the copy-on-write column-update writer override neither writeColumnUpdate method
+  // makes the copy-on-write column-update write use the plain writer, which overrides neither
+  // writeColumnUpdate method
   private final val COLUMN_UPDATE_COW_NO_WRITE_COLUMN_UPDATE =
     "column-update-cow-no-write-column-update"
   // makes the copy-on-write column-update writer override only writeColumnUpdate(record)
@@ -99,6 +100,9 @@ class InMemoryRowLevelOperationTable private (
   private final val COLUMN_UPDATE_SPLIT_ROW_ID = "column-update-split-row-id"
   // comma-separated columns that the delta column-update write clusters and orders by
   private final val COLUMN_UPDATE_CLUSTER_BY = "column-update-cluster-by"
+  // comma-separated columns that the delta column-update write orders by instead of the
+  // clustering columns
+  private final val COLUMN_UPDATE_ORDER_BY = "column-update-order-by"
   // wraps each column-update clustering and ordering column in two nested transforms, f(g(col))
   private final val COLUMN_UPDATE_CLUSTER_BY_NESTED_TRANSFORM =
     "column-update-cluster-by-nested-transform"
@@ -417,16 +421,22 @@ class InMemoryRowLevelOperationTable private (
     override def hashCode(): Int = System.identityHashCode(this)
     override def canEqual(other: Any): Boolean = false
 
-    private val clusterExprs: Seq[Expression] = {
-      val refs = Option(properties.get(COLUMN_UPDATE_CLUSTER_BY))
-        .map(_.split(",").map(name => FieldReference(name.trim)).toSeq)
-        .getOrElse(Seq(PARTITION_COLUMN_REF))
+    private def writeRequirementRefs(key: String): Option[Seq[Expression]] =
+      Option(properties.get(key)).map(_.split(",").map(name => FieldReference(name.trim)).toSeq)
+
+    private def withNestedTransforms(refs: Seq[Expression]): Seq[Expression] = {
       if (properties.getOrDefault(COLUMN_UPDATE_CLUSTER_BY_NESTED_TRANSFORM, "false") == "true") {
         refs.map(ref => LogicalExpressions.apply("f", LogicalExpressions.apply("g", ref)))
       } else {
         refs
       }
     }
+
+    private val clusterExprs: Seq[Expression] = withNestedTransforms(
+      writeRequirementRefs(COLUMN_UPDATE_CLUSTER_BY).getOrElse(Seq(PARTITION_COLUMN_REF)))
+
+    private val orderExprs: Seq[Expression] =
+      writeRequirementRefs(COLUMN_UPDATE_ORDER_BY).map(withNestedTransforms).getOrElse(clusterExprs)
 
     override def newWriteBuilder(info: LogicalWriteInfo): DeltaWriteBuilder = {
       lastWriteInfo = info
@@ -459,7 +469,7 @@ class InMemoryRowLevelOperationTable private (
               }
 
               override def requiredOrdering(): Array[SortOrder] = {
-                clusterExprs.map { expr =>
+                orderExprs.map { expr =>
                   LogicalExpressions.sort(
                     expr,
                     SortDirection.ASCENDING,
@@ -727,7 +737,7 @@ class InMemoryRowLevelOperationTable private (
         new RecordOnlyColumnUpdateWriterFactory(CatalogV2Util.v2ColumnsToStructType(columns()))
       } else if (
           properties.getOrDefault(COLUMN_UPDATE_COW_NO_WRITE_COLUMN_UPDATE, "false") == "true") {
-        new NoWriteColumnUpdateOverrideWriterFactory
+        super.createBatchWriterFactory(info)
       } else {
         new ColumnUpdateBufferedRowsWriterFactory(CatalogV2Util.v2ColumnsToStructType(columns()))
       }
@@ -875,25 +885,8 @@ private class DeltaBufferWriter(schema: StructType, pkRowId: Boolean)
   override def commit(): WriterCommitMessage = buffer
 }
 
-// Test-only: a writer factory for a connector that never overrides writeColumnUpdate(), to
-// exercise the DataWriter#writeColumnUpdate default that throws
-// DATA_SOURCE_WRITE_COLUMN_UPDATE_NOT_IMPLEMENTED.
-// Declared top-level (no reference to the enclosing table) so it stays task-serializable.
-private class NoWriteColumnUpdateOverrideWriterFactory extends DataWriterFactory {
-  override def createWriter(partitionId: Int, taskId: Long): DataWriter[InternalRow] = {
-    new NoWriteColumnUpdateOverrideWriter
-  }
-}
-
-private class NoWriteColumnUpdateOverrideWriter extends DataWriter[InternalRow] {
-  override def write(record: InternalRow): Unit = {}
-  override def commit(): WriterCommitMessage = new BufferedRows(Seq.empty, StructType(Nil))
-  override def abort(): Unit = {}
-  override def close(): Unit = {}
-}
-
 // Test-only: a writer that accepts writeColumnUpdate and tags those rows in the write log. Only the
-// column-update writers extend it, so a plain writer rejects rows sent to writeColumnUpdate.
+// column-update writers use it, so a plain writer rejects rows sent to writeColumnUpdate.
 private class ColumnUpdateBufferWriter(schema: StructType) extends BufferWriter(schema) {
   private final val WRITE_COLUMN_UPDATE = UTF8String.fromString(WriteColumnUpdate.toString)
 

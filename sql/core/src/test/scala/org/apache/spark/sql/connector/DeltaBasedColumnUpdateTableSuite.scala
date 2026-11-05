@@ -30,6 +30,7 @@ import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReferenc
 import org.apache.spark.sql.connector.write.LogicalWriteInfo
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.UPDATE
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.CommandExecutionMode
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -65,6 +66,9 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
 
   private val splitWithRowIdOperationClass =
     classOf[InMemoryRowLevelOperationTable#DeltaBasedColumnUpdateSplitOperationWithRowId].getName
+
+  private val splitReqAttrsOperationClass =
+    classOf[InMemoryRowLevelOperationTable#DeltaBasedColumnUpdateSplitOperationWithReqAttrs].getName
 
   private def splitReqAttrsTableProps(reqAttrs: String): java.util.Map[String, String] = {
     tablePropsWith(reqAttrsTableProps(reqAttrs), "split-updates" -> "true")
@@ -149,6 +153,21 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
       Row(1, 1, "a  ", "x", "hr") :: Nil)
   }
 
+  test("column-update: CHAR and VARCHAR self-assignments are not reported when the types are " +
+    "preserved") {
+    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      createTable("pk INT NOT NULL, id INT, c CHAR(3), v VARCHAR(10), dep STRING")
+      sql(s"INSERT INTO $tableNameAsString VALUES (1, 1, 'a', 'x', 'hr')")
+
+      sql(s"UPDATE $tableNameAsString SET id = -1, c = c, v = v WHERE pk = 1")
+
+      checkLastUpdatedColumns("id")
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(1, -1, "a  ", "x", "hr") :: Nil)
+    }
+  }
+
   test("column-update: a LogicalWriteInfo that does not implement columnUpdateSchema throws") {
     val info = new LogicalWriteInfo {
       override def options(): CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()
@@ -167,6 +186,9 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
     Seq(
       ("id = -1", Seq("id"), Seq("pk", "dep", "id"), Row(1, -1, "hr")),
       ("ID = -1", Seq("id"), Seq("pk", "dep", "id"), Row(1, -1, "hr")),
+      // assigns every column in table order, so the assignments are aligned as written
+      ("PK = PK, ID = -1, DEP = 'eng'", Seq("id", "dep"), Seq("pk", "dep", "id"),
+        Row(1, -1, "eng")),
       ("id = -1, dep = 'eng'", Seq("id", "dep"), Seq("pk", "dep", "id"), Row(1, -1, "eng")),
       ("id = -1, dep = dep", Seq("id"), Seq("pk", "dep", "id"), Row(1, -1, "hr")),
       ("id = id, dep = 'eng'", Seq("dep"), Seq("pk", "dep"), Row(1, 10, "eng")),
@@ -216,16 +238,17 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
 
   test("column-update: undeclared write requirement columns are rejected") {
     val excludeColumnPruning = SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ColumnPruning.ruleName
-    val splitReqAttrsOperationClass =
-      classOf[InMemoryRowLevelOperationTable#DeltaBasedColumnUpdateSplitOperationWithReqAttrs]
-        .getName
     Seq(
       (reqAttrsTableProps("pk,salary"), "dep", reqAttrsOperationClass, "[`dep`]"),
       (splitReqAttrsTableProps("pk,salary"), "dep", splitReqAttrsOperationClass, "[`dep`]"),
+      (tablePropsWith(reqAttrsTableProps("pk,salary"), "column-update-order-by" -> "pk"), "dep",
+        reqAttrsOperationClass, "[`dep`]"),
+      (tablePropsWith(reqAttrsTableProps("pk,salary"), "column-update-order-by" -> "dep"), "pk",
+        reqAttrsOperationClass, "[`dep`]"),
       (tablePropsWith(reqAttrsTableProps("pk,salary"),
         "column-update-cluster-by-nested-transform" -> "true"), "dep", reqAttrsOperationClass,
         "[`dep`]"),
-      (reqAttrsTableProps("pk,salary"), "id,dep", reqAttrsOperationClass, "[`dep`, `id`]"),
+      (reqAttrsTableProps("pk,salary"), "id,dep", reqAttrsOperationClass, "[`id`, `dep`]"),
       (reqAttrsTableProps("pk,salary,s"), "s.missing", reqAttrsOperationClass,
         "[`s`.`missing` (FIELD_NOT_FOUND)]")
     ).foreach { case (props, clusterBy, operationClass, columns) =>
@@ -402,8 +425,9 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
       Row(1, -1, "hr") :: Row(2, 2, "hr") :: Nil)
   }
 
-  test("column-update split: row-ID reassignment on narrow write is rejected") {
-    // the declared [pk, dep, salary] leaves out `extra`, so the write is narrow
+  test("column-update split: row-ID reassignment is rejected when requiredDataAttributes leaves " +
+    "out a column") {
+    // the declared [pk, dep, salary] leaves out `extra`
     createAndInitTableSplit("pk INT NOT NULL, salary INT, dep STRING, extra STRING",
       """{ "pk": 1, "salary": 100, "dep": "hr", "extra": "x" }
         |{ "pk": 2, "salary": 200, "dep": "software", "extra": "y" }
@@ -432,25 +456,38 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
       Row(2, 200, "software") :: Row(11, -1, "hr") :: Nil)
   }
 
-  test("column-update split: row-ID reassignment is allowed when requiredDataAttributes " +
-    "covers every data column of a relation with metadata columns") {
+  test("column-update split: row-ID reassignment is rejected when metadata columns are listed") {
+    // on a table that accepts any schema, the aligned assignments also list the metadata columns,
+    // so the relation has columns that no declaration can cover
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |""".stripMargin,
+      tablePropsWith(splitReqAttrsTableProps("pk,salary,dep"), "accept-any-schema" -> "true"))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(s"UPDATE $tableNameAsString SET pk = 2, salary = salary, dep = dep, " +
+          "index = index, _partition = _partition")
+      },
+      condition = "COLUMN_UPDATE_SPLIT_ROW_ID_REASSIGNMENT",
+      parameters = Map("connector" -> splitReqAttrsOperationClass, "rowIds" -> "[`pk`]"))
+  }
+
+  test("column-update split: row-ID reassignment is allowed with a metadata column in a " +
+    "condition that resolves in a later iteration") {
     createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
       """{ "pk": 1, "salary": 100, "dep": "hr" }
         |{ "pk": 2, "salary": 200, "dep": "software" }
         |""".stripMargin,
       splitReqAttrsTableProps("pk,salary,dep"))
 
-    // `_partition` and the coerced `salary > 0.5` make the analyzer add the metadata columns to
-    // the target relation in a later iteration. Executing this statement fails in ExpandExec, so
-    // only the analyzed plan is checked.
-    val parsed = spark.sessionState.sqlParser.parsePlan(
-      s"UPDATE $tableNameAsString SET pk = pk + 10, salary = -1 " +
-        s"WHERE dep = 'hr' AND _partition = 'hr' AND salary > 0.5")
-    val write = spark.sessionState.executePlan(parsed).analyzed.collectFirst {
-      case w: WriteDelta => w
-    }.getOrElse(fail("couldn't find WriteDelta in analyzed plan"))
+    // the coerced `salary > 0.5` makes the analyzer resolve the UPDATE in a later iteration
+    sql(s"UPDATE $tableNameAsString SET pk = pk + 10, salary = -1 " +
+      "WHERE dep = 'hr' AND _partition = 'hr' AND salary > 0.5")
 
-    assert(write.table.output.map(_.name) == Seq("pk", "salary", "dep"))
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+      Row(2, 200, "software") :: Row(11, -1, "hr") :: Nil)
   }
 
   test("column-update split: a row-ID column that does not reach the REINSERT row must be " +
@@ -480,6 +517,81 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
     }
   }
 
+  test("column-update split: an empty declaration keeps the write full width") {
+    // `_partition` is the row ID, and with no metadata attributes it does not reach the REINSERT
+    // row. The fixture cannot commit such a row, so this checks the analyzed plan.
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |""".stripMargin,
+      tablePropsWith(splitPartitionRowIdTableProps, "no-metadata" -> "true"))
+
+    val analyzed = spark.sessionState.executePlan(
+      spark.sessionState.sqlParser.parsePlan(
+        s"UPDATE $tableNameAsString SET salary = salary WHERE pk = 1"),
+      CommandExecutionMode.SKIP).analyzed
+
+    checkLastUpdatedColumns()
+    val write = analyzed.collectFirst { case w: WriteDelta => w }
+      .getOrElse(fail("couldn't find WriteDelta in the analyzed plan"))
+    assert(write.table.output.map(_.name) == Seq("pk", "salary", "dep"))
+  }
+
+  test("column-update split: an UPDATE with a subquery condition") {
+    withTempView("updated_pk") {
+      createAndInitTable("pk INT NOT NULL, salary INT, bonus INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "bonus": 10, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "bonus": 20, "dep": "software" }
+          |""".stripMargin,
+        splitTableProps)
+      import testImplicits._
+      Seq(2).toDF("pk").createOrReplaceTempView("updated_pk")
+
+      sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE pk IN (SELECT pk FROM updated_pk)")
+
+      checkLastColumnUpdateSchema("pk", "dep", "salary")
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+        Row(1, 100, 10, "hr") :: Row(2, -1, 20, "software") :: Nil)
+    }
+  }
+
+  test("column-update: runtime group filtering on a narrow delta write") {
+    withTempView("matched_ids") {
+      createAndInitTableWithProps(reqAttrsTableProps("pk,dep,salary"))
+      import testImplicits._
+      Seq(1, 100).toDF().createOrReplaceTempView("matched_ids")
+
+      executeAndCheckScans(
+        s"UPDATE $tableNameAsString SET salary = -1 WHERE id IN (SELECT * FROM matched_ids)",
+        primaryScanSchema = "pk INT, id INT, dep STRING, extra INT, _partition STRING",
+        groupFilterScanSchema = Some("id INT, dep STRING"))
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+        Row(1, 1, "hr", -1, 10, 1) ::
+        Row(2, 2, "hr", 200, 20, 1) ::
+        Row(3, 3, "software", 300, 30, 1) :: Nil)
+    }
+  }
+
+  test("column-update: a full-width write keeps a condition column that its distribution uses") {
+    // the declaration is empty, so the write is full width, and without metadata attributes only
+    // the condition reads `_partition`
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |""".stripMargin,
+      tablePropsWith(reqAttrsTableProps(""), "no-metadata" -> "true",
+        "column-update-cluster-by" -> "_partition"))
+
+    sql(s"UPDATE $tableNameAsString SET salary = salary WHERE _partition = 'hr'")
+
+    checkLastWriteIsFullWidth()
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+      Row(1, 100, "hr") :: Row(2, 200, "software") :: Nil)
+  }
+
   test("column-update split: metadata row ID preserved on reinsert need not be declared") {
     // `_partition` is a required metadata attribute with PRESERVE_ON_REINSERT, so the REINSERT
     // row carries it through the metadata projection.
@@ -499,27 +611,6 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
       Row(1, -1, "hr") :: Row(2, 200, "software") :: Nil)
-  }
-
-  test("column-update split: the fixture rejects a DELETE it cannot locate by row ID") {
-    Seq(
-      Map("column-update-split-row-id" -> "_partition", "no-metadata" -> "true") -> "_partition",
-      Map("column-update-split-row-id" -> "id") -> "id"
-    ).foreach { case (props, rowIdName) =>
-      withTable(tableNameAsString) {
-        createAndInitTable("pk INT NOT NULL, id INT NOT NULL, dep STRING",
-          """{ "pk": 1, "id": 2, "dep": "hr" }
-            |{ "pk": 2, "id": 1, "dep": "hr" }
-            |""".stripMargin,
-          props.asJava)
-
-        val e = intercept[IllegalStateException] {
-          sql(s"DELETE FROM $tableNameAsString WHERE pk < 2")
-        }
-        assert(e.getMessage == "The split fixture can only locate a row by pk or by metadata " +
-          s"row-ID columns, but row-ID column $rowIdName is in neither")
-      }
-    }
   }
 
   test("column-update split: the write relation and the scan have only the declared and " +
@@ -569,17 +660,26 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
     }
   }
 
-  test("column-update: an undeclared CHECK constraint column that the UPDATE reads is kept") {
+  test("column-update: an undeclared CHECK constraint column that the UPDATE reads is kept and " +
+    "enforced") {
     createAndInitTable("pk INT NOT NULL, id INT, dep STRING, extra INT",
       """{ "pk": 1, "id": 1, "dep": "hr", "extra": 5 }
         |""".stripMargin)
-    sql(s"ALTER TABLE $tableNameAsString ADD CONSTRAINT positive_extra CHECK (extra > 0)")
+    sql(s"ALTER TABLE $tableNameAsString ADD CONSTRAINT extra_above_id CHECK (extra > id)")
 
     sql(s"UPDATE $tableNameAsString SET id = -1 WHERE extra > 3")
     checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(1, -1, "hr", 5) :: Nil)
 
-    sql(s"UPDATE $tableNameAsString SET id = extra + 1 WHERE pk = 1")
-    checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(1, 6, "hr", 5) :: Nil)
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql(s"UPDATE $tableNameAsString SET id = extra + 1 WHERE pk = 1")
+      },
+      condition = "CHECK_CONSTRAINT_VIOLATION",
+      sqlState = "23001",
+      parameters = Map(
+        "constraintName" -> "extra_above_id",
+        "expression" -> "extra > id",
+        "values" -> " - extra : 5\n - id : 6"))
   }
 
   test("column-update: CHECK constraint on a reassigned row-ID column is enforced") {

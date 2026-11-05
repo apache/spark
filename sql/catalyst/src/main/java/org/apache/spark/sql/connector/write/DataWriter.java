@@ -96,8 +96,7 @@ public interface DataWriter<T> extends Closeable {
    * {@link RowLevelOperation#requiredMetadataAttributes()}, and to
    * {@link #writeColumnUpdate(Object)} otherwise. The record follows
    * {@link LogicalWriteInfo#columnUpdateSchema()} and the metadata follows
-   * {@link LogicalWriteInfo#metadataSchema()}. Operations that mix in {@link SupportsDelta} receive
-   * such rows through {@link DeltaWriter#update} and {@link DeltaWriter#reinsert} instead.
+   * {@link LogicalWriteInfo#metadataSchema()}.
    * <p>
    * By default, delegates to {@link #writeColumnUpdate(Object)} and drops the metadata.
    * <p>

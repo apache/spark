@@ -50,8 +50,8 @@ public interface RowLevelOperationInfo {
    * granularity (e.g. {@code SET s.c1 = -1} returns {@code s}), even when the field is assigned to
    * itself.
    * <p>
-   * Column names match the case used in the table schema, and a top-level column whose name
-   * contains a dot is one name part.
+   * Metadata columns are never reported. Column names match the case used in the table schema, and
+   * a top-level column whose name contains a dot is one name part.
    *
    * @since 4.4.0
    */

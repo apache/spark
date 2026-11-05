@@ -25,8 +25,6 @@ import org.apache.spark.sql.catalyst.optimizer.ColumnPruning
 import org.apache.spark.sql.catalyst.plans.logical.Union
 import org.apache.spark.sql.connector.catalog.InMemoryRowLevelOperationTable
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.UPDATE
-import org.apache.spark.sql.connector.write.RowLevelOperationTable
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, V2Writes}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SupportsRuntimeCatalystFiltering
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
@@ -46,6 +44,9 @@ class GroupBasedColumnUpdateTableSuite extends UpdateTableSuiteBase
   }
 
   override protected def fullWidthTableProps: java.util.Map[String, String] = java.util.Map.of()
+
+  // the scan schema of every column of t(pk, salary, bonus, dep) and its metadata columns
+  private val fullScanSchema = s"pk INT, salary INT, bonus INT, dep STRING$scanMetadataColumns"
 
   test("column-update ReplaceData: runtime group filtering reads only the referenced columns") {
     Seq(true, false).foreach { dppEnabled =>
@@ -164,7 +165,7 @@ class GroupBasedColumnUpdateTableSuite extends UpdateTableSuiteBase
       },
       condition = "DATA_SOURCE_WRITE_COLUMN_UPDATE_NOT_IMPLEMENTED",
       parameters = Map(
-        "class" -> "org.apache.spark.sql.connector.catalog.NoWriteColumnUpdateOverrideWriter"))
+        "class" -> "org.apache.spark.sql.connector.catalog.BufferWriter"))
   }
 
   test("column-update ReplaceData: the subquery plan narrows the write relation and the scan") {
@@ -215,6 +216,29 @@ class GroupBasedColumnUpdateTableSuite extends UpdateTableSuiteBase
     }
   }
 
+  test("column-update ReplaceData: runtime group filtering on a metadata column with a " +
+    "subquery") {
+    withTempView("updated_pk") {
+      createAndInitTable("pk INT NOT NULL, salary INT, bonus INT, dep STRING",
+        """{ "pk": 1, "salary": 300, "bonus": 7, "dep": "hr" }
+          |{ "pk": 2, "salary": 150, "bonus": 7, "dep": "software" }
+          |{ "pk": 3, "salary": 120, "bonus": 7, "dep": "hr" }
+          |""".stripMargin)
+      import testImplicits._
+      Seq(1, 2).toDF("pk").createOrReplaceTempView("updated_pk")
+
+      // the group filter of each read of the table must refer to the metadata column of that read
+      sql(s"UPDATE $tableNameAsString SET salary = -1 " +
+        "WHERE _partition = 'hr' AND pk IN (SELECT pk FROM updated_pk)")
+
+      checkLastColumnUpdateSchema("pk", "dep", "salary")
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+        Row(1, -1, 7, "hr") :: Row(2, 150, 7, "software") :: Row(3, 120, 7, "hr") :: Nil)
+      checkReplacedPartitions(Seq("hr"))
+    }
+  }
+
   test("column-update ReplaceData: unread partition column skips runtime group filtering") {
     withTempView("matched_ids") {
       createAndInitTableWithProps(reqAttrsTableProps("pk,salary"))
@@ -236,6 +260,68 @@ class GroupBasedColumnUpdateTableSuite extends UpdateTableSuiteBase
         Row(2, 2, "hr", 200, 20, 1) ::
         Row(3, 3, "software", 300, 30, 1) :: Nil)
       checkReplacedPartitions(Seq("hr", "software"))
+    }
+  }
+
+  test("column-update ReplaceData: an IN subquery on the partition column with the group " +
+    "filter disabled") {
+    withSQLConf(SQLConf.RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED.key -> "false") {
+      withTempView("updated_dep") {
+        createAndInitTableWithProps(reqAttrsTableProps("pk,dep,salary"))
+        import testImplicits._
+        Seq("hr").toDF().createOrReplaceTempView("updated_dep")
+
+        // dynamic partition pruning of the read of the updated rows must not prune the scan
+        // that the read of the copied rows shares
+        sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE dep IN (SELECT * FROM updated_dep)")
+
+        checkLastColumnUpdateSchema("pk", "dep", "salary")
+        checkAnswer(
+          sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+          Row(1, 1, "hr", -1, 10, 1) ::
+          Row(2, 2, "hr", -1, 20, 1) ::
+          Row(3, 3, "software", 300, 30, 1) :: Nil)
+        checkReplacedPartitions(Seq("hr", "software"))
+      }
+    }
+  }
+
+  test("column-update ReplaceData: a NOT EXISTS subquery on the partition column") {
+    withTempView("kept_dep") {
+      createAndInitTableWithProps(reqAttrsTableProps("pk,dep,salary"))
+      import testImplicits._
+      Seq("hr").toDF("d").createOrReplaceTempView("kept_dep")
+
+      sql(s"UPDATE $tableNameAsString t SET salary = -1 " +
+        "WHERE NOT EXISTS (SELECT 1 FROM kept_dep WHERE d = t.dep)")
+
+      checkLastColumnUpdateSchema("pk", "dep", "salary")
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+        Row(1, 1, "hr", 100, 10, 1) ::
+        Row(2, 2, "hr", 200, 20, 1) ::
+        Row(3, 3, "software", -1, 30, 1) :: Nil)
+      checkReplacedPartitions(Seq("software"))
+    }
+  }
+
+  test("column-update ReplaceData: a scalar subquery on the partition column with catalyst " +
+    "runtime filtering") {
+    withTempView("src") {
+      createAndInitTableWithProps(tablePropsWith(reqAttrsTableProps("pk,dep,salary"),
+        "use-catalyst-runtime-filtering" -> "true"))
+      import testImplicits._
+      Seq("hr").toDF("d").createOrReplaceTempView("src")
+
+      sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE dep = (SELECT max(d) FROM src)")
+
+      checkLastColumnUpdateSchema("pk", "dep", "salary")
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+        Row(1, 1, "hr", -1, 10, 1) ::
+        Row(2, 2, "hr", -1, 20, 1) ::
+        Row(3, 3, "software", 300, 30, 1) :: Nil)
+      checkReplacedPartitions(Seq("hr"))
     }
   }
 
@@ -300,9 +386,6 @@ class GroupBasedColumnUpdateTableSuite extends UpdateTableSuiteBase
     }
   }
 
-  private val fullScanSchema =
-    "pk INT, salary INT, bonus INT, dep STRING, _partition STRING, index INT"
-
   test("column-update ReplaceData: an UPDATE without the mix-in reads every column") {
     createAndInitTable("pk INT NOT NULL, salary INT, bonus INT, dep STRING",
       """{ "pk": 1, "salary": 100, "bonus": 10, "dep": "hr" }
@@ -339,33 +422,6 @@ class GroupBasedColumnUpdateTableSuite extends UpdateTableSuiteBase
         checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(1, 150, 10, "hr") :: Nil)
       }
     }
-  }
-
-  test("column-update ReplaceData: an operation rebuilt with withTable keeps the updated columns") {
-    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
-      """{ "pk": 1, "salary": 100, "dep": "hr" }
-        |""".stripMargin)
-
-    val write = executeAndKeepAnalyzedWrite {
-      sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE pk = 1")
-    }
-    val relation = write.table.asInstanceOf[DataSourceV2Relation]
-    val operationTable = relation.table.asInstanceOf[RowLevelOperationTable]
-    val t = table
-    t.lastUpdatedColumns = null
-
-    val rebuilt = operationTable.withTable(t)
-
-    checkLastUpdatedColumns("salary")
-    assert(rebuilt.operationInfo eq operationTable.operationInfo)
-    val rebuiltQuery = write.query.transform {
-      case r: DataSourceV2Relation if r.table eq operationTable => r.copy(table = rebuilt)
-    }
-    assert(rebuiltQuery.exists {
-      case r: DataSourceV2Relation => r.table eq rebuilt
-      case _ => false
-    })
-    V2Writes(write.withNewTable(relation.copy(table = rebuilt)).withNewQuery(rebuiltQuery))
   }
 
   test("column-update ReplaceData: column update schema nullability covers UPDATE and COPY " +

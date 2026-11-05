@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{ProjectingInternalRow, SQLConfHelper}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, Expression, ExprId, If, Literal, MetadataAttribute, NamedExpression, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, AttributeSet, Expression, ExprId, If, Literal, MetadataAttribute, NamedExpression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, Expand, LogicalPlan, MergeRows, Project, Union}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.{GeneratedColumn, ReplaceDataProjections,
@@ -77,7 +77,7 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
     val updatedColumns = updatedAttrs.map(attr => FieldReference.column(attr.name))
     val info = RowLevelOperationInfoImpl(command, options, updatedColumns)
     val operation = table.newRowLevelOperationBuilder(info).build()
-    RowLevelOperationTable(table, operation)(info)
+    RowLevelOperationTable(table, operation)
   }
 
   protected def buildRelationWithAttrs(
@@ -368,8 +368,9 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
 object RewriteRowLevelCommand extends SQLConfHelper {
 
   /**
-   * Whether the operation narrows the write: it mixes in `SupportsColumnUpdates` and declares at
-   * least one column. An operation that declares none receives full-width rows.
+   * Whether the operation asks for narrow rows: it mixes in `SupportsColumnUpdates` and declares at
+   * least one column. Only UPDATE delivers them (see `V2Writes.hasNarrowRows`). An operation that
+   * declares none receives full-width rows.
    */
   private[sql] def narrowsWrite(operation: RowLevelOperation): Boolean = operation match {
     case op: SupportsColumnUpdates => op.requiredDataAttributes.nonEmpty
@@ -386,38 +387,38 @@ object RewriteRowLevelCommand extends SQLConfHelper {
       relation: LogicalPlan,
       operation: SupportsColumnUpdates): Seq[AttributeReference] = {
     val refs = operation.requiredDataAttributes.toImmutableArraySeq
-    val nameless = refs.filter(_.fieldNames.isEmpty).map(_ => Seq.empty[String])
+    val names = refs.map(_.fieldNames.toImmutableArraySeq)
+    val nameless = names.filter(_.isEmpty)
     if (nameless.nonEmpty) {
       throw QueryCompilationErrors.unknownRequiredDataAttributeError(
         operation.getClass.getName, nameless)
     }
-    val nested = refs.filter(_.fieldNames.length > 1).map(_.fieldNames.toSeq)
+    val nested = names.filter(_.length > 1)
     if (nested.nonEmpty) {
       throw QueryCompilationErrors.nestedRequiredDataAttributeError(
         operation.getClass.getName, nested)
     }
-    val normalizedNames =
-      refs.map(ref => SchemaUtils.foldName(ref.fieldNames.head, conf.caseSensitiveAnalysis))
+    val normalizedNames = names.map(n => SchemaUtils.foldName(n.head, conf.caseSensitiveAnalysis))
     val counts = normalizedNames.groupBy(identity).view.mapValues(_.size).toMap
-    val duplicates = refs.zip(normalizedNames)
+    val duplicates = names.zip(normalizedNames)
       .filter { case (_, name) => counts(name) > 1 }
       .distinctBy(_._2)
-      .map(_._1.fieldNames.toSeq)
+      .map(_._1)
     if (duplicates.nonEmpty) {
       throw QueryCompilationErrors.duplicateRequiredDataAttributeError(
         operation.getClass.getName, duplicates)
     }
     val resolvedOpts = refs.map(V2ExpressionUtils.resolveRefOpt(_, relation))
-    val unknown = refs.zip(resolvedOpts).collect {
-      case (ref, None) => ref.fieldNames.toSeq
+    val unknown = names.zip(resolvedOpts).collect {
+      case (name, None) => name
     }
     if (unknown.nonEmpty) {
       throw QueryCompilationErrors.unknownRequiredDataAttributeError(
         operation.getClass.getName, unknown)
     }
-    val resolved = resolvedOpts.flatten.map(_.asInstanceOf[AttributeReference])
-    val metadata = refs.zip(resolved).collect {
-      case (ref, attr) if MetadataAttribute.isValid(attr.metadata) => ref.fieldNames.toSeq
+    val resolved = resolvedOpts.flatten.map(_.toAttribute)
+    val metadata = names.zip(resolved).collect {
+      case (name, attr) if MetadataAttribute.isValid(attr.metadata) => name
     }
     if (metadata.nonEmpty) {
       throw QueryCompilationErrors.metadataRequiredDataAttributeError(
@@ -426,7 +427,7 @@ object RewriteRowLevelCommand extends SQLConfHelper {
     // `resolveRefOpt` matches with the session's resolver but keeps the declared spelling, so map
     // each resolved attribute back to the relation's own (by exprId) to avoid a spelling mismatch
     // between the connector's declaration and the table's actual column name.
-    val byExprId = relation.output.map(a => a.exprId -> a).toMap
-    resolved.map(a => byExprId(a.exprId).asInstanceOf[AttributeReference])
+    val relationAttrs = AttributeMap(relation.output.map(a => a -> a))
+    resolved.map(a => relationAttrs(a).asInstanceOf[AttributeReference])
   }
 }

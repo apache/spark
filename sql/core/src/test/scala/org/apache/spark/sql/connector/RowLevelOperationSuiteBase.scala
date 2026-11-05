@@ -388,7 +388,7 @@ abstract class RowLevelOperationSuiteBase
 
   /**
    * Asserts that the column names in RowLevelOperationInfo.updatedColumns() received by the
-   * last operation match exactly the expected set.  Order is ignored.
+   * last operation match exactly the expected set. Order is ignored.
    */
   protected def checkLastUpdatedColumns(expectedNames: String*): Unit = {
     assert(table.lastUpdatedColumns != null, "no row-level operation was built")
