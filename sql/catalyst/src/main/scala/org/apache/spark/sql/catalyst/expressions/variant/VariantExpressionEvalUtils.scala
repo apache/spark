@@ -99,8 +99,9 @@ object VariantExpressionEvalUtils {
   def parseVariantPath(
       pathValue: String,
       functionName: String,
+      legacyPathBackslashAsLiteral: Boolean,
       allowRoot: Boolean = false): Array[VariantPathSegment] = {
-    val parsed = VariantPathParser.parse(pathValue).getOrElse {
+    val parsed = VariantPathParser.parse(pathValue, legacyPathBackslashAsLiteral).getOrElse {
       throw QueryExecutionErrors.invalidVariantPath(pathValue, functionName)
     }
     if (!allowRoot && parsed.isEmpty) {
@@ -110,7 +111,9 @@ object VariantExpressionEvalUtils {
   }
 
   /** Render a parsed path prefix back to a JSONPath string for error messages. */
-  private def renderVariantPath(segments: Array[VariantBuilder.PathSegment]): String = {
+  private def renderVariantPath(
+      segments: Array[VariantBuilder.PathSegment],
+      legacyPathBackslashAsLiteral: Boolean): String = {
     val sb = new StringBuilder("$")
     segments.foreach {
       case o: VariantBuilder.ObjectKeySegment =>
@@ -119,10 +122,13 @@ object VariantExpressionEvalUtils {
         // must use bracket notation so the rendered path round-trips to the same segments.
         if (key.nonEmpty && !key.contains('.') && !key.contains('[')) {
           sb.append('.').append(key)
-        } else if (!key.contains('\'')) {
-          sb.append("['").append(key).append("']")
         } else {
-          sb.append("[\"").append(key).append("\"]")
+          val quote = if (key.contains('\'')) '"' else '\''
+          if (legacyPathBackslashAsLiteral) {
+            sb.append('[').append(quote).append(key).append(quote).append(']')
+          } else {
+            sb.append(VariantPathParser.quoteKey(key, quote))
+          }
         }
       case a: VariantBuilder.ArrayIndexSegment => sb.append('[').append(a.index).append(']')
     }
@@ -145,8 +151,12 @@ object VariantExpressionEvalUtils {
     new VariantVal(out.getValue, out.getMetadata)
   }
 
-  def deleteAtPath(input: VariantVal, path: UTF8String): VariantVal =
-    deleteAtPath(input, toJavaSegments(parseVariantPath(path.toString, "variant_delete")))
+  def deleteAtPath(
+      input: VariantVal,
+      path: UTF8String,
+      legacyPathBackslashAsLiteral: Boolean): VariantVal =
+    deleteAtPath(input, toJavaSegments(
+      parseVariantPath(path.toString, "variant_delete", legacyPathBackslashAsLiteral)))
 
   /**
    * Insert `value` into `input` at `javaSegments`. `path` is the source string used in error
@@ -163,7 +173,8 @@ object VariantExpressionEvalUtils {
       value: Any,
       valueDataType: DataType,
       functionName: String,
-      failOnError: Boolean): VariantVal = {
+      failOnError: Boolean,
+      legacyPathBackslashAsLiteral: Boolean): VariantVal = {
     val v = new Variant(input.getValue, input.getMetadata)
     try {
       val valVal = castToVariant(value, valueDataType)
@@ -176,7 +187,8 @@ object VariantExpressionEvalUtils {
         null
       case e: VariantPathTypeMismatchException =>
         throw QueryExecutionErrors.variantPathTypeMismatch(
-          path, renderVariantPath(javaSegments.take(e.depth)), functionName)
+          path, renderVariantPath(javaSegments.take(e.depth), legacyPathBackslashAsLiteral),
+          functionName)
       case _: VariantSizeLimitException =>
         throw QueryExecutionErrors.variantSizeLimitError(VariantUtil.SIZE_LIMIT, functionName)
     }
@@ -188,10 +200,13 @@ object VariantExpressionEvalUtils {
       value: Any,
       valueDataType: DataType,
       functionName: String,
-      failOnError: Boolean): VariantVal = {
+      failOnError: Boolean,
+      legacyPathBackslashAsLiteral: Boolean): VariantVal = {
     val pathStr = path.toString
-    val javaSegments = toJavaSegments(parseVariantPath(pathStr, functionName))
-    insertAtPath(input, javaSegments, pathStr, value, valueDataType, functionName, failOnError)
+    val javaSegments = toJavaSegments(
+      parseVariantPath(pathStr, functionName, legacyPathBackslashAsLiteral))
+    insertAtPath(input, javaSegments, pathStr, value, valueDataType, functionName, failOnError,
+      legacyPathBackslashAsLiteral)
   }
 
   /**
@@ -210,7 +225,8 @@ object VariantExpressionEvalUtils {
       valueDataType: DataType,
       createIfMissing: Boolean,
       functionName: String,
-      failOnError: Boolean): VariantVal = {
+      failOnError: Boolean,
+      legacyPathBackslashAsLiteral: Boolean): VariantVal = {
     val v = new Variant(input.getValue, input.getMetadata)
     try {
       val valVal = castToVariant(value, valueDataType)
@@ -221,7 +237,8 @@ object VariantExpressionEvalUtils {
       case _: VariantPathTypeMismatchException if !failOnError => null
       case e: VariantPathTypeMismatchException =>
         throw QueryExecutionErrors.variantPathTypeMismatch(
-          path, renderVariantPath(javaSegments.take(e.depth)), functionName)
+          path, renderVariantPath(javaSegments.take(e.depth), legacyPathBackslashAsLiteral),
+          functionName)
       case _: VariantSizeLimitException =>
         throw QueryExecutionErrors.variantSizeLimitError(VariantUtil.SIZE_LIMIT, functionName)
     }
@@ -234,11 +251,13 @@ object VariantExpressionEvalUtils {
       valueDataType: DataType,
       createIfMissing: Boolean,
       functionName: String,
-      failOnError: Boolean): VariantVal = {
+      failOnError: Boolean,
+      legacyPathBackslashAsLiteral: Boolean): VariantVal = {
     val pathStr = path.toString
-    val javaSegments = toJavaSegments(parseVariantPath(pathStr, functionName))
+    val javaSegments = toJavaSegments(
+      parseVariantPath(pathStr, functionName, legacyPathBackslashAsLiteral))
     setAtPath(input, javaSegments, pathStr, value, valueDataType, createIfMissing, functionName,
-      failOnError)
+      failOnError, legacyPathBackslashAsLiteral)
   }
 
   /**
@@ -256,7 +275,8 @@ object VariantExpressionEvalUtils {
       value: Any,
       valueDataType: DataType,
       functionName: String,
-      failOnError: Boolean): VariantVal = {
+      failOnError: Boolean,
+      legacyPathBackslashAsLiteral: Boolean): VariantVal = {
     val v = new Variant(input.getValue, input.getMetadata)
     try {
       val valVal = castToVariant(value, valueDataType)
@@ -267,7 +287,8 @@ object VariantExpressionEvalUtils {
       case _: VariantPathTypeMismatchException if !failOnError => null
       case e: VariantPathTypeMismatchException =>
         throw QueryExecutionErrors.variantPathTypeMismatch(
-          path, renderVariantPath(javaSegments.take(e.depth)), functionName)
+          path, renderVariantPath(javaSegments.take(e.depth), legacyPathBackslashAsLiteral),
+          functionName)
       case _: VariantSizeLimitException =>
         throw QueryExecutionErrors.variantSizeLimitError(VariantUtil.SIZE_LIMIT, functionName)
     }
@@ -279,10 +300,13 @@ object VariantExpressionEvalUtils {
       value: Any,
       valueDataType: DataType,
       functionName: String,
-      failOnError: Boolean): VariantVal = {
+      failOnError: Boolean,
+      legacyPathBackslashAsLiteral: Boolean): VariantVal = {
     val pathStr = path.toString
-    val javaSegments = toJavaSegments(parseVariantPath(pathStr, functionName, allowRoot = true))
-    arrayAppendAtPath(input, javaSegments, pathStr, value, valueDataType, functionName, failOnError)
+    val javaSegments = toJavaSegments(
+      parseVariantPath(pathStr, functionName, legacyPathBackslashAsLiteral, allowRoot = true))
+    arrayAppendAtPath(input, javaSegments, pathStr, value, valueDataType, functionName, failOnError,
+      legacyPathBackslashAsLiteral)
   }
 
   def stripNulls(input: VariantVal, includeArrays: Boolean): VariantVal = {
@@ -291,8 +315,11 @@ object VariantExpressionEvalUtils {
     new VariantVal(out.getValue, out.getMetadata)
   }
 
-  def parsePickPath(path: UTF8String): Array[VariantBuilder.PathSegment] =
-    toJavaSegments(parseVariantPath(path.toString, "variant_pick", allowRoot = true))
+  def parsePickPath(
+      path: UTF8String,
+      legacyPathBackslashAsLiteral: Boolean): Array[VariantBuilder.PathSegment] =
+    toJavaSegments(parseVariantPath(
+      path.toString, "variant_pick", legacyPathBackslashAsLiteral, allowRoot = true))
 
   def pickAtPaths(
       input: VariantVal,

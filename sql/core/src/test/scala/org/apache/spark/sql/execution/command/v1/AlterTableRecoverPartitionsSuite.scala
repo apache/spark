@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command.v1
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.execution.command
 
 /**
@@ -112,6 +112,25 @@ trait AlterTableRecoverPartitionsSuiteBase extends command.AlterTableRecoverPart
       val expected = (0 to 100)
         .map(a => Map("a" -> a.toString, "b" -> "5", "c" -> "42")) :+ initPart
       checkPartitions(t, expected: _*)
+    }
+  }
+
+  test("SPARK-60129: keep locations of existing partitions") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      withTempDir { newRoot =>
+        sql(s"CREATE TABLE $t (id INT, p STRING) $defaultUsing PARTITIONED BY (p)")
+        sql(s"INSERT INTO $t PARTITION (p='b') SELECT 1")
+        checkAnswer(sql(s"SELECT id, p FROM $t"), Row(1, "b"))
+
+        val partDir = new Path(newRoot.getCanonicalPath, "p=b")
+        val fs = partDir.getFileSystem(spark.sessionState.newHadoopConf())
+        fs.mkdirs(partDir)
+        sql(s"ALTER TABLE $t SET LOCATION '${newRoot.toURI}'")
+        sql(s"ALTER TABLE $t RECOVER PARTITIONS")
+
+        checkPartitions(t, Map("p" -> "b"))
+        checkAnswer(sql(s"SELECT id, p FROM $t"), Row(1, "b"))
+      }
     }
   }
 

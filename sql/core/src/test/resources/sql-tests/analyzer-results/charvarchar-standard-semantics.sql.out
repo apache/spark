@@ -77,6 +77,20 @@ Project [try_cast(12345 as varchar(4)) AS TRY_CAST(12345 AS VARCHAR(4))#x]
 
 
 -- !query
+SELECT concat('<', CAST(CAST('a' AS CHAR(2)) AS VARCHAR(2)), '>')
+-- !query analysis
+Project [concat(<, cast(cast(cast(a as char(2)) as varchar(2)) as string), >) AS concat(<, CAST(CAST(a AS CHAR(2)) AS VARCHAR(2)), >)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT concat('<', CAST(CAST('a' AS VARCHAR(2)) AS CHAR(4)), '>')
+-- !query analysis
+Project [concat(<, cast(cast(cast(a as varchar(2)) as char(4)) as string), >) AS concat(<, CAST(CAST(a AS VARCHAR(2)) AS CHAR(4)), >)#x]
++- OneRowRelation
+
+
+-- !query
 SELECT coalesce(CAST('abcdef' AS VARCHAR(2)), CAST('x' AS VARCHAR(4)))
 -- !query analysis
 Project [coalesce(cast(cast(abcdef as varchar(2)) as varchar(4)), cast(x as varchar(4))) AS coalesce(CAST(abcdef AS VARCHAR(2)), CAST(x AS VARCHAR(4)))#x]

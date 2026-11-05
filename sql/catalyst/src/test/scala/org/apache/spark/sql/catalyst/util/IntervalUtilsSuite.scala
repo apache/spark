@@ -325,6 +325,25 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
           10,
           12 * MICROS_PER_MINUTE + millisToMicros(888)))
       assert(fromDayTimeString("-3 0:0:0") === new CalendarInterval(0, -3, 0L))
+      // The legacy day-time grammar captures the fraction with an unbounded `\d+`, so a
+      // 10+ digit fraction is reachable here (the modern parser bounds it to 1..9 digits).
+      // A leading-zero fraction whose value is <= 999999999 must still parse -- truncated to
+      // microseconds exactly as before, not rejected.
+      assert(fromDayTimeString("0 0:0:0.0000000001") === new CalendarInterval(0, 0, 0L))
+      assert(fromDayTimeString("0 0:0:0.0999999999") ===
+        new CalendarInterval(0, 0, 999999L))
+      // A 10+ digit fraction whose value exceeds 999999999 must still throw the same
+      // out-of-range error (the digits are parsed whole, not truncated to 9).
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          fromDayTimeString("0 0:0:0.1000000000")
+        },
+        parameters = Map(
+          "msg" -> "requirement failed: nanosecond 1000000000 outside range [0, 999999999]",
+          "input" -> "0 0:0:0.1000000000"),
+        condition = "INVALID_INTERVAL_FORMAT.DAY_TIME_PARSING",
+        sqlState = Some("22006")
+      )
 
       checkError(
         exception = intercept[SparkIllegalArgumentException] {
