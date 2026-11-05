@@ -828,8 +828,10 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   }
 
   /**
-   * Sets up pipelined mode: switches the socket to blocking mode, starts the writer
-   * thread, configures idle timeout, and returns a DataInputStream for reading output.
+   * Sets up pipelined mode: switches the socket to blocking mode and configures idle timeout.
+   * Sends the command and reads the init response synchronously on the task thread.
+   * After successful init, starts the input writer thread and returns a DataInputStream
+   * for reading output.
    */
   private[python] def createPipelinedDataIn(
       worker: PythonWorker,
@@ -853,15 +855,18 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     worker.channel.configureBlocking(true)
     worker.refresh() // re-initializes (no selector in blocking mode)
 
-    BasePythonRunner.startPipelinedWriter(
-      new PipelinedWriterRunnable(worker, writer, bufferSize, context), context)
+    context.killTaskIfInterrupted()
+    writer.open(new DataOutputStream(
+      new BufferedOutputStream(Channels.newOutputStream(worker.channel), bufferSize)))
 
     def inputStream(input: InputStream): PythonWorkerInputStream = {
       val stream = new PythonWorkerInputStream(
         new BufferedInputStream(input, bufferSize), BasePythonRunner.readInitResponseFrame)
-      context.killTaskIfInterrupted()
-      // Capture the response time before the consumer's first pull; report failures on that pull.
-      val _ = stream.initResponse
+      // Complete init before producing rows; report init failures on the consumer's first pull.
+      if (stream.initResponse.toOption.exists(_.error.isEmpty)) {
+        BasePythonRunner.startPipelinedWriter(
+          new PipelinedWriterRunnable(worker, writer, bufferSize, context), context)
+      }
       stream
     }
 
@@ -1671,6 +1676,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
    * socket in blocking mode. The task main thread simultaneously reads output from the same
    * socket. TCP sockets are full-duplex, so concurrent read() and write() from different
    * threads is safe -- they operate on independent OS-level buffers.
+   * Task initialization completes before this writer starts.
    *
    * This design achieves true pipeline parallelism without any inter-thread queues or locks:
    *   Writer Thread:  serialize batch N  ->  channel.write(batch N)    [blocking]
@@ -1715,10 +1721,6 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         // CloseShieldOutputStream). bufferStream is closed only in the finally below.
         val writerStream = new CloseShieldOutputStream(bufferStream)
         var dataOut = new DataOutputStream(writerStream)
-
-        // Write command/metadata (partition index, task context, broadcasts, UDF definition).
-        writer.open(dataOut)
-        flushToSocket(bufferStream)
 
         // Write input data in a loop, batching into buffers of ~bufferSize.
         var hasInput = true

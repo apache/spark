@@ -936,7 +936,7 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
     assert(context.taskMetrics.diskBytesSpilled == 9L)
   }
 
-  gridTest("init response read does not produce rows or retime a pipelined response")(
+  gridTest("init response is read before row production in both modes")(
       Seq(false, true)) { pipelined =>
     val runner = new InitTimingPythonRunner
     val server = ServerSocketChannel.open()
@@ -949,6 +949,7 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
     val inputPulls = new AtomicInteger(0)
     val initReadComplete = new AtomicBoolean(false)
     val responseSentAt = new AtomicLong(0L)
+    val firstInputPullTime = new AtomicLong(0L)
     val startTime = System.currentTimeMillis()
     pythonSide.socket().setSoTimeout(10000)
 
@@ -991,6 +992,8 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
     val peerThread = startThread(peer.run())
     try {
       val rows = Iterator.single(Array[Byte](1)).map { row =>
+        assert(responseSentAt.get() != 0L, "Row input was pulled before the init response")
+        firstInputPullTime.set(System.currentTimeMillis())
         if (!pipelined) {
           assert(initReadComplete.get(), "Row input was pulled during the init response read")
         }
@@ -1034,12 +1037,71 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
       assert(init >= responseSentAt.get() - startTime)
       assert(init <= initializedAt - startTime)
       assert(inputPulls.get() == 1)
+      assert(firstInputPullTime.get() >= response.receivedAtMs)
       assert(runner.recordedMetrics("pythonBootTime").value == 0L)
       assert(runner.recordedMetrics("pythonProcessingTime").value == 42L)
       assert(context.taskMetrics.memoryBytesSpilled == 7L)
       assert(context.taskMetrics.diskBytesSpilled == 9L)
     } finally {
       allowInput.countDown()
+      context.markTaskCompleted(None)
+      worker.stop()
+      pythonSide.close()
+      server.close()
+      peerThread.join(10000)
+      assert(!peerThread.isAlive)
+    }
+  }
+
+  gridTest("pipelined init failures do not start row input")(Seq(false, true)) { truncated =>
+    val runner = new InitTimingPythonRunner
+    val server = ServerSocketChannel.open()
+    server.bind(new InetSocketAddress(InetAddress.getLoopbackAddress, 0))
+    val channel = SocketChannel.open(server.getLocalAddress)
+    val pythonSide = server.accept()
+    val worker = PythonWorker(channel).refreshNonBlocking()
+    val context = TaskContext.empty()
+    val inputPulls = new AtomicInteger(0)
+    pythonSide.socket().setSoTimeout(10000)
+    val peer = new FutureTask[Unit](() => {
+      try {
+        val input = new DataInputStream(pythonSide.socket().getInputStream)
+        assert(input.readInt() == SpecialLengths.START_OF_INIT_MESSAGE)
+        input.readFully(new Array[Byte](input.readInt()))
+        val output = new DataOutputStream(pythonSide.socket().getOutputStream)
+        output.writeInt(SpecialLengths.START_OF_INIT_RESPONSE)
+        if (truncated) {
+          output.writeInt(2)
+          output.writeByte('{')
+        } else {
+          PythonWorkerUtils.writeUTF(initErrorJson, output)
+        }
+        output.flush()
+      } finally {
+        pythonSide.close()
+      }
+    })
+    val peerThread = startThread(peer.run())
+    try {
+      val rows = Iterator.single(Array[Byte](1)).map { row =>
+        inputPulls.incrementAndGet()
+        row
+      }
+      val writer = runner.writer(worker, rows, context)
+      val stream = runner.createPipelinedDataIn(worker, writer, None, context)
+      val reader = runner.reader(stream, System.currentTimeMillis(), context, worker, writer)
+      if (truncated) {
+        val error = intercept[SparkException](reader.hasNext)
+        assert(error.getCause.isInstanceOf[EOFException])
+      } else {
+        val error = intercept[PythonException](reader.hasNext)
+        assert(error.getMessage.contains("ValueError: bad"))
+      }
+      peer.get(10, TimeUnit.SECONDS)
+      context.markTaskCompleted(None)
+      assert(inputPulls.get() == 0)
+      assert(runner.recordedMetrics.values.forall(_.value == 0L))
+    } finally {
       context.markTaskCompleted(None)
       worker.stop()
       pythonSide.close()
