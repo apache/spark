@@ -140,6 +140,22 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
     checkResolverGuard("SELECT ARRAY_CONTAINS(ARRAY(1, 2, 3), 2);")
   }
 
+  test("SQL JSON constructor and path functions") {
+    checkResolverGuard("""SELECT JSON_ARRAY(1, 'x', true)""")
+    checkResolverGuard("""SELECT JSON_ARRAY('[1]' FORMAT JSON)""")
+    checkResolverGuard("""SELECT JSON_VALUE('{"a":1}', '$.a')""")
+    checkResolverGuard("""SELECT JSON_VALUE('{"a":1}', '$.a' RETURNING INT)""")
+    checkResolverGuard("""SELECT JSON_QUERY('{"a":[1]}', '$.a')""")
+    checkResolverGuard("""SELECT JSON_QUERY('{"a":[1]}', '$.a' WITH ARRAY WRAPPER)""")
+    checkResolverGuard("""SELECT JSON_EXISTS('{"a":1}', '$.a')""")
+    checkResolverGuard("""SELECT JSON_EXISTS('{"a":1}', '$.a' TRUE ON ERROR)""")
+    // A clause-free JSON_OBJECT routes as an UnresolvedFunction unless a VALUE/colon member is raw;
+    // such a call, or a clause-bearing one, is built directly as a JsonObjectExpr. Assert the guard
+    // admits that direct form (removing its allowlist arm would fail here).
+    checkResolverGuard("""SELECT JSON_OBJECT('a' VALUE 1 RETURNING STRING)""")
+    checkResolverGuard("""SELECT JSON_OBJECT('a' VALUE '[1]' FORMAT JSON)""")
+  }
+
   test("Conditional expressions") {
     checkResolverGuard("SELECT COALESCE(NULL, 1)")
     checkResolverGuard("SELECT col1, IF(col1 > 1, 1, 0) FROM VALUES(1,2),(2,3)")

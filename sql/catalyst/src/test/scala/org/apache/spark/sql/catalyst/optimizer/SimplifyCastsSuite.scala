@@ -70,6 +70,35 @@ class SimplifyCastsSuite extends PlanTest {
     comparePlans(optimized, plan, checkAnalysis = false)
   }
 
+  test("struct casts that only widen nullability") {
+    val field = StructField("value", IntegerType, nullable = false)
+    Seq(
+      StructType(Seq(field)),
+      StructType(Seq(StructField("nested", StructType(Seq(field)), nullable = false))),
+      StructType(Seq(StructField("array", ArrayType(IntegerType, false), nullable = false))),
+      StructType(Seq(StructField("map",
+        MapType(StringType, IntegerType, false), nullable = false)))).foreach { from =>
+      val input = LocalRelation($"s".struct(from))
+      val plan = input.select($"s".cast(from.asNullable).as("casted")).analyze
+      comparePlans(Optimize.execute(plan), input.select($"s".as("casted")).analyze)
+    }
+  }
+
+  test("struct casts that change more than compatible nullability") {
+    val field = StructField("value", IntegerType)
+    val from = StructType(Seq(field))
+    val input = LocalRelation($"s".struct(from))
+    val metadata = new MetadataBuilder().putString("key", "value").build()
+    Seq(
+      field.copy(nullable = false),
+      field.copy(name = "renamed"),
+      field.copy(dataType = LongType),
+      field.copy(metadata = metadata)).foreach { target =>
+      val plan = input.select(input.output.head.cast(StructType(Seq(target))).as("casted"))
+      comparePlans(Optimize.execute(plan), plan, checkAnalysis = false)
+    }
+  }
+
   test("SPARK-37922: Combine to one cast if we can safely up-cast two casts") {
     val input = LocalRelation($"a".int, $"b".decimal(18, 2), $"c".date, $"d".timestamp)
 
@@ -119,7 +148,7 @@ class SimplifyCastsSuite extends PlanTest {
   }
 
   test("SPARK-45909: Remove the cast if it can safely up-cast in IsNotNull") {
-    val input = LocalRelation($"a".int, $"b".decimal(18, 0))
+    val input = LocalRelation($"a".int, $"b".decimal(18, 0), $"d".decimal(19, 0))
     // Remove cast
     comparePlans(
       Optimize.execute(
@@ -137,5 +166,9 @@ class SimplifyCastsSuite extends PlanTest {
       Optimize.execute(
         input.select($"a".cast(DecimalType(2, 1)).as("v")).analyze),
       input.select($"a".cast(DecimalType(2, 1)).as("v")).analyze)
+    // SPARK-60943: DECIMAL(19, 0) values can be out of the range of BIGINT
+    comparePlans(
+      Optimize.execute(input.select($"d".cast(LongType).isNotNull.as("v")).analyze),
+      input.select($"d".cast(LongType).isNotNull.as("v")).analyze)
   }
 }

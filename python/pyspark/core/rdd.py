@@ -5337,6 +5337,7 @@ class PipelinedRDD(RDD[U], Generic[T, U]):
 
         if profiler:
             assert self._jrdd_val is not None
+            assert self.ctx.profiler_collector is not None
             self._id = self._jrdd_val.id()
             self.ctx.profiler_collector.add_profiler(self._id, profiler)
         return self._jrdd_val

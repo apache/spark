@@ -338,57 +338,37 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT time_bucket(INTERVAL '15' MINUTE, DATE '2024-01-15')
 -- !query schema
-struct<>
+struct<time_bucket(INTERVAL '15' MINUTE, DATE '2024-01-15', TIMESTAMP '1970-01-01 00:00:00'):timestamp>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"DATE '2024-01-15'\"",
-    "inputType" : "\"DATE\"",
-    "paramIndex" : "second",
-    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
-    "sqlExpr" : "\"time_bucket(INTERVAL '15' MINUTE, DATE '2024-01-15', TIMESTAMP '1970-01-01 00:00:00')\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 59,
-    "fragment" : "time_bucket(INTERVAL '15' MINUTE, DATE '2024-01-15')"
-  } ]
-}
+2024-01-15 00:00:00
 
 
 -- !query
 SELECT time_bucket(INTERVAL '15' MINUTE, '2024-01-15 10:23:00')
 -- !query schema
-struct<>
+struct<time_bucket(INTERVAL '15' MINUTE, 2024-01-15 10:23:00, TIMESTAMP '1970-01-01 00:00:00'):timestamp>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"2024-01-15 10:23:00\"",
-    "inputType" : "\"STRING\"",
-    "paramIndex" : "second",
-    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
-    "sqlExpr" : "\"time_bucket(INTERVAL '15' MINUTE, 2024-01-15 10:23:00, TIMESTAMP '1970-01-01 00:00:00')\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 63,
-    "fragment" : "time_bucket(INTERVAL '15' MINUTE, '2024-01-15 10:23:00')"
-  } ]
-}
+2024-01-15 10:15:00
 
 
 -- !query
 SELECT time_bucket(INTERVAL '15' MINUTE, TIMESTAMP '2024-01-15 10:23:00', DATE '2024-01-01')
+-- !query schema
+struct<time_bucket(INTERVAL '15' MINUTE, TIMESTAMP '2024-01-15 10:23:00', DATE '2024-01-01'):timestamp>
+-- !query output
+2024-01-15 10:15:00
+
+
+-- !query
+SELECT time_bucket(INTERVAL '15' MINUTE, TIMESTAMP '2024-01-15 10:23:00', '2024-01-01 00:00:00')
+-- !query schema
+struct<time_bucket(INTERVAL '15' MINUTE, TIMESTAMP '2024-01-15 10:23:00', 2024-01-01 00:00:00):timestamp>
+-- !query output
+2024-01-15 10:15:00
+
+
+-- !query
+SELECT time_bucket(INTERVAL '15' MINUTE, TIMESTAMP_NTZ '2024-01-15 10:23:00', DATE '2024-01-01')
 -- !query schema
 struct<>
 -- !query output
@@ -398,23 +378,23 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"DATE '2024-01-01'\"",
-    "inputType" : "\"DATE\"",
+    "inputType" : "\"TIMESTAMP\"",
     "paramIndex" : "third",
-    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
-    "sqlExpr" : "\"time_bucket(INTERVAL '15' MINUTE, TIMESTAMP '2024-01-15 10:23:00', DATE '2024-01-01')\""
+    "requiredType" : "\"TIMESTAMP_NTZ\"",
+    "sqlExpr" : "\"time_bucket(INTERVAL '15' MINUTE, TIMESTAMP_NTZ '2024-01-15 10:23:00', DATE '2024-01-01')\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 8,
-    "stopIndex" : 92,
-    "fragment" : "time_bucket(INTERVAL '15' MINUTE, TIMESTAMP '2024-01-15 10:23:00', DATE '2024-01-01')"
+    "stopIndex" : 96,
+    "fragment" : "time_bucket(INTERVAL '15' MINUTE, TIMESTAMP_NTZ '2024-01-15 10:23:00', DATE '2024-01-01')"
   } ]
 }
 
 
 -- !query
-SELECT time_bucket(INTERVAL '15' MINUTE, TIMESTAMP '2024-01-15 10:23:00', '2024-01-01 00:00:00')
+SELECT time_bucket(INTERVAL '15' MINUTE, TIMESTAMP_NTZ '2024-01-15 10:23:00', '2024-01-01 00:00:00')
 -- !query schema
 struct<>
 -- !query output
@@ -424,17 +404,69 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"2024-01-01 00:00:00\"",
-    "inputType" : "\"STRING\"",
+    "inputType" : "\"TIMESTAMP\"",
     "paramIndex" : "third",
-    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
-    "sqlExpr" : "\"time_bucket(INTERVAL '15' MINUTE, TIMESTAMP '2024-01-15 10:23:00', 2024-01-01 00:00:00)\""
+    "requiredType" : "\"TIMESTAMP_NTZ\"",
+    "sqlExpr" : "\"time_bucket(INTERVAL '15' MINUTE, TIMESTAMP_NTZ '2024-01-15 10:23:00', 2024-01-01 00:00:00)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 100,
+    "fragment" : "time_bucket(INTERVAL '15' MINUTE, TIMESTAMP_NTZ '2024-01-15 10:23:00', '2024-01-01 00:00:00')"
+  } ]
+}
+
+
+-- !query
+SELECT time_bucket(INTERVAL '15' MINUTE, DATE '2024-01-15', TIMESTAMP_NTZ '2024-01-01 00:00:00')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"TIMESTAMP_NTZ '2024-01-01 00:00:00'\"",
+    "inputType" : "\"TIMESTAMP_NTZ\"",
+    "paramIndex" : "third",
+    "requiredType" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"time_bucket(INTERVAL '15' MINUTE, DATE '2024-01-15', TIMESTAMP_NTZ '2024-01-01 00:00:00')\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 8,
     "stopIndex" : 96,
-    "fragment" : "time_bucket(INTERVAL '15' MINUTE, TIMESTAMP '2024-01-15 10:23:00', '2024-01-01 00:00:00')"
+    "fragment" : "time_bucket(INTERVAL '15' MINUTE, DATE '2024-01-15', TIMESTAMP_NTZ '2024-01-01 00:00:00')"
+  } ]
+}
+
+
+-- !query
+SELECT time_bucket(INTERVAL '15' MINUTE, '2024-01-15 10:23:00', TIMESTAMP_NTZ '2024-01-01 00:00:00')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"TIMESTAMP_NTZ '2024-01-01 00:00:00'\"",
+    "inputType" : "\"TIMESTAMP_NTZ\"",
+    "paramIndex" : "third",
+    "requiredType" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"time_bucket(INTERVAL '15' MINUTE, 2024-01-15 10:23:00, TIMESTAMP_NTZ '2024-01-01 00:00:00')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 100,
+    "fragment" : "time_bucket(INTERVAL '15' MINUTE, '2024-01-15 10:23:00', TIMESTAMP_NTZ '2024-01-01 00:00:00')"
   } ]
 }
 
