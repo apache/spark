@@ -26,6 +26,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -415,7 +416,23 @@ class FunctionResolution(
    * `system.builtin` actually defines a function of this name, so calling it for a non-builtin name
    * would wrongly report builtin ownership.
    */
-  def unqualifiedFunctionResolvesToBuiltinBeforeAnyShadow(functionName: String): Boolean = {
+  def unqualifiedFunctionResolvesToBuiltinBeforeAnyShadow(functionName: String): Boolean =
+    unqualifiedFunctionOwnerKind(functionName).contains(SessionCatalog.Builtin)
+
+  /**
+   * Whether a temp function owns an unqualified name: it comes first in the effective SQL PATH,
+   * before `system.builtin` and any persistent function. Same precondition as
+   * [[unqualifiedFunctionResolvesToBuiltinBeforeAnyShadow]].
+   */
+  def unqualifiedFunctionResolvesToTemp(functionName: String): Boolean =
+    unqualifiedFunctionOwnerKind(functionName).contains(SessionCatalog.Temp)
+
+  /**
+   * The kind of the first PATH entry that owns an unqualified name: `Builtin`, `Temp`, or None for
+   * a persistent function (or no owner).
+   */
+  private def unqualifiedFunctionOwnerKind(
+      functionName: String): Option[SessionCatalog.SessionFunctionKind] = {
     // Walk the PATH in order and stop at the first entry that owns the name. The default order puts
     // system.builtin first, so the common case returns on the first entry with no catalog lookup;
     // only a custom PATH that lists a persistent catalog ahead of system.builtin reaches the probe
@@ -423,24 +440,24 @@ class FunctionResolution(
     sqlResolutionPathEntriesForAnalysis.foreach { pathEntry =>
       val candidate = pathEntry :+ functionName
       FunctionResolution.sessionNamespaceKind(candidate) match {
-        case Some(org.apache.spark.sql.catalyst.catalog.SessionCatalog.Builtin) =>
-          return true
-        case Some(org.apache.spark.sql.catalyst.catalog.SessionCatalog.Temp) =>
+        case Some(SessionCatalog.Builtin) =>
+          return Some(SessionCatalog.Builtin)
+        case Some(SessionCatalog.Temp) =>
           // A visible temp scalar function shadows the builtin; a visible temp *table* function
           // makes scalar resolution terminal at this PATH entry (NOT_A_SCALAR_FUNCTION). Either way
           // the name never reaches system.builtin, mirroring `resolveFunctionCandidate`.
           val ident = FunctionIdentifier(functionName)
           if (v1SessionCatalog.isTemporaryScalarFunctionVisible(ident) ||
               v1SessionCatalog.isTemporaryTableFunctionVisible(ident)) {
-            return false
+            return Some(SessionCatalog.Temp)
           }
         case None =>
           if (persistentFunctionExists(candidate)) {
-            return false
+            return None
           }
       }
     }
-    false
+    None
   }
 
   /**

@@ -1374,6 +1374,30 @@ world'))"""))
     }
   }
 
+  test("SPARK-59243: a nested call the built-in owns is not a temp reference") {
+    // Under the default resolution order the built-in precedes a temp `json_object`, so it owns
+    // the nested call; the body does not reference the temp function.
+    try {
+      sql("CREATE TEMPORARY FUNCTION json_object(a STRING, b STRING) RETURNS STRING " +
+        "RETURN 'shadowed'")
+      Seq(
+        "json_object('a' VALUE json_object('b' VALUE 1))",
+        "json_object('a': json_object('b': 1))"
+      ).foreach { body =>
+        sql(s"CREATE OR REPLACE FUNCTION perm_json_fn() RETURNS STRING RETURN $body")
+        checkAnswer(sql("SELECT perm_json_fn()"), Row("""{"a":{"b":1}}"""))
+      }
+      // The flat call is still rejected by name, as before.
+      val e = intercept[AnalysisException] {
+        sql("CREATE OR REPLACE FUNCTION perm_json_fn() RETURNS STRING RETURN json_object('a', 1)")
+      }
+      assert(e.getCondition == "INVALID_TEMP_OBJ_REFERENCE")
+    } finally {
+      sql("DROP FUNCTION IF EXISTS perm_json_fn")
+      sql("DROP TEMPORARY FUNCTION IF EXISTS json_object")
+    }
+  }
+
   test("SPARK-59243: a routed nested call is checked for cyclic SQL function references") {
     withSQLConf(
       SQLConf.PATH_ENABLED.key -> "true",

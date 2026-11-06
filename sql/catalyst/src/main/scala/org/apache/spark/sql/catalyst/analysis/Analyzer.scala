@@ -439,7 +439,7 @@ class Analyzer(
   private val v1SessionCatalog: SessionCatalog = catalogManager.v1SessionCatalog
   private val relationResolution =
     new RelationResolution(catalogManager, sharedRelationCache)
-  private val functionResolution = new FunctionResolution(catalogManager, relationResolution)
+  private[sql] val functionResolution = new FunctionResolution(catalogManager, relationResolution)
 
   override protected def validatePlanChanges(
       previousPlan: LogicalPlan,

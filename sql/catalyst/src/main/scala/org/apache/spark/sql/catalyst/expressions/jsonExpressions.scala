@@ -1343,12 +1343,14 @@ object ImplicitlyFormattedAsJson {
 
   private def isAnalyzerCollationCast(c: Cast): Boolean = {
     // The default-collation rules only recolor a string producer of the default `StringType`, and
-    // never mark the cast user-specified. `string(...)` has no user mark, but it wraps a `Collate`,
-    // wraps an explicitly collated producer, or keeps the collation, so it is rejected too.
+    // never mark the cast user-specified or recolored. `string(...)` has no user mark, but it wraps
+    // a `Collate`, wraps an explicitly collated producer, or keeps the collation, so it is rejected
+    // too.
     if (!c.child.isInstanceOf[DefaultStringProducingExpression]) return false
     (c.dataType, c.child.dataType) match {
       case (to: StringType, from: StringType) =>
-        from.eq(StringType) && to != from && !c.containsTag(Cast.USER_SPECIFIED_CAST)
+        from.eq(StringType) && to != from && !c.containsTag(Cast.USER_SPECIFIED_CAST) &&
+          !c.containsTag(Cast.RECOLORED_USER_CAST)
       case _ => false
     }
   }
