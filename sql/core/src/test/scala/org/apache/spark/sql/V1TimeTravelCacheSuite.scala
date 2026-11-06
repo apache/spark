@@ -132,6 +132,32 @@ class V1TimeTravelCacheSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("write-driven recacheTableOrView rebuilds a pinned cache with a live subquery read") {
+    withPinnedCacheWithLiveSubqueryRead { (cached, _, _, _) =>
+      spark.sharedState.cacheManager.recacheTableOrView(
+        spark,
+        cachedTableNameParts,
+        includeTimeTravel = false)
+
+      assertCacheLoading(cached, expected = false)
+    }
+  }
+
+  test("write-driven recacheByPath rebuilds a pinned cache with a live subquery read") {
+    withPinnedCacheWithLiveSubqueryRead { (cached, rootPath, pinnedIndex, liveIndex) =>
+      val fs = rootPath.getFileSystem(spark.sessionState.newHadoopConf())
+      spark.sharedState.cacheManager.recacheByPath(
+        spark,
+        rootPath,
+        fs,
+        includeTimeTravel = false)
+
+      assertCacheLoading(cached, expected = false)
+      assert(pinnedIndex.refreshCount === 0)
+      assert(liveIndex.refreshCount === 1)
+    }
+  }
+
   test("V1 file write preserves a time travel cache and refreshes a live cache") {
     withTempPath { path =>
       withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
@@ -301,6 +327,33 @@ class V1TimeTravelCacheSuite extends QueryTest with SharedSparkSession {
         assert(fileIndex.refreshCount === (if (expectedToRecache) 1 else 0))
       } finally {
         df.unpersist(blocking = true)
+      }
+    }
+  }
+
+  /**
+   * Caches a query that reads the table at a pinned version and reads it live only inside an IN
+   * subquery, then passes the materialized cache and both file indexes to `f`.
+   */
+  private def withPinnedCacheWithLiveSubqueryRead(
+      f: (ClassicDataset[_], Path, TestFileIndex, TestFileIndex) => Unit): Unit = {
+    withTempDir { dir =>
+      val rootPath = new Path(dir.toURI)
+      val pinnedIndex = new TestFileIndex(isTimeTravel = true, rootPaths = Seq(rootPath))
+      val liveIndex = new TestFileIndex(isTimeTravel = false, rootPaths = Seq(rootPath))
+      withTempView("pinned", "live") {
+        ClassicDataset.ofRows(spark, LogicalRelation(newFileRelation(pinnedIndex), tableMetadata))
+          .createOrReplaceTempView("pinned")
+        ClassicDataset.ofRows(spark, LogicalRelation(newFileRelation(liveIndex), tableMetadata))
+          .createOrReplaceTempView("live")
+        val cached = spark.sql("SELECT * FROM pinned WHERE id IN (SELECT id FROM live)").persist()
+        try {
+          cached.count()
+          assertCacheLoading(cached, expected = true)
+          f(cached, rootPath, pinnedIndex, liveIndex)
+        } finally {
+          cached.unpersist(blocking = true)
+        }
       }
     }
   }

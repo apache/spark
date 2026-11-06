@@ -377,10 +377,18 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       includeTimeTravel: Boolean = true): Unit = {
     val resolver = spark.sessionState.conf.resolver
     def shouldInvalidate(entry: CachedData): Boolean = {
-      entry.plan.exists(isMatchedTableOrView(_, name, resolver, includeTimeTravel))
+      existsWithSubqueries(entry.plan)(isMatchedTableOrView(_, name, resolver, includeTimeTravel))
     }
     recacheByCondition(spark, shouldInvalidate)
   }
+
+  /**
+   * Returns whether `f` holds for any node of `plan`, including nodes inside subquery expressions.
+   * Write-driven invalidation skips time-travel relations, so an entry that reads a table at a
+   * pinned version and live only inside a subquery must still match through the subquery.
+   */
+  private def existsWithSubqueries(plan: LogicalPlan)(f: LogicalPlan => Boolean): Boolean =
+    plan.collectFirstWithSubqueries { case p if f(p) => () }.isDefined
 
   /**
    *  Re-caches all the cache entries that satisfies the given `condition`.
@@ -636,7 +644,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     val qualifiedPath = fs.makeQualified(resourcePath)
     recacheByCondition(
       spark,
-      _.plan.exists(lookupAndRefresh(_, fs, qualifiedPath, includeTimeTravel)))
+      entry => existsWithSubqueries(entry.plan) {
+        lookupAndRefresh(_, fs, qualifiedPath, includeTimeTravel)
+      })
   }
 
   /**
