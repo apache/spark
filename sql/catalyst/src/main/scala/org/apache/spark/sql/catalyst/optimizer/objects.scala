@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType, UserDefinedType}
+import org.apache.spark.sql.util.SchemaUtils.restoreOriginalOutputNames
 
 /*
  * This file defines optimization rules related to object manipulation (for the Dataset API).
@@ -221,25 +222,36 @@ object ObjectSerializerPruning extends Rule[LogicalPlan] {
       val usedRefs = p.references
       val prunedSerializer = s.serializer.filter(usedRefs.contains)
 
-      val rootFields = SchemaPruning.identifyRootFields(p.projectList, Seq.empty)
-
-      if (conf.serializerNestedSchemaPruningEnabled && rootFields.nonEmpty) {
-        // Prunes nested fields in serializers.
-        val prunedSchema = SchemaPruning.pruneSchema(
-          DataTypeUtils.fromAttributes(prunedSerializer.map(_.toAttribute)), rootFields)
-        val nestedPrunedSerializer = prunedSerializer.zipWithIndex.map { case (serializer, idx) =>
-          pruneSerializer(serializer, prunedSchema(idx).dataType)
-        }
-
-        // Builds new projection.
-        val projectionOverSchema = ProjectionOverSchema(prunedSchema, AttributeSet(s.output))
-        val newProjects = p.projectList.map(_.transformDown {
-          case projectionOverSchema(expr) => expr
-        }).map { case expr: NamedExpression => expr }
-        p.copy(projectList = newProjects,
-          child = SerializeFromObject(nestedPrunedSerializer, s.child))
-      } else {
+      if (!conf.serializerNestedSchemaPruningEnabled) {
         p.copy(child = SerializeFromObject(prunedSerializer, s.child))
+      } else {
+        // Normalize the root name so references such as items and ITEMS do not become
+        // distinct fields in pruneSchema during case-insensitive analysis.
+        val namesById = s.output.map(a => a.exprId -> a.name).toMap
+        val normalizedProjects = p.projectList.map(_.transform {
+          case a: AttributeReference if namesById.contains(a.exprId) =>
+            a.withName(namesById(a.exprId))
+        }.asInstanceOf[NamedExpression])
+        val rootFields = SchemaPruning.identifyRootFields(normalizedProjects, Seq.empty)
+        if (rootFields.nonEmpty) {
+          // Prunes nested fields in serializers.
+          val prunedSchema = SchemaPruning.pruneSchema(
+            DataTypeUtils.fromAttributes(prunedSerializer.map(_.toAttribute)), rootFields)
+          val nestedPrunedSerializer = prunedSerializer.zipWithIndex.map { case (serializer, idx) =>
+            pruneSerializer(serializer, prunedSchema(idx).dataType)
+          }
+
+          // Builds new projection.
+          val serialized = SerializeFromObject(nestedPrunedSerializer, s.child)
+          val projectionOverSchema = ProjectionOverSchema(serialized.schema, AttributeSet(s.output))
+          val newProjects = normalizedProjects.map(_.transformDown {
+            case projectionOverSchema(expr) => expr
+          }).map { case expr: NamedExpression => expr }
+          p.copy(projectList = restoreOriginalOutputNames(newProjects, p.projectList.map(_.name)),
+            child = serialized)
+        } else {
+          p.copy(child = SerializeFromObject(prunedSerializer, s.child))
+        }
       }
   }
 }

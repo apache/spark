@@ -132,6 +132,29 @@ class DatasetOptimizationSuite extends SharedSparkSession {
     }
   }
 
+  test("Nested projections bind to the fields emitted by the serializer") {
+    val ds = spark.range(1).map { _ =>
+      Tuple1((Map("k" -> ("map-a", "map-b")), ("other-a", "other-b")))
+    }
+    val query = ds.selectExpr("_1._1['k']._2", "_1._2._1")
+    // The map and its sibling share a serializer. Visiting the map converters twice causes
+    // pruning to fall back to the original schema, so the projection must use its ordinals.
+    assert(query.queryExecution.optimizedPlan.collectFirst {
+      case s: SerializeFromObject => s.schema
+    }.contains(ds.schema))
+    checkAnswer(query, Row("map-b", "other-a"))
+  }
+
+  test("Nested projections resolve case-insensitive references against the serializer") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val input = Seq((Seq(("unused", "wanted")), 1)).toDF("Items", "Id")
+      val ds = input.map(row => row)(ExpressionEncoder(input.schema))
+      val query = ds.selectExpr("items[0]._2", "ITEMS._2", "iD")
+      checkAnswer(query, Row("wanted", Seq("wanted"), 1))
+      assert(query.queryExecution.optimizedPlan.output.last.name == "iD")
+    }
+  }
+
   test("Pruned nested serializers: map of complex key") {
     withSQLConf(SQLConf.SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
       val mapData = Seq((Map((("1", 1), "a_1")), 1), (Map((("2", 2), "b_1")), 2),
