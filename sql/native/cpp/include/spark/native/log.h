@@ -78,6 +78,21 @@ inline void FollowLogLevel() {
   max_log_level.store(level, std::memory_order_relaxed);
 }
 
+/// Copies a string that Spark gets as a C string, which a NUL would truncate, writing each NUL as
+/// the two characters \0.
+inline std::string EscapeNul(std::string_view message) {
+  std::string text;
+  text.reserve(message.size());
+  for (char c : message) {
+    if (c == '\0') {
+      text += "\\0";
+    } else {
+      text += c;
+    }
+  }
+  return text;
+}
+
 }  // namespace internal
 
 /// The most verbose level of the messages that reach Spark: that of the log of Spark, which the SDK
@@ -102,17 +117,7 @@ inline void Log(LogLevel level, std::string_view message) {
       static_cast<int32_t>(level) > internal::max_log_level.load(std::memory_order_relaxed)) {
     return;
   }
-  // The message is a C string, so a NUL in it would truncate it.
-  std::string text;
-  text.reserve(message.size());
-  for (char c : message) {
-    if (c == '\0') {
-      text += "\\0";
-    } else {
-      text += c;
-    }
-  }
-  log(static_cast<int32_t>(level), text.c_str());
+  log(static_cast<int32_t>(level), internal::EscapeNul(message).c_str());
 }
 
 inline void LogError(std::string_view message) { Log(LogLevel::kError, message); }

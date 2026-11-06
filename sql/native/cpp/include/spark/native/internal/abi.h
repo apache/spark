@@ -61,16 +61,7 @@ inline std::string ErrorMessage(const arrow::Status& status) {
   if (status.detail() != nullptr) {
     message += ". Detail: " + status.detail()->ToString();
   }
-  std::string text;
-  text.reserve(message.size());
-  for (char c : message) {
-    if (c == '\0') {
-      text += "\\0";
-    } else {
-      text += c;
-    }
-  }
-  return text;
+  return EscapeNul(message);
 }
 
 // The message of the last error on each thread, which last_error returns until the next call on
