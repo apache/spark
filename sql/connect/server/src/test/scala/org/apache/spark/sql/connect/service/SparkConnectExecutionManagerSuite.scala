@@ -18,6 +18,8 @@ package org.apache.spark.sql.connect.service
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.SparkConnectTestUtils
+import org.apache.spark.sql.connect.config.Connect
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
@@ -114,5 +116,51 @@ class SparkConnectExecutionManagerSuite extends SharedSparkSession {
     assert(
       info.status == ExecuteStatus.Closed,
       s"Expected Closed status in inactive cache, got ${info.status}")
+  }
+
+  test("the concurrency limit is disabled by default") {
+    assert(executionManager.executionSlots.isEmpty)
+  }
+
+  test("execution concurrency configurations are static") {
+    assert(SQLConf.isStaticConfigKey(Connect.CONNECT_EXECUTE_MAX_CONCURRENT_QUERIES.key))
+    assert(SQLConf.isStaticConfigKey(Connect.CONNECT_EXECUTE_MAX_CONCURRENT_QUERIES_TIMEOUT.key))
+  }
+
+  test("streaming query commands do not require an execution slot") {
+    def request(plan: proto.Plan): proto.ExecutePlanRequest =
+      proto.ExecutePlanRequest.newBuilder().setPlan(plan).build()
+    def command(c: proto.Command.Builder): proto.ExecutePlanRequest =
+      request(proto.Plan.newBuilder().setCommand(c).build())
+
+    assert(
+      SparkConnectExecutionManager.requiresExecutionSlot(
+        request(proto.Plan.newBuilder().setRoot(proto.Relation.newBuilder()).build())))
+    assert(
+      SparkConnectExecutionManager.requiresExecutionSlot(
+        command(
+          proto.Command
+            .newBuilder()
+            .setWriteStreamOperationStart(proto.WriteStreamOperationStart.newBuilder()))))
+    Seq(
+      proto.Command
+        .newBuilder()
+        .setStreamingQueryCommand(proto.StreamingQueryCommand
+          .newBuilder()
+          .setAwaitTermination(proto.StreamingQueryCommand.AwaitTerminationCommand.newBuilder())),
+      proto.Command
+        .newBuilder()
+        .setStreamingQueryManagerCommand(
+          proto.StreamingQueryManagerCommand
+            .newBuilder()
+            .setAwaitAnyTermination(
+              proto.StreamingQueryManagerCommand.AwaitAnyTerminationCommand.newBuilder())),
+      proto.Command
+        .newBuilder()
+        .setStreamingQueryListenerBusCommand(
+          proto.StreamingQueryListenerBusCommand.newBuilder().setAddListenerBusListener(true)))
+      .foreach { c =>
+        assert(!SparkConnectExecutionManager.requiresExecutionSlot(command(c)))
+      }
   }
 }

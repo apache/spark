@@ -157,6 +157,7 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
     logDebug(
       s"Execution opId=${executeHolder.operationId} produced error. " +
         s"Last stream index is $lastProducedIndex.")
+    executeHolder.releaseExecutionPermit()
     responseLock.notifyAll()
   }
 
@@ -168,6 +169,7 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
     logDebug(
       s"Execution opId=${executeHolder.operationId} completed stream. " +
         s"Last stream index is $lastProducedIndex.")
+    executeHolder.releaseExecutionPermit()
     responseLock.notifyAll()
   }
 

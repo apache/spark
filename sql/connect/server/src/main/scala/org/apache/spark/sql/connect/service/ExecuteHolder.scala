@@ -21,12 +21,13 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
+import scala.util.control.NonFatal
 
 import com.google.protobuf.GeneratedMessage
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.connect.proto
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.Observation
 import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.sql.connect.config.Connect.{CONNECT_EXECUTE_REATTACHABLE_ENABLED, CONNECT_SESSION_RESULT_CHUNKING_MAX_CHUNK_SIZE}
@@ -143,6 +144,18 @@ private[connect] class ExecuteHolder(
   /** Indicates whether the cleanup method was called. */
   private[connect] val completionCallbackCalled: AtomicBoolean = new AtomicBoolean(false)
 
+  /** Guards executionPermit and executionPermitReleased. */
+  private val executionPermitLock = new Object
+
+  /** Execution slot held by this execution, if it was started through startWithSlot. */
+  private var executionPermit: Option[ExecutionPermit] = None
+
+  /** Whether releaseExecutionPermit was called. A slot granted afterwards is returned at once. */
+  private var executionPermitReleased = false
+
+  /** Request for an execution slot, if this execution was started through startWithSlot. */
+  @volatile private var executionSlotRequest: Option[ExecutionSlotRequest] = None
+
   /**
    * Start the execution. The execution is started in a background thread in ExecuteThreadRunner.
    * Responses are produced and cached in ExecuteResponseObserver. A GRPC thread consumes the
@@ -155,10 +168,81 @@ private[connect] class ExecuteHolder(
   }
 
   /**
+   * Start the execution once it gets an execution slot from `slots`. Returns immediately: until a
+   * slot is granted, the execution stays queued (in Pending status) and clients can attach to it
+   * like to any other execution. If no slot is granted within `timeoutMs` (0 or negative meaning
+   * no limit), the execution fails. Interrupting or closing the execution removes it from the
+   * queue.
+   */
+  private[connect] def startWithSlot(slots: ExecutionSlots, timeoutMs: Long): Unit = {
+    val request = slots.request(
+      timeoutMs,
+      onGranted = permit => onExecutionSlotGranted(permit),
+      onTimeout = () =>
+        runner.failBeforeStart(
+          new SparkConnectConcurrentExecutionsTimeoutException(slots.limit, s"$timeoutMs ms")))
+    executionSlotRequest = Some(request)
+    if (executionPermitLock.synchronized(executionPermitReleased)) {
+      // Released concurrently, before executionSlotRequest was set.
+      request.abandon()
+    }
+    if (request.isWaiting) {
+      logInfo(
+        log"Execution ${MDC(LogKeys.OPERATION_ID, operationId)} is queued until an execution " +
+          log"slot is available.")
+    }
+  }
+
+  private def onExecutionSlotGranted(permit: ExecutionPermit): Unit = {
+    val accepted = executionPermitLock.synchronized {
+      if (executionPermitReleased) {
+        false
+      } else {
+        executionPermit = Some(permit)
+        true
+      }
+    }
+    if (accepted) {
+      try {
+        runner.start()
+      } catch {
+        case NonFatal(e) =>
+          // Fails the execution, which releases the permit.
+          if (!runner.failBeforeStart(e)) {
+            throw e
+          }
+      }
+    } else {
+      permit.release()
+    }
+  }
+
+  /** Whether the execution is queued, waiting for an execution slot. */
+  private[connect] def isWaitingForExecutionSlot: Boolean =
+    executionSlotRequest.exists(_.isWaiting)
+
+  /**
+   * Release the execution slot held by this execution, or leave the queue if it is still waiting
+   * for one. Idempotent.
+   */
+  private[connect] def releaseExecutionPermit(): Unit = {
+    val permit = executionPermitLock.synchronized {
+      executionPermitReleased = true
+      val permit = executionPermit
+      executionPermit = None
+      permit
+    }
+    permit.foreach(_.release())
+    executionSlotRequest.foreach(_.abandon())
+  }
+
+  /**
    * Check if the execution was ended without finalizing the outcome and no further progress will
    * be made. If the execution was delegated, this method always returns false.
    */
   def isOrphan(): Boolean = {
+    // An execution that was not started yet, e.g. queued for an execution slot, is not orphaned.
+    !runner.isNotStarted &&
     !runner.isAlive() &&
     !runner.shouldDelegateCompleteResponse(request) &&
     !responseObserver.completed()
