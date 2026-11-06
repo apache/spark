@@ -291,10 +291,10 @@ object PushDownUtils extends Logging {
   }
 
   /**
-   * Whether no class of `scan` declares `planInputPartitionsWithRuntimeFilters`, which holds for a
-   * class compiled against Spark 4.3 and for a Java class implementing this trait directly that
-   * overrides only `filter`. A Scala class that mixes in this trait gets a forwarder, so it and
-   * its subclasses take the general path.
+   * Whether `scan` gets `planInputPartitionsWithRuntimeFilters` from the default in
+   * [[SupportsRuntimeCatalystFiltering]], such as a class compiled against Spark 4.3 or a Java
+   * class implementing the trait directly that overrides only `filter`. A Scala class that mixes in
+   * the trait gets a forwarder, so it and its subclasses take the general path.
    */
   private def implementsOnlyDeprecatedFilter(scan: SupportsRuntimeCatalystFiltering): Boolean =
     scan.getClass.getMethod("planInputPartitionsWithRuntimeFilters", classOf[Array[Expression]])
@@ -320,7 +320,8 @@ object PushDownUtils extends Logging {
    *  - A [[SupportsRuntimeV2Filtering]] scan is filtered through the mutating `filter`, and Spark
    *    may call this more than once for the same `scan` instance (see [[pushRuntimeFilters]]);
    *    successive calls are additive. A [[SupportsRuntimeCatalystFiltering]] scan re-plans from
-   *    the given expressions, once per scan node with runtime filters.
+   *    the given expressions, once per scan node with runtime filters, unless it declares only
+   *    the deprecated `filter`, which is then called as in Spark 4.3.
    *  - With a [[KeyedPartitioning]], every split returned on this path must implement
    *    [[HasPartitionKey]].
    *
@@ -333,7 +334,7 @@ object PushDownUtils extends Logging {
    *                            The raw [[HasPartitionKey]] rows are read and ordered against it, so
    *                            a projected partitioning must not be passed here: it would read each
    *                            key row at the wrong positions and types
-   * @param originalPartitions  unfiltered partitions, consulted only when no runtime filters fire
+   * @param originalPartitions  unfiltered partitions, read only when the scan is not re-planned
    * @return the partitions to read. Under a [[KeyedPartitioning]] there is one entry per original
    *         input partition: `Some(part)` for a survivor and `None` where a key's splits were
    *         entirely pruned, which is what preserves SPJ key alignment. Otherwise the entries are
@@ -347,10 +348,12 @@ object PushDownUtils extends Logging {
       keyedPartitioning: Option[KeyedPartitioning],
       originalPartitions: => Seq[InputPartition]): Seq[Option[InputPartition]] = {
     val (filtered, newPartitions) = scan match {
-      // A scan implementing both runtime-filtering interfaces falls through to pushRuntimeFilters,
-      // which rejects it. The scan is asked even when screening leaves no filter.
+      // A Catalyst scan is asked even when screening leaves no filter, unless it also implements
+      // SupportsRuntimeV2Filtering, which pushRuntimeFilters rejects, or declares only the
+      // deprecated `filter`, which pushRuntimeFilters calls as Spark 4.3 did.
       case catalystScan: SupportsRuntimeCatalystFiltering
-          if runtimeFilters.nonEmpty && !catalystScan.isInstanceOf[SupportsRuntimeV2Filtering] =>
+          if runtimeFilters.nonEmpty && !catalystScan.isInstanceOf[SupportsRuntimeV2Filtering] &&
+            !implementsOnlyDeprecatedFilter(catalystScan) =>
         val catalystFilters = catalystRuntimeFilters(catalystScan, runtimeFilters, output)
         (true, catalystScan.planInputPartitionsWithRuntimeFilters(catalystFilters.toArray))
       case _ =>

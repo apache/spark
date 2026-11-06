@@ -597,6 +597,20 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
       val screenedOut = new JavaDeprecatedFilterScan
       assert(!push(screenedOut, Seq(DynamicPruningExpression(Literal.TrueLiteral))))
       assert(screenedOut.filterCalls === 0)
+      // replanWithRuntimeFilters takes the same route, so with every filter screened out the node
+      // reads the partitions it planned, as in Spark 4.3, instead of planning the scan again.
+      val planned = Seq(LegacyPartition(42))
+      def replanJava(scan: Scan, filters: Seq[Expression]): Seq[InputPartition] =
+        PushDownUtils.replanWithRuntimeFilters(scan, filters, scanRelation.relation.table,
+          scanRelation.output, None, planned).flatten
+      val javaPruned = new JavaDeprecatedFilterScan
+      assert(replanJava(javaPruned, Seq(EqualTo(partAttr, Literal(3))))
+        .map(_.asInstanceOf[JavaDeprecatedFilterScan.Part].part) === Seq(3))
+      assert(javaPruned.filterCalls === 1)
+      val javaScreenedOut = new JavaDeprecatedFilterScan
+      assert(replanJava(javaScreenedOut, Seq(DynamicPruningExpression(Literal.TrueLiteral))) ===
+        planned)
+      assert(javaScreenedOut.filterCalls === 0)
       // A Scala scan that mixes in the trait gets a forwarder for the new method, so it is not
       // taken for a 4.3 one.
       val scalaScan = new LegacyFilterScan
@@ -1002,9 +1016,6 @@ private class BothRuntimeFilteringInterfacesScan
   override def filterAttributes(): Array[NamedReference] = Array(FieldReference("part"))
 
   override def filter(predicates: Array[Predicate]): Unit = {}
-
-  override def planInputPartitionsWithRuntimeFilters(
-      expressions: Array[Expression]): Array[InputPartition] = Array.empty
 }
 
 /** A scan declaring a filter attribute that its read schema does not contain. */
@@ -1013,9 +1024,6 @@ private class MissingFilterAttributeScan extends SupportsRuntimeCatalystFilterin
   override def readSchema(): StructType = new StructType().add("part", IntegerType)
 
   override def filterAttributes(): Array[NamedReference] = Array(FieldReference("missing"))
-
-  override def planInputPartitionsWithRuntimeFilters(
-      expressions: Array[Expression]): Array[InputPartition] = Array.empty
 }
 
 /** A scan declaring a fully pushed filter attribute that its relation output does not contain. */
@@ -1027,9 +1035,6 @@ private class MissingFullyPushedFilterAttributeScan extends SupportsRuntimeCatal
 
   override def fullyPushedFilterAttributes(): Array[NamedReference] =
     Array(FieldReference("missing"))
-
-  override def planInputPartitionsWithRuntimeFilters(
-      expressions: Array[Expression]): Array[InputPartition] = Array.empty
 }
 
 /** A scan declaring a root struct fully pushed without declaring it filterable. */
@@ -1043,9 +1048,6 @@ private class FullyPushedRootAttributeScan extends SupportsRuntimeCatalystFilter
 
   override def fullyPushedFilterAttributes(): Array[NamedReference] =
     Array(FieldReference("s"))
-
-  override def planInputPartitionsWithRuntimeFilters(
-      expressions: Array[Expression]): Array[InputPartition] = Array.empty
 }
 
 /** A scan declaring a nested runtime-filter attribute beneath an integer column. */
@@ -1055,9 +1057,6 @@ private class NestedFilterAttributeScan extends SupportsRuntimeCatalystFiltering
 
   override def filterAttributes(): Array[NamedReference] =
     Array(FieldReference(Seq("part", "nested")))
-
-  override def planInputPartitionsWithRuntimeFilters(
-      expressions: Array[Expression]): Array[InputPartition] = Array.empty
 }
 
 private case class KeyedInputPartition(key: Int) extends InputPartition with HasPartitionKey {

@@ -83,7 +83,7 @@ case class CSVScan(
     val hadoopConf = newReadHadoopConf()
     val broadcastedConf =
       SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
-    // The partition values are already truncated in `FileScan.partitions`.
+    // The partition values are already truncated in `FileScan.filePartitions`.
     // We should use `readPartitionSchema` as the partition schema here.
     CSVPartitionReaderFactory(conf, broadcastedConf,
       dataSchema, readDataSchema, readPartitionSchema, parsedOptions,

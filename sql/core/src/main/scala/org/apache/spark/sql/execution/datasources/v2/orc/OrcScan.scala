@@ -71,7 +71,7 @@ case class OrcScan(
     } else {
       MemoryMode.ON_HEAP
     }
-    // The partition values are already truncated in `FileScan.partitions`.
+    // The partition values are already truncated in `FileScan.filePartitions`.
     // We should use `readPartitionSchema` as the partition schema here.
     OrcPartitionReaderFactory(conf, broadcastedConf,
       dataSchema, readDataSchema, readPartitionSchema, pushedFilters, pushedAggregate,
