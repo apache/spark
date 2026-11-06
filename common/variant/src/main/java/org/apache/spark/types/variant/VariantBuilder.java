@@ -262,13 +262,14 @@ public class VariantBuilder {
   }
 
   // Check whether `v` already satisfies every rule listed in `canonicalize`. Return false at the
-  // first non-canonical encoding. Malformed bytes that the check can reject without decoding them
-  // return false, and the rebuild then decides whether they fail. Malformed bytes that the check
-  // has to decode throw instead, for example `MALFORMED_VARIANT` for an unreadable metadata table,
-  // a container whose data runs past the value, or a decimal whose precision or scale is out of
-  // range, and `UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT` for an unknown type ID. The rebuild decodes the
-  // same bytes, so `canonicalize` fails with the same error either way. Returning false does not
-  // establish validity.
+  // first non-canonical encoding. Malformed bytes that the check can reject from what it has
+  // already read return false, and the rebuild then decides whether they fail. This includes a
+  // container whose declared data runs past the value, which the rebuild accepts when every child
+  // it reaches is in bounds. Malformed bytes that the check has to decode throw instead, for
+  // example `MALFORMED_VARIANT` for an unreadable metadata table, a truncated container size field
+  // or offset list, or a decimal whose precision or scale is out of range, and
+  // `UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT` for an unknown type ID. When the check throws,
+  // `canonicalize` fails with that error. Returning false does not establish validity.
   static boolean isCanonical(Variant v) {
     if (v.pos != 0) {
       return false;

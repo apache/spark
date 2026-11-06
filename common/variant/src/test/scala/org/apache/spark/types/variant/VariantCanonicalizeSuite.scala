@@ -686,6 +686,16 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
     checkError("UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT") { VariantBuilder.doCanonicalize(unknown) }
   }
 
+  test("containers whose declared data runs past the value are rebuilt from their children") {
+    val overLongArray = bytes(arrayHeader(false, 1), 1, 0, 100) ++ integer(1)
+    val overLongObject = bytes(objectHeader(false, 1, 1), 1, 0, 0, 100) ++ integer(1)
+    checkKeyless(overLongArray, array(Seq(integer(1))))
+    check(new Variant(overLongObject, dictionary("a")), obj(Seq(0 -> integer(1))), dictionary("a"))
+    checkKeyless(array(Seq(overLongArray)), array(Seq(array(Seq(integer(1))))))
+    check(new Variant(array(Seq(overLongObject)), dictionary("a")),
+      array(Seq(obj(Seq(0 -> integer(1))))), dictionary("a"))
+  }
+
   test("deterministic nested permutations converge to independent expected bytes") {
     val expectedValue = obj(Seq(0 -> integer(1), 1 -> array(Seq(
       decimal("12", 1, DECIMAL4, 4), obj(Seq(2 -> string(utf8("x"))))))))
