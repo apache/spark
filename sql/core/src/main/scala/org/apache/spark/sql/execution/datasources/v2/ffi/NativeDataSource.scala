@@ -656,7 +656,9 @@ object NativeWriterCommitMessage {
  * or once a thread calls [[next]] again, which then fails: that thread no longer reads the batch.
  * So a reader closed before the end of its stream, as with a LIMIT, and not called again holds the
  * buffers of one batch until a garbage collection, which these buffers do not trigger: the JVM
- * does not count them.
+ * does not count them. Under `DataSourceRDD`, only a garbage collection frees them: its
+ * `PartitionIterator` drops the reader once it closes it, so a thread that asks the iterator for
+ * the next batch then fails without calling [[next]].
  *
  * @param kind the kind of the scan, `NativeLibrary.READ_BATCH` or `READ_MICRO_BATCH`
  * @param partition the partition, whose index in the scan the library gets as `partition_id`
@@ -755,22 +757,31 @@ class NativePartitionReader(
    * Checks that the data agrees with the nullability of the schema to read: a column, a field,
    * an element or a map value that it declares not nullable has no null, except where its parent
    * is null. Spark relies on the nullability, for example to evaluate `isnull` of such a column to
-   * false without reading it.
+   * false without reading it. `nullCounts` are the null_counts that the library exported for the
+   * columns.
    */
-  private def checkNulls(): Unit = {
-    root.getFieldVectors.asScala.zip(schema.fields).foreach { case (vector, field) =>
-      checkNulls(vector, field.dataType, field.nullable, field.name, _ => true)
+  private def checkNulls(nullCounts: Array[Long]): Unit = {
+    root.getFieldVectors.asScala.lazyZip(schema.fields).lazyZip(nullCounts).foreach {
+      case (vector, field, nullCount) =>
+        checkNulls(vector, field.dataType, field.nullable, field.name, _ => true, nullCount)
     }
   }
 
-  /** `referenced` tells whether a value belongs to a value of the parent that is not null. */
+  /**
+   * `referenced` tells whether a value belongs to a value of the parent that is not null.
+   * `nullCount` is the null_count that the library exported for the vector, if known, and -1
+   * otherwise.
+   */
   private def checkNulls(
       vector: ValueVector,
       dataType: DataType,
       nullable: Boolean,
       column: String,
-      referenced: Int => Boolean): Unit = {
-    if (!nullable && vector.getNullCount > 0 &&
+      referenced: Int => Boolean,
+      nullCount: Long = -1): Unit = {
+    // The C data interface requires a null_count other than -1 to be exact, so the nulls are only
+    // counted, which Arrow Java does in the validity bitmap on each call, for a negative one.
+    if (!nullable && (if (nullCount < 0) vector.getNullCount else nullCount) > 0 &&
         (0 until vector.getValueCount).exists(i => vector.isNull(i) && referenced(i))) {
       throw error(name, "read", s"The column $column has a null, but the schema to read " +
         "declares it not nullable.")
@@ -901,6 +912,9 @@ class NativePartitionReader(
   private def startReading(): Unit = synchronized {
     if (closed) {
       if (batchCleanable != null) {
+        // The Cleaner action does not refer to the batch, which then has no rows, so that it is
+        // not read at the freed addresses.
+        batch.setNumRows(0)
         batchCleanable.clean()
       }
       throw closedError()
@@ -909,8 +923,8 @@ class NativePartitionReader(
     batchReturned = false
   }
 
-  private def closedError(): Throwable = SparkException.internalError(
-    s"The partition reader of the native data source $name is closed.")
+  // Not an internal error: a thread that the task does not wait for gets it as the task completes.
+  private def closedError(): Throwable = error(name, "read", "The partition reader is closed.")
 
   private def stopReading(): Unit = synchronized {
     reading = false
@@ -943,7 +957,7 @@ class NativePartitionReader(
         batch.setNumRows(0)
         call(name, "read")(Data.importIntoVectorSchemaRoot(allocator, array, root, dictionaries))
         columns.zip(nullCounts).foreach { case (column, nullCount) => column.refresh(nullCount) }
-        checkNulls()
+        checkNulls(nullCounts)
         batch.setNumRows(root.getRowCount)
         true
       }
@@ -1111,6 +1125,10 @@ class NativePartitionReader(
     Utils.tryWithSafeFinally {
       Utils.tryWithSafeFinally {
         if (freeBatch && root != null) {
+          // The batch has no rows, so that it is not read at the freed addresses.
+          if (batch != null) {
+            batch.setNumRows(0)
+          }
           root.close()
         }
         dictionaries.close()
