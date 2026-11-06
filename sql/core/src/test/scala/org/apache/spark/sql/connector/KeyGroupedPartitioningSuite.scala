@@ -4318,6 +4318,15 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
         val shuffles = collectAllShuffles(df.queryExecution.executedPlan)
         assert(shuffles.map(_.outputPartitioning.numPartitions).sorted == Seq(3, 5),
           s"expected shuffles of 3 and 5 partitions, got:\n${df.queryExecution.executedPlan}")
+
+        // The nested join on the right reaches the same check on that child.
+        val swapped = sql(
+          """
+            |SELECT /*+ MERGE(pa, pd, pc) */ pc.id, pa.id, pd.id
+            |FROM testcat.ns.pc JOIN (testcat.ns.pa JOIN testcat.ns.pd ON pa.id = pd.id)
+            |ON pc.id = pa.id
+            |""".stripMargin)
+        checkAnswer(swapped, Seq(Row(1, 1, 1), Row(2, 2, 2), Row(3, 3, 3)))
       }
 
       withSQLConf(
@@ -4497,6 +4506,16 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
               |JOIN testcat.ns.fc ON fa.dept = fc.dept
               |""".stripMargin),
           Seq(Row(1, 10, "b1", "c10"), Row(2, 10, "b2", "c10"), Row(1, 20, "b3", "c20")))
+        // The nested join on the right. branch-4.1 drops (2, 10, b2, c10) for this side too.
+        checkAnswer(
+          sql(
+            """
+              |SELECT /*+ MERGE(fa, fb, fc) */ fa.store, fa.dept, fb.data, fc.data
+              |FROM testcat.ns.fc JOIN
+              |(testcat.ns.fa JOIN testcat.ns.fb ON fa.store = fb.store AND fa.dept = fb.dept)
+              |ON fa.dept = fc.dept
+              |""".stripMargin),
+          Seq(Row(1, 10, "b1", "c10"), Row(2, 10, "b2", "c10"), Row(1, 20, "b3", "c20")))
       }
     }
   }
@@ -4529,6 +4548,34 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
           assert(shuffles.size == 2,
             s"pd and pe should each shuffle once, got:\n${df.queryExecution.executedPlan}")
         }
+      }
+    }
+  }
+
+  test("SPARK-60460: nested SPJ pushes past a one-side shuffle that has the merged values") {
+    val idCol = Array(Column.create("id", IntegerType))
+    createTable("pa", idCol, Array(identity("id")))
+    sql("INSERT INTO testcat.ns.pa VALUES (1), (2), (3)")
+    createTable("pd", idCol, Array.empty)
+    sql("INSERT INTO testcat.ns.pd VALUES (1), (2), (3)")
+    createTable("pc", idCol, Array(identity("id")))
+    sql("INSERT INTO testcat.ns.pc VALUES (1), (2)")
+
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+        val df = sql(
+          """
+            |SELECT /*+ MERGE(pa, pd, pc) */ pa.id, pd.id, pc.id
+            |FROM testcat.ns.pa JOIN testcat.ns.pd ON pa.id = pd.id
+            |JOIN testcat.ns.pc ON pa.id = pc.id
+            |""".stripMargin)
+        checkAnswer(df, Seq(Row(1, 1, 1), Row(2, 2, 2)))
+        // pd's shuffle already has the merged keys: pc's scan is padded, nothing else shuffles.
+        assert(collectAllShuffles(df.queryExecution.executedPlan).size == 1,
+          s"only pd should shuffle, got:\n${df.queryExecution.executedPlan}")
       }
     }
   }
