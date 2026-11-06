@@ -2565,9 +2565,9 @@ object SQLConf {
       .doc("When true, external lookup join caches the complete lookup result of each key, " +
         "including a key with no result, within a task, per input partition (a task that reads " +
         "several input partitions, e.g. after coalesce, has one cache per partition). A cached " +
-        "result is reused as it was read, including the values of non-deterministic " +
-        "lookup-side expressions. It can be overridden per join with the EXTERNAL_LOOKUP hint " +
-        "option 'cache_enabled'.")
+        "result is reused as it was read. At present, a join whose source serves a range " +
+        "comparison (<, <=, >, >=) caches nothing. It can be overridden per join with the " +
+        "EXTERNAL_LOOKUP hint option 'cache_enabled'.")
       .version("4.4.0")
       .booleanConf
       .createWithDefault(true)
