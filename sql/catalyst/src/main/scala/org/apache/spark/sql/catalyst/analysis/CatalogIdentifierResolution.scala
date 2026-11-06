@@ -17,15 +17,18 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.ColumnDefinition
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.SparkCharVarcharUtils.replaceCharVarcharWithString
-import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, LookupCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, LookupCatalog, SupportsNamespaces}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
- * Resolves command target names to a [[ResolvedIdentifier]] for [[ResolveCatalogs]].
+ * Resolves command identifiers and namespaces for [[ResolveCatalogs]].
  */
 class CatalogIdentifierResolution(override val catalogManager: CatalogManager)
     extends LookupCatalog with SQLConfHelper {
@@ -57,6 +60,21 @@ class CatalogIdentifierResolution(override val catalogManager: CatalogManager)
     }
   }
 
+  /** Resolves the current catalog and namespace, e.g. the target of `SHOW TABLES`. */
+  def resolveCurrentNamespace(): ResolvedNamespace = {
+    ResolvedNamespace(currentCatalog, catalogManager.currentNamespace.toImmutableArraySeq)
+  }
+
+  /** Resolves a namespace name, loading its metadata only when requested. */
+  def resolveUnresolvedNamespace(unresolvedNamespace: UnresolvedNamespace): ResolvedNamespace = {
+    unresolvedNamespace match {
+      case UnresolvedNamespace(Seq(), fetchMetadata) =>
+        resolveNamespace(currentCatalog, Seq.empty[String], fetchMetadata)
+      case UnresolvedNamespace(CatalogAndNamespace(catalog, namespace), fetchMetadata) =>
+        resolveNamespace(catalog, namespace, fetchMetadata)
+    }
+  }
+
   /** Converts column definitions to output attributes, honoring CHAR/VARCHAR configuration. */
   def columnsToOutput(columns: Seq[ColumnDefinition]): Seq[AttributeReference] = {
     columns.map { col =>
@@ -66,6 +84,21 @@ class CatalogIdentifierResolution(override val catalogManager: CatalogManager)
         replaceCharVarcharWithString(col.dataType)
       }
       AttributeReference(col.name, dataType, col.nullable, col.metadata)()
+    }
+  }
+
+  private def resolveNamespace(
+      catalog: CatalogPlugin,
+      ns: Seq[String],
+      fetchMetadata: Boolean): ResolvedNamespace = {
+    catalog match {
+      case supportsNS: SupportsNamespaces if fetchMetadata =>
+        ResolvedNamespace(
+          catalog,
+          ns,
+          supportsNS.loadNamespaceMetadata(ns.toArray).asScala.toMap)
+      case _ =>
+        ResolvedNamespace(catalog, ns)
     }
   }
 }

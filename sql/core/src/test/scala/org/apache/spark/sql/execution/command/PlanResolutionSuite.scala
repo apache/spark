@@ -27,12 +27,12 @@ import org.mockito.invocation.InvocationOnMock
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, AsOfVersion, CreateTableHelper, EmptyFunctionRegistry, NoSuchTableException, RelationCache, RelationResolution, ResolvedFieldName, ResolvedFieldPosition, ResolvedIdentifier, ResolvedTable, ResolveSessionCatalog, TimeTravelSpec, UnresolvedAttribute, UnresolvedFieldPosition, UnresolvedInlineTable, UnresolvedPartitionSpec, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, AsOfVersion, CreateTableHelper, EmptyFunctionRegistry, KeepLegacyOutputs, NoSuchTableException, RelationCache, RelationResolution, ResolvedFieldName, ResolvedFieldPosition, ResolvedIdentifier, ResolvedNamespace, ResolvedTable, ResolveSessionCatalog, ShowCommandHelper, TimeTravelSpec, UnresolvedAttribute, UnresolvedFieldPosition, UnresolvedInlineTable, UnresolvedNamespace, UnresolvedPartitionSpec, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog, TempVariableManager}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{AlterColumns, AlterColumnSpec, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DefaultValueExpression, DeleteAction, DeleteFromTable, DescribeRelation, DescribeTablePartition, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, OverwriteByExpression, OverwritePartitionsDynamic, Project, ReplaceTable, ReplaceTableAsSelect, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterColumns, AlterColumnSpec, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DefaultValueExpression, DeleteAction, DeleteFromTable, DescribeRelation, DescribeTablePartition, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, OverwriteByExpression, OverwritePartitionsDynamic, Project, ReplaceTable, ReplaceTableAsSelect, SetTableLocation, SetTableProperties, ShowFunctions, ShowTableProperties, ShowTables, ShowTablesExtended, ShowViews, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.FakeV2Provider
@@ -786,6 +786,88 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         fail(s"Expected to parse ${classOf[CreateTableAsSelect].getName} from query," +
             s"got ${other.getClass.getName}: $sql")
     }
+  }
+
+  test("SHOW helpers preserve output attributes and legacy schema configuration") {
+    val namespace = ResolvedNamespace(v2SessionCatalog, Seq("db"))
+    val tables = ShowTables(namespace, Some("t*"))
+    val extended = ShowTablesExtended(namespace, "t*")
+    val views = ShowViews(namespace, Some("v*"))
+    val functions = ShowFunctions(namespace, userScope = true, systemScope = false,
+      pattern = Some("f*"))
+
+    for (useV1 <- Seq(false, true); legacy <- Seq(false, true)) {
+      withSQLConf(
+        SQLConf.LEGACY_USE_V1_COMMAND.key -> useV1.toString,
+        SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> legacy.toString) {
+        val renamedTables = KeepLegacyOutputs.keepLegacyShowTablesOutput(tables)
+        val resolvedTables = ShowCommandHelper.rewrite(renamedTables)
+        val expectedTables = if (useV1) {
+          ShowTablesCommand(Some("db"), Some("t*"), renamedTables.output)
+        } else {
+          renamedTables
+        }
+        comparePlans(resolvedTables, expectedTables)
+        assert(resolvedTables.output.map(_.exprId) == tables.output.map(_.exprId))
+        assert(resolvedTables.output.head.name == (if (legacy) "database" else "namespace"))
+
+        val resolvedExtended = ShowCommandHelper.rewrite(extended)
+        assert(resolvedExtended.output.map(_.exprId) == extended.output.map(_.exprId))
+        assert(resolvedExtended.output.head.name == (if (legacy) "database" else "namespace"))
+        comparePlans(resolvedExtended,
+          ShowTablesCommand(Some("db"), Some("t*"), resolvedExtended.output, isExtended = true))
+        comparePlans(ShowCommandHelper.rewrite(views),
+          ShowViewsCommand("db", Some("v*"), views.output))
+        comparePlans(ShowCommandHelper.rewrite(functions),
+          ShowFunctionsCommand("db", Some("f*"), true, false, functions.output))
+      }
+    }
+  }
+
+  test("SHOW helpers preserve namespace errors even when V1 commands are disabled") {
+    withSQLConf(SQLConf.LEGACY_USE_V1_COMMAND.key -> "false") {
+      Seq(Seq.empty[String], Seq("a", "b")).foreach { namespace =>
+        val target = ResolvedNamespace(v2SessionCatalog, namespace)
+        val commands = Seq(
+          ShowTables(target, None),
+          ShowTablesExtended(target, "*"),
+          ShowViews(target, None),
+          ShowFunctions(target, userScope = true, systemScope = true, pattern = None))
+        commands.foreach { command =>
+          val condition = if (namespace.isEmpty) {
+            "MISSING_DATABASE_FOR_V1_SESSION_CATALOG"
+          } else {
+            "NESTED_DATABASE_UNSUPPORTED_BY_V1_SESSION_CATALOG"
+          }
+          val parameters = if (namespace.isEmpty) Map.empty[String, String] else {
+            Map("namespace" -> "`a`.`b`")
+          }
+          checkError(
+            exception = intercept[AnalysisException] { ShowCommandHelper.rewrite(command) },
+            condition = condition,
+            parameters = parameters)
+        }
+      }
+    }
+  }
+
+  test("SHOW helpers leave V2 and unresolved targets unchanged") {
+    val targets = Seq(UnresolvedNamespace(Seq("db")), ResolvedNamespace(testCat, Seq("db")))
+    targets.foreach { target =>
+      val commands = Seq(
+        ShowTables(target, None),
+        ShowTablesExtended(target, "*"),
+        ShowFunctions(target, userScope = true, systemScope = true, pattern = None))
+      commands.foreach { command => assert(ShowCommandHelper.rewrite(command) eq command) }
+    }
+    val unresolvedViews = ShowViews(targets.head, None)
+    assert(ShowCommandHelper.rewrite(unresolvedViews) eq unresolvedViews)
+    checkError(
+      exception = intercept[AnalysisException] {
+        ShowCommandHelper.rewrite(ShowViews(targets.last, None))
+      },
+      condition = "MISSING_CATALOG_ABILITY.VIEWS",
+      parameters = Map("plugin" -> "testcat"))
   }
 
   test("drop table") {
