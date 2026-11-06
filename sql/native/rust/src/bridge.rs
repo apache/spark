@@ -27,7 +27,7 @@ use arrow_array::ffi_stream::FFI_ArrowArrayStream;
 use arrow_schema::SchemaRef;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use crate::write::{Batch, DriverWrite, DriverWriter, Streaming};
+use crate::write::{Batch, DriverWrite, DriverWriter};
 use crate::{
     abi, BatchWrite, Capabilities, CreateInfo, DataSource, LatestOffsetInfo, LimitSupport,
     MicroBatchStream, MicroBatchStreamInfo, PartitionReaderFactory, ReadLimit, ReaderContext,
@@ -285,7 +285,7 @@ impl<S: DataSource> Bridge<S> {
                     }
                     let info = StreamingWriteInfo::new(schema, mode, query_id);
                     let write = source.source.new_streaming_write(info)?;
-                    DriverWriter::create(Streaming(write))?
+                    DriverWriter::create(write)?
                 }
             }
         };

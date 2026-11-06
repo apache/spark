@@ -20,7 +20,7 @@ use std::ffi::c_void;
 
 use arrow_array::{ffi, Array, RecordBatch, StructArray};
 use arrow_schema::{DataType, SchemaRef};
-use serde::{de::DeserializeOwned, Serialize};
+use serde::Serialize;
 
 use crate::abi::{self, ArrowArray, SparkDsTaskContext};
 use crate::bridge::stream::validate_schema;
@@ -30,22 +30,11 @@ use crate::{
     TaskContext, WriterContext,
 };
 
-/// What a driver writer calls: a batch write, or the write of a micro-batch.
-pub trait Coordinator: Send + 'static {
-    type Factory: DataWriterFactory<Message = Self::Message>;
-    type Message: Serialize + DeserializeOwned + Send + 'static;
-
-    fn writer_factory(&self) -> Result<Self::Factory>;
-
-    fn commit(&mut self, epoch_id: i64, messages: Vec<Self::Message>) -> Result<()>;
-
-    fn abort(&mut self, epoch_id: i64, messages: Vec<Option<Self::Message>>) -> Result<()>;
-}
-
-/// A batch write, whose epoch ID is always -1.
+/// A batch write, which a driver writer drives as a streaming write whose epoch ID is always
+/// -1 and is ignored.
 pub struct Batch<W>(pub W);
 
-impl<W: BatchWrite> Coordinator for Batch<W> {
+impl<W: BatchWrite> StreamingWrite for Batch<W> {
     type Factory = W::Factory;
     type Message = W::Message;
 
@@ -62,26 +51,6 @@ impl<W: BatchWrite> Coordinator for Batch<W> {
     }
 }
 
-/// The write of a micro-batch.
-pub struct Streaming<W>(pub W);
-
-impl<W: StreamingWrite> Coordinator for Streaming<W> {
-    type Factory = W::Factory;
-    type Message = W::Message;
-
-    fn writer_factory(&self) -> Result<W::Factory> {
-        self.0.writer_factory()
-    }
-
-    fn commit(&mut self, epoch_id: i64, messages: Vec<W::Message>) -> Result<()> {
-        self.0.commit(epoch_id, messages)
-    }
-
-    fn abort(&mut self, epoch_id: i64, messages: Vec<Option<W::Message>>) -> Result<()> {
-        self.0.abort(epoch_id, messages)
-    }
-}
-
 /// A driver writer that decodes its own commit messages, so that one handle type holds the
 /// driver writers of batch writes and of the writes of micro-batches, which share the writer
 /// handles of the ABI.
@@ -92,11 +61,11 @@ pub trait DriverWrite: Send {
 }
 
 /// The driver keeps this coordinator until close, including after a failed commit.
-pub struct DriverWriter<C: Coordinator> {
+pub struct DriverWriter<C: StreamingWrite> {
     coordinator: Option<C>,
 }
 
-impl<C: Coordinator> DriverWriter<C> {
+impl<C: StreamingWrite> DriverWriter<C> {
     /// Wraps a coordinator, with the state that its task writers need: its serialized
     /// writer factory. On failure, the coordinator is dropped.
     pub fn create(coordinator: C) -> Result<(Box<dyn DriverWrite>, Vec<u8>)> {
@@ -113,7 +82,7 @@ impl<C: Coordinator> DriverWriter<C> {
     }
 }
 
-impl<C: Coordinator> DriverWrite for DriverWriter<C> {
+impl<C: StreamingWrite> DriverWrite for DriverWriter<C> {
     fn commit(&mut self, epoch_id: i64, messages: &[Option<&[u8]>]) -> Result<()> {
         let messages = messages
             .iter()
@@ -150,7 +119,7 @@ impl<C: Coordinator> DriverWrite for DriverWriter<C> {
     }
 }
 
-impl<C: Coordinator> Drop for DriverWriter<C> {
+impl<C: StreamingWrite> Drop for DriverWriter<C> {
     fn drop(&mut self) {
         if let Some(coordinator) = self.coordinator.take() {
             drop_provider(coordinator);
