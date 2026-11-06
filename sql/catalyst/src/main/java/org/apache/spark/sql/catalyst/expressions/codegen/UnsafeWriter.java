@@ -145,6 +145,8 @@ public abstract class UnsafeWriter {
 
     if (input == null) {
       BitSetMethods.set(getBuffer(), startingOffset, ordinal);
+      Platform.putLong(getBuffer(), cursor(), 0L);
+      Platform.putLong(getBuffer(), cursor() + 8, 0L);
     } else {
       // Write the months, days and microseconds fields of interval to the variable length portion.
       long longVal =
@@ -163,6 +165,12 @@ public abstract class UnsafeWriter {
     grow(TimestampNanosRowValues.SIZE_IN_BYTES);
     if (input == null) {
       BitSetMethods.set(getBuffer(), startingOffset, ordinal);
+      // Zero the reserved payload so that a null value is byte-identical no matter what stale bytes
+      // the reused buffer holds. The buffer is not cleared between rows, so without this two null
+      // keys can carry different bytes and split into separate groups (a nullable nanosecond
+      // GROUP BY / join key produced several null groups). Mirrors the in-place null-update path
+      // UnsafeRow#setTimestampNanosPayload, which zeroes the payload the same way.
+      TimestampNanosRowValues.zeroPayload(getBuffer(), 0, (int) cursor());
     } else {
       TimestampNanosRowValues.writePayload(
         getBuffer(), 0, (int) cursor(), input.epochMicros, input.nanosWithinMicro);

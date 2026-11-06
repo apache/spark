@@ -73,8 +73,8 @@ trait ShuffledJoin extends JoinCodegenSupport {
       // `PartitioningCollection` invariant), and `keysSatisfy` admits a marked side into it only
       // for full-key join keys, where the join equality ties every column of its claim: a row of
       // an undeclared key matches nothing on the accurate side and is filtered, so a marked
-      // member alongside an unmarked one is spurious. Clear it at the one site that can mix
-      // them, so consumers can take members' markers at face value (see
+      // member alongside an unmarked one is spurious. Clear it here so consumers can take
+      // members' markers at face value (see
       // `KeyedPartitioning.mayContainUnknownPartitionKeys`).
       PartitioningCollection.fromPartitionings(
         clearUnknownPartitionKeys(Seq(left.outputPartitioning, right.outputPartitioning)))
@@ -89,9 +89,8 @@ trait ShuffledJoin extends JoinCodegenSupport {
 
   /**
    * Clears the `mayContainUnknownPartitionKeys` marker of every `KeyedPartitioning` in
-   * `partitionings` when marked and unmarked keyed inputs meet; within a collection the
-   * constructor makes that unrepresentable. Only `ShuffledJoin`'s `InnerLike` arm can mix
-   * inputs this way; see the call site for the argument.
+   * `partitionings` when marked and unmarked keyed inputs meet in an `InnerLike` join.
+   * See the call site for why the marker can be cleared.
    */
   private def clearUnknownPartitionKeys(
       partitionings: Seq[Partitioning]): Seq[Partitioning] = {
@@ -99,18 +98,33 @@ trait ShuffledJoin extends JoinCodegenSupport {
     // chain, and keyless inputs drop out of the `flatMap` rather than reading as unmarked. The
     // all-unmarked path must reach no `copy`: `transform`'s `fastEquals` would compare every
     // partition key.
-    val markers = partitionings.flatMap(PartitioningCollection.keyedMarkerOf)
+    val representatives = partitionings.map(PartitioningCollection.representativeOf)
+    val markers = representatives.flatten.map(_.mayContainUnknownPartitionKeys)
     if (markers.isEmpty || markers.forall(_ == markers.head)) {
       partitionings
     } else {
-      partitionings.map {
-        case partitioning: Partitioning with Expression
-            if PartitioningCollection.keyedMarkerOf(partitioning).contains(true) =>
+      // The whole input has to come out holding one layout object, not merely equal ones.
+      // `PartitioningCollection.fromPartitionings` returns a member untouched only where its layout
+      // is `eq` the canonical one, so a fresh copy here would make the unmarked side rebuild, and
+      // re-check the collection's invariant, on every `outputPartitioning` call.
+      //
+      // The guard above means an unmarked side exists, so its layout is the one to keep. The `eq`
+      // on the keys is what makes this free: the two sides share that reference wherever they were
+      // laid out on one another, which is the shape this arm is for, and where they do not the
+      // copy is used without walking the keys twice.
+      val unmarkedLayout = representatives.flatten
+        .find(!_.mayContainUnknownPartitionKeys).map(_.layout)
+      partitionings.zip(representatives).map {
+        case (partitioning: Partitioning with Expression, Some(representative))
+            if representative.mayContainUnknownPartitionKeys =>
+          val copied = representative.layout.copy(unknownKeysOrigin = None)
+          val cleared = unmarkedLayout
+            .filter(l => (l.partitionKeys eq copied.partitionKeys) && l == copied)
+            .getOrElse(copied)
           partitioning.transform {
-            case k: KeyedPartitioning if k.mayContainUnknownPartitionKeys =>
-              k.copy(mayContainUnknownPartitionKeys = false)
+            case k: KeyedPartitioning => k.copy(layout = cleared)
           }.asInstanceOf[Partitioning]
-        case p => p
+        case (p, _) => p
       }
     }
   }

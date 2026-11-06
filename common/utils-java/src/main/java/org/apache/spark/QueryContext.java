@@ -40,10 +40,16 @@ public interface QueryContext {
     // Otherwise, it should be the object name. For example, a view name "V1".
     String objectName();
 
-    // The starting index in the query text which throws the exception. The index starts from 0.
+    /**
+     * The starting index in the query text which throws the exception.
+     * This is a 0-based Unicode code-point offset.
+     */
     int startIndex();
 
-    // The stopping index in the query which throws the exception. The index starts from 0.
+    /**
+     * The stopping index in the query text which throws the exception.
+     * This is a 0-based Unicode code-point offset, inclusive.
+     */
     int stopIndex();
 
     // The corresponding fragment of the query which throws the exception.

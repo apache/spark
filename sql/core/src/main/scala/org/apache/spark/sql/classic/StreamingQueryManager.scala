@@ -29,12 +29,14 @@ import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, QUERY_ID, RUN_ID}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
+import org.apache.spark.sql.catalyst.plans.logical.Except
 import org.apache.spark.sql.catalyst.streaming.{WriteToStream, WriteToStreamStatement}
 import org.apache.spark.sql.connector.catalog.{Identifier, SupportsWrite, Table, TableCatalog}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqMetadata
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
-import org.apache.spark.sql.execution.streaming.runtime.{AsyncProgressTrackingMicroBatchExecution, MicroBatchExecution, StreamingQueryListenerBus, StreamingQueryWrapper}
+import org.apache.spark.sql.execution.streaming.runtime.{AsyncProgressTrackingMicroBatchExecution, MicroBatchExecution, ResolveWriteToStream, StreamingQueryCheckpointMetadata, StreamingQueryListenerBus, StreamingQueryWrapper}
 import org.apache.spark.sql.execution.streaming.state.{RocksDBStateStoreProvider, StateStoreCoordinatorRef}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.STREAMING_QUERY_LISTENERS
@@ -282,8 +284,47 @@ class StreamingQueryManager private[sql] (
       catalogAndIdent,
       catalogTable)
 
+    // Unsupported-operation checks run during this initial analysis, before the normal offset-log
+    // configuration restoration. Read the compatibility value early for existing queries that
+    // contain a streaming EXCEPT so that upgrading does not change whether the query is accepted.
+    def hasExceptWithStreamingLeft: Boolean = analyzedPlan.exists {
+      case Except(left, _, _) if left.isStreaming => true
+      case _ => false
+    }
+
+    val hasPersistentCheckpointLocation = userSpecifiedCheckpointLocation.isDefined ||
+      sparkSession.sessionState.conf.checkpointLocation.isDefined
+
+    val (streamWriteAnalysisSession, streamWriteAnalysisPlan) = trigger match {
+      case _: ContinuousTrigger => (sparkSession, dataStreamWritePlan)
+      case _ if recoverFromCheckpointLocation &&
+          hasPersistentCheckpointLocation &&
+          hasExceptWithStreamingLeft =>
+        val (resolvedCheckpointRoot, _) = sparkSession.withActive {
+          ResolveWriteToStream.resolveCheckpointLocation(dataStreamWritePlan)
+        }
+        val resolvedDataStreamWritePlan = dataStreamWritePlan.copy(
+          userSpecifiedCheckpointLocation = Some(resolvedCheckpointRoot))
+        val checkpointMetadata = new StreamingQueryCheckpointMetadata(
+          sparkSession, resolvedCheckpointRoot, readOnly = true)
+
+        val analysisSession = checkpointMetadata.offsetLog.getLatest()
+          .flatMap(_._2.metadataOpt)
+          .map { metadata =>
+            val allowStreamingExcept = OffsetSeqMetadata.readValue(
+              metadata, SQLConf.ALLOW_EXCEPT_ON_STREAMING_DATAFRAME).toBoolean
+            val newSession = sparkSession.cloneSession()
+            newSession.conf.set(
+              SQLConf.ALLOW_EXCEPT_ON_STREAMING_DATAFRAME, allowStreamingExcept)
+            newSession
+          }
+          .getOrElse(sparkSession)
+        (analysisSession, resolvedDataStreamWritePlan)
+      case _ => (sparkSession, dataStreamWritePlan)
+    }
+
     val analyzedStreamWritePlan =
-      sparkSession.sessionState.executePlan(dataStreamWritePlan).analyzed
+      streamWriteAnalysisSession.sessionState.executePlan(streamWriteAnalysisPlan).analyzed
         .asInstanceOf[WriteToStream]
 
     (sink, trigger) match {

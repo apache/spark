@@ -19,24 +19,58 @@ package org.apache.spark.mllib.tree
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.hadoop.fs.{FileUtil, Path => HadoopPath}
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.tree.impl.DecisionTreeMetadata
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.FeatureType._
+import org.apache.spark.mllib.tree.configuration.QuantileStrategy.Sort
 import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Variance}
 import org.apache.spark.mllib.tree.model._
-import org.apache.spark.mllib.util.{Loader, MLlibTestSparkContext}
-import org.apache.spark.sql.functions.{col, lit, when}
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 
 class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
+
+  /////////////////////////////////////////////////////////////////////////////
+  // Tests for Strategy configuration
+  /////////////////////////////////////////////////////////////////////////////
+
+  test("Strategy should retain the constructor signature used by Spark 4.2") {
+    assert(classOf[Strategy].getConstructors.exists(_.getParameterCount == 15))
+    for (bootstrap <- Seq(false, true)) {
+      val strategy = new Strategy(Classification, Gini, 3, 2, 32, Sort, Map.empty[Int, Int],
+        1, 0.0, 256, 1.0, false, 10, 0.0, bootstrap)
+
+      assert(strategy.bootstrap == bootstrap)
+      assert(strategy.pruneTree)
+    }
+  }
+
+  test("Strategy should retain the bootstrap default getter used by compiled callers") {
+    val bootstrapDefault = Strategy.getClass.getMethod("$lessinit$greater$default$15")
+    assert(bootstrapDefault.invoke(Strategy) == java.lang.Boolean.FALSE)
+  }
+
+  test("Strategy should configure pruning independently of bootstrapping") {
+    for {
+      bootstrap <- Seq(false, true)
+      pruneTree <- Seq(false, true)
+    } {
+      val strategy = new Strategy(Classification, Gini, 3,
+        bootstrap = bootstrap, pruneTree = pruneTree)
+      assert(strategy.bootstrap == bootstrap)
+      assert(strategy.pruneTree == pruneTree)
+
+      val copied = strategy.copy
+      assert(copied.bootstrap == bootstrap)
+      assert(copied.pruneTree == pruneTree)
+    }
+  }
 
   /////////////////////////////////////////////////////////////////////////////
   // Tests calling train()
@@ -432,46 +466,6 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
       } finally {
         Utils.deleteRecursively(tempDir)
       }
-    }
-  }
-
-  test("load rejects a model whose node ids form a cycle") {
-    val srcDir = Utils.createTempDir()
-    val dstDir = Utils.createTempDir()
-    try {
-      val src = srcDir.toURI.toString
-      val dst = dstDir.toURI.toString
-      val arr = Array(
-        LabeledPoint(0.0, Vectors.dense(0.0)),
-        LabeledPoint(1.0, Vectors.dense(1.0)),
-        LabeledPoint(0.0, Vectors.dense(0.0)),
-        LabeledPoint(1.0, Vectors.dense(1.0)))
-      val strategy =
-        new Strategy(algo = Classification, impurity = Gini, maxDepth = 4, numClasses = 2)
-      val model = DecisionTree.train(sc.parallelize(arr.toImmutableArraySeq), strategy)
-      model.save(sc, src)
-
-      // Copy the metadata verbatim, and write a modified data set where the root (nodeId 1)
-      // points its left child at itself (a cycle). Reading src and writing dst avoids a
-      // self-overwrite.
-      val hadoopConf = sc.hadoopConfiguration
-      val srcMeta = new HadoopPath(Loader.metadataPath(src))
-      val dstMeta = new HadoopPath(Loader.metadataPath(dst))
-      FileUtil.copy(
-        srcMeta.getFileSystem(hadoopConf), srcMeta,
-        dstMeta.getFileSystem(hadoopConf), dstMeta, false, hadoopConf)
-      spark.read.parquet(Loader.dataPath(src))
-        .withColumn("leftNodeId",
-          when(col("nodeId") === 1, lit(1)).otherwise(col("leftNodeId")))
-        .write.parquet(Loader.dataPath(dst))
-
-      val e = intercept[IllegalArgumentException] {
-        DecisionTreeModel.load(sc, dst)
-      }
-      assert(e.getMessage.contains("Cycle detected"))
-    } finally {
-      Utils.deleteRecursively(srcDir)
-      Utils.deleteRecursively(dstDir)
     }
   }
 }

@@ -29,12 +29,7 @@ object TreePattern extends Enumeration  {
   val ALIAS: Value = Value
   val ANALYSIS_AWARE_EXPRESSION: Value = Value
   val AND: Value = Value
-  val ARRAYS_OVERLAP: Value = Value
   val ARRAYS_ZIP: Value = Value
-  val ARRAY_DISTINCT: Value = Value
-  val ARRAY_EXCEPT: Value = Value
-  val ARRAY_INTERSECT: Value = Value
-  val ARRAY_UNION: Value = Value
   val ATTRIBUTE_REFERENCE: Value = Value
   val AVERAGE: Value = Value
   val BINARY_ARITHMETIC: Value = Value
@@ -103,11 +98,13 @@ object TreePattern extends Enumeration  {
   val SESSION_WINDOW: Value = Value
   val SQL_FUNCTION_EXPRESSION: Value = Value
   val SQL_SCALAR_FUNCTION: Value = Value
+  val SUBTRACT_TIMESTAMPS: Value = Value
   val SUM: Value = Value
   val TEMP_RESOLVED_COLUMN: Value = Value
   val TIME_WINDOW: Value = Value
   val TIME_ZONE_AWARE_EXPRESSION: Value = Value
   val TRANSPILED_PYTHON_UDF: Value = Value
+  val TRANSPILED_UDF_PARAMETER: Value = Value
   val TRUE_OR_FALSE_LITERAL: Value = Value
   val USER_DEFINED_AGGREGATION: Value = Value
   val VARIANT_GET: Value = Value

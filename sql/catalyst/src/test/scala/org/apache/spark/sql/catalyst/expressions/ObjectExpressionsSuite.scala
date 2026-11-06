@@ -108,6 +108,19 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     )
   }
 
+  test("SPARK-43253: unresolved map objects have no inferred data type") {
+    val input = Literal.create(Seq(1), ArrayType(IntegerType, containsNull = false))
+    val unresolved = UnresolvedMapObjects(identity, input)
+    checkError(
+      exception = intercept[SparkException] { unresolved.dataType },
+      condition = "INTERNAL_ERROR",
+      parameters = Map("message" ->
+        "Cannot determine the data type of an unresolved MapObjects without a collection class."))
+    val collectionClass = classOf[java.util.ArrayList[_]]
+    assert(unresolved.copy(customCollectionCls = Some(collectionClass)).dataType ==
+      ObjectType(collectionClass))
+  }
+
   test("MapObjects should make copies of unsafe-backed data") {
     // test UnsafeRow-backed data
     val structEncoder = ExpressionEncoder[Array[Tuple2[java.lang.Integer, java.lang.Integer]]]()

@@ -103,7 +103,7 @@ class PySparkPlotAccessor:
         "pie": PySparkTopNPlotBase().get_top_n,
         "scatter": PySparkSampledPlotBase().get_sampled,
     }
-    _backends = {}  # type: ignore[var-annotated]
+    _backends: dict[str, ModuleType] = {}
 
     def __init__(self, data: "DataFrame"):
         self.data = data

@@ -279,38 +279,26 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
       val dataMap: Map[Int, NodeData] = data.map(n => n.nodeId -> n).toMap
       assert(dataMap.contains(1),
         s"DecisionTree missing root node (id = 1).")
-      constructNode(1, dataMap, mutable.Map.empty, mutable.Set.empty)
+      constructNode(1, dataMap, mutable.Map.empty)
     }
 
     /**
      * Builds a node from the node data map and adds new nodes to the input nodes map.
-     *
-     * `visiting` records the node ids currently being constructed (a fully constructed node is in
-     * `nodes` and every later visit short-circuits on it before `visiting` is consulted). A saved
-     * model whose left/right node ids form a cycle (which never happens for a valid tree) would
-     * otherwise recurse until the driver hits a StackOverflowError; detecting a node reached while
-     * it is still being constructed turns that into a clear, contained failure. Valid models
-     * (including shared leaves, which are served from `nodes`) are unaffected.
      */
     private def constructNode(
       id: Int,
       dataMap: Map[Int, NodeData],
-      nodes: mutable.Map[Int, Node],
-      visiting: mutable.Set[Int]): Node = {
+      nodes: mutable.Map[Int, Node]): Node = {
       if (nodes.contains(id)) {
         return nodes(id)
-      }
-      if (!visiting.add(id)) {
-        throw new IllegalArgumentException(
-          s"Cycle detected among node ids while loading the decision tree model (node id = $id).")
       }
       val data = dataMap(id)
       val node =
         if (data.isLeaf) {
           Node(data.nodeId, data.predict.toPredict, data.impurity, data.isLeaf)
         } else {
-          val leftNode = constructNode(data.leftNodeId.get, dataMap, nodes, visiting)
-          val rightNode = constructNode(data.rightNodeId.get, dataMap, nodes, visiting)
+          val leftNode = constructNode(data.leftNodeId.get, dataMap, nodes)
+          val rightNode = constructNode(data.rightNodeId.get, dataMap, nodes)
           val stats = new InformationGainStats(data.infoGain.get, data.impurity, leftNode.impurity,
             rightNode.impurity, leftNode.predict, rightNode.predict)
           new Node(data.nodeId, data.predict.toPredict, data.impurity, data.isLeaf,

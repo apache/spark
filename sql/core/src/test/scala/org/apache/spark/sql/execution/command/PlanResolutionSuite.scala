@@ -27,18 +27,19 @@ import org.mockito.invocation.InvocationOnMock
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, AsOfVersion, EmptyFunctionRegistry, NoSuchTableException, RelationCache, RelationResolution, ResolvedFieldName, ResolvedFieldPosition, ResolvedIdentifier, ResolvedTable, ResolveSessionCatalog, TimeTravelSpec, UnresolvedAttribute, UnresolvedFieldPosition, UnresolvedInlineTable, UnresolvedPartitionSpec, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, AsOfVersion, CreateTableHelper, EmptyFunctionRegistry, NoSuchTableException, RelationCache, RelationResolution, ResolvedFieldName, ResolvedFieldPosition, ResolvedIdentifier, ResolvedTable, ResolveSessionCatalog, TimeTravelSpec, UnresolvedAttribute, UnresolvedFieldPosition, UnresolvedInlineTable, UnresolvedPartitionSpec, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog, TempVariableManager}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{AlterColumns, AlterColumnSpec, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DefaultValueExpression, DeleteAction, DeleteFromTable, DescribeRelation, DescribeTablePartition, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, OverwriteByExpression, OverwritePartitionsDynamic, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterColumns, AlterColumnSpec, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DefaultValueExpression, DeleteAction, DeleteFromTable, DescribeRelation, DescribeTablePartition, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, OverwriteByExpression, OverwritePartitionsDynamic, Project, ReplaceTable, ReplaceTableAsSelect, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.FakeV2Provider
-import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, ColumnDefaultValue, Identifier, SupportsDelete, Table, TableCapability, TableCatalog, TableChange, TableContext, TableWritePrivilege, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, ColumnDefaultValue, Identifier, SupportsDelete, Table, TableCapability, TableCatalog, TableChange, TableContext, TableWritePrivilege, V1Table, WriteDistributionMode}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
-import org.apache.spark.sql.connector.expressions.{LiteralValue, Transform}
+import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue, NullOrdering, SortDirection, Transform}
+import org.apache.spark.sql.connector.expressions.LogicalExpressions.{bucket, sort}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -330,6 +331,33 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       parameters = parameters,
       context = context
     )
+  }
+
+  test("create table preprocessing preserves table metadata while normalizing column names") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val partition = StructField("Part", IntegerType)
+      val value = StructField("Value", IntegerType)
+      val table = CatalogTable(
+        identifier = TableIdentifier("table", Some("default")),
+        tableType = CatalogTableType.EXTERNAL,
+        storage = CatalogStorageFormat.empty.copy(locationUri = Some(new URI("file:/table"))),
+        schema = StructType(Seq(partition, value)),
+        provider = Some("parquet"),
+        partitionColumnNames = Seq("part"),
+        bucketSpec = Some(BucketSpec(4, Seq("VALUE"), Seq("value"))),
+        properties = Map("createdBy" -> "user"),
+        comment = Some("table comment"),
+        createTime = 123L,
+        lastAccessTime = 456L)
+      val create = CreateTableV1(table, SaveMode.Ignore, None)
+
+      val normalized = CreateTableHelper.normalizeCreateTableWithoutQuery(create)
+
+      assert(normalized == create.copy(tableDesc = table.copy(
+        schema = StructType(Seq(value, partition)),
+        partitionColumnNames = Seq("Part"),
+        bucketSpec = Some(BucketSpec(4, Seq("Value"), Seq("Value"))))))
+    }
   }
 
   test("create table - with partitioned by") {
@@ -3689,6 +3717,45 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         relation
       case _ =>
         fail(s"failed to resolve $unresolvedRelation as v2 table")
+    }
+  }
+
+  test("SPARK-34586: CREATE/CTAS/REPLACE/RTAS resolve with the declared write distribution " +
+    "and ordering") {
+    val idAsc = sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
+    val bucketDesc = sort(
+      bucket(8, Array(FieldReference("s"))), SortDirection.DESCENDING, NullOrdering.NULLS_FIRST)
+    Seq(
+      ("CREATE TABLE mydb.table_name (id bigint, description string) USING parquet " +
+        "ORDERED BY id",
+        true, classOf[CreateTable], WriteDistributionMode.RANGE, Seq(idAsc), None),
+      ("CREATE TABLE mydb.table_name (id bigint, description string) USING parquet " +
+        "PARTITIONED BY (bucket(8, description)) DISTRIBUTED BY PARTITION ORDERED BY id",
+        true, classOf[CreateTable], WriteDistributionMode.HASH, Seq(idAsc),
+        Some(Seq(bucket(8, Array(FieldReference("description")))))),
+      ("CREATE TABLE mydb.table_name (id bigint, description string) USING parquet " +
+        "PARTITIONED BY (bucket(8, description)) LOCALLY ORDERED BY (id)",
+        true, classOf[CreateTable], WriteDistributionMode.NONE, Seq(idAsc), None),
+      ("CREATE TABLE testcat.mydb.table_name USING parquet UNORDERED AS SELECT * FROM src",
+        false, classOf[CreateTableAsSelect], WriteDistributionMode.NONE, Seq.empty, None),
+      (s"REPLACE TABLE testcat.tab (i INT, s STRING) USING $v2Format " +
+        "ORDERED BY (bucket(8, s) DESC NULLS FIRST)",
+        false, classOf[ReplaceTable], WriteDistributionMode.RANGE, Seq(bucketDesc), None),
+      (s"REPLACE TABLE testcat.tab USING $v2Format " +
+        "ORDERED BY (bucket(8, s) DESC NULLS FIRST) AS SELECT * FROM src",
+        false, classOf[ReplaceTableAsSelect], WriteDistributionMode.RANGE, Seq(bucketDesc), None)
+    ).foreach { case (sql, withDefault, planClass, mode, ordering, partitioning) =>
+      val (plan, actualMode) = parseAndResolve(sql, withDefault) match {
+        case c: CreateTable => (c, c.writeDistributionMode)
+        case c: CreateTableAsSelect => (c, c.writeDistributionMode)
+        case r: ReplaceTable => (r, r.writeDistributionMode)
+        case r: ReplaceTableAsSelect => (r, r.writeDistributionMode)
+        case other => fail(s"unexpected plan for $sql: $other")
+      }
+      assert(planClass.isInstance(plan), sql)
+      assert(actualMode == mode, sql)
+      assert(plan.writeOrdering == ordering, sql)
+      partitioning.foreach(p => assert(plan.partitioning == p, sql))
     }
   }
 
