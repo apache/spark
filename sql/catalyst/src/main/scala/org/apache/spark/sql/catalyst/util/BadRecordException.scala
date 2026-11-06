@@ -80,11 +80,25 @@ case class PartialResultArrayException(
  */
 case class BadRecordException(
     @transient record: () => UTF8String,
-    @transient partialResults: () => Array[InternalRow] = () => Array.empty[InternalRow],
+    @transient partialResults: () => Array[InternalRow],
     cause: Throwable,
-    recoverable: Boolean = false) extends Exception(cause) {
+    recoverable: Boolean) extends Exception(cause) {
+  // The 3-argument constructor and apply are kept for code compiled against earlier releases.
+  def this(
+      record: () => UTF8String,
+      partialResults: () => Array[InternalRow] = () => Array.empty[InternalRow],
+      cause: Throwable) = this(record, partialResults, cause, false)
+
   override def getStackTrace(): Array[StackTraceElement] = new Array[StackTraceElement](0)
   override def fillInStackTrace(): Throwable = this
+}
+
+object BadRecordException {
+  def apply(
+      record: () => UTF8String,
+      partialResults: () => Array[InternalRow] = () => Array.empty[InternalRow],
+      cause: Throwable): BadRecordException =
+    new BadRecordException(record, partialResults, cause, false)
 }
 
 /**
