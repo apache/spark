@@ -36,7 +36,7 @@ import org.apache.spark.sql.connector.read.{ExternalLookup, ExternalLookupReader
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation,
   ExternalLookupRelation, PrepareExternalLookupJoin}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{LongType, StructType}
+import org.apache.spark.sql.types.{IntegerType, LongType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class PrepareExternalLookupJoinSuite extends PlanTest {
@@ -79,9 +79,9 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
   test("an equality is a lookup candidate only on a type that stores compare as Spark does") {
     val offeredTypes = Seq("TINYINT", "SMALLINT", "INT", "BIGINT", "BOOLEAN", "DECIMAL(10, 2)",
       "DATE", "TIMESTAMP", "TIMESTAMP_NTZ", "BINARY", "STRING", "STRING COLLATE UTF8_BINARY")
-    val notOfferedTypes = Seq("FLOAT", "DOUBLE", "STRING COLLATE UTF8_LCASE",
-      "STRING COLLATE UNICODE", "STRING COLLATE UTF8_BINARY_RTRIM", "STRUCT<a: INT>",
-      "ARRAY<INT>", "INTERVAL DAY TO SECOND")
+    val notOfferedTypes = Seq("FLOAT", "DOUBLE", "CHAR(3)", "VARCHAR(3)",
+      "STRING COLLATE UTF8_LCASE", "STRING COLLATE UNICODE", "STRING COLLATE UTF8_BINARY_RTRIM",
+      "STRUCT<a: INT>", "ARRAY<INT>", "INTERVAL DAY TO SECOND")
     for ((codeType, offered) <- offeredTypes.map(_ -> true) ++ notOfferedTypes.map(_ -> false)) {
       var offeredCandidates = Seq.empty[String]
       val lookup = lookupRelation(PlanningExternalLookupTable(s"id INT, code $codeType", select = {
@@ -112,6 +112,20 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
         condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_CANDIDATE",
         parameters = Map("table" -> QUOTED_TABLE_NAME))
     }
+  }
+
+  test("the residual evaluates key equalities and conjuncts that cannot fail first") {
+    val lookup = lookupRelation(PlanningExternalLookupTable("id INT, label STRING, value STRING"))
+    val Seq(lookupId, lookupLabel, lookupValue) = lookup.output
+    val Seq(streamId, streamLabel) = stream.output
+    // A cast can fail, so it runs after the equality and the comparison written after it, which
+    // keep their written order. The connector selects only `id = ?`.
+    val mayFail = streamLabel.cast(IntegerType) > 0
+    val conjuncts =
+      Seq(lookupId === streamId, mayFail, streamLabel === lookupLabel, lookupValue > "a")
+    val prepared = prepare(lookupJoin(lookup, conjuncts.reduce(_ && _)))
+    assert(prepared.residualCondition ===
+      Some(streamLabel === lookupLabel && lookupValue > "a" && mayFail))
   }
 
   test("selected predicates bind in the connector's order, and the residual in written order") {

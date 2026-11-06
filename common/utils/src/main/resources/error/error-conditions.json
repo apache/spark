@@ -2930,7 +2930,7 @@
       },
       "NO_LOOKUP_CANDIDATE" : {
         "message" : [
-          "The join condition has no lookup predicate that Spark can offer to table <table>. Spark offers only an equality `=` between a lookup column, with no cast or other expression applied to it, and an expression over the streaming side. If the lookup column is cast to match the streaming side, cast the streaming-side expression to the lookup column's type instead. Spark offers it only on lookup columns whose type a store compares as Spark does: integral types, BOOLEAN, DECIMAL, DATE, TIMESTAMP, TIMESTAMP_NTZ, BINARY, and strings with a binary collation such as UTF8_BINARY. It never offers one on FLOAT, DOUBLE, a string with another collation, a complex type or any other type."
+          "The join condition has no lookup predicate that Spark can offer to table <table>. Spark offers only an equality `=` between a lookup column, with no cast or other expression applied to it, and an expression over the streaming side. If the lookup column is cast to match the streaming side, cast the streaming-side expression to the lookup column's type instead. Spark offers it only on lookup columns whose type a store compares as Spark does: integral types, BOOLEAN, DECIMAL, DATE, TIMESTAMP, TIMESTAMP_NTZ, BINARY, and strings with a binary collation such as UTF8_BINARY. It never offers one on FLOAT, DOUBLE, CHAR, VARCHAR, a string with another collation, a complex type or any other type."
         ]
       },
       "NO_LOOKUP_PREDICATE" : {

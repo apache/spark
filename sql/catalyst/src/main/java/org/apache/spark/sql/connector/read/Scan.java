@@ -87,9 +87,10 @@ public interface Scan {
    * reports {@link TableCapability#EXTERNAL_LOOKUP}. Spark calls it at most once, on the driver.
    * {@link #readSchema()} describes the returned value rows and must list only top-level table
    * columns, each at most once, with the table's name and data type; its nullability may be
-   * weaker than the table's. The columns may be in any order. They must include every column
-   * passed to {@link SupportsPushDownRequiredColumns#pruneColumns}, or every table column if the
-   * builder was not pruned.
+   * weaker than the table's. Returned values must still satisfy both: a column that the table or
+   * the read schema declares NOT NULL must never hold a null. The columns may be in any order.
+   * They must include every column passed to {@link SupportsPushDownRequiredColumns#pruneColumns},
+   * or every table column if the builder was not pruned.
    *
    * @throws UnsupportedOperationException
    * @since 4.4.0

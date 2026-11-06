@@ -21,9 +21,11 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftOuter}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXTERNAL_LOOKUP_JOIN, TreePattern}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.read.{ExternalLookupReaderFactory, Scan}
-import org.apache.spark.sql.types.{BinaryType, BooleanType, ByteType, DataType, DateType,
-  DecimalType, IntegerType, LongType, ShortType, StringType, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.types.{BinaryType, BooleanType, ByteType, CharType, DataType,
+  DateType, DecimalType, IntegerType, LongType, ShortType, StringType, TimestampNTZType,
+  TimestampType, VarcharType}
 
 /**
  * A lookup join retained through ordinary expression and operator optimization.
@@ -94,12 +96,21 @@ object ExternalLookupKeyTypes {
    * Whether Spark offers `=` on a lookup column of this type: integral types, BOOLEAN, DECIMAL,
    * DATE, TIMESTAMP, TIMESTAMP_NTZ, BINARY, and strings whose collation compares bytes, such as
    * UTF8_BINARY. FLOAT and DOUBLE are not offered, because stores treat NaN and -0.0 in different
-   * ways, nor strings with another collation, nor complex types, nor any other type.
+   * ways, nor CHAR and VARCHAR, whose padding and length rules a store may apply differently, nor
+   * strings with another collation, nor complex types, nor any other type.
    */
   def supportsEquality(dataType: DataType): Boolean = dataType match {
     case ByteType | ShortType | IntegerType | LongType | BooleanType | DateType | TimestampType |
         TimestampNTZType | BinaryType | _: DecimalType => true
+    case _: CharType | _: VarcharType => false
     case stringType: StringType => stringType.supportsBinaryEquality
     case _ => false
   }
+
+  /**
+   * Whether `column` is a CHAR or VARCHAR column. Analysis reads one as a STRING and keeps its
+   * declared type in the metadata, so its data type alone does not tell.
+   */
+  def isCharOrVarchar(column: Attribute): Boolean =
+    CharVarcharUtils.getRawType(column.metadata).isDefined
 }
