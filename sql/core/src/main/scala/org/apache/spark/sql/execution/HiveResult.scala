@@ -39,14 +39,18 @@ import org.apache.spark.util.ArrayImplicits._
  * Runs a query returning the result in Hive compatible form.
  */
 object HiveResult extends SQLConfHelper {
-  case class TimeFormatters(date: DateFormatter, time: TimeFormatter, timestamp: TimestampFormatter)
+  case class TimeFormatters(
+      date: DateFormatter,
+      time: TimeFormatter,
+      timestamp: TimestampFormatter,
+      zoneId: ZoneId)
 
   def getTimeFormatters: TimeFormatters = {
     val dateFormatter = DateFormatter()
     val timeFormatter = new FractionTimeFormatter()
-    val timestampFormatter = TimestampFormatter.getFractionFormatter(
-      DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
-    TimeFormatters(dateFormatter, timeFormatter, timestampFormatter)
+    val zoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
+    val timestampFormatter = TimestampFormatter.getFractionFormatter(zoneId)
+    TimeFormatters(dateFormatter, timeFormatter, timestampFormatter, zoneId)
   }
 
   type BinaryFormatter = Array[Byte] => String
@@ -159,7 +163,7 @@ object HiveResult extends SQLConfHelper {
         HIVE_STYLE,
         startField,
         endField)
-    case (v: VariantVal, VariantType) => v.toString
+    case (v: VariantVal, VariantType) => v.toJson(formatters.zoneId)
     case (g: Geometry, dt: GeometryType) =>
       val internalGeom = STUtils.serializeGeomFromWKB(g, dt)
       val s = STUtils.stGeomAsEwkt(internalGeom).toString

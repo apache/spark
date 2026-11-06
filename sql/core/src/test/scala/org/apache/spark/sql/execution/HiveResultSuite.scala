@@ -161,6 +161,19 @@ class HiveResultSuite extends SharedSparkSession {
     }
   }
 
+  test("variant formatting in hive result honors the session time zone") {
+    Seq(
+      "UTC" -> "\"2020-01-01 00:00:00+00:00\"",
+      "America/Los_Angeles" -> "\"2019-12-31 16:00:00-08:00\"").foreach { case (tz, expected) =>
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> tz) {
+        val df = spark.sql("SELECT cast(TIMESTAMP'2020-01-01 00:00:00Z' AS VARIANT) AS v")
+        assert(hiveResultString(df.queryExecution.executedPlan) === Seq(expected))
+        val nested = df.selectExpr("array(v)").queryExecution.executedPlan
+        assert(hiveResultString(nested) === Seq(s"[$expected]"))
+      }
+    }
+  }
+
   test("toHiveString correctly handles UDTs") {
     val point = new ExamplePoint(50.0, 50.0)
     val tpe = new ExamplePointUDT()
