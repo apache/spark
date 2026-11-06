@@ -507,8 +507,9 @@ impl JsonTaskWriter<'_> {
     }
 }
 
-// Spark never writes after a failure, commit, or abort, commits at most once,
-// and never aborts a committed writer, so this writer does not track its phase.
+// Spark never writes after a failure, a commit, or an abort, and commits at most once, so this
+// writer does not track its phase. Abort may follow a commit whose message the SDK could not
+// serialize, so it removes the file in every case.
 impl DataWriter for JsonTaskWriter<'_> {
     type Message = CommitMessage;
 

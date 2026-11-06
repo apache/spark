@@ -99,7 +99,7 @@ pub struct DriverWriter<C: Coordinator> {
 impl<C: Coordinator> DriverWriter<C> {
     /// Wraps a coordinator, with the state that its task writers need: its serialized
     /// writer factory. On failure, the coordinator is dropped.
-    pub fn new(coordinator: C) -> Result<(Box<dyn DriverWrite>, Vec<u8>)> {
+    pub fn create(coordinator: C) -> Result<(Box<dyn DriverWrite>, Vec<u8>)> {
         let writer = Self {
             coordinator: Some(coordinator),
         };

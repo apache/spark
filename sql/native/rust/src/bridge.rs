@@ -271,7 +271,7 @@ impl<S: DataSource> Bridge<S> {
                         require(capabilities, Capabilities::BATCH_TRUNCATE, overwrite)?;
                     }
                     let write = source.source.new_write(WriteInfo::new(schema, mode))?;
-                    DriverWriter::new(Batch(write))?
+                    DriverWriter::create(Batch(write))?
                 }
                 Some(query_id) => {
                     require(
@@ -285,7 +285,7 @@ impl<S: DataSource> Bridge<S> {
                     }
                     let info = StreamingWriteInfo::new(schema, mode, query_id);
                     let write = source.source.new_streaming_write(info)?;
-                    DriverWriter::new(Streaming(write))?
+                    DriverWriter::create(Streaming(write))?
                 }
             }
         };
