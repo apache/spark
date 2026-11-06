@@ -2406,10 +2406,14 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
     // The query execution/optimization does not guarantee the expressions are evaluated in order.
     // We only can combine them if and only if both are deterministic and the outer condition is not
     // throwable (inner can be throwable as it was going to be evaluated first anyways).
+    // Combining a condition written after a non-deterministic or throwable one evaluates it ahead
+    // of that one, so it must also be unable to fail. `throwable` does not report e.g. a division
+    // by zero in ANSI mode, which the condition before it may have kept from being evaluated.
     case Filter(fc, nf @ Filter(nc, grandChild)) if nc.deterministic =>
-      val (combineCandidates, rest) =
-        splitConjunctivePredicates(fc).partition(p => p.deterministic && !p.throwable)
-      val mergedFilter = (ExpressionSet(combineCandidates) --
+      val (leading, following) =
+        splitConjunctivePredicates(fc).span(p => p.deterministic && !p.throwable)
+      val (cannotFail, rest) = following.partition(ExprUtils.canEvaluateUnconditionally)
+      val mergedFilter = (ExpressionSet(leading ++ cannotFail) --
         ExpressionSet(splitConjunctivePredicates(nc))).reduceOption(And) match {
         case Some(ac) =>
           Filter(And(nc, ac), grandChild)

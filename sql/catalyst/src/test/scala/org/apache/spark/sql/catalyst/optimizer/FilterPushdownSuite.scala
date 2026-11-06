@@ -135,6 +135,25 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, originalQuery)
   }
 
+  test("SPARK-60980: a condition that can fail is not combined ahead of a non-deterministic " +
+    "or throwable one") {
+    Seq(Rand(0) > 0.1, IsNull(RaiseError(Literal("boom")))).foreach { blocker =>
+      val originalQuery =
+        testRelation
+          .where($"c" === 1)
+          .where($"a" / $"b" > 1 && blocker && $"b" / $"a" > 1 && $"a" === 1)
+
+      val optimized = Optimize.execute(originalQuery.analyze)
+      val correctAnswer =
+        testRelation
+          .where($"c" === 1 && $"a" / $"b" > 1 && $"a" === 1)
+          .where(blocker && $"b" / $"a" > 1)
+          .analyze
+
+      comparePlans(optimized, correctAnswer)
+    }
+  }
+
   test("SPARK-16164: Filter pushdown should keep the ordering in the logical plan") {
     val originalQuery =
       testRelation
