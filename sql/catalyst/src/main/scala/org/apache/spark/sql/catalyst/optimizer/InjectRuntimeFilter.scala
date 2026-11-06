@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{INVOKE, JSON_TO_STRUCT, LIKE_FAMLIY, PYTHON_UDF, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, SCALA_UDF}
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DecimalType, IntegralType, NumericType}
 
@@ -433,8 +434,10 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
 
   // Whether the bloom filter's subquery can evaluate `creationSide` again, apart from the join. The
   // plan it reads must give the same rows again (SPARK-60808). So it must read no CTE, whose
-  // reference hides the determinism of its plan, and a cache only if Spark can tell that scanning
-  // it again gives the same rows. It must not read a file metadata column either, such as
+  // reference hides the determinism of its plan, a cache only if Spark can tell that scanning it
+  // again gives the same rows, and a V2 scan only if every operation pushed into it works on each
+  // row by itself. A pushed limit or top-N, for example, lets the source pick other rows on a
+  // second read. It must not read a file metadata column either, such as
   // `_metadata.file_block_start`, which depends on how the scan splits its files. The subquery can
   // split them differently. Its filters, and the projections that the key and the filters need,
   // must pass `cannotFail`, which takes only expressions that are deterministic in the subquery
@@ -449,6 +452,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       case Project(projectList, _) => !projectList.forall(e => cannotFail(trimAliases(e)))
       case Filter(condition, _) => !splitConjunctivePredicates(condition).forall(cannotFail)
       case _: CTERelationRef => true
+      case scan: DataSourceV2ScanRelation => !scan.onlyRowWisePushdowns
       case leaf: MaterializedLeafNode => !leaf.isOutputRepeatable
       case _: LeafNode => false
       case _ => true

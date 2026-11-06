@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, BloomFilterMightContain
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, BloomFilterAggregate}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan}
 import org.apache.spark.sql.columnar.CachedBatch
+import org.apache.spark.sql.connector.StorageFilterTestSource
 import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog
 import org.apache.spark.sql.execution.{FileSourceScanExec, InSubqueryExec, ProjectedBroadcastValueSubqueryExec, ReusedSubqueryExec, SubqueryBroadcastExec, SubqueryExec}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEPropagateEmptyRelation}
@@ -321,14 +322,15 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     }
   }
 
-  // Runs `query` and returns the DPP filters that physical planning left on the file source scans:
-  // the class of the subquery that each filter reads, or the filter itself if it reads none.
+  // Returns the DPP filters that physical planning left on the file source scans of `query`: the
+  // class of the subquery that each filter reads, or the filter itself if it reads none. Only AQE
+  // plans them as the query runs, so only then does it run the query.
   def dynamicPruningFilters(query: String): Seq[Any] = {
     // Keep the scans in the final plan even if they return no rows.
     withSQLConf(
         SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key -> AQEPropagateEmptyRelation.ruleName) {
       val df = sql(query)
-      df.collect()
+      if (conf.adaptiveExecutionEnabled) df.collect()
       collect(df.queryExecution.executedPlan) {
         case scan: FileSourceScanExec => scan.partitionFilters.collect {
           case DynamicPruningExpression(in: InSubqueryExec) => in.plan.getClass
@@ -1099,7 +1101,7 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     "on the same column") {
     withDppTestConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false") {
       val query = "select * from bf5part join bf2 on bf5part.f5 = bf2.c2 where bf2.a2 = 62"
-      assertDidNotRewriteWithBloomFilter(query)
+      assert(bloomFilterKeys(query).isEmpty)
       assert(dynamicPruningFilters(query) == Seq(classOf[SubqueryExec]))
     }
   }
@@ -1428,6 +1430,7 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       val withoutHint = query.replace("/*+ broadcast(x) */ ", "")
       assert(bloomFilterKeyNames(withoutHint).contains("f5"))
       assert(dynamicPruningFilters(withoutHint) == Seq(Literal.TrueLiteral))
+      sql(withoutHint).collect()
     }
   }
 
@@ -1443,11 +1446,14 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
 
   test("SPARK-60702: add bloom filter for a key with a dropped dpp filter of a floating point " +
     "type") {
-    // `NormalizeFloatingNumbers` wraps the `double` join keys, which cannot fail.
-    val query = "select * from bf5part join (select cast(c2 as double) k, a2 from bf2) d " +
-      "on bf5part.f5 = d.k where d.a2 = 36"
-    withDppTestConf() {
-      assertRewroteWithBloomFilterForDroppedDpp(query)
+    // `NormalizeFloatingNumbers` wraps the `double` join keys, which cannot fail, also over a
+    // `coalesce`.
+    Seq("bf5part.f5", "coalesce(cast(bf5part.f5 as double), 0D)").foreach { key =>
+      val query = "select * from bf5part join (select cast(c2 as double) k, a2 from bf2) d " +
+        s"on $key = d.k where d.a2 = 36"
+      withDppTestConf() {
+        assertRewroteWithBloomFilterForDroppedDpp(query)
+      }
     }
   }
 
@@ -1466,10 +1472,32 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       "where cast(coalesce(bf2.a2, 0L) as int) = 36"
     val wide = "select * from bf5part join bf2 on bf5part.f5 = bf2.c2 " +
       "where coalesce(bf2.a2, 0L) > 35.5D"
+    // A deeply nested filter takes a time linear in its size.
+    val nested = (1 to 28).foldLeft("b2 + 1") { (acc, k) =>
+      s"if(d2 > $k, $acc, cast(b2 as decimal(${10 + k}, 0)))"
+    }
     withDppTestConf() {
       assertBloomFilterWithoutDpp(narrow)
       assert(bloomFilterKeys(narrow).isEmpty)
       assertRewroteWithBloomFilterForDroppedDpp(wide)
+      assert(bloomFilterKeys("select * from bf5part join bf2 on bf5part.f5 = bf2.c2 " +
+        s"where bf2.a2 = 36 and $nested > 0").isEmpty)
+    }
+  }
+
+  test("SPARK-60702: do not add bloom filter whose creation side reads a scan with a pushed " +
+    "top-n") {
+    // The source picks the rows of a pushed top-N, so a second read can pick other rows. So `p.f5`
+    // gets no bloom filter. `x.k` gets one, from `bf5part`, which the inferred `f5 > 1` filters.
+    withTempView("tn") {
+      spark.read.format(classOf[StorageFilterTestSource].getName).option("push", "topN").load()
+        .createOrReplaceTempView("tn")
+      val query = "select * from bf5part p join (select * from (select * from tn order by v " +
+        "limit 100) where k > 1) x on p.f5 = x.k"
+      withDppTestConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        assertBloomFilterWithoutDpp(query)
+        assert(bloomFilterKeyNames(query) == Seq("k"))
+      }
     }
   }
 
@@ -1615,7 +1643,7 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     withTable("cdim", "cfact") {
       spark.range(200).selectExpr("cast(id as int) k", "cast(id % 2 as int) x")
         .write.saveAsTable("cdim")
-      spark.range(20000).selectExpr("cast(id % 200 as int) k", "id v")
+      spark.range(20000).selectExpr("cast(id % 20 as int) k", "id v")
         .write.partitionBy("k").saveAsTable("cfact")
       sql("analyze table cdim compute statistics")
       sql("analyze table cfact compute statistics")
