@@ -19,8 +19,9 @@ package org.apache.spark.sql
 
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression}
+import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression, GetStructField}
 import org.apache.spark.sql.catalyst.plans.logical.SerializeFromObject
+import org.apache.spark.sql.classic.ExpressionUtils.column
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -207,5 +208,17 @@ class DatasetOptimizationSuite extends SharedSparkSession {
     val query = df.map(row => Row(row))(encoder).select("s.i")
     testSerializer(query, Seq(Seq("i")))
     checkAnswer(query, Seq(Row("a"), Row("b"), Row("c")))
+  }
+
+  test("SPARK-60979: Pruned nested serializers: field names differ only by case") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val encoder = ExpressionEncoder(
+        new StructType().add("s", StructType.fromDDL("a string, A string, b int")))
+      val ds = spark.range(1).map(_ => Row(Row("x", "y", 1)))(encoder)
+      // `A` by its ordinal as the name is ambiguous in a case-insensitive session
+      val query = ds.select(column(GetStructField(col("s").expr, 1)))
+      testSerializer(query, Seq(Seq("A")))
+      checkAnswer(query, Row("y"))
+    }
   }
 }

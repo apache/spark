@@ -151,11 +151,11 @@ object ObjectSerializerPruning extends Rule[LogicalPlan] {
    * and a pruned `StructType`.
    */
   private def pruneNamedStruct(struct: CreateNamedStruct, prunedType: StructType) = {
-    // Filters out the pruned fields.
-    val resolver = conf.resolver
+    // Filters out the pruned fields. The pruned type names its fields after the fields of the
+    // serializer, so match by the exact name as the names may differ only by case.
+    val prunedFieldNames = prunedType.fieldNames.toSet
     val prunedFields = struct.nameExprs.zip(struct.valExprs).filter { case (nameExpr, _) =>
-      val name = nameExpr.eval(EmptyRow).toString
-      prunedType.fieldNames.exists(resolver(_, name))
+      prunedFieldNames.contains(nameExpr.eval(EmptyRow).toString)
     }.flatMap(pair => Seq(pair._1, pair._2))
 
     CreateNamedStruct(prunedFields)
