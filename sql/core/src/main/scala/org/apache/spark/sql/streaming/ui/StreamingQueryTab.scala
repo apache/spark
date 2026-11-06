@@ -32,6 +32,7 @@ private[sql] class StreamingQueryTab(
   attachPage(new StreamingQueryStatisticsPage(this))
   parent.attachTab(this)
 
+  // Not needed by this tab's pages (they load no files from /static/sql).
   SQLTab.addStaticHandler(parent)
 
   override def displayOrder: Int = 2

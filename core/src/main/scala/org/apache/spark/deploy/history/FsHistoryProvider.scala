@@ -447,7 +447,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       attempt.info.startTime.getTime(), attempt.info.appSparkVersion)
 
     // place the tab in UI based on the display order
-    AppHistoryServerPlugin.loadPlugins().toSeq.sortBy(_.displayOrder).foreach(_.setupUI(ui))
+    AppHistoryServerPlugin.loadPlugins().sortBy(_.displayOrder).foreach(_.setupUI(ui))
 
     val loadedUI = LoadedAppUI(ui)
     synchronized {
@@ -1439,7 +1439,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     replayBus.addListener(listener)
 
     for {
-      plugin <- AppHistoryServerPlugin.loadPlugins()
+      plugin <- AppHistoryServerPlugin.loadPluginsOrFail()
       listener <- plugin.createListeners(conf, trackingStore)
     } replayBus.addListener(listener)
 

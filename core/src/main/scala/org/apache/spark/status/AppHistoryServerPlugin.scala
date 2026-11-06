@@ -20,8 +20,11 @@ package org.apache.spark.status
 import java.util.ServiceLoader
 
 import scala.jdk.CollectionConverters._
+import scala.util.control.NonFatal
 
 import org.apache.spark.SparkConf
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.NUM_FAILURES
 import org.apache.spark.scheduler.SparkListener
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.Utils
@@ -42,10 +45,12 @@ private[spark] trait AppHistoryServerPlugin {
   def setupUI(ui: SparkUI): Unit
 
   /**
-   * Static resources (JS/CSS bundled with the plugin) to serve from the History Server's own UI,
-   * as (classpath resource directory, URL path) pairs. They are registered once at startup.
-   * Unlike a handler attached in [[setupUI]], which is torn down when the application cache
-   * evicts that application, these live as long as the History Server.
+   * Static resources (JS/CSS) to serve from the History Server's own UI, as (classpath resource
+   * directory, URL path) pairs. They are registered once at startup. The URL path must be under
+   * /static/; other paths are rejected so they cannot shadow the History Server's own routes.
+   * The directory is resolved with Spark's class loader, not the plugin's, so it must be on
+   * Spark's class path. Unlike a handler attached in [[setupUI]], which is torn down when the
+   * application cache evicts that application, these live as long as the History Server.
    *
    * This does not replace the registration in [[setupUI]] or in the tabs: the live driver UI
    * never calls this hook, so tabs must still register their own handlers.
@@ -58,8 +63,63 @@ private[spark] trait AppHistoryServerPlugin {
   def displayOrder: Int = Integer.MAX_VALUE
 }
 
-private[spark] object AppHistoryServerPlugin {
-  def loadPlugins(): Iterable[AppHistoryServerPlugin] = {
+private[spark] object AppHistoryServerPlugin extends Logging {
+
+  // Consecutive load failures tolerated before giving up on the remaining plugins
+  private[spark] val MAX_LOAD_FAILURES = 10
+
+  /**
+   * Loads the available plugins, skipping with a warning any that cannot be loaded, so that a
+   * broken plugin does not take down the History Server or the loading of an application UI.
+   */
+  def loadPlugins(): Seq[AppHistoryServerPlugin] = skipUnloadable(loadPluginsOrFail())
+
+  /**
+   * Lazily loads the available plugins. A plugin that cannot be loaded makes iteration throw.
+   * Use this where a missing plugin must not go unnoticed.
+   */
+  def loadPluginsOrFail(): Iterable[AppHistoryServerPlugin] = {
     ServiceLoader.load(classOf[AppHistoryServerPlugin], Utils.getContextOrSparkClassLoader).asScala
+  }
+
+  /**
+   * Iterates through the plugins and attempts to load them one by one. If a plugin
+   * fails to load, it increments a failure counter. If the number of consecutive failures reaches
+   * MAX_LOAD_FAILURES, the loading process is aborted and remaining plugins are skipped.
+   *
+   * @param plugins an iterable collection of AppHistoryServerPlugin instances to load
+   * @return a sequence of successfully loaded AppHistoryServerPlugin instances
+   *
+   * @note This method will stop loading after MAX_LOAD_FAILURES consecutive failures to prevent
+   *       infinite loops or excessive error conditions
+   * @note Successfully loading a plugin resets the consecutive failure counter
+   * @note Non-fatal exceptions and LinkageErrors are caught and logged as warnings
+   */
+  private[spark] def skipUnloadable(
+      plugins: Iterable[AppHistoryServerPlugin]): Seq[AppHistoryServerPlugin] = {
+    val iterator = plugins.iterator
+    val loaded = Seq.newBuilder[AppHistoryServerPlugin]
+    var keepLoading = true
+    var failuresInARow = 0
+    while (keepLoading && failuresInARow < MAX_LOAD_FAILURES) {
+      try {
+        if (iterator.hasNext) {
+          loaded += iterator.next()
+          failuresInARow = 0
+        } else {
+          keepLoading = false
+        }
+      } catch {
+        case t if NonFatal(t) || t.isInstanceOf[LinkageError] =>
+          failuresInARow += 1
+          logWarning("Skipping an AppHistoryServerPlugin that failed to load", t)
+      }
+    }
+    if (keepLoading) {
+      logWarning(log"Giving up loading AppHistoryServerPlugins after " +
+        log"${MDC(NUM_FAILURES, MAX_LOAD_FAILURES)} consecutive failures; " +
+        log"the remaining plugins were skipped")
+    }
+    loaded.result()
   }
 }

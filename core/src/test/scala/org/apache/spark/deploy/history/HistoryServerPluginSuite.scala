@@ -63,6 +63,11 @@ class HistoryServerPluginSuite extends SparkFunSuite {
       override def iterator: Iterator[AppHistoryServerPlugin] = new PluginIterator(elements)
     }
 
+  /** The plugins that load from the given elements, skipping the ones that fail. */
+  private def loadedFrom(
+      elements: Seq[Either[Throwable, AppHistoryServerPlugin]]): Seq[AppHistoryServerPlugin] =
+    AppHistoryServerPlugin.skipUnloadable(pluginsWithErrors(elements))
+
   private class PluginIterator(elements: Seq[Either[Throwable, AppHistoryServerPlugin]])
     extends Iterator[AppHistoryServerPlugin] {
 
@@ -102,14 +107,13 @@ class HistoryServerPluginSuite extends SparkFunSuite {
         fn(server)
       } finally {
         server.stop()
-        provider.stop()
       }
     }
   }
 
   test("static resources declared by plugins are served") {
     withHistoryServer { server =>
-      server.setupPluginStaticResources(pluginsWithErrors(Seq(
+      server.setupPluginStaticResources(loadedFrom(Seq(
         Right(new StaticPlugin("/static/test-a")),
         Right(new StaticPlugin("/static/test-b")))))
       assert(statusOf(server, "/static/test-a") === 200)
@@ -119,7 +123,7 @@ class HistoryServerPluginSuite extends SparkFunSuite {
 
   test("a plugin that fails to load is skipped and the others are still set up") {
     withHistoryServer { server =>
-      server.setupPluginStaticResources(pluginsWithErrors(Seq(
+      server.setupPluginStaticResources(loadedFrom(Seq(
         Right(new StaticPlugin("/static/test-before")),
         Left(new ServiceConfigurationError("provider constructor failed")),
         Left(new NoClassDefFoundError("missing class")),
@@ -131,11 +135,59 @@ class HistoryServerPluginSuite extends SparkFunSuite {
 
   test("a plugin whose staticResources throws does not affect the others") {
     withHistoryServer { server =>
-      server.setupPluginStaticResources(pluginsWithErrors(Seq(
+      server.setupPluginStaticResources(loadedFrom(Seq(
         Right(new StaticPlugin("/static/test-failing", fail = true)),
         Right(new StaticPlugin("/static/test-healthy")))))
       assert(statusOf(server, "/static/test-failing") === 404)
       assert(statusOf(server, "/static/test-healthy") === 200)
     }
+  }
+
+  test("a failing entry does not skip the later entries of the same plugin") {
+    withHistoryServer { server =>
+      val plugin = new StaticPlugin("unused") {
+        override def staticResources: Seq[(String, String)] = Seq(
+          staticDir -> "/static/test-first",
+          "org/apache/spark/ui/no-such-dir" -> "/static/test-missing",
+          staticDir -> "/static/test-third")
+      }
+      server.setupPluginStaticResources(loadedFrom(Seq(Right(plugin))))
+      assert(statusOf(server, "/static/test-first") === 200)
+      assert(statusOf(server, "/static/test-third") === 200)
+    }
+  }
+
+  test("paths outside /static/ are rejected and do not take over the server's routes") {
+    withHistoryServer { server =>
+      val plugin = new StaticPlugin("unused") {
+        override def staticResources: Seq[(String, String)] = Seq(
+          staticDir -> "/history",
+          staticDir -> "/api/v1/x",
+          staticDir -> "/static",
+          staticDir -> "/static/test-ok")
+      }
+      server.setupPluginStaticResources(loadedFrom(Seq(Right(plugin))))
+      assert(statusOf(server, "/static/test-ok") === 200)
+      assert(statusOf(server, "/history") !== 200)
+      assert(statusOf(server, "/api/v1/x") !== 200)
+    }
+  }
+
+  test("loading gives up when the iterator keeps failing without moving on") {
+    var calls = 0
+    val stuck = new Iterable[AppHistoryServerPlugin] {
+      override def iterator: Iterator[AppHistoryServerPlugin] =
+        new Iterator[AppHistoryServerPlugin] {
+          override def hasNext: Boolean = {
+            calls += 1
+            // scalastyle:off throwerror
+            throw new ServiceConfigurationError("getResources failed")
+            // scalastyle:on throwerror
+          }
+          override def next(): AppHistoryServerPlugin = throw new NoSuchElementException
+        }
+    }
+    assert(AppHistoryServerPlugin.skipUnloadable(stuck).isEmpty)
+    assert(calls === AppHistoryServerPlugin.MAX_LOAD_FAILURES)
   }
 }
