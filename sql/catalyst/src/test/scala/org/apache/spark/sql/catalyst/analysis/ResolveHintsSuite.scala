@@ -307,6 +307,39 @@ class ResolveHintsSuite extends AnalysisTest {
     }
   }
 
+  test("runtime filter hint resolution") {
+    // Resolves per relation, like a join strategy hint.
+    checkAnalysisWithoutViewWrapper(
+      UnresolvedHint("RUNTIME_FILTER", Seq("table2"),
+        table("TaBlE").join(table("TaBlE2"))),
+      Join(
+        testRelation,
+        ResolvedHint(testRelation2, HintInfo(runtimeFilterSource = true)),
+        Inner,
+        None,
+        JoinHint.NONE),
+      caseSensitive = false)
+
+    // Composes with a join strategy hint on the same relation rather than overriding it.
+    checkAnalysisWithoutViewWrapper(
+      UnresolvedHint("RUNTIME_FILTER", Seq("table2"),
+        UnresolvedHint("MERGEJOIN", Seq("table2"),
+          table("TaBlE").join(table("TaBlE2")))),
+      Join(
+        testRelation,
+        ResolvedHint(testRelation2,
+          HintInfo(strategy = Some(SHUFFLE_MERGE), runtimeFilterSource = true)),
+        Inner,
+        None,
+        JoinHint.NONE),
+      caseSensitive = false)
+
+    // Without parameters it applies to the whole subtree, like a join strategy hint.
+    checkAnalysisWithoutViewWrapper(
+      UnresolvedHint("RUNTIME_FILTER", Seq(), table("TaBlE")),
+      ResolvedHint(testRelation, HintInfo(runtimeFilterSource = true)))
+  }
+
   test("SPARK-35786: Support optimize rebalance by expression in AQE") {
     checkAnalysisWithoutViewWrapper(
       UnresolvedHint("REBALANCE", Seq(UnresolvedAttribute("a")), table("TaBlE")),

@@ -213,10 +213,12 @@ class InMemoryTableWithJoinAndSample(
         return false
       }
 
-      val otherSchema = otherScanBuilder.ownSchema
+      // A side that already pushed a join, as in a cascaded join, reads the joined columns.
+      val ownColumns = joinedSchema.getOrElse(tableSchema)
+      val otherSchema = otherScanBuilder.joinedSchema.getOrElse(otherScanBuilder.ownSchema)
       val leftFields = leftSideRequiredColumnsWithAliases.map { col =>
         val name = if (col.alias() != null) col.alias() else col.colName()
-        tableSchema(col.colName()).copy(name = name)
+        ownColumns(col.colName()).copy(name = name)
       }
       val rightFields = rightSideRequiredColumnsWithAliases.map { col =>
         val name = if (col.alias() != null) col.alias() else col.colName()

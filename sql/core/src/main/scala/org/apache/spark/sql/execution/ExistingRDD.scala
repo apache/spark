@@ -159,6 +159,9 @@ case class LogicalRDD(
 
   private[sql] def isCheckpointedInput: Boolean = fromCheckpoint && rdd.isCheckpointed
 
+  // An RDD's lineage is opaque, so only a checkpointed one is known to return the same rows.
+  override def isOutputRepeatable: Boolean = !isStreaming && isCheckpointedInput
+
   override lazy val constraints: ExpressionSet = originConstraints.getOrElse(ExpressionSet())
     // Subqueries can have non-deterministic results even when they only contain deterministic
     // expressions (e.g. consider a LIMIT 1 subquery without an ORDER BY). Propagating predicates

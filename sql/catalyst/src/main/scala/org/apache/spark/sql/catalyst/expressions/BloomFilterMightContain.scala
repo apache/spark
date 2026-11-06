@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLId, toSQL
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, JavaCode, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.optimizer.ScalarSubqueryReference
-import org.apache.spark.sql.catalyst.trees.TreePattern.OUTER_REFERENCE
+import org.apache.spark.sql.catalyst.trees.TreePattern.{BLOOM_FILTER_MIGHT_CONTAIN, OUTER_REFERENCE, TreePattern}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.sketch.BloomFilter
 
@@ -47,6 +47,8 @@ case class BloomFilterMightContain(
   override def left: Expression = bloomFilterExpression
   override def right: Expression = valueExpression
   override def prettyName: String = "might_contain"
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(BLOOM_FILTER_MIGHT_CONTAIN)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     (left.dataType, right.dataType) match {

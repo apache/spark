@@ -53,6 +53,8 @@ case class LogicalRelation(
     output = output.map(QueryPlan.normalizeExpressions(_, output)),
     catalogTable = None)
 
+  override def isOutputRepeatable: Boolean = !isStreaming
+
   override def computeStats(): Statistics = {
     catalogTable
       .flatMap(_.stats.map(_.toPlanStats(output, conf.cboEnabled || conf.planStatsEnabled)))
