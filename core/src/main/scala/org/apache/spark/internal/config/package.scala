@@ -766,6 +766,24 @@ package object config {
       .transform(CpuAmount.normalize)
       .createWithDefault(BigDecimal(1))
 
+  private[spark] val TASK_ASSIGNMENT_STRATEGY =
+    ConfigBuilder("spark.scheduler.taskAssignmentStrategy")
+      .doc("The strategy that decides, within a single resource-offer round, the order in which " +
+        "offered executors are considered when launching tasks. 'roundrobin' shuffles the " +
+        "offers so tasks are not always placed on the same executors. 'binpack' concentrates " +
+        "tasks onto as few executors as possible, which can help dynamic allocation reclaim " +
+        "idle executors; it visits the executor with the fewest free cores first (with executor " +
+        "id as a tie-breaker) so packing keeps filling the busiest executors and the target is " +
+        "deterministic across rounds. 'balance' spreads tasks as evenly as " +
+        "possible across executors. 'none' keeps the offers in their given order without " +
+        "shuffling.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .stringConf
+      .transform(_.toLowerCase(Locale.ROOT))
+      .checkValues(Set("roundrobin", "binpack", "balance", "none"))
+      .createWithDefault("roundrobin")
+
   private[spark] val DYN_ALLOCATION_ENABLED =
     ConfigBuilder("spark.dynamicAllocation.enabled")
       .version("1.2.0")
