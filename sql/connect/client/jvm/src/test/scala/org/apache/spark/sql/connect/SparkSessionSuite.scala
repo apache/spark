@@ -275,4 +275,37 @@ class SparkSessionSuite extends ConnectFunSuite {
     val bytes = SparkSerDeUtils.serialize(session)
     assert(SparkSerDeUtils.deserialize[SparkSession](bytes) == null)
   }
+
+  test("shouldStartLocalConnectServer: local master variants trigger local server") {
+    assert(SparkSession.shouldStartLocalConnectServer(Some("local"), isAPIModeConnect = false))
+    assert(SparkSession.shouldStartLocalConnectServer(Some("local[*]"), isAPIModeConnect = false))
+    assert(SparkSession.shouldStartLocalConnectServer(Some("local[4]"), isAPIModeConnect = false))
+  }
+
+  test("shouldStartLocalConnectServer: explicit remote host:port does not trigger local server")
+  {
+    // Regardless of 'spark.api.mode', an explicit 'sc://' remote must never be treated as a
+    // request to start (and silently redirect the session to) a local server.
+    Seq(false, true).foreach { isAPIModeConnect =>
+      assert(!SparkSession.shouldStartLocalConnectServer(
+        Some("sc://10.1.2.3:15002"), isAPIModeConnect))
+      assert(!SparkSession.shouldStartLocalConnectServer(
+        Some("sc://myhost:15002"), isAPIModeConnect))
+      assert(!SparkSession.shouldStartLocalConnectServer(
+        Some(connectionString2), isAPIModeConnect))
+    }
+  }
+
+  test("shouldStartLocalConnectServer: classic master with api.mode=connect triggers local " +
+    "server, bridging the classic master to Connect") {
+    assert(SparkSession.shouldStartLocalConnectServer(Some("yarn"), isAPIModeConnect = true))
+    assert(SparkSession.shouldStartLocalConnectServer(
+      Some("spark://host:7077"), isAPIModeConnect = true))
+    assert(!SparkSession.shouldStartLocalConnectServer(Some("yarn"), isAPIModeConnect = false))
+  }
+
+  test("shouldStartLocalConnectServer: no remote configured does not trigger local server") {
+    assert(!SparkSession.shouldStartLocalConnectServer(None, isAPIModeConnect = false))
+    assert(!SparkSession.shouldStartLocalConnectServer(None, isAPIModeConnect = true))
+  }
 }
