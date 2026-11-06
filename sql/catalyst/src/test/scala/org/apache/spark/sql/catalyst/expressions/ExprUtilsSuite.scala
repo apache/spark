@@ -88,8 +88,17 @@ class ExprUtilsSuite extends SparkFunSuite {
     assert(ExprUtils.canEvaluateUnconditionally(Cast(i, DoubleType, evalMode = EvalMode.ANSI)))
     assert(ExprUtils.canEvaluateUnconditionally(
       Cast(i, DecimalType(20, 0), evalMode = EvalMode.ANSI)))
-    // A decimal to an integral type is an up-cast too, but can overflow in ANSI mode.
-    assert(Cast.canUpCast(DecimalType(19, 0), LongType))
+    // A decimal to an integral type is an up-cast only when every value fits: DECIMAL(18, 0) to
+    // BIGINT, but not DECIMAL(19, 0), which can overflow in ANSI mode.
+    assert(ExprUtils.canEvaluateUnconditionally(Cast(AttributeReference("d", DecimalType(18, 0))(),
+      LongType, evalMode = EvalMode.ANSI)))
+    for ((precision, to) <- Seq((18, LongType), (9, IntegerType), (4, ShortType), (2, ByteType))) {
+      assert(Cast.canUpCast(DecimalType(precision, 0), to), to)
+      evalEach(DecimalType(precision, 0),
+        Seq("-" + "9" * precision, "9" * precision).map(d => Decimal(BigDecimal(d))))(
+        Cast(_, to, evalMode = EvalMode.ANSI))
+    }
+    assert(!Cast.canUpCast(DecimalType(19, 0), LongType))
     assert(!ExprUtils.canEvaluateUnconditionally(Cast(AttributeReference("d", DecimalType(19, 0))(),
       LongType, evalMode = EvalMode.ANSI)))
     intercept[ArithmeticException](Cast(Literal(Decimal(BigDecimal("9" * 19)), DecimalType(19, 0)),
@@ -150,6 +159,14 @@ class ExprUtilsSuite extends SparkFunSuite {
     assert(ExprUtils.canEvaluateUnconditionally(CreateNamedStruct(Seq(Literal("f0"), a))))
     assert(!ExprUtils.canEvaluateUnconditionally(
       CreateNamedStruct(Seq(Literal("f0"), Add(a, Literal(1L), ansi)))))
+    // So is an array, as both are marked `NoThrow`, but not a map, which raises on a NULL or, by
+    // default, a duplicate key (SPARK-60849).
+    assert(!ExprUtils.canEvaluateUnconditionally(CreateMap(Seq(a, Literal(1)))))
+    intercept[SparkRuntimeException](
+      CreateMap(Seq(Literal(1L), Literal(1), Literal(1L), Literal(2))).eval())
+    assert(ExprUtils.canEvaluateUnconditionally(
+      EqualTo(CreateArray(Seq(a, Literal(1L))), CreateArray(Seq(Literal(1L), Literal(2L))))))
+    assert(!ExprUtils.canEvaluateUnconditionally(CreateArray(Seq(a, Add(a, Literal(1L), ansi)))))
   }
 
   test("SPARK-60882: canEvaluateUnconditionally: numeric arithmetic outside ANSI mode") {

@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CharVarcharUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.{AbstractMapType, StringTypeWithCollation}
-import org.apache.spark.sql.types.{BooleanType, DataType, DateType, DecimalType, FileType, IntegralType, MapType, NumericType, StringHelper, StringType, StructType, TimestampNTZType, TimestampType, VariantType}
+import org.apache.spark.sql.types.{BooleanType, DataType, DateType, DecimalType, FileType, MapType, NumericType, StringHelper, StringType, StructType, TimestampNTZType, TimestampType, VariantType}
 import org.apache.spark.unsafe.types.UTF8String
 
 object ExprUtils extends EvalHelper with QueryErrorsBase {
@@ -252,7 +252,8 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
    *   - total accessors: GetStructField, GetArrayStructFields and GetMapValue never throw.
    *     Note that GetArrayItem/ElementAt are NOT included: they throw on invalid ordinals
    *     when ANSI mode is on;
-   *   - CreateNamedStruct, which only builds a struct from its fields;
+   *   - the expressions marked [[NoThrow]], such as CreateArray and CreateNamedStruct, which
+   *     only build a value from their children, as `ConstantFolding` assumes too;
    *   - logic/predicates: And, Or, Not, comparisons, IsNull, IsNotNull, IsNaN, NullIf,
    *     Coalesce, In and InSet are total boolean functions;
    *   - Size, which returns -1 or NULL for a NULL input rather than raising;
@@ -264,8 +265,8 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
    *   - the fields of a date or a timestamp, such as Year and Hour (GetDateField and
    *     GetTimeField), which only read the date or time of a valid value;
    *   - in every mode: a cast that widens a numeric type to another one (`Cast.canUpCast`),
-   *     such as the INT to BIGINT cast that type coercion adds to a comparison, other than a
-   *     decimal to an integral type, which can overflow; a cast of a timestamp to a date; and a
+   *     such as the INT to BIGINT cast that type coercion adds to a comparison, or a cast of a
+   *     DECIMAL(18, 0), whose values all fit, to BIGINT; a cast of a timestamp to a date; and a
    *     cast of a number or a boolean to a STRING, not to a CHAR or VARCHAR, which checks the
    *     length;
    *   - outside ANSI mode, the casts that return NULL, wrap or clamp for a value they can not
@@ -295,11 +296,9 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
       canEvaluateUnconditionallyInternal(e)
 
   // Only the numeric pairs are taken from `Cast.canUpCast`, which also covers e.g. DATE to
-  // TIMESTAMP, which can overflow, and casts between complex types. Among the numeric ones, a
-  // decimal to an integral type can overflow in ANSI mode, e.g. DECIMAL(19, 0) to BIGINT, as
-  // `Cast.nullable` notes.
+  // TIMESTAMP, which can overflow, and casts between complex types. Among the numeric ones, it
+  // only takes a decimal to an integral type whose values all fit.
   private def isNumericUpCast(from: DataType, to: DataType): Boolean = (from, to) match {
-    case (_: DecimalType, _: IntegralType) => false
     case (_: NumericType, _: NumericType) => Cast.canUpCast(from, to)
     case _ => false
   }
@@ -323,28 +322,22 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
 
   // Whether numeric arithmetic can not fail, in its own eval mode.
   private def cannotFailArithmetic(b: BinaryArithmetic): Boolean = {
-    val decimal = b.left.dataType.isInstanceOf[DecimalType]
-    b.children.forall(_.dataType.isInstanceOf[NumericType]) && (b.evalMode match {
-      case EvalMode.LEGACY => b match {
+    val decimal = b.children.exists(_.dataType.isInstanceOf[DecimalType])
+    b.children.forall(_.dataType.isInstanceOf[NumericType]) && b.evalMode != EvalMode.ANSI &&
+      (b match {
         case _: Add | _: Subtract | _: Multiply | _: Divide => true
         // `Decimal.quot` and `Decimal.%` raise when the integral quotient is too long.
-        case _: IntegralDivide | _: Remainder | _: Pmod => !decimal
-        case _ => false
-      }
-      // `DivModLike` and Pmod override `eval` without the catch of TRY mode, and IntegralDivide
-      // and Pmod check a zero divisor there as in ANSI mode.
-      case EvalMode.TRY => b match {
-        case _: Add | _: Subtract | _: Multiply | _: Divide => true
         case _: Remainder => !decimal
+        // `DivModLike` and Pmod override `eval` without the catch of TRY mode, and IntegralDivide
+        // and Pmod check a zero divisor there as in ANSI mode.
+        case _: IntegralDivide | _: Pmod => !decimal && b.evalMode == EvalMode.LEGACY
         case _ => false
-      }
-      case _ => false
-    })
+      })
   }
 
   private def canEvaluateUnconditionallyInternal(e: Expression): Boolean = e match {
     case _: AttributeReference | _: Literal => true
-    case _: GetStructField | _: GetArrayStructFields | _: GetMapValue | _: CreateNamedStruct =>
+    case _: GetStructField | _: GetArrayStructFields | _: GetMapValue | _: NoThrow =>
       e.children.forall(canEvaluateUnconditionallyInternal)
     case _: And | _: Or | _: Not | _: BinaryComparison | _: IsNull | _: IsNotNull |
          _: IsNaN | _: NullIf | _: Coalesce | _: In | _: InSet | _: Size | _: StartsWith |
