@@ -99,6 +99,148 @@ SELECT col1, MAX(ROW_NUMBER() OVER w) OVER () AS max_rn FROM t1 WINDOW w AS (ORD
 
 -- Nested windows over an aggregate, and in QUALIFY together with HAVING.
 SELECT col1, MAX(RANK() OVER (ORDER BY SUM(col2))) OVER () AS m FROM t1 GROUP BY col1;
+
+-- HAVING must be evaluated before every nested window layer.
+SELECT
+  k,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY k
+HAVING k = 'keep'
+ORDER BY k;
+
+-- HAVING must also precede windows nested in the outer window specification.
+SELECT
+  k,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER (
+    PARTITION BY RANK() OVER (ORDER BY SUM(v) DESC)) AS partition_rank_sum,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER (
+    ORDER BY RANK() OVER (ORDER BY SUM(v) DESC)) AS ordered_rank_sum
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY k
+HAVING k = 'keep'
+ORDER BY k;
+
+-- Three nested window levels, mixed with single-level and two-level windows.
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum,
+  MAX(SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER ()) OVER () AS max_rank_sum
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY k
+HAVING k = 'keep'
+ORDER BY k;
+
+-- HAVING on an aggregate alias must precede every nested window layer.
+SELECT
+  k,
+  COUNT(*) AS row_count,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum
+FROM VALUES ('drop', 1), ('drop', 1), ('keep', 1) AS input(k, v)
+GROUP BY k
+HAVING row_count = 1
+ORDER BY k;
+
+-- A window alias is not valid in HAVING.
+SELECT
+  k,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY k
+HAVING rank_sum = 1;
+
+-- Grouping analytics HAVING must be evaluated before every nested window layer.
+SELECT
+  k,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k = 'keep'
+ORDER BY k;
+
+-- Grouping analytics HAVING must also precede a single window layer.
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY GROUPING SETS ((k), ())
+HAVING k = 'keep'
+ORDER BY k;
+
+-- Grouping analytics HAVING on a window alias keeps its existing analysis behavior.
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY GROUPING SETS ((k), ())
+HAVING group_count = 3
+ORDER BY k;
+
+-- Grouping functions must still be rewritten when HAVING is moved before the window.
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY GROUPING SETS ((k), ())
+HAVING GROUPING_ID() = 1
+ORDER BY k;
+
+-- Aggregates used only by HAVING must remain available until the filter is evaluated.
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING SUM(v) = 1
+ORDER BY k;
+
+-- Subqueries in grouping analytics HAVING must remain resolved after the filter is moved.
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k = (SELECT 'keep')
+ORDER BY k;
+
+-- The legacy configuration preserves evaluation after the inner window.
+SET spark.sql.legacy.evaluateHavingAfterInnerWindow=true;
+
+SELECT
+  k,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY k
+HAVING k = 'keep'
+ORDER BY k;
+
+SELECT
+  k,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k = 'keep'
+ORDER BY k;
+
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY GROUPING SETS ((k), ())
+HAVING k = 'keep'
+ORDER BY k;
+
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY GROUPING SETS ((k), ())
+HAVING group_count = 3
+ORDER BY k;
+
+RESET spark.sql.legacy.evaluateHavingAfterInnerWindow;
+
 SELECT col1 FROM t1 GROUP BY col1, col2 HAVING col2 > 0
 QUALIFY ROW_NUMBER() OVER (ORDER BY SUM(col2) OVER (PARTITION BY col1) DESC, col1) = 1;
 

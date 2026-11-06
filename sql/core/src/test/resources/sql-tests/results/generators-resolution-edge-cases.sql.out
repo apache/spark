@@ -797,6 +797,100 @@ struct<col:int,cnt:bigint,a:int>
 
 
 -- !query
+SELECT explode(array(k)) AS generated_k,
+       SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum,
+       k
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY k
+HAVING k = 'keep'
+-- !query schema
+struct<generated_k:string,rank_sum:bigint,k:string>
+-- !query output
+keep	1	keep
+
+
+-- !query
+SELECT explode(array(k)) AS generated_k,
+       RANK() OVER (ORDER BY k) AS rank,
+       COUNT(*) OVER () AS group_count
+FROM VALUES ('a', 1), ('b', 2) AS input(k, v)
+GROUP BY k
+HAVING rank = 1
+-- !query schema
+struct<generated_k:string,rank:int,group_count:bigint>
+-- !query output
+a	1	2
+
+
+-- !query
+SELECT explode(array(k)) AS generated_k,
+       COUNT(*) OVER () AS group_count,
+       RANK() OVER (ORDER BY k) AS rank
+FROM VALUES ('a', 1), ('b', 2) AS input(k, v)
+GROUP BY k
+HAVING rank = 1
+-- !query schema
+struct<generated_k:string,group_count:bigint,rank:int>
+-- !query output
+a	2	1
+
+
+-- !query
+SET spark.sql.legacy.evaluateHavingAfterInnerWindow=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.evaluateHavingAfterInnerWindow	true
+
+
+-- !query
+SELECT explode(array(k)) AS generated_k,
+       SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum,
+       k
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY k
+HAVING k = 'keep'
+-- !query schema
+struct<generated_k:string,rank_sum:bigint,k:string>
+-- !query output
+keep	2	keep
+
+
+-- !query
+SELECT explode(array(k)) AS generated_k,
+       RANK() OVER (ORDER BY k) AS rank,
+       COUNT(*) OVER () AS group_count
+FROM VALUES ('a', 1), ('b', 2) AS input(k, v)
+GROUP BY k
+HAVING rank = 1
+-- !query schema
+struct<generated_k:string,rank:int,group_count:bigint>
+-- !query output
+a	1	2
+
+
+-- !query
+SELECT explode(array(k)) AS generated_k,
+       COUNT(*) OVER () AS group_count,
+       RANK() OVER (ORDER BY k) AS rank
+FROM VALUES ('a', 1), ('b', 2) AS input(k, v)
+GROUP BY k
+HAVING rank = 1
+-- !query schema
+struct<generated_k:string,group_count:bigint,rank:int>
+-- !query output
+a	2	1
+
+
+-- !query
+RESET spark.sql.legacy.evaluateHavingAfterInnerWindow
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 SELECT explode(array(a)) AS col,
        count(*) OVER () AS group_count,
        count(*) AS row_count

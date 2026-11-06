@@ -1030,11 +1030,23 @@ class Analyzer(
         case a: AttributeReference => attrMap.getOrElse(a, a)
       }
 
-      if (extraAggExprs.isEmpty) {
+      val windowOutputSet = AttributeSet(
+        aggregate.aggregateExpressions.zip(newChild.output).collect {
+          case (expr, output) if expr.containsPattern(WINDOW_EXPRESSION) => output
+        })
+      val withHaving = if (
+        !conf.getConf(SQLConf.LEGACY_EVALUATE_HAVING_AFTER_INNER_WINDOW) &&
+          windowOutputSet.nonEmpty && newCond.references.intersect(windowOutputSet).isEmpty) {
+        UnresolvedHaving(newCond, newChild)
+      } else {
         Filter(newCond, newChild)
+      }
+
+      if (extraAggExprs.isEmpty) {
+        withHaving
       } else {
         Project(newChild.output.dropRight(extraAggExprs.length),
-          Filter(newCond, newChild))
+          withHaving)
       }
     }
 
@@ -3912,6 +3924,27 @@ class Analyzer(
       Project(windowOps.output ++ newExpressionsWithWindowFunctions, windowOps)
     } // end of addWindow
 
+    /**
+     * Extracts all nested window expressions and places the HAVING filter below every Window,
+     * unless LEGACY_EVALUATE_HAVING_AFTER_INNER_WINDOW is true: then only the outermost layer is
+     * extracted here, and the inner windows are later extracted below the HAVING filter.
+     */
+    private def addWindowWithHaving(
+        aggregateExpressions: Seq[NamedExpression],
+        groupingExpressions: Seq[Expression],
+        child: LogicalPlan,
+        condition: Expression): LogicalPlan = {
+      val (windowExpressions, regularExpressions) =
+        extract(aggregateExpressions, groupingExpressions)
+      val windowChild = if (hasWindowFunction(regularExpressions) &&
+          !conf.getConf(SQLConf.LEGACY_EVALUATE_HAVING_AFTER_INNER_WINDOW)) {
+        addWindowWithHaving(regularExpressions, groupingExpressions, child, condition)
+      } else {
+        Filter(condition, Aggregate(groupingExpressions, regularExpressions, child))
+      }
+      addWindow(windowExpressions, windowChild)
+    }
+
     // We have to use transformDown at here to make sure the rule of
     // "Aggregate with Having clause" will be triggered.
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsDownWithPruning(
@@ -3935,12 +3968,7 @@ class Analyzer(
             throw QueryCompilationErrors.lateralColumnAliasInAggWithWindowAndHavingUnsupportedError(
               lcaRef.nameParts)
         })
-        val (windowExpressions, aggregateExpressions) = extract(aggregateExprs, groupingExprs)
-        // Create an Aggregate operator to evaluate aggregation functions.
-        val withAggregate = Aggregate(groupingExprs, aggregateExpressions, child)
-        // Add a Filter operator for conditions in the Having clause.
-        val withFilter = Filter(condition, withAggregate)
-        val withWindow = addWindow(windowExpressions, withFilter)
+        val withWindow = addWindowWithHaving(aggregateExprs, groupingExprs, child, condition)
 
         // Finally, generate output columns according to the original projectList.
         val finalProjectList = aggregateExprs.map(_.toAttribute)
@@ -4987,17 +5015,46 @@ object ResolveUnresolvedHaving extends Rule[LogicalPlan] {
    *
    * Returns None unless the condition can be evaluated below every Window in the chain.
    */
-  private def insertFilterBeforeWindow(filter: Filter): Option[LogicalPlan] = filter.child match {
-    case project: Project =>
-      insertFilterBeforeWindow(filter.copy(child = project.child))
+  private def insertFilterBeforeWindow(filter: Filter): Option[LogicalPlan] = {
+    if (SQLConf.get.getConf(SQLConf.LEGACY_EVALUATE_HAVING_AFTER_INNER_WINDOW)) {
+      insertFilterBeforeOuterWindow(filter)
+    } else {
+      insertFilterBeforeAllWindows(filter, foundWindow = false)
+    }
+  }
+
+  private def insertFilterBeforeAllWindows(
+      filter: Filter,
+      foundWindow: Boolean): Option[LogicalPlan] = filter.child match {
+    case project: Project if filter.condition.references.subsetOf(project.child.outputSet) =>
+      insertFilterBeforeAllWindows(filter.copy(child = project.child), foundWindow)
         .map(child => project.withNewChildren(Seq(child)))
-    case generate: Generate =>
-      insertFilterBeforeWindow(filter.copy(child = generate.child))
+    case generate: Generate if filter.condition.references.subsetOf(generate.child.outputSet) =>
+      insertFilterBeforeAllWindows(filter.copy(child = generate.child), foundWindow)
         .map(child => generate.withNewChildren(Seq(child)))
-    case window: Window =>
-      insertFilterBeforeWindowChain(filter, window)
+    case window: Window if filter.condition.references.subsetOf(window.child.outputSet) =>
+      insertFilterBeforeAllWindows(filter.copy(child = window.child), foundWindow = true)
+        .map(child => window.withNewChildren(Seq(child)))
+    case _ if foundWindow && !filter.child.containsPattern(WINDOW) &&
+        filter.condition.references.subsetOf(filter.child.outputSet) =>
+      Some(filter)
     case _ =>
       None
+  }
+
+  private def insertFilterBeforeOuterWindow(filter: Filter): Option[LogicalPlan] = {
+    filter.child match {
+      case project: Project =>
+        insertFilterBeforeOuterWindow(filter.copy(child = project.child))
+          .map(child => project.withNewChildren(Seq(child)))
+      case generate: Generate =>
+        insertFilterBeforeOuterWindow(filter.copy(child = generate.child))
+          .map(child => generate.withNewChildren(Seq(child)))
+      case window: Window =>
+        insertFilterBeforeWindowChain(filter, window)
+      case _ =>
+        None
+    }
   }
 
   private def insertFilterBeforeWindowChain(

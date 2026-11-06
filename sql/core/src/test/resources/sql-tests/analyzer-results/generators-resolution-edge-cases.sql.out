@@ -801,6 +801,142 @@ Project [col#x, cnt#xL, a#x]
 
 
 -- !query
+SELECT explode(array(k)) AS generated_k,
+       SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum,
+       k
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY k
+HAVING k = 'keep'
+-- !query analysis
+Project [generated_k#x, rank_sum#xL, k#x]
++- Generate explode(_gen_input_0#x), false, [generated_k#x]
+   +- Project [_gen_input_0#x, rank_sum#xL, k#x]
+      +- Project [_gen_input_0#x, k#x, _w0#x, rank_sum#xL, rank_sum#xL]
+         +- Window [sum(_w0#x) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS rank_sum#xL]
+            +- Project [_gen_input_0#x, k#x, _w0#x]
+               +- Project [_gen_input_0#x, k#x, _w0#xL, _w0#x, _w0#x]
+                  +- Window [rank(_w0#xL) windowspecdefinition(_w0#xL DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS _w0#x], [_w0#xL DESC NULLS LAST]
+                     +- Filter (k#x = keep)
+                        +- Aggregate [k#x], [array(k#x) AS _gen_input_0#x, k#x, sum(v#x) AS _w0#xL]
+                           +- SubqueryAlias input
+                              +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT explode(array(k)) AS generated_k,
+       RANK() OVER (ORDER BY k) AS rank,
+       COUNT(*) OVER () AS group_count
+FROM VALUES ('a', 1), ('b', 2) AS input(k, v)
+GROUP BY k
+HAVING rank = 1
+-- !query analysis
+Filter (rank#x = 1)
++- Project [generated_k#x, rank#x, group_count#xL]
+   +- Generate explode(_gen_input_0#x), false, [generated_k#x]
+      +- Project [_gen_input_0#x, rank#x, group_count#xL]
+         +- Project [_gen_input_0#x, k#x, rank#x, group_count#xL, rank#x, group_count#xL]
+            +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+               +- Window [rank(k#x) windowspecdefinition(k#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rank#x], [k#x ASC NULLS FIRST]
+                  +- Aggregate [k#x], [array(k#x) AS _gen_input_0#x, k#x]
+                     +- SubqueryAlias input
+                        +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT explode(array(k)) AS generated_k,
+       COUNT(*) OVER () AS group_count,
+       RANK() OVER (ORDER BY k) AS rank
+FROM VALUES ('a', 1), ('b', 2) AS input(k, v)
+GROUP BY k
+HAVING rank = 1
+-- !query analysis
+Filter (rank#x = 1)
++- Project [generated_k#x, group_count#xL, rank#x]
+   +- Generate explode(_gen_input_0#x), false, [generated_k#x]
+      +- Project [_gen_input_0#x, group_count#xL, rank#x]
+         +- Project [_gen_input_0#x, k#x, group_count#xL, rank#x, group_count#xL, rank#x]
+            +- Window [rank(k#x) windowspecdefinition(k#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rank#x], [k#x ASC NULLS FIRST]
+               +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+                  +- Aggregate [k#x], [array(k#x) AS _gen_input_0#x, k#x]
+                     +- SubqueryAlias input
+                        +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SET spark.sql.legacy.evaluateHavingAfterInnerWindow=true
+-- !query analysis
+SetCommand (spark.sql.legacy.evaluateHavingAfterInnerWindow,Some(true))
+
+
+-- !query
+SELECT explode(array(k)) AS generated_k,
+       SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum,
+       k
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY k
+HAVING k = 'keep'
+-- !query analysis
+Project [generated_k#x, rank_sum#xL, k#x]
++- Generate explode(_gen_input_0#x), false, [generated_k#x]
+   +- Project [_gen_input_0#x, rank_sum#xL, k#x]
+      +- Project [_gen_input_0#x, k#x, _w0#x, rank_sum#xL, rank_sum#xL]
+         +- Window [sum(_w0#x) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS rank_sum#xL]
+            +- Filter (k#x = keep)
+               +- Project [_gen_input_0#x, k#x, _w0#x]
+                  +- Project [_gen_input_0#x, k#x, _w0#xL, _w0#x, _w0#x]
+                     +- Window [rank(_w0#xL) windowspecdefinition(_w0#xL DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS _w0#x], [_w0#xL DESC NULLS LAST]
+                        +- Aggregate [k#x], [array(k#x) AS _gen_input_0#x, k#x, sum(v#x) AS _w0#xL]
+                           +- SubqueryAlias input
+                              +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT explode(array(k)) AS generated_k,
+       RANK() OVER (ORDER BY k) AS rank,
+       COUNT(*) OVER () AS group_count
+FROM VALUES ('a', 1), ('b', 2) AS input(k, v)
+GROUP BY k
+HAVING rank = 1
+-- !query analysis
+Filter (rank#x = 1)
++- Project [generated_k#x, rank#x, group_count#xL]
+   +- Generate explode(_gen_input_0#x), false, [generated_k#x]
+      +- Project [_gen_input_0#x, rank#x, group_count#xL]
+         +- Project [_gen_input_0#x, k#x, rank#x, group_count#xL, rank#x, group_count#xL]
+            +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+               +- Window [rank(k#x) windowspecdefinition(k#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rank#x], [k#x ASC NULLS FIRST]
+                  +- Aggregate [k#x], [array(k#x) AS _gen_input_0#x, k#x]
+                     +- SubqueryAlias input
+                        +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT explode(array(k)) AS generated_k,
+       COUNT(*) OVER () AS group_count,
+       RANK() OVER (ORDER BY k) AS rank
+FROM VALUES ('a', 1), ('b', 2) AS input(k, v)
+GROUP BY k
+HAVING rank = 1
+-- !query analysis
+Filter (rank#x = 1)
++- Project [generated_k#x, group_count#xL, rank#x]
+   +- Generate explode(_gen_input_0#x), false, [generated_k#x]
+      +- Project [_gen_input_0#x, group_count#xL, rank#x]
+         +- Project [_gen_input_0#x, k#x, group_count#xL, rank#x, group_count#xL, rank#x]
+            +- Window [rank(k#x) windowspecdefinition(k#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rank#x], [k#x ASC NULLS FIRST]
+               +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL]
+                  +- Aggregate [k#x], [array(k#x) AS _gen_input_0#x, k#x]
+                     +- SubqueryAlias input
+                        +- LocalRelation [k#x, v#x]
+
+
+-- !query
+RESET spark.sql.legacy.evaluateHavingAfterInnerWindow
+-- !query analysis
+ResetCommand spark.sql.legacy.evaluateHavingAfterInnerWindow
+
+
+-- !query
 SELECT explode(array(a)) AS col,
        count(*) OVER () AS group_count,
        count(*) AS row_count
