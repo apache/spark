@@ -250,6 +250,14 @@ abstract class Optimizer(catalogManager: CatalogManager)
     // plan may contain nodes that do not report stats. Anything that uses stats must run after
     // this batch.
     Batch("Early Filter and Projection Push-Down", Once, earlyScanPushDownRules: _*),
+    // Runs after the batch above because its canPlanAsBroadcastHashJoin decision (SPARK-34081)
+    // needs accurate stats (DSv2 relations only report stats after pushdown). The other pushdown
+    // branches are stats-free and stay in the operator-optimization batch; they are re-run here as
+    // a fixed point so a cascade exposed by the aggregate push (e.g. through a Union) completes.
+    Batch("Push Down Left Semi/Anti Join Through Aggregate", fixedPoint,
+      PushDownLeftSemiAntiJoinThroughAggregate,
+      PushDownLeftSemiAntiJoin,
+      PushLeftSemiLeftAntiThroughJoin),
     Batch("Update CTE Relation Stats", Once, UpdateCTERelationStats),
     // Since join costs in AQP can change between multiple runs, there is no reason that we have an
     // idempotence enforcement on this batch. We thus make it FixedPoint(1) instead of Once.
