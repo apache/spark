@@ -17,11 +17,15 @@
 
 package org.apache.spark.sql.catalyst.json
 
+import scala.util.Random
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.variant.VariantExpressionEvalUtils
 import org.apache.spark.sql.sources.{EqualTo, Filter, StringStartsWith}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.Codec.Base85Codec
 
 class JacksonParserSuite extends SparkFunSuite {
   test("feature mask should remain unchanged") {
@@ -66,5 +70,30 @@ class JacksonParserSuite extends SparkFunSuite {
       schema = StructType.fromDDL("i INTEGER, d DOUBLE"),
       filters = Seq(EqualTo("d", 3.14)),
       expected = Seq(InternalRow(1, 3.14)))
+  }
+
+  test("RoundTrip alternateVariantEncoding Z85") {
+    val jsonValues = Seq("21", "1021", "-29183652", "\"a\"",
+      Random.alphanumeric.take(2000).mkString("\"", "", "\""), "[1, null, true, {\"a\": 1}]",
+      "{\"key1\": \"value_1\", \"key_2\": [\"value2\", 1385731029.1236421, 1e90], \"key3\": false}"
+    )
+
+    jsonValues.foreach { json =>
+      val inputVariant = VariantExpressionEvalUtils.parseJson(UTF8String.fromString(json))
+
+      val metadata = inputVariant.getMetadata
+      val value = inputVariant.getValue
+
+      val combined = new Array[Byte](metadata.length + value.length)
+      System.arraycopy(metadata, 0, combined, 0, metadata.length)
+      System.arraycopy(value, 0, combined, metadata.length, value.length)
+
+      // Encode using Z85
+      val z85 = Base85Codec.encodeBytes(combined)
+
+      val variant = JacksonParser.getVariantFromZ85(z85)
+      assert(metadata sameElements variant.getMetadata)
+      assert(value sameElements variant.getValue)
+    }
   }
 }

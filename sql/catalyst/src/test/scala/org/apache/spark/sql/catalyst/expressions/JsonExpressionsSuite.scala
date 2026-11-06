@@ -29,11 +29,13 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.expressions.variant.VariantExpressionEvalUtils
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{PST, UTC, UTC_OPT}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.util.Codec.Base85Codec
 
 class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   val json =
@@ -453,6 +455,33 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
       parameters = Map("badRecord" -> "[null]", "failFastMode" -> "FAILFAST")
     )
+  }
+
+  test("from_json with alternateVariantEncoding Z85") {
+    val options = Map("alternateVariantEncoding" -> "Z85")
+    val schema = StructType.fromDDL(
+      "v VARIANT, s STRUCT<v: VARIANT>, a ARRAY<VARIANT>, m MAP<STRING, VARIANT>, i INT")
+    for (json <- Seq("21", "\"a\"", "null", "[1, null, true, {\"a\": 1}]")) {
+      val variant = VariantExpressionEvalUtils.parseJson(UTF8String.fromString(json))
+      val combined = new Array[Byte](variant.getMetadata.length + variant.getValue.length)
+      System.arraycopy(variant.getMetadata, 0, combined, 0, variant.getMetadata.length)
+      System.arraycopy(
+        variant.getValue, 0, combined, variant.getMetadata.length, variant.getValue.length)
+      val z85 = Base85Codec.encodeBytes(combined)
+      val fromJson = JsonToStructs(VariantType, options, Literal(s""""$z85""""), UTC_OPT)
+      checkEvaluation(fromJson, variant)
+      checkEvaluation(StructsToJson(options, fromJson, UTC_OPT), variant.toJson(UTC))
+      checkEvaluation(
+        JsonToStructs(schema, options,
+          Literal(s"""{"v":"$z85","s":{"v":"$z85"},"a":["$z85"],"m":{"k":"$z85"},"i":1}"""),
+          UTC_OPT),
+        InternalRow(
+          variant,
+          InternalRow(variant),
+          new GenericArrayData(Seq(variant)),
+          ArrayBasedMapData(Map(UTF8String.fromString("k") -> variant)),
+          1))
+    }
   }
 
   test("from_json - input=array, schema=array, output=array") {
