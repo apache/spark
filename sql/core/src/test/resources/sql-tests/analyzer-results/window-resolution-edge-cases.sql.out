@@ -344,6 +344,160 @@ Project [col1#x, m#x]
 
 
 -- !query
+SELECT
+  k,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY k
+HAVING k = 'keep'
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, rank_sum#xL]
+   +- Project [k#x, _w0#xL, _w0#x, _w0#x, rank_sum#xL, rank_sum#xL]
+      +- Window [sum(_w0#x) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS rank_sum#xL]
+         +- Project [k#x, _w0#xL, _w0#x, _w0#x]
+            +- Window [rank(_w0#xL) windowspecdefinition(_w0#xL DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS _w0#x], [_w0#xL DESC NULLS LAST]
+               +- Filter (k#x = keep)
+                  +- Aggregate [k#x], [k#x, sum(v#x) AS _w0#xL]
+                     +- SubqueryAlias input
+                        +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  k,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER (
+    PARTITION BY RANK() OVER (ORDER BY SUM(v) DESC)) AS partition_rank_sum,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER (
+    ORDER BY RANK() OVER (ORDER BY SUM(v) DESC)) AS ordered_rank_sum
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY k
+HAVING k = 'keep'
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, partition_rank_sum#xL, ordered_rank_sum#xL]
+   +- Project [k#x, _w0#xL, _w0#x, _w0#x, partition_rank_sum#xL, ordered_rank_sum#xL, partition_rank_sum#xL, ordered_rank_sum#xL]
+      +- Window [sum(_w0#x) windowspecdefinition(_w0#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS ordered_rank_sum#xL], [_w0#x ASC NULLS FIRST]
+         +- Window [sum(_w0#x) windowspecdefinition(_w0#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS partition_rank_sum#xL], [_w0#x]
+            +- Project [k#x, _w0#xL, _w0#x, _w0#x]
+               +- Window [rank(_w0#xL) windowspecdefinition(_w0#xL DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS _w0#x], [_w0#xL DESC NULLS LAST]
+                  +- Filter (k#x = keep)
+                     +- Aggregate [k#x], [k#x, sum(v#x) AS _w0#xL]
+                        +- SubqueryAlias input
+                           +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum,
+  MAX(SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER ()) OVER () AS max_rank_sum
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY k
+HAVING k = 'keep'
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, group_count#xL, rank_sum#xL, max_rank_sum#xL]
+   +- Project [k#x, _w0#xL, _w0#xL, _w1#x, _w1#x, _w0#x, _w1#xL, _w0#x, _w1#xL, group_count#xL, rank_sum#xL, max_rank_sum#xL, group_count#xL, rank_sum#xL, max_rank_sum#xL]
+      +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS group_count#xL, sum(_w0#x) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS rank_sum#xL, max(_w1#xL) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS max_rank_sum#xL]
+         +- Project [k#x, _w0#xL, _w0#xL, _w1#x, _w1#x, _w0#x, _w1#xL, _w0#x, _w1#xL]
+            +- Window [sum(_w1#x) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS _w1#xL]
+               +- Window [rank(_w0#xL) windowspecdefinition(_w0#xL DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS _w0#x], [_w0#xL DESC NULLS LAST]
+                  +- Project [k#x, _w0#xL, _w0#xL, _w1#x, _w1#x]
+                     +- Window [rank(_w0#xL) windowspecdefinition(_w0#xL DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS _w1#x], [_w0#xL DESC NULLS LAST]
+                        +- Filter (k#x = keep)
+                           +- Aggregate [k#x], [k#x, sum(v#x) AS _w0#xL, sum(v#x) AS _w0#xL]
+                              +- SubqueryAlias input
+                                 +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  k,
+  COUNT(*) AS row_count,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum
+FROM VALUES ('drop', 1), ('drop', 1), ('keep', 1) AS input(k, v)
+GROUP BY k
+HAVING row_count = 1
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, row_count#xL, rank_sum#xL]
+   +- Project [k#x, row_count#xL, _w0#xL, _w0#x, _w0#x, rank_sum#xL, rank_sum#xL]
+      +- Window [sum(_w0#x) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS rank_sum#xL]
+         +- Project [k#x, row_count#xL, _w0#xL, _w0#x, _w0#x]
+            +- Window [rank(_w0#xL) windowspecdefinition(_w0#xL DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS _w0#x], [_w0#xL DESC NULLS LAST]
+               +- Filter (row_count#xL = cast(1 as bigint))
+                  +- Aggregate [k#x], [k#x, count(1) AS row_count#xL, sum(v#x) AS _w0#xL]
+                     +- SubqueryAlias input
+                        +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT
+  k,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY k
+HAVING rank_sum = 1
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`rank_sum`",
+    "proposal" : "`_w0`, `input`.`k`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 145,
+    "stopIndex" : 152,
+    "fragment" : "rank_sum"
+  } ]
+}
+
+
+-- !query
+SET spark.sql.legacy.evaluateHavingAfterInnerWindow=true
+-- !query analysis
+SetCommand (spark.sql.legacy.evaluateHavingAfterInnerWindow,Some(true))
+
+
+-- !query
+SELECT
+  k,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY k
+HAVING k = 'keep'
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x, rank_sum#xL]
+   +- Project [k#x, _w0#x, rank_sum#xL, rank_sum#xL]
+      +- Window [sum(_w0#x) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS rank_sum#xL]
+         +- Filter (k#x = keep)
+            +- Project [k#x, _w0#x]
+               +- Project [k#x, _w0#xL, _w0#x, _w0#x]
+                  +- Window [rank(_w0#xL) windowspecdefinition(_w0#xL DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS _w0#x], [_w0#xL DESC NULLS LAST]
+                     +- Aggregate [k#x], [k#x, sum(v#x) AS _w0#xL]
+                        +- SubqueryAlias input
+                           +- LocalRelation [k#x, v#x]
+
+
+-- !query
+RESET spark.sql.legacy.evaluateHavingAfterInnerWindow
+-- !query analysis
+ResetCommand spark.sql.legacy.evaluateHavingAfterInnerWindow
+
+
+-- !query
 SELECT col1 FROM t1 GROUP BY col1, col2 HAVING col2 > 0
 QUALIFY ROW_NUMBER() OVER (ORDER BY SUM(col2) OVER (PARTITION BY col1) DESC, col1) = 1
 -- !query analysis

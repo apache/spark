@@ -990,8 +990,23 @@ class Analyzer(
         aggregate: Aggregate,
         selectedGroupByExprs: Seq[Seq[Expression]],
         groupByExprs: Seq[Expression]): LogicalPlan = {
-      // For CUBE/ROLLUP expressions, to avoid resolving repeatedly, here we delete them from
-      // groupingExpressions for condition resolving.
+      if (conf.getConf(SQLConf.HAVING_WITH_WINDOW_RESOLVES_GROUPING_COLUMN_FIRST) &&
+          aggregate.aggregateExpressions.exists(_.containsPattern(WINDOW_EXPRESSION)) &&
+          !conf.getConf(SQLConf.LEGACY_EVALUATE_HAVING_AFTER_INNER_WINDOW)) {
+        val expanded = constructAggregate(h, selectedGroupByExprs, groupByExprs,
+          aggregate.aggregateExpressions, aggregate.child)
+        expanded match {
+          case a: Aggregate if a.child.isInstanceOf[Expand] =>
+            // Expand keeps original inputs and introduces nullable grouping copies. Preserve
+            // that distinction until HAVING has resolved complete keys and aggregate arguments.
+            a.child.setTagValue(ColumnResolutionHelper.HAVING_GROUPING_CONTEXT_TAG,
+              ColumnResolutionHelper.HavingGroupingContext(
+                aggregate.child, groupByExprs.zip(a.groupingExpressions)))
+          case _ =>
+        }
+        return h.copy(child = expanded)
+      }
+      // Remove CUBE/ROLLUP wrappers to avoid repeatedly resolving grouping expressions.
       val aggForResolving = aggregate.copy(groupingExpressions = groupByExprs)
       // HACK ALTER! Ideally we should only resolve GROUPING SETS + HAVING when the having condition
       // is fully resolved, similar to the rule `ResolveAggregateFunctions`. However, Aggregate
@@ -1060,7 +1075,9 @@ class Analyzer(
 
       // We should make sure all expressions in condition have been resolved.
       case f @ Filter(cond, child) if hasGroupingFunction(cond) && cond.resolved =>
-        val groupingExprs = findGroupingExprs(child)
+        val groupingExprs = child.collectFirst { case a: Aggregate => a }
+          .flatMap(_.child.getTagValue(ColumnResolutionHelper.HAVING_GROUPING_CONTEXT_TAG))
+          .map(_.groupingExpressions.map(_._1)).getOrElse(findGroupingExprs(child))
         // For the grand total this is a resolved Literal(0); otherwise the unresolved
         // spark_grouping_id attribute is resolved by ResolveReferences.
         val newCond = GroupingAnalyticsTransformer.replaceGroupingFunction(
@@ -2134,7 +2151,10 @@ class Analyzer(
       case f @ Filter(cond, child) if !cond.resolved || f.missingInput.nonEmpty =>
         val resolvedBasic = resolveExpressionByPlanChildren(cond, f)
         val resolvedWithAgg = resolveColWithAgg(resolvedBasic, child)
-        val (newCond, newChild) = resolveExprsAndAddMissingAttrs(Seq(resolvedWithAgg), child)
+        val (newCond, newChild) = resolveExprsAndAddMissingAttrs(
+          Seq(resolvedWithAgg), child,
+          preserveHavingScope = f.getTagValue(
+            ColumnResolutionHelper.HAVING_GROUPING_SCOPE_TAG).contains(true))
         // Missing columns should be resolved right after basic column resolution.
         // See the doc of `ResolveReferences`.
         val resolvedFinal = resolveColsLastResort(newCond.head)
@@ -2143,6 +2163,7 @@ class Analyzer(
         } else {
           // Add missing attributes and then project them away.
           val newFilter = Filter(resolvedFinal, newChild)
+          newFilter.copyTagsFrom(f)
           Project(child.output, newFilter)
         }
 
@@ -3071,13 +3092,16 @@ class Analyzer(
       case f @ Filter(cond, a: Aggregate)
         if !f.resolved || AggregateExpression.containsAggregate(cond) ||
           ResolveGroupingAnalytics.hasGroupingFunction(cond) ||
-          cond.containsPattern(TEMP_RESOLVED_COLUMN) =>
+          cond.containsPattern(TEMP_RESOLVED_COLUMN) ||
+          (f.getTagValue(ColumnResolutionHelper.HAVING_GROUPING_SCOPE_TAG).contains(true) &&
+            f.missingInput.nonEmpty) =>
         // If the filter's condition contains aggregate expressions or grouping expressions or temp
         // resolved column, we cannot rewrite both the filter and the aggregate until they are
         // resolved by ResolveAggregateFunctions or ResolveGroupingAnalytics, because rewriting SQL
         // functions in aggregate can add an additional project on top of the aggregate
-        // which breaks the pattern matching in those rules.
-        f.copy(child = a.copy(child = rewrite(a.child)))
+        // which breaks the pattern matching in those rules. A HAVING scope may also have
+        // resolved input references waiting to be mapped to aggregate outputs.
+        f.withNewChildren(Seq(a.copy(child = rewrite(a.child))))
 
       case h @ UnresolvedHaving(_, a: Aggregate) =>
         // Similarly UnresolvedHaving should be resolved by ResolveAggregateFunctions first
@@ -3350,9 +3374,31 @@ class Analyzer(
           }
         })
 
-      case Filter(cond, agg: Aggregate) if agg.resolved && cond.resolved =>
+      // Lower grouping()/grouping_id() in original HAVING scope before remapping their inputs.
+      case filter @ Filter(cond, agg: Aggregate) if agg.resolved && cond.resolved &&
+          !(filter.getTagValue(ColumnResolutionHelper.HAVING_GROUPING_SCOPE_TAG).contains(true) &&
+            ResolveGroupingAnalytics.hasGroupingFunction(cond)) =>
         resolveOperatorWithAggregate(Seq(cond), agg, (newExprs, newChild) => {
-          Filter(newExprs.head, newChild)
+          val condition = if (filter.getTagValue(
+              ColumnResolutionHelper.HAVING_GROUPING_SCOPE_TAG).contains(true)) {
+            // Finalize correlated dependencies before QUALIFY or SQL UDF rewriting can
+            // separate this filter from its aggregate or discard its scope tag.
+            newExprs.head.transformWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
+              case subquery: SubqueryExpression if subquery.children.nonEmpty =>
+                val aliases = newChild.child.getTagValue(
+                  ColumnResolutionHelper.HAVING_GROUPING_CONTEXT_TAG).map {
+                  _.outerReferenceAliases(newChild.aggregateExpressions)
+                }.getOrElse(newChild.aggregateExpressions.collect { case alias: Alias => alias })
+                val plan = UpdateOuterReferences.updateOuterReferenceInSubquery(
+                  subquery.plan, aliases)
+                subquery.withNewPlan(plan).withNewOuterAttrs(SubExprUtils.getOuterReferences(plan))
+            }
+          } else {
+            newExprs.head
+          }
+          val newFilter = Filter(condition, newChild)
+          newFilter.copyTagsFrom(filter)
+          newFilter
         })
 
       case s @ Sort(_, _, agg: Aggregate, _) if agg.resolved && s.order.forall(_.resolved) =>
@@ -3417,8 +3463,12 @@ class Analyzer(
               _ => Alias(cleaned, toPrettySQL(e = cleaned, shouldTrimTempResolvedColumn = true))()
             )
             resultAlias.toAttribute
-          case grouping: Expression if agg.groupingExpressions.exists(grouping.semanticEquals) =>
-            trimTempResolvedColumn(grouping) match {
+          case grouping: Expression if agg.groupingExpressions.exists(grouping.semanticEquals) ||
+              agg.child.getTagValue(ColumnResolutionHelper.HAVING_GROUPING_CONTEXT_TAG)
+                .flatMap(_.expandedGroupingExpression(grouping)).nonEmpty =>
+            val expanded = agg.child.getTagValue(ColumnResolutionHelper.HAVING_GROUPING_CONTEXT_TAG)
+              .flatMap(_.expandedGroupingExpression(grouping)).getOrElse(grouping)
+            trimTempResolvedColumn(expanded) match {
               case ne: NamedExpression =>
                 val resultAttribute = aggExprMap.computeIfAbsent(ne.canonicalized, _ => ne)
                 resultAttribute.toAttribute
@@ -3912,6 +3962,60 @@ class Analyzer(
       Project(windowOps.output ++ newExpressionsWithWindowFunctions, windowOps)
     } // end of addWindow
 
+    /**
+     * Extracts all nested window expressions and places the HAVING filter below every Window.
+     */
+    private def addWindowWithHaving(
+        aggregateExpressions: Seq[NamedExpression],
+        groupingExpressions: Seq[Expression],
+        child: LogicalPlan,
+        condition: Expression): LogicalPlan = {
+      val (windowExpressions, regularExpressions) =
+        extract(aggregateExpressions, groupingExpressions)
+      val windowChild = if (hasWindowFunction(regularExpressions) &&
+          !conf.getConf(SQLConf.LEGACY_EVALUATE_HAVING_AFTER_INNER_WINDOW)) {
+        addWindowWithHaving(regularExpressions, groupingExpressions, child, condition)
+      } else {
+        addHavingFilter(groupingExpressions, regularExpressions, condition, child)
+      }
+      addWindow(windowExpressions, windowChild)
+    }
+
+    /** Keeps HAVING grouping dependencies below the projection that defines window scope. */
+    private def addHavingFilter(
+        groupingExpressions: Seq[Expression],
+        aggregateExpressions: Seq[NamedExpression],
+        condition: Expression,
+        child: LogicalPlan): LogicalPlan = {
+      if (!conf.getConf(SQLConf.HAVING_WITH_WINDOW_RESOLVES_GROUPING_COLUMN_FIRST)) {
+        return Filter(condition, Aggregate(groupingExpressions, aggregateExpressions, child))
+      }
+      // Expose complete grouping keys so correlated references retain valid dependencies.
+      val missingGrouping = groupingExpressions.distinct.filterNot { grouping =>
+        aggregateExpressions.exists {
+          case alias: Alias => alias.child.semanticEquals(grouping)
+          case other => other.semanticEquals(grouping)
+        }
+      }
+      val groupingHelpers = missingGrouping.map { grouping =>
+        // These keys belong to HAVING scope, not the ordinary SELECT-alias lookup.
+        val alias = Alias(grouping, toPrettySQL(grouping))()
+        val metadata = new MetadataBuilder().withMetadata(alias.metadata)
+          .putBoolean(ColumnResolutionHelper.HAVING_GROUPING_COLUMN_METADATA_KEY, true)
+          .build()
+        Alias(grouping, alias.name)(exprId = alias.exprId, explicitMetadata = Some(metadata))
+      }
+      val aggregate = Aggregate(groupingExpressions, aggregateExpressions ++ groupingHelpers, child)
+      val filter = Filter(condition, aggregate)
+      filter.setTagValue(ColumnResolutionHelper.HAVING_GROUPING_SCOPE_TAG, true)
+      // Helpers serve only HAVING and must not become name candidates in QUALIFY.
+      if (groupingHelpers.isEmpty) {
+        filter
+      } else {
+        Project(aggregateExpressions.map(_.toAttribute), filter)
+      }
+    }
+
     // We have to use transformDown at here to make sure the rule of
     // "Aggregate with Having clause" will be triggered.
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsDownWithPruning(
@@ -3935,12 +4039,7 @@ class Analyzer(
             throw QueryCompilationErrors.lateralColumnAliasInAggWithWindowAndHavingUnsupportedError(
               lcaRef.nameParts)
         })
-        val (windowExpressions, aggregateExpressions) = extract(aggregateExprs, groupingExprs)
-        // Create an Aggregate operator to evaluate aggregation functions.
-        val withAggregate = Aggregate(groupingExprs, aggregateExpressions, child)
-        // Add a Filter operator for conditions in the Having clause.
-        val withFilter = Filter(condition, withAggregate)
-        val withWindow = addWindow(windowExpressions, withFilter)
+        val withWindow = addWindowWithHaving(aggregateExprs, groupingExprs, child, condition)
 
         // Finally, generate output columns according to the original projectList.
         val finalProjectList = aggregateExprs.map(_.toAttribute)
@@ -4899,7 +4998,8 @@ object ResolveExpressionsWithNamePlaceholders extends Rule[LogicalPlan] {
 object UpdateOuterReferences extends Rule[LogicalPlan] {
   private def stripAlias(expr: Expression): Expression = expr match { case a: Alias => a.child }
 
-  private def updateOuterReferenceInSubquery(
+  /** Maps complete correlated expressions to outputs of their outer aggregate. */
+  private[analysis] def updateOuterReferenceInSubquery(
       plan: LogicalPlan,
       refExprs: Seq[Expression]): LogicalPlan = {
     plan resolveExpressions {
@@ -4987,17 +5087,45 @@ object ResolveUnresolvedHaving extends Rule[LogicalPlan] {
    *
    * Returns None unless the condition can be evaluated below every Window in the chain.
    */
-  private def insertFilterBeforeWindow(filter: Filter): Option[LogicalPlan] = filter.child match {
-    case project: Project =>
-      insertFilterBeforeWindow(filter.copy(child = project.child))
+  private def insertFilterBeforeWindow(filter: Filter): Option[LogicalPlan] = {
+    if (SQLConf.get.getConf(SQLConf.LEGACY_EVALUATE_HAVING_AFTER_INNER_WINDOW)) {
+      insertFilterBeforeOuterWindow(filter)
+    } else {
+      insertFilterBeforeAllWindows(filter, foundWindow = false)
+    }
+  }
+
+  private def insertFilterBeforeAllWindows(
+      filter: Filter,
+      foundWindow: Boolean): Option[LogicalPlan] = filter.child match {
+    case project: Project if filter.condition.references.subsetOf(project.child.outputSet) =>
+      insertFilterBeforeAllWindows(filter.copy(child = project.child), foundWindow)
         .map(child => project.withNewChildren(Seq(child)))
-    case generate: Generate =>
-      insertFilterBeforeWindow(filter.copy(child = generate.child))
+    case generate: Generate if filter.condition.references.subsetOf(generate.child.outputSet) =>
+      insertFilterBeforeAllWindows(filter.copy(child = generate.child), foundWindow)
         .map(child => generate.withNewChildren(Seq(child)))
-    case window: Window =>
-      insertFilterBeforeWindowChain(filter, window)
+    case window: Window if filter.condition.references.subsetOf(window.child.outputSet) =>
+      insertFilterBeforeAllWindows(filter.copy(child = window.child), foundWindow = true)
+        .map(child => window.withNewChildren(Seq(child)))
+    case _ if foundWindow && filter.condition.references.subsetOf(filter.child.outputSet) =>
+      Some(filter)
     case _ =>
       None
+  }
+
+  private def insertFilterBeforeOuterWindow(filter: Filter): Option[LogicalPlan] = {
+    filter.child match {
+      case project: Project =>
+        insertFilterBeforeOuterWindow(filter.copy(child = project.child))
+          .map(child => project.withNewChildren(Seq(child)))
+      case generate: Generate =>
+        insertFilterBeforeOuterWindow(filter.copy(child = generate.child))
+          .map(child => generate.withNewChildren(Seq(child)))
+      case window: Window =>
+        insertFilterBeforeWindowChain(filter, window)
+      case _ =>
+        None
+    }
   }
 
   private def insertFilterBeforeWindowChain(

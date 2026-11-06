@@ -465,6 +465,20 @@ object SQLConf {
     .intConf
     .createWithDefault(100)
 
+  val HAVING_WITH_WINDOW_RESOLVES_GROUPING_COLUMN_FIRST =
+    buildConf("spark.sql.analyzer.havingWithWindowResolvesGroupingColumnFirst.enabled")
+      .internal()
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .doc("When true, preserve HAVING name-resolution scope during window extraction so that " +
+        "grouping columns take precedence over SELECT aliases. For grouping sets, also evaluate " +
+        "HAVING before extracted windows using the original grouping-key and aggregate-input " +
+        "scope, unless spark.sql.legacy.evaluateHavingAfterInnerWindow is true. When false, " +
+        "retain SELECT-alias precedence after window extraction and the legacy grouping-set " +
+        "HAVING path.")
+      .version("4.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val ANALYZER_SINGLE_PASS_RESOLVER_ENABLED =
     buildConf("spark.sql.analyzer.singlePassResolver.enabled")
       .internal()
@@ -7049,6 +7063,17 @@ object SQLConf {
       .doc("If it is set to true, the parser will treat HAVING without GROUP BY as a normal " +
         "WHERE, which does not follow SQL standard.")
       .version("2.4.1")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_EVALUATE_HAVING_AFTER_INNER_WINDOW =
+    buildConf("spark.sql.legacy.evaluateHavingAfterInnerWindow")
+      .internal()
+      .doc("When true, HAVING may be evaluated after an inner window expression when window " +
+        "expressions are nested in the SELECT list, preserving the behavior before Spark 4.4. " +
+        "When false, HAVING is evaluated before every nested window expression.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 

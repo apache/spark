@@ -224,6 +224,126 @@ struct<col1:int,m:int>
 
 
 -- !query
+SELECT
+  k,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY k
+HAVING k = 'keep'
+ORDER BY k
+-- !query schema
+struct<k:string,rank_sum:bigint>
+-- !query output
+keep	1
+
+
+-- !query
+SELECT
+  k,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER (
+    PARTITION BY RANK() OVER (ORDER BY SUM(v) DESC)) AS partition_rank_sum,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER (
+    ORDER BY RANK() OVER (ORDER BY SUM(v) DESC)) AS ordered_rank_sum
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY k
+HAVING k = 'keep'
+ORDER BY k
+-- !query schema
+struct<k:string,partition_rank_sum:bigint,ordered_rank_sum:bigint>
+-- !query output
+keep	1	1
+
+
+-- !query
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum,
+  MAX(SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER ()) OVER () AS max_rank_sum
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY k
+HAVING k = 'keep'
+ORDER BY k
+-- !query schema
+struct<k:string,group_count:bigint,rank_sum:bigint,max_rank_sum:bigint>
+-- !query output
+keep	1	1	1
+
+
+-- !query
+SELECT
+  k,
+  COUNT(*) AS row_count,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum
+FROM VALUES ('drop', 1), ('drop', 1), ('keep', 1) AS input(k, v)
+GROUP BY k
+HAVING row_count = 1
+ORDER BY k
+-- !query schema
+struct<k:string,row_count:bigint,rank_sum:bigint>
+-- !query output
+keep	1	1
+
+
+-- !query
+SELECT
+  k,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY k
+HAVING rank_sum = 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`rank_sum`",
+    "proposal" : "`_w0`, `input`.`k`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 145,
+    "stopIndex" : 152,
+    "fragment" : "rank_sum"
+  } ]
+}
+
+
+-- !query
+SET spark.sql.legacy.evaluateHavingAfterInnerWindow=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.evaluateHavingAfterInnerWindow	true
+
+
+-- !query
+SELECT
+  k,
+  SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY k
+HAVING k = 'keep'
+ORDER BY k
+-- !query schema
+struct<k:string,rank_sum:bigint>
+-- !query output
+keep	2
+
+
+-- !query
+RESET spark.sql.legacy.evaluateHavingAfterInnerWindow
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 SELECT col1 FROM t1 GROUP BY col1, col2 HAVING col2 > 0
 QUALIFY ROW_NUMBER() OVER (ORDER BY SUM(col2) OVER (PARTITION BY col1) DESC, col1) = 1
 -- !query schema
