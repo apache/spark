@@ -958,6 +958,17 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-60943: canUpCast from DECIMAL(p, 0) to an integral type iff every value fits") {
+    Seq(ByteType -> BigDecimal(Byte.MaxValue), ShortType -> BigDecimal(Short.MaxValue),
+      IntegerType -> BigDecimal(Int.MaxValue), LongType -> BigDecimal(Long.MaxValue)).foreach {
+      case (t, max) =>
+        (1 to DecimalType.MAX_PRECISION).foreach { p =>
+          val fits = BigDecimal(10).pow(p) - 1 <= max
+          assert(Cast.canUpCast(DecimalType(p, 0), t) == fits, s"DECIMAL($p, 0) to $t")
+        }
+    }
+  }
+
   test("SPARK-27671: cast from nested null type in struct") {
     import DataTypeTestUtils._
 
