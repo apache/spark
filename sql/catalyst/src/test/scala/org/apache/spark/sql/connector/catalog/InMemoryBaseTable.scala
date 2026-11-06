@@ -28,9 +28,8 @@ import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ProjectingInternalRow}
+import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow, StructFilters}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BoundReference, Cast, EvalMode, Expression => CatalystExpression, GenericInternalRow, GetStructField, JoinedRow, Literal, MetadataStructFieldWithLogicalName, Predicate => CatalystPredicate}
-import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, GenericArrayData, MapData, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.functions.{FlipLowBitFunction, SelfReduceFunction}
@@ -1189,59 +1188,20 @@ object InMemoryBaseTable {
   val STREAMING_PUSHDOWNS = "streaming-pushdowns"
 
   /**
-   * Returns whether `row`, a row of a table with `schema`, may pass `filter`, for the filters of
-   * the tests: comparisons of a top-level column with a value, null checks, and their
-   * conjunctions, disjunctions and negations. It only returns false for a row that does not pass
-   * the filter, so that a stream that drops the other rows drops no row that Spark keeps.
+   * Returns whether `row`, a row of a table with `schema`, may pass `filter`. It only returns
+   * false for a row that does not pass the filter, so that a stream that drops the other rows
+   * drops no row that Spark keeps.
    */
   def passes(filter: Filter, row: InternalRow, schema: StructType): Boolean = {
-    // Whether the row passes the filter: Some(false) for false or null, None if unknown.
-    def eval(filter: Filter): Option[Boolean] = {
-      // The Catalyst value of a column and its type, or None if the row does not have it: a
-      // name that is not a top-level field, such as a nested or a quoted one, or a column added
-      // after the row was written, with a schema of fewer fields.
-      def value(column: String): Option[(Any, DataType)] = {
-        schema.getFieldIndex(column).filter(_ < row.numFields).map { ordinal =>
-          val dataType = schema(ordinal).dataType
-          (row.get(ordinal, dataType), dataType)
-        }
-      }
-      // Compares as Spark does, with the ordering of the type on the Catalyst values: for
-      // example, -0.0 is equal to 0.0, and strings are ordered by code point.
-      def compare(column: String, other: Any)(f: Int => Boolean): Option[Boolean] = {
-        value(column).flatMap {
-          case (null, _) => Some(false)
-          case _ if other == null => Some(false)
-          case (v, dataType) => scala.util.Try {
-            f(PhysicalDataType.ordering(dataType)
-              .compare(v, CatalystTypeConverters.convertToCatalyst(other)))
-          }.toOption
-        }
-      }
-      filter match {
-        case EqualTo(column, v) => compare(column, v)(_ == 0)
-        case GreaterThan(column, v) => compare(column, v)(_ > 0)
-        case GreaterThanOrEqual(column, v) => compare(column, v)(_ >= 0)
-        case LessThan(column, v) => compare(column, v)(_ < 0)
-        case LessThanOrEqual(column, v) => compare(column, v)(_ <= 0)
-        case IsNotNull(column) => value(column).map(_._1 != null)
-        case IsNull(column) => value(column).map(_._1 == null)
-        case And(left, right) => (eval(left), eval(right)) match {
-          case (Some(false), _) | (_, Some(false)) => Some(false)
-          case (Some(true), Some(true)) => Some(true)
-          case _ => None
-        }
-        case Or(left, right) => (eval(left), eval(right)) match {
-          case (Some(true), _) | (_, Some(true)) => Some(true)
-          case (Some(false), Some(false)) => Some(false)
-          case _ => None
-        }
-        // A null makes a comparison false here, but its negation is not true in SQL.
-        case Not(child) => eval(child).filter(identity).map(_ => false)
-        case _ => None
-      }
+    // Evaluates the filter as Spark does, with the Catalyst predicate that the CSV and JSON
+    // filters use. A filter over a column that the row does not have, such as a nested or a quoted
+    // one, or one added after the row was written, keeps the row, as does one that the predicate
+    // cannot express or evaluate.
+    val toRef = (name: String) => schema.getFieldIndex(name).filter(_ < row.numFields)
+      .map(i => BoundReference(i, schema(i).dataType, nullable = true))
+    StructFilters.filterToExpression(filter, toRef).forall { predicate =>
+      scala.util.Try(CatalystPredicate.createInterpreted(predicate).eval(row)).getOrElse(true)
     }
-    !eval(filter).contains(false)
   }
 
   /**

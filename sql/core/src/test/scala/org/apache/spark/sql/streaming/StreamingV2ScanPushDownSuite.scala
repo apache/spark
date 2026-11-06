@@ -29,7 +29,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow}
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, AttributeSet, Cast, Expression, GreaterThan, IsNotNull, Literal, RLike}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, AttributeSet, Cast, EvalMode, Expression, GreaterThan, IsNotNull, Literal, RLike}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Project}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -794,14 +794,17 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
       // neither is any filter written after it: each micro-batch evaluates the pushed filters
       // first, so a filter that fails on the row of the other owner, as the cast of its payload
       // does with ANSI, or the error raised for its quantity 0, would fail the query.
-      Seq(raise, "CAST(payload AS INT) > 0", "id > 0").foreach { filter =>
-        val df = source.where(s"owner = current_user() AND $filter")
-        assert(pushed(df) === Nil, filter)
-        testStream(df.select("id"))(
-          ProcessAllAvailable(),
-          assertPushedFilters(),
-          CheckAnswer(Row(1L)))
-      }
+      Seq(raise -> Nil, "CAST(payload AS INT) > 0" -> Nil, "id > 0" -> Seq("GreaterThan(id,0)"))
+        .foreach { case (filter, taken) =>
+          val df = source.where(s"owner = current_user() AND $filter")
+          assert(pushed(df) === Nil, filter)
+          // The filters of the V1 builder of the in-memory tables compare columns with values,
+          // which cannot fail, so it gets id > 0 wherever it is. It cannot take the others.
+          testStream(df.select("id"))(
+            ProcessAllAvailable(),
+            assertPushedFilters(taken: _*),
+            CheckAnswer(Row(1L)))
+        }
       // The filters written before it are pushed down, as the query evaluates them first anyway.
       assert(pushed(source.where(s"$raise AND id > 0 AND owner = current_user() AND qty > 0")) ===
         Seq(Set("qty"), Set("id")))
@@ -1131,9 +1134,9 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
             .intersect(relation.output.map(_.exprId).toSet).isEmpty)
           assert(copy.sameResult(relation))
           // The plan applies the pushed filters with those of the query, so the relation shows
-          // the filters that the source got.
+          // the filters that its scan builder was given.
           val string = relation.simpleString(100)
-          assert(string.contains("PushedFilters: [") && string.contains(" > 10)]"), string)
+          assert(string.contains("FiltersOfScanBuilder: [") && string.contains(" > 10)]"), string)
           true
         },
         CheckAnswer(Row("b")))
@@ -1189,6 +1192,15 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
       assert(reads(source.union(source)).isEmpty)
       assert(reads(source.where("extra > 10")).nonEmpty)
       assert(reads(source.join(spark.range(3).toDF("id"), "id")).nonEmpty)
+      // The optimizer turns the conditions of an as-of or a lateral join into filters too.
+      val static = spark.range(3).toDF("sid")
+      assert(reads(source.joinAsOf(static, source("id"), static("sid"), source("extra") > 10,
+        "inner", null, allowExactMatches = true, "backward")).nonEmpty)
+      withTempView("s") {
+        source.createOrReplaceTempView("s")
+        assert(reads(sql("SELECT * FROM s JOIN LATERAL (SELECT s.id AS x) ON s.extra > 10"))
+          .nonEmpty)
+      }
     }
     // A source that prunes its columns needs the optimized query either way.
     withSourceTable() {
@@ -1223,19 +1235,37 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
     // RLIKE cannot be translated to a predicate of the source, while the cast can, and fails on
     // a payload that is not a number with ANSI, which the RLIKE written before it drops.
     val matches = RLike(payload, Literal("^[0-9]+$"))
-    val positive = GreaterThan(Cast(payload, IntegerType), Literal(0))
+    val positive = GreaterThan(Cast(payload, IntegerType, evalMode = EvalMode.ANSI), Literal(0))
     assert(DataSourceV2Strategy.translateFilterV2(matches).isEmpty)
     assert(DataSourceV2Strategy.translateFilterV2(positive).nonEmpty)
     def pushed(filters: Expression*): Seq[Expression] = {
       StreamingV2ScanPushDown.buildScan(table, CaseInsensitiveStringMap.empty(), output,
           spark.sessionState.conf,
-          Some(StreamingV2ScanPushDown.Reads(AttributeSet(output), filters)))(_ => null)
+          Some(StreamingV2ScanPushDown.Reads(AttributeSet(output), Seq(filters))))(_ => null)
         .pushedFilters
     }
     assert(pushed(matches, positive) === Nil)
     assert(table.pushed.isEmpty)
     assert(pushed(positive, matches) === Seq(positive))
     assert(table.pushed.length === 1)
+  }
+
+  test("push down the filters that a V1 filter builder takes wherever they are") {
+    withSourceTable() {
+      val source = spark.readStream.table(tbl)
+      // A filter on a value of each micro-batch comes first, as in a window over the last hour:
+      // the filter after it is still pushed down to a V1 builder.
+      testStream(source.where("data <> current_user() AND extra > 10").select("data"))(
+        ProcessAllAvailable(),
+        assertPushedFilters("GreaterThan(extra,10)"),
+        CheckAnswer(Row("b")))
+      // Both reads apply both filters, in other orders.
+      testStream(source.where("id > 1 AND extra > 10").select("data")
+          .union(source.where("extra > 10 AND id > 1").select("data")))(
+        ProcessAllAvailable(),
+        assertPushedFilters("GreaterThan(extra,10)", "GreaterThan(id,1)"),
+        CheckAnswer(Row("b"), Row("b")))
+    }
   }
 
   test("keep the rows of the test table that a pushed filter keeps, or cannot tell") {
@@ -1264,27 +1294,6 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
  * for: their readers return the rows of the stream with only these columns. If `takesFilters`,
  * its scan builders also take the filters, and the readers drop the rows that fail them.
  */
-/** A table whose scan builder takes V2 predicates, which it records. */
-private class V2FilterTable extends Table with SupportsRead {
-  var pushed: Array[Predicate] = Array.empty
-  override def name(): String = "v2_filters"
-  override def schema(): StructType = StructType.fromDDL("id BIGINT, payload STRING")
-  override def capabilities(): util.Set[TableCapability] = util.EnumSet.of(
-    TableCapability.MICRO_BATCH_READ, TableCapability.STREAMING_FILTER_PUSHDOWN)
-  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-    new ScanBuilder with SupportsPushDownV2Filters {
-      override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
-        pushed = predicates
-        predicates
-      }
-      override def pushedPredicates(): Array[Predicate] = pushed
-      override def build(): Scan = new Scan {
-        override def readSchema(): StructType = schema()
-      }
-    }
-  }
-}
-
 private class PruningContinuousTable(input: ContinuousMemoryStream[_], takesFilters: Boolean)
   extends Table with SupportsRead {
 
@@ -1332,6 +1341,27 @@ private class PruningContinuousTable(input: ContinuousMemoryStream[_], takesFilt
 private object PruningContinuousTable {
   // The rows that the readers of the streams that take filters returned.
   val returnedRows = new AtomicLong()
+}
+
+/** A table whose scan builder takes V2 predicates, which it records. */
+private class V2FilterTable extends Table with SupportsRead {
+  var pushed: Array[Predicate] = Array.empty
+  override def name(): String = "v2_filters"
+  override def schema(): StructType = StructType.fromDDL("id BIGINT, payload STRING")
+  override def capabilities(): util.Set[TableCapability] = util.EnumSet.of(
+    TableCapability.MICRO_BATCH_READ, TableCapability.STREAMING_FILTER_PUSHDOWN)
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+    new ScanBuilder with SupportsPushDownV2Filters {
+      override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
+        pushed = predicates
+        predicates
+      }
+      override def pushedPredicates(): Array[Predicate] = pushed
+      override def build(): Scan = new Scan {
+        override def readSchema(): StructType = schema()
+      }
+    }
+  }
 }
 
 private class PruningContinuousStream(

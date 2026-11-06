@@ -24,16 +24,16 @@ import scala.util.control.NonFatal
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, ResolvedInlineTable}
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, AttributeSet, Cast, Expression, SubqueryExpression, Unevaluable}
-import org.apache.spark.sql.catalyst.optimizer.{ComputeCurrentTime, InferFiltersFromConstraints, InferFiltersFromGenerate, ReplaceExpressions, SpecialDatetimeValues}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, AttributeSet, Cast, Expression, ExpressionSet, SubqueryExpression, Unevaluable}
+import org.apache.spark.sql.catalyst.optimizer.{ComputeCurrentTime, InferFiltersFromConstraints, InferFiltersFromGenerate, PruneFilters, ReplaceExpressions, SpecialDatetimeValues}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, LeafNode, LogicalPlan, Project, SetOperation, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, Filter, Join, LateralJoin, LeafNode, LogicalPlan, Project, SetOperation, Statistics}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CAST, CURRENT_LIKE, RUNTIME_REPLACEABLE}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{SupportsRead, TableCapability}
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownRequiredColumns, SupportsPushDownV2Filters}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, PushDownUtils, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation}
@@ -72,11 +72,49 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
    * What the optimized plan of a streaming query reads from a streaming relation.
    *
    * @param requiredColumns the columns of the relation that the plan reads
-   * @param filters the filters that the scan of the relation may get, in the order in which the
-   *                plan evaluates them: those that every occurrence of the relation applies first,
-   *                see `pushableFilters`
+   * @param occurrenceFilters for each occurrence of the relation, its filters in the order in which
+   *                          the plan evaluates them, up to the first nondeterministic one: a
+   *                          filter pushed before it would change how many times it is evaluated
    */
-  case class Reads(requiredColumns: AttributeSet, filters: Seq[Expression])
+  case class Reads(requiredColumns: AttributeSet, occurrenceFilters: Seq[Seq[Expression]]) {
+
+    /**
+     * The filters that every occurrence evaluates first, in the same order: the longest common
+     * prefix of the leading pushable filters of the occurrences. Each micro-batch evaluates the
+     * pushed filters first, over the relation (see `withPushedFilters`), so a pushed filter that
+     * may fail on some rows, as a cast or a division does under ANSI, or `raise_error`, must not
+     * see a row that a filter written before it drops. These are the filters for a scan builder
+     * whose filters may fail.
+     */
+    def filters: Seq[Expression] = {
+      occurrenceFilters.map(_.takeWhile(isPushable)).reduceOption { (left, right) =>
+        left.zip(right).takeWhile { case (l, r) => l.semanticEquals(r) }.map(_._1)
+      }.getOrElse(Nil)
+    }
+
+    /**
+     * The pushable filters that every occurrence applies, in the order of the first occurrence,
+     * wherever they are. These are the filters for a scan builder whose filters cannot fail, which
+     * may run before the filters written before them.
+     */
+    def filtersInAnyOrder: Seq[Expression] = {
+      occurrenceFilters.map(_.filter(isPushable)) match {
+        case Seq() => Nil
+        case first +: others =>
+          val sets = others.map(ExpressionSet(_))
+          first.filter(filter => sets.forall(_.contains(filter)))
+      }
+    }
+  }
+
+  /**
+   * Returns whether the scan of a relation may get `filter`, a deterministic filter over the
+   * relation: if it has no subquery and no placeholder, whose value each micro-batch gets on its
+   * own (see `forStartup`).
+   */
+  private def isPushable(filter: Expression): Boolean = {
+    !SubqueryExpression.hasSubquery(filter) && !filter.exists(_.isInstanceOf[StartupValue])
+  }
 
   /**
    * The scan of a streaming source, and its stream.
@@ -169,7 +207,7 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
             case PhysicalOperation(project, filters, relation: StreamingRelationV2) =>
               occurrences += relation -> Reads(
                 AttributeSet((project ++ filters).flatMap(_.references)),
-                pushableFilters(filtersEvaluatedOnce(node, filters, conf)))
+                Seq(filtersEvaluatedOnce(node, filters, conf).takeWhile(_.deterministic)))
             case _ =>
               node.children.foreach(visit)
           }
@@ -202,26 +240,23 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
   /**
    * Returns what the occurrences of each relation read, combined: the scan of a relation reads the
    * rows of all its occurrences, so it reads the columns that any of them reads, and can only
-   * apply the filters that all of them apply. Each occurrence evaluates the pushed filters before
-   * its own, so the pushed filters are those that all the occurrences evaluate first, in the same
-   * order: the longest common prefix of their filters, see `pushableFilters`.
+   * apply the filters that all of them apply (see `Reads`).
    */
   private def combine(
       occurrences: Seq[(StreamingRelationV2, Reads)]): Map[StreamingRelationV2, Reads] = {
     occurrences.groupBy(_._1).map { case (relation, reads) =>
-      val filters = reads.map(_._2.filters).reduce { (left, right) =>
-        left.zip(right).takeWhile { case (l, r) => l.semanticEquals(r) }.map(_._1)
-      }
-      relation -> Reads(AttributeSet.fromAttributeSets(reads.map(_._2.requiredColumns)), filters)
+      relation -> Reads(AttributeSet.fromAttributeSets(reads.map(_._2.requiredColumns)),
+        reads.flatMap(_._2.occurrenceFilters))
     }
   }
 
   /**
    * Returns whether `plan` has a node with a condition that the optimizer could push down to a
-   * relation: a filter, or a join or a set operation, which it may turn into one.
+   * relation: a filter, or a join, an as-of or a lateral join, or a set operation, which it may
+   * turn into one.
    */
   private def mayHaveConditions(plan: LogicalPlan): Boolean = plan.exists {
-    case _: Filter | _: Join | _: SetOperation => true
+    case _: Filter | _: Join | _: AsOfJoin | _: LateralJoin | _: SetOperation => true
     case _ => false
   }
 
@@ -230,14 +265,17 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
    * relation, that each micro-batch evaluates once if they are pushed down. A micro-batch keeps a
    * filter above a projection of a value of its own, such as `current_timestamp()`, which is not
    * deterministic until its optimization ends, so it cannot merge it with the filter of the pushed
-   * filters below the projection, and only the propagation of the constraints of the plan prunes
-   * the copy above. Without it, the filters above such a projection are not pushed down.
+   * filters below the projection, and only `PruneFilters`, with the constraints of the plan, prunes
+   * the copy above. Without the propagation of the constraints, or with `PruneFilters` excluded,
+   * the filters above such a projection are not pushed down.
    */
   private def filtersEvaluatedOnce(
       node: LogicalPlan,
       filters: Seq[Expression],
       conf: SQLConf): Seq[Expression] = {
-    if (conf.constraintPropagationEnabled) {
+    if (conf.constraintPropagationEnabled &&
+        !conf.optimizerExcludedRules.toSeq.flatMap(_.split(",")).map(_.trim)
+          .contains(PruneFilters.ruleName)) {
       filters
     } else {
       // The lowest projection of a placeholder, the nodes of `node` being projections and
@@ -251,22 +289,6 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
         case Some(_) => Nil
         case None => filters
       }
-    }
-  }
-
-  /**
-   * Returns the filters that the scan of a relation may get of `filters`, the filters over an
-   * occurrence of the relation in the order in which the plan evaluates them: the deterministic
-   * ones without subqueries or placeholders, up to the first filter that is not, which is not
-   * pushed down, and neither are those after it. The plan of each micro-batch evaluates the pushed
-   * filters first, over the relation (see `withPushedFilters`), so a pushed filter does not see a
-   * row that a filter written before it drops: it could fail on such a row, as a filter with a
-   * cast or a division does under ANSI, or with `raise_error`.
-   */
-  private def pushableFilters(filters: Seq[Expression]): Seq[Expression] = {
-    filters.takeWhile { filter =>
-      filter.deterministic && !SubqueryExpression.hasSubquery(filter) &&
-        !filter.exists(_.isInstanceOf[StartupValue])
     }
   }
 
@@ -377,17 +399,21 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
     // The filters that the scan builder gets in some form, which each micro-batch applies first:
     // the others, such as a filter with a UDF that cannot be translated to a filter of the source,
     // are evaluated after them, as for the scans of batch queries, rather than on all the rows of
-    // the source. The predicates of a `SupportsPushDownV2Filters` builder may fail on some rows,
-    // as a cast does with ANSI, so they end at the first filter that the builder does not get:
-    // none runs before a filter written before it. The filters of a `SupportsPushDownFilters`
-    // builder compare columns with values, which cannot fail.
+    // the source. The filters of a `SupportsPushDownFilters` builder compare columns with values,
+    // which cannot fail, so it gets those that all the reads apply, wherever they are. The
+    // predicates of a `SupportsPushDownV2Filters` builder and the filters of the others may fail
+    // on some rows, as a cast does with ANSI, so they are the leading filters of the reads, up to
+    // the first that the builder does not get: none runs before a filter written before it. The
+    // builders are matched in the order of `PushDownUtils.pushFilters`.
+    def gets(filter: Expression): Boolean =
+      PushDownUtils.filtersOfScanBuilder(builder, Seq(filter)).nonEmpty
     val filters = known.filter(_ => pushesFilters)
       .map { r =>
-        val normalized = DataSourceStrategy.normalizeExprs(r.filters, output)
-        val taken = PushDownUtils.filtersOfScanBuilder(builder, normalized)
         builder match {
-          case _: SupportsPushDownV2Filters => normalized.takeWhile(f => taken.exists(_ eq f))
-          case _ => taken
+          case _: SupportsPushDownFilters =>
+            DataSourceStrategy.normalizeExprs(r.filtersInAnyOrder, output).filter(gets)
+          case _ =>
+            DataSourceStrategy.normalizeExprs(r.filters, output).takeWhile(gets)
         }
       }
       .getOrElse(Nil)

@@ -509,9 +509,10 @@ case class StreamingDataSourceV2ScanRelation(
       s", PrunedOutput: ${truncatedString(columns, "[", ", ", "]", maxFields)}"
     }
     // The plan of each micro-batch applies the pushed filters with those of the query, which
-    // explain shows together, so the relation shows the filters that the source got.
+    // explain shows together, so the relation shows the filters that its scan builder was given.
+    // Unlike the PushedFilters of a batch scan, these are not the filters that the builder took.
     val filters = if (pushedFilters.nonEmpty) {
-      s", PushedFilters: ${truncatedString(pushedFilters, "[", ", ", "]", maxFields)}"
+      s", FiltersOfScanBuilder: ${truncatedString(pushedFilters, "[", ", ", "]", maxFields)}"
     } else {
       ""
     }
