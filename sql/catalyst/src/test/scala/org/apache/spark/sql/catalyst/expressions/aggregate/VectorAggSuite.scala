@@ -111,6 +111,8 @@ class VectorAggSuite extends SparkFunSuite {
     }
   }
 
+  // TODO: Generalize the float and double tests for vector_sum and vector_avg into a single
+  // suite parameterized by the element type, instead of duplicating them per type.
   def createDoubleVectorSum(): (VectorSum, InternalRow) = {
     val input = new BoundReference(0, ArrayType(DoubleType), nullable = true)
     val agg = new VectorSum(input)

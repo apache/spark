@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.lang.{Float => JFloat}
+import java.lang.{Double => JDouble, Float => JFloat}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
@@ -796,9 +796,9 @@ object VectorAvg {
         val oldAvg = Platform.getDouble(accBytes, off)
         val value = inputArray.getDouble(i)
         val delta = value - oldAvg
-        val newAvg = if (java.lang.Double.isFinite(delta)) {
+        val newAvg = if (JDouble.isFinite(delta)) {
           oldAvg + delta * invCount
-        } else if (java.lang.Double.isFinite(oldAvg) && java.lang.Double.isFinite(value)) {
+        } else if (JDouble.isFinite(oldAvg) && JDouble.isFinite(value)) {
           oldAvg + (value * invCount - oldAvg * invCount)
         } else {
           oldAvg + value
