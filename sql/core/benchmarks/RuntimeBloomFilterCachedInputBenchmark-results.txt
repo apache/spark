@@ -1,0 +1,15 @@
+================================================================================================
+Runtime Bloom filter from a materialized selective cache
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
+AMD EPYC 7763 64-Core Processor
+Cached input runtime Bloom filter:        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Runtime Bloom filter disabled                       477            692         304          1.0         954.9       1.0X
+Runtime Bloom filter enabled                        294            320          36          1.7         588.4       1.6X
+
+Fact-side shuffle bytes without runtime Bloom filter: 33679423
+Fact-side shuffle bytes with runtime Bloom filter: 344110
+Fact-side shuffle reduction: 98.98%
+
