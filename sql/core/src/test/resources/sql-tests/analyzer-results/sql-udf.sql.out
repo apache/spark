@@ -3513,6 +3513,12 @@ SELECT s FROM t, false, false, false, false
 
 
 -- !query
+SET spark.sql.optimizer.scalarSubqueryUseSingleJoin=false
+-- !query analysis
+SetCommand (spark.sql.optimizer.scalarSubqueryUseSingleJoin,Some(false))
+
+
+-- !query
 SELECT c1, foo3_2e2(c1) FROM t1
 -- !query analysis
 Project [c1#x, spark_catalog.default.foo3_2e2(x#x) AS spark_catalog.default.foo3_2e2(c1)#x]
@@ -3533,6 +3539,12 @@ Project [c1#x, spark_catalog.default.foo3_2e2(x#x) AS spark_catalog.default.foo3
       +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
          +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
             +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+RESET spark.sql.optimizer.scalarSubqueryUseSingleJoin
+-- !query analysis
+ResetCommand spark.sql.optimizer.scalarSubqueryUseSingleJoin
 
 
 -- !query

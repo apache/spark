@@ -93,6 +93,126 @@ Project [scalar-subquery#x [id#xL] AS scalarsubquery(id)#xL]
 
 
 -- !query
+SELECT (
+  WITH correlated AS (SELECT * FROM VALUES (0), (1) AS r(id) WHERE r.id = o.id),
+  unreferenced AS (SELECT * FROM VALUES (0), (1) AS l(id) LEFT JOIN correlated ON l.id = correlated.id)
+  SELECT 1
+) FROM VALUES (0) AS o(id)
+-- !query analysis
+Project [scalar-subquery#x [id#x] AS scalarsubquery(id)#x]
+:  +- WithCTE
+:     :- CTERelationDef xxxx, false
+:     :  +- SubqueryAlias correlated
+:     :     +- Project [id#x]
+:     :        +- Filter (id#x = outer(id#x))
+:     :           +- SubqueryAlias r
+:     :              +- LocalRelation [id#x]
+:     :- CTERelationDef xxxx, false
+:     :  +- SubqueryAlias unreferenced
+:     :     +- Project [id#x, id#x]
+:     :        +- Join LeftOuter, (id#x = id#x)
+:     :           :- SubqueryAlias l
+:     :           :  +- LocalRelation [id#x]
+:     :           +- SubqueryAlias correlated
+:     :              +- CTERelationRef xxxx, true, [id#x], false, false, 2
+:     +- Project [1 AS 1#x]
+:        +- OneRowRelation
++- SubqueryAlias o
+   +- LocalRelation [id#x]
+
+
+-- !query
+SELECT (
+  WITH correlated AS (SELECT * FROM VALUES (0), (1) AS r(id) WHERE r.id = o.id),
+  unreferenced AS (SELECT * FROM VALUES (0), (1) AS l(id) LEFT JOIN correlated ON l.id = correlated.id)
+  SELECT count(*) FROM correlated
+) FROM VALUES (0) AS o(id)
+-- !query analysis
+Project [scalar-subquery#x [id#x] AS scalarsubquery(id)#xL]
+:  +- WithCTE
+:     :- CTERelationDef xxxx, false
+:     :  +- SubqueryAlias correlated
+:     :     +- Project [id#x]
+:     :        +- Filter (id#x = outer(id#x))
+:     :           +- SubqueryAlias r
+:     :              +- LocalRelation [id#x]
+:     :- CTERelationDef xxxx, false
+:     :  +- SubqueryAlias unreferenced
+:     :     +- Project [id#x, id#x]
+:     :        +- Join LeftOuter, (id#x = id#x)
+:     :           :- SubqueryAlias l
+:     :           :  +- LocalRelation [id#x]
+:     :           +- SubqueryAlias correlated
+:     :              +- CTERelationRef xxxx, true, [id#x], false, false, 2
+:     +- Aggregate [count(1) AS count(1)#xL]
+:        +- SubqueryAlias correlated
+:           +- CTERelationRef xxxx, true, [id#x], false, false, 2
++- SubqueryAlias o
+   +- LocalRelation [id#x]
+
+
+-- !query
+SELECT * FROM VALUES (0) AS o(id) WHERE EXISTS (
+  WITH correlated AS (SELECT * FROM VALUES (0), (1) AS r(id) WHERE r.id = o.id),
+  unreferenced AS (SELECT * FROM VALUES (0), (1) AS l(id) FULL OUTER JOIN correlated ON l.id = correlated.id)
+  SELECT 1
+)
+-- !query analysis
+Project [id#x]
++- Filter exists#x [id#x]
+   :  +- WithCTE
+   :     :- CTERelationDef xxxx, false
+   :     :  +- SubqueryAlias correlated
+   :     :     +- Project [id#x]
+   :     :        +- Filter (id#x = outer(id#x))
+   :     :           +- SubqueryAlias r
+   :     :              +- LocalRelation [id#x]
+   :     :- CTERelationDef xxxx, false
+   :     :  +- SubqueryAlias unreferenced
+   :     :     +- Project [id#x, id#x]
+   :     :        +- Join FullOuter, (id#x = id#x)
+   :     :           :- SubqueryAlias l
+   :     :           :  +- LocalRelation [id#x]
+   :     :           +- SubqueryAlias correlated
+   :     :              +- CTERelationRef xxxx, true, [id#x], false, false, 2
+   :     +- Project [1 AS 1#x]
+   :        +- OneRowRelation
+   +- SubqueryAlias o
+      +- LocalRelation [id#x]
+
+
+-- !query
+SELECT * FROM VALUES (0) AS o(id) WHERE EXISTS (
+  WITH correlated AS (SELECT * FROM VALUES (0), (1) AS r(id) WHERE r.id = o.id),
+  unreferenced AS (SELECT * FROM VALUES (0), (1) AS l(id) FULL OUTER JOIN correlated ON l.id = correlated.id)
+  SELECT * FROM correlated
+)
+-- !query analysis
+Project [id#x]
++- Filter exists#x [id#x]
+   :  +- WithCTE
+   :     :- CTERelationDef xxxx, false
+   :     :  +- SubqueryAlias correlated
+   :     :     +- Project [id#x]
+   :     :        +- Filter (id#x = outer(id#x))
+   :     :           +- SubqueryAlias r
+   :     :              +- LocalRelation [id#x]
+   :     :- CTERelationDef xxxx, false
+   :     :  +- SubqueryAlias unreferenced
+   :     :     +- Project [id#x, id#x]
+   :     :        +- Join FullOuter, (id#x = id#x)
+   :     :           :- SubqueryAlias l
+   :     :           :  +- LocalRelation [id#x]
+   :     :           +- SubqueryAlias correlated
+   :     :              +- CTERelationRef xxxx, true, [id#x], false, false, 2
+   :     +- Project [id#x]
+   :        +- SubqueryAlias correlated
+   :           +- CTERelationRef xxxx, true, [id#x], false, false, 2
+   +- SubqueryAlias o
+      +- LocalRelation [id#x]
+
+
+-- !query
 SELECT * FROM
   (
    WITH cte AS (SELECT * FROM range(10))

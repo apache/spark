@@ -3648,6 +3648,14 @@ struct<>
 
 
 -- !query
+SET spark.sql.optimizer.scalarSubqueryUseSingleJoin=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.optimizer.scalarSubqueryUseSingleJoin	false
+
+
+-- !query
 SELECT c1, foo3_2e2(c1) FROM t1
 -- !query schema
 struct<c1:int,spark_catalog.default.foo3_2e2(c1):int>
@@ -3655,6 +3663,14 @@ struct<c1:int,spark_catalog.default.foo3_2e2(c1):int>
 0	5
 0	5
 1	NULL
+
+
+-- !query
+RESET spark.sql.optimizer.scalarSubqueryUseSingleJoin
+-- !query schema
+struct<>
+-- !query output
+
 
 
 -- !query
