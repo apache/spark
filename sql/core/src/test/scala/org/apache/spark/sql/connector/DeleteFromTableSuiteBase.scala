@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.datasources.v2.{DeleteFromTableExec, ReplaceDataExec, WriteDeltaExec}
+import org.apache.spark.sql.internal.SQLConf
 
 abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
 
@@ -66,6 +67,23 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     sql(s"DELETE FROM $tableNameAsString AS t WHERE t.id <= 1 OR t.dep = 'hr'")
 
     checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(2, 2, "software") :: Nil)
+  }
+
+  test("SPARK-60978: delete keeps columns whose names differ only by case") {
+    // such a table can only be created and read in a case-sensitive session
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      createAndInitTable("pk INT NOT NULL, salary INT, SALARY INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "SALARY": 200, "dep": "hr" }
+          |{ "pk": 2, "salary": 300, "SALARY": 400, "dep": "hr" }
+          |""".stripMargin)
+    }
+
+    // the statement does not name the colliding columns so it is not ambiguous
+    sql(s"DELETE FROM $tableNameAsString WHERE pk <= 1")
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(2, 300, 400, "hr") :: Nil)
+    }
   }
 
   test("delete with IN predicates") {
