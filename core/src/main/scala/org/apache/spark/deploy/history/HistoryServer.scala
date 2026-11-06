@@ -166,33 +166,38 @@ class HistoryServer(
   }
 
   /**
-   * Registers the static resources declared by every available plugin. A plugin that cannot be
-   * loaded, or whose declared resources cannot be registered, is skipped with a warning so that
-   * it does not prevent the History Server from starting. Throwable is caught around both
-   * hasNext and next() because the ServiceLoader iterator can throw ServiceConfigurationError
-   * or LinkageError for a provider whose class is missing or cannot be linked.
+   * Registers the static resources declared by the given plugins, as (classpath resource
+   * directory, URL path) pairs.
+   *
+   * A failure never prevents the History Server from starting. It is logged as a warning and
+   * the rest is still registered:
+   *  - if reading a plugin's `staticResources` throws, that plugin is skipped;
+   *  - each declared entry is registered independently, so one failing entry (for example a
+   *    missing directory) does not skip the plugin's later entries.
+   *
+   * A path that is not under `/static/` is rejected as a failing entry, because it could
+   * otherwise shadow the History Server's own routes.
    */
   private[history] def setupPluginStaticResources(
-      plugins: Iterable[AppHistoryServerPlugin]): Unit = {
-    val iterator = plugins.iterator
-    var keepLoading = true
-    while (keepLoading) {
+      plugins: Seq[AppHistoryServerPlugin]): Unit = {
+    plugins.foreach { plugin =>
       try {
-        if (iterator.hasNext) {
-          val plugin = iterator.next()
+        plugin.staticResources.foreach { case (dir, path) =>
           try {
-            plugin.staticResources.foreach { case (dir, path) => addStaticHandler(dir, path) }
+            require(path.startsWith(HistoryServer.PLUGIN_STATIC_PATH_PREFIX),
+              s"path must be under ${HistoryServer.PLUGIN_STATIC_PATH_PREFIX}")
+            addStaticHandler(dir, path)
           } catch {
-            case t: Throwable =>
-              logWarning(log"Failed to set up static resources for " +
+            case t if NonFatal(t) || t.isInstanceOf[LinkageError] =>
+              logWarning(log"Failed to set up static resources from " +
+                log"${MDC(RESOURCE_NAME, dir)} at ${MDC(PATH, path)} for " +
                 log"${MDC(CLASS_NAME, plugin.getClass.getName)}", t)
           }
-        } else {
-          keepLoading = false
         }
       } catch {
-        case t: Throwable =>
-          logWarning("Skipping an AppHistoryServerPlugin that failed to load", t)
+        case t if NonFatal(t) || t.isInstanceOf[LinkageError] =>
+          logWarning(log"Failed to get the static resources declared by " +
+            log"${MDC(CLASS_NAME, plugin.getClass.getName)}", t)
       }
     }
   }
@@ -208,14 +213,22 @@ class HistoryServer(
     provider.stop()
   }
 
-  /** Attach a reconstructed UI to this server. Only valid after bind(). */
+  /**
+   * Attach a reconstructed UI to this server. Only valid after bind().
+   *
+   * A handler whose context path the History Server already serves (e.g. /static/sql) is not
+   * attached: the server's own handler is attached first and always answers, so the
+   * application's copy could never receive a request. Skipping it avoids wrapping, starting and
+   * adding it to the root handler on every UI load.
+   */
   override def attachSparkUI(
       appId: String,
       attemptId: Option[String],
       ui: SparkUI,
       completed: Boolean): Unit = {
     assert(serverInfo.isDefined, "HistoryServer must be bound before attaching SparkUIs")
-    ui.getHandlers.foreach { handler =>
+    val servedPaths = getHandlers.map(_.getContextPath).toSet
+    ui.getHandlers.filterNot(h => servedPaths.contains(h.getContextPath)).foreach { handler =>
       serverInfo.get.addHandler(handler, ui.securityManager)
     }
   }
@@ -334,6 +347,9 @@ object HistoryServer extends Logging {
   private lazy val conf = new SparkConf
 
   val UI_PATH_PREFIX = "/history"
+
+  // Plugin static resource paths must be under this prefix so they cannot shadow other routes
+  private[history] val PLUGIN_STATIC_PATH_PREFIX = "/static/"
 
   def main(argStrings: Array[String]): Unit = {
     Utils.resetStructuredLogging()
