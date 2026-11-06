@@ -18,7 +18,6 @@
 use std::cell::RefCell;
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::mem::{offset_of, size_of};
-use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Arc;
 
 pub use arrow_array::ffi::FFI_ArrowArray as ArrowArray;
@@ -26,7 +25,7 @@ pub use arrow_array::ffi_stream::FFI_ArrowArrayStream as ArrowArrayStream;
 pub use arrow_schema::ffi::FFI_ArrowSchema as ArrowSchema;
 use arrow_schema::{Schema, SchemaRef};
 
-use crate::bridge::{describe, panic_message};
+use crate::bridge::{c_message, provider_call};
 use crate::host::{self, LogEnabledFunction, LogFunction};
 use crate::{CreateInfo, HostInfo, LatestOffsetInfo, Options, ReadLimit, Result, WriteMode};
 
@@ -305,13 +304,10 @@ thread_local! {
 /// Converts provider failures and unwinding panics into the C error convention.
 pub fn call(action: impl FnOnce() -> Result<()>) -> c_int {
     LAST_ERROR.with(|error| *error.borrow_mut() = None);
-    let message = match catch_unwind(AssertUnwindSafe(|| action().map_err(|e| describe(&*e)))) {
-        Ok(Ok(())) => return 0,
-        Ok(Err(message)) => message,
-        Err(payload) => panic_message(payload),
+    let Err(message) = provider_call(action) else {
+        return 0;
     };
-    let message = CString::new(message.replace('\0', "\\0")).expect("NULs removed");
-    LAST_ERROR.with(|error| *error.borrow_mut() = Some(message));
+    LAST_ERROR.with(|error| *error.borrow_mut() = Some(c_message(message)));
     1
 }
 

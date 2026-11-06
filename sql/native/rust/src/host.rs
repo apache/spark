@@ -15,11 +15,13 @@
 
 //! The Spark process that loaded the library: its version and its log.
 
-use std::ffi::{c_char, CString};
+use std::ffi::c_char;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Once, PoisonError, RwLock};
 
 use log::{Level, LevelFilter, Log, Metadata, Record};
+
+use crate::bridge::c_message;
 
 pub(crate) type LogFunction = unsafe extern "C" fn(i32, *const c_char);
 pub(crate) type LogEnabledFunction = unsafe extern "C" fn(i32) -> bool;
@@ -83,8 +85,7 @@ impl Log for Logger {
 
     fn log(&self, record: &Record<'_>) {
         if let Some(host) = host() {
-            let message = record.args().to_string().replace('\0', "\\0");
-            let message = CString::new(message).expect("NULs removed");
+            let message = c_message(record.args().to_string());
             unsafe { (host.log)(native_level(record.level()), message.as_ptr()) };
         }
     }

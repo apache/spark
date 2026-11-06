@@ -14,7 +14,6 @@
 // limitations under the License.
 
 use std::ffi::{c_char, c_int, c_void, CString};
-use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Arc;
 
 use arrow_array::ffi::FFI_ArrowArray;
@@ -23,7 +22,7 @@ use arrow_array::{Array, RecordBatch, StructArray};
 use arrow_data::ArrayData;
 use arrow_schema::{ffi::FFI_ArrowSchema, DataType, Field, Fields, Schema, SchemaRef, TimeUnit};
 
-use super::{describe, panic_message};
+use super::{c_message, drop_provider, provider_call};
 use crate::{PartitionReader, Result};
 
 struct StreamState<'task> {
@@ -98,9 +97,7 @@ impl Drop for StreamState<'_> {
     fn drop(&mut self) {
         // release has no error return channel, but it must never unwind into C.
         if let Some(reader) = self.reader.take() {
-            if let Err(payload) = catch_unwind(AssertUnwindSafe(|| drop(reader))) {
-                let _ = panic_message(payload);
-            }
+            drop_provider(reader);
         }
     }
 }
@@ -136,17 +133,11 @@ fn callback(
     state: &mut StreamState<'_>,
     action: impl FnOnce(&mut StreamState<'_>) -> Result<()>,
 ) -> c_int {
-    let result = catch_unwind(AssertUnwindSafe(|| {
-        action(state).map_err(|e| describe(&*e))
-    }));
-    let message = match result {
-        Ok(Ok(())) => return 0,
-        Ok(Err(message)) => message,
-        Err(payload) => panic_message(payload),
+    let Err(message) = provider_call(|| action(state)) else {
+        return 0;
     };
     state.finished = true;
-    // Error text is a C string. A provider error may contain embedded NULs.
-    state.last_error = Some(CString::new(message.replace('\0', "\\0")).expect("NULs removed"));
+    state.last_error = Some(c_message(message));
     5 // EIO; get_last_error supplies the provider's actual error message.
 }
 
@@ -199,9 +190,7 @@ unsafe extern "C" fn release(stream: *mut FFI_ArrowArrayStream) {
     let state = unsafe { (*stream).private_data.cast::<StreamState<'_>>() };
     // Mark released before destruction. The consumer owns the stream structure.
     unsafe { stream.write(FFI_ArrowArrayStream::empty()) };
-    if let Err(payload) = catch_unwind(AssertUnwindSafe(|| unsafe { drop(Box::from_raw(state)) })) {
-        let _ = panic_message(payload);
-    }
+    drop_provider(unsafe { Box::from_raw(state) });
 }
 
 // Compare the Spark logical types of version 1 of the ABI, ignoring Arrow

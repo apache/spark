@@ -17,7 +17,6 @@
 //! writes and for the writes of micro-batches.
 
 use std::ffi::c_void;
-use std::panic::{catch_unwind, AssertUnwindSafe};
 
 use arrow_array::{ffi, Array, RecordBatch, StructArray};
 use arrow_schema::{DataType, SchemaRef};
@@ -25,7 +24,7 @@ use serde::{de::DeserializeOwned, Serialize};
 
 use crate::abi::{self, ArrowArray, SparkDsTaskContext};
 use crate::bridge::stream::validate_schema;
-use crate::bridge::{decode, describe, encode, panic_message, provider_call};
+use crate::bridge::{decode, describe, drop_provider, encode, provider_call};
 use crate::{
     BatchWrite, DataWriter, DataWriterFactory, PartitionWriter, Result, StreamingWrite,
     TaskContext, WriterContext,
@@ -200,13 +199,6 @@ impl Drop for TaskState<'_> {
         if let Some(writer) = self.writer.take() {
             drop_provider(writer);
         }
-    }
-}
-
-fn drop_provider<T>(value: T) {
-    // Close has no error channel and must never unwind across the native ABI.
-    if let Err(payload) = catch_unwind(AssertUnwindSafe(|| drop(value))) {
-        let _ = panic_message(payload);
     }
 }
 

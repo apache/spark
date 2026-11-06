@@ -18,6 +18,7 @@
 
 use std::any::Any;
 use std::collections::HashMap;
+use std::ffi::CString;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -422,6 +423,13 @@ pub(crate) fn provider_call<T>(
     .unwrap_or_else(|payload| Err(panic_message(payload)))
 }
 
+pub(crate) fn drop_provider<T>(value: T) {
+    // Close has no error channel and must never unwind across the native ABI.
+    if let Err(payload) = catch_unwind(AssertUnwindSafe(|| drop(value))) {
+        let _ = panic_message(payload);
+    }
+}
+
 /// The message of an error followed by those of its sources, which `Display` of many
 /// errors, such as those with added context, omits.
 pub(crate) fn describe(error: &(dyn std::error::Error + 'static)) -> String {
@@ -449,6 +457,11 @@ pub(crate) fn panic_message(payload: Box<dyn Any + Send>) -> String {
         return "native provider panicked with a non-string payload".to_owned();
     };
     format!("native provider panicked: {message}")
+}
+
+/// Error and log text is a C string. A provider message may contain embedded NULs.
+pub(crate) fn c_message(message: String) -> CString {
+    CString::new(message.replace('\0', "\\0")).expect("NULs removed")
 }
 
 #[cfg(test)]
