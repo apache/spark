@@ -575,6 +575,11 @@ private[spark] class PythonWorkerFactory(
     }
   }
 
+  /** Identifies a worker's original factory when its cache key has been reused. */
+  private[spark] def ownsWorker(worker: PythonWorker): Boolean = self.synchronized {
+    if (useDaemon) daemonWorkers.contains(worker) else simpleWorkers.contains(worker)
+  }
+
   /** Whether a worker created by this factory is checked out, i.e. neither idle nor stopped. */
   private[spark] def hasActiveWorkers: Boolean = self.synchronized {
     val workers = if (useDaemon) daemonWorkers.keys else simpleWorkers.keys

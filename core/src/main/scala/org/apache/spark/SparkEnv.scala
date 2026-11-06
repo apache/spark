@@ -211,6 +211,10 @@ class SparkEnv (
   @GuardedBy("this")
   private val pythonWorkers = mutable.HashMap[PythonWorkersKey, PythonWorkerFactory]()
 
+  // Evicted planners retain their original factory until their last worker finishes.
+  @GuardedBy("this")
+  private val retiringPythonWorkers = mutable.HashMap[PythonWorkerFactory, PythonWorkersKey]()
+
   /**
    * :: Experimental ::
    * Dispatcher factory to generate UDF worker dispatchers
@@ -363,14 +367,43 @@ class SparkEnv (
       pythonExec, workerModule, daemonModule, envVars, useDaemon)
   }
 
+  private def finishPythonWorker(
+      key: PythonWorkersKey,
+      worker: PythonWorker,
+      reuseWorker: Boolean): Unit = {
+    val retired = synchronized {
+      retiringPythonWorkers.keysIterator.find(_.ownsWorker(worker)) match {
+        case Some(factory) =>
+          // This worker must not enter a replacement factory's pool, even with the same key.
+          Utils.tryLogNonFatalError {
+            factory.stopWorker(worker)
+          }
+          worker.stop()
+          if (factory.hasActiveWorkers) {
+            None
+          } else {
+            retiringPythonWorkers.remove(factory)
+            Some(factory)
+          }
+        case None =>
+          pythonWorkers.get(key) match {
+            case Some(factory) if reuseWorker => factory.releaseWorker(worker)
+            case Some(factory) => factory.stopWorker(worker)
+            // The factory was removed, so close our end instead of returning it to a pool.
+            case None => worker.stop()
+          }
+          None
+      }
+    }
+    retired.foreach { factory =>
+      Utils.tryLogNonFatalError {
+        factory.stop()
+      }
+    }
+  }
+
   private[spark] def destroyPythonWorker(key: PythonWorkersKey, worker: PythonWorker): Unit = {
-    val factory = synchronized {
-      pythonWorkers.get(key).map(_.stopWorker(worker))
-    }
-    if (factory.isEmpty) {
-      // The factory was removed, which already stopped its processes; close our end as well.
-      worker.stop()
-    }
+    finishPythonWorker(key, worker, reuseWorker = false)
   }
 
   private[spark] def destroyPythonWorker(
@@ -392,13 +425,7 @@ class SparkEnv (
   }
 
   private[spark] def releasePythonWorker(key: PythonWorkersKey, worker: PythonWorker): Unit = {
-    val factory = synchronized {
-      pythonWorkers.get(key).map(_.releaseWorker(worker))
-    }
-    if (factory.isEmpty) {
-      // There is no pool to return the worker to once its factory has been removed.
-      worker.stop()
-    }
+    finishPythonWorker(key, worker, reuseWorker = true)
   }
 
   private[spark] def releasePythonWorker(
@@ -422,14 +449,12 @@ class SparkEnv (
   /**
    * Stops a session's Python worker factories once its executor-side state is cleaned up, i.e.
    * after eviction and after every task using the session has finished. In local mode, driver
-   * planners share this SparkEnv without holding a task reference, so their factories are
-   * stopped only when no worker is checked out; busy ones are left to
-   * [[removeDriverPythonWorkerFactories]].
+   * planners share this SparkEnv without holding a task reference, so busy planner factories
+   * are retired from the cache immediately and stopped when their last worker finishes.
    */
   private[spark] def removeExecutorPythonWorkerFactories(artifactUUID: String): Unit = {
-    removePythonWorkerFactories { (key, factory) =>
-      key.jobArtifactUUID.contains(artifactUUID) && (!key.driverOwned || !factory.hasActiveWorkers)
-    }
+    removePythonWorkerFactories(
+      (key, _) => key.jobArtifactUUID.contains(artifactUUID), retireBusyDrivers = true)
   }
 
   /** Stops a session's driver planner Python worker factories when the session is cleaned up. */
@@ -444,11 +469,23 @@ class SparkEnv (
    * them, and stops them outside of it, so that other sessions' workers are not blocked.
    */
   private def removePythonWorkerFactories(
-      shouldRemove: (PythonWorkersKey, PythonWorkerFactory) => Boolean): Unit = {
+      shouldRemove: (PythonWorkersKey, PythonWorkerFactory) => Boolean,
+      retireBusyDrivers: Boolean = false): Unit = {
     val removed = synchronized {
       val matching = pythonWorkers.filter { case (key, factory) => shouldRemove(key, factory) }
+      val retiring = retiringPythonWorkers.filter {
+        case (factory, key) => shouldRemove(key, factory)
+      }
       pythonWorkers --= matching.keys
-      matching.values.toSeq
+      retiringPythonWorkers --= retiring.keys
+      (matching.toSeq.map(_.swap) ++ retiring.toSeq).flatMap { case (factory, key) =>
+        if (retireBusyDrivers && key.driverOwned && factory.hasActiveWorkers) {
+          retiringPythonWorkers.put(factory, key)
+          None
+        } else {
+          Some(factory)
+        }
+      }
     }
     removed.foreach { factory =>
       Utils.tryLogNonFatalError {

@@ -124,24 +124,65 @@ class SparkEnvPythonWorkerSuite extends SparkFunSuite {
     }
   }
 
-  test("SPARK-54055: executor session cleanup keeps busy driver planners in local mode") {
+  gridTest("SPARK-54055: busy planner factories stop when their last worker finishes")(
+      Seq(false, true)) { reuseWorker =>
     withFactories { (env, factories) =>
+      val workerKey = key("session", driverOwned = true)
       env.createPythonWorker(key("session"), useDaemon = true)
-      env.createPythonWorker(key("session", driverOwned = true), useDaemon = true)
+      env.createPythonWorker(workerKey, useDaemon = true)
       val Seq(executorFactory, plannerFactory) = factories.constructed().asScala.toSeq
+      val workers = Seq.fill(2)(PythonWorker(SocketChannel.open()))
+      workers.foreach(worker => when(plannerFactory.ownsWorker(worker)).thenReturn(true))
       when(plannerFactory.hasActiveWorkers).thenReturn(true)
+      try {
+        env.removeExecutorPythonWorkerFactories("session")
+        verify(executorFactory, times(1)).stop()
+        verify(plannerFactory, never()).stop()
 
-      env.removeExecutorPythonWorkerFactories("session")
-      verify(executorFactory, times(1)).stop()
-      verify(plannerFactory, never()).stop()
+        // New planners cannot reuse the retired factory, even while it still has active workers.
+        env.createPythonWorker(workerKey, useDaemon = true)
+        assert(factories.constructed().size() == 3)
+        val replacement = factories.constructed().get(2)
+        workers.zipWithIndex.foreach { case (worker, index) =>
+          when(plannerFactory.hasActiveWorkers).thenReturn(index == 0)
+          if (reuseWorker) {
+            env.releasePythonWorker(workerKey, worker)
+          } else {
+            env.destroyPythonWorker(workerKey, worker)
+          }
+          verify(plannerFactory).stopWorker(worker)
+          assert(!worker.channel.isOpen)
+          if (index == 0) {
+            verify(plannerFactory, never()).stop()
+          }
+        }
+        // No second executor eviction is needed to stop the old daemon.
+        verify(plannerFactory, times(1)).stop()
+        verify(plannerFactory, never()).releaseWorker(any())
+        verify(replacement, never()).releaseWorker(any())
+        verify(replacement, never()).stopWorker(any())
+        verify(replacement, never()).stop()
+      } finally {
+        workers.foreach(_.stop())
+      }
+    }
+  }
 
-      // Once idle, a later executor cleanup retires the planner factory as well, so its daemon
-      // does not keep running in the deleted session directory.
-      when(plannerFactory.hasActiveWorkers).thenReturn(false)
-      env.removeExecutorPythonWorkerFactories("session")
-      verify(plannerFactory, times(1)).stop()
+  gridTest("SPARK-54055: session and SparkEnv shutdown stop retiring planner factories")(
+      Seq(false, true)) { stopEnv =>
+    withFactories { (env, factories) =>
       env.createPythonWorker(key("session", driverOwned = true), useDaemon = true)
-      assert(factories.constructed().size() == 3)
+      val factory = factories.constructed().get(0)
+      when(factory.hasActiveWorkers).thenReturn(true)
+      env.removeExecutorPythonWorkerFactories("session")
+      verify(factory, never()).stop()
+
+      if (stopEnv) {
+        env.stop()
+      } else {
+        env.removeDriverPythonWorkerFactories("session")
+      }
+      verify(factory, times(1)).stop()
     }
   }
 
