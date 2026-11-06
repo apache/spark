@@ -23,8 +23,11 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FsUrlStreamHandlerFactory
 
 import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.internal.config.History.{SNAPSHOT_ENABLED, SNAPSHOT_PATH}
+import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.Utils
 
 /**
  * Tests for [[org.apache.spark.sql.internal.SharedState]].
@@ -34,6 +37,14 @@ class SharedStateSuite extends SharedSparkSession {
   override protected def sparkConf: SparkConf = {
     super.sparkConf
       .set("spark.hadoop.fs.defaultFS", "file:///")
+      .set(UI_ENABLED, false)
+      .set(SNAPSHOT_ENABLED, true)
+      .set(SNAPSHOT_PATH, Utils.createTempDir().getAbsolutePath)
+  }
+
+  test("streaming query status is collected for history snapshots without the live UI") {
+    assert(spark.sparkContext.ui.isEmpty)
+    assert(spark.sharedState.streamingQueryStatusListener.isDefined)
   }
 
   test("SPARK-31692: Url handler factory should have the hadoop configs from Spark conf") {
