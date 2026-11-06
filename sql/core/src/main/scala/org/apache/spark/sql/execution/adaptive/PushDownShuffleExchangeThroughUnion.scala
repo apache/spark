@@ -38,9 +38,10 @@ import org.apache.spark.sql.execution.window.{Partial => PartialWindowGroupLimit
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Push down a shuffle [[EnsureRequirements]] put above a [[UnionExec]] below the union, so that
- * only the union's children that are not already laid out on the target take one. A local sort
- * above the shuffle, and the operators between it and the union, are rebuilt above the union:
+ * Push down a shuffle [[EnsureRequirements]] put above a [[UnionExec]] below the union. Eligible
+ * children already reporting the target retain their layouts; other children are retargeted or
+ * receive a new shuffle. Local sorts above the shuffle and operators between it and the union
+ * are rebuilt above the union:
  *
  * {{{
  *   SortMergeJoin                             SortMergeJoin
@@ -82,6 +83,10 @@ import org.apache.spark.sql.internal.SQLConf
  * `spark.sql.optimizer.pushDownShuffleThroughUnion.keepNonCoalescibleBranches.enabled`
  * can prevent coalescing of the consumer's compatible shuffle group. Forced skew optimization
  * can restore a union exchange after moved branches have shuffled, shuffling them a second time.
+ *
+ * Allowing subqueries can make pruning builds differ from main-query broadcast builds. With
+ * broadcast-only dynamic pruning, failed broadcast reuse removes the pruning filter and can scan
+ * all fact partitions; that cost can outweigh the saved build-side shuffle.
  *
  * The rule runs only in AQE preparation, after `EnsureRequirements` and before
  * `StampUnionDecisions`. It preserves the root distribution and all user repartition layouts
