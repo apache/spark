@@ -601,7 +601,6 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
 
   test("SPARK-60759: aggregateMetrics merges repeated driver updates of the same accumulator") {
     val statusStore = spark.sharedState.statusStore
-    val oldCount = statusStore.executionsList().size
 
     val values = Seq(10L, 20L)
     val physicalPlan = MyPlanWithRepeatedDriverAccumUpdates(sqlContext.sparkContext, values)
@@ -610,16 +609,12 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
       override lazy val executedPlan = physicalPlan
     }
 
-    SQLExecution.withNewExecutionId(dummyQueryExecution) {
-      physicalPlan.execute().collect()
+    val execId = runAndWaitForExecution {
+      SQLExecution.withNewExecutionId(dummyQueryExecution) {
+        physicalPlan.execute().collect()
+      }
     }
 
-    eventually(timeout(10.seconds), interval(10.milliseconds)) {
-      val executions = statusStore.executionsList()
-      assert(executions.size > oldCount && executions.last.metricValues != null)
-    }
-
-    val execId = statusStore.executionsList().last.executionId
     val metrics = statusStore.executionMetrics(execId)
     val driverMetric = physicalPlan.metrics("dummy")
     // The accumulator is cumulative, so each post reports the running total.
