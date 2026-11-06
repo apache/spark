@@ -346,7 +346,7 @@ if os.environ.get("PYSPARK_ENABLE_NAMEDTUPLE_PATCH") == "1":
     # and Cloudpickle e.g., bug fixes from the upstream. It's safer to have
     # a switch to turn on and off for the time being.
 
-    __cls = {}  # type: ignore[var-annotated]
+    __cls: dict[tuple, type] = {}
 
     def _restore(name, fields, value):
         """Restore an object of namedtuple"""
