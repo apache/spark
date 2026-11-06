@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, DynamicPruning, DynamicPruningExpression, EqualTo, Expression, GetStructField, GreaterThan, Literal, RLike}
+import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, AttributeSet, DynamicPruning, DynamicPruningExpression, EqualTo, Expression, ExpressionSet, GetStructField, GreaterThan, Literal, RLike}
 import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
 import org.apache.spark.sql.connector.catalog.{
   Column,
@@ -28,6 +28,7 @@ import org.apache.spark.sql.connector.catalog.{
   InMemoryCatalystRuntimeFilterTable,
   InMemoryTable,
   InMemoryTableCatalystRuntimeFilterCatalog,
+  Table,
   TableCatalog}
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference, Transform}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
@@ -36,7 +37,7 @@ import org.apache.spark.sql.execution.{FilterExec, ScalarSubquery => ExecScalarS
 import org.apache.spark.sql.execution.ExplainUtils.stripAQEPlan
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, DataSourceV2Strategy, PushDownUtils}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.SupportsRuntimeCatalystFiltering
+import org.apache.spark.sql.internal.connector.{SupportsCatalystFilterGuarantees, SupportsRuntimeCatalystFiltering}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
@@ -162,6 +163,36 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
           "scanClass" -> scanClass,
           "relationOutput" -> "\"STRUCT<id: INT, s: STRUCT<part: INT, other: INT>>\""),
         sqlState = "KD000")
+    }
+  }
+
+  test("static fully pushed attributes are independent of runtime declarations") {
+    val tbl = s"$catalogName.tbl_separate_fully_pushed"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (id INT, s STRUCT<part: INT, other: INT>) USING $v2Source")
+      val relation = sql(s"SELECT * FROM $tbl").queryExecution.optimizedPlan.collectFirst {
+        case r: DataSourceV2ScanRelation => r
+      }.getOrElse(fail("Expected a DataSourceV2ScanRelation"))
+      val source = relation.relation.table
+      val table = new Table with SupportsCatalystFilterGuarantees {
+        override def name(): String = source.name()
+        override def columns(): Array[Column] = source.columns()
+        override def capabilities() = source.capabilities()
+        override def fullyPushedFilterAttributes(): Array[NamedReference] =
+          Array(FieldReference(Seq("s", "part")))
+      }
+      val scan = new SupportsRuntimeCatalystFiltering {
+        override def readSchema(): StructType = relation.scan.readSchema()
+        override def filterAttributes(): Array[NamedReference] = Array(FieldReference("id"))
+        override def fullyPushedFilterAttributes(): Array[NamedReference] = filterAttributes()
+        override def filter(expressions: Array[Expression]): Unit = {}
+      }
+      val combined = relation.copy(relation = relation.relation.copy(table = table), scan = scan)
+      val id = AttributeSet(relation.output.filter(_.name == "id"))
+      assert(combined.runtimeFilterAttrs == id)
+      assert(combined.fullyPushedRuntimeFilterAttrs == id)
+      assert(combined.fullyPushedFilterAttrs ==
+        ExpressionSet(Seq(GetStructField(relation.output(1), 0))))
     }
   }
 

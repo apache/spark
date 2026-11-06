@@ -21,7 +21,7 @@ import java.time.LocalTime
 import java.util.{EnumSet, OptionalLong}
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -30,21 +30,23 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression,
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.expressions.variant.VariantGet
 import org.apache.spark.sql.catalyst.optimizer.{BooleanSimplification, CombineFilters, ConstantFolding}
+import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, JoinHint, Limit, LogicalPlan, Offset, OneRowRelation, Project, Sort}
 import org.apache.spark.sql.catalyst.util.{CharVarcharCodegenUtils, CharVarcharUtils, V2ExpressionBuilder}
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
-import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue, SortOrder => V2SortOrder, VariantGet => V2VariantGet}
+import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue, NamedReference, SortOrder => V2SortOrder, VariantGet => V2VariantGet}
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate}
 import org.apache.spark.sql.connector.join.{JoinType => V2JoinType}
 import org.apache.spark.sql.connector.read.{Batch, InputPartition, LocalScan, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder, Statistics, SupportsPushDownAggregates, SupportsPushDownJoin, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTopN, SupportsPushDownVariantExtractions, SupportsReportStatistics, V1Scan, VariantExtraction}
-import org.apache.spark.sql.execution.{InSubqueryExec, LocalTableScanExec, SubqueryExec}
+import org.apache.spark.sql.execution.{FilterExec, InSubqueryExec, LocalTableScanExec, ProjectExec, SubqueryExec}
+import org.apache.spark.sql.execution.planmerging.MergeSubplans
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
+import org.apache.spark.sql.internal.connector.{SupportsCatalystFilterGuarantees, SupportsPushDownCatalystFilters}
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ArrayType, BooleanType, DoubleType, FloatType, IntegerType, LongType, MetadataBuilder, StringType, StructField, StructType, TimestampNTZNanosType, TimestampType, TimeType, VariantType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, DoubleType, FloatType, IntegerType, LongType, MapType, MetadataBuilder, StringType, StructField, StructType, TimestampNTZNanosType, TimestampType, TimeType, VariantType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.udf.worker.UDFWorkerSpecification
 import org.apache.spark.unsafe.types.UTF8String
@@ -1501,6 +1503,281 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     }
   }
 
+  gridTest("guaranteed inferred filters stay logical for batch, V1 and local scans")(
+      Seq("batch", "v1", "local")) { scanType =>
+    val schema = StructType(Seq(
+      StructField("id", LongType, nullable = false),
+      StructField("value", LongType, nullable = true)))
+    val inferred = GreaterThanOrEqual(AttributeReference("value", LongType)(), Literal(0L))
+    val factory: StructType => Scan = required => scanType match {
+      case "batch" => new Scan with SupportsSparkFilterEstimation {
+        override def readSchema(): StructType = required
+        override def toBatch: Batch = emptyBatch
+      }
+      case "local" => new LocalScan with SupportsSparkFilterEstimation {
+        override def readSchema(): StructType = required
+        override def rows(): Array[InternalRow] = Array.empty
+      }
+      case "v1" => new V1Scan with SupportsSparkFilterEstimation {
+        override def readSchema(): StructType = required
+        override def toV1TableScan[T <: BaseRelation with TableScan](context: SQLContext): T = {
+          new BaseRelation with TableScan {
+            override def sqlContext: SQLContext = context
+            override def schema: StructType = required
+            override def buildScan() = context.sparkContext.emptyRDD[Row]
+          }.asInstanceOf[T]
+        }
+      }
+    }
+    val table = new InMemoryCatalystFilterTable(schema, inferred, Some(factory),
+      estimateInferred = false, fullyPushedColumns = Seq("value"))
+    val relation = DataSourceV2Relation.create(table, None, None, CaseInsensitiveStringMap.empty)
+    val residual = EqualTo(relation.output.head, Literal(1L))
+    val pushed = V2ScanRelationPushDown(Filter(residual, relation))
+    val logicalFilters = pushed.collect { case Filter(condition, _) => condition }
+    assert(logicalFilters.exists(_.references.exists(_.name == "value")))
+    assertInferredEvaluation(pushed, evaluate = false)
+    val physical = new DataSourceV2Strategy(spark).apply(pushed).head
+    val remaining = physical.collect { case FilterExec(condition, _) => condition }
+    assert(remaining.size == 1 && remaining.head.semanticEquals(residual))
+  }
+
+  gridTest("guaranteed nested filter attributes distinguish siblings and dotted names")(
+      Seq("s.part", "`s.part`", "s")) { declared =>
+    val nestedType = new StructType().add("other", LongType).add("part", LongType)
+    val schema = new StructType().add("s", nestedType).add("s.part", LongType)
+    val inferred = IsNotNull(AttributeReference("s", nestedType)())
+    val table = new InMemoryCatalystFilterTable(schema, inferred,
+      estimateInferred = false, fullyPushedColumns = Seq(declared))
+    val relation = DataSourceV2Relation.create(table, None, None, CaseInsensitiveStringMap.empty)
+    val scan = DataSourceV2ScanRelation(relation, table.newScanBuilder(relation.options).build(),
+      relation.output, inferredFilters = Seq(inferred))
+    val root = relation.output.head
+    val nested = EqualTo(Add(GetStructField(root, 1), Literal(1L)), Literal(2L))
+    val sibling = EqualTo(GetStructField(root, 0), Literal(2L))
+    val dotted = EqualTo(relation.output(1), Literal(3L))
+    val wholeStruct = IsNotNull(root)
+    val predicates = Seq(nested, sibling, dotted, wholeStruct)
+    val expected = declared match {
+      case "s.part" => Seq(sibling, dotted, wholeStruct)
+      case "`s.part`" => Seq(nested, sibling, wholeStruct)
+      case "s" => Seq(dotted)
+    }
+    val physical = new DataSourceV2Strategy(spark)
+      .apply(Filter(predicates.reduceLeft(And),
+        scan.copy(filterRemovalCandidates = predicates))).head
+    val remaining = physical.collect { case FilterExec(condition, _) => condition }
+    assert(remaining.size == 1)
+    assert(remaining.head.semanticEquals(expected.reduceLeft(And)))
+  }
+
+  gridTest("guaranteed nested filter attributes resolve against the pruned scan schema")(
+      Seq("S.NESTED.PART", "S.NESTED")) { declared =>
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val nestedType = new StructType()
+        .add("unused", LongType).add("part", LongType).add("other", LongType)
+      val structType = new StructType().add("unused", LongType).add("nested", nestedType)
+      val schema = new StructType().add("id", LongType).add("s", structType)
+      val inferred = IsNotNull(AttributeReference("s", structType)())
+      val table = new InMemoryCatalystFilterTable(schema, inferred,
+        estimateInferred = false,
+        fullyPushedColumns = Seq(declared, "id", "s.unused", "s.nested.unused"))
+      val relation = DataSourceV2Relation.create(table, None, None, CaseInsensitiveStringMap.empty)
+      val prunedNested = new StructType().add("part", LongType).add("other", LongType)
+      val prunedStruct = new StructType().add("nested", prunedNested)
+      val output = Seq(relation.output(1).withDataType(prunedStruct))
+      val scan = new Scan {
+        override def readSchema(): StructType = new StructType().add("s", prunedStruct)
+        override def toBatch: Batch = emptyBatch
+      }
+      val scanRelation = DataSourceV2ScanRelation(relation, scan, output,
+        inferredFilters = Seq(inferred))
+      val nested = GetStructField(output.head, 0)
+      val part = EqualTo(GetStructField(nested, 0), Literal(1L))
+      val other = EqualTo(GetStructField(nested, 1), Literal(2L))
+      val wholeStruct = IsNotNull(output.head)
+      val physical = new DataSourceV2Strategy(spark)
+        .apply(Filter(And(part, And(other, wholeStruct)),
+          scanRelation.copy(filterRemovalCandidates = Seq(part, other, wholeStruct)))).head
+      val remaining = physical.collect { case FilterExec(condition, _) => condition }
+      val expected = if (declared == "S.NESTED") wholeStruct else And(other, wholeStruct)
+      assert(remaining.size == 1)
+      assert(remaining.head.semanticEquals(expected))
+    }
+  }
+
+  gridTest("guaranteed filter attributes reject invalid declarations consistently")(
+      for {
+        declared <- Seq("missing", "s.missing", "arr.part", "map.part")
+        infer <- Seq(false, true)
+        prune <- Seq(false, true)
+      } yield (declared, infer, prune)) { case (declared, infer, prune) =>
+    val nested = new StructType().add("part", LongType)
+    val schema = new StructType().add("value", LongType).add("s", nested)
+      .add("arr", ArrayType(nested)).add("map", MapType(StringType, nested))
+    val inferred = GreaterThanOrEqual(AttributeReference("value", LongType)(), Literal(0L))
+    val table = new InMemoryCatalystFilterTable(schema, inferred,
+      estimateInferred = false, fullyPushedColumns = Seq(declared))
+    val relation = DataSourceV2Relation.create(table, None, None, CaseInsensitiveStringMap.empty)
+    val output = if (prune) relation.output.take(1) else relation.output
+    val scan = new Scan {
+      override def readSchema(): StructType = StructType(output.map(a =>
+        StructField(a.name, a.dataType, a.nullable)))
+      override def toBatch: Batch = emptyBatch
+    }
+    val scanRelation = DataSourceV2ScanRelation(relation, scan, output,
+      inferredFilters = if (infer) Seq(inferred) else Nil)
+    val error = intercept[AnalysisException] {
+      new DataSourceV2Strategy(spark).apply(scanRelation)
+    }
+    checkError(
+      exception = error,
+      condition = "DATA_SOURCE_INVALID_FULLY_PUSHED_FILTER_ATTRIBUTE",
+      parameters = Map(
+        "attribute" -> FieldReference(declared).fieldNames.map(n => s"`$n`").mkString("."),
+        "tableName" -> "`in-memory-catalyst-filter-table`",
+        "tableSchema" -> ("\"" + schema.sql + "\"")),
+      sqlState = "KD000")
+  }
+
+  test("guaranteed filter attributes preserve Boolean projection aliases") {
+    val schema = StructType(Seq(StructField("value", LongType, nullable = true)))
+    val inferred = GreaterThanOrEqual(AttributeReference("value", LongType)(), Literal(0L))
+    val table = new InMemoryCatalystFilterTable(schema, inferred,
+      estimateInferred = false, fullyPushedColumns = Seq("value"))
+    val relation = DataSourceV2Relation.create(table, None, None, CaseInsensitiveStringMap.empty)
+    val value = relation.output.head
+    val known = GreaterThanOrEqual(value, Literal(0L))
+    val unknown = LessThan(value, Literal(10L))
+    val other = GreaterThan(value, Literal(1L))
+    val pushed = V2ScanRelationPushDown(Filter(unknown, relation))
+    val metadata = new MetadataBuilder().putString("test", "preserved").build()
+    val aliases = Seq(
+      Alias(And(known, unknown), "propagatedFilter_0")(explicitMetadata = Some(metadata)),
+      Alias(Or(known, unknown), "propagatedFilter_1")(),
+      Alias(Not(known), "negated")(),
+      Alias(And(known, Literal.create(null, BooleanType)), "nullable")(),
+      Alias(And(known, known), "guaranteed")(),
+      Alias(And(other, And(known, unknown)), "nested_conjunction")())
+    val project = Project(aliases, pushed)
+    val physical = new DataSourceV2Strategy(spark).apply(project).head
+    val projected = physical.collectFirst { case p: ProjectExec => p.projectList }.get
+    assert(projected.map(_.exprId) == aliases.map(_.exprId))
+    assert(projected.head.metadata == metadata)
+    assert(projected == aliases)
+    assert(projected.head.nullable && projected(3).nullable)
+    assert(project.projectList == aliases)
+  }
+
+  test("guaranteed filter attributes retain nondeterministic, subquery and constant filters") {
+    val schema = StructType(Seq(StructField("value", LongType, nullable = true)))
+    val inferred = GreaterThanOrEqual(AttributeReference("value", LongType)(), Literal(0L))
+    val table = new InMemoryCatalystFilterTable(schema, inferred,
+      estimateInferred = false, fullyPushedColumns = Seq("value"))
+    val relation = DataSourceV2Relation.create(table, None, None, CaseInsensitiveStringMap.empty)
+    val value = relation.output.head
+    val pushed = V2ScanRelationPushDown(Filter(GreaterThan(value, Literal(0L)), relation))
+    val scan = pushed.collectFirst { case s: DataSourceV2ScanRelation => s }.get
+    val predicates = Seq(
+      GreaterThan(Rand(0), Cast(value, DoubleType)),
+      EqualTo(value, ScalarSubquery(Project(Seq(Alias(Literal(1L), "v")()), OneRowRelation()))),
+      Literal.FalseLiteral)
+    predicates.foreach { predicate =>
+      val physical = new DataSourceV2Strategy(spark)
+        .apply(Filter(predicate, scan.copy(filterRemovalCandidates = Seq(predicate)))).head
+      val remaining = physical.collectFirst { case FilterExec(expr, _) => expr }.get
+      assert(remaining == predicate)
+    }
+  }
+
+  gridTest("guaranteed filter attributes retain factored Boolean predicates")(
+      Seq(false, true)) { includeResidualColumns =>
+    val schema = StructType(Seq("a", "b", "c").map(StructField(_, BooleanType, false)))
+    val a = AttributeReference("a", BooleanType, nullable = false)()
+    val b = AttributeReference("b", BooleanType, nullable = false)()
+    val table = new InMemoryCatalystFilterTable(schema, Or(a, b),
+      estimateInferred = false,
+      fullyPushedColumns = if (includeResidualColumns) Seq("a", "b", "c") else Seq("a", "b"))
+    val relation = DataSourceV2Relation.create(table, None, None, CaseInsensitiveStringMap.empty)
+    val residual = Or(relation.output.head, relation.output(2))
+    val optimized = BooleanSimplification(CombineFilters(
+      V2ScanRelationPushDown(Filter(residual, relation))))
+    val condition = optimized.collectFirst { case Filter(expr, _) => expr }.get
+    assert(condition.isInstanceOf[Or] && condition.exists(_.isInstanceOf[And]))
+    val physical = new DataSourceV2Strategy(spark).apply(optimized).head
+    val remaining = physical.collectFirst { case FilterExec(expr, _) => expr }
+    assert(remaining.exists(_.semanticEquals(condition)))
+  }
+
+  test("guaranteed filter attributes retain static filters when the scan reports no inference") {
+    val schema = StructType(Seq(StructField("value", LongType, nullable = true)))
+    val inferred = GreaterThanOrEqual(AttributeReference("value", LongType)(), Literal(0L))
+    val table = new InMemoryCatalystFilterTable(schema, inferred,
+      estimateInferred = false, fullyPushedColumns = Seq("value"))
+    val relation = DataSourceV2Relation.create(table, None, None, CaseInsensitiveStringMap.empty)
+    val pushed = V2ScanRelationPushDown(Filter(GreaterThan(relation.output.head, Literal(0L)),
+      relation))
+    val withoutInference = pushed.transform {
+      case scan: DataSourceV2ScanRelation =>
+        scan.copy(inferredFilters = Nil)
+    }
+    val physical = new DataSourceV2Strategy(spark).apply(withoutInference).head
+    val remaining = physical.collect { case FilterExec(condition, _) => condition }
+    val value = relation.output.head
+    val expected = And(GreaterThan(value, Literal(0L)), GreaterThanOrEqual(value, Literal(0L)))
+    assert(remaining.size == 1)
+    assert(remaining.head.semanticEquals(expected))
+  }
+
+  gridTest("guaranteed filter attributes preserve aliases after merging three scans")(
+      Seq("general", "dsv2")) { mode =>
+    withSQLConf(
+        SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED.key -> "true",
+        SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key ->
+          (mode == "general").toString,
+        SQLConf.MERGE_SUBPLANS_DSV2_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key ->
+          (mode == "dsv2").toString) {
+      val schema = StructType(Seq("id", "value", "a", "b", "c")
+        .map(StructField(_, LongType, false)))
+      val inferred = GreaterThanOrEqual(AttributeReference("value", LongType)(), Literal(0L))
+      val table = new InMemoryCatalystFilterTable(schema, inferred,
+        estimateInferred = false, fullyPushedColumns = Seq("value")) {
+        override def capabilities(): java.util.Set[TableCapability] =
+          EnumSet.of(TableCapability.BATCH_READ, TableCapability.SCAN_MERGING)
+      }
+      val subqueries = Seq("a", "b", "c").map { name =>
+        val relation = DataSourceV2Relation.create(table, None, None,
+          CaseInsensitiveStringMap.empty)
+        val column = relation.output.find(_.name == name).get
+        val pushed = CombineFilters(V2ScanRelationPushDown(Project(
+          Seq(relation.output.head, relation.output(1), column),
+          Filter(GreaterThan(column, Literal(0L)), relation))))
+        val aggregate = Aggregate(Nil,
+          Seq(Alias(Count(column).toAggregateExpression(), s"count_$name")()), pushed)
+        Alias(ScalarSubquery(aggregate), name)()
+      }
+      val merged = MergeSubplans(Project(subqueries, OneRowRelation()))
+      val scans = merged.collectWithSubqueries { case s: DataSourceV2ScanRelation => s }
+      assert(scans.size == 1, s"expected three scans to merge:\n$merged")
+      val aliases = merged.collectWithSubqueries {
+        case p: Project => p.projectList.collect {
+          case a: Alias if a.name.startsWith("propagatedFilter_") => a
+        }
+      }.flatten
+      assert(aliases.size >= 3 && aliases.exists(_.references.exists(_.name == "value")))
+      val planned = merged.collectWithSubqueries {
+        case p @ PhysicalOperation(_, _, _: DataSourceV2ScanRelation) =>
+          new DataSourceV2Strategy(spark).apply(p).head
+      }
+      val projected = planned.flatMap(_.collect { case p: ProjectExec => p.projectList }.flatten)
+      val predicateColumns = projected.collect {
+        case a: Alias if a.name.startsWith("propagatedFilter_") => a.child
+      }.flatMap(_.references).map(_.name).toSet
+      assert(predicateColumns == Set("value", "a", "b", "c"))
+      assert(merged.resolved)
+    }
+  }
+
   test("inferred filters do not block limit pushdown") {
     val (table, relation) = newPushdownRelation()
     val id = relation.output.find(_.name == "id").get
@@ -1707,7 +1984,9 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       tableSchema: StructType,
       inferredFilter: Expression,
       scanFactory: Option[StructType => Scan] = None,
-      estimateInferred: Boolean = true) extends Table with SupportsRead {
+      estimateInferred: Boolean = true,
+      fullyPushedColumns: Seq[String] = Nil)
+    extends Table with SupportsRead with SupportsCatalystFilterGuarantees {
 
     override def name(): String = "in-memory-catalyst-filter-table"
 
@@ -1715,6 +1994,9 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
 
     override def capabilities(): java.util.Set[TableCapability] =
       EnumSet.of(TableCapability.BATCH_READ)
+
+    override def fullyPushedFilterAttributes(): Array[NamedReference] =
+      fullyPushedColumns.map(FieldReference(_)).toArray[NamedReference]
 
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
       new InMemoryCatalystFilterScanBuilder(

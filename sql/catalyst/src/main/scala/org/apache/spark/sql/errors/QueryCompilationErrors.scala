@@ -4779,6 +4779,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
+  def invalidDataSourceFullyPushedFilterAttributeError(
+      attribute: Array[String],
+      tableName: String,
+      tableSchema: StructType): AnalysisException = {
+    new AnalysisException(
+      errorClass = "DATA_SOURCE_INVALID_FULLY_PUSHED_FILTER_ATTRIBUTE",
+      messageParameters = Map(
+        "attribute" -> toSQLId(attribute.toImmutableArraySeq),
+        "tableName" -> toSQLId(tableName),
+        "tableSchema" -> toSQLType(tableSchema)))
+  }
+
   def cannotResolveDataSourceRuntimeFilterAttributeError(
       attribute: Array[String],
       method: String,

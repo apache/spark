@@ -27,7 +27,7 @@ import org.apache.spark.internal.LogKeys.EXPR
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedPersistentView, ResolvedTable, ResolvedTempView}
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, BloomFilterMightContain, Cast, DynamicPruning, DynamicPruningSubquery, Expression, InSet, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, BloomFilterMightContain, Cast, DynamicPruning, DynamicPruningSubquery, Expression, ExpressionSet, InSet, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -152,8 +152,25 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       AttributeSet(dataColumns), _.isInstanceOf[BloomFilterMightContain])
   }
 
+  private def removeFullyPushedFilters(
+      filters: Seq[Expression],
+      relation: DataSourceV2ScanRelation): Seq[Expression] = {
+    val attributes = relation.fullyPushedFilterAttrs
+    if (relation.inferredFilters.isEmpty || attributes.isEmpty) return filters
+    val candidates = ExpressionSet(relation.filterRemovalCandidates)
+    def fullyPushed(expression: Expression): Boolean = expression match {
+      case e if attributes.contains(e) => true
+      case _: Attribute => false
+      case e => e.children.forall(fullyPushed)
+    }
+    filters.filterNot { filter =>
+      candidates.contains(filter) && filter.references.nonEmpty && fullyPushed(filter) &&
+        PushDownUtils.isPushablePartitionFilter(filter)
+    }
+  }
+
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-    case PhysicalOperation(project, filters, ExtractV2ScanInfo(
+    case PhysicalOperation(project, filters, relation @ ExtractV2ScanInfo(
       v2Relation, V1ScanWrapper(scan, pushed, pushedDownOperators), output)) =>
       val v1Relation = scan.toV1TableScan[BaseRelation with TableScan](session.sqlContext)
       if (v1Relation.schema != scan.readSchema()) {
@@ -176,20 +193,23 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         v1Relation,
         None,
         tableIdentifier)
+      val scanFilters = removeFullyPushedFilters(filters, relation)
       DataSourceV2Strategy.withProjectAndFilter(
-        project, filters, dsScan, needsUnsafeConversion = false) :: Nil
+        project, scanFilters, dsScan, needsUnsafeConversion = false) :: Nil
 
     case PhysicalOperation(project, filters,
-        ExtractV2ScanInfo(_, scan: LocalScan, output)) =>
+        relation @ ExtractV2ScanInfo(_, scan: LocalScan, output)) =>
       val localScanExec = LocalTableScanExec(output, scan.rows().toImmutableArraySeq, None)
+      val scanFilters = removeFullyPushedFilters(filters, relation)
       DataSourceV2Strategy.withProjectAndFilter(
-        project, filters, localScanExec, needsUnsafeConversion = false) :: Nil
+        project, scanFilters, localScanExec, needsUnsafeConversion = false) :: Nil
 
     case PhysicalOperation(project, filters, relation: DataSourceV2ScanRelation) =>
       // projection and filters were already pushed down in the optimizer.
       // this uses PhysicalOperation to get the projection and ensure that if the batch scan does
       // not support columnar, a projection is added to convert the rows to UnsafeRow.
-      val (dynamicFilters, postScanFilters) = filters.partition {
+      val scanFilters = removeFullyPushedFilters(filters, relation)
+      val (dynamicFilters, postScanFilters) = scanFilters.partition {
         case _: DynamicPruning => true
         case _ => false
       }

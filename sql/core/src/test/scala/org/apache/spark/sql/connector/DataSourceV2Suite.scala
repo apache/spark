@@ -38,8 +38,9 @@ import org.apache.spark.sql.catalyst.expressions.{
   Predicate => CatalystPredicate, ScalarSubquery}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{
-  Aggregate, Filter => LogicalFilter, GlobalLimit, Join, LocalLimit, Project}
+  Aggregate, Filter => LogicalFilter, GlobalLimit, Join, LocalLimit, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
+import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.catalog.{PartitionInternalRow, SupportsRead, SupportsWrite, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
@@ -63,7 +64,7 @@ import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.{SimpleTableProvider, SupportsPushDownCatalystFilters}
+import org.apache.spark.sql.internal.connector.{SimpleTableProvider, SupportsCatalystFilterGuarantees, SupportsPushDownCatalystFilters}
 import org.apache.spark.sql.sources.{BaseRelation, Filter, GreaterThan, TableScan}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
@@ -1857,6 +1858,88 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     }
   }
 
+  gridTest("guaranteed filters retain logical statistics without physical evaluation")(
+      Seq(false, true)) { keepResiduals =>
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+      val query = spark.read
+        .format(classOf[GuaranteedCatalystFilterDataSourceV2].getName)
+        .option(CatalystFilterScanBuilder.INFERRED_DERIVATION,
+          CatalystFilterScanBuilder.NEGATE_I_TO_J)
+        .option(CatalystFilterScanBuilder.USE_INFERRED_FILTER_ESTIMATION, "false")
+        .option(CatalystFilterScanBuilder.REPORTED_ROW_COUNT, "10")
+        .option(CatalystFilterScanBuilder.REPORT_COLUMN_STATS, "true")
+        .option(CatalystFilterScanBuilder.KEEP_RESIDUAL_FILTERS, keepResiduals.toString)
+        .load()
+        .filter($"i" > 7)
+
+      checkAnswer(query, Seq(Row(8, -8), Row(9, -9)))
+      checkAnswer(query.select(($"j" < -8).as("flag")), Seq(Row(false), Row(true)))
+      val logical = query.queryExecution.optimizedPlan
+      val scan = getScanRelation(query)
+      assert(scan.stats.rowCount.contains(BigInt(10)))
+      assert(logical.stats.rowCount.contains(BigInt(1)))
+      assert(logical.exists {
+        case filter: LogicalFilter => containsFilter(filter.condition, "j < -7")
+        case _ => false
+      })
+      assert(!query.queryExecution.executedPlan.exists(_.isInstanceOf[FilterExec]))
+    }
+  }
+
+  gridTest("guaranteed filters retain predicates introduced by correlated subqueries")(
+      Seq("EXISTS (SELECT 1 FROM u WHERE u.c = t.i AND t.j < -8)",
+        "i IN (SELECT c FROM u WHERE t.j < -8)")) { subquery =>
+    withTempView("t", "u") {
+      spark.read.format(classOf[GuaranteedCatalystFilterDataSourceV2].getName)
+        .option(CatalystFilterScanBuilder.INFERRED_DERIVATION,
+          CatalystFilterScanBuilder.NEGATE_I_TO_J)
+        .option(CatalystFilterScanBuilder.USE_INFERRED_FILTER_ESTIMATION, "false")
+        .load().createOrReplaceTempView("t")
+      Seq(8, 9).toDF("c").createOrReplaceTempView("u")
+      val query = sql(s"SELECT * FROM t WHERE i > 7 AND $subquery")
+      checkAnswer(query, Row(9, -9))
+    }
+  }
+
+  test("guaranteed filters retain predicates above expensive projections") {
+    val twice = udf((value: Int) => value * 2)
+    val query = spark.read.format(classOf[GuaranteedCatalystFilterDataSourceV2].getName)
+      .option(CatalystFilterScanBuilder.INFERRED_DERIVATION,
+        CatalystFilterScanBuilder.NEGATE_I_TO_J)
+      .option(CatalystFilterScanBuilder.USE_INFERRED_FILTER_ESTIMATION, "false")
+      .load().filter($"i" > 7).withColumn("x", twice($"j")).filter($"x" < -16)
+    checkAnswer(query, Row(9, -9, -18))
+    assert(query.queryExecution.executedPlan.exists(_.isInstanceOf[FilterExec]))
+  }
+
+  test("guaranteed filters retain predicates added by an optimizer rule after pushdown") {
+    val original = spark.experimental.extraOptimizations
+    val addFilter = new Rule[LogicalPlan] {
+      private var applied = false
+
+      override def apply(plan: LogicalPlan): LogicalPlan = {
+        if (applied) return plan
+        plan.transformDown {
+          case scan: DataSourceV2ScanRelation if !applied && scan.inferredFilters.nonEmpty =>
+            applied = true
+            val j = scan.output.find(_.name == "j").get
+            LogicalFilter(CatalystLessThan(j, CatalystLiteral(-8)), scan)
+        }
+      }
+    }
+    spark.experimental.extraOptimizations = original :+ addFilter
+    try {
+      val query = spark.read.format(classOf[GuaranteedCatalystFilterDataSourceV2].getName)
+        .option(CatalystFilterScanBuilder.INFERRED_DERIVATION,
+          CatalystFilterScanBuilder.NEGATE_I_TO_J)
+        .option(CatalystFilterScanBuilder.USE_INFERRED_FILTER_ESTIMATION, "false")
+        .load().filter($"i" > 7)
+      checkAnswer(query, Row(9, -9))
+    } finally {
+      spark.experimental.extraOptimizations = original
+    }
+  }
+
   test("inferred filters do not retain pruned columns during execution") {
     withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
       val query = spark.read
@@ -2332,6 +2415,20 @@ class CatalystFilterDataSourceV2 extends TestingV2Source {
   }
 }
 
+class GuaranteedCatalystFilterDataSourceV2 extends TestingV2Source {
+
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
+    new SimpleBatchTable with SupportsCatalystFilterGuarantees {
+      override def fullyPushedFilterAttributes(): Array[NamedReference] =
+        Array(FieldReference.column("i"), FieldReference.column("j"))
+
+      override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+        new CatalystFilterScanBuilder(options)
+      }
+    }
+  }
+}
+
 class CatalystFilterJoinDataSourceV2 extends TestingV2Source {
 
   override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
@@ -2454,6 +2551,7 @@ class CatalystFilterScanBuilder(options: CaseInsensitiveStringMap) extends Simpl
     options.getBoolean(CatalystFilterScanBuilder.REPORT_COLUMN_STATS, false)
   private val keepResidualFilters =
     options.getBoolean(CatalystFilterScanBuilder.KEEP_RESIDUAL_FILTERS, false)
+  private val sourceOutput = DataTypeUtils.toAttributes(TestingV2Source.schema)
   private var requiredSchema = TestingV2Source.schema
 
   override def readSchema(): StructType = requiredSchema
@@ -2502,19 +2600,21 @@ class CatalystFilterScanBuilder(options: CaseInsensitiveStringMap) extends Simpl
   override def useInferredFilterEstimation(): Boolean =
     options.getBoolean(CatalystFilterScanBuilder.USE_INFERRED_FILTER_ESTIMATION, true)
 
+  private def bindToSourceOutput(filter: CatalystExpression): CatalystExpression = {
+    filter.transformUp {
+      case attr: AttributeReference =>
+        sourceOutput.find(_.name == attr.name).getOrElse(
+          throw new IllegalArgumentException(s"Unknown column: ${attr.name}"))
+    }
+  }
+
   override def planInputPartitions(): Array[InputPartition] = {
     // This source enforces inferred filters and asks Spark to use them for stats adjustment.
     val enforcedFilters = pushedCatalystFilters ++ inferredFilters
     enforcedFilters.reduceLeftOption(CatalystAnd) match {
       case Some(filter) =>
-        val attrs = DataTypeUtils.toAttributes(TestingV2Source.schema)
-        val bound = filter.transformUp {
-          case attr: AttributeReference =>
-            attrs.find(_.name == attr.name).getOrElse(
-              throw new IllegalArgumentException(s"Unknown column: ${attr.name}"))
-        }
         val predicate = CatalystPredicate.createInterpreted(
-          BindReferences.bindReference(bound, attrs))
+          BindReferences.bindReference(bindToSourceOutput(filter), sourceOutput))
         Array(ValuesInputPartition((0 until 10).filter { i =>
           predicate.eval(InternalRow(i, -i))
         }))
