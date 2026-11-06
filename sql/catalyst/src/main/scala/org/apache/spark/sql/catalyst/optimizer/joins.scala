@@ -650,13 +650,14 @@ trait JoinSelectionHelper extends Logging {
  * such as an RDD that is not checkpointed may return different rows on each computation.
  *
  * The plan is walked bottom-up, tracking:
- * - output attributes whose values are unstable: they come from a non-deterministic expression, an
- *   order-dependent aggregate or window function, a subquery whose plan fails this same analysis,
- *   or an expression over such an attribute;
- * - whether the row multiplicity is unstable, i.e. every row is still present but may be repeated
- *   a different number of times, which an outer generate with an unstable generator, or an
- *   aggregate or distinct over an unstable value, causes and which makes every aggregate over the
- *   rows unstable.
+ *   1. output attributes whose values are unstable: they come from a non-deterministic expression,
+ *      an order-dependent aggregate or window function, a subquery whose plan fails this same
+ *      analysis, or an expression over such an attribute;
+ *   2. whether the row multiplicity is unstable, i.e. every row is still present but may be
+ *      repeated a different number of times, which an outer generate with an unstable generator,
+ *      or an aggregate over an unstable value, causes and which makes every aggregate over the
+ *      rows unstable.
+ *
  * The plan is rejected outright when its row set is unstable (a filter or join condition consumes
  * an unstable attribute, an inner generate uses an unstable generator, any limit, offset or
  * sample), when a leaf cannot promise the same rows again, and, each with its own reason, when it
@@ -845,19 +846,8 @@ private[optimizer] object RuntimeFilterSourceAnalysis {
     // per partition, while each evaluation chooses its own partitioning.
     case _: Sample => Left(NotRepeatable)
 
-    // Each distinct row occurs once, whatever the input multiplicity, but rows that differ only
-    // in unstable values may or may not collapse. Rows that are equal but not identical, e.g.
-    // under a case-insensitive collation, collapse into whichever of them arrives first.
-    case d: Distinct => analyze(d.child).map { t =>
-      val representatives =
-        d.output.filterNot(attr => UnsafeRowUtils.isBinaryStable(attr.dataType))
-      Taint(t.unstable ++ AttributeSet(representatives),
-        unstableMultiplicity = d.outputSet.intersect(t.unstable).nonEmpty)
-    }
-
     // The rows and their values are unchanged.
-    case _: Sort | _: SubqueryAlias | _: Repartition | _: RepartitionByExpression |
-        _: RebalancePartitions =>
+    case _: Sort | _: Repartition | _: RepartitionByExpression | _: RebalancePartitions =>
       analyze(plan.children.head)
 
     // The filter would evaluate the observation a second time under the same name.
