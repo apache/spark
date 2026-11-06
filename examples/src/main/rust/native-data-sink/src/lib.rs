@@ -251,7 +251,6 @@ impl JsonWrite {
         epoch: Option<(String, i64)>,
     ) -> Result<()> {
         let mut filenames = BTreeSet::new();
-        let mut partitions = BTreeSet::new();
         for (index, message) in messages.iter().enumerate() {
             if message.operation != self.operation
                 || !is_filename(&message.filename)
@@ -260,9 +259,7 @@ impl JsonWrite {
                 return Err("Invalid or duplicate task commit message".into());
             }
             // Spark passes the message of partition i at position i.
-            if usize::try_from(message.partition).ok() != Some(index)
-                || !partitions.insert(message.partition)
-            {
+            if usize::try_from(message.partition).ok() != Some(index) {
                 return Err("A commit message does not match its partition".into());
             }
             if !self.staging.join(&message.filename).is_file() {
