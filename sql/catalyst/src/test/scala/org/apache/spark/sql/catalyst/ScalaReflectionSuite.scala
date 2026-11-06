@@ -108,6 +108,12 @@ object FooEnum extends Enumeration {
 
 case class FooClassWithEnum(i: Int, e: FooEnum)
 
+trait TraitTag
+
+case class InnerDataWithTraitTag(x: Int)
+
+case class OuterDataWithTraitTag(y: InnerDataWithTraitTag with TraitTag)
+
 object TestingUDT {
   @SQLUserDefinedType(udt = classOf[NestedStructUDT])
   class NestedStruct(val a: Integer, val b: Long, val c: Double)
@@ -217,6 +223,16 @@ class ScalaReflectionSuite extends SparkFunSuite {
         StructField("shortField", ShortType, nullable = false),
         StructField("byteField", ByteType, nullable = false),
         StructField("booleanField", BooleanType, nullable = false))),
+      nullable = true))
+  }
+
+  test("SPARK-44702: case class field type tagged with a trait") {
+    val schema = schemaFor[OuterDataWithTraitTag]
+    assert(schema === Schema(
+      StructType(Seq(
+        StructField("y", StructType(Seq(
+          StructField("x", IntegerType, nullable = false))),
+          nullable = true))),
       nullable = true))
   }
 

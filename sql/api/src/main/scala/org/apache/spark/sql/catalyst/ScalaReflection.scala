@@ -481,7 +481,10 @@ trait ScalaReflection extends Logging {
   def getConstructorParameters(tpe: Type): Seq[(String, Type)] = {
     val dealiasedTpe = tpe.dealias
     val formalTypeArgs = dealiasedTpe.typeSymbol.asClass.typeParams
-    val TypeRef(_, _, actualTypeArgs) = dealiasedTpe
+    val actualTypeArgs = dealiasedTpe match {
+      case TypeRef(_, _, args) => args
+      case _ => Nil
+    }
     val params = constructParams(dealiasedTpe)
     params.map { p =>
       val paramTpe = p.typeSignature
@@ -514,7 +517,14 @@ trait ScalaReflection extends Logging {
 
   protected def constructParams(tpe: Type): Seq[Symbol] = {
     val constructorSymbol = tpe.member(termNames.CONSTRUCTOR) match {
-      case NoSymbol => getCompanionConstructor(tpe)
+      case NoSymbol =>
+        // A compound type formed with `with` (e.g. `Foo with Tag`) has no constructor of its
+        // own. Its erasure collapses it to its single concrete class parent (traits erase to
+        // interfaces), whose constructor is the one we actually want.
+        tpe.erasure.member(termNames.CONSTRUCTOR) match {
+          case NoSymbol => getCompanionConstructor(tpe)
+          case sym => sym
+        }
       case sym => sym
     }
     val params = if (constructorSymbol.isMethod) {
