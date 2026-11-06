@@ -18,7 +18,7 @@ WholeStageCodegen (4)
                           BroadcastExchange #3
                             WholeStageCodegen (1)
                               Project [l_orderkey,l_shipmode]
-                                Filter [l_commitdate,l_receiptdate,l_shipdate,l_shipmode,l_orderkey]
+                                Filter [l_commitdate,l_shipdate,l_receiptdate,l_shipmode,l_orderkey]
                                   ColumnarToRow
                                     InputAdapter
                                       Scan parquet spark_catalog.default.lineitem [l_orderkey,l_shipdate,l_commitdate,l_receiptdate,l_shipmode]
