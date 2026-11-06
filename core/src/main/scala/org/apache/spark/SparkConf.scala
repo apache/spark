@@ -829,7 +829,9 @@ private[spark] object SparkConf extends Logging {
     // We need SSL configs to propagate as they may be needed for RPCs.
     // Passwords are propagated separately though.
     (name.startsWith("spark.ssl") && !name.contains("Password")) ||
-    isSparkPortConf(name)
+    isSparkPortConf(name) ||
+    // Driver instance ID must propagate to executors as a startup property.
+    name == DRIVER_INSTANCE_ID.key
   }
 
   /**
