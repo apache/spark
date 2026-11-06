@@ -22,7 +22,8 @@ module.exports = async ({github, context, core, env = process.env, log = console
   // the Build checks on the head commit (statusCheckRollup.commit) and the fork's
   // workflow runs for that commit (headRef.target), both as GitHub Actions check
   // suites: fork runs are Actions runs, and Build checks written with the GITHUB_TOKEN
-  // land in Actions suites too.
+  // land in Actions suites too. On the PR side, only suites containing Build checks
+  // are relevant; unrelated upstream workflow runs must not fill the page.
   //
   // A PR rarely has more than a few such suites. A fork's default branch can collect
   // thousands from scheduled workflows, but suites are listed oldest first and a push
@@ -36,22 +37,24 @@ module.exports = async ({github, context, core, env = process.env, log = console
   // https://docs.github.com/en/graphql/overview/rate-limits-and-query-limits-for-the-graphql-api
   const GITHUB_ACTIONS_APP_ID = 15368
   const PR_PAGE_SIZE = 25
+  // Name of the mirrored PR check, not the workflow.
+  const BUILD_CHECK_NAME = 'Build'
 
   // Quick syncs cover only open PRs updated in the last QUICK_SYNC_LOOKBACK_DAYS. A
   // push, comment, review, or label change updates a PR, but a check change does not.
   // Fork runs usually finish within hours of a push, and most reruns happen within
   // days. A later rerun, or a gap in quick syncs longer than the lookback, is picked
-  // up by the next full sync, which covers all open PRs. Both are scheduled at the
-  // schedule in the workflow.
+  // up by the next full sync, which covers all open PRs. Both schedules are defined
+  // in update_build_status.yml.
   const QUICK_SYNC_LOOKBACK_DAYS = 3
   const fullSync = env.FULL_SYNC == 'true'
   const updatedSince = fullSync ? 0
     : Date.now() - QUICK_SYNC_LOOKBACK_DAYS * 24 * 60 * 60 * 1000
 
-  // A missing Build check points at the fork's build_main.yml run for the PR branch.
+  // A run-linked Build check points at the fork's build_main.yml run for the PR branch.
   // Right after a push that run may not be registered yet, so a PR updated in the last
-  // NEW_RUN_GRACE_MINUTES without a run is left for a later pass instead of being
-  // told that no run exists.
+  // NEW_RUN_GRACE_MINUTES without a usable run is left for a later pass instead of
+  // receiving action_required guidance.
   const BUILD_WORKFLOW = '.github/workflows/build_main.yml'
   const NEW_RUN_GRACE_MINUTES = 5
   const runGraceSince = Date.now() - NEW_RUN_GRACE_MINUTES * 60 * 1000
@@ -69,11 +72,15 @@ module.exports = async ({github, context, core, env = process.env, log = console
             statusCheckRollup {
               commit {
                 oid
-                checkSuites(first: 10, filterBy: {appId: $appId}) {
+                checkSuites(first: 10, filterBy: {
+                  appId: $appId, checkName: "${BUILD_CHECK_NAME}"
+                }) {
                   pageInfo { hasNextPage }
                   nodes {
                     checkRuns(first: 10,
-                        filterBy: {checkName: "Build", checkType: LATEST}) {
+                        filterBy: {
+                          checkName: "${BUILD_CHECK_NAME}", checkType: LATEST
+                        }) {
                       pageInfo { hasNextPage }
                       nodes { databaseId status conclusion text }
                     }
@@ -156,6 +163,8 @@ module.exports = async ({github, context, core, env = process.env, log = console
       throw new Error('The PR head commit has more check suites or Build checks '
         + 'than a page holds')
     }
+    // checkName filtering can repeat suites; process each Build check only once.
+    const checks = new Map(suites.flatMap(s => s.checkRuns.nodes).map(cr => [cr.databaseId, cr]))
     const lower = (value) => value?.toLowerCase()
     const runs = target.checkSuites.nodes.filter(s => s.workflowRun).map(s => ({
       id: s.workflowRun.databaseId,
@@ -171,7 +180,7 @@ module.exports = async ({github, context, core, env = process.env, log = console
       forkOwner: node.headRef.repository.owner.login,
       forkRepo: node.headRef.repository.name,
       branch: node.headRef.name,
-      buildChecks: suites.flatMap(s => s.checkRuns.nodes).map(cr => ({
+      buildChecks: [...checks.values()].map(cr => ({
         id: cr.databaseId,
         status: lower(cr.status),
         conclusion: lower(cr.conclusion),
@@ -244,7 +253,7 @@ module.exports = async ({github, context, core, env = process.env, log = console
 
       // Sync every Build check that points at a fork run, not just the first: a commit
       // can carry more than one (e.g. left by the notify workflow this one replaced).
-      // An action_required check, written when no fork run was found, points at none.
+      // An action_required guidance check is not linked to a run.
       let syncableBuildCheck = false
       for (const cr of pr.buildChecks) {
         if (cr.conclusion == 'action_required') {
@@ -297,11 +306,11 @@ module.exports = async ({github, context, core, env = process.env, log = console
         }
       }
 
-      // No syncable Build check: none was created yet, only an action_required one
-      // exists, or the existing one points at a fork run that is gone. Create one
-      // from the fork's build_main.yml run for the PR branch (see toPR). A skipped run
-      // has no result to show. New Build checks are only created for non-master fork
-      // branches; existing run-linked checks are still synchronized above.
+      // No syncable Build check: link one to the PR branch's build_main.yml run, or
+      // create action_required guidance if no run exists, it was skipped, or the PR
+      // is from fork master. Fork master is reserved for syncing upstream; new PR
+      // builds must use other branches, even if an older workflow ran on master.
+      // Existing run-linked checks are still synchronized above.
       if (!syncableBuildCheck) {
         const run = pr.branch == 'master' || pr.buildRun?.conclusion == 'skipped'
           ? undefined : pr.buildRun
@@ -313,7 +322,7 @@ module.exports = async ({github, context, core, env = process.env, log = console
             failedPRs.add(pr.number)
             continue
           }
-          // Already told there is no run, or the run may not be registered yet.
+          // Already provided guidance, or still within the run-registration grace period.
           if (pr.buildChecks.some(cr => cr.conclusion == 'action_required')
               || Date.parse(pr.updatedAt) > runGraceSince) {
             count.skipped++
@@ -323,7 +332,9 @@ module.exports = async ({github, context, core, env = process.env, log = console
 
         const state = run ? checkState(run)
           : {status: 'completed', conclusion: 'action_required'}
-        const check = {...context.repo, name: 'Build', head_sha: pr.sha, ...state}
+        const check = {
+          ...context.repo, name: BUILD_CHECK_NAME, head_sha: pr.sha, ...state
+        }
         const change = 'none -> ' + label(state)
         try {
           if (run) {
@@ -344,8 +355,7 @@ module.exports = async ({github, context, core, env = process.env, log = console
             }
             check.details_url = actions_url
           } else {
-            // No usable run to show, or the PR is from fork master where new Build
-            // checks are not supported. Tell the contributor how to fix it.
+            // No usable run, or a fork-master PR: explain the required setup.
             check.output = {
               title: 'PR build setup requires attention',
               summary: `
