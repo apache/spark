@@ -111,6 +111,9 @@ object ExternalLookupJoinShapes {
    * comparison's parameter. It may read only stream columns, and it may read none, as a literal
    * does. A value that reads lookup columns, as in `t.a = t.b`, cannot be a parameter.
    *
+   * The lookup column must be of a type on which [[ExternalLookupKeyTypes]] lets Spark offer the
+   * comparison. A comparison on another type is an ordinary conjunct.
+   *
    * @param streamOutput The output of the join's left side, the stream side.
    * @param lookupOutput The output of the join's right side, the lookup side.
    */
@@ -125,7 +128,8 @@ object ExternalLookupJoinShapes {
         val nullSafe = comparison.isInstanceOf[EqualNullSafe]
         Seq(comparison, withOperandsSwapped(comparison)).collectFirst {
           case candidate @ BinaryComparison(lookupField: Attribute, parameter)
-              if isLookupComparison(lookupField, parameter) =>
+              if isLookupComparison(lookupField, parameter) &&
+                isOfferedOn(comparison, lookupField.dataType) =>
             LookupComparison(lookupField, parameter, candidate.sqlOperator, nullSafe)
         }
       case _ => None
@@ -137,6 +141,13 @@ object ExternalLookupJoinShapes {
         _: GreaterThanOrEqual => true
     case _ => false
   }
+
+  /** Whether Spark offers the comparison on a lookup column of this type. */
+  private def isOfferedOn(comparison: BinaryComparison, dataType: DataType): Boolean =
+    comparison match {
+      case _: EqualTo | _: EqualNullSafe => ExternalLookupKeyTypes.supportsEquality(dataType)
+      case _ => ExternalLookupKeyTypes.supportsRange(dataType)
+    }
 
   /** The same comparison with its operands swapped, so that `a < b` becomes `b > a`. */
   private def withOperandsSwapped(comparison: BinaryComparison): BinaryComparison =
@@ -184,6 +195,8 @@ case class ExternalLookupFilter(
  * @param lookupKeys The table column that each selected lookup predicate compares with the
  *   parameter at the same position. Spark checks each row that the connector returns against
  *   them, so the read schema must hold these columns.
+ * @param lookupKeyPredicates The name of each selected lookup predicate, such as `=` or `<`,
+ *   with the lookup column on the left. It tells how Spark checks the key.
  */
 case class PreparedExternalLookupJoin(
     child: LogicalPlan,
@@ -197,6 +210,7 @@ case class PreparedExternalLookupJoin(
     lookupParameters: Seq[Expression],
     nullSafeParameters: Seq[Boolean],
     lookupKeys: Seq[Attribute],
+    lookupKeyPredicates: Seq[String],
     joinType: JoinType,
     residualCondition: Option[Expression]) extends UnaryNode {
 
@@ -227,11 +241,11 @@ case class PreparedExternalLookupJoin(
  */
 object ExternalLookupKeyTypes {
   /**
-   * Whether Spark offers `=` on a lookup column of this type: integral types, BOOLEAN, DECIMAL,
-   * DATE, TIMESTAMP, TIMESTAMP_NTZ, BINARY, and strings whose collation compares bytes, such as
-   * UTF8_BINARY. FLOAT and DOUBLE are not offered, because stores treat NaN and -0.0 in different
-   * ways, nor CHAR and VARCHAR, whose padding and length rules a store may apply differently, nor
-   * strings with another collation, nor complex types, nor any other type.
+   * Whether Spark offers `=` or `<=>` on a lookup column of this type: integral types, BOOLEAN,
+   * DECIMAL, DATE, TIMESTAMP, TIMESTAMP_NTZ, BINARY, and strings whose collation compares bytes,
+   * such as UTF8_BINARY. FLOAT and DOUBLE are not offered, because stores treat NaN and -0.0 in
+   * different ways, nor CHAR and VARCHAR, whose padding and length rules a store may apply
+   * differently, nor strings with another collation, nor complex types, nor any other type.
    */
   def supportsEquality(dataType: DataType): Boolean = dataType match {
     case ByteType | ShortType | IntegerType | LongType | BooleanType | DateType | TimestampType |
@@ -247,4 +261,16 @@ object ExternalLookupKeyTypes {
    */
   def isCharOrVarchar(column: Attribute): Boolean =
     CharVarcharUtils.getRawType(column.metadata).isDefined
+
+  /**
+   * Whether Spark offers `<`, `<=`, `>` or `>=` on a lookup column of this type: integral types,
+   * DECIMAL, DATE, TIMESTAMP and TIMESTAMP_NTZ. Strings and BINARY are not offered, because Spark
+   * orders them by code point and by unsigned byte, while stores often order them differently,
+   * nor BOOLEAN, FLOAT, DOUBLE, complex types or any other type.
+   */
+  def supportsRange(dataType: DataType): Boolean = dataType match {
+    case ByteType | ShortType | IntegerType | LongType | DateType | TimestampType |
+        TimestampNTZType | _: DecimalType => true
+    case _ => false
+  }
 }
