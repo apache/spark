@@ -38,8 +38,9 @@ import org.apache.spark.sql.catalyst.expressions.{
   Predicate => CatalystPredicate, ScalarSubquery}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{
-  Aggregate, Filter => LogicalFilter, GlobalLimit, Join, LocalLimit, Project}
+  Aggregate, Filter => LogicalFilter, GlobalLimit, Join, LocalLimit, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
+import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.catalog.{PartitionInternalRow, SupportsRead, SupportsWrite, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
@@ -1882,6 +1883,60 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
         case _ => false
       })
       assert(!query.queryExecution.executedPlan.exists(_.isInstanceOf[FilterExec]))
+    }
+  }
+
+  gridTest("guaranteed filters retain predicates introduced by correlated subqueries")(
+      Seq("EXISTS (SELECT 1 FROM u WHERE u.c = t.i AND t.j < -8)",
+        "i IN (SELECT c FROM u WHERE t.j < -8)")) { subquery =>
+    withTempView("t", "u") {
+      spark.read.format(classOf[GuaranteedCatalystFilterDataSourceV2].getName)
+        .option(CatalystFilterScanBuilder.INFERRED_DERIVATION,
+          CatalystFilterScanBuilder.NEGATE_I_TO_J)
+        .option(CatalystFilterScanBuilder.USE_INFERRED_FILTER_ESTIMATION, "false")
+        .load().createOrReplaceTempView("t")
+      Seq(8, 9).toDF("c").createOrReplaceTempView("u")
+      val query = sql(s"SELECT * FROM t WHERE i > 7 AND $subquery")
+      checkAnswer(query, Row(9, -9))
+    }
+  }
+
+  test("guaranteed filters retain predicates above expensive projections") {
+    val twice = udf((value: Int) => value * 2)
+    val query = spark.read.format(classOf[GuaranteedCatalystFilterDataSourceV2].getName)
+      .option(CatalystFilterScanBuilder.INFERRED_DERIVATION,
+        CatalystFilterScanBuilder.NEGATE_I_TO_J)
+      .option(CatalystFilterScanBuilder.USE_INFERRED_FILTER_ESTIMATION, "false")
+      .load().filter($"i" > 7).withColumn("x", twice($"j")).filter($"x" < -16)
+    checkAnswer(query, Row(9, -9, -18))
+    assert(query.queryExecution.executedPlan.exists(_.isInstanceOf[FilterExec]))
+  }
+
+  test("guaranteed filters retain predicates added by an optimizer rule after pushdown") {
+    val original = spark.experimental.extraOptimizations
+    val addFilter = new Rule[LogicalPlan] {
+      private var applied = false
+
+      override def apply(plan: LogicalPlan): LogicalPlan = {
+        if (applied) return plan
+        plan.transformDown {
+          case scan: DataSourceV2ScanRelation if !applied && scan.inferredFilters.nonEmpty =>
+            applied = true
+            val j = scan.output.find(_.name == "j").get
+            LogicalFilter(CatalystLessThan(j, CatalystLiteral(-8)), scan)
+        }
+      }
+    }
+    spark.experimental.extraOptimizations = original :+ addFilter
+    try {
+      val query = spark.read.format(classOf[GuaranteedCatalystFilterDataSourceV2].getName)
+        .option(CatalystFilterScanBuilder.INFERRED_DERIVATION,
+          CatalystFilterScanBuilder.NEGATE_I_TO_J)
+        .option(CatalystFilterScanBuilder.USE_INFERRED_FILTER_ESTIMATION, "false")
+        .load().filter($"i" > 7)
+      checkAnswer(query, Row(9, -9))
+    } finally {
+      spark.experimental.extraOptimizations = original
     }
   }
 

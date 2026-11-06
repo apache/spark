@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, AttributeSet, DynamicPruning, DynamicPruningExpression, EqualTo, Expression, GetStructField, GreaterThan, Literal, RLike}
+import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, AttributeSet, DynamicPruning, DynamicPruningExpression, EqualTo, Expression, ExpressionSet, GetStructField, GreaterThan, Literal, RLike}
 import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
 import org.apache.spark.sql.connector.catalog.{
   Column,
@@ -191,7 +191,8 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
       val id = AttributeSet(relation.output.filter(_.name == "id"))
       assert(combined.runtimeFilterAttrs == id)
       assert(combined.fullyPushedRuntimeFilterAttrs == id)
-      assert(combined.fullyPushedFilterAttrs.contains(GetStructField(relation.output(1), 0)))
+      assert(combined.fullyPushedFilterAttrs ==
+        ExpressionSet(Seq(GetStructField(relation.output(1), 0))))
     }
   }
 

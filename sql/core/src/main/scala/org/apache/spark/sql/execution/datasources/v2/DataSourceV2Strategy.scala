@@ -27,7 +27,7 @@ import org.apache.spark.internal.LogKeys.EXPR
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedPersistentView, ResolvedTable, ResolvedTempView}
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, AttributeSet, BloomFilterMightContain, Cast, DynamicPruning, DynamicPruningSubquery, Expression, InSet, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, AttributeSet, BloomFilterMightContain, Cast, DynamicPruning, DynamicPruningSubquery, Expression, ExpressionSet, InSet, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -52,7 +52,6 @@ import org.apache.spark.sql.execution.streaming.runtime.StreamingV2ScanPushDown
 import org.apache.spark.sql.execution.streaming.runtime.StreamingV2ScanPushDown.ScanOfStream
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
-import org.apache.spark.sql.internal.connector.SupportsCatalystFilterGuarantees
 import org.apache.spark.sql.metricview.logical.CreateMetricView
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.storage.StorageLevel
@@ -158,20 +157,17 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
   private def removeFullyPushedFilters(
       filters: Seq[Expression],
       relation: DataSourceV2ScanRelation): Seq[Expression] = {
-    if (relation.inferredFilters.isEmpty) return filters
-    relation.relation.table match {
-      case _: SupportsCatalystFilterGuarantees =>
-        val attributes = relation.fullyPushedFilterAttrs
-        def fullyPushed(expression: Expression): Boolean = expression match {
-          case e if attributes.contains(e) => true
-          case _: Attribute => false
-          case e => e.children.forall(fullyPushed)
-        }
-        filters.filterNot { filter =>
-          filter.references.nonEmpty && fullyPushed(filter) &&
-            PushDownUtils.isPushablePartitionFilter(filter)
-        }
-      case _ => filters
+    val attributes = relation.fullyPushedFilterAttrs
+    if (relation.inferredFilters.isEmpty || attributes.isEmpty) return filters
+    val candidates = ExpressionSet(relation.filterRemovalCandidates)
+    def fullyPushed(expression: Expression): Boolean = expression match {
+      case e if attributes.contains(e) => true
+      case _: Attribute => false
+      case e => e.children.forall(fullyPushed)
+    }
+    filters.filterNot { filter =>
+      candidates.contains(filter) && filter.references.nonEmpty && fullyPushed(filter) &&
+        PushDownUtils.isPushablePartitionFilter(filter)
     }
   }
 

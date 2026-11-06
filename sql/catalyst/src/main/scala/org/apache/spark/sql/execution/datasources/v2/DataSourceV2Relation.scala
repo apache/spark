@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import java.util.{Collections, Optional, OptionalLong}
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics}
 import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSeq, AttributeSet, Expression, ExpressionSet, Literal, NamedExpression, ProjectionOverSchema, SortOrder, V2ExpressionUtils}
@@ -196,6 +197,9 @@ case class DataSourceV2Relation(
  *                             false: a pushed limit, offset, top-N, sample, aggregate or join
  *                             decides which rows the scan returns, and a build site that does not
  *                             set it keeps storage filters away from its scan.
+ * @param filterRemovalCandidates post-scan conjuncts recorded during filter pushdown, resolved
+ *                                against the pruned output, that a table's fully pushed attribute
+ *                                declaration may allow physical planning to omit.
  */
 case class DataSourceV2ScanRelation(
     relation: DataSourceV2Relation,
@@ -206,7 +210,8 @@ case class DataSourceV2ScanRelation(
     pushedFilters: Seq[Expression] = Seq.empty,
     inferredFilters: Seq[Expression] = Seq.empty,
     mergeableScan: Boolean = false,
-    onlyRowWisePushdowns: Boolean = false) extends LeafNode with NamedRelation {
+    onlyRowWisePushdowns: Boolean = false,
+    filterRemovalCandidates: Seq[Expression] = Seq.empty) extends LeafNode with NamedRelation {
 
   // TODO: Override validConstraints to return ExpressionSet(pushedFilters) so that pushed
   // filters participate in constraint propagation (InferFiltersFromConstraints, PruneFilters).
@@ -220,8 +225,19 @@ case class DataSourceV2ScanRelation(
   lazy val fullyPushedFilterAttrs: ExpressionSet = relation.table match {
     case table: SupportsCatalystFilterGuarantees =>
       val refs = table.fullyPushedFilterAttributes().toImmutableArraySeq
-      // Validate against the table before ignoring fields pruned from this scan.
-      V2ExpressionUtils.resolveRefs[NamedExpression](refs, relation)
+      val tableSchema = fromAttributes(relation.output)
+      refs.foreach { ref =>
+        val names = ref.fieldNames.toImmutableArraySeq
+        val valid = try {
+          names.nonEmpty && tableSchema.findNestedField(names, resolver = conf.resolver).isDefined
+        } catch {
+          case _: AnalysisException => false
+        }
+        if (!valid) {
+          throw QueryCompilationErrors.invalidDataSourceFullyPushedFilterAttributeError(
+            ref.fieldNames, table.name(), tableSchema)
+        }
+      }
       val schema = fromAttributes(output)
       val available = refs.filter { ref =>
         schema.findNestedField(ref.fieldNames.toImmutableArraySeq, resolver = conf.resolver)
@@ -469,7 +485,9 @@ case class DataSourceV2ScanRelation(
       // normalized against the relation's full output rather than `output`. inferredFilters only
       // reference `output` (pruneColumns drops the rest), so the same normalization is safe.
       pushedFilters = pushedFilters.map(QueryPlan.normalizeExpressions(_, relation.output)),
-      inferredFilters = inferredFilters.map(QueryPlan.normalizeExpressions(_, relation.output))
+      inferredFilters = inferredFilters.map(QueryPlan.normalizeExpressions(_, relation.output)),
+      filterRemovalCandidates = filterRemovalCandidates.map(
+        QueryPlan.normalizeExpressions(_, relation.output))
     )
   }
 }
