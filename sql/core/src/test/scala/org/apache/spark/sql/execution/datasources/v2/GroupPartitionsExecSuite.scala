@@ -21,7 +21,7 @@ import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, CodegenObjectFactoryMode, SortOrder, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.{Add, Ascending, Attribute, AttributeReference, CodegenObjectFactoryMode, Expression, Literal, SortOrder, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, HASH_ROUTING, KeyedPartitioning, KeyedShuffleSpec, KeyReducer, OrderedDistribution, Partitioning, PartitioningCollection, REPLICATED_FOR_JOIN, SPLIT_FOR_JOIN, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.date
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
@@ -110,8 +110,8 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     // This node re-reports the child's expressions, projected to `joinKeyPositions`. A reduce that
     // happened below it has to survive that, or a further join above reads the reported transform
     // as if it still described the keys.
-    val reducedExpr = TransformExpression(BucketFunction, Seq(exprA), Some(12))
-      .reducedTogetherWith(TransformExpression(BucketFunction, Seq(exprA), Some(8)))
+    val reducedExpr = TransformExpression(BucketFunction, Seq(Literal(12), exprA))
+      .reducedTogetherWith(TransformExpression(BucketFunction, Seq(Literal(8), exprA)))
     val child = DummySparkPlan(outputPartitioning =
       KeyedPartitioning(Seq(reducedExpr, exprB), Seq(row(1, 10), row(2, 20), row(1, 30))))
     val gpe = GroupPartitionsExec(child, joinKeyPositions = Some(Seq(0)))
@@ -127,13 +127,42 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     // Same for a node that reduces the other position. The position it does not reduce passes
     // through, marker and all.
     val reducingGpe = GroupPartitionsExec(child, reducers = Some(Seq(None, Some(
-      KeyReducer(BucketReducer(2), TransformExpression(BucketFunction, Seq(exprB), Some(2)))))))
+      KeyReducer(BucketReducer(2), TransformExpression(BucketFunction, Seq(Literal(2), exprB)))))))
     reducingGpe.outputPartitioning match {
       case kp: KeyedPartitioning =>
         assert(kp.expressions.head === reducedExpr, "the unreduced position keeps its marker")
         assert(!kp.expressionsDescribeKeys)
       case other => fail(s"Expected KeyedPartitioning, got $other")
     }
+  }
+
+  test("SPARK-50593: a reduce keeps an expression member in its partner's key space") {
+    // Two sides reduced together by % 4, each a collection of a column member and an expression
+    // member. Rebuilding the reduced expression over a member's argument must rebuild the partner
+    // it records the same way, or the two expression members stop sharing a key space.
+    val id = AttributeReference("id", IntegerType)()
+    val y = AttributeReference("y", IntegerType)()
+    def bucket(n: Int, arg: Expression): TransformExpression =
+      TransformExpression(BucketFunction, Seq(Literal(n), arg))
+    def side(n: Int, col: Attribute, other: Int, otherCol: Attribute): GroupPartitionsExec = {
+      val columnMember = KeyedPartitioning(Seq(bucket(n, col)), Seq(row(0), row(1)))
+      val exprMember = columnMember.copy(expressions = Seq(bucket(n, Add(col, Literal(1)))))
+      val child = DummySparkPlan(outputPartitioning =
+        PartitioningCollection(Seq(columnMember, exprMember)))
+      GroupPartitionsExec(child, reducers = Some(Seq(Some(KeyReducer(BucketReducer(4),
+        bucket(n, col).reducedTogetherWith(bucket(other, otherCol)))))))
+    }
+    def members(gpe: GroupPartitionsExec): Seq[TransformExpression] =
+      gpe.outputPartitioning.asInstanceOf[PartitioningCollection].partitionings.map {
+        case kp: KeyedPartitioning => kp.expressions.head.asInstanceOf[TransformExpression]
+        case other => fail(s"Expected KeyedPartitioning, got $other")
+      }
+    val Seq(leftColumn, leftExpr) = members(side(8, id, 12, y))
+    val Seq(rightColumn, rightExpr) = members(side(12, y, 8, id))
+
+    assert(leftColumn.hasSameReducedKeys(rightColumn), "column members")
+    assert(leftExpr.hasSameReducedKeys(rightExpr), "expression members")
+    assert(!leftColumn.hasSameReducedKeys(rightExpr), "a column member and an expression member")
   }
 
   test("SPARK-59285: a reduced key space's type reaches the reported partitioning with no key " +
@@ -468,7 +497,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
       override def resultType(): DataType = IntegerType
       override def displayName(): String = "mod2"
     }
-    val reducer = KeyReducer(mod2, TransformExpression(BucketFunction, Seq(exprA), Some(2)))
+    val reducer = KeyReducer(mod2, TransformExpression(BucketFunction, Seq(Literal(2), exprA)))
     val partitionKeys = Seq(row(1), row(2), row(3))
     val child = DummySparkPlan(
       outputPartitioning = KeyedPartitioning(Seq(exprA), partitionKeys)

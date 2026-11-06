@@ -17,6 +17,7 @@
 package org.apache.spark.sql.connector.catalog.functions;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.Literal;
 
 /**
  * Base class for user-defined functions that can be 'reduced' on another function.
@@ -61,7 +62,63 @@ import org.apache.spark.annotation.Evolving;
 public interface ReducibleFunction<I, O> {
 
   /**
-   * This method is for the bucket function.
+   * Generic reducer for parameterized functions (bucket, truncate, etc.).
+   *
+   * If this function is 'reducible' on another function, return the {@link Reducer}.
+   * <p>
+   * Each parameter is a {@link Literal} carrying both its value and data type, such as a bucket
+   * count, a truncate width, or a {@code CalendarInterval}. {@link Literal#value()} is Spark's
+   * internal representation (e.g. {@code UTF8String} for strings, {@code Decimal} for decimals);
+   * use {@link Literal#dataType()} to interpret it rather than assuming a JVM type. Spark does not
+   * call this method for a pair where either side has a null literal, a literal of array, map,
+   * struct or UDT type, or one of a type other than the function declares at its position in
+   * {@code inputTypes()}; the join shuffles instead. A literal past the declared arity has no
+   * declared type, so it is passed as it is.
+   * <p>
+   * {@code thisParams} and {@code otherParams} hold each side's own literal parameters and may have
+   * different lengths -- for example a zero-parameter transform reducing onto a one-parameter one.
+   * Implementations must check each array's length before indexing into it. Each call gets its own
+   * arrays, but the literal values may be shared, so implementations must not modify them.
+   * Spark only asks when the two transforms' arguments line up position by position, so
+   * {@code days(ts)} may be offered {@code truncate(ts, 3)} but never {@code bucket(4, ts)}.
+   * <p>
+   * Returning {@code null} means "not reducible for these parameters" and is authoritative:
+   * Spark consults no other overload. Dispatch order: Spark tries this generalized overload
+   * first, for every pair. Only if it is not implemented (throws
+   * {@link UnsupportedOperationException}) does Spark fall back: to
+   * {@link #reducer(ReducibleFunction)} when neither side has a parameter, or to the deprecated
+   * {@code reducer(int, ReducibleFunction, int)} overload when both sides are the same function
+   * and each has a single non-null integer parameter in the first position. If every
+   * eligible overload throws {@link UnsupportedOperationException}, Spark logs an "implements no
+   * reducer" warning; any other exception, from either side's call, is logged and the pair is
+   * treated as not reducible (the join falls back to a shuffle).
+   * <p>
+   * Examples:
+   * <ul>
+   *     <li>bucket(4, x) and bucket(2, x): thisParams = [4], otherParams = [2]</li>
+   *     <li>truncate(x, 3) and truncate(x, 5): thisParams = [3], otherParams = [5]</li>
+   *     <li>hypothetical range_bucket(x, 0L, 100L, 4): thisParams = [0L, 100L, 4]</li>
+   * </ul>
+   *
+   * @param thisParams literal parameters for this function (may differ in length from otherParams)
+   * @param otherFunction the other parameterized function
+   * @param otherParams literal parameters for the other function (may differ in length from
+   *                    thisParams)
+   * @return a reduction function if reducible, null otherwise
+   * @since 4.4.0
+   */
+  default Reducer<I, O> reducer(
+          Literal<?>[] thisParams,
+          ReducibleFunction<?, ?> otherFunction,
+          Literal<?>[] otherParams) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * This method is for the bucket function. When the generalized overload is not implemented,
+   * Spark offers it a pair of the same function whose single integer parameter comes first, as in
+   * {@code bucket(n, col)}, so an implementation should check {@code otherBucketFunction} rather
+   * than assume it is a bucket.
    *
    * If this bucket function is 'reducible' on another bucket function,
    * return the {@link Reducer} function.
@@ -78,7 +135,12 @@ public interface ReducibleFunction<I, O> {
    * @param otherBucketFunction the other parameterized function
    * @param otherNumBuckets parameter for the other function
    * @return a reduction function if it is reducible, null if not
+   * @deprecated as of 4.4.0. Please override
+   *     {@link #reducer(Literal[], ReducibleFunction, Literal[])} instead.
+   *     The new overload supports transforms with any number of parameters of any type
+   *     (e.g. truncate width, multi-arg range buckets), not just a single int.
    */
+  @Deprecated(since = "4.4.0")
   default Reducer<I, O> reducer(
       int thisNumBuckets,
       ReducibleFunction<?, ?> otherBucketFunction,
