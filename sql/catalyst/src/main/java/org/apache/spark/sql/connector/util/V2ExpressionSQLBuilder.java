@@ -222,6 +222,13 @@ public class V2ExpressionSQLBuilder {
     };
   }
 
+  protected boolean isLikeStringPredicate(String name) {
+    return switch (name) {
+      case "STARTS_WITH", "ENDS_WITH", "CONTAINS" -> true;
+      default -> false;
+    };
+  }
+
   // Operators whose rendered SQL is NOT a self-delimiting primary and therefore must be
   // parenthesized before a trailing IS [NOT] NULL: binary comparisons (per SPARK-57243) plus IN,
   // the boolean connectives, LIKE-family, and arithmetic. Function calls, CASE and CAST already

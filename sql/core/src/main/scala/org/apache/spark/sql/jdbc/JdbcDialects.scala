@@ -430,7 +430,7 @@ abstract class JdbcDialect extends Serializable with Logging {
         }
         inputToSQL(e.children()(0))
       case e: GeneralScalarExpression if isLikeStringPredicate(e.name()) =>
-        buildLikeStringPredicate(e).getOrElse(declineLikeStringPredicate(e.name()))
+        buildLikeStringPredicate(e).getOrElse(visitUnexpectedExpr(e))
       case _ => super.build(expr)
     }
 
@@ -442,16 +442,6 @@ abstract class JdbcDialect extends Serializable with Logging {
         case c if c == likeEscapeChar => s"$c$c"
         case c => c.toString
       }
-
-    private def isLikeStringPredicate(name: String): Boolean =
-      name == "STARTS_WITH" || name == "ENDS_WITH" || name == "CONTAINS"
-
-    private def declineLikeStringPredicate(name: String): Nothing =
-      throw new SparkUnsupportedOperationException(
-        errorClass = "_LEGACY_ERROR_TEMP_3177",
-        messageParameters = Map(
-          "class" -> this.getClass.getSimpleName,
-          "funcName" -> name))
 
     private def buildLikeStringPredicate(e: GeneralScalarExpression): Option[String] = {
       val children = e.children()
