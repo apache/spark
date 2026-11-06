@@ -29,9 +29,10 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow}
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeSet}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeSet, ScalarSubquery}
 import org.apache.spark.sql.catalyst.optimizer.ColumnPruning
-import org.apache.spark.sql.catalyst.plans.logical.{Project, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, WithCTE}
+import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.classic.Dataset
@@ -43,7 +44,7 @@ import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, Streaming
 import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{CharType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
@@ -797,6 +798,119 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
+  test("keep the placeholders of different static plans apart") {
+    withSourceTable() {
+      val df = spark.readStream.table(tbl).select(
+        expr("(SELECT max(id) FROM range(3))").as("a"),
+        expr("(SELECT max(id) FROM range(4))").as("b"),
+        expr("(SELECT max(id) FROM range(3))").as("c"),
+        col("data"))
+      val placeholders = StreamingV2ScanPushDown.forStartup(df.queryExecution.analyzed)
+        .collectFirst { case project: Project => project.projectList.take(3) }.get
+        .map(_.collectFirst { case subquery: ScalarSubquery => subquery.plan.canonicalized }.get)
+      // The placeholders of different plans differ, although they have the same output, while
+      // those of the same plan do not, as the plans in the micro-batches.
+      assert(placeholders(0) !== placeholders(1))
+      assert(placeholders(0) === placeholders(2))
+    }
+  }
+
+  test("plan the placeholders in the expressions of other placeholders too") {
+    withSourceTable() {
+      // The cast of the string is a placeholder whose expression has the placeholder of the
+      // current date.
+      val df = spark.readStream.table(tbl).select(
+        expr("CAST(concat(CAST(current_date() AS STRING), ' 12:00') AS TIMESTAMP)").as("t"),
+        col("data"))
+      val startup = StreamingV2ScanPushDown.forStartup(df.queryExecution.analyzed)
+      assert(!startup.flatMap(_.expressions).forall(_.deterministic))
+      // The planner of a micro-batch gets the values of both, which are deterministic.
+      val planned = StreamingV2ScanPushDown.forPlanning(startup)
+      assert(planned.flatMap(_.expressions).forall(_.deterministic))
+    }
+  }
+
+  test("fail the start of a query whose optimization for the pruning fails, in tests") {
+    // A rule that fails in the optimization when the query starts, whose plan has the relations of
+    // the sources, unlike the plans of the micro-batches.
+    val failing = new Rule[LogicalPlan] {
+      override def apply(plan: LogicalPlan): LogicalPlan = {
+        if (plan.exists(_.isInstanceOf[StreamingRelationV2])) {
+          throw new IllegalStateException("The optimization at the start failed.")
+        }
+        plan
+      }
+    }
+    withSourceTable() {
+      spark.experimental.extraOptimizations = Seq(failing)
+      try {
+        // Outside of tests, the scans read all their columns instead, with a warning.
+        testStream(spark.readStream.table(tbl).select("data"))(
+          StartStream(),
+          ExpectFailure[IllegalStateException](e =>
+            assert(e.getMessage.contains("The optimization at the start failed."))))
+      } finally {
+        spark.experimental.extraOptimizations = Nil
+      }
+    }
+  }
+
+  test("read a source whose scans report strings for its char columns") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val input = MemoryStream[(Long, String)]
+      val table = new StringReadSchemaTable(input)
+      val df = Dataset.ofRows(spark, StreamingRelationV2(None, "string_read_schema", table,
+        CaseInsensitiveStringMap.empty(), DataTypeUtils.toAttributes(table.schema()), None, None,
+        None))
+      // The relation outputs a char column, which the read schema of the scan has as a string:
+      // the readers return strings for both.
+      testStream(df)(
+        StartStream(),
+        AddData(input, (1L, "a"), (2L, "b")),
+        ProcessAllAvailable(),
+        assertReadSchema("_1", "_2"),
+        CheckAnswerRowsByFunc(rows => assert(rows.map(row => row.getLong(0) ->
+          row.getString(1).trim).toSet === Set(1L -> "a", 2L -> "b")), lastOnly = false))
+    }
+  }
+
+  // The confs with which the plans have char and varchar types, which the analysis rejects
+  // otherwise.
+  Seq(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS, SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO)
+    .foreach { conf =>
+      test(s"read only the columns of a query from a table with char and varchar columns: " +
+          conf.key) {
+        withSQLConf(conf.key -> "true") {
+          withTable(tbl) {
+            createTable(tbl, "id bigint, c char(3), v varchar(5), extra int")
+            sql(s"INSERT INTO $tbl VALUES (1, 'a', 'x', 10), (2, 'b', 'y', 20)")
+            // The relation of the source outputs the columns with the types char and varchar,
+            // while the read schemas of its scans may have strings.
+            testStream(spark.readStream.table(tbl).select("c", "v"))(
+              ProcessAllAvailable(),
+              assertReadSchema("c", "v"),
+              CheckAnswer(spark.read.table(tbl).select("c", "v").collect().toSeq: _*))
+            val logs = new LogAppender("the read schemas of the scans of char and varchar columns")
+            withLogAppender(logs,
+                loggerNames = Seq(StreamingV2ScanPushDown.getClass.getName.stripSuffix("$")),
+                level = Some(Level.WARN)) {
+              Seq(true, false).foreach { enabled =>
+                withSQLConf(SQLConf.STREAMING_V2_COLUMN_PRUNING_ENABLED.key -> enabled.toString) {
+                  testStream(spark.readStream.table(tbl))(
+                    ProcessAllAvailable(),
+                    assertReadSchema("id", "c", "v", "extra"),
+                    CheckAnswer(spark.read.table(tbl).collect().toSeq: _*))
+                }
+              }
+            }
+            // The scan of all the columns follows the relation, with the pruning or without it.
+            assert(logs.loggingEvents.isEmpty,
+              logs.loggingEvents.map(_.getMessage.getFormattedMessage))
+          }
+        }
+      }
+    }
+
   test("replace the expressions that make dates or timestamps of strings, times or variants") {
     withSourceTable() {
       // Each expression, and whether it is replaced: one whose type has a date or a timestamp, of
@@ -1092,6 +1206,28 @@ private class UnknownColumnReadSchemaTable(input: MemoryStream[_]) extends Table
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = () => new Scan {
     override def readSchema(): StructType = schema().add("unknown", "int")
+
+    override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = input
+  }
+}
+
+/**
+ * A table over a memory stream of (id, data) that declares STREAMING_COLUMN_PRUNING, whose schema
+ * has the column of the data as a char column, while the read schemas of its scans have it as a
+ * string.
+ */
+private class StringReadSchemaTable(input: MemoryStream[_]) extends Table with SupportsRead {
+  override def name(): String = "string_read_schema"
+
+  override def schema(): StructType = StructType(input.fullSchema().map { field =>
+    if (field.dataType == StringType) field.copy(dataType = CharType(3)) else field
+  })
+
+  override def capabilities(): util.Set[TableCapability] =
+    util.EnumSet.of(TableCapability.MICRO_BATCH_READ, TableCapability.STREAMING_COLUMN_PRUNING)
+
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = () => new Scan {
+    override def readSchema(): StructType = input.fullSchema()
 
     override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = input
   }
