@@ -33,14 +33,28 @@ jobs:
     outputs:
       should-run: ${{ steps.count.outputs.should-run }}
     steps:
-      - name: Check out the full branch history
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
       - name: Check whether this is every tenth commit
         id: count
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          count=$(git rev-list --count HEAD)
+          count=$(gh api graphql \
+            -f owner="$GITHUB_REPOSITORY_OWNER" \
+            -f name="${GITHUB_REPOSITORY#*/}" \
+            -f sha="$GITHUB_SHA" \
+            -f query='
+              query($owner: String!, $name: String!, $sha: GitObjectID!) {
+                repository(owner: $owner, name: $name) {
+                  object(oid: $sha) {
+                    ... on Commit { history { totalCount } }
+                  }
+                }
+              }' \
+            --jq '.data.repository.object.history.totalCount')
+          if [[ ! "$count" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::Expected a positive commit count, got: $count"
+            exit 1
+          fi
           remainder=$((count % 10))
 
           if ((remainder == 0)); then
