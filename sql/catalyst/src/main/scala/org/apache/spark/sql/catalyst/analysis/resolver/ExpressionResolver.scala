@@ -1284,9 +1284,8 @@ class ExpressionResolver(
   }
 
   /**
-   * Returns true if LateralColumnAlias resolution is enabled, current operator is not created
-   * because of a generated column and current expression is a grouping one (grouping expressions)
-   * can't reference an LCA.
+   * Returns true if LateralColumnAlias resolution is enabled and current expression is not a
+   * grouping one (grouping expressions can't reference an LCA).
    */
   private def canLaterallyReferenceColumn: Boolean = {
     traversals.current.lcaEnabled &&

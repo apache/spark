@@ -66,6 +66,46 @@ class JsonQuerySuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-59685: default-clause JSON_QUERY canonical SQL reparses to the built-in under a " +
+      "shadowing PATH") {
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "second") {
+      try {
+        sql("CREATE TEMPORARY FUNCTION json_query(a STRING, b STRING) RETURNS STRING " +
+          "RETURN 'shadowed'")
+        sql("SET PATH = system.session, system.builtin")
+        // A built-in JSON_QUERY whose only clause is the default RETURNING STRING: the clause makes
+        // it the built-in even under the shadow, but its canonical `sql` would drop the default.
+        val jsonQuery = sql(s"SELECT json_query('$doc', '$$.addr' RETURNING STRING)")
+          .queryExecution.analyzed.expressions
+          .flatMap(_.collect { case jq: JsonQuery => jq }).head
+        // The rendering must reparse back to the built-in, not the same-named routine on the PATH.
+        val reparsed = sql(s"SELECT ${jsonQuery.sql}")
+        assert(reparsed.queryExecution.analyzed.expressions
+          .exists(_.exists(_.isInstanceOf[JsonQuery])),
+          s"canonical SQL bound the shadow instead of the built-in: ${jsonQuery.sql}")
+        checkAnswer(reparsed, Row("""{"city":"NYC"}"""))
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS json_query")
+      }
+    }
+  }
+
+  test("SPARK-59685: a default JSON_QUERY keeps a clean auto-generated column name") {
+    val name = sql(s"SELECT json_query('$doc', '$$.addr')").schema.head.name
+    assert(!name.contains("RETURNING"), s"column name leaked the ownership clause: $name")
+  }
+
+  test("SPARK-59685: a nested SQL/JSON source keeps a clean auto-generated column name") {
+    // The JSON source is itself a routed built-in constructor; it is rendered in place, so its
+    // clause-free display form must not leak the round-trip RETURNING clause into the name.
+    val name = sql("SELECT json_query(json_array(1), '$[0]')").schema.head.name
+    assert(!name.contains("RETURNING"), s"nested source leaked the ownership clause: $name")
+    assert(name.contains("JSON_ARRAY(1)"), s"unexpected name: $name")
+  }
+
   test("extract an object or array as verbatim JSON text") {
     checkAnswer(sql(s"SELECT json_query('$doc', '$$.addr')"), Row("""{"city":"NYC"}"""))
     checkAnswer(sql(s"SELECT json_query('$doc', '$$.tags')"), Row("""["x","y"]"""))
@@ -251,6 +291,28 @@ class JsonQuerySuite extends QueryTest with SharedSparkSession {
     val rendered = jsonQuery.sql
     assert(rendered.contains("\\'addr\\'"), s"path was not escaped in: $rendered")
     checkAnswer(sql(s"SELECT $rendered"), Row("""{"city":"NYC"}"""))
+  }
+
+  test("SPARK-59685: explicit-clause canonical SQL round-trips, suppressing the ownership clause") {
+    // The default clause-free render appends `RETURNING STRING` for ownership; an explicit clause
+    // must suppress it (a spurious `RETURNING STRING` next to a clause would be invalid SQL). These
+    // cases reparse each mode's rendered `sql` to catch a renderer regression that the parse-only
+    // ExpressionParserSuite cannot -- e.g. a wrong keyword or a duplicated/conflicting clause.
+    Seq(
+      s"json_query('$doc', '$$.tags' WITH UNCONDITIONAL ARRAY WRAPPER)" -> Row("""[["x","y"]]"""),
+      s"json_query('$doc', '$$.id' WITH CONDITIONAL ARRAY WRAPPER)" -> Row("[7]"),
+      s"json_query('$doc', '$$.name' OMIT QUOTES)" -> Row("Ada"),
+      s"json_query('$doc', '$$.missing' EMPTY ARRAY ON EMPTY)" -> Row("[]"),
+      s"json_query('$doc', '$$.missing' EMPTY OBJECT ON EMPTY)" -> Row("{}"),
+      "json_query('not json', '$.a' EMPTY ARRAY ON ERROR)" -> Row("[]")
+    ).foreach { case (query, expected) =>
+      val jsonQuery = sql(s"SELECT $query").queryExecution.analyzed.expressions
+        .flatMap(_.collect { case jq: JsonQuery => jq }).head
+      val rendered = jsonQuery.sql
+      assert(!rendered.contains("RETURNING STRING"),
+        s"explicit-clause render leaked the ownership clause: $rendered")
+      checkAnswer(sql(s"SELECT $rendered"), expected)
+    }
   }
 
   test("works over a column of JSON documents") {

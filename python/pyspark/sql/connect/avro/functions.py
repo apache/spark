@@ -98,8 +98,8 @@ def _test() -> None:
         print(
             "Skipping all Avro Python tests as the optional Avro project was "
             "not compiled into a JAR. To run these tests, "
-            "you need to build Spark with 'build/sbt -Pavro package' or "
-            "'build/mvn -Pavro package' before running this test."
+            "you need to build Spark with 'build/sbt package' or "
+            "'build/mvn package' before running this test."
         )
         sys.exit(0)
     else:

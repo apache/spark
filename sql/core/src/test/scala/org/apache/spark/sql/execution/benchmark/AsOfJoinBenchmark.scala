@@ -24,6 +24,7 @@ import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Benchmark to measure AS-OF join performance: sort-merge operator vs correlated subquery.
+ * The sort-merge operator runs with the buffered scan and with the cursor scan.
  * To run this benchmark:
  * {{{
  *   1. build/sbt "sql/Test/runMain <this class>"
@@ -58,7 +59,8 @@ object AsOfJoinBenchmark extends SqlBasedBenchmark {
     ).toDF().asInstanceOf[classic.DataFrame]
     val right: classic.DataFrame = spark.range(rightRows).select(
       (col("id") % numGroups).as("group_id"),
-      (col("id") * 3 / 2).as("ts"),
+      // BIGINT like the left side, since the cursor scan needs both sort keys of one type.
+      (col("id") * 3 / 2).cast("bigint").as("ts"),
       lit("right_val").as("right_val")
     ).toDF().asInstanceOf[classic.DataFrame]
 
@@ -75,9 +77,19 @@ object AsOfJoinBenchmark extends SqlBasedBenchmark {
       }
     }
 
-    benchmark.addCase("Sort-merge AS-OF join") { _ =>
+    benchmark.addCase("Sort-merge AS-OF join, buffered scan") { _ =>
       withSQLConf(
         SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+        SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> "false",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        doAsOfJoin(left, right, Seq("group_id"))
+      }
+    }
+
+    benchmark.addCase("Sort-merge AS-OF join, cursor scan") { _ =>
+      withSQLConf(
+        SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+        SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> "true",
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
         doAsOfJoin(left, right, Seq("group_id"))
       }
@@ -93,7 +105,8 @@ object AsOfJoinBenchmark extends SqlBasedBenchmark {
       lit("left_val").as("left_val")
     ).toDF().asInstanceOf[classic.DataFrame]
     val right: classic.DataFrame = spark.range(rightRows).select(
-      (col("id") * 3 / 2).as("ts"),
+      // BIGINT like the left side, since the cursor scan needs both sort keys of one type.
+      (col("id") * 3 / 2).cast("bigint").as("ts"),
       lit("right_val").as("right_val")
     ).toDF().asInstanceOf[classic.DataFrame]
 
@@ -110,9 +123,19 @@ object AsOfJoinBenchmark extends SqlBasedBenchmark {
       }
     }
 
-    benchmark.addCase("Sort-merge AS-OF join") { _ =>
+    benchmark.addCase("Sort-merge AS-OF join, buffered scan") { _ =>
       withSQLConf(
         SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+        SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> "false",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        doAsOfJoin(left, right, Seq.empty)
+      }
+    }
+
+    benchmark.addCase("Sort-merge AS-OF join, cursor scan") { _ =>
+      withSQLConf(
+        SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+        SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> "true",
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
         doAsOfJoin(left, right, Seq.empty)
       }
@@ -125,6 +148,9 @@ object AsOfJoinBenchmark extends SqlBasedBenchmark {
     runBenchmark("AS-OF Join Benchmark") {
       // 10K left x 10K right, 100 groups - both paths feasible
       asOfJoinBenchmark(leftRows = 10000, rightRows = 10000, numGroups = 100)
+      // Few large groups: ~1K right rows buffered per group, and each left row rescans a
+      // prefix of that buffer, which is where the per-left-row group-scan cost dominates.
+      asOfJoinBenchmark(leftRows = 10000, rightRows = 10000, numGroups = 10)
       // No equi-key: 10K x 10K
       asOfJoinNoEquiKeyBenchmark(leftRows = 10000, rightRows = 10000)
     }

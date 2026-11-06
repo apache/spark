@@ -78,7 +78,7 @@ class Estimator(Params, Generic[M], metaclass=ABCMeta):
         self,
         dataset: Union[DataFrame, pd.DataFrame],
         params: Optional["ParamMap"] = None,
-    ) -> Union[M, List[M]]:
+    ) -> M:
         """
         Fits a model to the input dataset with optional parameters.
 

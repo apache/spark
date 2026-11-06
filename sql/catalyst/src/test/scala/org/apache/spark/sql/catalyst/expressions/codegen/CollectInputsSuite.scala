@@ -1,0 +1,263 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.catalyst.expressions.codegen
+
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{IntegerType, LongType, StringType}
+
+/**
+ * The policies of `CodegenContext.collectInputs`, one test per point where the places that move
+ * generated code into a method answer differently; and the whole stage split built on it.
+ */
+class CollectInputsSuite extends SparkFunSuite with SQLHelper {
+
+  private def evaluated(i: Int): ExprCode =
+    ExprCode(EmptyBlock, JavaCode.isNullVariable(s"isNull_$i"),
+      JavaCode.variable(s"value_$i", IntegerType))
+
+  private def deferred(i: Int): ExprCode =
+    ExprCode(code"int value_$i = row.getInt($i);", FalseLiteral,
+      JavaCode.variable(s"value_$i", IntegerType))
+
+  private def input(i: Int): BoundReference = BoundReference(i, IntegerType, nullable = true)
+
+  private def names(inputs: CollectedInputs): Seq[String] = inputs.arguments.map(_.variableName)
+
+  /** A context whose `INPUT_ROW` is `row`; a new one names `i`, so the default is set apart. */
+  private def context(row: String = null): CodegenContext = {
+    val ctx = new CodegenContext
+    ctx.INPUT_ROW = row
+    ctx
+  }
+
+  private val operator = InputPolicy.operatorMethod
+  private val commonExpr = InputPolicy.commonExpressionMethod
+
+  test("INPUT_ROW comes first wherever it is set") {
+    val ctx = context("row")
+    ctx.currentVars = Seq(evaluated(0))
+    for (policy <- Seq(operator, commonExpr)) {
+      val inputs = ctx.collectInputs(Seq(Add(input(0), Literal(1))), policy, Map.empty).get
+      assert(names(inputs) == Seq("row", "value_0", "isNull_0"))
+    }
+  }
+
+  test("an input the operator has not evaluated: hoisted for an operator's method, refused for " +
+      "a common expression's") {
+    val ctx = context()
+    val notYet = deferred(1)
+    ctx.currentVars = Seq(evaluated(0), notYet)
+    val expr = Add(input(0), input(1))
+    assert(ctx.collectInputs(Seq(expr), commonExpr, Map.empty).isEmpty)
+    assert(notYet.code.nonEmpty, "a refusal leaves the input's code where it is")
+
+    val inputs = ctx.collectInputs(Seq(expr), operator, Map.empty).get
+    assert(names(inputs).toSet == Set("value_0", "isNull_0", "value_1"))
+    assert(inputs.inputsToEvaluate.map(_.value.toString) == Seq("value_1"))
+    assert(notYet.code == EmptyBlock, "the hoisted input is evaluated ahead of the method")
+  }
+
+  test("a subexpression state: its variables for an operator's method, refused for a common " +
+      "expression's") {
+    val ctx = context()
+    ctx.currentVars = Seq(evaluated(0))
+    val common = Multiply(input(0), Literal(3))
+    val state = SubExprEliminationState(ExprCode(EmptyBlock,
+      JavaCode.isNullVariable("subExprIsNull_0"), JavaCode.variable("subExpr_0", IntegerType)))
+    val subExprs = Map(ExpressionEquals(common) -> state)
+    val expr = Add(common, Literal(1))
+    assert(ctx.collectInputs(Seq(expr), commonExpr, subExprs).isEmpty)
+    val inputs = ctx.collectInputs(Seq(expr), operator, subExprs).get
+    assert(names(inputs) == Seq("subExpr_0", "subExprIsNull_0"),
+      "the walk stops at the state and takes nothing below it")
+  }
+
+  test("a With: a common expression's method follows its references, an operator's method its " +
+      "children") {
+    val ctx = context()
+    ctx.currentVars = Seq(evaluated(0))
+    // A definition no reference reaches is not generated, so a method computing the `With` reads
+    // nothing of it; the walk over the children still reaches it.
+    val unreached = With(Literal(1), Seq(CommonExpressionDef(input(0))))
+    assert(names(ctx.collectInputs(Seq(unreached), commonExpr, Map.empty).get).isEmpty)
+    assert(names(ctx.collectInputs(Seq(unreached), operator, Map.empty).get) ==
+      Seq("value_0", "isNull_0"))
+
+    val definition = CommonExpressionDef(input(0))
+    val reached = With(Add(new CommonExpressionRef(definition), Literal(1)), Seq(definition))
+    assert(names(ctx.collectInputs(Seq(reached), commonExpr, Map.empty).get) ==
+      Seq("value_0", "isNull_0"))
+  }
+
+  test("a value no parameter can name: refused for a common expression's method, passed over " +
+      "for an operator's") {
+    val ctx = context()
+    ctx.currentVars = Seq(ExprCode(EmptyBlock, JavaCode.isNullExpression("index_0 == -1"),
+      JavaCode.variable("index_0", IntegerType)))
+    val expr = Add(input(0), Literal(1))
+    assert(ctx.collectInputs(Seq(expr), commonExpr, Map.empty).isEmpty)
+    assert(names(ctx.collectInputs(Seq(expr), operator, Map.empty).get) == Seq("index_0"))
+  }
+
+  test("the parameter limit: checked for a common expression's method, left to the caller of an " +
+      "operator's") {
+    val ctx = context()
+    // 128 longs take 256 slots, past the 255 a method has.
+    ctx.currentVars = (0 until 128).map { i =>
+      ExprCode(EmptyBlock, FalseLiteral, JavaCode.variable(s"long_$i", LongType))
+    }
+    val expr = (0 until 128).map(i => BoundReference(i, LongType, nullable = false): Expression)
+      .reduce(Add(_, _))
+    assert(ctx.collectInputs(Seq(expr), commonExpr, Map.empty).isEmpty)
+    assert(ctx.collectInputs(Seq(expr), operator, Map.empty).get.arguments.length == 128)
+  }
+
+  test("an input outside currentVars is read from INPUT_ROW") {
+    val ctx = context("row")
+    val inputs = ctx.collectInputs(Seq(input(0)), operator, Map.empty).get
+    assert(inputs.readsRow)
+    ctx.currentVars = Seq(evaluated(0))
+    assert(!ctx.collectInputs(Seq(input(0)), operator, Map.empty).get.readsRow)
+  }
+
+  test("a field handed out as a global is never an argument; an inlined one handed out as a " +
+      "variable is left out only where the policy says so") {
+    val ctx = context()
+    val expr = Length(BoundReference(0, StringType, nullable = false))
+    // A state of a type that is not primitive is a slot of a compacted array.
+    val slot = ctx.addMutableState("UTF8String", "value")
+    assert(slot.matches("\\w+\\[\\d+\\]"), slot)
+    ctx.currentVars = Seq(ExprCode(EmptyBlock, FalseLiteral, JavaCode.global(slot, StringType)))
+    for (policy <- Seq(InputPolicy.wholeStageSplit, commonExpr, operator)) {
+      assert(names(ctx.collectInputs(Seq(expr), policy, Map.empty).get).isEmpty, policy)
+    }
+    // An inlined state handed out as a variable is read as the field only by a whole stage split
+    // method.
+    val field = ctx.addMutableState("UTF8String", "field", forceInline = true)
+    ctx.currentVars = Seq(ExprCode(EmptyBlock, FalseLiteral, JavaCode.variable(field, StringType)))
+    assert(names(ctx.collectInputs(Seq(expr), InputPolicy.wholeStageSplit, Map.empty).get).isEmpty)
+    for (policy <- Seq(commonExpr, operator)) {
+      assert(names(ctx.collectInputs(Seq(expr), policy, Map.empty).get) == Seq(field), policy)
+    }
+  }
+
+  test("a slot handed out as a variable fails the testing check: while collecting where the " +
+      "policy asks for names, and in the method that takes it where it does not") {
+    val ctx = context()
+    val slot = ctx.addMutableState("UTF8String", "value")
+    ctx.currentVars = Seq(ExprCode(EmptyBlock, FalseLiteral, JavaCode.variable(slot, StringType)))
+    val expr = Length(BoundReference(0, StringType, nullable = false))
+    for (policy <- Seq(InputPolicy.wholeStageSplit, commonExpr)) {
+      val e = intercept[AssertionError](ctx.collectInputs(Seq(expr), policy, Map.empty))
+      assert(e.getMessage.contains(s"$slot cannot name a parameter") &&
+        e.getMessage.contains("JavaCode.global"), e.getMessage)
+    }
+    // Without the check, as in production, these policies refuse the method.
+    ctx.checkParameterNames = false
+    for (policy <- Seq(InputPolicy.wholeStageSplit, commonExpr)) {
+      assert(ctx.collectInputs(Seq(expr), policy, Map.empty).isEmpty, policy)
+    }
+    ctx.checkParameterNames = true
+    // An operator may keep its code inline, so collecting does not check.
+    val parameters = names(ctx.collectInputs(Seq(expr), operator, Map.empty).get)
+    assert(parameters == Seq(slot))
+    val e = intercept[AssertionError](ctx.assertParametersAreNames(parameters, "m"))
+    assert(e.getMessage.contains(s"m takes $slot") && e.getMessage.contains("JavaCode.global"),
+      e.getMessage)
+    ctx.assertParametersAreNames(Seq("value_0", "isNull_0"), "m")
+    // A keyword or a literal cannot name a parameter either.
+    val keyword = intercept[AssertionError](ctx.assertParametersAreNames(Seq("false"), "m"))
+    assert(keyword.getMessage.contains("m takes false") &&
+      keyword.getMessage.contains("LiteralValue"), keyword.getMessage)
+  }
+
+  test("an INPUT_ROW that is a slot fails the testing check: while collecting for a common " +
+      "expression's method, and in an operator's method that takes it") {
+    val ctx = context()
+    ctx.INPUT_ROW = ctx.addMutableState("InternalRow", "row")
+    assert(ctx.INPUT_ROW.matches("\\w+\\[\\d+\\]"), ctx.INPUT_ROW)
+    ctx.currentVars = Seq(evaluated(0))
+    val e1 = intercept[AssertionError](ctx.collectInputs(Seq(input(0)), commonExpr, Map.empty))
+    assert(e1.getMessage.contains("set INPUT_ROW to a local"), e1.getMessage)
+    ctx.checkParameterNames = false
+    assert(ctx.collectInputs(Seq(input(0)), commonExpr, Map.empty).isEmpty)
+    ctx.checkParameterNames = true
+    val parameters = names(ctx.collectInputs(Seq(input(0)), operator, Map.empty).get)
+    assert(parameters.head == ctx.INPUT_ROW)
+    val e2 = intercept[AssertionError](ctx.assertParametersAreNames(parameters, "m"))
+    assert(e2.getMessage.contains("set INPUT_ROW to a local"), e2.getMessage)
+  }
+
+  test("the whole stage split walks below the state of a node that generates its child") {
+    // `Collate` generates its child's code, which reads the input below it, never the state, so a
+    // method takes that input; where the node's own code reads the state, the state is taken.
+    val ctx = context()
+    ctx.currentVars = Seq(evaluated(0))
+    val state = SubExprEliminationState(ExprCode(EmptyBlock,
+      JavaCode.isNullVariable("subExprIsNull_0"), JavaCode.variable("subExpr_0", StringType)))
+    val column = BoundReference(0, StringType, nullable = true)
+    val collated = Collate(column, Literal("UNICODE_CI"))
+    val passThrough = Map(ExpressionEquals(collated) -> state)
+    assert(names(ctx.collectInputs(Seq(Length(collated)), InputPolicy.wholeStageSplit,
+      passThrough).get) == Seq("value_0", "isNull_0"))
+    val upper = Upper(column)
+    assert(names(ctx.collectInputs(Seq(Length(upper)), InputPolicy.wholeStageSplit,
+      Map(ExpressionEquals(upper) -> state)).get) == Seq("subExpr_0", "subExprIsNull_0"))
+  }
+
+  test("the whole stage split leaves a block it cannot move inline, between the runs of calls") {
+    // Under whole stage codegen (`currentVars` set), each piece is a block at this threshold; the
+    // middle one reads an input not evaluated yet, so it stays where it is, and the calls before
+    // and after it are two runs.
+    withSQLConf(SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1") {
+      val ctx = context()
+      ctx.wholeStageSplit = WholeStageSplit.Split(None)
+      ctx.currentVars = Seq(evaluated(0), deferred(1))
+      val pieces = Seq(
+        "int a = value_0;" -> Seq(input(0)),
+        "int b = value_1;" -> Seq(input(1)),
+        "int c = value_0;" -> Seq(input(0)))
+      val code = ctx.splitExpressionsWithSources(pieces, "f")
+      val calls = "f_\\d+_\\d+\\(value_0, isNull_0\\)".r.findAllIn(code).toSeq
+      assert(calls.length == 2, code)
+      val inline = code.indexOf("int b = value_1;")
+      assert(code.indexOf(calls.head) < inline && inline < code.lastIndexOf(calls.last), code)
+      assert(!code.contains("int a = value_0;") && !code.contains("int c = value_0;"),
+        "the other blocks are in methods")
+    }
+  }
+
+  test("a split call passing what its enclosing method does not take fails the audit") {
+    withSQLConf(SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1") {
+      val ctx = context()
+      ctx.wholeStageSplit = WholeStageSplit.Split(None)
+      ctx.currentVars = Seq(evaluated(0))
+      val code = ctx.splitExpressionsWithSources(
+        Seq("int a = value_0;" -> Seq(input(0)), "int b = value_0;" -> Seq(input(0))), "f")
+      ctx.assertSplitCallsWithin(code, Seq("value_0", "isNull_0"), "m")
+      val e = intercept[AssertionError] {
+        ctx.assertSplitCallsWithin(code, Seq("value_0"), "m")
+      }
+      assert(e.getMessage.contains("passing isNull_0, which m does not take"), e.getMessage)
+    }
+  }
+}

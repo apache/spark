@@ -115,6 +115,41 @@ class ArrowBatchTransformerTests(unittest.TestCase):
         self.assertEqual(flattened.num_rows, 0)
         self.assertEqual(flattened.num_columns, 2)
 
+    def test_concat_batches(self):
+        import pyarrow as pa
+
+        schema = pa.schema([("x", pa.int64())])
+        batches = [
+            pa.RecordBatch.from_pylist([{"x": 1}, {"x": 2}], schema=schema),
+            pa.RecordBatch.from_pylist([{"x": 3}], schema=schema),
+        ]
+        for kwargs in ({}, {"schema": schema}):
+            result = ArrowBatchTransformer.concat_batches(iter(batches), **kwargs)
+            self.assertEqual(result.column(0).to_pylist(), [1, 2, 3])
+            result = ArrowBatchTransformer.concat_batches(iter(batches[:1]), **kwargs)
+            self.assertIs(result, batches[0])
+        other = pa.RecordBatch.from_pylist([{"y": 1}])
+        with self.assertRaises(pa.ArrowInvalid):
+            ArrowBatchTransformer.concat_batches(iter([batches[0], other]), schema)
+
+    def test_concat_batches_drops_zero_row_batches(self):
+        import pyarrow as pa
+
+        schema = pa.schema([("x", pa.int64())])
+        batch = pa.RecordBatch.from_pylist([{"x": 1}], schema=schema)
+        empty = pa.RecordBatch.from_pylist([], schema=schema)
+        untyped_empty = pa.RecordBatch.from_pylist([])
+        for kwargs in ({}, {"schema": schema}):
+            result = ArrowBatchTransformer.concat_batches(
+                iter([empty, batch, untyped_empty]), **kwargs
+            )
+            self.assertIs(result, batch)
+        for batches in ([], [empty, untyped_empty]):
+            result = ArrowBatchTransformer.concat_batches(iter(batches), schema)
+            self.assertEqual((result.num_rows, result.schema), (0, schema))
+            with self.assertRaisesRegex(PySparkValueError, "needs a schema"):
+                ArrowBatchTransformer.concat_batches(iter(batches))
+
     def test_wrap_struct_basic(self):
         """Test wrapping columns into a struct."""
         import pyarrow as pa

@@ -120,6 +120,16 @@ class MapInPandasTestsMixin:
             expected = df.collect()
             self.assertEqual(actual, expected)
 
+    def test_map_in_pandas_accept_any_iterable_by_default(self):
+        # The legacy flag defaults to true, so returning a non-Iterator iterable (e.g. list) is
+        # accepted without setting any config. This guards the default against regression: the
+        # *_legacy_accept_any_iterable tests above force the flag on and would still pass if the
+        # default were flipped back to false.
+        df = self.spark.range(10, numPartitions=3)
+        actual = df.mapInPandas(lambda it: [pdf for pdf in it], "id long").collect()
+        expected = df.collect()
+        self.assertEqual(actual, expected)
+
     def test_multiple_columns(self):
         data = [(1, "foo"), (2, None), (3, "bar"), (4, "bar")]
         df = self.spark.createDataFrame(data, "a int, b string")

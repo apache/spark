@@ -24,7 +24,7 @@
 # - Node.js for documentation
 #
 # Branch-specific Dockerfiles should use "FROM spark-rm-base:latest" and add:
-# - Java version (8 or 17)
+# - Java version (8, 17, or 21)
 # - Python version and pip packages
 
 FROM ubuntu:jammy-20250819

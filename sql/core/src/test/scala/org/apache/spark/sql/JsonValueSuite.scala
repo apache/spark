@@ -61,6 +61,83 @@ class JsonValueSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-59685: default-clause JSON_VALUE canonical SQL reparses to the built-in under a " +
+      "shadowing PATH") {
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "second") {
+      try {
+        sql("CREATE TEMPORARY FUNCTION json_value(a STRING, b STRING) RETURNS STRING " +
+          "RETURN 'shadowed'")
+        sql("SET PATH = system.session, system.builtin")
+        // A built-in JSON_VALUE whose only clause is the default RETURNING STRING: the clause makes
+        // it the built-in even under the shadow, but its canonical `sql` would drop the default.
+        val jsonValue = sql(s"SELECT json_value('$doc', '$$.name' RETURNING STRING)")
+          .queryExecution.analyzed.expressions
+          .flatMap(_.collect { case jv: JsonValue => jv }).head
+        // The rendering must reparse back to the built-in, not the same-named routine on the PATH.
+        val reparsed = sql(s"SELECT ${jsonValue.sql}")
+        assert(reparsed.queryExecution.analyzed.expressions
+          .exists(_.exists(_.isInstanceOf[JsonValue])),
+          s"canonical SQL bound the shadow instead of the built-in: ${jsonValue.sql}")
+        checkAnswer(reparsed, Row("Ada"))
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS json_value")
+      }
+    }
+  }
+
+  test("SPARK-59685: explicit-clause JSON_VALUE canonical SQL keeps its clause and appends no " +
+      "default ownership clause") {
+    // The ownership clause (RETURNING STRING) is appended only to an otherwise clause-free render,
+    // gated independently on RETURNING, ON EMPTY, and ON ERROR. Exercise one explicit clause at a
+    // time so a regression appending a duplicate or conflicting RETURNING STRING fails here.
+    Seq(
+      s"json_value('$doc', '$$.id' RETURNING INT)" -> Row(7),
+      s"json_value('$doc', '$$.missing' DEFAULT -1 ON EMPTY)" -> Row("-1"),
+      s"json_value('$doc', '$$.name' ERROR ON ERROR)" -> Row("Ada")).foreach {
+      case (query, expected) =>
+        val jsonValue = sql(s"SELECT $query")
+          .queryExecution.analyzed.expressions
+          .flatMap(_.collect { case jv: JsonValue => jv }).head
+        val rendered = jsonValue.sql
+        assert(!rendered.contains("RETURNING STRING"),
+          s"canonical SQL appended a duplicate default clause: $rendered")
+        val reparsed = sql(s"SELECT $rendered")
+        assert(reparsed.queryExecution.analyzed.expressions
+          .exists(_.exists(_.isInstanceOf[JsonValue])),
+          s"canonical SQL did not reparse to the built-in: $rendered")
+        checkAnswer(reparsed, expected)
+    }
+  }
+
+  test("SPARK-59685: a default JSON_VALUE keeps a clean auto-generated column name") {
+    // The canonical `sql` forces the default RETURNING STRING so it stays bound to the built-in on
+    // reparse, but the display (column) name is never reparsed and must not leak that clause.
+    val name = sql(s"SELECT json_value('$doc', '$$.name')").schema.head.name
+    assert(!name.contains("RETURNING"), s"column name leaked the ownership clause: $name")
+  }
+
+  test("SPARK-59685: a nested SQL/JSON source keeps a clean auto-generated column name") {
+    // The JSON source is itself a routed built-in constructor; it is rendered in place, so its
+    // clause-free display form must not leak the round-trip RETURNING clause into the name.
+    val name = sql("SELECT json_value(json_array(1), '$[0]')").schema.head.name
+    assert(!name.contains("RETURNING"), s"nested source leaked the ownership clause: $name")
+    assert(name.contains("JSON_ARRAY(1)"), s"unexpected name: $name")
+  }
+
+  test("SPARK-59685: a nested SQL/JSON DEFAULT keeps a clean auto-generated column name") {
+    // A routed built-in constructor in the DEFAULT ... ON EMPTY / ON ERROR position is rendered in
+    // place too, so its clause-free display form must not leak the round-trip RETURNING clause.
+    Seq("ON EMPTY", "ON ERROR").foreach { position =>
+      val name = sql(s"SELECT json_value('$doc', '$$.name' DEFAULT json_array(1) $position)")
+        .schema.head.name
+      assert(!name.contains("RETURNING"), s"nested DEFAULT leaked the ownership clause: $name")
+      assert(name.contains("JSON_ARRAY(1)"), s"unexpected name: $name")
+    }
+  }
+
   test("extract a scalar value as STRING by default") {
     checkAnswer(sql(s"SELECT json_value('$doc', '$$.name')"), Row("Ada"))
     // Numbers and booleans come back as their JSON text under the default STRING RETURNING.

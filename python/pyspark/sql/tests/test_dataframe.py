@@ -32,7 +32,7 @@ from pyspark.errors import (
     PySparkValueError,
     QueryContextType,
 )
-from pyspark.sql import DataFrame, Row, functions
+from pyspark.sql import DataFrame, Row, functions, is_remote
 from pyspark.sql.functions import (
     array,
     col,
@@ -65,6 +65,268 @@ from pyspark.testing.utils import (
 
 
 class DataFrameTestsMixin:
+    def test_bin_by(self):
+        with self.sql_conf({"spark.sql.binByRelationOperator.enabled": "true"}):
+            df = self.spark.sql(
+                "SELECT TIMESTAMP_NTZ '2024-01-01 00:00:00' AS start, "
+                "TIMESTAMP_NTZ '2024-01-01 00:10:00' AS end, 100.0D AS value, 20.0F AS value2"
+            )
+            with self.temp_view("bin_by_input"):
+                df.createOrReplaceTempView("bin_by_input")
+                expected = self.spark.sql(
+                    "SELECT * FROM bin_by_input BIN BY (RANGE start TO end "
+                    "BIN WIDTH INTERVAL 5 MINUTES DISTRIBUTE UNIFORM (value, value2))"
+                )
+                for bound in [False, True]:
+                    with self.subTest(bound_columns=bound):
+                        result = df.binBy(
+                            df["start"] if bound else "start",
+                            df["end"] if bound else "end",
+                            functions.expr("INTERVAL 5 MINUTES"),
+                            (df["value"], df["value2"]) if bound else ["value", "value2"],
+                        )
+                        assertDataFrameEqual(result, expected)
+
+    def test_bin_by_origin_and_quoted_names(self):
+        with self.sql_conf({"spark.sql.binByRelationOperator.enabled": "true"}):
+            df = self.spark.sql(
+                "SELECT TIMESTAMP_NTZ '2024-01-01 00:00:00' AS `range.start`, "
+                "TIMESTAMP_NTZ '2024-01-01 00:10:00' AS `range``end`, 100.0D AS `v``.x`"
+            ).alias("metrics")
+            result = df.binBy(
+                "metrics.`range.start`",
+                col("metrics.`range``end`"),
+                functions.expr("INTERVAL 5 MINUTES"),
+                [df["`v``.x`"]],
+                alignTo=functions.expr("TIMESTAMP_NTZ '2024-01-01 00:02:00'"),
+                binStartName="bin.start",
+                binEndName="bin`end",
+                binDistributeRatioName="",
+            )
+            self.assertEqual(
+                result.columns, ["range.start", "range`end", "v`.x", "bin.start", "bin`end", ""]
+            )
+            self.assertEqual(
+                result.orderBy("`bin.start`").select("`v``.x`", "``").collect(),
+                [Row(20.0, 0.2), Row(50.0, 0.5), Row(30.0, 0.3)],
+            )
+
+    def test_bin_by_after_unpivot(self):
+        with self.sql_conf(
+            {
+                "spark.sql.binByRelationOperator.enabled": "true",
+                "spark.sql.analyzer.strictDataFrameColumnResolution": "false",
+            }
+        ):
+            df = self.spark.sql(
+                "SELECT TIMESTAMP_NTZ '2024-01-01 00:00:00' AS start, "
+                "TIMESTAMP_NTZ '2024-01-01 00:10:00' AS end, 100.0D AS value"
+            ).unpivot(["start", "end"], ["value"], "metric", "value")
+            result = df.binBy(
+                df["start"], df["end"], functions.expr("INTERVAL 5 MINUTES"), [df["value"]]
+            )
+            self.assertEqual(
+                result.select("metric", "value").collect(),
+                [Row("value", 50.0), Row("value", 50.0)],
+            )
+            unrelated = self.spark.sql("SELECT 200.0D AS value")
+            with self.assertRaises(AnalysisException) as error:
+                df.binBy(
+                    df["start"],
+                    df["end"],
+                    functions.expr("INTERVAL 5 MINUTES"),
+                    [unrelated["value"]],
+                ).collect()
+            self.assertEqual(
+                error.exception.getCondition(),
+                "CANNOT_RESOLVE_DATAFRAME_COLUMN"
+                if is_remote()
+                else "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION",
+            )
+
+    def test_bin_by_rejects_replaced_bound_columns(self):
+        with self.sql_conf(
+            {
+                "spark.sql.binByRelationOperator.enabled": "true",
+                "spark.sql.analyzer.strictDataFrameColumnResolution": "true",
+            }
+        ):
+            df = self.spark.sql(
+                "SELECT TIMESTAMP_NTZ '2024-01-01 00:00:00' AS start, "
+                "TIMESTAMP_NTZ '2024-01-01 00:10:00' AS end, 100.0D AS value"
+            )
+            width = functions.expr("INTERVAL 5 MINUTES")
+            condition = (
+                "CANNOT_RESOLVE_DATAFRAME_COLUMN"
+                if is_remote()
+                else "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION"
+            )
+            cases = [
+                ("start", functions.expr("TIMESTAMP_NTZ '2024-01-01 00:02:00'")),
+                ("end", functions.expr("TIMESTAMP_NTZ '2024-01-01 00:08:00'")),
+                ("value", lit(200.0)),
+            ]
+            changed = df.withColumns(dict(cases))
+            self.assertEqual(changed.binBy("start", "end", width, ["value"]).count(), 2)
+            self.assertEqual(
+                changed.binBy(changed["start"], changed["end"], width, [changed["value"]]).count(),
+                2,
+            )
+            for name, replacement in cases:
+                with self.subTest(column=name):
+                    changed = df.withColumn(name, replacement)
+                    with self.assertRaises(AnalysisException) as error:
+                        changed.binBy(df["start"], df["end"], width, [df["value"]]).collect()
+                    self.assertEqual(error.exception.getCondition(), condition)
+
+    def test_bin_by_analysis_errors(self):
+        with self.sql_conf({"spark.sql.binByRelationOperator.enabled": "true"}):
+            df = self.spark.sql(
+                "SELECT TIMESTAMP_NTZ '2024-01-01 00:00:00' AS start, "
+                "TIMESTAMP_NTZ '2024-01-01 00:10:00' AS end, 100.0D AS value"
+            )
+            cases = [
+                ({"distributeUniform": []}, "BIN_BY_MISSING_DISTRIBUTE"),
+                (
+                    {"distributeUniform": ["value", df["value"]]},
+                    "BIN_BY_DUPLICATE_DISTRIBUTE_COLUMN",
+                ),
+                (
+                    {"distributeUniform": [col("value") + 1]},
+                    "BIN_BY_REQUIRES_TOP_LEVEL_COLUMN",
+                ),
+                (
+                    {"distributeUniform": [col("missing") + 1]},
+                    "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+                ),
+                (
+                    {"rangeStart": col("start").cast("timestamp")},
+                    "BIN_BY_REQUIRES_TOP_LEVEL_COLUMN",
+                ),
+                (
+                    {"alignTo": lit(None).cast("timestamp_ntz")},
+                    "BIN_BY_NULL_ARGUMENT",
+                ),
+                (
+                    {"binWidth": functions.expr("INTERVAL 0 MINUTES")},
+                    "BIN_BY_NON_POSITIVE_BIN_WIDTH",
+                ),
+            ]
+            for overrides, condition in cases:
+                with self.subTest(condition=condition, overrides=overrides):
+                    args = dict(
+                        rangeStart="start",
+                        rangeEnd="end",
+                        binWidth=functions.expr("INTERVAL 5 MINUTES"),
+                        distributeUniform=["value"],
+                    )
+                    args.update(overrides)
+                    with self.assertRaises(AnalysisException) as error:
+                        df.binBy(**args).collect()
+                    self.assertEqual(error.exception.getCondition(), condition)
+
+    def test_bin_by_result_column_handles(self):
+        for strict in ["true", "false"]:
+            with (
+                self.subTest(strict=strict),
+                self.sql_conf(
+                    {
+                        "spark.sql.binByRelationOperator.enabled": "true",
+                        "spark.sql.analyzer.strictDataFrameColumnResolution": strict,
+                    }
+                ),
+            ):
+                df = self.spark.sql(
+                    "SELECT TIMESTAMP_NTZ '2024-01-01 00:00:00' AS start, "
+                    "TIMESTAMP_NTZ '2024-01-01 00:10:00' AS end, 100.0D AS value"
+                )
+                result = df.binBy("start", "end", functions.expr("INTERVAL 5 MINUTES"), ["value"])
+                assertDataFrameEqual(
+                    result.select(result["bin_start"], result["value"]),
+                    result.select("bin_start", "value"),
+                )
+                if is_remote() and strict == "false":
+                    self.assertEqual(result.select(df["value"]).collect(), [Row(50.0), Row(50.0)])
+                else:
+                    with self.assertRaises(AnalysisException) as error:
+                        result.select(df["value"]).collect()
+                    self.assertEqual(
+                        error.exception.getCondition(),
+                        "CANNOT_RESOLVE_DATAFRAME_COLUMN"
+                        if is_remote()
+                        else "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION",
+                    )
+
+    def test_bin_by_rejects_nested_column(self):
+        with self.sql_conf(
+            {
+                "spark.sql.binByRelationOperator.enabled": "true",
+                "spark.sql.analyzer.strictDataFrameColumnResolution": "true",
+            }
+        ):
+            df = self.spark.sql(
+                "SELECT TIMESTAMP_NTZ '2024-01-01 00:00:00' AS start, "
+                "TIMESTAMP_NTZ '2024-01-01 00:10:00' AS end, 100.0D AS value"
+            ).select(struct("start").alias("s"), "end", "value")
+            for after_unpivot in [False, True]:
+                input_df = (
+                    df.unpivot(["s", "end"], ["value"], "metric", "value") if after_unpivot else df
+                )
+                for bound in [False, True]:
+                    with self.subTest(after_unpivot=after_unpivot, bound=bound):
+                        with self.assertRaises(AnalysisException) as error:
+                            input_df.binBy(
+                                input_df["s.start"] if bound else "s.start",
+                                "end",
+                                functions.expr("INTERVAL 5 MINUTES"),
+                                ["value"],
+                            ).collect()
+                        self.check_error(
+                            exception=error.exception,
+                            errorClass="BIN_BY_REQUIRES_TOP_LEVEL_COLUMN",
+                            messageParameters={"columnName": '"s.start"'},
+                        )
+
+    def test_bin_by_argument_types(self):
+        df = self.spark.range(1)
+        cases = [
+            ({"distributeUniform": "id"}, "distributeUniform", "list or tuple", "str"),
+            ({"distributeUniform": [["value"]]}, "col", "Column or str", "list"),
+            ({"distributeUniform": [("value",)]}, "col", "Column or str", "tuple"),
+            ({"binWidth": "INTERVAL 5 MINUTES"}, "binWidth", "Column", "str"),
+            ({"binWidth": None}, "binWidth", "Column", "NoneType"),
+            ({"alignTo": "origin"}, "alignTo", "Column", "str"),
+        ]
+        cases += [
+            ({name: 1}, name, "str", "int")
+            for name in ("binStartName", "binEndName", "binDistributeRatioName")
+        ]
+        for overrides, arg_name, expected_type, arg_type in cases:
+            with self.subTest(overrides=overrides):
+                args = dict(
+                    binWidth=functions.expr("INTERVAL 5 MINUTES"), distributeUniform=["value"]
+                )
+                args.update(overrides)
+                with self.assertRaises(PySparkTypeError) as error:
+                    df.binBy("start", "end", **args)
+                self.check_error(
+                    exception=error.exception,
+                    errorClass="NOT_EXPECTED_TYPE",
+                    messageParameters={
+                        "arg_name": arg_name,
+                        "expected_type": expected_type,
+                        "arg_type": arg_type,
+                    },
+                )
+
+    def test_bin_by_disabled(self):
+        with self.sql_conf({"spark.sql.binByRelationOperator.enabled": "false"}):
+            with self.assertRaises(AnalysisException) as error:
+                self.spark.range(1).binBy(
+                    "id", "id", functions.expr("INTERVAL 5 MINUTES"), ["id"]
+                ).collect()
+            self.assertEqual(error.exception.getCondition(), "UNSUPPORTED_FEATURE.BIN_BY")
+
     def test_range(self):
         self.assertEqual(self.spark.range(1, 1).count(), 0)
         self.assertEqual(self.spark.range(1, 0, -1).count(), 1)
@@ -1227,6 +1489,37 @@ class DataFrameTestsMixin:
             df = df.toJSON()
             self.assertIsInstance(df, DataFrame)
             self.assertEqual(df.select("value").count(), 10)
+
+    def test_rdd_conversion_propagates_sql_conf(self):
+        # Converting a DataFrame to an RDD must run under a tracked SQL execution so
+        # that session SQLConfs are propagated to the executors, mirroring the classic
+        # Scala Dataset.rdd behavior (SPARK-50994). Otherwise the non-vectorized parquet
+        # reader on the executor side would not see spark.sql.caseSensitive and would
+        # resolve the two same-named but differently-cased columns wrongly, failing to
+        # read the file. Accessing `.rdd` eagerly materializes the shuffle map stage
+        # (the parquet scan) under adaptive execution; disabling shuffle-file cleanup
+        # (off by default outside of tests) lets `collect` reuse that materialized
+        # output instead of recomputing the scan without the propagated conf.
+        with self.sql_conf(
+            {
+                "spark.sql.caseSensitive": True,
+                "spark.sql.parquet.enableVectorizedReader": False,
+                "spark.sql.classic.shuffleDependency.fileCleanup.enabled": False,
+            }
+        ):
+            with tempfile.TemporaryDirectory(prefix="test_rdd_conversion_sql_conf") as d:
+                self.spark.createDataFrame(
+                    [(1, 1.0), (2, 2.0), (3, 3.0), (1, 1.0)], ["a", "A"]
+                ).write.format("parquet").mode("overwrite").save(d)
+
+                deduplicated = self.spark.read.parquet(d).dropDuplicates(["a"])
+
+                rows = deduplicated.rdd.collect()
+
+                self.assertEqual(
+                    sorted((row[0], row[1]) for row in rows),
+                    [(1, 1.0), (2, 2.0), (3, 3.0)],
+                )
 
     def test_zip_with_index(self):
         df = self.spark.createDataFrame([("a", 1), ("b", 2), ("c", 3)], ["letter", "number"])
