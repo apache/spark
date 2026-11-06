@@ -83,6 +83,19 @@ trait GraphValidations extends Logging {
     case _ => false
   }
 
+  /** Rejects any AutoCDC flow with an ignore-null selection, since neither SCD type supports it. */
+  protected[graph] def validateNoAutoCdcIgnoreNullSelection(): Unit = {
+    resolvedFlows
+      .collectFirst {
+        case f: AutoCdcMergeFlow if f.changeArgs.ignoreNullSelection.isDefined => f
+      }
+      .foreach { flow =>
+        throw new UnsupportedOperationException(
+          s"AutoCDC flow ${flow.displayName} specifies ignore-null updates, which are not yet " +
+            "supported.")
+      }
+  }
+
   /**
    * Validate that each resolved flow is correctly either a streaming flow or non-streaming flow,
    * depending on the flow type (ex. once flow vs non-once flow) and the dataset type the flow

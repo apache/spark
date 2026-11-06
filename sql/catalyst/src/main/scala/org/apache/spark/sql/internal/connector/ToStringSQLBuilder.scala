@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.internal.connector
 
+import org.apache.spark.sql.connector.expressions.Expression
+import org.apache.spark.sql.connector.expressions.GeneralScalarExpression
 import org.apache.spark.sql.connector.expressions.GetArrayItem
 import org.apache.spark.sql.connector.expressions.VariantGet
+import org.apache.spark.sql.connector.read.LookupParameter
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 
 /**
@@ -38,6 +41,17 @@ class ToStringSQLBuilder extends V2ExpressionSQLBuilder with Serializable {
     s"""$funcName($distinct${inputs.mkString(", ")})"""
   }
 
+  // A parameter has no value to repeat, so the null-safe expansion would print one parameter as
+  // three markers and misstate how many parameter fields the predicate carries.
+  override protected def visitBinaryComparison(
+      name: String, le: Expression, re: Expression): String = {
+    if (name == "<=>" && (le.isInstanceOf[LookupParameter] || re.isInstanceOf[LookupParameter])) {
+      inputToSQL(le) + " <=> " + inputToSQL(re)
+    } else {
+      super.visitBinaryComparison(name, le, re)
+    }
+  }
+
   override protected def visitGetArrayItem(getArrayItem: GetArrayItem): String = {
     s"${getArrayItem.childArray.toString}[${getArrayItem.ordinal.toString}]"
   }
@@ -49,5 +63,14 @@ class ToStringSQLBuilder extends V2ExpressionSQLBuilder with Serializable {
     val typ = variantGet.targetType().catalogString
     val tz = Option(variantGet.timeZoneId()).map(z => s", tz=$z").getOrElse("")
     s"$funcName($col, '$path', $typ$tz)"
+  }
+
+  // `super.visitUnexpectedExpr` builds its error message from `expr.toString`, which calls back
+  // into `ToStringSQLBuilder` for a `GeneralScalarExpression`, so an unknown name would recurse
+  // until StackOverflowError. Render it as a function call instead.
+  override protected def visitUnexpectedExpr(expr: Expression): String = expr match {
+    case e: GeneralScalarExpression => visitSQLFunction(e.name(), e.children())
+    case p: LookupParameter => p.describe()
+    case _ => super.visitUnexpectedExpr(expr)
   }
 }

@@ -45,6 +45,8 @@ private[client] abstract class HiveVersionSuite(version: String) extends SparkFu
 
   override def suiteName: String = s"${super.suiteName}($version)"
 
+  override val suiteId: String = s"${getClass.getName}($version)"
+
   override protected def test(testName: String, testTags: Tag*)(testFun: => Any)
       (implicit pos: Position): Unit = {
     super.test(s"$version: $testName", testTags: _*)(testFun)

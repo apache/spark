@@ -83,7 +83,7 @@ class ExpressionInfoSuite extends SharedSparkSession {
 
     val validSources = Seq(
       "built-in", "hive", "python_udf", "scala_udf", "java_udf", "python_udtf", "internal",
-      "sql_udf")
+      "sql_udf", "v2_function")
     validSources.foreach { source =>
       val info = new ExpressionInfo(
         "testClass", null, "testName", null, "", "", "", "", "", "", source)
