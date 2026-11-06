@@ -60,7 +60,7 @@ import org.apache.spark.sql.internal.SQLConf
  * so it keeps its layout and only the right child takes a shuffle.
  *
  * The operators between the shuffle and the union are looked through only under
- * `spark.sql.optimizer.pushDownShuffleThroughUnion.lookThroughOperators.enabled`, and only when
+ * `spark.sql.adaptive.pushDownShuffleThroughUnion.lookThroughOperators.enabled`, and only when
  * moving the shuffle past them preserves results: a deterministic project, a local sort, a
  * filter, a partial aggregate and a partial window group limit. The reducing ones are why the
  * gate exists: the child is then shuffled before the reduction, which can send more data than the
@@ -71,7 +71,7 @@ import org.apache.spark.sql.internal.SQLConf
  * count must be at least the smaller of the replaced exchange's count and the effective initial
  * shuffle partition count (`coalescePartitions.initialPartitionNum` when set). At least one
  * child keeps its layout; others are retargeted or shuffled without changing child order.
- * `spark.sql.optimizer.pushDownShuffleThroughUnion.maxMovedBranches` limits moved children, and
+ * `spark.sql.adaptive.pushDownShuffleThroughUnion.maxMovedBranches` limits moved children, and
  * `maxUnionChildren` limits all branches whose tails run within each consumer task.
  * The rebuilt child must satisfy its consumer's distribution and pair with fixed siblings.
  *
@@ -80,7 +80,7 @@ import org.apache.spark.sql.internal.SQLConf
  * invalidate an ancestor's distribution. AQE can discard the optimization for the round, or add
  * another shuffle when skew optimization is forced. Join inputs and join branches are opt-in.
  * Allowing targets via
- * `spark.sql.optimizer.pushDownShuffleThroughUnion.keepNonCoalescibleBranches.enabled`
+ * `spark.sql.adaptive.pushDownShuffleThroughUnion.keepNonCoalescibleBranches.enabled`
  * can prevent coalescing of the consumer's compatible shuffle group. Forced skew optimization
  * can restore a union exchange after moved branches have shuffled, shuffling them a second time.
  *
