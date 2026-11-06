@@ -48,6 +48,7 @@ from pyspark.ml.param.shared import (
     HasBlockSize,
     HasElasticNetParam,
     HasFitIntercept,
+    HasIntermediateStorageLevel,
     HasMaxBlockSizeInMB,
     HasMaxIter,
     HasParallelism,
@@ -607,6 +608,7 @@ class _LinearSVCParams(
     HasAggregationDepth,
     HasThreshold,
     HasMaxBlockSizeInMB,
+    HasIntermediateStorageLevel,
 ):
     """
     Params for :py:class:`LinearSVC` and :py:class:`LinearSVCModel`.
@@ -847,6 +849,13 @@ class LinearSVC(
         """
         return self._set(maxBlockSizeInMB=value)
 
+    @since("4.4.0")
+    def setIntermediateStorageLevel(self, value: str) -> "LinearSVC":
+        """
+        Sets the value of :py:attr:`intermediateStorageLevel`.
+        """
+        return self._set(intermediateStorageLevel=value)
+
 
 class LinearSVCModel(
     _JavaClassificationModel[Vector],
@@ -952,6 +961,7 @@ class _LogisticRegressionParams(
     HasAggregationDepth,
     HasThreshold,
     HasMaxBlockSizeInMB,
+    HasIntermediateStorageLevel,
 ):
     """
     Params for :py:class:`LogisticRegression` and :py:class:`LogisticRegressionModel`.
@@ -1524,6 +1534,13 @@ class LogisticRegression(
         Sets the value of :py:attr:`maxBlockSizeInMB`.
         """
         return self._set(maxBlockSizeInMB=value)
+
+    @since("4.4.0")
+    def setIntermediateStorageLevel(self, value: str) -> "LogisticRegression":
+        """
+        Sets the value of :py:attr:`intermediateStorageLevel`.
+        """
+        return self._set(intermediateStorageLevel=value)
 
 
 class LogisticRegressionModel(
@@ -3082,6 +3099,7 @@ class _MultilayerPerceptronParams(
     HasStepSize,
     HasSolver,
     HasBlockSize,
+    HasIntermediateStorageLevel,
 ):
     """
     Params for :py:class:`MultilayerPerceptronClassifier`.
@@ -3327,6 +3345,13 @@ class MultilayerPerceptronClassifier(
         Sets the value of :py:attr:`solver`.
         """
         return self._set(solver=value)
+
+    @since("4.4.0")
+    def setIntermediateStorageLevel(self, value: str) -> "MultilayerPerceptronClassifier":
+        """
+        Sets the value of :py:attr:`intermediateStorageLevel`.
+        """
+        return self._set(intermediateStorageLevel=value)
 
 
 class MultilayerPerceptronClassificationModel(
@@ -4042,6 +4067,7 @@ class OneVsRestModelWriter(MLWriter):
 class FMClassifier(
     _JavaProbabilisticClassifier["FMClassificationModel"],
     _FactorizationMachinesParams,
+    HasIntermediateStorageLevel,
     JavaMLWritable,
     JavaMLReadable["FMClassifier"],
 ):
@@ -4258,10 +4284,18 @@ class FMClassifier(
         """
         return self._set(regParam=value)
 
+    @since("4.4.0")
+    def setIntermediateStorageLevel(self, value: str) -> "FMClassifier":
+        """
+        Sets the value of :py:attr:`intermediateStorageLevel`.
+        """
+        return self._set(intermediateStorageLevel=value)
+
 
 class FMClassificationModel(
     _JavaProbabilisticClassificationModel[Vector],
     _FactorizationMachinesParams,
+    HasIntermediateStorageLevel,
     JavaMLWritable,
     JavaMLReadable["FMClassificationModel"],
     HasTrainingSummary,

@@ -48,7 +48,8 @@ import org.apache.spark.storage.StorageLevel
 /** Params for linear SVM Classifier. */
 private[classification] trait LinearSVCParams extends ClassifierParams with HasRegParam
   with HasMaxIter with HasFitIntercept with HasTol with HasStandardization with HasWeightCol
-  with HasAggregationDepth with HasThreshold with HasMaxBlockSizeInMB {
+  with HasAggregationDepth with HasThreshold with HasMaxBlockSizeInMB
+  with HasIntermediateStorageLevel {
 
   /**
    * Param for threshold in binary classification prediction.
@@ -171,6 +172,10 @@ class LinearSVC @Since("2.2.0") (
   @Since("3.1.0")
   def setMaxBlockSizeInMB(value: Double): this.type = set(maxBlockSizeInMB, value)
 
+  /** @group expertSetParam */
+  @Since("4.4.0")
+  def setIntermediateStorageLevel(value: String): this.type = set(intermediateStorageLevel, value)
+
   private[spark] override def estimateModelSize(dataset: Dataset[_]): Long = {
     val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
     var size = this.estimateMatadataSize
@@ -186,7 +191,7 @@ class LinearSVC @Since("2.2.0") (
     instr.logDataset(dataset)
     instr.logParams(this, labelCol, weightCol, featuresCol, predictionCol, rawPredictionCol,
       regParam, maxIter, fitIntercept, tol, standardization, threshold, aggregationDepth,
-      maxBlockSizeInMB)
+      maxBlockSizeInMB, intermediateStorageLevel)
 
     if (dataset.storageLevel != StorageLevel.NONE) {
       instr.logWarning("Input instances will be standardized, blockified to blocks, and " +
@@ -304,7 +309,7 @@ class LinearSVC @Since("2.2.0") (
 
     val maxMemUsage = (actualBlockSizeInMB * 1024L * 1024L).ceil.toLong
     val blocks = InstanceBlock.blokifyWithMaxMemUsage(standardized, maxMemUsage)
-      .persist(StorageLevel.MEMORY_AND_DISK)
+      .persist(StorageLevel.fromString($(intermediateStorageLevel)))
       .setName(s"training blocks (blockSizeInMB=$actualBlockSizeInMB)")
 
     val getAggregatorFunc = new HingeBlockAggregator(bcInverseStd, bcScaledMean,
