@@ -47,6 +47,7 @@ goes into specific options that are available for the built-in data sources.
 * [ORC Files](sql-data-sources-orc.html)
 * [JSON Files](sql-data-sources-json.html)
 * [CSV Files](sql-data-sources-csv.html)
+* [Fixed-width Files](sql-data-sources-fwf.html)
 * [Text Files](sql-data-sources-text.html)
 * [XML Files](sql-data-sources-xml.html)
 * [Hive Tables](sql-data-sources-hive-tables.html)

@@ -335,6 +335,36 @@ def csv_dataset_example(spark: SparkSession) -> None:
     # $example off:csv_dataset$
 
 
+def fwf_dataset_example(spark: SparkSession) -> None:
+    # $example on:fwf_dataset$
+    # spark is from the previous example
+    sc = spark.sparkContext
+
+    # A fixed-width dataset is pointed to by path.
+    # The path can be either a single file or a directory of files
+    path = "examples/src/main/resources/people-fwf.txt"
+
+    df = spark.read.option("header", True).fwf(path)
+    df.show()
+    # +-------+---+
+    # |   name|age|
+    # +-------+---+
+    # |Michael| 29|
+    # |   Andy| 30|
+    # | Justin| 19|
+    # +-------+---+
+
+    # Read with explicit field widths
+    df2 = spark.read.option("header", True).option("widths", "10,4").fwf(path)
+
+    # Read with explicit from-to character intervals
+    df3 = spark.read.option("header", True).option("colspecs", "0-10,10-14").fwf(path)
+
+    # "output" is a folder which contains multiple fixed-width files and a _SUCCESS file.
+    df3.write.option("widths", "10,4").fwf("output")
+    # $example off:fwf_dataset$
+
+
 def text_dataset_example(spark: SparkSession) -> None:
     # $example on:text_dataset$
     # spark is from the previous example
@@ -492,6 +522,7 @@ if __name__ == "__main__":
     parquet_schema_merging_example(spark)
     json_dataset_example(spark)
     csv_dataset_example(spark)
+    fwf_dataset_example(spark)
     text_dataset_example(spark)
     jdbc_dataset_example(spark)
     xml_dataset_example(spark)
