@@ -736,6 +736,221 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
     }
   }
 
+  Seq(
+    true -> Row(1, 2, 3),
+    false -> Row(2, 1, 3)
+  ).foreach { case (resolveDifferentArityByPosition, expected) =>
+    test("Insert schema evolution: column list resolves nested fields by position - " +
+      s"differentArityByPosition=$resolveDifferentArityByPosition") {
+      withSQLConf(
+          SQLConf.INSERT_COLUMN_LIST_DIFFERENT_ARITY_STRUCTS_RESOLVE_BY_POSITION.key ->
+            resolveDifferentArityByPosition.toString) {
+        val t1 = s"${catalogAndNamespace}tbl"
+        withTable(t1) {
+          sql(s"""CREATE TABLE $t1 (
+               |  s struct<x: int, y: int>,
+               |  arr array<struct<x: int, y: int>>,
+               |  m map<string, struct<x: int, y: int>>)
+               |USING $v2Format""".stripMargin)
+          sql(
+            s"""INSERT WITH SCHEMA EVOLUTION INTO $t1 (s, arr, m)
+               |SELECT
+               |  named_struct('y', 1, 'x', 2, 'z', 3),
+               |  array(named_struct('y', 1, 'x', 2, 'z', 3)),
+               |  map('k', named_struct('y', 1, 'x', 2, 'z', 3))
+               |""".stripMargin)
+
+          checkAnswer(
+            sql(s"""SELECT
+                 |  s.x, s.y, s.z,
+                 |  arr[0].x, arr[0].y, arr[0].z,
+                 |  m['k'].x, m['k'].y, m['k'].z
+                 |FROM $t1""".stripMargin),
+            Row.fromSeq(expected.toSeq ++ expected.toSeq ++ expected.toSeq))
+        }
+      }
+    }
+  }
+
+  Seq(
+    true -> Row(1, null),
+    false -> Row(null, 1)
+  ).foreach { case (resolveDifferentArityByPosition, expected) =>
+    test(
+      "Insert schema evolution: column list resolves narrower nested struct by position - " +
+        s"differentArityByPosition=$resolveDifferentArityByPosition") {
+      withSQLConf(
+          SQLConf.INSERT_COLUMN_LIST_DIFFERENT_ARITY_STRUCTS_RESOLVE_BY_POSITION.key ->
+            resolveDifferentArityByPosition.toString) {
+        withInsertNestedTypeCoercion {
+          val t1 = s"${catalogAndNamespace}tbl"
+          withTable(t1) {
+            sql(s"CREATE TABLE $t1 (s struct<x: int, y: int>) USING $v2Format")
+            sql(
+              s"""INSERT WITH SCHEMA EVOLUTION INTO $t1 (s)
+                 |SELECT named_struct('y', 1)
+                 |""".stripMargin)
+
+            checkAnswer(sql(s"SELECT s.x, s.y FROM $t1"), expected)
+          }
+        }
+      }
+    }
+  }
+
+  Seq(false, true).foreach { schemaEvolutionEnabled =>
+    test(
+      "Insert schema evolution: column list rejects duplicate fields after positional rename - " +
+        s"schemaEvolutionEnabled=$schemaEvolutionEnabled") {
+      withSQLConf(
+          SQLConf.INSERT_COLUMN_LIST_DIFFERENT_ARITY_STRUCTS_RESOLVE_BY_POSITION.key -> "true") {
+        val t1 = s"${catalogAndNamespace}tbl"
+        withTable(t1) {
+          sql(s"CREATE TABLE $t1 (s struct<x: int>) USING $v2Format")
+          val schemaEvolution = if (schemaEvolutionEnabled) "WITH SCHEMA EVOLUTION " else ""
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(
+                s"""INSERT $schemaEvolution INTO $t1 (s)
+                   |SELECT named_struct('y', 2, 'x', 3, 'z', 4)
+                   |""".stripMargin)
+            },
+            condition = "INCOMPATIBLE_DATA_FOR_TABLE.AMBIGUOUS_COLUMN_NAME",
+            parameters = Map(
+              "tableName" -> t1.split("\\.").map(quoteIdentifier).mkString("."),
+              "colName" -> "`s`.`x`"))
+          assert(spark.table(t1).schema("s").dataType ===
+            StructType(Seq(StructField("x", IntegerType))))
+        }
+      }
+    }
+  }
+
+  test("Insert column list rejects a rename-created duplicate for ACCEPT_ANY_SCHEMA") {
+    withSQLConf(
+        SQLConf.INSERT_COLUMN_LIST_DIFFERENT_ARITY_STRUCTS_RESOLVE_BY_POSITION.key -> "true") {
+      val t1 = s"${catalogAndNamespace}tbl"
+      withTable(t1) {
+        sql(s"""CREATE TABLE $t1 (s struct<x: int>) USING $v2Format
+             |TBLPROPERTIES ('accept-any-schema' = 'true')""".stripMargin)
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(
+              s"""INSERT INTO $t1 (s)
+                 |SELECT named_struct('y', 2, 'x', 3, 'z', 4)
+                 |""".stripMargin)
+          },
+          condition = "INCOMPATIBLE_DATA_FOR_TABLE.AMBIGUOUS_COLUMN_NAME",
+          parameters = Map(
+            "tableName" -> t1.split("\\.").map(quoteIdentifier).mkString("."),
+            "colName" -> "`s`.`x`"))
+      }
+    }
+  }
+
+  test("Insert column list does not reject user-written duplicates for ACCEPT_ANY_SCHEMA") {
+    withSQLConf(
+        SQLConf.INSERT_COLUMN_LIST_DIFFERENT_ARITY_STRUCTS_RESOLVE_BY_POSITION.key -> "true") {
+      val t1 = s"${catalogAndNamespace}tbl"
+      withTable(t1) {
+        sql(s"""CREATE TABLE $t1 (s struct<x: int>) USING $v2Format
+             |TBLPROPERTIES ('accept-any-schema' = 'true')""".stripMargin)
+        sql(s"INSERT INTO $t1 (s) SELECT named_struct('x', 2, 'x', 3)")
+
+        checkAnswer(spark.table(t1), Row(Row(2)))
+        assert(spark.table(t1).schema("s").dataType ===
+          StructType(Seq(StructField("x", IntegerType))))
+      }
+    }
+  }
+
+  test("Insert column list reports a rename-created duplicate in an array element") {
+    withSQLConf(
+        SQLConf.INSERT_COLUMN_LIST_DIFFERENT_ARITY_STRUCTS_RESOLVE_BY_POSITION.key -> "true") {
+      val t1 = s"${catalogAndNamespace}tbl"
+      withTable(t1) {
+        sql(s"CREATE TABLE $t1 (arr array<struct<x: int>>) USING $v2Format")
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(
+              s"""INSERT INTO $t1 (arr)
+                 |SELECT array(named_struct('y', 2, 'x', 3))
+                 |""".stripMargin)
+          },
+          condition = "INCOMPATIBLE_DATA_FOR_TABLE.AMBIGUOUS_COLUMN_NAME",
+          parameters = Map(
+            "tableName" -> t1.split("\\.").map(quoteIdentifier).mkString("."),
+            "colName" -> "`arr`.`element`.`x`"))
+      }
+    }
+  }
+
+  test("Insert column list reports a rename-created duplicate in a map value") {
+    withSQLConf(
+        SQLConf.INSERT_COLUMN_LIST_DIFFERENT_ARITY_STRUCTS_RESOLVE_BY_POSITION.key -> "true") {
+      val t1 = s"${catalogAndNamespace}tbl"
+      withTable(t1) {
+        sql(s"CREATE TABLE $t1 (m map<string, struct<x: int>>) USING $v2Format")
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(
+              s"""INSERT INTO $t1 (m)
+                 |SELECT map('k', named_struct('y', 2, 'x', 3))
+                 |""".stripMargin)
+          },
+          condition = "INCOMPATIBLE_DATA_FOR_TABLE.AMBIGUOUS_COLUMN_NAME",
+          parameters = Map(
+            "tableName" -> t1.split("\\.").map(quoteIdentifier).mkString("."),
+            "colName" -> "`m`.`value`.`x`"))
+      }
+    }
+  }
+
+  test("Insert column list reports a rename-created duplicate in a map key by default") {
+    val t1 = s"${catalogAndNamespace}tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (m map<struct<x: int>, string>) USING $v2Format")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(
+            s"""INSERT INTO $t1 (m)
+               |SELECT map(named_struct('y', 2, 'x', 3), 'v')
+               |""".stripMargin)
+        },
+        condition = "INCOMPATIBLE_DATA_FOR_TABLE.AMBIGUOUS_COLUMN_NAME",
+        parameters = Map(
+          "tableName" -> t1.split("\\.").map(quoteIdentifier).mkString("."),
+          "colName" -> "`m`.`key`.`x`"))
+    }
+  }
+
+  test("Insert column list detects rename-created duplicates using the session resolver") {
+    withSQLConf(
+        SQLConf.INSERT_COLUMN_LIST_DIFFERENT_ARITY_STRUCTS_RESOLVE_BY_POSITION.key -> "true") {
+      val t1 = s"${catalogAndNamespace}tbl"
+      withTable(t1) {
+        sql(s"CREATE TABLE $t1 (s struct<x: int>) USING $v2Format")
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"INSERT INTO $t1 (s) SELECT named_struct('y', 2, 'X', 3)")
+            },
+            condition = "INCOMPATIBLE_DATA_FOR_TABLE.AMBIGUOUS_COLUMN_NAME",
+            parameters = Map(
+              "tableName" -> t1.split("\\.").map(quoteIdentifier).mkString("."),
+              "colName" -> "`s`.`x`"))
+        }
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+          sql(
+            s"""INSERT WITH SCHEMA EVOLUTION INTO $t1 (s)
+               |SELECT named_struct('y', 2, 'X', 3)
+               |""".stripMargin)
+          checkAnswer(sql(s"SELECT s.x, s.X FROM $t1"), Row(2, 3))
+        }
+      }
+    }
+  }
+
   test("Insert schema evolution: extra column by name - different column order") {
     val t1 = s"${catalogAndNamespace}tbl"
     withTable(t1) {

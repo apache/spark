@@ -6388,6 +6388,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val INSERT_COLUMN_LIST_DIFFERENT_ARITY_STRUCTS_RESOLVE_BY_POSITION =
+    buildConf("spark.sql.insertInto.columnList.differentArityStructsResolveByPosition.enabled")
+      .doc("When true, INSERT column lists resolve input and target structs with different field " +
+        "counts by position.")
+      .internal()
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
   val BIN_BY_ENABLED =
     buildConf("spark.sql.binByRelationOperator.enabled")
       .doc("Enable the BIN BY relation operator for aligning range-typed rows to " +
