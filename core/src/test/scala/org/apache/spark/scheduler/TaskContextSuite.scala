@@ -1988,6 +1988,41 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     assert(!completionInvoked) // completion listener should NOT be triggered
   }
 
+  test("SPARK-60992: a failing post-status-update listener does not mark the task failed") {
+    val context = TaskContext.empty()
+    val failureListener = mock(classOf[TaskFailureListener])
+    context.addTaskFailureListener(failureListener)
+    context.markTaskCompleted(None)
+
+    var isFailedInLastListener = true
+    context.addPostStatusUpdateListener(new PostStatusUpdateListener {
+      override def onStatusUpdateSent(context: TaskContext): Unit =
+        isFailedInLastListener = context.isFailed()
+    })
+    val error = new RuntimeException("post-status-update failure")
+    context.addPostStatusUpdateListener(new PostStatusUpdateListener {
+      override def onStatusUpdateSent(context: TaskContext): Unit = throw error
+    })
+
+    // The caller, the executor, still gets the failure to log it.
+    val e = intercept[TaskCompletionListenerException] {
+      context.invokePostStatusUpdateListeners()
+    }
+    assert(e.getMessage.contains("post-status-update failure"))
+    assert(e.getSuppressed.toSeq === Seq(error))
+
+    // The executor has already reported the task's success and released its resources.
+    verify(failureListener, never()).onTaskFailure(any(), any())
+    assert(!isFailedInLastListener)
+    assert(!context.isFailed())
+    assert(context.getTaskFailure.isEmpty)
+
+    // The task is still not failed for a failure listener added later.
+    val lateFailureListener = mock(classOf[TaskFailureListener])
+    context.addTaskFailureListener(lateFailureListener)
+    verify(lateFailureListener, never()).onTaskFailure(any(), any())
+  }
+
   test("SPARK-46947: ensure the correct block manager is used to unroll memory for task") {
     import BlockManagerValidationPlugin._
     BlockManagerValidationPlugin.resetState()

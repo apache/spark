@@ -207,8 +207,21 @@ private[spark] class TaskContextImpl(
   }
 
   private[spark] def invokePostStatusUpdateListeners(): Unit = {
+    // The executor has already reported the task's success to the driver and released the task's
+    // block locks and memory, and `Task.run` has unset its `TaskContext`. So a failing listener
+    // must not mark the task failed, which `invokeListeners()` does for a listener that throws:
+    // the failure listeners would run for a task that has not failed, without those resources.
+    val listenerExceptions = new ArrayBuffer[Throwable](2)
     invokeListeners(onPostStatusUpdateCallbacks, "PostStatusUpdateListener", None, Claim) {
-      _.onStatusUpdateSent(this)
+      listener =>
+        try {
+          listener.onStatusUpdateSent(this)
+        } catch {
+          case e: Throwable => listenerExceptions += e
+        }
+    }
+    if (listenerExceptions.nonEmpty) {
+      throw newTaskCompletionListenerException(listenerExceptions.toSeq, None)
     }
   }
 
