@@ -20,7 +20,7 @@ use std::ffi::{c_char, c_int, c_void};
 
 use crate::abi::{
     self, ArrowArray, ArrowArrayStream, ArrowSchema, SparkDsCommitOffsetInfo, SparkDsCreateInfo,
-    SparkDsDataWriterInfo, SparkDsFinishDataWriterInfo, SparkDsFinishWriteInfo, SparkDsHost,
+    SparkDsDataWriterInfo, SparkDsFinishDataWriterInfo, SparkDsFinishWriteInfo,
     SparkDsInitialOffsetInfo, SparkDsLatestOffsetInfo, SparkDsLibrary, SparkDsPartitionsInfo,
     SparkDsReadInfo, SparkDsReadLimit, SparkDsReaderInfo, SparkDsSink, SparkDsStreamPartitionsInfo,
     SparkDsStreamReaderInfo, SparkDsTaskContext, SparkDsWriteInfo,
@@ -74,7 +74,14 @@ macro_rules! export_data_source {
                 host: *const $crate::__private::abi::SparkDsHost,
                 library: *mut *const $crate::__private::abi::SparkDsLibrary,
             ) -> std::ffi::c_int {
-                unsafe { $crate::__private::initialize::<$source>(host, library, &LIBRARY) }
+                unsafe {
+                    $crate::__private::abi::initialize(
+                        host,
+                        library,
+                        &LIBRARY,
+                        <$source as $crate::DataSource>::init,
+                    )
+                }
             }
         };
     };
@@ -176,18 +183,6 @@ pub const fn library<S: Exported>() -> SparkDsLibrary {
             None
         },
     }
-}
-
-/// Initializes the library: see [`abi::initialize`].
-///
-/// # Safety
-/// The arguments must follow the spark_ds_init contract of spark_datasource.h.
-pub unsafe fn initialize<S: Exported>(
-    host: *const SparkDsHost,
-    output: *mut *const SparkDsLibrary,
-    library: &'static SparkDsLibrary,
-) -> c_int {
-    unsafe { abi::initialize(host, output, library, S::init) }
 }
 
 /// The ID of the driver handle that Spark passes back, which the SDK returned as a pointer.

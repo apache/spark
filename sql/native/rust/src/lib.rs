@@ -50,7 +50,7 @@ mod write;
 #[doc(hidden)]
 pub mod __private {
     pub use crate::bridge::Bridge;
-    pub use crate::export::{initialize, library, Exported};
+    pub use crate::export::{library, Exported};
 
     pub mod abi {
         pub use crate::abi::*;
