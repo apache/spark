@@ -363,9 +363,10 @@ class ExternalLookupJoinEvaluatorFactory(
   }
 
   /**
-   * Collects the result rows of one request by key, and caches them once the cursor is done. A
-   * key with more than `maxRowsPerKey` result rows is not cached. The rows are the batch's own
-   * copies, which are never changed.
+   * Collects the result rows of one request by key, and caches them once the cursor is done. It
+   * receives only the rows that satisfy the selected lookup predicates, so the cache never holds a
+   * row that Spark's check dropped. A key with more than `maxRowsPerKey` result rows is not cached.
+   * The rows are the batch's own copies, which are never changed.
    */
   private class CacheWriter(cache: LookupCache, keys: Array[UnsafeRow]) {
     private val resultsByKey = mutable.HashMap.from(
