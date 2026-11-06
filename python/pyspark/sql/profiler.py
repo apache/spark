@@ -226,12 +226,9 @@ class WorkerSamplingProfiler:
         elif self._aggregation == "stage":
             return f"sampling_stage_{tc.stageId()}"
         else:
-            # taskAttemptId alone is unique in the application; the stage, partition and
-            # attempt number are kept so the key is readable.
-            return (
-                f"sampling_task_{tc.stageId()}_{tc.partitionId()}"
-                f".{tc.attemptNumber()}_{tc.taskAttemptId()}"
-            )
+            # Stage ids are unique in the application, so this identifies a task. All
+            # attempts of the task, e.g. retries, are merged together.
+            return f"sampling_task_{tc.stageId()}_{tc.partitionId()}"
 
 
 class WorkerPerfProfiler:
