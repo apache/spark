@@ -1,4 +1,4 @@
-Project [id#0L, __pivot_count(b) AS `count(b)`#0[0] AS 1#0L, __pivot_count(b) AS `count(b)`#0[1] AS 2#0L, __pivot_count(b) AS `count(b)`#0[2] AS 3#0L]
-+- Aggregate [id#0L], [id#0L, pivotfirst(a#0, count(b)#0L, 1, 2, 3, 0, 0) AS __pivot_count(b) AS `count(b)`#0]
-   +- Aggregate [id#0L, a#0], [id#0L, a#0, count(b#0) AS count(b)#0L]
+Project [id#0L, __pivot_count((IF((a IN (CAST(1 AS INT), CAST(2 AS INT), CAST(3 AS INT))), b, CAST(NULL AS DOUBLE)))) AS `count(b)` AS `count(b)`#0[0] AS 1#0L, __pivot_count((IF((a IN (CAST(1 AS INT), CAST(2 AS INT), CAST(3 AS INT))), b, CAST(NULL AS DOUBLE)))) AS `count(b)` AS `count(b)`#0[1] AS 2#0L, __pivot_count((IF((a IN (CAST(1 AS INT), CAST(2 AS INT), CAST(3 AS INT))), b, CAST(NULL AS DOUBLE)))) AS `count(b)` AS `count(b)`#0[2] AS 3#0L]
++- Aggregate [id#0L], [id#0L, pivotfirst(a#0, count(b)#0L, 1, 2, 3, 0, 0) AS __pivot_count((IF((a IN (CAST(1 AS INT), CAST(2 AS INT), CAST(3 AS INT))), b, CAST(NULL AS DOUBLE)))) AS `count(b)` AS `count(b)`#0]
+   +- Aggregate [id#0L, if (a#0 IN (cast(1 as int),cast(2 as int),cast(3 as int))) a#0 else null], [id#0L, if (a#0 IN (cast(1 as int),cast(2 as int),cast(3 as int))) a#0 else null AS a#0, count(if (a#0 IN (cast(1 as int),cast(2 as int),cast(3 as int))) b#0 else null) AS count(b)#0L]
       +- LocalRelation <empty>, [id#0L, a#0, b#0]
