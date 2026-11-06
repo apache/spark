@@ -260,13 +260,9 @@ class MicroBatchExecution(
     }
 
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
-    // The columns and the filters that the query reads from each Data Source V2 source, which the
-    // scan of the source gets if its table has the capability for them and its scan builder
-    // supports them, from the plan of the query optimized once as its micro-batches are. The plan
-    // is only optimized for such a source.
-    lazy val sourceReads = StreamingV2ScanPushDown.reads(
+    lazy val columnsAndFiltersOfSources = StreamingV2ScanPushDown.columnsAndFiltersOfSources(
       sparkSessionForStream, planWithDedupKeys, initialLatestOffsetSeq.flatMap(_._2.metadataOpt))
-    val _logicalPlan = planWithDedupKeys.transform {
+    val planWithScans = planWithDedupKeys.transform {
       case streamingRelation @ StreamingRelation(
           dataSourceV1, sourceName, output, sourceIdentifyingName) =>
         toExecutionRelationMap.getOrElseUpdate(streamingRelation, {
@@ -298,7 +294,7 @@ class MicroBatchExecution(
             // reads, so that connectors implementing SupportsMetadataColumns include them in
             // readSchema().
             val streamingScan = StreamingV2ScanPushDown.buildScan(
-              table, options, output, streamConf, sourceReads.get(s))(
+              table, options, output, streamConf, columnsAndFiltersOfSources.get(s))(
               _.toMicroBatchStream(metadataPath))
             val relation = StreamingDataSourceV2Relation(
                 table,
@@ -313,7 +309,9 @@ class MicroBatchExecution(
                 },
                 sourceIdentifyingName
               )
-            streamingScan.toRelation(relation)
+            StreamingDataSourceV2ScanRelation(relation, streamingScan.scan, output,
+              streamingScan.stream, scanOutput = streamingScan.scanOutput,
+              pushedFilters = streamingScan.pushedFilters)
           })
           // Each micro-batch applies the filters that the scan builder got to the rows of the
           // source, see StreamingV2ScanPushDown.
@@ -337,6 +335,9 @@ class MicroBatchExecution(
           })
         }
     }
+    // The copies of the pushed filters that the query applies above them are dropped, so that each
+    // micro-batch evaluates them once, see StreamingV2ScanPushDown.
+    val _logicalPlan = StreamingV2ScanPushDown.withoutRepeatedPushedFilters(planWithScans)
 
     // Extract sources and their sourceIdentifyingName for sourceIdMap mapping
     val sourcesWithNames = _logicalPlan.collect {

@@ -6257,12 +6257,13 @@ object SQLConf {
 
   val STREAMING_V2_COLUMN_PRUNING_ENABLED =
     buildConf("spark.sql.streaming.v2ColumnPruning.enabled")
-      .internal()
       .doc("When true, the scan of a Data Source V2 streaming source whose table has the " +
         "capability STREAMING_COLUMN_PRUNING only reads the top-level columns that the streaming " +
         "query reads from it, which Spark takes from the plan of the query optimized when the " +
-        "query starts, as it does for batch scans. When false, it reads all the columns of the " +
-        "source.")
+        "query starts, as it does for batch scans. A query that reads other columns of the " +
+        "source later, for example, after the configuration of the optimizer changes in its " +
+        "session, fails with STREAMING_SCAN_MISSING_COLUMNS. When false, the scan reads all the " +
+        "columns of the source.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
@@ -6273,10 +6274,11 @@ object SQLConf {
       .internal()
       .doc("When true, the scan of a Data Source V2 streaming source whose table has the " +
         "capability STREAMING_FILTER_PUSHDOWN gets the filters that the streaming query applies " +
-        "first to all the rows that it reads from the source, which Spark takes from the plan of " +
-        "the query optimized when the query starts, as it does for batch scans. The query still " +
-        "applies the filters to the rows of the source and after the scan. When false, the scan " +
-        "gets no filter.")
+        "to all the rows that it reads from the source, which Spark takes from the plan of the " +
+        "query optimized when the query starts, as it does for batch scans. A scan builder " +
+        "whose filters may fail on some rows, as a cast does with ANSI, only gets those that the " +
+        "query applies before any other filter. The query still applies the filters to the rows " +
+        "of the source and after the scan. When false, the scan gets no filter.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf

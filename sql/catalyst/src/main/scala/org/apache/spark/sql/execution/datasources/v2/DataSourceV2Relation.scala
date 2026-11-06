@@ -481,9 +481,11 @@ case class StreamingDataSourceV2Relation(
  *
  * @param output the columns of the source that the query references, which the plan of each
  *               micro-batch is optimized with
- * @param prunedOutput the columns of `output` that the scan reads, in the order of its read schema,
- *                     if it was built to read fewer of them. The scan node of the physical plan
- *                     outputs these, so the plan must not read the other columns of `output`.
+ * @param scanOutput the columns of `output` that the scan reads, in the order of its read schema,
+ *                   unless these are all the columns of `output` in their order. The readers of
+ *                   the stream return these columns, so a planner must build the scan node from
+ *                   them rather than from `output`, and check that the plan reads no other column
+ *                   of `output`, as `DataSourceV2Strategy` does.
  * @param pushedFilters the filters that the scan builder got, over `output`, which the scan may
  *                      apply in any form. The plan of the query applies them over the relation,
  *                      as it applies them anyway, so that the scan cannot drop a row that the plan
@@ -496,7 +498,7 @@ case class StreamingDataSourceV2ScanRelation(
     stream: SparkDataStream,
     startOffset: Option[Offset] = None,
     endOffset: Option[Offset] = None,
-    prunedOutput: Option[Seq[AttributeReference]] = None,
+    scanOutput: Option[Seq[AttributeReference]] = None,
     pushedFilters: Seq[Expression] = Nil)
   extends LeafNode with MultiInstanceRelation with NamedRelation  {
 
@@ -505,8 +507,8 @@ case class StreamingDataSourceV2ScanRelation(
   override def name: String = relation.table.name()
 
   override def simpleString(maxFields: Int): String = {
-    val pruned = prunedOutput.map { columns =>
-      s", PrunedOutput: ${truncatedString(columns, "[", ", ", "]", maxFields)}"
+    val scanned = scanOutput.map { columns =>
+      s", ScanOutput: ${truncatedString(columns, "[", ", ", "]", maxFields)}"
     }
     // The plan of each micro-batch applies the pushed filters with those of the query, which
     // explain shows together, so the relation shows the filters that its scan builder was given.
@@ -517,11 +519,11 @@ case class StreamingDataSourceV2ScanRelation(
       ""
     }
     statePrefix + "StreamingDataSourceV2ScanRelation" +
-      s"${truncatedString(output, "[", ", ", "]", maxFields)} $name" + pruned.getOrElse("") +
+      s"${truncatedString(output, "[", ", ", "]", maxFields)} $name" + scanned.getOrElse("") +
       filters
   }
 
-  // The default canonicalization renumbers the attributes of `output` and `prunedOutput`, but not
+  // The default canonicalization renumbers the attributes of `output` and `scanOutput`, but not
   // those inside `pushedFilters`, which are over `output`: they are normalized against `output`,
   // so that two copies of the same scan, such as the relation and its `newInstance()`, have the
   // same result.
@@ -537,7 +539,7 @@ case class StreamingDataSourceV2ScanRelation(
     val newAttributes = AttributeMap(output.zip(newOutput))
     copy(
       output = newOutput,
-      prunedOutput = prunedOutput.map(_.map(a => a.withExprId(newAttributes(a).exprId))),
+      scanOutput = scanOutput.map(_.map(a => a.withExprId(newAttributes(a).exprId))),
       pushedFilters = pushedFilters.map(_.transform {
         case a: AttributeReference => a.withExprId(newAttributes.getOrElse(a, a).exprId)
       }))
@@ -557,7 +559,7 @@ case class StreamingDataSourceV2ScanRelation(
       case _ => None
     }
 
-    Seq(output, qualifiedTableName, scan, stream, startOffset, endOffset, prunedOutput,
+    Seq(output, qualifiedTableName, scan, stream, startOffset, endOffset, scanOutput,
       pushedFilters)
   }
 

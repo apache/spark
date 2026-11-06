@@ -182,9 +182,9 @@ public enum TableCapability {
    * query optimized then, and creates the micro-batch or continuous stream of the read from that
    * scan. By returning this capability, a table declares that the partition readers of such a
    * stream return the columns of {@link org.apache.spark.sql.connector.read.Scan#readSchema()},
-   * as those of the batches of the scan do. Spark asks a pruned scan for its read schema before it
-   * creates the stream. Without this capability, the scans of streaming reads read all the
-   * columns of the table.
+   * in its order, as those of the batches of the scan do. Spark asks the scan for its read schema
+   * before it creates the stream, whether the scan reads all the columns or not. Without this
+   * capability, the scans of streaming reads read all the columns of the table, in its order.
    *
    * @since 4.4.0
    */
@@ -192,11 +192,14 @@ public enum TableCapability {
 
   /**
    * Signals that the scans of the streaming reads of the table may get the filters that the
-   * streaming query applies first to all the rows that it reads from the table, before any other
-   * filter, which Spark pushes to a scan builder that implements
+   * streaming query applies to all the rows that it reads from the table, which Spark pushes to a
+   * scan builder that implements
    * {@link org.apache.spark.sql.connector.read.SupportsPushDownFilters} or
    * {@link org.apache.spark.sql.connector.read.SupportsPushDownV2Filters}, as it does for the
-   * scans of batch reads.
+   * scans of batch reads. The filters of a {@code SupportsPushDownFilters} builder compare columns
+   * with values, which cannot fail, so it gets such filters wherever the query applies them. A
+   * builder whose filters may fail on some rows, as a cast does with ANSI, only gets the filters
+   * that the query applies before any other filter.
    * <p>
    * Spark builds the scan of a streaming read once, when the query starts, from the plan of the
    * query optimized then, and creates the micro-batch or continuous stream of the read from that

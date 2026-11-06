@@ -2517,6 +2517,26 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = null)
   }
 
+  def streamingScanMissingColumnsError(source: Seq[String], columns: Seq[String]): Throwable = {
+    new SparkException(
+      errorClass = "STREAMING_SCAN_MISSING_COLUMNS",
+      messageParameters = Map(
+        "columns" -> columns.map(column => toSQLId(Seq(column))).mkString(", "),
+        "source" -> toSQLId(source),
+        "config" -> toSQLConf(SQLConf.STREAMING_V2_COLUMN_PRUNING_ENABLED.key)),
+      cause = null)
+  }
+
+  def streamingScanInvalidReadSchemaError(
+      source: String,
+      reason: String,
+      cause: Throwable = null): Throwable = {
+    new SparkException(
+      errorClass = "STREAMING_SCAN_INVALID_READ_SCHEMA",
+      messageParameters = Map("source" -> toSQLId(source), "reason" -> reason),
+      cause = cause)
+  }
+
   def cannotPurgeAsBreakInternalStateError(): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(errorClass = "_LEGACY_ERROR_TEMP_2260")
   }

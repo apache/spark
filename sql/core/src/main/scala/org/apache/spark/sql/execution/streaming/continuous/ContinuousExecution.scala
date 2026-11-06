@@ -77,13 +77,10 @@ class ContinuousExecution(
     val v2ToRelationMap = MutableMap[StreamingRelationV2, StreamingDataSourceV2ScanRelation]()
     var nextSourceId = 0
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
-    // The columns and the filters that the query reads from each Data Source V2 source, which the
-    // scan of the source gets if its table has the capability for them and its scan builder
-    // supports them, from the plan of the query optimized once as it is when it runs. The plan is
-    // only optimized for such a source.
     val streamConf = sparkSessionForStream.sessionState.conf
-    lazy val sourceReads = StreamingV2ScanPushDown.reads(sparkSessionForStream, analyzedPlan, None)
-    val _logicalPlan = analyzedPlan.transform {
+    lazy val columnsAndFiltersOfSources =
+      StreamingV2ScanPushDown.columnsAndFiltersOfSources(sparkSessionForStream, analyzedPlan, None)
+    val planWithScans = analyzedPlan.transform {
       case s @ StreamingRelationV2(ds, sourceName, table: SupportsRead, options, output,
         catalog, identifier, _, _) =>
         val dsStr = if (ds.nonEmpty) s"[${ds.get}]" else ""
@@ -102,16 +99,21 @@ class ContinuousExecution(
           // reads, so that connectors implementing SupportsMetadataColumns include them in
           // readSchema().
           val streamingScan = StreamingV2ScanPushDown.buildScan(
-            table, options, output, streamConf, sourceReads.get(s))(
+            table, options, output, streamConf, columnsAndFiltersOfSources.get(s))(
             _.toContinuousStream(metadataPath))
           val relation = StreamingDataSourceV2Relation(
               table, output, catalog, identifier, options, metadataPath)
-          streamingScan.toRelation(relation)
+          StreamingDataSourceV2ScanRelation(relation, streamingScan.scan, output,
+            streamingScan.stream, scanOutput = streamingScan.scanOutput,
+            pushedFilters = streamingScan.pushedFilters)
         })
         // The query applies the filters that the scan builder got to the rows of the source, see
         // StreamingV2ScanPushDown.
         StreamingV2ScanPushDown.withPushedFilters(scanRelation)
     }
+    // The copies of the pushed filters that the query applies above them are dropped, so that the
+    // query evaluates them once, see StreamingV2ScanPushDown.
+    val _logicalPlan = StreamingV2ScanPushDown.withoutRepeatedPushedFilters(planWithScans)
 
     sources = _logicalPlan.collect {
       case r: StreamingDataSourceV2ScanRelation => r.stream.asInstanceOf[ContinuousStream]
