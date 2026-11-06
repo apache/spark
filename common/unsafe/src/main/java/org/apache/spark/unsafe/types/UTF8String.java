@@ -143,6 +143,17 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   public static final UTF8String EMPTY_UTF8 = UTF8String.fromString("");
   public static final UTF8String ZERO_UTF8 = UTF8String.fromString("0");
   public static final UTF8String SPACE_UTF8 = UTF8String.fromString(" ");
+  private static final UTF8String TRUE_UTF8 = UTF8String.fromString("true");
+  private static final UTF8String FALSE_UTF8 = UTF8String.fromString("false");
+
+  // ASCII digit pairs "00", "01", ..., "99", so that fromLong can write two digits per division.
+  private static final byte[] DIGIT_PAIRS = new byte[200];
+  static {
+    for (int i = 0; i < 100; i++) {
+      DIGIT_PAIRS[2 * i] = (byte) ('0' + i / 10);
+      DIGIT_PAIRS[2 * i + 1] = (byte) ('0' + i % 10);
+    }
+  }
 
 
   /**
@@ -192,6 +203,74 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     byte[] spaces = new byte[length];
     Arrays.fill(spaces, (byte) ' ');
     return fromBytes(spaces);
+  }
+
+  /**
+   * Creates an UTF8String holding the base-10 representation of a long, equivalent to
+   * `fromString(Long.toString(value))` but without allocating an intermediate `java.lang.String`.
+   * Callers with narrower integral types (byte, short, int) can widen to long without changing the
+   * result.
+   */
+  public static UTF8String fromLong(long value) {
+    if (value == 0) {
+      return ZERO_UTF8;
+    }
+    boolean negative = value < 0;
+    // Extract digits in negative space so that Long.MIN_VALUE is representable (it cannot be
+    // negated). For a negative v and q = v / 100, `q * 100 - v` is the remainder in [0, 99].
+    long v = negative ? value : -value;
+    byte[] bytes = new byte[digitCount(v) + (negative ? 1 : 0)];
+    int pos = bytes.length;
+    // Write two digits per division: in long arithmetic until the value fits in an int, then in
+    // cheaper int arithmetic.
+    while (v <= Integer.MIN_VALUE) {
+      long q = v / 100;
+      int r = (int) (q * 100 - v);
+      v = q;
+      bytes[--pos] = DIGIT_PAIRS[2 * r + 1];
+      bytes[--pos] = DIGIT_PAIRS[2 * r];
+    }
+    int iv = (int) v;
+    while (iv <= -100) {
+      int q = iv / 100;
+      int r = q * 100 - iv;
+      iv = q;
+      bytes[--pos] = DIGIT_PAIRS[2 * r + 1];
+      bytes[--pos] = DIGIT_PAIRS[2 * r];
+    }
+    // One or two digits are left, iv is in [-99, -1].
+    if (iv <= -10) {
+      bytes[--pos] = DIGIT_PAIRS[-2 * iv + 1];
+      bytes[--pos] = DIGIT_PAIRS[-2 * iv];
+    } else {
+      bytes[--pos] = (byte) ('0' - iv);
+    }
+    if (negative) {
+      bytes[0] = (byte) '-';
+    }
+    return fromBytes(bytes);
+  }
+
+  /**
+   * Returns the number of decimal digits of a negative long, without dividing.
+   */
+  private static int digitCount(long negativeValue) {
+    long bound = -10;
+    for (int digits = 1; digits < 19; digits++) {
+      if (negativeValue > bound) {
+        return digits;
+      }
+      bound *= 10;
+    }
+    return 19;
+  }
+
+  /**
+   * Creates an UTF8String holding the string representation of a boolean ("true" or "false"),
+   * matching `String.valueOf(boolean)`. Returns a shared, cached instance without allocating.
+   */
+  public static UTF8String fromBoolean(boolean value) {
+    return value ? TRUE_UTF8 : FALSE_UTF8;
   }
 
   /**
