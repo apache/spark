@@ -2,142 +2,142 @@
 Section A - FIRST sliding respect-nulls
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 FIRST sliding respect-nulls, N=10K rows:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-FIRST sliding respect-nulls naive                   331            352          29          0.0       32293.4       1.0X
-FIRST sliding respect-nulls segtree                  61             68           6          0.2        6005.3       5.4X
+FIRST sliding respect-nulls naive                   319            335          14          0.0       31120.0       1.0X
+FIRST sliding respect-nulls segtree                  57             64           5          0.2        5577.8       5.6X
 
 
 ================================================================================================
 Section A - LAST sliding respect-nulls
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 LAST sliding respect-nulls, N=10K rows:   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-LAST sliding respect-nulls naive                    375            381           4          0.0       36614.8       1.0X
-LAST sliding respect-nulls segtree                   55             74          17          0.2        5368.8       6.8X
+LAST sliding respect-nulls naive                    383            393           8          0.0       37358.6       1.0X
+LAST sliding respect-nulls segtree                   50             53           3          0.2        4900.7       7.6X
 
 
 ================================================================================================
 Section A - FIRST sliding IGNORE NULLS
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 FIRST sliding ignore-nulls, N=10K rows:   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-FIRST sliding ignore-nulls naive                    387            390           3          0.0       37829.5       1.0X
-FIRST sliding ignore-nulls segtree                   44             49           7          0.2        4337.2       8.7X
+FIRST sliding ignore-nulls naive                    403            410          10          0.0       39313.0       1.0X
+FIRST sliding ignore-nulls segtree                   41             48           7          0.2        4040.5       9.7X
 
 
 ================================================================================================
 Section A - LAST sliding IGNORE NULLS
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 LAST sliding ignore-nulls, N=10K rows:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-LAST sliding ignore-nulls naive                     565            571           4          0.0       55224.3       1.0X
-LAST sliding ignore-nulls segtree                    46             54           8          0.2        4514.7      12.2X
+LAST sliding ignore-nulls naive                     583            588           4          0.0       56917.2       1.0X
+LAST sliding ignore-nulls segtree                    42             44           2          0.2        4115.9      13.8X
 
 
 ================================================================================================
 Section B - FIRST shrinking respect-nulls
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 FIRST shrinking respect-nulls, N=10K rows:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------
-FIRST shrinking respect-nulls naive                 1615           1660          51          0.0      157749.5       1.0X
-FIRST shrinking respect-nulls segtree                 37             45           9          0.3        3629.8      43.5X
+FIRST shrinking respect-nulls naive                 1557           1580          18          0.0      152003.0       1.0X
+FIRST shrinking respect-nulls segtree                 33             35           3          0.3        3197.5      47.5X
 
 
 ================================================================================================
 Section B - LAST shrinking respect-nulls
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 LAST shrinking respect-nulls, N=10K rows:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-LAST shrinking respect-nulls naive                 1752           1779          30          0.0      171098.1       1.0X
-LAST shrinking respect-nulls segtree                 36             40           6          0.3        3538.2      48.4X
+LAST shrinking respect-nulls naive                 1722           1733          13          0.0      168126.0       1.0X
+LAST shrinking respect-nulls segtree                 33             36           4          0.3        3265.5      51.5X
 
 
 ================================================================================================
 Section B - FIRST shrinking IGNORE NULLS
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 FIRST shrinking ignore-nulls, N=10K rows:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-FIRST shrinking ignore-nulls naive                 1774           1779           6          0.0      173203.4       1.0X
-FIRST shrinking ignore-nulls segtree                 36             47          14          0.3        3471.0      49.9X
+FIRST shrinking ignore-nulls naive                 1824           1830           4          0.0      178148.5       1.0X
+FIRST shrinking ignore-nulls segtree                 31             35           3          0.3        3075.9      57.9X
 
 
 ================================================================================================
 Section B - LAST shrinking IGNORE NULLS
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 LAST shrinking ignore-nulls, N=10K rows:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-LAST shrinking ignore-nulls naive                  2297           2318          22          0.0      224307.0       1.0X
-LAST shrinking ignore-nulls segtree                  36             56          16          0.3        3544.5      63.3X
+LAST shrinking ignore-nulls naive                  2285           2294          19          0.0      223102.4       1.0X
+LAST shrinking ignore-nulls segtree                  34             37           2          0.3        3297.5      67.7X
 
 
 ================================================================================================
 Section C - N=5K
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 FIRST shrinking frame, N=5K rows:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-FIRST naive N=5K                                    421            424           3          0.0       82179.3       1.0X
-FIRST segtree N=5K                                   27             38          14          0.2        5205.3      15.8X
+FIRST naive N=5K                                    417            421           5          0.0       81384.0       1.0X
+FIRST segtree N=5K                                   26             48          13          0.2        5112.5      15.9X
 
 
 ================================================================================================
 Section C - N=25K (stress)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 FIRST shrinking frame, N=25K rows:        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-FIRST naive N=25K                                 10095          10131          32          0.0      394326.9       1.0X
-FIRST segtree N=25K                                  48             55          11          0.5        1888.2     208.8X
+FIRST naive N=25K                                  9980          10097         170          0.0      389837.5       1.0X
+FIRST segtree N=25K                                  45             53           9          0.6        1767.5     220.6X
 
 
 ================================================================================================
 Section C - N=50K (stress, last naive run)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 FIRST shrinking frame, N=50K rows:        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-FIRST naive N=50K                                 40035          40266         319          0.0      781927.7       1.0X
-FIRST segtree N=50K                                  78             81           5          0.7        1525.5     512.6X
+FIRST naive N=50K                                 39760          39781          25          0.0      776559.7       1.0X
+FIRST segtree N=50K                                  74             80          10          0.7        1454.5     533.9X
 
 
 ================================================================================================
 Section C - N=100K (segtree-only, stress)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 FIRST shrinking frame, N=100K rows (segtree-only):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------------
-FIRST segtree N=100K                                         137            161          29          0.7        1340.4       1.0X
+FIRST segtree N=100K                                         135            136           1          0.8        1321.3       1.0X
 
 
