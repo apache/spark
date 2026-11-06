@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{INVOKE, JSON_TO_STRUCT, 
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DecimalType, IntegralType, NumericType}
+import org.apache.spark.sql.types.NumericType
 
 /**
  * Insert a runtime filter on one side of the join (we call this side the application side) if
@@ -425,12 +425,9 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     })
   }
 
-  // `canUpCast` also takes `DECIMAL(19,0)` to `BIGINT`, which can overflow. So a decimal to an
-  // integral type does not count.
   private def isNumericUpCast(c: Cast): Boolean =
     c.child.dataType.isInstanceOf[NumericType] && c.dataType.isInstanceOf[NumericType] &&
-      Cast.canUpCast(c.child.dataType, c.dataType) &&
-      !(c.child.dataType.isInstanceOf[DecimalType] && c.dataType.isInstanceOf[IntegralType])
+      Cast.canUpCast(c.child.dataType, c.dataType)
 
   // Whether the bloom filter's subquery can evaluate `creationSide` again, apart from the join. The
   // plan it reads must give the same rows again (SPARK-60808). So it must read no CTE, whose

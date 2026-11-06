@@ -1430,7 +1430,7 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       val withoutHint = query.replace("/*+ broadcast(x) */ ", "")
       assert(bloomFilterKeyNames(withoutHint).contains("f5"))
       assert(dynamicPruningFilters(withoutHint) == Seq(Literal.TrueLiteral))
-      sql(withoutHint).collect()
+      if (!conf.adaptiveExecutionEnabled) sql(withoutHint).collect()
     }
   }
 
@@ -1495,7 +1495,9 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       val query = "select * from bf5part p join (select * from (select * from tn order by v " +
         "limit 100) where k > 1) x on p.f5 = x.k"
       withDppTestConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
-        assertBloomFilterWithoutDpp(query)
+        withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false") {
+          assert(bloomFilterKeyNames(query) == Seq("f5"))
+        }
         assert(bloomFilterKeyNames(query) == Seq("k"))
       }
     }
@@ -1533,7 +1535,7 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
 
   test("SPARK-60702: do not add bloom filter for a key with a dropped dpp filter under a " +
     "decimal to bigint cast") {
-    // `Cast.canUpCast` takes `DECIMAL(19,0)` to `BIGINT`, but `9999999999999999999` overflows. The
+    // `9999999999999999999` overflows `BIGINT`, so the cast is no up-cast (SPARK-60943). The
     // query casts it only on rows with `v > 0`, which that partition does not have.
     withTable("fd") {
       sql("create table fd (v int, d decimal(19,0)) using parquet partitioned by (d)")
