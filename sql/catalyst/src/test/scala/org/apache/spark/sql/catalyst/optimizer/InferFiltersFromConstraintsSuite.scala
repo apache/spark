@@ -361,6 +361,16 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     assert(inferred.count(_.isInstanceOf[GreaterThan]) === 2, inferred)
   }
 
+  test("SPARK-60985: an integral remainder by a non-zero constant is inferred") {
+    val relation = LocalRelation($"x".int, $"y".int)
+    def even(e: Expression): Expression = Remainder(e, Literal(2), EvalMode.ANSI) === 0
+    val query = relation.where($"x" === $"y" && even($"y")).analyze
+    comparePlans(
+      InferFiltersFromConstraints(query),
+      relation.where(IsNotNull($"x") && IsNotNull($"y") && $"x" === $"y" &&
+        even($"y") && even($"x")).analyze)
+  }
+
   test("SPARK-60985: a constraint whose canonical form is MultiCommutativeOp is inferred") {
     val relation = LocalRelation($"x".int, $"y".int)
     def anyOf(e: Expression): Expression = e === 1 || e === 2 || e === 3

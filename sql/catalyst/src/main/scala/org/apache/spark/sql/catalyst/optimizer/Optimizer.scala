@@ -2346,12 +2346,20 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
   // Top-down, so that each cast is judged by the type of its original input.
   private def stripCannotFail(e: Expression): Expression = e match {
     case c: Cast if isNumericUpCast(c.child.dataType, c.dataType) => stripCannotFail(c.child)
+    // An integral remainder by a non-zero constant, e.g. `x % 2 = 0`, never fails.
+    case r: Remainder if r.dataType.isInstanceOf[IntegralType] && isNonZeroIntegral(r.right) =>
+      stripCannotFail(r.left)
     case i: InSubquery =>
       (i.values.map(IsNotNull(_)) ++ i.query.joinCond).map(stripCannotFail).reduce[Expression](And)
     case x: Exists =>
       x.joinCond.map(stripCannotFail).foldLeft[Expression](Literal.TrueLiteral)(And)
     case s: ScalarSubquery if !s.isCorrelated => Literal.create(null, s.dataType)
     case other => other.mapChildren(stripCannotFail)
+  }
+
+  private def isNonZeroIntegral(e: Expression): Boolean = e match {
+    case Literal(v, _: IntegralType) => v != null && v != 0
+    case _ => false
   }
 
   private def isNumericUpCast(from: DataType, to: DataType): Boolean = (from, to) match {
