@@ -36,7 +36,8 @@ import org.apache.spark.sql.types.{BinaryType, BooleanType, ByteType, CharType, 
  * overrides them. A cache lives within a task, per input partition, so these bound each such cache:
  * `maxEntries` keys, each kept for `ttlMillis` (0 keeps it until evicted). A key with more than
  * `maxRowsPerKey` result rows is still joined but not cached, so that one large result cannot
- * fill the cache.
+ * fill the cache. At present, a join that selects a range comparison (`<`, `<=`, `>`, `>=`) caches
+ * nothing, whatever these settings say.
  */
 case class ExternalLookupCacheOptions(
     enabled: Boolean,

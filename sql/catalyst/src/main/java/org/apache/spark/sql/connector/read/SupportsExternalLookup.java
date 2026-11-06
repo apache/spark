@@ -52,6 +52,12 @@ public interface SupportsExternalLookup extends ScanBuilder {
    *   => each parameter row is (event_time lower bound, tenant);
    *      event_time < ? and region = ? stay in Spark's join condition
    * }</pre>
+   * Currently, when any selected predicate is a range comparison ({@code <}, {@code <=},
+   * {@code >} or {@code >=}), Spark does not cache that join's lookup results. A source should
+   * leave a range comparison unselected when serving the lookup without it costs less, for example
+   * when the equality keys repeat often enough that the cache would absorb most requests. An
+   * unselected comparison still applies: Spark evaluates it on the returned rows, as it does
+   * {@code event_time < ?} above.
    * <ul>
    *   <li>The result must be non-null and hold offered instances, unchanged, without nulls or
    *   duplicates. Spark matches them by identity, not {@code equals}.</li>

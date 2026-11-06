@@ -2393,6 +2393,44 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     assert(SimpleExternalLookupDataSource.requestedKeys.asScala.toSeq === Seq(2, 2))
   }
 
+  test("external lookup does not cache the results of a range lookup") {
+    // One row per batch, so the second shift can avoid its request only through the cache.
+    val lookup = spark.read
+      .format(classOf[SimpleExternalLookupDataSource].getName)
+      .option("maxBatchSize", "1")
+      .load()
+      .hint("external_lookup", "cache_enabled=true")
+    // Two shifts that both start at employee id 2.
+    val shifts = streamOf(Seq(("early", 2), ("late", 2)).toDF("shift", "firstId"))
+
+    Seq(
+      ("range", lookup("id") >= shifts("firstId"), 2, 0),
+      ("equality", lookup("id") === shifts("firstId"), 1, 1)).foreach {
+      case (kind, condition, requests, cacheHits) =>
+        SimpleExternalLookupDataSource.resetCounters()
+        val run = runStream(shifts.join(lookup, condition, "inner"))
+        QueryTest.sameRows(
+          Seq(Row("early", 2, 2, "sales"), Row("late", 2, 2, "sales")),
+          run.rows).foreach(fail(_))
+        assert(run.lookupJoin.cacheOptions.enabled === (kind == "equality"), kind)
+        assert(SimpleExternalLookupDataSource.requestCount.get() === requests, kind)
+        assert(run.lookupJoin.metrics("numCacheHits").value === cacheHits, kind)
+    }
+  }
+
+  test("a connector that reuses its byte buffer cannot change cached rows") {
+    // The connector writes each BINARY value into one array. The cache keeps the row of id 1
+    // while the row of id 2 overwrites the array, then serves it to the second visit of id 1.
+    val badges = readSchemaLookup("reusedBuffer")
+    val visits = streamOf(Seq(1, 2, 1).toDF("id"))
+
+    val run = runStream(visits.join(badges, visits("id") === badges("id")))
+    QueryTest.sameRows(
+      Seq(Row(1, 1, Array[Byte](1)), Row(2, 2, Array[Byte](2)), Row(1, 1, Array[Byte](1))),
+      run.rows).foreach(fail(_))
+    assert(run.lookupJoin.metrics("numCacheHits").value === 1)
+  }
+
   test("external lookup caps each inner-join request at the engine batch size") {
     val lookup = spark.read
       .format(classOf[SimpleExternalLookupDataSource].getName)
@@ -3272,6 +3310,7 @@ case class ReadSchemaExternalLookupTable(kind: String) extends Table with Suppor
     case "nullStructInArray" => new StructType()
       .add("id", IntegerType)
       .add("items", ArrayType(new StructType().add("a", IntegerType, nullable = false)))
+    case "reusedBuffer" => StructType.fromDDL("id INT, badge BINARY")
   }
   override def capabilities(): java.util.Set[TableCapability] =
     java.util.EnumSet.of(EXTERNAL_LOOKUP)
@@ -3313,6 +3352,9 @@ case class ReadSchemaExternalLookupScan(schema: StructType, kind: String) extend
 case class ReadSchemaExternalLookupReaderFactory(kind: String)
   extends ExternalLookupReaderFactory {
   override def createReader(): ExternalLookupReader = new ExternalLookupReader {
+    // The one array that a "reusedBuffer" reader writes every BINARY value into.
+    private val badgeBuffer = new Array[Byte](1)
+
     override def lookupBatch(keys: Array[InternalRow]): ExternalLookupResultCursor = {
       val results = keys.iterator.zipWithIndex.map { case (key, ordinal) =>
         val id = key.getInt(0)
@@ -3326,6 +3368,9 @@ case class ReadSchemaExternalLookupReaderFactory(kind: String)
             new GenericArrayData(Array[Any](null))))
           case "nullStructInArray" =>
             InternalRow(id, new GenericArrayData(Array[Any](InternalRow(null))))
+          case "reusedBuffer" =>
+            badgeBuffer(0) = id.toByte
+            InternalRow(id, badgeBuffer)
           case _ => InternalRow(id, name)
         })
       }
