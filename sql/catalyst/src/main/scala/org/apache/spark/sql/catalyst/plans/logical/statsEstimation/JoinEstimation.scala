@@ -196,12 +196,13 @@ case class JoinEstimation(join: Join) extends Logging {
       // Check if the two sides are disjoint
       val leftKeyStat = leftStats.attributeStats(leftKey)
       val rightKeyStat = rightStats.attributeStats(rightKey)
-      val lInterval = ValueInterval(leftKeyStat.min, leftKeyStat.max, leftKey.dataType)
-      val rInterval = ValueInterval(rightKeyStat.min, rightKeyStat.max, rightKey.dataType)
+      val lInterval = keyInterval(leftKey, leftKeyStat)
+      val rInterval = keyInterval(rightKey, rightKeyStat)
       if (ValueInterval.isIntersected(lInterval, rInterval)) {
         val (newMin, newMax) = ValueInterval.intersect(lInterval, rInterval, leftKey.dataType)
         val (card, joinStat) = (leftKeyStat.histogram, rightKeyStat.histogram) match {
-          case (Some(l: Histogram), Some(r: Histogram)) =>
+          // Histograms are bounded by the intersected min/max, so they need both keys' min/max.
+          case (Some(l: Histogram), Some(r: Histogram)) if newMin.isDefined && newMax.isDefined =>
             computeByHistogram(leftKey, rightKey, l, r, newMin, newMax)
           case _ =>
             computeByNdv(leftKey, rightKey, newMin, newMax)
@@ -221,6 +222,19 @@ case class JoinEstimation(join: Join) extends Logging {
       i += 1
     }
     (joinCard, AttributeMap(keyStatsAfterJoin))
+  }
+
+  /**
+   * Returns the value range of a join key. A key with distinct values but no min/max (a data
+   * source may not report them, and a union drops them for some types) has an unknown range, not
+   * only nulls. Like a string key, it is assumed to overlap the other key.
+   */
+  private def keyInterval(key: AttributeReference, keyStat: ColumnStat): ValueInterval = {
+    if (keyStat.distinctCount.get > 0 && !keyStat.hasMinMaxStats) {
+      new DefaultValueInterval()
+    } else {
+      ValueInterval(keyStat.min, keyStat.max, key.dataType)
+    }
   }
 
   /** Returns join cardinality and the column stat for this pair of join keys. */

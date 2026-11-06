@@ -560,6 +560,87 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
     assert(join.stats == expectedStats)
   }
 
+  test("SPARK-61002: a join key without min/max is not taken as holding only nulls") {
+    // table1 (key-1-5 int, key-5-9 int): (1, 9), (2, 8), (3, 7), (4, 6), (5, 5)
+    // A data source can report the distinct and null counts of a column but not its min/max.
+    val (noMinMax, noMinMaxStat) = (attr("key-no-min-max"),
+      ColumnStat(distinctCount = Some(3), min = None, max = None,
+        nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)))
+    val noMinMaxTable = StatsTestPlan(
+      outputList = Seq(noMinMax),
+      rowCount = 3,
+      attributeStats = AttributeMap(Seq(noMinMax -> noMinMaxStat)))
+    val join = Join(table1, noMinMaxTable, Inner,
+      Some(EqualTo(nameToAttr("key-1-5"), noMinMax)), JoinHint.NONE)
+    // Estimated by ndv: 5 * 3 / max(5, 3) = 3. The range of the joined keys is unknown.
+    val joinedColStat = ColumnStat(distinctCount = Some(3), min = None, max = None,
+      nullCount = Some(0), avgLen = Some(4), maxLen = Some(4))
+    val expectedStats = Statistics(
+      sizeInBytes = 3 * (8 + 4 * 3),
+      rowCount = Some(3),
+      attributeStats = AttributeMap(Seq(
+        nameToAttr("key-1-5") -> joinedColStat, noMinMax -> joinedColStat,
+        nameToAttr("key-5-9") -> nameToColInfo("key-5-9")._2.copy(distinctCount = Some(3)))))
+    assert(join.stats == expectedStats)
+  }
+
+  test("SPARK-61002: join keys with histograms but without min/max are estimated by ndv") {
+    val histogram = Histogram(height = 10, Array(
+      HistogramBin(lo = 1, hi = 5, ndv = 5), HistogramBin(lo = 5, hi = 9, ndv = 4)))
+    val (col1, col2) = (attr("key1"), attr("key2"))
+    val withMinMax = generateJoinChild(col1, histogram, 1, 9)
+    val noMinMax = StatsTestPlan(
+      outputList = Seq(col2),
+      rowCount = 20,
+      attributeStats = AttributeMap(Seq(
+        col2 -> inferColumnStat(histogram, 1, 9).copy(min = None, max = None))))
+    val join = Join(withMinMax, noMinMax, Inner, Some(EqualTo(col1, col2)), JoinHint.NONE)
+    // 20 * 20 / max(9, 9), rounded up.
+    assert(join.stats.rowCount == Some(45))
+  }
+
+  test("SPARK-61002: a boolean join key from a union is not taken as holding only nulls") {
+    def booleanTable(name: String, rowCount: Int): StatsTestPlan = {
+      val col = AttributeReference(name, BooleanType)()
+      StatsTestPlan(
+        outputList = Seq(col),
+        rowCount = rowCount,
+        attributeStats = AttributeMap(Seq(col -> ColumnStat(distinctCount = Some(2),
+          min = Some(false), max = Some(true),
+          nullCount = Some(0), avgLen = Some(1), maxLen = Some(1)))))
+    }
+    val union = Union(booleanTable("b1", 10), booleanTable("b2", 10))
+    val unionKey = union.output.head
+    // The union keeps the distinct and null counts of a boolean column but not its min/max.
+    assert(union.stats.attributeStats(unionKey).hasCountStats)
+    assert(!union.stats.attributeStats(unionKey).hasMinMaxStats)
+    val other = booleanTable("b3", 4)
+    val join = Join(union, other, Inner, Some(EqualTo(unionKey, other.output.head)), JoinHint.NONE)
+    // 20 * 4 / max(2, 2)
+    assert(join.stats.rowCount == Some(40))
+  }
+
+  test("SPARK-61002: a join key holding only nulls matches no key without min/max") {
+    def noMinMaxTable(name: String, distinctCount: Int): StatsTestPlan = {
+      val col = attr(name)
+      StatsTestPlan(
+        outputList = Seq(col),
+        rowCount = 3,
+        attributeStats = AttributeMap(Seq(col -> ColumnStat(distinctCount = Some(distinctCount),
+          min = None, max = None, nullCount = Some(if (distinctCount == 0) 3 else 0),
+          avgLen = Some(4), maxLen = Some(4)))))
+    }
+    val nullKeys = noMinMaxTable("null-keys", 0)
+    Seq(noMinMaxTable("some-keys", 3), noMinMaxTable("other-null-keys", 0)).foreach { other =>
+      Seq(Join(nullKeys, other, Inner, Some(EqualTo(nullKeys.output.head, other.output.head)),
+          JoinHint.NONE),
+        Join(other, nullKeys, Inner, Some(EqualTo(other.output.head, nullKeys.output.head)),
+          JoinHint.NONE)).foreach { join =>
+        assert(join.stats.rowCount == Some(0))
+      }
+    }
+  }
+
   test("SPARK-33018 Fix estimate statistics issue if child has 0 bytes") {
     case class MyStatsTestPlan(
         outputList: Seq[Attribute],
