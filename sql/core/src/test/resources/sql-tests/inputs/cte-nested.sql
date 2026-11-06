@@ -29,6 +29,37 @@ SELECT (
   SELECT id
 ) FROM range(1);
 
+-- un-referenced CTE in subquery expression: references a correlated CTE on the right side of a
+-- left join
+SELECT (
+  WITH correlated AS (SELECT * FROM VALUES (0), (1) AS r(id) WHERE r.id = o.id),
+  unreferenced AS (SELECT * FROM VALUES (0), (1) AS l(id) LEFT JOIN correlated ON l.id = correlated.id)
+  SELECT 1
+) FROM VALUES (0) AS o(id);
+
+-- un-referenced CTE in subquery expression: references a correlated CTE on the right side of a
+-- left join, which the CTE main query also references
+SELECT (
+  WITH correlated AS (SELECT * FROM VALUES (0), (1) AS r(id) WHERE r.id = o.id),
+  unreferenced AS (SELECT * FROM VALUES (0), (1) AS l(id) LEFT JOIN correlated ON l.id = correlated.id)
+  SELECT count(*) FROM correlated
+) FROM VALUES (0) AS o(id);
+
+-- un-referenced CTE in EXISTS subquery: references a correlated CTE in a full outer join
+SELECT * FROM VALUES (0) AS o(id) WHERE EXISTS (
+  WITH correlated AS (SELECT * FROM VALUES (0), (1) AS r(id) WHERE r.id = o.id),
+  unreferenced AS (SELECT * FROM VALUES (0), (1) AS l(id) FULL OUTER JOIN correlated ON l.id = correlated.id)
+  SELECT 1
+);
+
+-- un-referenced CTE in EXISTS subquery: references a correlated CTE in a full outer join, which
+-- the CTE main query also references
+SELECT * FROM VALUES (0) AS o(id) WHERE EXISTS (
+  WITH correlated AS (SELECT * FROM VALUES (0), (1) AS r(id) WHERE r.id = o.id),
+  unreferenced AS (SELECT * FROM VALUES (0), (1) AS l(id) FULL OUTER JOIN correlated ON l.id = correlated.id)
+  SELECT * FROM correlated
+);
+
 -- Make sure CTE in subquery is scoped to that subquery rather than global
 -- the 2nd half of the union should fail because the cte is scoped to the first half
 SELECT * FROM

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.collection.mutable
+
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
@@ -39,11 +41,12 @@ object ValidateSubqueryExpression
       plan: LogicalPlan,
       expr: SubqueryExpression,
       skipOuterReferenceValidationInFilter: Boolean = false): Unit = {
-    lazy val referencedCtes = referencedCteDefinitions(expr.plan)
+    lazy val inlinedCtes = inlinedCteReferences(expr.plan)
+    lazy val inlinedCteIds = inlinedCtes.values.map(_.cteDef.id).toSet
 
     def checkAggregateInScalarSubquery(
         conditions: Seq[Expression],
-        query: LogicalPlan, agg: Aggregate): Unit = {
+        query: LogicalPlan, agg: Aggregate, cteRefsToAgg: Seq[CTERelationRef]): Unit = {
       // Make sure correlated scalar subqueries contain one row for every outer row by
       // enforcing that they are aggregates containing exactly one aggregate expression.
       val aggregates = agg.expressions.flatMap(_.collect {
@@ -56,7 +59,15 @@ object ValidateSubqueryExpression
           messageParameters = Map.empty)
       }
 
-      val nonEquivalentGroupByExprs = nonEquivalentGroupbyCols(query, agg, referencedCtes)
+      // Inlining replaces a CTE reference that doesn't keep its definition's attributes with a
+      // copy of the body under fresh attributes, whose equivalences can only qualify an aggregate
+      // inside that copy. So the equivalences follow such a reference only on the way to `agg`.
+      val equivalenceCtes = inlinedCtes.collect {
+        case (cteRef, inlined)
+            if cteRef.outputSet == inlined.cteDef.outputSet || cteRefsToAgg.contains(cteRef) =>
+          cteRef -> inlined.cteDef
+      }
+      val nonEquivalentGroupByExprs = nonEquivalentGroupbyCols(query, agg, equivalenceCtes)
       val invalidCols = if (!SQLConf.get.getConf(
         SQLConf.LEGACY_SCALAR_SUBQUERY_ALLOW_GROUP_BY_NON_EQUALITY_CORRELATED_PREDICATE)) {
         nonEquivalentGroupByExprs
@@ -98,22 +109,25 @@ object ValidateSubqueryExpression
 
     /**
      * Skips subquery aliases added by the Analyzer as well as hints. For projects, does the
-     * necessary mapping and skips to its child. A [[CTERelationRef]] is followed into its
-     * definition's body, and a [[WithCTE]] is skipped only if all of its definitions are
-     * referenced, since inlining the CTEs keeps a [[WithCTE]] with an unreferenced definition.
+     * necessary mapping and skips to its child. A [[CTERelationRef]] that inlining replaces is
+     * followed into its definition's body, and a [[WithCTE]] is skipped only if inlining replaces
+     * all of its definitions, since it keeps a [[WithCTE]] with any other definition. Returns the
+     * remaining plan along with the [[CTERelationRef]]s followed to reach it.
      */
     @scala.annotation.tailrec
-    def cleanQueryInScalarSubquery(p: LogicalPlan): LogicalPlan = p match {
-      case s: SubqueryAlias => cleanQueryInScalarSubquery(s.child)
+    def cleanQueryInScalarSubquery(
+        p: LogicalPlan,
+        cteRefs: List[CTERelationRef] = Nil): (LogicalPlan, Seq[CTERelationRef]) = p match {
+      case s: SubqueryAlias => cleanQueryInScalarSubquery(s.child, cteRefs)
       // Skip SQL function node added by the Analyzer
-      case s: SQLFunctionNode => cleanQueryInScalarSubquery(s.child)
-      case p: Project => cleanQueryInScalarSubquery(p.child)
-      case h: ResolvedHint => cleanQueryInScalarSubquery(h.child)
-      case withCte: WithCTE if withCte.cteDefs.forall(cte => referencedCtes.contains(cte.id)) =>
-        cleanQueryInScalarSubquery(withCte.plan)
-      case cteRef: CTERelationRef if referencedCtes.contains(cteRef.cteId) =>
-        cleanQueryInScalarSubquery(referencedCtes(cteRef.cteId).child)
-      case child => child
+      case s: SQLFunctionNode => cleanQueryInScalarSubquery(s.child, cteRefs)
+      case p: Project => cleanQueryInScalarSubquery(p.child, cteRefs)
+      case h: ResolvedHint => cleanQueryInScalarSubquery(h.child, cteRefs)
+      case withCte: WithCTE if withCte.cteDefs.forall(cte => inlinedCteIds.contains(cte.id)) =>
+        cleanQueryInScalarSubquery(withCte.plan, cteRefs)
+      case cteRef: CTERelationRef if inlinedCtes.contains(cteRef) =>
+        cleanQueryInScalarSubquery(inlinedCtes(cteRef).cteDef.child, cteRef :: cteRefs)
+      case child => (child, cteRefs)
     }
 
     // Check whether the given expressions contains the subquery expression.
@@ -164,9 +178,11 @@ object ValidateSubqueryExpression
 
         if (outerAttrs.nonEmpty) {
           if (!SQLConf.get.getConf(SQLConf.SCALAR_SUBQUERY_USE_SINGLE_JOIN)) {
-            cleanQueryInScalarSubquery(query) match {
-              case a: Aggregate => checkAggregateInScalarSubquery(outerAttrs, query, a)
-              case Filter(_, a: Aggregate) => checkAggregateInScalarSubquery(outerAttrs, query, a)
+            val (cleanedQuery, cteRefs) = cleanQueryInScalarSubquery(query)
+            cleanedQuery match {
+              case a: Aggregate => checkAggregateInScalarSubquery(outerAttrs, query, a, cteRefs)
+              case Filter(_, a: Aggregate) =>
+                checkAggregateInScalarSubquery(outerAttrs, query, a, cteRefs)
               case p: LogicalPlan if p.maxRows.exists(_ <= 1) => // Ok
               case other =>
                 expr.failAnalysis(
@@ -207,7 +223,7 @@ object ValidateSubqueryExpression
         // A lateral join with a multi-row outer query and a non-deterministic lateral subquery
         // cannot be decorrelated. Otherwise it may produce incorrect results.
         if (!expr.deterministic && !join.left.maxRows.exists(_ <= 1)) {
-          cleanQueryInScalarSubquery(join.right.plan) match {
+          cleanQueryInScalarSubquery(join.right.plan)._1 match {
             // Python UDTFs are by default non-deterministic. They are constructed as a
             // OneRowRelation subquery and can be rewritten by the optimizer without
             // any decorrelation.
@@ -251,36 +267,59 @@ object ValidateSubqueryExpression
   }
 
   /**
-   * Returns the [[CTERelationDef]]s of `plan`'s [[WithCTE]]s that a [[CTERelationRef]] in `plan`
-   * references, keyed by CTE id. The single-pass resolver validates a subquery before its CTEs
-   * are inlined, so validation follows these references instead. References inside subquery
-   * expressions count only if `includeReferencesInSubqueries` is set.
+   * The definition whose body a [[CTERelationRef]] is inlined with, and whether the reference
+   * sits inside a nested subquery expression of the validated plan.
    */
-  private def referencedCteDefinitions(
-      plan: LogicalPlan,
-      includeReferencesInSubqueries: Boolean = true): Map[Long, CTERelationDef] = {
+  private case class InlinedCteReference(cteDef: CTERelationDef, inSubquery: Boolean)
+
+  /**
+   * Returns the [[CTERelationRef]]s in `plan` that `InlineCTE` replaces with the body of a
+   * [[CTERelationDef]] in `plan`. The fixed-point analyzer validates a subquery after inlining
+   * its CTEs, while the single-pass resolver validates it before, so validation follows these
+   * references into their definitions' bodies instead.
+   *
+   * As in `InlineCTE`, a reference counts only if it is reachable from the main query of its
+   * [[WithCTE]]: directly, from a nested subquery expression, or through the body of a definition
+   * with such a reference. Any other definition stays in place with its original body, and the
+   * references inside it stay as they are. A definition that is never inlined (`forceSkipInline`)
+   * stays in place as well, though the references inside its body are followed.
+   */
+  private def inlinedCteReferences(
+      plan: LogicalPlan): Map[CTERelationRef, InlinedCteReference] = {
     if (!plan.containsPattern(CTE)) {
       Map.empty
     } else {
-      val collectReferencedId: PartialFunction[LogicalPlan, Long] = {
-        case ref: CTERelationRef => ref.cteId
+      // The definitions found so far, with whether their WithCTE sits in a nested subquery.
+      val definitions = mutable.HashMap.empty[Long, (CTERelationDef, Boolean)]
+      val visitedCteIds = mutable.HashSet.empty[Long]
+      val references = mutable.HashMap.empty[CTERelationRef, InlinedCteReference]
+      def visit(p: LogicalPlan, inSubquery: Boolean): Unit = p match {
+        case withCte: WithCTE =>
+          withCte.cteDefs.foreach(cteDef => definitions(cteDef.id) = (cteDef, inSubquery))
+          visit(withCte.plan, inSubquery)
+        case cteRef: CTERelationRef =>
+          definitions.get(cteRef.cteId).foreach { case (cteDef, cteDefInSubquery) =>
+            if (!cteDef.forceSkipInline) {
+              references(cteRef) = InlinedCteReference(cteDef, inSubquery)
+            }
+            if (visitedCteIds.add(cteDef.id)) {
+              visit(cteDef.child, cteDefInSubquery)
+            }
+          }
+        case _ if p.containsPattern(CTE) =>
+          p.children.foreach(visit(_, inSubquery))
+          p.subqueries.foreach(visit(_, inSubquery = true))
+        case _ =>
       }
-      val referencedIds = if (includeReferencesInSubqueries) {
-        plan.collectWithSubqueries(collectReferencedId).toSet
-      } else {
-        plan.collect(collectReferencedId).toSet
-      }
-      plan.collect { case withCte: WithCTE => withCte.cteDefs }.flatten
-        .filter(cte => referencedIds.contains(cte.id))
-        .map(cte => cte.id -> cte)
-        .toMap
+      visit(plan, inSubquery = false)
+      references.toMap
     }
   }
 
   /**
    * Validates to make sure the outer references appearing inside the subquery
-   * are allowed. A [[CTERelationRef]] to a CTE defined in `sub` is validated as that CTE's body
-   * in place of the reference, as if the CTE were inlined.
+   * are allowed. A [[CTERelationRef]] that inlining replaces with the body of a CTE defined in
+   * `sub` is validated as that body in place of the reference, as if the CTE were inlined.
    */
   private def checkCorrelationsInSubquery(
       sub: LogicalPlan,
@@ -417,8 +456,14 @@ object ValidateSubqueryExpression
     val simplifiedSub = AnalysisHelper.allowInvokingTransformsInAnalyzer {
       BooleanSimplification(sub)
     }
-    val referencedCtes =
-      referencedCteDefinitions(simplifiedSub, includeReferencesInSubqueries = false)
+    val inlinedCtes = inlinedCteReferences(simplifiedSub)
+    // checkPlan doesn't descend into nested subquery expressions, so it checks a definition at its
+    // references only if one of them sits outside of those.
+    val cteIdsCheckedAtReferences =
+      inlinedCtes.values.filterNot(_.inSubquery).map(_.cteDef.id).toSet
+    // The verdict on a definition's body depends only on the arguments it is checked with, so it
+    // is checked once for each combination of them, however many references lead to it.
+    val checkedCteBodies = mutable.HashSet.empty[(Long, Boolean, Boolean)]
 
     // Recursively check invalid outer references in the plan.
     def checkPlan(
@@ -448,8 +493,11 @@ object ValidateSubqueryExpression
       // are on the path from the operator hosting the correlated expressions
       // up to the operator producing the correlated values.
       plan match {
-        case cteRef: CTERelationRef if referencedCtes.contains(cteRef.cteId) =>
-          checkPlan(referencedCtes(cteRef.cteId).child, aggregated, canContainOuter)
+        case cteRef: CTERelationRef if inlinedCtes.contains(cteRef) =>
+          val cteDef = inlinedCtes(cteRef).cteDef
+          if (checkedCteBodies.add((cteDef.id, aggregated, canContainOuter))) {
+            checkPlan(cteDef.child, aggregated, canContainOuter)
+          }
 
         // Category 1:
         // ResolvedHint, LeafNode, Repartition, and SubqueryAlias
@@ -580,10 +628,11 @@ object ValidateSubqueryExpression
         // Inlining CTE relations keeps only the un-referenced ones in the plan. Here we should
         // simply skip them and check the children, as un-referenced CTE relations won't be
         // executed anyway and doesn't need to be restricted by the current subquery correlation
-        // limitations. Referenced CTE relations are checked at their references instead.
+        // limitations. Referenced CTE relations are checked at their references instead, unless
+        // those all sit in nested subquery expressions, which are validated on their own.
         case withCte: WithCTE =>
-          (withCte.cteDefs.filterNot(cte => referencedCtes.contains(cte.id)) :+ withCte.plan)
-            .foreach(child => checkPlan(child, aggregated, canContainOuter))
+          (withCte.cteDefs.filterNot(cte => cteIdsCheckedAtReferences.contains(cte.id)) :+
+            withCte.plan).foreach(child => checkPlan(child, aggregated, canContainOuter))
 
         case cteDef: CTERelationDef =>
           checkPlan(cteDef.child, aggregated, canContainOuter)

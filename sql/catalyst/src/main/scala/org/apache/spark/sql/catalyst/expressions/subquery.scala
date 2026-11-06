@@ -324,12 +324,12 @@ object SubExprUtils extends PredicateHelper {
    *   select *, (select count(*) from
    *     (select * from y where y1 = x1 union all select * from y) group by y1) from x;
    *
-   * `cteDefinitions` are followed from each [[CTERelationRef]] into its definition's body, for
-   * plans whose CTEs are not inlined.
+   * For plans whose CTEs are not inlined, `cteDefinitions` maps the [[CTERelationRef]]s to follow
+   * to their definitions, whose bodies stand in for them.
    */
   def getCorrelatedEquivalentInnerExpressions(
       plan: LogicalPlan,
-      cteDefinitions: Map[Long, CTERelationDef] = Map.empty): ExpressionSet = {
+      cteDefinitions: Map[CTERelationRef, CTERelationDef] = Map.empty): ExpressionSet = {
     def equivalentExpressions(child: LogicalPlan): ExpressionSet =
       getCorrelatedEquivalentInnerExpressions(child, cteDefinitions)
     plan match {
@@ -378,8 +378,8 @@ object SubExprUtils extends PredicateHelper {
         ExpressionSet(plan.children.flatMap(child =>
           equivalentExpressions(child)))
 
-      case cteRef: CTERelationRef if cteDefinitions.contains(cteRef.cteId) =>
-        equivalentExpressions(cteDefinitions(cteRef.cteId).child)
+      case cteRef: CTERelationRef if cteDefinitions.contains(cteRef) =>
+        equivalentExpressions(cteDefinitions(cteRef).child)
 
       case _ => ExpressionSet().empty
     }
@@ -391,7 +391,7 @@ object SubExprUtils extends PredicateHelper {
   def nonEquivalentGroupbyCols(
       query: LogicalPlan,
       aggNode: Aggregate,
-      cteDefinitions: Map[Long, CTERelationDef] = Map.empty): ExpressionSet = {
+      cteDefinitions: Map[CTERelationRef, CTERelationDef] = Map.empty): ExpressionSet = {
     val correlatedEquivalentExprs = getCorrelatedEquivalentInnerExpressions(query, cteDefinitions)
     // Grouping expressions, except outer refs and constant expressions - grouping by an
     // outer ref or a constant is always ok

@@ -753,7 +753,9 @@ CREATE FUNCTION foo3_2e2(x INT) RETURNS INT RETURN
 WITH t AS (SELECT c1, SUM(c2) AS s FROM t2 WHERE c1 = x GROUP BY c1)
 SELECT s FROM t;
 
+SET spark.sql.optimizer.scalarSubqueryUseSingleJoin=false;
 SELECT c1, foo3_2e2(c1) FROM t1;
+RESET spark.sql.optimizer.scalarSubqueryUseSingleJoin;
 
 -- 3.3 Create and invoke function with different SQL configurations
 SET spark.sql.ansi.enabled=true;
