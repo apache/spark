@@ -441,3 +441,27 @@ SELECT
 FROM aggr_time;
 
 SELECT percentile_approx(t, array(0.25, 0.5, 0.75)) FROM aggr_time;
+
+-- Aggregate function inside an AggregateExpression should be validated using checkInputDataTypes
+CREATE OR REPLACE TEMPORARY VIEW aggr_double AS SELECT * FROM VALUES
+(1.0D), (2.0D), (3.0D), (4.0D) AS aggr_double(col1);
+
+SELECT percentile(col1, 0.5) FROM aggr_double;
+SELECT percentile(col1, 1.1) FROM aggr_double;
+SELECT percentile(col1, -0.1) FROM aggr_double;
+SELECT percentile(col1, 0.0), percentile(col1, 1.0) FROM aggr_double;
+SELECT percentile(col1, array(0.5, 1.1)) FROM aggr_double;
+SELECT percentile(col1, col1) FROM aggr_double;
+SELECT percentile_approx(col1, 1.1) FROM aggr_double;
+SELECT percentile_cont(1.1) WITHIN GROUP (ORDER BY col1) FROM aggr_double;
+SELECT percentile_disc(1.1) WITHIN GROUP (ORDER BY col1) FROM aggr_double;
+
+-- The same validation applies under a window, a FILTER clause, DISTINCT and in HAVING
+SELECT percentile(col1, 1.1) OVER () FROM aggr_double;
+SELECT percentile(col1, 1.1) FILTER (WHERE col1 > 1) FROM aggr_double;
+SELECT percentile(DISTINCT col1, 1.1) FROM aggr_double;
+SELECT 1 FROM aggr_double HAVING percentile(col1, 1.1) > 0;
+SELECT percentile(col1, 0.5) OVER () FROM aggr_double;
+SELECT percentile(DISTINCT col1, 0.5) FILTER (WHERE col1 > 1) FROM aggr_double;
+
+DROP VIEW aggr_double;

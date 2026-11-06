@@ -44,7 +44,7 @@ class KubernetesSuite extends SparkFunSuite
   with BeforeAndAfterAll with BeforeAndAfter with BasicTestsSuite with SparkConfPropagateSuite
   with SecretsTestsSuite with PythonTestsSuite with ClientModeTestsSuite with PodTemplateSuite
   with VolumeSuite with PVTestsSuite with DepsTestsSuite with DecommissionSuite with RTestsSuite
-  with Logging with Eventually with Matchers {
+  with ExecutorResizeSuite with Logging with Eventually with Matchers {
 
 
   import KubernetesSuite._
@@ -658,6 +658,7 @@ private[spark] object KubernetesSuite {
   val SPARK_MINI_READ_WRITE_TEST = "org.apache.spark.examples.MiniReadWriteTest"
   val SPARK_REMOTE_MAIN_CLASS: String = "org.apache.spark.examples.SparkRemoteFileTest"
   val SPARK_DRIVER_MAIN_CLASS: String = "org.apache.spark.examples.DriverSubmissionTest"
+  val SPARK_SQL_CLI_MAIN_CLASS: String = "org.apache.spark.examples.sql.JavaSparkSQLCli"
   val TIMEOUT = PatienceConfiguration.Timeout(Span(3, Minutes))
   val INTERVAL = PatienceConfiguration.Interval(Span(1, Seconds))
 }

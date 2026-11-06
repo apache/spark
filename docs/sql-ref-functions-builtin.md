@@ -140,3 +140,8 @@ user-defined function that may share the same name.
 {% include_api_gen generated-st-funcs-table.html %}
 #### Examples
 {% include_api_gen generated-st-funcs-examples.html %}
+
+### Vector Functions
+{% include_api_gen generated-vector-funcs-table.html %}
+#### Examples
+{% include_api_gen generated-vector-funcs-examples.html %}

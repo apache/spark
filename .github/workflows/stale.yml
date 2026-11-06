@@ -28,7 +28,7 @@ jobs:
     if: github.repository == 'apache/spark'
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/stale@v10
+    - uses: actions/stale@v11
       with:
         repo-token: ${{ secrets.GITHUB_TOKEN }}
         stale-pr-message: >

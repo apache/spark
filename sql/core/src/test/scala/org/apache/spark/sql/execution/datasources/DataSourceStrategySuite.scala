@@ -285,6 +285,14 @@ class DataSourceStrategySuite extends SharedSparkSession {
     }
   }
 
+  test("normalizeExprs uses the first matching attribute") {
+    val attribute = AttributeReference("original", IntegerType)()
+    val attributes = Seq(attribute.withName("first"), attribute.withName("second"))
+
+    assert(DataSourceStrategy.normalizeExprs(Seq(attribute), attributes) ===
+      Seq(attribute.withName("first")))
+  }
+
   test("SPARK-31027 test `PushableColumn.unapply` that finds the column name of " +
     "an expression that can be pushed down") {
     attrInts.foreach { case (attrInt, colName) =>

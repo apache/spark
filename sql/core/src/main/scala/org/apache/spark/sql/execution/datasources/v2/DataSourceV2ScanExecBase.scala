@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, ExpressionSet, SortOrder, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -45,8 +45,15 @@ trait DataSourceV2ScanExecBase
 
   def readerFactory: PartitionReaderFactory
 
-  /** Optional partitioning expressions provided by the V2 data sources, through
-   * `SupportsReportPartitioning` */
+  /**
+   * Optional partitioning expressions provided by the V2 data sources, through
+   * `SupportsReportPartitioning`. `None` means the source reported no key,
+   * `V2ScanPartitioningAndOrdering` dropped it (a key it cannot resolve, or none left after
+   * pruning), or storage-partitioned join is off for this scan: the planner gates it on
+   * `spark.sql.sources.v2.bucketing.enabled` when the scan is built (see `DataSourceV2Strategy`),
+   * so a copy of the planned node (such as the one `PlanAdaptiveDynamicPruningFilters` makes at
+   * stage creation) keeps that decision instead of reading the config again (SPARK-60260).
+   */
   def keyGroupedPartitioning: Option[Seq[Expression]]
 
   /** Optional ordering expressions provided by the V2 data sources, through
@@ -102,7 +109,7 @@ trait DataSourceV2ScanExecBase
    */
   @transient protected lazy val reportedKeyedPartitioning: Option[KeyedPartitioning] = {
     keyGroupedPartitioning match {
-      case Some(exprs) if conf.v2BucketingEnabled && KeyedPartitioning.supportsExpressions(exprs) &&
+      case Some(exprs) if KeyedPartitioning.supportsExpressions(exprs) &&
           inputPartitions.nonEmpty && inputPartitions.forall(_.isInstanceOf[HasPartitionKey]) =>
         // A data source reports its splits in its own order, and a keyed side and a side
         // re-shuffled onto it have to agree on the order or
@@ -135,20 +142,60 @@ trait DataSourceV2ScanExecBase
 
   /**
    * Returns the output ordering for this scan. When the source reports ordering via
-   * `SupportsReportOrdering`, that ordering is returned as-is. Otherwise, when the output
-   * partitioning is a `KeyedPartitioning` and
-   * `spark.sql.sources.v2.bucketing.partitionKeyOrdering.enabled` is on, each partition
-   * contains rows where the key expressions evaluate to a single constant value, so the data
-   * is trivially sorted by those expressions within the partition.
+   * `SupportsReportOrdering` and `V2ScanPartitioningAndOrdering` keeps it, that ordering may
+   * reference columns pruned out of the scan output, while a consumer binds it against the
+   * output, e.g. the k-way merge of `GroupPartitionsExec`. Ordering is prefix-based, so the
+   * leading run of sort orders over the output is kept and the rest is dropped, except the sort
+   * orders on a partition key when the output partitioning is a `KeyedPartitioning`. Each
+   * partition holds a single key, so those still hold.
+   *
+   * If nothing of the reported ordering is kept, the ordering is derived from the partition keys
+   * instead, when the output partitioning is a `KeyedPartitioning` and
+   * `spark.sql.sources.v2.bucketing.partitionKeyOrdering.enabled` is on. Each partition contains
+   * rows where the key expressions evaluate to a single constant value, so the data is trivially
+   * sorted by those expressions within the partition. Nothing is kept, for example, when the
+   * source reports no ordering, one Spark ignores, or an empty one.
+   *
+   * A kept sort order wins over the derived ordering, since ordering is prefix-based. Putting the
+   * keys in front would stop a kept `[data]` from satisfying a required `[data]`. So the result
+   * can depend on the columns a query reads. A report `[s]` derives the key ordering only when `s`
+   * is pruned.
+   *
+   * In both the reported and the derived ordering, a sort order that holds a partition transform
+   * is dropped, even on a partition key. In a reported ordering it also ends the leading run, like
+   * a sort order over a pruned column. Dropping it loses nothing today when Spark can call the
+   * transform's function, since no operator then requires an ordering over the transform. The
+   * write path sorts by the function call instead. Keeping such a sort order would add
+   * comparisons nobody uses. Dropping it also handles a transform Spark cannot evaluate. Revisit
+   * this if an ordering over a transform becomes a real requirement.
    */
-  override def outputOrdering: Seq[SortOrder] = {
-    (ordering, outputPartitioning) match {
-      case (Some(o), _) => o
-      case (_, k: KeyedPartitioning) if conf.v2BucketingPartitionKeyOrderingEnabled =>
-        k.expressions.map(SortOrder(_, Ascending))
-      case _ => Seq.empty
+  override def outputOrdering: Seq[SortOrder] =
+    if (keptOrdering.isEmpty && conf.v2BucketingPartitionKeyOrderingEnabled) {
+      derivedOrdering
+    } else {
+      keptOrdering
     }
+
+  /**
+   * What `outputOrdering` keeps of the reported ordering. A lazy val because `ordering`,
+   * `outputSet` and `outputPartitioning` do not change for an instance, so only the config is
+   * read on each call of `outputOrdering`.
+   */
+  @transient private lazy val keptOrdering: Seq[SortOrder] = {
+    val (prefix, rest) = ordering.getOrElse(Nil)
+      .span(order => order.references.subsetOf(outputSet) && !holdsTransform(order.child))
+    val keyExprs = ExpressionSet(derivedOrdering.map(_.child))
+    prefix ++ rest.filter(order => keyExprs.contains(order.child))
   }
+
+  /** The ordering over the partition keys that `outputOrdering` can derive. */
+  @transient private lazy val derivedOrdering: Seq[SortOrder] = outputPartitioning match {
+    case k: KeyedPartitioning =>
+      k.expressions.filterNot(holdsTransform).map(SortOrder(_, Ascending))
+    case _ => Nil
+  }
+
+  private def holdsTransform(e: Expression): Boolean = e.exists(_.isInstanceOf[TransformExpression])
 
   override def supportsColumnar: Boolean = {
     scan.columnarSupportMode() match {

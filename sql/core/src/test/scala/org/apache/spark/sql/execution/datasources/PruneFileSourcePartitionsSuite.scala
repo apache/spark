@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
-import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, FileScan}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, FileScan, PlannedScan}
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.functions.broadcast
 import org.apache.spark.sql.internal.SQLConf
@@ -170,7 +170,7 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with Shared
   override def getScanExecPartitionSize(plan: SparkPlan): Long = {
     plan.collectFirst {
       case p: FileSourceScanExec => p.selectedPartitions.partitionCount
-      case BatchScanExec(_, scan: FileScan, _, _, _, _) =>
+      case BatchScanExec(_, PlannedScan(scan: FileScan), _, _, _, _, _, _) =>
         scan.fileIndex.listFiles(scan.partitionFilters, scan.dataFilters).length
     }.get
   }

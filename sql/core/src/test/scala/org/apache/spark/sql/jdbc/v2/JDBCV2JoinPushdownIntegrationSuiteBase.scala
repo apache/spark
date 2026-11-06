@@ -299,6 +299,31 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
     }
   }
 
+  gridTest("Join pushdown preserves partitioned input reads")(Seq(1, 2)) { numPartitions =>
+    val tableOptions = s"""WITH (
+      |'partitionColumn' '${caseConvert("id")}',
+      |'lowerBound' '0',
+      |'upperBound' '11',
+      |'numPartitions' '$numPartitions')""".stripMargin
+    val sqlQuery = s"""
+      |SELECT a.id, b.id
+      |FROM $catalogAndNamespace.$casedJoinTableName1 $tableOptions a
+      |JOIN $catalogAndNamespace.$casedJoinTableName1 $tableOptions b ON a.id = b.id + 1
+      |""".stripMargin
+
+    val expectedRows = for {
+      (leftId, _, _) <- table1Data
+      (rightId, _, _) <- table1Data
+      if leftId == rightId + 1
+    } yield Row(leftId, rightId)
+
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      val df = sql(sqlQuery)
+      checkJoinNotPushed(df)
+      checkAnswer(df, expectedRows)
+    }
+  }
+
   test("Test multi-way self join with conditions") {
     val sqlQuery = s"""
       |SELECT * FROM
@@ -474,6 +499,42 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
 
       checkAggregateRemoved(df, supportsAggregatePushdown)
       checkAnswer(df, rows)
+    }
+  }
+
+  test("Join pushdown preserves aliases in partially pushed averages") {
+    assume(supportsAggregatePushdown, "Aggregate pushdown is not supported")
+    def sqlPartitionedQuery(numPartitions: Int): String = {
+      val idCol = caseConvert("id")
+      // numPartitions alone is valid and selects the partial aggregate path when greater than 1.
+      val tableOptions = s"WITH ('numPartitions' '$numPartitions')"
+      // Some databases return an integer for AVG over integer input, so use decimal input.
+      s"""
+        |SELECT avg(CAST(b.$idCol AS DECIMAL(10, 2)))
+        |FROM $catalogAndNamespace.$casedJoinTableName1 $tableOptions a
+        |JOIN $catalogAndNamespace.$casedJoinTableName1 $tableOptions b ON a.$idCol = b.$idCol + 1
+        |""".stripMargin
+    }
+
+    val rowsWithJoinPushdown = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      val completeAgg = sql(sqlPartitionedQuery(numPartitions = 1))
+      checkJoinPushed(completeAgg)
+      checkAggregateRemoved(completeAgg, pushed = true)
+      val expectedRows = completeAgg.collect().toSeq
+      assert(expectedRows.head.get(0) != null)
+
+      val partialAgg = sql(sqlPartitionedQuery(numPartitions = 2))
+      checkJoinPushed(partialAgg)
+      checkAggregateRemoved(partialAgg, pushed = false)
+      checkAnswer(partialAgg, expectedRows)
+      expectedRows
+    }
+
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
+      val df = sql(sqlPartitionedQuery(numPartitions = 2))
+      checkJoinNotPushed(df)
+      checkAggregateRemoved(df, pushed = false)
+      checkAnswer(df, rowsWithJoinPushdown)
     }
   }
 

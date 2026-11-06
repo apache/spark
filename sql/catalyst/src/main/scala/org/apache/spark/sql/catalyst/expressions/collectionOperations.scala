@@ -3072,7 +3072,9 @@ case class ElementAt(
           val errorContext = getContextOrNullCode(ctx)
           val utils = classOf[ArrayExpressionUtils].getName
           val assignment = s"${ev.value} = ${CodeGenerator.getValue(eval1, dataType, index)};"
-          val body = if (arrayElementNullable) {
+          // `ev.isNull` is declared only for a nullable expression. Otherwise the index raises
+          // an error or selects an element that cannot be NULL.
+          val body = if (nullable && arrayElementNullable) {
             s"""
                |if ($eval1.isNullAt($index)) {
                |  ${ev.isNull} = true;
@@ -3093,7 +3095,10 @@ case class ElementAt(
         nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
           val index = ctx.freshName("elementAtIndex")
           val intIndex = ctx.freshName("elementAtIntIndex")
-          val nullCheck = if (arrayElementNullable) {
+          // `ev.isNull` is declared only for a nullable expression. Otherwise the index is 0, or
+          // selects an element that cannot be NULL, so neither this branch nor the out-of-bounds
+          // branch below is taken.
+          val nullCheck = if (nullable && arrayElementNullable) {
             s"""
                |if ($eval1.isNullAt($intIndex)) {
                |  ${ev.isNull} = true;
@@ -3104,6 +3109,7 @@ case class ElementAt(
           }
           val errorContext = getContextOrNullCode(ctx)
           val indexOutOfBoundBranch = defaultValueOutOfBound match {
+            case _ if !nullable => ""
             case Some(value) =>
               val defaultValueEval = value.genCode(ctx)
               s"""
@@ -3372,10 +3378,16 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
   private def genCodeForNumberOfElements(ctx: CodegenContext) : (String, String) = {
     val numElements = ctx.freshName("numElements")
     val z = ctx.freshName("z")
+    // The upper bound is checked here rather than left to the array allocation so that this path
+    // reports the same error as `eval`. Without it the allocation fails with an internal error.
     val code = s"""
         |long $numElements = 0L;
         |for (int $z = 0; $z < ${children.length}; $z++) {
         |  $numElements += args[$z].numElements();
+        |}
+        |if ($numElements > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
+        |  throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
+        |    "$prettyName", $numElements);
         |}
       """.stripMargin
 
@@ -3505,10 +3517,16 @@ case class Flatten(child: Expression) extends UnaryExpression
       ctx: CodegenContext,
       childVariableName: String) : (String, String) = {
     val variableName = ctx.freshName("numElements")
+    // The upper bound is checked here rather than left to the array allocation so that this path
+    // reports the same error as `eval`. Without it the allocation fails with an internal error.
     val code = s"""
       |long $variableName = 0;
       |for (int z = 0; z < $childVariableName.numElements(); z++) {
       |  $variableName += $childVariableName.getArray(z).numElements();
+      |}
+      |if ($variableName > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
+      |  throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
+      |    "$prettyName", $variableName);
       |}
       """.stripMargin
     (code, variableName)
