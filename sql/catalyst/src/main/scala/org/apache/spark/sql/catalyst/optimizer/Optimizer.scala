@@ -3255,23 +3255,44 @@ object TransposeWindow extends Rule[LogicalPlan] {
       }
       val unpinned = transposeAdjacentPairsBounded(plan, chain.bottomChild)
 
-      // Price only the chain and a window it can swap across the bottom cut. Anything
-      // deeper is outside this linear stack and may not preserve partitioning into it.
-      val bottomWindow = chain.windows.head
-      val cutWindow = bottomWindow.child match {
-        case Project(_, w: Window) if transposeAdjacentPair.isDefinedAt(bottomWindow) => Some(w)
-        case _ => None
+      // Both candidates are the incoming plan, so this returns no replacement.
+      if (pinned.fastEquals(plan) && unpinned.fastEquals(plan)) {
+        None
+      } else {
+        // The priced windows stay on the Window/Project spine. The node under that
+        // spine may not preserve partitioning into the stack.
+        val bottomWindow = chain.windows.head
+        val cutWindow = bottomWindow.child match {
+          case Project(_, w: Window)
+              if transposeAdjacentPair.isDefinedAt(bottomWindow) =>
+            Some(w)
+          case _ => None
+        }
+        val pricedWindowOutputs = (chain.windows ++ cutWindow).map(_.windowOutputSet).toSet
+        def emittedExchangeCount(p: LogicalPlan): Int = {
+          val windows = ListBuffer.empty[Window]
+          def walk(node: LogicalPlan): Unit = node match {
+            case w: Window =>
+              if (pricedWindowOutputs.contains(w.windowOutputSet)) {
+                windows += w
+              }
+              walk(w.child)
+            case Project(_, child) =>
+              walk(child)
+            case _ =>
+          }
+          walk(p)
+          val ordered = windows.toSeq.reverse
+          exchangeCount(ordered, ordered.indices)
+        }
+        val chosen =
+          if (emittedExchangeCount(pinned) > emittedExchangeCount(unpinned)) {
+            unpinned
+          } else {
+            pinned
+          }
+        if (chosen.fastEquals(plan)) None else Some(chosen)
       }
-      val pricedWindowOutputs = (chain.windows ++ cutWindow).map(_.windowOutputSet).toSet
-      def emittedExchangeCount(p: LogicalPlan): Int = {
-        val windows = p.collect {
-          case w: Window if pricedWindowOutputs.contains(w.windowOutputSet) => w
-        }.reverse
-        exchangeCount(windows, windows.indices)
-      }
-      val chosen =
-        if (emittedExchangeCount(pinned) > emittedExchangeCount(unpinned)) unpinned else pinned
-      if (chosen.fastEquals(plan)) None else Some(chosen)
     } else {
       transposeAdjacentPairsIfChanged(plan, chain.bottomChild)
     }

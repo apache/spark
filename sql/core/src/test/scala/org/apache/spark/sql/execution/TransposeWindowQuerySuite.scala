@@ -405,11 +405,8 @@ class TransposeWindowQuerySuite extends QueryTest with SharedSparkSession
   }
 
   test("rank filter over a reordered chain still gets a window group limit") {
-    // All three windows ride the single minimal spec [k1, k2], so the unpinned reorder
-    // (p1, f1, rn bottom-to-top) already keeps rn on top riding f1's exchange: no pin
-    // reorder inserts a pass-through restoring project at the chain top,
-    // and PushDownPredicates moves the filter below it, restoring the Filter-over-Window
-    // shape InferWindowGroupLimit needs.
+    // All three windows ride [k1, k2], so the reorder keeps rn on top and the
+    // group limit is kept.
     val query =
       """
         |SELECT * FROM (
@@ -529,11 +526,9 @@ class TransposeWindowQuerySuite extends QueryTest with SharedSparkSession
   }
 
   test("rank filter with a computed top project still gets a window group limit") {
-    // The derived alias n is computed by the subquery project above the row_number
-    // window. PushDownPredicates runs before TransposeWindow in the operator batch and
-    // pushes both conjuncts below the project (n rewrites to v + k1), so the reorder
-    // sees the filter directly on the window stack; as in the previous test the unpinned
-    // order keeps rn on top riding f1's exchange, so no pin is needed.
+    // The project above the windows computes n. Both filter conjuncts are pushed
+    // below it, so this is the same stack as "rank filter over a reordered chain
+    // still gets a window group limit".
     val query =
       """
         |SELECT * FROM (
@@ -1112,7 +1107,7 @@ class TransposeWindowQuerySuite extends QueryTest with SharedSparkSession
   }
 
   test("a stack the pin would reorder to a riding order is emitted unpinned") {
-    // sum m and rank rn share [k1, k2] with different orderings, and the x sum's longer
+    // sum m and rank rn share [k1, k2] and the k1 ordering, and the x sum's longer
     // (k1, v) ordering separates them from the incomparable [k3] sum. The pinned order puts
     // rn on top of x's exchange, so pinning buys no lower-exchange plan: the rule
     // emits that stack's own order instead of pinning. That order
@@ -1158,7 +1153,8 @@ class TransposeWindowQuerySuite extends QueryTest with SharedSparkSession
     // and the restored output.
     def rankFiltered: DataFrame = {
       val t = spark.table("t")
-      val wRn = Window.partitionBy("k1", "k2", "k3").orderBy("k1")
+      // v is unique, so rn = 1 is the smallest v in the partition.
+      val wRn = Window.partitionBy("k1", "k2", "k3").orderBy("v")
       val wF = Window.partitionBy("k1", "k2").orderBy("k1")
       val wS = Window.partitionBy("k1").orderBy("k1")
       t.withColumn("rn", row_number().over(wRn))

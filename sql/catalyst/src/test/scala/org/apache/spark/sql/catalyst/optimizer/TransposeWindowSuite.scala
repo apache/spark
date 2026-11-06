@@ -156,10 +156,6 @@ class TransposeWindowSuite extends PlanTest {
   }
 
   test("flag-on falls back to pairwise transpose when a dependent window blocks the stack") {
-    // Bottom-to-top: r PARTITION BY (k1, k2), s PARTITION BY (k1), t = sum(r) PARTITION BY
-    // (k3). t reads r, so reorderable rejects the chain. s is still a strict-subset pair
-    // with r; flag-off swaps s under r (2 exchanges). Flag-on must apply the same
-    // pairwise fallback instead of leaving the 3-exchange input order.
     val query = wideRelation
       .window(Seq(rankOnK1K2OrderV), Seq(k1, k2), Seq(v.asc))
       .window(Seq(sum(v).as("s")), Seq(k1), order)
@@ -1628,10 +1624,9 @@ class TransposeWindowSuite extends PlanTest {
   }
 
   /**
-   * CollapseWindow + TransposeWindow to a fixed point (as in the operator-optimization
-   * batch), normalize the rank bound (including the IN/NOT shapes OptimizeIn and
-   * BooleanSimplification rewrite), optionally push filters through top projects, then
-   * InferWindowGroupLimit.
+   * Not the production operator batch: PushDownPredicates runs after
+   * TransposeWindow here, and before it in production. Then the rank bound
+   * is normalized, then InferWindowGroupLimit.
    */
   private object OptimizeWithGroupLimit extends RuleExecutor[LogicalPlan] {
     val batches =
@@ -2737,7 +2732,7 @@ class TransposeWindowSuite extends PlanTest {
   test("renamed rank filter pins the top window through the alias peel") {
     // Same displacing stack as the rank-filter pin test, but a transparent top link
     // renames rn to rank and the filter references the rename. TransposeWindow runs
-    // before PushDownPredicates in the batch, so it sees the Filter above the link, and
+    // before PushDownPredicates in this harness, so it sees the Filter above the link, and
     // only the alias peel in `unpinnedOrder` maps rank back to rn; without it the
     // condition matches no rank output, nothing pins, and the reorder buries the rank
     // window under the incomparable [k1, k4] window, losing the WindowGroupLimit.

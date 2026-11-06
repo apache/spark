@@ -91,12 +91,7 @@ object InferWindowGroupLimit extends Rule[LogicalPlan] with PredicateHelper {
    * collects the limits of supported rank-like functions, prefers `RowNumber` (cheaper to
    * evaluate) and the smallest limit, and returns `None` when the rule is disabled, the
    * selected limit exceeds `windowGroupLimitThreshold`, or the known `child` cardinality
-   * makes the rewrite unnecessary. Shared with `TransposeWindow`, which uses a candidate as
-   * one precondition for pinning the top Window of a chain below the rank filter. The other
-   * conditions -- a chain that cannot be stack-reordered keeps the pin, while a reorderable
-   * chain drops it when the unpinned order rides a lower exchange, when the pin would cost
-   * an exchange that order avoids, or when the stack the pin would emit reorders into a
-   * rideable order -- live in `unpinnedOrder`.
+   * makes the rewrite unnecessary. Also used by `TransposeWindow`.
    */
   private[optimizer] def selectRankCandidate(
       condition: Expression,
