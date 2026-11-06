@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.execution.joins
 
+import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, AttributeSeq,
-  AttributeSet, BoundReference, EqualNullSafe, EqualTo, Expression, ExprUtils, PredicateHelper}
+  AttributeSet, BoundReference, EqualNullSafe, EqualTo, Expression, ExprUtils, GreaterThan,
+  GreaterThanOrEqual, LessThan, LessThanOrEqual, PredicateHelper}
 import org.apache.spark.sql.catalyst.plans.{JoinType, LeftAnti, LeftOuter, LeftSemi, QueryPlan}
 import org.apache.spark.sql.catalyst.plans.logical.ExternalLookupTransform
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
@@ -45,6 +47,7 @@ case class ExternalLookupJoinExec(
     lookupTransforms: Seq[ExternalLookupTransform],
     nullSafeParameters: Seq[Boolean],
     lookupKeys: Seq[Attribute],
+    lookupKeyPredicates: Seq[String],
     joinType: JoinType,
     residualCondition: Option[Expression],
     @transient scan: Scan,
@@ -109,17 +112,22 @@ case class ExternalLookupJoinExec(
 
   // Spark does not trust the connector to evaluate the selected lookup predicates as Spark does,
   // so it checks them itself on each row that the connector returns. The check reads that row
-  // after the parameter row of its request, and compares lookup key i with parameter i.
+  // after the parameter row of its request, and compares lookup key i with parameter i as its
+  // selected predicate does.
   private def lookupKeyCheck: Option[Expression] = lookupParameters.indices.map { index =>
     val parameter = lookupParameters(index)
     val parameterValue = BoundReference(index, parameter.dataType, parameter.nullable)
     val keyOrdinal = lookupInput.indexWhere(_.exprId == lookupKeys(index).exprId)
     val key = lookupInput(keyOrdinal)
     val keyValue = BoundReference(lookupParameters.length + keyOrdinal, key.dataType, key.nullable)
-    if (nullSafeParameters(index)) {
-      EqualNullSafe(keyValue, parameterValue)
-    } else {
-      EqualTo(keyValue, parameterValue)
+    lookupKeyPredicates(index) match {
+      case "=" => EqualTo(keyValue, parameterValue)
+      case "<=>" => EqualNullSafe(keyValue, parameterValue)
+      case "<" => LessThan(keyValue, parameterValue)
+      case "<=" => LessThanOrEqual(keyValue, parameterValue)
+      case ">" => GreaterThan(keyValue, parameterValue)
+      case ">=" => GreaterThanOrEqual(keyValue, parameterValue)
+      case other => throw SparkException.internalError(s"Unexpected lookup predicate $other")
     }
   }.reduceOption(And)
 

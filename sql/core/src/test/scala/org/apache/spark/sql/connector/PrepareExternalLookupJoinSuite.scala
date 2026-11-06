@@ -272,6 +272,55 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
     assert(prepared.residualCondition.isEmpty)
   }
 
+  test("a null-safe equality and a range are lookup candidates only on types they are safe on") {
+    // `<=>` has the allowlist of `=`. A range is offered only on integral, DECIMAL and datetime
+    // types: Spark orders strings by code point and BINARY by unsigned byte, and stores often do
+    // not.
+    val rangeTypes = Seq("TINYINT", "SMALLINT", "INT", "BIGINT", "DECIMAL(10, 2)", "DATE",
+      "TIMESTAMP", "TIMESTAMP_NTZ")
+    val equalityOnlyTypes = Seq("BOOLEAN", "BINARY", "STRING", "STRING COLLATE UTF8_BINARY")
+    val neitherTypes = Seq("FLOAT", "DOUBLE", "STRING COLLATE UTF8_LCASE", "STRUCT<a: INT>")
+    def offeredFor(codeType: String): Seq[String] = {
+      var offered = Seq.empty[String]
+      val lookup = lookupRelation(PlanningExternalLookupTable(s"id INT, code $codeType", select = {
+        candidates =>
+          offered = candidates.map(_.toString).toSeq
+          candidates.take(1)
+      }))
+      val Seq(lookupId, lookupCode) = lookup.output
+      val streamId = stream.output.head
+      val streamCode = AttributeReference("streamCode", lookupCode.dataType)()
+      val conjuncts =
+        Seq(streamId === lookupId, streamCode <=> lookupCode, streamCode < lookupCode,
+          lookupCode <= streamCode)
+      prepare(lookupJoin(lookup, conjuncts.reduce(_ && _),
+        left = LocalRelation(Seq(streamId, streamCode), isStreaming = true)))
+      offered
+    }
+    rangeTypes.foreach { codeType =>
+      assert(offeredFor(codeType) === Seq("id = ?", "code <=> ?", "code > ?", "code <= ?"),
+        codeType)
+    }
+    equalityOnlyTypes.foreach { codeType =>
+      assert(offeredFor(codeType) === Seq("id = ?", "code <=> ?"), codeType)
+    }
+    neitherTypes.foreach { codeType =>
+      assert(offeredFor(codeType) === Seq("id = ?"), codeType)
+    }
+
+    // A string or BINARY range alone leaves no candidate.
+    Seq("STRING", "BINARY").foreach { codeType =>
+      val lookup = lookupRelation(PlanningExternalLookupTable(s"id INT, code $codeType"))
+      val lookupCode = lookup.output(1)
+      val streamCode = AttributeReference("streamCode", lookupCode.dataType)()
+      checkError(
+        exception = prepareError(lookupJoin(lookup, lookupCode < streamCode,
+          left = LocalRelation(Seq(streamCode), isStreaming = true))),
+        condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_CANDIDATE",
+        parameters = Map("table" -> QUOTED_TABLE_NAME))
+    }
+  }
+
   test("the read schema binds to the analyzed lookup attributes by exact name") {
     val lookup = lookupRelation(PlanningExternalLookupTable(
       "id INT NOT NULL, value VARCHAR(8) NOT NULL, s STRUCT<a: INT NOT NULL>",

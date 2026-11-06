@@ -1078,8 +1078,9 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       .select(left("id"), lookup("department"))
 
     assert(runStream(joined).plan.exists(_.isInstanceOf[PreparedExternalLookupJoin]))
-    // The source is asked for only the lookup column that the projection reads.
-    assert(SimpleExternalLookupDataSource.requiredColumns.get() === Seq("department"))
+    // The source is asked for the lookup column that the projection reads, and for the key, which
+    // Spark checks on every returned row.
+    assert(SimpleExternalLookupDataSource.requiredColumns.get() === Seq("id", "department"))
     checkStream(joined, Seq(Row(1, "engineering"), Row(1, "research"), Row(3, null)))
   }
 
@@ -2407,13 +2408,13 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     checkStream(
       left.join(lookup, left("id") === lookup("id"), "left_semi"),
       Seq(Row(1), Row(2)))
-    assert(SimpleExternalLookupDataSource.requiredColumns.get().isEmpty)
+    assert(SimpleExternalLookupDataSource.requiredColumns.get() === Seq("id"))
     checkStream(
       left.join(lookup, left("id") === lookup("id"), "left_anti"),
       Seq(Row(3)))
   }
 
-  test("external lookup prunes request keys from inner and outer responses") {
+  test("external lookup reads only the key when no lookup column is read above the join") {
     val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
     val left = streamOf(Seq(1, 3).toDF("id"))
 
@@ -2426,7 +2427,8 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
         Seq(Row(1), Row(1), Row(3))
       }
       checkStream(result, expected)
-      assert(SimpleExternalLookupDataSource.requiredColumns.get().isEmpty)
+      // Spark reads the key to check it on every returned row.
+      assert(SimpleExternalLookupDataSource.requiredColumns.get() === Seq("id"))
     }
   }
 
@@ -2441,13 +2443,13 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     checkStream(
       claims.join(lookup, condition, "left_semi"),
       Seq(Row(1, "engineering")))
-    assert(SimpleExternalLookupDataSource.requiredColumns.get() === Seq("department"))
+    assert(SimpleExternalLookupDataSource.requiredColumns.get() === Seq("id", "department"))
 
     SimpleExternalLookupDataSource.resetCounters()
     checkStream(
       claims.join(lookup, condition, "left_anti"),
       Seq(Row(1, "missing"), Row(3, "missing")))
-    assert(SimpleExternalLookupDataSource.requiredColumns.get() === Seq("department"))
+    assert(SimpleExternalLookupDataSource.requiredColumns.get() === Seq("id", "department"))
   }
 
   test("external lookup join handles null, missing, duplicate, and partial batches") {
@@ -2645,7 +2647,7 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       (">=", "id", IntegerType),
       ("<", "id", IntegerType),
       ("=", "department", StringType)))
-    assert(SimpleExternalLookupDataSource.requiredColumns.get() === Seq("department"))
+    assert(SimpleExternalLookupDataSource.requiredColumns.get() === Seq("id", "department"))
   }
 
   test("an upstream limit stops one-to-many cursor consumption") {
@@ -2696,7 +2698,11 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       spark.read.format(classOf[CaseInsensitiveExternalLookupDataSource].getName).load()
     val orders = streamOf(Seq((1, "AB-1"), (2, "ab-1"), (3, "Ab-1")).toDF("order", "sku"))
     val matched = Seq(Row(1, "AB-1", "AB-1", "adapter"), Row(2, "ab-1", "ab-1", "cable"))
-    Seq("inner" -> matched, "left_outer" -> (matched :+ Row(3, "Ab-1", null, null))).foreach {
+    Seq(
+      "inner" -> matched,
+      "left_outer" -> (matched :+ Row(3, "Ab-1", null, null)),
+      "left_semi" -> Seq(Row(1, "AB-1"), Row(2, "ab-1")),
+      "left_anti" -> Seq(Row(3, "Ab-1"))).foreach {
       case (joinType, expected) =>
         CaseInsensitiveExternalLookupTable.returnedRows.set(0)
         checkStream(orders.join(products, orders("sku") === products("sku"), joinType), expected)

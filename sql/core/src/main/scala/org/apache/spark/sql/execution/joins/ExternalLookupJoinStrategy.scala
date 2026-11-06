@@ -32,6 +32,7 @@ object ExternalLookupJoinStrategy extends SparkStrategy {
         lookup.lookupTransforms,
         lookup.nullSafeParameters,
         lookup.lookupKeys,
+        lookup.lookupKeyPredicates,
         lookup.joinType,
         lookup.residualCondition,
         lookup.scan,

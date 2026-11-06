@@ -191,11 +191,12 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
     val lookupOutput = join.right.output.filter(requiredAbove.contains)
     val residualLookupReferences =
       residual.flatMap(_.references).filter(join.right.outputSet.contains)
-    // The columns are pruned only now, because a column that only a selected lookup predicate
-    // reads is no longer needed. V2ScanRelationPushDown.pruneColumns prunes a scan the same way,
-    // through PushDownUtils.pruneColumns, which this rule cannot call: it can pass nested-pruned
-    // columns, while a lookup scan receives only whole top-level columns, and it binds the read
-    // schema by the resolver, while a lookup scan binds it by exact name.
+    // The columns are pruned only now, once the lookup predicates are selected. A column that a
+    // selected lookup predicate reads is kept, because Spark checks the predicate itself on every
+    // row that the connector returns. V2ScanRelationPushDown.pruneColumns prunes a scan the same
+    // way, through PushDownUtils.pruneColumns, which this rule cannot call: it can pass
+    // nested-pruned columns, while a lookup scan receives only whole top-level columns, and it
+    // binds the read schema by the resolver, while a lookup scan binds it by exact name.
     val (prunedUpperStages, requiredBySegment) =
       pruneLookupTransforms(lookupOutput ++ residualLookupReferences, lookupPlan.upperStages)
     val segmentFields =
@@ -203,7 +204,8 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
     val segmentFilter = (postScanFilters ++ lookupPlan.filtersStayUp).reduceOption(And)
     val requiredColumns = relation.output.filter(
       (AttributeSet(segmentFields.flatMap(_.references)) ++
-        segmentFilter.map(_.references).getOrElse(AttributeSet.empty)).contains)
+        segmentFilter.map(_.references).getOrElse(AttributeSet.empty) ++
+        AttributeSet(selectedPredicates.map(_.projectedField))).contains)
     // As V2ScanRelationPushDown does above a scan: the filters, then a projection when it computes
     // more than the columns it selects. Execution reads a selected column by its id.
     val segmentStages = segmentFilter.map(ExternalLookupFilter(_, relation.output)).toSeq ++
@@ -275,6 +277,7 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
       selectedPredicates.map(_.parameter),
       selectedPredicates.map(_.nullSafe),
       selectedPredicates.map(_.projectedField),
+      selectedPredicates.map(_.predicateName),
       join.joinType,
       residual.reduceOption(And))
     joinFilter.reduceOption(And).map(Filter(_, prepared)).getOrElse(prepared)
