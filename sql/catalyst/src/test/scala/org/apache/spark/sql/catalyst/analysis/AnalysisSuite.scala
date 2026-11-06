@@ -53,6 +53,37 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 class AnalysisSuite extends AnalysisTest with Matchers {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
 
+  gridTest("insertion column projection preserves caller-owned aliases")(
+      Seq(IntegerType, StructType(Seq(StructField("input", IntegerType, nullable = false))),
+        ArrayType(StructType(Seq(StructField("input", IntegerType))), containsNull = false),
+        MapType(StringType, StructType(Seq(StructField("input", IntegerType))),
+          valueContainsNull = false))) { inputType =>
+    val renamedType = inputType match {
+      case struct: StructType => StructType(struct.fields.map(_.copy(name = "target")))
+      case ArrayType(struct: StructType, containsNull) =>
+        ArrayType(StructType(struct.fields.map(_.copy(name = "target"))), containsNull)
+      case MapType(keyType, struct: StructType, valueContainsNull) =>
+        MapType(keyType, StructType(struct.fields.map(_.copy(name = "target"))), valueContainsNull)
+      case other => other
+    }
+    val input = AttributeReference("input", inputType)()
+    val target = AttributeReference("target", renamedType)()
+    val expressionId = NamedExpression.newExprId
+    var aliasesCreated = 0
+    val projected = InsertionResolution.resolveByNameColumn(input, target, (child, name) => {
+      aliasesCreated += 1
+      Alias(child, name)(exprId = expressionId)
+    })
+    assert(aliasesCreated == 1)
+    assert(projected.exprId == expressionId)
+    assert(projected.name == target.name)
+    val expectedChild = inputType match {
+      case _: StructType | _: ArrayType | _: MapType => Cast(input, renamedType)
+      case _ => input
+    }
+    assert(projected.child == expectedChild)
+  }
+
   test("resolve a table specification without changing option evaluation or other fields") {
     val specification = UnresolvedTableSpec(
       properties = Map("property" -> "value"),
