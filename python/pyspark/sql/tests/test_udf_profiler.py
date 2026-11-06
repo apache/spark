@@ -857,6 +857,31 @@ class UDFProfiler2TestsMixin:
                     # Call trees are keyed by thread name, so main threads of tasks merge.
                     self.assertIn("MainThread", result["callstack"])
 
+    def test_sampling_profiler_merge_threads_by_name(self):
+        import threading
+        import time
+
+        @udf("long")
+        def add1_in_thread(x):
+            t = threading.Thread(target=time.sleep, args=(0.05,), name="helper")
+            t.start()
+            t.join()
+            return x + 1
+
+        with self.sql_conf(
+            {
+                "spark.sql.pyspark.udf.profiler": "sampling",
+                "spark.sql.pyspark.udf.profiler.samplingInterval": "10",
+                "spark.sql.pyspark.udf.profiler.samplingAggregation": "stage",
+            }
+        ):
+            self.spark.range(10, numPartitions=2).select(add1_in_thread("id")).collect()
+
+        results = list(self.sampling_profile_results.values())
+        self.assertEqual(1, len(results))
+        # The threads of both tasks are merged by name into one call tree per name.
+        self.assertEqual({"MainThread", "helper"}, set(results[0]["callstack"]))
+
 
 class UDFProfiler2Tests(UDFProfiler2TestsMixin, ReusedSQLTestCase):
     def setUp(self) -> None:
