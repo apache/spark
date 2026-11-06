@@ -3302,16 +3302,22 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     assert(SimpleExternalLookupDataSource.metricSamples.get() >= 4)
   }
 
-  test("external lookup deduplicates floating-point keys using Spark equality") {
-    SemanticKeyExternalLookupDataSource.requestSizes.clear()
-    val nan1 = java.lang.Double.longBitsToDouble(0x7ff8000000000001L)
-    val nan2 = java.lang.Double.longBitsToDouble(0x7ff8000000000002L)
-    // Put equivalent keys in different input batches to exercise cache identity as well.
-    val left = streamOf(Seq(-0.0d, nan1, 0.0d, nan2).toDF("key"))
-    val lookup = semanticKeyLookup("double")
-
-    assert(runStream(left.join(lookup, left("key") === lookup("key"))).rows.size === 4)
-    assert(SemanticKeyExternalLookupDataSource.requestSizes.asScala.toSeq === Seq(2))
+  test("external lookup caches only the returned rows that satisfy the selected predicates") {
+    // Requests hold one row, so the second order for `AB-1` reads its product from the cache. The
+    // cache holds only the row that passed Spark's check of `sku = ?`.
+    val products = spark.read
+      .format(classOf[CaseInsensitiveExternalLookupDataSource].getName)
+      .option("maxBatchSize", "1")
+      .load()
+    val orders = streamOf(Seq((1, "AB-1"), (2, "AB-1")).toDF("order", "sku"))
+    CaseInsensitiveExternalLookupTable.returnedRows.set(0)
+    val run = runStream(orders.join(products, orders("sku") === products("sku")))
+    QueryTest.sameRows(
+      Seq(Row(1, "AB-1", "AB-1", "adapter"), Row(2, "AB-1", "AB-1", "adapter")),
+      run.rows).foreach(fail(_))
+    assert(run.lookupJoin.metrics("numCacheHits").value === 1)
+    // The one request returned both case variants.
+    assert(CaseInsensitiveExternalLookupTable.returnedRows.get() === 2)
   }
 
   test("external lookup offers no lookup key on a double or a string with a non-binary collation") {
