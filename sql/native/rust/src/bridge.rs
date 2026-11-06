@@ -374,7 +374,7 @@ fn remove<T>(handles: &HandleMap<T>, handle: i64) {
     let value = lock(handles).remove(&handle);
     // Provider destructors run after releasing the registry lock. Repeated
     // closes are harmless, and IDs are never reused.
-    drop(value);
+    drop_provider(value);
 }
 
 struct SourceState<S> {
@@ -424,9 +424,9 @@ pub(crate) fn provider_call<T>(
 }
 
 pub(crate) fn drop_provider<T>(value: T) {
-    // Close has no error channel and must never unwind across the native ABI.
+    // Close has no error channel and must never unwind across the native ABI, so log the panic.
     if let Err(payload) = catch_unwind(AssertUnwindSafe(|| drop(value))) {
-        let _ = panic_message(payload);
+        log::warn!("Ignoring a panic during a drop: {}", panic_message(payload));
     }
 }
 

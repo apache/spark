@@ -28,6 +28,11 @@ The Rust and C tests run independently of Spark and Java. The workspace is not
 part of Maven/SBT and introduces no Rust requirement for building Spark. This is
 an API prototype, not a published crate or a compatibility commitment.
 
+The API uses the types of Arrow 58, such as `RecordBatch`, `SchemaRef`, and `ArrowError`, so
+a connector must use the same major version of Arrow: the SDK re-exports the crates as
+`spark_native_source::arrow_array` and `spark_native_source::arrow_schema`. Upgrading the
+major version of Arrow is a breaking change of the SDK.
+
 The [Range connector][range] is a separate workspace member under
 `examples/src/main/rust/native-data-source`, with a C integration test, packaging
 helper, and Spark smoke script. The [file sink example][sink] is a separate write-only
@@ -121,8 +126,9 @@ bytes already copied to Spark, including for retried tasks.
 
 The reader owns its executor resources and cannot borrow its temporary factory.
 It may borrow `TaskContext` until the returned Arrow stream is released. Every host
-provides the task IDs of version 1 of the ABI, so the SDK rejects a shorter task
-context, as it rejects any structure shorter than in version 1. `is_interrupted()` checks
+provides the task IDs of version 1 of the ABI, so the SDK rejects a task context shorter
+than in version 1, as it rejects the info structures and the read limit that Spark passes to
+the calls when they are shorter. `is_interrupted()` checks
 Spark's live cancellation callback, not a snapshot of its initial value; for a reader, it
 is also true once the task ended. Check it during long operations; blocking I/O still
 requires timeouts. `TaskContext::for_testing()`, with its `with_*` methods and
@@ -241,8 +247,10 @@ driver registry.
 Each `DataWriterFactory::open` receives a `WriterContext` with the input schema and
 the task, and returns a task-bound writer. `write` takes ownership of a
 `RecordBatch`, so its Arrow buffers can be retained after the callback, until the writer
-is dropped: they belong to the data writer of Spark, which frees them when it closes the
-writer. The SDK
+is dropped: they belong to the data writer of Spark, and the ABI requires the library to
+release them before Spark closes the writer. Spark cannot free a batch that is still
+retained when it closes the writer: it logs an error, and the memory stays allocated until
+the batch is dropped. The SDK
 moves the incoming Arrow array, which has the schema that the data writer got, and
 releases imported resources on failures. Input slices need not have zero offsets;
 the zero-offset restriction applies to arrays exported to Spark by readers. When Spark
@@ -271,12 +279,13 @@ including after task commit, so connectors need a strategy for orphaned data.
 Spark provides no batch query ID: generate and serialize an operation identity
 when needed. Task-attempt IDs alone are not globally unique across applications.
 
-When `writer_factory` or the serialization of its factory fails, `create_writer` fails
-and the SDK drops the coordinator without commit or abort, so Drop must also release what
-only that write staged. Spark also creates writers late, after prerequisite AQE shuffle
-stages, but input computation can still fail during write tasks. Constructors must
-therefore avoid irreversible changes. The epoch ID tells the task writers of batch writes,
-whose epoch ID is `-1`, from those of micro-batches.
+When `writer_factory` or the serialization of its factory fails, `create_writer` fails,
+and when Spark cannot copy the serialized factory, for example when it is too large, Spark
+fails the write. Either way, the SDK drops the coordinator without commit or abort, so
+Drop must also release what only that write staged. Spark also creates writers late, after
+prerequisite AQE shuffle stages, but input computation can still fail during write tasks.
+Constructors must therefore avoid irreversible changes. The epoch ID tells the task writers
+of batch writes, whose epoch ID is `-1`, from those of micro-batches.
 
 The [file sink][sink] demonstrates append/truncate using staged JSONL files and
 atomic publication of a manifest on a local or shared filesystem. Its documented
@@ -310,18 +319,21 @@ streaming scans.
 `MicroBatchStream::default_read_limit` limits the data of each micro-batch, for example
 to `ReadLimit::MaxRows` from an option of the source; the default reads all the available
 data. Spark passes the limit to `latest_offset` in `LatestOffsetInfo::limit`, and with
-`Trigger.AvailableNow`, the end of the run in `LatestOffsetInfo::run_end`, which the
-latest offset must not go beyond. Spark also asks without a limit for the progress of the
-query, so a stream does not count the calls of `latest_offset` as micro-batches.
+`Trigger.AvailableNow` and a `ReadLimit::MaxRows` limit, the end of the run in
+`LatestOffsetInfo::run_end`, which the latest offset must not go beyond. Spark also asks
+without a limit for the progress of the query, so a stream does not count the calls of
+`latest_offset` as micro-batches.
 
 The SDK serializes `MicroBatchStream::Offset` with serde as compact JSON on a single line,
 which Spark stores in the checkpoint as it is, without the SDK's versioned envelope, and
 decodes the offsets that Spark passes back. Spark compares offsets by their JSON to decide
 whether a micro-batch has new data, so a position must always serialize to the same JSON:
 use structs and `BTreeMap`, not `HashMap`. A restarted query may plan its last range again,
-with offsets from its checkpoint that an earlier version of the library may have written. A
-failed call, including a panic or an offset that does not decode, stops the query: Spark
-makes no other call on the stream before it closes it.
+with offsets from its checkpoint that an earlier version of the library may have written.
+When that version had a different `Offset` type, for example without a field that the new
+one adds with `#[serde(default)]`, the same position encodes to different JSON, so Spark
+runs one micro-batch without rows. A failed call, including a panic or an offset that does
+not decode, stops the query: Spark makes no other call on the stream before it closes it.
 
 Streaming writes reuse the task writers of batch writes. Spark creates a `StreamingWrite`
 for each micro-batch, from a `StreamingWriteInfo` with the ID of the query, which stays the
@@ -397,21 +409,20 @@ Use Rust 1.85 or newer (as required by Arrow 58) and a C compiler. The C integra
 test uses `dlopen` and pthreads on Linux or macOS. From this directory:
 
 ```bash
-cargo build --workspace --locked
 cargo test --workspace --locked
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo fmt --all -- --check
 ```
 
-Build before testing so the C harness loads the current example dynamic library.
-The harness compiles against [Spark's header][header], as a library that copies it
-would. It calls the actual function table and validates capability-only source
-discovery and optional slots, independent driver planners, pushdown and planning,
-serialized executor reads, rejection of structures shorter than in version 1,
-cancellation, sequential cross-thread stream callbacks, Arrow buffers surviving stream
-release, micro-batch reads with their offsets, including an offset that does not
-decode, and admission control. This checks the C boundary without requiring Java; it
-does not substitute for Spark planner and task-lifecycle testing.
+The C harness loads the example dynamic library that `cargo test` builds. It compiles
+against [Spark's header][header], as a library that copies it would. It calls the actual
+function table and validates capability-only source discovery and optional slots,
+independent driver planners, pushdown and planning, serialized executor reads, rejection of
+structures shorter than in version 1, cancellation, sequential cross-thread stream
+callbacks, Arrow buffers surviving stream release, micro-batch reads with their offsets,
+including an offset that does not decode, and admission control. This checks the C
+boundary without requiring Java; it does not substitute for Spark planner and task-lifecycle
+testing.
 
 Rust tests additionally exercise the exported function table with option-dependent
 capabilities, narrowed and unimplemented declarations, the source name, library

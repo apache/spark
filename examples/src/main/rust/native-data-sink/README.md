@@ -103,7 +103,8 @@ if files:
 
 ## Build, package, and run
 
-From the repository root:
+The example builds only in the Spark source tree, not from the copy in a binary distribution,
+since it depends on the SDK under `sql/native/rust`. From the repository root:
 
 ```sh
 cargo build --manifest-path sql/native/rust/Cargo.toml --workspace --locked

@@ -50,7 +50,7 @@ impl StreamState<'_> {
         let batch = project(batch?, &self.expected)?;
         match &self.schema {
             Some(schema) if batch.schema() != *schema => {
-                return Err("reader returned a batch with a different schema".into());
+                return Err(schema_change(schema, &batch.schema()).into());
             }
             Some(_) => {}
             None => {
@@ -68,6 +68,20 @@ impl StreamState<'_> {
             check_nulls(column, field, field.name(), None)?;
         }
         Ok(Some(data))
+    }
+}
+
+/// Describes how the schema of a batch differs from that of the stream. Both have the
+/// columns of the schema to read, so either a column or the metadata of the schema differs.
+fn schema_change(stream: &Schema, batch: &Schema) -> String {
+    let mut fields = stream.fields().iter().zip(batch.fields());
+    match fields.find(|(first, field)| first != field) {
+        Some((first, field)) => format!(
+            "reader returned a batch with a different schema: the column {} is {first:?} in \
+             the first batch and {field:?} in this one",
+            first.name()
+        ),
+        None => "reader returned a batch with a different schema: its metadata differs".to_owned(),
     }
 }
 

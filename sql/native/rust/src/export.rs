@@ -449,9 +449,9 @@ unsafe extern "C" fn abort<S: Exported>(
 ) -> c_int {
     abi::call(|| {
         let info = unsafe { abi::input(info)? };
-        // Spark rejected what create_writer returned, before any task ran. The SDK returns a
-        // single state, so this does not happen; the coordinator is dropped at close, as when
-        // its creation fails.
+        // Spark rejected what create_writer returned, before any task ran: the SDK returns a
+        // single state, so only when Spark could not copy it, for example when it is too
+        // large. The coordinator is dropped at close, as when its creation fails.
         if info.rejected != 0 {
             return Ok(());
         }

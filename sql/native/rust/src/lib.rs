@@ -57,6 +57,12 @@ pub mod __private {
     }
 }
 
+/// The Arrow crate of [`RecordBatch`], which connectors can use to have the same version of
+/// Arrow as the SDK.
+pub use arrow_array;
+/// The Arrow crate of [`SchemaRef`] and [`ArrowError`], which connectors can use to have the
+/// same version of Arrow as the SDK.
+pub use arrow_schema;
 pub use capabilities::Capabilities;
 pub use host::HostInfo;
 /// The `log` crate, whose macros write to the log of the Spark driver or executor, with
@@ -418,7 +424,9 @@ impl MicroBatchStreamInfo {
 /// [`Offset`](Self::Offset), and compares them by that JSON, so serialize a position to the
 /// same JSON each time: for example, use structs and `BTreeMap` rather than `HashMap`. A
 /// restarted query passes the offsets of its checkpoint, which an earlier version of the
-/// library may have written, to `latest_offset`, `plan`, and `commit`.
+/// library may have written, to `latest_offset`, `plan`, and `commit`. When that version had a
+/// different `Offset` type, the same position may encode to different JSON, so Spark runs one
+/// micro-batch without rows.
 ///
 /// # Admission control
 ///
@@ -566,9 +574,10 @@ pub enum WriteMode {
 /// phase or guard against repeated calls:
 ///
 /// - `writer_factory` runs once, right after [`DataSource::new_write`], before any task
-///   opens a writer. When it fails, or the SDK cannot serialize its factory, the write
-///   fails and the coordinator is dropped without `abort`, so Drop must also release
-///   what only this write staged.
+///   opens a writer. When it fails, the SDK cannot serialize its factory, or Spark cannot
+///   copy the serialized factory, for example when it is too large, the write fails and
+///   the coordinator is dropped without `abort`, so Drop must also release what only this
+///   write staged.
 /// - `commit` runs at most once, when every task succeeded. The SDK fails the write
 ///   without calling it when a task message cannot be decoded.
 /// - `abort` runs at most once, never after a successful `commit`. It follows a failed
@@ -669,12 +678,15 @@ pub trait DataWriter: Send {
 
     /// Takes ownership of an imported Arrow batch, which may be retained after this call,
     /// but not after the writer is dropped: its buffers belong to the data writer of Spark,
-    /// which frees them once it closes the writer, so do not pass the batch to a thread or a
-    /// value that outlives the writer. It has the schema of [`WriterContext::schema`], and at most
-    /// `spark.sql.execution.arrow.maxRecordsPerBatch` rows. When Spark writes the batches
-    /// of a native scan without converting them to rows, it copies their values as the
-    /// scan returned them, without the checks of a conversion, such as the precision of a
-    /// decimal. Process batches incrementally and check task cancellation.
+    /// and the ABI requires the library to release them before Spark closes the writer, so do
+    /// not pass the batch to a thread or a value that outlives the writer. Spark cannot free a
+    /// batch that is still retained when it closes the writer: it logs an error, and the memory
+    /// stays allocated until the batch is dropped. It has the schema of
+    /// [`WriterContext::schema`], and at most `spark.sql.execution.arrow.maxRecordsPerBatch`
+    /// rows. When Spark writes the batches of a native scan without converting them to rows,
+    /// it copies their values as the scan returned them, without the checks of a conversion,
+    /// such as the precision of a decimal. Process batches incrementally and check task
+    /// cancellation.
     fn write(&mut self, batch: RecordBatch) -> Result<()>;
 
     /// Finish staging and return a typed message for the driver. Do not make the

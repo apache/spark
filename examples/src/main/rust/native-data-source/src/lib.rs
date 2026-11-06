@@ -29,6 +29,10 @@ use spark_native_source::{
     ScanBuilder, ScanInfo, ScanPlan, Unsupported,
 };
 
+// The largest values of numPartitions and batchSize.
+const MAX_PARTITIONS: usize = 100_000;
+const MAX_BATCH_SIZE: usize = 1_000_000;
+
 pub struct RangeSource {
     start: i64,
     end: i64,
@@ -106,6 +110,14 @@ impl DataSource for RangeSource {
         }
         if num_partitions == 0 || batch_size == 0 || max_rows_per_trigger == Some(0) {
             return Err("numPartitions, batchSize and maxRowsPerTrigger must be positive".into());
+        }
+        // A failed allocation aborts the process, so bound the sizes that the reads allocate.
+        if num_partitions > MAX_PARTITIONS || batch_size > MAX_BATCH_SIZE {
+            return Err(format!(
+                "numPartitions must be at most {MAX_PARTITIONS}, and batchSize at most \
+                 {MAX_BATCH_SIZE}"
+            )
+            .into());
         }
         Ok(Self {
             start,
@@ -238,6 +250,15 @@ impl MicroBatchStream for RangeStream {
     }
 
     fn latest_offset(&mut self, info: LatestOffsetInfo<RangeOffset>) -> Result<RangeOffset> {
+        // The offsets of a checkpoint may come from a query with other options. Reject them
+        // here, before Spark logs the latest offset, which it would plan again on restart.
+        if info.start.next < self.start || info.start.next > self.end {
+            return Err(format!(
+                "The offset {} is not in the range [{}, {}]",
+                info.start.next, self.start, self.end
+            )
+            .into());
+        }
         // All the rows of the range are available, within the limit and the end of the run.
         let mut next = self.end;
         if let ReadLimit::MaxRows(rows) = info.limit {
@@ -492,7 +513,9 @@ mod tests {
         for (key, value) in [
             ("batchsize", "0"),
             ("batchsize", "-1"),
+            ("batchsize", "1000001"),
             ("numpartitions", "0"),
+            ("numpartitions", "100001"),
             ("maxrowspertrigger", "0"),
             ("end", "-1"),
             ("start", "not-an-integer"),
@@ -538,6 +561,9 @@ mod tests {
         let outside: RangeOffset = serde_json::from_str(r#"{"next":30}"#).unwrap();
         assert!(stream.plan(initial, outside).is_err());
         assert!(stream.plan(latest, initial).is_err());
+        assert!(stream
+            .latest_offset(LatestOffsetInfo::new(outside))
+            .is_err());
     }
 
     #[test]

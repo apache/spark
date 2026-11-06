@@ -61,19 +61,18 @@ fn c_abi_arrow_round_trip() -> Result<(), Box<dyn Error>> {
         String::from_utf8_lossy(&compiled.stderr)
     );
 
+    // cargo test rebuilds the library in the deps directory of this test, not in the
+    // directory of its profile, which only cargo build refreshes.
     let executable = std::env::current_exe()?;
-    let profile = executable
-        .parent()
-        .and_then(Path::parent)
-        .ok_or("Missing Cargo profile directory")?;
-    let library = profile.join(format!(
+    let deps = executable.parent().ok_or("Missing Cargo deps directory")?;
+    let library = deps.join(format!(
         "{}spark_datasource_rust_sdk_range{}",
         std::env::consts::DLL_PREFIX,
         std::env::consts::DLL_SUFFIX
     ));
     assert!(
         library.is_file(),
-        "Run cargo build --workspace first: {}",
+        "Missing the library: {}",
         library.display()
     );
 

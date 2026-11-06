@@ -56,8 +56,8 @@ options. A source created just for capability discovery is closed without creati
 | --- | --- | --- |
 | `start` | `0` | Inclusive start, as a signed 64-bit integer |
 | `end` | `100` | Exclusive end; must be at least `start` |
-| `numpartitions` | `2` | Maximum number of partitions; must be positive |
-| `batchsize` | `1024` | Maximum rows per Arrow batch; must be positive |
+| `numpartitions` | `2` | Maximum number of partitions; from 1 to 100000 |
+| `batchsize` | `1024` | Maximum rows per Arrow batch; from 1 to 1000000 |
 | `maxRowsPerTrigger` | none | Maximum rows per micro-batch of a streaming read; must be positive |
 
 Spark normalizes option names to lower case. Unknown options are rejected.
@@ -107,6 +107,8 @@ offsets of its checkpoint.
 
 ## Build and test
 
+The example builds only in the Spark source tree, not from the copy in a binary distribution:
+it depends on the SDK under `sql/native/rust`, and its C test on the header under `sql/core`.
 Run from the repository root with Rust and a C compiler:
 
 ```sh
@@ -114,12 +116,12 @@ cargo build --manifest-path sql/native/rust/Cargo.toml --workspace --locked
 cargo test --manifest-path sql/native/rust/Cargo.toml --workspace --locked
 ```
 
-Build before testing so the `c_abi_smoke` integration test can load the actual connector library.
-That test calls its function table through the C header and consumes Arrow C streams without a
-JVM, including streaming reads through the stream reader functions, with and without a read
-limit. The Rust tests cover global limits, projections, serialization, bounded batches, empty
-output projections, and the micro-batches of a stream, within a limit and the end of a run. These
-checks do not substitute for the Spark smoke script.
+The build produces the library to package below. The `c_abi_smoke` integration test loads the
+library that `cargo test` builds, and calls its function table through the C header and
+consumes Arrow C streams without a JVM, including streaming reads through the stream reader
+functions, with and without a read limit. The Rust tests cover global limits, projections,
+serialization, bounded batches, empty output projections, and the micro-batches of a stream,
+within a limit and the end of a run. These checks do not substitute for the Spark smoke script.
 
 ## Package and run with Spark
 
