@@ -232,12 +232,8 @@ class SerializersTest(unittest.TestCase):
                 if length < 1 << 31:
                     ser.dump_stream([payload], stream)
                     self.assertEqual(stream.write.call_count, 2)
-                    self.assertEqual(
-                        serializers.read_int(
-                            io.BytesIO(stream.write.call_args_list[0].args[0])
-                        ),
-                        length,
-                    )
+                    header = io.BytesIO(stream.write.call_args_list[0].args[0])
+                    self.assertEqual(serializers.read_int(header), length)
                     stream.write.assert_called_with(payload)
                 else:
                     with self.assertRaisesRegex(
