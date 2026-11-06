@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.planning.PhysicalAggregation
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Call, Command, CreateVariable, LogicalPlan, PlanHelper, Project, ReplaceData, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -100,7 +101,8 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
       // (see `canSubstitute`), and the copies compound with nesting, as with
       // `spark.sql.alwaysInlineCommonExpr`. Each copy is evaluated wherever the expression is: a
       // CHECK predicate stored by ALTER TABLE at every later write, and a `Call` argument when it
-      // is folded, so an impure foldable such as `aes_encrypt` over literals is folded per copy.
+      // is folded. A generated-IV `aes_encrypt` is non-deterministic, so a definition read more
+      // than once keeps its `With`.
       // Analysis lets no command but `CreateVariable` hold a nondeterministic expression; a `Call`
       // can hold one, as `InvokeProcedures` optimizes it before analysis checks it, and then
       // rejects it as not foldable. A nondeterministic definition read more than once keeps its
@@ -190,8 +192,8 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
   /**
    * Whether a copy of `e` at every reference always evaluates to the same value. `foldable` is not
    * enough: `current_timestamp()` re-reads the clock, a TIME -> TIMESTAMP cast derives the current
-   * date, `aes_encrypt` is a foldable `StaticInvoke` with a random IV, and a Hive UDF is foldable
-   * on a user-declared determinism flag.
+   * date, and a Hive UDF is foldable on a user-declared determinism flag. A generated-IV
+   * `aes_encrypt` is non-deterministic (see `AesEncrypt`); an explicit IV is a pure `StaticInvoke`.
    */
   private def isSafeToDuplicate(
       e: Expression,
@@ -208,7 +210,11 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
       // of the blanket NonSQLExpression rejection below, when every argument is a literal tree.
       case _ if ComputeCurrentTime.isMakeTimestampBuilder(e) =>
         e.children.forall(isLiteralTree)
-      // Arbitrary Java methods and UDFs can be foldable without being pure.
+      // `StaticInvoke.isDeterministic` is the purity flag for that call. A generated-IV
+      // aes_encrypt clears it; a deterministic static call of literal arguments is pure.
+      case s: StaticInvoke if s.isDeterministic =>
+        s.arguments.forall(isLiteralTree)
+      // UDFs and other non-SQL calls can be foldable without being pure.
       case _: NonSQLExpression | _: UserDefinedExpression => false
       // A TIME -> TIMESTAMP cast has no date of its own; it derives one from the current date at
       // eval time, so duplicated copies could resolve different dates. Reject it. Scope to exactly
@@ -259,15 +265,12 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
    * it admits a `PythonUDF`, which may be nondeterministic and is still in the tree here, since
    * `SparkOptimizer` extracts it in a later batch. So determinism is asked separately.
    *
-   * It is asked of the expression, which is weaker than `isSafeToDuplicate` above: `isCheap` admits
-   * anything foldable and `InvokeLike.foldable` implies `deterministic`, so an impure foldable such
-   * as an `aes_encrypt` with no IV still gets substituted and folded per copy. That predates this
-   * rule keeping a `With` -- the condition it replaced was no stricter -- and belongs either on
-   * those expressions or in one purity predicate shared with `isSafeToDuplicate`.
+   * Determinism is the expression's own flag. A generated-IV `aes_encrypt` clears it (see
+   * `AesEncrypt`), so a multiply-referenced copy is not substituted. `isSafeToDuplicate` is
+   * stricter: it still rejects non-SQL calls whose determinism flag is user-declared.
    *
    * Without `requireCheap`, as for a command's expressions (`inlineCommandWiths`), the cost is not
-   * asked, so the gap widens to an impure definition that reads a column, such as an
-   * `aes_encrypt` over one.
+   * asked. A nondeterministic definition read more than once still keeps its `With`.
    */
   private def canSubstitute(
       child: Expression,

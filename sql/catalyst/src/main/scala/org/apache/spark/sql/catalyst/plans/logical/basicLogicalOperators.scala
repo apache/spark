@@ -2228,6 +2228,9 @@ case class Sample(
       s"Sampling fraction ($fraction) must be on interval [0, 1] without replacement")
   }
 
+  // `None` is resolved to a fresh seed in each SampleExec, so two copies are two samples.
+  override def deterministic: Boolean = seed.isDefined && super.deterministic
+
   // when withReplacement is true, PoissonSampler is applied in SampleExec,
   // which may output more rows than child.
   override def maxRows: Option[Long] = {

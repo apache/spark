@@ -47,4 +47,17 @@ class SampleSuite extends SparkFunSuite {
     // The old implementation could never exceed 999.
     assert(seeds.exists(_ > 1000L))
   }
+
+  test("SPARK-60934: seedless TABLESAMPLE is non-deterministic") {
+    // None is nondeterministic. Some is deterministic when the child is.
+    // An outer seed does not clear a seedless child.
+    val child = OneRowRelation()
+    val seedless = Sample(0.0, 0.5, withReplacement = false, None, child)
+    assert(!seedless.deterministic)
+    val seeded = Sample(0.0, 0.5, withReplacement = false, 7L, child)
+    assert(seeded.deterministic)
+    val seededOverSeedless =
+      Sample(0.0, 0.5, withReplacement = false, 7L, seedless)
+    assert(!seededOverSeedless.deterministic)
+  }
 }

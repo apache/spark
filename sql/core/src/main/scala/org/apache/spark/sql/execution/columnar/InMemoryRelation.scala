@@ -499,9 +499,10 @@ object InMemoryRelation extends PredicateHelper {
       analyzedPlan: LogicalPlan,
       plan: LogicalPlan,
       onOptimizedNode: LogicalPlan => Unit): Boolean = {
-    // Runtime-replaceable expressions such as AES encryption can become deterministic-looking
-    // StaticInvoke nodes during optimization despite using a fresh random initialization vector.
-    // Inspect the original analyzed expressions before trusting the optimized execution shape.
+    // A generated-IV aes_encrypt is non-deterministic (see AesEncrypt). An explicit IV
+    // is deterministic, and other runtime-replaceable calls can still become a
+    // deterministic StaticInvoke. Inspect the analyzed expressions before trusting
+    // the optimized shape; hasSafeExpressions rejects AesEncrypt either way.
     var repeatable = analyzedPlan.deterministic
     if (repeatable) {
       analyzedPlan.foreachWithSubqueries { node =>
