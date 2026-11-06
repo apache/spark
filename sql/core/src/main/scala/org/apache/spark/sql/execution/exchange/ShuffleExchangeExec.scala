@@ -69,6 +69,18 @@ trait ShuffleExchangeLike extends Exchange {
    */
   def shuffleOrigin: ShuffleOrigin
 
+  /**
+   * Whether this shuffle was inserted to guarantee CTE (subplan) reuse.
+   *
+   * When true, shuffle-planning rules must treat this exchange as immutable so that all
+   * references to the same CTE stay canonically equal and dedup into a single
+   * `ReusedExchangeExec`. In particular `EnsureRequirements` must not rewrite its
+   * partitioning in place; a consumer needing a different partitioning wraps it in a new
+   * shuffle instead. A shuffle qualifies when it carries the `LOCAL_SHUFFLE_FOR_CTE`
+   * origin, which is only produced for CTE reuse.
+   */
+  def isCreatedForSubplanReuse: Boolean = shuffleOrigin.isInstanceOf[LOCAL_SHUFFLE_FOR_CTE]
+
   @transient
   private lazy val promise = Promise[MapOutputStatistics]()
 
@@ -183,6 +195,10 @@ case object REBALANCE_PARTITIONS_BY_COL extends ShuffleOrigin
 // was required by a stateful operator. The physical partitioning is static and Spark shouldn't
 // change it.
 case object REQUIRED_BY_STATEFUL_OPERATOR extends ShuffleOrigin
+
+// Indicates that the shuffle operator facilitates CTE reuse. The `cteId` identifies
+// the CTE definition being reused across multiple references.
+case class LOCAL_SHUFFLE_FOR_CTE(cteId: Long) extends ShuffleOrigin
 
 /**
  * Performs a shuffle that will result in the desired partitioning.
