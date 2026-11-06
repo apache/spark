@@ -270,6 +270,32 @@ class FilterPushdownSuite extends PlanTest {
     }
   }
 
+  test("SPARK-60905: Push a filter on a Python UDF alias when Python UDFs are not expensive") {
+    def pythonUDF(child: Expression): PythonUDF = PythonUDF(
+      "pythonUDF", null, IntegerType, Seq(child), PythonEvalType.SQL_BATCHED_UDF,
+      udfDeterministic = true)
+    // `g` passes the UDF an expensive argument.
+    val f = pythonUDF($"a") + 1
+    val g = pythonUDF(expensiveRLike("magic"))
+    val originalQuery = testStringRelation
+      .select($"a", f as "f", g as "g")
+      .where($"f" > 0 && $"g" > 0)
+      .analyze
+
+    // A parent expression caches whether its child is expensive, so optimize the same plan
+    // with the default first.
+    Optimize.execute(originalQuery)
+    withSQLConf(SQLConf.AVOID_DOUBLE_FILTER_EVAL_FOR_PYTHON_UDF.key -> "false") {
+      val correctAnswer = testStringRelation
+        .where(f > 0)
+        .select($"a", f as "f", g as "g")
+        .where($"g" > 0)
+        .analyze
+
+      comparePlans(Optimize.execute(originalQuery), correctAnswer)
+    }
+  }
+
   // Case 1: Multiple filters that don't reference any projection aliases - all should be pushed
   test("SPARK-59693: Case 1 - multiple filters not referencing projection aliases") {
     val originalQuery = testStringRelation

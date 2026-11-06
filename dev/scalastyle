@@ -33,7 +33,7 @@ if test ! -z "$ERRORS"; then
     # When running under GitHub Actions, also emit each scalastyle violation as
     # a workflow `::error` annotation so it appears inline on the PR's "Files
     # changed" tab. Without this, a violation cascades into ~7 red CI checks
-    # (Linters, Java 17/25 Maven build, Documentation generation, sparkr,
+    # (Linters, Java 21/25 Maven build, Documentation generation, sparkr,
     # Docker integration, TPC-DS) -- all needing catalyst to compile -- and
     # each only surfaces a generic "exit code 1" with no file/line, forcing
     # the user to download a full job log to find the actual violation.
