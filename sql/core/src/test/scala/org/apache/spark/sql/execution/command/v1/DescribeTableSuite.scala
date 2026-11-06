@@ -815,6 +815,56 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
       assert(expectedOutput == parsedOutput.copy(location = None, created_time = None))
     }
   }
+
+  test("DESCRIBE AS JSON geography type") {
+    withNamespaceAndTable("ns", "table") { t =>
+      spark.sql(s"CREATE TABLE $t (id INT, geog GEOGRAPHY(4326)) USING parquet")
+      val jsonValue = spark.sql(s"DESCRIBE EXTENDED $t AS JSON").head().getString(0)
+      val parsedOutput = parse(jsonValue).extract[DescribeTableJson]
+
+      assert(parsedOutput.columns == Some(List(
+        TableColumn("id", Type("int")),
+        TableColumn("geog", Type("geography", srid = Some("4326")))
+      )))
+    }
+  }
+
+  test("DESCRIBE AS JSON geography type with mixed SRID") {
+    withTempView("v") {
+      spark.sql("CREATE TEMP VIEW v AS SELECT CAST(NULL AS GEOGRAPHY(ANY)) AS geog")
+      val jsonValue = spark.sql("DESCRIBE EXTENDED v AS JSON").head().getString(0)
+      val parsedOutput = parse(jsonValue).extract[DescribeTableJson]
+
+      assert(parsedOutput.columns == Some(List(
+        TableColumn("geog", Type("geography", srid = Some("ANY")))
+      )))
+    }
+  }
+
+  test("DESCRIBE AS JSON geography type nested in a struct") {
+    withNamespaceAndTable("ns", "table") { t =>
+      spark.sql(
+        s"""
+           |CREATE TABLE $t (
+           |  id INT,
+           |  location STRUCT<name: STRING, geog: GEOGRAPHY(4326)>
+           |) USING parquet
+           |""".stripMargin)
+      val jsonValue = spark.sql(s"DESCRIBE EXTENDED $t AS JSON").head().getString(0)
+      val parsedOutput = parse(jsonValue).extract[DescribeTableJson]
+
+      assert(parsedOutput.columns == Some(List(
+        TableColumn("id", Type("int")),
+        TableColumn("location", Type(
+          name = "struct",
+          fields = Some(List(
+            Field("name", Type("string", collation = Some("UTF8_BINARY"))),
+            Field("geog", Type("geography", srid = Some("4326")))
+          ))
+        ))
+      )))
+    }
+  }
 }
 
 /**
