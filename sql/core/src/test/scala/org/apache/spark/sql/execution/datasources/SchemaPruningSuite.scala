@@ -1470,10 +1470,14 @@ abstract class SchemaPruningSuite
     checkScan(query, "struct<id:int, name:struct<first:string>>")
   }
 
+  private def dynamicSelectorNameType(fields: String): String = {
+    val readFields =
+      if (dataSourceName == "orc") "first:string,middle:string,last:string" else fields
+    s"struct<$readFields>"
+  }
+
   testSchemaPruning("SPARK-42163: GetArrayItem and GetMapItem with non-foldable index") {
-    // Technically, there's no reason that we can't support a non-foldable index, it's just tricky
-    // with the existing pruning code. If we ever do support it, this test can be modified to check
-    // for a narrower scan schema.
+    val nameType = dynamicSelectorNameType("first:string")
     val arrayQuery =
       sql("""
             |SELECT
@@ -1481,7 +1485,7 @@ abstract class SchemaPruningSuite
             |FROM contacts
             |""".stripMargin)
     checkScan(arrayQuery,
-        """struct<friends:array<struct<first:string,middle:string,last:string>>,
+        s"""struct<friends:array<$nameType>,
           |employer:struct<id:int,company:struct<name:string,address:string>>>""".stripMargin)
     checkAnswer(arrayQuery,
       Row(Row("abc", "123 Business Street"), "Susan") ::
@@ -1494,9 +1498,44 @@ abstract class SchemaPruningSuite
             |FROM contacts
             |""".stripMargin)
     checkScan(mapQuery,
-        """struct<relatives:map<string,struct<first:string,middle:string,last:string>>,
+        s"""struct<relatives:map<string,$nameType>,
           |employer:struct<id:int,company:struct<name:string>>>""".stripMargin)
     checkAnswer(mapQuery, Row(0, null) :: Row(1, null) ::
       Row(null, null) :: Row(null, null) :: Nil)
   }
+
+  testSchemaPruning("dynamic selectors retain fields used by the selector") {
+    val nameType = dynamicSelectorNameType("first:string,last:string")
+    Seq(
+      "friends[if(friends[0].first = 'Susan', 0, 1)].last",
+      "element_at(friends, if(friends[0].first = 'Susan', 1, 2)).last").foreach { expression =>
+      val query = sql(s"SELECT $expression FROM contacts")
+      checkScan(query, s"struct<friends:array<$nameType>>")
+      checkAnswer(query, Row("Smith") :: Row(null) :: Row(null) :: Row(null) :: Nil)
+    }
+
+    Seq(
+      "relatives[if(relatives['brother'].first = 'John', 'brother', 'sister')].last",
+      "element_at(relatives, " +
+        "if(relatives['brother'].first = 'John', 'brother', 'sister')).last").foreach { expr =>
+      val query = sql(s"SELECT $expr FROM contacts")
+      checkScan(query, s"struct<relatives:map<string,$nameType>>")
+      checkAnswer(query, Row("Doe") :: Row("Doe") :: Row(null) :: Row(null) :: Nil)
+    }
+  }
+
+  testSchemaPruning("dynamic selectors preserve array lambda dependencies") {
+    val nameType = dynamicSelectorNameType("first:string,last:string")
+    val query = sql("""
+      |SELECT
+      |  filter(friends, x -> x.first = 'Susan')[employer.id].last,
+      |  element_at(transform(friends, x -> x.last), employer.id + 1)
+      |FROM contacts
+      |""".stripMargin)
+    checkScan(query,
+      s"struct<friends:array<$nameType>,employer:struct<id:int>>")
+    checkAnswer(query, Row("Smith", "Smith") :: Row(null, null) ::
+      Row(null, null) :: Row(null, null) :: Nil)
+  }
+
 }

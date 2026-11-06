@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical.SerializeFromObject
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{MetadataBuilder, StructType}
 
 class DatasetOptimizationSuite extends SharedSparkSession {
   import testImplicits._
@@ -129,6 +129,40 @@ class DatasetOptimizationSuite extends SharedSparkSession {
       val df3 = mapDs.select(expr("map_values(_1)._2[0]"))
       testSerializer(df3, Seq(Seq("_2")))
       checkAnswer(df3, Seq(Row(11), Row(22), Row(33)))
+    }
+  }
+
+  test("Nested projections bind to the fields emitted by the serializer") {
+    val ds = spark.range(1).map { _ =>
+      ((Map("k" -> ("map-a", "map-b")), ("other-a", "other-b")), "k")
+    }
+    // Projecting the sibling as well can leave the original serializer in place.
+    val query = ds.selectExpr("_1._1['k']._2", "_1._2._1")
+    checkAnswer(query, Row("map-b", "other-a"))
+
+    val mapValue = ds.selectExpr("_1._1[_2]._2")
+    testSerializer(mapValue, Seq(Seq("_1"), Seq("_2")))
+    checkAnswer(mapValue, Row("map-b"))
+    checkAnswer(ds.selectExpr("_1._1[_2]._2", "_1._2._1"), Row("map-b", "other-a"))
+  }
+
+  test("Nested projections resolve case-insensitive references against the serializer") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val input = Seq((Seq(("unused", "wanted", "second")), 1)).toDF("Items", "Id")
+      val ds = input.map(row => row)(ExpressionEncoder(input.schema))
+      val query = ds.selectExpr("items[0]._2", "ITEMS._2", "iD")
+      checkAnswer(query, Row("wanted", Seq("wanted"), 1))
+      assert(query.queryExecution.optimizedPlan.output.last.name == "iD")
+
+      val metadata = new MetadataBuilder().putString("source", "items").build()
+      val dynamic = ds.select(
+        expr("items[iD - 1]._2").as("First", metadata),
+        expr("element_at(ITEMS, Id)._3").as("Second"),
+        $"iD")
+      checkAnswer(dynamic, Row("wanted", "second", 1))
+      val output = dynamic.queryExecution.optimizedPlan.output
+      assert(output.map(_.name) == Seq("First", "Second", "iD"))
+      assert(output.head.metadata == metadata)
     }
   }
 
