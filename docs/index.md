@@ -81,13 +81,14 @@ Example applications are also provided in R. For example:
 
 ## Running Spark Client Applications Anywhere with Spark Connect
 
-Spark Connect is a new client-server architecture introduced in Spark 3.4 that decouples Spark
-client applications and allows remote connectivity to Spark clusters. The separation between
-client and server allows Spark and its open ecosystem to be leveraged from anywhere, embedded
-in any application. In Spark 3.4, Spark Connect provides DataFrame API coverage for PySpark and
-DataFrame/Dataset API support in Scala.
+Spark Connect is a client-server architecture that decouples Spark client applications from the
+Spark driver and allows remote connectivity to Spark clusters. The separation between client
+and server allows Spark and its open ecosystem to be leveraged from anywhere, embedded in any
+application. Spark Connect covers the DataFrame API in PySpark and the DataFrame/Dataset API
+in Scala, and clients for other languages are developed in separate Apache repositories.
 
-To learn more about Spark Connect and how to use it, see [Spark Connect Overview](spark-connect-overview.html).
+To learn more about Spark Connect, see [Spark Connect Overview](spark-connect-overview.html);
+to run a server and connect to it, see [Setting up Spark Connect](spark-connect-setup.html).
 
 # Launching on a Cluster
 
