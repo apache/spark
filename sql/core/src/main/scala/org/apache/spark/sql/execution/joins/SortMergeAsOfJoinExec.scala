@@ -24,7 +24,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReference
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, GenerateOrdering}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, GenerateOrdering,
+  GeneratePredicate}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.AsOfJoin
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -175,7 +176,8 @@ private[joins] class SortMergeAsOfJoinScanner(
   private val joinedOutput = leftOutput ++ rightOutput
   private val joinedRow = new JoinedRow()
   // Use nullable bound references so outer-join null padding is safe even when
-  // right attributes are NOT NULL in the catalog schema.
+  // right attributes are NOT NULL in the catalog schema. Every output row reuses the
+  // projection's row.
   private val resultProjection = {
     val nullableRefs = joinedOutput.zipWithIndex.map { case (attr, i) =>
       BoundReference(i, attr.dataType, nullable = true)
@@ -183,9 +185,14 @@ private[joins] class SortMergeAsOfJoinScanner(
     UnsafeProjection.create(nullableRefs, joinedOutput)
   }
 
-  private val boundAsOfCond = bindReference(asOfCondition, joinedOutput)
-  private val boundResidualCond =
-    residualCondition.map(bindReference(_, joinedOutput))
+  // A repeated part must not run before its guard: `y <> 0 AND x / y > 1 AND x / y < 10` would
+  // divide by zero when y is 0. So the generated predicates skip subexpression elimination. The
+  // interpreted fallback keeps it, but runs a shared part only when an operand reaches it, so
+  // AND, OR and IF still short-circuit. Both are lazy, so a task that checks no right row
+  // compiles neither condition.
+  private lazy val boundAsOfCond = ShortCircuitPredicate.create(asOfCondition, joinedOutput)
+  private lazy val boundResidualCond =
+    residualCondition.map(ShortCircuitPredicate.create(_, joinedOutput))
 
   private val equiKeyOrdering: Option[BaseOrdering] =
     if (leftKeys.nonEmpty) {
@@ -291,7 +298,7 @@ private[joins] class SortMergeAsOfJoinScanner(
           if (joinType == LeftOuter) {
             numOutputRows += 1
             joinedRow.withLeft(leftRow).withRight(nullRightRow)
-            return resultProjection(joinedRow).copy()
+            return resultProjection(joinedRow)
           }
         } else {
           val bestMatch = if (useCursorScan) {
@@ -304,11 +311,11 @@ private[joins] class SortMergeAsOfJoinScanner(
           if (bestMatch != null) {
             numOutputRows += 1
             joinedRow.withLeft(leftRow).withRight(bestMatch)
-            return resultProjection(joinedRow).copy()
+            return resultProjection(joinedRow)
           } else if (joinType == LeftOuter) {
             numOutputRows += 1
             joinedRow.withLeft(leftRow).withRight(nullRightRow)
-            return resultProjection(joinedRow).copy()
+            return resultProjection(joinedRow)
           }
         }
       }
@@ -407,13 +414,14 @@ private[joins] class SortMergeAsOfJoinScanner(
   }
 
   /** Whether `cond` is TRUE on the current joined row. FALSE and NULL both fail. */
-  private def holds(cond: Expression): Boolean = {
-    val result = cond.eval(joinedRow)
-    result != null && result.asInstanceOf[Boolean]
-  }
+  private def holds(cond: BasePredicate): Boolean = cond.eval(joinedRow)
 
   /** Whether the residual ON condition, if any, holds on the current joined row. */
-  private def residualHolds: Boolean = boundResidualCond.forall(holds)
+  private def residualHolds: Boolean = boundResidualCond match {
+    // A match, not `forall`, so the per-row check makes no closure.
+    case Some(cond) => cond.eval(joinedRow)
+    case None => true
+  }
 
   /**
    * Backward joins keep the last row that passes the as-of and residual conditions.
@@ -694,4 +702,23 @@ private[execution] object SortMergeAsOfJoinScanner {
     case _: YearMonthIntervalType | _: DayTimeIntervalType => true
     case _ => false
   }
+}
+
+/**
+ * Builds a predicate whose AND, OR and IF still skip the parts they do not need. The generated
+ * predicate skips subexpression elimination, which would run a repeated part first. The
+ * interpreted fallback, used when code generation is off or fails, keeps subexpression
+ * elimination, but runs a shared part only when an operand reaches it.
+ */
+private[joins] object ShortCircuitPredicate
+    extends CodeGeneratorWithInterpretedFallback[Expression, BasePredicate] {
+
+  def create(e: Expression, inputSchema: Seq[Attribute]): BasePredicate =
+    createObject(bindReference(e, inputSchema))
+
+  override protected def createCodeGeneratedObject(in: Expression): BasePredicate =
+    GeneratePredicate.generate(in, useSubexprElimination = false)
+
+  override protected def createInterpretedObject(in: Expression): BasePredicate =
+    InterpretedPredicate(in)
 }
