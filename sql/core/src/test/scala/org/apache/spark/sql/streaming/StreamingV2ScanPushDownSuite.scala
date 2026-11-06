@@ -31,7 +31,7 @@ import org.apache.spark.sql.{DataFrame, Encoder, Encoders, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeSet, Cast, EvalMode, Expression, GreaterThan, IsNotNull, Literal, RLike}
 import org.apache.spark.sql.catalyst.optimizer.{ColumnPruning, PruneFilters}
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, Project, WithCTE}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
@@ -812,6 +812,53 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
+  test("read only the columns of a join with a static common table expression") {
+    withSourceTable() {
+      withTempView("s") {
+        spark.readStream.table(tbl).createOrReplaceTempView("s")
+        val df = sql("WITH dims AS (SELECT id AS sid FROM range(2, 4)) " +
+          "SELECT s.data FROM s JOIN dims ON s.id = dims.sid")
+        // The definition of the common table expression stays in the plan optimized when the
+        // query starts, with a placeholder of its plan.
+        assert(df.queryExecution.analyzed.exists(_.isInstanceOf[WithCTE]))
+        assert(requiredColumns(df).values.map(_.map(_.name).toSet).toSeq ===
+          Seq(Set("id", "data")))
+        testStream(df)(
+          ProcessAllAvailable(),
+          assertReadSchema("id", "data"),
+          CheckAnswer(Row("b")))
+      }
+    }
+  }
+
+  test("read the columns of a condition on a subquery, whatever its plan is") {
+    withSourceTable() {
+      withTempView("s") {
+        spark.readStream.table(tbl).createOrReplaceTempView("s")
+        // The plan of the subquery does not fold into the plan optimized when the query starts,
+        // as a micro-batch may replace it with the cache, so the scan reads both columns.
+        val df = sql("SELECT CASE WHEN (SELECT true) THEN data ELSE CAST(extra AS STRING) END " +
+          "AS v FROM s")
+        assert(requiredColumns(df).values.map(_.map(_.name).toSet).toSeq ===
+          Seq(Set("data", "extra")))
+        testStream(df)(
+          ProcessAllAvailable(),
+          assertReadSchema("data", "extra"),
+          CheckAnswer(Row("a"), Row("b")))
+        // The nodes of a subquery that reference the columns of the query stay, so the scan reads
+        // these columns.
+        val correlated = sql("SELECT data FROM s " +
+          "WHERE EXISTS (SELECT 1 FROM range(0, 2) r WHERE r.id + 1 = s.id)")
+        assert(requiredColumns(correlated).values.map(_.map(_.name).toSet).toSeq ===
+          Seq(Set("id", "data")))
+        testStream(correlated)(
+          ProcessAllAvailable(),
+          assertReadSchema("id", "data"),
+          CheckAnswer(Row("a"), Row("b")))
+      }
+    }
+  }
+
   Seq(
     "CAST('today' AS DATE) < DATE'2100-01-01'",
     "CAST('12:00:00' AS TIMESTAMP) < TIMESTAMP'2100-01-01 00:00:00'",
@@ -1251,8 +1298,19 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
           parameters = Map(
             "source" -> "`unknown_column_read_schema`",
             "reason" -> ("struct<_1:bigint,_2:string,_3:int,unknown:int> has the columns " +
-              "unknown, which the relation does not output")))
+              "unknown, which the relation does not output"),
+            "config" -> s"\"${SQLConf.STREAMING_V2_COLUMN_PRUNING_ENABLED.key}\""))
       })
+    // Without the column pruning, the scan node outputs the columns of the relation instead, as
+    // it did before the capability.
+    withPushDownConfsRestored {
+      testStream(df)(
+        StartStream(additionalConfs = pruningEnabled(false)),
+        AddData(input, (1L, "a", 10)),
+        ProcessAllAvailable(),
+        assertScanOutputs(Seq("_1", "_2", "_3")),
+        CheckAnswer(Row(1L, "a", 10)))
+    }
   }
 
   test("read all the columns of a source whose pruned scan has no read schema") {

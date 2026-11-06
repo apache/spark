@@ -539,7 +539,7 @@ case class StreamingDataSourceV2ScanRelation(
     val newAttributes = AttributeMap(output.zip(newOutput))
     copy(
       output = newOutput,
-      scanOutput = scanOutput.map(_.map(a => a.withExprId(newAttributes(a).exprId))),
+      scanOutput = scanOutput.map(_.map(newAttributes)),
       pushedFilters = pushedFilters.map(_.transform {
         case a: AttributeReference => a.withExprId(newAttributes.getOrElse(a, a).exprId)
       }))

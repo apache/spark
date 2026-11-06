@@ -22,13 +22,12 @@ import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.{Logging, LogKeys}
-import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, ResolvedInlineTable}
-import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, AttributeSet, Cast, Expression, ExpressionSet, Generator, PredicateHelper, SubqueryExpression, Unevaluable}
+import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, AttributeSet, Cast, Expression, ExpressionSet, Generator, NamedExpression, OuterReference, PredicateHelper, SubqueryExpression, Unevaluable}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.optimizer.{InferFiltersFromConstraints, InferFiltersFromGenerate, ReplaceExpressions}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, Filter, Join, LateralJoin, LeafNode, LogicalPlan, Project, SetOperation, Statistics, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, CTERelationDef, Filter, Join, LateralJoin, LeafNode, LogicalPlan, Project, SetOperation, Statistics, SubqueryAlias}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, RUNTIME_REPLACEABLE}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -38,8 +37,9 @@ import org.apache.spark.sql.connector.catalog.{SupportsRead, TableCapability}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, PushDownUtils, StreamingDataSourceV2ScanRelation}
+import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.datasources.DataSourceStrategy
+import org.apache.spark.sql.execution.datasources.v2.{PushDownUtils, StreamingDataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetSeqMetadata, OffsetSeqMetadataBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{AnyTimeType, DataType, DatetimeType, StringType, StructType, VariantType}
@@ -170,7 +170,9 @@ private[sql] object StreamingV2ScanPushDown extends Logging with PredicateHelper
     session.withActive {
       SQLConf.withExistingConf(conf) {
         try {
-          val optimized = session.sessionState.optimizer.execute(forStartup(plan))
+          // The plan of a micro-batch is normalized before it is optimized, see `QueryExecution`.
+          val normalized = QueryExecution.normalize(session, plan)
+          val optimized = session.sessionState.optimizer.execute(forStartup(normalized))
           // The planner of a micro-batch gets the values of the expressions that depend on when
           // they are evaluated, which are deterministic.
           val planned = optimized.transformUpWithSubqueries {
@@ -182,7 +184,7 @@ private[sql] object StreamingV2ScanPushDown extends Logging with PredicateHelper
           // Visits the nodes as the planner plans them: the projections and the filters over a
           // relation are planned with its scan, and the other nodes on their own.
           def visit(node: LogicalPlan): Unit = node match {
-            case PhysicalOperation(project, filters, relation: StreamingRelationV2) =>
+            case ScanOfStream(project, filters, relation: StreamingRelationV2) =>
               occurrences += relation -> Reads(
                 AttributeSet((project ++ filters).flatMap(_.references)),
                 Seq(filters.takeWhile(_.deterministic)))
@@ -234,25 +236,24 @@ private[sql] object StreamingV2ScanPushDown extends Logging with PredicateHelper
   /**
    * Returns `plan` for the optimization when the query starts, so that the columns that it reads
    * from its streaming relations do not depend on when it is optimized:
-   *  - The subtrees without a streaming relation, such as the static side of a join, and the
-   *    relations of batch scans in subqueries, become placeholders of their outputs, so that
-   *    nothing of them folds into the plan: a micro-batch applies the cache, which may change
-   *    after the query starts, and their scans are neither built nor planned.
+   *  - The subtrees without a streaming relation, such as the static side of a join or the plan
+   *    of a static common table expression, and the subtrees of the plans of subqueries without
+   *    an outer reference, become placeholders of their outputs, so that nothing of them folds
+   *    into the plan: a micro-batch applies the cache, which may change after the query starts,
+   *    and their scans are neither built nor planned.
    *  - The expressions whose values may depend on when they are evaluated or on the state of the
    *    session, such as the current time or the conversions to dates and timestamps (see
    *    `makesDateOrTimestamp`), become placeholders that are not deterministic for the optimizer,
    *    as the current time of a micro-batch, and keep their children.
    * Visible for tests.
    */
-  private[sql] def forStartup(plan: LogicalPlan): LogicalPlan = plan.transformDown {
-    case node if !node.isStreaming => BatchRelation(node.output)
-  }.transformUpWithSubqueries {
-    case relation: DataSourceV2Relation => BatchRelation(relation.output)
-    case relation: LogicalRelation if !relation.isStreaming => BatchRelation(relation.output)
-    case relation: HiveTableRelation => BatchRelation(relation.output)
-    // The rows of an inline table may have values of the current time, which the optimizer
-    // evaluates.
-    case table: ResolvedInlineTable => BatchRelation(table.output)
+  private[sql] def forStartup(plan: LogicalPlan): LogicalPlan = withOpaqueSubqueries(
+    plan.transformDown {
+      // `WithCTE` keeps the definitions of its common table expressions as they are.
+      case definition: CTERelationDef if !definition.isStreaming =>
+        definition.copy(child = BatchRelation(definition.child.output))
+      case node if !node.isStreaming => BatchRelation(node.output)
+    }).transformUpWithSubqueries {
     case node =>
       // The expressions that ReplaceExpressions replaces with others when the optimization starts
       // are replaced first, as the optimizer does, so that the conversions that they stand for,
@@ -269,6 +270,39 @@ private[sql] object StreamingV2ScanPushDown extends Logging with PredicateHelper
         case e if e.containsPattern(CURRENT_LIKE) => StartupValue(e, e.children)
         case e if makesDateOrTimestamp(e) => StartupValue(e, e.children)
       }
+  }
+
+  /**
+   * Returns `plan` with the subtrees of the plans of its subqueries that have no outer reference
+   * replaced by placeholders of their outputs, also in the subqueries of the others. The others
+   * keep the columns of the plan that they reference, which the plan reads.
+   */
+  private def withOpaqueSubqueries(plan: LogicalPlan): LogicalPlan = plan.transformUp {
+    case node => node.transformExpressions {
+      case subquery: SubqueryExpression =>
+        subquery.withNewPlan(withOpaqueSubqueries(subquery.plan.transformDown {
+          case child if !hasOuterReferences(child) => BatchRelation(child.output)
+        }))
+    }
+  }
+
+  // Whether `plan` references the columns of an outer query, also in its subqueries.
+  private def hasOuterReferences(plan: LogicalPlan): Boolean = plan.exists { node =>
+    node.expressions.exists(_.exists {
+      case _: OuterReference => true
+      case subquery: SubqueryExpression => hasOuterReferences(subquery.plan)
+      case _ => false
+    })
+  }
+
+  /**
+   * Matches the projections and the filters over a relation that the planner plans with the scan
+   * of the relation, as `DataSourceV2Strategy` does for the scans of streaming sources, so that
+   * the columns that a scan reads are those that its micro-batches plan.
+   */
+  private[sql] object ScanOfStream {
+    def unapply(plan: LogicalPlan): Option[(Seq[NamedExpression], Seq[Expression], LogicalPlan)] =
+      PhysicalOperation.unapply(plan)
   }
 
   /**
@@ -328,7 +362,9 @@ private[sql] object StreamingV2ScanPushDown extends Logging with PredicateHelper
    * `SupportsPushDownRequiredColumns`, the scan is built again from a new scan builder: with the
    * column pruning alone if it had filters too, and then with all the columns and no filter, as
    * without these pushdowns. If the read schema of a scan of all the columns of such a table does
-   * not follow the relation, the query fails with STREAMING_SCAN_INVALID_READ_SCHEMA.
+   * not follow the relation, the query fails with STREAMING_SCAN_INVALID_READ_SCHEMA, unless
+   * `conf` disables the column pruning, with which the scan node outputs the columns of the
+   * relation, as it did before the capability.
    *
    * The stream is created once, from the scan that the source reads, outside of the fallback: a
    * stream can start to use the checkpoint of the source, or other resources, before it fails, so
@@ -410,14 +446,22 @@ private[sql] object StreamingV2ScanPushDown extends Logging with PredicateHelper
       if (returnsReadSchema) {
         // The readers of the stream return the columns of the read schema, so a read schema that
         // does not follow the relation fails the query when it starts: the scan node cannot
-        // output the columns of the relation in its place.
+        // output the columns of the relation in its place. Without the column pruning, the scan
+        // node outputs them instead, as it did before the capability.
+        def invalid(reason: String, cause: Throwable): (Scan, Seq[AttributeReference]) = {
+          if (conf.streamingV2ColumnPruningEnabled) {
+            throw QueryExecutionErrors.streamingScanInvalidReadSchemaError(
+              table.name(), reason, cause)
+          }
+          logWarning(log"The read schema of the scan of all the columns of the streaming table " +
+            log"${MDC(LogKeys.STREAMING_TABLE, table)} ${MDC(LogKeys.REASON, reason)}. Its scan " +
+            log"node outputs the columns of the relation, as the column pruning is disabled.")
+          scan -> output
+        }
         Try(readOutput(scan.readSchema(), output, output)) match {
           case Success(Right(columns)) => scan -> columns
-          case Success(Left(reason)) =>
-            throw QueryExecutionErrors.streamingScanInvalidReadSchemaError(table.name(), reason)
-          case Failure(e) =>
-            throw QueryExecutionErrors.streamingScanInvalidReadSchemaError(
-              table.name(), s"could not be read: $e", e)
+          case Success(Left(reason)) => invalid(reason, null)
+          case Failure(e) => invalid(s"could not be read: $e", e)
         }
       } else {
         scan -> output
@@ -593,7 +637,7 @@ private[sql] object StreamingV2ScanPushDown extends Logging with PredicateHelper
    * differ. It is not deterministic for the optimizer, as the current time of a micro-batch is
    * not, so that the optimizer neither folds it nor moves operators around it as it could with a
    * value. It is deterministic once `planned`, as the values that the planner of a micro-batch
-   * gets are.
+   * gets are, unless the expression itself is not, as a nondeterministic UDF.
    */
   private case class StartupValue(
       expression: Expression,
@@ -602,7 +646,8 @@ private[sql] object StreamingV2ScanPushDown extends Logging with PredicateHelper
     extends Expression with Unevaluable {
     override val dataType: DataType = expression.dataType
     override val nullable: Boolean = expression.nullable
-    override lazy val deterministic: Boolean = planned && children.forall(_.deterministic)
+    override lazy val deterministic: Boolean =
+      planned && expression.deterministic && children.forall(_.deterministic)
     override protected def withNewChildrenInternal(
         newChildren: IndexedSeq[Expression]): Expression = copy(children = newChildren)
   }
