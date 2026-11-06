@@ -1801,8 +1801,14 @@ class StructType(DataType):
         """Return the number of fields."""
         return len(self.fields)
 
-    def __getitem__(self, key: Union[str, int]) -> StructField:
-        """Access fields by name or slice."""
+    @overload
+    def __getitem__(self, key: Union[str, int]) -> StructField: ...
+
+    @overload
+    def __getitem__(self, key: slice) -> "StructType": ...
+
+    def __getitem__(self, key: Union[str, int, slice]) -> Union[StructField, "StructType"]:
+        """Access a field by name or index, or a subset of fields by slice."""
         if isinstance(key, str):
             for field in self:
                 if field.name == key:
