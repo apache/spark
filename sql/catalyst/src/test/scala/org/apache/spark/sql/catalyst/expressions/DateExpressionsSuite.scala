@@ -1556,7 +1556,13 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
               (makeTimestampExpr.copy(hour = Literal(25)), "Invalid value for Hour"),
               (makeTimestampExpr.copy(min = Literal(65)), "Invalid value for Min"),
               (makeTimestampExpr.copy(sec = Literal(Decimal(
-                BigDecimal(70.0), 16, 6))), "Invalid value for Second")
+                BigDecimal(70.0), 16, 6))), "Invalid value for Second"),
+              // The unscaled micros exceed Int; narrowing used to wrap them into
+              // a valid second instead of failing the range check.
+              (makeTimestampExpr.copy(sec = Literal(Decimal(
+                BigDecimal("4324.967296"), 16, 6))), "Invalid value for Second"),
+              (makeTimestampExpr.copy(sec = Literal(Decimal(
+                BigDecimal("-2147483648"), 16, 6))), "Invalid value for Second")
             ).foreach { entry =>
               if (ansi) {
                 checkExceptionInExpression[DateTimeException](entry._1, EmptyRow, entry._2)
