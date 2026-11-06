@@ -516,7 +516,7 @@ case class StreamingDataSourceV2ScanRelation(
     val newAttributes = AttributeMap(output.zip(newOutput))
     copy(
       output = newOutput,
-      scanOutput = scanOutput.map(_.map(a => a.withExprId(newAttributes(a).exprId))))
+      scanOutput = scanOutput.map(_.map(newAttributes)))
   }
 
   override def computeStats(): Statistics = scan match {
