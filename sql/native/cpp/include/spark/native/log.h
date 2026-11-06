@@ -50,21 +50,38 @@ struct HostInfo {
 namespace internal {
 
 using HostLog = void (*)(int32_t level, const char* message);
+using HostLogEnabled = bool (*)(int32_t level);
 
 // Copied from the host when Spark initializes the library, so that logging never reads the host
 // structure afterwards. Messages are dropped until then, for example in unit tests.
 inline std::atomic<HostLog> host_log{nullptr};
+inline std::atomic<HostLogEnabled> host_log_enabled{nullptr};
 inline std::atomic<int32_t> max_log_level{static_cast<int32_t>(LogLevel::kInfo)};
+
+/// Sets the most verbose level of the messages that reach Spark to that of the log of Spark, or to
+/// LogLevel::kInfo with a host that does not tell. The level of Spark can change while it runs,
+/// and asking is a call into the JVM, so the SDK asks again only when an operation or a task
+/// starts.
+inline void FollowLogLevel() {
+  HostLogEnabled enabled = host_log_enabled.load(std::memory_order_acquire);
+  int32_t level = static_cast<int32_t>(LogLevel::kInfo);
+  if (enabled != nullptr) {
+    level = 0;
+    for (LogLevel candidate :
+         {LogLevel::kTrace, LogLevel::kDebug, LogLevel::kInfo, LogLevel::kWarn, LogLevel::kError}) {
+      if (enabled(static_cast<int32_t>(candidate))) {
+        level = static_cast<int32_t>(candidate);
+        break;
+      }
+    }
+  }
+  max_log_level.store(level, std::memory_order_relaxed);
+}
 
 }  // namespace internal
 
-/// Passes the messages up to `level`, which is LogLevel::kInfo by default. Call it, for example in
-/// DataSource::Init, to pass more.
-inline void SetMaxLogLevel(LogLevel level) {
-  internal::max_log_level.store(static_cast<int32_t>(level), std::memory_order_relaxed);
-}
-
-/// The most verbose level of the messages that reach Spark.
+/// The most verbose level of the messages that reach Spark: that of the log of Spark, which the SDK
+/// follows, so a library does not set it.
 inline LogLevel MaxLogLevel() {
   return static_cast<LogLevel>(internal::max_log_level.load(std::memory_order_relaxed));
 }

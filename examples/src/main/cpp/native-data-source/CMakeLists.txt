@@ -34,7 +34,7 @@ if(SPARK_NATIVE_BUILD_TESTS)
   # the library like Spark does, without a JVM. It uses dlopen and pthreads, on Linux or macOS.
   if(UNIX)
     add_executable(c_abi_smoke tests/c_abi_smoke.c)
-    target_include_directories(c_abi_smoke PRIVATE "${PROJECT_SOURCE_DIR}/include")
+    target_include_directories(c_abi_smoke PRIVATE "${SPARK_DATASOURCE_HEADER_DIR}")
     set_target_properties(c_abi_smoke PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
     target_compile_options(c_abi_smoke PRIVATE
       $<$<C_COMPILER_ID:GNU,Clang,AppleClang>:-Wall -Wextra -Werror>)

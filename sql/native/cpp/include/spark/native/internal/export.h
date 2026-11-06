@@ -202,9 +202,8 @@ struct SourceTraits {
     if (kMicroBatchRead) capabilities = capabilities | Capabilities::kMicroBatchRead;
     if (kBatchWrite) capabilities = capabilities | Capabilities::kBatchWrite;
     if (kStreamingWrite) capabilities = capabilities | Capabilities::kStreamingWrite;
-    if (kBatchTruncate || kStreamingTruncate) {
-      capabilities = capabilities | Capabilities::kTruncate;
-    }
+    if (kBatchTruncate) capabilities = capabilities | Capabilities::kBatchTruncate;
+    if (kStreamingTruncate) capabilities = capabilities | Capabilities::kStreamingTruncate;
     return capabilities;
   }();
 
@@ -216,12 +215,27 @@ struct SourceTraits {
   using StreamingWriterFactory = typename FactoryOf<StreamingWrite>::type;
 
   /// Keeps the implemented operations of a declaration, so that a source can narrow its
-  /// operations but never add one, and truncation only while a write that supports it remains.
+  /// operations but never add one, and each truncation only with its write.
   static constexpr Capabilities Effective(Capabilities declared) {
     Capabilities capabilities = declared & kCapabilities;
-    bool truncates = (kBatchTruncate && capabilities.Contains(Capabilities::kBatchWrite)) ||
-                     (kStreamingTruncate && capabilities.Contains(Capabilities::kStreamingWrite));
-    return truncates ? capabilities : capabilities.Without(Capabilities::kTruncate);
+    if (!capabilities.Contains(Capabilities::kBatchWrite)) {
+      capabilities = capabilities.Without(Capabilities::kBatchTruncate);
+    }
+    if (!capabilities.Contains(Capabilities::kStreamingWrite)) {
+      capabilities = capabilities.Without(Capabilities::kStreamingTruncate);
+    }
+    return capabilities;
+  }
+
+  /// The native capabilities of a source with these operations. Every stream supports admission
+  /// control: its default read limit is all the available data unless it overrides
+  /// MicroBatchStream::DefaultReadLimit.
+  static constexpr uint64_t Declared(Capabilities capabilities) {
+    uint64_t bits = capabilities.bits();
+    if (capabilities.Contains(Capabilities::kMicroBatchRead)) {
+      bits |= SPARK_DS_ADMISSION_CONTROL;
+    }
+    return bits;
   }
 };
 
@@ -244,11 +258,9 @@ class Exports {
       table.close = &Close;
       if constexpr (Traits::kBatchRead) {
         table.create_reader = &CreateReader;
-        table.push_predicates = &PushPredicates;
         table.push_limit = &PushLimit;
         table.prune_columns = &PruneColumns;
         table.partitions = &Partitions;
-        table.serialize_reader = &SerializeReader;
         table.close_reader = &CloseReader;
       }
       if constexpr (Traits::kMicroBatchRead) {
@@ -256,9 +268,9 @@ class Exports {
         table.initial_offset = &InitialOffset;
         table.latest_offset = &LatestOffset;
         table.stream_partitions = &StreamPartitions;
-        table.serialize_stream_reader = &SerializeStreamReader;
         table.commit_offset = &CommitOffset;
         table.close_stream_reader = &CloseStreamReader;
+        table.default_read_limit = &DefaultReadLimit;
       }
       // Batch scans and micro-batches share the executor reader.
       if constexpr (Traits::kBatchRead || Traits::kMicroBatchRead) {
@@ -267,7 +279,6 @@ class Exports {
       // Batch and streaming writes share all the callbacks of writers.
       if constexpr (Traits::kBatchWrite || Traits::kStreamingWrite) {
         table.create_writer = &CreateWriter;
-        table.serialize_writer = &SerializeWriter;
         table.commit = &Commit;
         table.abort = &Abort;
         table.close_writer = &CloseWriter;
@@ -297,18 +308,29 @@ class Exports {
 
   static const char* LastErrorCallback() noexcept { return LastError(); }
 
+  /// Passes the partitions of a plan, and its state, to the sinks of Spark.
+  static arrow::Status EmitPlan(const EncodedPlan& plan, SparkDsSink add_partition,
+                                SparkDsSink set_state, void* sink) {
+    for (const std::string& partition : plan.partitions) {
+      ARROW_RETURN_NOT_OK(Emit(add_partition, sink, partition));
+    }
+    return Emit(set_state, sink, plan.state);
+  }
+
   // Data source.
 
   static int Create(const SparkDsCreateInfo* info, uint64_t* capabilities, void** source) noexcept {
     return Call([&]() -> arrow::Status {
       ARROW_RETURN_NOT_OK(RequireOutput(capabilities));
       ARROW_RETURN_NOT_OK(RequireOutput(source));
+      // An operation starts on the driver: follow the level of the log of Spark.
+      FollowLogLevel();
       ARROW_ASSIGN_OR_RAISE(CreateInfo create_info, ReadCreateInfo(info));
       ARROW_ASSIGN_OR_RAISE(S created, S::Make(create_info));
       Capabilities declared = created.capabilities();
       auto handle = std::make_unique<Source>(Source{std::move(created), Capabilities::Empty()});
       handle->capabilities = Traits::Effective(declared);
-      *capabilities = handle->capabilities.bits();
+      *capabilities = Traits::Declared(handle->capabilities);
       *source = handle.release();
       return arrow::Status::OK();
     });
@@ -331,7 +353,9 @@ class Exports {
 
   // Batch reader.
 
-  static int CreateReader(void* source, struct ArrowSchema* schema, void** reader) noexcept {
+  static int CreateReader(void* source, struct ArrowSchema* schema, const SparkDsReaderInfo* info,
+                          void** reader) noexcept {
+    (void)info;
     return Call([&]() -> arrow::Status {
       ARROW_RETURN_NOT_OK(RequireOutput(reader));
       ARROW_ASSIGN_OR_RAISE(std::shared_ptr<arrow::Schema> read_schema, ImportSchema(schema));
@@ -341,24 +365,7 @@ class Exports {
         return arrow::Status::Invalid("source does not support batch reads");
       }
       ARROW_ASSIGN_OR_RAISE(auto builder, handle->source.NewScan(ScanInfo(read_schema)));
-      *reader = new Planner(std::move(builder), std::move(read_schema));
-      return arrow::Status::OK();
-    });
-  }
-
-  static int PushPredicates(void* reader, const char* const* predicates, int64_t count,
-                            int32_t* uses) noexcept {
-    return Call([&]() -> arrow::Status {
-      if (count > 0) {
-        ARROW_RETURN_NOT_OK(RequireOutput(uses));
-      }
-      ARROW_ASSIGN_OR_RAISE(Planner * planner, Handle<Planner>(reader));
-      ARROW_ASSIGN_OR_RAISE(std::vector<std::string> values, Strings(predicates, count));
-      ARROW_ASSIGN_OR_RAISE(std::vector<FilterSupport> support,
-                            planner->PushPredicates(ParsePredicates(values)));
-      for (size_t index = 0; index < support.size(); ++index) {
-        uses[index] = PredicateUse(support[index]);
-      }
+      *reader = new Planner(std::move(builder));
       return arrow::Status::OK();
     });
   }
@@ -375,33 +382,21 @@ class Exports {
     });
   }
 
-  static int PruneColumns(void* reader, const char* const* columns, int64_t count,
-                          bool* pruned) noexcept {
+  static int PruneColumns(void* reader, const char* const* columns, int64_t count) noexcept {
     return Call([&]() -> arrow::Status {
-      ARROW_RETURN_NOT_OK(RequireOutput(pruned));
       ARROW_ASSIGN_OR_RAISE(Planner * planner, Handle<Planner>(reader));
       ARROW_ASSIGN_OR_RAISE(std::vector<std::string> names, Strings(columns, count));
-      ARROW_ASSIGN_OR_RAISE(*pruned, planner->PruneColumns(names));
-      return arrow::Status::OK();
+      return planner->PruneColumns(names);
     });
   }
 
-  static int Partitions(void* reader, SparkDsSink add_partition, void* sink) noexcept {
+  static int Partitions(void* reader, const SparkDsPartitionsInfo* info, SparkDsSink add_partition,
+                        SparkDsSink set_state, void* sink) noexcept {
+    (void)info;
     return Call([&]() -> arrow::Status {
       ARROW_ASSIGN_OR_RAISE(Planner * planner, Handle<Planner>(reader));
-      ARROW_ASSIGN_OR_RAISE(std::shared_ptr<const EncodedPlan> plan, planner->Planned());
-      for (const std::string& partition : plan->partitions) {
-        ARROW_RETURN_NOT_OK(Emit(add_partition, sink, partition));
-      }
-      return arrow::Status::OK();
-    });
-  }
-
-  static int SerializeReader(void* reader, SparkDsSink set_state, void* sink) noexcept {
-    return Call([&]() -> arrow::Status {
-      ARROW_ASSIGN_OR_RAISE(Planner * planner, Handle<Planner>(reader));
-      ARROW_ASSIGN_OR_RAISE(std::shared_ptr<const EncodedPlan> plan, planner->Planned());
-      return Emit(set_state, sink, plan->state);
+      ARROW_ASSIGN_OR_RAISE(EncodedPlan plan, planner->Plan());
+      return EmitPlan(plan, add_partition, set_state, sink);
     });
   }
 
@@ -409,23 +404,27 @@ class Exports {
 
   // Stream reader.
 
-  static int CreateStreamReader(void* source, struct ArrowSchema* schema, void** reader) noexcept {
+  static int CreateStreamReader(void* source, struct ArrowSchema* schema,
+                                const SparkDsStreamReaderInfo* info, void** reader) noexcept {
     return Call([&]() -> arrow::Status {
       ARROW_RETURN_NOT_OK(RequireOutput(reader));
+      ARROW_ASSIGN_OR_RAISE(std::string checkpoint_location, ReadCheckpointLocation(info));
       ARROW_ASSIGN_OR_RAISE(std::shared_ptr<arrow::Schema> read_schema, ImportSchema(schema));
       ARROW_RETURN_NOT_OK(ValidateSchema(*read_schema));
       ARROW_ASSIGN_OR_RAISE(Source * handle, Handle<Source>(source));
       if (!handle->capabilities.Contains(Capabilities::kMicroBatchRead)) {
         return arrow::Status::Invalid("source does not support micro-batch streaming reads");
       }
-      ARROW_ASSIGN_OR_RAISE(auto stream,
-                            handle->source.NewMicroBatchStream(MicroBatchStreamInfo(read_schema)));
-      *reader = new Stream(std::move(stream), std::move(read_schema));
+      MicroBatchStreamInfo stream_info(std::move(read_schema), std::move(checkpoint_location));
+      ARROW_ASSIGN_OR_RAISE(auto stream, handle->source.NewMicroBatchStream(stream_info));
+      *reader = new Stream(std::move(stream));
       return arrow::Status::OK();
     });
   }
 
-  static int InitialOffset(void* reader, SparkDsSink set_offset, void* sink) noexcept {
+  static int InitialOffset(void* reader, const SparkDsInitialOffsetInfo* info,
+                           SparkDsSink set_offset, void* sink) noexcept {
+    (void)info;
     return Call([&]() -> arrow::Status {
       ARROW_ASSIGN_OR_RAISE(Stream * stream, Handle<Stream>(reader));
       ARROW_ASSIGN_OR_RAISE(std::string offset, stream->InitialOffset());
@@ -433,40 +432,43 @@ class Exports {
     });
   }
 
-  static int LatestOffset(void* reader, SparkDsSink set_offset, void* sink) noexcept {
+  static int DefaultReadLimit(void* reader, SparkDsReadLimit* limit) noexcept {
     return Call([&]() -> arrow::Status {
       ARROW_ASSIGN_OR_RAISE(Stream * stream, Handle<Stream>(reader));
-      ARROW_ASSIGN_OR_RAISE(std::string offset, stream->LatestOffset());
+      ARROW_ASSIGN_OR_RAISE(ReadLimit value, stream->DefaultReadLimit());
+      return SetReadLimit(limit, value);
+    });
+  }
+
+  static int LatestOffset(void* reader, const SparkDsLatestOffsetInfo* info, SparkDsSink set_offset,
+                          void* sink) noexcept {
+    return Call([&]() -> arrow::Status {
+      ARROW_ASSIGN_OR_RAISE(Stream * stream, Handle<Stream>(reader));
+      ARROW_ASSIGN_OR_RAISE(LatestOffsetInfo<std::string> request, ReadLatestOffsetInfo(info));
+      ARROW_ASSIGN_OR_RAISE(std::string offset, stream->LatestOffset(request));
       return Emit(set_offset, sink, offset);
     });
   }
 
-  static int StreamPartitions(void* reader, const char* start, const char* end,
-                              SparkDsSink add_partition, void* sink) noexcept {
+  static int StreamPartitions(void* reader, const SparkDsStreamPartitionsInfo* info,
+                              SparkDsSink add_partition, SparkDsSink set_state,
+                              void* sink) noexcept {
     return Call([&]() -> arrow::Status {
       ARROW_ASSIGN_OR_RAISE(Stream * stream, Handle<Stream>(reader));
-      ARROW_ASSIGN_OR_RAISE(std::string from, String(start));
-      ARROW_ASSIGN_OR_RAISE(std::string to, String(end));
-      ARROW_ASSIGN_OR_RAISE(std::vector<std::string> partitions, stream->Plan(from, to));
-      for (const std::string& partition : partitions) {
-        ARROW_RETURN_NOT_OK(Emit(add_partition, sink, partition));
-      }
-      return arrow::Status::OK();
+      ARROW_ASSIGN_OR_RAISE(SparkDsStreamPartitionsInfo range,
+                            Input(info, "SparkDsStreamPartitionsInfo"));
+      ARROW_ASSIGN_OR_RAISE(std::string from, String(range.start));
+      ARROW_ASSIGN_OR_RAISE(std::string to, String(range.end));
+      ARROW_ASSIGN_OR_RAISE(EncodedPlan plan, stream->Plan(from, to));
+      return EmitPlan(plan, add_partition, set_state, sink);
     });
   }
 
-  static int SerializeStreamReader(void* reader, SparkDsSink set_state, void* sink) noexcept {
+  static int CommitOffset(void* reader, const SparkDsCommitOffsetInfo* info) noexcept {
     return Call([&]() -> arrow::Status {
       ARROW_ASSIGN_OR_RAISE(Stream * stream, Handle<Stream>(reader));
-      ARROW_ASSIGN_OR_RAISE(std::shared_ptr<const std::string> state, stream->Serialized());
-      return Emit(set_state, sink, *state);
-    });
-  }
-
-  static int CommitOffset(void* reader, const char* end) noexcept {
-    return Call([&]() -> arrow::Status {
-      ARROW_ASSIGN_OR_RAISE(Stream * stream, Handle<Stream>(reader));
-      ARROW_ASSIGN_OR_RAISE(std::string offset, String(end));
+      ARROW_ASSIGN_OR_RAISE(SparkDsCommitOffsetInfo commit, Input(info, "SparkDsCommitOffsetInfo"));
+      ARROW_ASSIGN_OR_RAISE(std::string offset, String(commit.end));
       return stream->CommitOffset(offset);
     });
   }
@@ -475,27 +477,35 @@ class Exports {
 
   // Partition reader.
 
-  static int Read(const SparkDsTaskContext* task, const uint8_t* reader_state,
-                  int64_t reader_state_length, const uint8_t* partition, int64_t partition_length,
+  static int Read(const SparkDsTaskContext* task, const SparkDsReadInfo* info,
                   struct ArrowArrayStream* out) noexcept {
     return Call([&]() -> arrow::Status {
       ARROW_RETURN_NOT_OK(RequireOutput(out));
-      ARROW_ASSIGN_OR_RAISE(std::string_view state_bytes, Bytes(reader_state, reader_state_length));
-      ARROW_ASSIGN_OR_RAISE(std::string_view partition_bytes, Bytes(partition, partition_length));
-      ARROW_ASSIGN_OR_RAISE(State state, DecodeState(state_bytes));
-      if (state.streaming) {
-        if constexpr (Traits::kMicroBatchRead) {
-          return OpenPartition<typename Traits::StreamReaderFactory>(task, state, partition_bytes,
-                                                                     out);
-        } else {
-          return arrow::Status::Invalid("source does not support micro-batch streaming reads");
-        }
-      }
-      if constexpr (Traits::kBatchRead) {
-        return OpenPartition<typename Traits::BatchReaderFactory>(task, state, partition_bytes,
-                                                                  out);
-      } else {
-        return arrow::Status::Invalid("source does not support batch reads");
+      // A task starts on an executor: follow the level of the log of Spark.
+      FollowLogLevel();
+      ARROW_ASSIGN_OR_RAISE(SparkDsReadInfo read, Input(info, "SparkDsReadInfo"));
+      ARROW_ASSIGN_OR_RAISE(std::shared_ptr<arrow::Schema> schema, ImportSchema(read.schema));
+      ARROW_ASSIGN_OR_RAISE(std::string_view state,
+                            Bytes(read.reader_state, read.reader_state_length));
+      ARROW_ASSIGN_OR_RAISE(std::string_view partition,
+                            Bytes(read.partition, read.partition_length));
+      switch (read.kind) {
+        case SPARK_DS_READ_BATCH:
+          if constexpr (Traits::kBatchRead) {
+            return OpenPartition<typename Traits::BatchReaderFactory>(task, std::move(schema),
+                                                                      state, partition, out);
+          } else {
+            return arrow::Status::Invalid("source does not support batch reads");
+          }
+        case SPARK_DS_READ_MICRO_BATCH:
+          if constexpr (Traits::kMicroBatchRead) {
+            return OpenPartition<typename Traits::StreamReaderFactory>(task, std::move(schema),
+                                                                       state, partition, out);
+          } else {
+            return arrow::Status::Invalid("source does not support micro-batch streaming reads");
+          }
+        default:
+          return arrow::Status::Invalid("unsupported kind of read: ", read.kind);
       }
     });
   }
@@ -503,76 +513,87 @@ class Exports {
   // Writer.
 
   static int CreateWriter(void* source, struct ArrowSchema* schema, const SparkDsWriteInfo* info,
-                          void** writer) noexcept {
+                          SparkDsSink set_state, void* sink, void** writer) noexcept {
     return Call([&]() -> arrow::Status {
       ARROW_RETURN_NOT_OK(RequireOutput(writer));
+      if (set_state == nullptr) {
+        return arrow::Status::Invalid("null result sink");
+      }
       ARROW_ASSIGN_OR_RAISE(WriteRequest request, ReadWriteInfo(info));
       ARROW_ASSIGN_OR_RAISE(std::shared_ptr<arrow::Schema> write_schema, ImportSchema(schema));
       ARROW_RETURN_NOT_OK(ValidateSchema(*write_schema));
       ARROW_ASSIGN_OR_RAISE(Source * handle, Handle<Source>(source));
-      Capabilities capabilities = handle->capabilities;
-      bool truncate = request.mode == WriteMode::kTruncate;
-      if (!request.query_id) {
-        if constexpr (Traits::kBatchWrite) {
-          if (!capabilities.Contains(Capabilities::kBatchWrite)) {
-            return arrow::Status::Invalid("source does not support batch writes");
-          }
-          if (truncate &&
-              !(Traits::kBatchTruncate && capabilities.Contains(Capabilities::kTruncate))) {
-            return arrow::Status::Invalid("source does not support truncate");
-          }
-          ARROW_ASSIGN_OR_RAISE(auto write,
-                                handle->source.NewWrite(WriteInfo(write_schema, request.mode)));
-          using Writer = DriverWriter<typename Traits::BatchWrite, /*kStreaming=*/false>;
-          *writer = static_cast<WriterHandle*>(new Writer(std::move(write), write_schema));
-          return arrow::Status::OK();
-        } else {
-          return arrow::Status::Invalid("source does not support batch writes");
-        }
+      ARROW_ASSIGN_OR_RAISE(CreatedWriter created,
+                            NewWriter(*handle, std::move(write_schema), std::move(request)));
+      // The sink is not null, so Spark gets the state of the writer.
+      ARROW_RETURN_NOT_OK(Emit(set_state, sink, created.state));
+      *writer = created.writer.release();
+      return arrow::Status::OK();
+    });
+  }
+
+  /// Creates a batch write, or the write of a micro-batch of the streaming query of the request,
+  /// with the state of its task writers.
+  static arrow::Result<CreatedWriter> NewWriter(Source& handle,
+                                                std::shared_ptr<arrow::Schema> schema,
+                                                WriteRequest request) {
+    Capabilities capabilities = handle.capabilities;
+    bool truncate = request.mode == WriteMode::kTruncate;
+    if (!request.query_id) {
+      if (!capabilities.Contains(Capabilities::kBatchWrite)) {
+        return arrow::Status::Invalid("source does not support batch writes");
       }
-      if constexpr (Traits::kStreamingWrite) {
-        if (!capabilities.Contains(Capabilities::kStreamingWrite)) {
-          return arrow::Status::Invalid("source does not support streaming writes");
-        }
-        if (truncate &&
-            !(Traits::kStreamingTruncate && capabilities.Contains(Capabilities::kTruncate))) {
-          return arrow::Status::Invalid(
-              "source does not support truncate in streaming writes (the output mode complete)");
-        }
-        StreamingWriteInfo streaming_info(write_schema, request.mode, *request.query_id);
-        ARROW_ASSIGN_OR_RAISE(auto write, handle->source.NewStreamingWrite(streaming_info));
-        using Writer = DriverWriter<typename Traits::StreamingWrite, /*kStreaming=*/true>;
-        *writer = static_cast<WriterHandle*>(new Writer(std::move(write), write_schema));
-        return arrow::Status::OK();
+      if (truncate && !capabilities.Contains(Capabilities::kBatchTruncate)) {
+        return arrow::Status::Invalid("source does not support the save mode overwrite");
+      }
+      if constexpr (Traits::kBatchWrite) {
+        ARROW_ASSIGN_OR_RAISE(auto write,
+                              handle.source.NewWrite(WriteInfo(std::move(schema), request.mode)));
+        return DriverWriter<typename Traits::BatchWrite, /*kStreaming=*/false>::Make(
+            std::move(write));
       } else {
-        return arrow::Status::Invalid("source does not support streaming writes");
+        return arrow::Status::Invalid("source does not support batch writes");
       }
+    }
+    if (!capabilities.Contains(Capabilities::kStreamingWrite)) {
+      return arrow::Status::Invalid("source does not support streaming writes");
+    }
+    if (truncate && !capabilities.Contains(Capabilities::kStreamingTruncate)) {
+      return arrow::Status::Invalid("source does not support the output mode complete");
+    }
+    if constexpr (Traits::kStreamingWrite) {
+      StreamingWriteInfo streaming_info(std::move(schema), request.mode, *request.query_id);
+      ARROW_ASSIGN_OR_RAISE(auto write, handle.source.NewStreamingWrite(streaming_info));
+      return DriverWriter<typename Traits::StreamingWrite, /*kStreaming=*/true>::Make(
+          std::move(write));
+    } else {
+      return arrow::Status::Invalid("source does not support streaming writes");
+    }
+  }
+
+  static int Commit(void* writer, const SparkDsFinishWriteInfo* info) noexcept {
+    return Call([&]() -> arrow::Status {
+      ARROW_ASSIGN_OR_RAISE(WriterHandle * handle, Handle<WriterHandle>(writer));
+      ARROW_ASSIGN_OR_RAISE(SparkDsFinishWriteInfo finish, Input(info, "SparkDsFinishWriteInfo"));
+      ARROW_ASSIGN_OR_RAISE(auto messages,
+                            Messages(finish.messages, finish.message_lengths, finish.num_messages));
+      return handle->Commit(finish.epoch_id, messages);
     });
   }
 
-  static int SerializeWriter(void* writer, SparkDsSink set_state, void* sink) noexcept {
+  static int Abort(void* writer, const SparkDsFinishWriteInfo* info) noexcept {
     return Call([&]() -> arrow::Status {
       ARROW_ASSIGN_OR_RAISE(WriterHandle * handle, Handle<WriterHandle>(writer));
-      ARROW_ASSIGN_OR_RAISE(std::shared_ptr<const std::string> state, handle->Serialized());
-      return Emit(set_state, sink, *state);
-    });
-  }
-
-  static int Commit(void* writer, int64_t epoch_id, const uint8_t* const* messages,
-                    const int64_t* message_lengths, int64_t num_messages) noexcept {
-    return Call([&]() -> arrow::Status {
-      ARROW_ASSIGN_OR_RAISE(WriterHandle * handle, Handle<WriterHandle>(writer));
-      ARROW_ASSIGN_OR_RAISE(auto values, Messages(messages, message_lengths, num_messages));
-      return handle->Commit(epoch_id, values);
-    });
-  }
-
-  static int Abort(void* writer, int64_t epoch_id, const uint8_t* const* messages,
-                   const int64_t* message_lengths, int64_t num_messages) noexcept {
-    return Call([&]() -> arrow::Status {
-      ARROW_ASSIGN_OR_RAISE(WriterHandle * handle, Handle<WriterHandle>(writer));
-      ARROW_ASSIGN_OR_RAISE(auto values, Messages(messages, message_lengths, num_messages));
-      return handle->Abort(epoch_id, values);
+      ARROW_ASSIGN_OR_RAISE(SparkDsFinishWriteInfo finish, Input(info, "SparkDsFinishWriteInfo"));
+      // Spark rejected what create_writer returned, before any task ran. The SDK returns a single
+      // state, so this does not happen; the write is destroyed at close, as when its creation
+      // fails.
+      if (finish.rejected != 0) {
+        return arrow::Status::OK();
+      }
+      ARROW_ASSIGN_OR_RAISE(auto messages,
+                            Messages(finish.messages, finish.message_lengths, finish.num_messages));
+      return handle->Abort(finish.epoch_id, messages);
     });
   }
 
@@ -580,55 +601,65 @@ class Exports {
 
   // Data writer.
 
-  static int CreateDataWriter(const SparkDsTaskContext* task, const uint8_t* writer_state,
-                              int64_t writer_state_length, int64_t epoch_id,
+  static int CreateDataWriter(const SparkDsTaskContext* task, const SparkDsDataWriterInfo* info,
                               void** data_writer) noexcept {
     return Call([&]() -> arrow::Status {
       ARROW_RETURN_NOT_OK(RequireOutput(data_writer));
-      ARROW_ASSIGN_OR_RAISE(std::string_view bytes, Bytes(writer_state, writer_state_length));
-      ARROW_ASSIGN_OR_RAISE(State state, DecodeState(bytes));
-      ARROW_RETURN_NOT_OK(CheckEpoch(state.streaming, epoch_id));
+      // A task starts on an executor: follow the level of the log of Spark.
+      FollowLogLevel();
+      ARROW_ASSIGN_OR_RAISE(SparkDsDataWriterInfo writer_info,
+                            Input(info, "SparkDsDataWriterInfo"));
+      ARROW_ASSIGN_OR_RAISE(std::shared_ptr<arrow::Schema> schema,
+                            ImportSchema(writer_info.schema));
+      ARROW_ASSIGN_OR_RAISE(std::string_view state,
+                            Bytes(writer_info.writer_state, writer_info.writer_state_length));
+      // The epoch ID tells them apart: it is -1 for a batch write.
+      int64_t epoch_id = writer_info.epoch_id;
       TaskWriter* writer = nullptr;
-      if (state.streaming) {
+      if (epoch_id == -1) {
+        if constexpr (Traits::kBatchWrite) {
+          ARROW_ASSIGN_OR_RAISE(writer, OpenTaskWriter<typename Traits::BatchWriterFactory>(
+                                            task, std::move(schema), state, std::nullopt));
+        } else {
+          return arrow::Status::Invalid("source does not support batch writes");
+        }
+      } else if (epoch_id >= 0) {
         if constexpr (Traits::kStreamingWrite) {
           ARROW_ASSIGN_OR_RAISE(writer, OpenTaskWriter<typename Traits::StreamingWriterFactory>(
-                                            task, state, epoch_id));
+                                            task, std::move(schema), state, epoch_id));
         } else {
           return arrow::Status::Invalid("source does not support streaming writes");
         }
       } else {
-        if constexpr (Traits::kBatchWrite) {
-          ARROW_ASSIGN_OR_RAISE(writer, OpenTaskWriter<typename Traits::BatchWriterFactory>(
-                                            task, state, std::nullopt));
-        } else {
-          return arrow::Status::Invalid("source does not support batch writes");
-        }
+        return arrow::Status::Invalid("invalid epoch ID ", epoch_id);
       }
       *data_writer = writer;
       return arrow::Status::OK();
     });
   }
 
-  static int Write(void* data_writer, struct ArrowArray* array,
-                   struct ArrowSchema* schema) noexcept {
+  static int Write(void* data_writer, struct ArrowArray* array) noexcept {
     return Call([&]() -> arrow::Status {
       ARROW_ASSIGN_OR_RAISE(TaskWriter * writer, Handle<TaskWriter>(data_writer));
-      return writer->Write(array, schema);
+      return writer->Write(array);
     });
   }
 
-  static int CommitDataWriter(void* data_writer, SparkDsSink set_message, void* sink) noexcept {
+  static int CommitDataWriter(void* data_writer, const SparkDsFinishDataWriterInfo* info,
+                              SparkDsSink set_message, void* sink) noexcept {
+    (void)info;
     return Call([&]() -> arrow::Status {
       if (set_message == nullptr) {
         return arrow::Status::Invalid("null result sink");
       }
       ARROW_ASSIGN_OR_RAISE(TaskWriter * writer, Handle<TaskWriter>(data_writer));
-      ARROW_ASSIGN_OR_RAISE(std::shared_ptr<const std::string> message, writer->Commit());
-      return Emit(set_message, sink, *message);
+      ARROW_ASSIGN_OR_RAISE(std::string message, writer->Commit());
+      return Emit(set_message, sink, message);
     });
   }
 
-  static int AbortDataWriter(void* data_writer) noexcept {
+  static int AbortDataWriter(void* data_writer, const SparkDsFinishDataWriterInfo* info) noexcept {
+    (void)info;
     return Call([&]() -> arrow::Status {
       ARROW_ASSIGN_OR_RAISE(TaskWriter * writer, Handle<TaskWriter>(data_writer));
       return writer->Abort();
@@ -656,7 +687,10 @@ int Initialize(const SparkDsHost* host, const SparkDsLibrary** library) noexcept
                                     SPARK_DS_ABI_VERSION);
     }
     auto log = FieldOf<HostLog>(host, size, offsetof(SparkDsHost, log));
+    auto log_enabled = FieldOf<HostLogEnabled>(host, size, offsetof(SparkDsHost, is_log_enabled));
+    host_log_enabled.store(log_enabled.value_or(nullptr), std::memory_order_release);
     host_log.store(log.value_or(nullptr), std::memory_order_release);
+    FollowLogLevel();
     HostInfo info;
     info.abi_version = *version;
     auto spark_version = FieldOf<const char*>(host, size, offsetof(SparkDsHost, spark_version));

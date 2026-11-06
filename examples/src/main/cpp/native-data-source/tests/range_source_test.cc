@@ -27,9 +27,10 @@ using cpp_sdk_range::RangePartition;
 using cpp_sdk_range::RangeReaderFactory;
 using cpp_sdk_range::RangeScan;
 using cpp_sdk_range::RangeSource;
-using spark::native::FilterSupport;
+using cpp_sdk_range::RangeStream;
+using spark::native::LatestOffsetInfo;
 using spark::native::LimitSupport;
-using spark::native::Predicate;
+using spark::native::ReadLimit;
 
 namespace {
 
@@ -54,18 +55,16 @@ RangeScan Scan(const RangeSource& source) {
   return scan;
 }
 
-Predicate Comparison(const std::string& name, int64_t value, bool reversed = false) {
-  std::vector<Predicate> children = {Predicate::Column({"id"}),
-                                     Predicate::Literal("bigint", value)};
-  if (reversed) {
-    std::swap(children[0], children[1]);
-  }
-  return Predicate::Function(name, std::move(children));
+RangeStream Stream(const RangeSource& source) {
+  ASSIGN_OR_FAIL(std::shared_ptr<arrow::Schema> schema, source.InferSchema());
+  ASSIGN_OR_FAIL(RangeStream stream, source.NewMicroBatchStream(
+                                         sn::MicroBatchStreamInfo(schema, "file:/tmp/checkpoint")));
+  return stream;
 }
 
 using Batches = std::vector<std::shared_ptr<arrow::RecordBatch>>;
 
-/// Reads every partition with the schema that the SDK negotiated for `columns`.
+/// Reads every partition with `columns` as the schema to read, as Spark passes it.
 Batches Read(const sn::ScanPlan<RangeReaderFactory>& plan,
              const std::vector<std::string>& columns) {
   ASSIGN_OR_FAIL(std::shared_ptr<arrow::Schema> schema, OutputSchema(columns));
@@ -111,20 +110,16 @@ sn::ScanPlan<RangeReaderFactory> Plan(RangeScan& scan) {
 
 }  // namespace
 
-TEST(FiltersBeforeTheGlobalLimitAndPreservesTheProjectedOrder) {
+TEST(AppliesAGlobalLimitAndReadsTheColumnsInTheirOrder) {
   RangeSource source =
       Source({{"start", "10"}, {"end", "25"}, {"numpartitions", "3"}, {"batchsize", "2"}});
   RangeScan scan = Scan(source);
-  ASSIGN_OR_FAIL(auto support, scan.PushFilters({Comparison(">=", 13), Comparison("<", 22)}));
-  CHECK(support == std::vector<FilterSupport>(2, FilterSupport::kExact));
   ASSIGN_OR_FAIL(LimitSupport limit, scan.PushLimit(5));
   CHECK(limit == LimitSupport::kGlobal);
-  ASSIGN_OR_FAIL(bool pruned, scan.PruneColumns({"label", "id"}));
-  CHECK(pruned);
   sn::ScanPlan<RangeReaderFactory> plan = Plan(scan);
   CHECK_EQ(plan.partitions.size(), size_t{3});
   Batches batches = Read(plan, {"label", "id"});
-  CHECK(Ids(batches) == Sequence(13, 18));
+  CHECK(Ids(batches) == Sequence(10, 15));
   for (const auto& batch : batches) {
     CHECK(batch->num_rows() <= 2);
     CHECK_EQ(batch->schema()->field(0)->name(), std::string("label"));
@@ -136,66 +131,18 @@ TEST(FiltersBeforeTheGlobalLimitAndPreservesTheProjectedOrder) {
   }
 }
 
-TEST(ComparisonsHandleReversedOperandsAndInt64Boundaries) {
-  for (const auto& [start, end] :
-       std::vector<std::pair<int64_t, int64_t>>{{-2, 3}, {kMin, kMin + 3}, {kMax - 3, kMax}}) {
-    RangeSource source = Source({{"start", std::to_string(start)}, {"end", std::to_string(end)}});
-    for (int64_t literal : {kMin, int64_t{-1}, int64_t{0}, int64_t{1}, kMax}) {
-      for (const std::string op : {"=", "<=>", ">", ">=", "<", "<="}) {
-        for (bool reversed : {false, true}) {
-          RangeScan scan = Scan(source);
-          ASSIGN_OR_FAIL(auto support, scan.PushFilters({Comparison(op, literal, reversed)}));
-          CHECK(support == std::vector<FilterSupport>({FilterSupport::kExact}));
-          std::vector<int64_t> expected;
-          for (int64_t id : Sequence(start, end)) {
-            int64_t left = reversed ? literal : id;
-            int64_t right = reversed ? id : literal;
-            bool matches = op == ">"    ? left > right
-                           : op == ">=" ? left >= right
-                           : op == "<"  ? left < right
-                           : op == "<=" ? left <= right
-                                        : left == right;
-            if (matches) {
-              expected.push_back(id);
-            }
-          }
-          CHECK(Ids(Read(Plan(scan), kAll)) == expected);
-        }
-      }
-    }
+TEST(LimitsNearTheEndOfTheInt64RangeDoNotOverflow) {
+  RangeSource source = Source({{"start", std::to_string(kMax - 3)}, {"end", std::to_string(kMax)}});
+  for (const auto& [limit, expected] : std::vector<std::pair<int64_t, size_t>>{{2, 2}, {kMax, 3}}) {
+    RangeScan scan = Scan(source);
+    CHECK_OK(scan.PushLimit(limit));
+    CHECK_EQ(Ids(Read(Plan(scan), kAll)).size(), expected);
   }
-}
-
-TEST(UnsupportedFiltersRemainResidualWithoutMutatingTheScan) {
-  RangeSource source = Source({{"end", "10"}});
-  RangeScan scan = Scan(source);
-  Predicate unsupported_and = Predicate::Function("AND", {Comparison(">", 5), Predicate()});
-  ASSIGN_OR_FAIL(Predicate null, Predicate::Parse(R"({"type":"function","name":"<=>","children":[
-      {"type":"column","name":["id"]},{"type":"literal","dataType":"bigint","value":null}]})"));
-  ASSIGN_OR_FAIL(Predicate floating, Predicate::Parse(R"({"type":"function","name":"=","children":[
-      {"type":"column","name":["id"]},{"type":"literal","dataType":"double","value":1.5}]})"));
-  ASSIGN_OR_FAIL(auto support, scan.PushFilters({unsupported_and, null, floating,
-                                                 Comparison("FUTURE_COMPARISON", 0)}));
-  CHECK(support == std::vector<FilterSupport>(4, FilterSupport::kUnsupported));
-  CHECK(Ids(Read(Plan(scan), kAll)) == Sequence(0, 10));
-}
-
-TEST(ConjunctionsAndContradictoryPredicatesFormExactIntersections) {
-  RangeSource source = Source({{"end", "10"}});
-  RangeScan first = Scan(source);
-  Predicate conjunction = Predicate::Function("AND", {Comparison(">=", 3), Comparison("<=", 6)});
-  ASSIGN_OR_FAIL(auto support, first.PushFilters({conjunction}));
-  CHECK(support == std::vector<FilterSupport>({FilterSupport::kExact}));
-  CHECK(Ids(Read(Plan(first), kAll)) == std::vector<int64_t>({3, 4, 5, 6}));
-  RangeScan empty = Scan(source);
-  CHECK_OK(empty.PushFilters({Comparison(">", 5), Comparison("<", 3)}));
-  CHECK(Plan(empty).partitions.empty());
 }
 
 TEST(SerializedPlansPreserveZeroColumnRowCountsAndBatchSizes) {
   RangeSource source = Source({{"end", "7"}, {"numpartitions", "1"}, {"batchsize", "3"}});
   RangeScan scan = Scan(source);
-  CHECK_OK(scan.PruneColumns({}));
   sn::ScanPlan<RangeReaderFactory> plan = Plan(scan);
   auto factory =
       nlohmann::json::parse(nlohmann::json(plan.factory).dump()).get<RangeReaderFactory>();
@@ -204,6 +151,7 @@ TEST(SerializedPlansPreserveZeroColumnRowCountsAndBatchSizes) {
     partitions.push_back(
         nlohmann::json::parse(nlohmann::json(partition).dump()).get<RangePartition>());
   }
+  // SELECT count(*) reads no columns.
   Batches batches = Read(sn::ScanPlan<RangeReaderFactory>(factory, partitions), {});
   std::vector<int64_t> rows;
   for (const auto& batch : batches) {
@@ -213,14 +161,13 @@ TEST(SerializedPlansPreserveZeroColumnRowCountsAndBatchSizes) {
   CHECK(rows == std::vector<int64_t>({3, 3, 1}));
 }
 
-TEST(ZeroLimitEmptyRangeAndRepeatedLimitsDoNotAddRows) {
+TEST(ZeroLimitAndEmptyRangeDoNotAddRows) {
   RangeSource source = Source({{"end", "10"}, {"numpartitions", "20"}});
   RangeScan zero = Scan(source);
   CHECK_OK(zero.PushLimit(0));
   CHECK(Plan(zero).partitions.empty());
   RangeScan limited = Scan(source);
   CHECK_OK(limited.PushLimit(2));
-  CHECK_OK(limited.PushLimit(5));
   sn::ScanPlan<RangeReaderFactory> plan = Plan(limited);
   CHECK_EQ(plan.partitions.size(), size_t{2});
   CHECK(Ids(Read(plan, kAll)) == std::vector<int64_t>({0, 1}));
@@ -233,6 +180,7 @@ TEST(RejectsInvalidOptionsAndIncompatibleUserSchemas) {
   for (const auto& option : Options{{"batchsize", "0"},
                                     {"batchsize", "-1"},
                                     {"numpartitions", "0"},
+                                    {"maxrowspertrigger", "0"},
                                     {"end", "-1"},
                                     {"start", "not-an-integer"},
                                     {"unknown", "1"}}) {
@@ -241,19 +189,19 @@ TEST(RejectsInvalidOptionsAndIncompatibleUserSchemas) {
   RangeSource source = Source({});
   auto invalid = arrow::schema({arrow::field("id", arrow::int32(), false)});
   CHECK(!source.NewScan(sn::ScanInfo(invalid)).ok());
-  ASSIGN_OR_FAIL(auto labels, OutputSchema({"label"}));
-  ASSIGN_OR_FAIL(RangeScan scan, source.NewScan(sn::ScanInfo(labels)));
-  CHECK(!scan.PruneColumns({"id"}).ok());
+  CHECK(
+      !source.NewMicroBatchStream(sn::MicroBatchStreamInfo(invalid, "file:/tmp/checkpoint")).ok());
   CHECK(!OutputSchema({"id", "id"}).ok());
 }
 
 TEST(AStreamPlansMicroBatchesBetweenJsonOffsets) {
   RangeSource source =
       Source({{"start", "10"}, {"end", "25"}, {"numpartitions", "2"}, {"batchsize", "4"}});
-  ASSIGN_OR_FAIL(auto schema, source.InferSchema());
-  ASSIGN_OR_FAIL(auto stream, source.NewMicroBatchStream(sn::MicroBatchStreamInfo(schema)));
+  RangeStream stream = Stream(source);
+  ASSIGN_OR_FAIL(ReadLimit limit, stream.DefaultReadLimit());
+  CHECK(limit == ReadLimit::AllAvailable());
   ASSIGN_OR_FAIL(RangeOffset initial, stream.InitialOffset());
-  ASSIGN_OR_FAIL(RangeOffset latest, stream.LatestOffset());
+  ASSIGN_OR_FAIL(RangeOffset latest, stream.LatestOffset(LatestOffsetInfo<RangeOffset>(initial)));
   CHECK_EQ(nlohmann::json(initial).dump(), std::string(R"({"next":10})"));
   CHECK_EQ(nlohmann::json(latest).dump(), std::string(R"({"next":25})"));
   // As if an earlier query had planned a micro-batch up to an offset of its checkpoint.
@@ -267,8 +215,38 @@ TEST(AStreamPlansMicroBatchesBetweenJsonOffsets) {
   CHECK(none.partitions.empty());
   CHECK(!stream.Plan(initial, RangeOffset{30}).ok());
   CHECK(!stream.Plan(latest, initial).ok());
-  auto invalid = arrow::schema({arrow::field("id", arrow::int32(), false)});
-  CHECK(!source.NewMicroBatchStream(sn::MicroBatchStreamInfo(invalid)).ok());
+}
+
+TEST(AStreamLimitsItsMicroBatchesToMaxRowsPerTrigger) {
+  RangeSource source = Source({{"start", "10"}, {"end", "25"}, {"maxrowspertrigger", "4"}});
+  RangeStream stream = Stream(source);
+  ASSIGN_OR_FAIL(ReadLimit limit, stream.DefaultReadLimit());
+  CHECK(limit == ReadLimit::MaxRows(4));
+  auto request = [](int64_t start, ReadLimit limit, std::optional<int64_t> run_end) {
+    LatestOffsetInfo<RangeOffset> info(RangeOffset{start});
+    info.limit = limit;
+    if (run_end) {
+      info.run_end = RangeOffset{*run_end};
+    }
+    return info;
+  };
+  std::vector<int64_t> ends;
+  for (int64_t start = 10;;) {
+    ASSIGN_OR_FAIL(RangeOffset end, stream.LatestOffset(request(start, limit, std::nullopt)));
+    if (end.next == start) {
+      break;
+    }
+    ends.push_back(end.next);
+    start = end.next;
+  }
+  CHECK(ends == std::vector<int64_t>({14, 18, 22, 25}));
+  // A run of Trigger.AvailableNow does not read beyond its end.
+  ASSIGN_OR_FAIL(RangeOffset within_run, stream.LatestOffset(request(18, limit, 20)));
+  CHECK_EQ(within_run.next, int64_t{20});
+  // Spark asks without a limit, for the progress of the query or with Trigger.Once.
+  ASSIGN_OR_FAIL(RangeOffset all,
+                 stream.LatestOffset(request(10, ReadLimit::AllAvailable(), std::nullopt)));
+  CHECK_EQ(all.next, int64_t{25});
 }
 
 TEST(OpensAHugePartitionLazilyWithoutMaterializingIt) {

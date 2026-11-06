@@ -38,10 +38,12 @@ class Capabilities {
   static const Capabilities kMicroBatchRead;
   static const Capabilities kBatchWrite;
   static const Capabilities kStreamingWrite;
-  /// Writes that replace the existing data: batch writes with the save mode "overwrite", and
-  /// micro-batches with the output mode "complete". Requires kBatchWrite or kStreamingWrite: the
-  /// SDK removes it from a set without them.
-  static const Capabilities kTruncate;
+  /// Batch writes with the save mode "overwrite", which replace the existing data. Requires
+  /// kBatchWrite: the SDK does not declare it without it.
+  static const Capabilities kBatchTruncate;
+  /// Micro-batches with the output mode "complete", which replace the output of the previous ones.
+  /// Requires kStreamingWrite: the SDK does not declare it without it.
+  static const Capabilities kStreamingTruncate;
 
   /// No operations. A source without capabilities still supports schema discovery.
   static constexpr Capabilities Empty() { return Capabilities(0); }
@@ -50,26 +52,27 @@ class Capabilities {
   /// keeps only the operations that the source implements.
   static constexpr Capabilities All() {
     return Capabilities(SPARK_DS_BATCH_READ | SPARK_DS_MICRO_BATCH_READ | SPARK_DS_BATCH_WRITE |
-                        SPARK_DS_STREAMING_WRITE | SPARK_DS_TRUNCATE);
+                        SPARK_DS_STREAMING_WRITE | SPARK_DS_BATCH_TRUNCATE |
+                        SPARK_DS_STREAMING_TRUNCATE);
   }
 
   /// Whether this set contains every operation of `other`.
   constexpr bool Contains(Capabilities other) const { return (bits_ & other.bits_) == other.bits_; }
 
-  /// Removes the operations of `other`, and also kTruncate when no write remains.
+  /// Removes the operations of `other`.
   constexpr Capabilities Without(Capabilities other) const {
-    return FromBits(bits_ & ~other.bits_);
+    return Capabilities(bits_ & ~other.bits_);
   }
 
   /// The operations of both sets, as in `Capabilities::kBatchWrite |
   /// Capabilities::kStreamingWrite`.
   constexpr Capabilities operator|(Capabilities other) const {
-    return FromBits(bits_ | other.bits_);
+    return Capabilities(bits_ | other.bits_);
   }
 
   /// The operations in both sets.
   constexpr Capabilities operator&(Capabilities other) const {
-    return FromBits(bits_ & other.bits_);
+    return Capabilities(bits_ & other.bits_);
   }
 
   constexpr bool operator==(const Capabilities& other) const = default;
@@ -83,9 +86,12 @@ class Capabilities {
       uint64_t bit;
       const char* name;
     } kNames[] = {
-        {SPARK_DS_BATCH_READ, "BATCH_READ"},   {SPARK_DS_MICRO_BATCH_READ, "MICRO_BATCH_READ"},
-        {SPARK_DS_BATCH_WRITE, "BATCH_WRITE"}, {SPARK_DS_STREAMING_WRITE, "STREAMING_WRITE"},
-        {SPARK_DS_TRUNCATE, "TRUNCATE"},
+        {SPARK_DS_BATCH_READ, "BATCH_READ"},
+        {SPARK_DS_MICRO_BATCH_READ, "MICRO_BATCH_READ"},
+        {SPARK_DS_BATCH_WRITE, "BATCH_WRITE"},
+        {SPARK_DS_STREAMING_WRITE, "STREAMING_WRITE"},
+        {SPARK_DS_BATCH_TRUNCATE, "BATCH_TRUNCATE"},
+        {SPARK_DS_STREAMING_TRUNCATE, "STREAMING_TRUNCATE"},
     };
     std::string names;
     for (const auto& entry : kNames) {
@@ -100,12 +106,6 @@ class Capabilities {
  private:
   constexpr explicit Capabilities(uint64_t bits) : bits_(bits) {}
 
-  // Truncation requires a write, so a set never keeps it without one.
-  static constexpr Capabilities FromBits(uint64_t bits) {
-    constexpr uint64_t kWrites = SPARK_DS_BATCH_WRITE | SPARK_DS_STREAMING_WRITE;
-    return Capabilities((bits & kWrites) == 0 ? bits & ~uint64_t{SPARK_DS_TRUNCATE} : bits);
-  }
-
   uint64_t bits_;
 };
 
@@ -113,6 +113,7 @@ inline constexpr Capabilities Capabilities::kBatchRead{SPARK_DS_BATCH_READ};
 inline constexpr Capabilities Capabilities::kMicroBatchRead{SPARK_DS_MICRO_BATCH_READ};
 inline constexpr Capabilities Capabilities::kBatchWrite{SPARK_DS_BATCH_WRITE};
 inline constexpr Capabilities Capabilities::kStreamingWrite{SPARK_DS_STREAMING_WRITE};
-inline constexpr Capabilities Capabilities::kTruncate{SPARK_DS_TRUNCATE};
+inline constexpr Capabilities Capabilities::kBatchTruncate{SPARK_DS_BATCH_TRUNCATE};
+inline constexpr Capabilities Capabilities::kStreamingTruncate{SPARK_DS_STREAMING_TRUNCATE};
 
 }  // namespace spark::native

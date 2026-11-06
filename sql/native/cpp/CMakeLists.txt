@@ -13,8 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# The experimental C++ SDK for the native data source C ABI proposed in Spark PR #59424, with its
-# examples. It is not part of the Maven or SBT build of Spark.
+# The experimental C++ SDK for native data sources, over version 1 of the C ABI of Spark,
+# spark_datasource.h, with its examples. It is not part of the Maven or SBT build of Spark.
 
 cmake_minimum_required(VERSION 3.16)
 project(spark_native_cpp_sdk VERSION 0.1.0 LANGUAGES C CXX)
@@ -25,12 +25,18 @@ option(SPARK_NATIVE_BUILD_TESTS "Build the tests of the SDK and of the examples"
 find_package(Arrow REQUIRED)
 find_package(nlohmann_json 3.10 REQUIRED)
 
+# The C header of the ABI, spark_datasource.h, in the source tree of Spark. A library built outside
+# of it can copy the header, or use the copy in the include directory of a Spark distribution.
+set(SPARK_DATASOURCE_HEADER_DIR
+  "${CMAKE_CURRENT_SOURCE_DIR}/../../core/src/main/resources/org/apache/spark/sql/datasource"
+  CACHE PATH "The directory of spark_datasource.h")
+
 # The SDK is header-only: each data source library compiles it, so that no C++ type crosses the
 # boundary of the library.
 add_library(spark_native_source INTERFACE)
 add_library(spark::native_source ALIAS spark_native_source)
 target_include_directories(spark_native_source INTERFACE
-  "${CMAKE_CURRENT_SOURCE_DIR}/include")
+  "${CMAKE_CURRENT_SOURCE_DIR}/include" "${SPARK_DATASOURCE_HEADER_DIR}")
 target_compile_features(spark_native_source INTERFACE cxx_std_20)
 target_link_libraries(spark_native_source INTERFACE
   Arrow::arrow_shared nlohmann_json::nlohmann_json)

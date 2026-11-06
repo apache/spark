@@ -27,11 +27,10 @@
 
 namespace sn = spark::native;
 using spark::native::Capabilities;
-using spark::native::FilterSupport;
 using spark::native::LimitSupport;
-using spark::native::testing::Collect;
 using spark::native::testing::CreateArguments;
 using spark::native::testing::LastError;
+using spark::native::testing::Plan;
 
 namespace {
 
@@ -57,29 +56,31 @@ arrow::Status Fail(const std::string& failure, const std::string& message) {
   return arrow::Status::OK();
 }
 
-/// Reads one row, `value + partition`, ignoring the negotiated schema of its context, to test that
-/// the SDK checks it.
+std::shared_ptr<arrow::Schema> IdSchema() {
+  return arrow::schema({arrow::field("id", arrow::int64(), false)});
+}
+
+/// Reads one row, `value + partition`, ignoring the schema to read of its context, to test that the
+/// SDK checks it.
 struct Factory : sn::PartitionReaderFactory<int64_t> {
   int64_t value = 0;
 
   arrow::Result<std::shared_ptr<arrow::RecordBatchReader>> Open(
       const int64_t& partition, const sn::ReaderContext&) const override {
-    auto schema = arrow::schema({arrow::field("id", arrow::int64(), false)});
     arrow::Int64Builder builder;
     ARROW_RETURN_NOT_OK(builder.Append(value + partition));
     ARROW_ASSIGN_OR_RAISE(std::shared_ptr<arrow::Array> ids, builder.Finish());
-    return arrow::RecordBatchReader::Make({arrow::RecordBatch::Make(schema, 1, {ids})}, schema);
+    return arrow::RecordBatchReader::Make({arrow::RecordBatch::Make(IdSchema(), 1, {ids})},
+                                          IdSchema());
   }
 };
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Factory, value)
 
 class Builder : public sn::ScanBuilder<Factory> {
  public:
-  Builder(FilterSupport filters, LimitSupport limit, std::string failure)
-      : filters_(filters), limit_(limit), failure_(std::move(failure)) {}
+  Builder(LimitSupport limit, std::string failure) : limit_(limit), failure_(std::move(failure)) {}
   Builder(Builder&& other) noexcept
       : ScanBuilder(std::move(other)),
-        filters_(other.filters_),
         limit_(other.limit_),
         failure_(std::move(other.failure_)),
         value_(other.value_),
@@ -88,15 +89,6 @@ class Builder : public sn::ScanBuilder<Factory> {
     if (live_) {
       ++builders_destroyed;
     }
-  }
-
-  arrow::Result<std::vector<FilterSupport>> PushFilters(
-      const std::vector<sn::Predicate>& filters) override {
-    ARROW_RETURN_NOT_OK(Fail(failure_, "negotiation failed"));
-    if (filters_ == FilterSupport::kExact && failure_ == "wrong_count") {
-      return std::vector<FilterSupport>();
-    }
-    return std::vector<FilterSupport>(filters.size(), filters_);
   }
 
   arrow::Result<LimitSupport> PushLimit(int64_t limit) override {
@@ -115,7 +107,6 @@ class Builder : public sn::ScanBuilder<Factory> {
   }
 
  private:
-  FilterSupport filters_;
   LimitSupport limit_;
   std::string failure_;
   int64_t value_ = 42;
@@ -139,9 +130,7 @@ class Source : public sn::DataSource {
 
   static arrow::Result<Source> Make(const sn::CreateInfo& info) { return Source(info.options); }
 
-  arrow::Result<std::shared_ptr<arrow::Schema>> InferSchema() const override {
-    return arrow::schema(arrow::FieldVector{});
-  }
+  arrow::Result<std::shared_ptr<arrow::Schema>> InferSchema() const override { return IdSchema(); }
 
   Capabilities capabilities() const override {
     std::string mode = Option("capabilities");
@@ -151,13 +140,9 @@ class Source : public sn::DataSource {
   }
 
   arrow::Result<Builder> NewScan(const sn::ScanInfo&) const {
-    std::string filters = Option("filters");
-    FilterSupport support = filters == "exact"     ? FilterSupport::kExact
-                            : filters == "pruning" ? FilterSupport::kPruningOnly
-                                                   : FilterSupport::kUnsupported;
     LimitSupport limit =
         Option("limit") == "global" ? LimitSupport::kGlobal : LimitSupport::kUnsupported;
-    return Builder(support, limit, Option("failure"));
+    return Builder(limit, Option("failure"));
   }
 
  private:
@@ -188,39 +173,20 @@ void* CreateSource(std::vector<std::pair<std::string, std::string>> options,
   return source;
 }
 
-/// Creates a reader of `schema`, or of the schema of the source.
-void* CreateReader(void* source, std::shared_ptr<arrow::Schema> schema = nullptr) {
+/// Creates a reader of the schema of the source.
+void* CreateReader(void* source) {
   const SparkDsLibrary& library = Library();
   struct ArrowSchema exported{};
-  if (schema == nullptr) {
-    CHECK_SUCCESS(library, library.schema(source, &exported));
-  } else {
-    CHECK_OK(arrow::ExportSchema(*schema, &exported));
-  }
+  CHECK_SUCCESS(library, library.schema(source, &exported));
+  SparkDsReaderInfo info{sizeof(SparkDsReaderInfo)};
   void* reader = nullptr;
-  int code = library.create_reader(source, &exported, &reader);
+  int code = library.create_reader(source, &exported, &info, &reader);
   if (exported.release != nullptr) {
     exported.release(&exported);
   }
   CHECK_SUCCESS(library, code);
   CHECK(reader != nullptr);
   return reader;
-}
-
-/// Pushes predicates, and returns how the reader uses them, or the error of the call.
-arrow::Result<std::vector<int32_t>> PushPredicates(void* reader,
-                                                   const std::vector<std::string>& predicates) {
-  const SparkDsLibrary& library = Library();
-  std::vector<const char*> pointers;
-  for (const std::string& predicate : predicates) {
-    pointers.push_back(predicate.c_str());
-  }
-  std::vector<int32_t> uses(predicates.size(), SPARK_DS_PREDICATE_UNUSED);
-  if (library.push_predicates(reader, pointers.data(), static_cast<int64_t>(pointers.size()),
-                              uses.data()) != 0) {
-    return arrow::Status::Invalid(LastError(library));
-  }
-  return uses;
 }
 
 arrow::Result<bool> PushLimit(void* reader, int32_t limit) {
@@ -232,40 +198,59 @@ arrow::Result<bool> PushLimit(void* reader, int32_t limit) {
   return applied;
 }
 
-struct Plan {
-  std::string state;
-  std::vector<std::string> partitions;
-};
-
+/// Plans a scan, whose partitions and state partitions returns in a single call.
 arrow::Result<Plan> Planned(void* reader) {
   const SparkDsLibrary& library = Library();
+  SparkDsPartitionsInfo info{sizeof(SparkDsPartitionsInfo)};
   Plan plan;
-  if (library.partitions(reader, &Collect, &plan.partitions) != 0) {
+  if (library.partitions(reader, &info, &Plan::AddPartition, &Plan::SetState, &plan) != 0) {
+    CHECK(plan.partitions.empty() && plan.states.empty());
     return arrow::Status::Invalid(LastError(library));
   }
-  std::vector<std::string> state;
-  if (library.serialize_reader(reader, &Collect, &state) != 0) {
-    return arrow::Status::Invalid(LastError(library));
-  }
-  CHECK(state.size() == 1);
-  plan.state = state[0];
+  CHECK(plan.states.size() == 1);
   return plan;
 }
 
 /// The value of the factory in the serialized state of a planned scan.
-int64_t FactoryValue(const std::string& state) {
-  ASSIGN_OR_FAIL(sn::internal::State decoded, sn::internal::DecodeState(state));
-  CHECK(!decoded.streaming);
-  return decoded.factory.get<Factory>().value;
+int64_t FactoryValue(const Plan& plan) {
+  ASSIGN_OR_FAIL(Factory factory, sn::internal::Decode<Factory>(plan.states[0]));
+  return factory.value;
 }
 
-const std::string kUnknownPredicate = R"({"type":"future_expression"})";
+/// Reads a partition of a plan with `schema` as the schema to read, as Spark does.
+arrow::Result<std::shared_ptr<arrow::RecordBatchReader>> Read(
+    const Plan& plan, size_t index, const std::shared_ptr<arrow::Schema>& schema,
+    const sn::testing::HostTask& task, int32_t kind = SPARK_DS_READ_BATCH) {
+  const SparkDsLibrary& library = Library();
+  struct ArrowSchema exported{};
+  CHECK_OK(arrow::ExportSchema(*schema, &exported));
+  const std::string& state = plan.states[0];
+  const std::string& partition = plan.partitions[index];
+  SparkDsReadInfo info{sizeof(SparkDsReadInfo),
+                       kind,
+                       &exported,
+                       reinterpret_cast<const uint8_t*>(state.data()),
+                       static_cast<int64_t>(state.size()),
+                       reinterpret_cast<const uint8_t*>(partition.data()),
+                       static_cast<int64_t>(partition.size())};
+  struct ArrowArrayStream stream{};
+  int code = library.read(&task.context, &info, &stream);
+  // The library may move the schema; otherwise Spark releases it after the call.
+  if (exported.release != nullptr) {
+    exported.release(&exported);
+  }
+  if (code != 0) {
+    CHECK(stream.release == nullptr);
+    return arrow::Status::Invalid(LastError(library));
+  }
+  return arrow::ImportRecordBatchReader(&stream);
+}
 
 }  // namespace
 
 SPARK_EXPORT_DATA_SOURCE(Source);
 
-TEST(SourceCanCloseBeforePlanningAndThePlanIsBuiltOnce) {
+TEST(SourceCanCloseBeforePlanningAndAScanIsPlannedOnce) {
   ResetCounters();
   const SparkDsLibrary& library = Library();
   void* source = CreateSource({});
@@ -274,66 +259,19 @@ TEST(SourceCanCloseBeforePlanningAndThePlanIsBuiltOnce) {
   CHECK_EQ(sources_destroyed.load(), 1);
 
   ASSIGN_OR_FAIL(Plan plan, Planned(reader));
-  ASSIGN_OR_FAIL(Plan again, Planned(reader));
-  CHECK(plan.state == again.state && plan.partitions == again.partitions);
   CHECK(plan.partitions.size() == 2);
   ASSIGN_OR_FAIL(int64_t first, sn::internal::Decode<int64_t>(plan.partitions[0]));
   ASSIGN_OR_FAIL(int64_t second, sn::internal::Decode<int64_t>(plan.partitions[1]));
   CHECK_EQ(first, int64_t{2});
   CHECK_EQ(second, int64_t{7});
-  CHECK_EQ(FactoryValue(plan.state), int64_t{42});
+  CHECK_EQ(FactoryValue(plan), int64_t{42});
   CHECK_EQ(builds.load(), 1);
+  // Planning consumed the builder: no other call reaches it.
   CHECK_EQ(builders_destroyed.load(), 1);
-  bool pruned = false;
-  CHECK(library.prune_columns(reader, nullptr, 0, &pruned) != 0);
+  CHECK_CONTAINS(Planned(reader).status().message(), "already been planned");
+  CHECK(library.prune_columns(reader, nullptr, 0) != 0);
   CHECK_CONTAINS(LastError(library), "already been planned");
   library.close_reader(reader);
-}
-
-TEST(ResidualFiltersPreventCallingTheLimitOfTheProvider) {
-  for (const auto& [filters, use] : std::vector<std::pair<std::string, int32_t>>{
-           {"pruning", SPARK_DS_PREDICATE_PARTIAL}, {"unsupported", SPARK_DS_PREDICATE_UNUSED}}) {
-    ResetCounters();
-    void* source = CreateSource({{"filters", filters}, {"limit", "global"}});
-    void* reader = CreateReader(source);
-    Library().close(source);
-    ASSIGN_OR_FAIL(std::vector<int32_t> uses, PushPredicates(reader, {kUnknownPredicate}));
-    CHECK(uses == std::vector<int32_t>({use}));
-    ASSIGN_OR_FAIL(bool applied, PushLimit(reader, 1));
-    CHECK(!applied);
-    CHECK_EQ(limits.load(), 0);
-    Library().close_reader(reader);
-  }
-}
-
-TEST(PredicatesThatDoNotParseStayUnsupportedAndResidual) {
-  ResetCounters();
-  void* source = CreateSource({{"filters", "exact"}, {"limit", "global"}});
-  void* reader = CreateReader(source);
-  Library().close(source);
-  // A column name must be an array of parts.
-  std::string malformed =
-      R"({"type":"function","name":"IS_NULL","children":[{"type":"column","name":"id"}]})";
-  std::string valid =
-      R"({"type":"function","name":"IS_NULL","children":[{"type":"column","name":["id"]}]})";
-  // The connector reports every predicate as exact, including the kUnknown placeholder.
-  ASSIGN_OR_FAIL(std::vector<int32_t> uses, PushPredicates(reader, {malformed, valid}));
-  CHECK(uses == std::vector<int32_t>({SPARK_DS_PREDICATE_UNUSED, SPARK_DS_PREDICATE_COMPLETE}));
-  ASSIGN_OR_FAIL(bool applied, PushLimit(reader, 1));
-  CHECK(!applied);
-  CHECK_EQ(limits.load(), 0);
-  Library().close_reader(reader);
-}
-
-TEST(PushFiltersMustReturnOneResultPerPredicate) {
-  ResetCounters();
-  void* source = CreateSource({{"filters", "exact"}, {"failure", "wrong_count"}});
-  void* reader = CreateReader(source);
-  Library().close(source);
-  arrow::Result<std::vector<int32_t>> uses = PushPredicates(reader, {kUnknownPredicate});
-  CHECK(!uses.ok());
-  CHECK_CONTAINS(uses.status().message(), "one result per predicate");
-  Library().close_reader(reader);
 }
 
 TEST(OnlyGlobalLimitsReturnTrueToTheAbi) {
@@ -350,76 +288,50 @@ TEST(OnlyGlobalLimitsReturnTrueToTheAbi) {
   }
 }
 
-TEST(PlanningErrorsAndExceptionsPreserveTheFirstFailureWithoutRetrying) {
-  for (const auto& [failure, expected] : std::vector<std::pair<std::string, std::string>>{
-           {"error", "planning failed"},
-           {"throw", "native provider threw an exception: planning failed"}}) {
+TEST(NegotiationAndPlanningErrorsAndExceptionsAreReported) {
+  for (const auto& [failure, prefix] : std::vector<std::pair<std::string, std::string>>{
+           {"error", ""}, {"throw", "native provider threw an exception: "}}) {
     ResetCounters();
     void* source = CreateSource({{"failure", failure}});
-    void* reader = CreateReader(source);
+    void* negotiated = CreateReader(source);
+    void* planned = CreateReader(source);
     Library().close(source);
-    arrow::Result<Plan> first = Planned(reader);
-    arrow::Result<Plan> second = Planned(reader);
-    CHECK(!first.ok() && !second.ok());
-    CHECK_EQ(first.status().message(), expected);
-    CHECK_EQ(second.status().message(), expected);
-    CHECK_EQ(PushLimit(reader, 1).status().message(), expected);
-    CHECK_EQ(builds.load(), 1);
-    CHECK_EQ(builders_destroyed.load(), 1);
-    Library().close_reader(reader);
-    CHECK_EQ(builders_destroyed.load(), 1);
-  }
-}
-
-TEST(FailedNegotiationDiscardsThePartiallyMutatedBuilder) {
-  for (const auto& [failure, expected] : std::vector<std::pair<std::string, std::string>>{
-           {"error", "negotiation failed"},
-           {"throw", "native provider threw an exception: negotiation failed"}}) {
-    ResetCounters();
-    void* source = CreateSource({{"failure", failure}});
-    void* reader = CreateReader(source);
-    CHECK_EQ(PushLimit(reader, 5).status().message(), expected);
-    CHECK_EQ(PushLimit(reader, 1).status().message(), expected);
-    CHECK_EQ(PushPredicates(reader, {}).status().message(), expected);
-    CHECK_EQ(Planned(reader).status().message(), expected);
+    CHECK_EQ(PushLimit(negotiated, 5).status().message(), prefix + "negotiation failed");
+    CHECK_EQ(Planned(planned).status().message(), prefix + "planning failed");
     CHECK_EQ(limits.load(), 1);
-    CHECK_EQ(builds.load(), 0);
+    CHECK_EQ(builds.load(), 1);
+    // The failed plan consumed its builder; Spark only closes the other scan.
     CHECK_EQ(builders_destroyed.load(), 1);
-    Library().close_reader(reader);
-    Library().close(source);
+    Library().close_reader(negotiated);
+    Library().close_reader(planned);
+    CHECK_EQ(builders_destroyed.load(), 2);
   }
 }
 
-TEST(ScansOfOneSourceKeepPushdownAndCachedPlansIndependent) {
+TEST(ScansOfOneSourceKeepPushdownAndPlansIndependent) {
   ResetCounters();
-  void* source = CreateSource({{"filters", "pruning"}, {"limit", "global"}});
+  void* source = CreateSource({{"limit", "global"}});
   void* first = CreateReader(source);
   void* second = CreateReader(source);
   Library().close(source);
 
-  CHECK_OK(PushPredicates(second, {kUnknownPredicate}));
   ASSIGN_OR_FAIL(bool first_limited, PushLimit(first, 5));
-  ASSIGN_OR_FAIL(bool second_limited, PushLimit(second, 1));
   CHECK(first_limited);
-  CHECK(!second_limited);
   ASSIGN_OR_FAIL(Plan first_plan, Planned(first));
   ASSIGN_OR_FAIL(Plan second_plan, Planned(second));
-  CHECK_EQ(FactoryValue(first_plan.state), int64_t{5});
-  CHECK_EQ(FactoryValue(second_plan.state), int64_t{42});
+  CHECK_EQ(FactoryValue(first_plan), int64_t{5});
+  CHECK_EQ(FactoryValue(second_plan), int64_t{42});
   CHECK_EQ(builds.load(), 2);
   CHECK_EQ(limits.load(), 1);
   Library().close_reader(first);
-  ASSIGN_OR_FAIL(Plan again, Planned(second));
-  CHECK(again.state == second_plan.state);
   Library().close_reader(second);
 }
 
 TEST(ExecutorRetriesUseOnlySerializedValuesAfterTheDriverIsClosed) {
   ResetCounters();
   const SparkDsLibrary& library = Library();
-  auto schema = arrow::schema({arrow::field("id", arrow::int64(), false)});
   void* source = CreateSource({});
-  void* reader = CreateReader(source, schema);
+  void* reader = CreateReader(source);
   library.close(source);
   // Spark copies the factory and the partitions out of the library before closing the planner.
   ASSIGN_OR_FAIL(Plan plan, Planned(reader));
@@ -431,14 +343,7 @@ TEST(ExecutorRetriesUseOnlySerializedValuesAfterTheDriverIsClosed) {
   for (int32_t attempt = 0; attempt < 2; ++attempt) {
     for (size_t index = 0; index < plan.partitions.size(); ++index) {
       sn::testing::HostTask task(static_cast<int32_t>(index), attempt * 2 + int64_t(index));
-      const std::string& partition = plan.partitions[index];
-      struct ArrowArrayStream stream{};
-      CHECK_SUCCESS(library,
-                    library.read(&task.context, reinterpret_cast<const uint8_t*>(plan.state.data()),
-                                 static_cast<int64_t>(plan.state.size()),
-                                 reinterpret_cast<const uint8_t*>(partition.data()),
-                                 static_cast<int64_t>(partition.size()), &stream));
-      ASSIGN_OR_FAIL(auto batches, arrow::ImportRecordBatchReader(&stream));
+      ASSIGN_OR_FAIL(auto batches, Read(plan, index, IdSchema(), task));
       ASSIGN_OR_FAIL(auto batch, batches->Next());
       CHECK(batch != nullptr);
       int64_t expected = 42 + (index == 0 ? 2 : 7);
@@ -449,38 +354,35 @@ TEST(ExecutorRetriesUseOnlySerializedValuesAfterTheDriverIsClosed) {
   }
 }
 
-TEST(ExecutorRejectsAFactorySchemaDifferentFromTheNegotiatedSchema) {
+TEST(ExecutorRejectsAReaderWithoutTheSchemaToRead) {
   const SparkDsLibrary& library = Library();
   void* source = CreateSource({});
-  // The factory returns one id column, but the driver negotiates the empty schema of the source.
+  void* reader = CreateReader(source);
+  ASSIGN_OR_FAIL(Plan plan, Planned(reader));
+  library.close_reader(reader);
+  library.close(source);
+  // The factory returns a bigint id column, but Spark reads a string id or a label.
+  sn::testing::HostTask task(0, 1);
+  auto string_id = arrow::schema({arrow::field("id", arrow::utf8(), false)});
+  CHECK_CONTAINS(Read(plan, 0, string_id, task).status().message(),
+                 "does not match the schema to read");
+  auto label = arrow::schema({arrow::field("label", arrow::int64(), false)});
+  CHECK_CONTAINS(Read(plan, 0, label, task).status().message(), "does not return the column label");
+}
+
+TEST(TheKindOfTheReadSelectsTheFactory) {
+  const SparkDsLibrary& library = Library();
+  CHECK(library.create_stream_reader == nullptr);
+  void* source = CreateSource({});
   void* reader = CreateReader(source);
   ASSIGN_OR_FAIL(Plan plan, Planned(reader));
   library.close_reader(reader);
   library.close(source);
   sn::testing::HostTask task(0, 1);
-  struct ArrowArrayStream stream{};
-  CHECK(library.read(&task.context, reinterpret_cast<const uint8_t*>(plan.state.data()),
-                     static_cast<int64_t>(plan.state.size()),
-                     reinterpret_cast<const uint8_t*>(plan.partitions[0].data()),
-                     static_cast<int64_t>(plan.partitions[0].size()), &stream) != 0);
-  CHECK_CONTAINS(LastError(library), "negotiated schema");
-  CHECK(stream.release == nullptr);
-}
-
-TEST(TheReadOfAMicroBatchFailsForASourceWithoutStreamingReads) {
-  const SparkDsLibrary& library = Library();
-  CHECK(library.create_stream_reader == nullptr);
-  ASSIGN_OR_FAIL(std::string state,
-                 sn::internal::EncodeState(/*streaming=*/true, *arrow::schema(arrow::FieldVector{}),
-                                           Factory()));
-  ASSIGN_OR_FAIL(std::string partition, sn::internal::Encode(int64_t{0}));
-  sn::testing::HostTask task(0, 1);
-  struct ArrowArrayStream stream{};
-  CHECK(library.read(&task.context, reinterpret_cast<const uint8_t*>(state.data()),
-                     static_cast<int64_t>(state.size()),
-                     reinterpret_cast<const uint8_t*>(partition.data()),
-                     static_cast<int64_t>(partition.size()), &stream) != 0);
-  CHECK_CONTAINS(LastError(library), "does not support micro-batch streaming reads");
+  CHECK_CONTAINS(Read(plan, 0, IdSchema(), task, SPARK_DS_READ_MICRO_BATCH).status().message(),
+                 "does not support micro-batch streaming reads");
+  CHECK_CONTAINS(Read(plan, 0, IdSchema(), task, 7).status().message(),
+                 "unsupported kind of read: 7");
 }
 
 TEST(CapabilitiesKeepOnlyImplementedOperations) {

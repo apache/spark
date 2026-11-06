@@ -20,7 +20,6 @@ add_executable(sdk_test
   test_main.cc
   abi_test.cc
   capabilities_test.cc
-  predicate_test.cc
   stream_test.cc
   task_context_test.cc)
 target_link_libraries(sdk_test PRIVATE spark::native_source Threads::Threads)

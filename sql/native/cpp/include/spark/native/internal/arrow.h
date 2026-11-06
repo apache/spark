@@ -18,8 +18,10 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cerrno>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -152,8 +154,8 @@ arrow::Result<std::vector<bool>> Elements(const arrow::ListArray& list, Valid va
   return mask;
 }
 
-/// Rejects a null where the negotiated schema declares a column, a field, an element, or a map
-/// value not nullable, unless its parent is null, as Spark does after reading. `referenced` tells
+/// Rejects a null where the schema to read declares a column, a field, an element, or a map value
+/// not nullable, unless its parent is null, as Spark does after reading. `referenced` tells
 /// which values belong to a parent value that is not null.
 inline arrow::Status CheckNulls(const arrow::Array& array, const arrow::Field& field,
                                 const std::string& column, const std::vector<bool>* referenced) {
@@ -225,23 +227,35 @@ inline arrow::Status ValidateLayout(const arrow::ArrayData& data) {
 /// concurrently, and keep their errors in the stream, not in a thread-local.
 class ExportedStream {
  public:
-  /// Exports `reader`, whose schema must have the Spark types of `expected`, the negotiated schema.
+  /// Exports `reader`, whose schema must have the columns of `expected`, the schema to read, with
+  /// their Spark types. It may have more, such as all the columns of the source: the stream has
+  /// those of the schema to read, in its order, since Spark rejects a stream with other columns.
   /// On failure, `out` is left unchanged.
   static arrow::Status Export(std::shared_ptr<arrow::RecordBatchReader> reader,
                               std::shared_ptr<arrow::Schema> expected,
                               struct ArrowArrayStream* out) {
     ARROW_RETURN_NOT_OK(RequireOutput(out));
-    std::shared_ptr<arrow::Schema> schema = reader->schema();
-    if (schema == nullptr) {
+    std::shared_ptr<arrow::Schema> source = reader->schema();
+    if (source == nullptr) {
       return arrow::Status::Invalid("the partition reader has no schema");
+    }
+    ARROW_ASSIGN_OR_RAISE(std::optional<std::vector<int>> columns, Projection(*source, *expected));
+    std::shared_ptr<arrow::Schema> schema = source;
+    if (columns) {
+      arrow::FieldVector fields;
+      for (int index : *columns) {
+        fields.push_back(source->field(index));
+      }
+      schema = arrow::schema(std::move(fields), source->metadata());
     }
     ARROW_ASSIGN_OR_RAISE(bool same, SameSparkTypes(*schema, *expected));
     if (!same) {
-      return arrow::Status::Invalid("executor reader schema does not match the negotiated schema: ",
+      return arrow::Status::Invalid("executor reader schema does not match the schema to read: ",
                                     schema->ToString(), " instead of ", expected->ToString());
     }
     auto state = std::unique_ptr<ExportedStream>(
-        new ExportedStream(std::move(reader), std::move(schema), std::move(expected)));
+        new ExportedStream(std::move(reader), std::move(source), std::move(columns),
+                           std::move(schema), std::move(expected)));
     out->get_schema = &GetSchema;
     out->get_next = &GetNext;
     out->get_last_error = &GetLastError;
@@ -252,8 +266,33 @@ class ExportedStream {
 
  private:
   ExportedStream(std::shared_ptr<arrow::RecordBatchReader> reader,
+                 std::shared_ptr<arrow::Schema> source, std::optional<std::vector<int>> columns,
                  std::shared_ptr<arrow::Schema> schema, std::shared_ptr<arrow::Schema> expected)
-      : reader_(std::move(reader)), schema_(std::move(schema)), expected_(std::move(expected)) {}
+      : reader_(std::move(reader)),
+        source_(std::move(source)),
+        columns_(std::move(columns)),
+        schema_(std::move(schema)),
+        expected_(std::move(expected)) {}
+
+  /// The indices of the columns of the schema to read in the schema of a reader, by name, or
+  /// nothing when the reader has exactly these columns.
+  static arrow::Result<std::optional<std::vector<int>>> Projection(const arrow::Schema& source,
+                                                                   const arrow::Schema& expected) {
+    std::vector<std::string> names = source.field_names();
+    if (names == expected.field_names()) {
+      return std::nullopt;
+    }
+    std::vector<int> indices;
+    for (const auto& field : expected.fields()) {
+      auto position = std::find(names.begin(), names.end(), field->name());
+      if (position == names.end()) {
+        return arrow::Status::Invalid("the partition reader does not return the column ",
+                                      field->name(), " of the schema to read");
+      }
+      indices.push_back(static_cast<int>(position - names.begin()));
+    }
+    return indices;
+  }
 
   static ExportedStream& Of(struct ArrowArrayStream* stream) {
     return *static_cast<ExportedStream*>(stream->private_data);
@@ -294,7 +333,7 @@ class ExportedStream {
         out->release = nullptr;
         return arrow::Status::OK();
       }
-      ARROW_RETURN_NOT_OK(state.Check(*batch));
+      ARROW_ASSIGN_OR_RAISE(batch, state.Prepare(std::move(batch)));
       return arrow::ExportRecordBatch(*batch, out);
     });
   }
@@ -312,27 +351,36 @@ class ExportedStream {
     delete state;
   }
 
-  arrow::Status Check(const arrow::RecordBatch& batch) const {
-    if (!batch.schema()->Equals(*schema_, /*check_metadata=*/false)) {
+  /// Checks a batch of the reader, and returns the batch to export, with the columns of the stream.
+  arrow::Result<std::shared_ptr<arrow::RecordBatch>> Prepare(
+      std::shared_ptr<arrow::RecordBatch> batch) const {
+    if (!batch->schema()->Equals(*source_, /*check_metadata=*/false)) {
       return arrow::Status::Invalid(
-          "reader returned a batch with a different schema: ", batch.schema()->ToString(),
-          " instead of ", schema_->ToString());
+          "reader returned a batch with a different schema: ", batch->schema()->ToString(),
+          " instead of ", source_->ToString());
+    }
+    if (columns_) {
+      ARROW_ASSIGN_OR_RAISE(batch, batch->SelectColumns(*columns_));
     }
     // Spark cannot check the sizes of the buffers, so check that they hold their values.
-    ARROW_RETURN_NOT_OK(batch.Validate());
-    for (int index = 0; index < batch.num_columns(); ++index) {
-      const auto& column = batch.column(index);
+    ARROW_RETURN_NOT_OK(batch->Validate());
+    for (int index = 0; index < batch->num_columns(); ++index) {
+      const auto& column = batch->column(index);
       ARROW_RETURN_NOT_OK(ValidateLayout(*column->data()));
       const auto& field = *expected_->field(index);
       ARROW_RETURN_NOT_OK(CheckNulls(*column, field, field.name(), nullptr));
     }
-    return arrow::Status::OK();
+    return batch;
   }
 
   std::shared_ptr<arrow::RecordBatchReader> reader_;
-  // The schema of the stream, the schema of the reader, which every batch must have.
+  // The schema of the reader, which every batch must have.
+  std::shared_ptr<arrow::Schema> source_;
+  // The columns of the reader that the stream has, or nothing for all of them.
+  std::optional<std::vector<int>> columns_;
+  // The schema of the stream: the columns of the reader that the schema to read has.
   std::shared_ptr<arrow::Schema> schema_;
-  // The negotiated schema, whose Spark types and nullability each batch must respect.
+  // The schema to read, whose Spark types and nullability each batch must respect.
   std::shared_ptr<arrow::Schema> expected_;
   std::string error_;
   bool finished_ = false;

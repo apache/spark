@@ -16,7 +16,8 @@
 // The objects behind the native handles: driver planners, streams, and writers, and the executor
 // task writers, which are restored from serialized values only.
 //
-// Spark never calls a handle concurrently, so these objects have no locks. Calls on different
+// Spark never calls a handle concurrently, and documents the order of the calls on each handle,
+// so these objects have no locks, and do not guard against other orders. Calls on different
 // handles run concurrently, and share no state.
 
 #pragma once
@@ -49,259 +50,131 @@ struct SourceHandle {
   Capabilities capabilities;
 };
 
-/// A planned scan, which the native partitions and serialize_reader functions return.
+/// The partitions of a scan or a micro-batch, and the state of its reader: its factory.
 struct EncodedPlan {
   std::string state;
   std::vector<std::string> partitions;
 };
 
-/// The driver planner of a batch scan: it negotiates pushdown, then plans the scan once, and
-/// caches the plan or the first failure.
+/// Encodes the factory of a plan, as the state of its reader, and each of its partitions.
+template <typename Plan>
+arrow::Result<EncodedPlan> EncodePlan(const Plan& plan) {
+  EncodedPlan encoded;
+  ARROW_ASSIGN_OR_RAISE(encoded.state, Encode(plan.factory));
+  for (const auto& partition : plan.partitions) {
+    ARROW_ASSIGN_OR_RAISE(std::string bytes, Encode(partition));
+    encoded.partitions.push_back(std::move(bytes));
+  }
+  return encoded;
+}
+
+/// The driver planner of a batch scan: it negotiates pushdown, then plans the scan, which consumes
+/// the builder.
 template <typename B>
 class Planner {
  public:
-  Planner(B builder, std::shared_ptr<arrow::Schema> schema)
-      : builder_(std::move(builder)), schema_(std::move(schema)) {}
-
-  /// Pushes parsed predicates. Nothing stands for one that did not parse, which the connector
-  /// receives as kUnknown and which stays unsupported whatever it returns.
-  arrow::Result<std::vector<FilterSupport>> PushPredicates(
-      std::vector<std::optional<Predicate>> parsed) {
-    std::vector<Predicate> predicates;
-    predicates.reserve(parsed.size());
-    for (auto& predicate : parsed) {
-      predicates.push_back(predicate ? std::move(*predicate) : Predicate());
-    }
-    ARROW_ASSIGN_OR_RAISE(
-        std::vector<FilterSupport> support,
-        Negotiate([&](B& builder) -> arrow::Result<std::vector<FilterSupport>> {
-          ARROW_ASSIGN_OR_RAISE(std::vector<FilterSupport> result, builder.PushFilters(predicates));
-          if (result.size() != predicates.size()) {
-            return arrow::Status::Invalid("PushFilters must return one result per predicate");
-          }
-          return result;
-        }));
-    for (size_t index = 0; index < support.size(); ++index) {
-      if (!parsed[index]) {
-        support[index] = FilterSupport::kUnsupported;
-      }
-      has_residual_ |= support[index] != FilterSupport::kExact;
-    }
-    return support;
-  }
+  explicit Planner(B builder) : builder_(std::move(builder)) {}
 
   arrow::Result<bool> PushLimit(int64_t limit) {
-    bool has_residual = has_residual_;
-    return Negotiate([&](B& builder) -> arrow::Result<bool> {
-      if (has_residual) {
-        return false;
-      }
-      ARROW_ASSIGN_OR_RAISE(LimitSupport support, builder.PushLimit(limit));
-      return support == LimitSupport::kGlobal;
+    ARROW_ASSIGN_OR_RAISE(B * builder, Builder());
+    ARROW_ASSIGN_OR_RAISE(LimitSupport support, Guard([&] { return builder->PushLimit(limit); }));
+    return support == LimitSupport::kGlobal;
+  }
+
+  arrow::Status PruneColumns(const std::vector<std::string>& columns) {
+    ARROW_ASSIGN_OR_RAISE(B * builder, Builder());
+    return Guard([&] { return builder->PruneColumns(columns); });
+  }
+
+  arrow::Result<EncodedPlan> Plan() {
+    ARROW_ASSIGN_OR_RAISE(B * builder, Builder());
+    arrow::Result<EncodedPlan> result = Guard([&]() -> arrow::Result<EncodedPlan> {
+      ARROW_ASSIGN_OR_RAISE(auto plan, builder->Plan());
+      return EncodePlan(plan);
     });
-  }
-
-  arrow::Result<bool> PruneColumns(const std::vector<std::string>& columns) {
-    arrow::FieldVector fields;
-    for (const std::string& column : columns) {
-      int index = schema_->GetFieldIndex(column);
-      if (index < 0) {
-        return arrow::Status::Invalid("Unable to get field index: '", column,
-                                      "' is not a column of ", schema_->ToString());
-      }
-      fields.push_back(schema_->field(index));
-    }
-    auto schema = arrow::schema(std::move(fields), schema_->metadata());
-    ARROW_ASSIGN_OR_RAISE(bool pruned,
-                          Negotiate([&](B& builder) { return builder.PruneColumns(columns); }));
-    if (pruned) {
-      schema_ = std::move(schema);
-    }
-    return pruned;
-  }
-
-  arrow::Result<std::shared_ptr<const EncodedPlan>> Planned() {
-    if (plan_ != nullptr) {
-      return plan_;
-    }
-    ARROW_RETURN_NOT_OK(failure_);
-    arrow::Result<std::shared_ptr<const EncodedPlan>> result =
-        Guard([&]() -> arrow::Result<std::shared_ptr<const EncodedPlan>> {
-          ARROW_ASSIGN_OR_RAISE(auto plan, builder_->Plan());
-          auto encoded = std::make_shared<EncodedPlan>();
-          ARROW_ASSIGN_OR_RAISE(encoded->state,
-                                EncodeState(/*streaming=*/false, *schema_, plan.factory));
-          for (const auto& partition : plan.partitions) {
-            ARROW_ASSIGN_OR_RAISE(std::string bytes, Encode(partition));
-            encoded->partitions.push_back(std::move(bytes));
-          }
-          return encoded;
-        });
     // Planning consumes the builder, whatever its result.
     builder_.reset();
-    if (!result.ok()) {
-      failure_ = result.status();
-      return failure_;
-    }
-    plan_ = *result;
-    return plan_;
-  }
-
- private:
-  template <typename F>
-  auto Negotiate(F&& action) -> decltype(action(std::declval<B&>())) {
-    if (plan_ != nullptr) {
-      return arrow::Status::Invalid("scan has already been planned");
-    }
-    ARROW_RETURN_NOT_OK(failure_);
-    auto result = Guard([&] { return action(*builder_); });
-    if (!result.ok()) {
-      // A partially mutated builder must never be reused after a failure.
-      failure_ = StatusOf(result);
-      builder_.reset();
-    }
     return result;
   }
 
-  static arrow::Status StatusOf(const arrow::Status& status) { return status; }
-
-  template <typename T>
-  static arrow::Status StatusOf(const arrow::Result<T>& result) {
-    return result.status();
+ private:
+  arrow::Result<B*> Builder() {
+    if (!builder_) {
+      return arrow::Status::Invalid("the scan has already been planned");
+    }
+    return &*builder_;
   }
 
   std::optional<B> builder_;
-  std::shared_ptr<const EncodedPlan> plan_;
-  // The first failure, which every later call returns.
-  arrow::Status failure_;
-  std::shared_ptr<arrow::Schema> schema_;
-  bool has_residual_ = false;
 };
 
-/// The driver state of the stream of a streaming query.
+/// The driver state of the stream of a streaming query, which decodes and encodes its offsets.
 template <typename M>
 class StreamReader {
  public:
   using Offset = typename M::Offset;
 
-  StreamReader(M stream, std::shared_ptr<arrow::Schema> schema)
-      : stream_(std::move(stream)), schema_(std::move(schema)) {}
+  explicit StreamReader(M stream) : stream_(std::move(stream)) {}
 
   arrow::Result<std::string> InitialOffset() {
-    return Call([&]() -> arrow::Result<std::string> {
+    return Guard([&]() -> arrow::Result<std::string> {
       ARROW_ASSIGN_OR_RAISE(Offset offset, stream_.InitialOffset());
       return EncodeOffset(offset);
     });
   }
 
-  arrow::Result<std::string> LatestOffset() {
-    return Call([&]() -> arrow::Result<std::string> {
-      ARROW_ASSIGN_OR_RAISE(Offset offset, stream_.LatestOffset());
+  arrow::Result<ReadLimit> DefaultReadLimit() const {
+    return Guard([&] { return stream_.DefaultReadLimit(); });
+  }
+
+  arrow::Result<std::string> LatestOffset(const LatestOffsetInfo<std::string>& request) {
+    return Guard([&]() -> arrow::Result<std::string> {
+      ARROW_ASSIGN_OR_RAISE(Offset start, DecodeOffset<Offset>(request.start));
+      LatestOffsetInfo<Offset> info(std::move(start));
+      info.limit = request.limit;
+      if (request.run_end) {
+        ARROW_ASSIGN_OR_RAISE(info.run_end, DecodeOffset<Offset>(*request.run_end));
+      }
+      ARROW_ASSIGN_OR_RAISE(Offset offset, stream_.LatestOffset(info));
       return EncodeOffset(offset);
     });
   }
 
-  /// Plans a micro-batch, and keeps its encoded state for serialize_stream_reader.
-  arrow::Result<std::vector<std::string>> Plan(std::string_view start, std::string_view end) {
-    std::shared_ptr<const std::string> state;
-    ARROW_ASSIGN_OR_RAISE(
-        std::vector<std::string> partitions, Call([&]() -> arrow::Result<std::vector<std::string>> {
-          ARROW_ASSIGN_OR_RAISE(Offset from, DecodeOffset<Offset>(start));
-          ARROW_ASSIGN_OR_RAISE(Offset to, DecodeOffset<Offset>(end));
-          ARROW_ASSIGN_OR_RAISE(auto plan, stream_.Plan(from, to));
-          std::vector<std::string> encoded;
-          for (const auto& partition : plan.partitions) {
-            ARROW_ASSIGN_OR_RAISE(std::string bytes, Encode(partition));
-            encoded.push_back(std::move(bytes));
-          }
-          ARROW_ASSIGN_OR_RAISE(std::string bytes,
-                                EncodeState(/*streaming=*/true, *schema_, plan.factory));
-          state = std::make_shared<const std::string>(std::move(bytes));
-          return encoded;
-        }));
-    planned_ = std::move(state);
-    return partitions;
-  }
-
-  arrow::Result<std::shared_ptr<const std::string>> Serialized() const {
-    ARROW_RETURN_NOT_OK(failure_);
-    if (planned_ == nullptr) {
-      return arrow::Status::Invalid("no micro-batch has been planned");
-    }
-    return planned_;
+  arrow::Result<EncodedPlan> Plan(std::string_view start, std::string_view end) {
+    return Guard([&]() -> arrow::Result<EncodedPlan> {
+      ARROW_ASSIGN_OR_RAISE(Offset from, DecodeOffset<Offset>(start));
+      ARROW_ASSIGN_OR_RAISE(Offset to, DecodeOffset<Offset>(end));
+      ARROW_ASSIGN_OR_RAISE(auto plan, stream_.Plan(from, to));
+      return EncodePlan(plan);
+    });
   }
 
   arrow::Status CommitOffset(std::string_view end) {
-    return Call([&]() -> arrow::Status {
+    return Guard([&]() -> arrow::Status {
       ARROW_ASSIGN_OR_RAISE(Offset offset, DecodeOffset<Offset>(end));
       return stream_.Commit(offset);
     });
   }
 
  private:
-  /// Calls the stream, unless an earlier call failed, and keeps the first failure.
-  template <typename F>
-  auto Call(F&& action) -> decltype(action()) {
-    ARROW_RETURN_NOT_OK(failure_);
-    auto result = Guard(std::forward<F>(action));
-    if (!result.ok()) {
-      if constexpr (std::is_same_v<decltype(result), arrow::Status>) {
-        failure_ = result;
-      } else {
-        failure_ = result.status();
-      }
-    }
-    return result;
-  }
-
   M stream_;
-  std::shared_ptr<arrow::Schema> schema_;
-  // The state of the last planned micro-batch, which serialize_stream_reader returns.
-  std::shared_ptr<const std::string> planned_;
-  // The first failure, which stops the query: every later call returns it.
-  arrow::Status failure_;
 };
-
-/// Checks the epoch ID that Spark passes with a write: -1 for a batch write, and the ID of the
-/// micro-batch, which is not negative, for a streaming write.
-inline arrow::Status CheckEpoch(bool streaming, int64_t epoch_id) {
-  if (streaming && epoch_id < 0) {
-    return arrow::Status::Invalid("the write of a micro-batch requires its epoch ID, not ",
-                                  epoch_id);
-  }
-  if (!streaming && epoch_id != -1) {
-    return arrow::Status::Invalid("a batch write requires epoch ID -1, not ", epoch_id);
-  }
-  return arrow::Status::OK();
-}
-
-/// The phases of a driver or task writer, whose failures and results the SDK caches.
-enum class Phase { kActive, kCommitted, kFailed, kAborted };
-
-inline arrow::Status Active(Phase phase, const arrow::Status& failure) {
-  switch (phase) {
-    case Phase::kActive:
-      return arrow::Status::OK();
-    case Phase::kFailed:
-      return failure;
-    case Phase::kCommitted:
-      return arrow::Status::Invalid("writer was already committed");
-    case Phase::kAborted:
-      break;
-  }
-  return arrow::Status::Invalid("writer was already aborted");
-}
 
 /// The driver writer of a batch write, or of the write of a micro-batch, which share the writer
 /// handles of the ABI. The driver keeps it until close, including after a failed commit.
 class WriterHandle {
  public:
   virtual ~WriterHandle() = default;
-  virtual arrow::Result<std::shared_ptr<const std::string>> Serialized() = 0;
   virtual arrow::Status Commit(int64_t epoch_id,
                                const std::vector<std::optional<std::string_view>>& messages) = 0;
   virtual arrow::Status Abort(int64_t epoch_id,
                               const std::vector<std::optional<std::string_view>>& messages) = 0;
+};
+
+/// A writer, with the state that its task writers need: its serialized writer factory.
+struct CreatedWriter {
+  std::unique_ptr<WriterHandle> writer;
+  std::string state;
 };
 
 template <typename W, bool kStreaming>
@@ -309,38 +182,20 @@ class DriverWriter final : public WriterHandle {
  public:
   using Message = typename W::Message;
 
-  DriverWriter(W write, std::shared_ptr<arrow::Schema> schema)
-      : write_(std::move(write)), schema_(std::move(schema)) {}
-
-  /// Creates and serializes the writer factory once, caching the result.
-  arrow::Result<std::shared_ptr<const std::string>> Serialized() override {
-    if (serialized_) {
-      return *serialized_;
-    }
-    ARROW_RETURN_NOT_OK(Active(phase_, failure_));
-    arrow::Result<std::shared_ptr<const std::string>> result =
-        Guard([&]() -> arrow::Result<std::shared_ptr<const std::string>> {
-          ARROW_RETURN_NOT_OK(ValidateSchema(*schema_));
-          ARROW_ASSIGN_OR_RAISE(auto factory, write_.CreateWriterFactory());
-          ARROW_ASSIGN_OR_RAISE(std::string state, EncodeState(kStreaming, *schema_, factory));
-          return std::make_shared<const std::string>(std::move(state));
-        });
-    if (!result.ok()) {
-      phase_ = Phase::kFailed;
-      failure_ = result.status();
-    }
-    serialized_ = result;
-    return result;
+  /// Wraps a write, and serializes its writer factory. On failure, the write is destroyed.
+  static arrow::Result<CreatedWriter> Make(W write) {
+    auto writer = std::unique_ptr<DriverWriter>(new DriverWriter(std::move(write)));
+    ARROW_ASSIGN_OR_RAISE(std::string state, Guard([&]() -> arrow::Result<std::string> {
+                            ARROW_ASSIGN_OR_RAISE(auto factory,
+                                                  writer->write_.CreateWriterFactory());
+                            return Encode(factory);
+                          }));
+    return CreatedWriter{std::move(writer), std::move(state)};
   }
 
   arrow::Status Commit(int64_t epoch_id,
                        const std::vector<std::optional<std::string_view>>& messages) override {
-    ARROW_RETURN_NOT_OK(CheckEpoch(kStreaming, epoch_id));
-    if (phase_ == Phase::kCommitted) {
-      return arrow::Status::OK();
-    }
-    ARROW_RETURN_NOT_OK(Active(phase_, failure_));
-    arrow::Status result = Guard([&]() -> arrow::Status {
+    return Guard([&]() -> arrow::Status {
       std::vector<Message> decoded;
       decoded.reserve(messages.size());
       for (const auto& message : messages) {
@@ -356,21 +211,11 @@ class DriverWriter final : public WriterHandle {
         return write_.Commit(std::move(decoded));
       }
     });
-    phase_ = result.ok() ? Phase::kCommitted : Phase::kFailed;
-    failure_ = result;
-    return result;
   }
 
   arrow::Status Abort(int64_t epoch_id,
                       const std::vector<std::optional<std::string_view>>& messages) override {
-    ARROW_RETURN_NOT_OK(CheckEpoch(kStreaming, epoch_id));
-    if (phase_ == Phase::kCommitted) {
-      return arrow::Status::OK();
-    }
-    if (phase_ == Phase::kAborted) {
-      return failure_;
-    }
-    arrow::Status result = Guard([&]() -> arrow::Status {
+    return Guard([&]() -> arrow::Status {
       // Abort is the cleanup path: a message that cannot be decoded is passed as nothing instead
       // of preventing the coordinator from cleaning up.
       std::vector<std::optional<Message>> decoded;
@@ -396,40 +241,13 @@ class DriverWriter final : public WriterHandle {
         return write_.Abort(std::move(decoded));
       }
     });
-    phase_ = Phase::kAborted;
-    failure_ = result;
-    return result;
   }
 
  private:
-  W write_;
-  std::shared_ptr<arrow::Schema> schema_;
-  std::optional<arrow::Result<std::shared_ptr<const std::string>>> serialized_;
-  Phase phase_ = Phase::kActive;
-  // The failure of a failed writer, or the result of the abort of an aborted one.
-  arrow::Status failure_;
-};
+  explicit DriverWriter(W write) : write_(std::move(write)) {}
 
-/// Imports the batch that Spark passes to write, moving its Arrow structs.
-inline arrow::Result<std::shared_ptr<arrow::RecordBatch>> ImportBatch(
-    struct ArrowArray* array, struct ArrowSchema* schema, const arrow::Schema& expected) {
-  ARROW_RETURN_NOT_OK(RequireOutput(array));
-  ARROW_RETURN_NOT_OK(RequireOutput(schema));
-  ARROW_ASSIGN_OR_RAISE(std::shared_ptr<arrow::Array> imported, arrow::ImportArray(array, schema));
-  if (imported->type_id() != arrow::Type::STRUCT) {
-    return arrow::Status::Invalid("write input must be an Arrow struct array");
-  }
-  if (imported->null_count() != 0) {
-    return arrow::Status::Invalid("write input cannot contain null rows");
-  }
-  ARROW_ASSIGN_OR_RAISE(std::shared_ptr<arrow::RecordBatch> batch,
-                        arrow::RecordBatch::FromStructArray(imported));
-  ARROW_ASSIGN_OR_RAISE(bool same, SameSparkTypes(*batch->schema(), expected));
-  if (!same) {
-    return arrow::Status::Invalid("write batch schema does not match the planned schema");
-  }
-  return batch;
-}
+  W write_;
+};
 
 /// The writer of a task, which encodes its own commit messages, so that one handle type holds the
 /// writers of batch and streaming writes, whatever their messages.
@@ -437,49 +255,25 @@ class TaskWriter {
  public:
   virtual ~TaskWriter() = default;
 
-  /// Imports owned Arrow data and passes it to the writer.
-  arrow::Status Write(struct ArrowArray* array, struct ArrowSchema* schema) {
-    ARROW_RETURN_NOT_OK(Active(phase_, failure_));
-    arrow::Status result = Guard([&]() -> arrow::Status {
-      ARROW_ASSIGN_OR_RAISE(auto batch, ImportBatch(array, schema, *schema_));
+  /// Imports the array that Spark passes, which has the schema of the writer, moving it, and
+  /// passes it to the writer.
+  arrow::Status Write(struct ArrowArray* array) {
+    return Guard([&]() -> arrow::Status {
+      ARROW_RETURN_NOT_OK(RequireOutput(array));
+      ARROW_ASSIGN_OR_RAISE(std::shared_ptr<arrow::RecordBatch> batch,
+                            arrow::ImportRecordBatch(array, schema_));
       return WriteBatch(std::move(batch));
     });
-    if (!result.ok()) {
-      phase_ = Phase::kFailed;
-      failure_ = result;
-    }
-    return result;
   }
 
-  /// Commits the task once, and caches its serialized message, or its failure.
-  arrow::Result<std::shared_ptr<const std::string>> Commit() {
-    if (phase_ == Phase::kCommitted) {
-      return message_;
-    }
-    ARROW_RETURN_NOT_OK(Active(phase_, failure_));
-    arrow::Result<std::string> result = Guard([&] { return CommitWriter(); });
-    if (!result.ok()) {
-      phase_ = Phase::kFailed;
-      failure_ = result.status();
-      return failure_;
-    }
-    phase_ = Phase::kCommitted;
-    message_ = std::make_shared<const std::string>(std::move(result).ValueUnsafe());
-    return message_;
+  /// Commits the task, and returns its serialized message.
+  arrow::Result<std::string> Commit() {
+    return Guard([&] { return CommitWriter(); });
   }
 
-  /// Aborts an unfinished task once, including after a failed write or commit.
+  /// Aborts the task, also after a failed write or commit.
   arrow::Status Abort() {
-    if (phase_ == Phase::kCommitted) {
-      return arrow::Status::OK();
-    }
-    if (phase_ == Phase::kAborted) {
-      return failure_;
-    }
-    arrow::Status result = Guard([&] { return AbortWriter(); });
-    phase_ = Phase::kAborted;
-    failure_ = result;
-    return result;
+    return Guard([&] { return AbortWriter(); });
   }
 
  protected:
@@ -490,11 +284,8 @@ class TaskWriter {
   virtual arrow::Status AbortWriter() = 0;
 
  private:
+  // The schema that create_data_writer got, which every array that write gets has.
   std::shared_ptr<arrow::Schema> schema_;
-  Phase phase_ = Phase::kActive;
-  std::shared_ptr<const std::string> message_;
-  // The failure of a failed writer, or the result of the abort of an aborted one.
-  arrow::Status failure_;
 };
 
 template <typename Message>
@@ -520,39 +311,40 @@ class TypedTaskWriter final : public TaskWriter {
   std::unique_ptr<DataWriter<Message>> writer_;
 };
 
-/// Restores the executor reader of a partition with the factory F, using only serialized values:
-/// no source, planner, stream, or driver handle is created or consulted.
+/// Opens the executor reader of a partition with the factory F, using only serialized values: no
+/// source, planner, stream, or driver handle is created or consulted.
 template <typename F>
-arrow::Status OpenPartition(const SparkDsTaskContext* task, const State& state,
-                            std::string_view partition, struct ArrowArrayStream* out) {
-  ARROW_ASSIGN_OR_RAISE(F factory, FromJson<F>(state.factory));
-  ARROW_RETURN_NOT_OK(ValidateSchema(*state.schema));
+arrow::Status OpenPartition(const SparkDsTaskContext* task, std::shared_ptr<arrow::Schema> schema,
+                            std::string_view state, std::string_view partition,
+                            struct ArrowArrayStream* out) {
+  ARROW_RETURN_NOT_OK(ValidateSchema(*schema));
+  ARROW_ASSIGN_OR_RAISE(F factory, Decode<F>(state));
   ARROW_ASSIGN_OR_RAISE(TaskContext context, ImportTaskContext(task));
   ARROW_ASSIGN_OR_RAISE(auto value, Decode<typename F::Partition>(partition));
-  ARROW_ASSIGN_OR_RAISE(std::shared_ptr<arrow::RecordBatchReader> reader, Guard([&] {
-                          return factory.Open(value, ReaderContext(state.schema, context));
-                        }));
+  ARROW_ASSIGN_OR_RAISE(std::shared_ptr<arrow::RecordBatchReader> reader,
+                        Guard([&] { return factory.Open(value, ReaderContext(schema, context)); }));
   if (reader == nullptr) {
     return arrow::Status::Invalid("PartitionReaderFactory::Open returned a null reader");
   }
-  return ExportedStream::Export(std::move(reader), state.schema, out);
+  return ExportedStream::Export(std::move(reader), std::move(schema), out);
 }
 
-/// Restores the task writer of a write with the factory F, without consulting any driver state.
+/// Opens the task writer of a write with the factory F, without consulting any driver state.
 template <typename F>
-arrow::Result<TaskWriter*> OpenTaskWriter(const SparkDsTaskContext* task, const State& state,
-                                          std::optional<int64_t> epoch_id) {
-  ARROW_ASSIGN_OR_RAISE(F factory, FromJson<F>(state.factory));
-  ARROW_RETURN_NOT_OK(ValidateSchema(*state.schema));
+arrow::Result<TaskWriter*> OpenTaskWriter(const SparkDsTaskContext* task,
+                                          std::shared_ptr<arrow::Schema> schema,
+                                          std::string_view state, std::optional<int64_t> epoch_id) {
+  ARROW_RETURN_NOT_OK(ValidateSchema(*schema));
+  ARROW_ASSIGN_OR_RAISE(F factory, Decode<F>(state));
   ARROW_ASSIGN_OR_RAISE(TaskContext context, ImportTaskContext(task));
-  WriterContext writer_context(state.schema, context);
+  WriterContext writer_context(schema, context);
   writer_context.epoch_id = epoch_id;
   ARROW_ASSIGN_OR_RAISE(std::unique_ptr<DataWriter<typename F::Message>> writer,
                         Guard([&] { return factory.Open(writer_context); }));
   if (writer == nullptr) {
     return arrow::Status::Invalid("DataWriterFactory::Open returned a null writer");
   }
-  return new TypedTaskWriter<typename F::Message>(state.schema, std::move(writer));
+  return new TypedTaskWriter<typename F::Message>(std::move(schema), std::move(writer));
 }
 
 }  // namespace spark::native::internal

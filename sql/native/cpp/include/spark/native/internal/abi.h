@@ -129,9 +129,32 @@ std::optional<T> FieldOf(const void* pointer, int64_t size, size_t offset) {
   return value;
 }
 
+/// Copies a structure that Spark passes, which has every field of version 1 of the ABI: fields are
+/// only appended to the structures, so a shorter one is an error, not partly read. `name` is the
+/// name of the structure in errors.
+template <typename T>
+arrow::Result<T> Input(const T* pointer, const char* name) {
+  ARROW_ASSIGN_OR_RAISE(int64_t size, StructSize(pointer));
+  if (size < static_cast<int64_t>(sizeof(T))) {
+    return arrow::Status::Invalid(name, " has ", size,
+                                  " bytes, fewer than in version 1 of the native ABI");
+  }
+  T value;
+  std::memcpy(&value, pointer, sizeof(T));
+  return value;
+}
+
 inline arrow::Result<std::string> String(const char* pointer) {
   if (pointer == nullptr) {
     return arrow::Status::Invalid("null string");
+  }
+  return std::string(pointer);
+}
+
+/// A string that may be null.
+inline std::optional<std::string> OptionalString(const char* pointer) {
+  if (pointer == nullptr) {
+    return std::nullopt;
   }
   return std::string(pointer);
 }
@@ -200,28 +223,20 @@ inline arrow::Result<std::shared_ptr<arrow::Schema>> ImportSchema(struct ArrowSc
   return arrow::ImportSchema(schema);
 }
 
-inline arrow::Result<CreateInfo> ReadCreateInfo(const SparkDsCreateInfo* info) {
-  ARROW_ASSIGN_OR_RAISE(int64_t size, StructSize(info));
-  auto name = FieldOf<const char*>(info, size, offsetof(SparkDsCreateInfo, name));
-  if (!name) {
-    return arrow::Status::Invalid("create info does not provide a name");
-  }
-  if (*name == nullptr) {
+inline arrow::Result<CreateInfo> ReadCreateInfo(const SparkDsCreateInfo* pointer) {
+  ARROW_ASSIGN_OR_RAISE(SparkDsCreateInfo info, Input(pointer, "SparkDsCreateInfo"));
+  if (info.name == nullptr) {
     return arrow::Status::Invalid("create info has a null name");
   }
-  auto keys = FieldOf<const char* const*>(info, size, offsetof(SparkDsCreateInfo, option_keys));
-  auto values = FieldOf<const char* const*>(info, size, offsetof(SparkDsCreateInfo, option_values));
-  auto count = FieldOf<int64_t>(info, size, offsetof(SparkDsCreateInfo, num_options));
-  if (!keys || !values || !count) {
-    return arrow::Status::Invalid("create info does not provide its options");
-  }
-  ARROW_ASSIGN_OR_RAISE(std::vector<std::string> option_keys, Strings(*keys, *count));
-  ARROW_ASSIGN_OR_RAISE(std::vector<std::string> option_values, Strings(*values, *count));
+  ARROW_ASSIGN_OR_RAISE(std::vector<std::string> option_keys,
+                        Strings(info.option_keys, info.num_options));
+  ARROW_ASSIGN_OR_RAISE(std::vector<std::string> option_values,
+                        Strings(info.option_values, info.num_options));
   Options options;
   for (size_t index = 0; index < option_keys.size(); ++index) {
     options[std::move(option_keys[index])] = std::move(option_values[index]);
   }
-  return CreateInfo(std::string(*name), std::move(options));
+  return CreateInfo(std::string(info.name), std::move(options));
 }
 
 /// The mode of a write, and the ID of the query of a streaming write.
@@ -230,18 +245,10 @@ struct WriteRequest {
   std::optional<std::string> query_id;
 };
 
-inline arrow::Result<WriteRequest> ReadWriteInfo(const SparkDsWriteInfo* info) {
-  ARROW_ASSIGN_OR_RAISE(int64_t size, StructSize(info));
-  auto mode = FieldOf<int32_t>(info, size, offsetof(SparkDsWriteInfo, mode));
-  if (!mode) {
-    return arrow::Status::Invalid("write info does not provide a mode");
-  }
-  auto query_id = FieldOf<const char*>(info, size, offsetof(SparkDsWriteInfo, query_id));
-  if (!query_id) {
-    return arrow::Status::Invalid("write info does not provide a query ID");
-  }
-  WriteRequest request{WriteMode::kAppend, std::nullopt};
-  switch (*mode) {
+inline arrow::Result<WriteRequest> ReadWriteInfo(const SparkDsWriteInfo* pointer) {
+  ARROW_ASSIGN_OR_RAISE(SparkDsWriteInfo info, Input(pointer, "SparkDsWriteInfo"));
+  WriteRequest request{WriteMode::kAppend, OptionalString(info.query_id)};
+  switch (info.mode) {
     case SPARK_DS_WRITE_APPEND:
       request.mode = WriteMode::kAppend;
       break;
@@ -249,43 +256,53 @@ inline arrow::Result<WriteRequest> ReadWriteInfo(const SparkDsWriteInfo* info) {
       request.mode = WriteMode::kTruncate;
       break;
     default:
-      return arrow::Status::Invalid("unsupported native write mode: ", *mode);
-  }
-  if (*query_id != nullptr) {
-    request.query_id = std::string(*query_id);
+      return arrow::Status::Invalid("unsupported native write mode: ", info.mode);
   }
   return request;
 }
 
-inline int32_t PredicateUse(FilterSupport support) {
-  switch (support) {
-    case FilterSupport::kExact:
-      return SPARK_DS_PREDICATE_COMPLETE;
-    case FilterSupport::kPruningOnly:
-      return SPARK_DS_PREDICATE_PARTIAL;
-    case FilterSupport::kUnsupported:
-      break;
-  }
-  return SPARK_DS_PREDICATE_UNUSED;
+/// The location of the checkpoint of a stream reader.
+inline arrow::Result<std::string> ReadCheckpointLocation(const SparkDsStreamReaderInfo* pointer) {
+  ARROW_ASSIGN_OR_RAISE(SparkDsStreamReaderInfo info, Input(pointer, "SparkDsStreamReaderInfo"));
+  return String(info.checkpoint_location);
 }
 
-/// Parses each predicate on its own. One that does not parse, for example because a later Spark
-/// encodes it differently, stays unused instead of failing the scan.
-inline std::vector<std::optional<Predicate>> ParsePredicates(
-    const std::vector<std::string>& predicates) {
-  std::vector<std::optional<Predicate>> parsed;
-  parsed.reserve(predicates.size());
-  for (const std::string& text : predicates) {
-    arrow::Result<Predicate> predicate = Predicate::Parse(text);
-    if (predicate.ok()) {
-      parsed.emplace_back(std::move(predicate).ValueUnsafe());
-    } else {
-      LogWarn("Leaving unused a predicate that cannot be parsed (" + predicate.status().message() +
-              "): " + text);
-      parsed.emplace_back(std::nullopt);
-    }
+/// The start, the limit, and the end of the run of a request for the latest offset, with the
+/// offsets as JSON.
+inline arrow::Result<LatestOffsetInfo<std::string>> ReadLatestOffsetInfo(
+    const SparkDsLatestOffsetInfo* pointer) {
+  ARROW_ASSIGN_OR_RAISE(SparkDsLatestOffsetInfo info, Input(pointer, "SparkDsLatestOffsetInfo"));
+  ARROW_ASSIGN_OR_RAISE(SparkDsReadLimit limit, Input(info.limit, "SparkDsReadLimit"));
+  ARROW_ASSIGN_OR_RAISE(std::string start, String(info.start));
+  LatestOffsetInfo<std::string> request(std::move(start));
+  switch (limit.kind) {
+    case SPARK_DS_READ_ALL_AVAILABLE:
+      break;
+    case SPARK_DS_READ_MAX_ROWS:
+      request.limit = ReadLimit::MaxRows(limit.max_rows);
+      break;
+    default:
+      return arrow::Status::Invalid("unsupported kind of read limit: ", limit.kind);
   }
-  return parsed;
+  request.run_end = OptionalString(info.run_end);
+  return request;
+}
+
+/// Sets the limit that default_read_limit returns, in the structure that Spark initialized with
+/// its size.
+inline arrow::Status SetReadLimit(SparkDsReadLimit* output, const ReadLimit& limit) {
+  ARROW_ASSIGN_OR_RAISE(SparkDsReadLimit value, Input(output, "SparkDsReadLimit"));
+  switch (limit.kind()) {
+    case ReadLimit::Kind::kAllAvailable:
+      value.kind = SPARK_DS_READ_ALL_AVAILABLE;
+      break;
+    case ReadLimit::Kind::kMaxRows:
+      value.kind = SPARK_DS_READ_MAX_ROWS;
+      value.max_rows = limit.max_rows();
+      break;
+  }
+  std::memcpy(output, &value, sizeof(value));
+  return arrow::Status::OK();
 }
 
 }  // namespace spark::native::internal

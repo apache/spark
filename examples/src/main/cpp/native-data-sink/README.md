@@ -25,9 +25,9 @@ declare truncation support with `static constexpr bool kSupportsTruncate = true;
 supplies the C ABI entry point, factory and commit message serialization, Arrow batch import,
 capability checks, and error handling.
 
-The example targets C ABI version 1 from [Spark PR #59424][native-source-pr], pinned to
-`74aa0dffc53463034fa6549796c4dd599e9705de`. Running it in Spark requires that framework and
-Java 22 or later on the driver and executors. The standalone tests do not need Spark or a JVM.
+The example targets version 1 of the C ABI of native data sources, `spark_datasource.h`, which
+Spark 4.4.0 introduces. Running it in Spark requires Java 22 or later on the driver and executors.
+The standalone tests do not need Spark or a JVM.
 
 ## Supported data and options
 
@@ -39,13 +39,13 @@ small example.
 | Option | Default | Meaning |
 | --- | --- | --- |
 | `path` | Required | Absolute directory shared by the driver and every executor |
-| `readonly` | `false` | Remove all the write and truncate capabilities when `true` |
+| `readonly` | `false` | Remove all the capabilities, which are those of writes, when `true` |
 
 Unknown options are rejected, except `checkpointLocation`, which Spark passes to the sink of a
 streaming query. Source creation and capability discovery do not create files. The default
-instance advertises only native `BATCH_WRITE`, `STREAMING_WRITE`, and `TRUNCATE`; it does not
-advertise reads. Spark performs its native capability check again with the operation's effective
-options.
+instance advertises only native `BATCH_WRITE`, `STREAMING_WRITE`, `BATCH_TRUNCATE`, and
+`STREAMING_TRUNCATE`; it does not advertise reads. Spark performs its native capability check
+again with the operation's effective options.
 
 ## Commit and abort protocol
 
@@ -158,4 +158,3 @@ garbage collection with an appropriate reader-retention policy; this demo does n
 policy.
 
 [sdk]: ../../../../../sql/native/cpp/README.md
-[native-source-pr]: https://github.com/apache/spark/pull/59424

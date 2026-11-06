@@ -338,7 +338,8 @@ TEST(ReadonlyRemovesAllWriteCapabilitiesWithoutCreatingFiles) {
   Capabilities capabilities = sink.capabilities();
   CHECK(!capabilities.Contains(Capabilities::kBatchWrite));
   CHECK(!capabilities.Contains(Capabilities::kStreamingWrite));
-  CHECK(!capabilities.Contains(Capabilities::kTruncate));
+  CHECK(!capabilities.Contains(Capabilities::kBatchTruncate));
+  CHECK(!capabilities.Contains(Capabilities::kStreamingTruncate));
   CHECK(!sink.NewWrite(sn::WriteInfo(SinkSchema(), WriteMode::kAppend)).ok());
   CHECK(!sink.NewStreamingWrite(sn::StreamingWriteInfo(SinkSchema(), WriteMode::kAppend, "query"))
              .ok());
@@ -348,8 +349,8 @@ TEST(ReadonlyRemovesAllWriteCapabilitiesWithoutCreatingFiles) {
 
 TEST(TheSinkDeclaresOnlyWrites) {
   using Traits = sn::internal::SourceTraits<JsonSink>;
-  CHECK(Traits::kCapabilities ==
-        (Capabilities::kBatchWrite | Capabilities::kStreamingWrite | Capabilities::kTruncate));
+  CHECK(Traits::kCapabilities == (Capabilities::kBatchWrite | Capabilities::kStreamingWrite |
+                                  Capabilities::kBatchTruncate | Capabilities::kStreamingTruncate));
   const SparkDsLibrary* library = sn::internal::Exports<JsonSink>::Library();
   CHECK(library->create_reader == nullptr && library->read == nullptr);
   CHECK(library->create_writer != nullptr && library->schema != nullptr);

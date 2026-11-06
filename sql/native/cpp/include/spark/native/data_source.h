@@ -13,7 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Experimental C++ SDK for the native data source C ABI proposed in Spark PR #59424.
+// Experimental C++ SDK for native data sources, over version 1 of the C ABI of Spark,
+// spark_datasource.h.
 //
 // A data source derives from DataSource, and names the types of the operations that it
 // implements: a ScanBuilder for batch reads, a MicroBatchStream for micro-batch streaming reads, a
@@ -24,8 +25,9 @@
 //
 // Methods receive their inputs in structs with constructors, so that new ABI fields can reach
 // connectors without breaking them: *Info structs on the driver (CreateInfo, ScanInfo,
-// MicroBatchStreamInfo, WriteInfo, StreamingWriteInfo, and HostInfo), and *Context structs, which
-// carry the live TaskContext, on the executors (ReaderContext and WriterContext).
+// MicroBatchStreamInfo, LatestOffsetInfo, WriteInfo, StreamingWriteInfo, and HostInfo), and
+// *Context structs, which carry the live TaskContext, on the executors (ReaderContext and
+// WriterContext).
 //
 // Errors are arrow::Status values. The SDK also reports an exception that connector code throws as
 // the error of the call. Destructors must not throw, as C++ requires.
@@ -47,7 +49,6 @@
 
 #include "spark/native/capabilities.h"
 #include "spark/native/log.h"
-#include "spark/native/predicate.h"
 #include "spark/native/task_context.h"
 
 namespace spark::native {
@@ -106,8 +107,10 @@ struct CreateInfo {
 ///   `arrow::Result<StreamingWrite> NewStreamingWrite(const StreamingWriteInfo&) const`.
 ///
 /// The SDK installs native callbacks and reports capabilities only for the implemented
-/// operations, and calls the New* method of an operation only for them. SPARK_EXPORT_DATA_SOURCE
-/// checks these declarations when it compiles.
+/// operations, and calls the New* method of an operation only while the capabilities of the
+/// instance include it. It passes WriteMode::kTruncate only for a write that declares
+/// kSupportsTruncate, while the capabilities include kBatchTruncate or kStreamingTruncate.
+/// SPARK_EXPORT_DATA_SOURCE checks these declarations when it compiles.
 ///
 /// Spark creates a source with `static arrow::Result<S> Make(const CreateInfo&)` for each schema
 /// inference, scan, stream, and write, including the write of each micro-batch, and may create one
@@ -176,17 +179,6 @@ struct ScanInfo {
   std::shared_ptr<arrow::Schema> schema;
 };
 
-/// How completely a connector evaluates a pushed predicate. Spark currently rechecks all
-/// predicates, including exact ones.
-enum class FilterSupport {
-  /// Implements Spark SQL semantics and returns only matching rows.
-  kExact,
-  /// May skip data that cannot match, but may also return nonmatching rows.
-  kPruningOnly,
-  /// Does not evaluate this predicate.
-  kUnsupported,
-};
-
 /// Whether a connector limits the rows produced by the whole scan.
 enum class LimitSupport {
   /// The scan may return more rows than the limit. A connector may still cap the rows of each
@@ -202,8 +194,9 @@ struct ReaderContext {
   ReaderContext(std::shared_ptr<arrow::Schema> schema, TaskContext task)
       : schema(std::move(schema)), task(task) {}
 
-  /// The negotiated schema: the schema to read, or its pruned columns in order. The reader
-  /// returns batches with exactly these columns.
+  /// The schema to read: the columns that the scan reads, in order, which are those of
+  /// ScanBuilder::PruneColumns for a batch scan, and of MicroBatchStreamInfo::schema for a
+  /// micro-batch.
   std::shared_ptr<arrow::Schema> schema;
   /// The task that reads the partition.
   TaskContext task;
@@ -212,8 +205,8 @@ struct ReaderContext {
 /// Serializable configuration from which executors open partition readers.
 ///
 /// The factory carries configuration or a snapshot descriptor; open connections and other live
-/// resources in Open. The SDK serializes the negotiated schema with the factory, so the factory
-/// need not carry it.
+/// resources in Open. Spark passes the schema to read with each partition, so the factory need not
+/// carry it.
 ///
 /// The factory and its partitions are serialized with nlohmann::json, for example with
 /// NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE, and must be default constructible.
@@ -236,9 +229,10 @@ class PartitionReaderFactory {
   ///
   /// Any arrow::RecordBatchReader, such as a Parquet reader, can be returned. Its schema may use
   /// any supported Arrow encoding of a Spark type, such as large_utf8 for a string, and every batch
-  /// must have that schema. The SDK checks Spark-compatible Arrow types, the negotiated schema and
-  /// its nullability, and zero array offsets recursively. It reports incompatible layouts instead
-  /// of copying buffers.
+  /// must have that schema. It may also have more columns than the schema to read, such as all the
+  /// columns of the source: the SDK keeps those of the schema to read, by name. The SDK checks
+  /// Spark-compatible Arrow types, the schema to read and its nullability, and zero array offsets
+  /// recursively. It reports incompatible layouts instead of copying buffers.
   virtual arrow::Result<std::shared_ptr<arrow::RecordBatchReader>> Open(
       const Partition& partition, const ReaderContext& context) const = 0;
 
@@ -269,8 +263,10 @@ struct ScanPlan {
 
 /// Negotiates pushdown on the driver, then plans the scan.
 ///
-/// The SDK calls Plan once, when Spark first asks for the partitions, and caches the result,
-/// including a failure. Only the serialized factory and partitions reach the executors.
+/// Spark calls PushLimit and PruneColumns, each at most once and in this order, then Plan, and
+/// destroys the builder. After a call fails, it makes no other call. It destroys a builder without
+/// planning it when it does not read the scan, for example to only explain a query. Only the
+/// serialized factory and partitions reach the executors.
 template <typename FactoryT>
 class ScanBuilder {
  public:
@@ -278,32 +274,24 @@ class ScanBuilder {
 
   virtual ~ScanBuilder() = default;
 
-  /// Returns one result per input predicate in order. Unknown functions and types must not be
-  /// reported as exact. Spark currently rechecks all filters. A predicate that the SDK cannot
-  /// parse arrives as Predicate::Kind::kUnknown, and the SDK reports it as unsupported whatever
-  /// this method returns for it.
-  virtual arrow::Result<std::vector<FilterSupport>> PushFilters(
-      const std::vector<Predicate>& filters) {
-    return std::vector<FilterSupport>(filters.size(), FilterSupport::kUnsupported);
-  }
-
-  /// Counts rows after filtering. Spark currently pushes limits only for scans with no filters;
-  /// the SDK also declines a limit when any predicate that it received remains residual.
+  /// Counts rows. Spark pushes a limit only when the query does not filter the rows, since it
+  /// filters them after reading.
   virtual arrow::Result<LimitSupport> PushLimit(int64_t limit) {
     (void)limit;
     return LimitSupport::kUnsupported;
   }
 
-  /// On true, output exactly these top-level columns in this order. On false, keep the original
-  /// schema. An empty projection must preserve row counts. Retain internally needed filter
-  /// columns without returning them. Readers get the resulting schema in ReaderContext::schema.
-  virtual arrow::Result<bool> PruneColumns(const std::vector<std::string>& columns) {
+  /// Tells the scan the top-level columns that the query needs, in order, so that it can plan to
+  /// read only them. There may be none, for example for SELECT count(*): the batches then only
+  /// have a number of rows. Readers get these columns in ReaderContext::schema whether or not the
+  /// scan implements this method.
+  virtual arrow::Status PruneColumns(const std::vector<std::string>& columns) {
     (void)columns;
-    return false;
+    return arrow::Status::OK();
   }
 
-  /// Plans the scan. The SDK calls it at most once, as the last call on the builder, so it may
-  /// move out of the builder.
+  /// Plans the scan. Spark calls it at most once, as the last call on the builder, so it may move
+  /// out of the builder.
   virtual arrow::Result<ScanPlan<Factory>> Plan() = 0;
 
  protected:
@@ -321,11 +309,66 @@ class ScanBuilder {
 /// What Spark passes to create the stream of a streaming query.
 struct MicroBatchStreamInfo {
   /// The information of a stream created outside Spark, for example in a test.
-  explicit MicroBatchStreamInfo(std::shared_ptr<arrow::Schema> schema)
-      : schema(std::move(schema)) {}
+  MicroBatchStreamInfo(std::shared_ptr<arrow::Schema> schema, std::string checkpoint_location)
+      : schema(std::move(schema)), checkpoint_location(std::move(checkpoint_location)) {}
 
-  /// The schema to read: the schema of the source, or one that the user specified.
+  /// The columns to read: those of the schema of the source, or of one that the user specified, or
+  /// only the top-level columns of it that the query needs. The readers of the micro-batches get
+  /// it in ReaderContext::schema.
   std::shared_ptr<arrow::Schema> schema;
+  /// A directory in the checkpoint of the query that is reserved for this source, such as
+  /// file:/tmp/checkpoint/sources/0, where the stream may keep what it needs to recover from a
+  /// failure. It stays the same when the query restarts. It is a fully qualified Hadoop path, whose
+  /// characters are not escaped as in a URI, on a file system that the library may not be able to
+  /// access, such as s3a. Spark keeps what it needs there under the names that start with _spark,
+  /// which the library must not use.
+  std::string checkpoint_location;
+};
+
+/// A limit on the data of a micro-batch.
+class ReadLimit {
+ public:
+  enum class Kind {
+    /// All the available data.
+    kAllAvailable,
+    /// At most max_rows() rows, at least 1.
+    kMaxRows,
+  };
+
+  static constexpr ReadLimit AllAvailable() { return ReadLimit(Kind::kAllAvailable, 0); }
+  static constexpr ReadLimit MaxRows(int64_t rows) { return ReadLimit(Kind::kMaxRows, rows); }
+
+  constexpr Kind kind() const { return kind_; }
+  /// The maximum number of rows of a limit of the kind kMaxRows.
+  constexpr int64_t max_rows() const { return max_rows_; }
+
+  constexpr bool operator==(const ReadLimit& other) const = default;
+
+ private:
+  constexpr ReadLimit(Kind kind, int64_t max_rows) : kind_(kind), max_rows_(max_rows) {}
+
+  Kind kind_;
+  int64_t max_rows_;
+};
+
+/// What Spark passes to ask a stream for its latest offset.
+template <typename OffsetT>
+struct LatestOffsetInfo {
+  /// A request without a limit, made outside Spark, for example in a test. Set limit and run_end
+  /// for other requests.
+  explicit LatestOffsetInfo(OffsetT start) : start(std::move(start)) {}
+
+  /// The offset that the next micro-batch starts after: the end of the previous one, or the
+  /// initial offset.
+  OffsetT start;
+  /// The limit on the data after start: that of MicroBatchStream::DefaultReadLimit, or
+  /// ReadLimit::AllAvailable() when Spark reads all the available data, such as for the progress
+  /// of the query or with Trigger.Once.
+  ReadLimit limit = ReadLimit::AllAvailable();
+  /// With Trigger.AvailableNow and a limit, the end of the run: the latest offset must not go
+  /// beyond it, so that the run reads the data that was available when it started. It is not the
+  /// end of the next micro-batch. Nothing otherwise.
+  std::optional<OffsetT> run_end;
 };
 
 /// Finds new data and plans the micro-batches of a streaming query, on the driver.
@@ -334,20 +377,25 @@ struct MicroBatchStreamInfo {
 /// destroys it when the query stops. For each micro-batch, it asks for the LatestOffset, and when
 /// that differs from the end of the previous micro-batch, plans the data in between. Only the
 /// serialized factory and partitions of each plan reach the executors, which read them as those of
-/// a batch scan. Spark pushes nothing down into a streaming scan, so its readers return all the
-/// columns of the schema.
+/// a batch scan.
 ///
 /// Offsets: Spark stores offsets in the checkpoint of the query, as the JSON of OffsetT, which the
 /// SDK serializes with nlohmann::json, and compares them by that JSON, so serialize a position to
 /// the same JSON each time: nlohmann::json orders the keys of objects, but a type with a custom
 /// to_json must be deterministic too. A restarted query passes the offsets of its checkpoint, which
-/// an earlier version of the library may have written, to Plan and Commit.
+/// an earlier version of the library may have written, to LatestOffset, Plan, and Commit.
+///
+/// Admission control: DefaultReadLimit limits the data of each micro-batch, typically with an
+/// option of the source. Spark passes the limit to LatestOffset, except when a micro-batch reads
+/// all the available data, as with Trigger.Once. With Trigger.AvailableNow, a run reads the data
+/// that was available when it started: with a limit, in several micro-batches, whose latest offsets
+/// must not go beyond LatestOffsetInfo::run_end.
 ///
 /// Lifecycle:
 ///
 /// - Calls never run concurrently.
-/// - A failed call, including an exception, stops the query, so the SDK returns that failure from
-///   every later call.
+/// - After a call fails, including with an exception, Spark makes no other call: it stops the
+///   query, and destroys the stream.
 /// - After a restart, Spark may plan the last range of the query again, so Plan must return
 ///   partitions that read the same data for the same range.
 template <typename OffsetT, typename FactoryT>
@@ -361,11 +409,23 @@ class MicroBatchStream {
   virtual ~MicroBatchStream() = default;
 
   /// Returns the offset to start from when the query has no checkpoint: the first micro-batch
-  /// reads the data after it.
+  /// reads the data after it. Spark keeps it in the checkpoint, and asks only when the checkpoint
+  /// does not have it yet, so a query that restarts before its first micro-batch is committed
+  /// starts from the same offset.
   virtual arrow::Result<Offset> InitialOffset() = 0;
 
-  /// Returns the offset of the most recent data available.
-  virtual arrow::Result<Offset> LatestOffset() = 0;
+  /// Returns the limit on the data of each micro-batch. Spark asks once, when the query starts.
+  /// The default, ReadLimit::AllAvailable(), reads all the available data in each micro-batch.
+  virtual arrow::Result<ReadLimit> DefaultReadLimit() const { return ReadLimit::AllAvailable(); }
+
+  /// Returns the end of the next micro-batch: the offset of the most recent data after info.start,
+  /// within info.limit, and not beyond info.run_end. Return start when there is no new data. When
+  /// there is, return an offset after start, even if the next unit of data, such as a file, is
+  /// larger than the limit: Spark sees no new data otherwise, and never reads further.
+  ///
+  /// With a limit, Spark also asks without a limit for some micro-batches, to report the progress
+  /// of the query, so do not count the calls as micro-batches, or reserve data in them.
+  virtual arrow::Result<Offset> LatestOffset(const LatestOffsetInfo<Offset>& info) = 0;
 
   /// Plans the micro-batch that reads the data after `start`, up to and including `end`.
   virtual arrow::Result<ScanPlan<Factory>> Plan(const Offset& start, const Offset& end) = 0;
@@ -425,18 +485,20 @@ struct WriterContext {
   std::optional<int64_t> epoch_id;
 };
 
-/// The writer of one task attempt. The SDK destroys it after commit or abort.
+/// The writer of one task attempt. Spark destroys it after commit or abort.
 ///
-/// Lifecycle: the SDK enforces the following, so implementations need not track their own phase
-/// or guard against repeated calls.
+/// Lifecycle: Spark calls the methods in this order, so implementations need not track their own
+/// phase or guard against repeated calls.
 ///
-/// - Write runs zero or more times, and never after any call has failed or after Commit or Abort.
+/// - Write runs zero or more times, before Commit or Abort, and never after a call has failed.
 /// - Commit runs at most once, never after a failed Write or after Abort.
 /// - Abort runs at most once, never after a Commit whose message reached Spark. It may follow a
 ///   failed Write or Commit, including a Commit that returned a message that the SDK could not
 ///   serialize, so it must handle a task attempt that already finished its output.
 /// - The destructor runs exactly once when Spark closes the writer, possibly without Commit or
 ///   Abort.
+/// - The writer of a task attempt that Spark kills, such as a speculative one, may still write,
+///   abort, and be destroyed after the driver committed or aborted the write.
 /// - An exception in any method is reported as that method's failure.
 template <typename MessageT>
 class DataWriter {
@@ -445,14 +507,18 @@ class DataWriter {
 
   virtual ~DataWriter() = default;
 
-  /// Takes an imported Arrow batch, which may be retained after this call. Its columns match
-  /// WriterContext::schema by Spark type. Process batches incrementally and check task
-  /// cancellation.
+  /// Takes an imported Arrow batch, which may be retained after this call, but not after the writer
+  /// is destroyed: its buffers belong to the data writer of Spark, which frees them once it closes
+  /// the writer, so do not pass the batch to a thread or an object that outlives the writer. It has
+  /// the schema of WriterContext::schema, and at most spark.sql.execution.arrow.maxRecordsPerBatch
+  /// rows. When Spark writes the batches of a native scan without converting them to rows, it
+  /// copies their values as the scan returned them, without the checks of a conversion, such as the
+  /// precision of a decimal. Process batches incrementally and check task cancellation.
   virtual arrow::Status Write(std::shared_ptr<arrow::RecordBatch> batch) = 0;
 
   /// Finishes staging and returns a message for the driver. Do not make the whole write visible
-  /// here. On failure, including the failure to serialize the message, the SDK keeps this writer
-  /// available for Abort.
+  /// here. On failure, including the failure of the SDK to serialize the message, Spark calls
+  /// Abort.
   virtual arrow::Result<Message> Commit() = 0;
 
   virtual arrow::Status Abort() = 0;
@@ -492,18 +558,18 @@ class DataWriterFactory {
 /// Keep irreversible publication, including removing overwritten data, in Commit. The destructor
 /// releases resources; it must not publish data or perform fallible flushing.
 ///
-/// Lifecycle: the SDK enforces the following, so implementations need not track their own phase
-/// or guard against repeated calls.
+/// Lifecycle: Spark calls the methods in this order, so implementations need not track their own
+/// phase or guard against repeated calls.
 ///
-/// - CreateWriterFactory runs at most once, before any task opens a writer.
-/// - Commit runs at most once, only while no earlier call has failed, including
-///   CreateWriterFactory and the serialization of its factory. It is skipped, and the write fails,
-///   when any task message is missing or cannot be decoded.
-/// - Abort runs at most once, never after a successful Commit. It may follow a failed Commit, or
-///   run without Commit.
-/// - The destructor runs exactly once, possibly without Commit or Abort. Spark closes the
-///   coordinator without Abort when CreateWriterFactory or the serialization of its factory fails,
-///   so the destructor must also release what only this write staged.
+/// - CreateWriterFactory runs once, right after the NewWrite method of the source, before any task
+///   opens a writer. When it fails, or the SDK cannot serialize its factory, the write fails and
+///   the coordinator is destroyed without Abort, so the destructor must also release what only
+///   this write staged.
+/// - Commit runs at most once, when every task succeeded. The SDK fails the write without calling
+///   it when a task message cannot be decoded.
+/// - Abort runs at most once, never after a successful Commit. It follows a failed Commit, or a
+///   failed task, also when computing the data to write failed.
+/// - The destructor runs exactly once, possibly without Commit or Abort.
 /// - An exception in any method is reported as that method's failure.
 ///
 /// Message i of Commit and Abort belongs to input partition i.
@@ -515,15 +581,15 @@ class BatchWrite {
   /// The message with which a task attempt reports its staged output to the driver.
   using Message = typename FactoryT::Message;
 
-  /// Whether the write supports WriteMode::kTruncate, which adds the kTruncate capability to batch
-  /// writes. A write sets it with `static constexpr bool kSupportsTruncate = true;`.
+  /// Whether the write supports WriteMode::kTruncate, for the save mode "overwrite", which adds the
+  /// kBatchTruncate capability. A write sets it with `static constexpr bool kSupportsTruncate =
+  /// true;`.
   static constexpr bool kSupportsTruncate = false;
 
   virtual ~BatchWrite() = default;
 
-  /// Returns the configuration of the task writers. The SDK serializes it once, with the schema of
-  /// the input, and caches the result, including a failure. Include a unique operation ID when
-  /// needed; Spark supplies no batch query ID.
+  /// Returns the configuration of the task writers, which the SDK serializes for them. Include a
+  /// unique operation ID when needed; Spark supplies no batch query ID.
   virtual arrow::Result<Factory> CreateWriterFactory() const = 0;
 
   /// Publishes only the winning attempt from each input partition. Task retries and speculative
@@ -566,14 +632,16 @@ struct StreamingWriteInfo {
 /// A driver coordinator for the write of one micro-batch, or epoch, of a streaming query, which
 /// also creates the serializable configuration of its task writers.
 ///
-/// Spark creates a write for each micro-batch. The SDK enforces the lifecycle of a BatchWrite,
-/// with the epoch ID of the micro-batch passed to Commit and Abort, and to the task writers in
+/// Spark creates a write for each micro-batch, with the lifecycle of a BatchWrite, and passes the
+/// epoch ID of the micro-batch to Commit and Abort, and to the task writers in
 /// WriterContext::epoch_id.
 ///
 /// Exactly-once output: Spark may commit an epoch again, with a new write, for example when the
 /// query restarts after a failure: committing an epoch that is already committed must have no
-/// effect. The ID of the query, StreamingWriteInfo::query_id, and the epoch ID identify the output
-/// of a micro-batch, also when other queries write to the same destination.
+/// effect. A restarted query may also abort an epoch that an earlier run committed, so Abort must
+/// only remove what the task writers of its own write wrote. The ID of the query,
+/// StreamingWriteInfo::query_id, and the epoch ID identify the output of a micro-batch, also when
+/// other queries write to the same destination.
 template <typename FactoryT>
 class StreamingWrite {
  public:
@@ -583,13 +651,12 @@ class StreamingWrite {
   using Message = typename FactoryT::Message;
 
   /// Whether the write supports WriteMode::kTruncate, for the output mode "complete", which adds
-  /// the kTruncate capability.
+  /// the kStreamingTruncate capability.
   static constexpr bool kSupportsTruncate = false;
 
   virtual ~StreamingWrite() = default;
 
-  /// Returns the configuration of the task writers. The SDK serializes it once, with the schema of
-  /// the input, and caches the result, including a failure.
+  /// Returns the configuration of the task writers, which the SDK serializes for them.
   virtual arrow::Result<Factory> CreateWriterFactory() const = 0;
 
   /// Publishes the winning attempt of each input partition as the output of epoch `epoch_id`,

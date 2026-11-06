@@ -101,6 +101,21 @@ inline void Collect(void* sink, const uint8_t* data, int64_t length) {
   values.emplace_back(reinterpret_cast<const char*>(data), static_cast<size_t>(length));
 }
 
+/// What a planning call returns: its partitions, and the state of the reader, with a sink for
+/// each, which share the sink argument of the call.
+struct Plan {
+  std::vector<std::string> partitions;
+  std::vector<std::string> states;
+
+  static void AddPartition(void* sink, const uint8_t* data, int64_t length) {
+    Collect(&static_cast<Plan*>(sink)->partitions, data, length);
+  }
+
+  static void SetState(void* sink, const uint8_t* data, int64_t length) {
+    Collect(&static_cast<Plan*>(sink)->states, data, length);
+  }
+};
+
 /// The message of the last error of the calling thread.
 inline std::string LastError(const SparkDsLibrary& library) {
   const char* message = library.last_error();
@@ -137,12 +152,14 @@ class CreateArguments {
 };
 
 using HostLogFunction = void (*)(int32_t level, const char* message);
+using HostLogEnabledFunction = bool (*)(int32_t level);
 
 /// A host that, like Spark's, stays valid until the process exits.
-inline const SparkDsHost* LeakedHost(HostLogFunction log, const char* spark_version) {
+inline const SparkDsHost* LeakedHost(HostLogFunction log, const char* spark_version,
+                                     HostLogEnabledFunction is_log_enabled = nullptr) {
   static std::deque<SparkDsHost> hosts;
   return &hosts.emplace_back(
-      SparkDsHost{sizeof(SparkDsHost), SPARK_DS_ABI_VERSION, spark_version, log});
+      SparkDsHost{sizeof(SparkDsHost), SPARK_DS_ABI_VERSION, spark_version, log, is_log_enabled});
 }
 
 /// Initializes the data source that the test executable exports.

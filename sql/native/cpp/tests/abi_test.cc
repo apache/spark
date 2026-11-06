@@ -67,13 +67,18 @@ TEST(ErrorMessagesKeepTheDetailOfArrowErrors) {
   CHECK_EQ(internal::ErrorMessage(arrow::Status::Invalid("plain")), std::string("plain"));
 }
 
-TEST(EmptyArraysAcceptNullAndTruncatedCreateInfoFails) {
+TEST(EmptyArraysAcceptNullAndTruncatedStructuresFail) {
   ASSIGN_OR_FAIL(std::vector<std::string> strings, internal::Strings(nullptr, 0));
   CHECK(strings.empty());
   CHECK(!internal::Strings(nullptr, 1).ok());
   CHECK(!internal::Strings(nullptr, -1).ok());
   int64_t prefix = sizeof(int64_t);
-  CHECK(!internal::ReadCreateInfo(reinterpret_cast<const SparkDsCreateInfo*>(&prefix)).ok());
+  arrow::Result<spark::native::CreateInfo> truncated =
+      internal::ReadCreateInfo(reinterpret_cast<const SparkDsCreateInfo*>(&prefix));
+  CHECK(!truncated.ok());
+  CHECK_EQ(truncated.status().message(),
+           std::string("SparkDsCreateInfo has 8 bytes, fewer than in version 1 of the native ABI"));
+  CHECK(!internal::Input<SparkDsReadInfo>(nullptr, "SparkDsReadInfo").ok());
 }
 
 TEST(CreateInfoCarriesTheSourceNameAndOptions) {
@@ -131,21 +136,42 @@ TEST(EncodedValuesRoundTripAndRejectAnotherWireVersion) {
   CHECK(!rejected.ok());
   CHECK_CONTAINS(rejected.status().message(), "unsupported native state version");
   CHECK(!internal::Decode<int64_t>("not json").ok());
-  CHECK(!internal::Decode<int64_t>(R"({"version":1,"value":"text"})").ok());
+  std::string text =
+      "{\"version\":" + std::to_string(internal::kStateVersion) + ",\"value\":\"text\"}";
+  CHECK(!internal::Decode<int64_t>(text).ok());
 }
 
-TEST(StatesCarryTheirKindTheSchemaAndTheFactory) {
-  auto schema = arrow::schema(
-      {arrow::field("id", arrow::int64(), false), arrow::field("label", arrow::large_utf8())});
-  for (bool streaming : {false, true}) {
-    ASSIGN_OR_FAIL(std::string encoded,
-                   internal::EncodeState(streaming, *schema, nlohmann::json{{"size", 3}}));
-    ASSIGN_OR_FAIL(internal::State state, internal::DecodeState(encoded));
-    CHECK(state.streaming == streaming);
-    CHECK(state.schema->Equals(*schema));
-    CHECK(state.factory == nlohmann::json({{"size", 3}}));
-  }
-  CHECK(!internal::DecodeState(R"({"version":1,"kind":"other","schema":"","factory":1})").ok());
+TEST(LatestOffsetInfoCarriesTheStartTheLimitAndTheEndOfTheRun) {
+  SparkDsReadLimit limit{sizeof(SparkDsReadLimit), SPARK_DS_READ_ALL_AVAILABLE, 0};
+  SparkDsLatestOffsetInfo info{sizeof(SparkDsLatestOffsetInfo), R"({"next":3})", &limit, nullptr};
+  ASSIGN_OR_FAIL(auto request, internal::ReadLatestOffsetInfo(&info));
+  CHECK_EQ(request.start, std::string(R"({"next":3})"));
+  CHECK(request.limit == spark::native::ReadLimit::AllAvailable());
+  CHECK(!request.run_end.has_value());
+
+  limit.kind = SPARK_DS_READ_MAX_ROWS;
+  limit.max_rows = 5;
+  info.run_end = R"({"next":9})";
+  ASSIGN_OR_FAIL(auto limited, internal::ReadLatestOffsetInfo(&info));
+  CHECK(limited.limit == spark::native::ReadLimit::MaxRows(5));
+  CHECK(limited.run_end == std::optional<std::string>(R"({"next":9})"));
+
+  limit.kind = 7;
+  arrow::Result<spark::native::LatestOffsetInfo<std::string>> unknown =
+      internal::ReadLatestOffsetInfo(&info);
+  CHECK(!unknown.ok());
+  CHECK_CONTAINS(unknown.status().message(), "unsupported kind of read limit: 7");
+}
+
+TEST(DefaultReadLimitsSetTheKindAndTheRows) {
+  SparkDsReadLimit limit{sizeof(SparkDsReadLimit), SPARK_DS_READ_ALL_AVAILABLE, 0};
+  CHECK_OK(internal::SetReadLimit(&limit, spark::native::ReadLimit::MaxRows(4)));
+  CHECK_EQ(limit.kind, SPARK_DS_READ_MAX_ROWS);
+  CHECK_EQ(limit.max_rows, int64_t{4});
+  CHECK_OK(internal::SetReadLimit(&limit, spark::native::ReadLimit::AllAvailable()));
+  CHECK_EQ(limit.kind, SPARK_DS_READ_ALL_AVAILABLE);
+  limit.size = sizeof(int64_t);
+  CHECK(!internal::SetReadLimit(&limit, spark::native::ReadLimit::AllAvailable()).ok());
 }
 
 TEST(OffsetsAreCompactJsonOnOneLine) {

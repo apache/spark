@@ -13,8 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Batch writes through the function table that the library exports: driver coordinators, task
-// writers restored from serialized state, and the lifecycle that the SDK enforces.
+// Batch writes through the function table that the library exports: driver coordinators, and task
+// writers restored from serialized state.
 
 #include <algorithm>
 #include <mutex>
@@ -176,6 +176,15 @@ class Driver : public sn::BatchWrite<Factory> {
   static constexpr bool kSupportsTruncate = true;
 
   explicit Driver(std::string failure) : failure_(std::move(failure)) {}
+  Driver(Driver&& other) noexcept
+      : BatchWrite(std::move(other)),
+        failure_(std::move(other.failure_)),
+        live_(std::exchange(other.live_, false)) {}
+  ~Driver() override {
+    if (live_) {
+      Record("DriverDestroyed");
+    }
+  }
 
   arrow::Result<Factory> CreateWriterFactory() const override {
     Record("FactoryCreated");
@@ -201,6 +210,7 @@ class Driver : public sn::BatchWrite<Factory> {
 
  private:
   std::string failure_;
+  bool live_ = true;
 };
 
 class Source : public sn::DataSource {
@@ -223,7 +233,9 @@ class Source : public sn::DataSource {
 
   Capabilities capabilities() const override {
     if (capabilities_ == "none") return Capabilities::Empty();
-    if (capabilities_ == "append") return Capabilities::All().Without(Capabilities::kTruncate);
+    if (capabilities_ == "append") {
+      return Capabilities::All().Without(Capabilities::kBatchTruncate);
+    }
     return Capabilities::All();
   }
 
@@ -277,34 +289,33 @@ std::unique_ptr<Handle> CreateSource(const std::string& failure, const std::stri
   return std::make_unique<Handle>(source, Library().close);
 }
 
-int CreateDriver(const Handle& source, int32_t mode, const char* query_id, void** writer) {
+/// Creates a writer, and collects the state that create_writer returns for its data writers.
+int CreateDriver(const Handle& source, int32_t mode, const char* query_id, void** writer,
+                 std::vector<std::string>* states) {
   struct ArrowSchema input{};
   CHECK_OK(arrow::ExportSchema(*Schema(), &input));
   SparkDsWriteInfo info{sizeof(SparkDsWriteInfo), mode, query_id};
   *writer = nullptr;
-  int code = Library().create_writer(source.get(), &input, &info, writer);
+  int code = Library().create_writer(source.get(), &input, &info, &Collect, states, writer);
   if (input.release != nullptr) {
     input.release(&input);
   }
   return code;
 }
 
-std::unique_ptr<Handle> OpenDriver(const Handle& source, int32_t mode) {
+/// A writer, and the state of its data writers.
+struct Driven {
+  std::unique_ptr<Handle> driver;
+  std::string state;
+};
+
+Driven OpenDriver(const Handle& source, int32_t mode) {
   void* writer = nullptr;
-  CHECK_SUCCESS(Library(), CreateDriver(source, mode, nullptr, &writer));
+  std::vector<std::string> states;
+  CHECK_SUCCESS(Library(), CreateDriver(source, mode, nullptr, &writer, &states));
   CHECK(writer != nullptr);
-  return std::make_unique<Handle>(writer, Library().close_writer);
-}
-
-int Serialize(const Handle& driver, std::vector<std::string>* output) {
-  return Library().serialize_writer(driver.get(), &Collect, output);
-}
-
-std::string State(const Handle& driver) {
-  std::vector<std::string> output;
-  CHECK_SUCCESS(Library(), Serialize(driver, &output));
-  CHECK(output.size() == 1);
-  return output[0];
+  CHECK(states.size() == 1);
+  return Driven{std::make_unique<Handle>(writer, Library().close_writer), states[0]};
 }
 
 /// The data writer of a task, which closes it before its host context expires.
@@ -313,13 +324,26 @@ struct Task {
   std::unique_ptr<Handle> writer;
 };
 
+int CreateDataWriter(const HostTask& host, const std::string& state, int64_t epoch_id,
+                     void** writer) {
+  struct ArrowSchema input{};
+  CHECK_OK(arrow::ExportSchema(*Schema(), &input));
+  SparkDsDataWriterInfo info{sizeof(SparkDsDataWriterInfo), &input,
+                             reinterpret_cast<const uint8_t*>(state.data()),
+                             static_cast<int64_t>(state.size()), epoch_id};
+  *writer = nullptr;
+  int code = Library().create_data_writer(&host.context, &info, writer);
+  if (input.release != nullptr) {
+    input.release(&input);
+  }
+  return code;
+}
+
 std::unique_ptr<Task> OpenTask(const std::string& state, int32_t partition) {
   auto task = std::make_unique<Task>();
   task->host = std::make_unique<HostTask>(partition, 100 + partition);
   void* writer = nullptr;
-  CHECK_SUCCESS(Library(), Library().create_data_writer(
-                               &task->host->context, reinterpret_cast<const uint8_t*>(state.data()),
-                               static_cast<int64_t>(state.size()), -1, &writer));
+  CHECK_SUCCESS(Library(), CreateDataWriter(*task->host, state, -1, &writer));
   CHECK(writer != nullptr);
   task->writer = std::make_unique<Handle>(writer, Library().close_data_writer);
   return task;
@@ -332,22 +356,27 @@ std::shared_ptr<arrow::RecordBatch> Batch(const std::vector<int64_t>& values) {
                                   {builder.Finish().ValueOrDie()});
 }
 
+/// Writes a batch, as an array of the schema of the data writer.
 int Write(const Task& task, const std::shared_ptr<arrow::RecordBatch>& batch) {
   struct ArrowArray array{};
-  struct ArrowSchema schema{};
-  CHECK_OK(arrow::ExportRecordBatch(*batch, &array, &schema));
-  int code = Library().write(task.writer->get(), &array, &schema);
+  CHECK_OK(arrow::ExportRecordBatch(*batch, &array));
+  int code = Library().write(task.writer->get(), &array);
   if (code == 0) {
     // Retained input must be moved from the caller.
-    CHECK(array.release == nullptr && schema.release == nullptr);
+    CHECK(array.release == nullptr);
   }
   if (array.release != nullptr) array.release(&array);
-  if (schema.release != nullptr) schema.release(&schema);
   return code;
 }
 
+const SparkDsFinishDataWriterInfo kFinishTask{sizeof(SparkDsFinishDataWriterInfo)};
+
 int TaskCommit(const Task& task, std::vector<std::string>* messages) {
-  return Library().commit_data_writer(task.writer->get(), &Collect, messages);
+  return Library().commit_data_writer(task.writer->get(), &kFinishTask, &Collect, messages);
+}
+
+int TaskAbort(const Task& task) {
+  return Library().abort_data_writer(task.writer->get(), &kFinishTask);
 }
 
 std::string TaskMessage(const Task& task) {
@@ -358,16 +387,18 @@ std::string TaskMessage(const Task& task) {
 }
 
 int Finish(const Handle& driver, bool abort,
-           const std::vector<std::optional<std::string>>& messages, int64_t epoch_id = -1) {
+           const std::vector<std::optional<std::string>>& messages) {
   std::vector<const uint8_t*> pointers;
   std::vector<int64_t> lengths;
   for (const auto& message : messages) {
     pointers.push_back(message ? reinterpret_cast<const uint8_t*>(message->data()) : nullptr);
     lengths.push_back(message ? static_cast<int64_t>(message->size()) : 0);
   }
+  SparkDsFinishWriteInfo info{
+      sizeof(SparkDsFinishWriteInfo),        -1, pointers.data(), lengths.data(),
+      static_cast<int64_t>(messages.size()), 0};
   auto finish = abort ? Library().abort : Library().commit;
-  return finish(driver.get(), epoch_id, pointers.data(), lengths.data(),
-                static_cast<int64_t>(messages.size()));
+  return finish(driver.get(), &info);
 }
 
 Message Expected(int32_t partition, std::vector<int64_t> values, int64_t batches,
@@ -391,50 +422,53 @@ TEST(WriteTypesAndOptionsControlCapabilities) {
   // kInfersSchema = false leaves schema inference to Spark's error.
   CHECK(library.schema == nullptr);
   CHECK(library.create_reader == nullptr && library.read == nullptr);
-  CHECK(library.create_stream_reader == nullptr);
+  CHECK(library.create_stream_reader == nullptr && library.default_read_limit == nullptr);
   CHECK(library.create_writer != nullptr && library.write != nullptr);
 
-  for (const auto& [capabilities, expected] :
-       std::vector<std::pair<std::string, uint64_t>>{{"", SPARK_DS_BATCH_WRITE | SPARK_DS_TRUNCATE},
-                                                     {"append", SPARK_DS_BATCH_WRITE},
-                                                     {"none", 0}}) {
+  for (const auto& [capabilities, expected] : std::vector<std::pair<std::string, uint64_t>>{
+           {"", SPARK_DS_BATCH_WRITE | SPARK_DS_BATCH_TRUNCATE},
+           {"append", SPARK_DS_BATCH_WRITE},
+           {"none", 0}}) {
     uint64_t mask = 0;
     std::unique_ptr<Handle> source = CreateSource("", capabilities, &mask);
     CHECK_EQ(mask, expected);
     for (int32_t mode : {SPARK_DS_WRITE_APPEND, SPARK_DS_WRITE_TRUNCATE}) {
       void* writer = nullptr;
-      int code = CreateDriver(*source, mode, nullptr, &writer);
+      std::vector<std::string> states;
+      int code = CreateDriver(*source, mode, nullptr, &writer, &states);
       bool supported = (expected & SPARK_DS_BATCH_WRITE) != 0 &&
-                       (mode == SPARK_DS_WRITE_APPEND || (expected & SPARK_DS_TRUNCATE) != 0);
+                       (mode == SPARK_DS_WRITE_APPEND || (expected & SPARK_DS_BATCH_TRUNCATE) != 0);
       if (supported) {
         CHECK_SUCCESS(library, code);
+        CHECK(states.size() == 1);
         library.close_writer(writer);
       } else {
         CHECK(code != 0);
-        CHECK(writer == nullptr);
+        CHECK(writer == nullptr && states.empty());
         CHECK_CONTAINS(LastError(library), "support");
       }
     }
   }
-  CHECK(Events() == std::vector<std::string>(
-                        {"WriteCreated(false)", "WriteCreated(true)", "WriteCreated(false)"}));
+  CHECK(Events() ==
+        std::vector<std::string>({"WriteCreated(false)", "FactoryCreated", "DriverDestroyed",
+                                  "WriteCreated(true)", "FactoryCreated", "DriverDestroyed",
+                                  "WriteCreated(false)", "FactoryCreated", "DriverDestroyed"}));
 
   std::unique_ptr<Handle> source = CreateSource("", "");
   void* writer = nullptr;
-  CHECK(CreateDriver(*source, 99, nullptr, &writer) != 0);
+  std::vector<std::string> states;
+  CHECK(CreateDriver(*source, 99, nullptr, &writer, &states) != 0);
   CHECK(writer == nullptr);
-  CHECK(CreateDriver(*source, SPARK_DS_WRITE_APPEND, "streaming-query", &writer) != 0);
+  CHECK(CreateDriver(*source, SPARK_DS_WRITE_APPEND, "streaming-query", &writer, &states) != 0);
   CHECK_CONTAINS(LastError(library), "does not support streaming writes");
-  CHECK(writer == nullptr);
+  CHECK(writer == nullptr && states.empty());
 }
 
 TEST(SerializedFactoryAndMessagesRoundTripWithoutTheDriverSourceOrInputBuffers) {
   ClearEvents();
   std::unique_ptr<Handle> source = CreateSource("", "");
-  std::unique_ptr<Handle> driver = OpenDriver(*source, SPARK_DS_WRITE_TRUNCATE);
+  auto [driver, state] = OpenDriver(*source, SPARK_DS_WRITE_TRUNCATE);
   source.reset();
-  std::string state = State(*driver);
-  CHECK(state == State(*driver));
 
   std::unique_ptr<Task> first = OpenTask(state, 7);
   std::shared_ptr<arrow::RecordBatch> input = Batch({2, 5, 9});
@@ -445,7 +479,6 @@ TEST(SerializedFactoryAndMessagesRoundTripWithoutTheDriverSourceOrInputBuffers) 
   CHECK(buffer.use_count() > 1);
   CHECK_SUCCESS(Library(), Write(*first, Batch({})));
   std::string first_message = TaskMessage(*first);
-  CHECK(first_message == TaskMessage(*first));
   first.reset();
   // Closing the writer releases the retained Arrow buffers.
   CHECK_EQ(buffer.use_count(), long{1});
@@ -454,7 +487,7 @@ TEST(SerializedFactoryAndMessagesRoundTripWithoutTheDriverSourceOrInputBuffers) 
   std::string second_message = TaskMessage(*second);
   second.reset();
   CHECK_SUCCESS(Library(), Finish(*driver, false, {first_message, second_message}));
-  CHECK_SUCCESS(Library(), Finish(*driver, false, {first_message, second_message}));
+  driver.reset();
   CHECK(Events() == std::vector<std::string>({
                         "WriteCreated(true)",
                         "FactoryCreated",
@@ -468,32 +501,25 @@ TEST(SerializedFactoryAndMessagesRoundTripWithoutTheDriverSourceOrInputBuffers) 
                             Describe(std::vector<Message>{Expected(7, {2, 5, 9}, 2, ""),
                                                           Expected(8, {}, 0, "")}) +
                             ")",
+                        "DriverDestroyed",
                     }));
 }
 
-TEST(TheInputSchemaAndLiveTaskCancellationAreChecked) {
+TEST(TaskWritersSeeLiveTaskCancellation) {
   for (bool cancelled : {false, true}) {
     ClearEvents();
     std::unique_ptr<Handle> source = CreateSource("", "");
-    std::unique_ptr<Handle> driver = OpenDriver(*source, SPARK_DS_WRITE_APPEND);
-    std::unique_ptr<Task> task = OpenTask(State(*driver), 0);
+    auto [driver, state] = OpenDriver(*source, SPARK_DS_WRITE_APPEND);
+    std::unique_ptr<Task> task = OpenTask(state, 0);
+    CHECK_SUCCESS(Library(), Write(*task, Batch({1})));
     if (cancelled) {
-      CHECK_SUCCESS(Library(), Write(*task, Batch({1})));
       task->host->cancelled = true;
       std::vector<std::string> messages;
       CHECK(TaskCommit(*task, &messages) != 0);
       CHECK(messages.empty());
       CHECK_CONTAINS(LastError(Library()), "cancelled");
-    } else {
-      auto wrong_schema = arrow::schema({arrow::field("value", arrow::int32(), false)});
-      arrow::Int32Builder builder;
-      CHECK_OK(builder.Append(1));
-      auto input = arrow::RecordBatch::Make(wrong_schema, 1, {builder.Finish().ValueOrDie()});
-      CHECK(Write(*task, input) != 0);
-      CHECK_CONTAINS(LastError(Library()), "schema");
-      CHECK_EQ(Count("Batch(1)"), size_t{0});
     }
-    CHECK_SUCCESS(Library(), Library().abort_data_writer(task->writer->get()));
+    CHECK_SUCCESS(Library(), TaskAbort(*task));
     task.reset();
     CHECK_EQ(Count("TaskAbort(" + Flag(cancelled) + ")"), size_t{1});
     CHECK_EQ(Count("TaskDestroyed(" + Flag(cancelled) + ")"), size_t{1});
@@ -506,25 +532,22 @@ TEST(TaskFailuresAndMessageSerializationFailuresRemainAbortable) {
                                     "task_commit_throw", "message_serialization"}) {
     ClearEvents();
     std::unique_ptr<Handle> source = CreateSource(failure, "");
-    std::unique_ptr<Handle> driver = OpenDriver(*source, SPARK_DS_WRITE_APPEND);
-    std::unique_ptr<Task> task = OpenTask(State(*driver), 0);
+    auto [driver, state] = OpenDriver(*source, SPARK_DS_WRITE_APPEND);
+    std::unique_ptr<Task> task = OpenTask(state, 0);
     bool write_failed = failure.rfind("write_", 0) == 0;
     CHECK_EQ(Write(*task, Batch({4})) != 0, write_failed);
-    std::vector<std::string> messages;
-    CHECK(TaskCommit(*task, &messages) != 0);
-    CHECK(messages.empty());
+    // Spark commits only after successful writes, and aborts after any failure.
+    if (!write_failed) {
+      std::vector<std::string> messages;
+      CHECK(TaskCommit(*task, &messages) != 0);
+      CHECK(messages.empty());
+    }
     std::string message = LastError(Library());
     CHECK(message.find("failed") != std::string::npos ||
           message.find("threw") != std::string::npos);
-    std::vector<std::string> before_retry = Events();
-    CHECK(TaskCommit(*task, &messages) != 0);
-    CHECK(messages.empty());
-    // A failed commit cannot run the commit of the provider twice.
-    CHECK(Events() == before_retry);
     // A commit whose message cannot be serialized counts as failed, so abort follows a provider
     // commit that returned a message.
-    CHECK_SUCCESS(Library(), Library().abort_data_writer(task->writer->get()));
-    CHECK_SUCCESS(Library(), Library().abort_data_writer(task->writer->get()));
+    CHECK_SUCCESS(Library(), TaskAbort(*task));
     task.reset();
     CHECK_EQ(Count("TaskAbort(false)"), size_t{1});
     CHECK_EQ(Count("TaskCommit"), write_failed ? size_t{0} : size_t{1});
@@ -536,66 +559,52 @@ TEST(DriverFailuresPreserveMessagesAndMissingTaskPositionsForAbort) {
   for (const std::string failure : {"driver_commit_error", "driver_commit_throw"}) {
     ClearEvents();
     std::unique_ptr<Handle> source = CreateSource(failure, "");
-    std::unique_ptr<Handle> driver = OpenDriver(*source, SPARK_DS_WRITE_APPEND);
-    std::unique_ptr<Task> task = OpenTask(State(*driver), 1);
+    auto [driver, state] = OpenDriver(*source, SPARK_DS_WRITE_APPEND);
+    std::unique_ptr<Task> task = OpenTask(state, 1);
     CHECK_SUCCESS(Library(), Write(*task, Batch({42})));
     std::string message = TaskMessage(*task);
     task.reset();
     CHECK(Finish(*driver, false, {message}) != 0);
     CHECK_CONTAINS(LastError(Library()), "driver commit");
-    std::vector<std::string> before_retry = Events();
-    CHECK(Finish(*driver, false, {message}) != 0);
-    CHECK(Events() == before_retry);
+    // Spark aborts a write whose commit failed.
     std::vector<std::optional<std::string>> aborted = {std::nullopt, message, std::nullopt};
-    CHECK_SUCCESS(Library(), Finish(*driver, true, aborted));
     CHECK_SUCCESS(Library(), Finish(*driver, true, aborted));
     Message expected = Expected(1, {42}, 1, failure);
     CHECK_EQ(Count("DriverCommit(" + Describe(std::vector<Message>{expected}) + ")"), size_t{1});
     CHECK_EQ(Count("DriverAbort(" + Describe({std::nullopt, expected, std::nullopt}) + ")"),
              size_t{1});
-    size_t aborts = 0;
-    for (const std::string& event : Events()) {
-      aborts += event.rfind("DriverAbort", 0) == 0 ? 1 : 0;
-    }
-    CHECK_EQ(aborts, size_t{1});
   }
 }
 
-TEST(WriterFactoryFailuresAreCachedAndTheDriverCanAbort) {
+TEST(WriterFactoryFailuresFailTheCreationOfTheWriter) {
   for (const auto& [failure, expected] : std::vector<std::pair<std::string, std::string>>{
            {"writer_factory_error", "creating the writer factory failed"},
            {"factory_serialization", "factory serialization failed"}}) {
     ClearEvents();
     std::unique_ptr<Handle> source = CreateSource(failure, "");
-    std::unique_ptr<Handle> driver = OpenDriver(*source, SPARK_DS_WRITE_APPEND);
-    for (int attempt = 0; attempt < 2; ++attempt) {
-      std::vector<std::string> output;
-      CHECK(Serialize(*driver, &output) != 0);
-      CHECK(output.empty());
-      CHECK_CONTAINS(LastError(Library()), expected);
-    }
-    // Commit never follows a failed call.
-    CHECK(Finish(*driver, false, {}) != 0);
-    CHECK_SUCCESS(Library(), Finish(*driver, true, {}));
+    void* writer = nullptr;
+    std::vector<std::string> states;
+    CHECK(CreateDriver(*source, SPARK_DS_WRITE_APPEND, nullptr, &writer, &states) != 0);
+    CHECK(writer == nullptr && states.empty());
+    CHECK_CONTAINS(LastError(Library()), expected);
+    // The write never started, so it is destroyed without abort.
     CHECK(Events() ==
-          std::vector<std::string>({"WriteCreated(false)", "FactoryCreated", "DriverAbort([])"}));
+          std::vector<std::string>({"WriteCreated(false)", "FactoryCreated", "DriverDestroyed"}));
   }
 }
 
-TEST(BatchWritesRejectTheEpochsOfMicroBatches) {
+TEST(TheEpochOfADataWriterSelectsItsWrite) {
   ClearEvents();
   std::unique_ptr<Handle> source = CreateSource("", "");
-  std::unique_ptr<Handle> driver = OpenDriver(*source, SPARK_DS_WRITE_APPEND);
-  std::string state = State(*driver);
+  auto [driver, state] = OpenDriver(*source, SPARK_DS_WRITE_APPEND);
   HostTask host(0, 100);
   void* writer = nullptr;
-  CHECK(Library().create_data_writer(&host.context, reinterpret_cast<const uint8_t*>(state.data()),
-                                     static_cast<int64_t>(state.size()), 0, &writer) != 0);
-  CHECK_CONTAINS(LastError(Library()), "epoch ID -1");
+  // A micro-batch, which this source does not write, and an invalid epoch.
+  CHECK(CreateDataWriter(host, state, 0, &writer) != 0);
+  CHECK_CONTAINS(LastError(Library()), "does not support streaming writes");
+  CHECK(CreateDataWriter(host, state, -2, &writer) != 0);
+  CHECK_CONTAINS(LastError(Library()), "invalid epoch ID -2");
   CHECK(writer == nullptr);
-  CHECK(Finish(*driver, false, {}, /*epoch_id=*/3) != 0);
-  CHECK_CONTAINS(LastError(Library()), "epoch ID -1");
-  // The rejected call did not change the write, which can still abort.
   CHECK_SUCCESS(Library(), Finish(*driver, true, {}));
   CHECK(Events() ==
         std::vector<std::string>({"WriteCreated(false)", "FactoryCreated", "DriverAbort([])"}));
@@ -604,8 +613,8 @@ TEST(BatchWritesRejectTheEpochsOfMicroBatches) {
 TEST(UndecodableMessagesFailCommitButAbortStillCleansUp) {
   ClearEvents();
   std::unique_ptr<Handle> source = CreateSource("", "");
-  std::unique_ptr<Handle> driver = OpenDriver(*source, SPARK_DS_WRITE_APPEND);
-  std::unique_ptr<Task> task = OpenTask(State(*driver), 2);
+  auto [driver, state] = OpenDriver(*source, SPARK_DS_WRITE_APPEND);
+  std::unique_ptr<Task> task = OpenTask(state, 2);
   CHECK_SUCCESS(Library(), Write(*task, Batch({6})));
   std::string message = TaskMessage(*task);
   task.reset();

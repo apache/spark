@@ -101,7 +101,7 @@ struct Exported {
   }
 };
 
-/// Exports a reader of `batches`, with the schema `schema`, for the negotiated schema `expected`.
+/// Exports a reader of `batches`, with the schema `schema`, for the schema to read `expected`.
 void Export(Exported& exported, std::vector<BatchResult> batches,
             std::shared_ptr<arrow::Schema> schema, std::shared_ptr<arrow::Schema> expected) {
   auto reader =
@@ -123,7 +123,7 @@ std::optional<std::string> NextError(struct ArrowArrayStream& stream) {
   return std::string(error == nullptr ? "(no message)" : error);
 }
 
-/// The error of the first batch of a reader of `batch`, whose negotiated schema is `expected`.
+/// The error of the first batch of a reader of `batch`, whose schema to read is `expected`.
 std::optional<std::string> BatchError(std::shared_ptr<arrow::RecordBatch> batch,
                                       std::shared_ptr<arrow::Schema> expected) {
   Exported exported;
@@ -178,7 +178,7 @@ TEST(AReaderWithoutBatchesHasItsSchema) {
 }
 
 TEST(TheSchemaOfTheReaderIsTheSchemaOfTheStream) {
-  // The negotiated schema has a utf8 string, which the reader returns as large_utf8.
+  // The schema to read has a utf8 string, which the reader returns as large_utf8.
   auto expected = arrow::schema({arrow::field("label", arrow::utf8())});
   auto actual = arrow::schema({arrow::field("label", arrow::large_utf8())});
   arrow::LargeStringBuilder builder;
@@ -225,18 +225,43 @@ TEST(AFailedStreamReleasesItsReader) {
   CHECK_EQ(destroyed->load(), 1);
 }
 
-TEST(NegotiatedSchemaMismatchIsRejectedBeforeTheStreamIsExported) {
+TEST(ASchemaMismatchIsRejectedBeforeTheStreamIsExported) {
   auto destroyed = std::make_shared<std::atomic<int>>(0);
-  auto expected = arrow::schema({arrow::field("id", arrow::utf8(), false)});
   struct ArrowArrayStream stream{};
-  {
+  for (auto [expected, error] :
+       {std::make_pair(arrow::schema({arrow::field("id", arrow::utf8(), false)}),
+                       "does not match the schema to read"),
+        std::make_pair(arrow::schema({arrow::field("label", arrow::utf8(), false)}),
+                       "does not return the column label")}) {
     auto reader = std::make_shared<TestReader>(IdSchema(), std::vector<BatchResult>{}, destroyed);
     arrow::Status status = internal::ExportedStream::Export(reader, expected, &stream);
     CHECK(!status.ok());
-    CHECK_CONTAINS(status.message(), "does not match the negotiated schema");
+    CHECK_CONTAINS(status.message(), error);
   }
   CHECK(stream.release == nullptr);
-  CHECK_EQ(destroyed->load(), 1);
+  CHECK_EQ(destroyed->load(), 2);
+}
+
+TEST(TheSdkKeepsTheColumnsOfTheSchemaToReadByName) {
+  // The reader ignores pruning and returns all the columns of the source, in its order.
+  auto all = arrow::schema(
+      {arrow::field("id", arrow::int64(), false), arrow::field("flag", arrow::boolean(), false)});
+  arrow::BooleanBuilder flags;
+  CHECK_OK(flags.AppendValues(std::vector<bool>{true, false}));
+  ASSIGN_OR_FAIL(std::shared_ptr<arrow::Array> flag_values, flags.Finish());
+  auto batch = arrow::RecordBatch::Make(all, 2, {Int64s({3, 5}), flag_values});
+  for (const auto& expected :
+       {arrow::schema({all->field(1), all->field(0)}), arrow::schema(arrow::FieldVector{})}) {
+    Exported exported;
+    Export(exported, {batch}, all, expected);
+    std::shared_ptr<arrow::RecordBatchReader> reader = Import(exported);
+    CHECK(reader->schema()->Equals(*expected));
+    ASSIGN_OR_FAIL(auto read, reader->Next());
+    CHECK(read->schema()->Equals(*expected));
+    CHECK_EQ(read->num_rows(), int64_t{2});
+    ASSIGN_OR_FAIL(auto end, reader->Next());
+    CHECK(end == nullptr);
+  }
 }
 
 TEST(LogicalSchemaComparisonAcceptsEquivalentArrowRepresentations) {
@@ -315,7 +340,7 @@ TEST(AColumnShorterThanItsBatchIsRejected) {
   CHECK(BatchError(batch, IdSchema()).has_value());
 }
 
-TEST(NullsMustRespectTheNullabilityOfTheNegotiatedSchema) {
+TEST(NullsMustRespectTheNullabilityOfTheSchemaToRead) {
   auto batch = Ids({1, std::nullopt}, /*nullable=*/true);
   CHECK_CONTAINS(BatchError(batch, IdSchema(false)).value_or(""), "The column id has a null");
   CHECK(!BatchError(batch, IdSchema(true)).has_value());

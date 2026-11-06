@@ -90,7 +90,9 @@ class TaskContext {
   /// The attempt number of the stage of the task.
   int32_t stage_attempt_number() const { return stage_attempt_number_; }
 
-  /// The partition that the task reads or writes.
+  /// For a reader, the index of its partition in the plan of its scan or micro-batch, which is not
+  /// the partition of the task when a task reads several partitions, for example after a coalesce
+  /// or a union. For a writer, the partition of the task.
   int32_t partition_id() const { return partition_id_; }
 
   /// The attempt number of the task.
@@ -99,7 +101,9 @@ class TaskContext {
   /// The ID of the task attempt, unique within the Spark application but not across applications.
   int64_t task_attempt_id() const { return task_attempt_id_; }
 
-  /// Whether Spark killed this task, read from Spark each time. Any thread can call it.
+  /// Whether Spark killed this task, read from Spark each time. For a reader, also whether the task
+  /// failed or completed: a native engine may read a stream after its task ended. Any thread can
+  /// call it.
   bool IsInterrupted() const {
     if (is_interrupted_ != nullptr) {
       return is_interrupted_(host_);

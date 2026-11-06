@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Package the compiled range connector for the C ABI in Spark PR #59424."""
+"""Package a compiled connector for the native data source C ABI of Spark."""
 
 import argparse
 import json

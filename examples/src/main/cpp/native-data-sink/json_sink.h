@@ -107,8 +107,8 @@ struct Operation {
   Operation() = default;
   Operation(const Operation&) = delete;
   Operation& operator=(const Operation&) = delete;
-  // Spark can close a write without abort, for example when serializing its factory fails, so an
-  // unfinished write also cleans up here.
+  // A write can be destroyed without abort, for example when creating or serializing its factory
+  // fails, so an unfinished write also cleans up here.
   ~Operation();
 
   /// Publishes the winning attempts, and records the epoch of a streaming query.
@@ -123,7 +123,7 @@ struct Operation {
   arrow::Status Cleanup() const;
 };
 
-// The SDK calls each method at most once, never after a successful commit or an abort, so the
+// Spark calls each method at most once, and never aborts a successful commit, so the
 // coordinators do not track their own phase.
 class JsonWrite : public spark::native::BatchWrite<JsonWriterFactory> {
  public:

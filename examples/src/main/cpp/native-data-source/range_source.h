@@ -35,8 +35,8 @@ struct RangePartition {
 };
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(RangePartition, start, end)
 
-/// Reader configuration travels to each executor; it contains no live objects. The SDK passes the
-/// negotiated columns to the reader, so the factory omits them.
+/// Reader configuration travels to each executor; it contains no live objects. Spark passes the
+/// columns to read to the reader, so the factory omits them.
 struct RangeReaderFactory : spark::native::PartitionReaderFactory<RangePartition> {
   int64_t batch_size = 1024;
 
@@ -52,36 +52,34 @@ struct RangeOffset {
 };
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(RangeOffset, next)
 
+/// The readers get the columns to read in their context, so the scan does not prune columns.
 class RangeScan : public spark::native::ScanBuilder<RangeReaderFactory> {
  public:
-  RangeScan(int64_t start, int64_t end, int64_t num_partitions, std::vector<std::string> columns,
-            RangeReaderFactory factory);
+  RangeScan(int64_t start, int64_t end, int64_t num_partitions, RangeReaderFactory factory);
 
-  arrow::Result<std::vector<spark::native::FilterSupport>> PushFilters(
-      const std::vector<spark::native::Predicate>& filters) override;
   arrow::Result<spark::native::LimitSupport> PushLimit(int64_t limit) override;
-  arrow::Result<bool> PruneColumns(const std::vector<std::string>& columns) override;
   arrow::Result<spark::native::ScanPlan<RangeReaderFactory>> Plan() override;
 
  private:
-  // The selected ids, [lower_, upper_), which stay within the range, so that their arithmetic
-  // never overflows. The selection is empty when lower_ >= upper_.
-  int64_t lower_;
-  int64_t upper_;
+  int64_t start_;
+  int64_t end_;
   int64_t num_partitions_;
   std::optional<int64_t> limit_;
-  std::vector<std::string> columns_;
   RangeReaderFactory factory_;
 };
 
 /// A streaming read of the range. The range is fixed, so all its rows are available when the query
-/// starts: the first micro-batch reads them, and later ones find no new data.
+/// starts: the first micro-batch reads them, unless maxRowsPerTrigger limits each micro-batch, and
+/// later ones find no new data.
 class RangeStream : public spark::native::MicroBatchStream<RangeOffset, RangeReaderFactory> {
  public:
-  RangeStream(int64_t start, int64_t end, int64_t num_partitions, RangeReaderFactory factory);
+  RangeStream(int64_t start, int64_t end, int64_t num_partitions,
+              std::optional<int64_t> max_rows_per_trigger, RangeReaderFactory factory);
 
   arrow::Result<RangeOffset> InitialOffset() override;
-  arrow::Result<RangeOffset> LatestOffset() override;
+  arrow::Result<spark::native::ReadLimit> DefaultReadLimit() const override;
+  arrow::Result<RangeOffset> LatestOffset(
+      const spark::native::LatestOffsetInfo<RangeOffset>& info) override;
   arrow::Result<spark::native::ScanPlan<RangeReaderFactory>> Plan(const RangeOffset& start,
                                                                   const RangeOffset& end) override;
 
@@ -89,6 +87,7 @@ class RangeStream : public spark::native::MicroBatchStream<RangeOffset, RangeRea
   int64_t start_;
   int64_t end_;
   int64_t num_partitions_;
+  std::optional<int64_t> max_rows_per_trigger_;
   RangeReaderFactory factory_;
 };
 
@@ -106,12 +105,14 @@ class RangeSource : public spark::native::DataSource {
       const spark::native::MicroBatchStreamInfo& info) const;
 
  private:
-  RangeSource(int64_t start, int64_t end, int64_t num_partitions, int64_t batch_size);
+  RangeSource(int64_t start, int64_t end, int64_t num_partitions, int64_t batch_size,
+              std::optional<int64_t> max_rows_per_trigger);
 
   int64_t start_;
   int64_t end_;
   int64_t num_partitions_;
   int64_t batch_size_;
+  std::optional<int64_t> max_rows_per_trigger_;
 };
 
 /// The schema of the columns of the range, in the order of `columns`.

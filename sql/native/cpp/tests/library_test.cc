@@ -39,11 +39,15 @@ std::atomic<int> destroyed{0};
 std::mutex mutex;
 std::vector<std::optional<std::string>> initialized;
 std::vector<std::pair<int32_t, std::string>> logs;
+// The most verbose level that the log of the host writes, as a SPARK_DS_LOG_* value.
+std::atomic<int32_t> host_level{SPARK_DS_LOG_INFO};
 
 void RecordLog(int32_t level, const char* message) {
   std::lock_guard<std::mutex> lock(mutex);
   logs.emplace_back(level, message);
 }
+
+bool IsLogEnabled(int32_t level) { return level <= host_level.load(); }
 
 struct Factory : sn::PartitionReaderFactory<int64_t> {
   int64_t unused = 0;
@@ -145,7 +149,8 @@ TEST(InitializationLoggingAndCapabilitiesFollowTheSourceLifecycle) {
     std::lock_guard<std::mutex> lock(mutex);
     CHECK(logs == decltype(logs)({{1, "this library does not support the Spark version"}}));
   }
-  CHECK(spark_ds_init(sn::testing::LeakedHost(&RecordLog, "4.4.0-test"), &table) == 0);
+  CHECK(spark_ds_init(sn::testing::LeakedHost(&RecordLog, "4.4.0-test", &IsLogEnabled), &table) ==
+        0);
   CHECK(table != nullptr);
   const SparkDsLibrary& library = *table;
   CHECK(library.size == sizeof(SparkDsLibrary));
@@ -155,11 +160,19 @@ TEST(InitializationLoggingAndCapabilitiesFollowTheSourceLifecycle) {
     CHECK(initialized == decltype(initialized)({"unsupported", "4.4.0-test"}));
   }
   sn::LogWarn(std::string("a message with a \0 byte", 23));
-  // The default level drops debug messages, until the library raises it.
+  // The SDK follows the level of the log of Spark, which drops debug messages.
   CHECK(!sn::IsLogEnabled(sn::LogLevel::kDebug));
   sn::LogDebug("a dropped debug message");
-  sn::SetMaxLogLevel(sn::LogLevel::kDebug);
+  // The level of Spark changes while it runs: the SDK asks again when an operation starts.
+  host_level = SPARK_DS_LOG_DEBUG;
+  sn::LogDebug("a debug message before an operation starts");
+  Created operation = Create(library, "capability_test", "all");
+  CHECK_SUCCESS(library, operation.code);
+  CHECK(sn::IsLogEnabled(sn::LogLevel::kDebug));
   sn::LogDebug("a debug message");
+  sn::LogTrace("a dropped trace message");
+  library.close(operation.source);
+  host_level = SPARK_DS_LOG_INFO;
   {
     std::lock_guard<std::mutex> lock(mutex);
     CHECK(std::vector(logs.begin() + 1, logs.end()) ==
@@ -174,10 +187,10 @@ TEST(InitializationLoggingAndCapabilitiesFollowTheSourceLifecycle) {
   CHECK_EQ(probe.mask, uint64_t{SPARK_DS_BATCH_READ});
   CHECK(probe.source != nullptr);
   library.close(probe.source);
-  CHECK_EQ(declarations.load(), 1);
+  CHECK_EQ(declarations.load(), 2);
   CHECK_EQ(schemas.load(), 0);
   CHECK_EQ(scans.load(), 0);
-  CHECK_EQ(destroyed.load(), 1);
+  CHECK_EQ(destroyed.load(), 2);
 
   // Keep all instances alive together: the last declaration must not affect earlier sources.
   std::vector<std::pair<uint64_t, void*>> sources;
@@ -189,14 +202,15 @@ TEST(InitializationLoggingAndCapabilitiesFollowTheSourceLifecycle) {
     CHECK(created.source != nullptr);
     sources.emplace_back(expected, created.source);
   }
-  CHECK_EQ(declarations.load(), 5);
+  CHECK_EQ(declarations.load(), 6);
 
+  SparkDsReaderInfo info{sizeof(SparkDsReaderInfo)};
   for (const auto& [mask, source] : sources) {
     struct ArrowSchema schema{};
     CHECK_SUCCESS(library, library.schema(source, &schema));
     int scans_before = scans.load();
     void* reader = nullptr;
-    int code = library.create_reader(source, &schema, &reader);
+    int code = library.create_reader(source, &schema, &info, &reader);
     if (schema.release != nullptr) {
       schema.release(&schema);
     }
@@ -211,12 +225,12 @@ TEST(InitializationLoggingAndCapabilitiesFollowTheSourceLifecycle) {
       CHECK_EQ(scans.load(), scans_before + 1);
       library.close_reader(reader);
     }
-    CHECK_EQ(declarations.load(), 5);
+    CHECK_EQ(declarations.load(), 6);
     library.close(source);
   }
   CHECK_EQ(schemas.load(), 4);
   CHECK_EQ(scans.load(), 2);
-  CHECK_EQ(destroyed.load(), 5);
+  CHECK_EQ(destroyed.load(), 6);
 
   // The source receives the name that Spark passes, so it can reject other names.
   Created other = Create(library, "other_source", "all");
@@ -231,7 +245,7 @@ TEST(InitializationLoggingAndCapabilitiesFollowTheSourceLifecycle) {
            std::string("native provider threw an exception: capability discovery failed"));
   CHECK_EQ(failing.mask, uint64_t{0});
   CHECK(failing.source == nullptr);
-  CHECK_EQ(destroyed.load(), 6);
+  CHECK_EQ(destroyed.load(), 7);
   CHECK_EQ(schemas.load(), 4);
   CHECK_EQ(scans.load(), 2);
 }

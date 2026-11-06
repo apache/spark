@@ -18,31 +18,26 @@
 
 using spark::native::Capabilities;
 
-TEST(TruncateNeverRemainsWithoutWrites) {
+TEST(SetsCombineAndRemoveOperations) {
   Capabilities all = Capabilities::All();
-  // Truncation remains while either write does.
-  CHECK(all.Without(Capabilities::kBatchWrite).Contains(Capabilities::kTruncate));
-  Capabilities reads =
-      all.Without(Capabilities::kBatchWrite).Without(Capabilities::kStreamingWrite);
-  CHECK(reads.Contains(Capabilities::kBatchRead));
-  CHECK(reads.Contains(Capabilities::kMicroBatchRead));
-  CHECK(!reads.Contains(Capabilities::kTruncate));
-  CHECK(all.Without(Capabilities::kBatchWrite | Capabilities::kStreamingWrite) == reads);
-  // A set of truncation alone has no write to truncate.
-  CHECK((Capabilities::kTruncate | Capabilities::Empty()) == Capabilities::Empty());
-  CHECK((Capabilities::kTruncate & all) == Capabilities::Empty());
-  Capabilities append_only = all.Without(Capabilities::kTruncate);
-  CHECK(append_only.Contains(Capabilities::kBatchWrite));
-  CHECK(!append_only.Contains(Capabilities::kTruncate));
+  Capabilities truncations = Capabilities::kBatchTruncate | Capabilities::kStreamingTruncate;
+  Capabilities append_only = all.Without(truncations);
+  CHECK(append_only.Contains(Capabilities::kBatchWrite | Capabilities::kStreamingWrite));
+  CHECK(!append_only.Contains(Capabilities::kBatchTruncate));
+  CHECK(!append_only.Contains(Capabilities::kStreamingTruncate));
+  Capabilities reads = Capabilities::kBatchRead | Capabilities::kMicroBatchRead;
+  CHECK(all.Without(reads).Without(truncations) == all.Without(reads | truncations));
+  CHECK((truncations & Capabilities::kBatchTruncate) == Capabilities::kBatchTruncate);
   CHECK(all.Contains(Capabilities::Empty()));
-  CHECK_EQ(all.bits(),
-           uint64_t{SPARK_DS_BATCH_READ | SPARK_DS_MICRO_BATCH_READ | SPARK_DS_BATCH_WRITE |
-                    SPARK_DS_STREAMING_WRITE | SPARK_DS_TRUNCATE});
+  CHECK_EQ(all.bits(), uint64_t{SPARK_DS_BATCH_READ | SPARK_DS_MICRO_BATCH_READ |
+                                SPARK_DS_BATCH_WRITE | SPARK_DS_STREAMING_WRITE |
+                                SPARK_DS_BATCH_TRUNCATE | SPARK_DS_STREAMING_TRUNCATE});
 }
 
 TEST(ToStringListsOperationNames) {
   CHECK_EQ(Capabilities::All().ToString(),
-           std::string("{BATCH_READ, MICRO_BATCH_READ, BATCH_WRITE, STREAMING_WRITE, TRUNCATE}"));
+           std::string("{BATCH_READ, MICRO_BATCH_READ, BATCH_WRITE, STREAMING_WRITE, "
+                       "BATCH_TRUNCATE, STREAMING_TRUNCATE}"));
   CHECK_EQ(Capabilities::Empty().ToString(), std::string("{}"));
 }
 
@@ -126,7 +121,7 @@ using Traits = spark::native::internal::SourceTraits<S>;
 TEST(TheTypesOfASourceDetermineItsOperations) {
   CHECK(Traits<ReadOnly>::kCapabilities == Capabilities::kBatchRead);
   CHECK(Traits<StreamingSink<true>>::kCapabilities ==
-        (Capabilities::kStreamingWrite | Capabilities::kTruncate));
+        (Capabilities::kStreamingWrite | Capabilities::kStreamingTruncate));
   CHECK(Traits<StreamingSink<false>>::kCapabilities == Capabilities::kStreamingWrite);
   // A declaration can only narrow the implemented operations.
   CHECK(Traits<ReadOnly>::Effective(Capabilities::All()) == Capabilities::kBatchRead);
@@ -135,7 +130,10 @@ TEST(TheTypesOfASourceDetermineItsOperations) {
         Capabilities::kStreamingWrite);
   CHECK(Traits<StreamingSink<true>>::Effective(Capabilities::kStreamingWrite) ==
         Capabilities::kStreamingWrite);
-  CHECK(Traits<StreamingSink<true>>::Effective(Capabilities::kTruncate) == Capabilities::Empty());
+  // Truncation goes only with its write.
+  CHECK(Traits<StreamingSink<true>>::Effective(Capabilities::kStreamingTruncate) ==
+        Capabilities::Empty());
+  CHECK_EQ(Traits<ReadOnly>::Declared(Capabilities::kBatchRead), uint64_t{SPARK_DS_BATCH_READ});
 
   const SparkDsLibrary* read_only = spark::native::internal::Exports<ReadOnly>::Library();
   CHECK(read_only->create_reader != nullptr && read_only->read != nullptr);

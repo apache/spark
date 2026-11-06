@@ -17,9 +17,7 @@
 
 #include <algorithm>
 #include <charconv>
-#include <limits>
 #include <set>
-#include <tuple>
 #include <utility>
 
 #include <arrow/api.h>
@@ -27,15 +25,12 @@
 
 namespace cpp_sdk_range {
 
-using spark::native::FilterSupport;
+using spark::native::LatestOffsetInfo;
 using spark::native::LimitSupport;
-using spark::native::LiteralValue;
-using spark::native::Predicate;
+using spark::native::ReadLimit;
 using spark::native::ScanPlan;
 
 namespace {
-
-constexpr int64_t kMax = std::numeric_limits<int64_t>::max();
 
 /// The number of ids in [lower, upper), which may exceed the range of int64_t.
 uint64_t Rows(int64_t lower, int64_t upper) {
@@ -97,79 +92,6 @@ arrow::Result<int64_t> Option(const spark::native::Options& options, const std::
   return value;
 }
 
-bool IsId(const Predicate& predicate) {
-  return predicate.kind == Predicate::Kind::kColumn && predicate.column.size() == 1 &&
-         predicate.column[0] == "id";
-}
-
-/// A non-null tinyint, smallint, int, or bigint literal, decoded by the SDK.
-std::optional<int64_t> IntegerLiteral(const Predicate& predicate) {
-  std::optional<LiteralValue> value = predicate.literal_value();
-  if (!value || !std::holds_alternative<int64_t>(*value)) {
-    return std::nullopt;
-  }
-  return std::get<int64_t>(*value);
-}
-
-/// The ids in [lower, upper) for which `predicate` is true, or nothing for a predicate that the
-/// range does not evaluate.
-std::optional<std::pair<int64_t, int64_t>> PredicateBounds(const Predicate& predicate,
-                                                           int64_t lower, int64_t upper) {
-  if (predicate.kind != Predicate::Kind::kFunction || predicate.children.size() != 2) {
-    return std::nullopt;
-  }
-  if (predicate.name == "AND") {
-    // Do not narrow the scan when only one side of an AND is supported.
-    auto left = PredicateBounds(predicate.children[0], lower, upper);
-    if (!left) {
-      return std::nullopt;
-    }
-    return PredicateBounds(predicate.children[1], left->first, left->second);
-  }
-  std::string name = predicate.name;
-  std::optional<int64_t> value;
-  if (IsId(predicate.children[0])) {
-    value = IntegerLiteral(predicate.children[1]);
-  } else if (IsId(predicate.children[1])) {
-    value = IntegerLiteral(predicate.children[0]);
-    // `value op id` is `id reversed(op) value`.
-    if (name == ">") {
-      name = "<";
-    } else if (name == ">=") {
-      name = "<=";
-    } else if (name == "<") {
-      name = ">";
-    } else if (name == "<=") {
-      name = ">=";
-    }
-  }
-  if (!value) {
-    return std::nullopt;
-  }
-  // The bounds never exceed those of the range, whose end is at most the largest int64_t.
-  auto at_least = [&](int64_t id) { lower = std::max(lower, id); };
-  auto below = [&](int64_t id) { upper = std::min(upper, id); };
-  if (name == "=" || name == "<=>") {
-    at_least(*value);
-    if (*value < kMax) below(*value + 1);
-  } else if (name == ">") {
-    if (*value < kMax) {
-      at_least(*value + 1);
-    } else {
-      below(lower);
-    }
-  } else if (name == ">=") {
-    at_least(*value);
-  } else if (name == "<") {
-    below(*value);
-  } else if (name == "<=") {
-    if (*value < kMax) below(*value + 1);
-  } else {
-    return std::nullopt;
-  }
-  return std::make_pair(lower, upper);
-}
-
 }  // namespace
 
 arrow::Result<std::shared_ptr<arrow::Schema>> OutputSchema(
@@ -193,12 +115,18 @@ arrow::Result<std::shared_ptr<arrow::Schema>> OutputSchema(
 
 // RangeSource
 
-RangeSource::RangeSource(int64_t start, int64_t end, int64_t num_partitions, int64_t batch_size)
-    : start_(start), end_(end), num_partitions_(num_partitions), batch_size_(batch_size) {}
+RangeSource::RangeSource(int64_t start, int64_t end, int64_t num_partitions, int64_t batch_size,
+                         std::optional<int64_t> max_rows_per_trigger)
+    : start_(start),
+      end_(end),
+      num_partitions_(num_partitions),
+      batch_size_(batch_size),
+      max_rows_per_trigger_(max_rows_per_trigger) {}
 
 arrow::Result<RangeSource> RangeSource::Make(const spark::native::CreateInfo& info) {
   for (const auto& [key, value] : info.options) {
-    if (key != "start" && key != "end" && key != "numpartitions" && key != "batchsize") {
+    if (key != "start" && key != "end" && key != "numpartitions" && key != "batchsize" &&
+        key != "maxrowspertrigger") {
       return arrow::Status::Invalid("Unknown range option: ", key);
     }
   }
@@ -206,13 +134,19 @@ arrow::Result<RangeSource> RangeSource::Make(const spark::native::CreateInfo& in
   ARROW_ASSIGN_OR_RAISE(int64_t end, Option(info.options, "end", 100));
   ARROW_ASSIGN_OR_RAISE(int64_t num_partitions, Option(info.options, "numpartitions", 2));
   ARROW_ASSIGN_OR_RAISE(int64_t batch_size, Option(info.options, "batchsize", 1024));
+  std::optional<int64_t> max_rows_per_trigger;
+  if (info.options.count("maxrowspertrigger") != 0) {
+    ARROW_ASSIGN_OR_RAISE(max_rows_per_trigger, Option(info.options, "maxrowspertrigger", 0));
+  }
   if (end < start) {
     return arrow::Status::Invalid("end must be greater than or equal to start");
   }
-  if (num_partitions <= 0 || batch_size <= 0) {
-    return arrow::Status::Invalid("numPartitions and batchSize must be positive");
+  if (num_partitions <= 0 || batch_size <= 0 ||
+      (max_rows_per_trigger && *max_rows_per_trigger <= 0)) {
+    return arrow::Status::Invalid(
+        "numPartitions, batchSize and maxRowsPerTrigger must be positive");
   }
-  return RangeSource(start, end, num_partitions, batch_size);
+  return RangeSource(start, end, num_partitions, batch_size, max_rows_per_trigger);
 }
 
 arrow::Result<std::shared_ptr<arrow::Schema>> RangeSource::InferSchema() const {
@@ -220,10 +154,10 @@ arrow::Result<std::shared_ptr<arrow::Schema>> RangeSource::InferSchema() const {
 }
 
 arrow::Result<RangeScan> RangeSource::NewScan(const spark::native::ScanInfo& info) const {
-  ARROW_ASSIGN_OR_RAISE(std::vector<std::string> columns, ReadColumns(*info.schema));
+  ARROW_RETURN_NOT_OK(ReadColumns(*info.schema));
   RangeReaderFactory factory;
   factory.batch_size = batch_size_;
-  return RangeScan(start_, end_, num_partitions_, std::move(columns), factory);
+  return RangeScan(start_, end_, num_partitions_, factory);
 }
 
 arrow::Result<RangeStream> RangeSource::NewMicroBatchStream(
@@ -231,7 +165,7 @@ arrow::Result<RangeStream> RangeSource::NewMicroBatchStream(
   ARROW_RETURN_NOT_OK(ReadColumns(*info.schema));
   RangeReaderFactory factory;
   factory.batch_size = batch_size_;
-  return RangeStream(start_, end_, num_partitions_, factory);
+  return RangeStream(start_, end_, num_partitions_, max_rows_per_trigger_, factory);
 }
 
 // RangeReaderFactory
@@ -241,8 +175,8 @@ arrow::Result<std::shared_ptr<arrow::RecordBatchReader>> RangeReaderFactory::Ope
   if (batch_size <= 0 || partition.start > partition.end) {
     return arrow::Status::Invalid("Invalid serialized range plan");
   }
-  // The negotiated schema has the requested columns in order, with the types that the scan
-  // validated.
+  // The schema to read has the columns that the query needs, in order, with the types that the
+  // scan validated.
   std::shared_ptr<arrow::Schema> schema = context.schema;
   std::vector<std::string> columns;
   for (const auto& field : schema->fields()) {
@@ -293,62 +227,52 @@ arrow::Result<std::shared_ptr<arrow::RecordBatchReader>> RangeReaderFactory::Ope
 
 // RangeScan
 
-RangeScan::RangeScan(int64_t start, int64_t end, int64_t num_partitions,
-                     std::vector<std::string> columns, RangeReaderFactory factory)
-    : lower_(start),
-      upper_(end),
-      num_partitions_(num_partitions),
-      columns_(std::move(columns)),
-      factory_(factory) {}
-
-arrow::Result<std::vector<FilterSupport>> RangeScan::PushFilters(
-    const std::vector<Predicate>& filters) {
-  std::vector<FilterSupport> support;
-  for (const Predicate& filter : filters) {
-    if (auto bounds = PredicateBounds(filter, lower_, upper_)) {
-      std::tie(lower_, upper_) = *bounds;
-      support.push_back(FilterSupport::kExact);
-    } else {
-      support.push_back(FilterSupport::kUnsupported);
-    }
-  }
-  return support;
-}
+RangeScan::RangeScan(int64_t start, int64_t end, int64_t num_partitions, RangeReaderFactory factory)
+    : start_(start), end_(end), num_partitions_(num_partitions), factory_(factory) {}
 
 arrow::Result<LimitSupport> RangeScan::PushLimit(int64_t limit) {
-  limit_ = limit_ ? std::min(*limit_, limit) : limit;
+  limit_ = limit;
   return LimitSupport::kGlobal;
 }
 
-arrow::Result<bool> RangeScan::PruneColumns(const std::vector<std::string>& columns) {
-  for (const std::string& column : columns) {
-    if (std::find(columns_.begin(), columns_.end(), column) == columns_.end()) {
-      return arrow::Status::Invalid("Projection contains a column outside the read schema");
-    }
-  }
-  ARROW_RETURN_NOT_OK(OutputSchema(columns));
-  columns_ = columns;
-  return true;
-}
-
 arrow::Result<ScanPlan<RangeReaderFactory>> RangeScan::Plan() {
-  // Filter before applying a global limit, then split the selected interval.
-  int64_t upper = upper_;
-  if (limit_ && Rows(lower_, upper) > static_cast<uint64_t>(*limit_)) {
-    upper = Advance(lower_, static_cast<uint64_t>(*limit_));
+  // Apply a global limit by shortening the range, then split it.
+  int64_t end = end_;
+  if (limit_ && Rows(start_, end) > static_cast<uint64_t>(*limit_)) {
+    end = Advance(start_, static_cast<uint64_t>(*limit_));
   }
-  return ScanPlan<RangeReaderFactory>(factory_, Split(lower_, upper, num_partitions_));
+  return ScanPlan<RangeReaderFactory>(factory_, Split(start_, end, num_partitions_));
 }
 
 // RangeStream
 
 RangeStream::RangeStream(int64_t start, int64_t end, int64_t num_partitions,
-                         RangeReaderFactory factory)
-    : start_(start), end_(end), num_partitions_(num_partitions), factory_(factory) {}
+                         std::optional<int64_t> max_rows_per_trigger, RangeReaderFactory factory)
+    : start_(start),
+      end_(end),
+      num_partitions_(num_partitions),
+      max_rows_per_trigger_(max_rows_per_trigger),
+      factory_(factory) {}
 
 arrow::Result<RangeOffset> RangeStream::InitialOffset() { return RangeOffset{start_}; }
 
-arrow::Result<RangeOffset> RangeStream::LatestOffset() { return RangeOffset{end_}; }
+arrow::Result<ReadLimit> RangeStream::DefaultReadLimit() const {
+  return max_rows_per_trigger_ ? ReadLimit::MaxRows(*max_rows_per_trigger_)
+                               : ReadLimit::AllAvailable();
+}
+
+arrow::Result<RangeOffset> RangeStream::LatestOffset(const LatestOffsetInfo<RangeOffset>& info) {
+  // All the rows of the range are available, within the limit and the end of the run.
+  int64_t next = end_;
+  if (info.limit.kind() == ReadLimit::Kind::kMaxRows && info.start.next < end_ &&
+      Rows(info.start.next, end_) > static_cast<uint64_t>(info.limit.max_rows())) {
+    next = Advance(info.start.next, static_cast<uint64_t>(info.limit.max_rows()));
+  }
+  if (info.run_end) {
+    next = std::min(next, info.run_end->next);
+  }
+  return RangeOffset{next};
+}
 
 arrow::Result<ScanPlan<RangeReaderFactory>> RangeStream::Plan(const RangeOffset& start,
                                                               const RangeOffset& end) {

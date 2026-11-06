@@ -145,8 +145,9 @@ class JsonTaskWriter : public spark::native::DataWriter<CommitMessage> {
     }
   }
 
-  // The SDK never writes after a failure, commit, or abort, commits at most once, and never
-  // aborts a committed writer, so this writer does not track its phase.
+  // Spark never writes after a failure, a commit, or an abort, and commits at most once, so this
+  // writer does not track its phase. Abort may follow a Commit whose message the SDK could not
+  // serialize, so it removes the file in every case.
   arrow::Status Write(std::shared_ptr<arrow::RecordBatch> batch) override {
     if (descriptor_ < 0) {
       return arrow::Status::Invalid("The task writer is closed");
@@ -481,7 +482,7 @@ arrow::Status JsonStreamingWrite::Abort(int64_t epoch_id,
 
 arrow::Result<std::unique_ptr<spark::native::DataWriter<CommitMessage>>> JsonWriterFactory::Open(
     const spark::native::WriterContext& context) const {
-  // The SDK checks that each batch has this schema, so the writer checks it once.
+  // Each batch has this schema, so the writer checks it once.
   ARROW_RETURN_NOT_OK(ValidateSchema(*context.schema));
   spark::native::TaskContext task = context.task;
   if (task.IsInterrupted()) {
@@ -544,8 +545,8 @@ arrow::Result<std::shared_ptr<arrow::Schema>> JsonSink::InferSchema() const { re
 
 Capabilities JsonSink::capabilities() const {
   if (readonly_) {
-    // Also removes kTruncate, which requires a write.
-    return Capabilities::All().Without(Capabilities::kBatchWrite | Capabilities::kStreamingWrite);
+    // A write-only sink without its writes.
+    return Capabilities::Empty();
   }
   return Capabilities::All();
 }
