@@ -21,6 +21,7 @@ import org.apache.spark.sql.{AnalysisException, Dataset, SaveMode}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Append
 import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorsUtils
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
+import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
 import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{LongType, StringType, StructType}
@@ -165,12 +166,9 @@ class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest
     )
   }
 
-  test("incremental cleanup factor does not change dropDuplicatesWithinWatermark output") {
-    // dropDuplicatesWithinWatermark deliberately does not participate in incremental cleanup
-    // (its dedup key excludes the event time, so mid-batch eviction of a shared key could change
-    // the output). Setting a non-zero incrementalCleanupFactor must therefore leave the output and
-    // per-batch state counts identical to the default -- this is the same sequence as
-    // "deduplicate with subset of columns which event time column is not in subset".
+  test("incremental cleanup preserves dropDuplicatesWithinWatermark output") {
+    // Incremental cleanup uses the late-events watermark. Physical removal therefore can trail
+    // batch-end eviction by one batch, but logical expiry keeps the emitted records unchanged.
     withSQLConf(SQLConf.STREAMING_STATE_INCREMENTAL_CLEANUP_FACTOR.key -> "10") {
       val inputData = MemoryStream[(String, Int)]
       val result = inputData.toDS()
@@ -194,17 +192,66 @@ class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest
 
         AddData(inputData, "b" -> 22, "c" -> 21),
         CheckNewAnswer("b" -> 22, "c" -> 21),
-        assertNumStateRows(total = 2, updated = 2),
+        assertNumStateRows(total = 3, updated = 2),
 
-        // "a" -> 21 is emitted as new because the earlier "a" state expired and was evicted at the
-        // previous batch end -- unchanged from the factor-0 path.
+        // "a" -> 21 is emitted because its earlier state is logically expired, even though its
+        // physical removal is deferred until the incremental eviction iterator reaches it.
         AddData(inputData, "a" -> 21),
         CheckNewAnswer("a" -> 21),
         assertNumStateRows(total = 3, updated = 1),
 
         AddData(inputData, "d" -> 25),
         CheckNewAnswer("d" -> 25),
-        assertNumStateRows(total = 2, updated = 1)
+        assertNumStateRows(total = 4, updated = 1)
+      )
+    }
+  }
+
+  test("incremental cleanup must not evict a key refreshed earlier in the same batch (RocksDB)") {
+    // RocksDB's store iterator is a snapshot taken when the eviction iterator is opened at batch
+    // start. If a logically expired key is refreshed by a record before the iterator reaches it,
+    // the snapshot still shows the stale, expired value; the operator must re-read the current
+    // value and keep the entry, otherwise a later duplicate of that key would be emitted as new.
+    // A single shuffle partition and equal-length keys make the RocksDB (byte-ordered) iteration
+    // order deterministic: k1 < k2 < k3 < k9.
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key -> "1",
+      SQLConf.STREAMING_STATE_INCREMENTAL_CLEANUP_FACTOR.key -> "1") {
+      val inputData = MemoryStream[(String, Int)]
+      val result = inputData.toDS()
+        .withColumn("eventTime", timestamp_seconds($"_2"))
+        .withWatermark("eventTime", "2 seconds")
+        .dropDuplicatesWithinWatermark("_1")
+        .select($"_1", $"eventTime".cast("long").as[Long])
+
+      testStream(result, Append)(
+        // expiresAt = 19 for all three; watermark advances to 15
+        AddData(inputData, "k1" -> 17, "k2" -> 17, "k3" -> 17),
+        CheckNewAnswer("k1" -> 17, "k2" -> 17, "k3" -> 17),
+        assertNumStateRows(total = 3, updated = 3),
+
+        // Watermark advances to 20, making k1..k3 logically expired (19 <= 20). The no-data batch
+        // still uses late-events watermark 15 for incremental eviction, so nothing is removed yet.
+        AddData(inputData, "k9" -> 22),
+        CheckNewAnswer("k9" -> 22),
+        assertNumStateRows(total = 4, updated = 1),
+
+        // Late-events watermark is 20. With factor 1 the eviction iterator advances one removal per
+        // input record, in key order:
+        //   "k3": expired -> emitted; evicts k1; k3 refreshed to expiresAt 23.
+        //   "k0": new     -> emitted; evicts k2.
+        //   "k4": new     -> emitted; iterator reaches k3 -- snapshot says 19 but the store says 23,
+        //                    so it must be skipped.
+        //   "k3": live (23 > 20) -> dropped. Without the re-read it would have been emitted again.
+        AddData(inputData, "k3" -> 21, "k0" -> 21, "k4" -> 21, "k3" -> 21),
+        CheckNewAnswer("k3" -> 21, "k0" -> 21, "k4" -> 21),
+        assertNumStateRows(total = 4, updated = 3),
+
+        // Still deduplicated in the next batch.
+        AddData(inputData, "k3" -> 22),
+        CheckNewAnswer(),
+        assertNumStateRows(total = 4, updated = 0)
       )
     }
   }
