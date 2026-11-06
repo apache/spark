@@ -23,8 +23,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.jdk.CollectionConverters._
 
-import com.google.common.collect.Lists;
-
+import org.apache.spark.util.Utils
 import org.apache.spark.util.kvstore._
 
 /**
@@ -36,9 +35,8 @@ import org.apache.spark.util.kvstore._
  * operations (except the case for caching) after calling switch to the disk-based KVStore.
  */
 
-private[history] class HybridStore extends KVStore {
-
-  private val inMemoryStore = new InMemoryStore()
+private[history] class HybridStore(
+    private val inMemoryStore: KVStore = new InMemoryStore()) extends KVStore {
 
   private var diskStore: KVStore = null
 
@@ -145,13 +143,22 @@ private[history] class HybridStore extends KVStore {
 
     backgroundThread = new Thread(() => {
       try {
+        inMemoryStore match {
+          case compact: CompactInMemoryStore => compact.compact()
+          case _ =>
+        }
         for (klass <- klassMap.keys().asScala) {
-          val values = Lists.newArrayList(
-              inMemoryStore.view(klass).closeableIterator())
-          diskStore match {
-            case db: LevelDB => db.writeAll(values)
-            case db: RocksDB => db.writeAll(values)
-            case _ => throw new IllegalStateException("Unknown disk-based KVStore")
+          Utils.tryWithResource(inMemoryStore.view(klass).closeableIterator()) { iterator =>
+            // Compact records decode on demand. Keep the decoded objects and the disk write
+            // batch bounded instead of reconstructing an entire retained class at once.
+            while (iterator.hasNext) {
+              val values = iterator.next(1024)
+              diskStore match {
+                case db: LevelDB => db.writeAll(values)
+                case db: RocksDB => db.writeAll(values)
+                case _ => throw new IllegalStateException("Unknown disk-based KVStore")
+              }
+            }
           }
         }
         listener.onSwitchToDiskStoreSuccess()

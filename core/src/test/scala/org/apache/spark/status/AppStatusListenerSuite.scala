@@ -2083,6 +2083,11 @@ class AppStatusListenerWithInMemoryStoreSuite extends AppStatusListenerSuite {
   override def createKVStore: KVStore = new InMemoryStore()
 }
 
+class AppStatusListenerWithCompactStoreSuite extends AppStatusListenerSuite {
+  override def conf: SparkConf = super.conf.set(COMPACT_UI_STORE_ENABLED, true)
+  override def createKVStore: KVStore = KVUtils.createInMemoryStore(conf)
+}
+
 @ExtendedLevelDBTest
 class AppStatusListenerWithLevelDBSuite extends AppStatusListenerSuite {
   override def conf: SparkConf = super.conf

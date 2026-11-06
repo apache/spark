@@ -71,6 +71,11 @@ private[spark] class ElementTrackingStore(store: KVStore, conf: SparkConf) exten
 
   private val triggers = new HashMap[Class[_], LatchedTriggers]()
   private val flushTriggers = new ListBuffer[() => Unit]()
+
+  // Serializes related application records. Keep this separate from the close() monitor,
+  // since shutdown waits for asynchronous writes that may need this lock.
+  val transactionLock: AnyRef = new Object
+
   private val executor: ExecutorService = if (conf.get(ASYNC_TRACKING_ENABLED)) {
     ThreadUtils.newDaemonSingleThreadExecutor("element-tracking-store-worker")
   } else {
@@ -161,6 +166,11 @@ private[spark] class ElementTrackingStore(store: KVStore, conf: SparkConf) exten
 
   override def view[T](klass: Class[T]): KVStoreView[T] = store.view(klass)
 
+  def viewSummaries[T](klass: Class[T]): KVStoreView[T] = store match {
+    case compact: CompactInMemoryStore => compact.viewSummaries(klass)
+    case _ => store.view(klass)
+  }
+
   override def count(klass: Class[_]): Long = store.count(klass)
 
   override def count(klass: Class[_], index: String, indexedValue: Any): Long = {
@@ -183,13 +193,21 @@ private[spark] class ElementTrackingStore(store: KVStore, conf: SparkConf) exten
     flushTriggers.foreach { trigger =>
       Utils.tryLog(trigger())
     }
+    compact()
 
     if (closeParent) {
       store.close()
     }
   }
 
-  def usingInMemoryStore: Boolean = store.isInstanceOf[InMemoryStore]
+  def usingInMemoryStore: Boolean = store.isInstanceOf[InMemoryStore] || usingCompactStore
+
+  def usingCompactStore: Boolean = store.isInstanceOf[CompactInMemoryStore]
+
+  def compact(): Unit = store match {
+    case compact: CompactInMemoryStore => compact.compact()
+    case _ =>
+  }
 
   private case class Trigger[T](
       threshold: Long,

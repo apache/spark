@@ -77,4 +77,12 @@ private[spark] object Status {
     .version("3.4.0")
     .stringConf
     .createOptional
+
+  val COMPACT_UI_STORE_ENABLED = ConfigBuilder("spark.ui.store.compact.enabled")
+    .doc("Use the experimental compact in-memory UI store and compact live metric tracking. " +
+      "Completed task data is packed into blocks and large record details are decoded on demand. " +
+      "The existing retention limits still apply. A configured disk store takes precedence.")
+    .version("4.4.0")
+    .booleanConf
+    .createWithDefault(false)
 }

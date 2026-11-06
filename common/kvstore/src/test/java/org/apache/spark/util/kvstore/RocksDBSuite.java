@@ -470,12 +470,45 @@ public class RocksDBSuite {
     fullList.addAll(type2List);
 
     db.writeAll(fullList);
+    assertEquals(4, db.count(CustomType1.class));
+    assertEquals(4, db.count(CustomType2.class));
     for (CustomType1 value : type1List) {
       assertEquals(value, db.read(value.getClass(), value.key));
     }
     for (CustomType2 value : type2List) {
       assertEquals(value, db.read(value.getClass(), value.key));
     }
+  }
+
+  @Test
+  public void testWriteAllCountsAcrossBatchesAndRepeatedKeys() throws Exception {
+    CustomType1 first = createCustomType1(1);
+    CustomType1 second = createCustomType1(2);
+    CustomType1 third = createCustomType1(3);
+    first.id = "shared";
+    second.id = "shared";
+    third.id = "shared";
+    db.writeAll(List.of(first, second));
+    assertEquals(2, db.count(CustomType1.class));
+    assertEquals(2, db.count(CustomType1.class, "id", "shared"));
+
+    CustomType1 intermediate = createCustomType1(1);
+    intermediate.id = "temporary";
+    CustomType1 replacement = createCustomType1(1);
+    replacement.id = "moved";
+    db.writeAll(List.of(intermediate, third, replacement));
+    assertEquals(3, db.count(CustomType1.class));
+    assertEquals(2, db.count(CustomType1.class, "id", "shared"));
+    assertEquals(0, db.count(CustomType1.class, "id", "temporary"));
+    assertEquals(1, db.count(CustomType1.class, "id", "moved"));
+    assertEquals("moved", db.read(CustomType1.class, first.key).id);
+    try (KVStoreIterator<CustomType1> it = db.view(CustomType1.class)
+        .index("id").first("temporary").last("temporary").closeableIterator()) {
+      assertFalse(it.hasNext());
+    }
+    db.delete(CustomType1.class, first.key);
+    assertEquals(2, db.count(CustomType1.class));
+    assertEquals(0, db.count(CustomType1.class, "id", "moved"));
   }
 
   private CustomType1 createCustomType1(int i) {
