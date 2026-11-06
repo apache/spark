@@ -34,7 +34,8 @@ import org.apache.spark.sql.connector.metric.CustomTaskMetric;
  *   implementations must tolerate {@code close()} during an in-progress call, for example by
  *   cancelling or failing that call.</li>
  *   <li>Requests are not snapshot boundaries: results may mix source versions.</li>
- *   <li>Retried or speculative tasks may repeat a request; duplicates must be tolerated.</li>
+ *   <li>Retried or speculative tasks may send the same request again, so a source must
+ *   tolerate repeated requests. This does not allow repeated result rows.</li>
  *   <li>Implementations should respond to thread interruption if their client supports it.</li>
  * </ul>
  *
@@ -53,14 +54,22 @@ public interface ExternalLookupReader extends Closeable {
    * Spark guarantees that {@code uniqueParameters} is non-null and holds between 1 and
    * {@link ExternalLookup#maxParameterRowsPerRequest()} rows, none of them null. Field {@code i}
    * of each row is the value for the {@code i}-th selected predicate, in Spark's internal
-   * representation.
+   * representation: an integral or BOOLEAN value as its Java primitive; DECIMAL as a
+   * {@code Decimal} at the column's precision and scale; DATE as days since 1970-01-01 in the
+   * proleptic Gregorian calendar; TIMESTAMP as microseconds since 1970-01-01 00:00:00 UTC;
+   * TIMESTAMP_NTZ as microseconds of the local date and time, with no time zone; BINARY as its
+   * bytes; and STRING as UTF-8 bytes, compared byte by byte. A conversion that loses precision,
+   * such as to milliseconds, can lose matches.
    * No two rows are equal; a null {@code <=>} parameter equals a null. Only {@code <=>} parameters
    * may be null at the top level.
    * <p>
-   * The cursor must be non-null. Each row's results must be complete and depend only on the row;
-   * Spark may reuse them for equal rows. The input is read-only and must not be kept after the
-   * cursor closes. Spark closes every cursor it obtains, including one it has read to the end,
-   * before the next call and before closing this reader.
+   * The cursor must be non-null. Each row's results must be complete, with no cap and no row lost
+   * to paging, and depend only on the row; Spark may reuse them for equal rows. A table row is
+   * returned once for each parameter row that it matches: a row that matches two parameter rows
+   * is returned twice, once with each ordinal. Spark checks the selected predicates on every
+   * returned row, but cannot find a missing one. The input is read-only and must not be kept
+   * after the cursor closes. Spark closes every cursor it obtains, including one it has read to
+   * the end, before the next call and before closing this reader.
    */
   ExternalLookupResultCursor lookupBatch(InternalRow[] uniqueParameters) throws IOException;
 

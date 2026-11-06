@@ -29,8 +29,11 @@ import org.apache.spark.sql.catalyst.InternalRow;
  * ordinal is a miss. If the read schema has no columns, each match is still one (empty) row.
  * <p>
  * {@link #inputOrdinal()} and {@link #get()} are valid after {@link #next()} returns
- * {@code true}, until the next {@code next} or {@link #close()}. The row may be reused; Spark
- * copies the rows it keeps. Spark closes every cursor, which may be before its end.
+ * {@code true}, until the next {@code next} or {@link #close()}. The row and its buffers, byte
+ * arrays included, may be reused: Spark copies each row before it calls {@code next} again.
+ * Each value must fit its column's type: a null only in a column that both the table and the
+ * read schema allow to be null, and a decimal within its precision and scale. Otherwise the task
+ * fails. Spark closes every cursor, which may be before its end.
  *
  * @since 4.4.0
  */

@@ -34,6 +34,7 @@ import org.apache.spark.sql.connector.read.{ExternalLookupReader, ExternalLookup
   ExternalLookupResultCursor}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric}
+import org.apache.spark.sql.types.{Decimal, DecimalType}
 import org.apache.spark.util.Utils
 
 /**
@@ -92,6 +93,7 @@ class ExternalLookupJoinEvaluatorFactory(
     extends Iterator[InternalRow] {
     private val reader = new LookupReader
     private val parameters = new LookupParameters(partitionIndex)
+    private val resultRows = new LookupResultRows
     private val joinOutput = new JoinOutput(partitionIndex)
     private var batch: Iterator[InternalRow] = Iterator.empty
     private var inputExhausted = false
@@ -115,7 +117,9 @@ class ExternalLookupJoinEvaluatorFactory(
     private def tryAdvance(): Unit = {
       while (!batch.hasNext && !inputExhausted) {
         val rows = readBatch()
-        if (rows.nonEmpty) batch = new BatchJoinIterator(rows, parameters, joinOutput, reader)
+        if (rows.nonEmpty) {
+          batch = new BatchJoinIterator(rows, parameters, resultRows, joinOutput, reader)
+        }
         inputExhausted = !input.hasNext
       }
       if (inputExhausted && !batch.hasNext) reader.close()
@@ -146,6 +150,7 @@ class ExternalLookupJoinEvaluatorFactory(
   private class BatchJoinIterator(
       rows: Array[InternalRow],
       parameters: LookupParameters,
+      resultRows: LookupResultRows,
       joinOutput: JoinOutput,
       reader: LookupReader) extends Iterator[InternalRow] {
     metrics.inputRows += rows.length
@@ -157,12 +162,13 @@ class ExternalLookupJoinEvaluatorFactory(
     private val pending = mutable.Queue.empty[(Int, InternalRow)]
 
     // One entry for each distinct key that can match, in the order of first occurrence. A row
-    // that can never match, because of a null parameter or because it fails the stream condition,
-    // is finished right away, and its key is not requested.
+    // that can never match, because it fails the stream condition or has a null parameter, is
+    // finished right away, and its key is not requested. The stream condition is checked before
+    // the key is computed, so that it can guard the parameter expressions.
     private val keyEntries = mutable.LinkedHashMap.empty[UnsafeRow, KeyEntry]
     rows.indices.foreach { index =>
-      val key = parameters.key(rows(index))
-      if (parameters.matchesNothing(key) || !joinOutput.canMatch(rows(index))) {
+      lazy val key = parameters.key(rows(index))
+      if (!joinOutput.canMatch(rows(index)) || parameters.matchesNothing(key)) {
         finish(index)
       } else {
         keyEntries.get(key) match {
@@ -176,10 +182,11 @@ class ExternalLookupJoinEvaluatorFactory(
     private val requestedKeys = keyEntries.keys.toArray
 
     private val lookupStartNanos = System.nanoTime()
-    // No connector request, and no reader, when no key can match.
+    // No connector request, and no reader, when no key can match. The connector gets copies of
+    // the request rows, so that the ones that Spark checks the results against stay its own.
     private var cursor: ExternalLookupResultCursor =
       if (keyEntries.isEmpty) EmptyLookupCursor
-      else reader.lookup(keyEntries.values.map(_.requestRow).toArray)
+      else reader.lookup(keyEntries.values.map(_.requestRow.copy()).toArray)
 
     override def hasNext: Boolean = {
       tryFillPending()
@@ -199,17 +206,20 @@ class ExternalLookupJoinEvaluatorFactory(
         while (pending.isEmpty && advanceCursor()) {
           reader.resultRowRead()
           val key = requestedKey(cursor.inputOrdinal())
-          val resultRow = cursor.get()
+          val resultRow = resultRows.validatedCopy(cursor.get())
           if (parameters.selectedPredicatesHold(keyEntries(key).requestRow, resultRow)) {
-            // The connector may reuse its row, and several stream rows can join it.
-            joinResultRow(key, resultRow.copy())
+            joinResultRow(key, resultRow)
           }
         }
-        if (pending.isEmpty) finishCursor()
+        if (pending.isEmpty) {
+          // A close() while the cursor was read may have ended it early.
+          if (cursor ne EmptyLookupCursor) reader.ensureOpen()
+          finishCursor(completed = true)
+        }
       } catch {
         case error: Throwable =>
           Utils.tryWithSafeFinally(throw error) {
-            finishCursor()
+            finishCursor(completed = false)
           }
       }
     }
@@ -240,8 +250,12 @@ class ExternalLookupJoinEvaluatorFactory(
       }
     }
 
-    /** Closes the cursor once, and finishes every stream row that was waiting for its results. */
-    private def finishCursor(): Unit = if (cursor ne EmptyLookupCursor) {
+    /**
+     * Closes the cursor once. After a complete read, finishes every stream row that was waiting for
+     * its results. After a failure or a close, the results may be partial, so it finishes none:
+     * a row without a match could be a row whose match was never read.
+     */
+    private def finishCursor(completed: Boolean): Unit = if (cursor ne EmptyLookupCursor) {
       cursor = EmptyLookupCursor
       try {
         reader.closeCursor()
@@ -249,7 +263,7 @@ class ExternalLookupJoinEvaluatorFactory(
         metrics.lookupTime += System.nanoTime() - lookupStartNanos
         reader.updateMetrics()
       }
-      keyEntries.values.foreach(_.rowIndexes.foreach(finish))
+      if (completed) keyEntries.values.foreach(_.rowIndexes.foreach(finish))
     }
 
     private def finish(index: Int): Unit = if (!finished.contains(index)) {
@@ -269,6 +283,54 @@ class ExternalLookupJoinEvaluatorFactory(
     override def inputOrdinal(): Int = throw new NoSuchElementException("external lookup result")
     override def get(): InternalRow = throw new NoSuchElementException("external lookup result")
     override def close(): Unit = {}
+  }
+
+  /**
+   * Validates each row that the connector returns, and copies it once into Spark's own row before
+   * Spark checks, joins or keeps it. A connector may reuse its row and its buffers, byte arrays
+   * included, so a row that Spark still holds must not share them. A value that breaks its
+   * column's type fails the task: a null in a column that the table or the read schema declares
+   * NOT NULL, or a decimal that does not fit its precision and scale. Spark already relied on
+   * them while it optimized the query.
+   */
+  private class LookupResultRows {
+    private val copy = UnsafeProjection.create(lookupInput, lookupInput)
+    private val notNullFields = lookupInput.zipWithIndex.filterNot(_._1.nullable)
+    private val decimalFields = lookupInput.zipWithIndex.collect {
+      case (field, ordinal) if field.dataType.isInstanceOf[DecimalType] =>
+        (field, ordinal, field.dataType.asInstanceOf[DecimalType])
+    }
+
+    /** The row, validated and copied into a row that Spark owns. */
+    def validatedCopy(resultRow: InternalRow): UnsafeRow = {
+      notNullFields.foreach { case (field, ordinal) =>
+        if (resultRow.isNullAt(ordinal)) {
+          throw QueryExecutionErrors.invalidDataSourceExternalLookupError(
+            tableName,
+            "NULL_IN_NOT_NULL_FIELD",
+            Map("field" -> QueryExecutionErrors.toSQLId(Seq(field.name))))
+        }
+      }
+      decimalFields.foreach { case (field, ordinal, decimalType) =>
+        if (!resultRow.isNullAt(ordinal) &&
+            !fits(resultRow.getDecimal(ordinal, decimalType.precision, decimalType.scale),
+              decimalType)) {
+          throw QueryExecutionErrors.invalidDataSourceExternalLookupError(
+            tableName,
+            "DECIMAL_OUT_OF_RANGE",
+            Map(
+              "field" -> QueryExecutionErrors.toSQLId(Seq(field.name)),
+              "type" -> QueryExecutionErrors.toSQLType(decimalType)))
+        }
+      }
+      copy(resultRow).copy()
+    }
+
+    /** Whether the decimal has its type's precision and scale without rounding. */
+    private def fits(value: Decimal, decimalType: DecimalType): Boolean = {
+      val rescaled = value.clone()
+      rescaled.changePrecision(decimalType.precision, decimalType.scale) && rescaled == value
+    }
   }
 
   /**
@@ -378,6 +440,11 @@ class ExternalLookupJoinEvaluatorFactory(
             tableName, "NULL_RESULT_CURSOR")
         }
       activeCursor.set(cursor)
+      // A close() while the request ran did not find this cursor, so it is closed here.
+      if (closed.get()) {
+        closeCursor()
+        ensureOpen()
+      }
       cursor
     }
 

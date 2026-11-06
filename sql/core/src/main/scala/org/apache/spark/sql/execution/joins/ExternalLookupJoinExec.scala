@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.joins
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, AttributeSet,
-  BoundReference, EqualNullSafe, EqualTo, Expression, PredicateHelper}
+  BoundReference, EqualNullSafe, EqualTo, Expression, ExprUtils, PredicateHelper}
 import org.apache.spark.sql.catalyst.plans.{JoinType, LeftOuter}
 import org.apache.spark.sql.connector.metric.CustomTaskMetric
 import org.apache.spark.sql.connector.read.{ExternalLookupReaderFactory, Scan}
@@ -60,15 +60,17 @@ case class ExternalLookupJoinExec(
 
   // The conjuncts of the residual condition that read only stream columns, and the rest. A stream
   // row that fails the first cannot match, so the join checks them on each stream row before the
-  // lookup, and does not request the row's key. Only conjuncts that are deterministic and cannot
-  // throw are checked early, as in predicate pushdown, because the join then evaluates them for
-  // rows without a match too, and before the conjuncts written ahead of them. A conjunct that reads
-  // no column stays with the rest: the optimizer has already folded it if it could.
+  // lookup, and does not request the row's key. The join then evaluates them for rows without a
+  // match too, and before the conjuncts written ahead of them, so only conjuncts that can never
+  // fail are checked early: those that ExprUtils.canEvaluateUnconditionally accepts, as for the
+  // streamed side of other joins. `Expression.throwable` is not enough, because most expressions
+  // that can fail, such as an ANSI cast, do not report it. A conjunct that reads no column stays
+  // with the rest: the optimizer has already folded it if it could.
   private def splitResidualCondition: (Option[Expression], Option[Expression]) = {
     val (streamConjuncts, joinedConjuncts) =
       residualCondition.toSeq.flatMap(splitConjunctivePredicates).partition { conjunct =>
         conjunct.references.nonEmpty && conjunct.references.subsetOf(child.outputSet) &&
-          conjunct.deterministic && !conjunct.throwable
+          ExprUtils.canEvaluateUnconditionally(conjunct)
       }
     (streamConjuncts.reduceOption(And), joinedConjuncts.reduceOption(And))
   }

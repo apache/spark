@@ -46,7 +46,7 @@ import org.apache.spark.sql.connector.read.{Batch, ExternalLookup, ExternalLooku
   ExternalLookupReaderFactory, ExternalLookupResultCursor, InputPartition, LookupParameter,
   PartitionReader, PartitionReaderFactory, Scan, ScanBuilder, SupportsExternalLookup,
   SupportsPushDownRequiredColumns, SupportsPushDownV2Filters}
-import org.apache.spark.sql.execution.LocalTableScanExec
+import org.apache.spark.sql.execution.{CoalesceExec, LocalTableScanExec}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExternalLookupRelation}
 import org.apache.spark.sql.execution.joins.ExternalLookupJoinExec
 import org.apache.spark.sql.execution.streaming.operators.stateful.StreamingDeduplicateExec
@@ -58,7 +58,8 @@ import org.apache.spark.sql.functions.{coalesce, col, concat, expr, length, lit,
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{StreamingQueryException, StreamRealTimeModeE2ESuiteBase}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DataType, DoubleType, IntegerType, StringType, StructType}
+import org.apache.spark.sql.types.{DataType, Decimal, DoubleType, IntegerType, StringType,
+  StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -198,7 +199,14 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       (nullCursor, "NULL_RESULT_CURSOR", Map("table" -> "`SimpleExternalLookupTable`")),
       (misconfigured("nullReader"), "NULL_LOOKUP_READER", table),
       (misconfigured("invalidOrdinal"), "INVALID_INPUT_ORDINAL",
-        table ++ Map("ordinal" -> "5", "numParameterRows" -> "1"))).foreach {
+        table ++ Map("ordinal" -> "5", "numParameterRows" -> "1")),
+      // A value that breaks its column's type, which Spark relied on while it optimized.
+      (misconfigured("nullValue"), "NULL_IN_NOT_NULL_FIELD",
+        table ++ Map("field" -> "`department`")),
+      (misconfigured("nullUnderNotNullReadSchema"), "NULL_IN_NOT_NULL_FIELD",
+        table ++ Map("field" -> "`department`")),
+      (misconfigured("decimalOutOfRange"), "DECIMAL_OUT_OF_RANGE",
+        table ++ Map("field" -> "`amount`", "type" -> "\"DECIMAL(5,2)\""))).foreach {
       case (lookup, subClass, parameters) =>
         checkError(
           exception = streamFailure[SparkRuntimeException](
@@ -600,6 +608,82 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
         CaseInsensitiveExternalLookupTable.returnedRows.set(0)
         checkStream(orders.join(products, orders("sku") === products("sku"), joinType), expected)
         assert(CaseInsensitiveExternalLookupTable.returnedRows.get() === 6)
+    }
+  }
+
+  test("external lookup checks returned rows against its own copy of each request row") {
+    // A connector that overwrites the parameter rows it was given cannot make Spark drop rows.
+    val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    val left = streamOf(Seq(1, 2).toDF("id"))
+    SimpleExternalLookupDataSource.afterParameterRowsRead.set(_.foreach(_.setInt(0, -1)))
+    checkStream(
+      left.join(lookup, left("id") === lookup("id")),
+      Seq(Row(1, 1, "engineering"), Row(1, 1, "research"), Row(2, 2, "sales")))
+  }
+
+  test("a stream-side guard keeps a lookup key or a residual from failing on rows it rejects") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val employees = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+      // The guard is checked before the key is computed, so the badge `bad` is never cast.
+      val scans = streamOf(Seq(("1", true), ("bad", false)).toDF("badge", "verified"))
+      checkStream(
+        scans.join(employees,
+          scans("verified") && employees("id") === scans("badge").cast("int"), "left_outer"),
+        Seq(Row("1", true, 1, "engineering"), Row("1", true, 1, "research"),
+          Row("bad", false, null, null)))
+      // A conjunct that can fail is evaluated on joined rows only, as a join does, so never for
+      // employee 99, who has no match.
+      val timesheets = streamOf(Seq((1, "8"), (99, "bad")).toDF("id", "hours"))
+      checkStream(
+        timesheets.join(employees,
+          timesheets("id") === employees("id") && timesheets("hours").cast("int") > 0,
+          "left_outer"),
+        Seq(Row(1, "8", 1, "engineering"), Row(1, "8", 1, "research"),
+          Row(99, "bad", null, null)))
+    }
+  }
+
+  test("external lookup finishes no stream row after a failed or closed read") {
+    // After a failure or a close the result may be partial, so a stream row without a match could
+    // be one whose match was never read: Spark emits no unmatched row then. Id 1 has two matches
+    // and id 3 has none, and both are in one request.
+    val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    val left = streamOf(Seq(1).toDF("id"))
+    val outerJoin =
+      runStream(left.join(lookup, left("id") === lookup("id"), "left_outer")).lookupJoin
+    val input = CoalesceExec(1,
+      LocalTableScanExec(outerJoin.child.output, Seq(InternalRow(1), InternalRow(3)), None))
+    Seq(
+      "cursorFailure" -> 0, "closeBetweenResultRows" -> 1, "closeAtCursorEnd" -> 2).foreach {
+      case (failure, outputRows) =>
+        SimpleExternalLookupDataSource.resetCounters()
+        val readerFactory = outerJoin.readerFactory match {
+          case factory: SimpleExternalLookupReaderFactory if failure == "cursorFailure" =>
+            factory.copy(failAt = "cursor")
+          case factory => factory
+        }
+        val failingJoin = outerJoin.copy(readerFactory = readerFactory, child = input)
+        val rdd = failingJoin.execute()
+        val context = TaskContext.empty()
+        TaskContext.setTaskContext(context)
+        try {
+          val rows = rdd.iterator(rdd.partitions.head, context)
+          val completeTask = () => context.markTaskCompleted(None)
+          failure match {
+            case "closeBetweenResultRows" =>
+              rows.next()
+              completeTask()
+            case "closeAtCursorEnd" =>
+              SimpleExternalLookupDataSource.beforeCursorEnds.set(completeTask)
+            case _ =>
+          }
+          intercept[Exception] {
+            while (rows.hasNext) rows.next()
+          }
+          assert(failingJoin.metrics("numOutputRows").value === outputRows, failure)
+        } finally {
+          TaskContext.unset()
+        }
     }
   }
 
@@ -1011,6 +1095,10 @@ object SimpleExternalLookupDataSource {
   val closeEvents = new ConcurrentLinkedQueue[String]()
   val beforeReaderReturns = new AtomicReference[() => Unit](() => ())
   val beforeLookupReturns = new AtomicReference[() => Unit](() => ())
+  // Called with the parameter rows of each request, after the results are read.
+  val afterParameterRowsRead = new AtomicReference[Array[InternalRow] => Unit](_ => ())
+  // Called when a cursor reaches its end, before it reports it.
+  val beforeCursorEnds = new AtomicReference[() => Unit](() => ())
   val lookupCandidates =
     new AtomicReference(Seq.empty[(String, String, DataType)])
   val lookupCandidateDescriptions = new AtomicReference(Seq.empty[String])
@@ -1038,6 +1126,8 @@ object SimpleExternalLookupDataSource {
     closeEvents.clear()
     beforeReaderReturns.set(() => ())
     beforeLookupReturns.set(() => ())
+    afterParameterRowsRead.set(_ => ())
+    beforeCursorEnds.set(() => ())
     lookupCandidates.set(Seq.empty)
     lookupCandidateDescriptions.set(Seq.empty)
     departmentsById.set(INITIAL_DEPARTMENTS_BY_ID)
@@ -1254,6 +1344,7 @@ case class SimpleExternalLookupReaderFactory(
           current.updated(2, Seq("sales-v2"))
         }
       }
+      SimpleExternalLookupDataSource.afterParameterRowsRead.get()(keys)
       SimpleExternalLookupDataSource.beforeLookupReturns.get()()
       new TestExternalLookupResultCursor(
         if (failAt == "cursor") {
@@ -1263,6 +1354,7 @@ case class SimpleExternalLookupReaderFactory(
           results
         },
         onNext = () => SimpleExternalLookupDataSource.resultRowsRead.incrementAndGet(),
+        onEnd = () => SimpleExternalLookupDataSource.beforeCursorEnds.get()(),
         onClose = () => SimpleExternalLookupDataSource.closeEvents.add("cursor"))
     }
 
@@ -1386,6 +1478,7 @@ case class CompositeExternalLookupReaderFactory(
 class TestExternalLookupResultCursor(
     results: Iterator[(Int, InternalRow)],
     onNext: () => Unit = () => (),
+    onEnd: () => Unit = () => (),
     onClose: () => Unit = () => ())
     extends ExternalLookupResultCursor {
   private var current: (Int, InternalRow) = _
@@ -1396,6 +1489,7 @@ class TestExternalLookupResultCursor(
     true
   } else {
     current = null
+    onEnd()
     false
   }
 
@@ -1547,7 +1641,7 @@ class ReadSchemaExternalLookupDataSource extends TableProvider {
 
 class MisconfiguredExternalLookupDataSource extends TableProvider {
   override def inferSchema(options: CaseInsensitiveStringMap): StructType =
-    SimpleExternalLookupDataSource.outputSchema
+    MisconfiguredExternalLookupTable(options.get("kind")).schema()
 
   override def getTable(
       schema: StructType,
@@ -1685,7 +1779,11 @@ object MetricsExternalLookupReaderFactory extends ExternalLookupReaderFactory {
 
 case class MisconfiguredExternalLookupTable(kind: String) extends Table with SupportsRead {
   override def name(): String = "MisconfiguredExternalLookupTable"
-  override def schema(): StructType = SimpleExternalLookupDataSource.outputSchema
+  override def schema(): StructType = kind match {
+    case "nullUnderNotNullReadSchema" => StructType.fromDDL("id INT, department STRING")
+    case "decimalOutOfRange" => StructType.fromDDL("id INT, amount DECIMAL(5, 2)")
+    case _ => SimpleExternalLookupDataSource.outputSchema
+  }
   override def capabilities(): java.util.Set[TableCapability] = kind match {
     case "batchOnly" => java.util.EnumSet.of(BATCH_READ)
     case _ => java.util.EnumSet.of(EXTERNAL_LOOKUP)
@@ -1703,8 +1801,13 @@ case class MisconfiguredExternalLookupTable(kind: String) extends Table with Sup
         case "duplicateField" =>
           NoExternalLookupScan(new StructType().add("id", "int").add("id", "int"))
         case "noExternalLookup" => NoExternalLookupScan(schema())
-        case "invalidOrdinal" | "nullReader" => new Scan {
-          override def readSchema(): StructType = schema()
+        case "invalidOrdinal" | "nullReader" | "nullValue" | "nullUnderNotNullReadSchema" |
+            "decimalOutOfRange" => new Scan {
+          override def readSchema(): StructType = kind match {
+            case "nullUnderNotNullReadSchema" =>
+              StructType.fromDDL("id INT, department STRING NOT NULL")
+            case _ => schema()
+          }
           override def toExternalLookup(): ExternalLookup =
             TestExternalLookup(10, MisconfiguredExternalLookupReaderFactory(kind))
         }
@@ -1733,6 +1836,19 @@ case class MisconfiguredExternalLookupReaderFactory(kind: String)
       override def lookupBatch(keys: Array[InternalRow]): ExternalLookupResultCursor =
         new TestExternalLookupResultCursor(
           Iterator(5 -> InternalRow(1, UTF8String.fromString("value"))))
+      override def close(): Unit = {}
+    }
+    // A null in a column that the table or the read schema declares NOT NULL.
+    case "nullValue" | "nullUnderNotNullReadSchema" => new ExternalLookupReader {
+      override def lookupBatch(keys: Array[InternalRow]): ExternalLookupResultCursor =
+        new TestExternalLookupResultCursor(Iterator(0 -> InternalRow(keys(0).getInt(0), null)))
+      override def close(): Unit = {}
+    }
+    // A DECIMAL(5, 2) value with more digits than its type allows.
+    case "decimalOutOfRange" => new ExternalLookupReader {
+      override def lookupBatch(keys: Array[InternalRow]): ExternalLookupResultCursor =
+        new TestExternalLookupResultCursor(
+          Iterator(0 -> InternalRow(keys(0).getInt(0), Decimal(BigDecimal("12345.678")))))
       override def close(): Unit = {}
     }
   }

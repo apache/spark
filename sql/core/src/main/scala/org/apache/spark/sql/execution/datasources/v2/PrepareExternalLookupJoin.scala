@@ -142,13 +142,17 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
     val scan = scanBuilder.build()
     // Fields bind to table columns by exact name, as in `PushDownUtils.toOutputAttrs`. CHAR and
     // VARCHAR are read as STRING, and nullability, including nested nullability, does not count
-    // for the match. The value-row attributes take the read schema's type and nullability, so they
-    // describe every value the connector may return.
+    // for the match. The value-row attributes take the read schema's type. A top-level column is
+    // nullable only when both the table and the read schema allow nulls: the join fails the task
+    // on a null that either rules out, because Spark relied on the table's nullability while it
+    // optimized the query.
     val readSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(scan.readSchema())
     val lookupInput = readSchema.fields.map { field =>
       relation.output.find { attr =>
         attr.name == field.name && DataType.equalsIgnoreNullability(attr.dataType, field.dataType)
-      }.map(_.withDataType(field.dataType).withNullability(field.nullable)).getOrElse {
+      }.map { attr =>
+        attr.withDataType(field.dataType).withNullability(attr.nullable && field.nullable)
+      }.getOrElse {
         throw QueryCompilationErrors.invalidDataSourceExternalLookupError(
           tableName, "UNKNOWN_SCAN_FIELD", Map("field" -> toSQLId(Seq(field.name))))
       }
