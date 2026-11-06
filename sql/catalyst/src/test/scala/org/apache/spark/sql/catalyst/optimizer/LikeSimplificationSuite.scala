@@ -385,55 +385,59 @@ class LikeSimplificationSuite extends PlanTest {
     comparePlans(Optimize.execute(originalQuery), originalQuery)
   }
 
-  test("derive exact length guard for '_'-only LIKE patterns") {
-    // No `%` and no literals: exact length; the guard replaces the LIKE.
-    comparePlans(
-      Optimize.execute(testRelation.where($"a" like "_").analyze),
-      testRelation.where(Length($"a") === 1).analyze)
-    comparePlans(
-      Optimize.execute(testRelation.where($"a" like "___").analyze),
-      testRelation.where(Length($"a") === 3).analyze)
+  test("no length guard for LIKE patterns of only '_'/'%' wildcards") {
+    // A byte length cannot stand in for a code-point count, so these stay as LIKE.
+    Seq("_", "___", "_%", "%_%", "_%_").foreach { pattern =>
+      val query = testRelation.where($"a" like pattern).analyze
+      comparePlans(Optimize.execute(query), query)
+    }
   }
 
-  test("derive minimum length guard for '_' with '%' LIKE patterns") {
-    comparePlans(
-      Optimize.execute(testRelation.where($"a" like "_%").analyze),
-      testRelation.where(Length($"a") >= 1).analyze)
-    comparePlans(
-      Optimize.execute(testRelation.where($"a" like "%_%").analyze),
-      testRelation.where(Length($"a") >= 1).analyze)
-    comparePlans(
-      Optimize.execute(testRelation.where($"a" like "_%_").analyze),
-      testRelation.where(Length($"a") >= 2).analyze)
-  }
-
-  test("derive additive length guard for '_' patterns with literals") {
-    // No `%`: exact length; the literal means the LIKE is kept as the exact residual.
+  test("derive byte-length guard for '_' patterns with literals") {
+    // No `%`: each `_` is 1 to 4 bytes and each ASCII literal 1 byte, so 'a_c' is 3 to 6 bytes.
     comparePlans(
       Optimize.execute(testRelation.where($"a" like "a_c").analyze),
-      testRelation.where(Length($"a") === 3 && ($"a" like "a_c")).analyze)
-    // With `%`: minimum length.
+      testRelation.where(OctetLength($"a") >= 3 && OctetLength($"a") <= 6 &&
+        ($"a" like "a_c")).analyze)
+    // With `%`: only the lower bound.
     comparePlans(
       Optimize.execute(testRelation.where($"a" like "a_b%").analyze),
-      testRelation.where(Length($"a") >= 3 && ($"a" like "a_b%")).analyze)
+      testRelation.where(OctetLength($"a") >= 3 && ($"a" like "a_b%")).analyze)
   }
 
-  test("no additive length guard over a nondeterministic input") {
+  // scalastyle:off nonascii
+  test("byte-length guard counts literal bytes under binary collation") {
+    // 'é_c' with a 2-byte literal: 2 + 1 bytes of literals plus 1 to 4 for the `_`.
+    comparePlans(
+      Optimize.execute(testRelation.where($"a" like "é_c").analyze),
+      testRelation.where(OctetLength($"a") >= 4 && OctetLength($"a") <= 7 &&
+        ($"a" like "é_c")).analyze)
+  }
+  // scalastyle:on nonascii
+
+  test("byte-length guard counts each code point as 1 to 4 bytes under UTF8_LCASE") {
+    // A literal can match a case variant of a different byte width, so 'a_c' is 3 to 12 bytes.
+    val lcase = StringType("UTF8_LCASE")
+    val relation = LocalRelation(AttributeReference("a", lcase)())
+    val a = relation.output.head
+    val like = Like(a, Literal.create("a_c", lcase), '\\')
+    comparePlans(
+      Optimize.execute(relation.where(like).analyze),
+      relation.where(OctetLength(a) >= 3 && OctetLength(a) <= 12 && like).analyze)
+  }
+
+  test("no length guard over a nondeterministic input") {
     // The guarded form reads the input twice, and each read could see a different value.
     val input = Uuid(Some(0L))
     val originalQuery = testRelation.where(input like "a_c").analyze
     comparePlans(Optimize.execute(originalQuery), originalQuery)
 
-    // A '_'-only pattern is replaced by the guard alone, which reads the input once.
-    comparePlans(
-      Optimize.execute(testRelation.where(input like "___").analyze),
-      testRelation.where(Length(input) === 3).analyze)
-
     // The guard is still added for a deterministic input, even one not cheap.
     val substr = $"a".substring(1, 5)
     comparePlans(
       Optimize.execute(testRelation.where(substr like "a_c").analyze),
-      testRelation.where(Length(substr) === 3 && (substr like "a_c")).analyze)
+      testRelation.where(OctetLength(substr) >= 3 && OctetLength(substr) <= 6 &&
+        (substr like "a_c")).analyze)
   }
 
   test("no length guard when the pattern has escapes or no '_'") {

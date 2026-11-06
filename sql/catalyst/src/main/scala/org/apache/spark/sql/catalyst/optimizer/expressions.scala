@@ -1014,45 +1014,50 @@ object LikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
-  // For a pattern that contains a `_` wildcard (which `simplifyLike` leaves as a full `Like`),
-  // derive a code-point length guard. `_` matches exactly one code point, so a pattern with no
-  // `%` fixes the length (`Length = N`) and one with `%` gives a lower bound (`Length >= N`),
-  // where N is the number of non-`%` code points. `Length` (code-point count) is used rather
-  // than a byte length because `_` counts code points regardless of their byte width, and the
-  // constraint holds under any collation.
+  // For a pattern with a `_` wildcard and at least one literal (which `simplifyLike` leaves as a
+  // full `Like`), derive a byte-length guard and keep the exact `Like` as the residual:
+  // `<byte-length bounds> && (input LIKE pattern)`. `_` matches exactly one code point, which is
+  // 1 to 4 bytes of UTF-8. Under a binary-equality collation each literal matches its own bytes;
+  // otherwise (LIKE reaches this only for UTF8_LCASE) a literal code point can match a case
+  // variant of a different width, so it also counts as 1 to 4 bytes. A pattern with `%` gives
+  // only the lower bound. The guard uses OctetLength, which reads the stored byte count, rather
+  // than the code-point count (Length), which scans the whole string and can cost more than the
+  // `Like` it guards. A pattern of only `_`/`%` wildcards is left alone: a byte length cannot
+  // stand in for it exactly.
   //
-  // With no literals (only `_`/`%`) the guard is exactly equivalent to the `Like`, so it
-  // replaces it. Otherwise the guard is only a necessary condition and the exact `Like` is kept
-  // as the residual: `Length <op> N && (input LIKE pattern)`. The residual is tagged to keep the
-  // rule idempotent under the fixed-point batch. `And(guard, Like)` equals the `Like` in every
-  // context (it is `Like` conjoined with one of its necessary conditions), so no predicate-only
-  // restriction is needed. It does read the input twice, so it is made only for a deterministic
-  // input; a nondeterministic one could give each read a different value.
+  // The residual is tagged to keep the rule idempotent under the fixed-point batch.
+  // `And(guard, Like)` equals the `Like` in every context (it is `Like` conjoined with one of its
+  // necessary conditions), so no predicate-only restriction is needed. It does read the input
+  // twice, so it is made only for a deterministic input; a nondeterministic one could give each
+  // read a different value.
   private def deriveLengthGuard(
       input: Expression,
       pattern: String,
       escapeChar: Char,
       like: Expression): Option[Expression] = {
-    if (pattern.contains(escapeChar) || pattern.indexOf('_') < 0 ||
-        like.containsTag(LIKE_LENGTH_GUARDED)) {
+    val literals = pattern.filter(c => c != '_' && c != '%')
+    if (pattern.contains(escapeChar) || pattern.indexOf('_') < 0 || literals.isEmpty ||
+        !input.deterministic || like.containsTag(LIKE_LENGTH_GUARDED)) {
       None
     } else {
-      val n = pattern.codePointCount(0, pattern.length) - pattern.count(_ == '%')
-      val lengthGuard =
-        if (pattern.indexOf('%') >= 0) GreaterThanOrEqual(Length(input), Literal(n))
-        else EqualTo(Length(input), Literal(n))
-      if (pattern.exists(c => c != '_' && c != '%')) {
-        // Literals present: length is only a necessary condition, so keep the exact `Like`.
-        if (input.deterministic) {
-          like.setTagValue(LIKE_LENGTH_GUARDED, ())
-          Some(And(lengthGuard, like))
-        } else {
-          None
-        }
-      } else {
-        // Only `_`/`%` wildcards: the length guard is exactly equivalent to the `Like`.
-        Some(lengthGuard)
+      val underscores = pattern.count(_ == '_')
+      val (minLiteralBytes, maxLiteralBytes) = input.dataType match {
+        case st: StringType if st.supportsBinaryEquality =>
+          val bytes = UTF8String.fromString(literals).numBytes
+          (bytes, bytes)
+        case _ =>
+          val codePoints = literals.codePointCount(0, literals.length)
+          (codePoints, 4 * codePoints)
       }
+      val minBytes = GreaterThanOrEqual(OctetLength(input), Literal(minLiteralBytes + underscores))
+      val guard = if (pattern.indexOf('%') >= 0) {
+        minBytes
+      } else {
+        And(minBytes,
+          LessThanOrEqual(OctetLength(input), Literal(maxLiteralBytes + 4 * underscores)))
+      }
+      like.setTagValue(LIKE_LENGTH_GUARDED, ())
+      Some(And(guard, like))
     }
   }
 
