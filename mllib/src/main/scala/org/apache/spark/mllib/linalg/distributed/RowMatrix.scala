@@ -20,6 +20,7 @@ package org.apache.spark.mllib.linalg.distributed
 import java.util.Arrays
 
 import scala.collection.mutable.ListBuffer
+import scala.reflect.ClassTag
 
 import breeze.linalg.{axpy => brzAxpy, inv, svd => brzSvd, DenseMatrix => BDM, DenseVector => BDV,
   MatrixSingularException, SparseVector => BSV}
@@ -133,6 +134,10 @@ class RowMatrix @Since("1.0.0") (
    */
   @Since("1.0.0")
   def computeGramianMatrix(): Matrix = {
+    computeGramianMatrixAsRDD().first()
+  }
+
+  private def computeGramianMatrixAsRDD(): RDD[Matrix] = {
     val n = numCols().toInt
     checkNumColumns(n)
     // Computes n*(n+1)/2, avoiding overflow in the multiplication.
@@ -141,7 +146,7 @@ class RowMatrix @Since("1.0.0") (
     val gramianSizeInBytes = nt * 8L
 
     // Compute the upper triangular part of the gram matrix.
-    val GU = rows.treeAggregate[BDV[Double]](
+    val GU = rows.treeAggregateToRDD[BDV[Double]](
       zeroValue = null.asInstanceOf[BDV[Double]],
       seqOp = (maybeU: BDV[Double], v: Vector) => {
         val U =
@@ -160,15 +165,16 @@ class RowMatrix @Since("1.0.0") (
           U1
         } else {
           U1 += U2
-        },
-      depth = getTreeAggregateIdealDepth(gramianSizeInBytes),
-      finalAggregateOnExecutor = true
-    )
+      },
+      depth = getTreeAggregateIdealDepth(gramianSizeInBytes))
 
-    RowMatrix.triuToFull(n, GU.data)
+    GU.map(U => RowMatrix.triuToFull(n, U.data))
   }
 
-  private def computeDenseVectorCovariance(mean: Vector, n: Int, m: Long): Matrix = {
+  private def computeDenseVectorCovarianceAndApply[U: ClassTag](
+      mean: Vector,
+      n: Int,
+      m: Long)(f: Matrix => U): U = {
 
     val bc = rows.context.broadcast(mean)
 
@@ -176,85 +182,91 @@ class RowMatrix @Since("1.0.0") (
     // This succeeds when n <= 65535, which is checked above
     val nt = if (n % 2 == 0) ((n / 2) * (n + 1)) else (n * ((n + 1) / 2))
 
-    val MU = rows.treeAggregate[BDV[Double]](
-      zeroValue = null.asInstanceOf[BDV[Double]],
-      seqOp = (maybeU: BDV[Double], v: Vector) => {
-        val U =
-          if (maybeU == null) {
-            new BDV[Double](nt)
-          } else {
-            maybeU
+    try {
+      val MU = rows.treeAggregateToRDD[BDV[Double]](
+        zeroValue = null.asInstanceOf[BDV[Double]],
+        seqOp = (maybeU: BDV[Double], v: Vector) => {
+          val U =
+            if (maybeU == null) {
+              new BDV[Double](nt)
+            } else {
+              maybeU
+            }
+
+          val n = v.size
+          val na = Array.ofDim[Double](n)
+          val means = bc.value
+
+          val ta = v.toArray
+          for (index <- 0 until n) {
+            na(index) = ta(index) - means(index)
           }
 
-        val n = v.size
-        val na = Array.ofDim[Double](n)
-        val means = bc.value
+          BLAS.spr(1.0, new DenseVector(na), U.data)
+          U
+        },
+        combOp = (U1: BDV[Double], U2: BDV[Double]) =>
+          if (U1 == null) {
+            U2
+          } else if (U2 == null) {
+            U1
+          } else {
+            U1 += U2
+          },
+        depth = 2)
 
-        val ta = v.toArray
-        for (index <- 0 until n) {
-          na(index) = ta(index) - means(index)
+      MU.map { U =>
+        val M = RowMatrix.triuToFull(n, U.data).asBreeze
+
+        var i = 0
+        var j = 0
+        val m1 = m - 1.0
+        while (i < n) {
+          j = i
+          while (j < n) {
+            val Mij = M(i, j) / m1
+            M(i, j) = Mij
+            M(j, i) = Mij
+            j += 1
+          }
+          i += 1
         }
 
-        BLAS.spr(1.0, new DenseVector(na), U.data)
-        U
-      },
-      combOp = (U1: BDV[Double], U2: BDV[Double]) =>
-        if (U1 == null) {
-          U2
-        } else if (U2 == null) {
-          U1
-        } else {
-          U1 += U2
-        },
-      depth = 2,
-      finalAggregateOnExecutor = true
-    )
-
-    bc.destroy()
-
-    val M = RowMatrix.triuToFull(n, MU.data).asBreeze
-
-    var i = 0
-    var j = 0
-    val m1 = m - 1.0
-    while (i < n) {
-      j = i
-      while (j < n) {
-        val Mij = M(i, j) / m1
-        M(i, j) = Mij
-        M(j, i) = Mij
-        j += 1
-      }
-      i += 1
+        f(Matrices.fromBreeze(M))
+      }.first()
+    } finally {
+      bc.destroy()
     }
-
-    Matrices.fromBreeze(M)
   }
 
-  private def computeSparseVectorCovariance(mean: Vector, n: Int, m: Long): Matrix = {
+  private def computeSparseVectorCovarianceAndApply[U: ClassTag](
+      mean: Vector,
+      n: Int,
+      m: Long)(f: Matrix => U): U = {
+    computeGramianMatrixAsRDD().map { matrix =>
+      // We use the formula Cov(X, Y) = E[X * Y] - E[X] E[Y], which is not accurate if
+      // E[X * Y] is large but Cov(X, Y) is small, but it is good for sparse computation.
+      // TODO: find a fast and stable way for sparse data.
+      val G = matrix.asBreeze
 
-    // We use the formula Cov(X, Y) = E[X * Y] - E[X] E[Y], which is not accurate if E[X * Y] is
-    // large but Cov(X, Y) is small, but it is good for sparse computation.
-    // TODO: find a fast and stable way for sparse data.
-    val G = computeGramianMatrix().asBreeze
-
-    var i = 0
-    var j = 0
-    val m1 = m - 1.0
-    var alpha = 0.0
-    while (i < n) {
-      alpha = m / m1 * mean(i)
-      j = i
-      while (j < n) {
-        val Gij = G(i, j) / m1 - alpha * mean(j)
-        G(i, j) = Gij
-        G(j, i) = Gij
-        j += 1
+      var i = 0
+      var j = 0
+      val m1 = m - 1.0
+      var alpha = 0.0
+      while (i < n) {
+        alpha = m / m1 * mean(i)
+        j = i
+        while (j < n) {
+          val Gij = G(i, j) / m1 - alpha * mean(j)
+          G(i, j) = Gij
+          G(j, i) = Gij
+          j += 1
+        }
+        i += 1
       }
-      i += 1
-    }
 
-    Matrices.fromBreeze(G)
+      f(Matrices.fromBreeze(G))
+    }.first()
   }
 
   private def checkNumColumns(cols: Int): Unit = {
@@ -466,6 +478,10 @@ class RowMatrix @Since("1.0.0") (
    */
   @Since("1.0.0")
   def computeCovariance(): Matrix = {
+    computeCovarianceAndApply((matrix: Matrix) => matrix)
+  }
+
+  private def computeCovarianceAndApply[U: ClassTag](f: Matrix => U): U = {
     val n = numCols().toInt
     checkNumColumns(n)
 
@@ -476,9 +492,9 @@ class RowMatrix @Since("1.0.0") (
     val mean = Vectors.fromML(summary.mean)
     // If all the rows are sparse vectors, then compute based on `computeSparseVectorCovariance`.
     if (!isSparseMatrix) {
-      computeDenseVectorCovariance(mean, n, m)
+      computeDenseVectorCovarianceAndApply(mean, n, m)(f)
     } else {
-      computeSparseVectorCovariance(mean, n, m)
+      computeSparseVectorCovarianceAndApply(mean, n, m)(f)
     }
   }
 
@@ -511,19 +527,20 @@ class RowMatrix @Since("1.0.0") (
 
       (svd.V, Vectors.dense(explainedVariance))
     } else {
+      computeCovarianceAndApply { covariance =>
+        val Cov = covariance.asBreeze.asInstanceOf[BDM[Double]]
 
-      val Cov = computeCovariance().asBreeze.asInstanceOf[BDM[Double]]
+        val brzSvd.SVD(u: BDM[Double], s: BDV[Double], _) = brzSvd(Cov)
 
-      val brzSvd.SVD(u: BDM[Double], s: BDV[Double], _) = brzSvd(Cov)
+        val eigenSum = s.data.sum
+        val explainedVariance = s.data.map(_ / eigenSum)
 
-      val eigenSum = s.data.sum
-      val explainedVariance = s.data.map(_ / eigenSum)
-
-      if (k == n) {
-        (Matrices.dense(n, k, u.data), Vectors.dense(explainedVariance))
-      } else {
-        (Matrices.dense(n, k, Arrays.copyOfRange(u.data, 0, n * k)),
-          Vectors.dense(Arrays.copyOfRange(explainedVariance, 0, k)))
+        if (k == n) {
+          (Matrices.dense(n, k, u.data), Vectors.dense(explainedVariance))
+        } else {
+          (Matrices.dense(n, k, Arrays.copyOfRange(u.data, 0, n * k)),
+            Vectors.dense(Arrays.copyOfRange(explainedVariance, 0, k)))
+        }
       }
     }
   }
