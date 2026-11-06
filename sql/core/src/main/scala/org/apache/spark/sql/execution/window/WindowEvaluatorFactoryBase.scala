@@ -22,12 +22,12 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Add, AggregateWindowFunction, Ascending, Attribute, BoundReference, CurrentRow, DateAdd, DateAddYMInterval, DecimalAddNoOverflowCheck, Descending, Expression, ExtractANSIIntervalDays, FrameLessOffsetWindowFunction, FrameType, IdentityProjection, IntegerLiteral, MutableProjection, NamedExpression, OffsetWindowFunction, PythonFuncExpression, RangeFrame, RowFrame, RowOrdering, SortOrder, SpecifiedWindowFrame, TimestampAddInterval, TimestampAddYMInterval, UnaryMinus, UnboundedFollowing, UnboundedPreceding, UnsafeProjection, WindowExpression}
+import org.apache.spark.sql.catalyst.expressions.{Add, AggregateWindowFunction, Ascending, Attribute, BoundReference, CurrentRow, DateAdd, DateAddYMInterval, DecimalAddNoOverflowCheck, Descending, Expression, ExtractANSIIntervalDays, FrameLessOffsetWindowFunction, FrameType, IdentityProjection, IntegerLiteral, MutableProjection, NamedExpression, NullsFirst, OffsetWindowFunction, PythonFuncExpression, RangeFrame, RowFrame, RowOrdering, SortOrder, SpecifiedWindowFrame, TimestampAddInterval, TimestampAddYMInterval, UnaryMinus, UnboundedFollowing, UnboundedPreceding, UnsafeProjection, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, DeclarativeAggregate, Max, Min}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{CalendarIntervalType, DateType, DayTimeIntervalType, DecimalType, IntegerType, TimestampNTZType, TimestampType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{CalendarIntervalType, DateType, DayTimeIntervalType, DecimalType, IntegerType, IntegralType, TimestampNTZType, TimestampType, YearMonthIntervalType}
 import org.apache.spark.sql.types.DayTimeIntervalType.DAY
 import org.apache.spark.util.collection.Utils
 
@@ -115,6 +115,20 @@ trait WindowEvaluatorFactoryBase {
       case (RangeFrame, CurrentRow) =>
         val ordering = RowOrdering.create(orderSpec, childOutput)
         RangeBoundOrdering(ordering, IdentityProjection, IdentityProjection)
+
+      case (RangeFrame, offset: Expression) if orderSpec.size == 1 &&
+          orderSpec.head.dataType.isInstanceOf[IntegralType] &&
+          offset.dataType.isInstanceOf[IntegralType] && offset.eval() != null =>
+        // Compare the values with their bounds exactly, instead of computing the bounds in the
+        // type of the order expression, where they could overflow.
+        val sortExpr = orderSpec.head
+        val current = MutableProjection.create(sortExpr.child :: Nil, childOutput)
+        IntegralRangeBoundOrdering(
+          current,
+          sortExpr.child.dataType,
+          offset.eval().asInstanceOf[Number].longValue(),
+          ascending = sortExpr.direction == Ascending,
+          nullsFirst = sortExpr.nullOrdering == NullsFirst)
 
       case (RangeFrame, offset: Expression) if orderSpec.size == 1 =>
         // Use only the first order expression when the offset is non-null.
