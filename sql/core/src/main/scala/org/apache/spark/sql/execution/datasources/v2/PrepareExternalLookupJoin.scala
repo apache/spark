@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.{Collections, IdentityHashMap}
 
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, EqualTo, Expression,
-  PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, EqualNullSafe, EqualTo,
+  Expression, ExprUtils, PredicateHelper}
 import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupJoin, ExternalLookupKeyTypes,
   LogicalPlan, PreparedExternalLookupJoin}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -62,8 +62,6 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
         throw QueryCompilationErrors.unsupportedExternalLookupJoinError(
           "TABLE", Map("table" -> toSQLId(tableName)))
     }
-    // Each conjunct keeps its position, so the residual keeps the written order: a conjunct that
-    // can throw is never evaluated before the conjuncts written ahead of it.
     val conjuncts = join.condition.toSeq.flatMap(splitConjunctivePredicates)
     val offeredCandidates = conjuncts.zipWithIndex.collect {
       case (EqualTo(leftExpr, rightAttr: Attribute), index)
@@ -94,9 +92,16 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
     val selectedPredicates = selectedCandidates(tableName, offeredPredicates, offeredCandidates,
       lookupBuilder.selectLookupPredicates(offeredPredicates.clone()))
     val selectedConjuncts = selectedPredicates.map(_.conjunctIndex).toSet
-    val residual = conjuncts.zipWithIndex.collect {
+    // As a hash join matches its keys before it evaluates its other conditions, the residual
+    // evaluates the equalities between the two sides first, together with the conjuncts that
+    // cannot fail. A conjunct that can fail then runs only for rows that pass them. Each group
+    // keeps the written order.
+    val (residualFirst, residualRest) = conjuncts.zipWithIndex.collect {
       case (conjunct, index) if !selectedConjuncts.contains(index) => conjunct
+    }.partition { conjunct =>
+      isJoinKeyEquality(join, conjunct) || ExprUtils.canEvaluateUnconditionally(conjunct)
     }
+    val residual = residualFirst ++ residualRest
 
     val scan = scanBuilder.build()
     // Fields bind to table columns by exact name, as in `PushDownUtils.toOutputAttrs`. CHAR and
@@ -159,7 +164,25 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
       leftExpr: Expression,
       rightAttr: Attribute): Boolean =
     leftExpr.references.subsetOf(join.left.outputSet) && join.right.outputSet.contains(rightAttr) &&
-      ExternalLookupKeyTypes.supportsEquality(rightAttr.dataType)
+      ExternalLookupKeyTypes.supportsEquality(rightAttr.dataType) &&
+      !ExternalLookupKeyTypes.isCharOrVarchar(rightAttr)
+
+  /**
+   * An equality between an expression over the stream side and one over the lookup side, each
+   * reading a column, which a hash join would use as a join key.
+   */
+  private def isJoinKeyEquality(join: ExternalLookupJoin, conjunct: Expression): Boolean = {
+    def readsOnly(expression: Expression, plan: LogicalPlan): Boolean =
+      expression.references.nonEmpty && expression.references.subsetOf(plan.outputSet)
+    def betweenSides(first: Expression, second: Expression): Boolean =
+      (readsOnly(first, join.left) && readsOnly(second, join.right)) ||
+        (readsOnly(first, join.right) && readsOnly(second, join.left))
+    conjunct match {
+      case EqualTo(first, second) => betweenSides(first, second)
+      case EqualNullSafe(first, second) => betweenSides(first, second)
+      case _ => false
+    }
+  }
 
   /**
    * Maps the connector's selection back to the offered candidates, in the connector's order, which
