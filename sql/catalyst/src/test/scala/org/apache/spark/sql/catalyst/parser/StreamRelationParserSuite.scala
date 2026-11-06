@@ -601,6 +601,16 @@ class StreamRelationParserSuite extends AnalysisTest {
     assert(!relationChanges.head.changelogContext.computeUpdates())
   }
 
+  test("SPARK-60557: STREAM(t) CHANGES is an unbounded change feed, not an alias") {
+    parsePlan("SELECT * FROM STREAM(t) CHANGES") match {
+      case Project(_, NamedStreamingRelation(changes: RelationChanges, Unassigned)) =>
+        assert(changes.relation == UnresolvedRelation(Seq("t"), isStreaming = true))
+        assert(changes.changelogContext.range().isInstanceOf[ChangelogRange.UnboundedRange])
+      case other =>
+        fail(s"Expected an unaliased, unbounded streaming change feed, but got: $other")
+    }
+  }
+
   test("STREAM t CHANGES FROM VERSION") {
     val plan = parsePlan("SELECT * FROM STREAM t CHANGES FROM VERSION 1")
     val relationChanges = plan.collect { case rc: RelationChanges => rc }
