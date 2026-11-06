@@ -2853,6 +2853,37 @@ class CachedTableSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-60179: cached plan is not reused across session time zones for a " +
+    "complex-to-string cast") {
+    withTempView("t") {
+      sql("""SELECT array(timestamp_micros(0)) AS ats,
+            |       array(array(timestamp_micros(0))) AS aats,
+            |       timestamp_micros(0) AS ts""".stripMargin)
+        .createOrReplaceTempView("t")
+      // All three columns hold the same instant, and rendering one as a string localizes it. The
+      // scalar column is the control: it was already classified as zone-dependent.
+      Seq(
+        ("ats", "[1970-01-01 00:00:00]", "[1969-12-31 16:00:00]"),
+        ("aats", "[[1970-01-01 00:00:00]]", "[[1969-12-31 16:00:00]]"),
+        ("ts", "1970-01-01 00:00:00", "1969-12-31 16:00:00")).foreach {
+        case (column, inUTC, inLA) =>
+          val query = s"SELECT CAST($column AS STRING) AS v FROM t"
+          withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+            val cached = sql(query)
+            cached.persist()
+            try {
+              checkAnswer(cached, Row(inUTC))
+              withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+                checkAnswer(sql(query), Row(inLA))
+              }
+            } finally {
+              cached.unpersist()
+            }
+          }
+      }
+    }
+  }
+
   private def cacheManager = spark.sharedState.cacheManager
 
   private def pinTable(

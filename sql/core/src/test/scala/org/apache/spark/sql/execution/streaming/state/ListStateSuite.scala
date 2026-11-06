@@ -23,9 +23,12 @@ import java.util.UUID
 import org.apache.spark.{SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.TransformWithStateVariableUtils
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl}
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.ttl.ListStateImplWithTTL
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{ListState, TimeMode, TTLConfig, ValueState}
 
 /**
@@ -423,6 +426,112 @@ class ListStateSuite extends StateVariableSuiteBase {
       assert(ttlValues.forall(_._2 === ttlExpirationMs))
       val ttlStateValue = testState.getValueInTTLState()
       assert(ttlStateValue.isDefined)
+    }
+  }
+
+  // Runs `f` against `version` of the store and commits it. Aborts on failure so that closing the
+  // provider does not wait on the unreleased store and hide the original error.
+  private def withTTLListState(
+      provider: StateStoreProvider,
+      version: Long,
+      currentTimestampMs: () => Long,
+      numValuesRemovedDueToTTLExpiry: SQLMetric)(
+      f: (StateStore, StatefulProcessorHandleImpl, ListStateImplWithTTL[String]) => Unit): Unit = {
+    val store = provider.getStore(version)
+    try {
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(), stringEncoder,
+        TimeMode.ProcessingTime(), currentTimestampMs = Some(currentTimestampMs),
+        metrics = Map("numValuesRemovedDueToTTLExpiry" -> numValuesRemovedDueToTTLExpiry))
+      val listState = handle.getListState[String]("testState", Encoders.STRING,
+        TTLConfig(Duration.ofMinutes(1))).asInstanceOf[ListStateImplWithTTL[String]]
+      f(store, handle, listState)
+      store.commit()
+    } finally {
+      if (!store.hasCommitted) {
+        store.abort()
+      }
+    }
+  }
+
+  Seq(1, 2).foreach { mergeOperatorVersion =>
+    val mergeOperatorConf =
+      SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key -> mergeOperatorVersion.toString
+
+    test("ListState TTL eviction keeps unexpired values in order " +
+        s"(mergeOperatorVersion = $mergeOperatorVersion)") {
+      withSQLConf(mergeOperatorConf) {
+        tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+          var timestampMs = 0L
+          val numValuesRemoved = SQLMetrics.createMetric(spark.sparkContext, "removed")
+          ImplicitGroupingKeyTracker.setImplicitKey("test_key")
+
+          withTTLListState(provider, 0, () => timestampMs, numValuesRemoved) {
+            (_, _, listState) =>
+              listState.put(Array("v1", "v2"))
+              timestampMs = 1000
+              listState.appendList(Array("v3", "v4"))
+              listState.appendValue("v5")
+              assert(listState.getTTLValues().toSeq === Seq(("v1", 60000L), ("v2", 60000L),
+                ("v3", 61000L), ("v4", 61000L), ("v5", 61000L)))
+          }
+
+          timestampMs = 60000
+          withTTLListState(provider, 1, () => timestampMs, numValuesRemoved) {
+            (_, handle, listState) =>
+              handle.doTtlCleanup(timestampMs)
+              assert(listState.getTTLValues().toSeq ===
+                Seq(("v3", 61000L), ("v4", 61000L), ("v5", 61000L)))
+              assert(listState.getValueInTTLState() === Some(61000L))
+              assert(numValuesRemoved.value === 2)
+              listState.appendList(Array("v6"))
+              assert(listState.get().toSeq === Seq("v3", "v4", "v5", "v6"))
+          }
+
+          timestampMs = 61000
+          withTTLListState(provider, 2, () => timestampMs, numValuesRemoved) {
+            (_, handle, listState) =>
+              handle.doTtlCleanup(timestampMs)
+              assert(listState.getTTLValues().toSeq === Seq(("v6", 120000L)))
+              assert(listState.getValueInTTLState() === Some(120000L))
+              assert(numValuesRemoved.value === 5)
+          }
+        }
+      }
+    }
+
+    test("ListState TTL eviction of every value removes the list " +
+        s"(mergeOperatorVersion = $mergeOperatorVersion)") {
+      withSQLConf(mergeOperatorConf) {
+        tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+          var timestampMs = 0L
+          val numValuesRemoved = SQLMetrics.createMetric(spark.sparkContext, "removed")
+          ImplicitGroupingKeyTracker.setImplicitKey("test_key")
+          val encodedKey =
+            stringEncoder.createSerializer().apply("test_key").asInstanceOf[UnsafeRow].copy()
+
+          withTTLListState(provider, 0, () => timestampMs, numValuesRemoved) {
+            (_, _, listState) =>
+              listState.put(Array("v1", "v2"))
+              timestampMs = 1000
+              listState.appendList(Array("v3"))
+          }
+
+          timestampMs = 61000
+          withTTLListState(provider, 1, () => timestampMs, numValuesRemoved) {
+            (store, handle, listState) =>
+              handle.doTtlCleanup(timestampMs)
+              assert(!store.keyExists(encodedKey, "testState"))
+              assert(!listState.exists())
+              assert(listState.getValueInTTLState().isEmpty)
+              assert(numValuesRemoved.value === 3)
+          }
+
+          withTTLListState(provider, 2, () => timestampMs, numValuesRemoved) {
+            (store, _, _) =>
+              assert(!store.keyExists(encodedKey, "testState"))
+          }
+        }
+      }
     }
   }
 

@@ -320,6 +320,10 @@ class RunnerConf(Conf):
         )
 
     @property
+    def detailed_timing_enabled(self) -> bool:
+        return self.get("spark.sql.execution.pythonUDF.detailedTiming.enabled", "false") == "true"
+
+    @property
     def use_legacy_pandas_udtf_conversion(self) -> bool:
         return (
             self.get("spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled", "false")
@@ -388,6 +392,10 @@ class RunnerConf(Conf):
     @property
     def udf_profiler(self) -> Optional[str]:
         return self.get("spark.sql.pyspark.udf.profiler", None)
+
+    @property
+    def udf_profiler_sampling_interval(self) -> int:
+        return int(self.get("spark.sql.pyspark.udf.profiler.samplingInterval", 100))
 
     @property
     def data_source_profiler(self) -> Optional[str]:
