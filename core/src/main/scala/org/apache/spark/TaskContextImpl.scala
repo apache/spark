@@ -217,7 +217,17 @@ private[spark] class TaskContextImpl(
         try {
           listener.onStatusUpdateSent(this)
         } catch {
-          case e: Throwable => listenerExceptions += e
+          case e: Throwable =>
+            listenerExceptions += e
+            // Log each failure with its own exception, as `invokeListeners()` does: a structured
+            // log keeps only the message of the aggregate's suppressed exceptions. Best effort:
+            // a failure to log must not reach `invokeListeners()`, which would mark the task
+            // failed. It is reported with `e` instead.
+            try {
+              logError(log"Error in ${MDC(LISTENER, "PostStatusUpdateListener")}", e)
+            } catch {
+              case t: Throwable => e.addSuppressed(t)
+            }
         }
     }
     if (listenerExceptions.nonEmpty) {
