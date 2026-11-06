@@ -310,7 +310,7 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
  * table. It also does data type casting and field renaming, to make sure that the columns to be
  * inserted have the correct data type and fields have the correct names.
  */
-object PreprocessTableInsertion extends ResolveInsertionBase {
+object PreprocessTableInsertion extends Rule[LogicalPlan] {
   private def preprocess(
       insert: InsertIntoStatement,
       tblName: String,
@@ -372,7 +372,7 @@ object PreprocessTableInsertion extends ResolveInsertionBase {
     // Create a project if this INSERT has a user-specified column list.
     val hasColumnList = insert.userSpecifiedCols.nonEmpty
     val query = if (hasColumnList) {
-      createProjectForByNameQuery(tblName, insert)
+      InsertionResolution.createProjectForByNameQuery(tblName, insert)
     } else {
       insert.query
     }
