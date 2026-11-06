@@ -54,7 +54,13 @@ case class ExternalLookupJoin(
       newRight: LogicalPlan): ExternalLookupJoin = copy(left = newLeft, right = newRight)
 }
 
-/** A lookup join after its optimized lookup side has been converted to an external operation. */
+/**
+ * A lookup join after its optimized lookup side has been converted to an external operation.
+ *
+ * @param lookupKeys The table column that each selected lookup predicate compares with the
+ *   parameter at the same position. Spark checks each row that the connector returns against
+ *   them, so the read schema must hold these columns.
+ */
 case class PreparedExternalLookupJoin(
     child: LogicalPlan,
     tableName: String,
@@ -65,6 +71,7 @@ case class PreparedExternalLookupJoin(
     lookupOutput: Seq[Attribute],
     lookupParameters: Seq[Expression],
     nullSafeParameters: Seq[Boolean],
+    lookupKeys: Seq[Attribute],
     joinType: JoinType,
     residualCondition: Option[Expression]) extends UnaryNode {
 

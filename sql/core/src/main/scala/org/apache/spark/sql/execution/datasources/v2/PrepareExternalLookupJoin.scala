@@ -188,6 +188,7 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
       lookupOutput,
       selectedPredicates.map(_.parameter),
       selectedPredicates.map(_.nullSafe),
+      selectedPredicates.map(_.projectedField),
       join.joinType,
       residual.reduceOption(And))
     joinFilter.reduceOption(And).map(Filter(_, prepared)).getOrElse(prepared)
