@@ -2,109 +2,109 @@
 Transport comparison: regular vs RPC-streaming vs in-process channel
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 repartition(k)+count:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-regular                                            3799           3807          10          5.3         190.0       1.0X
-streaming                                          3704           3721          24          5.4         185.2       1.0X
-channel                                            1463           1681         307         13.7          73.2       2.6X
+regular                                            3736           3764          39          5.4         186.8       1.0X
+streaming                                          3702           3722          28          5.4         185.1       1.0X
+channel                                            1272           1281          13         15.7          63.6       2.9X
 
-OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 groupBy(k).count:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-regular                                             317            404          51         63.0          15.9       1.0X
-streaming                                           306            313           6         65.3          15.3       1.0X
-channel                                             291            311          19         68.7          14.6       1.1X
+regular                                             330            350          17         60.6          16.5       1.0X
+streaming                                           306            327          18         65.4          15.3       1.1X
+channel                                             302            322          21         66.1          15.1       1.1X
 
-OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 join 10M x 10M on unique k+count:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-regular                                            4524           4673         211          2.2         452.4       1.0X
-streaming                                          4603           4618          22          2.2         460.3       1.0X
-channel                                            4505           4523          26          2.2         450.5       1.0X
+regular                                            4610           4832         314          2.2         461.0       1.0X
+streaming                                          4780           4977         279          2.1         478.0       1.0X
+channel                                            4647           4779         187          2.2         464.7       1.0X
 
-OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 prototype 1M uniq:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-regular                                             261            276          11        383.8           2.6       1.0X
-streaming                                           256            265           9        390.6           2.6       1.0X
-channel                                             119            149          31        843.5           1.2       2.2X
+regular                                             266            279          12        376.4           2.7       1.0X
+streaming                                           266            286          15        375.3           2.7       1.0X
+channel                                             111            132          18        899.3           1.1       2.4X
 
 
 ================================================================================================
 Regular vs channel, AQE off
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 repartition(k)+count:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-regular                                            3627           3683          80          5.5         181.3       1.0X
-pipelined                                          1678           1738          85         11.9          83.9       2.2X
+regular                                            3651           3652           1          5.5         182.6       1.0X
+pipelined                                          1156           1186          43         17.3          57.8       3.2X
 
-OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 groupBy(k).count:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-regular                                             274            287          17         72.9          13.7       1.0X
-pipelined                                           275            288          17         72.7          13.8       1.0X
+regular                                             275            305          35         72.7          13.8       1.0X
+pipelined                                           276            304          35         72.4          13.8       1.0X
 
-OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 repartitionByRange(k)+count:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-regular                                            3603           3624          30          5.6         180.1       1.0X
-pipelined                                          1510           1612         144         13.2          75.5       2.4X
+regular                                            3658           3672          20          5.5         182.9       1.0X
+pipelined                                          1158           1170          16         17.3          57.9       3.2X
 
-OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 groupBy(k).count+orderBy(k):              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-regular                                             800            832          39         25.0          40.0       1.0X
-pipelined                                           806            816          14         24.8          40.3       1.0X
+regular                                             870            874           5         23.0          43.5       1.0X
+pipelined                                           867            872           4         23.1          43.3       1.0X
 
-OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 prototype: repartition(id)+count, 1M uniq:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------
-regular                                              253            270          18        395.1           2.5       1.0X
-pipelined                                            115            144          23        867.5           1.2       2.2X
+regular                                              262            271          10        381.7           2.6       1.0X
+pipelined                                            101            131          26        987.4           1.0       2.6X
 
 
 ================================================================================================
 Regular vs channel, AQE on
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 repartition(k)+count (AQE):               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-regular                                            3584           3671         123          5.6         179.2       1.0X
-pipelined                                          1460           1486          37         13.7          73.0       2.5X
+regular                                            3643           3648           7          5.5         182.2       1.0X
+pipelined                                          1143           1182          56         17.5          57.1       3.2X
 
-OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 groupBy(k).count (AQE):                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-regular                                             277            301          53         72.3          13.8       1.0X
-pipelined                                           269            296          42         74.2          13.5       1.0X
+regular                                             274            286          14         73.0          13.7       1.0X
+pipelined                                           277            290           9         72.1          13.9       1.0X
 
-OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 groupBy(k).count+orderBy(k) (AQE):        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-regular                                             842            891          44         23.7          42.1       1.0X
-pipelined                                           804            830          27         24.9          40.2       1.0X
+regular                                             882            933          46         22.7          44.1       1.0X
+pipelined                                           873            905          32         22.9          43.7       1.0X
 
-OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 prototype 1M uniq (AQE):                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-regular                                             260            267           5        384.7           2.6       1.0X
-pipelined                                           108            129          14        928.1           1.1       2.4X
+regular                                             259            267          11        386.1           2.6       1.0X
+pipelined                                           100            126          26       1000.2           1.0       2.6X
 
 
