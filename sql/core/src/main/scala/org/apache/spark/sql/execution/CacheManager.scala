@@ -480,31 +480,45 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       // Remove the cache entry before creating a new ones.
       cachedData = cachedData.filterNot(cd => needToRecache.exists(_ eq cd))
     }
-    needToRecache.foreach { cd =>
-      cd.cachedRepresentation.cacheBuilder.clearCache()
-      val rebuiltEntry = tryRebuildCacheEntry(spark, cd)
-      this.synchronized {
-        val previousOwnership = Option(cacheOwners.remove(cd))
-        rebuiltEntry.foreach { entry =>
-          previousOwnership.foreach { ownership =>
-            lookupCachedDataInternal(entry.plan) match {
-              case Some(existing) =>
-                val existingOwnership =
-                  Option(cacheOwners.get(existing)).getOrElse(CacheOwnership(Set.empty))
-                cacheOwners.put(
-                  existing,
-                  CacheOwnership(
-                    existingOwnership.sessionUUIDs ++ ownership.sessionUUIDs,
-                    existingOwnership.retained || ownership.retained))
-                logWarning("While recaching, data was already added to cache.")
-              case None =>
-                cachedData = entry +: cachedData
-                cacheOwners.put(entry, ownership)
-                CacheManager.logCacheOperation(log"Re-cached Dataframe cache entry:" +
-                  log"${MDC(DATAFRAME_CACHE_ENTRY, entry)}")
+    var remaining = needToRecache
+    try {
+      while (remaining.nonEmpty) {
+        val cd = remaining.head
+        cd.cachedRepresentation.cacheBuilder.clearCache()
+        val rebuiltEntry = tryRebuildCacheEntry(spark, cd)
+        this.synchronized {
+          val previousOwnership = Option(cacheOwners.remove(cd))
+          rebuiltEntry.foreach { entry =>
+            previousOwnership.foreach { ownership =>
+              lookupCachedDataInternal(entry.plan) match {
+                case Some(existing) =>
+                  val existingOwnership =
+                    Option(cacheOwners.get(existing)).getOrElse(CacheOwnership(Set.empty))
+                  cacheOwners.put(
+                    existing,
+                    CacheOwnership(
+                      existingOwnership.sessionUUIDs ++ ownership.sessionUUIDs,
+                      existingOwnership.retained || ownership.retained))
+                  logWarning("While recaching, data was already added to cache.")
+                case None =>
+                  cachedData = entry +: cachedData
+                  cacheOwners.put(entry, ownership)
+                  CacheManager.logCacheOperation(log"Re-cached Dataframe cache entry:" +
+                    log"${MDC(DATAFRAME_CACHE_ENTRY, entry)}")
+              }
             }
           }
         }
+        remaining = remaining.tail
+      }
+    } finally {
+      // A planning failure aborts the batch after all entries have already been removed.
+      // Release ownership and buffers for the failed entry and any entries not rebuilt yet.
+      remaining.foreach { cd =>
+        this.synchronized {
+          cacheOwners.remove(cd)
+        }
+        cd.cachedRepresentation.cacheBuilder.clearCache()
       }
     }
   }
