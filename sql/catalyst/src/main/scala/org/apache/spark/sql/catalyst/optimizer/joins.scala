@@ -354,15 +354,19 @@ trait JoinSelectionHelper extends Logging {
   }
 
   /**
-   * How `JoinSelection` plans `join` when it has no equi-join keys: the side a broadcast nested
-   * loop join builds, or `None` for a Cartesian product. Rules that need to know or price the plan
-   * a non-equi join gets can share it.
+   * How `JoinSelection` plans `join` when it has no equi-join keys and
+   * `canPlanAsBroadcastHashJoin(join, conf)` is false: the side a broadcast nested loop join
+   * builds, or `None` for a Cartesian product. Rules that need to know or price the plan a non-equi
+   * join gets can share it. Without equi-join keys, only a single-column null-aware anti join can
+   * be a broadcast hash join.
    *
-   * With hints, it builds a hinted side, or else plans a Cartesian product under a
+   * With hints, it builds a broadcast-hinted side, or else plans a Cartesian product under a
    * shuffle-replicate hint. Otherwise, or if no hint applies, it builds a side small enough to
    * broadcast, or else plans a Cartesian product for an inner join, or else builds the side the
-   * join requires or prefers, however large. Of two candidate sides, it builds the smaller for an
-   * inner or full join, the left for a right join, and the right for a left join.
+   * join requires or prefers, however large. A side hinted NO_BROADCAST_AND_REPLICATION is never
+   * broadcast by size, and the hint rules out a Cartesian product, so the other side is built. Of
+   * two candidate sides, it builds the smaller for an inner or full join, the left for a right
+   * join, and the right for a left join.
    */
   def getNonEquiJoinBuildSide(join: Join, conf: SQLConf): Option[BuildSide] = {
     val Join(left, right, joinType, _, hint) = join
