@@ -1035,8 +1035,10 @@ object LikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
       case st: StringType => st.supportsBinaryEquality
       case _ => false
     }
+    // An escape char that is itself a wildcard character means `%`/`_` no longer act as
+    // wildcards, so the prefix cannot be read off the pattern; skip, as `simplifyLike` does.
     if (!binaryCollation || !CollapseProject.isCheap(input) ||
-        like.containsTag(LIKE_PREFIX_GUARDED)) {
+        escapeChar == '%' || escapeChar == '_' || like.containsTag(LIKE_PREFIX_GUARDED)) {
       None
     } else {
       val prefix = pattern.takeWhile(c => c != '%' && c != '_')

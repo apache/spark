@@ -193,9 +193,11 @@ class LikeSimplificationSuite extends PlanTest {
     comparePlans(Optimize.execute(escPercent), escPercent)
     val escUnderscore = testRelation.where($"a".like("a__b", '_')).analyze
     comparePlans(Optimize.execute(escUnderscore), escUnderscore)
-    // Unescaped '_' single-char wildcard -> not handled by this rule.
-    val underscore = testRelation.where($"a" like "a_b").analyze
-    comparePlans(Optimize.execute(underscore), underscore)
+    // Unescaped '_' single-char wildcard -> not simplified; only its leading literal is derived
+    // as a StartsWith guard, with the LIKE kept as the exact residual.
+    comparePlans(
+      Optimize.execute(testRelation.where($"a" like "a_b").analyze),
+      testRelation.where(StartsWith($"a", "a") && ($"a" like "a_b")).analyze)
   }
 
   test("SPARK-33677: LikeSimplification skips invalid/pathological escapes, simplifies valid") {
@@ -431,10 +433,11 @@ class LikeSimplificationSuite extends PlanTest {
   }
 
   test("no StartsWith prefix guard when the escape char is in the prefix") {
-    // 'a\%b%' escapes the first '%' into a literal, so the leading literal is 'a%b'. Rather than
+    // 'a\%b_c%' escapes the first '%' into a literal, so the leading literal is 'a%b'. Rather than
     // resolve escapes to recover it, the derivation bails whenever the escape char falls in the
-    // prefix (here 'a\'), keeping the leading literal free of escapes.
-    val originalQuery = testRelation.where($"a" like "a\\%b%").analyze
+    // prefix (here 'a\'), keeping the leading literal free of escapes. (The unescaped '_' keeps
+    // `simplifyLike`'s escape decoding from handling the pattern first.)
+    val originalQuery = testRelation.where($"a" like "a\\%b_c%").analyze
     comparePlans(Optimize.execute(originalQuery), originalQuery)
   }
 
