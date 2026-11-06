@@ -45,6 +45,11 @@ import org.apache.spark.util.Utils
  * streams the connector's result rows into output rows. Parameters are deduplicated per request,
  * that is within one batch: a key repeated in a later batch is requested again.
  *
+ * Spark does not trust the connector with the selected lookup predicates: it evaluates
+ * `lookupKeyCheck` on every row that the connector returns, against the request row that the row
+ * answers, and drops a row that fails it, before it joins the row. The stream rows that share a
+ * request row have Spark-equal parameters, so one check serves all of them.
+ *
  * The join condition comes in two parts: `streamCondition` reads only stream columns and is
  * evaluated on each stream row before the request, and `residualCondition` is evaluated on the
  * joined rows. A stream row that fails `streamCondition` cannot match, so its parameters are not
@@ -54,6 +59,7 @@ class ExternalLookupJoinEvaluatorFactory(
     tableName: String,
     lookupParameters: Seq[Expression],
     nullSafeParameters: Seq[Boolean],
+    lookupKeyCheck: Option[Expression],
     streamOutput: Seq[Attribute],
     lookupInput: Seq[Attribute],
     output: Seq[Attribute],
@@ -130,9 +136,9 @@ class ExternalLookupJoinEvaluatorFactory(
 
   /**
    * Joins one batch of stream rows. Rows whose parameters are equal under Spark equality share
-   * one request row, and every result row for a request row joins all the stream rows sharing it.
-   * A stream row is finished, which may emit its unmatched output row, once no more result rows
-   * can match it.
+   * one request row, and every result row for a request row that satisfies the selected lookup
+   * predicates joins all the stream rows sharing it. A stream row is finished, which may emit its
+   * unmatched output row, once no more result rows can match it.
    *
    * Output rows are projected into a reused row on `next()`, so the consumer copies the rows it
    * retains, as with other join iterators.
@@ -193,8 +199,11 @@ class ExternalLookupJoinEvaluatorFactory(
         while (pending.isEmpty && advanceCursor()) {
           reader.resultRowRead()
           val key = requestedKey(cursor.inputOrdinal())
-          // The connector may reuse its row, and several stream rows can join it.
-          joinResultRow(key, cursor.get().copy())
+          val resultRow = cursor.get()
+          if (parameters.selectedPredicatesHold(keyEntries(key).requestRow, resultRow)) {
+            // The connector may reuse its row, and several stream rows can join it.
+            joinResultRow(key, resultRow.copy())
+          }
         }
         if (pending.isEmpty) finishCursor()
       } catch {
@@ -265,20 +274,28 @@ class ExternalLookupJoinEvaluatorFactory(
   /**
    * Evaluates the lookup parameters of stream rows: the request row that is sent to the
    * connector, and the key that identifies equal parameters under Spark equality, which
-   * normalizes floating-point values and collations.
+   * normalizes floating-point values and collations. Also checks the rows that the connector
+   * returns against the selected lookup predicates.
    */
   private class LookupParameters(partitionIndex: Int) {
     private val requestProjection = UnsafeProjection.create(lookupParameters, streamOutput)
     private val keyProjection = UnsafeProjection.create(lookupParameters.map { parameter =>
       NormalizeFloatingNumbers.normalize(CollationKey.injectCollationKey(parameter))
     }, streamOutput)
+    private val keyCheck = lookupKeyCheck.map(Predicate.create(_))
+    private val requestAndResult = new JoinedRow()
     requestProjection.initialize(partitionIndex)
     keyProjection.initialize(partitionIndex)
+    keyCheck.foreach(_.initialize(partitionIndex))
 
     def requestRow(streamRow: InternalRow): UnsafeRow = requestProjection(streamRow).copy()
 
     /** The key of a stream row, in a reused row: copy it to retain it. */
     def key(streamRow: InternalRow): UnsafeRow = keyProjection(streamRow)
+
+    /** Whether a row that the connector returns satisfies the selected lookup predicates. */
+    def selectedPredicatesHold(requestRow: UnsafeRow, resultRow: InternalRow): Boolean =
+      keyCheck.forall(_.eval(requestAndResult(requestRow, resultRow)))
 
     /**
      * A null parameter that is not null-safe matches no lookup row, so it is not requested.

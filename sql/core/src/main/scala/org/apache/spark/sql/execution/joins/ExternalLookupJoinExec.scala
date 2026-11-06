@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.joins
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, AttributeSet,
-  Expression, PredicateHelper}
+  BoundReference, EqualNullSafe, EqualTo, Expression, PredicateHelper}
 import org.apache.spark.sql.catalyst.plans.{JoinType, LeftOuter}
 import org.apache.spark.sql.connector.metric.CustomTaskMetric
 import org.apache.spark.sql.connector.read.{ExternalLookupReaderFactory, Scan}
@@ -39,6 +39,7 @@ case class ExternalLookupJoinExec(
     lookupInput: Seq[Attribute],
     lookupOutput: Seq[Attribute],
     nullSafeParameters: Seq[Boolean],
+    lookupKeys: Seq[Attribute],
     joinType: JoinType,
     residualCondition: Option[Expression],
     @transient scan: Scan,
@@ -71,6 +72,22 @@ case class ExternalLookupJoinExec(
       }
     (streamConjuncts.reduceOption(And), joinedConjuncts.reduceOption(And))
   }
+
+  // Spark does not trust the connector to evaluate the selected lookup predicates as Spark does,
+  // so it checks them itself on each row that the connector returns. The check reads that row
+  // after the parameter row of its request, and compares lookup key i with parameter i.
+  private def lookupKeyCheck: Option[Expression] = lookupParameters.indices.map { index =>
+    val parameter = lookupParameters(index)
+    val parameterValue = BoundReference(index, parameter.dataType, parameter.nullable)
+    val keyOrdinal = lookupInput.indexWhere(_.exprId == lookupKeys(index).exprId)
+    val key = lookupInput(keyOrdinal)
+    val keyValue = BoundReference(lookupParameters.length + keyOrdinal, key.dataType, key.nullable)
+    if (nullSafeParameters(index)) {
+      EqualNullSafe(keyValue, parameterValue)
+    } else {
+      EqualTo(keyValue, parameterValue)
+    }
+  }.reduceOption(And)
 
   override def references: AttributeSet =
     AttributeSet(lookupParameters.flatMap(_.references)) ++
@@ -106,6 +123,7 @@ case class ExternalLookupJoinExec(
       tableName,
       lookupParameters,
       nullSafeParameters,
+      lookupKeyCheck,
       child.output,
       lookupInput,
       output,

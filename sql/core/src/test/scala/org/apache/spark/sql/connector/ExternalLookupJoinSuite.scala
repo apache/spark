@@ -570,24 +570,37 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     assert(SimpleExternalLookupDataSource.metricSamples.get() >= 4)
   }
 
-  test("external lookup deduplicates floating-point keys within a request") {
-    val nan1 = java.lang.Double.longBitsToDouble(0x7ff8000000000001L)
-    val nan2 = java.lang.Double.longBitsToDouble(0x7ff8000000000002L)
-    // Requests hold two rows, so each pair of equivalent keys shares one request row.
-    val left = streamOf(Seq(-0.0d, 0.0d, nan1, nan2).toDF("key"))
-    val lookup = semanticKeyLookup("double")
-
-    assert(runStream(left.join(lookup, left("key") === lookup("key"))).rows.size === 4)
-    assert(SemanticKeyExternalLookupDataSource.requestSizes.asScala.toSeq === Seq(1, 1))
+  test("external lookup offers no lookup key on a double or a string with a non-binary collation") {
+    // A store may compare such values differently from Spark, for NaN and -0.0 or for case, so the
+    // equality stays in Spark's residual condition. Without another lookup key the join fails.
+    Seq(
+      "double" -> streamOf(Seq(-0.0d, 0.0d).toDF("key")),
+      "string collate utf8_lcase" -> streamOf(Seq("lookup", "LOOKUP").toDF("key"))
+        .selectExpr("CAST(key AS STRING COLLATE UTF8_LCASE) AS key")).foreach {
+      case (keyType, left) =>
+        val lookup = semanticKeyLookup(keyType)
+        checkError(
+          exception = streamFailure[AnalysisException](
+            left.join(lookup, left("key") === lookup("key"))),
+          condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_CANDIDATE",
+          parameters = Map("table" -> "`SemanticKeyExternalLookupTable`"))
+        assert(SemanticKeyExternalLookupDataSource.requestSizes.isEmpty)
+    }
   }
 
-  test("external lookup deduplicates keys using Spark collation equality") {
-    val left = streamOf(Seq("lookup", "LOOKUP").toDF("key"))
-      .selectExpr("CAST(key AS STRING COLLATE UTF8_LCASE) AS key")
-    val lookup = semanticKeyLookup("string collate utf8_lcase")
-
-    assert(runStream(left.join(lookup, left("key") === lookup("key"))).rows.size === 2)
-    assert(SemanticKeyExternalLookupDataSource.requestSizes.asScala.toSeq === Seq(1))
+  test("external lookup drops returned rows that do not satisfy the selected lookup predicates") {
+    // The store matches SKUs case-insensitively, so it returns both `AB-1` and `ab-1` for every
+    // order. Spark checks `sku = ?` itself, and keeps only the product with the exact SKU.
+    val products =
+      spark.read.format(classOf[CaseInsensitiveExternalLookupDataSource].getName).load()
+    val orders = streamOf(Seq((1, "AB-1"), (2, "ab-1"), (3, "Ab-1")).toDF("order", "sku"))
+    val matched = Seq(Row(1, "AB-1", "AB-1", "adapter"), Row(2, "ab-1", "ab-1", "cable"))
+    Seq("inner" -> matched, "left_outer" -> (matched :+ Row(3, "Ab-1", null, null))).foreach {
+      case (joinType, expected) =>
+        CaseInsensitiveExternalLookupTable.returnedRows.set(0)
+        checkStream(orders.join(products, orders("sku") === products("sku"), joinType), expected)
+        assert(CaseInsensitiveExternalLookupTable.returnedRows.get() === 6)
+    }
   }
 
   private def semanticKeyLookup(keyType: String): DataFrame = {
@@ -1455,6 +1468,64 @@ case class SemanticKeyExternalLookupReaderFactory(
           case "key" => value
           case "payload" => UTF8String.fromString("value")
         })
+      }
+      new TestExternalLookupResultCursor(results)
+    }
+
+    override def close(): Unit = {}
+  }
+}
+
+class CaseInsensitiveExternalLookupDataSource extends TableProvider {
+  override def inferSchema(options: CaseInsensitiveStringMap): StructType =
+    CaseInsensitiveExternalLookupTable.schema()
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: java.util.Map[String, String]): Table = CaseInsensitiveExternalLookupTable
+}
+
+/**
+ * A lookup-only product table in a store that matches SKUs case-insensitively, so it returns more
+ * rows than `sku = ?` selects in Spark.
+ */
+object CaseInsensitiveExternalLookupTable extends Table with SupportsRead {
+  // Two products whose SKUs differ only in case.
+  val products: Seq[(String, String)] = Seq("AB-1" -> "adapter", "ab-1" -> "cable")
+  // The rows that the store returned, before Spark checked them.
+  val returnedRows = new AtomicInteger()
+
+  override def name(): String = "CaseInsensitiveExternalLookupTable"
+  override def schema(): StructType = StructType.fromDDL("sku STRING, product STRING")
+  override def capabilities(): java.util.Set[TableCapability] =
+    java.util.EnumSet.of(EXTERNAL_LOOKUP)
+
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+    val maxBatchSize = options.getInt("maxBatchSize", 100)
+    new SupportsExternalLookup {
+      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Predicate] =
+        candidates.filter(_.name() == "=").take(1)
+      override def build(): Scan = new Scan {
+        override def readSchema(): StructType = schema()
+        override def toExternalLookup(): ExternalLookup =
+          TestExternalLookup(maxBatchSize, CaseInsensitiveExternalLookupReaderFactory)
+      }
+    }
+  }
+}
+
+object CaseInsensitiveExternalLookupReaderFactory extends ExternalLookupReaderFactory {
+  override def createReader(): ExternalLookupReader = new ExternalLookupReader {
+    override def lookupBatch(keys: Array[InternalRow]): ExternalLookupResultCursor = {
+      val results = keys.iterator.zipWithIndex.flatMap { case (key, ordinal) =>
+        val sku = key.getUTF8String(0).toString
+        CaseInsensitiveExternalLookupTable.products.iterator
+          .filter { case (storedSku, _) => storedSku.equalsIgnoreCase(sku) }
+          .map { case (storedSku, product) =>
+            CaseInsensitiveExternalLookupTable.returnedRows.incrementAndGet()
+            ordinal -> InternalRow(UTF8String.fromString(storedSku), UTF8String.fromString(product))
+          }
       }
       new TestExternalLookupResultCursor(results)
     }

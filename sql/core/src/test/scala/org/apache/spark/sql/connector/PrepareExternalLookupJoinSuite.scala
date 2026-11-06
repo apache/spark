@@ -243,6 +243,7 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
       prepared(candidates => Array(candidates(1), candidates(0)))
     assert(reversed.lookupParameters === Seq(streamLabel, streamId))
     assert(reversed.nullSafeParameters === Seq(false, false))
+    assert(reversed.lookupKeys.map(_.name) === Seq("label", "id"))
     assert(reversed.residualCondition === Some(conjuncts(2) && conjuncts(3)))
     assert(reversed.output === joinOutput)
     assert(PrepareExternalLookupJoin(reversed) === reversed)

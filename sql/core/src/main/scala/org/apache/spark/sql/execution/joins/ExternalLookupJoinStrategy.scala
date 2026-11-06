@@ -30,6 +30,7 @@ object ExternalLookupJoinStrategy extends SparkStrategy {
         lookup.lookupInput,
         lookup.lookupOutput,
         lookup.nullSafeParameters,
+        lookup.lookupKeys,
         lookup.joinType,
         lookup.residualCondition,
         lookup.scan,
