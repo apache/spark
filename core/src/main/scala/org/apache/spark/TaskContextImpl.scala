@@ -574,9 +574,11 @@ private[spark] class TaskContextImpl(
    * left to it, since its thread may be one on which they must not run, e.g. a kill thread, or the
    * task thread once `Task.run` has unset its `TaskContext` and the executor has released the
    * task's block locks and memory. A listener that fails here still starts the failure listeners
-   * on this thread (see `runListener`). Unless `mode` is `Nested`, this thread releases the
-   * invocation when it is done, or hands it over to a thread waiting for it in
-   * `markTaskCompleted()`.
+   * on this thread (see `runListener`), except for the listeners of
+   * `invokePostStatusUpdateListeners()`, which collect their failures themselves, so that they
+   * neither mark the task failed nor start the failure listeners. Unless `mode` is `Nested`, this
+   * thread releases the invocation when it is done, or hands it over to a thread waiting for it
+   * in `markTaskCompleted()`.
    *
    * Exceptions of the failure listeners left to this invocation are reported to the caller of
    * this method, together with those of `listeners`.

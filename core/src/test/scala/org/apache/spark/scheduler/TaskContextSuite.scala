@@ -2000,16 +2000,20 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
         isFailedInLastListener = context.isFailed()
     })
     val error = new RuntimeException("post-status-update failure")
+    val anotherError = new RuntimeException("another post-status-update failure")
     context.addPostStatusUpdateListener(new PostStatusUpdateListener {
       override def onStatusUpdateSent(context: TaskContext): Unit = throw error
     })
+    context.addPostStatusUpdateListener(new PostStatusUpdateListener {
+      override def onStatusUpdateSent(context: TaskContext): Unit = throw anotherError
+    })
 
-    // The caller, the executor, still gets the failure to log it.
+    // The caller, the executor, still gets all failures to log them, in invocation order.
     val e = intercept[TaskCompletionListenerException] {
       context.invokePostStatusUpdateListeners()
     }
     assert(e.getMessage.contains("post-status-update failure"))
-    assert(e.getSuppressed.toSeq === Seq(error))
+    assert(e.getSuppressed.toSeq === Seq(anotherError, error))
 
     // The executor has already reported the task's success and released its resources.
     verify(failureListener, never()).onTaskFailure(any(), any())
