@@ -31,6 +31,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.sql._
+import org.apache.spark.sql.functions.udf
 import org.apache.spark.util.VersionUtils.majorMinorVersion
 
 /** Params for Multilayer Perceptron. */
@@ -318,6 +319,53 @@ class MultilayerPerceptronClassificationModel private[ml] (
       predictionColName, $(labelCol), "")
   }
 
+  override protected def predictRawColumn(features: Column): Column = {
+    val localLayers = $(layers).clone()
+    val localWeights = weights
+    lazy val localModel = FeedForwardTopology
+      .multiLayerPerceptron(localLayers, softmaxOnTop = true)
+      .model(localWeights)
+    udf((features: Vector) => localModel.predictRaw(features)).apply(features)
+  }
+
+  override protected def raw2probabilityColumn(rawPrediction: Column): Column = {
+    udf((rawPrediction: Vector) =>
+      MultilayerPerceptronClassificationModel.raw2probability(rawPrediction)
+    ).apply(rawPrediction)
+  }
+
+  override protected def predictProbabilityColumn(features: Column): Column = {
+    val localLayers = $(layers).clone()
+    val localWeights = weights
+    lazy val localModel = FeedForwardTopology
+      .multiLayerPerceptron(localLayers, softmaxOnTop = true)
+      .model(localWeights)
+    udf((features: Vector) => localModel.predict(features)).apply(features)
+  }
+
+  override protected def raw2predictionColumn(rawPrediction: Column): Column = {
+    if (isDefined(thresholds)) {
+      val localThresholds = getThresholds.clone()
+      udf((rawPrediction: Vector) => {
+        val probability =
+          MultilayerPerceptronClassificationModel.raw2probability(rawPrediction)
+        ProbabilisticClassificationModel.probability2prediction(probability, localThresholds)
+      }).apply(rawPrediction)
+    } else {
+      udf((rawPrediction: Vector) => rawPrediction.argmax.toDouble).apply(rawPrediction)
+    }
+  }
+
+  override protected def predictionColumn(features: Column): Column = {
+    val localLayers = $(layers).clone()
+    val localWeights = weights
+    lazy val localModel = FeedForwardTopology
+      .multiLayerPerceptron(localLayers, softmaxOnTop = true)
+      .model(localWeights)
+    udf((features: Vector) => localModel.predict(features).argmax.toDouble)
+      .apply(features)
+  }
+
   /**
    * Predict label for the given features.
    * This internal method is used to implement `transform()` and output [[predictionCol]].
@@ -346,7 +394,7 @@ class MultilayerPerceptronClassificationModel private[ml] (
     new MultilayerPerceptronClassificationModel.MultilayerPerceptronClassificationModelWriter(this)
 
   override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
-    mlpModel.raw2ProbabilityInPlace(rawPrediction)
+    MultilayerPerceptronClassificationModel.raw2probabilityInPlace(rawPrediction)
   }
 
   @Since("3.0.0")
@@ -397,6 +445,36 @@ class MultilayerPerceptronClassificationModel private[ml] (
 @Since("2.0.0")
 object MultilayerPerceptronClassificationModel
   extends MLReadable[MultilayerPerceptronClassificationModel] {
+
+  private def raw2probability(rawPrediction: Vector): Vector = {
+    raw2probabilityInPlace(rawPrediction.copy)
+  }
+
+  private def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
+    val values = rawPrediction.toArray
+    var max = Double.MinValue
+    var i = 0
+    while (i < values.length) {
+      if (values(i) > max) {
+        max = values(i)
+      }
+      i += 1
+    }
+    var sum = 0.0
+    i = 0
+    while (i < values.length) {
+      values(i) = math.exp(values(i) - max)
+      sum += values(i)
+      i += 1
+    }
+    i = 0
+    while (i < values.length) {
+      values(i) /= sum
+      i += 1
+    }
+    rawPrediction
+  }
+
   private[ml] case class Data(weights: Vector)
 
   private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
