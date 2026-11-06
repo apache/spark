@@ -1347,6 +1347,19 @@ class WholeStageCodegenSuite extends SharedSparkSession
         s"addExact appears $enabledCount times when enabled vs $disabledCount times when disabled")
   }
 
+  test("SPARK-59589: a subexpression method reads an Expand's varying output as a field") {
+    // `ExpandExec` holds an UNPIVOT's string output in a slot of a compacted mutable state array,
+    // such as `expand_mutableStateArray_0[1]`. A large common subexpression reading it is computed
+    // in a method of its own, which takes the local variables it reads as parameters. Taken for a
+    // local variable, the slot became a parameter `UTF8String expand_mutableStateArray_0[1]` and
+    // the stage did not compile. Handed out as a field, it is read as one.
+    val f = "concat(upper(v), lower(v), reverse(v), trim(v), ltrim(v), rtrim(v), initcap(v), " +
+      "repeat(v, 2), lpad(v, 10, 'x'), rpad(v, 10, 'y'))"
+    val stringParameter = "private void \\w*subExpr_\\d+\\([^)]*UTF8String ".r
+    checkExpandSlotRead("subExpr", unpivot => s"SELECT c, $f AS x, concat($f, 'z') AS y $unpivot",
+      code => assert(code.forall(c => stringParameter.findFirstIn(c.body).isEmpty)))
+  }
+
   test("SPARK-60398: Expand compiles with its switch case functions spilled to nested classes") {
     // A sliding window has its Expand generate a row for each window a time can fall in: 360 rows
     // for a window of an hour sliding by 10 seconds. Without subexpression elimination the code
@@ -1375,6 +1388,61 @@ class WholeStageCodegenSuite extends SharedSparkSession
         check(times.select(window($"ts", "1 hour", "10 seconds")))
       }
     }
+  }
+
+  test("SPARK-59589: split switch cases and aggregate functions read an Expand's output as a " +
+      "field") {
+    // With the consume functions not split by operator, the consumer reads the UNPIVOT's output
+    // directly, and a tiny threshold moves its code into methods: the switch cases of the Expand
+    // that `RewriteDistinctAggregates` adds, and the aggregate functions.
+    withSQLConf(
+        SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> "false",
+        SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1") {
+      checkExpandSlotRead("switchCaseCode", unpivot =>
+        s"SELECT count(DISTINCT lpad(v, 10, 'x')), count(DISTINCT rpad(v, 10, 'y')) $unpivot")
+      checkExpandSlotRead("doAggregate_sum", unpivot =>
+        s"SELECT c, sum(length(lpad(v, 10, 'x'))), sum(length(rpad(v, 10, 'y'))) $unpivot " +
+          "GROUP BY c")
+    }
+  }
+
+  /**
+   * Checks the query `query` builds from a FROM clause that UNPIVOTs two string columns into
+   * `v`: a method named like `method` calls `lpad` on the slot of the compacted mutable state
+   * array that `ExpandExec` holds `v` in, `check` holds of the code, the code compiles, and the
+   * rows match those computed without whole stage codegen.
+   */
+  private def checkExpandSlotRead(
+      method: String,
+      query: String => String,
+      check: Seq[CodeAndComment] => Unit = _ => ()): Unit = {
+    withTempView("t") {
+      spark.range(10).selectExpr("concat('a', CAST(id AS STRING)) AS a",
+        "concat('b', CAST(id AS STRING)) AS b").createOrReplaceTempView("t")
+      def df: DataFrame = sql(query("FROM t UNPIVOT (v FOR c IN (a, b))"))
+      val code = genCode(df)
+      // A subexpression method or a switch case also writes into a slot of the same array,
+      // so the array's name alone does not show a read.
+      assert(code.exists(c => methodsHolding(c, "].lpad(").exists(_.contains(method))), method)
+      withClue(s"$method: ")(check(code))
+      code.foreach(CodeGenerator.compile)
+      val expected = withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+        df.collect().toSeq
+      }
+      checkAnswer(df, expected)
+    }
+  }
+
+  /**
+   * The methods of the generated class `code` whose code holds `text`, by name, whose prefix
+   * says which operator they were generated for, such as `expand_switchCaseCode_0`.
+   */
+  private def methodsHolding(code: CodeAndComment, text: String): Set[String] = {
+    val header = "(?m)^\\s*(?:private|public|protected)\\s[^{}();=]*?([A-Za-z_$][\\w$]*)\\s*\\(".r
+    val starts = header.findAllMatchIn(code.body).map(m => (m.start, m.group(1))).toSeq
+    starts.zip(starts.drop(1).map(_._1) :+ code.body.length).collect {
+      case ((start, name), end) if code.body.substring(start, end).contains(text) => name
+    }.toSet
   }
 
   test("SPARK-60403: full outer joins compile with their functions spilled to nested classes") {
