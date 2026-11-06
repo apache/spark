@@ -236,6 +236,16 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("filter removal candidates are normalized for scan comparison") {
+    val first = scanWithCorrelatedColumns()
+    val relation = first.relation.newInstance()
+    val second = first.copy(relation = relation, output = relation.output)
+    val left = first.copy(filterRemovalCandidates = Seq(GreaterThan(first.output.head, Literal(1))))
+    val right = second.copy(
+      filterRemovalCandidates = Seq(GreaterThan(second.output.head, Literal(1))))
+    assert(left.canonicalized == right.canonicalized)
+  }
+
   test("inferred filters require scan opt-in for separate estimation") {
     withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
       val base = scanWithCorrelatedColumns(estimateInferredFilters = false)

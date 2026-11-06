@@ -26,9 +26,14 @@ trait SupportsCatalystFilterGuarantees extends Table {
   /**
    * Returns attributes for which this table's scans fully evaluate Catalyst filters.
    *
-   * For scans reporting inferred filters, Spark omits executable static filter conjuncts that
-   * reference only these attributes. The source must fully enforce the query filters over these
-   * attributes during pushdown.
+   * For scans reporting inferred filters, Spark may omit static conjuncts over these attributes
+   * that are unchanged from returned residuals or adjustment predicates recorded during pushdown.
+   * Eligible conjuncts must be deterministic and contain no subqueries or Python UDFs. The source
+   * must fully enforce the query filters it receives over these attributes, including residuals
+   * returned to Spark, and reflect their enforcement in scan equality for scan reuse.
+   *
+   * The declaration must stay fixed for a Table instance and hold for every scan its builders
+   * produce, including scans built with different read options.
    *
    * References may name top-level columns or nested struct fields. Declaring a struct covers all
    * of its nested fields. Spark ignores fields pruned from the scan. The source must evaluate every

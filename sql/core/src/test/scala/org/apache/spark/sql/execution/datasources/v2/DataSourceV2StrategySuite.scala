@@ -21,7 +21,7 @@ import java.time.LocalTime
 import java.util.{EnumSet, OptionalLong}
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -46,7 +46,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.{SupportsCatalystFilterGuarantees, SupportsPushDownCatalystFilters}
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ArrayType, BooleanType, DoubleType, FloatType, IntegerType, LongType, MetadataBuilder, StringType, StructField, StructType, TimestampNTZNanosType, TimestampType, TimeType, VariantType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, DoubleType, FloatType, IntegerType, LongType, MapType, MetadataBuilder, StringType, StructField, StructType, TimestampNTZNanosType, TimestampType, TimeType, VariantType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.udf.worker.UDFWorkerSpecification
 import org.apache.spark.unsafe.types.UTF8String
@@ -1564,7 +1564,8 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       case "s" => Seq(dotted)
     }
     val physical = new DataSourceV2Strategy(spark)
-      .apply(Filter(predicates.reduceLeft(And), scan)).head
+      .apply(Filter(predicates.reduceLeft(And),
+        scan.copy(filterRemovalCandidates = predicates))).head
     val remaining = physical.collect { case FilterExec(condition, _) => condition }
     assert(remaining.size == 1)
     assert(remaining.head.semanticEquals(expected.reduceLeft(And)))
@@ -1596,12 +1597,47 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       val other = EqualTo(GetStructField(nested, 1), Literal(2L))
       val wholeStruct = IsNotNull(output.head)
       val physical = new DataSourceV2Strategy(spark)
-        .apply(Filter(And(part, And(other, wholeStruct)), scanRelation)).head
+        .apply(Filter(And(part, And(other, wholeStruct)),
+          scanRelation.copy(filterRemovalCandidates = Seq(part, other, wholeStruct)))).head
       val remaining = physical.collect { case FilterExec(condition, _) => condition }
       val expected = if (declared == "S.NESTED") wholeStruct else And(other, wholeStruct)
       assert(remaining.size == 1)
       assert(remaining.head.semanticEquals(expected))
     }
+  }
+
+  gridTest("guaranteed filter attributes reject invalid declarations consistently")(
+      for {
+        declared <- Seq("missing", "s.missing", "arr.part", "map.part")
+        infer <- Seq(false, true)
+        prune <- Seq(false, true)
+      } yield (declared, infer, prune)) { case (declared, infer, prune) =>
+    val nested = new StructType().add("part", LongType)
+    val schema = new StructType().add("value", LongType).add("s", nested)
+      .add("arr", ArrayType(nested)).add("map", MapType(StringType, nested))
+    val inferred = GreaterThanOrEqual(AttributeReference("value", LongType)(), Literal(0L))
+    val table = new InMemoryCatalystFilterTable(schema, inferred,
+      estimateInferred = false, fullyPushedColumns = Seq(declared))
+    val relation = DataSourceV2Relation.create(table, None, None, CaseInsensitiveStringMap.empty)
+    val output = if (prune) relation.output.take(1) else relation.output
+    val scan = new Scan {
+      override def readSchema(): StructType = StructType(output.map(a =>
+        StructField(a.name, a.dataType, a.nullable)))
+      override def toBatch: Batch = emptyBatch
+    }
+    val scanRelation = DataSourceV2ScanRelation(relation, scan, output,
+      inferredFilters = if (infer) Seq(inferred) else Nil)
+    val error = intercept[AnalysisException] {
+      new DataSourceV2Strategy(spark).apply(scanRelation)
+    }
+    checkError(
+      exception = error,
+      condition = "DATA_SOURCE_INVALID_FULLY_PUSHED_FILTER_ATTRIBUTE",
+      parameters = Map(
+        "attribute" -> FieldReference(declared).fieldNames.map(n => s"`$n`").mkString("."),
+        "tableName" -> "`in-memory-catalyst-filter-table`",
+        "tableSchema" -> ("\"" + schema.sql + "\"")),
+      sqlState = "KD000")
   }
 
   test("guaranteed filter attributes preserve Boolean projection aliases") {
@@ -1647,13 +1683,14 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       EqualTo(value, ScalarSubquery(Project(Seq(Alias(Literal(1L), "v")()), OneRowRelation()))),
       Literal.FalseLiteral)
     predicates.foreach { predicate =>
-      val physical = new DataSourceV2Strategy(spark).apply(Filter(predicate, scan)).head
+      val physical = new DataSourceV2Strategy(spark)
+        .apply(Filter(predicate, scan.copy(filterRemovalCandidates = Seq(predicate)))).head
       val remaining = physical.collectFirst { case FilterExec(expr, _) => expr }.get
       assert(remaining == predicate)
     }
   }
 
-  gridTest("guaranteed filter attributes handle Boolean factoring")(
+  gridTest("guaranteed filter attributes retain factored Boolean predicates")(
       Seq(false, true)) { includeResidualColumns =>
     val schema = StructType(Seq("a", "b", "c").map(StructField(_, BooleanType, false)))
     val a = AttributeReference("a", BooleanType, nullable = false)()
@@ -1669,11 +1706,7 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     assert(condition.isInstanceOf[Or] && condition.exists(_.isInstanceOf[And]))
     val physical = new DataSourceV2Strategy(spark).apply(optimized).head
     val remaining = physical.collectFirst { case FilterExec(expr, _) => expr }
-    if (includeResidualColumns) {
-      assert(remaining.isEmpty)
-    } else {
-      assert(remaining.exists(_.semanticEquals(condition)))
-    }
+    assert(remaining.exists(_.semanticEquals(condition)))
   }
 
   test("guaranteed filter attributes retain static filters when the scan reports no inference") {
@@ -1688,7 +1721,12 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       case scan: DataSourceV2ScanRelation =>
         scan.copy(inferredFilters = Nil)
     }
-    assertInferredEvaluation(withoutInference, evaluate = true)
+    val physical = new DataSourceV2Strategy(spark).apply(withoutInference).head
+    val remaining = physical.collect { case FilterExec(condition, _) => condition }
+    val value = relation.output.head
+    val expected = And(GreaterThan(value, Literal(0L)), GreaterThanOrEqual(value, Literal(0L)))
+    assert(remaining.size == 1)
+    assert(remaining.head.semanticEquals(expected))
   }
 
   gridTest("guaranteed filter attributes preserve aliases after merging three scans")(
