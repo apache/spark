@@ -2096,6 +2096,31 @@ WithCTE
 
 
 -- !query
+WITH RECURSIVE t1(lvl, n) AS (
+    SELECT 0, id FROM range(3)
+    UNION ALL
+    SELECT lvl + 1, IF(lvl = 0, NULL, n + 1) FROM t1 WHERE lvl < 2
+)
+SELECT * FROM t1
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t1
+:     +- Project [0#x AS lvl#x, id#xL AS n#xL]
+:        +- UnionLoop xxxx
+:           :- Project [0 AS 0#x, id#xL]
+:           :  +- Range (0, 3, step=1)
+:           +- Project [(lvl#x + 1) AS (lvl + 1)#x, if ((lvl#x = 0)) cast(null as bigint) else (n#xL + cast(1 as bigint)) AS (IF((lvl = 0), NULL, (n + 1)))#xL]
+:              +- Filter (lvl#x < 2)
+:                 +- SubqueryAlias t1
+:                    +- Project [0#x AS lvl#x, id#xL AS n#xL]
+:                       +- UnionLoopRef xxxx, [0#x, id#xL], false
++- Project [lvl#x, n#xL]
+   +- SubqueryAlias t1
+      +- CTERelationRef xxxx, true, [lvl#x, n#xL], false, false
+
+
+-- !query
 WITH RECURSIVE t1(lvl, a, b, c) AS (
     SELECT 0, ARRAY(id), ARRAY(id), ARRAY(id) FROM range(3)
     UNION ALL

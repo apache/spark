@@ -491,12 +491,30 @@ class UDFSuite extends SharedSparkSession {
          |)
          |SELECT lvl, count_if(was_null) FROM t GROUP BY lvl ORDER BY lvl""".stripMargin)
 
-    // The anchor writes the NULLs.
+    // The anchor writes the NULLs, and the recursion passes them through.
     checkAnswer(
       nullsPerLevel(
         "SELECT 0, ARRAY(f(IF(id % 2 = 0, CAST(NULL AS BIGINT), id))), false FROM range(200)",
-        "SELECT lvl + 1, ARRAY(arr[0] + 1), arr[0] IS NULL FROM t WHERE lvl < 1"),
+        "SELECT lvl + 1, arr, arr[0] IS NULL FROM t WHERE lvl < 1"),
       Seq(Row(0, 0L), Row(1, 100L)))
+
+    // Same, with the array built in a subquery of the anchor.
+    checkAnswer(
+      nullsPerLevel(
+        """SELECT 0, a, false
+          |FROM (SELECT ARRAY(f(IF(id % 2 = 0, CAST(NULL AS BIGINT), id))) AS a FROM range(200))
+          |""".stripMargin,
+        "SELECT lvl + 1, arr, arr[0] IS NULL FROM t WHERE lvl < 1"),
+      Seq(Row(0, 0L), Row(1, 100L)))
+
+    // The recursion writes the NULLs into an array built in a subquery.
+    checkAnswer(
+      nullsPerLevel(
+        "SELECT 0, ARRAY(id), false FROM range(200)",
+        """SELECT lvl + 1, a, arr[0] IS NULL
+          |FROM (SELECT lvl, arr, ARRAY(f(IF(lvl = 0, CAST(NULL AS BIGINT), arr[0]))) AS a FROM t)
+          |WHERE lvl < 2""".stripMargin),
+      Seq(Row(0, 0L), Row(1, 0L), Row(2, 200L)))
 
     // The recursion writes the NULLs.
     checkAnswer(

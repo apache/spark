@@ -781,6 +781,14 @@ WITH RECURSIVE t1(lvl, arr) AS (
 )
 SELECT * FROM t1;
 
+-- The recursion writes a top-level NULL into a column the anchor built as non-nullable
+WITH RECURSIVE t1(lvl, n) AS (
+    SELECT 0, id FROM range(3)
+    UNION ALL
+    SELECT lvl + 1, IF(lvl = 0, NULL, n + 1) FROM t1 WHERE lvl < 2
+)
+SELECT * FROM t1;
+
 -- `b` copies `a`, so it can only hold NULLs once `a` does
 WITH RECURSIVE t1(lvl, a, b, c) AS (
     SELECT 0, ARRAY(id), ARRAY(id), ARRAY(id) FROM range(3)

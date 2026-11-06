@@ -21,12 +21,12 @@ import scala.collection.mutable
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
+import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReference, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.{Cross, Inner, LeftAnti, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
-import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION, SCALA_UDF}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
 import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
@@ -37,8 +37,8 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
   // self-reference types.
   private val LOOP_ORIGIN = TreeNodeTag[LogicalPlan]("unionLoopOrigin")
 
-  // The self-reference types to rebuild a recursive CTE definition with.
-  private val SELF_REFERENCE_TYPES = TreeNodeTag[Seq[DataType]]("selfReferenceTypes")
+  // The self-reference types and nullability to rebuild a recursive CTE definition with.
+  private val SELF_REFERENCE_TYPES = TreeNodeTag[Seq[(DataType, Boolean)]]("selfReferenceTypes")
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (plan.containsAllPatterns(CTE)) {
@@ -323,34 +323,41 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
   // Assumes that `anchor` is already resolved. If `columnNames` is set (which happens if an
   // UnresolvedSubqueryColumnAliases is atop a Union) also places an UnresolvedSubqueryColumnAliases
   // node above UnionLoopRef. At some later stage UnresolvedSubqueryColumnAliases gets resolved to
-  // a Project node. `refTypes` overrides the anchor's data types for the UnionLoopRef output.
+  // a Project node. `refTypes` overrides the anchor's data types and nullability for the
+  // UnionLoopRef output.
   private def rewriteRecursiveCTERefs(
       recursion: LogicalPlan,
       anchor: LogicalPlan,
       cteDefId: Long,
       columnNames: Option[Seq[String]],
-      refTypes: Option[Seq[DataType]] = None) = {
-    val types = refTypes.getOrElse(anchor.output.map(_.dataType))
+      refTypes: Option[Seq[(DataType, Boolean)]] = None) = {
+    val types = refTypes.getOrElse(outputTypes(anchor))
     recursion.transformUpWithSubqueriesAndPruning(_.containsPattern(CTE)) {
       case r: CTERelationRef if r.recursive && r.cteId == cteDefId =>
-        // We mark the output of UnionLoopRef as nullable as it may become NULL in the following
-        // iterations.
-        val output = anchor.output.zip(types).map { case (a, dt) =>
-          a.newInstance().withNullability(true).withDataType(dt)
+        val output = anchor.output.zip(types).map { case (a, (dt, nullable)) =>
+          a.newInstance().withNullability(nullable).withDataType(dt)
         }
         val ref = UnionLoopRef(r.cteId, output, false)
         columnNames.map(UnresolvedSubqueryColumnAliases(_, ref)).getOrElse(ref)
     }
   }
 
-  // The anchor's types, unless widenSelfReference has found wider ones.
-  private def selfReferenceTypes(cteDef: CTERelationDef, anchor: LogicalPlan): Seq[DataType] =
-    cteDef.getTagValue(SELF_REFERENCE_TYPES).getOrElse(anchor.output.map(_.dataType))
+  private def outputTypes(plan: LogicalPlan): Seq[(DataType, Boolean)] =
+    plan.output.map(a => (a.dataType, a.nullable))
 
-  // A recursion can write NULLs into nested types that the self-reference declares non-nullable,
-  // e.g. ARRAY(CAST(NULL AS INT)) for an ARRAY(1) anchor. Once the loop is resolved, widens the
-  // nullability of such self-reference types to the anchor's and recursion's and rebuilds the
-  // loop from the original definition. This repeats until no type widens.
+  // The anchor's types, unless widenSelfReference has found wider ones.
+  private def selfReferenceTypes(
+      cteDef: CTERelationDef,
+      anchor: LogicalPlan): Seq[(DataType, Boolean)] =
+    cteDef.getTagValue(SELF_REFERENCE_TYPES).getOrElse(outputTypes(anchor))
+
+  // The self-reference starts with the anchor's types and nullability, but the recursion can
+  // write NULLs that they do not allow, e.g. ARRAY(CAST(NULL AS INT)) for an ARRAY(1) anchor. Once
+  // the loop is resolved, widens the self-reference's nullability, top-level and nested, to the
+  // anchor's and recursion's and rebuilds the loop from the original definition. This repeats
+  // until nothing widens.
+  // TODO: Copies of values that Spark types as nullable whatever their inputs, such as arr[0] or
+  // array_append results, still widen even if they never hold NULLs.
   private def widenSelfReference(cteDef: CTERelationDef): CTERelationDef = {
     val loop = if (cteDef.hasSelfReferenceAsUnionLoopRef) {
       cteDef.child.collectFirst { case l: UnionLoop if l.id == cteDef.id => l }
@@ -360,11 +367,13 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
     loop.filter(_.resolved) match {
       case Some(l) =>
         val refTypes = cteDef.child.collectFirstWithSubqueries {
-          case r: UnionLoopRef if r.loopId == cteDef.id => r.output.map(_.dataType)
+          case r: UnionLoopRef if r.loopId == cteDef.id => outputTypes(r)
         }.get
-        val children = Seq(l.anchor, l.recursion).map(withUdfNullHandling)
-        val widened = refTypes.zipWithIndex.map { case (dt, i) =>
-          children.foldLeft(dt)((t, c) => StructType.unionLikeMerge(t, c.output(i).dataType))
+        val childOutputs = Seq(l.anchor, l.recursion).map(withLaterNullability(_).output)
+        val widened = refTypes.zipWithIndex.map { case (refType, i) =>
+          childOutputs.foldLeft(refType) { case ((dt, nullable), output) =>
+            (StructType.unionLikeMerge(dt, output(i).dataType), nullable || output(i).nullable)
+          }
         }
         if (widened == refTypes) {
           cteDef
@@ -376,23 +385,37 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
               restored
             case None =>
               throw SparkException.internalError("The self-reference of recursive CTE " +
-                s"${cteDef.id} needs wider types ${widened.map(_.sql).mkString(", ")}, but the " +
-                "loop has no origin to rebuild it from.")
+                s"${cteDef.id} needs wider types ${widened.map(_._1.sql).mkString(", ")}, but " +
+                "the loop has no origin to rebuild it from.")
           }
         }
       case None => cteDef
     }
   }
 
-  // Primitive Scala UDFs only become nullable in the later "ScalaUDF Null Handling" batch. Applies
-  // that batch to a copy, so the self-reference also covers the NULLs those UDFs write.
-  private def withUdfNullHandling(plan: LogicalPlan): LogicalPlan = {
-    if (plan.containsPattern(SCALA_UDF)) {
-      val handled = UpdateAttributeNullability(HandleNullInputsForUDF(plan))
-      if (handled.fastEquals(plan)) plan else withUdfNullHandling(handled)
-    } else {
-      plan
-    }
+  // Applies to a copy the nullability that later analysis adds: primitive Scala UDFs only become
+  // nullable in the "ScalaUDF Null Handling" batch, and references keep the types they were
+  // resolved with. So the self-reference also covers those NULLs.
+  private def withLaterNullability(plan: LogicalPlan): LogicalPlan = {
+    val handled = refreshAttributeTypes(HandleNullInputsForUDF(plan))
+    if (handled.fastEquals(plan)) plan else withLaterNullability(handled)
+  }
+
+  // Like UpdateAttributeNullability, but also takes the data type of the child's output attribute
+  // where it is more nullable.
+  private def refreshAttributeTypes(plan: LogicalPlan): LogicalPlan = plan.transformUp {
+    case p if p.children.nonEmpty && p.childrenResolved =>
+      val childOutput = AttributeMap(p.children.flatMap(_.output).map(a => a -> a))
+      p.transformExpressions {
+        case a: AttributeReference if childOutput.contains(a) =>
+          val c = childOutput(a)
+          val dataType = if (DataType.equalsIgnoreCompatibleNullability(a.dataType, c.dataType)) {
+            c.dataType
+          } else {
+            a.dataType
+          }
+          a.withNullability(a.nullable || c.nullable).withDataType(dataType)
+      }
   }
 
   /**

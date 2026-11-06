@@ -2143,6 +2143,27 @@ struct<lvl:int,arr:array<struct<a:bigint>>>
 
 
 -- !query
+WITH RECURSIVE t1(lvl, n) AS (
+    SELECT 0, id FROM range(3)
+    UNION ALL
+    SELECT lvl + 1, IF(lvl = 0, NULL, n + 1) FROM t1 WHERE lvl < 2
+)
+SELECT * FROM t1
+-- !query schema
+struct<lvl:int,n:bigint>
+-- !query output
+0	0
+0	1
+0	2
+1	NULL
+1	NULL
+1	NULL
+2	NULL
+2	NULL
+2	NULL
+
+
+-- !query
 WITH RECURSIVE t1(lvl, a, b, c) AS (
     SELECT 0, ARRAY(id), ARRAY(id), ARRAY(id) FROM range(3)
     UNION ALL
