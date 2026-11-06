@@ -311,14 +311,17 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       testConstraintsAfterJoin(originalLeft, originalRight, left, right, Inner, condition)
     }
 
-    Seq(Some("left.a".attr === "right.b".attr.cast(IntegerType)),
-      Some("right.b".attr.cast(IntegerType) === "left.a".attr)).foreach { condition =>
-      // A narrowing cast can fail, so it is not inferred.
-      testConstraintsAfterJoin(originalLeft, originalRight, left, right, Inner, condition)
+    // A narrowing cast can fail in ANSI mode, so it is not inferred.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      Seq(Some("left.a".attr === "right.b".attr.cast(IntegerType)),
+        Some("right.b".attr.cast(IntegerType) === "left.a".attr)).foreach { condition =>
+        testConstraintsAfterJoin(originalLeft, originalRight, left, right, Inner, condition)
+      }
     }
   }
 
-  private def failable(e: Expression): Expression = Literal(10.0) / e > 0.0
+  private def failable(e: Expression): Expression =
+    Divide(Literal(10.0), e, EvalMode.ANSI) > 0.0
 
   test("SPARK-60985: a constraint that can fail is not inferred as a filter") {
     val relation = LocalRelation($"x".double, $"y".double)

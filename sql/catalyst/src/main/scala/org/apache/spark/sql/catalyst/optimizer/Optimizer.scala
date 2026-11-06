@@ -2334,17 +2334,24 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
    * on rows and values the query may never evaluate it on, e.g. `10 / x > 0` from `x = y AND
    * 10 / y > 0` on a row where `x` is 0 and `y` is not, so only a constraint that cannot fail
    * becomes a filter. Constant parts count as what they evaluate to, as they are folded right
-   * after this rule, and an uncorrelated subquery as a constant, as it runs once whichever rows
-   * use it. Callers pass the original expressions, because [[ExpressionSet.filter]] tests the
-   * canonicalized ones.
+   * after this rule. An uncorrelated subquery counts as a constant, as it runs once whichever
+   * rows use it, and a correlated one by its values and its correlation condition. Callers pass
+   * the original expressions, because [[ExpressionSet.filter]] tests the canonicalized ones.
    */
   private def canBeFilter(constraint: Expression): Boolean = {
     conf.legacyInferFailableFiltersFromConstraints || ExprUtils.canEvaluateUnconditionally(
-      ConstantFolding.constantFolding(constraint, isConditionalBranch = true).transformUp {
-        case c: Cast if isNumericUpCast(c.child.dataType, c.dataType) => c.child
-        case i: InSubquery => i.values.map(IsNotNull(_)).reduce[Expression](And)
-        case s: ScalarSubquery => Literal.create(null, s.dataType)
-      })
+      stripCannotFail(ConstantFolding.constantFolding(constraint, isConditionalBranch = true)))
+  }
+
+  // Top-down, so that each cast is judged by the type of its original input.
+  private def stripCannotFail(e: Expression): Expression = e match {
+    case c: Cast if isNumericUpCast(c.child.dataType, c.dataType) => stripCannotFail(c.child)
+    case i: InSubquery =>
+      (i.values.map(IsNotNull(_)) ++ i.query.joinCond).map(stripCannotFail).reduce[Expression](And)
+    case x: Exists =>
+      x.joinCond.map(stripCannotFail).foldLeft[Expression](Literal.TrueLiteral)(And)
+    case s: ScalarSubquery if !s.isCorrelated => Literal.create(null, s.dataType)
+    case other => other.mapChildren(stripCannotFail)
   }
 
   private def isNumericUpCast(from: DataType, to: DataType): Boolean = (from, to) match {
