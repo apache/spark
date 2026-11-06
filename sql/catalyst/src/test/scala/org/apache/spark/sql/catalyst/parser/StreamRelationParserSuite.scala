@@ -601,6 +601,16 @@ class StreamRelationParserSuite extends AnalysisTest {
     assert(!relationChanges.head.changelogContext.computeUpdates())
   }
 
+  test("SPARK-60557: STREAM(t) CHANGES is an unbounded change feed, not an alias") {
+    parsePlan("SELECT * FROM STREAM(t) CHANGES") match {
+      case Project(_, NamedStreamingRelation(changes: RelationChanges, Unassigned)) =>
+        assert(changes.relation == UnresolvedRelation(Seq("t"), isStreaming = true))
+        assert(changes.changelogContext.range().isInstanceOf[ChangelogRange.UnboundedRange])
+      case other =>
+        fail(s"Expected an unaliased, unbounded streaming change feed, but got: $other")
+    }
+  }
+
   test("STREAM t CHANGES FROM VERSION") {
     val plan = parsePlan("SELECT * FROM STREAM t CHANGES FROM VERSION 1")
     val relationChanges = plan.collect { case rc: RelationChanges => rc }
@@ -679,6 +689,26 @@ class StreamRelationParserSuite extends AnalysisTest {
     assert(relationChanges.head.changelogContext.deduplicationMode() ==
       ChangelogContext.DeduplicationMode.NONE)
     assert(relationChanges.head.changelogContext.computeUpdates())
+  }
+
+  test("STREAM(t) CHANGES is equivalent to the non-parenthesized form") {
+    val clauses = """CHANGES FROM VERSION 1
+                    |WITH (deduplicationMode = 'none', computeUpdates = 'true')
+                    |IDENTIFIED BY my_source
+                    |WATERMARK event_time DELAY OF INTERVAL 1 MINUTE
+                    |AS src""".stripMargin
+    comparePlans(
+      parsePlan(s"SELECT * FROM STREAM t $clauses"),
+      parsePlan(s"SELECT * FROM STREAM(t) $clauses"))
+  }
+
+  test("STREAM table-valued functions do not support CHANGES") {
+    Seq(
+      "SELECT * FROM STREAM range(1) CHANGES FROM VERSION 1",
+      "SELECT * FROM STREAM(range(1)) CHANGES FROM VERSION 1"
+    ).foreach { query =>
+      interceptParseException(parsePlan)(query)(None)
+    }
   }
 
   test("STREAM t CHANGES - error: subquery in timestamp") {
