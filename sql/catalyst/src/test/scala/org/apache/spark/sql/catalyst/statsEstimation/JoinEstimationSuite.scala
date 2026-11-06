@@ -21,11 +21,12 @@ import java.sql.{Date, Timestamp}
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, AttributeReference, EqualTo}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeMap, AttributeReference, EqualTo}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils}
 import org.apache.spark.sql.types.{DateType, TimestampType, _}
 
 
@@ -558,6 +559,32 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
       rowCount = Some(0),
       attributeStats = AttributeMap(Nil))
     assert(join.stats == expectedStats)
+  }
+
+  test("SPARK-60810: string and binary join keys with histograms use the distinct count") {
+    // DSv2 connectors can report a histogram for any type, but only numeric-like keys can be
+    // estimated with one. 10 x 10 rows with 10 distinct values on each side give 10 rows.
+    val histogram = Histogram(height = 1, Array(HistogramBin(lo = 0, hi = 10, ndv = 10)))
+    val stat = ColumnStat(distinctCount = Some(10), nullCount = Some(0), avgLen = Some(1),
+      maxLen = Some(1), histogram = Some(histogram))
+    def side(key: Attribute): LogicalPlan =
+      StatsTestPlan(Seq(key), 10, AttributeMap(Seq(key -> stat)))
+    def joinRows(left: LogicalPlan, right: LogicalPlan): Option[BigInt] = Join(left, right, Inner,
+      Some(EqualTo(left.output.head, right.output.head)), JoinHint.NONE).stats.rowCount
+
+    Seq(StringType, BinaryType).foreach { dt =>
+      val rows = joinRows(side(AttributeReference("l", dt)()), side(AttributeReference("r", dt)()))
+      assert(rows.contains(BigInt(10)), dt)
+    }
+
+    // CHAR keys reach the join through the read-side padding Project, which passes the
+    // column's statistics, histogram included, to its alias.
+    def paddedSide(name: String): LogicalPlan = {
+      val c = DataTypeUtils.toAttribute(CharVarcharUtils.replaceCharVarcharWithStringInSchema(
+        StructType(Seq(StructField(name, CharType(5))))).head)
+      Project(Seq(Alias(CharVarcharUtils.addPaddingForScan(c), name)()), side(c))
+    }
+    assert(joinRows(paddedSide("l"), paddedSide("r")).contains(BigInt(10)))
   }
 
   test("SPARK-33018 Fix estimate statistics issue if child has 0 bytes") {

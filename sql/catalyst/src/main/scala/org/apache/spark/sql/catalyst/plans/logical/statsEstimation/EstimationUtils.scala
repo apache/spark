@@ -20,8 +20,9 @@ package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 import scala.collection.mutable.ArrayBuffer
 import scala.math.BigDecimal.RoundingMode
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, EmptyRow, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, EmptyRow, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.types.{DecimalType, _}
 
 object EstimationUtils {
@@ -87,6 +88,26 @@ object EstimationUtils {
     expressions.collect {
       case alias @ Alias(attr: Attribute, _) if attributeStats.contains(attr) =>
         alias.toAttribute -> attributeStats(attr)
+      // Read-side CHAR padding wraps each CHAR column of a scan. With padding on, ANALYZE TABLE
+      // reads the table through it as well, so the statistics already describe padded values.
+      // Statistics collected otherwise (with padding off, or reported by a connector) can
+      // describe shorter values, and every non-null padded value has at least N characters.
+      // A distinct count of 0 or a null count covering every row means no non-null values, so
+      // there is nothing to pad (ANALYZE then stores the type's default size as the lengths).
+      // The distinct count is left as is.
+      // It is too high only when stored values differ just in trailing spaces, which the
+      // padding makes equal.
+      case alias @ Alias(CharVarcharUtils.ReadSidePadding(attr: Attribute, Literal(n: Int, _)), _)
+          if attributeStats.contains(attr) =>
+        val stat = attributeStats(attr)
+        val noValues =
+          stat.distinctCount.contains(BigInt(0)) || stat.nullCount.exists(_ >= rowCount)
+        val padded = if (noValues) {
+          stat
+        } else {
+          stat.copy(avgLen = stat.avgLen.map(_.max(n)), maxLen = stat.maxLen.map(_.max(n)))
+        }
+        alias.toAttribute -> padded
       case alias @ Alias(expr: Expression, _) if expr.foldable && expr.deterministic =>
         val value = expr.eval(EmptyRow)
         val size = expr.dataType.defaultSize
@@ -126,6 +147,16 @@ object EstimationUtils {
     // Output size can't be zero, or sizeInBytes of BinaryNode will also be zero
     // (simple computation of statistics returns product of children).
     if (outputRowCount > 0) outputRowCount * getSizePerRow(attributes, attrStats) else 1
+  }
+
+  /**
+   * Whether the histogram estimation paths apply to a column of this type. String and binary
+   * columns have no numeric bounds, which those paths need. ANALYZE TABLE builds no histogram for
+   * them, but a DSv2 connector can report one for any type.
+   */
+  def canEstimateWithHistogram(dataType: DataType): Boolean = dataType match {
+    case _: StringType | BinaryType => false
+    case _ => true
   }
 
   /**

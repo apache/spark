@@ -21,7 +21,8 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils}
 import org.apache.spark.sql.types._
 
 
@@ -161,6 +162,54 @@ class ProjectEstimationSuite extends StatsEstimationTestBase {
       rowCount = Some(2),
       attributeStats = toAttributeMap(expectedColStats2, proj2))
     assert(proj2.stats == expectedStats2)
+  }
+
+  test("SPARK-60810: column stats of a CHAR column survive read-side padding") {
+    val c = DataTypeUtils.toAttribute(CharVarcharUtils.replaceCharVarcharWithStringInSchema(
+      StructType(Seq(StructField("c", CharType(5))))).head)
+    val colStat = ColumnStat(distinctCount = Some(10), nullCount = Some(0),
+      avgLen = Some(5), maxLen = Some(5))
+    val child = StatsTestPlan(
+      outputList = Seq(c),
+      rowCount = 1000,
+      attributeStats = AttributeMap(Seq(c -> colStat)))
+
+    val padded = CharVarcharUtils.addPaddingForScan(c)
+    assert(padded != c, "expected a read-side padding expression for a CHAR column")
+    val proj = Project(Seq(Alias(padded, "c")()), child)
+    assert(proj.stats.attributeStats.get(proj.output.head).contains(colStat))
+
+    // Statistics of values shorter than N, e.g. collected with read-side padding off: every
+    // non-null padded value has at least N characters.
+    val shortStat = colStat.copy(avgLen = Some(3), maxLen = Some(4))
+    val shortChild = child.copy(attributeStats = AttributeMap(Seq(c -> shortStat)))
+    val shortProj = Project(Seq(Alias(padded, "c")()), shortChild)
+    assert(shortProj.stats.attributeStats.get(shortProj.output.head).contains(colStat))
+    // The same without a distinct count, e.g. from a connector that reports only lengths.
+    val noNdvChild = child.copy(
+      attributeStats = AttributeMap(Seq(c -> shortStat.copy(distinctCount = None))))
+    val noNdvProj = Project(Seq(Alias(padded, "c")()), noNdvChild)
+    assert(noNdvProj.stats.attributeStats.get(noNdvProj.output.head)
+      .contains(colStat.copy(distinctCount = None)))
+
+    // An all-null column has no values to pad; ANALYZE stores the default size of the string
+    // type, 20, as its lengths, which a CHAR(30) floor must not raise.
+    val wide = DataTypeUtils.toAttribute(CharVarcharUtils.replaceCharVarcharWithStringInSchema(
+      StructType(Seq(StructField("w", CharType(30))))).head)
+    val nullStat = ColumnStat(distinctCount = Some(0), nullCount = Some(1000),
+      avgLen = Some(20), maxLen = Some(20))
+    val nullChild = StatsTestPlan(
+      outputList = Seq(wide),
+      rowCount = 1000,
+      attributeStats = AttributeMap(Seq(wide -> nullStat)))
+    val nullProj = Project(Seq(Alias(CharVarcharUtils.addPaddingForScan(wide), "w")()), nullChild)
+    assert(nullProj.stats.attributeStats.get(nullProj.output.head).contains(nullStat))
+    // The same reported by a connector without a distinct count: every row is null.
+    val connectorNullStat = ColumnStat(nullCount = Some(1000), avgLen = Some(0), maxLen = Some(0))
+    val connectorNullChild = child.copy(attributeStats = AttributeMap(Seq(c -> connectorNullStat)))
+    val connectorNullProj = Project(Seq(Alias(padded, "c")()), connectorNullChild)
+    assert(connectorNullProj.stats.attributeStats.get(connectorNullProj.output.head)
+      .contains(connectorNullStat))
   }
 
   private def checkProjectStats(
