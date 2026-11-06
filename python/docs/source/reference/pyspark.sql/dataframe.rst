@@ -31,6 +31,7 @@ DataFrame
     DataFrame.alias
     DataFrame.approxQuantile
     DataFrame.asTable
+    DataFrame.binBy
     DataFrame.cache
     DataFrame.checkpoint
     DataFrame.coalesce

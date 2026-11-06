@@ -29,8 +29,23 @@ import org.apache.spark.sql.internal.SQLConf
  */
 class ParseSqlResultSuite extends SparkFunSuite {
 
-  private def obj(sql: String): JObject =
-    parse(ParseSqlResult.fromSql(sql)).asInstanceOf[JObject]
+  private def objs(sql: String): List[JObject] =
+    parse(ParseSqlResult.fromSql(sql)) match {
+      case JArray(values) => values.map(_.asInstanceOf[JObject])
+      case other => fail(s"expected JSON array, got: $other")
+    }
+
+  /** Slice `s` using 1-based Unicode code-point start and length. */
+  private def sliceByCodePoints(s: String, start: Int, length: Int): String = {
+    val begin = s.offsetByCodePoints(0, start - 1)
+    val end = s.offsetByCodePoints(begin, length)
+    s.substring(begin, end)
+  }
+
+  private def obj(sql: String): JObject = objs(sql) match {
+    case value :: Nil => value
+    case other => fail(s"expected one statement, got ${other.size}: $other")
+  }
 
   private def tableRefs(sql: String, field: String): Set[Seq[String]] =
     obj(sql) \ field match {
@@ -65,6 +80,77 @@ class ParseSqlResultSuite extends SparkFunSuite {
     assert(SqlStatementCodes.Explain.statementCode === -23)
     assert(SqlStatementCodes.Set.statementCode === -24)
     assert(SqlStatementCodes.CreateMetricViewStmt.statementCode === -37)
+  }
+
+  test("batches return one statement object per statement with source spans") {
+    Seq("select 1; select 2", "select 1; select 2;").foreach { sql =>
+      val statements = objs(sql)
+      assert(statements.size === 2)
+      assert(statements.map(_ \ "start") === Seq(JInt(1), JInt(11)))
+      assert(statements.map(_ \ "length") === Seq(JInt(8), JInt(8)))
+      assert(statements.map(_ \ "parse_success") === Seq(JBool(true), JBool(true)))
+      assert(statements.map(_ \ "statement_identifier") ===
+        Seq(JString("SELECT"), JString("SELECT")))
+    }
+
+    val statements = objs("  SELECT 1 ;\n SELECT 2;  ")
+    assert(statements.map(_ \ "start") === Seq(JInt(3), JInt(15)))
+    assert(statements.map(_ \ "length") === Seq(JInt(8), JInt(8)))
+
+    val sqlWithDroppedComment = "SELECT 1; /* SELECT 2 */; SELECT 2"
+    val commentStatements = objs(sqlWithDroppedComment)
+    assert(commentStatements.map(_ \ "start") ===
+      Seq(JInt(1), JInt(sqlWithDroppedComment.lastIndexOf("SELECT 2") + 1)))
+
+    val emoji = new String(Character.toChars(0x1F600))
+    val unicodeSql = s"SELECT '$emoji$emoji'; SELECT 2;"
+    val unicodeStatements = objs(unicodeSql)
+    val spans = unicodeStatements.map { statement =>
+      val JInt(start) = statement \ "start"
+      val JInt(length) = statement \ "length"
+      (start.toInt, length.toInt)
+    }
+    assert(spans === Seq((1, 11), (14, 8)))
+    assert(spans.map { case (start, length) =>
+      sliceByCodePoints(unicodeSql, start, length)
+    } === Seq(s"SELECT '$emoji$emoji'", "SELECT 2"))
+
+    val nbsp = 0xA0.toChar
+    val nbspSql = s"${nbsp}SELECT 1$nbsp;"
+    val nbspStmt = objs(nbspSql).head
+    val JInt(nbspStart) = nbspStmt \ "start"
+    val JInt(nbspLength) = nbspStmt \ "length"
+    assert((nbspStart.toInt, nbspLength.toInt) === (2, 8))
+    assert(nbspSql.substring(nbspStart.toInt - 1, nbspStart.toInt - 1 + nbspLength.toInt) ===
+      "SELECT 1")
+  }
+
+  test("batch errors are isolated and preserve statement order") {
+    val statements = objs("SELECT 1; SELEC 2; SELECT 3")
+    assert(statements.map(_ \ "start") === Seq(JInt(1), JInt(11), JInt(20)))
+    assert(statements.map(_ \ "length") === Seq(JInt(8), JInt(7), JInt(8)))
+    assert(statements.map(_ \ "parse_success") ===
+      Seq(JBool(true), JBool(false), JBool(true)))
+    assert(statements(1) \ "error" \ "errorClass" === JString("PARSE_SYNTAX_ERROR"))
+  }
+
+  test("SQL scripts remain one statement in a batch") {
+    val statements = objs("BEGIN SELECT 1; SELECT 2; END; SELECT 3")
+    assert(statements.size === 2)
+    assert(statements.map(_ \ "start") === Seq(JInt(1), JInt(32)))
+    assert(statements.map(_ \ "length") === Seq(JInt(29), JInt(8)))
+    assert(statements.map(_ \ "statement_identifier") ===
+      Seq(JString("BEGIN END"), JString("SELECT")))
+  }
+
+  test("empty and closed-comment-only batches contain no statements") {
+    Seq("", "  ", ";;", "-- comment", "/* closed */").foreach { sql =>
+      assert(objs(sql).isEmpty, sql)
+    }
+
+    val unclosed = objs("/* unclosed")
+    assert(unclosed.size === 1)
+    assert(unclosed.head \ "parse_success" === JBool(false))
   }
 
   test("TABLE and VALUES classify as SELECT") {
@@ -166,5 +252,51 @@ class ParseSqlResultSuite extends SparkFunSuite {
     val j = obj("SELEC FROM t")
     assert(j \ "parse_success" === JBool(false))
     assert(j \ "error" \ "errorClass" === JString("PARSE_SYNTAX_ERROR"))
+  }
+
+  test("error queryContext indexes are Unicode code points") {
+    val emoji = new String(Character.toChars(0x1F600))
+    val sql = s"SELECT '$emoji' FRUM t"
+    val j = obj(sql)
+    assert(j \ "parse_success" === JBool(false))
+    val ctx = (j \ "error" \ "queryContext")(0)
+    val JString(fragment) = ctx \ "fragment"
+    val JInt(start) = ctx \ "startIndex"
+    val JInt(stop) = ctx \ "stopIndex"
+    val JInt(position) = j \ "error" \ "position"
+    assert(fragment === sql)
+    assert(start.toInt === 1)
+    assert(stop.toInt === sql.codePointCount(0, sql.length))
+    assert(sliceByCodePoints(sql, start.toInt, stop.toInt - start.toInt + 1) === fragment)
+    // ANTLR column is already a 0-based code-point offset on the line.
+    assert(position.toInt === sql.codePointCount(0, sql.lastIndexOf('t')))
+
+    val literalSql = s"SELECT '$emoji' AS e, DATE 'bad'"
+    val literal = obj(literalSql)
+    assert(literal \ "error" \ "errorClass" === JString("INVALID_TYPED_LITERAL"))
+    val literalCtx = (literal \ "error" \ "queryContext")(0)
+    val JInt(literalStart) = literalCtx \ "startIndex"
+    val JInt(literalStop) = literalCtx \ "stopIndex"
+    assert(literalCtx \ "fragment" === JString("DATE 'bad'"))
+    assert(literalStart.toInt === literalSql.codePointCount(0, literalSql.indexOf("DATE")) + 1)
+    assert(literalStop.toInt === literalSql.codePointCount(0, literalSql.length))
+
+    val failedAfterEmoji = s"SELECT '$emoji'; SELECT '$emoji' FRUM t"
+    val failed = objs(failedAfterEmoji)
+    assert(failed.map(_ \ "parse_success") === Seq(JBool(true), JBool(false)))
+    val JInt(failedStart) = failed(1) \ "start"
+    val JInt(failedLength) = failed(1) \ "length"
+    assert((failedStart.toInt, failedLength.toInt) === (13, 17))
+    assert(sliceByCodePoints(failedAfterEmoji, failedStart.toInt, failedLength.toInt) ===
+      s"SELECT '$emoji' FRUM t")
+
+    val scriptSql = s"BEGIN SELECT '$emoji'; lbl_begin: BEGIN SELECT 1; END lbl_end; END"
+    val script = obj(scriptSql)
+    assert(script \ "error" \ "errorClass" === JString("LABELS_MISMATCH"))
+    val scriptCtx = (script \ "error" \ "queryContext")(0)
+    val JInt(scriptStart) = scriptCtx \ "startIndex"
+    val JInt(scriptStop) = scriptCtx \ "stopIndex"
+    assert(scriptCtx \ "fragment" === JString("lbl_begin:"))
+    assert((scriptStart.toInt, scriptStop.toInt) === (19, 28))
   }
 }

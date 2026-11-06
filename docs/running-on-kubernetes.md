@@ -290,6 +290,140 @@ To use a secret through an environment variable use the following options to the
 --conf spark.kubernetes.executor.secretKeyRef.ENV_NAME=name:key
 ```
 
+## OIDC Credential Propagation
+
+Spark can propagate short-lived, identity-derived credentials to executors so that a job accesses
+cloud storage as a specific workload or user rather than as the pod's shared service account. On
+Kubernetes this pairs naturally with projected ServiceAccount tokens, which the kubelet issues as
+OIDC JWTs and rotates automatically.
+
+The mechanism, security model, and core configuration keys are described under
+[OIDC Credential Propagation](security.html#oidc-credential-propagation) on the security page. The
+AWS S3 / STS reference provider and its options are described under
+[AWS reference provider](security.html#aws-reference-provider) on the same page. This section shows
+two complete Kubernetes configurations that use the AWS reference provider.
+
+In both examples, the driver reads the identity token, exchanges it for temporary credentials via
+`sts:AssumeRoleWithWebIdentity`, and propagates those credentials to executors. The raw token stays
+on the driver; executors only ever receive the short-lived S3 credentials. Because credentials are
+carried over Spark's RPC channels, enable [RPC encryption](security.html#network-encryption)
+whenever you enable credential propagation.
+
+The examples below enable AES-based RPC encryption with `spark.authenticate=true` and
+`spark.network.crypto.enabled=true`. In general Spark documents SSL-based RPC encryption
+(`spark.ssl.rpc.enabled=true`) as the preferred method and AES-based encryption as the legacy one
+(see [Network Encryption](security.html#network-encryption)). The examples use the AES-based method
+because on Kubernetes Spark automatically generates and distributes the authentication secret, so it
+needs no additional key material, whereas the SSL-based method requires configuring a key store and
+related settings; choose SSL if your environment already standardizes on it.
+
+With credential propagation enabled and no `spark.hadoop.fs.s3a.aws.credentials.provider` set in
+your Spark configuration (a value in `core-site.xml` is not detected), both the
+driver and the executors access S3 using the propagated OIDC credentials. One caveat is specific to
+`cluster` mode: if you pass application dependencies from the same object store the job reads or
+writes (for example `--jars s3a://BUCKET/app.jar` where output also goes to `s3a://BUCKET/...`),
+`spark-submit` fetches those dependencies before the credentials are wired up and caches a
+`FileSystem` for that bucket using the pod's service account. The driver's later access to the same
+bucket then reuses that cached `FileSystem` and runs under the service account rather than the OIDC
+identity (the job succeeds, but under a mixed identity). Prefer `local://` for `--jars` / `--files`,
+or set `spark.hadoop.fs.s3a.impl.disable.cache=true`. See
+[Provider-declared configuration and driver-side access](security.html#provider-declared-configuration-and-driver-side-access)
+for the full discussion.
+
+These examples assume a Spark image built with both the `credential-aws` and `hadoop-cloud`
+modules (`-Pcredential-aws -Phadoop-cloud`), so that the reference provider and the S3A connector
+are both present. See
+[Enabling the AWS reference provider](security.html#enabling-the-aws-reference-provider)
+for details.
+
+### Example: workload-level ServiceAccount token
+
+This is the simplest setup. Kubernetes automatically mounts a projected ServiceAccount token, and
+the driver uses it directly as the OIDC identity. The IAM role's trust policy must trust the
+cluster's OIDC issuer and the driver's ServiceAccount.
+
+Add a projected token volume to the driver via a pod template (`driver-pod-template.yaml`):
+
+```yaml
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+    - name: spark-kubernetes-driver
+      volumeMounts:
+        - name: oidc-token
+          mountPath: /var/run/secrets/oidc
+          readOnly: true
+  volumes:
+    - name: oidc-token
+      projected:
+        sources:
+          - serviceAccountToken:
+              path: token
+              expirationSeconds: 3600
+              # The audience must match the audience your IAM role's trust policy expects.
+              audience: sts.amazonaws.com
+```
+
+Then submit with credential propagation enabled:
+
+```bash
+/opt/spark/bin/spark-submit \
+    --deploy-mode cluster \
+    --master k8s://<KUBERNETES_MASTER_ENDPOINT> \
+    --conf spark.kubernetes.container.image=<spark-image-with-credential-aws> \
+    --conf spark.kubernetes.driver.podTemplateFile=driver-pod-template.yaml \
+    --conf spark.authenticate=true \
+    --conf spark.network.crypto.enabled=true \
+    --conf spark.security.oidc.enabled=true \
+    --conf spark.security.oidc.identityToken.file=/var/run/secrets/oidc/token \
+    --conf spark.security.oidc.aws.roleArn=arn:aws:iam::123456789012:role/spark-data-access \
+    <application-jar> <args>
+```
+
+Only the driver needs the projected token volume; executors receive the derived credentials over
+RPC and do not read the token themselves.
+
+### Example: per-user identity token
+
+For per-user access control, the identity token represents an individual user rather than the
+workload. Delivering such a token to the driver pod is outside Spark's scope and is handled by
+existing Kubernetes mechanisms, for example by mounting a
+[Secret](https://kubernetes.io/docs/concepts/configuration/secret/) that an external system (such
+as a sidecar or an admission webhook) populates with the user's token. Spark simply reads the token
+from the configured file path.
+
+Create a Secret holding the user's identity token and mount it into the driver using Spark's
+[secret management](#secret-management) options:
+
+```bash
+kubectl create secret generic user-oidc-token \
+    --from-file=token=/path/to/user-identity-token.jwt
+```
+
+```bash
+/opt/spark/bin/spark-submit \
+    --deploy-mode cluster \
+    --master k8s://<KUBERNETES_MASTER_ENDPOINT> \
+    --conf spark.kubernetes.container.image=<spark-image-with-credential-aws> \
+    --conf spark.kubernetes.driver.secrets.user-oidc-token=/etc/oidc \
+    --conf spark.authenticate=true \
+    --conf spark.network.crypto.enabled=true \
+    --conf spark.security.oidc.enabled=true \
+    --conf spark.security.oidc.identityToken.file=/etc/oidc/token \
+    --conf spark.security.oidc.aws.roleArn=arn:aws:iam::123456789012:role/spark-user-access \
+    <application-jar> <args>
+```
+
+Here `spark.kubernetes.driver.secrets.user-oidc-token=/etc/oidc` mounts the `user-oidc-token`
+Secret at `/etc/oidc`, so its `token` key becomes the file `/etc/oidc/token` that
+`spark.security.oidc.identityToken.file` points to. The Secret is mounted only on the driver; as
+before, executors receive only the derived S3 credentials.
+
+When the mounted token is rotated (the external system updates the Secret), Spark detects the change
+and re-exchanges it on the next renewal cycle, so long-running applications continue to work across
+token rotation.
+
 ## Pod Template
 Kubernetes allows defining pods from [template files](https://kubernetes.io/docs/concepts/workloads/pods/pod-overview/#pod-templates).
 Spark users can similarly use template files to define the driver or executor pod configurations that Spark configurations do not support.
@@ -445,7 +579,8 @@ change to the application code. They apply to executor pods of every resource pr
 
 The resize plugins are registered via `spark.plugins` and run in the driver, while the recovery mode is
 built into the executor pod allocator and needs no plugin. All three features require the default
-`direct` pods allocator (`spark.kubernetes.allocation.pods.allocator`).
+`direct` pods allocator (`spark.kubernetes.allocation.pods.allocator`), except that the memory resize
+plugin also supports the `deployment` pods allocator.
 
 ### Executor Memory Resize
 
@@ -459,7 +594,7 @@ request are increased by `spark.kubernetes.executor.resizeFactor`, up to
 the container is not restarted.
 
 ```
---conf spark.plugins=org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin
+--conf spark.plugins=ExecutorResizePlugin
 --conf spark.kubernetes.executor.resizeInterval=1m
 ```
 
@@ -490,7 +625,7 @@ the filesystem usage of its local directories and reports the highest usage rati
 up to `spark.kubernetes.executor.pvc.resizeMaxStorage`.
 
 ```
---conf spark.plugins=org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin
+--conf spark.plugins=ExecutorPVCResizePlugin
 --conf spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.options.claimName=OnDemand
 --conf spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.options.storageClass=gp3
 --conf spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.options.sizeLimit=100Gi
@@ -549,7 +684,7 @@ the replacement executors behave rather than the resources of the existing ones.
 registered together:
 
 ```
---conf spark.plugins=org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin,org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin
+--conf spark.plugins=ExecutorResizePlugin,ExecutorPVCResizePlugin
 ```
 
 All of these features operate at the level of the driver, not of an individual job or session. In a
@@ -1052,7 +1187,10 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>(value of spark.kubernetes.authenticate.driver.serviceAccountName)</code></td>
   <td>
     Service account that is used when running the executor pod.
-    If this parameter is not setup, the fallback logic will use the driver's service account.
+    If this parameter is not setup, the fallback logic will use the value of
+    <code>spark.kubernetes.authenticate.driver.serviceAccountName</code>.
+    Both are ignored when the executor pod template already names a non-empty service account in
+    either <code>serviceAccount</code> or <code>serviceAccountName</code>.
   </td>
   <td>3.1.0</td>
 </tr>
@@ -1718,6 +1856,8 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>false</code></td>
   <td>
     If set to true, Spark will store the exit exception failed applications in the Kubernetes API server using the <code>spark.exit-exception</code> annotation.
+    Note that the annotation is visible to anyone who can get the driver pod. The parts of the exit exception matching
+    <code>spark.redaction.string.regex</code> are redacted.
   </td>
   <td>4.1.0</td>
 </tr>
@@ -1960,7 +2100,9 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>OUTLIER</code></td>
   <td>
     Executor roll policy: Valid values are ID, ADD_TIME, TOTAL_GC_TIME,
-    TOTAL_DURATION, FAILED_TASKS, and OUTLIER (default).
+    TOTAL_DURATION, AVERAGE_DURATION, FAILED_TASKS, PEAK_JVM_ONHEAP_MEMORY,
+    PEAK_JVM_OFFHEAP_MEMORY, TOTAL_SHUFFLE_WRITE, DISK_USED, ACTIVE_TASKS,
+    OUTLIER (default), and OUTLIER_NO_FALLBACK.
     When executor roll happens, Spark uses this policy to choose
     an executor and decommission it. The built-in policies are based on executor summary
     and newly started executors are protected by spark.kubernetes.executor.minTasksPerExecutorBeforeRolling.
@@ -1970,19 +2112,33 @@ See the [configuration page](configuration.html) for information on Spark config
     TOTAL_DURATION policy chooses an executor with the biggest total task time.
     AVERAGE_DURATION policy chooses an executor with the biggest average task time.
     FAILED_TASKS policy chooses an executor with the most number of failed tasks.
+    PEAK_JVM_ONHEAP_MEMORY policy chooses an executor with the biggest peak JVM on-heap memory.
+    PEAK_JVM_OFFHEAP_MEMORY policy chooses an executor with the biggest peak JVM off-heap memory.
+    TOTAL_SHUFFLE_WRITE policy chooses an executor with the biggest total shuffle write.
+    DISK_USED policy chooses an executor with the biggest disk size used by its
+    stored blocks (e.g., disk-persisted RDD blocks).
+    ACTIVE_TASKS policy chooses an executor with the smallest number of active tasks.
+    If there is a tie, it chooses an executor with the smallest add-time.
+    It is recommended to use it with spark.kubernetes.executor.minTasksPerExecutorBeforeRolling
+    because newly started executors usually have no active tasks.
     OUTLIER policy chooses an executor with outstanding statistics which is bigger than
     at least two standard deviation from the mean in average task time,
-    total task time, total task GC time, and the number of failed tasks if exists.
+    total task time, total task GC time, the number of failed tasks,
+    peak JVM on-heap memory, peak JVM off-heap memory, total shuffle write,
+    and disk used if exists.
+    The dimensions are checked in this order and the first outlier found is chosen.
     If there is no outlier, it works like TOTAL_DURATION policy.
+    OUTLIER_NO_FALLBACK policy picks an outlier using the OUTLIER policy above.
+    If there is no outlier then no executor will be rolled.
   </td>
   <td>3.3.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.resizeInterval</code></td>
-  <td><code>0s</code></td>
+  <td><code>1min</code></td>
   <td>
-    Interval between executor resize operations. To disable, set 0 (default).
-    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin</code>
+    Interval between executor resize operations. To disable, set 0.
+    Takes effect only when <code>ExecutorResizePlugin</code>
     is registered via <code>spark.plugins</code>.
   </td>
   <td>4.2.0</td>
@@ -1991,8 +2147,8 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.executor.resizeThreshold</code></td>
   <td><code>0.9</code></td>
   <td>
-    The threshold to resize.
-    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin</code>
+    The threshold to resize. It should be in (0, 1).
+    Takes effect only when <code>ExecutorResizePlugin</code>
     is registered via <code>spark.plugins</code>.
   </td>
   <td>4.2.0</td>
@@ -2001,8 +2157,8 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.executor.resizeFactor</code></td>
   <td><code>0.1</code></td>
   <td>
-    The factor to resize.
-    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin</code>
+    The factor to resize. It should be in (0, 1].
+    Takes effect only when <code>ExecutorResizePlugin</code>
     is registered via <code>spark.plugins</code>.
   </td>
   <td>4.2.0</td>
@@ -2013,7 +2169,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     The upper bound of the executor container memory limit that the resize plugin can grow to.
     By default, it is <code>Long.MaxValue</code>, which means no upper bound.
-    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin</code>
+    Takes effect only when <code>ExecutorResizePlugin</code>
     is registered via <code>spark.plugins</code>.
   </td>
   <td>4.4.0</td>
@@ -2024,7 +2180,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     Interval between executor PVC resize operations, in minutes. Defaults to 5 minutes.
     Set to 0 to disable. Must be 0 or a positive multiple of 5 minutes.
-    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin</code>
+    Takes effect only when <code>ExecutorPVCResizePlugin</code>
     is registered via <code>spark.plugins</code>.
   </td>
   <td>4.2.0</td>
@@ -2034,7 +2190,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>0.5</code></td>
   <td>
     The PVC usage ratio (used / capacity) above which the driver triggers a resize.
-    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin</code>
+    Takes effect only when <code>ExecutorPVCResizePlugin</code>
     is registered via <code>spark.plugins</code>.
   </td>
   <td>4.2.0</td>
@@ -2044,7 +2200,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>1.0</code></td>
   <td>
     The factor to grow PVC storage by, relative to the current request.
-    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin</code>
+    Takes effect only when <code>ExecutorPVCResizePlugin</code>
     is registered via <code>spark.plugins</code>.
   </td>
   <td>4.2.0</td>
@@ -2055,7 +2211,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     The upper bound of the PVC storage request that the resize plugin can grow to.
     By default, it is <code>Long.MaxValue</code>, which means no upper bound.
-    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin</code>
+    Takes effect only when <code>ExecutorPVCResizePlugin</code>
     is registered via <code>spark.plugins</code>.
   </td>
   <td>4.4.0</td>
@@ -2131,18 +2287,23 @@ See the below table for the full list of pod specifications that will be overwri
   <td>serviceAccount</td>
   <td>Value of <code>spark.kubernetes.authenticate.driver.serviceAccountName</code></td>
   <td>
-    Spark will override <code>serviceAccount</code> with the value of the spark configuration for only
-    driver pods, and only if the spark configuration is specified and no driver credentials are
-    submitted for Spark to mount as a secret. Executor pods will remain unaffected.
+    For driver pods Spark will override <code>serviceAccount</code> with the value of
+    <code>spark.kubernetes.authenticate.driver.serviceAccountName</code>, but only if that
+    configuration is set and no driver credentials are submitted for Spark to mount as a secret.
+    For executor pods Spark writes both fields with the same value: the account the template names,
+    if it names one in either field, and otherwise
+    <code>spark.kubernetes.authenticate.executor.serviceAccountName</code>, falling back to the
+    driver's. When the template names both fields, <code>serviceAccountName</code> is the one that
+    decides, as it is for Kubernetes itself. Spark warns when
+    <code>spark.kubernetes.authenticate.executor.serviceAccountName</code> named an account the
+    template displaced.
   </td>
 </tr>
 <tr>
   <td>serviceAccountName</td>
   <td>Value of <code>spark.kubernetes.authenticate.driver.serviceAccountName</code></td>
   <td>
-    Spark will override <code>serviceAccountName</code> with the value of the spark configuration for only
-    driver pods, and only if the spark configuration is specified and no driver credentials are
-    submitted for Spark to mount as a secret. Executor pods will remain unaffected.
+    Same as <code>serviceAccount</code>.
   </td>
 </tr>
 <tr>

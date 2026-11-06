@@ -81,7 +81,7 @@ class UnpivotParserSuite extends AnalysisTest {
         "col",
         Seq("val1", "val2"),
         table("t"))
-        .where(coalesce($"val1", $"val2").isNotNull)
+        .where($"val1".isNotNull || $"val2".isNotNull)
         .select(star())
     )
   }
@@ -101,11 +101,21 @@ class UnpivotParserSuite extends AnalysisTest {
             "col",
             Seq("val1", "val2"),
             table("t"))
-            .where(coalesce($"val1", $"val2").isNotNull)
+            .where($"val1".isNotNull || $"val2".isNotNull)
             .select(star())
         )
       }
     }
+  }
+
+  test("unpivot - multiple values with different types") {
+    assertAnalysisSuccess(parsePlan(
+      """SELECT * FROM VALUES
+        |  (DATE '2026-01-01', 1, DATE '2026-01-02', 2)
+        |  AS t(date1, int1, date2, int2)
+        |UNPIVOT EXCLUDE NULLS (
+        |  (date_value, int_value) FOR kind IN ((date1, int1), (date2, int2))
+        |)""".stripMargin))
   }
 
   test("unpivot - multiple values with inner alias") {

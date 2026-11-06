@@ -568,7 +568,7 @@ class Dataset[T] private[sql](
       reliableCheckpoint: Boolean,
       storageLevel: Option[StorageLevel]): Dataset[T] = {
     val actionName = if (reliableCheckpoint) "checkpoint" else "localCheckpoint"
-    withAction(actionName, queryExecution) { physicalPlan =>
+    withAction(actionName, queryExecution.withRegularShuffle) { physicalPlan =>
       val internalRdd = physicalPlan.execute().map(_.copy())
       if (reliableCheckpoint) {
         assert(storageLevel.isEmpty, "StorageLevel should not be defined for reliableCheckpoint")
@@ -1070,6 +1070,61 @@ class Dataset[T] private[sql](
       executed,
       logicalPlan.output,
       withGroupingKey.newColumns)
+  }
+
+  /** @inheritdoc */
+  def binBy(
+      rangeStart: Column,
+      rangeEnd: Column,
+      binWidth: Column,
+      distributeUniform: Array[Column]): DataFrame = {
+    binBy(
+      rangeStart = rangeStart,
+      rangeEnd = rangeEnd,
+      binWidth = binWidth,
+      distributeUniform = distributeUniform,
+      alignTo = null)
+  }
+
+  /** @inheritdoc */
+  def binBy(
+      rangeStart: Column,
+      rangeEnd: Column,
+      binWidth: Column,
+      distributeUniform: Array[Column],
+      alignTo: Column): DataFrame = {
+    binBy(
+      rangeStart = rangeStart,
+      rangeEnd = rangeEnd,
+      binWidth = binWidth,
+      distributeUniform = distributeUniform,
+      alignTo = alignTo,
+      binStartName = null,
+      binEndName = null,
+      binDistributeRatioName = null)
+  }
+
+  /** @inheritdoc */
+  def binBy(
+      rangeStart: Column,
+      rangeEnd: Column,
+      binWidth: Column,
+      distributeUniform: Array[Column],
+      alignTo: Column,
+      binStartName: String,
+      binEndName: String,
+      binDistributeRatioName: String): DataFrame = withPlan {
+    UnresolvedBinBy(
+      binWidthExpr = binWidth.expr,
+      rangeStartCol = rangeStart.expr,
+      rangeEndCol = rangeEnd.expr,
+      originExpr = Option(alignTo).map(_.expr),
+      distributeColumns = distributeUniform.map(_.expr).toImmutableArraySeq,
+      outputAliases = BinByOutputAliases(
+        binStart = Option(binStartName),
+        binEnd = Option(binEndName),
+        binRatio = Option(binDistributeRatioName)),
+      child = logicalPlan)
   }
 
   /** @inheritdoc */
@@ -1575,7 +1630,7 @@ class Dataset[T] private[sql](
 
   /** @inheritdoc */
   def toLocalIterator(): java.util.Iterator[T] = {
-    withAction("toLocalIterator", queryExecution) { plan =>
+    withAction("toLocalIterator", queryExecution.withRegularShuffle) { plan =>
       val fromRow = resolvedEnc.createDeserializer()
       plan.executeToIterator().map(fromRow).asJava
     }
@@ -1662,7 +1717,7 @@ class Dataset[T] private[sql](
   // Represents the `QueryExecution` used to produce the content of the Dataset as an `RDD`.
   @transient private lazy val rddQueryExecution: QueryExecution = {
     val deserialized = CatalystSerde.deserialize[T](logicalPlan)
-    sparkSession.sessionState.executePlan(deserialized)
+    sparkSession.sessionState.executePlan(deserialized).withRegularShuffle
   }
 
   private[sql] lazy val materializedRdd: RDD[T] = {
@@ -2132,9 +2187,16 @@ class Dataset[T] private[sql](
    * Converts a JavaRDD to a PythonRDD.
    */
   private[sql] def javaToPython: JavaRDD[Array[Byte]] = {
+    val qe = queryExecution.withRegularShuffle
+    withNewRDDExecutionId("javaToPython", qe) {
+      javaToPython(qe)
+    }
+  }
+
+  private def javaToPython(qe: QueryExecution): JavaRDD[Array[Byte]] = {
     val structType = schema  // capture it for closure
     val binaryAsBytes = sparkSession.sessionState.conf.pysparkBinaryAsBytes  // capture config value
-    val rdd = queryExecution.toRdd.map(row =>
+    val rdd = qe.toRdd.map(row =>
       EvaluatePython.toJava(row, structType, binaryAsBytes))
     EvaluatePython.javaToPython(rdd)
   }
@@ -2287,8 +2349,9 @@ class Dataset[T] private[sql](
   }
 
   private[sql] def toPythonIterator(prefetchPartitions: Boolean = false): Array[Any] = {
-    withNewExecutionId {
-      PythonRDD.toLocalIteratorAndServe(javaToPython.rdd, prefetchPartitions)
+    val qe = queryExecution.withRegularShuffle
+    SQLExecution.withNewExecutionId(qe) {
+      PythonRDD.toLocalIteratorAndServe(javaToPython(qe).rdd, prefetchPartitions)
     }
   }
 
@@ -2309,9 +2372,11 @@ class Dataset[T] private[sql](
    * them with an execution. Before performing the action, the metrics of the executed plan will be
    * reset.
    */
-  private def withNewRDDExecutionId[U](name: String)(body: => U): U = {
-    SQLExecution.withNewExecutionId(rddQueryExecution, Some(name)) {
-      rddQueryExecution.executedPlan.resetMetrics()
+  private def withNewRDDExecutionId[U](
+      name: String,
+      qe: QueryExecution = rddQueryExecution)(body: => U): U = {
+    SQLExecution.withNewExecutionId(qe, Some(name)) {
+      qe.executedPlan.resetMetrics()
       body
     }
   }
