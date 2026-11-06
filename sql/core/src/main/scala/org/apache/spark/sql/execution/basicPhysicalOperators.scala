@@ -535,7 +535,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
         // for the already-emitted dependencies.
         val statesByFirstUse: Map[Int, Seq[SubExprEliminationState]] =
           subExprs.states.toSeq.groupBy { case (exprEq, _) =>
-            boundOtherPreds.indexWhere(_.exists(e => ExpressionEquals(e) == exprEq))
+            ctx.firstReferencingExpression(boundOtherPreds, exprEq)
           }.map { case (idx, kvs) => idx -> kvs.map(_._2) }
 
         // Emit an IsNotNull check, binding against child.output so the inner expression
