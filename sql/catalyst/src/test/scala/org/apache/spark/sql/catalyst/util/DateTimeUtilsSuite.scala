@@ -586,8 +586,8 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       "Z", "UTC", "GMT", "America/New_York", "Asia/Kolkata", "Europe/Moscow",
       "+7:30", "-1:0", "+07:3", "+08:0", "+07:30", "+0730", "+08:00:00",
       "GMT+8:00", "UTC-01:00", "", "not-a-zone", "+9:99")
-    // A non-ASCII digit (U+0661 ARABIC-INDIC DIGIT ONE): Character.isDigit accepts it but
-    // ZoneId.of rejects it, so getZoneId must still raise INVALID_TIMEZONE.
+    // A non-ASCII digit (U+0661 ARABIC-INDIC DIGIT ONE) is not padded, like the regex's `\d`,
+    // and ZoneId.of rejects it, so getZoneId must still raise INVALID_TIMEZONE.
     val nonAsciiDigit = s"+${0x0661.toChar}:30"
 
     (generated ++ extras :+ nonAsciiDigit).distinct.foreach { tz =>

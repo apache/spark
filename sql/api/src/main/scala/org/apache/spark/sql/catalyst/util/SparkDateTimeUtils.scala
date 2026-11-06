@@ -56,8 +56,8 @@ trait SparkDateTimeUtils {
    * The two rules are applied in order, so the minute rule operates on the hour-padded value.
    * Inputs that need no padding -- well-formed offsets, named zones and `Z` -- are returned
    * unchanged (the same instance), so the method allocates only when it rewrites a value. Digit
-   * positions are tested with `Character.isDigit`; validating the resulting zone is left to
-   * `ZoneId.of`.
+   * positions accept only the ASCII digits `0`-`9`, like the regex `\d` this replaces;
+   * validating the resulting zone is left to `ZoneId.of`.
    *
    * @param zoneId
    *   the time-zone string to normalize
@@ -71,7 +71,7 @@ trait SparkDateTimeUtils {
     var i = 0
     while (i <= len - 3) {
       val c = zoneId.charAt(i)
-      if ((c == '+' || c == '-') && Character.isDigit(zoneId.charAt(i + 1)) &&
+      if ((c == '+' || c == '-') && isAsciiDigit(zoneId.charAt(i + 1)) &&
         zoneId.charAt(i + 2) == ':') {
         afterHour = zoneId.substring(0, i + 1) + "0" + zoneId.substring(i + 1)
         i = len // done after the first match
@@ -83,14 +83,16 @@ trait SparkDateTimeUtils {
     val n = afterHour.length
     if (n >= 5) {
       val c = afterHour.charAt(n - 5)
-      if ((c == '+' || c == '-') && Character.isDigit(afterHour.charAt(n - 4)) &&
-        Character.isDigit(afterHour.charAt(n - 3)) && afterHour.charAt(n - 2) == ':' &&
-        Character.isDigit(afterHour.charAt(n - 1))) {
+      if ((c == '+' || c == '-') && isAsciiDigit(afterHour.charAt(n - 4)) &&
+        isAsciiDigit(afterHour.charAt(n - 3)) && afterHour.charAt(n - 2) == ':' &&
+        isAsciiDigit(afterHour.charAt(n - 1))) {
         return afterHour.substring(0, n - 1) + "0" + afterHour.substring(n - 1)
       }
     }
     afterHour
   }
+
+  private def isAsciiDigit(c: Char): Boolean = c >= '0' && c <= '9'
 
   def getTimeZone(timeZoneId: String): TimeZone = TimeZone.getTimeZone(getZoneId(timeZoneId))
 
