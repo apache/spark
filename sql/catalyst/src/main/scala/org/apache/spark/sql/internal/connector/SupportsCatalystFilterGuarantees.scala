@@ -28,8 +28,7 @@ trait SupportsCatalystFilterGuarantees extends Table {
    *
    * For scans reporting inferred filters, Spark omits executable static filter conjuncts that
    * reference only these attributes. The source must fully enforce the query filters over these
-   * attributes during pushdown. Logical filters remain available for statistics estimation.
-   * Boolean projections retain their evaluation, including aliases created by MergeSubplans.
+   * attributes during pushdown.
    *
    * References may name top-level columns or nested struct fields. Declaring a struct covers all
    * of its nested fields. Spark ignores fields pruned from the scan. The source must evaluate every
