@@ -221,4 +221,14 @@ class DatasetOptimizationSuite extends SharedSparkSession {
       checkAnswer(query, Row("y"))
     }
   }
+
+  test("SPARK-60979: Pruned nested serializers: references differ in case from the schema") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val encoder = ExpressionEncoder(StructType.fromDDL("s struct<x: INT, y: INT>"))
+      val ds = spark.range(1).map(_ => Row(Row(1, 2)))(encoder)
+      checkAnswer(ds.select($"S", $"s.x"), Row(Row(1, 2), 1))
+      checkAnswer(ds.select($"S.x", $"s.y"), Row(1, 2))
+      checkAnswer(ds.select($"S.y"), Row(2))
+    }
+  }
 }

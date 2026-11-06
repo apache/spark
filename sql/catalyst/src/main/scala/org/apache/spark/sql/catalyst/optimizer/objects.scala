@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType, UserDefinedType}
+import org.apache.spark.sql.util.SchemaUtils
 
 /*
  * This file defines optimization rules related to object manipulation (for the Dataset API).
@@ -221,7 +222,14 @@ object ObjectSerializerPruning extends Rule[LogicalPlan] {
       val usedRefs = p.references
       val prunedSerializer = s.serializer.filter(usedRefs.contains)
 
-      val rootFields = SchemaPruning.identifyRootFields(p.projectList, Seq.empty)
+      // Name the references after the serializer output. The analyzer keeps the case that the
+      // query used, and pruneSchema and ProjectionOverSchema match names exactly.
+      val nameById = s.output.map(a => a.exprId -> a.name).toMap
+      val normalizedProjects = p.projectList.map(_.transform {
+        case a: AttributeReference if nameById.contains(a.exprId) =>
+          a.withName(nameById(a.exprId))
+      }.asInstanceOf[NamedExpression])
+      val rootFields = SchemaPruning.identifyRootFields(normalizedProjects, Seq.empty)
 
       if (conf.serializerNestedSchemaPruningEnabled && rootFields.nonEmpty) {
         // Prunes nested fields in serializers.
@@ -233,10 +241,12 @@ object ObjectSerializerPruning extends Rule[LogicalPlan] {
 
         // Builds new projection.
         val projectionOverSchema = ProjectionOverSchema(prunedSchema, AttributeSet(s.output))
-        val newProjects = p.projectList.map(_.transformDown {
+        val newProjects = normalizedProjects.map(_.transformDown {
           case projectionOverSchema(expr) => expr
         }).map { case expr: NamedExpression => expr }
-        p.copy(projectList = newProjects,
+        p.copy(
+          projectList =
+            SchemaUtils.restoreOriginalOutputNames(newProjects, p.projectList.map(_.name)),
           child = SerializeFromObject(nestedPrunedSerializer, s.child))
       } else {
         p.copy(child = SerializeFromObject(prunedSerializer, s.child))
