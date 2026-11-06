@@ -57,10 +57,7 @@ def is_debugging_enabled() -> bool:
 
         spark = SparkSession.getActiveSession()
         if spark is not None:
-            debugging_value = spark.conf.get(
-                "spark.python.sql.dataFrameDebugging.enabled", 
-                "true"
-            )
+            debugging_value = spark.conf.get("spark.python.sql.dataFrameDebugging.enabled", "true")
             assert debugging_value is not None
             _enable_debugging_cache = debugging_value.lower() == "true"
         else:
