@@ -508,7 +508,6 @@ class CollationTypePrecedenceSuite extends SharedSparkSession {
         val lcase = s"$fn(v, '$$.s', 'STRING COLLATE UTF8_LCASE')"
         val lcaseMap = s"$fn(v, '$$', 'MAP<STRING, STRING COLLATE UTF8_LCASE>')"
         val mixedStruct = s"$fn(v, '$$', 'STRUCT<s: STRING, t: STRING COLLATE UTF8_LCASE>')"
-        val lcaseCast = s"CAST($fn(v, '$$.s') AS STRING COLLATE UTF8_LCASE)"
         checkAnswer(
           sql(s"SELECT DISTINCT COLLATION($lcase || 'a') FROM $tableName"),
           Row(UTF8_LCASE_COLLATION_NAME))
@@ -522,10 +521,7 @@ class CollationTypePrecedenceSuite extends SharedSparkSession {
           s"$lcaseMap['s'] = 'OPEN'",
           s"element_at($lcaseMap, 's') = 'OPEN'",
           // The collation of the path does not take part.
-          s"$fn(v, '$$.s' COLLATE UNICODE, 'STRING COLLATE UTF8_LCASE') = 'OPEN'",
-          // A cast from VARIANT, including `v:s::STRING COLLATE ...`, follows the same rule.
-          s"$lcaseCast = 'OPEN'",
-          s"v:s::STRING COLLATE UTF8_LCASE = 'OPEN'").foreach { cond =>
+          s"$fn(v, '$$.s' COLLATE UNICODE, 'STRING COLLATE UTF8_LCASE') = 'OPEN'").foreach { cond =>
           checkAnswer(sql(s"SELECT id FROM $tableName WHERE $cond"), Seq(Row(1), Row(2)))
         }
 
@@ -543,10 +539,12 @@ class CollationTypePrecedenceSuite extends SharedSparkSession {
           s"$lcase IN (p, 'x')",
           s"$fn(v, '$$.s', 'STRING COLLATE UTF8_BINARY') = c",
           s"$mixedStruct.s = c",
-          s"$lcaseCast = p",
-          s"v:s::STRING COLLATE UTF8_LCASE = p",
           s"$lcase || p = 'OPEN'",
-          s"(CASE WHEN id = 1 THEN $lcase ELSE p END) = 'OPEN'").foreach { cond =>
+          s"(CASE WHEN id = 1 THEN $lcase ELSE p END) = 'OPEN'",
+          // A cast from VARIANT keeps the Cast rule: default strength, so it conflicts with a
+          // literal of another collation.
+          s"CAST($fn(v, '$$.s') AS STRING COLLATE UTF8_LCASE) = 'OPEN'",
+          s"v:s::STRING COLLATE UTF8_LCASE = 'OPEN'").foreach { cond =>
           assertIndeterminateCollation(sql(s"SELECT id FROM $tableName WHERE $cond"))
         }
         // Combining them gives an indeterminate collation that fails when the result is stored.
@@ -564,7 +562,8 @@ class CollationTypePrecedenceSuite extends SharedSparkSession {
           checkAnswer(sql(s"SELECT id FROM $tableName WHERE $cond"), Seq(Row(1), Row(2)))
         }
 
-        // Under a default collation, an explicit UTF8_BINARY target keeps UTF8_BINARY.
+        // Under a default collation, an explicit UTF8_BINARY target keeps UTF8_BINARY, and plain
+        // targets, whose type the default collation rewrites, keep default strength.
         withView(viewName) {
           sql(
             s"""
@@ -572,10 +571,11 @@ class CollationTypePrecedenceSuite extends SharedSparkSession {
                |  $fn(v, '$$.s', 'STRING') = 'OPEN' AS plain,
                |  $fn(v, '$$.s', 'STRING COLLATE UTF8_BINARY') = 'OPEN' AS binary,
                |  v:s::STRING = 'OPEN' AS plain_cast,
-               |  v:s::STRING COLLATE UTF8_BINARY = 'OPEN' AS binary_cast
+               |  $fn(v, '$$.s', 'STRING') = c AS plain_col,
+               |  v:s::STRING = c AS plain_cast_col
                |FROM $tableName WHERE id = 1
                |""".stripMargin)
-          checkAnswer(sql(s"SELECT * FROM $viewName"), Row(true, false, true, false))
+          checkAnswer(sql(s"SELECT * FROM $viewName"), Row(true, false, true, true, true))
         }
       }
     }

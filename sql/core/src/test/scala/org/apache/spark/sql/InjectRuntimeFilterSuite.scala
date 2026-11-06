@@ -551,6 +551,42 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-60871: no runtime filters for nonbinary collated join keys") {
+    withSQLConf(
+        SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "0",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> "1MB") {
+      withTable("bf_variant_fact", "bf_variant_dim") {
+        sql("CREATE TABLE bf_variant_fact (id INT, v VARIANT) USING parquet")
+        sql("""INSERT INTO bf_variant_fact SELECT id, parse_json(j) FROM VALUES
+              |  (1, '{"k": "Open"}'), (2, '{"k": "x"}') AS t(id, j)""".stripMargin)
+        sql("CREATE TABLE bf_variant_dim (id INT, v VARIANT) USING parquet")
+        sql("""INSERT INTO bf_variant_dim SELECT id, parse_json(j) FROM VALUES
+              |  (10, '{"k": "open"}'), (20, '{"k": "y"}') AS t(id, j)""".stripMargin)
+
+        val dim = "(SELECT * FROM bf_variant_dim WHERE id = 10) d"
+        def queries(targetType: String): Seq[String] = {
+          val on = s"ON variant_get(f.v, '$$.k', '$targetType') = " +
+            s"variant_get(d.v, '$$.k', '$targetType')"
+          Seq(
+            s"SELECT f.id FROM bf_variant_fact f JOIN $dim $on",
+            s"SELECT f.id FROM bf_variant_fact f LEFT SEMI JOIN $dim $on",
+            s"SELECT f.id FROM bf_variant_fact f RIGHT OUTER JOIN $dim $on",
+            s"SELECT f.id FROM $dim LEFT OUTER JOIN bf_variant_fact f $on")
+        }
+
+        // Binary keys get a Bloom filter on the fact side.
+        queries("STRING").foreach(assertRewroteWithBloomFilter(_))
+        // A Bloom filter over UTF8_LCASE keys would drop the fact row 'Open', which the join
+        // matches with 'open'.
+        queries("STRING COLLATE UTF8_LCASE").foreach { query =>
+          assertDidNotRewriteWithBloomFilter(query)
+          checkAnswer(sql(query), Row(1))
+        }
+      }
+    }
+  }
+
   test("SPARK-58272: use materialized caches without predicates only with pruning statistics") {
     withSQLConf(
         SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "0",
