@@ -31,11 +31,7 @@ trait LogicalPlanStats { self: LogicalPlan =>
    * [[invalidateStatsCache()]].
    */
   def stats: Statistics = statsCache.getOrElse {
-    if (conf.cboEnabled) {
-      statsCache = Option(BasicStatsPlanVisitor.visit(self))
-    } else {
-      statsCache = Option(SizeInBytesOnlyStatsPlanVisitor.visit(self))
-    }
+    statsCache = Option(LogicalPlanStatsEstimator.get(conf).estimate(self))
     statsCache.get
   }
 

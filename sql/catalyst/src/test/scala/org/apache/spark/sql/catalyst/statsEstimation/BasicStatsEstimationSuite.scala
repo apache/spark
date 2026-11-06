@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeMap, AttributeReference, Literal, SortOrder}
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.DefaultLogicalPlanStatsEstimator
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, ByteType, IntegerType, LongType}
@@ -413,6 +414,21 @@ test("range with invalid long value") {
       expectedStatsCboOff = expectedSortStats)
   }
 
+  test("custom logical plan statistics estimator") {
+    withSQLConf(SQLConf.STATS_ESTIMATOR_CLASS.key -> classOf[TestStatsEstimator].getName) {
+      val customPlan = StatsTestPlan(Seq(attribute), 10, AttributeMap(Nil))
+      assert(customPlan.stats === Statistics(sizeInBytes = 100, rowCount = Some(10)))
+
+      val fallbackPlan = DummyLogicalPlan(Statistics(sizeInBytes = 20), Statistics(30))
+      assert(fallbackPlan.stats === Statistics(sizeInBytes = 30))
+
+      withSQLConf(SQLConf.CBO_ENABLED.key -> "false") {
+        fallbackPlan.invalidateStatsCache()
+        assert(fallbackPlan.stats === Statistics(sizeInBytes = 20))
+      }
+    }
+  }
+
   /** Check estimated stats when cbo is turned on/off. */
   private def checkStats(
       plan: LogicalPlan,
@@ -449,4 +465,11 @@ private case class DummyLogicalPlan(
   override def output: Seq[Attribute] = Nil
 
   override def computeStats(): Statistics = if (conf.cboEnabled) cboStats else defaultStats
+}
+
+class TestStatsEstimator extends DefaultLogicalPlanStatsEstimator {
+  override def estimate(plan: LogicalPlan): Statistics = plan match {
+    case _: StatsTestPlan => Statistics(sizeInBytes = 100, rowCount = Some(10))
+    case _ => super.estimate(plan)
+  }
 }
