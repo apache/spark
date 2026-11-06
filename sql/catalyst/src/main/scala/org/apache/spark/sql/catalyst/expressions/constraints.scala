@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.UUID
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisErrorAt, StoredExpressionFunctions, TypeCheckResult, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.codegen.{Block, CodegenContext, ExprCode, FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -127,6 +127,29 @@ case class CheckConstraint(
 // scalastyle:on line.size.limit
 
   override def inputTypes: Seq[AbstractDataType] = Seq(BooleanType)
+
+  /**
+   * Fails the analysis if the condition calls a user-defined function. A write can read `condition`
+   * again and resolve the name of the function in its own session, where the name can refer to
+   * another function or to none, so the constraint would not enforce what this DDL declares.
+   */
+  def failIfCallsUserDefinedFunction(): Unit = {
+    StoredExpressionFunctions.findUserDefinedFunctionCall(child).foreach {
+      case (call, functionName) =>
+        call.failAnalysis(
+          errorClass = "USER_DEFINED_FUNCTION_IN_CHECK_CONSTRAINT",
+          messageParameters = Map("checkCondition" -> condition, "functionName" -> functionName))
+    }
+  }
+
+  /** Fails the analysis if the condition contains a subquery, which `Check` does not allow. */
+  def failIfContainsSubquery(): Unit = {
+    if (SubqueryExpression.hasSubquery(child)) {
+      child.failAnalysis(
+        errorClass = "SUBQUERY_IN_CHECK_CONSTRAINT",
+        messageParameters = Map("checkCondition" -> condition))
+    }
+  }
 
   def toV2Constraint: Constraint = {
     val predicate = new V2ExpressionBuilder(child, true).buildPredicate().orNull
@@ -338,8 +361,10 @@ case class CheckInvariant(
     columnExtractors.map {
       case (name, extractor) =>
         val colValue = extractor.genCode(ctx)
+        // The name is not Java source, so pass it by reference instead of embedding it.
+        val nameRef = ctx.addReferenceObj("columnName", name)
         code"""
-              |$colList.add("$name");
+              |$colList.add($nameRef);
               |${colValue.code}
               |if (${colValue.isNull}) {
               |  $valList.add(null);
@@ -354,12 +379,15 @@ case class CheckInvariant(
     val elementValue = child.genCode(ctx)
     val colListName = ctx.freshName("colList")
     val valListName = ctx.freshName("valList")
+    // These texts are not Java source, so pass them by reference instead of embedding them.
+    val nameRef = ctx.addReferenceObj("constraintName", constraintName)
+    val sqlRef = ctx.addReferenceObj("predicateSql", predicateSql)
     val ret = code"""${elementValue.code}
           |
           |if (!${elementValue.isNull} && ${elementValue.value} == false) {
           |  ${generateColumnValuesCode(colListName, valListName, ctx)}
           |  throw org.apache.spark.sql.errors.QueryExecutionErrors.checkViolationJava(
-          |     "$constraintName", "$predicateSql", $colListName, $valListName);
+          |     $nameRef, $sqlRef, $colListName, $valListName);
           |}
      """.stripMargin
     ret

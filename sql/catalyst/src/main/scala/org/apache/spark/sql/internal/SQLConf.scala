@@ -19,7 +19,7 @@ package org.apache.spark.sql.internal
 
 import java.util.{Locale, Properties, TimeZone}
 import java.util
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
 import java.util.regex.Pattern
 
@@ -66,8 +66,8 @@ object SQLConf {
 
   private[this] val sqlConfEntriesUpdateLock = new Object
 
-  @volatile
-  private[this] var sqlConfEntries: util.Map[String, ConfigEntry[_]] = util.Collections.emptyMap()
+  // Concurrent map so registration does not copy the whole registry and reads stay lock-free.
+  private[this] val sqlConfEntries = new ConcurrentHashMap[String, ConfigEntry[_]]()
 
   // Advanced after every `sqlConfEntries` update, so a reader that sees a version also sees the
   // entries it counts.
@@ -85,17 +85,13 @@ object SQLConf {
     require(!ConfigRegistry.containsConfig(entry.key),
       s"${entry.key} is defined in a .textproto config file. " +
         s"Use buildConfFromConfigFile instead of buildConf.")
-    val updatedMap = new java.util.HashMap[String, ConfigEntry[_]](sqlConfEntries)
-    updatedMap.put(entry.key, entry)
-    sqlConfEntries = updatedMap
+    sqlConfEntries.put(entry.key, entry)
     sqlConfEntriesVersion += 1
   }
 
   // For testing only
   private[sql] def unregister(entry: ConfigEntry[_]): Unit = sqlConfEntriesUpdateLock.synchronized {
-    val updatedMap = new java.util.HashMap[String, ConfigEntry[_]](sqlConfEntries)
-    updatedMap.remove(entry.key)
-    sqlConfEntries = updatedMap
+    sqlConfEntries.remove(entry.key)
     sqlConfEntriesVersion += 1
   }
 
@@ -134,8 +130,12 @@ object SQLConf {
       s"$settingsVersion, entriesVersion=$entriesVersion, keys=${retained.size})"
   }
 
+  // ConcurrentHashMap rejects null keys; treat a null key as unregistered.
+  private[this] def registeredEntry(key: String): ConfigEntry[_] =
+    if (key == null) null else sqlConfEntries.get(key)
+
   private[internal] def getConfigEntry(key: String): ConfigEntry[_] = {
-    Option(sqlConfEntries.get(key)).getOrElse(ConfigEntry.findProtoDefinedEntry(key))
+    Option(registeredEntry(key)).getOrElse(ConfigEntry.findProtoDefinedEntry(key))
   }
 
   private[sql] def isSessionBindingPolicy(key: String): Boolean = {
@@ -171,7 +171,7 @@ object SQLConf {
   }
 
   private[sql] def containsConfigKey(key: String): Boolean = {
-    sqlConfEntries.containsKey(key) || ConfigRegistry.containsConfig(key)
+    registeredEntry(key) != null || ConfigRegistry.containsConfig(key)
   }
 
   def registerStaticConfigKey(key: String): Unit = staticConfKeysUpdateLock.synchronized {
@@ -315,7 +315,7 @@ object SQLConf {
       val isSchedulerEventLoopThread = SparkContext.getActive
         .flatMap { sc => Option(sc.dagScheduler) }
         .map(_.eventProcessLoop.eventThread)
-        .exists(_.getId == Thread.currentThread().getId)
+        .exists(_.threadId == Thread.currentThread().threadId)
       if (isSchedulerEventLoopThread) {
         // DAGScheduler event loop thread does not have an active SparkSession, the `confGetter`
         // will return `fallbackConf` which is unexpected. Here we require the caller to get the
@@ -667,6 +667,32 @@ object SQLConf {
       "evaluated for the rows which survived the filters below it. Costs an extra operator per " +
       s"split, and only applies when ${AVOID_DOUBLE_FILTER_EVAL.key} is also enabled.")
     .version("4.3.0")
+    .booleanConf
+    .createWithDefault(true)
+
+  val REGEX_PATTERN_COST_ESTIMATE_VERSION =
+    buildConf("spark.sql.optimizer.regexPatternCostEstimateVersion")
+    .internal()
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .doc(s"How ${AVOID_DOUBLE_FILTER_EVAL.key} decides whether a LIKE or RLIKE expression is " +
+      "expensive. 0: every LIKE and RLIKE expression is expensive, as in 4.2.0 for a subject " +
+      "that is not a literal. 1: only one whose pattern is likely to be expensive to match. A " +
+      "streaming query keeps the version recorded in its checkpoint, and one restarted from a " +
+      "checkpoint without it uses 0.")
+    .version("4.2.2")
+    .intConf
+    .checkValue(_ >= 0, "The version of the regex pattern cost estimate must be nonnegative.")
+    .createWithDefault(1)
+
+  val AVOID_DOUBLE_FILTER_EVAL_FOR_PYTHON_UDF =
+    buildConf("spark.sql.optimizer.avoidDoubleFilterEvalForPythonUDF")
+    .internal()
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .doc(s"When true, ${AVOID_DOUBLE_FILTER_EVAL.key} treats a Python UDF as expensive. When " +
+      "false, a Python UDF is only as expensive as its arguments, as before 4.4.0. A streaming " +
+      "query keeps the value recorded in its checkpoint, and one restarted from a checkpoint " +
+      "without it uses false.")
+    .version("4.4.0")
     .booleanConf
     .createWithDefault(true)
 
@@ -1186,6 +1212,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED =
+    buildConf("spark.sql.join.sortMergeAsOfJoin.cursorScan.enabled")
+      .internal()
+      .doc("When true, the sort-merge AS-OF join reads the right side once with a cursor if " +
+        "the join is backward or forward, has no residual join condition, and its as-of " +
+        "condition compares the two sort keys, left one first and of the same type. Other " +
+        "joins, and joins on STRUCT, ARRAY, TIME, nanosecond timestamp or user-defined type " +
+        "keys, buffer each right-side group and scan the buffer again for every left row.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION =
     buildConf("spark.sql.requireAllClusterKeysForCoPartition")
       .internal()
@@ -1558,6 +1597,18 @@ object SQLConf {
         "handles skew in shuffled join (sort-merge and shuffled hash) by splitting (and " +
         "replicating if needed) skewed partitions.")
       .version("3.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val SKEW_JOIN_PER_JOIN_FALLBACK_ENABLED =
+    buildConf("spark.sql.adaptive.skewJoin.perJoinFallback.enabled")
+      .internal()
+      .doc("When true, a plan whose all-at-once skew join optimization breaks a requirement " +
+        "keeps the splits the plan can still satisfy, instead of giving up the optimization for " +
+        "every join. When false, such a plan is left unchanged. Only takes effect when " +
+        "'spark.sql.adaptive.forceOptimizeSkewedJoin' is false.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(true)
 
@@ -3267,14 +3318,9 @@ object SQLConf {
         "supports it, such as a CASE WHEN with many branches, into methods that take the input " +
         "variables they read as parameters, the way code generation outside whole stage codegen " +
         "splits it. In a stage whose expressions are split, the methods that subexpression " +
-        "elimination's discarded first pass added are removed; and in every stage, a slot of " +
-        "a compacted mutable state array counts as the field it is when code moves into a " +
-        "method: an operator's method that took it as a parameter, and failed to compile, now " +
-        "compiles, and a common expression's definition reading one, which stayed inline, " +
-        "gets its method. When false, " +
-        "the code stays in the method of its operator, where a large enough expression goes " +
-        "past the JVM's 64KB method limit and fails to compile, and the generated code is what " +
-        "it was before this conf existed.")
+        "elimination's discarded first pass added are removed. When false, the code stays in " +
+        "the method of its operator, where a large enough expression goes past the JVM's 64KB " +
+        "method limit and fails to compile.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
@@ -4568,6 +4614,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val USE_CURRENT_SQL_CONFIGS_FOR_GENERATED_COLUMN =
+    buildConf("spark.sql.legacy.useCurrentConfigsForGeneratedColumn")
+      .internal()
+      .doc("When true, a write parses and analyzes the SQL text of a generation expression of a " +
+        "Data Source V2 table under the SQL configs of the current active SparkSession, and " +
+        "CREATE TABLE and REPLACE TABLE do not reject a text that the session reads differently.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val STORE_ANALYZED_PLAN_FOR_VIEW =
     buildConf("spark.sql.legacy.storeAnalyzedPlanForView")
       .internal()
@@ -5482,13 +5539,24 @@ object SQLConf {
   val PYTHON_UDF_PROFILER =
     buildConf("spark.sql.pyspark.udf.profiler")
       .doc("Configure the Python/Pandas UDF profiler by enabling or disabling it " +
-        "with the option to choose between \"perf\" and \"memory\" types, " +
+        "with the option to choose between \"perf\", \"memory\" and \"sampling\" types, " +
         "or unsetting the config disables the profiler. This is disabled by default.")
       .version("4.0.0")
       .stringConf
       .transform(_.toLowerCase(Locale.ROOT))
-      .checkValues(Set("perf", "memory"))
+      .checkValues(Set("perf", "memory", "sampling"))
       .createOptional
+
+  val PYTHON_UDF_PROFILER_SAMPLING_INTERVAL =
+    buildConf("spark.sql.pyspark.udf.profiler.samplingInterval")
+      .doc("The interval in milliseconds at which the sampling profiler samples the call " +
+        "stack. This takes effect only when spark.sql.pyspark.udf.profiler is set to " +
+        "\"sampling\".")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(v => v > 0L, "The sampling interval must be at least 1 millisecond.")
+      .createWithDefault(100)
 
   val PYTHON_UDF_WORKER_FAULTHANLDER_ENABLED =
     buildConf("spark.sql.execution.pyspark.udf.faulthandler.enabled")
@@ -7465,9 +7533,9 @@ object SQLConf {
     .doc("Comma-separated list of native data source packages (.sparkpkg files), and of " +
       "directories that contain them, on the local file system of the driver. Spark adds a " +
       "package to the artifacts of the session when one of its data sources is used, so that " +
-      "the executors get it too. Packages can also be added with spark.addArtifact. These " +
-      "packages take precedence over the native data source libraries installed in the native " +
-      "library path. See spark.sql.dataSource.native.enabled.")
+      "the executors get it too. Packages added with spark.addArtifact take precedence over " +
+      "these packages, which take precedence over the native data source libraries installed " +
+      "in the native library path. See spark.sql.dataSource.native.enabled.")
     .version("4.4.0")
     .withBindingPolicy(ConfigBindingPolicy.SESSION)
     .stringConf
@@ -9837,6 +9905,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def sqlAsOfJoinEnabled: Boolean = getConf(SQL_ASOF_JOIN_ENABLED)
 
+  def sortMergeAsOfJoinCursorScanEnabled: Boolean =
+    getConf(SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED)
+
   def enableRadixSort: Boolean = getConf(RADIX_SORT_ENABLED)
 
   def isParquetSchemaMergingEnabled: Boolean = getConf(PARQUET_SCHEMA_MERGING_ENABLED)
@@ -10084,6 +10155,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def useCurrentSQLConfigsForView: Boolean = getConf(SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_VIEW)
 
+  def useCurrentSQLConfigsForGeneratedColumn: Boolean =
+    getConf(SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_GENERATED_COLUMN)
+
   def storeAnalyzedPlanForView: Boolean = getConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW)
 
   def allowAutoGeneratedAliasForView: Boolean = getConf(SQLConf.ALLOW_AUTO_GENERATED_ALIAS_FOR_VEW)
@@ -10121,6 +10195,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def pysparkJVMStacktraceEnabled: Boolean = getConf(PYSPARK_JVM_STACKTRACE_ENABLED)
 
   def pythonUDFProfiler: Option[String] = getConf(PYTHON_UDF_PROFILER)
+
+  def pythonUDFProfilerSamplingInterval: Long = getConf(PYTHON_UDF_PROFILER_SAMPLING_INTERVAL)
 
   def pythonDataSourceProfiler: Option[String] = getConf(PYTHON_DATA_SOURCE_PROFILER)
 

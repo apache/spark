@@ -41,6 +41,10 @@ object MimaExcludes {
     // [SPARK-57500][SQL] The private MySQLDialect no longer overrides this method.
     ProblemFilters.exclude[InaccessibleMethodProblem](
       "org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder.escapeStringLiteralForLikePattern"),
+    // [SPARK-60217][SQL] Remove the unused createZstdInputStream overload that built a default
+    // Hadoop conf; callers pass the read's conf to the remaining overload.
+    ProblemFilters.exclude[DirectMissingMethodProblem](
+      "org.apache.spark.io.HadoopCodecStreams.createZstdInputStream"),
     // [SPARK-58896] Decision tree leaf counts moved behind NodeStats. The old package-private
     // numLeave accessors are removed from concrete models.
     ProblemFilters.exclude[DirectMissingMethodProblem](

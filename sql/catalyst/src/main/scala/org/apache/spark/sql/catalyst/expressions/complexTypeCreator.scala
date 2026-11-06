@@ -200,7 +200,7 @@ private [sql] object GenArrayData {
   since = "2.0.0",
   group = "map_funcs")
 case class CreateMap(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
-  extends Expression with NoThrow {
+  extends Expression {
 
   def this(children: Seq[Expression]) = {
     this(children, SQLConf.get.getConf(SQLConf.LEGACY_CREATE_EMPTY_COLLECTION_USING_STRING_TYPE))
