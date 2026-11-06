@@ -779,8 +779,8 @@ def _load_from_socket(sock_info: "JavaArray", serializer: "Serializer") -> Itera
     result of meth:`Serializer.load_stream`,
     usually a generator that yields deserialized data
     """
+    sockfile, sock = _create_local_socket(sock_info)
     try:
-        sockfile, sock = _create_local_socket(sock_info)
         yield serializer.load_stream(sockfile)
     finally:
         sockfile.close()

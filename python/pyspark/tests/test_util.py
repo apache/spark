@@ -18,15 +18,16 @@ import gc
 import os
 import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from py4j.protocol import Py4JJavaError
 
 from pyspark import keyword_only
+from pyspark.errors import PySparkRuntimeError
 from pyspark.find_spark_home import _find_spark_home
 from pyspark.loose_version import LooseVersion
 from pyspark.testing.utils import PySparkTestCase, eventually, timeout
-from pyspark.util import _parse_memory, disable_gc
+from pyspark.util import _load_from_socket, _parse_memory, disable_gc
 
 
 class KeywordOnlyTests(unittest.TestCase):
@@ -179,6 +180,54 @@ class UtilTests(PySparkTestCase):
             time.sleep(3600)  # Simulate a long-running operation
         else:
             print("succeeding immediately")
+
+
+class LoadFromSocketTests(unittest.TestCase):
+    def setUp(self):
+        self.sockfile = Mock()
+        self.sock = Mock()
+        self.serializer = Mock()
+        patcher = patch(
+            "pyspark.util._create_local_socket", return_value=(self.sockfile, self.sock)
+        )
+        self.create_socket = patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_connection_failure(self):
+        error = PySparkRuntimeError(
+            errorClass="CANNOT_OPEN_SOCKET", messageParameters={"errors": "connection failed"}
+        )
+        self.create_socket.side_effect = error
+        with self.assertRaises(PySparkRuntimeError) as context:
+            with _load_from_socket((0, "secret"), self.serializer):
+                self.fail("A failed connection must not yield a stream")
+        self.assertIs(context.exception, error)
+        self.serializer.load_stream.assert_not_called()
+
+    def test_load_stream(self):
+        self.serializer.load_stream.return_value = iter([1, 2])
+        with _load_from_socket((0, "secret"), self.serializer) as stream:
+            self.assertEqual(list(stream), [1, 2])
+            self.sockfile.close.assert_not_called()
+            self.sock.close.assert_not_called()
+        self.serializer.load_stream.assert_called_once_with(self.sockfile)
+        self.sockfile.close.assert_called_once_with()
+        self.sock.close.assert_called_once_with()
+
+    def test_deserialization_failure(self):
+        self.serializer.load_stream.side_effect = ValueError("deserialization failed")
+        with self.assertRaisesRegex(ValueError, "deserialization failed"):
+            with _load_from_socket((0, "secret"), self.serializer):
+                self.fail("Failed deserialization must not yield a stream")
+        self.sockfile.close.assert_called_once_with()
+        self.sock.close.assert_called_once_with()
+
+    def test_consumer_failure(self):
+        with self.assertRaisesRegex(ValueError, "consumer failed"):
+            with _load_from_socket((0, "secret"), self.serializer):
+                raise ValueError("consumer failed")
+        self.sockfile.close.assert_called_once_with()
+        self.sock.close.assert_called_once_with()
 
 
 class HandleWorkerExceptionTests(unittest.TestCase):
