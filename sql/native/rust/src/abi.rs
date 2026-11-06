@@ -300,14 +300,15 @@ pub struct SparkDsLibrary {
 // The sizes and field offsets of the header on 64-bit targets, so that a binding that does
 // not match it fails to compile wherever the SDK builds, including in each library.
 macro_rules! layout {
-    ($($name:ident: $size:literal { $($field:ident: $offset:literal),* $(,)? })*) => {$(
+    ($($name:ident: $size:literal { $($field:ident: $offset:literal),* $(,)? })*) => {
         #[cfg(target_pointer_width = "64")]
-        const _: () = assert!(size_of::<$name>() == $size);
-        $(
-            #[cfg(target_pointer_width = "64")]
-            const _: () = assert!(offset_of!($name, $field) == $offset);
-        )*
-    )*};
+        const _: () = {
+            $(
+                assert!(size_of::<$name>() == $size);
+                $(assert!(offset_of!($name, $field) == $offset);)*
+            )*
+        };
+    };
 }
 
 layout! {
