@@ -768,8 +768,8 @@ class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends Databas
   override def getDatabaseMinorVersion: Int = VersionUtils.minorVersion(conn.spark.version)
 
   // JSR-221 defines JDBC 4.0 API Specification - https://jcp.org/en/jsr/detail?id=221
-  // JDBC 4.3 is the latest Maintenance version of the JDBC 4.0 specification as of JDK 17
-  // https://docs.oracle.com/en/java/javase/17/docs/api/java.sql/java/sql/package-summary.html
+  // JDBC 4.3 is the latest Maintenance version of the JDBC 4.0 specification as of JDK 21
+  // https://docs.oracle.com/en/java/javase/21/docs/api/java.sql/java/sql/package-summary.html
   override def getJDBCMajorVersion: Int = 4
 
   override def getJDBCMinorVersion: Int = 3

@@ -116,7 +116,9 @@ private[spark] abstract class Spillable[C](taskMemoryManager: TaskMemoryManager)
    * when there is not enough memory for the task.
    */
   override def spill(size: Long, trigger: MemoryConsumer): Long = {
-    if (trigger != this && taskMemoryManager.getTungstenMemoryMode == MemoryMode.ON_HEAP) {
+    // Compare by reference: a distinct consumer that is equal to this one must not be mistaken
+    // for a self-triggered spill.
+    if ((trigger ne this) && taskMemoryManager.getTungstenMemoryMode == MemoryMode.ON_HEAP) {
       val isSpilled = forceSpill()
       if (!isSpilled) {
         0L
@@ -151,7 +153,7 @@ private[spark] abstract class Spillable[C](taskMemoryManager: TaskMemoryManager)
    * @param elements number of elements read from input since last spill
    */
   @inline private def logSpillage(size: Long, elements: Int): Unit = {
-    val threadId = Thread.currentThread().getId
+    val threadId = Thread.currentThread().threadId
     logInfo(log"Thread ${MDC(LogKeys.THREAD_ID, threadId)} " +
       log"spilling in-memory map of ${MDC(LogKeys.BYTE_SIZE,
         org.apache.spark.util.Utils.bytesToString(size))} " +

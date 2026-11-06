@@ -825,7 +825,7 @@ private[spark] class Executor(
       }
 
       setMDCForTask(taskName, mdcProperties)
-      threadId = Thread.currentThread.getId
+      threadId = Thread.currentThread.threadId
       Thread.currentThread.setName(threadName)
       val threadMXBean = ManagementFactory.getThreadMXBean
       val taskMemoryManager = new TaskMemoryManager(env.memoryManager, taskId)
