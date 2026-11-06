@@ -776,6 +776,18 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     }
   }
 
+  test("SPARK-61050: Remainder, Pmod and IntegralDivide of decimals with a 41-digit quotient") {
+    val left = Literal(Decimal(BigDecimal("9" * 38)), DecimalType(38, 0))
+    val right = Literal(Decimal(BigDecimal("0.007"), 3, 3), DecimalType(3, 3))
+    Seq(EvalMode.LEGACY, EvalMode.ANSI).foreach { mode =>
+      checkEvaluation(Remainder(left, right, mode), Decimal(BigDecimal("0.006"), 3, 3))
+      checkEvaluation(Pmod(left, right, mode), Decimal(BigDecimal("0.006"), 3, 3))
+    }
+    checkEvaluation(IntegralDivide(left, right, EvalMode.LEGACY), null)
+    checkExceptionInExpression[SparkArithmeticException](
+      IntegralDivide(left, right, EvalMode.ANSI), "NUMERIC_VALUE_OUT_OF_RANGE")
+  }
+
   test("SPARK-24598: overflow on long returns wrong result") {
     val maxLongLiteral = Literal(Long.MaxValue)
     val minLongLiteral = Literal(Long.MinValue)

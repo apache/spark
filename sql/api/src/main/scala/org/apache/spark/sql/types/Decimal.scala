@@ -558,11 +558,17 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def %(that: Decimal): Decimal =
     if (that.isZero) null
-    else Decimal(toJavaBigDecimal.remainder(that.toJavaBigDecimal, MATH_CONTEXT))
+    else {
+      val (a, b) = (toJavaBigDecimal, that.toJavaBigDecimal)
+      Decimal(a.remainder(b, integralQuotientContext(a, b)))
+    }
 
   def quot(that: Decimal): Decimal =
     if (that.isZero) null
-    else Decimal(toJavaBigDecimal.divideToIntegralValue(that.toJavaBigDecimal, MATH_CONTEXT))
+    else {
+      val (a, b) = (toJavaBigDecimal, that.toJavaBigDecimal)
+      Decimal(a.divideToIntegralValue(b, integralQuotientContext(a, b)))
+    }
 
   def remainder(that: Decimal): Decimal = this % that
 
@@ -610,6 +616,17 @@ object Decimal {
   // precision than DecimalType.MAX_PRECISION. Then, TypeCoercion will properly round up/down
   // the last extra digit.
   private val MATH_CONTEXT = new MathContext(DecimalType.MAX_PRECISION + 1, RoundingMode.DOWN)
+
+  // `BigDecimal.remainder` and `divideToIntegralValue` raise "Division impossible" when the
+  // integral part of the quotient has more digits than the `MathContext` holds, e.g. 41 digits
+  // for DECIMAL(38, 0) and DECIMAL(3, 3). Returns `MATH_CONTEXT`, or a larger context that holds
+  // the integral part of `a / b`: |a| < 10^(a.precision - a.scale) and
+  // |b| >= 10^(b.precision - b.scale - 1).
+  private def integralQuotientContext(a: JavaBigDecimal, b: JavaBigDecimal): MathContext = {
+    val digits = (a.precision.toLong - a.scale) - (b.precision.toLong - b.scale) + 1
+    if (digits <= MATH_CONTEXT.getPrecision) MATH_CONTEXT
+    else new MathContext(digits.toInt, RoundingMode.DOWN)
+  }
 
   private[sql] val ZERO = Decimal(0)
   private[sql] val ONE = Decimal(1)
