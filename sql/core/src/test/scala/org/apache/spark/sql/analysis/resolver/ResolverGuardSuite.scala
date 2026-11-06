@@ -18,18 +18,34 @@
 package org.apache.spark.sql.analysis.resolver
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.SqlScriptingContextManager
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.analysis.resolver.{
   AnalyzerBridgeState,
   ExplicitlyUnsupportedResolverFeature,
+  PlanPreprocessor,
+  ResolutionGap,
   Resolver,
   ResolverGuard
 }
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.catalog.VariableDefinition
+import org.apache.spark.sql.catalyst.expressions.{
+  Alias,
+  CreateArray,
+  GetMapValue,
+  GetStructField,
+  Literal
+}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.sql.functions.struct
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.scripting.SqlScriptingTestUtils
 import org.apache.spark.sql.test.SharedSparkSession
 
-class ResolverGuardSuite extends ResolverGuardSuiteBase {
+class ResolverGuardSuite extends ResolverGuardSuiteBase with SqlScriptingTestUtils {
+  import testImplicits._
+
   test("Select * from an inline table") {
     checkResolverGuard("SELECT * FROM VALUES(1,2,3)")
   }
@@ -361,7 +377,10 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
     val planId: Long = 0
     plan.asInstanceOf[Project].projectList.head.setTagValue(LogicalPlan.PLAN_ID_TAG, planId)
 
-    checkResolverGuard(plan, unsupportedReason = Some("PLAN_ID_TAG"))
+    checkResolverGuard(
+      plan,
+      unsupportedReason = Some("PLAN_ID_TAG with strict DataFrame column resolution")
+    )
   }
 
   test("Star outside of Project list") {
@@ -375,7 +394,10 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
       override def lookupMetadataAndResolve(
           plan: LogicalPlan,
           analyzerBridgeState: Option[AnalyzerBridgeState] = None): LogicalPlan =
-        throw new ExplicitlyUnsupportedResolverFeature("ResolverGuardSuite dummy exception")
+        throw new ExplicitlyUnsupportedResolverFeature(
+          ResolutionGap.ViewBody,
+          "ResolverGuardSuite dummy exception"
+        )
     }
 
     val dummyPlan = Project(Seq.empty, new OneRowRelation)
@@ -429,29 +451,484 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
     }
   }
 
-  test("Higher-order functions are unsupported") {
+  test("Higher-order functions") {
+    checkResolverGuard("SELECT transform(array(1, 2), x -> x + 1)")
+    checkResolverGuard("SELECT filter(array(1, 2), x -> x > 1)")
+    checkResolverGuard("SELECT aggregate(array(1, 2), 0, (acc, x) -> acc + x)")
+  }
+
+  test("Metadata column star target") {
+    withTable("t") {
+      sql("CREATE TABLE t (col INT) USING parquet")
+      checkResolverGuard("SELECT _metadata.* FROM t")
+    }
+  }
+
+  test("COALESCE with star expression") {
     checkResolverGuard(
-      "SELECT transform(array(1, 2), x -> x + 1)",
-      unsupportedReason = Some("unsupported function transform")
-    )
-    checkResolverGuard(
-      "SELECT filter(array(1, 2), x -> x > 1)",
-      unsupportedReason = Some("unsupported function filter")
-    )
-    checkResolverGuard(
-      "SELECT aggregate(array(1, 2), 0, (acc, x) -> acc + x)",
-      unsupportedReason = Some("unsupported function aggregate")
+      "SELECT COALESCE(TA.*) FROM VALUES(1, 2) AS TA(c1, c2), VALUES('a', 'b') AS TB(ca, cb)"
     )
   }
 
-  test("Star target with unsupported metadata attribute name") {
-    withTable("t") {
-      sql("CREATE TABLE t (col INT) USING parquet")
-      checkResolverGuard(
-        "SELECT _metadata.* FROM t",
-        unsupportedReason = Some("unsupported attribute name '_metadata'")
+  test("CreateArray expression") {
+    checkResolverGuard("SELECT array(1, 2, 3)")
+    checkResolverGuard("SELECT array()")
+    checkResolverGuard("SELECT array(1, 2.0, '3')")
+
+    val plan = Project(
+      Seq(UnresolvedAlias(CreateArray(Seq(Literal(1), Literal(2), Literal(3))))),
+      OneRowRelation()
+    )
+    checkResolverGuard(plan = plan, unsupportedReason = None)
+  }
+
+  test("DISTRIBUTE BY") {
+    checkResolverGuard(
+      plan = spark
+        .sql("SELECT col1, col2 FROM values(1,2) DISTRIBUTE BY col1")
+        .queryExecution
+        .logical,
+      unsupportedReason = None
+    )
+  }
+
+  test("GetMapValue") {
+    val df = Seq(Map("key" -> 1)).toDF("m").select($"m")
+    val mapAttribute = df.queryExecution.analyzed.output.head
+    val plan = Project(
+      projectList = Seq(Alias(GetMapValue(mapAttribute, Literal("key")), "value")()),
+      child = df.queryExecution.logical
+    )
+
+    checkResolverGuard(plan = plan, unsupportedReason = None)
+  }
+
+  test("GetStructField") {
+    val df = Seq((1, 2)).toDF("a", "b").select(struct($"a", $"b").as("s"))
+    val structAttribute = df.queryExecution.analyzed.output.head
+    val plan = Project(
+      projectList = Seq(Alias(GetStructField(structAttribute, 0, Some("a")), "field")()),
+      child = df.queryExecution.logical
+    )
+
+    checkResolverGuard(plan = plan, unsupportedReason = None)
+  }
+
+  test("Grouping analytics") {
+    val testCases = Seq(
+      "SELECT col1 FROM VALUES(1) GROUP BY CUBE(col1)",
+      "SELECT col1 FROM VALUES(1) GROUP BY ROLLUP(col1)",
+      "SELECT col1 FROM VALUES(1) GROUP BY GROUPING SETS((col1), ())"
+    )
+
+    testCases.foreach(query => checkResolverGuard(query))
+  }
+
+  test("IDENTIFIER clause") {
+    checkResolverGuard("SELECT IDENTIFIER('c' || '1') FROM VALUES(1) AS T(c1)")
+    withTable("t1") {
+      spark.sql("CREATE TABLE t1 (c1 INT) USING parquet")
+      checkResolverGuard("SELECT * FROM IDENTIFIER('t' || '1')")
+    }
+  }
+
+  test("IDENTIFIER clause with functions") {
+    checkResolverGuard("SELECT IDENTIFIER(concat('c', '1')) FROM VALUES(1) AS T(c1)")
+    withTable("t1") {
+      spark.sql("CREATE TABLE t1 (c1 INT) USING parquet")
+      checkResolverGuard("SELECT * FROM IDENTIFIER(concat('t', '1'))")
+    }
+  }
+
+  test("IDENTIFIER clause with variable is supported") {
+    withTable("t1") {
+      spark.sql("CREATE TABLE t1 (c1 INT) USING csv")
+      withSessionVariable("tbl_name") {
+        spark.sql("DECLARE tbl_name STRING DEFAULT 't1'")
+        checkResolverGuard("SELECT * FROM IDENTIFIER(tbl_name)")
+      }
+    }
+    withSessionVariable("col_name") {
+      spark.sql("DECLARE col_name STRING DEFAULT 'c1'")
+      checkResolverGuard("SELECT IDENTIFIER(col_name) FROM VALUES(1) AS T(c1)")
+    }
+  }
+
+  test("IDENTIFIER expressions use standard function support checks") {
+    checkResolverGuardOnly("SELECT IDENTIFIER(max('c1')) FROM VALUES(1) AS T(c1)")
+    checkResolverGuardOnly("SELECT IDENTIFIER((SELECT 'c1')) FROM VALUES(1) AS T(c1)")
+    checkResolverGuardOnly(
+      "SELECT IDENTIFIER(WINDOW('c1', '1 minute')) FROM VALUES(1) AS T(c1)",
+      unsupportedReason = Some("unsupported function window")
+    )
+    withSqlFunction("identifier_name") {
+      sql("CREATE FUNCTION identifier_name() RETURNS STRING RETURN 'c1'")
+      checkResolverGuardOnly(
+        "SELECT IDENTIFIER(identifier_name()) FROM VALUES(1) AS T(c1)",
+        unsupportedReason = Some("non-builtin function")
       )
     }
+  }
+
+  test("IDENTIFIER subquery remains guard-supported") {
+    checkResolverGuardOnly("SELECT * FROM IDENTIFIER((SELECT 't'))")
+  }
+
+  test("JSON_TABLE") {
+    // JSON_TABLE is parsed into a [[Generate]] operator, which is not supported yet.
+    checkResolverGuard(
+      "SELECT * FROM JSON_TABLE('{\"items\":[1]}', '$.items[*]' " +
+      "COLUMNS (value INT PATH '$'))",
+      Some("class org.apache.spark.sql.catalyst.plans.logical.Generate operator resolution")
+    )
+  }
+
+  test("LATERAL JOIN") {
+    val lateralJoinQuery =
+      "SELECT * FROM (VALUES (1, 2)) AS t1(c1, c2) JOIN LATERAL (SELECT c1 + c2 AS c3) ON c2 = c3"
+    checkResolverGuard(lateralJoinQuery)
+  }
+
+  test("LIMIT ALL") {
+    checkResolverGuard(
+      """
+        WITH RECURSIVE r AS (
+          SELECT 0 AS level
+          UNION ALL
+          SELECT level + 1 FROM r WHERE level < 9
+        )
+        SELECT * FROM r LIMIT ALL;
+        """
+    )
+  }
+
+  test("Lambda variable") {
+    val testCases = Seq(
+      "SELECT array_sort(array(2, 1), (p1, p2) -> IF(p1 > p2, 1, 0))",
+      "SELECT transform(array(2, 1), x -> x * 2)",
+      "SELECT filter(array(2, 1), x -> x > 0)"
+    )
+
+    testCases.foreach(query => checkResolverGuard(query))
+  }
+
+  test("Metadata column resolution") {
+    withTable("t") {
+      spark.sql("CREATE TABLE t (col INT) USING csv")
+      checkResolverGuard("SELECT _metadata FROM t")
+    }
+  }
+
+  test("NamePlaceholder") {
+    val query = "SELECT struct(*) FROM VALUES (1)"
+    checkResolverGuard(query)
+  }
+
+  test("Named argument expression") {
+    val query = "SELECT mask('ABCabc123', lowerChar => 'q')"
+    checkResolverGuard(query)
+  }
+
+  test("Natural join with multiple resolution passes") {
+    val df1 = Seq(1 -> "a").toDF("k", "v").as("left")
+    val df2 = Seq(1 -> "b").toDF("k", "v").as("right")
+    val dfQuery = df1
+      .join(df2, "k", "outer")
+      .withColumn("left_all", struct($"left.k"))
+      .withColumn("right_all", struct($"right.k"))
+    checkResolverGuard(
+      plan = dfQuery.queryExecution.logical,
+      unsupportedReason = Some("NaturalJoin second resolution")
+    )
+  }
+
+  test("PLAN_ID_TAG with set operation") {
+    val child = spark.sessionState.sqlParser.parsePlan(
+      "SELECT col1 FROM VALUES (1) UNION ALL SELECT col1 FROM VALUES (2)"
+    )
+    val planId: Long = 0
+    child.setTagValue(LogicalPlan.PLAN_ID_TAG, planId)
+    val attribute = UnresolvedAttribute("col1")
+    attribute.setTagValue(LogicalPlan.PLAN_ID_TAG, planId)
+    val plan = Project(Seq(attribute), child)
+
+    withSQLConf(SQLConf.STRICT_DATAFRAME_COLUMN_RESOLUTION.key -> "false") {
+      checkResolverGuard(plan, unsupportedReason = None)
+    }
+  }
+
+  test("Pivot") {
+    checkResolverGuard(
+      plan = spark
+        .sql("SELECT * FROM VALUES (2024,1) PIVOT (sum(col1) FOR col2 IN (1 AS q1))")
+        .queryExecution
+        .logical,
+      unsupportedReason = None
+    )
+  }
+
+  test("Unpivot") {
+    checkResolverGuard(
+      plan = spark
+        .sql("SELECT * FROM VALUES (2024,1) UNPIVOT (col1 FOR col2 IN (col1 AS `Jan-Mar`))")
+        .queryExecution
+        .logical,
+      unsupportedReason = None
+    )
+  }
+
+  test("Recursive CTE") {
+    val query =
+      """
+        WITH RECURSIVE r AS (
+          SELECT 0 AS level
+          UNION ALL
+          SELECT level + 1 FROM r WHERE level < 9
+        )
+        SELECT * FROM r;
+      """
+
+    checkResolverGuard(query)
+  }
+
+  test("SQL pipe aggregate with ordinals") {
+    checkResolverGuard("values (3, 4) as tab(x, y) |> aggregate sum(y) group by 1")
+  }
+
+  test("SQL pipe syntax") {
+    withTable("t") {
+      spark.sql("CREATE TABLE t (x INT, y STRING) USING CSV")
+      checkResolverGuard(
+        """
+          | FROM t AS t_alias
+          | |> SELECT t_alias.x as tx, t_alias.y as ty
+          | |> WHERE ty = 'def'
+          | |> SELECT tx
+          |""".stripMargin
+      )
+    }
+  }
+
+  test("Star target with columns") {
+    val df1 = Seq(1 -> "a").toDF("k", "v").as("left")
+    val df2 = df1.withColumn("left_duplicates", struct($"left.*"))
+    checkResolverGuard(plan = df2.queryExecution.logical, None)
+  }
+
+  test("Star target with except") {
+    checkResolverGuard("SELECT * EXCEPT(col2) FROM VALUES(1,2)")
+  }
+
+  test("Star with metadata target in aggregate") {
+    withTable("t") {
+      spark.sql("CREATE TABLE t (col INT) USING csv")
+      checkResolverGuard("SELECT _metadata.* FROM t GROUP BY ALL")
+    }
+  }
+
+  test("Streaming relation") {
+    withTable("t1") {
+      spark.sql("CREATE TABLE t1 USING parquet AS SELECT * FROM VALUES (1)")
+
+      checkResolverGuard(
+        "SELECT * FROM STREAM t1",
+        unsupportedReason = Some(
+          "class org.apache.spark.sql.catalyst.analysis.NamedStreamingRelation operator resolution"
+        )
+      )
+    }
+  }
+
+  test("TVFs resolution") {
+    checkResolverGuard("SELECT * FROM range(10)")
+    checkResolverGuard(
+      "SELECT * FROM python_worker_logs()",
+      unsupportedReason = Some("unsupported table valued function python_worker_logs")
+    )
+
+    val generatorTableValuedFunctions = Seq(
+      "collations" -> "SELECT * FROM collations()",
+      "explode" -> "SELECT * FROM explode(array(1,2,3))",
+      "explode_outer" -> "SELECT * FROM explode_outer(array())",
+      "inline" -> "SELECT * FROM inline(array(struct(1, 'a')))",
+      "inline_outer" -> "SELECT * FROM inline_outer(array(struct(1, 'a')))",
+      "json_tuple" -> "SELECT * FROM json_tuple('{\"a\":1}', 'a')",
+      "posexplode" -> "SELECT * FROM posexplode(array(1,2,3))",
+      "posexplode_outer" -> "SELECT * FROM posexplode_outer(array())",
+      "sql_keywords" -> "SELECT * FROM sql_keywords()",
+      "stack" -> "SELECT * FROM stack(2, 1, 2, 3)",
+      "variant_explode" -> "SELECT * FROM variant_explode(parse_json('[1,2,3]'))",
+      "variant_explode_outer" -> "SELECT * FROM variant_explode_outer(parse_json('[]'))"
+    )
+    generatorTableValuedFunctions.foreach { case (name, query) =>
+      checkResolverGuard(
+        query,
+        unsupportedReason = Some(s"generator table valued function $name")
+      )
+    }
+  }
+
+  test("table valued function with alias") {
+    checkResolverGuard("SELECT * FROM range(10) AS my_table(r)")
+  }
+
+  test("multi-part table valued function name") {
+    checkResolverGuard(
+      "SELECT * FROM catalog.schema.range(10)",
+      unsupportedReason = Some("multi-part table valued function name")
+    )
+  }
+
+  test("streaming table valued function") {
+    // Streaming TVFs are wrapped in NamedStreamingRelation for source naming support,
+    // so the resolver guard hits that wrapper first before the underlying TVF.
+    checkResolverGuard(
+      "SELECT * FROM STREAM range(10)",
+      unsupportedReason = Some(
+        "class org.apache.spark.sql.catalyst.analysis.NamedStreamingRelation operator resolution"
+      )
+    )
+  }
+
+  test("user-defined table valued function") {
+    withSqlFunction("custom_tvf") {
+      sql("CREATE FUNCTION custom_tvf() RETURNS TABLE(x INT) RETURN SELECT 1 AS x")
+      checkResolverGuard(
+        "SELECT * FROM custom_tvf()",
+        unsupportedReason = Some("UDTF")
+      )
+    }
+  }
+
+  test("Temp variables") {
+    checkResolverGuard("SELECT 1")
+    withTempVariable("temp_variable") {
+      checkResolverGuard("SELECT temp_variable")
+      checkResolverGuard("SELECT 1")
+    }
+  }
+
+  test("Scripting variables") {
+    val compoundBody = spark.sessionState.sqlParser.parsePlan("""
+      BEGIN
+      SELECT 1;
+      END
+      """).asInstanceOf[CompoundBody]
+    withSqlScriptingContextManager(spark, compoundBody) { _ =>
+      checkResolverGuard("SELECT 1")
+      withScriptingVariable("scripting_variable", "value") {
+        checkResolverGuard("SELECT scripting_variable")
+        checkResolverGuard("SELECT 1")
+      }
+    }
+  }
+
+  test("SET VARIABLE") {
+    withSessionVariable("set_variable_target") {
+      sql("DECLARE VARIABLE set_variable_target INT DEFAULT 0")
+      checkResolverGuard("SET VAR set_variable_target = 1")
+      checkResolverGuard("SET VAR (set_variable_target) = (SELECT col1 FROM VALUES (2))")
+    }
+  }
+
+  test("SET VARIABLE scripting targets") {
+    val compoundBody = spark.sessionState.sqlParser.parsePlan("""
+      BEGIN
+      SELECT 1;
+      END
+      """).asInstanceOf[CompoundBody]
+    withSqlScriptingContextManager(spark, compoundBody) { _ =>
+      withScriptingVariable("set_variable_target", "value") {
+        checkResolverGuardOnly("SET VAR set_variable_target = 'other_value'")
+      }
+    }
+  }
+
+  gridTest("SET VARIABLE with an unknown target")(
+    Seq(
+      "SET VAR missing_set_variable_target = 1",
+      "SET VAR missing_set_variable_target = source_variable")) { statement =>
+    checkResolverGuardOnly(statement)
+  }
+
+  test("SET VARIABLE rejects nested raw and preprocessed CTE sources") {
+    withSessionVariable("set_variable_target") {
+      sql("DECLARE VARIABLE set_variable_target INT")
+      val parsedPlan = spark.sessionState.sqlParser.parsePlan(
+        "SET VAR (set_variable_target) = " +
+          "(SELECT value FROM " +
+          "(WITH source(value) AS (VALUES(1)) SELECT value FROM source) nested_source)")
+      val preprocessedPlan = new PlanPreprocessor(
+        resolver = new Resolver(spark.sessionState.catalogManager),
+        resolveExpressionIdentifiersInRootScope = true).substitutePlan(parsedPlan)
+      val unsupportedReason = Some("SET VARIABLE with a CTE source")
+
+      checkResolverGuard(parsedPlan, unsupportedReason)
+      checkResolverGuard(preprocessedPlan, unsupportedReason)
+    }
+  }
+
+  test("EXECUTE IMMEDIATE is unsupported") {
+    val unsupportedReason = Some(
+      "class org.apache.spark.sql.catalyst.analysis.UnresolvedExecuteImmediate " +
+      "operator resolution"
+    )
+    checkResolverGuard("EXECUTE IMMEDIATE 'SELECT 1'", unsupportedReason)
+    withSessionVariable("execute_immediate_target") {
+      sql("DECLARE VARIABLE execute_immediate_target INT")
+      checkResolverGuard(
+        "EXECUTE IMMEDIATE 'SELECT 1' INTO execute_immediate_target",
+        unsupportedReason
+      )
+    }
+  }
+
+  test("Positional parameters") {
+    checkResolverGuard(
+      plan = spark.sql("SELECT ?", Array(1)).queryExecution.logical,
+      unsupportedReason = None
+    )
+    withSQLConf(SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY.key -> "true") {
+      checkResolverGuard(
+        plan = spark.sql("SELECT ?", Array(1)).queryExecution.logical,
+        unsupportedReason = Some(
+          "class org.apache.spark.sql.catalyst.analysis.PosParameter expression resolution"
+        )
+      )
+    }
+  }
+
+  test("BIN BY") {
+    withSQLConf(SQLConf.BIN_BY_ENABLED.key -> "true") {
+      checkResolverGuard(
+        plan = spark
+          .sql(
+            """SELECT * FROM VALUES
+              |  (TIMESTAMP'2024-01-01 00:00:00', TIMESTAMP'2024-01-01 01:00:00', 1.0D)
+              |  AS t(ts_start, ts_end, value)
+              |BIN BY (RANGE ts_start TO ts_end BIN WIDTH INTERVAL '5' MINUTE
+              |  DISTRIBUTE UNIFORM (value))
+              |""".stripMargin)
+          .queryExecution
+          .logical,
+        unsupportedReason = None
+      )
+    }
+  }
+
+  test("UnresolvedExtractValue") {
+    val query = "SELECT 1 AS a FROM VALUES(ARRAY(1)) GROUP BY col1 ORDER BY col1[0]"
+    checkResolverGuard(query)
+  }
+
+  test("UnresolvedHint") {
+    ResolverGuard.BUILTIN_HINT_NAMES.foreach { hintName =>
+      checkResolverGuardOnly(s"SELECT /*+ $hintName */ col1 FROM VALUES(1, 2)")
+    }
+    checkResolverGuardOnly(
+      "SELECT /*+ UNKNOWN_HINT */ col1 FROM VALUES(1, 2)",
+      unsupportedReason = Some("user defined hint")
+    )
   }
 
   test("prioritizeOrdinalResolutionInSort disabled is unsupported") {
@@ -496,6 +973,18 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
 }
 
 trait ResolverGuardSuiteBase extends SharedSparkSession {
+  /**
+   * Verifies the [[ResolverGuard]] result without attempting full resolution. Use when full
+   * resolution requires environment setup not present in this suite.
+   */
+  protected def checkResolverGuardOnly(
+      query: String,
+      unsupportedReason: Option[String] = None): Unit = {
+    val plan = spark.sessionState.sqlParser.parsePlan(query)
+    val resolverGuard = new ResolverGuard(catalogManager = spark.sessionState.catalogManager)
+    assert(resolverGuard.apply(plan).planUnsupportedReason == unsupportedReason)
+  }
+
   protected def checkResolverGuard(
       query: String,
       unsupportedReason: Option[String] = None): Unit = {
@@ -548,6 +1037,27 @@ trait ResolverGuardSuiteBase extends SharedSparkSession {
           msg = s"Resolver failed to resolve a feature supported in resolver guard.",
           cause = throwable
         )
+    }
+  }
+
+  protected def withScriptingVariable[R](name: String, value: String)(body: => R): R = {
+    val variableManager = SqlScriptingContextManager.get().get.getVariableManager.get
+
+    variableManager.create(
+      nameParts = Seq(name),
+      varDef = VariableDefinition(Identifier.of(Array(name), name), value, Literal(value)),
+      overrideIfExists = false
+    )
+
+    body
+  }
+
+  protected def withTempVariable[R](name: String)(body: => R): R = {
+    spark.sql(s"DECLARE $name = 1;")
+    try {
+      body
+    } finally {
+      spark.sql(s"DROP TEMPORARY VARIABLE $name;")
     }
   }
 

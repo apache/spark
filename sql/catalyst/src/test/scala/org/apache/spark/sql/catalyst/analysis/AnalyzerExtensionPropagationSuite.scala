@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.analysis.resolver.{ResolverExtension, TreeNodeResolver}
+import org.apache.spark.sql.catalyst.analysis.resolver.{LogicalPlanResolver, ResolverExtension}
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -45,7 +45,7 @@ class AnalyzerExtensionPropagationSuite extends SparkFunSuite {
   private val dummyExtension: ResolverExtension = new ResolverExtension {
     override def resolveOperator(
         operator: LogicalPlan,
-        resolver: TreeNodeResolver[LogicalPlan, LogicalPlan]): Option[LogicalPlan] = None
+        resolver: LogicalPlanResolver): Option[LogicalPlan] = None
   }
 
   private def newCatalogManager(): CatalogManager =

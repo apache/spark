@@ -17,15 +17,20 @@
 
 package org.apache.spark.sql.analysis.resolver
 
-import java.util.HashMap
+import java.util.{HashMap, HashSet}
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedStar
 import org.apache.spark.sql.catalyst.analysis.resolver.{
+  GroupingModifier,
   NameResolutionParameters,
   NameScope,
   NameScopeStack,
+  NameScopeType,
   NameTarget,
+  OperatorResolutionContext,
+  QueryBlockScope,
+  QueryBlockScopeStack,
   SubqueryRegistry
 }
 import org.apache.spark.sql.catalyst.expressions.{
@@ -38,8 +43,11 @@ import org.apache.spark.sql.catalyst.expressions.{
   GetMapValue,
   GetStructField,
   Literal,
+  MetadataAttribute,
   OuterReference
 }
+import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -104,7 +112,7 @@ class NameScopeSuite extends SharedSparkSession {
   )()
 
   test("Empty scope") {
-    val nameScope = new NameScope
+    val nameScope = new NameScope(queryBlockScope = new QueryBlockScope)
 
     assert(nameScope.output.isEmpty)
 
@@ -116,7 +124,10 @@ class NameScopeSuite extends SharedSparkSession {
   }
 
   test("Distinct attributes") {
-    val nameScope = new NameScope(Seq(col1Integer, col2Integer, col3Boolean, col4String))
+    val nameScope = new NameScope(
+      queryBlockScope = new QueryBlockScope,
+      output = Seq(col1Integer, col2Integer, col3Boolean, col4String)
+    )
 
     assert(nameScope.output == Seq(col1Integer, col2Integer, col3Boolean, col4String))
 
@@ -148,7 +159,10 @@ class NameScopeSuite extends SharedSparkSession {
   }
 
   test("Duplicate attribute names") {
-    val nameScope = new NameScope(Seq(col1Integer, col1Integer, col1IntegerOther))
+    val nameScope = new NameScope(
+      queryBlockScope = new QueryBlockScope,
+      output = Seq(col1Integer, col1Integer, col1IntegerOther)
+    )
 
     assert(nameScope.output == Seq(col1Integer, col1Integer, col1IntegerOther))
 
@@ -168,7 +182,9 @@ class NameScopeSuite extends SharedSparkSession {
 
     val nameScope =
       new NameScope(
-        Seq(col1Integer, col3Boolean, col2Integer, col2Integer, col3BooleanOther, col4String)
+        queryBlockScope = new QueryBlockScope,
+        output =
+          Seq(col1Integer, col3Boolean, col2Integer, col2Integer, col3BooleanOther, col4String)
       )
 
     assert(
@@ -211,7 +227,9 @@ class NameScopeSuite extends SharedSparkSession {
 
   test("Expand star") {
     val nameScope = new NameScope(
-      Seq(col6IntegerWithQualifier, col6IntegerOtherWithQualifier, col7StringWithQualifier)
+      queryBlockScope = new QueryBlockScope,
+      output =
+        Seq(col6IntegerWithQualifier, col6IntegerOtherWithQualifier, col7StringWithQualifier)
     )
 
     Seq(Seq("table"), Seq("database", "table"), Seq("catalog", "database", "table"))
@@ -552,6 +570,48 @@ class NameScopeSuite extends SharedSparkSession {
     }
   }
 
+  test("Opaque scope blocks outer reference resolution") {
+    val stack = newNameScopeStack()
+
+    stack.overwriteCurrent(output = Some(Seq(col1Integer, col2Integer)))
+
+    withSubqueryNameScope(stack) {
+      withOpaqueNameScope(stack) {
+        assert(
+          stack.resolveMultipartName(Seq("col1")) == NameTarget(
+            candidates = Seq.empty,
+            output = Seq.empty
+          )
+        )
+      }
+    }
+  }
+
+  test("Opaque scope blocks outer references but allows inner resolution") {
+    val stack = newNameScopeStack()
+
+    stack.overwriteCurrent(output = Some(Seq(col1Integer, col2Integer)))
+
+    withSubqueryNameScope(stack) {
+      withOpaqueNameScope(stack) {
+        stack.overwriteCurrent(output = Some(Seq(col3Boolean)))
+
+        assert(
+          stack.resolveMultipartName(Seq("col3")) == NameTarget(
+            candidates = Seq(col3Boolean),
+            output = Seq(col3Boolean)
+          )
+        )
+        assert(
+          stack.resolveMultipartName(Seq("col1")) == NameTarget(
+            candidates = Seq.empty,
+            output = Seq(col3Boolean)
+          )
+        )
+      }
+    }
+  }
+
   test("Nested correlation") {
     val stack = newNameScopeStack()
 
@@ -595,19 +655,15 @@ class NameScopeSuite extends SharedSparkSession {
     )
 
     assert(
-      stack.resolveMultipartName(
-        Seq("col3"),
-        NameResolutionParameters(canResolveNameByHiddenOutput = false)
-      ) == NameTarget(
+      stack.resolveMultipartName(Seq("col3")) == NameTarget(
         candidates = Seq.empty,
         output = Seq(col1Integer, col2Integer)
       )
     )
+
+    stack.current.markScopeForHiddenOutputResolution()
     assert(
-      stack.resolveMultipartName(
-        Seq("col3"),
-        NameResolutionParameters(canResolveNameByHiddenOutput = true)
-      ) == NameTarget(
+      stack.resolveMultipartName(Seq("col3")) == NameTarget(
         candidates = Seq(col3Boolean),
         output = Seq(col1Integer, col2Integer)
       )
@@ -637,12 +693,10 @@ class NameScopeSuite extends SharedSparkSession {
             output = Seq.empty
           )
         )
+
+        stack.current.markScopeForHiddenOutputResolution()
         assert(
-          stack
-            .resolveMultipartName(
-              Seq("col3"),
-              NameResolutionParameters(canResolveNameByHiddenOutput = true)
-            ) == NameTarget(
+          stack.resolveMultipartName(Seq("col3")) == NameTarget(
             candidates = Seq(col3Boolean),
             output = Seq.empty
           )
@@ -650,11 +704,7 @@ class NameScopeSuite extends SharedSparkSession {
 
         stack.overwriteCurrent(output = Some(Seq(col1Integer)))
         assert(
-          stack
-            .resolveMultipartName(
-              Seq("col3"),
-              NameResolutionParameters(canResolveNameByHiddenOutput = true)
-            ) == NameTarget(
+          stack.resolveMultipartName(Seq("col3")) == NameTarget(
             candidates = Seq(col3Boolean),
             output = Seq(col1Integer)
           )
@@ -662,12 +712,9 @@ class NameScopeSuite extends SharedSparkSession {
       }
 
       assert(stack.current.hiddenOutput == Seq(col1Integer))
+      stack.current.markScopeForHiddenOutputResolution()
       assert(
-        stack
-          .resolveMultipartName(
-            Seq("col3"),
-            NameResolutionParameters(canResolveNameByHiddenOutput = true)
-          ) == NameTarget(
+        stack.resolveMultipartName(Seq("col3")) == NameTarget(
           candidates = Seq.empty,
           output = Seq(col1Integer)
         )
@@ -694,32 +741,18 @@ class NameScopeSuite extends SharedSparkSession {
         output = Seq(col1Integer, col1IntegerOther)
       )
     )
+
+    stack.current.markScopeForHiddenOutputResolution()
     assert(
-      stack.resolveMultipartName(
-        Seq("col1"),
-        NameResolutionParameters(shouldPreferHiddenOutput = true)
-      ) == NameTarget(
-        candidates = Seq(col1Integer, col1IntegerOther),
-        output = Seq(col1Integer, col1IntegerOther)
-      )
-    )
-    assert(
-      stack.resolveMultipartName(
-        Seq("col1"),
-        NameResolutionParameters(canResolveNameByHiddenOutput = true)
-      ) == NameTarget(
+      stack.resolveMultipartName(Seq("col1")) == NameTarget(
         candidates = Seq(col1IntegerOther),
         output = Seq(col1Integer, col1IntegerOther)
       )
     )
+
+    stack.current.markScopeForHaving()
     assert(
-      stack.resolveMultipartName(
-        Seq("col1"),
-        NameResolutionParameters(
-          canResolveNameByHiddenOutput = true,
-          shouldPreferHiddenOutput = true
-        )
-      ) == NameTarget(
+      stack.resolveMultipartName(Seq("col1")) == NameTarget(
         candidates = Seq(col1IntegerOther),
         output = Seq(col1Integer, col1IntegerOther)
       )
@@ -741,32 +774,18 @@ class NameScopeSuite extends SharedSparkSession {
         output = Seq(col1Integer)
       )
     )
+
+    stack.current.markScopeForHiddenOutputResolution()
     assert(
-      stack.resolveMultipartName(
-        Seq("col1"),
-        NameResolutionParameters(shouldPreferHiddenOutput = true)
-      ) == NameTarget(
+      stack.resolveMultipartName(Seq("col1")) == NameTarget(
         candidates = Seq(col1Integer),
         output = Seq(col1Integer)
       )
     )
+
+    stack.current.markScopeForHaving()
     assert(
-      stack.resolveMultipartName(
-        Seq("col1"),
-        NameResolutionParameters(canResolveNameByHiddenOutput = true)
-      ) == NameTarget(
-        candidates = Seq(col1Integer),
-        output = Seq(col1Integer)
-      )
-    )
-    assert(
-      stack.resolveMultipartName(
-        Seq("col1"),
-        NameResolutionParameters(
-          canResolveNameByHiddenOutput = true,
-          shouldPreferHiddenOutput = true
-        )
-      ) == NameTarget(
+      stack.resolveMultipartName(Seq("col1")) == NameTarget(
         candidates = Seq(col1Integer),
         output = Seq(col1Integer)
       )
@@ -788,32 +807,18 @@ class NameScopeSuite extends SharedSparkSession {
         output = Seq(col1Integer, col1IntegerOther)
       )
     )
+
+    stack.current.markScopeForHiddenOutputResolution()
     assert(
-      stack.resolveMultipartName(
-        Seq("col1"),
-        NameResolutionParameters(shouldPreferHiddenOutput = true)
-      ) == NameTarget(
+      stack.resolveMultipartName(Seq("col1")) == NameTarget(
         candidates = Seq(col1Integer, col1IntegerOther),
         output = Seq(col1Integer, col1IntegerOther)
       )
     )
+
+    stack.current.markScopeForHaving()
     assert(
-      stack.resolveMultipartName(
-        Seq("col1"),
-        NameResolutionParameters(canResolveNameByHiddenOutput = true)
-      ) == NameTarget(
-        candidates = Seq(col1Integer, col1IntegerOther),
-        output = Seq(col1Integer, col1IntegerOther)
-      )
-    )
-    assert(
-      stack.resolveMultipartName(
-        Seq("col1"),
-        NameResolutionParameters(
-          canResolveNameByHiddenOutput = true,
-          shouldPreferHiddenOutput = true
-        )
-      ) == NameTarget(
+      stack.resolveMultipartName(Seq("col1")) == NameTarget(
         candidates = Seq(col1Integer, col1IntegerOther),
         output = Seq(col1Integer, col1IntegerOther)
       )
@@ -839,34 +844,19 @@ class NameScopeSuite extends SharedSparkSession {
         output = Seq(col10Integer)
       )
     )
+
+    stack.current.markScopeForHiddenOutputResolution()
     assert(
-      stack
-        .resolveMultipartName(
-          Seq("col10", "key"),
-          NameResolutionParameters(shouldPreferHiddenOutput = true)
-        ) == NameTarget(
-        candidates = Seq.empty,
-        output = Seq(col10Integer)
-      )
-    )
-    assert(
-      stack.resolveMultipartName(
-        Seq("col10", "key"),
-        NameResolutionParameters(canResolveNameByHiddenOutput = true)
-      ) == NameTarget(
+      stack.resolveMultipartName(Seq("col10", "key")) == NameTarget(
         candidates = Seq(GetMapValue(col10Map, Literal("key"))),
         aliasName = Some("key"),
         output = Seq(col10Integer)
       )
     )
+
+    stack.current.markScopeForHaving()
     assert(
-      stack.resolveMultipartName(
-        Seq("col10", "key"),
-        NameResolutionParameters(
-          canResolveNameByHiddenOutput = true,
-          shouldPreferHiddenOutput = true
-        )
-      ) == NameTarget(
+      stack.resolveMultipartName(Seq("col10", "key")) == NameTarget(
         candidates = Seq(GetMapValue(col10Map, Literal("key"))),
         aliasName = Some("key"),
         output = Seq(col10Integer)
@@ -894,34 +884,19 @@ class NameScopeSuite extends SharedSparkSession {
         output = Seq(col10Map)
       )
     )
+
+    stack.current.markScopeForHiddenOutputResolution()
     assert(
-      stack.resolveMultipartName(
-        Seq("col10", "key"),
-        NameResolutionParameters(shouldPreferHiddenOutput = true)
-      ) == NameTarget(
+      stack.resolveMultipartName(Seq("col10", "key")) == NameTarget(
         candidates = Seq(GetMapValue(col10Map, Literal("key"))),
         aliasName = Some("key"),
         output = Seq(col10Map)
       )
     )
+
+    stack.current.markScopeForHaving()
     assert(
-      stack.resolveMultipartName(
-        Seq("col10", "key"),
-        NameResolutionParameters(canResolveNameByHiddenOutput = true)
-      ) == NameTarget(
-        candidates = Seq(GetMapValue(col10Map, Literal("key"))),
-        aliasName = Some("key"),
-        output = Seq(col10Map)
-      )
-    )
-    assert(
-      stack.resolveMultipartName(
-        Seq("col10", "key"),
-        NameResolutionParameters(
-          canResolveNameByHiddenOutput = true,
-          shouldPreferHiddenOutput = true
-        )
-      ) == NameTarget(
+      stack.resolveMultipartName(Seq("col10", "key")) == NameTarget(
         candidates = Seq(GetMapValue(col10Map, Literal("key"))),
         aliasName = Some("key"),
         output = Seq(col10Map)
@@ -948,32 +923,18 @@ class NameScopeSuite extends SharedSparkSession {
         output = Seq(col1Integer)
       )
     )
+
+    stack.current.markScopeForHiddenOutputResolution()
     assert(
-      stack.resolveMultipartName(
-        Seq("col1", "key"),
-        NameResolutionParameters(shouldPreferHiddenOutput = true)
-      ) == NameTarget(
+      stack.resolveMultipartName(Seq("col1", "key")) == NameTarget(
         candidates = Seq.empty,
         output = Seq(col1Integer)
       )
     )
+
+    stack.current.markScopeForHaving()
     assert(
-      stack.resolveMultipartName(
-        Seq("col1", "key"),
-        NameResolutionParameters(canResolveNameByHiddenOutput = true)
-      ) == NameTarget(
-        candidates = Seq.empty,
-        output = Seq(col1Integer)
-      )
-    )
-    assert(
-      stack.resolveMultipartName(
-        Seq("col1", "key"),
-        NameResolutionParameters(
-          canResolveNameByHiddenOutput = true,
-          shouldPreferHiddenOutput = true
-        )
-      ) == NameTarget(
+      stack.resolveMultipartName(Seq("col1", "key")) == NameTarget(
         candidates = Seq.empty,
         output = Seq(col1Integer)
       )
@@ -1134,6 +1095,492 @@ class NameScopeSuite extends SharedSparkSession {
     )
   }
 
+  test("Metadata output - basic resolution by qualified name") {
+    val metaCol = MetadataAttribute(
+      "_metadata",
+      StructType(Seq(StructField("file_path", StringType)))
+    )
+    val stack = newNameScopeStack()
+
+    stack.overwriteCurrent(
+      output = Some(Seq(col1Integer, col2Integer)),
+      hiddenOutput = Some(Seq(col1Integer, col2Integer, metaCol))
+    )
+
+    assert(stack.current.output == Seq(col1Integer, col2Integer))
+    assert(stack.current.hiddenOutput.filter(_.isMetadataCol) == Seq(metaCol))
+  }
+
+  test("Metadata output - not resolved by unqualified name when qualifiedAccessOnly") {
+    val metaCol = MetadataAttribute("_metadata", IntegerType).markAsQualifiedAccessOnly()
+    val stack = newNameScopeStack()
+
+    stack.overwriteCurrent(
+      output = Some(Seq(col1Integer)),
+      hiddenOutput = Some(Seq(col1Integer, metaCol))
+    )
+
+    val result = stack.resolveMultipartName(Seq("_metadata"))
+    assert(
+      result == NameTarget(
+        candidates = Seq.empty,
+        output = Seq(col1Integer)
+      )
+    )
+  }
+
+  test("Metadata output - resolved when not qualifiedAccessOnly") {
+    val metaCol = MetadataAttribute("_metadata", IntegerType)
+    val stack = newNameScopeStack()
+
+    stack.overwriteCurrent(
+      output = Some(Seq(col1Integer)),
+      hiddenOutput = Some(Seq(col1Integer, metaCol))
+    )
+
+    val result = stack.resolveMultipartName(Seq("_metadata"))
+    assert(result.candidates.size == 1)
+  }
+
+  test("Metadata output - main output takes precedence over metadata output") {
+    val metaCol = MetadataAttribute("col1", IntegerType)
+    val stack = newNameScopeStack()
+
+    stack.overwriteCurrent(
+      output = Some(Seq(col1Integer)),
+      hiddenOutput = Some(Seq(col1Integer, metaCol))
+    )
+
+    val result = stack.resolveMultipartName(Seq("col1"))
+    assert(
+      result == NameTarget(
+        candidates = Seq(col1Integer.withName("col1")),
+        output = Seq(col1Integer)
+      )
+    )
+  }
+
+  test("Metadata output - not duplicated with output attributes") {
+    val metaCol = MetadataAttribute("_metadata", IntegerType)
+    val stack = newNameScopeStack()
+
+    stack.overwriteCurrent(
+      output = Some(Seq(col1Integer)),
+      hiddenOutput = Some(Seq(col1Integer, metaCol))
+    )
+
+    assert(stack.current.output == Seq(col1Integer))
+    assert(stack.current.hiddenOutput.filter(_.isMetadataCol) == Seq(metaCol))
+  }
+
+  test("Metadata output - preserved through overwriteCurrent without explicit metadataOutput") {
+    val metaCol = MetadataAttribute("_metadata", IntegerType)
+    val stack = newNameScopeStack()
+
+    stack.overwriteCurrent(
+      output = Some(Seq(col1Integer)),
+      hiddenOutput = Some(Seq(col1Integer, metaCol))
+    )
+
+    stack.overwriteCurrent(
+      output = Some(Seq(col1Integer, col2Integer))
+    )
+
+    assert(stack.current.hiddenOutput.filter(_.isMetadataCol) == Seq(metaCol))
+  }
+
+  test("Metadata output - overwritten when explicitly provided") {
+    val metaCol1 = MetadataAttribute("_metadata1", IntegerType)
+    val metaCol2 = MetadataAttribute("_metadata2", StringType)
+    val stack = newNameScopeStack()
+
+    stack.overwriteCurrent(
+      output = Some(Seq(col1Integer)),
+      hiddenOutput = Some(Seq(col1Integer, metaCol1))
+    )
+    assert(stack.current.hiddenOutput.filter(_.isMetadataCol) == Seq(metaCol1))
+
+    stack.overwriteCurrent(
+      output = Some(Seq(col1Integer)),
+      hiddenOutput = Some(Seq(col1Integer, metaCol2))
+    )
+    assert(stack.current.hiddenOutput.filter(_.isMetadataCol) == Seq(metaCol2))
+  }
+
+  test("Metadata output - cleared when overwritten with empty sequence") {
+    val metaCol = MetadataAttribute("_metadata", IntegerType)
+    val stack = newNameScopeStack()
+
+    stack.overwriteCurrent(
+      output = Some(Seq(col1Integer)),
+      hiddenOutput = Some(Seq(col1Integer, metaCol))
+    )
+    assert(stack.current.hiddenOutput.filter(_.isMetadataCol) == Seq(metaCol))
+
+    stack.overwriteCurrent(
+      output = Some(Seq(col1Integer)),
+      hiddenOutput = Some(Seq(col1Integer))
+    )
+    assert(stack.current.hiddenOutput.filter(_.isMetadataCol).isEmpty)
+  }
+
+  test("Metadata output - propagated through pushScope/popScope") {
+    val metaCol = MetadataAttribute("_metadata", IntegerType)
+    val stack = newNameScopeStack()
+
+    stack.overwriteCurrent(
+      output = Some(Seq(col1Integer)),
+      hiddenOutput = Some(Seq(col1Integer, metaCol))
+    )
+
+    withNameScope(stack) {
+      stack.overwriteCurrent(
+        output = Some(Seq(col2Integer)),
+        hiddenOutput = Some(Seq(col2Integer, metaCol))
+      )
+    }
+
+    assert(stack.current.hiddenOutput.filter(_.isMetadataCol) == Seq(metaCol))
+  }
+
+  test("Metadata output - not propagated through subquery scope") {
+    val metaCol = MetadataAttribute("_metadata", IntegerType)
+    val stack = newNameScopeStack()
+
+    stack.overwriteCurrent(
+      output = Some(Seq(col1Integer)),
+      hiddenOutput = Some(Seq(col1Integer, metaCol))
+    )
+
+    val outerMetadataOutputBefore = stack.current.hiddenOutput.filter(_.isMetadataCol)
+
+    withSubqueryNameScope(stack) {
+      val metaCol2 = MetadataAttribute("_metadata2", StringType)
+      stack.overwriteCurrent(
+        output = Some(Seq(col2Integer)),
+        hiddenOutput = Some(Seq(col2Integer, metaCol2))
+      )
+    }
+
+    assert(stack.current.hiddenOutput.filter(_.isMetadataCol) == outerMetadataOutputBefore)
+  }
+
+  test("Metadata output - multiple metadata attributes") {
+    val metaCol1 = MetadataAttribute("_metadata", StructType(Seq(
+      StructField("file_path", StringType),
+      StructField("file_name", StringType)
+    )))
+    val metaCol2 = MetadataAttribute("_row_index", LongType)
+    val stack = newNameScopeStack()
+
+    stack.overwriteCurrent(
+      output = Some(Seq(col1Integer, col2Integer)),
+      hiddenOutput = Some(Seq(col1Integer, col2Integer, metaCol1, metaCol2))
+    )
+
+    assert(stack.current.hiddenOutput.filter(_.isMetadataCol) == Seq(metaCol1, metaCol2))
+  }
+
+  test("Metadata output - excluded from findAttributesByName") {
+    val metaCol = MetadataAttribute("_metadata", IntegerType)
+    val stack = newNameScopeStack()
+
+    stack.overwriteCurrent(
+      output = Some(Seq(col1Integer)),
+      hiddenOutput = Some(Seq(col1Integer, metaCol))
+    )
+
+    assert(stack.current.findAttributesByName("_metadata") == Seq.empty)
+    assert(stack.current.findAttributesByName("col1") == Seq(col1Integer))
+  }
+
+  test("Metadata output - excluded from untargeted star expansion") {
+    val metaColWithQualifier = MetadataAttribute("_metadata", IntegerType)
+    val col1WithQualifier = AttributeReference(
+      name = "col1",
+      dataType = IntegerType
+    )(qualifier = Seq("catalog", "database", "table"))
+
+    val nameScope = new NameScope(
+      queryBlockScope = new QueryBlockScope,
+      output = Seq(col1WithQualifier),
+      hiddenOutput = Seq(metaColWithQualifier)
+    )
+
+    val expanded = nameScope.expandStar(UnresolvedStar(None))
+    assert(expanded == Seq(col1WithQualifier))
+  }
+
+  test("Metadata output - metadata struct star expansion") {
+    val metadataAttribute = MetadataAttribute(
+      "_metadata",
+      StructType(Seq(StructField("file_name", StringType)))
+    )
+    val nameScope = new NameScope(
+      queryBlockScope = new QueryBlockScope,
+      output = Seq(col1Integer),
+      hiddenOutput = Seq(metadataAttribute)
+    )
+
+    val expanded = nameScope.expandStar(UnresolvedStar(Some(Seq("_metadata"))))
+    assert(expanded.map(_.name) == Seq("file_name"))
+  }
+
+  test("Metadata output - visible struct shadows same-named hidden metadata struct") {
+    val visibleAttribute = AttributeReference(
+      "_metadata",
+      StructType(Seq(StructField("visible_field", StringType))))()
+    val hiddenMetadataAttribute = MetadataAttribute(
+      "_metadata",
+      StructType(Seq(StructField("hidden_field", StringType)))
+    )
+    val nameScope = new NameScope(
+      queryBlockScope = new QueryBlockScope,
+      output = Seq(visibleAttribute),
+      hiddenOutput = Seq(hiddenMetadataAttribute)
+    )
+
+    val expanded = nameScope.expandStar(UnresolvedStar(Some(Seq("_metadata"))))
+    assert(expanded.map(_.name) == Seq("visible_field"))
+  }
+
+  test("Metadata output - qualified metadata struct star expansion") {
+    val metadataAttribute = MetadataAttribute(
+      "_metadata",
+      StructType(Seq(StructField("file_name", StringType)))
+    )
+      .withQualifier(Seq("table"))
+      .markAsQualifiedAccessOnly()
+    val nameScope = new NameScope(
+      queryBlockScope = new QueryBlockScope,
+      output = Seq(col1Integer),
+      hiddenOutput = Seq(metadataAttribute)
+    )
+    val unqualifiedStar = UnresolvedStar(Some(Seq("_metadata")))
+    val qualifiedStar = UnresolvedStar(Some(Seq("table", "_metadata")))
+
+    assert(!nameScope.canExpandStarFromCurrentScope(unqualifiedStar))
+    assert(nameScope.expandStar(qualifiedStar).map(_.name) == Seq("file_name"))
+  }
+
+  test("Metadata output - resolution with hidden output interaction") {
+    val metaCol = MetadataAttribute("_metadata", IntegerType)
+    val stack = newNameScopeStack()
+
+    stack.overwriteCurrent(
+      output = Some(Seq(col1Integer)),
+      hiddenOutput = Some(Seq(col1Integer, col2Integer, metaCol))
+    )
+
+    val resultBeforeHiddenEnabled = stack.resolveMultipartName(Seq("col2"))
+    assert(
+      resultBeforeHiddenEnabled == NameTarget(
+        candidates = Seq.empty,
+        output = Seq(col1Integer)
+      )
+    )
+
+    stack.current.markScopeForHiddenOutputResolution()
+
+    val resultAfterHiddenEnabled = stack.resolveMultipartName(Seq("col2"))
+    assert(
+      resultAfterHiddenEnabled == NameTarget(
+        candidates = Seq(col2Integer),
+        output = Seq(col1Integer)
+      )
+    )
+  }
+
+  test("Metadata output - empty metadata output with non-empty output") {
+    val stack = newNameScopeStack()
+
+    stack.overwriteCurrent(
+      output = Some(Seq(col1Integer, col2Integer)),
+      hiddenOutput = Some(Seq(col1Integer, col2Integer))
+    )
+
+    assert(stack.current.output == Seq(col1Integer, col2Integer))
+    assert(stack.current.hiddenOutput.filter(_.isMetadataCol).isEmpty)
+  }
+
+  test("Metadata output - preserved through overwriteOutputAndExtendHiddenOutput") {
+    val metaCol = MetadataAttribute("_metadata", IntegerType)
+    val stack = newNameScopeStack()
+
+    stack.overwriteCurrent(
+      output = Some(Seq(col1Integer)),
+      hiddenOutput = Some(Seq(col1Integer, metaCol))
+    )
+
+    stack.overwriteOutputAndExtendHiddenOutput(
+      output = Seq(col1Integer, col2Integer)
+    )
+
+    assert(stack.current.hiddenOutput.filter(_.isMetadataCol) == Seq(metaCol))
+  }
+
+  test("Metadata output - overwritten in overwriteOutputAndExtendHiddenOutput") {
+    val metaCol1 = MetadataAttribute("_metadata1", IntegerType)
+    val metaCol2 = MetadataAttribute("_metadata2", StringType)
+    val stack = newNameScopeStack()
+
+    stack.overwriteCurrent(
+      output = Some(Seq(col1Integer)),
+      hiddenOutput = Some(Seq(col1Integer, metaCol1))
+    )
+
+    stack.overwriteOutputAndExtendHiddenOutput(
+      output = Seq(col1Integer, col2Integer),
+      stripMetadataFromHiddenOutput = true
+    )
+
+    assert(stack.current.hiddenOutput.filter(_.isMetadataCol).isEmpty)
+  }
+
+  test("Metadata output - preserved in overwriteOutputAndExtendHiddenOutput without explicit") {
+    val metaCol = MetadataAttribute("_metadata", IntegerType)
+    val stack = newNameScopeStack()
+
+    stack.overwriteCurrent(
+      output = Some(Seq(col1Integer)),
+      hiddenOutput = Some(Seq(col1Integer, metaCol))
+    )
+
+    stack.overwriteOutputAndExtendHiddenOutput(
+      output = Seq(col1Integer, col2Integer)
+    )
+
+    assert(stack.current.hiddenOutput.filter(_.isMetadataCol) == Seq(metaCol))
+  }
+
+  test("Metadata output - struct metadata attribute field extraction") {
+    val metaCol = MetadataAttribute(
+      "_metadata",
+      StructType(Seq(StructField("file_path", StringType, true)))
+    )
+    val stack = newNameScopeStack()
+
+    stack.overwriteCurrent(
+      output = Some(Seq(col1Integer)),
+      hiddenOutput = Some(Seq(col1Integer, metaCol))
+    )
+
+    val result = stack.resolveMultipartName(Seq("_metadata", "file_path"))
+    assert(result.candidates.size == 1)
+    assert(result.aliasName == Some("file_path"))
+    assert(result.candidates.head.isInstanceOf[GetStructField])
+  }
+
+  test("Metadata output - metadata attribute with same exprId as output is excluded") {
+    val regularCol = AttributeReference(name = "col1", dataType = IntegerType)()
+    val metaCol = MetadataAttribute("col1", IntegerType)
+    val stack = newNameScopeStack()
+
+    stack.overwriteCurrent(
+      output = Some(Seq(regularCol)),
+      hiddenOutput = Some(Seq(regularCol, metaCol))
+    )
+
+    val result = stack.resolveMultipartName(Seq("col1"))
+    assert(result.candidates.size == 1)
+  }
+
+  test("Metadata output - nested scope inherits metadata output on popScope") {
+    val metaCol = MetadataAttribute("_metadata", IntegerType)
+    val stack = newNameScopeStack()
+
+    stack.overwriteCurrent(output = Some(Seq(col1Integer)))
+
+    withNameScope(stack) {
+      stack.overwriteCurrent(
+        output = Some(Seq(col2Integer)),
+        hiddenOutput = Some(Seq(col2Integer, metaCol))
+      )
+    }
+
+    assert(
+      stack.current.hiddenOutput.filter(_.isMetadataCol) == Seq(metaCol),
+      "Metadata output should be propagated from child scope to parent on popScope"
+    )
+  }
+
+  test("Metadata output - multiple nested scopes propagate metadata output") {
+    val metaCol = MetadataAttribute("_metadata", IntegerType)
+    val stack = newNameScopeStack()
+
+    stack.overwriteCurrent(output = Some(Seq(col1Integer)))
+
+    withNameScope(stack) {
+      withNameScope(stack) {
+        stack.overwriteCurrent(
+          output = Some(Seq(col3Boolean)),
+          hiddenOutput = Some(Seq(col3Boolean, metaCol))
+        )
+      }
+
+      assert(
+        stack.current.hiddenOutput.filter(_.isMetadataCol) == Seq(metaCol),
+        "Metadata output should propagate from inner to middle scope"
+      )
+    }
+
+    assert(
+      stack.current.hiddenOutput.filter(_.isMetadataCol) == Seq(metaCol),
+      "Metadata output should propagate from middle to outer scope"
+    )
+  }
+
+  test("Metadata output - resolution order: main > metadata > hidden") {
+    val metaCol = MetadataAttribute("target", IntegerType)
+    val mainCol = AttributeReference(name = "target", dataType = StringType)()
+    val stack = newNameScopeStack()
+
+    stack.overwriteCurrent(
+      output = Some(Seq(mainCol)),
+      hiddenOutput = Some(Seq(mainCol, col2Integer, metaCol))
+    )
+
+    val result = stack.resolveMultipartName(Seq("target"))
+    assert(
+      result.candidates.size == 1,
+      "Should resolve to exactly one candidate from main output"
+    )
+    assert(
+      result.candidates.head.asInstanceOf[Attribute].exprId == mainCol.exprId,
+      "Should resolve to main output attribute, not metadata"
+    )
+  }
+
+  test("Metadata output - having clause does not affect metadata resolution") {
+    val metaCol = MetadataAttribute("_metadata", IntegerType)
+    val stack = newNameScopeStack()
+
+    stack.overwriteCurrent(
+      output = Some(Seq(col1Integer)),
+      hiddenOutput = Some(Seq(col1Integer, col2Integer, metaCol))
+    )
+
+    stack.current.markScopeForHaving()
+
+    val hiddenResult = stack.resolveMultipartName(Seq("col2"))
+    assert(hiddenResult.candidates.size == 1)
+  }
+
+  test("Metadata output - sort clause does not affect metadata resolution") {
+    val metaCol = MetadataAttribute("_metadata", IntegerType)
+    val stack = newNameScopeStack()
+
+    stack.overwriteCurrent(
+      output = Some(Seq(col1Integer)),
+      hiddenOutput = Some(Seq(col1Integer, col2Integer, metaCol))
+    )
+
+    stack.current.markScopeForSort()
+
+    val hiddenResult = stack.resolveMultipartName(Seq("col2"))
+    assert(hiddenResult.candidates.size == 1)
+  }
+
   test("availableAliasesNameLookup case sensitivity") {
     val stack = newNameScopeStack()
 
@@ -1217,25 +1664,210 @@ class NameScopeSuite extends SharedSparkSession {
     )
   }
 
+  test("pushScope inherits the parent's QueryBlockScope") {
+    val stack = newNameScopeStack()
+    val parentQueryBlockScope = stack.current.queryBlockScope
+
+    stack.pushScope()
+    try {
+      assert(stack.current.queryBlockScope eq parentQueryBlockScope)
+    } finally {
+      stack.popScope()
+    }
+  }
+
+  test("canExpandStarFromCurrentScope with targeted star that resolves") {
+    val nameScope = new NameScope(
+      queryBlockScope = new QueryBlockScope,
+      output = Seq(col6IntegerWithQualifier, col6IntegerOtherWithQualifier, col7StringWithQualifier)
+    )
+
+    assert(nameScope.canExpandStarFromCurrentScope(UnresolvedStar(Some(Seq("table")))))
+  }
+
+  test("canExpandStarFromCurrentScope with targeted star that does not resolve") {
+    val nameScope = new NameScope(
+      queryBlockScope = new QueryBlockScope,
+      output = Seq(col6IntegerWithQualifier, col6IntegerOtherWithQualifier, col7StringWithQualifier)
+    )
+
+    assert(!nameScope.canExpandStarFromCurrentScope(UnresolvedStar(Some(Seq("nonexistent_table")))))
+  }
+
+  test("canExpandStarFromCurrentScope with untargeted star") {
+    val nameScope = new NameScope(
+      queryBlockScope = new QueryBlockScope,
+      output = Seq(col1Integer, col2Integer)
+    )
+
+    assert(nameScope.canExpandStarFromCurrentScope(UnresolvedStar(None)))
+  }
+
+  test("expandStar resolves targeted star from outer scope") {
+    val (stack, subqueryRegistry) = newNameScopeStackWithRegistry()
+
+    stack.overwriteCurrent(
+      output = Some(Seq(col6IntegerWithQualifier, col7StringWithQualifier))
+    )
+
+    withSubqueryNameScope(stack, subqueryRegistry) {
+      stack.overwriteCurrent(output = Some(Seq(col1Integer)))
+
+      val result = stack.expandStar(UnresolvedStar(Some(Seq("table"))))
+      assert(result.length == 2)
+      result.foreach {
+        case _: OuterReference =>
+        case other => fail(s"Expected OuterReference, got ${other.getClass.getSimpleName}")
+      }
+    }
+  }
+
+  test("expandStar throws for unresolvable targeted star when not in subquery") {
+    val stack = newNameScopeStack()
+
+    stack.overwriteCurrent(
+      output = Some(Seq(col6IntegerWithQualifier, col7StringWithQualifier))
+    )
+
+    intercept[AnalysisException] {
+      stack.expandStar(UnresolvedStar(Some(Seq("nonexistent_table"))))
+    }
+  }
+
+  test("expandStar resolves outer star through derived table wrapper") {
+    withSQLConf(
+      "spark.sql.analyzer.singlePassResolver.enabled" -> "true"
+    ) {
+      val result = sql(
+        "SELECT (SELECT * FROM (SELECT t1.* FROM VALUES(2) AS t2(col1) LIMIT 1)) " +
+        "FROM VALUES(1) AS t1(col1)"
+      )
+      assert(result.collect().head.getInt(0) == 1)
+    }
+  }
+
+  test("expandStar with untargeted star in subquery expands from current scope") {
+    val (stack, subqueryRegistry) = newNameScopeStackWithRegistry()
+
+    stack.overwriteCurrent(output = Some(Seq(col6IntegerWithQualifier, col7StringWithQualifier)))
+
+    withSubqueryNameScope(stack, subqueryRegistry) {
+      stack.overwriteCurrent(output = Some(Seq(col3Boolean)))
+
+      val result = stack.expandStar(UnresolvedStar(None))
+      assert(result == Seq(col3Boolean))
+    }
+  }
+
+  test("expandStar throws when both current and outer scopes cannot resolve") {
+    val (stack, subqueryRegistry) = newNameScopeStackWithRegistry()
+
+    stack.overwriteCurrent(
+      output = Some(Seq(col6IntegerWithQualifier, col7StringWithQualifier))
+    )
+
+    withSubqueryNameScope(stack, subqueryRegistry) {
+      stack.overwriteCurrent(output = Some(Seq(col1Integer)))
+
+      intercept[AnalysisException] {
+        stack.expandStar(UnresolvedStar(Some(Seq("nonexistent_table"))))
+      }
+    }
+  }
+
+  test("unaggregatedAccessOnlyIds excludes Expand-copy attributes under aggregate expressions") {
+    val bExpand = AttributeReference(name = "b", dataType = IntegerType)()
+    val bOriginal = AttributeReference(name = "b", dataType = IntegerType)()
+
+    val stack = newNameScopeStack()
+
+    stack.overwriteCurrent(
+      output = Some(Seq(bExpand)),
+      hiddenOutput = Some(Seq(bOriginal))
+    )
+
+    val groupingAttributeIds = new HashSet[ExprId]
+    groupingAttributeIds.add(bExpand.exprId)
+    stack.overwriteOutputAndExtendHiddenOutput(
+      output = Seq(bExpand),
+      groupingModifier = GroupingModifier.GroupingAnalytics(groupingAttributeIds)
+    )
+
+    stack.current.markScopeForHaving()
+
+    val insideAggregate = stack.resolveMultipartName(
+      Seq("b"),
+      NameResolutionParameters(
+        canReferenceAggregatedAccessOnlyAttributes = true,
+        canResolveNameByHiddenOutput = true,
+        shouldPreferHiddenOutput = true
+      )
+    )
+    assert(insideAggregate.candidates.size == 1)
+    assert(
+      insideAggregate.candidates.head.asInstanceOf[AttributeReference].exprId == bOriginal.exprId
+    )
+
+    val outsideAggregate = stack.resolveMultipartName(Seq("b"))
+    assert(outsideAggregate.candidates.size == 1)
+    assert(
+      outsideAggregate.candidates.head.asInstanceOf[AttributeReference].exprId == bExpand.exprId
+    )
+  }
+
   private def newNameScopeStack() = new NameScopeStack(
     tempVariableManager = spark.sessionState.analyzer.catalogManager.tempVariableManager,
     catalogManager = spark.sessionState.analyzer.catalogManager,
-    subqueryRegistry = new SubqueryRegistry
+    subqueryRegistry = new SubqueryRegistry,
+    queryBlockScopes = new QueryBlockScopeStack
   )
 
+  private def newNameScopeStackWithRegistry(): (NameScopeStack, SubqueryRegistry) = {
+    val subqueryRegistry = new SubqueryRegistry
+    val stack = new NameScopeStack(
+      tempVariableManager = spark.sessionState.analyzer.catalogManager.tempVariableManager,
+      catalogManager = spark.sessionState.analyzer.catalogManager,
+      subqueryRegistry = subqueryRegistry,
+      queryBlockScopes = new QueryBlockScopeStack
+    )
+    (stack, subqueryRegistry)
+  }
+
   private def withSubqueryNameScope[R](stack: NameScopeStack)(body: => R): R =
-    withNameScopeImpl(stack, isSubqueryRoot = true) {
+    withNameScopeImpl(stack, scopeType = NameScopeType.SubqueryRoot) {
       body
     }
+
+  private def withSubqueryNameScope[R](
+      stack: NameScopeStack,
+      subqueryRegistry: SubqueryRegistry)(body: => R): R = {
+    subqueryRegistry.pushScope(
+      parentOperator = Project(Nil, OneRowRelation()),
+      autoGeneratedAliasProvider = null,
+      outerOperatorResolutionContext = new OperatorResolutionContext
+    )
+    try {
+      withNameScopeImpl(stack, scopeType = NameScopeType.SubqueryRoot) {
+        body
+      }
+    } finally {
+      subqueryRegistry.popScope()
+    }
+  }
 
   private def withNameScope[R](stack: NameScopeStack)(body: => R): R =
-    withNameScopeImpl(stack, isSubqueryRoot = false) {
+    withNameScopeImpl(stack, scopeType = NameScopeType.Intermediate) {
       body
     }
 
-  private def withNameScopeImpl[R](stack: NameScopeStack, isSubqueryRoot: Boolean)(
+  private def withOpaqueNameScope[R](stack: NameScopeStack)(body: => R): R =
+    withNameScopeImpl(stack, scopeType = NameScopeType.Opaque) {
+      body
+    }
+
+  private def withNameScopeImpl[R](stack: NameScopeStack, scopeType: NameScopeType)(
       body: => R): R = {
-    stack.pushScope(isSubqueryRoot = isSubqueryRoot)
+    stack.pushScope(scopeType = scopeType)
     try {
       body
     } finally {

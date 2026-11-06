@@ -26,6 +26,8 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class ExplicitlyUnsupportedResolverFeatureSuite extends SharedSparkSession {
+  import testImplicits._
+
   test("Unsupported table types") {
     withTable("csv_table") {
       spark.sql("CREATE TABLE csv_table (col1 INT) USING CSV;").collect()
@@ -45,31 +47,98 @@ class ExplicitlyUnsupportedResolverFeatureSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-57353: HAVING with grouping analytics is unsupported (SPARK-57346)") {
+  test("SPARK-57353: HAVING with grouping analytics is supported") {
     checkResolution(
       """SELECT a, SUM(b) FROM VALUES (1,10),(1,20),(2,30) AS t(a,b)
         |GROUP BY ROLLUP(a) HAVING SUM(b) > 30""".stripMargin,
-      shouldPass = false,
-      expectedMessage = Some("HAVING with grouping analytics (SPARK-57346)")
+      shouldPass = true
     )
   }
 
-  test("SPARK-57353: ORDER BY with grouping analytics is unsupported (SPARK-57346)") {
+  test("SPARK-57353: ORDER BY with grouping analytics is supported") {
     checkResolution(
       """SELECT a, SUM(b) as s FROM VALUES (1,10),(1,20),(2,30) AS t(a,b)
         |GROUP BY CUBE(a) ORDER BY s""".stripMargin,
-      shouldPass = false,
-      expectedMessage = Some("ORDER BY with grouping analytics (SPARK-57346)")
+      shouldPass = true
     )
   }
 
-  test("SPARK-57353: LCA with grouping analytics is unsupported") {
+  test("Aggregate functions in ORDER BY with grouping analytics") {
+    checkResolution(
+      """SELECT a, b, SUM(b) AS sb FROM VALUES (1,10),(1,20),(2,30) AS t(a,b)
+        |GROUP BY GROUPING SETS ((a, b), (a)) ORDER BY SUM(b)""".stripMargin,
+      expectedMessage = Some("aggregate functions in ORDER BY over grouping analytics")
+    )
+    checkResolution(
+      """SELECT a, SUM(b) AS s FROM VALUES (1,10),(1,20),(2,30) AS t(a,b)
+        |GROUP BY ROLLUP(a) ORDER BY a, s""".stripMargin,
+      shouldPass = true
+    )
+  }
+
+  test("Metadata columns referenced by both an operator and its ancestor") {
+    withTable("t") {
+      spark.sql("CREATE TABLE t (id INT) USING parquet")
+      checkResolution(
+        "SELECT _metadata.file_name FROM t WHERE _metadata.row_index < 100",
+        expectedMessage =
+          Some("metadata columns referenced by both an operator and its ancestor")
+      )
+      checkResolution(
+        "SELECT id FROM t WHERE _metadata.row_index < 100",
+        shouldPass = true
+      )
+    }
+  }
+
+  test("Hidden columns referenced across a pipe operator") {
+    checkResolution(
+      """VALUES (0), (1) lhs(a)
+        ||> INNER JOIN VALUES (1), (2) rhs(a) USING (a)
+        ||> EXTEND rhs.a AS z
+        ||> DROP z
+        ||> ORDER BY rhs.a""".stripMargin,
+      expectedMessage = Some("hidden columns referenced across a pipe operator")
+    )
+  }
+
+  test("Nested fields of grouping expressions in HAVING with grouping analytics") {
+    checkResolution(
+      """SELECT s.a FROM VALUES (named_struct('a', 1)) AS t(s)
+        |GROUP BY ROLLUP(s.a) HAVING s.a > 0""".stripMargin,
+      expectedMessage = Some("unresolved columns in HAVING over grouping analytics")
+    )
+  }
+
+  test("NaN pivot values") {
+    checkResolution(
+      """SELECT * FROM VALUES (1.0D, 10) AS t(k, v)
+        |PIVOT (SUM(v) FOR k IN (DOUBLE('NaN') AS x, 1.0D AS y))""".stripMargin,
+      expectedMessage = Some("NaN pivot values")
+    )
+  }
+
+  test("Hidden columns referenced both inside and outside lambda functions") {
+    val df = Seq((Seq(1, 2), 1, 2)).toDF("i", "x", "d")
+    checkPlanResolution(
+      df.select("x").filter("exists(i, x -> x % d == 0)").queryExecution.logical,
+      shouldPass = false,
+      expectedMessage =
+        Some("hidden columns referenced both inside and outside lambda functions")
+    )
+    checkPlanResolution(
+      df.select("x", "d").filter("exists(i, x -> x % d == 0)").queryExecution.logical,
+      shouldPass = true,
+      expectedMessage = None
+    )
+  }
+
+  test("SPARK-57353: LCA with grouping analytics is supported") {
     checkResolution(
       """SELECT a, SUM(b) as total, total + 1
         |FROM VALUES (1,10),(1,20),(2,30) AS t(a,b)
         |GROUP BY CUBE(a)""".stripMargin,
-      shouldPass = false,
-      expectedMessage = Some("lateral column alias with grouping analytics")
+      shouldPass = true
     )
   }
 
@@ -135,6 +204,45 @@ class ExplicitlyUnsupportedResolverFeatureSuite extends SharedSparkSession {
         |ORDER BY a""".stripMargin,
       shouldPass = true
     )
+  }
+
+  gridTest("SET VARIABLE rejects unmatched DEFAULT during resolution")(
+    Seq(
+      "SET VAR default_target = DEFAULT",
+      "SET VAR (default_target) = (VALUES(DEFAULT))",
+      "SET VAR (default_target) = (SELECT (SELECT DEFAULT))")) { statement =>
+    withSessionVariable("default_target") {
+      sql("DECLARE VARIABLE default_target INT DEFAULT 7")
+      checkResolution(
+        statement,
+        expectedMessage = Some("DEFAULT references in SET VARIABLE")
+      )
+    }
+  }
+
+  gridTest("SET VARIABLE resolves real default names")(
+    Seq(
+      "SET VAR (default_target) = (SELECT default FROM VALUES(11) AS t(default))",
+      "SET VAR (default_target) = " +
+        "(SELECT (SELECT default) FROM VALUES(12) AS t(default))",
+      "SET VAR default_target = default")) { statement =>
+    withSessionVariable("default_target", "default") {
+      sql("DECLARE VARIABLE default_target INT DEFAULT 7")
+      sql("DECLARE VARIABLE default INT DEFAULT 13")
+      checkResolution(statement, shouldPass = true)
+    }
+  }
+
+  test("non-SQL user-defined function falls back") {
+    spark.udf.register("scala_udf", (x: Int) => x + 1)
+    try {
+      checkResolution(
+        "SELECT scala_udf(1)",
+        expectedMessage = Some("non-SQL function (source: 'scala_udf')")
+      )
+    } finally {
+      spark.sessionState.catalog.dropTempFunction("scala_udf", ignoreIfNotExists = true)
+    }
   }
 
   private def checkResolution(

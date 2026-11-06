@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.analysis.{AliasResolution, UnresolvedAlias}
+import org.apache.spark.sql.catalyst.analysis.{AliasResolution, MultiAlias, UnresolvedAlias}
 import org.apache.spark.sql.catalyst.expressions.{Alias, AliasHelper, Expression, NamedExpression}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
@@ -55,6 +55,10 @@ class AliasResolver(expressionResolver: ExpressionResolver)
    * Resulting [[Alias]] must be added to the list of `availableAliases` in the current
    * [[NameScope]].
    *
+   * [[AliasResolution.resolve]] may also return a bare [[NamedExpression]] (such as
+   * [[AttributeReference]]) when the child is already a [[NamedExpression]] with its own name.
+   * In that case the expression IDs were already mapped during child resolution, so we return
+   * the [[NamedExpression]] as-is.
    */
   override def resolve(unresolvedAlias: UnresolvedAlias): NamedExpression =
     scopes.current.lcaRegistry.withNewLcaScope(aliasKind = AliasKind.Implicit) {
@@ -79,6 +83,8 @@ class AliasResolver(expressionResolver: ExpressionResolver)
           val resultAlias = expressionResolver.getExpressionIdAssigner.mapExpression(alias)
           scopes.current.registerAlias(resultAlias)
           resultAlias
+        case namedExpression: NamedExpression if !namedExpression.isInstanceOf[MultiAlias] =>
+          namedExpression
         case _ =>
           throw QueryCompilationErrors.unsupportedSinglePassAnalyzerFeature(
             s"${resolvedNode.getClass} expression resolution"

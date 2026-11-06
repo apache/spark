@@ -23,7 +23,11 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{
+  Attribute,
+  AttributeReference,
+  Expression,
   ExprId,
+  LambdaFunction,
   NamedExpression,
   PipeOperator
 }
@@ -33,8 +37,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{
   LogicalPlan,
   Project,
   SubqueryAlias,
-  UnaryNode,
-  Window
+  UnaryNode
 }
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
@@ -159,7 +162,7 @@ import org.apache.spark.sql.internal.SQLConf
  * }}}
  *
  * As it can be seen, `col2` ([[Sort]] order expression) needs to be resolved using the hidden
- * output. Because of that it must be added to all the [[Project]]s, [[Window]]s, and [[Aggregate]]s
+ * output. Because of that it must be added to all the [[Project]]s and [[Aggregate]]s
  * below the [[Sort]] operator.
  * Resolved plan would be:
  *
@@ -211,7 +214,7 @@ trait ResolvesNameByHiddenOutput extends SQLConfHelper {
 
   /**
    * Insert the missing expressions in the output list of the operator. Recursively call
-   * `expandOperatorsOutputList` to expand the output lists of [[Project]]s, [[Window]]s,
+   * `expandOperatorsOutputList` to expand the output lists of [[Project]]s
    * and [[Aggregate]]s below the current one.
    * In order to stay compatible with fixed-point, missing expressions are inserted after the
    * original output list, but before any qualified access only columns that have been added as
@@ -257,19 +260,95 @@ trait ResolvesNameByHiddenOutput extends SQLConfHelper {
               operatorOutput = aggregate.aggregateExpressions,
               missingExpressions = missingExpressions
             )
-          case window: Window =>
-            expandOperatorsOutputList(
-              operator = window,
-              operatorOutput = window.windowExpressions,
-              missingExpressions = missingExpressions
-            )
           case other =>
             other.withNewChildren(
               Seq(insertMissingExpressions(expandableOperator.child, missingExpressions))
             )
         }
+      case pipeOperator: PipeOperator =>
+        failIfMissingExpressionsBelowPipeOperator(pipeOperator, missingExpressions)
+
+        pipeOperator
       case other => other
     }
+
+  /**
+   * The fixed-point Analyzer resolves attributes referenced in lambda function bodies one
+   * iteration later than the rest of the expression tree. If attributes missing from the child
+   * output are referenced both inside and outside of lambda function bodies, it inserts them in two
+   * separate iterations, each time placing an additional [[Project]] on top of the operator, which
+   * single-pass doesn't replicate. Fail with [[ExplicitlyUnsupportedResolverFeature]] in that case.
+   * For example:
+   * {{{
+   *   df.select("x").filter("exists(i, x -> x % d == 0)")
+   * }}}
+   */
+  protected def failIfMissingAttributesInsideAndOutsideLambdaFunctions(
+      expressions: Seq[Expression],
+      missingAttributes: Seq[Attribute]): Unit = {
+    if (missingAttributes.nonEmpty) {
+      val idsInsideLambdaFunctions = new HashSet[ExprId]
+      val idsOutsideLambdaFunctions = new HashSet[ExprId]
+
+      def collectReferences(expression: Expression, isInsideLambdaFunction: Boolean): Unit =
+        expression match {
+          case lambdaFunction: LambdaFunction =>
+            collectReferences(lambdaFunction.function, isInsideLambdaFunction = true)
+          case attribute: AttributeReference =>
+            if (isInsideLambdaFunction) {
+              idsInsideLambdaFunctions.add(attribute.exprId)
+            } else {
+              idsOutsideLambdaFunctions.add(attribute.exprId)
+            }
+          case other =>
+            other.children.foreach(collectReferences(_, isInsideLambdaFunction))
+        }
+
+      expressions.foreach(collectReferences(_, isInsideLambdaFunction = false))
+
+      val hasMissingAttributesOutsideLambdaFunctions =
+        missingAttributes.exists(attribute => idsOutsideLambdaFunctions.contains(attribute.exprId))
+      val hasMissingAttributesOnlyInsideLambdaFunctions = missingAttributes.exists { attribute =>
+        idsInsideLambdaFunctions.contains(attribute.exprId) &&
+        !idsOutsideLambdaFunctions.contains(attribute.exprId)
+      }
+
+      if (hasMissingAttributesOutsideLambdaFunctions &&
+        hasMissingAttributesOnlyInsideLambdaFunctions) {
+        throw new ExplicitlyUnsupportedResolverFeature(
+          ResolutionGap.MissingAttributesInsideAndOutsideLambdaFunctions
+        )
+      }
+    }
+  }
+
+  /**
+   * Missing expressions are not inserted below a [[PipeOperator]]. However, the fixed-point
+   * Analyzer can still propagate qualified access only columns (e.g. the hidden `USING` join keys)
+   * referenced above it into the [[Project]]s below it. For example:
+   * {{{
+   * VALUES (0), (1) lhs(a)
+   * |> INNER JOIN VALUES (1), (2) rhs(a) USING (a)
+   * |> EXTEND rhs.a AS z
+   * |> DROP z
+   * |> ORDER BY rhs.a;
+   * }}}
+   * Single-pass doesn't support this yet, so fail with [[ExplicitlyUnsupportedResolverFeature]] if
+   * some of the missing expressions are not in the [[PipeOperator]] output.
+   */
+  private def failIfMissingExpressionsBelowPipeOperator(
+      pipeOperator: PipeOperator,
+      missingExpressions: Seq[NamedExpression]): Unit = {
+    val pipeOperatorOutputIds = new HashSet[ExprId](pipeOperator.output.size)
+    pipeOperator.output.foreach(attribute => pipeOperatorOutputIds.add(attribute.exprId))
+    if (missingExpressions.exists(
+        expression => !pipeOperatorOutputIds.contains(expression.exprId)
+      )) {
+      throw new ExplicitlyUnsupportedResolverFeature(
+        ResolutionGap.MissingExpressionsBelowPipeOperator
+      )
+    }
+  }
 
   private def expandOperatorsOutputList(
       operator: UnaryNode,
@@ -288,14 +367,6 @@ trait ResolvesNameByHiddenOutput extends SQLConfHelper {
         case aggregate: Aggregate =>
           val newAggregateList = nonMetadataCols ++ filteredMissingExpressions ++ metadataCols
           aggregate.copy(aggregateExpressions = newAggregateList)
-        case window: Window =>
-          val expandedChild = insertMissingExpressions(
-            operator = operator.child,
-            missingExpressions = filteredMissingExpressions
-          )
-          val newWindowExpressions =
-            nonMetadataCols ++ filteredMissingExpressions.map(_.toAttribute) ++ metadataCols
-          window.copy(windowExpressions = newWindowExpressions, child = expandedChild)
         case project: Project =>
           val expandedChild = insertMissingExpressions(
             operator = operator.child,
@@ -326,7 +397,7 @@ trait ResolvesNameByHiddenOutput extends SQLConfHelper {
     }
   }
 
-  private def filterMissingExpressions(
+  protected def filterMissingExpressions(
       operatorOutput: Seq[NamedExpression],
       missingExpressions: Seq[NamedExpression]): Seq[NamedExpression] = {
     val operatorOutputExpressionIdSet = new HashSet[ExprId]
@@ -350,10 +421,41 @@ trait ResolvesNameByHiddenOutput extends SQLConfHelper {
       unaryNode: UnaryNode,
       missingExpressions: Seq[NamedExpression]): Boolean = {
     val isOperatorExtendable = unaryNode match {
-      case _ @(_: PipeOperator | _: Distinct | _: SubqueryAlias) => false
+      case _: PipeOperator | _: Distinct | _: SubqueryAlias => false
       case _ => true
     }
     isOperatorExtendable && missingExpressions.nonEmpty
+  }
+
+  /**
+   * Builds an operator output after hidden output attributes have been inserted into its child.
+   *
+   * For example:
+   *
+   * {{{
+   * SELECT r.col1 AS a, a + 1
+   * FROM t5 JOIN t5 AS r USING (col1, col2)
+   * WHERE r.col2 IS NULL
+   * }}}
+   *
+   * `r.col2` is hidden by the `USING` join output, but the project must still carry it through
+   * the lower LCA projects so the child remains valid after [[insertMissingExpressions]] expands
+   * it. Starting LCA resolution from `scopes.current.output` alone would omit such newly inserted
+   * hidden attributes. This method appends the missing hidden attributes to the regular output and
+   * keeps qualified-access-only attributes at the end, preserving the output shape expected by
+   * hidden output pruning.
+   */
+  protected def outputWithMissingAttributes(
+      output: Seq[Attribute],
+      missingAttributes: Seq[Attribute]): Seq[Attribute] = {
+    val filteredMissingAttributes = filterMissingExpressions(
+      operatorOutput = output,
+      missingExpressions = missingAttributes
+    ).map(_.toAttribute.markAsAllowAnyAccess())
+    val (qualifiedAccessOnlyAttributes, regularAttributes) =
+      output.partition(_.qualifiedAccessOnly)
+
+    regularAttributes ++ filteredMissingAttributes ++ qualifiedAccessOnlyAttributes
   }
 
   /**
@@ -365,11 +467,12 @@ trait ResolvesNameByHiddenOutput extends SQLConfHelper {
    * hidden output that were inserted as missing attributes, because they may be needed in upper
    * operators (if not, they will be pruned away in [[PruneMetadataColumns]]). Other hidden
    * attributes are thrown away, because we cannot reference them from the new [[Project]] (they
-   * are not outputted from below).
+   * are not outputted from below). [[NameScope.qualifiedAccessOnlyOutputIds]] is overwritten with
+   * the ids of the appended qualified access only columns.
    *
-   * If [[SQLConf.SINGLE_PASS_RESOLVER_PREVENT_USING_ALIASES_FROM_NON_DIRECT_CHILDREN]] is set to
-   * true, we need to overwrite the current scope and clear `aggregateListAliases` and
-   * `baseAggregate`. This is needed in order to prevent later replacement of Sort/Having
+   * If [[SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_PREVENT_USING_ALIASES_FROM_NON_DIRECT_CHILDREN]] is
+   * set to true, we need to clear the base [[Aggregate]] and its aliases in the current
+   * [[QueryBlockScope]]. This is needed in order to prevent later replacement of Sort/Having
    * expressions using semantically equal aliased expressions from non-direct children. For
    * example, in the following query:
    *
@@ -385,7 +488,7 @@ trait ResolvesNameByHiddenOutput extends SQLConfHelper {
    *
    * Instead of using missing attribute `col1#1` we can use its alias `a#3` in the [[Sort]] and
    * avoid adding an extra projection. This is because all of [[Sort]], [[Project]], [[Filter]] and
-   * [[Aggregate]] belong to the same [[NameScope]] since [[Project]] was artificially inserted.
+   * [[Aggregate]] belong to the same query block since [[Project]] was artificially inserted.
    *
    * However, fixed-point can't handle this case properly and produces the following plan:
    *
@@ -425,16 +528,16 @@ trait ResolvesNameByHiddenOutput extends SQLConfHelper {
         child = operator
       )
 
+      val qualifiedAccessOnlyOutputIds = new HashSet[ExprId](hiddenOutputToPreserve.size)
+      hiddenOutputToPreserve.foreach { attribute =>
+        qualifiedAccessOnlyOutputIds.add(attribute.exprId)
+      }
+      scopes.overwriteCurrent(qualifiedAccessOnlyOutputIds = Some(qualifiedAccessOnlyOutputIds))
+
       if (conf.getConf(
           SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_PREVENT_USING_ALIASES_FROM_NON_DIRECT_CHILDREN
         )) {
-        scopes.overwriteCurrent(
-          output = Some(scopes.current.output),
-          hiddenOutput = Some(scopes.current.hiddenOutput),
-          availableAliases = Some(scopes.current.availableAliases),
-          aggregateListAliases = Seq.empty,
-          baseAggregate = None
-        )
+        scopes.current.queryBlockScope.clearAggregateState()
       }
 
       project

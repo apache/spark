@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, NamedArgumentExpression}
 
 /**
  * A mixin trait for expression resolvers that as part of their resolution, replace single node
@@ -77,21 +77,34 @@ trait ProducesUnresolvedSubtree extends ResolvesExpressionChildren {
    * is encountered. However, in case of function resolution, [[handlePartiallyResolvedFunction]]
    * will not always invoke [[ExpressionResolver]], so boundary tags will need to be cleaned up
    * manually.
+   *
+   * For a [[NamedArgumentExpression]] child the boundary tag is placed on its inner value rather
+   * than on the wrapper: argument rearrangement ([[FunctionBuilderBase.rearrange]]) replaces the
+   * wrapper with its value in positional order, so only the value survives into the resolved tree.
+   * Tagging the wrapper would lose the boundary and the already-resolved value would be
+   * re-resolved.
+   *
+   * The boundary nodes are also untagged directly, because the callback result need not contain
+   * them.
    */
   protected def withResolvedSubtreeWithManualTagCleanup(
       expression: Expression,
       expressionResolver: Expression => Expression)(body: => Expression): Expression = {
-    expression.children.foreach {
-      case _: Literal =>
-      case child => child.setTagValue(ResolverTag.SINGLE_PASS_SUBTREE_BOUNDARY, ())
+    val taggedChildren = expression.children.flatMap {
+      case _: Literal => None
+      case NamedArgumentExpression(_, child) => Some(child)
+      case child => Some(child)
     }
+    taggedChildren.foreach(_.setTagValue(ResolverTag.SINGLE_PASS_SUBTREE_BOUNDARY, ()))
 
-    val withBodyApplied = body
+    try {
+      val withBodyApplied = body
 
-    val resolvedExpression = expressionResolver(withBodyApplied)
-    val resolvedExpressionWithTagCleanup = unsetBoundaryTagsWithPruning(resolvedExpression)
-
-    resolvedExpressionWithTagCleanup
+      val resolvedExpression = expressionResolver(withBodyApplied)
+      unsetBoundaryTagsWithPruning(resolvedExpression)
+    } finally {
+      taggedChildren.foreach(_.unsetTagValue(ResolverTag.SINGLE_PASS_SUBTREE_BOUNDARY))
+    }
   }
 
   /**
