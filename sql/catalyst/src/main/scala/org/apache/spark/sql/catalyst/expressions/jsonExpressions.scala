@@ -1366,10 +1366,10 @@ object ImplicitlyFormattedAsJson {
  * RETURNING defaults to STRING.
  *
  * `formatJson(i)` marks element `i` as already-JSON text (SQL/JSON `FORMAT JSON`), so it is spliced
- * in verbatim instead of quoted as a string: implicitly for a nested JSON constructor, explicitly
- * for `... FORMAT JSON`. It is decided before this node is built (see
- * [[ImplicitlyFormattedAsJson]]) and is a plain field, not derived from the child, so an optimizer
- * rewrite of the child (e.g. `CollapseProject`) cannot change it.
+ * in verbatim instead of quoted as a string: implicitly for a nested JSON producer (a JSON
+ * constructor or a `KEEP QUOTES` `JSON_QUERY`), explicitly for `... FORMAT JSON`. It is decided
+ * before this node is built (see [[ImplicitlyFormattedAsJson]]) and is a plain field, not derived
+ * from the child, so an optimizer rewrite of the child (e.g. `CollapseProject`) cannot change it.
  *
  * {{{
  *   JSON_ARRAY(1, 'x', true)                    -- '[1,"x",true]'

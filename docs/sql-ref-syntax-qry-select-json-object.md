@@ -90,7 +90,8 @@ JSON_OBJECT ( [ key, value [, key, value] ... ]
     `{"a":"{\"b\":1}"}`). Implicit raw splicing applies to the direct syntax above, to the
     unqualified comma form (e.g. `json_object('a', json_object('b', 1))`), and to a qualified or
     otherwise generic routed call (e.g. `builtin.json_object('a', json_object('b', 1))`); each
-    produces `{"a":{"b":1}}`.
+    produces `{"a":{"b":1}}` when Spark's built-in owns every call (see above; an extension's
+    replacement can still own a qualified call).
 
 * **FORMAT JSON**
 
