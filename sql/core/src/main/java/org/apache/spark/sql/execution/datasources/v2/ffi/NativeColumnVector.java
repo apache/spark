@@ -127,6 +127,16 @@ class NativeColumnVector extends ReusedArrowColumnVector {
   void refresh(long nullCount) {
   }
 
+  /**
+   * Whether {@code vector} has a null, given the null_count {@code nullCount} that the library
+   * exported for its array, or -1 if it is not known. The C data interface requires a null_count
+   * other than -1 to be exact, so the nulls are only counted, which Arrow Java does in the
+   * validity bitmap on each call, for a negative one.
+   */
+  static boolean hasNulls(ValueVector vector, long nullCount) {
+    return nullCount < 0 ? vector.getNullCount() > 0 : nullCount > 0;
+  }
+
   /** A vector that reads its values and their validity at the addresses of its buffers. */
   private abstract static class Direct extends NativeColumnVector {
     // Whether the schema to read declares the column nullable. The reader checks that the batches
@@ -145,10 +155,7 @@ class NativeColumnVector extends ReusedArrowColumnVector {
     @Override
     void refresh(long nullCount) {
       ValueVector vector = getValueVector();
-      // The C data interface requires a null_count other than -1 to be exact, so the nulls are
-      // only counted, which Arrow Java does in the validity bitmap on each call, for a negative
-      // one.
-      boolean hasNulls = nullable && (nullCount < 0 ? vector.getNullCount() > 0 : nullCount > 0);
+      boolean hasNulls = nullable && hasNulls(vector, nullCount);
       validity = hasNulls ? vector.getValidityBuffer().memoryAddress() : 0;
       data = vector.getDataBuffer().memoryAddress();
     }

@@ -779,9 +779,7 @@ class NativePartitionReader(
       column: String,
       referenced: Int => Boolean,
       nullCount: Long = -1): Unit = {
-    // The C data interface requires a null_count other than -1 to be exact, so the nulls are only
-    // counted, which Arrow Java does in the validity bitmap on each call, for a negative one.
-    if (!nullable && (if (nullCount < 0) vector.getNullCount else nullCount) > 0 &&
+    if (!nullable && NativeColumnVector.hasNulls(vector, nullCount) &&
         (0 until vector.getValueCount).exists(i => vector.isNull(i) && referenced(i))) {
       throw error(name, "read", s"The column $column has a null, but the schema to read " +
         "declares it not nullable.")
