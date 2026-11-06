@@ -629,7 +629,7 @@ class ResolverGuard(
       // JSON
       case _: GetJsonObject | _: JsonTuple | _: JsonToStructs | _: StructsToJson |
           _: SchemaOfJson | _: JsonObjectKeys | _: LengthOfJsonArray | _: JsonArray |
-          _: JsonExists | _: JsonQuery | _: JsonValue | _: JsonObjectExpr =>
+          _: JsonExists | _: JsonQuery | _: JsonValue | _: JsonObjectExpr | _: IsJson =>
         true
       // CSV
       case _: SchemaOfCsv | _: StructsToCsv | _: CsvToStructs =>

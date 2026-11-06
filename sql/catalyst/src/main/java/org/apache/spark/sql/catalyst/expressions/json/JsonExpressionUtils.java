@@ -21,11 +21,16 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonToken;
+import com.fasterxml.jackson.core.StreamReadConstraints;
+import com.fasterxml.jackson.core.exc.StreamConstraintsException;
 
+import org.apache.spark.SparkRuntimeException;
 import org.apache.spark.sql.catalyst.json.CreateJacksonParser;
 import org.apache.spark.sql.catalyst.util.GenericArrayData;
+import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.unsafe.types.UTF8String;
 
 public class JsonExpressionUtils {
@@ -116,5 +121,163 @@ public class JsonExpressionUtils {
     } catch (IOException e) {
       return null;
     }
+  }
+
+  // Shape codes for the SQL `IS [NOT] JSON` predicate, kept in sync with IsJsonShape on the
+  // Scala side. SHAPE_ANY covers both bare `IS JSON` and `IS JSON VALUE` (any well-formed value).
+  public static final int SHAPE_ANY = 0;
+  public static final int SHAPE_OBJECT = 1;
+  public static final int SHAPE_ARRAY = 2;
+  public static final int SHAPE_SCALAR = 3;
+
+  // A strict JSON factory for the ANSI SQL `IS [NOT] JSON` predicate. Unlike the shared factory
+  // used by the Hive-compatible JSON functions, it leaves ALLOW_SINGLE_QUOTES and
+  // ALLOW_UNESCAPED_CONTROL_CHARS disabled, so only well-formed ANSI JSON is accepted
+  // (e.g. `{'a':1}` with single quotes is rejected).
+  private static final JsonFactory STRICT_JSON_FACTORY = new JsonFactory();
+
+  /**
+   * Evaluates the SQL `IS JSON` predicate for a single, already-evaluated operand: returns whether
+   * {@code json} is a well-formed ANSI JSON value of the requested {@code shape}. The operand is
+   * read exactly once here, so a non-deterministic input is evaluated a single time (unlike a
+   * plan that references the child in more than one place). NULL handling (NULL input yields a
+   * NULL result) is left to the calling expression; this method is only invoked for non-null
+   * input. Malformed input yields false. Input that exceeds one of Jackson's default
+   * {@code StreamReadConstraints} (nesting depth, number length, string length, or field name
+   * length) cannot be classified and raises an IS_JSON_INPUT_LIMIT_EXCEEDED condition, at the
+   * same limits where {@code parse_json} fails -- but only if checking the input actually
+   * requires going past a limit: a shape mismatch decided by the first token (including an
+   * over-long root number under OBJECT or ARRAY, which cannot be an object or an array)
+   * returns false, like any other mismatch, and so does trailing content after a well-formed
+   * value, even when reading the trailing token goes past a limit (any trailing token already
+   * decides the answer).
+   */
+  public static boolean isJson(UTF8String json, int shape) {
+    // The parser decodes the bytes through a UTF-8 reader that silently replaces malformed
+    // sequences with U+FFFD, so check the raw bytes first: input that is not valid UTF-8
+    // (e.g. a lone continuation byte, or an encoded surrogate) is not well-formed JSON text.
+    if (!json.isValid()) {
+      return false;
+    }
+    try (JsonParser jsonParser =
+        CreateJacksonParser.utf8String(STRICT_JSON_FACTORY, json)) {
+      JsonToken token;
+      try {
+        token = jsonParser.nextToken();
+      } catch (StreamConstraintsException e) {
+        // Jackson validates a number's length while producing its token, and no other limit can
+        // be reached while producing the first token (nesting needs a second token, string values
+        // are not decoded until getText, and the first token is never a field name -- a field name
+        // is only produced inside an object, after START_OBJECT), so the first value is an
+        // over-long number. It can never be an object or an array, so the shape is decided
+        // without classifying the number; the other shapes accept a number and still need it
+        // classified.
+        if (shape == SHAPE_OBJECT || shape == SHAPE_ARRAY) {
+          return false;
+        }
+        throw limitError(e, json);
+      }
+      if (token == null) {
+        // Empty input is not a JSON value.
+        return false;
+      }
+      boolean matchesShape = switch (shape) {
+        case SHAPE_OBJECT -> token == JsonToken.START_OBJECT;
+        case SHAPE_ARRAY -> token == JsonToken.START_ARRAY;
+        case SHAPE_SCALAR -> switch (token) {
+          case VALUE_STRING, VALUE_NUMBER_INT, VALUE_NUMBER_FLOAT,
+               VALUE_TRUE, VALUE_FALSE, VALUE_NULL -> true;
+          default -> false;
+        };
+        // SHAPE_ANY: any well-formed JSON value (object, array, or scalar).
+        default -> switch (token) {
+          case START_OBJECT, START_ARRAY, VALUE_STRING, VALUE_NUMBER_INT,
+               VALUE_NUMBER_FLOAT, VALUE_TRUE, VALUE_FALSE, VALUE_NULL -> true;
+          default -> false;
+        };
+      };
+      if (!matchesShape) {
+        return false;
+      }
+      // Walk the whole value token by token (rather than `skipChildren`, which does not look at
+      // string contents) so that malformed input (e.g. `{`, `[1,`) surfaces as a parse error
+      // and every string value and field name can be checked for unpaired surrogates.
+      int depth = 0;
+      do {
+        switch (token) {
+          case START_OBJECT, START_ARRAY -> depth++;
+          case END_OBJECT, END_ARRAY -> depth--;
+          case FIELD_NAME, VALUE_STRING -> {
+            if (hasUnpairedSurrogate(jsonParser.getText())) {
+              return false;
+            }
+          }
+          default -> { }
+        }
+      } while (depth > 0 && (token = jsonParser.nextToken()) != null);
+      if (depth > 0) {
+        return false;
+      }
+      // Reject trailing content after the first value, e.g. `1 2` or `{} []`, so only a single
+      // well-formed JSON value is accepted. Any trailing token already decides the answer, so
+      // reading it is given its own handler: a trailing value that goes past a limit (e.g. a
+      // number longer than the maximum, which Jackson validates while producing its token)
+      // returns false rather than raising, like any other trailing content.
+      try {
+        return jsonParser.nextToken() == null;
+      } catch (StreamConstraintsException e) {
+        return false;
+      }
+    } catch (StreamConstraintsException e) {
+      throw limitError(e, json);
+    } catch (IOException e) {
+      return false;
+    }
+  }
+
+  // Builds the IS_JSON_INPUT_LIMIT_EXCEEDED condition for the parser limit that `e` reports.
+  // Jackson does not expose which limit was exceeded, so this matches the message prefixes used
+  // by StreamReadConstraints, and falls back to the condition listing every limit for a message
+  // it does not recognize.
+  private static SparkRuntimeException limitError(StreamConstraintsException e, UTF8String json) {
+    StreamReadConstraints limits = STRICT_JSON_FACTORY.streamReadConstraints();
+    String message = String.valueOf(e.getMessage());
+    if (message.startsWith("Document nesting depth")) {
+      return QueryExecutionErrors.isJsonNestingDepthLimitError(
+          json, limits.getMaxNestingDepth(), e);
+    } else if (message.startsWith("Number value length")) {
+      return QueryExecutionErrors.isJsonNumberLengthLimitError(
+          json, limits.getMaxNumberLength(), e);
+    } else if (message.startsWith("String value length")) {
+      return QueryExecutionErrors.isJsonStringLengthLimitError(
+          json, limits.getMaxStringLength(), e);
+    } else if (message.startsWith("Name length")) {
+      return QueryExecutionErrors.isJsonNameLengthLimitError(json, limits.getMaxNameLength(), e);
+    } else {
+      return QueryExecutionErrors.isJsonUnknownLimitError(
+          json, limits.getMaxNestingDepth(), limits.getMaxNumberLength(),
+          limits.getMaxStringLength(), limits.getMaxNameLength(), e);
+    }
+  }
+
+  // Returns whether `str` contains an unpaired UTF-16 surrogate code unit. Jackson accepts an
+  // escaped lone surrogate (e.g. a high surrogate escape with no low surrogate after it), and so
+  // does the RFC 8259 grammar (section 8.2), but such a string is not well-formed Unicode.
+  // Rejecting it is a deliberate rule stricter than RFC 8259, matching I-JSON (RFC 7493
+  // section 2.1) and the strict check in VariantBuilder.checkValidUnicodeString.
+  private static boolean hasUnpairedSurrogate(String str) {
+    int len = str.length();
+    for (int i = 0; i < len; ++i) {
+      char c = str.charAt(i);
+      if (Character.isHighSurrogate(c)) {
+        if (i + 1 >= len || !Character.isLowSurrogate(str.charAt(i + 1))) {
+          return true;
+        }
+        ++i;
+      } else if (Character.isLowSurrogate(c)) {
+        return true;
+      }
+    }
+    return false;
   }
 }

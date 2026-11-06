@@ -104,7 +104,7 @@ Operators listed on the same table cell have the same precedence and are evaluat
     </tr>
     <tr>
       <td>11</td>
-      <td>BETWEEN<br/>IN<br/>RLIKE, REGEXP<br/>ILIKE<br/>LIKE<br/>IS [NULL, TRUE, FALSE]<br/>IS DISTINCT FROM</td>
+      <td>BETWEEN<br/>IN<br/>RLIKE, REGEXP<br/>ILIKE<br/>LIKE<br/>IS [NULL, TRUE, FALSE]<br/>IS DISTINCT FROM<br/><a href="sql-ref-is-json.html">IS JSON</a></td>
       <td>other predicates</td>
       <td>Left to right</td>
     </tr>

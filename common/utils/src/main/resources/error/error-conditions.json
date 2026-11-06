@@ -5928,6 +5928,39 @@
     ],
     "sqlState" : "2200N"
   },
+  "IS_JSON_INPUT_LIMIT_EXCEEDED" : {
+    "message" : [
+      "Cannot evaluate the IS JSON predicate because the input exceeds a JSON parser limit:"
+    ],
+    "subClass" : {
+      "NAME_LENGTH" : {
+        "message" : [
+          "a field name is longer than the maximum of <maxNameLength> characters. The input starts with: <inputPrefix>."
+        ]
+      },
+      "NESTING_DEPTH" : {
+        "message" : [
+          "the nesting depth of objects and arrays exceeds the maximum of <maxNestingDepth>. The input starts with: <inputPrefix>."
+        ]
+      },
+      "NUMBER_LENGTH" : {
+        "message" : [
+          "a number is longer than the maximum of <maxNumberLength> characters. The input starts with: <inputPrefix>."
+        ]
+      },
+      "STRING_LENGTH" : {
+        "message" : [
+          "a string value is longer than the maximum of <maxStringLength> characters. The input starts with: <inputPrefix>."
+        ]
+      },
+      "UNKNOWN" : {
+        "message" : [
+          "the input exceeds one of the parser limits: a nesting depth of <maxNestingDepth> and lengths of <maxNumberLength> characters for numbers, <maxStringLength> for string values, and <maxNameLength> for field names. The input starts with: <inputPrefix>."
+        ]
+      }
+    },
+    "sqlState" : "54000"
+  },
   "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR" : {
     "message" : [
       "JDBC external engine syntax error. The error was caused by the query <jdbcQuery>. External engine SQLSTATE: <externalEngineSqlState>. <externalEngineError>."
