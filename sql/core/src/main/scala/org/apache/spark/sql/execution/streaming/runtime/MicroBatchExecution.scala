@@ -262,7 +262,7 @@ class MicroBatchExecution(
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
     lazy val columnsAndFiltersOfSources = StreamingV2ScanPushDown.columnsAndFiltersOfSources(
       sparkSessionForStream, planWithDedupKeys, initialLatestOffsetSeq.flatMap(_._2.metadataOpt))
-    val planWithScans = planWithDedupKeys.transform {
+    val _logicalPlan = planWithDedupKeys.transform {
       case streamingRelation @ StreamingRelation(
           dataSourceV1, sourceName, output, sourceIdentifyingName) =>
         toExecutionRelationMap.getOrElseUpdate(streamingRelation, {
@@ -336,9 +336,6 @@ class MicroBatchExecution(
           })
         }
     }
-    // The copies of the pushed filters that the query applies above them are dropped, so that each
-    // micro-batch evaluates them once, see StreamingV2ScanPushDown.
-    val _logicalPlan = StreamingV2ScanPushDown.withoutRepeatedPushedFilters(planWithScans)
 
     // Extract sources and their sourceIdentifyingName for sourceIdMap mapping
     val sourcesWithNames = _logicalPlan.collect {

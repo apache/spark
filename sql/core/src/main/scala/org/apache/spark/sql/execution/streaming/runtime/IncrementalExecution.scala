@@ -150,7 +150,11 @@ class IncrementalExecution(
         ts.toLiteral
       case e: ExpressionWithRandomSeed => e.withNewSeed(Utils.random.nextLong())
     }
-    WidenStatefulOperatorAttributeNullability(optimized)
+    // The plan applies the filters that the scans of its sources got to the rows of their
+    // relations, and the copies of these filters above them are dropped once the optimizer has
+    // rewritten both in the same way, see StreamingV2ScanPushDown.
+    WidenStatefulOperatorAttributeNullability(
+      StreamingV2ScanPushDown.withoutRepeatedPushedFilters(optimized))
   }
 
   // Use `this` for explain so the already-open transaction and executedPlan are reused.

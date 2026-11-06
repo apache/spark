@@ -80,7 +80,7 @@ class ContinuousExecution(
     val streamConf = sparkSessionForStream.sessionState.conf
     lazy val columnsAndFiltersOfSources =
       StreamingV2ScanPushDown.columnsAndFiltersOfSources(sparkSessionForStream, analyzedPlan, None)
-    val planWithScans = analyzedPlan.transform {
+    val _logicalPlan = analyzedPlan.transform {
       case s @ StreamingRelationV2(ds, sourceName, table: SupportsRead, options, output,
         catalog, identifier, _, _) =>
         val dsStr = if (ds.nonEmpty) s"[${ds.get}]" else ""
@@ -112,9 +112,6 @@ class ContinuousExecution(
         // StreamingV2ScanPushDown.
         StreamingV2ScanPushDown.withPushedFilters(scanRelation)
     }
-    // The copies of the pushed filters that the query applies above them are dropped, so that the
-    // query evaluates them once, see StreamingV2ScanPushDown.
-    val _logicalPlan = StreamingV2ScanPushDown.withoutRepeatedPushedFilters(planWithScans)
 
     sources = _logicalPlan.collect {
       case r: StreamingDataSourceV2ScanRelation => r.stream.asInstanceOf[ContinuousStream]

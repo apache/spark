@@ -209,8 +209,10 @@ public enum TableCapability {
    * for such a scan, as for the scan of a batch read. The stream may then drop the rows that fail
    * the filters that the builder took: the query applies all the filters that the builder got to
    * the rows that it reads from the table, and Spark evaluates all the filters of the query after
-   * the scan. The progress of the query only counts the rows that the stream returns. Without this
-   * capability, the scans of streaming reads get no filter.
+   * the scan. The progress of the query only counts the rows that the stream returns. Spark only
+   * pushes the filters to these scans when {@code spark.sql.streaming.v2FilterPushdown.enabled} is
+   * true, which it is not by default. Without this capability, the scans of streaming reads get no
+   * filter.
    *
    * @since 4.4.0
    */

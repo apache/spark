@@ -55,9 +55,10 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
 
   private val tbl = "testcat.t"
 
-  // The pruning of the scans of streaming queries is disabled by default.
-  override protected def sparkConf: SparkConf =
-    super.sparkConf.set(SQLConf.STREAMING_V2_COLUMN_PRUNING_ENABLED, true)
+  // The pushdowns to the scans of streaming queries are disabled by default.
+  override protected def sparkConf: SparkConf = super.sparkConf
+    .set(SQLConf.STREAMING_V2_COLUMN_PRUNING_ENABLED, true)
+    .set(SQLConf.STREAMING_V2_FILTER_PUSHDOWN_ENABLED, true)
 
   before {
     spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
@@ -138,11 +139,13 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
    * Checks that the last micro-batch evaluates the filters on `column` once, apart from the
    * IsNotNull that the optimizer infers.
    */
-  private def assertEvaluatedOnce(column: String): StreamAction = AssertOnQuery { query =>
+  private def assertEvaluatedOnce(columns: String*): StreamAction = AssertOnQuery { query =>
     val conditions = query.lastExecution.optimizedPlan.collect {
       case filter: Filter => filter.condition
-    }.flatMap(splitConjunctivePredicates).filter(_.references.map(_.name).toSet == Set(column))
-      .filterNot(_.isInstanceOf[IsNotNull])
+    }.flatMap(splitConjunctivePredicates).filter { condition =>
+      val names = condition.references.map(_.name).toSet
+      names.nonEmpty && names.subsetOf(columns.toSet)
+    }.filterNot(_.isInstanceOf[IsNotNull])
     assert(conditions.length === 1, conditions)
     true
   }
@@ -620,6 +623,8 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
   }
 
   test("push the filters of a streaming query down to the scan of its source") {
+    // The suite enables the filter pushdown, which is disabled by default.
+    assert(!SQLConf.STREAMING_V2_FILTER_PUSHDOWN_ENABLED.defaultValue.get)
     withPushDownConfsRestored {
       withSourceTable() {
         val df = spark.readStream.table(tbl).where("extra > 10").select("data")
@@ -678,7 +683,7 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
     "ts < '12:00:00'" -> "ts",
     "ts > CAST('T09:30:00' AS TIMESTAMP)" -> "ts",
     // Every cast of a string to a timestamp with local time zone is a placeholder when the query
-    // starts, also of a string with a date, or of a string column. TODO(SPARK-60926): push these
+    // starts, also of a string with a date, or of a string column. A follow-up could push these
     // down again when their values do not depend on the date.
     "CAST(data AS TIMESTAMP) < TIMESTAMP'2100-01-01 00:00:00'" -> "data",
     "ts < '2100-01-01 12:00:00'" -> "ts"
@@ -1105,9 +1110,16 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
-  Seq("pushFilters", "pruneColumns", "build").foreach { failingStep =>
+  Seq(
+    // The column pruning alone works when the filters fail.
+    "pushFilters" -> (Seq("_2", "_3") -> Nil),
+    // The filters alone work when the column pruning fails.
+    "pruneColumns" -> (Seq("_1", "_2", "_3") -> Seq("GreaterThan(_3,10)")),
+    // Neither works when any pushdown fails the build, so the scan reads all the columns with no
+    // filter, as without the pushdowns.
+    "build" -> (Seq("_1", "_2", "_3") -> Nil)
+  ).foreach { case (failingStep, (columns, filters)) =>
     test(s"read with fewer pushdowns when the scan fails with the pushdowns: $failingStep") {
-      val columns = if (failingStep == "pushFilters") Seq("_2", "_3") else Seq("_1", "_2", "_3")
       val input = new ProjectingMemoryStream(spark)
       val table = new FailingPushDownTable(input, failingStep)
       val df = Dataset.ofRows(spark, StreamingRelationV2(None, "failing_push_down", table,
@@ -1121,11 +1133,10 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
           StartStream(),
           AddData(input, (1L, "a", 10), (2L, "b", 20)),
           ProcessAllAvailable(),
-          // When the filters fail, a new scan builder builds a scan of the columns of the query
-          // with no filter. When the pruning fails too, another builds a scan of all the columns
-          // with no filter, as without the pushdowns.
+          // Each new scan builder builds the scan with fewer pushdowns: the column pruning
+          // alone, then the filters alone, and then all the columns with no filter.
           assertReadSchema(columns: _*),
-          AssertOnQuery(_ => table.streams.asScala.toSeq == Seq(columns -> Nil)),
+          AssertOnQuery(_ => table.streams.asScala.toSeq == Seq(columns -> filters)),
           CheckAnswer(Row("b")))
       }
       val warnings = logs.loggingEvents.map(_.getMessage.getFormattedMessage)
@@ -1137,8 +1148,13 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
       assert(warnings.exists { message =>
         message.contains("could not be built to read only the columns _2, _3: ") &&
           message.contains(s"$failingStep failed with the pushdowns") &&
-          message.contains("It reads all the columns instead.")
+          message.contains("It reads all the columns with the filters ")
       } === (failingStep != "pushFilters"), warnings)
+      assert(warnings.exists { message =>
+        message.contains("could not be built with the pushdowns (columns: all, filters: ") &&
+          message.contains(s"$failingStep failed with the pushdowns") &&
+          message.contains("It reads all the columns with no filter instead.")
+      } === (failingStep == "build"), warnings)
     }
   }
 
@@ -1604,6 +1620,79 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
+  Seq(
+    // Two filters above the projection, which the micro-batch combines.
+    "two filters" -> ((df: DataFrame) =>
+      df.withColumn("pt", current_timestamp()).where("extra > 10").where("data = 'b'")
+        .select("data", "pt"), Seq(Seq("extra"), Seq("data"))),
+    // A filter that the optimizer rewrites, as id > CAST(1 AS BIGINT), whose pushed filter is
+    // optimized too.
+    "a rewritten filter" -> ((df: DataFrame) =>
+      df.withColumn("pt", current_timestamp()).where("id > 1").select("data", "pt"),
+      Seq(Seq("id"))),
+    // A filter on an alias of the column of the pushed filter.
+    "a filter on an alias" -> ((df: DataFrame) =>
+      df.select(col("data"), col("extra").as("e"), current_timestamp().as("pt"))
+        .where("e > 10").select("data", "pt"), Seq(Seq("e", "extra"))),
+    // A filter above a watermark, which keeps the rows and the columns of its child.
+    "a filter above a watermark" -> ((df: DataFrame) =>
+      df.withColumn("pt", current_timestamp()).withWatermark("pt", "10 seconds")
+        .where("extra > 10").select("data"), Seq(Seq("extra")))
+  ).foreach { case (name, (query, columns)) =>
+    test(s"evaluate the pushed filters once with $name above a projection of a value of each " +
+        "micro-batch") {
+      withSourceTable() {
+        val df = query(spark.readStream.table(tbl))
+        withoutPruneFilters.foreach { confs =>
+          withSQLConf(confs.toSeq: _*) {
+            testStream(df)(
+              ProcessAllAvailable() +:
+                columns.map(names => assertEvaluatedOnce(names: _*)): _*)
+          }
+        }
+      }
+    }
+  }
+
+  test("read all the columns with the filters when only the column pruning fails") {
+    // The pruned scans of the table do not have the column data, so the scan reads all the
+    // columns, still with the filter.
+    withSourceTable(InMemoryBaseTable.SIMULATE_INCOMPLETE_COLUMN_PRUNING -> "true") {
+      testStream(spark.readStream.table(tbl).where("extra > 10").select("data"))(
+        ProcessAllAvailable(),
+        assertReadSchema("id", "data", "extra"),
+        assertPushedFilters("GreaterThan(extra,10)"),
+        CheckAnswer(Row("b")))
+    }
+  }
+
+  test("push down the filters to a scan of all the columns whose read schema does not follow " +
+      "the relation, without the column pruning") {
+    val input = MemoryStream[(Long, String, Int)]
+    val table = new UnknownColumnFilterTable(input)
+    val df = Dataset.ofRows(spark, StreamingRelationV2(None, "unknown_column_filter", table,
+      CaseInsensitiveStringMap.empty(), DataTypeUtils.toAttributes(table.schema()), None, None,
+      None)).toDF("id", "data", "extra").where("extra > 10").select("data")
+    val logs = new LogAppender("the read schema of a scan of all the columns with filters")
+    withLogAppender(logs,
+        loggerNames = Seq(StreamingV2ScanPushDown.getClass.getName.stripSuffix("$")),
+        level = Some(Level.WARN)) {
+      withSQLConf(SQLConf.STREAMING_V2_COLUMN_PRUNING_ENABLED.key -> "false") {
+        testStream(df)(
+          StartStream(),
+          AddData(input, (1L, "a", 10), (2L, "b", 20)),
+          ProcessAllAvailable(),
+          AssertOnQuery(_ => table.pushed == Seq("GreaterThan(_3,10)")),
+          CheckAnswer(Row("b")))
+      }
+    }
+    // The scan with the filter goes through the check of a scan of all the columns, which only
+    // logs the read schema without the column pruning, rather than building it again.
+    val warnings = logs.loggingEvents.map(_.getMessage.getFormattedMessage)
+    assert(warnings.exists(_.contains("as the column pruning is disabled")), warnings)
+    assert(!warnings.exists(_.contains("could not be built")), warnings)
+  }
+
   test("do not optimize a query without conditions when no source prunes its columns") {
     withSourceTable(InMemoryBaseTable.STREAMING_COLUMN_PRUNING -> "false") {
       val source = spark.readStream.table(tbl)
@@ -1874,6 +1963,44 @@ private class UnknownColumnReadSchemaTable(input: MemoryStream[_]) extends Table
     override def readSchema(): StructType = schema().add("unknown", "int")
 
     override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = input
+  }
+}
+
+/**
+ * A table over a memory stream that declares STREAMING_COLUMN_PRUNING and
+ * STREAMING_FILTER_PUSHDOWN, whose scans have a column in their read schema that the table does not
+ * have, and whose scan builder takes all the filters, which it records.
+ */
+private class UnknownColumnFilterTable(input: MemoryStream[_]) extends Table with SupportsRead {
+  @volatile var pushed: Seq[String] = Nil
+
+  override def name(): String = "unknown_column_filter"
+
+  override def schema(): StructType = input.fullSchema()
+
+  override def capabilities(): util.Set[TableCapability] = util.EnumSet.of(
+    TableCapability.MICRO_BATCH_READ,
+    TableCapability.STREAMING_COLUMN_PRUNING,
+    TableCapability.STREAMING_FILTER_PUSHDOWN)
+
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+    new ScanBuilder with SupportsPushDownFilters {
+      private var filters = Array.empty[SourceFilter]
+
+      override def pushFilters(filters: Array[SourceFilter]): Array[SourceFilter] = {
+        this.filters = filters
+        pushed = filters.map(_.toString).toSeq
+        filters
+      }
+
+      override def pushedFilters(): Array[SourceFilter] = filters
+
+      override def build(): Scan = new Scan {
+        override def readSchema(): StructType = schema().add("unknown", "int")
+
+        override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = input
+      }
+    }
   }
 }
 
