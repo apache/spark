@@ -96,16 +96,6 @@ concept StreamingWriteOf = requires { typename W::Factory; } &&
                            std::derived_from<W, StreamingWrite<typename W::Factory>> &&
                            std::move_constructible<W> && WriterFactory<typename W::Factory>;
 
-template <typename T>
-struct FactoryOf {
-  using type = typename T::Factory;
-};
-
-template <>
-struct FactoryOf<Unsupported> {
-  using type = Unsupported;
-};
-
 /// What a source implements, which its declarations determine, as the documentation of
 /// DataSource describes them.
 template <typename S>
@@ -206,13 +196,6 @@ struct SourceTraits {
     if (kStreamingTruncate) capabilities = capabilities | Capabilities::kStreamingTruncate;
     return capabilities;
   }();
-
-  // The factories of the executors, Unsupported for an operation that the source does not
-  // implement.
-  using BatchReaderFactory = typename FactoryOf<ScanBuilder>::type;
-  using StreamReaderFactory = typename FactoryOf<MicroBatchStream>::type;
-  using BatchWriterFactory = typename FactoryOf<BatchWrite>::type;
-  using StreamingWriterFactory = typename FactoryOf<StreamingWrite>::type;
 
   /// Keeps the implemented operations of a declaration, so that a source can narrow its
   /// operations but never add one, and each truncation only with its write.
@@ -492,15 +475,15 @@ class Exports {
       switch (read.kind) {
         case SPARK_DS_READ_BATCH:
           if constexpr (Traits::kBatchRead) {
-            return OpenPartition<typename Traits::BatchReaderFactory>(task, std::move(schema),
-                                                                      state, partition, out);
+            return OpenPartition<typename Traits::ScanBuilder::Factory>(task, std::move(schema),
+                                                                        state, partition, out);
           } else {
             return arrow::Status::Invalid("source does not support batch reads");
           }
         case SPARK_DS_READ_MICRO_BATCH:
           if constexpr (Traits::kMicroBatchRead) {
-            return OpenPartition<typename Traits::StreamReaderFactory>(task, std::move(schema),
-                                                                       state, partition, out);
+            return OpenPartition<typename Traits::MicroBatchStream::Factory>(
+                task, std::move(schema), state, partition, out);
           } else {
             return arrow::Status::Invalid("source does not support micro-batch streaming reads");
           }
@@ -618,14 +601,14 @@ class Exports {
       TaskWriter* writer = nullptr;
       if (epoch_id == -1) {
         if constexpr (Traits::kBatchWrite) {
-          ARROW_ASSIGN_OR_RAISE(writer, OpenTaskWriter<typename Traits::BatchWriterFactory>(
+          ARROW_ASSIGN_OR_RAISE(writer, OpenTaskWriter<typename Traits::BatchWrite::Factory>(
                                             task, std::move(schema), state, std::nullopt));
         } else {
           return arrow::Status::Invalid("source does not support batch writes");
         }
       } else if (epoch_id >= 0) {
         if constexpr (Traits::kStreamingWrite) {
-          ARROW_ASSIGN_OR_RAISE(writer, OpenTaskWriter<typename Traits::StreamingWriterFactory>(
+          ARROW_ASSIGN_OR_RAISE(writer, OpenTaskWriter<typename Traits::StreamingWrite::Factory>(
                                             task, std::move(schema), state, epoch_id));
         } else {
           return arrow::Status::Invalid("source does not support streaming writes");
