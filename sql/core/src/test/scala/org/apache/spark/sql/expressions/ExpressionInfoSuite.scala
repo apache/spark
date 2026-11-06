@@ -374,4 +374,33 @@ class ExpressionInfoSuite extends SharedSparkSession {
     val pythonInfo = catalog.lookupFunctionInfo(FunctionIdentifier(pythonUDF.name))
     assert(pythonInfo.getSource === "python_udf")
   }
+
+  test("deterministic listBuiltinFunctionInfos output") {
+    val infos1 = org.apache.spark.sql.api.python.PythonSQLUtils.listBuiltinFunctionInfos()
+    val infos2 = org.apache.spark.sql.api.python.PythonSQLUtils.listBuiltinFunctionInfos()
+
+    assert(infos1.nonEmpty)
+    assert(infos1.length === infos2.length)
+    assert(infos1.map(_.getName).toSeq === infos2.map(_.getName).toSeq)
+    assert(infos1.map(_.getClassName).toSeq === infos2.map(_.getClassName).toSeq)
+    assert(infos1.map(_.getExamples).toSeq === infos2.map(_.getExamples).toSeq)
+
+    // Verify all function names are unique and sorted
+    val names = infos1.map(_.getName).toSeq
+    assert(names.distinct.length === names.length)
+    assert(names === names.sorted)
+
+    // Verify generator functions present in both FunctionRegistry and TableFunctionRegistry
+    val duplicateFunctionNames = Seq(
+      "explode", "explode_outer", "inline", "inline_outer", "posexplode", "posexplode_outer"
+    )
+    val infoMap = infos1.map(i => i.getName -> i).toMap
+    duplicateFunctionNames.foreach { name =>
+      assert(infoMap.contains(name))
+      val info = infoMap(name)
+      assert(info.getClassName.nonEmpty)
+      assert(info.getExamples.nonEmpty)
+    }
+  }
 }
+
