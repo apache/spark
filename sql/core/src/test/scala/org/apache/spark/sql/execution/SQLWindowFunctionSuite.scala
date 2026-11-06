@@ -19,8 +19,9 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.catalyst.expressions.WindowExpression
 import org.apache.spark.sql.execution.window.WindowExec
-import org.apache.spark.sql.internal.SQLConf.{ADAPTIVE_EXECUTION_ENABLED, WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD, WINDOW_EXEC_BUFFER_SIZE_SPILL_THRESHOLD, WINDOW_EXEC_BUFFER_SPILL_THRESHOLD, WINDOW_EXEC_DISTINCT_HASH_FALLBACK_THRESHOLD}
+import org.apache.spark.sql.internal.SQLConf.{ADAPTIVE_EXECUTION_ENABLED, COLLAPSE_WINDOW_WITH_EMPTY_ORDER_SPEC_IN_CHILD, WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD, WINDOW_EXEC_BUFFER_SIZE_SPILL_THRESHOLD, WINDOW_EXEC_BUFFER_SPILL_THRESHOLD, WINDOW_EXEC_DISTINCT_HASH_FALLBACK_THRESHOLD}
 import org.apache.spark.sql.test.SharedSparkSession
 
 case class WindowData(month: Int, area: String, product: Int)
@@ -371,27 +372,115 @@ class SQLWindowFunctionSuite extends SharedSparkSession {
     }
   }
 
-  test("window function: unbounded distinct frame skips the event sorter") {
+  test("window function: unbounded distinct hash frame skips the event sorter") {
     withSQLConf(
       ADAPTIVE_EXECUTION_ENABLED.key -> "false",
       WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1000",
       WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "5",
       WINDOW_EXEC_DISTINCT_HASH_FALLBACK_THRESHOLD.key -> Int.MaxValue.toString) {
+      Seq("", "ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING")
+        .foreach { windowSpec =>
+          val result = sql(
+            s"""
+               |SELECT max(distinct_count)
+               |FROM (
+               |  SELECT count(DISTINCT id) OVER ($windowSpec) AS distinct_count
+               |  FROM range(100)
+               |)
+             """.stripMargin)
+          assertNotSpilled(sparkContext, "unbounded distinct window without an event sorter") {
+            checkAnswer(result, Row(100L))
+          }
+          val window = result.queryExecution.executedPlan.collectFirst {
+            case window: WindowExec => window
+          }.get
+          assert(window.metrics("spillSize").value == 0)
+        }
+    }
+  }
+
+  test("window function: ordered unbounded distinct frames preserve first-occurrence order") {
+    val data = Seq(
+      (1, 0, "z"), (1, 1, "a"), (1, 2, "m"), (1, 3, "z"),
+      (1, 4, null.asInstanceOf[String]), (1, 5, "b"),
+      (2, 0, null.asInstanceOf[String]), (2, 1, "q"), (2, 2, "c"), (2, 3, "q")
+    ).toDF("k", "id", "x")
+
+    withTempView("distinctWindowData") {
+      data.createOrReplaceTempView("distinctWindowData")
+      // FIRST over ROWS is rewritten to NTH_VALUE; use RANGE to test the distinct frame.
+      Seq(Int.MaxValue, 1).foreach { fallbackThreshold =>
+        withSQLConf(
+          WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1000",
+          WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "2",
+          WINDOW_EXEC_DISTINCT_HASH_FALLBACK_THRESHOLD.key -> fallbackThreshold.toString) {
+          checkAnswer(
+            sql(
+              """
+                |SELECT k, id,
+                |  first(DISTINCT x) OVER wr,
+                |  first(DISTINCT x, true) OVER wr,
+                |  collect_list(DISTINCT x) OVER w,
+                |  collect_list(DISTINCT x) OVER wd
+                |FROM distinctWindowData
+                |WINDOW w AS (PARTITION BY k ORDER BY id
+                |  ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+                |  wd AS (PARTITION BY k ORDER BY id DESC
+                |  ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+                |  wr AS (PARTITION BY k ORDER BY id
+                |  RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
+                |ORDER BY k, id
+              """.stripMargin),
+            (0 to 5).map { id =>
+              Row(1, id, "z", "z", Seq("z", "a", "m", "b"), Seq("b", "z", "m", "a"))
+            } ++ (0 to 3).map { id =>
+              Row(2, id, null, "q", Seq("q", "c"), Seq("q", "c"))
+            })
+        }
+      }
+    }
+  }
+
+  test("window function: ordered unbounded distinct frames preserve collated input order") {
+    withSQLConf(WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
+      checkAnswer(
+        sql(
+          """
+            |SELECT id,
+            |  first(DISTINCT x COLLATE UTF8_LCASE) OVER w,
+            |  collect_list(DISTINCT x COLLATE UTF8_LCASE) OVER w
+            |FROM VALUES (0, 'z'), (1, 'A'), (2, 'm'), (3, 'Z'), (4, 'a') AS data(id, x)
+            |WINDOW w AS (ORDER BY id
+            |  RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
+            |ORDER BY id
+          """.stripMargin),
+        (0 to 4).map(id => Row(id, "z", Seq("z", "A", "m"))))
+    }
+  }
+
+  test("window function: merged unbounded distinct frames retain their ordering requirement") {
+    withSQLConf(
+      ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      COLLAPSE_WINDOW_WITH_EMPTY_ORDER_SPEC_IN_CHILD.key -> "true",
+      WINDOW_EXEC_DISTINCT_HASH_FALLBACK_THRESHOLD.key -> "1") {
       val result = sql(
         """
-          |SELECT max(distinct_count)
+          |SELECT id, collect_list(DISTINCT x) OVER (
+          |  ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
+          |  AS ordered_values, sort_array(unordered_values) AS unordered_values
           |FROM (
-          |  SELECT count(DISTINCT id) OVER () AS distinct_count
-          |  FROM range(100)
+          |  SELECT id, x, collect_list(DISTINCT x) OVER () AS unordered_values
+          |  FROM VALUES (0, 'z'), (1, 'a'), (2, 'z'), (3, 'b') AS data(id, x)
           |)
+          |ORDER BY id
         """.stripMargin)
-      assertNotSpilled(sparkContext, "unbounded distinct window without an event sorter") {
-        checkAnswer(result, Row(100L))
+      checkAnswer(result, (0 to 3).map(id => Row(id, Seq("z", "a", "b"), Seq("a", "b", "z"))))
+      val windows = result.queryExecution.executedPlan.collect { case w: WindowExec => w }
+      assert(windows.size == 1)
+      val orderingRequirements = windows.head.windowExpression.flatMap { expression =>
+        expression.collect { case WindowExpression(_, spec) => spec.orderSpec.nonEmpty }
       }
-      val window = result.queryExecution.executedPlan.collectFirst {
-        case window: WindowExec => window
-      }.get
-      assert(window.metrics("spillSize").value == 0)
+      assert(orderingRequirements == Seq(false, true))
     }
   }
 

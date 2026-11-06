@@ -39,8 +39,9 @@ import org.apache.spark.unsafe.map.BytesToBytesMap
  * external sorter for the rest of the window partition. For a growing frame, that sorter finds the
  * earliest event for every key, then a second external sorter orders those events by
  * (firstVisibleIndex, inputIndex). The frame feeds each unique, normalized DISTINCT input to the
- * aggregate processor when its event becomes visible. A frame covering the entire partition
- * consumes unique inputs directly because their order is undefined.
+ * aggregate processor when its event becomes visible. An ordered full-partition frame also
+ * restores first-occurrence order after sort-based deduplication. Unordered full-partition frames
+ * consume unique inputs directly.
  */
 private[window] abstract class DistinctWindowFunctionFrame(
     target: InternalRow,
@@ -158,6 +159,8 @@ private[window] abstract class DistinctWindowFunctionFrame(
     }
     private var usingMap = map != null
     private var sorter: UnsafeKVExternalSorter = _
+
+    def isUsingMap: Boolean = usingMap
 
     def add(key: UnsafeRow, value: UnsafeRow): Unit = {
       if (!usingMap) {
@@ -355,6 +358,13 @@ private[window] abstract class DistinctWindowFunctionFrame(
     }
   }
 
+  protected final def drainAllEvents(): Unit = {
+    while (nextEventIndex != Int.MaxValue) {
+      processor.update(eventIterator.getValue)
+      loadNextEvent()
+    }
+  }
+
   protected final def updateProcessor(index: Int): Unit = {
     var bufferUpdated = index == 0
     while (nextEventIndex <= index) {
@@ -387,9 +397,9 @@ private[window] abstract class DistinctWindowFunctionFrame(
 }
 
 /**
- * Computes DISTINCT aggregates over the entire window partition. Since every output row has the
- * same set of unique inputs, their consumption order is undefined and is not restored after hash
- * deduplication or sorting by the DISTINCT key.
+ * Computes DISTINCT aggregates over the entire window partition. For ordered windows, sort-based
+ * deduplication is followed by event sorting to restore first-occurrence order. Without a window
+ * ORDER BY, unique inputs can be consumed directly without restoring their input order.
  */
 private[window] final class UnboundedDistinctWindowFunctionFrame(
     target: InternalRow,
@@ -397,6 +407,7 @@ private[window] final class UnboundedDistinctWindowFunctionFrame(
     distinctExpressions: Seq[Expression],
     filter: Option[Expression],
     inputSchema: Seq[Attribute],
+    preserveInputOrder: Boolean,
     spillSize: SQLMetric,
     hashFallbackThreshold: Int,
     spillThreshold: Int,
@@ -427,7 +438,17 @@ private[window] final class UnboundedDistinctWindowFunctionFrame(
 
   override protected def processDistinctRows(
       firstVisibleRows: FirstVisibleRowsBuilder): Unit = {
-    firstVisibleRows.foreachDistinctRow((key, _) => processor.update(key))
+    if (!preserveInputOrder || firstVisibleRows.isUsingMap) {
+      firstVisibleRows.foreachDistinctRow((key, _) => processor.update(key))
+    } else {
+      try {
+        prepareOrderedEvents(firstVisibleRows)
+        drainAllEvents()
+      } finally {
+        // Full-partition frames consume all events in prepare, so release them immediately.
+        close()
+      }
+    }
   }
 
   override protected def prepareFrame(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {

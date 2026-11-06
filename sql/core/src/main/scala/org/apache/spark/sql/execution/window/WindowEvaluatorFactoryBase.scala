@@ -295,6 +295,12 @@ trait WindowEvaluatorFactoryBase {
         // Create the factory to produce WindowFunctionFrame.
         val factory = key match {
           case ("DISTINCT_AGGREGATE", _, UnboundedPreceding, UnboundedFollowing, _, _) =>
+            // CollapseWindow can merge ordered and unordered expressions into the same frame.
+            // Preserve the input order if any expression in this frame requires it.
+            val preserveInputOrder = expressions.exists {
+              case WindowExpression(_, spec) => spec.orderSpec.nonEmpty
+              case _ => false
+            }
             target: InternalRow =>
               new UnboundedDistinctWindowFunctionFrame(
                 target,
@@ -302,6 +308,7 @@ trait WindowEvaluatorFactoryBase {
                 normalizedDistinctExpressions,
                 distinctAggregateExpressions.head.filter,
                 childOutput,
+                preserveInputOrder,
                 spillSize,
                 conf.windowExecDistinctHashFallbackThreshold,
                 conf.windowExecBufferSpillThreshold,

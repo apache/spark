@@ -189,6 +189,60 @@ class DistinctWindowFunctionFrameSuite extends QueryTest with SharedSparkSession
     }
   }
 
+  test("unbounded distinct frames account for event spills only when input order is required") {
+    withTaskMemoryManager { (_, taskMemoryManager) =>
+      val inputAttribute = AttributeReference("value", IntegerType, nullable = false)()
+      val rows = new ExternalAppendOnlyUnsafeRowArray(
+        Int.MaxValue, Long.MaxValue, Int.MaxValue, Long.MaxValue)
+      val projection = UnsafeProjection.create(Array[DataType](IntegerType))
+
+      def spillSizeAfterPrepare(preserveInputOrder: Boolean): Long = {
+        val target = new GenericInternalRow(1)
+        val processor = AggregateProcessor(
+          Array[Expression](Count(Seq(inputAttribute))),
+          ordinal = 0,
+          inputAttributes = Seq(inputAttribute),
+          (expressions, schema) => MutableProjection.create(expressions, schema),
+          filters = Array[Option[Expression]](None))
+        val spillSize = SQLMetrics.createSizeMetric(sparkContext, "spill size")
+        val frame = new UnboundedDistinctWindowFunctionFrame(
+          target,
+          processor,
+          distinctExpressions = Seq(inputAttribute),
+          filter = None,
+          inputSchema = Seq(inputAttribute),
+          preserveInputOrder,
+          spillSize,
+          hashFallbackThreshold = 0,
+          spillThreshold = 2,
+          spillSizeThreshold = Long.MaxValue)
+        try {
+          frame.prepare(rows)
+          assert(target.getLong(0) === 4L)
+          assert(taskMemoryManager.getMemoryConsumptionForThisTask === 0L)
+          val preparedSpillSize = spillSize.value
+          frame.close()
+          assert(spillSize.value === preparedSpillSize)
+          preparedSpillSize
+        } finally {
+          frame.close()
+        }
+      }
+
+      try {
+        Seq(3, 1, 2, 3, 0).foreach { value =>
+          rows.add(projection(new GenericInternalRow(Array[Any](value))))
+        }
+        val unorderedSpillSize = spillSizeAfterPrepare(preserveInputOrder = false)
+        val orderedSpillSize = spillSizeAfterPrepare(preserveInputOrder = true)
+        assert(unorderedSpillSize > 0L)
+        assert(orderedSpillSize > unorderedSpillSize)
+      } finally {
+        rows.clear()
+      }
+    }
+  }
+
   test("track range upper bounds lazily across partitions") {
     withTaskMemoryManager { (_, _) =>
       val inputAttribute = AttributeReference("value", IntegerType, nullable = false)()
