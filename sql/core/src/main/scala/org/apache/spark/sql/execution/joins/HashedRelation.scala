@@ -537,7 +537,8 @@ private[execution] final class LongToUnsafeRowMap(
     val mm: TaskMemoryManager,
     capacity: Int,
     ignoresDuplicatedKey: Boolean = false)
-  extends MemoryConsumer(mm, mm.getTungstenMemoryMode) with Externalizable with KryoSerializable {
+  extends MemoryConsumer(mm, LongToUnsafeRowMap.MIN_PAGE_SIZE_BYTES, mm.getTungstenMemoryMode)
+  with Externalizable with KryoSerializable {
 
   // Whether the keys are stored in dense mode or not.
   private var isDense = false
@@ -593,7 +594,7 @@ private[execution] final class LongToUnsafeRowMap(
       array = allocateArray(n * 2)
       array.zeroOut()
       mask = n * 2 - 2
-      page = allocatePage(1 << 20) // 1M bytes
+      page = allocatePage(LongToUnsafeRowMap.MIN_PAGE_SIZE_BYTES)
       cursor = page.getBaseOffset
     }
   }
@@ -988,6 +989,20 @@ private[execution] final class LongToUnsafeRowMap(
   override def read(kryo: Kryo, in: Input): Unit = {
     read(() => in.readBoolean(), () => in.readLong(), in.readBytes)
   }
+}
+
+private[joins] object LongToUnsafeRowMap {
+  /**
+   * The page size floor passed to `MemoryConsumer`, which is also the size of the initial page.
+   *
+   * `MemoryConsumer.allocatePage` rounds every request up to the consumer's page size. With the
+   * default page size (`spark.buffer.pageSize`, up to 64 MiB), even an empty map would reserve
+   * 64 MiB of execution memory. A task that keeps many maps alive at once, e.g. a stage with a
+   * chain of shuffled hash joins, then runs out of execution memory long before the maps hold
+   * that much data. With a 1 MiB floor, the page starts at 1 MiB and grows by doubling, so the
+   * memory each map reserves stays close to what it stores.
+   */
+  val MIN_PAGE_SIZE_BYTES: Long = 1L << 20
 }
 
 class LongHashedRelation(
