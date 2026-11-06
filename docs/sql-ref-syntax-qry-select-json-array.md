@@ -61,14 +61,15 @@ JSON_ARRAY ( [ value [ FORMAT JSON ] [, ...] ]
     Marks a string `value` as already-JSON text, so it is spliced into the array verbatim instead
     of being quoted as a JSON string. For example, `JSON_ARRAY('[1,2]')` produces `["[1,2]"]`, while
     `JSON_ARRAY('[1,2]' FORMAT JSON)` produces `[[1,2]]`. A nested `JSON_ARRAY` constructor carries
-    `FORMAT JSON` implicitly, so `JSON_ARRAY(JSON_ARRAY(1))` produces `[[1]]`; so does a qualified
-    or otherwise routed call such as `builtin.json_array(json_array(1))`. `FORMAT JSON` requires
-    a string argument (an untyped `NULL` literal is also accepted and follows the `ON NULL`
-    behavior, exactly as a non-`FORMAT JSON` `NULL` would). At runtime, a non-null `FORMAT JSON`
-    value must contain exactly one well-formed JSON value; malformed text or multiple top-level
-    values raise an error. This decision is fixed from the query text and does not depend on query
-    optimization: a `JSON_ARRAY` result that reaches an argument through a column reference is a
-    plain `STRING` and is quoted, whether or not the optimizer inlines it.
+    `FORMAT JSON` implicitly, so `JSON_ARRAY(JSON_ARRAY(1))` and a qualified or otherwise routed
+    call such as `builtin.json_array(json_array(1))` both produce `[[1]]` when Spark's built-in owns
+    every call (see above; an extension's replacement can still own a qualified call). `FORMAT JSON`
+    requires a string argument (an untyped `NULL` literal is also accepted and follows the
+    `ON NULL` behavior, exactly as a non-`FORMAT JSON` `NULL` would). At runtime, a non-null
+    `FORMAT JSON` value must contain exactly one well-formed JSON value; malformed text or multiple
+    top-level values raise an error. This decision is fixed from the query text and does not depend
+    on query optimization: a `JSON_ARRAY` result that reaches an argument through a column reference
+    is a plain `STRING` and is quoted, whether or not the optimizer inlines it.
 
 * **{ NULL | ABSENT } ON NULL**
 
