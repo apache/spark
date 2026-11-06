@@ -25,7 +25,7 @@ import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, ResolvedInlineTable}
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, AttributeSet, Cast, Expression, SubqueryExpression, Unevaluable}
-import org.apache.spark.sql.catalyst.optimizer.{ComputeCurrentTime, InferFiltersFromConstraints, ReplaceExpressions, SpecialDatetimeValues}
+import org.apache.spark.sql.catalyst.optimizer.{ComputeCurrentTime, InferFiltersFromConstraints, InferFiltersFromGenerate, ReplaceExpressions, SpecialDatetimeValues}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, LeafNode, LogicalPlan, Project, SetOperation, Statistics}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{CAST, CURRENT_LIKE, RUNT
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{SupportsRead, TableCapability}
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownRequiredColumns}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownRequiredColumns, SupportsPushDownV2Filters}
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, PushDownUtils, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation}
@@ -121,8 +121,9 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
    *    deterministic, as the current time of a micro-batch, so neither its filters nor its columns
    *    depend on them, and no filter on them is pushed down.
    *  - The filters that the optimizer infers from the constraints of the plan, such as those of the
-   *    filters over another relation joined with the relation, are not inferred, so that the scan
-   *    only gets the filters that the query applies to the relation itself.
+   *    filters over another relation joined with the relation, or from a generator, such as the
+   *    `isnotnull` of the array of an `explode`, are not inferred, so that the scan only gets the
+   *    filters that the query applies to the relation itself, whatever else the plan has.
    *  - The relations of batch scans become placeholders, so that their scans are neither built
    *    nor planned: they do not change what the plan reads from its streaming relations.
    *
@@ -137,7 +138,8 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
     offsetLogMetadata.foreach(OffsetSeqMetadata.setSessionConf(_, conf, logChanges = false))
     conf.setConf(SQLConf.CBO_ENABLED, false)
     conf.setConfString(SQLConf.OPTIMIZER_EXCLUDED_RULES.key,
-      (conf.optimizerExcludedRules.toSeq :+ InferFiltersFromConstraints.ruleName).mkString(","))
+      (conf.optimizerExcludedRules.toSeq ++
+        Seq(InferFiltersFromConstraints.ruleName, InferFiltersFromGenerate.ruleName)).mkString(","))
     // Without a source that prunes its columns, the scans can only get filters, which come from a
     // condition of the plan: without one, nothing can be pushed down, and the plan is not
     // optimized.
@@ -375,11 +377,18 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
     // The filters that the scan builder gets in some form, which each micro-batch applies first:
     // the others, such as a filter with a UDF that cannot be translated to a filter of the source,
     // are evaluated after them, as for the scans of batch queries, rather than on all the rows of
-    // the source.
+    // the source. The predicates of a `SupportsPushDownV2Filters` builder may fail on some rows,
+    // as a cast does with ANSI, so they end at the first filter that the builder does not get:
+    // none runs before a filter written before it. The filters of a `SupportsPushDownFilters`
+    // builder compare columns with values, which cannot fail.
     val filters = known.filter(_ => pushesFilters)
       .map { r =>
-        PushDownUtils.filtersOfScanBuilder(builder,
-          DataSourceStrategy.normalizeExprs(r.filters, output))
+        val normalized = DataSourceStrategy.normalizeExprs(r.filters, output)
+        val taken = PushDownUtils.filtersOfScanBuilder(builder, normalized)
+        builder match {
+          case _: SupportsPushDownV2Filters => normalized.takeWhile(f => taken.exists(_ eq f))
+          case _ => taken
+        }
       }
       .getOrElse(Nil)
 

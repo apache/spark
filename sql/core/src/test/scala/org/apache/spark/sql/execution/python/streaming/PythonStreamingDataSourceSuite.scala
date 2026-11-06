@@ -21,15 +21,19 @@ import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import scala.concurrent.duration._
 
+import org.apache.logging.log4j.Level
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.IntegratedUDFTestUtils.{createUserDefinedPythonDataSource, shouldTestPandasUDFs}
+import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
+import org.apache.spark.sql.connector.catalog.TableCapability
 import org.apache.spark.sql.connector.read.streaming.ReadLimit
 import org.apache.spark.sql.execution.datasources.v2.python.{PythonDataSourceV2, PythonMicroBatchStream, PythonMicroBatchStreamWithAdmissionControl, PythonStreamingSourceOffset, PythonStreamingSourceReadLimit}
 import org.apache.spark.sql.execution.python.PythonDataSourceSuiteBase
 import org.apache.spark.sql.execution.streaming.ProcessingTimeTrigger
 import org.apache.spark.sql.execution.streaming.checkpointing.{CommitLog, OffsetSeqLog}
-import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingV2ScanPushDown}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{StreamingQueryException, Trigger}
 import org.apache.spark.sql.types.StructType
@@ -605,8 +609,15 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
     // a streaming query are not pushed down to it.
     withSQLConf(SQLConf.PYTHON_FILTER_PUSHDOWN_ENABLED.key -> "true") {
       val df = spark.readStream.format(dataSourceName).load().where("id > 1")
+      val table = df.queryExecution.analyzed.collectFirst {
+        case relation: StreamingRelationV2 => relation.table
+      }.get
+      assert(!table.capabilities().contains(TableCapability.STREAMING_FILTER_PUSHDOWN))
+      // The answer is the same whether the filter is pushed down or not, and a failure of the
+      // pushdown falls back to the scan of all the columns with no filter, which is logged.
+      val logs = new LogAppender("the fallback of a streaming scan")
       val stopSignal = new CountDownLatch(1)
-      val q = df.writeStream
+      val query = df.writeStream
         .foreachBatch((df: DataFrame, batchId: Long) => {
           df.cache()
           val expected = if (batchId == 0) Nil else Seq(Row(batchId * 2), Row(batchId * 2 + 1))
@@ -614,13 +625,19 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
           if (batchId > 3) stopSignal.countDown()
         })
         .trigger(ProcessingTimeTrigger(0))
-        .start()
-      try {
-        assert(stopSignal.await(waitTimeout.toMillis, TimeUnit.MILLISECONDS), q.exception)
-      } finally {
-        q.stop()
-        q.awaitTermination()
+      withLogAppender(logs,
+          loggerNames = Seq(StreamingV2ScanPushDown.getClass.getName.stripSuffix("$")),
+          level = Some(Level.WARN)) {
+        val q = query.start()
+        try {
+          assert(stopSignal.await(waitTimeout.toMillis, TimeUnit.MILLISECONDS), q.exception)
+        } finally {
+          q.stop()
+          q.awaitTermination()
+        }
       }
+      assert(!logs.loggingEvents.exists(_.getMessage.getFormattedMessage
+        .contains("could not be built with the pushdowns")))
     }
   }
 

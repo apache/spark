@@ -29,21 +29,22 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow}
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Cast, Expression, IsNotNull}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, AttributeSet, Cast, Expression, GreaterThan, IsNotNull, Literal, RLike}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Project}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryBaseTable, InMemoryTableCatalog, SupportsRead, Table, TableCapability}
-import org.apache.spark.sql.connector.read.{InputPartition, Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
+import org.apache.spark.sql.connector.expressions.filter.Predicate
+import org.apache.spark.sql.connector.read.{InputPartition, Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns, SupportsPushDownV2Filters}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousPartitionReader, ContinuousPartitionReaderFactory, ContinuousStream, MicroBatchStream, Offset, PartitionOffset}
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, MicroBatchScanExec, StreamingDataSourceV2ScanRelation}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Strategy, MicroBatchScanExec, StreamingDataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamExecution, StreamingQueryWrapper, StreamingV2ScanPushDown}
 import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{Filter => SourceFilter}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -1195,6 +1196,48 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
+  test("push down no filter that the optimizer infers from a generator") {
+    def reads(df: DataFrame): Map[StreamingRelationV2, StreamingV2ScanPushDown.Reads] =
+      StreamingV2ScanPushDown.reads(spark, df.queryExecution.analyzed, None)
+    def pushed(df: DataFrame): Seq[Set[String]] =
+      reads(df).values.toSeq.flatMap(_.filters).map(_.references.map(_.name).toSet)
+    // The optimizer infers isnotnull(arr) and size(arr) > 0 from the explode of arr, which the
+    // query does not write: the scan only gets the filters that the query applies, whether the
+    // query has another filter or not, and whether the table prunes its columns or not.
+    Seq(pushdowns, s"TBLPROPERTIES ('${InMemoryBaseTable.STREAMING_PUSHDOWNS}' = 'filters')")
+      .foreach { properties =>
+        withTable(tbl) {
+          sql(s"CREATE TABLE $tbl (id bigint, arr array<int>) $properties")
+          val source = spark.readStream.table(tbl)
+          assert(pushed(source.select(explode(col("arr")))) === Nil, properties)
+          assert(pushed(source.where("id > 0").select(explode(col("arr")))) === Seq(Set("id")),
+            properties)
+        }
+      }
+  }
+
+  test("push down only the leading predicates that a V2 filter builder gets") {
+    val table = new V2FilterTable
+    val output = DataTypeUtils.toAttributes(table.schema())
+    val payload = output(1)
+    // RLIKE cannot be translated to a predicate of the source, while the cast can, and fails on
+    // a payload that is not a number with ANSI, which the RLIKE written before it drops.
+    val matches = RLike(payload, Literal("^[0-9]+$"))
+    val positive = GreaterThan(Cast(payload, IntegerType), Literal(0))
+    assert(DataSourceV2Strategy.translateFilterV2(matches).isEmpty)
+    assert(DataSourceV2Strategy.translateFilterV2(positive).nonEmpty)
+    def pushed(filters: Expression*): Seq[Expression] = {
+      StreamingV2ScanPushDown.buildScan(table, CaseInsensitiveStringMap.empty(), output,
+          spark.sessionState.conf,
+          Some(StreamingV2ScanPushDown.Reads(AttributeSet(output), filters)))(_ => null)
+        .pushedFilters
+    }
+    assert(pushed(matches, positive) === Nil)
+    assert(table.pushed.isEmpty)
+    assert(pushed(positive, matches) === Seq(positive))
+    assert(table.pushed.length === 1)
+  }
+
   test("keep the rows of the test table that a pushed filter keeps, or cannot tell") {
     import org.apache.spark.sql.sources.{EqualTo, GreaterThanOrEqual, LessThan}
     val schema = StructType.fromDDL("d double, s string")
@@ -1221,6 +1264,27 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
  * for: their readers return the rows of the stream with only these columns. If `takesFilters`,
  * its scan builders also take the filters, and the readers drop the rows that fail them.
  */
+/** A table whose scan builder takes V2 predicates, which it records. */
+private class V2FilterTable extends Table with SupportsRead {
+  var pushed: Array[Predicate] = Array.empty
+  override def name(): String = "v2_filters"
+  override def schema(): StructType = StructType.fromDDL("id BIGINT, payload STRING")
+  override def capabilities(): util.Set[TableCapability] = util.EnumSet.of(
+    TableCapability.MICRO_BATCH_READ, TableCapability.STREAMING_FILTER_PUSHDOWN)
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+    new ScanBuilder with SupportsPushDownV2Filters {
+      override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
+        pushed = predicates
+        predicates
+      }
+      override def pushedPredicates(): Array[Predicate] = pushed
+      override def build(): Scan = new Scan {
+        override def readSchema(): StructType = schema()
+      }
+    }
+  }
+}
+
 private class PruningContinuousTable(input: ContinuousMemoryStream[_], takesFilters: Boolean)
   extends Table with SupportsRead {
 
