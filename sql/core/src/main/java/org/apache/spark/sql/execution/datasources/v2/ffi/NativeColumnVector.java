@@ -87,32 +87,30 @@ class NativeColumnVector extends ReusedArrowColumnVector {
    * read declares {@code nullable} or not.
    */
   static NativeColumnVector create(ValueVector vector, boolean nullable, Object reader) {
-    NativeColumnVector column;
     if (vector instanceof BitVector) {
-      column = new Booleans(vector, nullable, reader);
+      return new Booleans(vector, nullable, reader);
     } else if (vector instanceof TinyIntVector) {
-      column = new Bytes(vector, nullable, reader);
+      return new Bytes(vector, nullable, reader);
     } else if (vector instanceof SmallIntVector) {
-      column = new Shorts(vector, nullable, reader);
+      return new Shorts(vector, nullable, reader);
     } else if (vector instanceof IntVector || vector instanceof DateDayVector) {
-      column = new Ints(vector, nullable, reader);
+      return new Ints(vector, nullable, reader);
     } else if (vector instanceof BigIntVector || vector instanceof TimeStampMicroTZVector ||
         vector instanceof TimeStampMicroVector) {
-      column = new Longs(vector, nullable, reader);
+      return new Longs(vector, nullable, reader);
     } else if (vector instanceof Float4Vector) {
-      column = new Floats(vector, nullable, reader);
+      return new Floats(vector, nullable, reader);
     } else if (vector instanceof Float8Vector) {
-      column = new Doubles(vector, nullable, reader);
+      return new Doubles(vector, nullable, reader);
     } else if (vector instanceof DecimalVector decimalVector) {
-      column = new Decimals(decimalVector, nullable, reader);
+      return new Decimals(decimalVector, nullable, reader);
     } else if (vector instanceof VarCharVector) {
-      column = new Strings(vector, nullable, reader);
+      return new Strings(vector, nullable, reader);
     } else if (vector instanceof ViewVarCharVector) {
-      column = new StringViews(vector, nullable, reader);
+      return new StringViews(vector, nullable, reader);
     } else {
-      column = new NativeColumnVector(vector, reader);
+      return new NativeColumnVector(vector, reader);
     }
-    return column;
   }
 
   NativeColumnVector(ValueVector vector, Object reader) {
