@@ -19,6 +19,13 @@
 Upgrading PySpark
 ==================
 
+Upgrading from PySpark 4.3 to 4.4
+---------------------------------
+* In Spark 4.4, pandas-to-Arrow conversion of Arrow-backed pandas columns honors the requested
+  schema type and ``spark.sql.execution.pandas.convertToArrowArraySafely``, including DataFrame
+  creation and pandas UDF results. With safe conversion enabled, overflowing values are rejected
+  on PyArrow 18. With safe conversion disabled, unsafe casts are allowed on newer PyArrow versions.
+
 Upgrading from PySpark 4.2 to 4.3
 ---------------------------------
 * In Spark 4.3, Python 3.10 support was dropped in PySpark.
