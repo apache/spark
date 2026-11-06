@@ -1061,7 +1061,11 @@ object FunctionRegistry {
     expression[BitmapAnd]("bitmap_and"),
     expression[BitmapOr]("bitmap_or"),
     expression[BitmapAndNot]("bitmap_andnot"),
-    expression[BitmapXor]("bitmap_xor")
+    expression[BitmapXor]("bitmap_xor"),
+    expression[InetAton]("inet_aton"),
+    expression[InetNtoa]("inet_ntoa"),
+    expression[TryInetAton]("try_inet_aton"),
+    expression[TryInetNtoa]("try_inet_ntoa")
   )
 
   private def dataSketchExpressions: Seq[FunctionRegistryEntry] = Seq(
