@@ -300,6 +300,28 @@ class CollapseProjectSuite extends PlanTest {
     }
   }
 
+  test("in-process Python UDFs do not force inline multiply referenced producers") {
+    def udf(e: Expression): PythonUDF = {
+      PythonUDF("udf", null, IntegerType, Seq(e),
+        PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF, udfDeterministic = true)
+    }
+    val query = testRelation
+      .select((udf($"a") + $"b" * $"b").as("value"))
+      .select(udf($"value").as("result"), $"value")
+      .analyze
+    comparePlans(Optimize.execute(query), query)
+  }
+
+  test("in-process Python UDFs do not force inline aggregate results") {
+    def udf(e: Expression): PythonUDF = {
+      PythonUDF("udf", null, IntegerType, Seq(e),
+        PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF, udfDeterministic = true)
+    }
+    val query = testRelation.groupBy($"a")(udf(sum($"b")).as("s"))
+      .select(udf($"s").as("r"), $"s").analyze
+    comparePlans(Optimize.execute(query), query)
+  }
+
   test("SPARK-53399: Merge Python UDFs with same evalType") {
     val pythonUdf = (e: Expression) => {
       PythonUDF("udf", null, IntegerType, Seq(e), PythonEvalType.SQL_BATCHED_UDF, true)

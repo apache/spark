@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.time.LocalTime
 import java.util.{EnumSet, OptionalLong}
 
 import org.apache.spark.SparkConf
@@ -25,14 +26,15 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.Count
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Complete, Count, Percentile, PercentileDisc}
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.expressions.variant.VariantGet
 import org.apache.spark.sql.catalyst.optimizer.{BooleanSimplification, CombineFilters, ConstantFolding}
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, JoinHint, Limit, LogicalPlan, Offset, OneRowRelation, Project, Sort}
-import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
+import org.apache.spark.sql.catalyst.util.{CharVarcharCodegenUtils, CharVarcharUtils, V2ExpressionBuilder}
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
-import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue, SortOrder => V2SortOrder, VariantGet => V2VariantGet}
+import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue, SortOrder => V2SortOrder, VariantGet => V2VariantGet}
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate}
 import org.apache.spark.sql.connector.join.{JoinType => V2JoinType}
@@ -42,7 +44,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ArrayType, BooleanType, DoubleType, FloatType, IntegerType, LongType, StringType, StructField, StructType, TimestampType, VariantType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, DoubleType, FloatType, IntegerType, LongType, MetadataBuilder, StringType, StructField, StructType, TimestampNTZNanosType, TimestampType, TimeType, VariantType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.udf.worker.UDFWorkerSpecification
 import org.apache.spark.unsafe.types.UTF8String
@@ -348,6 +350,64 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
 
     val unknownPred = new Predicate("UNKNOWN", Array())
     assert(V2ExpressionUtils.toCatalyst(unknownPred).isEmpty)
+  }
+
+  Seq(true, false).foreach { ansiEnabled =>
+    test(s"boolean operators wrap boolean casts for V2 pushdown with ANSI $ansiEnabled") {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        val intCol = AttributeReference("c", IntegerType)()
+        val boolCast = Cast(intCol, BooleanType)
+        val predicate = GreaterThan(intCol, Literal(0))
+        val v2BoolCast = new V2Cast(FieldReference("c"), IntegerType, BooleanType)
+        val wrappedBoolCast = new Predicate("BOOLEAN_EXPRESSION",
+          Array[V2Expression](v2BoolCast))
+        val v2Predicate = new Predicate(">",
+          Array[V2Expression](FieldReference("c"), LiteralValue(0, IntegerType)))
+        val expectedCast: Option[V2Expression] = if (ansiEnabled) Some(v2BoolCast) else None
+        assertResult(expectedCast) {
+          new V2ExpressionBuilder(boolCast).build()
+        }
+        val conditions = Seq[(Expression, Predicate)](
+          Not(boolCast) -> new V2Not(wrappedBoolCast),
+          And(boolCast, predicate) -> new V2And(wrappedBoolCast, v2Predicate),
+          Or(predicate, boolCast) -> new V2Or(v2Predicate, wrappedBoolCast))
+        conditions.foreach { case (condition, v2Condition) =>
+          val filter = Coalesce(Seq(condition, Literal(false)))
+          val expectedCondition: Option[Predicate] =
+            if (ansiEnabled) Some(v2Condition) else None
+          val expectedFilter = expectedCondition.map { translated =>
+            new Predicate("COALESCE", Array[V2Expression](translated, new AlwaysFalse))
+          }
+          testTranslateFilter(filter, expectedFilter)
+          assertResult(expectedCondition) {
+            new V2ExpressionBuilder(condition, isPredicate = true).buildPredicate()
+          }
+        }
+        assertResult(Some(new V2Not(v2Predicate))) {
+          new V2ExpressionBuilder(Not(predicate), isPredicate = true).buildPredicate()
+        }
+      }
+    }
+  }
+
+  test("boolean cast operands fall back when V2 predicate wrapping is disabled") {
+    withSQLConf(
+        SQLConf.ANSI_ENABLED.key -> "true",
+        SQLConf.DATA_SOURCE_ALWAYS_CREATE_V2_PREDICATE.key -> "false") {
+      val intCol = AttributeReference("c", IntegerType)()
+      val boolCast = Cast(intCol, BooleanType)
+      val predicate = GreaterThan(intCol, Literal(0))
+      val conditions: Seq[Expression] = Seq(
+        Not(boolCast),
+        And(boolCast, predicate),
+        Or(predicate, boolCast))
+      conditions.foreach { condition =>
+        testTranslateFilter(Coalesce(Seq(condition, Literal(false))), None)
+        assertResult(Option.empty[Predicate]) {
+          new V2ExpressionBuilder(condition, isPredicate = true).buildPredicate()
+        }
+      }
+    }
   }
 
   test("round trip conversion of CASE_WHEN expression") {
@@ -909,6 +969,32 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     }
   }
 
+  gridTest("VariantGet translation uses the captured path parser mode")(
+      Seq(false, true)) { legacy =>
+    val ref = AttributeReference("v", VariantType)()
+    val conf = SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL.key
+    for {
+      (path, modeSensitive) <- Seq(
+        "$['city']" -> false,
+        """$.a\nb""" -> false,
+        """$['a\qb']""" -> false,
+        """$['a\nb']""" -> true,
+        """$["a\nb"]""" -> true,
+        """$['a\']""" -> true)
+      failOnError <- Seq(false, true)
+    } {
+      val expression = VariantGet(
+        ref, Literal(path), BooleanType, failOnError, legacyPathBackslashAsLiteral = legacy)
+      val expected = Option.when(!legacy || !modeSensitive)(
+        new V2VariantGet(FieldReference("v"), path, BooleanType, failOnError, null))
+      withSQLConf(conf -> (!legacy).toString) {
+        assert(new V2ExpressionBuilder(expression).build() == expected)
+        testTranslateFilter(expression,
+          expected.map(extraction => new Predicate("BOOLEAN_EXPRESSION", Array(extraction))))
+      }
+    }
+  }
+
   test("VariantGet with non-foldable path returns None") {
     val ref = AttributeReference("v", VariantType)()
     val s = AttributeReference("s", StringType)()
@@ -923,6 +1009,17 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     val expr = VariantGet(ref, nullPath, StringType, failOnError = true)
     val result = new V2ExpressionBuilder(expr).build()
     assert(result.isEmpty, "null path should not translate (graceful, no NPE)")
+  }
+
+  test("SPARK-60542: percentile_cont over nanosecond timestamps is not pushed down") {
+    def translate(agg: AggregateFunction): Option[V2Expression] =
+      new V2ExpressionBuilder(AggregateExpression(agg, Complete, isDistinct = false)).build()
+    val d = AttributeReference("d", DoubleType)()
+    val ts = AttributeReference("ts", TimestampNTZNanosType(9))()
+    assert(translate(new Percentile(d, Literal(0.5))).isDefined)
+    // A source would interpolate with its own rounding; percentile_disc returns an input value.
+    assert(translate(new Percentile(ts, Literal(0.5))).isEmpty)
+    assert(translate(PercentileDisc(ts, Literal(0.5))).isDefined)
   }
 
   test("VariantGet with non-column child returns None") {
@@ -951,17 +1048,15 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     }
   }
 
-  test("VariantGet boolean targetType does not crash under Or (isPredicate path)") {
+  test("VariantGet boolean targetType translates under Or (isPredicate path)") {
     val ref = AttributeReference("v", VariantType)()
     val path = Literal.create("$.flag", StringType)
     val boolExpr = VariantGet(ref, path, BooleanType, failOnError = true)
     val x = AttributeReference("x", IntegerType)()
     val orExpr = Or(boolExpr, GreaterThan(x, Literal(0)))
-    // A boolean-typed VariantGet in predicate position must translate to a V2Predicate, or the
-    // enclosing And/Or's `isInstanceOf[V2Predicate]` assert crashes planning;
-    // the BOOLEAN_EXPRESSION predicate provides that.
+    // BOOLEAN_EXPRESSION wraps the boolean VariantGet so Or receives a V2Predicate operand.
     val result = new V2ExpressionBuilder(orExpr, isPredicate = true).build()
-    assert(result.isDefined, "Or with boolean VariantGet should translate without AssertionError")
+    assert(result.isDefined, "Or with boolean VariantGet should translate to a V2 predicate")
     result.get match {
       case p: Predicate => // expected
       case other => fail(s"expected a Predicate, got ${other.getClass.getName}")
@@ -1825,6 +1920,130 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-60479: read-side CHAR padding StaticInvoke translates") {
+    val md = new MetadataBuilder()
+      .putString(CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, "char(1)")
+      .build()
+    val col = AttributeReference("flag", StringType, metadata = md)()
+    val padded = CharVarcharUtils.addPaddingForScan(col)
+    val eq = EqualTo(padded, Literal("Y"))
+    val result = new V2ExpressionBuilder(eq, isPredicate = true).build()
+    assert(result.isDefined, "readSidePadding should translate to a V2 predicate")
+    result.get match {
+      case p: Predicate if p.name() == "=" =>
+        p.children()(0) match {
+          case g: GeneralScalarExpression
+              if g.name() == CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING =>
+            assert(g.children()(0) === FieldReference("flag"))
+            assert(g.children()(1) === LiteralValue(1, IntegerType))
+            assert(g.children()(2) ===
+              LiteralValue(UTF8String.fromString(" "), StringType))
+          case other =>
+            fail(s"expected CHAR_READ_SIDE_PADDING, got ${other.describe()}")
+        }
+        assert(p.children()(1) === LiteralValue(UTF8String.fromString("Y"), StringType))
+      case other =>
+        fail(s"expected '=' predicate, got ${other.describe()}")
+    }
+
+    val isNull = new V2ExpressionBuilder(IsNull(padded), isPredicate = true).build()
+    assert(isNull.isDefined)
+    isNull.get match {
+      case p: Predicate if p.name() == "IS_NULL" =>
+        assert(p.children()(0) === FieldReference("flag"))
+      case other => fail(s"expected IS_NULL on the raw column, got ${other.describe()}")
+    }
+
+    val nseq = new V2ExpressionBuilder(EqualNullSafe(padded, Literal("Y")), isPredicate = true)
+      .build()
+    assert(nseq.isDefined)
+    nseq.get match {
+      case p: Predicate if p.name() == "<=>" =>
+        p.children()(0) match {
+          case g: GeneralScalarExpression
+              if g.name() == CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING =>
+            assert(g.children()(0) === FieldReference("flag"))
+            assert(g.children()(1) === LiteralValue(1, IntegerType))
+            assert(g.children()(2) ===
+              LiteralValue(UTF8String.fromString(" "), StringType))
+          case other =>
+            fail(s"expected CHAR_READ_SIDE_PADDING, got ${other.describe()}")
+        }
+        assert(p.children()(1) === LiteralValue(UTF8String.fromString("Y"), StringType))
+      case other => fail(s"expected '<=>' predicate, got ${other.describe()}")
+    }
+    val in = new V2ExpressionBuilder(In(padded, Seq(Literal("Y"))), isPredicate = true).build()
+    assert(in.isDefined)
+    val neq = new V2ExpressionBuilder(Not(EqualTo(padded, Literal("Y"))), isPredicate = true)
+      .build()
+    assert(neq.isDefined)
+    neq.get match {
+      case p: Predicate if p.name() == "<>" =>
+        p.children()(0) match {
+          case g: GeneralScalarExpression
+              if g.name() == CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING =>
+            assert(g.children()(0) === FieldReference("flag"))
+            assert(g.children()(1) === LiteralValue(1, IntegerType))
+            assert(g.children()(2) ===
+              LiteralValue(UTF8String.fromString(" "), StringType))
+          case other =>
+            fail(s"expected CHAR_READ_SIDE_PADDING, got ${other.describe()}")
+        }
+        assert(p.children()(1) === LiteralValue(UTF8String.fromString("Y"), StringType))
+      case other => fail(s"expected '<>' predicate, got ${other.describe()}")
+    }
+    val inSet = new V2ExpressionBuilder(
+      InSet(padded, Set(UTF8String.fromString("Y"))), isPredicate = true).build()
+    assert(inSet.isDefined)
+    inSet.get match {
+      case p: Predicate if p.name() == "IN" =>
+        assert(p.children().length === 2)
+        p.children()(0) match {
+          case g: GeneralScalarExpression
+              if g.name() == CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING =>
+            assert(g.children()(0) === FieldReference("flag"))
+            assert(g.children()(1) === LiteralValue(1, IntegerType))
+            assert(g.children()(2) ===
+              LiteralValue(UTF8String.fromString(" "), StringType))
+          case other =>
+            fail(s"expected CHAR_READ_SIDE_PADDING, got ${other.describe()}")
+        }
+        assert(p.children()(1) === LiteralValue(UTF8String.fromString("Y"), StringType))
+      case other =>
+        fail(s"expected IN predicate, got ${other.describe()}")
+    }
+    val inNull = new V2ExpressionBuilder(
+      In(padded, Seq(Literal("Y"), Literal(null, StringType))), isPredicate = true).build()
+    assert(inNull.isEmpty, "IN list with NULL should stay local")
+    val litLeft = new V2ExpressionBuilder(EqualTo(Literal("Y"), padded), isPredicate = true)
+      .build()
+    assert(litLeft.isDefined, "literal on the left of equality should still translate")
+    assert(new V2ExpressionBuilder(EqualTo(padded, Literal("YY")), isPredicate = true)
+      .build().isEmpty, "over-long literal should stay local")
+    assert(new V2ExpressionBuilder(GreaterThan(padded, Literal("A")), isPredicate = true)
+      .build().isEmpty, "range comparison should stay local")
+    val other = AttributeReference("other", StringType)()
+    assert(new V2ExpressionBuilder(EqualTo(padded, other), isPredicate = true).build().isEmpty,
+      "CHAR vs column should stay local")
+    val nestedRpad = StringRPad(padded, Literal(3), Literal("x"))
+    assert(new V2ExpressionBuilder(EqualTo(nestedRpad, Literal("Yxx")), isPredicate = true)
+      .build().isEmpty, "rpad of padded CHAR should stay local")
+
+    def paddingInvoke(cls: Class[_], functionName: String): StaticInvoke = {
+      StaticInvoke(cls, StringType, functionName, col :: Literal(1) :: Nil, returnNullable = false)
+    }
+    val otherClass = paddingInvoke(classOf[String], CharVarcharUtils.READ_SIDE_PADDING)
+    assert(new V2ExpressionBuilder(EqualTo(otherClass, Literal("Y")), isPredicate = true)
+      .build().isEmpty)
+    Seq(CharVarcharUtils.CHAR_TYPE_READ_SIDE_CHECK,
+        CharVarcharUtils.VARCHAR_TYPE_READ_SIDE_CHECK).foreach { name =>
+      assert(new V2ExpressionBuilder(
+        EqualTo(paddingInvoke(classOf[CharVarcharCodegenUtils], name), Literal("Y")),
+        isPredicate = true).build().isEmpty,
+        s"$name should not translate")
+    }
+  }
+
   test("SPARK-59301: translate runtime IN filter") {
     attrInts.foreach { case (attr, name) =>
       checkRuntimeFilter(runtimeFilter(attr, Array[Any](1, 2)), name,
@@ -1860,6 +2079,16 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       runtimeFilter(Cast($"clong".long, DoubleType), Array[Any](1.0d))).isEmpty)
     assert(DataSourceV2Strategy.translateRuntimeFilterV2(
       runtimeFilter(Cast($"cint".int, StringType), Array[Any](UTF8String.fromString("1")))).isEmpty)
+  }
+
+  test("SPARK-60355: translate runtime IN filter on a time column cast to a larger precision") {
+    // values with more fractional digits than the column type are dropped and nulls are kept,
+    // the same as `UnwrapCastInBinaryComparison` does for `InSet`
+    val noon = LocalTime.NOON.toNanoOfDay
+    val ctime = AttributeReference("ctime", TimeType(6))()
+    val in = runtimeFilter(Cast(ctime, TimeType(9)), Array[Any](noon, noon + 1, null))
+    checkRuntimeFilter(in, "ctime",
+      Set(LiteralValue(noon, TimeType(6)), LiteralValue(null, TimeType(6))))
   }
 
   private def runtimeFilter(child: Expression, values: Array[Any]): InSubqueryExec = {

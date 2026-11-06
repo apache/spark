@@ -61,8 +61,8 @@ class SortResolver(operatorResolver: Resolver, expressionResolver: ExpressionRes
    *     resolution.
    *  2. Resolve order expressions using [[ExpressionResolver.resolveExpressionTreeInOperator]].
    *  3. In case order expressions contain only one element, `UnresolvedAttribute(ALL)`, which
-   *     can't be resolved from current (nor from hidden output) - this is done using
-   *     [[ResolveAsAllKeyword]], skip previous step and resolve it as an `ALL` keyword (by copying
+   *     can't be resolved from current (nor from hidden output) - this is checked using
+   *     [[canOrderByAll]], skip previous step and resolve it as an `ALL` keyword (by copying
    *     child's output and transforming it into attributes).
    *  4. In case there are attributes referenced in the order expressions are resolved using
    *     the hidden output (or in case we order by [[AggregateExpression]]s which are not present

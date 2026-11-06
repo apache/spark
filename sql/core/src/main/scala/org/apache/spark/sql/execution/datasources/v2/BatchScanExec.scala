@@ -30,22 +30,48 @@ import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.DELETE
 import org.apache.spark.sql.connector.write.RowLevelOperationTable
 import org.apache.spark.sql.execution.EmptyRDDWithPartitions
+import org.apache.spark.sql.execution.datasources.StorageFilterPlanning
 import org.apache.spark.sql.execution.metric.{SQLLastAttemptMetrics, SQLMetric, SQLMetrics}
+import org.apache.spark.sql.internal.connector.{StorageFilterImpl, StorageFilterRequestImpl}
+import org.apache.spark.sql.types.BooleanType
 import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Physical plan node for scanning a batch of data from a data source v2.
+ *
+ * @param plannedScan The `Scan` to read, with the `Batch` and the input partitions planned from it,
+ *                    see [[PlannedScan]].
+ * @param storageFilters Predicates the scan's readers may evaluate, to skip reading the other
+ *                       columns of the rows they reject, see [[SupportsStorageFilters]]. Non-empty
+ *                       only for a scan that declared their columns. Each task's readers get them
+ *                       ANDed into one filter, in a [[StorageFilterRequest]]. They stay in the
+ *                       post-scan `Filter` too.
+ * @param appendsCheckedColumn Whether the readers mark the rows they checked in a boolean column,
+ *                             the last of `output`, see `StorageFilterPlanning.checkedColumn`.
  */
 case class BatchScanExec(
     output: Seq[AttributeReference],
-    @transient scan: Scan,
+    @transient plannedScan: PlannedScan,
     runtimeFilters: Seq[Expression],
     ordering: Option[Seq[SortOrder]] = None,
     @transient table: Table,
-    keyGroupedPartitioning: Option[Seq[Expression]] = None
+    keyGroupedPartitioning: Option[Seq[Expression]] = None,
+    storageFilters: Seq[Expression] = Nil,
+    appendsCheckedColumn: Boolean = false
   ) extends DataSourceV2ScanExecBase {
 
-  @transient lazy val batch: Batch = if (scan == null) null else scan.toBatch
+  // The readers are asked for the column only with storage filters, and append it last.
+  require(!appendsCheckedColumn ||
+    (storageFilters.nonEmpty && output.lastOption.exists(_.dataType == BooleanType)),
+    "A checked column comes with storage filters, last in the output")
+
+  // The output the scan was planned for, without the checked column the readers append.
+  private def scanOutput: Seq[AttributeReference] =
+    if (appendsCheckedColumn) output.init else output
+
+  override def scan: Scan = if (plannedScan == null) null else plannedScan.scan
+
+  def batch: Batch = if (scan == null) null else plannedScan.batch
 
   override protected lazy val sparkMetrics: Map[String, SQLMetric] = {
     val name = "number of output rows"
@@ -66,12 +92,15 @@ case class BatchScanExec(
     case other: BatchScanExec =>
       this.batch != null && this.batch == other.batch &&
           this.runtimeFilters == other.runtimeFilters &&
-          this.prunedKeyGroupedPartitioning == other.prunedKeyGroupedPartitioning
+          this.prunedKeyGroupedPartitioning == other.prunedKeyGroupedPartitioning &&
+          this.storageFilters == other.storageFilters &&
+          this.appendsCheckedColumn == other.appendsCheckedColumn
     case _ =>
       false
   }
 
-  override def hashCode(): Int = Objects.hash(batch, runtimeFilters, prunedKeyGroupedPartitioning)
+  override def hashCode(): Int = Objects.hash(
+    batch, runtimeFilters, prunedKeyGroupedPartitioning, storageFilters, appendsCheckedColumn)
 
   /**
    * The reported partitioning keys restricted to those still present in `output`. A key may
@@ -83,20 +112,28 @@ case class BatchScanExec(
   @transient lazy val prunedKeyGroupedPartitioning: Option[Seq[Expression]] =
     keyGroupedPartitioning.map(_.filter(_.references.subsetOf(outputSet)))
 
-  @transient override lazy val inputPartitions: Seq[InputPartition] =
-    batch.planInputPartitions().toImmutableArraySeq
+  override def inputPartitions: Seq[InputPartition] = plannedScan.inputPartitions
 
-  // Visible for testing
+  // Visible for testing. Runtime filtering resolves the scan's columns by name, which the checked
+  // column must not take part in.
   @transient private[sql] lazy val filteredPartitions: Seq[Option[InputPartition]] =
     PushDownUtils.replanWithRuntimeFilters(
       scan,
       runtimeFilters,
       table,
-      output,
+      scanOutput,
       reportedKeyedPartitioning,
       inputPartitions)
 
-  override lazy val readerFactory: PartitionReaderFactory = batch.createReaderFactory()
+  override def readerFactory: PartitionReaderFactory = plannedScan.readerFactory
+
+  // What every task's readers get, the storage filters ANDed into one. A runtime bloom arrives as
+  // a ScalarSubquery over the build side, which SparkPlan has computed by the time this is forced.
+  // The readers get its result, so the task does not carry the subquery's plan.
+  @transient private lazy val storageFilterRequest: Option[StorageFilterRequest] =
+    storageFilters.map(StorageFilterPlanning.withSubqueryResults)
+      .reduceOption(And)
+      .map(c => StorageFilterRequestImpl(StorageFilterImpl(c, scanOutput), appendsCheckedColumn))
 
   override lazy val inputRDD: RDD[InternalRow] = {
     val rdd = if (filteredPartitions.isEmpty && outputPartitioning == SinglePartition) {
@@ -104,7 +141,8 @@ case class BatchScanExec(
       new EmptyRDDWithPartitions(sparkContext, 1)
     } else {
       new DataSourceRDD(
-        sparkContext, filteredPartitions, readerFactory, supportsColumnar, customMetrics)
+        sparkContext, filteredPartitions, readerFactory, supportsColumnar, customMetrics,
+        storageFilterRequest, Option.when(appendsCheckedColumn)(output.length))
     }
     postDriverMetrics(scan.reportDriverMetrics())
     rdd
@@ -117,17 +155,54 @@ case class BatchScanExec(
         runtimeFilters.filterNot(_ == DynamicPruningExpression(Literal.TrueLiteral)),
         output),
       keyGroupedPartitioning = prunedKeyGroupedPartitioning.map(
-        _.map(QueryPlan.normalizeExpressions(_, output))))
+        _.map(QueryPlan.normalizeExpressions(_, output))),
+      // Storage filters change what the scan returns, so a scan carrying one must not be reused for
+      // a plain scan of the same table.
+      storageFilters = QueryPlan.normalizePredicates(storageFilters, output))
   }
 
   override def simpleString(maxFields: Int): String = {
     val truncatedOutputString = truncatedString(output, "[", ", ", "]", maxFields)
     val runtimeFiltersString = s"RuntimeFilters: ${runtimeFilters.mkString("[", ",", "]")}"
-    val result = s"$nodeName$truncatedOutputString ${scan.description()} $runtimeFiltersString"
+    val storageFiltersString = storageFiltersDescription.map(" " + _).getOrElse("")
+    val result = s"$nodeName$truncatedOutputString ${scan.description()} " +
+      s"$runtimeFiltersString$storageFiltersString"
     redact(result)
+  }
+
+  override def verboseStringWithOperatorId(): String = {
+    val verbose = super.verboseStringWithOperatorId()
+    storageFiltersDescription.map(d => verbose + redact(d) + "\n").getOrElse(verbose)
+  }
+
+  // Only when the scan has some, since an empty one would change every other scan's description.
+  private def storageFiltersDescription: Option[String] = Option.when(storageFilters.nonEmpty) {
+    s"StorageFilters: ${storageFilters.mkString("[", ",", "]")}"
   }
 
   override def nodeName: String = {
     s"BatchScan ${table.name()}".trim
   }
+}
+
+/**
+ * A `Scan`, with the `Batch` and the input partitions a [[BatchScanExec]] plans from it once, when
+ * a node first asks for them. The copies later rules make of the node share it, so they read the
+ * partitions the first node planned, with a reader factory from the `Batch` that planned them.
+ * The partitions have to be the planned ones, because the `Scan` can be shared with another node
+ * whose runtime filter prunes it first, e.g. the build side of a DPP subquery (SPARK-60752). A
+ * pushed runtime filter replans them from a new `Batch`, but keeps the planned `Batch`'s reader
+ * factory.
+ *
+ * A rule that rebuilds a node over the same `Scan` passes on its `plannedScan`, or uses `copy`. A
+ * new `PlannedScan` is for a node that is planned again, or one over another `Scan`.
+ */
+final class PlannedScan(val scan: Scan) {
+  lazy val batch: Batch = scan.toBatch
+  lazy val inputPartitions: Seq[InputPartition] = batch.planInputPartitions().toImmutableArraySeq
+  lazy val readerFactory: PartitionReaderFactory = batch.createReaderFactory()
+}
+
+object PlannedScan {
+  def unapply(plannedScan: PlannedScan): Some[Scan] = Some(plannedScan.scan)
 }

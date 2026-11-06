@@ -53,7 +53,7 @@ public class ThreadFactoryWithGarbageCleanup implements ThreadFactory {
   @Override
   public Thread newThread(Runnable runnable) {
     Thread newThread = new ThreadWithGarbageCleanup(runnable);
-    newThread.setName(namePrefix + ": Thread-" + newThread.getId());
+    newThread.setName(namePrefix + ": Thread-" + newThread.threadId());
     return newThread;
   }
 

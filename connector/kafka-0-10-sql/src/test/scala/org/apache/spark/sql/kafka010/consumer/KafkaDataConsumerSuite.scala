@@ -25,12 +25,13 @@ import scala.collection.immutable
 import scala.jdk.CollectionConverters._
 import scala.util.Random
 
+import org.apache.kafka.clients.admin.{Admin, AdminClientConfig, RecordsToDelete}
 import org.apache.kafka.clients.consumer.ConsumerConfig._
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.{TaskContext, TaskContextImpl}
+import org.apache.spark.{SparkConf, TaskContext, TaskContextImpl}
 import org.apache.spark.kafka010.KafkaDelegationTokenTest
 import org.apache.spark.sql.kafka010.{KafkaIllegalStateException, KafkaTestUtils, RecordBuilder}
 import org.apache.spark.sql.kafka010.consumer.KafkaDataConsumer.CacheKey
@@ -99,6 +100,55 @@ class KafkaDataConsumerSuite
       consumer.invokePrivate(throwOnDataLoss(0L, 1L, topicPartition, groupId, cause))
     }
     assert(e.getCause === cause)
+  }
+
+  test("reacquire consumer before recovering from an out-of-range offset") {
+    val testTopic = "out-of-range-recovery-topic-" + Random.nextInt()
+    val testTopicPartition = new TopicPartition(testTopic, 0)
+    testUtils.createTopic(testTopic, 1)
+    testUtils.sendMessages((0 until 3).map { offset =>
+      new RecordBuilder(testTopic, s"value-$offset").build()
+    })
+
+    val admin = Admin.create(Map[String, Object](
+      AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG -> testUtils.brokerAddress).asJava)
+    try {
+      admin.deleteRecords(Map(
+        testTopicPartition -> RecordsToDelete.beforeOffset(2L)).asJava).all().get()
+    } finally {
+      admin.close()
+    }
+    assert(testUtils.getEarliestOffsets(Set(testTopic))(testTopicPartition) === 2L)
+
+    val kafkaParams = new ju.HashMap[String, Object](getKafkaParams())
+    kafkaParams.put(AUTO_OFFSET_RESET_CONFIG, "none")
+
+    // Closing a consumer as soon as it is returned deterministically reproduces an eviction
+    // racing with the out-of-range recovery path.
+    val closingConsumerPool = new InternalKafkaConsumerPool(new SparkConf()) {
+      override def returnObject(consumer: InternalKafkaConsumer): Unit = {
+        super.returnObject(consumer)
+        reset()
+      }
+    }
+    val consumer = new KafkaDataConsumer(
+      testTopicPartition,
+      kafkaParams,
+      closingConsumerPool,
+      fetchedDataPool)
+
+    try {
+      val originalConsumer = consumer.getOrRetrieveConsumer()
+      val record = consumer.get(0, 3, 10000, failOnDataLoss = false)
+
+      assert(record !== null)
+      assert(record.offset() === 2L)
+      assert(new String(record.value(), StandardCharsets.UTF_8) === "value-2")
+      assert(consumer._consumer.exists(_.ne(originalConsumer)))
+    } finally {
+      consumer.release()
+      closingConsumerPool.close()
+    }
   }
 
   test("new KafkaDataConsumer instance in case of Task retry") {
