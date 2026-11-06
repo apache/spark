@@ -66,7 +66,7 @@ case class SparkScriptTransformationExec(
     val outputIterator =
       createOutputIteratorWithoutSerde(writerThread, inputStream, proc, stderrBuffer)
 
-    writerThread.start()
+    startWriterThread(writerThread)
 
     outputIterator
   }
