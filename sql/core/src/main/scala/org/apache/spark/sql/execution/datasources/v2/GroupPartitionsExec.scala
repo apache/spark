@@ -18,9 +18,10 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{Partition, SparkException}
+import org.apache.spark.SparkException
 import org.apache.spark.rdd.{CoalescedRDD, PartitionCoalescer, PartitionGroup, RDD, SortedMergeCoalescedRDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -39,9 +40,10 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
  * storage-partitioned joins to align partitions from different sides of the join.
  *
  * Everything that says how the node was decided is `@transient`, since only the driver plans and
- * the executors read the groups through [[GroupedPartitionCoalescer]] rather than through this
- * node. The two partitionings are not, matching `ShuffleExchangeExec`'s, since they are what the
- * node claims rather than how it arrived at the claim.
+ * groups the partitions, through [[GroupedPartitionCoalescer]], and the executors read the
+ * coalesced partitions rather than this node. The two partitionings are not, matching
+ * `ShuffleExchangeExec`'s, since they are what the node claims rather than how it arrived at the
+ * claim.
  *
  * @param child The child plan providing bucketed/partitioned input
  * @param grouping What this node does to the child's partitions, derived once at planning time by
@@ -863,30 +865,32 @@ private[sql] object GroupPartitionsExec {
  *
  * Unlike Spark's default coalescer which tries to minimize data movement, this coalescer
  * groups partitions based on their partition keys to maintain the grouping semantics
- * required for storage-partitioned operations.
+ * required for storage-partitioned operations. V2 scan partition packing uses it for its groups
+ * too.
  *
  * @param groupedPartitions Sequence where each element is a sequence of input partition
- *                         indices that should be grouped together
+ *                         indices that should be grouped together. Only the driver reads it,
+ *                         so it is not serialized into tasks.
  */
 class GroupedPartitionCoalescer(
-    val groupedPartitions: Seq[Seq[Int]]
+    @transient val groupedPartitions: Seq[Seq[Int]]
   ) extends PartitionCoalescer with Serializable {
 
   override def coalesce(maxPartitions: Int, parent: RDD[_]): Array[PartitionGroup] = {
+    require(groupedPartitions.size == maxPartitions)
+    val assigned = mutable.Map.empty[String, Int].withDefaultValue(0)
     groupedPartitions.map { partitionIndices =>
-      val partitions = new ArrayBuffer[Partition](partitionIndices.size)
-      val preferredLocations = new ArrayBuffer[String](partitionIndices.size)
-      partitionIndices.foreach { partitionIndex =>
-        val partition = parent.partitions(partitionIndex)
-        partitions += partition
-        preferredLocations ++= parent.preferredLocations(partition)
+      val partitions = partitionIndices.map(parent.partitions(_))
+      // A group of one partition names no location, so the scheduler uses all of that
+      // partition's locations. Otherwise prefer the location that the largest number of the
+      // group's partitions report, and spread ties across groups rather than sending them all to
+      // one location.
+      val preferredLocation = if (partitions.size == 1) None else {
+        partitions.flatMap(parent.preferredLocations).groupBy(identity).toSeq.sortBy {
+          case (location, occurrences) => (-occurrences.size, assigned(location), location)
+        }.headOption.map(_._1)
       }
-      // Select the most common location as the preferred location
-      val preferredLocation = preferredLocations
-        .groupBy(identity)
-        .view.mapValues(_.size)
-        .maxByOption(_._2)
-        .map(_._1)
+      preferredLocation.foreach(location => assigned(location) += 1)
       val partitionGroup = new PartitionGroup(preferredLocation)
       partitionGroup.partitions ++= partitions
       partitionGroup

@@ -32,7 +32,11 @@ public interface Batch {
   /**
    * Returns a list of {@link InputPartition input partitions}. Each {@link InputPartition}
    * represents a data split that can be processed by one Spark task. The number of input
-   * partitions returned here is the same as the number of RDD partitions this scan outputs.
+   * partitions returned here is the same as the number of RDD partitions this scan outputs, unless
+   * spark.sql.sources.v2.scanPartitionPacking.enabled lets Spark pack them into fewer partitions,
+   * by the sizes they report (see {@link HasPartitionStatistics}) or, when
+   * spark.sql.sources.v2.scanPartitionPacking.maxPartitionNum is set and an input reports no size,
+   * by count.
    * <p>
    * If the {@link Scan} supports filter pushdown, this Batch is likely configured with a filter
    * and is responsible for creating splits for that filter, which is not a full scan.

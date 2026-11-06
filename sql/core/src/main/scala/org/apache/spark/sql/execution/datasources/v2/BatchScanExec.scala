@@ -23,13 +23,13 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
+import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, SinglePartition, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.DELETE
 import org.apache.spark.sql.connector.write.RowLevelOperationTable
-import org.apache.spark.sql.execution.EmptyRDDWithPartitions
+import org.apache.spark.sql.execution.{EmptyRDDWithPartitions, SQLExecution}
 import org.apache.spark.sql.execution.datasources.StorageFilterPlanning
 import org.apache.spark.sql.execution.metric.{SQLLastAttemptMetrics, SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.connector.{StorageFilterImpl, StorageFilterRequestImpl}
@@ -57,7 +57,8 @@ case class BatchScanExec(
     @transient table: Table,
     keyGroupedPartitioning: Option[Seq[Expression]] = None,
     storageFilters: Seq[Expression] = Nil,
-    appendsCheckedColumn: Boolean = false
+    appendsCheckedColumn: Boolean = false,
+    partitionPacking: Option[V2ScanPartitionPacking] = None
   ) extends DataSourceV2ScanExecBase {
 
   // The readers are asked for the column only with storage filters, and append it last.
@@ -84,13 +85,26 @@ case class BatchScanExec(
       case _ =>
         SQLMetrics.createMetric(sparkContext, name)
     }
-    Map("numOutputRows" -> metric)
+    // Packing's keys must not collide with a connector's driver metric names.
+    Map("numOutputRows" -> metric) ++ (if (partitionPacking.isDefined) {
+      Map(
+        "packingNumInputPartitions" ->
+          SQLMetrics.createMetric(sparkContext, "number of input partitions"),
+        "packingNumPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions"),
+        "packingMaxPartitionsPerGroup" ->
+          SQLMetrics.createMetric(sparkContext, "max partitions per group"))
+    } else {
+      Map.empty
+    })
   }
 
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
   override def equals(other: Any): Boolean = other match {
     case other: BatchScanExec =>
-      this.batch != null && this.batch == other.batch &&
+      // The packing options first: marking a scan compares the copy with its original, which must
+      // not create the original's batch.
+      this.partitionPacking == other.partitionPacking &&
+          this.batch != null && this.batch == other.batch &&
           this.runtimeFilters == other.runtimeFilters &&
           this.prunedKeyGroupedPartitioning == other.prunedKeyGroupedPartitioning &&
           this.storageFilters == other.storageFilters &&
@@ -100,7 +114,8 @@ case class BatchScanExec(
   }
 
   override def hashCode(): Int = Objects.hash(
-    batch, runtimeFilters, prunedKeyGroupedPartitioning, storageFilters, appendsCheckedColumn)
+    batch, runtimeFilters, prunedKeyGroupedPartitioning, storageFilters, appendsCheckedColumn,
+    partitionPacking)
 
   /**
    * The reported partitioning keys restricted to those still present in `output`. A key may
@@ -114,6 +129,27 @@ case class BatchScanExec(
 
   override def inputPartitions: Seq[InputPartition] = plannedScan.inputPartitions
 
+  /**
+   * Marks this scan for packing. Nothing is planned here: `inputRDD` packs the inputs that
+   * runtime filtering leaves, when the scan executes. The marked copy shares this scan's
+   * `PlannedScan`, so the batch, inputs and reader factory one of them plans the other reuses.
+   */
+  private[sql] def withPartitionPacking(options: V2ScanPartitionPacking): BatchScanExec = {
+    val packed = copy(partitionPacking = Some(options))
+    packed.copyTagsFrom(this)
+    packed
+  }
+
+  /**
+   * This scan without packing, keeping its runtime filters. It shares this scan's `PlannedScan`,
+   * so it reports the inputs and keys planned before runtime filtering narrowed the `Scan`.
+   */
+  private[sql] def withoutPacking: BatchScanExec = {
+    val unpacked = copy(partitionPacking = None)
+    unpacked.copyTagsFrom(this)
+    unpacked
+  }
+
   // Visible for testing. Runtime filtering resolves the scan's columns by name, which the checked
   // column must not take part in.
   @transient private[sql] lazy val filteredPartitions: Seq[Option[InputPartition]] =
@@ -124,6 +160,21 @@ case class BatchScanExec(
       scanOutput,
       reportedKeyedPartitioning,
       inputPartitions)
+
+  // Keep the source's full keyed metadata for runtime-filter validation and empty-slot padding,
+  // but do not advertise properties that packing across inputs no longer preserves, even when no
+  // inputs merge: the groups are decided only when the scan executes.
+  @transient override lazy val outputPartitioning: Partitioning = if (partitionPacking.isDefined) {
+    UnknownPartitioning(0)
+  } else {
+    scanOutputPartitioning
+  }
+
+  override def outputOrdering: Seq[SortOrder] = if (partitionPacking.isDefined) {
+    Nil
+  } else {
+    super.outputOrdering
+  }
 
   override def readerFactory: PartitionReaderFactory = plannedScan.readerFactory
 
@@ -140,12 +191,47 @@ case class BatchScanExec(
       // return an empty RDD with 1 partition if dynamic filtering removed the only split
       new EmptyRDDWithPartitions(sparkContext, 1)
     } else {
-      new DataSourceRDD(
-        sparkContext, filteredPartitions, readerFactory, supportsColumnar, customMetrics,
+      // Padding remains in filteredPartitions for keyed runtime-filter validation. A packed
+      // scan advertises no keyed layout, so its tasks need not serialize or compute empty slots.
+      val inputs = if (partitionPacking.isDefined) {
+        filteredPartitions.filter(_.nonEmpty)
+      } else {
+        filteredPartitions
+      }
+      val source = new DataSourceRDD(
+        sparkContext, inputs, readerFactory, supportsColumnar, customMetrics,
         storageFilterRequest, Option.when(appendsCheckedColumn)(output.length))
+      partitionPacking match {
+        case Some(packing) =>
+          packing.pack(inputs.flatten, session.leafNodeDefaultParallelism) match {
+            case Some(groups) =>
+              postPackingMetrics(inputs.size, groups.size, groups.iterator.map(_.size).max)
+              source.coalesce(groups.size, shuffle = false,
+                partitionCoalescer = Some(new GroupedPartitionCoalescer(groups)))
+            case None =>
+              postPackingMetrics(inputs.size, inputs.size, inputs.size.min(1))
+              source
+          }
+        case None => source
+      }
     }
     postDriverMetrics(scan.reportDriverMetrics())
     rdd
+  }
+
+  // What packing did, in GroupPartitionsExec's terms. `inputRDD` is computed once per node.
+  private def postPackingMetrics(
+      numInputs: Int,
+      numPartitions: Int,
+      maxPartitionsPerGroup: Int): Unit = {
+    val values = Seq(
+      "packingNumInputPartitions" -> numInputs,
+      "packingNumPartitions" -> numPartitions,
+      "packingMaxPartitionsPerGroup" -> maxPartitionsPerGroup)
+    values.foreach { case (name, value) => metrics(name).set(value) }
+    SQLMetrics.postDriverMetricsUpdatedByValue(sparkContext,
+      sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY),
+      values.map { case (name, value) => metrics(name).id -> value.toLong })
   }
 
   override def doCanonicalize(): BatchScanExec = {
@@ -163,17 +249,23 @@ case class BatchScanExec(
 
   override def simpleString(maxFields: Int): String = {
     val truncatedOutputString = truncatedString(output, "[", ", ", "]", maxFields)
+    val packingString = packingDescription.map(" " + _).getOrElse("")
     val runtimeFiltersString = s"RuntimeFilters: ${runtimeFilters.mkString("[", ",", "]")}"
     val storageFiltersString = storageFiltersDescription.map(" " + _).getOrElse("")
     val result = s"$nodeName$truncatedOutputString ${scan.description()} " +
-      s"$runtimeFiltersString$storageFiltersString"
+      s"$runtimeFiltersString$storageFiltersString$packingString"
     redact(result)
   }
 
   override def verboseStringWithOperatorId(): String = {
     val verbose = super.verboseStringWithOperatorId()
-    storageFiltersDescription.map(d => verbose + redact(d) + "\n").getOrElse(verbose)
+    (storageFiltersDescription.map(redact) ++ packingDescription)
+      .foldLeft(verbose)((text, line) => text + line + "\n")
   }
+
+  // Whether the scan may pack its inputs. The groups are decided when it executes.
+  private def packingDescription: Option[String] =
+    Option.when(partitionPacking.isDefined)("PartitionPacking: true")
 
   // Only when the scan has some, since an empty one would change every other scan's description.
   private def storageFiltersDescription: Option[String] = Option.when(storageFilters.nonEmpty) {

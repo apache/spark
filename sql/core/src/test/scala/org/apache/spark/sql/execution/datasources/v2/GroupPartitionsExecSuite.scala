@@ -942,6 +942,28 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     assert(diverged.withKeyPositionsFor(swapped).isEmpty,
       "there is nothing to move the positions into once the child reports another partitioning")
   }
+
+  test("SPARK-60265: the grouped coalescer spreads tied locations and keeps single groups free") {
+    val parent = spark.sparkContext.makeRDD((0 until 6).map(i => (i, Seq("host-a", "host-b"))))
+    val coalescer = new GroupedPartitionCoalescer(Seq(Seq(0, 1), Seq(2), Seq(3, 4), Seq(5)))
+    // Groups whose partitions all prefer both hosts alternate between them, and a group of one
+    // partition names no host, so the scheduler uses all of that partition's hosts.
+    assert(coalescer.coalesce(4, parent).map(_.prefLoc).toSeq ===
+      Seq(Some("host-a"), None, Some("host-b"), None))
+    val coalesced = parent.coalesce(4, shuffle = false, Some(coalescer))
+    assert(spark.sparkContext.getPreferredLocs(coalesced, 1).map(_.host).toSet ===
+      Set("host-a", "host-b"))
+    // A location that the largest number of a group's partitions report wins over balancing.
+    val majority = spark.sparkContext.makeRDD((0 until 5).map { i =>
+      (i, Seq(if (i < 4) "host-a" else "host-b"))
+    })
+    assert(new GroupedPartitionCoalescer(Seq(Seq(0, 1), Seq(2, 3, 4))).coalesce(2, majority)
+      .map(_.prefLoc).toSeq === Seq(Some("host-a"), Some("host-a")))
+    // Only the driver reads the groups, so tasks do not carry them.
+    val serializer = new JavaSerializer(new SparkConf()).newInstance()
+    val copy = serializer.deserialize[GroupedPartitionCoalescer](serializer.serialize(coalescer))
+    assert(copy.groupedPartitions == null)
+  }
 }
 
 private case class DummyLeafSparkPlan(

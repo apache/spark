@@ -347,7 +347,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
 
       collected = df.queryExecution.executedPlan.collect {
         case BatchScanExec(
-            _, PlannedScan(scan: InMemoryBaseTable#InMemoryBatchScan), _, _, _, _, _, _) =>
+            _, PlannedScan(scan: InMemoryBaseTable#InMemoryBatchScan), _, _, _, _, _, _, _) =>
           assert(scan.options.get("split-size") === "5")
       }
       assert (collected.size == 1)
@@ -383,7 +383,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
 
       collected = df.queryExecution.executedPlan.collect {
         case BatchScanExec(
-            _, PlannedScan(scan: InMemoryBaseTable#InMemoryBatchScan), _, _, _, _, _, _) =>
+            _, PlannedScan(scan: InMemoryBaseTable#InMemoryBatchScan), _, _, _, _, _, _, _) =>
           assert(scan.options.get("split-size") === "5")
       }
       assert (collected.size == 1)

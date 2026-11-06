@@ -124,7 +124,9 @@ trait DataSourceV2ScanExecBase
 
   // A `lazy val` because the planner asks a node for its partitioning many times, and each ask
   // would otherwise re-project the reported keys.
-  @transient override lazy val outputPartitioning: physical.Partitioning =
+  @transient override lazy val outputPartitioning: physical.Partitioning = scanOutputPartitioning
+
+  protected def scanOutputPartitioning: physical.Partitioning =
     reportedKeyedPartitioning match {
       case Some(partitioning) =>
         // A partition key may reference a column that was pruned out of the scan output (see
