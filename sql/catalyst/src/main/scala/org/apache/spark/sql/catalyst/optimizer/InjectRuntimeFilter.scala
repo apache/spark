@@ -89,7 +89,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       return filterApplicationSidePlan
     }
     // The subquery evaluates the creation side again, apart from the join. A non-deterministic
-    // filter or key can give it different keys than the join sees.
+    // filter or key can give it different keys than the join sees. This check does not see into
+    // a leaf that returns other rows when read again, like a cache whose plan is not repeatable.
     if (!aggregate.deterministic) {
       return filterApplicationSidePlan
     }

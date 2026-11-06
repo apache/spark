@@ -1135,6 +1135,9 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
             |FROM (SELECT k FROM dim
             |  WHERE cast(reflect('java.lang.Math', 'random') AS DOUBLE) < 0.5) d
             |LEFT JOIN fact f ON d.k = f.k""".stripMargin), Row(0L))
+        // A deterministic creation side gets a bloom filter with these tables and settings.
+        assert(getNumBloomFilters(sql("SELECT * FROM (SELECT k FROM dim WHERE k < 100) d " +
+          "LEFT JOIN fact f ON d.k = f.k").queryExecution.optimizedPlan) == 1)
       }
     }
   }
