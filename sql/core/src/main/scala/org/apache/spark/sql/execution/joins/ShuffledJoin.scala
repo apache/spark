@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.joins
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Coalesce, Expression}
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, FullOuter, InnerLike, JoinType, LeftAnti, LeftExistence, LeftOuter, LeftSingle, RightOuter}
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, CoalescedNullAwareHashPartitioning, Distribution, HashPartitioningLike, KeyedPartitioning, NullAwareHashPartitioning, Partitioning, PartitioningCollection, UnknownPartitioning, UnspecifiedDistribution}
-import org.apache.spark.sql.catalyst.trees.{MultiTransform, TreeNodeTag}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -29,16 +28,6 @@ import org.apache.spark.sql.internal.SQLConf
  */
 trait ShuffledJoin extends JoinCodegenSupport {
   def isSkewJoin: Boolean
-
-  // Read on the first `outputPartitioning` call, which is during preparation, and carried through
-  // node copies in a tag, so a copy made at execution keeps the value its exchanges were planned
-  // against.
-  private lazy val fullOuterExpandLimit: Int =
-    getTagValue(ShuffledJoin.FULL_OUTER_EXPAND_LIMIT).getOrElse {
-      val limit = conf.getConf(SQLConf.FULL_OUTER_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT)
-      setTagValue(ShuffledJoin.FULL_OUTER_EXPAND_LIMIT, limit)
-      limit
-    }
 
   private lazy val canSpreadNullJoinKeys: Boolean = {
     // Only NULL keys on the preserved side of an outer or left anti join can create this skew:
@@ -155,32 +144,26 @@ trait ShuffledJoin extends JoinCodegenSupport {
    * A null-aware side may have spread its NULL-keyed rows, and those are exactly the rows whose
    * coalesced key contains a NULL, so the output is null-aware whenever either side is.
    *
-   * Every sound pair of the children's members is reported, each in up to
-   * `FULL_OUTER_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT` argument orders (see `coalescedKeys`),
-   * in a `PartitioningCollection` when there is more than one.
+   * Every sound pair of the children's members is reported, each in the two argument orders of
+   * `coalescedKeys`, in a `PartitioningCollection` when there is more than one.
    */
-  private def fullOuterOutputPartitioning: Partitioning = {
+  private lazy val fullOuterOutputPartitioning: Partitioning = {
     val leftPartitioning = left.outputPartitioning
-    val fallback = UnknownPartitioning(leftPartitioning.numPartitions)
-    if (fullOuterExpandLimit == 0) {
-      fallback
-    } else {
-      requiredChildDistribution match {
-        case Seq(leftDist: ClusteredDistribution, rightDist: ClusteredDistribution) =>
-          val leftHashes = hashPartitionings(leftPartitioning)
-          val rightHashes = hashPartitionings(right.outputPartitioning)
-          val coalesced = for {
-            l <- leftHashes
-            r <- rightHashes
-            p <- coalescedPartitionings(l, leftDist, r, rightDist)
-          } yield p
-          coalesced match {
-            case Seq() => fallback
-            case Seq(single) => single
-            case multiple => PartitioningCollection.fromPartitionings(multiple)
-          }
-        case _ => fallback
-      }
+    // Spreading is allowed here rather than read from `requiredChildDistribution`, which follows
+    // the live `spark.sql.shuffle.spreadNullJoinKeys.enabled`. A null-aware side then pairs with a
+    // strict one however the conf has changed since planning, and the output takes the null-aware
+    // shape, which is sound either way.
+    val leftDist = ClusteredDistribution(leftKeys, allowNullKeySpreading = true)
+    val rightDist = ClusteredDistribution(rightKeys, allowNullKeySpreading = true)
+    val coalesced = for {
+      l <- hashPartitionings(leftPartitioning)
+      r <- hashPartitionings(right.outputPartitioning)
+      p <- coalescedPartitionings(l, leftDist, r, rightDist)
+    } yield p
+    coalesced match {
+      case Seq() => UnknownPartitioning(leftPartitioning.numPartitions)
+      case Seq(single) => single
+      case multiple => PartitioningCollection.fromPartitionings(multiple)
     }
   }
 
@@ -214,22 +197,15 @@ trait ShuffledJoin extends JoinCodegenSupport {
   }
 
   /**
-   * The coalesced keys of `keyPairs`, at most `fullOuterExpandLimit` of them. `Coalesce(l, r)` and
-   * `Coalesce(r, l)` agree on every output row: a matched row has equal keys, and an unmatched
-   * row has a NULL on the other side. So each position may take either order. Every key left
-   * first and every key right first come first, as a query usually writes all of its keys in one
-   * order, and the mixed orders follow.
+   * The coalesced keys of `keyPairs` with every key left first, and with every key right first.
+   * `Coalesce(l, r)` and `Coalesce(r, l)` agree on every output row: a matched row has equal keys,
+   * and an unmatched row has a NULL on the other side. `USING` gives the left-first order, and a
+   * query usually writes all of its keys in one order, so the mixed orders are not reported.
    */
   private def coalescedKeys(keyPairs: Seq[(Expression, Expression)]): Seq[Seq[Expression]] = {
-    val alternatives = keyPairs.map { case (l, r) => Seq(Coalesce(Seq(l, r)), Coalesce(Seq(r, l))) }
-    val leftFirst = alternatives.map(_.head)
-    val rightFirst = alternatives.map(_.last)
-    val mixed = MultiTransform.generateCartesianProduct(alternatives.map(a => () => a))
-      .filter(keys => keys != leftFirst && keys != rightFirst)
-    // A strict `List`, as an unforced `LazyList` held by a plan node can overflow the stack.
-    (leftFirst #:: rightFirst #:: mixed)
-      .take(fullOuterExpandLimit)
-      .toList
+    val leftFirst = keyPairs.map { case (l, r) => Coalesce(Seq(l, r)) }
+    val rightFirst = keyPairs.map { case (l, r) => Coalesce(Seq(r, l)) }
+    Seq(leftFirst, rightFirst)
   }
 
   /**
@@ -275,8 +251,6 @@ trait ShuffledJoin extends JoinCodegenSupport {
 }
 
 object ShuffledJoin {
-  private val FULL_OUTER_EXPAND_LIMIT = TreeNodeTag[Int]("fullOuterExpandLimit")
-
   /**
    * Whether replicating the right side over splits of the left cannot change the result. The
    * right partition then reaches every left split, so no output row may come from a right row
