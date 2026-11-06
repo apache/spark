@@ -645,6 +645,57 @@ case class MakeTime(
     copy(hours = newChildren(0), minutes = newChildren(1), secsAndMicros = newChildren(2))
 }
 
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(hour, minute, second) - Try to create time from hour, minute and second fields. The function returns NULL on invalid inputs.",
+  arguments = """
+    Arguments:
+      * hour - the hour to represent, from 0 to 23
+      * minute - the minute to represent, from 0 to 59
+      * second - the second to represent, from 0 to 59.999999
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(6, 30, 45.887);
+       06:30:45.887
+      > SELECT _FUNC_(NULL, 30, 0);
+       NULL
+      > SELECT _FUNC_(25, 30, 0);
+       NULL
+  """,
+  group = "datetime_funcs",
+  since = "4.3.0")
+// scalastyle:on line.size.limit
+object TryMakeTimeExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val numArgs = expressions.length
+    if (numArgs == 3) {
+      new TryMakeTime(expressions(0), expressions(1), expressions(2))
+    } else {
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(3), numArgs)
+    }
+  }
+}
+
+case class TryMakeTime(
+    hours: Expression,
+    minutes: Expression,
+    secsAndMicros: Expression,
+    replacement: Expression)
+  extends RuntimeReplaceable with InheritAnalysisRules {
+
+  def this(hours: Expression, minutes: Expression, secsAndMicros: Expression) =
+    this(hours, minutes, secsAndMicros,
+      TryEval(MakeTime(hours, minutes, secsAndMicros)))
+
+  override def prettyName: String = "try_make_time"
+
+  override def parameters: Seq[Expression] = Seq(hours, minutes, secsAndMicros)
+
+  override protected def withNewChildInternal(newChild: Expression): TryMakeTime =
+    copy(replacement = newChild)
+}
+
 /**
  * Adds day-time interval to time.
  */

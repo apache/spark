@@ -164,6 +164,58 @@ abstract class TimeFunctionsSuiteBase extends SharedSparkSession {
     checkAnswer(result2, expected)
   }
 
+  test("SPARK-57846: try_make_time function") {
+    // Valid input data.
+    val schema = StructType(Seq(
+      StructField("hour", IntegerType, nullable = false),
+      StructField("minute", IntegerType, nullable = false),
+      StructField("second", DecimalType(16, 6), nullable = false)
+    ))
+    val data = Seq(
+      Row(0, 0, BigDecimal(0.0)),
+      Row(1, 2, BigDecimal(3.4)),
+      Row(23, 59, BigDecimal(59.999999))
+    )
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+
+    // Test valid inputs using both selectExpr and select.
+    val result1 = df.selectExpr("try_make_time(hour, minute, second)")
+    val result2 = df.select(try_make_time(col("hour"), col("minute"), col("second")))
+    checkAnswer(result1, result2)
+
+    // For valid inputs, try_make_time should produce the same result as make_time.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      val makeResult = df.select(make_time(col("hour"), col("minute"), col("second")))
+      checkAnswer(result1, makeResult)
+    }
+
+    // Test invalid inputs return null instead of throwing.
+    val invalidData = Seq(
+      Row(25, 0, BigDecimal(0.0)),
+      Row(1, 60, BigDecimal(0.0)),
+      Row(1, 2, BigDecimal(60.0))
+    )
+    val invalidDf = spark.createDataFrame(
+      spark.sparkContext.parallelize(invalidData), schema)
+    val invalidResult = invalidDf.selectExpr("try_make_time(hour, minute, second)")
+    checkAnswer(invalidResult, Seq(Row(null), Row(null), Row(null)))
+
+    // Test NULL inputs return null through the DataFrame API.
+    val nullSchema = StructType(Seq(
+      StructField("hour", IntegerType, nullable = true),
+      StructField("minute", IntegerType, nullable = true),
+      StructField("second", DecimalType(16, 6), nullable = true)
+    ))
+    val nullData = Seq(
+      Row(null, 0, BigDecimal(0.0)),
+      Row(1, null, BigDecimal(0.0)),
+      Row(1, 2, null)
+    )
+    val nullDf = spark.createDataFrame(spark.sparkContext.parallelize(nullData), nullSchema)
+    val nullResult = nullDf.select(try_make_time(col("hour"), col("minute"), col("second")))
+    checkAnswer(nullResult, Seq(Row(null), Row(null), Row(null)))
+  }
+
   test("SPARK-53929: make_timestamp function") {
     // Input data for the function.
     val schema = StructType(Seq(
