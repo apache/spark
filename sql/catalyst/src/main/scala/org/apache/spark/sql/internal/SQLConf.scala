@@ -3529,8 +3529,8 @@ object SQLConf {
         "(including user-written FILTER on a plain column), so the first " +
         "aggregate's output cardinality stays bounded by the un-rewritten " +
         "plan. A child that is not safe to evaluate unconditionally (for example " +
-        "a division, which can throw) keeps the raw Expand key. When false, both " +
-        "the IF/CASE rewrite and the union-of-filters guard are disabled. The " +
+        "a division in ANSI mode, which can throw) keeps the raw Expand key. " +
+        "When false, both the IF/CASE rewrite and the union-of-filters guard are disabled. The " +
         "IF/CASE rewrite is only applied to base expressions that are safe to " +
         "evaluate unconditionally (e.g. plain columns), so the short-circuit " +
         "semantics of IF/CASE WHEN are preserved. A condition that contains a " +
