@@ -1,0 +1,36 @@
+- text: Overview
+  url: graphframes-programming-guide.html
+- text: Internals
+  url: graphframes-architecture.html
+- text: Quick Start
+  url: graphframes-quick-start.html
+- text: Creating GraphFrames
+  url: graphframes-creating-graphframes.html
+- text: Basic Operations
+  url: graphframes-basic-operations.html
+- text: Centrality Metrics
+  url: graphframes-centralities.html
+- text: Motif Finding
+  url: graphframes-motif-finding.html
+- text: Traversals and Connectivity
+  url: graphframes-traversals.html
+- text: Community Detection
+  url: graphframes-graph-clustering.html
+- text: Subgraphs
+  url: graphframes-subgraphs.html
+- text: Graph Machine Learning
+  url: graphframes-graph-ml.html
+- text: Saving and Loading
+  url: graphframes-saving-and-loading.html
+- text: Message Passing
+  url: graphframes-aggregate-messages.html
+- text: Pregel API
+  url: graphframes-pregel.html
+- text: Property Graphs
+  url: graphframes-property-graphs.html
+- text: GraphX Conversions
+  url: graphframes-graphx-conversion.html
+- text: Configurations
+  url: graphframes-configurations.html
+- text: Reserved Columns
+  url: graphframes-special-columns.html
