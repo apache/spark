@@ -260,11 +260,7 @@ class MicroBatchExecution(
     }
 
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
-    // The columns that the query reads from each Data Source V2 source, which the scan of the
-    // source reads if its table has the capability STREAMING_COLUMN_PRUNING and its scan builder
-    // supports the pruning, from the plan of the query optimized once as its micro-batches are.
-    // The plan is only optimized for such a source.
-    lazy val sourceReads = StreamingV2ScanPushDown.reads(
+    lazy val requiredColumnsOfSources = StreamingV2ScanPushDown.requiredColumnsOfSources(
       sparkSessionForStream, planWithDedupKeys, initialLatestOffsetSeq.flatMap(_._2.metadataOpt))
     val _logicalPlan = planWithDedupKeys.transform {
       case streamingRelation @ StreamingRelation(
@@ -298,7 +294,7 @@ class MicroBatchExecution(
             // reads, so that connectors implementing SupportsMetadataColumns include them in
             // readSchema().
             val streamingScan = StreamingV2ScanPushDown.buildScan(
-              table, options, output, streamConf, sourceReads.get(s))(
+              table, options, output, streamConf, requiredColumnsOfSources.get(s))(
               _.toMicroBatchStream(metadataPath))
             val relation = StreamingDataSourceV2Relation(
                 table,
@@ -313,7 +309,8 @@ class MicroBatchExecution(
                 },
                 sourceIdentifyingName
               )
-            streamingScan.toRelation(relation)
+            StreamingDataSourceV2ScanRelation(relation, streamingScan.scan, output,
+              streamingScan.stream, scanOutput = streamingScan.scanOutput)
           })
         } else if (v1.isEmpty) {
           throw QueryExecutionErrors.microBatchUnsupportedByDataSourceError(

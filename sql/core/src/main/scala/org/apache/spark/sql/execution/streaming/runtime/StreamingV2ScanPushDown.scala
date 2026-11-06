@@ -37,8 +37,9 @@ import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{SupportsRead, TableCapability}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetSeqMetadata, OffsetSeqMetadataBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{AnyTimeType, DataType, DatetimeType, StringType, StructType, VariantType}
@@ -80,42 +81,17 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
   case class StreamingScan(
       scan: Scan,
       stream: SparkDataStream,
-      scanOutput: Option[Seq[AttributeReference]]) {
-
-    /** Returns the scan relation of the source whose relation is `relation`. */
-    def toRelation(
-        relation: StreamingDataSourceV2Relation): StreamingDataSourceV2ScanRelation = {
-      StreamingDataSourceV2ScanRelation(relation, scan, relation.output, stream,
-        scanOutput = scanOutput)
-    }
-  }
+      scanOutput: Option[Seq[AttributeReference]])
 
   /**
-   * Returns the columns that the optimized `plan` reads from each of its streaming relations of
-   * Data Source V2: those that the planner takes from the projections and the filters over each
-   * occurrence of the relation, or all its columns where nothing is projected or filtered over it.
-   * A relation that the optimized plan does not have has no entry, so that its scan reads all its
-   * columns, as no relation has if the optimizer fails, or if the optimized plan has a streaming
-   * relation that `plan` does not have.
-   *
-   * The plan is optimized as the micro-batches are: with the optimizer and the configuration of
-   * the stream, the values of the configurations that the offset log of a restarted query pins, and
-   * without the cost-based reordering of joins, which `StreamExecution` disables for its queries.
-   * The plan does not depend on when it is optimized:
-   *  - The expressions whose values may depend on when they are evaluated or on the state of the
-   *    session, such as the current time, the current database, or the conversions of strings,
-   *    times and variants to dates and timestamps, which take the current date for a string with
-   *    only a time such as '12:00:00', a special string such as 'today', or a time (see
-   *    `forStartup`), become placeholders that the optimizer does not take as deterministic, as
-   *    the current time of a micro-batch, so the columns that the plan reads do not depend on
-   *    their values, which each micro-batch gets.
-   *  - The relations of batch scans become placeholders, so that their scans are neither built
-   *    nor planned: they do not change what the plan reads from its streaming relations.
+   * Returns the columns that each streaming relation of Data Source V2 needs to read, from `plan`
+   * optimized as the micro-batches are (see `forStartup`). A relation without an entry reads all
+   * its columns, as all do if the optimization fails.
    *
    * @param session the session of the stream
    * @param offsetLogMetadata the metadata of the last entry of the offset log of the query, if any
    */
-  def reads(
+  def requiredColumnsOfSources(
       session: SparkSession,
       plan: LogicalPlan,
       offsetLogMetadata: Option[OffsetSeqMetadataBase]): Map[StreamingRelationV2, AttributeSet] = {
@@ -172,11 +148,21 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
   }
 
   /**
-   * Returns `plan` for the optimization when the query starts, see `reads`, with its subqueries.
-   * The expressions that are replaced keep their children, so that the plan still reads the same
-   * columns. Visible for tests.
+   * Returns `plan` for the optimization when the query starts, so that the columns that it reads
+   * from its streaming relations do not depend on when it is optimized:
+   *  - The subtrees without a streaming relation, such as the static side of a join, and the
+   *    relations of batch scans in subqueries, become placeholders of their outputs, so that
+   *    nothing of them folds into the plan: a micro-batch applies the cache, which may change
+   *    after the query starts, and their scans are neither built nor planned.
+   *  - The expressions whose values may depend on when they are evaluated or on the state of the
+   *    session, such as the current time or the conversions to dates and timestamps (see
+   *    `makesDateOrTimestamp`), become placeholders that are not deterministic for the optimizer,
+   *    as the current time of a micro-batch, and keep their children.
+   * Visible for tests.
    */
-  private[sql] def forStartup(plan: LogicalPlan): LogicalPlan = plan.transformUpWithSubqueries {
+  private[sql] def forStartup(plan: LogicalPlan): LogicalPlan = plan.transformDown {
+    case node if !node.isStreaming => BatchRelation(node.output)
+  }.transformUpWithSubqueries {
     case relation: DataSourceV2Relation => BatchRelation(relation.output)
     case relation: LogicalRelation if !relation.isStreaming => BatchRelation(relation.output)
     case relation: HiveTableRelation => BatchRelation(relation.output)
@@ -244,8 +230,9 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
    * Builds the scan of a streaming source, and creates its stream with `createStream`. If the
    * table of the source has the capability `STREAMING_COLUMN_PRUNING`, its scan builder supports
    * the pushdown, and `conf` enables it, the scan only reads the columns of `output` that the query
-   * reads (see `reads`). `requiredColumns` is only evaluated for such a scan. Otherwise, the scan
-   * reads all the columns of `output`, as the scans of streaming queries did before this pushdown.
+   * reads (see `requiredColumnsOfSources`). `requiredColumns` is only evaluated for such a scan.
+   * Otherwise, the scan reads all the columns of `output`, as the scans of streaming queries did
+   * before this pushdown.
    *
    * The streams of the scans of a table with the capability return the columns of the read
    * schemas of the scans, in their order, so Spark asks each scan of such a table for its read
@@ -254,8 +241,8 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
    * type, as `SupportsPushDownRequiredColumns` requires. If the scan builder or the scan fails
    * with the pruning, or the read schema of a pruned scan cannot be read or does not follow
    * `SupportsPushDownRequiredColumns`, a scan of all the columns is built instead, from a new scan
-   * builder, as without this pushdown. If the read schema of a scan of all the columns does not
-   * have them, its scan node outputs them in their order, as without this pushdown.
+   * builder, as without this pushdown. If the read schema of a scan of all the columns of such a
+   * table does not follow the relation, the query fails with STREAMING_SCAN_INVALID_READ_SCHEMA.
    *
    * The stream is created once, from the scan that the source reads, outside of the fallback: a
    * stream can start to use the checkpoint of the source, or other resources, before it fails, so
@@ -297,24 +284,16 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
     def scanOfAllColumns(builder: ScanBuilder): (Scan, Seq[AttributeReference]) = {
       val scan = build(builder, output)
       if (returnsReadSchema) {
-        // Logs why the columns of the read schema are not those of `output`, which the scan node
-        // outputs in their order instead.
-        def ignoreReadSchema(
-            reason: String,
-            cause: Option[Throwable]): (Scan, Seq[AttributeReference]) = {
-          val message = log"The read schema of the scan of all the columns of the streaming " +
-            log"table ${MDC(LogKeys.STREAMING_TABLE, table)} ${MDC(LogKeys.REASON, reason)}, " +
-            log"so its scan node outputs the columns of the relation in their order."
-          cause match {
-            case Some(e) => logWarning(message, e)
-            case None => logWarning(message)
-          }
-          scan -> output
-        }
+        // The readers of the stream return the columns of the read schema, so a read schema that
+        // does not follow the relation fails the query when it starts: the scan node cannot
+        // output the columns of the relation in its place.
         Try(readOutput(scan.readSchema(), output, output)) match {
           case Success(Right(columns)) => scan -> columns
-          case Success(Left(reason)) => ignoreReadSchema(reason, None)
-          case Failure(e) => ignoreReadSchema(s"could not be read: $e", Some(e))
+          case Success(Left(reason)) =>
+            throw QueryExecutionErrors.streamingScanInvalidReadSchemaError(table.name(), reason)
+          case Failure(e) =>
+            throw QueryExecutionErrors.streamingScanInvalidReadSchemaError(
+              table.name(), s"could not be read: $e", e)
         }
       } else {
         scan -> output

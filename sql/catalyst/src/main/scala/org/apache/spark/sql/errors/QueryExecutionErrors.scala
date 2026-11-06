@@ -2527,6 +2527,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = null)
   }
 
+  def streamingScanInvalidReadSchemaError(
+      source: String,
+      reason: String,
+      cause: Throwable = null): Throwable = {
+    new SparkException(
+      errorClass = "STREAMING_SCAN_INVALID_READ_SCHEMA",
+      messageParameters = Map("source" -> toSQLId(source), "reason" -> reason),
+      cause = cause)
+  }
+
   def cannotPurgeAsBreakInternalStateError(): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(errorClass = "_LEGACY_ERROR_TEMP_2260")
   }

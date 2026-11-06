@@ -482,9 +482,10 @@ case class StreamingDataSourceV2Relation(
  * @param output the columns of the source that the query references, which the plan of each
  *               micro-batch is optimized with
  * @param scanOutput the columns of `output` that the scan reads, in the order of its read schema,
- *                   unless these are all the columns of `output` in their order. The scan node of
- *                   the physical plan outputs these, so the plan must not read the other columns
- *                   of `output`.
+ *                   unless these are all the columns of `output` in their order. The readers of
+ *                   the stream return these columns, so a planner must build the scan node from
+ *                   them rather than from `output`, and check that the plan reads no other column
+ *                   of `output`, as `DataSourceV2Strategy` does.
  */
 case class StreamingDataSourceV2ScanRelation(
     relation: StreamingDataSourceV2Relation,

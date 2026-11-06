@@ -29,7 +29,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow}
-import org.apache.spark.sql.catalyst.expressions.Alias
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeSet}
 import org.apache.spark.sql.catalyst.optimizer.ColumnPruning
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
@@ -77,6 +77,10 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
       f
     }
   }
+
+  /** The columns that a streaming query needs from each of its sources, when it starts. */
+  private def requiredColumns(df: DataFrame): Map[StreamingRelationV2, AttributeSet] =
+    StreamingV2ScanPushDown.requiredColumnsOfSources(spark, df.queryExecution.analyzed, None)
 
   private def insert(values: String, table: String = tbl): StreamAction = Execute { _ =>
     sql(s"INSERT INTO $table VALUES $values")
@@ -609,7 +613,7 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
         // The condition takes the date of each micro-batch, so the scan reads both columns.
         val df = spark.readStream.table(tbl).select(expr(s"CASE WHEN $condition THEN data " +
           "ELSE CAST(extra AS STRING) END AS v"))
-        val reads = StreamingV2ScanPushDown.reads(spark, df.queryExecution.analyzed, None)
+        val reads = requiredColumns(df)
         assert(reads.values.map(_.map(_.name).toSet).toSeq ===
           Seq(Set("data", "extra")))
         testStream(df)(
@@ -628,7 +632,7 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
       val df = spark.readStream.table(tbl).withColumn("cutoff", lit("12:00:00"))
         .select(expr("CASE WHEN CAST(cutoff AS TIMESTAMP) < TIMESTAMP'2100-01-01 00:00:00' " +
           "THEN data ELSE CAST(extra AS STRING) END AS v"))
-      val reads = StreamingV2ScanPushDown.reads(spark, df.queryExecution.analyzed, None)
+      val reads = requiredColumns(df)
       assert(reads.values.map(_.map(_.name).toSet).toSeq ===
         Seq(Set("data", "extra")))
       testStream(df)(
@@ -750,7 +754,7 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
       val inline = sql("SELECT * FROM VALUES (2, current_date()) AS s(k, d)")
       val df = source.where("extra > 10").join(inline, source("id") === inline("k"))
         .select("data", "d")
-      val reads = StreamingV2ScanPushDown.reads(spark, df.queryExecution.analyzed, None)
+      val reads = requiredColumns(df)
       assert(reads.values.map(_.map(_.name).toSet).toSeq ===
         Seq(Set("id", "data", "extra")))
     }
@@ -763,10 +767,57 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
         table, None, None, CaseInsensitiveStringMap.empty()))
       val source = spark.readStream.table(tbl)
       val df = source.join(static, source("id") === static("sid")).select("data")
-      val reads = StreamingV2ScanPushDown.reads(spark, df.queryExecution.analyzed, None)
+      val reads = requiredColumns(df)
       assert(reads.values.map(_.map(_.name).toSet).toSeq === Seq(Set("id", "data")))
       assert(table.scanBuilders.get() === 0)
     }
+  }
+
+  test("read the columns of a condition on a static side, whatever the cache holds") {
+    withSourceTable() {
+      val static = spark.range(1, 4).toDF("sid").withColumn("on", lit(false))
+      val source = spark.readStream.table(tbl)
+      val df = source.join(static, source("id") === static("sid"))
+        .select(when(col("on"), col("data")).otherwise(col("extra").cast("string")).as("v"))
+      // The static side is opaque when the query starts, so the scan reads both columns of the
+      // condition, also when a micro-batch cannot fold it, as with the static side cached after
+      // the query started.
+      assert(requiredColumns(df).values.map(_.map(_.name).toSet).toSeq ===
+        Seq(Set("id", "data", "extra")))
+      static.cache()
+      try {
+        testStream(df)(
+          ProcessAllAvailable(),
+          assertReadSchemas(Seq("id", "data", "extra")),
+          CheckAnswer(Row("10"), Row("20")),
+          insert("(3, 'c', 30)"),
+          ProcessAllAvailable(),
+          CheckAnswer(Row("10"), Row("20"), Row("30")))
+      } finally {
+        static.unpersist()
+      }
+    }
+  }
+
+  test("fail a query whose scan of all the columns has a read schema that does not follow the " +
+      "relation") {
+    val input = MemoryStream[(Long, String, Int)]
+    val table = new UnknownColumnReadSchemaTable(input)
+    val df = Dataset.ofRows(spark, StreamingRelationV2(None, "unknown_column_read_schema", table,
+      CaseInsensitiveStringMap.empty(), DataTypeUtils.toAttributes(table.schema()), None, None,
+      None)).toDF("id", "data", "extra")
+    // The readers of the stream would return the column that the relation does not output, so
+    // the scan node could not output the columns of the relation in their order.
+    testStream(df)(
+      StartStream(),
+      ExpectFailure[SparkException] { e =>
+        checkError(e.asInstanceOf[SparkException],
+          condition = "STREAMING_SCAN_INVALID_READ_SCHEMA",
+          parameters = Map(
+            "source" -> "`unknown_column_read_schema`",
+            "reason" -> ("struct<_1:bigint,_2:string,_3:int,unknown:int> has the columns " +
+              "unknown, which the relation does not output")))
+      })
   }
 
   test("read all the columns of a source whose pruned scan has no read schema") {
@@ -925,6 +976,25 @@ private class CountingBatchTable extends Table with SupportsRead {
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     scanBuilders.incrementAndGet()
     () => throw new UnsupportedOperationException("The scan of the batch table is not built.")
+  }
+}
+
+/**
+ * A table over a memory stream that declares STREAMING_COLUMN_PRUNING, whose scans have a column
+ * in their read schema that the table does not have.
+ */
+private class UnknownColumnReadSchemaTable(input: MemoryStream[_]) extends Table with SupportsRead {
+  override def name(): String = "unknown_column_read_schema"
+
+  override def schema(): StructType = input.fullSchema()
+
+  override def capabilities(): util.Set[TableCapability] =
+    util.EnumSet.of(TableCapability.MICRO_BATCH_READ, TableCapability.STREAMING_COLUMN_PRUNING)
+
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = () => new Scan {
+    override def readSchema(): StructType = schema().add("unknown", "int")
+
+    override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = input
   }
 }
 

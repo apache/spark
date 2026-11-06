@@ -77,12 +77,9 @@ class ContinuousExecution(
     val v2ToRelationMap = MutableMap[StreamingRelationV2, StreamingDataSourceV2ScanRelation]()
     var nextSourceId = 0
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
-    // The columns that the query reads from each Data Source V2 source, which the scan of the
-    // source reads if its table has the capability STREAMING_COLUMN_PRUNING and its scan builder
-    // supports the pruning, from the plan of the query optimized once as it is when it runs. The
-    // plan is only optimized for such a source.
     val streamConf = sparkSessionForStream.sessionState.conf
-    lazy val sourceReads = StreamingV2ScanPushDown.reads(sparkSessionForStream, analyzedPlan, None)
+    lazy val requiredColumnsOfSources =
+      StreamingV2ScanPushDown.requiredColumnsOfSources(sparkSessionForStream, analyzedPlan, None)
     val _logicalPlan = analyzedPlan.transform {
       case s @ StreamingRelationV2(ds, sourceName, table: SupportsRead, options, output,
         catalog, identifier, _, _) =>
@@ -102,11 +99,12 @@ class ContinuousExecution(
           // reads, so that connectors implementing SupportsMetadataColumns include them in
           // readSchema().
           val streamingScan = StreamingV2ScanPushDown.buildScan(
-            table, options, output, streamConf, sourceReads.get(s))(
+            table, options, output, streamConf, requiredColumnsOfSources.get(s))(
             _.toContinuousStream(metadataPath))
           val relation = StreamingDataSourceV2Relation(
               table, output, catalog, identifier, options, metadataPath)
-          streamingScan.toRelation(relation)
+          StreamingDataSourceV2ScanRelation(relation, streamingScan.scan, output,
+            streamingScan.stream, scanOutput = streamingScan.scanOutput)
         })
     }
 

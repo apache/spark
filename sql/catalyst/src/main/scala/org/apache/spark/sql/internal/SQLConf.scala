@@ -6257,7 +6257,6 @@ object SQLConf {
 
   val STREAMING_V2_COLUMN_PRUNING_ENABLED =
     buildConf("spark.sql.streaming.v2ColumnPruning.enabled")
-      .internal()
       .doc("When true, the scan of a Data Source V2 streaming source whose table has the " +
         "capability STREAMING_COLUMN_PRUNING only reads the top-level columns that the streaming " +
         "query reads from it, which Spark takes from the plan of the query optimized when the " +
