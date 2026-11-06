@@ -891,6 +891,11 @@ object LikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
   private val contains = "%+([^_%]+)%+".r
   private val equalTo = "([^_%]*)".r
 
+  // Marks a residual `Like` that `deriveLengthGuard` has already guarded with a length
+  // predicate, so the rule does not re-wrap it on later fixed-point iterations. Ignored by
+  // `fastEquals`.
+  private[sql] val LIKE_LENGTH_GUARDED = TreeNodeTag[Unit]("likeLengthGuarded")
+
   private def startsWithExpr(input: Expression, prefix: String): Expression =
     StartsWith(input, Literal.create(prefix, input.dataType))
 
@@ -1009,6 +1014,53 @@ object LikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
+  // For a pattern with a `_` wildcard and at least one literal (which `simplifyLike` leaves as a
+  // full `Like`), derive a byte-length guard and keep the exact `Like` as the residual:
+  // `<byte-length bounds> && (input LIKE pattern)`. `_` matches exactly one code point, which is
+  // 1 to 4 bytes of UTF-8. Under a binary-equality collation each literal matches its own bytes;
+  // otherwise (LIKE reaches this only for UTF8_LCASE) a literal code point can match a case
+  // variant of a different width, so it also counts as 1 to 4 bytes. A pattern with `%` gives
+  // only the lower bound. The guard uses OctetLength, which reads the stored byte count, rather
+  // than the code-point count (Length), which scans the whole string and can cost more than the
+  // `Like` it guards. A pattern of only `_`/`%` wildcards is left alone: a byte length cannot
+  // stand in for it exactly.
+  //
+  // The residual is tagged to keep the rule idempotent under the fixed-point batch.
+  // `And(guard, Like)` equals the `Like` in every context (it is `Like` conjoined with one of its
+  // necessary conditions), so no predicate-only restriction is needed. It does read the input
+  // twice, so it is made only for a deterministic input; a nondeterministic one could give each
+  // read a different value.
+  private def deriveLengthGuard(
+      input: Expression,
+      pattern: String,
+      escapeChar: Char,
+      like: Expression): Option[Expression] = {
+    val literals = pattern.filter(c => c != '_' && c != '%')
+    if (pattern.contains(escapeChar) || pattern.indexOf('_') < 0 || literals.isEmpty ||
+        !input.deterministic || like.containsTag(LIKE_LENGTH_GUARDED)) {
+      None
+    } else {
+      val underscores = pattern.count(_ == '_')
+      val (minLiteralBytes, maxLiteralBytes) = input.dataType match {
+        case st: StringType if st.supportsBinaryEquality =>
+          val bytes = UTF8String.fromString(literals).numBytes
+          (bytes, bytes)
+        case _ =>
+          val codePoints = literals.codePointCount(0, literals.length)
+          (codePoints, 4 * codePoints)
+      }
+      val minBytes = GreaterThanOrEqual(OctetLength(input), Literal(minLiteralBytes + underscores))
+      val guard = if (pattern.indexOf('%') >= 0) {
+        minBytes
+      } else {
+        And(minBytes,
+          LessThanOrEqual(OctetLength(input), Literal(maxLiteralBytes + 4 * underscores)))
+      }
+      like.setTagValue(LIKE_LENGTH_GUARDED, ())
+      Some(And(guard, like))
+    }
+  }
+
   private def simplifyMultiLike(
       child: Expression, patterns: Seq[UTF8String], multi: MultiLikeBase): Expression = {
     val (remainPatternMap, replacementMap) =
@@ -1044,7 +1096,10 @@ object LikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
         // If pattern is null, return null value directly, since "col like null" == null.
         Literal(null, BooleanType)
       } else {
-        simplifyLike(input, pattern.toString, escapeChar).getOrElse(l)
+        val patternStr = pattern.toString
+        simplifyLike(input, patternStr, escapeChar)
+          .orElse(deriveLengthGuard(input, patternStr, escapeChar, l))
+          .getOrElse(l)
       }
     case l @ LikeAll(child, patterns) if CollapseProject.isCheap(child) =>
       simplifyMultiLike(child, patterns, l)

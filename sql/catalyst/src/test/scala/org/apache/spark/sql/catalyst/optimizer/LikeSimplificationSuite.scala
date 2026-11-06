@@ -183,9 +183,6 @@ class LikeSimplificationSuite extends PlanTest {
     comparePlans(Optimize.execute(escPercent), escPercent)
     val escUnderscore = testRelation.where($"a".like("a__b", '_')).analyze
     comparePlans(Optimize.execute(escUnderscore), escUnderscore)
-    // Unescaped '_' single-char wildcard -> not handled by this rule.
-    val underscore = testRelation.where($"a" like "a_b").analyze
-    comparePlans(Optimize.execute(underscore), underscore)
   }
 
   test("SPARK-33677: LikeSimplification skips invalid/pathological escapes, simplifies valid") {
@@ -386,6 +383,75 @@ class LikeSimplificationSuite extends PlanTest {
     val originalQuery = testRelation.where($"a".substring(1, 5) likeAny("abc%", "", "ab")).analyze
 
     comparePlans(Optimize.execute(originalQuery), originalQuery)
+  }
+
+  test("no length guard for LIKE patterns of only '_'/'%' wildcards") {
+    // A byte length cannot stand in for a code-point count, so these stay as LIKE.
+    Seq("_", "___", "_%", "%_%", "_%_").foreach { pattern =>
+      val query = testRelation.where($"a" like pattern).analyze
+      comparePlans(Optimize.execute(query), query)
+    }
+  }
+
+  test("derive byte-length guard for '_' patterns with literals") {
+    // No `%`: each `_` is 1 to 4 bytes and each ASCII literal 1 byte, so 'a_c' is 3 to 6 bytes.
+    comparePlans(
+      Optimize.execute(testRelation.where($"a" like "a_c").analyze),
+      testRelation.where(OctetLength($"a") >= 3 && OctetLength($"a") <= 6 &&
+        ($"a" like "a_c")).analyze)
+    // With `%`: only the lower bound.
+    comparePlans(
+      Optimize.execute(testRelation.where($"a" like "a_b%").analyze),
+      testRelation.where(OctetLength($"a") >= 3 && ($"a" like "a_b%")).analyze)
+  }
+
+  // scalastyle:off nonascii
+  test("byte-length guard counts literal bytes under binary collation") {
+    // 'é_c' with a 2-byte literal: 2 + 1 bytes of literals plus 1 to 4 for the `_`.
+    comparePlans(
+      Optimize.execute(testRelation.where($"a" like "é_c").analyze),
+      testRelation.where(OctetLength($"a") >= 4 && OctetLength($"a") <= 7 &&
+        ($"a" like "é_c")).analyze)
+  }
+  // scalastyle:on nonascii
+
+  test("byte-length guard counts each code point as 1 to 4 bytes under UTF8_LCASE") {
+    // A literal can match a case variant of a different byte width, so 'a_c' is 3 to 12 bytes.
+    val lcase = StringType("UTF8_LCASE")
+    val relation = LocalRelation(AttributeReference("a", lcase)())
+    val a = relation.output.head
+    val like = Like(a, Literal.create("a_c", lcase), '\\')
+    comparePlans(
+      Optimize.execute(relation.where(like).analyze),
+      relation.where(OctetLength(a) >= 3 && OctetLength(a) <= 12 && like).analyze)
+  }
+
+  test("no length guard over a nondeterministic input") {
+    // The guarded form reads the input twice, and each read could see a different value.
+    val input = Uuid(Some(0L))
+    val originalQuery = testRelation.where(input like "a_c").analyze
+    comparePlans(Optimize.execute(originalQuery), originalQuery)
+
+    // The guard is still added for a deterministic input, even one not cheap.
+    val substr = $"a".substring(1, 5)
+    comparePlans(
+      Optimize.execute(testRelation.where(substr like "a_c").analyze),
+      testRelation.where(OctetLength(substr) >= 3 && OctetLength(substr) <= 6 &&
+        (substr like "a_c")).analyze)
+  }
+
+  test("no length guard when the pattern has escapes or no '_'") {
+    // An escaped `_` is a literal, so the pattern is an equality, not a length guard.
+    comparePlans(
+      Optimize.execute(testRelation.where($"a" like "a\\_b").analyze),
+      testRelation.where($"a" === "a_b").analyze)
+    // An unescaped `_` alongside an escape sequence is left as a LIKE.
+    val mixed = testRelation.where($"a" like "a\\%_b").analyze
+    comparePlans(Optimize.execute(mixed), mixed)
+    // No `_`: existing behavior is unchanged (StartsWith), not a length guard.
+    comparePlans(
+      Optimize.execute(testRelation.where($"a" like "abc%").analyze),
+      testRelation.where(StartsWith($"a", "abc")).analyze)
   }
 
   // scalastyle:off nonascii
