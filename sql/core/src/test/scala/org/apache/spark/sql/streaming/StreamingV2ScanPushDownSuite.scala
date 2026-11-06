@@ -29,13 +29,14 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{DataFrame, Encoder, Encoders, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow}
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeSet, Cast, EvalMode, Expression, GreaterThan, IsNotNull, Literal, RLike, ScalarSubquery}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeSet, Cast, EvalMode, Expression, GreaterThan, IsNotNull, LeafExpression, Literal, RLike, ScalarSubquery}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.optimizer.{ColumnPruning, PruneFilters}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.classic.{Dataset, SparkSession}
+import org.apache.spark.sql.classic.{Dataset, ExpressionUtils, SparkSession}
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryBaseTable, InMemoryTableCatalog, SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns, SupportsPushDownV2Filters}
@@ -45,8 +46,9 @@ import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, MemoryStr
 import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
 import org.apache.spark.sql.sources.{Filter => SourceFilter}
-import org.apache.spark.sql.types.{CharType, IntegerType, StringType, StructType}
+import org.apache.spark.sql.types.{CharType, DataType, IntegerType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -59,6 +61,8 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
   override protected def sparkConf: SparkConf = super.sparkConf
     .set(SQLConf.STREAMING_V2_COLUMN_PRUNING_ENABLED, true)
     .set(SQLConf.STREAMING_V2_FILTER_PUSHDOWN_ENABLED, true)
+    // A failure of the optimization when a query starts fails the tests.
+    .set(SQLConf.STREAMING_V2_SCAN_PUSHDOWN_FAIL_ON_ERROR, true)
 
   before {
     spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
@@ -1219,27 +1223,110 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
-  test("fail the start of a query whose optimization for the pruning fails, in tests") {
-    // A rule that fails in the optimization when the query starts, whose plan has the relations of
-    // the sources, unlike the plans of the micro-batches.
-    val failing = new Rule[LogicalPlan] {
-      override def apply(plan: LogicalPlan): LogicalPlan = {
-        if (plan.exists(_.isInstanceOf[StreamingRelationV2])) {
-          throw new IllegalStateException("The optimization at the start failed.")
+  Seq(true, false).foreach { failOnError =>
+    test(s"handle a failure of the optimization when the query starts: $failOnError") {
+      // A rule that fails in the optimization when the query starts, whose plan has the relations
+      // of the sources, unlike the plans of the micro-batches.
+      val failing = new Rule[LogicalPlan] {
+        override def apply(plan: LogicalPlan): LogicalPlan = {
+          if (plan.exists(_.isInstanceOf[StreamingRelationV2])) {
+            throw new IllegalStateException("The optimization at the start failed.")
+          }
+          plan
         }
-        plan
+      }
+      withSourceTable() {
+        spark.experimental.extraOptimizations = Seq(failing)
+        val logs = new LogAppender("the failure of the optimization at the start")
+        try {
+          val failOnErrorConf = SQLConf.STREAMING_V2_SCAN_PUSHDOWN_FAIL_ON_ERROR.key
+          withSQLConf(failOnErrorConf -> failOnError.toString) {
+            val df = spark.readStream.table(tbl).where("extra > 10").select("data")
+            if (failOnError) {
+              testStream(df)(
+                StartStream(),
+                ExpectFailure[IllegalStateException](e =>
+                  assert(e.getMessage.contains("The optimization at the start failed."))))
+            } else {
+              // As outside of the tests, the scan reads all the columns with no filter instead.
+              withLogAppender(logs,
+                  loggerNames = Seq(StreamingV2ScanPushDown.getClass.getName.stripSuffix("$")),
+                  level = Some(Level.WARN)) {
+                testStream(df)(
+                  ProcessAllAvailable(),
+                  assertReadSchema("id", "data", "extra"),
+                  assertPushedFilters(),
+                  CheckAnswer(Row("b")))
+              }
+              assert(logs.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(
+                "Could not optimize the streaming query to push down what it reads")))
+            }
+          }
+        } finally {
+          spark.experimental.extraOptimizations = Nil
+        }
       }
     }
+  }
+
+  test("fail a micro-batch whose query no longer applies the filters that its scan got") {
     withSourceTable() {
-      spark.experimental.extraOptimizations = Seq(failing)
-      try {
-        // Outside of tests, the scans read all their columns instead, with a warning.
-        testStream(spark.readStream.table(tbl).select("data"))(
+      // The filter has a value that changes each time that it is evaluated, which the optimization
+      // at the start folds, as it would fold a function of the time that it does not replace.
+      ChangingValue.values.set(0)
+      val df = spark.readStream.table(tbl)
+        .where(col("extra") > ExpressionUtils.column(ChangingValue())).select("data")
+      // The micro-batch fails before it reads its data, as its query has another value.
+      testStream(df)(
+        StartStream(),
+        ExpectFailure[SparkException] { e =>
+          checkError(e.asInstanceOf[SparkException],
+            condition = "STREAMING_SCAN_FILTERS_CHANGED",
+            parameters = Map(
+              "filters" -> "(testcat.t.extra > 1)",
+              "source" -> "`testcat`.`t`",
+              "config" -> s"\"${SQLConf.STREAMING_V2_FILTER_PUSHDOWN_ENABLED.key}\""))
+        })
+    }
+  }
+
+  Seq(false, true).foreach { catalyst =>
+    val kind = if (catalyst) "Catalyst" else "V2"
+    test(s"evaluate the filters of the micro-batches in their order with a $kind filter builder") {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        val input = MemoryStream[(Long, String)]
+        val table = new FilterStreamTable(input, catalyst)
+        // The cast fails on a payload that is not a number with ANSI, which the RLIKE written
+        // before it drops.
+        val df = Dataset.ofRows(spark, StreamingRelationV2(None, table.name(), table,
+          CaseInsensitiveStringMap.empty(), DataTypeUtils.toAttributes(table.schema()), None, None,
+          None)).toDF("id", "payload")
+          .where("id > 0 AND payload RLIKE '^[0-9]+$' AND CAST(payload AS INT) > 1").select("id")
+        testStream(df)(
           StartStream(),
-          ExpectFailure[IllegalStateException](e =>
-            assert(e.getMessage.contains("The optimization at the start failed."))))
-      } finally {
-        spark.experimental.extraOptimizations = Nil
+          AddData(input, (1L, "1"), (2L, "abc"), (3L, "3")),
+          ProcessAllAvailable(),
+          CheckAnswer(Row(3L)),
+          AssertOnQuery { query =>
+            // A V2 builder gets the filter before the RLIKE, which it cannot take, and a
+            // Catalyst builder all of them, in their order.
+            if (catalyst) {
+              assert(table.pushed.length === 3, table.pushed)
+              assert(table.pushed(1).contains("RLIKE") && table.pushed(2).contains("CAST"),
+                table.pushed)
+            } else {
+              assert(table.pushed.length === 1 && table.pushed.head.contains("_1"), table.pushed)
+            }
+            // Each micro-batch evaluates the RLIKE before the cast, over the relation.
+            val conditions = query.lastExecution.optimizedPlan.collect {
+              case Filter(condition, _: StreamingDataSourceV2ScanRelation) =>
+                splitConjunctivePredicates(condition)
+            }.flatten
+            val rlike = conditions.indexWhere(_.isInstanceOf[RLike])
+            val cast = conditions.indexWhere(_.exists(_.isInstanceOf[Cast]))
+            assert(rlike >= 0 && rlike < cast, conditions)
+            true
+          })
       }
     }
   }
@@ -2165,4 +2252,68 @@ private object ProjectingMemoryStream {
   val ids = new AtomicInteger(1 << 21)
   val encoder: Encoder[(Long, String, Int)] =
     Encoders.tuple(Encoders.scalaLong, Encoders.STRING, Encoders.scalaInt)
+}
+
+/**
+ * A table over a memory stream of (id, payload), whose scan builder takes V2 predicates, or
+ * Catalyst filters, which it records, and whose stream returns all the rows.
+ */
+private class FilterStreamTable(input: MemoryStream[_], catalyst: Boolean)
+  extends Table with SupportsRead {
+  @volatile var pushed: Seq[String] = Nil
+
+  override def name(): String = "filter_stream"
+
+  override def schema(): StructType = input.fullSchema()
+
+  override def capabilities(): util.Set[TableCapability] = util.EnumSet.of(
+    TableCapability.MICRO_BATCH_READ, TableCapability.STREAMING_FILTER_PUSHDOWN)
+
+  private def scan(): Scan = new Scan {
+    override def readSchema(): StructType = schema()
+
+    override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = input
+  }
+
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = if (catalyst) {
+    new ScanBuilder with SupportsPushDownCatalystFilters {
+      override def pushFilters(filters: Seq[Expression]): Seq[Expression] = {
+        pushed = filters.map(_.sql)
+        filters
+      }
+
+      override def pushedFilters: Array[Predicate] = Array.empty
+
+      override def build(): Scan = scan()
+    }
+  } else {
+    new ScanBuilder with SupportsPushDownV2Filters {
+      private var predicates = Array.empty[Predicate]
+
+      override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
+        this.predicates = predicates
+        pushed = predicates.map(_.toString).toSeq
+        predicates
+      }
+
+      override def pushedPredicates(): Array[Predicate] = predicates
+
+      override def build(): Scan = scan()
+    }
+  }
+}
+
+/** A foldable value that changes each time that it is evaluated, as a function of time would. */
+private case class ChangingValue() extends LeafExpression with CodegenFallback {
+  override def dataType: DataType = IntegerType
+
+  override def nullable: Boolean = false
+
+  override def foldable: Boolean = true
+
+  override def eval(input: InternalRow): Any = ChangingValue.values.incrementAndGet()
+}
+
+private object ChangingValue {
+  val values = new AtomicInteger()
 }

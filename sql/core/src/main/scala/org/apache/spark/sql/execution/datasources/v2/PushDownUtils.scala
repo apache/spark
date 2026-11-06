@@ -51,22 +51,32 @@ object PushDownUtils extends Logging {
   }
 
   /**
-   * Returns the filters of `filters` that [[pushFilters]] gives to `scanBuilder` in some form, in
-   * their order: those that it translates to data source filters or predicates, or the
-   * deterministic ones for a [[SupportsPushDownCatalystFilters]] builder. The others are only
-   * evaluated after the scan.
+   * Returns whether [[pushFilters]] gives `filter` to `scanBuilder` in some form: whether it
+   * translates it to a data source filter or predicate, or whether it is deterministic for a
+   * [[SupportsPushDownCatalystFilters]] builder. The other filters are only evaluated after the
+   * scan. [[pushFilters]] decides with it which filters it gives to the builder.
    */
-  def filtersOfScanBuilder(
-      scanBuilder: ScanBuilder,
-      filters: Seq[Expression]): Seq[Expression] = scanBuilder match {
-    case _: SupportsPushDownFilters =>
-      filters.filter { filter =>
-        DataSourceStrategy.translateFilter(filter, supportNestedPredicatePushdown = true).isDefined
-      }
+  def getsFilter(scanBuilder: ScanBuilder, filter: Expression): Boolean = scanBuilder match {
+    case _: SupportsPushDownFilters => translateFilter(filter, mapping = None).isDefined
     case _: SupportsPushDownV2Filters =>
-      filters.filter(f => f.deterministic && DataSourceV2Strategy.translateFilterV2(f).isDefined)
-    case _: SupportsPushDownCatalystFilters => filters.filter(_.deterministic)
-    case _ => Nil
+      filter.deterministic && translateFilterV2(filter, mapping = None).isDefined
+    case _: SupportsPushDownCatalystFilters => filter.deterministic
+    case _ => false
+  }
+
+  // The translations of `pushFilters` for the builders of data source filters and predicates,
+  // which record the original filters in `mapping`.
+  private def translateFilter(
+      filter: Expression,
+      mapping: Option[mutable.HashMap[sources.Filter, Expression]]): Option[sources.Filter] = {
+    DataSourceStrategy.translateFilterWithMapping(filter, mapping,
+      nestedPredicatePushdownEnabled = true)
+  }
+
+  private def translateFilterV2(
+      filter: Expression,
+      mapping: Option[mutable.HashMap[Predicate, Expression]]): Option[Predicate] = {
+    DataSourceV2Strategy.translateFilterV2WithMapping(filter, mapping)
   }
 
   /**
@@ -100,13 +110,10 @@ object PushDownUtils extends Logging {
         val untranslatableExprs = mutable.ArrayBuffer.empty[Expression]
 
         for (filterExpr <- filters) {
-          val translated =
-            DataSourceStrategy.translateFilterWithMapping(filterExpr, Some(translatedFilterToExpr),
-              nestedPredicatePushdownEnabled = true)
-          if (translated.isEmpty) {
-            untranslatableExprs += filterExpr
+          if (getsFilter(r, filterExpr)) {
+            translatedFilters += translateFilter(filterExpr, Some(translatedFilterToExpr)).get
           } else {
-            translatedFilters += translated.get
+            untranslatableExprs += filterExpr
           }
         }
 
@@ -132,13 +139,10 @@ object PushDownUtils extends Logging {
         val untranslatableExprs = mutable.ArrayBuffer.empty[Expression]
 
         for (filterExpr <- deterministicFilters) {
-          val translated =
-            DataSourceV2Strategy.translateFilterV2WithMapping(
-              filterExpr, Some(translatedFilterToExpr))
-          if (translated.isEmpty) {
-            untranslatableExprs += filterExpr
+          if (getsFilter(r, filterExpr)) {
+            translatedFilters += translateFilterV2(filterExpr, Some(translatedFilterToExpr)).get
           } else {
-            translatedFilters += translated.get
+            untranslatableExprs += filterExpr
           }
         }
 
@@ -164,7 +168,8 @@ object PushDownUtils extends Logging {
           ExpressionSet(untranslatableExprs)) ++ nonDeterministicFilters
         (Right(r.pushedPredicates.toImmutableArraySeq), orderedPostScanFilters)
       case r: SupportsPushDownCatalystFilters =>
-        val postScanFilters = r.pushFilters(deterministicFilters) ++ nonDeterministicFilters
+        val postScanFilters =
+          r.pushFilters(filters.filter(getsFilter(r, _))) ++ nonDeterministicFilters
         (Right(r.pushedFilters.toImmutableArraySeq), postScanFilters)
       case _ => (Left(Nil), filters)
     }

@@ -6279,7 +6279,21 @@ object SQLConf {
         "query once more when it starts, as it optimizes each micro-batch. A scan builder " +
         "whose filters may fail on some rows, as a cast does with ANSI, only gets those that the " +
         "query applies before any other filter. The query still applies the filters to the rows " +
-        "of the source and after the scan. When false, the scan gets no filter.")
+        "of the source and after the scan, and each micro-batch optimizes the query in the same " +
+        "way again before it reads its data, to check that the query still applies them, and " +
+        "fails with STREAMING_SCAN_FILTERS_CHANGED otherwise. When false, the scan gets no filter.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
+  val STREAMING_V2_SCAN_PUSHDOWN_FAIL_ON_ERROR =
+    buildConf("spark.sql.streaming.v2ScanPushDown.failOnOptimizationError")
+      .internal()
+      .doc("When true, a failure of the optimization of a streaming query when it starts, which " +
+        "finds what the scans of its Data Source V2 sources read, fails the query. When false, " +
+        "the scans of its sources read all their columns with no filter instead, with a " +
+        "warning. The tests of these pushdowns set it.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf

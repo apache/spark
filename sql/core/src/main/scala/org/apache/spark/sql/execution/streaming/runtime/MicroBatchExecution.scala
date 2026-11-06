@@ -112,6 +112,11 @@ class MicroBatchExecution(
   // in the same way, when OffsetLog v2 is used.
   @volatile protected var sourceIdMap: Map[String, SparkDataStream] = Map.empty
 
+  // Checks, before a micro-batch reads its data, that the query still applies the filters that
+  // the scans of its sources got when it started, see StreamingV2ScanPushDown.checkPushedFilters.
+  // This is initialized with the sources.
+  @volatile private var checkPushedFilters: SparkSession => Unit = _ => ()
+
   override protected def sourceToIdMap: Map[SparkDataStream, String] = sourceIdMap.map(_.swap)
 
   // Sink name for commit log support
@@ -336,6 +341,14 @@ class MicroBatchExecution(
           })
         }
     }
+
+    val pushedFilters = v2ToRelationMap.toSeq.collect {
+      case (relation, scanRelation) if scanRelation.pushedFilters.nonEmpty =>
+        (relation, scanRelation.pushedFilters, StreamingV2ScanPushDown.sourceName(
+          scanRelation.relation.table, scanRelation.catalog, scanRelation.identifier))
+    }
+    checkPushedFilters = session =>
+      StreamingV2ScanPushDown.checkPushedFilters(session, planWithDedupKeys, pushedFilters)
 
     // Extract sources and their sourceIdentifyingName for sourceIdMap mapping
     val sourcesWithNames = _logicalPlan.collect {
@@ -1364,6 +1377,7 @@ class MicroBatchExecution(
     loggingThreadContext.put(LogKeys.BATCH_ID.name, execCtx.batchId.toString)
 
     execCtx.reportTimeTaken("queryPlanning") {
+      checkPushedFilters(sparkSessionToRunBatch)
       execCtx.executionPlan = new IncrementalExecution(
         sparkSessionToRunBatch,
         triggerLogicalPlan,

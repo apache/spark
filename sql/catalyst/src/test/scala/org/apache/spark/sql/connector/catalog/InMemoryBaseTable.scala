@@ -712,9 +712,10 @@ abstract class InMemoryBaseTable(
     override def planInputPartitions(start: Offset, end: Offset): Array[InputPartition] = {
       val s = start.asInstanceOf[InMemoryTableOffset].rowCount.toInt
       val e = end.asInstanceOf[InMemoryTableOffset].rowCount.toInt
-      Array(InMemoryMicroBatchPartition(InMemoryBaseTable.this.rows.slice(s, e).filter { row =>
-        filters.forall(InMemoryBaseTable.passes(_, row, tableSchema))
-      }))
+      // The rows keep their positions in the micro-batch, which the metadata column index has
+      // with or without the filters.
+      Array(InMemoryMicroBatchPartition(InMemoryBaseTable.this.rows.slice(s, e).zipWithIndex
+        .filter { case (row, _) => filters.forall(InMemoryBaseTable.passes(_, row, tableSchema)) }))
     }
     override def createReaderFactory(): PartitionReaderFactory = {
       val metadataColNames = new mutable.ArrayBuffer[String]()
@@ -1311,7 +1312,8 @@ object InMemoryBaseTable {
 /**
  * A partition for [[InMemoryBaseTable]] micro-batch streaming reads, holding a slice of rows.
  */
-case class InMemoryMicroBatchPartition(rows: Seq[InternalRow]) extends InputPartition
+/** The rows of a micro-batch, with their positions in it. */
+case class InMemoryMicroBatchPartition(rows: Seq[(InternalRow, Int)]) extends InputPartition
 
 /**
  * Represent a set of rows buffered in memory for a given partition key.
@@ -1357,7 +1359,7 @@ private class InMemoryMicroBatchReaderFactory(
         dataOrdinals.map(ordinals => ProjectingInternalRow(dataSchema, ordinals.toSeq))
       override def next(): Boolean = { idx += 1; idx < rows.size }
       override def get(): InternalRow = {
-        val tableRow = rows(idx)
+        val (tableRow, index) = rows(idx)
         val rawRow = projection.map { projection =>
           projection.project(tableRow)
           projection
@@ -1365,7 +1367,7 @@ private class InMemoryMicroBatchReaderFactory(
         if (metaNames.isEmpty) rawRow
         else {
           val metaRow = new GenericInternalRow(metaNames.map {
-            case "index" => idx.asInstanceOf[Any]
+            case "index" => index.asInstanceOf[Any]
             case "_partition" => UTF8String.fromString("").asInstanceOf[Any]
             case _ => null
           })

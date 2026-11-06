@@ -49,7 +49,6 @@ import org.apache.spark.sql.execution.command.{CommandUtils, MetricViewHelper}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelationWithTable, PushableColumnAndNestedColumn, StorageFilterPlanning}
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.execution.streaming.runtime.StreamingV2ScanPushDown
-import org.apache.spark.sql.execution.streaming.runtime.StreamingV2ScanPushDown.ScanOfStream
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.metricview.logical.CreateMetricView
@@ -268,8 +267,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         StorageFilterPlanning.skipCheckedRows(filtersAbove, storageFilters, checked),
         batchExec, !batchExec.supportsColumnar) :: Nil
 
-    // StreamingV2ScanPushDown takes the columns that each scan reads with the same match.
-    case ScanOfStream(p, f, r: StreamingDataSourceV2ScanRelation)
+    // StreamingV2ScanPushDown takes what each streaming scan reads with the same match, which must
+    // match the same nodes as this one and the next.
+    case PhysicalOperation(p, f, r: StreamingDataSourceV2ScanRelation)
       if r.startOffset.isDefined && r.endOffset.isDefined =>
 
       val microBatchStream = r.stream.asInstanceOf[MicroBatchStream]
@@ -280,7 +280,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       // Add a Project here to make sure we produce unsafe rows.
       DataSourceV2Strategy.withProjectAndFilter(p, f, scanExec, !scanExec.supportsColumnar) :: Nil
 
-    case ScanOfStream(p, f, r: StreamingDataSourceV2ScanRelation)
+    case PhysicalOperation(p, f, r: StreamingDataSourceV2ScanRelation)
       if r.startOffset.isDefined && r.endOffset.isEmpty =>
 
         val scanExec = if (r.relation.realTimeModeDuration.isDefined) {
