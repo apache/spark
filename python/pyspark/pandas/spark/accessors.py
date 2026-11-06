@@ -21,7 +21,7 @@ but Spark has it.
 """
 
 from abc import ABCMeta, abstractmethod
-from typing import TYPE_CHECKING, Callable, Generic, List, Optional, Union
+from typing import TYPE_CHECKING, Callable, Dict, Generic, List, Optional, Union
 
 from pyspark import StorageLevel
 from pyspark.pandas._typing import IndexOpsLike
@@ -684,7 +684,8 @@ class SparkFrameMethods:
         mode: str = "overwrite",
         partition_cols: Optional[Union[str, List[str]]] = None,
         index_col: Optional[Union[str, List[str]]] = None,
-        **options: "OptionalPrimitiveType",
+        options: Optional[Dict[str, "OptionalPrimitiveType"]] = None,
+        **kwargs: "OptionalPrimitiveType",
     ) -> None:
         """
         Write the DataFrame into a Spark table. :meth:`DataFrame.spark.to_table`
@@ -744,8 +745,8 @@ class SparkFrameMethods:
 
         >>> df.to_table('%s.my_table' % db, partition_cols='date')
         """
-        if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
-            options = options.get("options")  # type: ignore[assignment]
+        if options is None:
+            options = kwargs
 
         self._psdf.spark.frame(index_col=index_col).write.saveAsTable(
             name=name, format=format, mode=mode, partitionBy=partition_cols, **options
@@ -758,7 +759,8 @@ class SparkFrameMethods:
         mode: str = "overwrite",
         partition_cols: Optional[Union[str, List[str]]] = None,
         index_col: Optional[Union[str, List[str]]] = None,
-        **options: "OptionalPrimitiveType",
+        options: Optional[Dict[str, "OptionalPrimitiveType"]] = None,
+        **kwargs: "OptionalPrimitiveType",
     ) -> None:
         """Write the DataFrame out to a Spark data source.
 
@@ -815,8 +817,8 @@ class SparkFrameMethods:
 
         >>> df.spark.to_spark_io(path='%s/to_spark_io/foo.json' % path, format='json')
         """
-        if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
-            options = options.get("options")  # type: ignore[assignment]
+        if options is None:
+            options = kwargs
 
         self._psdf.spark.frame(index_col=index_col).write.save(
             path=path, format=format, mode=mode, partitionBy=partition_cols, **options
