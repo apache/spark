@@ -19,6 +19,7 @@ import base64
 import datetime
 import decimal
 import json
+import math
 import struct
 from array import array
 from typing import Any, Callable, Dict, List, NamedTuple, Tuple
@@ -403,6 +404,7 @@ class VariantUtils:
 
             return cls._handle_array(value, pos, handle_array)
         else:
+            _, type_info = cls._get_type_info(value, pos)
             value = cls._get_scalar(variant_type, value, metadata, pos, zone_id)
             if value is None:
                 return "null"
@@ -413,9 +415,72 @@ class VariantUtils:
             if isinstance(value, bytes):
                 # decoding simply converts byte array to string
                 return '"' + base64.b64encode(value).decode("utf-8") + '"'
-            if isinstance(value, (datetime.date, datetime.datetime)):
+            if isinstance(value, float):
+                return cls._float_to_json(value, type_info == VariantUtils.FLOAT)
+            if isinstance(value, decimal.Decimal):
+                return cls._decimal_to_json(value)
+            if isinstance(value, datetime.datetime):
+                return '"' + cls._timestamp_to_json(value) + '"'
+            if isinstance(value, datetime.date):
                 return '"' + str(value) + '"'
             return str(value)
+
+    # The `_*_to_json` helpers below format scalars the same way as `Variant.toJsonImpl` on the
+    # JVM, so that `VariantVal.toJson` and the `to_json` SQL function produce the same output.
+
+    @classmethod
+    def _float_to_json(cls, value: float, is_float32: bool) -> str:
+        # JSON has no literal for non-finite numbers, so they are written as quoted strings.
+        if math.isnan(value):
+            return '"NaN"'
+        if math.isinf(value):
+            return '"Infinity"' if value > 0 else '"-Infinity"'
+        if is_float32:
+            # A FLOAT is decoded into a Python float (a double), whose repr has more digits than
+            # the original FLOAT, e.g. 1.100000023841858 for 1.1. Print the shortest decimal that
+            # reads back as the same FLOAT instead. 9 significant digits always suffice.
+            for precision in range(1, 10):
+                shortest = float("%.*g" % (precision, value))
+                try:
+                    packed = struct.pack("<f", shortest)
+                except OverflowError:
+                    # Rounded up past the largest FLOAT, e.g. 3.403e+38 for 3.4028235e+38.
+                    continue
+                if struct.unpack("<f", packed)[0] == value:
+                    return str(shortest)
+        return str(value)
+
+    @classmethod
+    def _decimal_to_json(cls, value: decimal.Decimal) -> str:
+        # Strip trailing zeros and use plain (non-scientific) notation, like
+        # `BigDecimal.stripTrailingZeros().toPlainString()`. Formatting with "f" and no precision
+        # is exact, independent of the decimal context.
+        plain = format(value, "f")
+        if "." in plain:
+            plain = plain.rstrip("0").rstrip(".")
+        return plain
+
+    @classmethod
+    def _timestamp_to_json(cls, value: datetime.datetime) -> str:
+        # Print the fractional seconds without trailing zeros, e.g. "00:00:01.5" rather than
+        # "00:00:01.500000", and omit them when they are zero.
+        result = value.replace(tzinfo=None).isoformat(sep=" ")
+        if value.microsecond != 0:
+            result = result.rstrip("0")
+        offset = value.utcoffset()
+        if offset is not None:
+            # Print the offset as +HH:MM. Like the JVM, drop the seconds of an offset that has
+            # them, e.g. a historical local mean time offset, and print "+00:00" when no hours or
+            # minutes remain.
+            total_seconds = int(offset.total_seconds())
+            hours, seconds = divmod(abs(total_seconds), 3600)
+            minutes = seconds // 60
+            if hours == 0 and minutes == 0:
+                result += "+00:00"
+            else:
+                sign = "-" if total_seconds < 0 else "+"
+                result += "%s%02d:%02d" % (sign, hours, minutes)
+        return result
 
     @classmethod
     def _to_python(cls, value: bytes, metadata: bytes, pos: int) -> Any:
