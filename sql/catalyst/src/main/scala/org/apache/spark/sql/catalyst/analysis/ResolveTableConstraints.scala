@@ -33,7 +33,8 @@ class ResolveTableConstraints(
     val catalogManager: CatalogManager,
     analyze: LogicalPlan => LogicalPlan) extends Rule[LogicalPlan] {
 
-  private val tableConstraintResolution = new TableConstraintResolution(catalogManager, analyze)
+  private val tableConstraintResolution = new TableConstraintResolution(
+    this.catalogManager, analyze, conf.sessionLocalTimeZone)
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     _.containsPattern(COMMAND), ruleId) {

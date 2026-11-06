@@ -34,7 +34,7 @@ private[sql] object FieldNameAndPositionResolution {
   def resolveCreateIndex(
       cmd: CreateIndex,
       table: ResolvedTable,
-      conf: SQLConf): CreateIndex = {
+      conf: => SQLConf): CreateIndex = {
     cmd.copy(columns = cmd.columns.map {
       case (u: UnresolvedFieldName, prop) => resolveFieldNames(table, u.name, u, conf) -> prop
       case other => other
@@ -45,7 +45,7 @@ private[sql] object FieldNameAndPositionResolution {
   def resolveDropColumnsIfExists(
       a: DropColumns,
       table: ResolvedTable,
-      conf: SQLConf): DropColumns = {
+      conf: => SQLConf): DropColumns = {
     val columnsToDrop = a.columnsToDrop
     a.copy(columnsToDrop = columnsToDrop.flatMap(c => resolveFieldNamesOpt(table, c.name, c, conf)))
   }
@@ -54,7 +54,7 @@ private[sql] object FieldNameAndPositionResolution {
   def resolveAlterTableFieldNames(
       a: AlterTableCommand,
       table: ResolvedTable,
-      conf: SQLConf): LogicalPlan = {
+      conf: => SQLConf): LogicalPlan = {
     a.transformExpressions {
       case u: UnresolvedFieldName => resolveFieldNames(table, u.name, u, conf)
     }
@@ -64,7 +64,7 @@ private[sql] object FieldNameAndPositionResolution {
   def resolveAddColumns(
       a: AddColumns,
       table: ResolvedTable,
-      conf: SQLConf): AddColumns = {
+      conf: => SQLConf): AddColumns = {
     // 'colsToAdd' keeps track of new columns being added. It stores a mapping from a
     // normalized parent name of fields to field names that belong to the parent.
     // For example, if we add columns "a.b.c", "a.b.d", and "a.c", 'colsToAdd' will become
@@ -121,7 +121,7 @@ private[sql] object FieldNameAndPositionResolution {
   def resolveAlterColumns(
       a: AlterColumns,
       table: ResolvedTable,
-      conf: SQLConf): AlterColumns = {
+      conf: => SQLConf): AlterColumns = {
     val resolvedSpecs = a.specs.map {
       case s @ AlterColumnSpec(
           ResolvedFieldName(path, field), dataType, _, _, position, _, _, _) =>
@@ -154,7 +154,7 @@ private[sql] object FieldNameAndPositionResolution {
       table: ResolvedTable,
       fieldName: Seq[String],
       context: Expression,
-      conf: SQLConf): ResolvedFieldName = {
+      conf: => SQLConf): ResolvedFieldName = {
     resolveFieldNamesOpt(table, fieldName, context, conf)
       .getOrElse {
         throw QueryCompilationErrors.unresolvedColumnError(fieldName, table.schema.fieldNames,
@@ -166,7 +166,7 @@ private[sql] object FieldNameAndPositionResolution {
       table: ResolvedTable,
       fieldName: Seq[String],
       context: Expression,
-      conf: SQLConf): Option[ResolvedFieldName] = {
+      conf: => SQLConf): Option[ResolvedFieldName] = {
     table.schema.findNestedField(
       fieldName, includeCollections = true, conf.resolver, context.origin
     ).map {

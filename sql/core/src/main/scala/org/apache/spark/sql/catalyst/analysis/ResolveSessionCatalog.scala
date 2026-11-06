@@ -67,7 +67,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     case a @ AlterColumns(ResolvedTable(catalog, ident, table: V1Table, _), specs, _)
         if supportsV1Command(catalog) && a.resolved && specs.forall(_.isDefaultValueTypeCoerced) =>
-      AlterTableHelper.lowerAlterColumns(a, catalog, ident, table)
+      AlterTableHelper.lowerAlterColumns(a, catalog, ident, table, conf.resolver)
 
     case AlterTableClusterBy(ResolvedTable(catalog, _, table: V1Table, _), clusterBySpecOpt)
         if supportsV1Command(catalog) =>
@@ -189,7 +189,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       CreateTableHelper.lowerReplaceTable(c)
 
     case c @ ReplaceTableAsSelect(ResolvedV1CommandIdentifier(ident), _, _, _, _, _, _, _, _) =>
-      CreateTableHelper.lowerReplaceTableAsSelect(c, ident)
+      CreateTableHelper.lowerReplaceTableAsSelect(c, ident, conf.defaultDataSourceName)
 
     // For CREATE TABLE LIKE, use the v1 command if both the target and source are in the session
     // catalog (or a V1-compatible catalog extension). If source is in a different catalog, fall

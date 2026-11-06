@@ -58,6 +58,7 @@ import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, Proced
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSourceV2Relation, ExtractV2Table}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.metricview.logical.MetricViewPlaceholder
 import org.apache.spark.sql.types._
@@ -1546,7 +1547,7 @@ class Analyzer(
   }
 
   /** Handle INSERT INTO for DSv2 */
-  object ResolveInsertInto extends Rule[LogicalPlan] {
+  object ResolveInsertInto extends ResolveInsertionBase {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       AlwaysProcess.fn, ruleId) {
       case i: InsertIntoStatement
@@ -1560,7 +1561,7 @@ class Analyzer(
           if i.table.isInstanceOf[DataSourceV2Relation] &&
             i.query.resolved &&
             (i.replaceCriteriaOpt.isEmpty || i.replaceCriteriaOpt.exists(_.isReplaceWhere)) =>
-        InsertionResolution.resolveInsertInto(i)
+        InsertionResolution.resolveInsertInto(i, createProjectForByNameQuery)
     }
   }
 
@@ -3961,7 +3962,15 @@ class Analyzer(
       case v2Write: V2WriteCommand
           if v2Write.table.resolved && v2Write.query.resolved && !v2Write.outputResolved &&
             v2Write.pendingSchemaChanges.isEmpty =>
+        validateStoreAssignmentPolicy()
         WriteOutputResolution.resolveOutputRelation(v2Write, execute)
+    }
+  }
+
+  private def validateStoreAssignmentPolicy(): Unit = {
+    // SPARK-28730: LEGACY store assignment policy is disallowed in data source v2.
+    if (conf.storeAssignmentPolicy == StoreAssignmentPolicy.LEGACY) {
+      throw QueryCompilationErrors.legacyStoreAssignmentPolicyError()
     }
   }
 

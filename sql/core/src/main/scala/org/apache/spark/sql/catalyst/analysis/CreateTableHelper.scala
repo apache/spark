@@ -128,8 +128,9 @@ private[sql] object CreateTableHelper extends SQLConfHelper with Logging with Al
   /** Rejects session-catalog RTAS when its provider only supports V1 commands. */
   private[analysis] def lowerReplaceTableAsSelect(
       c: ReplaceTableAsSelect,
-      ident: TableIdentifier): LogicalPlan = {
-    val provider = c.tableSpec.provider.getOrElse(conf.defaultDataSourceName)
+      ident: TableIdentifier,
+      defaultProvider: => String): LogicalPlan = {
+    val provider = c.tableSpec.provider.getOrElse(defaultProvider)
     if (!isV2Provider(provider)) {
       throw QueryCompilationErrors.unsupportedTableOperationError(
         ident, "REPLACE TABLE AS SELECT")

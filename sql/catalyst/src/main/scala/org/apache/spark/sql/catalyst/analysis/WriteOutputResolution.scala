@@ -22,23 +22,20 @@ import org.apache.spark.sql.catalyst.analysis.TableOutputResolver.DefaultValueFi
 import org.apache.spark.sql.catalyst.expressions.{Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, V2WriteCommand}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, GeneratedColumn, StoredExpressionText}
-import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
-import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.internal.connector.{SchemaAlignmentConfig, SupportsConfigurableSchemaAlignment}
 
 /** Aligns a resolved write query with its target columns and stored generation expressions. */
 private[sql] object WriteOutputResolution extends SQLConfHelper {
 
   /**
-   * Resolves output columns after the table and query are resolved and schema changes are applied.
+   * Resolves output columns after the table/query, schema changes and store policy are checked.
    * The callback analyzes newly constructed generated-column expressions under their stored
    * settings.
    */
   def resolveOutputRelation(
       v2Write: V2WriteCommand,
       analyze: LogicalPlan => LogicalPlan): V2WriteCommand = {
-    validateStoreAssignmentPolicy()
     TableOutputResolver.suitableForByNameCheck(v2Write.isByName,
       expected = v2Write.table.output, queryOutput = v2Write.query.output)
     // With schema evolution + coercion flag, missing top-level columns AND missing nested
@@ -112,12 +109,5 @@ private[sql] object WriteOutputResolution extends SQLConfHelper {
         case c => c
       })
     case other => other
-  }
-
-  private def validateStoreAssignmentPolicy(): Unit = {
-    // SPARK-28730: LEGACY store assignment policy is disallowed in data source v2.
-    if (conf.storeAssignmentPolicy == StoreAssignmentPolicy.LEGACY) {
-      throw QueryCompilationErrors.legacyStoreAssignmentPolicyError()
-    }
   }
 }
