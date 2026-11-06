@@ -333,16 +333,17 @@ class DenseMatrix @Since("2.0.0") (
   }
 
   override def hashCode: Int = {
-    // Matches SparseMatrix.hashCode (Breeze's QuasiTensor.hashCode) so that equal dense and
-    // sparse matrices have the same hash code. The values are visited in column major order
-    // and those with a zero hash code, such as 0.0 and -0.0, are skipped.
+    // Matches SparseMatrix.hashCode so that equal dense and sparse matrices have the same hash
+    // code. The shape is mixed first, and then the column major index and the value of each
+    // entry are mixed in column major order. The values with a zero hash code, such as 0.0 and
+    // -0.0, are skipped.
     val data = if (isTransposed) toArray else values
-    var hash = 43
+    var hash = MurmurHash3.mix(MurmurHash3.mix(43, numRows), numCols)
     var i = 0
     while (i < data.length) {
       val valueHash = data(i).##
       if (valueHash != 0) {
-        hash = MurmurHash3.mix(hash, valueHash)
+        hash = MurmurHash3.mix(MurmurHash3.mix(hash, i), valueHash)
       }
       i += 1
     }
@@ -669,7 +670,24 @@ class SparseMatrix @Since("2.0.0") (
       rowIndices: Array[Int],
       values: Array[Double]) = this(numRows, numCols, colPtrs, rowIndices, values, false)
 
-  override def hashCode(): Int = asBreeze.hashCode()
+  override def hashCode(): Int = {
+    // Matches DenseMatrix.hashCode. The entries are visited in column major order.
+    val m = if (isTransposed) toSparseColMajor else this
+    var hash = MurmurHash3.mix(MurmurHash3.mix(43, numRows), numCols)
+    var j = 0
+    while (j < numCols) {
+      var k = m.colPtrs(j)
+      while (k < m.colPtrs(j + 1)) {
+        val valueHash = m.values(k).##
+        if (valueHash != 0) {
+          hash = MurmurHash3.mix(MurmurHash3.mix(hash, m.rowIndices(k) + j * numRows), valueHash)
+        }
+        k += 1
+      }
+      j += 1
+    }
+    hash
+  }
 
   override def equals(o: Any): Boolean = o match {
     case m: Matrix => asBreeze == m.asBreeze

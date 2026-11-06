@@ -25,7 +25,8 @@ import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.REASON
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.PythonUDF.{correctEvalType, isScalarPythonUDF}
+import org.apache.spark.sql.catalyst.expressions.PythonUDF.{canonicalizeDeterministic,
+  correctEvalType, isScalarPythonUDF}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -187,6 +188,9 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
    *         - PythonUDF (bar)
    *           - PythonUDF (baz)
    * - if the eval types of the UDF expressions in the chain differ, return false.
+   * - if the element-wise nesting depths of the UDF expressions in the chain differ, return false.
+   *   The worker runs a chain as one function under the outermost UDF's depth. In
+   *   transform(arr, x -> transform(f(x), y -> g(y))), g lifts to depth 2 and f to depth 1.
    * - if a UDF has more than one child, e.g. foo(bar(), baz()), return false
    * If we return false here, the expectation is that the recursive calls of
    * collectEvaluableUDFsFromExpressions will then visit the children and extract them first to
@@ -203,6 +207,7 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
         PythonUDF.chainsInWorker(e) &&
           correctEvalType(e, pythonUDFArrowFallbackOnUDT) ==
           correctEvalType(child, pythonUDFArrowFallbackOnUDT) &&
+          e.elementwiseNestingDepth == child.elementwiseNestingDepth &&
           shouldExtractUDFExpressionTree(child, pythonUDFArrowFallbackOnUDT)
       // Python UDF can't be evaluated directly in JVM
       case children => !children.exists(hasScalarPythonUDF)
@@ -272,14 +277,7 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
     expressions.flatMap(collectEvaluableUDFs)
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = applyInternal(
-    // Lift Python UDFs out of higher-order function lambdas first, turning them into ordinary
-    // top-level UDFs this rule can then extract. Running it here rather than as a separate batch
-    // entry makes the ordering structural: `CheckAnalysis` accepts a lambda-UDF plan only because
-    // this rewrite will run, so the two must not be separable by rule reordering or exclusion.
-    ExtractPythonUDFFromLambda(plan))
-
-  private def applyInternal(plan: LogicalPlan): LogicalPlan = plan match {
+  def apply(plan: LogicalPlan): LogicalPlan = plan match {
     // SPARK-26293: A subquery will be rewritten into join later, and will go through this rule
     // eventually. Here we skip subquery, as Python UDF only needs to be extracted once.
     case s: Subquery if s.correlated => plan
@@ -295,14 +293,6 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
       case p: ArrowEvalPython => p
 
       case plan: LogicalPlan => extract(plan)
-    }
-  }
-
-  private def canonicalizeDeterministic(u: PythonUDF) = {
-    if (u.deterministic) {
-      u.canonicalized.asInstanceOf[PythonUDF]
-    } else {
-      u
     }
   }
 

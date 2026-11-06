@@ -22,6 +22,7 @@ import java.util.concurrent.{CountDownLatch, ExecutionException, Semaphore, Time
 
 import scala.collection.mutable.ListBuffer
 
+import org.apache.logging.log4j.Level
 import org.scalatest.BeforeAndAfter
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Seconds, Span}
@@ -30,8 +31,9 @@ import org.apache.spark.{SparkIllegalArgumentException, TestUtils}
 import org.apache.spark.sql._
 import org.apache.spark.sql.connector.read.streaming
 import org.apache.spark.sql.execution.streaming.checkpointing.{AsyncCommitLog, AsyncOffsetSeqLog, CommitMetadata, OffsetSeq}
-import org.apache.spark.sql.execution.streaming.runtime.{AsyncProgressTrackingMicroBatchExecution, LongOffset, MemoryStream, StreamExecution}
+import org.apache.spark.sql.execution.streaming.runtime.{AsyncProgressTrackingMicroBatchExecution, LongOffset, MemoryStream, StreamExecution, StreamingQueryWrapper}
 import org.apache.spark.sql.execution.streaming.runtime.AsyncProgressTrackingMicroBatchExecution.{ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS, ASYNC_PROGRESS_TRACKING_ENABLED, ASYNC_PROGRESS_TRACKING_OVERRIDE_SINK_SUPPORT_CHECK}
+import org.apache.spark.sql.execution.streaming.state.{FailureInjectionCheckpointFileManager, FailureInjectionFileSystem}
 import org.apache.spark.sql.functions.{column, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{StreamingQuery, StreamingQueryException, StreamTest, Trigger}
@@ -863,6 +865,61 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
       }
     } finally {
       executor.shutdownNow()
+    }
+  }
+
+  test("SPARK-60469: stop warns and still terminates when async log writes do not finish") {
+    withSQLConf(
+      SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key ->
+        classOf[FailureInjectionCheckpointFileManager].getName) {
+      withTempDir { checkpointDir =>
+        val injectionState = FailureInjectionFileSystem.registerTempPath(checkpointDir.getPath)
+        val semaphore = FailureInjectionFileSystem.createAtomicDelaySemaphore
+        try {
+          val inputData = MemoryStream[Int]
+          val query = inputData.toDF().writeStream
+            .format("noop")
+            .option(ASYNC_PROGRESS_TRACKING_ENABLED, true)
+            .option(ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS, 0)
+            .option("checkpointLocation", checkpointDir.getAbsolutePath)
+            .start()
+          inputData.addData(0)
+          query.processAllAvailable()
+
+          // Block the async commit log write of batch 1 so that it is still running on stop.
+          injectionState.delayCreateAtomicRegex = Seq(".*/commits/1")
+          inputData.addData(1)
+          query.processAllAvailable()
+          eventually(timeout(streamingTimeout)) {
+            assert(semaphore.hasQueuedThreads)
+          }
+
+          val logAppender = new LogAppender("async progress tracking executor shutdown")
+          logAppender.setThreshold(Level.WARN)
+          try {
+            withLogAppender(logAppender) {
+              // This waits 30 seconds for the blocked write.
+              query.stop()
+            }
+          } finally {
+            // Let the blocked write finish before the checkpoint directory is deleted, and drop
+            // the permit if the write was interrupted instead.
+            injectionState.delayCreateAtomicRegex = Seq.empty
+            semaphore.release()
+            waitPendingOffsetWrites(query.asInstanceOf[StreamingQueryWrapper].streamingQuery)
+            semaphore.drainPermits()
+          }
+          assert(logAppender.loggingEvents.exists(_.getMessage.getFormattedMessage.endsWith(
+            "did not terminate in 30 seconds")))
+          assert(!spark.streams.active.exists(_.id == query.id))
+        } finally {
+          injectionState.delayCreateAtomicRegex = Seq.empty
+          if (semaphore.hasQueuedThreads) {
+            semaphore.release()
+          }
+          FailureInjectionFileSystem.removePathFromTempToInjectionState(checkpointDir.getPath)
+        }
+      }
     }
   }
 

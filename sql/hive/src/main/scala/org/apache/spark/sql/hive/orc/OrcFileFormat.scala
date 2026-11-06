@@ -201,6 +201,7 @@ case class OrcFileFormat() extends FileFormat
 
     case _: AnsiIntervalType => false
     case _: TimeType => false
+    case _: GeometryType | _: GeographyType => false
     case _: AtomicType => true
 
     case st: StructType => st.forall { f => supportDataType(f.dataType) }
@@ -269,6 +270,9 @@ private[orc] class OrcSerializer(dataSchema: StructType, conf: Configuration)
     dataType match {
       case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
         TimestampType
+      // Hive types have no collations, and its type parser rejects `string collate <name>`.
+      case s: StringType =>
+        StringHelper.removeCollation(s)
       case StructType(fields) =>
         StructType(fields.map(f => f.copy(dataType = toHiveCompatibleDataType(f.dataType))))
       case ArrayType(elementType, containsNull) =>
