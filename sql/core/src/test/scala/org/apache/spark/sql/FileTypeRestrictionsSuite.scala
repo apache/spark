@@ -21,14 +21,18 @@ import org.apache.spark.SparkConf
 import org.apache.spark.api.python.{PythonBroadcast, PythonEvalType, SimplePythonFunction}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.api.java.UDF1
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, DeduplicateWithinWatermark, LogicalPlan, MapInPandas}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, InMemoryCatalog, TableInfo}
+import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.execution.python.{UserDefinedPythonFunction, UserDefinedPythonTableFunction}
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
 import org.apache.spark.sql.functions.{col, udf}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DataType, FileType, IntegerType, MapType, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, FileType, IntegerType, LongType, MapType, StringType, StructType}
 
 /**
  * Tests the rules on where the FILE type can be used: table columns must be FILE EXTERNAL,
@@ -50,8 +54,11 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
   private val externalFile = "SELECT CAST(NULL AS FILE EXTERNAL) AS f"
 
   /** Analyzes `query` without running it. */
-  private def analyze(query: String): Unit =
-    spark.sessionState.executePlan(spark.sessionState.sqlParser.parsePlan(query)).assertAnalyzed()
+  private def analyze(query: String): Unit = analyze(spark.sessionState.sqlParser.parsePlan(query))
+
+  /** Analyzes `plan` without running it. */
+  private def analyze(plan: LogicalPlan): Unit =
+    spark.sessionState.executePlan(plan).assertAnalyzed()
 
   test("a table column definition requires FILE EXTERNAL") {
     Seq("testcat.t", "t").foreach { table =>
@@ -282,6 +289,42 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("CLUSTER BY a field of an array of structs") {
+    // A schema without a FILE is not changed by the FILE checks, with the flag on or off.
+    Seq("true", "false").foreach { enabled =>
+      withSQLConf(SQLConf.FILE_TYPE_ENABLED.key -> enabled) {
+        Seq("t", "testcat.t").foreach { table =>
+          val provider = if (table.startsWith("testcat")) "" else "USING parquet"
+          withTable(table) {
+            sql(s"CREATE TABLE $table (id INT, arr ARRAY<STRUCT<x: INT>>) $provider")
+            sql(s"ALTER TABLE $table CLUSTER BY (arr.x)")
+          }
+        }
+        withTable("t") {
+          sql("CREATE TABLE t (id INT, arr ARRAY<STRUCT<x: INT>>) USING parquet CLUSTER BY (arr.x)")
+        }
+      }
+    }
+    // A FILE in a struct element of an array is found. A CTAS cannot cluster by such a field,
+    // with or without a FILE.
+    withTable("t") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          analyze("CREATE TABLE t (id INT, arr ARRAY<STRUCT<f: FILE EXTERNAL>>) USING parquet " +
+            "CLUSTER BY (arr.f)")
+        },
+        condition = "FILE_TYPE_UNSUPPORTED_COLUMN_USAGE.CLUSTERING_COLUMN",
+        parameters = Map("colName" -> "`f`", "dataType" -> "\"FILE EXTERNAL\""))
+    }
+    withTable("testcat.t") {
+      sql("CREATE TABLE testcat.t (id INT, arr ARRAY<STRUCT<f: FILE EXTERNAL>>)")
+      checkError(
+        exception = intercept[AnalysisException](sql("ALTER TABLE testcat.t CLUSTER BY (arr.f)")),
+        condition = "FILE_TYPE_UNSUPPORTED_COLUMN_USAGE.CLUSTERING_COLUMN",
+        parameters = Map("colName" -> "`f`", "dataType" -> "\"FILE EXTERNAL\""))
+    }
+  }
+
   test("ALTER COLUMN requires FILE EXTERNAL and cannot change the type of a FILE column") {
     withTable("testcat.t") {
       sql("CREATE TABLE testcat.t (id INT, s STRING, f FILE EXTERNAL, v VOID)")
@@ -419,6 +462,15 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
       parameters = Map("colName" -> "`f`", "dataType" -> "\"FILE EXTERNAL\""))
   }
 
+  test("dropDuplicates may use keys other than a FILE column") {
+    // `Dataset.dropDuplicates` needs a row encoder, which FILE does not have yet, so the plans
+    // are analyzed directly.
+    val child = sql("SELECT 1 AS id, CAST(NULL AS FILE EXTERNAL) AS f").queryExecution.analyzed
+    val id = child.output.head
+    analyze(Deduplicate(Seq(id), child))
+    analyze(DeduplicateWithinWatermark(Seq(id), child))
+  }
+
   test("a FILE cannot be hashed") {
     checkError(
       exception = intercept[AnalysisException] {
@@ -539,8 +591,26 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
         },
         condition = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_QUALIFIER",
         parameters = Map("routineType" -> "function", "routineName" -> "`file_udaf`"))
+      // A FILE map key is found in an array element and in a map value.
+      Seq(
+        ArrayType(MapType(FileType(), IntegerType)),
+        MapType(StringType, MapType(FileType(), IntegerType))).foreach { dataType =>
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.udf.register("file_udf", fileUdf, dataType)
+          },
+          condition = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_MAP_KEY",
+          parameters = Map("routineType" -> "function", "routineName" -> "`file_udf`"))
+      }
       spark.udf.register("file_udf", fileUdf, FileType())
       spark.udf.register("file_udaf", new FileTypeUDAF(FileType()))
+    }
+    // Registration is not checked when the FILE type is disabled. A query that uses the UDF then
+    // fails because the type is disabled.
+    withUserDefinedFunction("file_udf" -> true) {
+      withSQLConf(SQLConf.FILE_TYPE_ENABLED.key -> "false") {
+        spark.udf.register("file_udf", fileUdf, FileType.external)
+      }
     }
     // A UDAF class registered by name is checked only when it is used in a query.
     withUserDefinedFunction("class_udaf" -> true) {
@@ -551,6 +621,24 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
         },
         condition = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_QUALIFIER",
         parameters = Map("routineType" -> "function", "routineName" -> "`class_udaf`"))
+    }
+  }
+
+  test("a V2 catalog function declares a plain FILE in its return type") {
+    val catalog = spark.sessionState.catalogManager.catalog("testcat").asInstanceOf[InMemoryCatalog]
+    val ident = Identifier.of(Array("ns"), "file_fn")
+    catalog.createFunction(ident, new FileTypeFunction(FileType.external))
+    try {
+      checkError(
+        exception = intercept[AnalysisException] {
+          analyze("SELECT testcat.ns.file_fn(id) FROM range(1)")
+        },
+        condition = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_QUALIFIER",
+        parameters = Map("routineType" -> "function", "routineName" -> "`file_fn`"))
+      catalog.createFunction(ident, new FileTypeFunction(FileType()))
+      analyze("SELECT testcat.ns.file_fn(id) FROM range(1)")
+    } finally {
+      catalog.dropFunction(ident)
     }
   }
 
@@ -603,6 +691,28 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
         "py_udtf", pythonUdtf(Some(new StructType().add("f", FileType()))))
       spark.udtf.registerPython("py_udtf", pythonUdtf(None))
     }
+
+    // A non-scalar Python UDF, such as the function of mapInPandas, returns rows, so its data
+    // type is the schema of the rows and may hold a FILE EXTERNAL.
+    val rowSchema = new StructType().add("f", FileType.external)
+    val mapUdf = UserDefinedPythonFunction(
+      "map_udf", func, rowSchema, PythonEvalType.SQL_MAP_PANDAS_ITER_UDF, udfDeterministic = true)
+    val child = spark.range(1).queryExecution.analyzed
+    analyze(MapInPandas(
+      mapUdf.builder(child.output), toAttributes(rowSchema), child, isBarrier = false,
+      profile = None))
+  }
+}
+
+/** A V2 scalar function that returns `dataType`; only its return type is used by the tests. */
+private class FileTypeFunction(dataType: DataType) extends UnboundFunction {
+  override def name(): String = "file_fn"
+  override def description(): String = name()
+  override def bind(inputType: StructType): BoundFunction = new ScalarFunction[AnyRef] {
+    override def inputTypes(): Array[DataType] = Array(LongType)
+    override def resultType(): DataType = dataType
+    override def name(): String = "file_fn"
+    override def produceResult(input: InternalRow): AnyRef = null
   }
 }
 

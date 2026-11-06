@@ -1264,18 +1264,23 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
    * created, such as UDFs that are not registered and UDAF classes registered with
    * `CREATE FUNCTION ... AS`. SQL functions are checked by `CREATE FUNCTION`. V2 catalog functions
    * are covered only when they are bound as an [[ApplyFunctionExpression]]. A non-scalar Python
-   * UDF is skipped, as its data type is the schema of the rows it returns.
+   * UDF is skipped, as its data type is the schema of the rows it returns. As in
+   * `checkAnalysis0`, sub-plans that are already analyzed are skipped, as they were checked when
+   * they were analyzed.
    */
   private def checkFileTypeInUserDefinedRoutines(plan: LogicalPlan): Unit = {
+    def check(operator: LogicalPlan): Unit = if (!operator.analyzed) {
+      operator.expressions.foreach(_.foreach {
+        case udf: PythonUDF if !PythonUDF.isScalarPythonUDF(udf) =>
+        case routine: UserDefinedExpression
+            if routine.dataType.existsRecursively(_.isInstanceOf[FileType]) =>
+          TypeUtils.checkNoQualifierInRegisteredRoutineReturnType(routine.dataType, routine.name)
+        case _ =>
+      })
+      operator.children.foreach(check)
+    }
     if (SQLConf.get.isFileTypeEnabled) {
-      plan.foreach { operator =>
-        operator.expressions.foreach(_.foreach {
-          case udf: PythonUDF if !PythonUDF.isScalarPythonUDF(udf) =>
-          case routine: UserDefinedExpression =>
-            TypeUtils.checkNoQualifierInRegisteredRoutineReturnType(routine.dataType, routine.name)
-          case _ =>
-        })
-      }
+      check(plan)
     }
   }
 

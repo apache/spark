@@ -223,14 +223,29 @@ object TypeUtils extends QueryErrorsBase {
     }
   }
 
-  /** Fails if a clustering column of `clusterBySpec` holds a FILE. */
+  /**
+   * Fails if a clustering column of `clusterBySpec` holds a FILE. Only a schema that holds a FILE
+   * is checked. A column is looked up as the clustering normalizer does
+   * (`SchemaUtils.findColumnPosition`): the first match, descending into structs and the struct
+   * elements of arrays. A column that is not found is left to the normalizer, which reports it.
+   */
   def checkNoFileTypeClusteringColumn(
       schema: StructType,
       clusterBySpec: ClusterBySpec,
       resolver: Resolver): Unit = {
-    clusterBySpec.columnNames.foreach { ref =>
-      schema.findNestedField(ref.fieldNames.toImmutableArraySeq, resolver = resolver)
-        .foreach { case (_, field) => checkNoFileTypeInColumnUsage(field, "CLUSTERING_COLUMN") }
+    def find(schema: StructType, path: Seq[String]): Option[StructField] =
+      schema.fields.find(f => resolver(f.name, path.head)).flatMap { field =>
+        (path.tail, field.dataType) match {
+          case (Seq(), _) => Some(field)
+          case (tail, s: StructType) => find(s, tail)
+          case (tail, ArrayType(s: StructType, _)) => find(s, tail)
+          case _ => None
+        }
+      }
+    if (schema.existsRecursively(_.isInstanceOf[FileType])) {
+      clusterBySpec.columnNames.map(_.fieldNames.toImmutableArraySeq).filter(_.nonEmpty)
+        .flatMap(find(schema, _))
+        .foreach(checkNoFileTypeInColumnUsage(_, "CLUSTERING_COLUMN"))
     }
   }
 
