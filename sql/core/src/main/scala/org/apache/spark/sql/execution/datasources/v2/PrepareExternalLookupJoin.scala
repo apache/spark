@@ -21,8 +21,8 @@ import java.util.{Collections, IdentityHashMap}
 
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, EqualTo, Expression,
   PredicateHelper}
-import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupJoin, LogicalPlan,
-  PreparedExternalLookupJoin}
+import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupJoin, ExternalLookupKeyTypes,
+  LogicalPlan, PreparedExternalLookupJoin}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.EXTERNAL_LOOKUP_JOIN
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -150,12 +150,16 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
       residual.reduceOption(And))
   }
 
-  /** An equality between a bare lookup column and an expression over the stream side. */
+  /**
+   * An equality between a bare lookup column and an expression over the stream side, on a type
+   * that Spark offers as a lookup key.
+   */
   private def isLookupEquality(
       join: ExternalLookupJoin,
       leftExpr: Expression,
       rightAttr: Attribute): Boolean =
-    leftExpr.references.subsetOf(join.left.outputSet) && join.right.outputSet.contains(rightAttr)
+    leftExpr.references.subsetOf(join.left.outputSet) && join.right.outputSet.contains(rightAttr) &&
+      ExternalLookupKeyTypes.supportsEquality(rightAttr.dataType)
 
   /**
    * Maps the connector's selection back to the offered candidates, in the connector's order, which

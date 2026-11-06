@@ -21,7 +21,8 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.FormExternalLookupJoin
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression,
+  Literal}
 import org.apache.spark.sql.catalyst.optimizer.ColumnPruning
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, JoinType, LeftOuter, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupJoin, Join, JoinHint,
@@ -73,6 +74,44 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
       exception = prepareError(Project(lookup.output, lookup)),
       condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
       parameters = Map("tableName" -> QUOTED_TABLE_NAME, "operation" -> "batch scan"))
+  }
+
+  test("an equality is a lookup candidate only on a type that stores compare as Spark does") {
+    val offeredTypes = Seq("TINYINT", "SMALLINT", "INT", "BIGINT", "BOOLEAN", "DECIMAL(10, 2)",
+      "DATE", "TIMESTAMP", "TIMESTAMP_NTZ", "BINARY", "STRING", "STRING COLLATE UTF8_BINARY")
+    val notOfferedTypes = Seq("FLOAT", "DOUBLE", "STRING COLLATE UTF8_LCASE",
+      "STRING COLLATE UNICODE", "STRING COLLATE UTF8_BINARY_RTRIM", "STRUCT<a: INT>",
+      "ARRAY<INT>", "INTERVAL DAY TO SECOND")
+    for ((codeType, offered) <- offeredTypes.map(_ -> true) ++ notOfferedTypes.map(_ -> false)) {
+      var offeredCandidates = Seq.empty[String]
+      val lookup = lookupRelation(PlanningExternalLookupTable(s"id INT, code $codeType", select = {
+        candidates =>
+          offeredCandidates = candidates.map(_.toString).toSeq
+          candidates.take(1)
+      }))
+      val Seq(lookupId, lookupCode) = lookup.output
+      val streamId = stream.output.head
+      val streamCode = AttributeReference("streamCode", lookupCode.dataType)()
+      val codesEqual = streamCode === lookupCode
+      val prepared = prepare(lookupJoin(lookup, streamId === lookupId && codesEqual,
+        left = LocalRelation(Seq(streamId, streamCode), isStreaming = true)))
+      val expected = if (offered) Seq("id = ?", "code = ?") else Seq("id = ?")
+      assert(offeredCandidates === expected, codeType)
+      // The connector selects only `id = ?`, so Spark evaluates the code equality either way.
+      assert(prepared.residualCondition === Some(codesEqual), codeType)
+    }
+
+    // Without another candidate, the join cannot run.
+    Seq("DOUBLE", "STRING COLLATE UTF8_LCASE").foreach { codeType =>
+      val lookup = lookupRelation(PlanningExternalLookupTable(s"id INT, code $codeType"))
+      val lookupCode = lookup.output(1)
+      val streamCode = AttributeReference("streamCode", lookupCode.dataType)()
+      checkError(
+        exception = prepareError(lookupJoin(lookup, streamCode === lookupCode,
+          left = LocalRelation(Seq(streamCode), isStreaming = true))),
+        condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_CANDIDATE",
+        parameters = Map("table" -> QUOTED_TABLE_NAME))
+    }
   }
 
   test("selected predicates bind in the connector's order, and the residual in written order") {

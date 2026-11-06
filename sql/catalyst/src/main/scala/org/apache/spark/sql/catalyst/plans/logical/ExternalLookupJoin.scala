@@ -22,6 +22,8 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expre
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftOuter}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXTERNAL_LOOKUP_JOIN, TreePattern}
 import org.apache.spark.sql.connector.read.{ExternalLookupReaderFactory, Scan}
+import org.apache.spark.sql.types.{BinaryType, BooleanType, ByteType, DataType, DateType,
+  DecimalType, IntegerType, LongType, ShortType, StringType, TimestampNTZType, TimestampType}
 
 /**
  * A lookup join retained through ordinary expression and operator optimization.
@@ -79,4 +81,25 @@ case class PreparedExternalLookupJoin(
 
   // Connector descriptions may contain secrets. The physical node renders a redacted description.
   override protected def stringArgs: Iterator[Any] = Iterator(child)
+}
+
+/**
+ * The types of lookup columns on which Spark offers a comparison to the connector as a lookup
+ * candidate. The connector evaluates a selected candidate in its store, so Spark offers only types
+ * whose values a store compares as Spark does. A comparison on any other type stays in Spark's
+ * residual condition.
+ */
+object ExternalLookupKeyTypes {
+  /**
+   * Whether Spark offers `=` on a lookup column of this type: integral types, BOOLEAN, DECIMAL,
+   * DATE, TIMESTAMP, TIMESTAMP_NTZ, BINARY, and strings whose collation compares bytes, such as
+   * UTF8_BINARY. FLOAT and DOUBLE are not offered, because stores treat NaN and -0.0 in different
+   * ways, nor strings with another collation, nor complex types, nor any other type.
+   */
+  def supportsEquality(dataType: DataType): Boolean = dataType match {
+    case ByteType | ShortType | IntegerType | LongType | BooleanType | DateType | TimestampType |
+        TimestampNTZType | BinaryType | _: DecimalType => true
+    case stringType: StringType => stringType.supportsBinaryEquality
+    case _ => false
+  }
 }
