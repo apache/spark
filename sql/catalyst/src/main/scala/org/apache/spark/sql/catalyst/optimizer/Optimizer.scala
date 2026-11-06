@@ -2651,8 +2651,10 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     // Additional restrictions:
     // SPARK-60602: A throwable part (including one over a throwable alias) must not be
     // evaluated on rows the parts written before it would have filtered out. So it is pushed
-    // only when no expensive part is written before it, it never enters the projection split,
+    // below the projection as a cheap part only when no expensive part is written before it,
     // and the parts left above the projection keep their written order.
+    // SPARK-60731: The projection split places the parts in their written order (see
+    // `splitProjectForExpensiveConditions` for the exceptions).
     // SPARK-13473: We can't push the predicate down when the underlying projection output non-
     // deterministic field(s).  Non-deterministic expressions are essentially stateful. This
     // implies that, for a given input row, the output are determined by the expression's initial
@@ -2697,24 +2699,16 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         } else {
           grandChild
         }
-        // Case 3: split the projection around the expensive conditions. Non-deterministic
-        // conditions stay in the top filter, as they do everywhere else in this rule -- the
-        // split orders conditions by cost, and cost is no way to decide how many rows a
-        // non-deterministic expression sees. Throwable conditions, or conditions over throwable
-        // aliases, stay there too: ordering by cost could evaluate them (or compute the aliases
-        // in a lower projection) ahead of the conditions written before them.
+        // Case 3: split the projection around the expensive conditions, in their written order
+        // (see `splitProjectForExpensiveConditions`). Whatever it does not place stays above
+        // the projection, in the written order too; from the lowest filter there, a later pass
+        // can still push a deterministic condition that is not throwable and only reads aliases
+        // computed below. The cheap conditions this rule pushes below the projection (cases 1 and
+        // 2), non-deterministic ones included, run before all of these (see `splitPushable`).
         val (splitChild, splitAliases, stayUp) =
           if (expensiveWithUsed.nonEmpty && SQLConf.get.splitProjectionForExpensiveFilters) {
-            val (splittable, notSplittable) = expensiveWithUsed.partition {
-              case (cond, _, replaced) => cond.deterministic && !replaced.throwable
-            }
-            val (child, aliases, unplaced) = splitProjectForExpensiveConditions(
-              project, aliasMap, baseChild,
-              splittable.map { case (cond, used, _) => (cond, used) })
-            // Keep the top filter in the order the conditions were written, so a throwable
-            // condition still only sees the rows the conditions before it kept.
-            val stayUpSet = (unplaced ++ notSplittable.map(_._1)).toSet
-            (child, aliases, expensiveWithUsed.map(_._1).filter(stayUpSet.contains))
+            splitProjectForExpensiveConditions(project, aliasMap, baseChild,
+              expensiveWithUsed.map { case (cond, used, _) => (cond, used) })
           } else {
             (baseChild, AttributeSet.empty, expensiveWithUsed.map(_._1))
           }
@@ -2732,8 +2726,27 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
 
           if (stayUp.isEmpty) {
             topProjection
-          } else {
+          } else if (splitAliases.isEmpty) {
+            // Nothing was split off, so this is the same plan as with the split off.
             Filter(stayUp.reduce(And), topProjection)
+          } else {
+            // As in the split, a non-deterministic condition left above gets a filter of its own:
+            // in a shared filter, a later pass would push it below the conditions before it, or
+            // move the ones after it ahead of it, as cheap conditions over the aliases the split
+            // computed. Every alias is computed below these filters, so, unlike in the split,
+            // whether a condition joins the filter before it depends only on whether it and the
+            // conditions of that filter are deterministic. A throwable condition shares a filter
+            // with the deterministic ones before it, as it does in the split when it needs no new
+            // alias, and in the original filter.
+            val filters = stayUp.foldLeft(Vector.empty[Seq[Expression]]) { (filters, cond) =>
+              if (filters.nonEmpty && cond.deterministic && filters.last.forall(_.deterministic)) {
+                filters.init :+ (filters.last :+ cond)
+              } else {
+                filters :+ Seq(cond)
+              }
+            }
+            filters.foldLeft[LogicalPlan](topProjection)((plan, conds) =>
+              Filter(conds.reduce(And), plan))
           }
         }
       }
@@ -3017,32 +3030,62 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
    * }}}
    * so `rlike(e, 'other')` only runs on the rows where `rlike(e, 'magic')` was true.
    *
-   * Conditions are grouped by the aliases they reference, then the group needing the fewest
-   * not-yet-computed aliases is split off first -- least demanding first keeps the expensive
-   * expressions as high in the stack, and so over as few rows, as we can manage. On a tie, the
-   * group making the most conditions evaluable wins, falling back to the condition written first
-   * (the only selectivity signal we have). Whole-stage codegen already defers a projected
-   * expression past a filter that does not need it (`CodegenSupport.evaluateRequiredVariables`),
-   * so this rule only buys the same saving on the paths codegen does not cover -- interpreted
-   * projections, operators it bails out of, Python UDFs.
+   * The conditions are placed in the order they are written (SPARK-60731): each layer computes
+   * the aliases the next condition needs and filters on it and, when it is deterministic, on the
+   * deterministic conditions right after it that only need aliases computed already. A
+   * non-deterministic condition gets a filter of its own, which neither the conditions before it
+   * nor the ones after it join, and a layer that needs no new alias is a filter alone. So the
+   * split does not evaluate a condition, nor compute the aliases it needs, on rows the
+   * conditions written before it would have dropped. The exception: an alias that shares
+   * expensive work with one an earlier condition needs is computed together with it (see
+   * below), unless that alias is `throwable`. An expression that can fail without reporting
+   * `throwable`, such as a UDF or, in ANSI mode, a division by zero, can still be computed early
+   * this way.
    *
-   * Two restrictions keep the split from costing more than it saves:
+   * Later passes can still move a deterministic condition that is not throwable, including one
+   * calling a UDF that can fail, ahead of some of the conditions written before it: one that only
+   * reads aliases computed in a lower layer is cheap there, and this rule pushes it, as it does
+   * any cheap condition that is not throwable, no lower than the filter of the highest layer that
+   * computes an expensive alias it reads. It does not move past the filter of a non-deterministic
+   * condition, which `CombineFilters` does not merge into. So, when the split places at least one
+   * condition, the caller gives each non-deterministic condition it leaves above the projection a
+   * filter of its own too. The projection on top computes the aliases of the conditions left
+   * above it, as without the split.
+   *
+   * Whole-stage codegen already defers a projected expression past a filter that does not need
+   * it (`CodegenSupport.evaluateRequiredVariables`), so this rule only buys the same saving on
+   * the paths codegen does not cover -- interpreted projections, operators it bails out of,
+   * Python UDFs.
+   *
+   * Two restrictions keep the split from costing more than it saves, with one exception for
+   * throwable aliases:
    *  - Only split a [[Project]] off while it leaves an expensive alias for a later layer; an extra
    *    operator has to buy a real deferral.
    *  - Aliases sharing an expensive sub-expression move together. Subexpression elimination
    *    works within one projection and cannot reach across a [[Filter]], so splitting them apart
    *    would re-evaluate the shared part on every row below the filter and again on every
-   *    survivor (a struct-returning UDF read field by field is the common shape).
+   *    survivor (a struct-returning UDF read field by field is the common shape). A throwable
+   *    alias is the exception: it is not pulled into the layer of an earlier condition, so it
+   *    does not raise on rows the conditions before its first reader drop, even though the
+   *    shared part then runs twice, a cost whole-stage codegen does not remove. When whole-stage
+   *    codegen covers the operator, it already defers the alias past the filter (see above), so
+   *    the exception only costs the second run; but the optimizer cannot know in advance that
+   *    codegen will cover it, even with whole-stage codegen enabled.
    *
-   * The most demanding group is left un-placed for the caller to put above the projection --
-   * where expensive conditions go when there is nothing worth splitting.
-   *
-   * Callers must pass deterministic, non-throwable conditions only -- the grouping below orders
-   * conditions by cost, and cost is no way to decide how many rows a non-deterministic
-   * expression sees, nor may it evaluate a throwable one ahead of the conditions before it.
+   * The conditions from the first one that needs every expensive alias not computed yet
+   * (counting the aliases that are not throwable and share expensive work with the ones it
+   * reads, directly or through each other) are left un-placed for the caller to put above the
+   * projection -- where expensive conditions go when there is nothing worth splitting. So such
+   * a condition ends the split: the conditions after it are not placed either, even those that
+   * need fewer aliases. A throwable alias is among the aliases a condition needs only when the
+   * condition reads it, not when it only reads an alias sharing its work. It is still among the
+   * aliases not computed yet, so a condition that does not read it never needs every one of
+   * them. So with `f` and a throwable `t` sharing its work as the only expensive aliases, the
+   * condition on `f` does not end the split: `f` is computed and filtered on first, and `t`
+   * above it, which runs the shared part again.
    *
    * Returns the new plan, the alias attributes it has already computed, and the un-placed
-   * conditions (in their original, alias-referencing form).
+   * conditions (in their original, alias-referencing form and written order).
    */
   private def splitProjectForExpensiveConditions(
       project: Project,
@@ -3057,8 +3100,9 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     // Two aliases share work exactly when they share a regex, so version 0 of the estimate
     // collects the regex expressions and not their ancestors. A Python UDF counts here even with
     // `avoidDoubleFilterEvalForPythonUDF` off, so two aliases sharing one stay in one layer and
-    // do not run it twice. The split only stacks layers above `baseChild`, so a restart from a
-    // checkpoint does not depend on it.
+    // do not run it twice, unless one of them is throwable and a condition written before every
+    // condition that needs it needs the other (see `aliasesSharing`). The split only stacks
+    // layers above `baseChild`, so a restart from a checkpoint does not depend on it.
     val regexIsExpensive = conf.getConf(SQLConf.REGEX_PATTERN_COST_ESTIMATE_VERSION) == 0
     val expensivePartsOf = AttributeMap(expensiveAliases.toSeq.map { attr =>
       attr -> aliasMap(attr).child.collect {
@@ -3068,7 +3112,11 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     })
     def expensiveParts(attr: Attribute): Set[Expression] =
       expensivePartsOf.getOrElse(attr, Set.empty)
+    // A throwable alias is not pulled into the unit of an alias it shares work with, so it is
+    // not computed ahead of the first condition that reads it, even when that evaluates the
+    // shared part twice. It still pulls in the aliases that are not throwable.
     val aliasesSharing = expensivePartsOf.toSeq
+      .filterNot { case (attr, _) => aliasMap(attr).child.throwable }
       .flatMap { case (attr, parts) => parts.map(part => part -> attr) }
       .groupBy(_._1)
       .map { case (part, pairs) => part -> AttributeSet(pairs.map(_._2)) }
@@ -3079,53 +3127,58 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       var grew = true
       while (grew) {
         val next = unit.flatMap(expensiveParts).foldLeft(unit) {
-          case (acc, part) => acc ++ aliasesSharing(part)
+          case (acc, part) => acc ++ aliasesSharing.getOrElse(part, AttributeSet.empty)
         }
         grew = next.size > unit.size
         unit = next
       }
       unit
     }
-    val indexed = expensiveConds.zipWithIndex.map {
-      case ((cond, used), idx) => (unitOf(AttributeSet(used.keys)), idx, cond)
-    }
-    // Group conditions over the same aliases; group on sorted exprIds (not AttributeSet) for
-    // stable hashing, and order groups by first condition to keep plans stable.
-    var pending: Seq[(AttributeSet, Seq[(Int, Expression)])] = indexed
-      .groupBy { case (used, _, _) => used.toSeq.map(_.exprId.id).sorted }
-      .toSeq
-      .map { case (_, group) => (group.head._1, group.map { case (_, idx, cond) => (idx, cond) }) }
-      .sortBy { case (_, conds) => conds.head._1 }
-    def conditionsOf(groups: Seq[(AttributeSet, Seq[(Int, Expression)])]): Seq[Expression] =
-      groups.flatMap(_._2).sortBy(_._1).map(_._2)
-
     // Projection order is stable, unlike the alias map's iteration order.
     val orderedAliases = project.projectList.collect { case a: Alias => a }
 
+    var pending: Seq[(AttributeSet, Expression)] = expensiveConds.map {
+      case (cond, used) => (unitOf(AttributeSet(used.keys)), cond)
+    }
     var plan = baseChild
     var computed = AttributeSet.empty
     var searching = true
-    while (searching) {
+    while (searching && pending.nonEmpty) {
+      val (needed, head) = pending.head
       // Only split while it leaves an expensive alias for a later layer.
-      val stillToCompute = expensiveAliases -- computed
-      val candidates = pending.filter { case (used, _) => !stillToCompute.subsetOf(used) }
-      if (candidates.isEmpty) {
+      if ((expensiveAliases -- computed).subsetOf(needed)) {
         searching = false
       } else {
-        val (bestUsed, _) = candidates.minBy {
-          case (used, conds) => ((used -- computed).size, -conds.size)
-        }
-        val newAliases = orderedAliases.filter(a => bestUsed.contains(a) && !computed.contains(a))
+        val newAliases = orderedAliases.filter(a => needed.contains(a) && !computed.contains(a))
         computed ++= AttributeSet(newAliases.map(_.toAttribute))
-        // Keep the plan's existing outputs available for later projections; column pruning drops
-        // the extras.
-        val newProject = project.copy(projectList = plan.output ++ newAliases, child = plan)
-        val (evaluable, rest) = pending.partition { case (used, _) => used.subsetOf(computed) }
-        plan = Filter(conditionsOf(evaluable).reduce(And), newProject)
+        // The next condition, and the deterministic ones after it that only need aliases
+        // computed already. A non-deterministic condition shares no filter with the conditions
+        // before or after it: in a later pass, a condition that only reads aliases computed
+        // below would be pushed below the conditions before it, or the ones after it would be
+        // moved ahead of it. It filters on its own instead, which a later pass does not merge
+        // with the filters below it, nor push below them.
+        val (evaluableTail, rest) = if (head.deterministic) {
+          pending.tail.span { case (condNeeded, cond) =>
+            cond.deterministic && condNeeded.subsetOf(computed)
+          }
+        } else {
+          (Nil, pending.tail)
+        }
+        val condition = (head +: evaluableTail.map(_._2)).reduce(And)
+        plan = if (newAliases.isEmpty) {
+          // When the condition needs no new alias, it or the one before it is non-deterministic;
+          // otherwise it would have joined the previous filter. A projection would compute
+          // nothing here.
+          Filter(condition, plan)
+        } else {
+          // Keep the plan's existing outputs available for later projections; column pruning
+          // drops the extras.
+          Filter(condition, project.copy(projectList = plan.output ++ newAliases, child = plan))
+        }
         pending = rest
       }
     }
-    (plan, computed, conditionsOf(pending))
+    (plan, computed, pending.map(_._2))
   }
 
   /**

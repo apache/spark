@@ -27,15 +27,15 @@ import scala.util.Random
 
 import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Cast, EqualTo, ExpressionSet, GreaterThan, Literal, PythonUDF, ScalarSubquery}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Cast, EqualTo, ExpressionSet, GreaterThan, Literal, PythonUDF, ScalarSubquery, ScalaUDF}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LeafNode, LocalRelation, LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LeafNode, LocalRelation, LogicalPlan, OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.util.RandomUUIDGenerator
 import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.execution.{FilterExec, LogicalRDD, QueryExecution, SortExec, WholeStageCodegenExec}
@@ -2978,6 +2978,112 @@ class DataFrameSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-60731: the projection split places filter conditions in written order") {
+    val gCalls = sparkContext.longAccumulator("gCalls")
+    val f = udf((i: Long) => i)
+    val h = udf((i: Long) => i)
+    val g = udf((i: Long) => {
+      gCalls.add(1)
+      require(i > 5, s"g called with $i")
+      i
+    })
+    // `g > 0` needs one alias and `f + h > 10` two, but `g` only works for the ids
+    // `f + h > 10` keeps, so it must only be computed after it, as written.
+    def query(): DataFrame = spark.range(0, 10, 1, 1)
+      .select($"id", f($"id") as "f", h($"id") as "h", g($"id") as "g")
+      .where($"f" + $"h" > 10 && $"g" > 0)
+    val expected = (6L until 10L).map(i => Row(i, i, i, i))
+    // An interpreted projection computes every projected column for every row it gets, so
+    // without codegen only the split keeps `g` away from the other rows.
+    for (codegen <- Seq(true, false); split <- Seq(true, false) if codegen || split) {
+      withSQLConf(
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString,
+        SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> split.toString) {
+        gCalls.reset()
+        // Collect, not checkAnswer, so the plan runs exactly once.
+        assert(query().collect().toSeq === expected)
+        if (!codegen) assert(gCalls.value === 4)
+      }
+    }
+    // Without codegen and the split, the single interpreted projection computes g on every row.
+    withSQLConf(
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+      SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> "false") {
+      val e = intercept[SparkException](query().collect())
+      assert(e.getMessage.contains("FAILED_EXECUTE_UDF"))
+      assert(e.getMessage.contains("g called with"))
+    }
+
+    // Each of these filters with a non-deterministic condition is split (asserted below), and
+    // returns the same rows with the split on as with it off. The non-deterministic condition:
+    //  (1) is written first;
+    //  (2) is written after two conditions and reads only the alias of the first;
+    //  (3) is the same, with a condition after it that only reads computed aliases;
+    //  (4) is written after one condition, reads a new alias, and has a condition after it that
+    //    only reads computed aliases;
+    //  (5) is left above the split after the condition that ends it, reading only the alias of
+    //    the first condition;
+    //  (6) ends the split itself, and has a condition after it that only reads computed aliases.
+    // In (2) and (3), the non-deterministic condition needs no new alias, so it would join the
+    // filter before it if the split allowed that. In (5) and (6), a later pass would swap it with
+    // another condition if they shared the top filter, and the rows would differ.
+    val k = udf((i: Long) => i)
+    def df: DataFrame = spark.range(0, 100, 1, 1)
+      .select($"id", f($"id") as "f", h($"id") as "h", k($"id") as "k")
+    def randQueries: Seq[DataFrame] = Seq(
+      df.where((rand(10) > 0.5 || $"h" < 0) && $"f" >= 50),
+      df.where($"f" >= 20 && $"h" >= 40 && (rand(10) > 0.5 || $"f" < 0) && $"k" >= 0),
+      df.where($"f" >= 20 && $"h" >= 40 && (rand(10) > 0.5 || $"f" < 0) && $"f" % 3 =!= 0 &&
+        $"k" >= 0),
+      df.where($"f" >= 20 && (rand(10) > 0.5 || $"h" < 0) && $"f" % 3 =!= 0 && $"k" >= 0),
+      df.where($"f" >= 20 && $"h" + $"k" >= 60 && (rand(10) > 0.5 || $"f" < 0)),
+      df.where($"f" >= 20 && (rand(10) > 0.5 || $"h" + $"k" < 0) && $"f" % 3 =!= 0))
+    def udfProjects(q: DataFrame): Seq[Project] = q.queryExecution.optimizedPlan.collect {
+      case p: Project if p.projectList.exists(_.exists(_.isInstanceOf[ScalaUDF])) => p
+    }
+    val unsplit = withSQLConf(SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> "false") {
+      randQueries.map { q =>
+        assert(udfProjects(q).size === 1, "The split applied with the split off:\n" +
+          q.queryExecution.optimizedPlan)
+        q.collect().toSeq
+      }
+    }
+    withSQLConf(SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> "true") {
+      val split = randQueries.map { q =>
+        assert(udfProjects(q).size > 1, "The split did not apply:\n" +
+          q.queryExecution.optimizedPlan)
+        q.collect().toSeq
+      }
+      assert(split === unsplit)
+    }
+  }
+
+
+  test("SPARK-60731: a throwable alias sharing work with an earlier condition's alias is not " +
+    "computed ahead of its first reader") {
+    // t shares gt5 with f, but is not computed with f, so without codegen it does not raise on
+    // the rows f drops. With the split off, the single interpreted projection computes it on
+    // every row and raises.
+    val gt5 = udf((i: Long) => i > 5)
+    def query(): DataFrame = spark.range(0, 10, 1, 1)
+      .select($"id", gt5($"id") as "f",
+        when(gt5($"id"), lit(true)).otherwise(raise_error(lit("boom")).isNull) as "t")
+      .where($"f" && $"t")
+    for (split <- Seq(true, false)) {
+      withSQLConf(
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+        SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> split.toString) {
+        if (split) {
+          assert(query().collect().toSeq === (6L until 10L).map(i => Row(i, true, true)))
+        } else {
+          checkError(
+            exception = intercept[SparkRuntimeException](query().collect()),
+            condition = "USER_RAISED_EXCEPTION",
+            parameters = Map("errorMessage" -> "boom"))
+        }
+      }
+    }
+  }
   test("SPARK-60633: a throwable filter condition is not pushed through an operator ahead of " +
     "its order") {
     def df: DataFrame = spark.range(0, 10, 1, 1).toDF()
