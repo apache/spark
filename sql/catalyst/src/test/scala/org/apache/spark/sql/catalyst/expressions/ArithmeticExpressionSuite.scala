@@ -452,6 +452,34 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     }
   }
 
+  test("decimal remainder and pmod allow a quotient wider than 39 digits") {
+    val positive = Literal(Decimal("99999999999999999999999999999999999999"))
+    val negative = Literal(Decimal("-99999999999999999999999999999999999999"))
+    val divisor = Literal(Decimal("0.0007"))
+    checkEvaluation(Remainder(positive, divisor), Decimal("0.0004"))
+    checkEvaluation(Remainder(negative, divisor), Decimal("-0.0004"))
+    checkEvaluation(Pmod(positive, divisor), Decimal("0.0004"))
+    checkEvaluation(Pmod(negative, divisor), Decimal("0.0003"))
+  }
+
+  test("decimal remainder and pmod at the quotient precision boundary") {
+    val positive = Literal(Decimal("99999999999999999999999999999999999999"))
+    val negative = Literal(Decimal("-99999999999999999999999999999999999999"))
+    for {
+      ansi <- Seq("true", "false")
+      (divisor, remainder, positiveMod) <- Seq(
+        ("7", "1", "6"), ("0.7", "0.3", "0.4"), ("0.07", "0.02", "0.05"))
+    } {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+        val right = Literal(Decimal(divisor))
+        checkEvaluation(Remainder(positive, right), Decimal(remainder))
+        checkEvaluation(Remainder(negative, right), -Decimal(remainder))
+        checkEvaluation(Pmod(positive, right), Decimal(remainder))
+        checkEvaluation(Pmod(negative, right), Decimal(positiveMod))
+      }
+    }
+  }
+
   test("% (Remainder)") {
     testNumericDataTypes { convert =>
       val left = Literal(convert(1))
