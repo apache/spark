@@ -26,7 +26,7 @@ use arrow_array::ffi_stream::FFI_ArrowArrayStream;
 use arrow_schema::SchemaRef;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use crate::write::{Batch, DriverWriter, Streaming};
+use crate::write::{Batch, DriverWrite, DriverWriter, Streaming};
 use crate::{
     abi, BatchWrite, Capabilities, CreateInfo, DataSource, LatestOffsetInfo, LimitSupport,
     MicroBatchStream, MicroBatchStreamInfo, PartitionReaderFactory, ReadLimit, ReaderContext,
@@ -49,7 +49,7 @@ pub struct Bridge<S: DataSource> {
     // The builder of each scan, until Spark plans the scan.
     scans: HandleMap<Option<S::ScanBuilder>>,
     streams: HandleMap<S::MicroBatchStream>,
-    writers: HandleMap<Write<S>>,
+    writers: HandleMap<Box<dyn DriverWrite>>,
 }
 
 impl<S: DataSource> Default for Bridge<S> {
@@ -270,8 +270,7 @@ impl<S: DataSource> Bridge<S> {
                         require(capabilities, Capabilities::BATCH_TRUNCATE, overwrite)?;
                     }
                     let write = source.source.new_write(WriteInfo::new(schema, mode))?;
-                    let (writer, state) = DriverWriter::new(Batch(write))?;
-                    (Write::Batch(writer), state)
+                    DriverWriter::new(Batch(write))?
                 }
                 Some(query_id) => {
                     require(
@@ -285,8 +284,7 @@ impl<S: DataSource> Bridge<S> {
                     }
                     let info = StreamingWriteInfo::new(schema, mode, query_id);
                     let write = source.source.new_streaming_write(info)?;
-                    let (writer, state) = DriverWriter::new(Streaming(write))?;
-                    (Write::Streaming(writer), state)
+                    DriverWriter::new(Streaming(write))?
                 }
             }
         };
@@ -381,29 +379,6 @@ fn remove<T>(handles: &HandleMap<T>, handle: i64) {
 struct SourceState<S> {
     source: S,
     capabilities: Capabilities,
-}
-
-/// The driver writer of a batch write, or of the write of a micro-batch, which share the
-/// writer handles of the ABI.
-enum Write<S: DataSource> {
-    Batch(DriverWriter<Batch<S::BatchWrite>>),
-    Streaming(DriverWriter<Streaming<S::StreamingWrite>>),
-}
-
-impl<S: DataSource> Write<S> {
-    fn commit(&mut self, epoch_id: i64, messages: &[Option<&[u8]>]) -> Result<()> {
-        match self {
-            Self::Batch(writer) => writer.commit(epoch_id, messages),
-            Self::Streaming(writer) => writer.commit(epoch_id, messages),
-        }
-    }
-
-    fn abort(&mut self, epoch_id: i64, messages: &[Option<&[u8]>]) -> Result<()> {
-        match self {
-            Self::Batch(writer) => writer.abort(epoch_id, messages),
-            Self::Streaming(writer) => writer.abort(epoch_id, messages),
-        }
-    }
 }
 
 /// Offsets are compact JSON on a single line, which Spark stores in the checkpoint as they

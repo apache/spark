@@ -83,6 +83,15 @@ impl<W: StreamingWrite> Coordinator for Streaming<W> {
     }
 }
 
+/// A driver writer that decodes its own commit messages, so that one handle type holds the
+/// driver writers of batch writes and of the writes of micro-batches, which share the writer
+/// handles of the ABI.
+pub trait DriverWrite: Send {
+    fn commit(&mut self, epoch_id: i64, messages: &[Option<&[u8]>]) -> Result<()>;
+
+    fn abort(&mut self, epoch_id: i64, messages: &[Option<&[u8]>]) -> Result<()>;
+}
+
 /// The driver keeps this coordinator until close, including after a failed commit.
 pub struct DriverWriter<C: Coordinator> {
     coordinator: Option<C>,
@@ -91,20 +100,22 @@ pub struct DriverWriter<C: Coordinator> {
 impl<C: Coordinator> DriverWriter<C> {
     /// Wraps a coordinator, with the state that its task writers need: its serialized
     /// writer factory. On failure, the coordinator is dropped.
-    pub fn new(coordinator: C) -> Result<(Self, Vec<u8>)> {
+    pub fn new(coordinator: C) -> Result<(Box<dyn DriverWrite>, Vec<u8>)> {
         let writer = Self {
             coordinator: Some(coordinator),
         };
         // The factory's destructor is connector code too, so it runs in provider_call.
         let state = provider_call(|| encode(&writer.coordinator().writer_factory()?))?;
-        Ok((writer, state))
+        Ok((Box::new(writer), state))
     }
 
     fn coordinator(&self) -> &C {
         self.coordinator.as_ref().expect("coordinator is present")
     }
+}
 
-    pub fn commit(&mut self, epoch_id: i64, messages: &[Option<&[u8]>]) -> Result<()> {
+impl<C: Coordinator> DriverWrite for DriverWriter<C> {
+    fn commit(&mut self, epoch_id: i64, messages: &[Option<&[u8]>]) -> Result<()> {
         let messages = messages
             .iter()
             .map(|message| decode(message.ok_or("missing committed task message")?))
@@ -115,7 +126,7 @@ impl<C: Coordinator> DriverWriter<C> {
             .commit(epoch_id, messages)
     }
 
-    pub fn abort(&mut self, epoch_id: i64, messages: &[Option<&[u8]>]) -> Result<()> {
+    fn abort(&mut self, epoch_id: i64, messages: &[Option<&[u8]>]) -> Result<()> {
         // Abort is the cleanup path: a message that cannot be decoded is passed as None
         // instead of preventing the coordinator from cleaning up.
         let messages = messages
