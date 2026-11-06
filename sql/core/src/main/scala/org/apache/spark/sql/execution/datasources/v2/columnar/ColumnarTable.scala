@@ -62,7 +62,9 @@ class ColumnarTable(
   override def schema(): StructType = tableSchema
 
   // The streams of the scans of the table return the columns of their read schemas: their stream
-  // readers get these columns, and return exactly them, see ColumnarScan.
+  // readers get these columns, and return exactly them, see ColumnarScan. The native data sources,
+  // which implement ColumnarDataSource, check the schema of the data of each partition against it
+  // (see NativePartitionReader), and fail the read otherwise.
   private lazy val tableCapabilities = {
     val capabilities = new util.HashSet[TableCapability](
       createDataSource(withTableOptions(CaseInsensitiveStringMap.empty())).capabilities())

@@ -99,7 +99,8 @@ class ContinuousExecution(
           // reads, so that connectors implementing SupportsMetadataColumns include them in
           // readSchema().
           val streamingScan = StreamingV2ScanPushDown.buildScan(
-            table, options, output, streamConf, columnsAndFiltersOfSources.get(s))(
+            table, options, output, streamConf, columnsAndFiltersOfSources.get(s),
+            StreamingV2ScanPushDown.sourceName(table, catalog, identifier))(
             _.toContinuousStream(metadataPath))
           val relation = StreamingDataSourceV2Relation(
               table, output, catalog, identifier, options, metadataPath)

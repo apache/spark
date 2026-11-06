@@ -344,24 +344,30 @@ object OffsetSeqMetadata extends Logging {
   }
 
   /**
-   * Set the SparkSession configuration with the values in the metadata.
-   *
-   * @param logChanges whether to log the values that are not in the metadata or that differ from
-   *                   those of the session, which a copy of the configuration of a query that
-   *                   gets them again later does not need to log twice
+   * Sets the values of the metadata in `conf`, as `setSessionConf` does, without logging them: for
+   * a copy of the configuration of a query, which `setSessionConf` sets with them later.
    */
-  def setSessionConf(
-      metadata: OffsetSeqMetadataBase,
-      sessionConf: SQLConf,
-      logChanges: Boolean = true): Unit = {
+  def setConfWithoutLogging(metadata: OffsetSeqMetadataBase, conf: SQLConf): Unit = {
+    val keys = relevantSQLConfs.map(entry => entry.key -> entry.key) ++
+      rebindSQLConfsOffsetLogToSession.map { case (inOffsetLog, inSession) =>
+        inOffsetLog.key -> inSession.key
+      }
+    keys.foreach { case (keyInOffsetLog, keyInSession) =>
+      metadata.conf.get(keyInOffsetLog)
+        .orElse(defaultValueForMissingConf(metadata, keyInOffsetLog))
+        .foreach(conf.setConfString(keyInSession, _))
+    }
+  }
+
+  /** Set the SparkSession configuration with the values in the metadata */
+  def setSessionConf(metadata: OffsetSeqMetadataBase, sessionConf: SQLConf): Unit = {
     def setOneSessionConf(confKeyInOffsetLog: String, confKeyInSession: String): Unit = {
       metadata.conf.get(confKeyInOffsetLog) match {
 
         case Some(valueInMetadata) =>
           // Config value exists in the metadata, update the session config with this value
           val optionalValueInSession = sessionConf.getConfString(confKeyInSession, null)
-          if (logChanges && optionalValueInSession != null &&
-              optionalValueInSession != valueInMetadata) {
+          if (optionalValueInSession != null && optionalValueInSession != valueInMetadata) {
             logWarning(log"Updating the value of conf '${MDC(CONFIG, confKeyInSession)}' in " +
               log"current session from '${MDC(OLD_VALUE, optionalValueInSession)}' " +
               log"to '${MDC(NEW_VALUE, valueInMetadata)}'.")
@@ -376,12 +382,10 @@ object OffsetSeqMetadata extends Logging {
 
             case Some(defaultValue) =>
               sessionConf.setConfString(confKeyInSession, defaultValue)
-              if (logChanges) {
-                logWarning(log"Conf '${MDC(CONFIG, confKeyInSession)}' was not found in the " +
-                  log"offset log, using default value '${MDC(DEFAULT_VALUE, defaultValue)}'")
-              }
+              logWarning(log"Conf '${MDC(CONFIG, confKeyInSession)}' was not found in the offset " +
+                log"log, using default value '${MDC(DEFAULT_VALUE, defaultValue)}'")
 
-            case None if logChanges =>
+            case None =>
               val value = sessionConf.getConfString(confKeyInSession, null)
               val valueStr = if (value != null) {
                 s" Using existing session conf value '$value'."
@@ -390,8 +394,6 @@ object OffsetSeqMetadata extends Logging {
               }
               logWarning(log"Conf '${MDC(CONFIG, confKeyInSession)}' was not found in the " +
                 log"offset log. ${MDC(TIP, valueStr)}")
-
-            case None =>
           }
       }
     }

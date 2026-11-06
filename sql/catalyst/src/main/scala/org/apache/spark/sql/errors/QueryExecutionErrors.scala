@@ -2528,13 +2528,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def streamingScanInvalidReadSchemaError(
-      source: String,
+      source: Seq[String],
       reason: String,
       cause: Throwable = null): Throwable = {
     new SparkException(
       errorClass = "STREAMING_SCAN_INVALID_READ_SCHEMA",
       messageParameters = Map(
-        "source" -> toSQLId(Seq(source)),
+        "source" -> toSQLId(source),
         "reason" -> reason,
         "config" -> toSQLConf(SQLConf.STREAMING_V2_COLUMN_PRUNING_ENABLED.key)),
       cause = cause)

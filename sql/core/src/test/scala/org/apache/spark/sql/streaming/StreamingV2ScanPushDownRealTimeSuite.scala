@@ -20,6 +20,7 @@ package org.apache.spark.sql.streaming
 import java.util
 import java.util.concurrent.atomic.AtomicInteger
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.{Encoder, Encoders}
 import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
@@ -31,6 +32,7 @@ import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Partitio
 import org.apache.spark.sql.connector.read.streaming.SupportsRealTimeRead.RecordStatus
 import org.apache.spark.sql.execution.datasources.v2.{RealTimeStreamScanExec, StreamingDataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemorySink, LowLatencyMemoryStream}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -38,6 +40,10 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 class StreamingV2ScanPushDownRealTimeSuite extends StreamRealTimeModeSuiteBase {
 
   import testImplicits._
+
+  // The pruning of the scans of streaming queries is disabled by default.
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.STREAMING_V2_COLUMN_PRUNING_ENABLED, true)
 
   test("read only the columns that a real-time query needs") {
     val input = new PruningLowLatencyStream(spark)
