@@ -198,9 +198,10 @@ trait ShuffledJoin extends JoinCodegenSupport {
 
   /**
    * The coalesced keys of `keyPairs` with every key left first, and with every key right first.
-   * `Coalesce(l, r)` and `Coalesce(r, l)` agree on every output row: a matched row has equal keys,
-   * and an unmatched row has a NULL on the other side. `USING` gives the left-first order, and a
-   * query usually writes all of its keys in one order, so the mixed orders are not reported.
+   * For key pairs that pass `canCoalesce`, `Coalesce(l, r)` and `Coalesce(r, l)` agree on every
+   * output row: a matched row has equal keys, and an unmatched row has a NULL on the other side.
+   * `USING` gives the left-first order, and a query usually writes all of its keys in one order,
+   * so the mixed orders are not reported.
    */
   private def coalescedKeys(keyPairs: Seq[(Expression, Expression)]): Seq[Seq[Expression]] = {
     val leftFirst = keyPairs.map { case (l, r) => Coalesce(Seq(l, r)) }
