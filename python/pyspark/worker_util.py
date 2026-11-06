@@ -270,8 +270,8 @@ class _EndOfInput:
 
     __slots__ = ("error",)
 
-    def __init__(self, error: Optional[Exception]) -> None:
-        self.error = error
+    def __init__(self) -> None:
+        self.error: Optional[Exception] = None
 
 
 @contextmanager
@@ -279,8 +279,9 @@ def read_in_thread(
     iterator: Iterable[Any], queue_depth: int
 ) -> Generator[Iterator[Any], None, None]:
     """
-    Read ``iterator`` in a background thread, keeping up to ``queue_depth`` items ahead of the
-    caller, and yield an iterator over the same items.
+    Read ``iterator`` in a background thread and yield an iterator over the same items. The
+    reader runs ahead of the caller by up to ``queue_depth`` queued items plus the one it is
+    waiting to enqueue.
 
     This lets reading and deserializing the input overlap with the caller's work. Items that are
     themselves iterators (e.g. lazy per-group iterators that still read the input stream) are
@@ -297,6 +298,7 @@ def read_in_thread(
 
     item_queue: queue.Queue = queue.Queue(maxsize=queue_depth)
     stop_event = threading.Event()
+    end = _EndOfInput()
 
     def _put(item: Any) -> bool:
         # Block until there is room, giving up once the consumer has stopped.
@@ -309,7 +311,6 @@ def read_in_thread(
         return False
 
     def _read() -> None:
-        error = None
         try:
             for item in iterator:
                 if hasattr(item, "__next__"):
@@ -317,16 +318,16 @@ def read_in_thread(
                 if not _put(item) or stop_event.is_set():
                     return
         except Exception as e:
-            error = e
+            end.error = e
         finally:
-            _put(_EndOfInput(error))
+            _put(end)
 
     def _consume() -> Iterator[Any]:
         while True:
             item = item_queue.get()
-            if isinstance(item, _EndOfInput):
-                if item.error is not None:
-                    raise item.error
+            if item is end:
+                if end.error is not None:
+                    raise end.error
                 return
             yield item
 
