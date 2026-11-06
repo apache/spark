@@ -1026,7 +1026,8 @@ object LikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
   // as the residual: `Length <op> N && (input LIKE pattern)`. The residual is tagged to keep the
   // rule idempotent under the fixed-point batch. `And(guard, Like)` equals the `Like` in every
   // context (it is `Like` conjoined with one of its necessary conditions), so no predicate-only
-  // restriction is needed.
+  // restriction is needed. It does read the input twice, so it is made only for a deterministic
+  // input; a nondeterministic one could give each read a different value.
   private def deriveLengthGuard(
       input: Expression,
       pattern: String,
@@ -1042,8 +1043,12 @@ object LikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
         else EqualTo(Length(input), Literal(n))
       if (pattern.exists(c => c != '_' && c != '%')) {
         // Literals present: length is only a necessary condition, so keep the exact `Like`.
-        like.setTagValue(LIKE_LENGTH_GUARDED, ())
-        Some(And(lengthGuard, like))
+        if (input.deterministic) {
+          like.setTagValue(LIKE_LENGTH_GUARDED, ())
+          Some(And(lengthGuard, like))
+        } else {
+          None
+        }
       } else {
         // Only `_`/`%` wildcards: the length guard is exactly equivalent to the `Like`.
         Some(lengthGuard)

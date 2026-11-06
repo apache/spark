@@ -183,9 +183,6 @@ class LikeSimplificationSuite extends PlanTest {
     comparePlans(Optimize.execute(escPercent), escPercent)
     val escUnderscore = testRelation.where($"a".like("a__b", '_')).analyze
     comparePlans(Optimize.execute(escUnderscore), escUnderscore)
-    // Unescaped '_' single-char wildcard -> not handled by this rule.
-    val underscore = testRelation.where($"a" like "a_b").analyze
-    comparePlans(Optimize.execute(underscore), underscore)
   }
 
   test("SPARK-33677: LikeSimplification skips invalid/pathological escapes, simplifies valid") {
@@ -421,10 +418,32 @@ class LikeSimplificationSuite extends PlanTest {
       testRelation.where(Length($"a") >= 3 && ($"a" like "a_b%")).analyze)
   }
 
-  test("no length guard when '_' is escaped or absent") {
-    // Escaped `_`: pattern contains the escape char, so it is not simplified.
-    val escaped = testRelation.where($"a" like "a\\_b").analyze
-    comparePlans(Optimize.execute(escaped), escaped)
+  test("no additive length guard over a nondeterministic input") {
+    // The guarded form reads the input twice, and each read could see a different value.
+    val input = Uuid(Some(0L))
+    val originalQuery = testRelation.where(input like "a_c").analyze
+    comparePlans(Optimize.execute(originalQuery), originalQuery)
+
+    // A '_'-only pattern is replaced by the guard alone, which reads the input once.
+    comparePlans(
+      Optimize.execute(testRelation.where(input like "___").analyze),
+      testRelation.where(Length(input) === 3).analyze)
+
+    // The guard is still added for a deterministic input, even one not cheap.
+    val substr = $"a".substring(1, 5)
+    comparePlans(
+      Optimize.execute(testRelation.where(substr like "a_c").analyze),
+      testRelation.where(Length(substr) === 3 && (substr like "a_c")).analyze)
+  }
+
+  test("no length guard when the pattern has escapes or no '_'") {
+    // An escaped `_` is a literal, so the pattern is an equality, not a length guard.
+    comparePlans(
+      Optimize.execute(testRelation.where($"a" like "a\\_b").analyze),
+      testRelation.where($"a" === "a_b").analyze)
+    // An unescaped `_` alongside an escape sequence is left as a LIKE.
+    val mixed = testRelation.where($"a" like "a\\%_b").analyze
+    comparePlans(Optimize.execute(mixed), mixed)
     // No `_`: existing behavior is unchanged (StartsWith), not a length guard.
     comparePlans(
       Optimize.execute(testRelation.where($"a" like "abc%").analyze),
