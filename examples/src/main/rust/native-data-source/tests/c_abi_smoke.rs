@@ -38,7 +38,9 @@ fn c_abi_arrow_round_trip() -> Result<(), Box<dyn Error>> {
     fs::create_dir(&directory.0)?;
 
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let header = manifest.join("../../../../../sql/native/rust/tests/fixtures");
+    // The header of the Spark source tree, as a library would copy it.
+    let header =
+        manifest.join("../../../../../sql/core/src/main/resources/org/apache/spark/sql/datasource");
     let harness = directory.0.join("c_abi_smoke");
     let compiler = std::env::var_os("CC").unwrap_or_else(|| "cc".into());
     let mut command = Command::new(compiler);

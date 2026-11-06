@@ -19,19 +19,19 @@ use std::sync::Arc;
 
 use arrow_array::ffi::FFI_ArrowArray;
 use arrow_array::ffi_stream::FFI_ArrowArrayStream;
-use arrow_array::{Array, StructArray};
+use arrow_array::{Array, RecordBatch, StructArray};
 use arrow_data::ArrayData;
-use arrow_schema::{ffi::FFI_ArrowSchema, DataType, Field, Fields, SchemaRef, TimeUnit};
+use arrow_schema::{ffi::FFI_ArrowSchema, DataType, Field, Fields, Schema, SchemaRef, TimeUnit};
 
 use super::{describe, panic_message};
 use crate::{PartitionReader, Result};
 
 struct StreamState<'task> {
     reader: Option<PartitionReader<'task>>,
-    // The negotiated schema, whose Spark types and nullability each batch must respect.
+    // The schema to read, whose columns, Spark types, and nullability each batch must have.
     expected: SchemaRef,
     // The schema of the stream: that of the first batch, which every batch must have, or
-    // the negotiated schema of a reader without batches. Unknown until either is read.
+    // the schema to read of a reader without batches. Unknown until either is read.
     schema: Option<SchemaRef>,
     // The first batch, when get_schema read it to learn the schema.
     pending: Option<ArrayData>,
@@ -48,7 +48,7 @@ impl StreamState<'_> {
             self.schema.get_or_insert_with(|| self.expected.clone());
             return Ok(None);
         };
-        let batch = batch?;
+        let batch = project(batch?, &self.expected)?;
         match &self.schema {
             Some(schema) if batch.schema() != *schema => {
                 return Err("reader returned a batch with a different schema".into());
@@ -58,9 +58,7 @@ impl StreamState<'_> {
                 if canonical_fields(batch.schema().fields())?
                     != canonical_fields(self.expected.fields())?
                 {
-                    return Err(
-                        "executor reader schema does not match the negotiated schema".into(),
-                    );
+                    return Err("executor reader schema does not match the schema to read".into());
                 }
                 self.schema = Some(batch.schema());
             }
@@ -72,6 +70,28 @@ impl StreamState<'_> {
         }
         Ok(Some(data))
     }
+}
+
+/// Keeps the columns of the schema to read, in its order, from a batch that may have more,
+/// such as all the columns of the source.
+fn project(batch: RecordBatch, expected: &Schema) -> Result<RecordBatch> {
+    let schema = batch.schema();
+    let names = |fields: &Fields| fields.iter().map(|field| field.name().clone()).collect();
+    let actual: Vec<String> = names(schema.fields());
+    let wanted: Vec<String> = names(expected.fields());
+    if actual == wanted {
+        return Ok(batch);
+    }
+    let indices =
+        wanted
+            .iter()
+            .map(|name| {
+                actual.iter().position(|actual| actual == name).ok_or_else(|| {
+                format!("reader returned a batch without the column {name} of the schema to read")
+            })
+            })
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+    Ok(batch.project(&indices)?)
 }
 
 impl Drop for StreamState<'_> {
@@ -242,7 +262,7 @@ fn canonical_type(data_type: &DataType) -> Result<DataType> {
     })
 }
 
-/// Rejects a null where the negotiated schema declares a column, a field, an element,
+/// Rejects a null where the schema to read declares a column, a field, an element,
 /// or a map value not nullable, unless its parent is null, as Spark does after reading.
 /// `referenced` tells which values belong to a parent value that is not null.
 fn check_nulls(
@@ -444,7 +464,7 @@ mod tests {
     }
 
     #[test]
-    fn a_reader_without_batches_has_the_negotiated_schema() {
+    fn a_reader_without_batches_has_the_schema_to_read() {
         let mut stream = ArrowArrayStreamReader::try_new(export(reader_of(vec![]))).unwrap();
         assert_eq!(stream.schema(), schema());
         assert!(stream.next().is_none());
@@ -452,7 +472,7 @@ mod tests {
 
     #[test]
     fn the_first_batch_determines_the_arrow_types_of_the_stream() {
-        // The negotiated schema has a Utf8 string, which the reader returns as LargeUtf8.
+        // The schema to read has a Utf8 string, which the reader returns as LargeUtf8.
         let expected = Arc::new(Schema::new(vec![Field::new("label", DataType::Utf8, true)]));
         let actual = Arc::new(Schema::new(vec![Field::new(
             "label",
@@ -472,6 +492,35 @@ mod tests {
             .unwrap();
         assert_eq!(labels.value(1), "b");
         assert!(stream.next().is_none());
+    }
+
+    #[test]
+    fn the_sdk_keeps_the_columns_of_the_schema_to_read_by_name() {
+        // The reader ignores pruning and returns all the columns of the source, in its order.
+        let all = Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Int64, false),
+            Field::new("flag", DataType::Boolean, false),
+        ]));
+        let ids = Arc::new(Int64Array::from(vec![3, 5]));
+        let flags = Arc::new(BooleanArray::from(vec![true, false]));
+        let batch = RecordBatch::try_new(all, vec![ids, flags]).unwrap();
+        for (columns, rows) in [(vec!["flag", "id"], 2), (vec![], 2)] {
+            let fields: Vec<_> = columns
+                .iter()
+                .map(|name| match *name {
+                    "id" => Field::new("id", DataType::Int64, false),
+                    _ => Field::new("flag", DataType::Boolean, false),
+                })
+                .collect();
+            let expected = Arc::new(Schema::new(fields));
+            let exported = export_with(reader_of(vec![batch.clone()]), &expected);
+            let mut stream = ArrowArrayStreamReader::try_new(exported).unwrap();
+            assert_eq!(stream.schema(), expected);
+            let read = stream.next().unwrap().unwrap();
+            assert_eq!(read.schema(), expected);
+            assert_eq!(read.num_rows(), rows, "{columns:?}");
+            assert!(stream.next().is_none());
+        }
     }
 
     #[test]
@@ -534,14 +583,14 @@ mod tests {
     }
 
     #[test]
-    fn negotiated_schema_mismatch_drops_the_reader() {
+    fn a_schema_mismatch_drops_the_reader() {
         let reader = reader();
         let drops = reader.drops.clone();
         let expected = Arc::new(Schema::new(vec![Field::new("id", DataType::Utf8, false)]));
         let mut stream = export_with(reader, &expected);
         let error = first_batch_error(&mut stream).unwrap();
         assert!(
-            error.contains("does not match the negotiated schema"),
+            error.contains("does not match the schema to read"),
             "{error}"
         );
         assert!(at_end(&mut stream), "a failed stream has no more batches");
@@ -668,7 +717,7 @@ mod tests {
     }
 
     #[test]
-    fn nulls_must_respect_the_nullability_of_the_negotiated_schema() {
+    fn nulls_must_respect_the_nullability_of_the_schema_to_read() {
         let values = Arc::new(Int64Array::from(vec![Some(1), None]));
         let nullable = Arc::new(Schema::new(vec![Field::new("id", DataType::Int64, true)]));
         let required = Arc::new(Schema::new(vec![Field::new("id", DataType::Int64, false)]));

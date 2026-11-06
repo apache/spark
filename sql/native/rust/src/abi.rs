@@ -27,19 +27,29 @@ pub use arrow_schema::ffi::FFI_ArrowSchema as ArrowSchema;
 use arrow_schema::{Schema, SchemaRef};
 
 use crate::bridge::{describe, panic_message};
-use crate::host::{self, LogFunction};
-use crate::{CreateInfo, FilterSupport, HostInfo, Options, Result, WriteMode};
+use crate::host::{self, LogEnabledFunction, LogFunction};
+use crate::{CreateInfo, HostInfo, LatestOffsetInfo, Options, ReadLimit, Result, WriteMode};
 
 pub const ABI_VERSION: i32 = 1;
 pub const BATCH_READ: u64 = 1;
 pub const MICRO_BATCH_READ: u64 = 2;
 pub const BATCH_WRITE: u64 = 4;
 pub const STREAMING_WRITE: u64 = 8;
-pub const TRUNCATE: u64 = 16;
+pub const BATCH_TRUNCATE: u64 = 16;
+pub const STREAMING_TRUNCATE: u64 = 32;
+pub const ADMISSION_CONTROL: u64 = 64;
+pub const READ_BATCH: i32 = 0;
+pub const READ_MICRO_BATCH: i32 = 1;
+pub const READ_ALL_AVAILABLE: i32 = 0;
+pub const READ_MAX_ROWS: i32 = 1;
+pub const WRITE_APPEND: i32 = 0;
+pub const WRITE_TRUNCATE: i32 = 1;
 pub const LOG_ERROR: i32 = 1;
 
 pub type SparkDsSink = Option<unsafe extern "C" fn(*mut c_void, *const u8, i64)>;
 pub type Interrupted = unsafe extern "C" fn(*const SparkDsTaskContext) -> bool;
+
+// What Spark passes to the library.
 
 #[repr(C)]
 pub struct SparkDsHost {
@@ -47,9 +57,11 @@ pub struct SparkDsHost {
     pub abi_version: i32,
     pub spark_version: *const c_char,
     pub log: Option<LogFunction>,
+    pub is_log_enabled: Option<LogEnabledFunction>,
 }
 
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct SparkDsCreateInfo {
     pub size: i64,
     pub name: *const c_char,
@@ -59,6 +71,64 @@ pub struct SparkDsCreateInfo {
 }
 
 #[repr(C)]
+#[derive(Clone, Copy)]
+pub struct SparkDsReaderInfo {
+    pub size: i64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct SparkDsPartitionsInfo {
+    pub size: i64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct SparkDsStreamReaderInfo {
+    pub size: i64,
+    pub checkpoint_location: *const c_char,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct SparkDsInitialOffsetInfo {
+    pub size: i64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct SparkDsReadLimit {
+    pub size: i64,
+    pub kind: i32,
+    pub max_rows: i64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct SparkDsLatestOffsetInfo {
+    pub size: i64,
+    pub start: *const c_char,
+    pub limit: *const SparkDsReadLimit,
+    pub run_end: *const c_char,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct SparkDsStreamPartitionsInfo {
+    pub size: i64,
+    pub start: *const c_char,
+    pub end: *const c_char,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct SparkDsCommitOffsetInfo {
+    pub size: i64,
+    pub end: *const c_char,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
 pub struct SparkDsTaskContext {
     pub size: i64,
     pub stage_id: i32,
@@ -70,11 +140,53 @@ pub struct SparkDsTaskContext {
 }
 
 #[repr(C)]
+#[derive(Clone, Copy)]
+pub struct SparkDsReadInfo {
+    pub size: i64,
+    pub kind: i32,
+    pub schema: *mut ArrowSchema,
+    pub reader_state: *const u8,
+    pub reader_state_length: i64,
+    pub partition: *const u8,
+    pub partition_length: i64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
 pub struct SparkDsWriteInfo {
     pub size: i64,
     pub mode: i32,
     pub query_id: *const c_char,
 }
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct SparkDsDataWriterInfo {
+    pub size: i64,
+    pub schema: *mut ArrowSchema,
+    pub writer_state: *const u8,
+    pub writer_state_length: i64,
+    pub epoch_id: i64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct SparkDsFinishWriteInfo {
+    pub size: i64,
+    pub epoch_id: i64,
+    pub messages: *const *const u8,
+    pub message_lengths: *const i64,
+    pub num_messages: i64,
+    pub rejected: i64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct SparkDsFinishDataWriterInfo {
+    pub size: i64,
+}
+
+// What the library returns to Spark.
 
 /// The complete version 1 table. Unsupported operations have null function slots.
 #[repr(C)]
@@ -85,76 +197,105 @@ pub struct SparkDsLibrary {
     pub create:
         Option<unsafe extern "C" fn(*const SparkDsCreateInfo, *mut u64, *mut *mut c_void) -> c_int>,
     pub schema: Option<unsafe extern "C" fn(*mut c_void, *mut ArrowSchema) -> c_int>,
-    pub create_reader:
-        Option<unsafe extern "C" fn(*mut c_void, *mut ArrowSchema, *mut *mut c_void) -> c_int>,
-    pub create_stream_reader:
-        Option<unsafe extern "C" fn(*mut c_void, *mut ArrowSchema, *mut *mut c_void) -> c_int>,
+    pub create_reader: Option<
+        unsafe extern "C" fn(
+            *mut c_void,
+            *mut ArrowSchema,
+            *const SparkDsReaderInfo,
+            *mut *mut c_void,
+        ) -> c_int,
+    >,
+    pub create_stream_reader: Option<
+        unsafe extern "C" fn(
+            *mut c_void,
+            *mut ArrowSchema,
+            *const SparkDsStreamReaderInfo,
+            *mut *mut c_void,
+        ) -> c_int,
+    >,
     pub create_writer: Option<
         unsafe extern "C" fn(
             *mut c_void,
             *mut ArrowSchema,
             *const SparkDsWriteInfo,
+            SparkDsSink,
+            *mut c_void,
             *mut *mut c_void,
         ) -> c_int,
     >,
     pub close: Option<unsafe extern "C" fn(*mut c_void)>,
-    pub push_predicates:
-        Option<unsafe extern "C" fn(*mut c_void, *const *const c_char, i64, *mut i32) -> c_int>,
     pub push_limit: Option<unsafe extern "C" fn(*mut c_void, i32, *mut bool) -> c_int>,
     pub prune_columns:
-        Option<unsafe extern "C" fn(*mut c_void, *const *const c_char, i64, *mut bool) -> c_int>,
-    pub partitions: Option<unsafe extern "C" fn(*mut c_void, SparkDsSink, *mut c_void) -> c_int>,
-    pub serialize_reader:
-        Option<unsafe extern "C" fn(*mut c_void, SparkDsSink, *mut c_void) -> c_int>,
-    pub close_reader: Option<unsafe extern "C" fn(*mut c_void)>,
-    pub initial_offset:
-        Option<unsafe extern "C" fn(*mut c_void, SparkDsSink, *mut c_void) -> c_int>,
-    pub latest_offset: Option<unsafe extern "C" fn(*mut c_void, SparkDsSink, *mut c_void) -> c_int>,
-    pub stream_partitions: Option<
+        Option<unsafe extern "C" fn(*mut c_void, *const *const c_char, i64) -> c_int>,
+    pub partitions: Option<
         unsafe extern "C" fn(
             *mut c_void,
-            *const c_char,
-            *const c_char,
+            *const SparkDsPartitionsInfo,
+            SparkDsSink,
             SparkDsSink,
             *mut c_void,
         ) -> c_int,
     >,
-    pub serialize_stream_reader:
-        Option<unsafe extern "C" fn(*mut c_void, SparkDsSink, *mut c_void) -> c_int>,
-    pub commit_offset: Option<unsafe extern "C" fn(*mut c_void, *const c_char) -> c_int>,
+    pub close_reader: Option<unsafe extern "C" fn(*mut c_void)>,
+    pub initial_offset: Option<
+        unsafe extern "C" fn(
+            *mut c_void,
+            *const SparkDsInitialOffsetInfo,
+            SparkDsSink,
+            *mut c_void,
+        ) -> c_int,
+    >,
+    pub latest_offset: Option<
+        unsafe extern "C" fn(
+            *mut c_void,
+            *const SparkDsLatestOffsetInfo,
+            SparkDsSink,
+            *mut c_void,
+        ) -> c_int,
+    >,
+    pub stream_partitions: Option<
+        unsafe extern "C" fn(
+            *mut c_void,
+            *const SparkDsStreamPartitionsInfo,
+            SparkDsSink,
+            SparkDsSink,
+            *mut c_void,
+        ) -> c_int,
+    >,
+    pub commit_offset:
+        Option<unsafe extern "C" fn(*mut c_void, *const SparkDsCommitOffsetInfo) -> c_int>,
     pub close_stream_reader: Option<unsafe extern "C" fn(*mut c_void)>,
     pub read: Option<
         unsafe extern "C" fn(
             *const SparkDsTaskContext,
-            *const u8,
-            i64,
-            *const u8,
-            i64,
+            *const SparkDsReadInfo,
             *mut ArrowArrayStream,
         ) -> c_int,
     >,
-    pub serialize_writer:
-        Option<unsafe extern "C" fn(*mut c_void, SparkDsSink, *mut c_void) -> c_int>,
-    pub commit:
-        Option<unsafe extern "C" fn(*mut c_void, i64, *const *const u8, *const i64, i64) -> c_int>,
-    pub abort:
-        Option<unsafe extern "C" fn(*mut c_void, i64, *const *const u8, *const i64, i64) -> c_int>,
+    pub commit: Option<unsafe extern "C" fn(*mut c_void, *const SparkDsFinishWriteInfo) -> c_int>,
+    pub abort: Option<unsafe extern "C" fn(*mut c_void, *const SparkDsFinishWriteInfo) -> c_int>,
     pub close_writer: Option<unsafe extern "C" fn(*mut c_void)>,
     pub create_data_writer: Option<
         unsafe extern "C" fn(
             *const SparkDsTaskContext,
-            *const u8,
-            i64,
-            i64,
+            *const SparkDsDataWriterInfo,
             *mut *mut c_void,
         ) -> c_int,
     >,
-    pub write:
-        Option<unsafe extern "C" fn(*mut c_void, *mut ArrowArray, *mut ArrowSchema) -> c_int>,
-    pub commit_data_writer:
-        Option<unsafe extern "C" fn(*mut c_void, SparkDsSink, *mut c_void) -> c_int>,
-    pub abort_data_writer: Option<unsafe extern "C" fn(*mut c_void) -> c_int>,
+    pub write: Option<unsafe extern "C" fn(*mut c_void, *mut ArrowArray) -> c_int>,
+    pub commit_data_writer: Option<
+        unsafe extern "C" fn(
+            *mut c_void,
+            *const SparkDsFinishDataWriterInfo,
+            SparkDsSink,
+            *mut c_void,
+        ) -> c_int,
+    >,
+    pub abort_data_writer:
+        Option<unsafe extern "C" fn(*mut c_void, *const SparkDsFinishDataWriterInfo) -> c_int>,
     pub close_data_writer: Option<unsafe extern "C" fn(*mut c_void)>,
+    pub default_read_limit:
+        Option<unsafe extern "C" fn(*mut c_void, *mut SparkDsReadLimit) -> c_int>,
 }
 
 thread_local! {
@@ -212,6 +353,25 @@ pub unsafe fn struct_size<T>(pointer: *const T) -> Result<i64> {
     Ok(size)
 }
 
+/// Copies a structure that Spark passes, which has every field of version 1 of the ABI: fields
+/// are only appended to the structures, so a shorter one is an error, not partly read.
+///
+/// # Safety
+/// A non-null pointer must address a live structure whose first field is its size.
+pub unsafe fn input<T: Copy>(pointer: *const T) -> Result<T> {
+    let size = unsafe { struct_size(pointer)? };
+    if size < size_of::<T>() as i64 {
+        let name = std::any::type_name::<T>()
+            .rsplit("::")
+            .next()
+            .unwrap_or("structure");
+        return Err(
+            format!("{name} has {size} bytes, fewer than in version 1 of the native ABI").into(),
+        );
+    }
+    Ok(unsafe { pointer.read_unaligned() })
+}
+
 pub fn require_output<T>(pointer: *mut T) -> Result<()> {
     if pointer.is_null() {
         return Err("null output pointer".into());
@@ -241,7 +401,9 @@ pub unsafe fn initialize(
         }
         let log: Option<Option<LogFunction>> =
             unsafe { field(pointer, size, offset_of!(SparkDsHost, log)) };
-        host::install(log.flatten());
+        let is_log_enabled: Option<Option<LogEnabledFunction>> =
+            unsafe { field(pointer, size, offset_of!(SparkDsHost, is_log_enabled)) };
+        host::install(log.flatten(), is_log_enabled.flatten());
         let spark_version: Option<*const c_char> =
             unsafe { field(pointer, size, offset_of!(SparkDsHost, spark_version)) };
         let spark_version = spark_version
@@ -294,6 +456,16 @@ pub unsafe fn string(pointer: *const c_char) -> Result<String> {
 }
 
 /// # Safety
+/// As for [`string`], for a pointer that may be null.
+pub unsafe fn optional_string(pointer: *const c_char) -> Result<Option<String>> {
+    if pointer.is_null() {
+        Ok(None)
+    } else {
+        Ok(Some(unsafe { string(pointer)? }))
+    }
+}
+
+/// # Safety
 /// Each element must be a NUL-terminated UTF-8 string, readable during this call.
 pub unsafe fn strings(data: *const *const c_char, length: i64) -> Result<Vec<String>> {
     unsafe { slice(data, length)? }
@@ -305,24 +477,14 @@ pub unsafe fn strings(data: *const *const c_char, length: i64) -> Result<Vec<Str
 /// # Safety
 /// `info` must follow the `create` contract of the C header.
 pub unsafe fn create_info(info: *const SparkDsCreateInfo) -> Result<CreateInfo> {
-    let size = unsafe { struct_size(info)? };
-    let pointer = info.cast();
-    let name: *const c_char = unsafe { field(pointer, size, offset_of!(SparkDsCreateInfo, name)) }
-        .ok_or("create info does not provide a name")?;
-    if name.is_null() {
+    let info = unsafe { input(info)? };
+    if info.name.is_null() {
         return Err("create info has a null name".into());
     }
-    let name = unsafe { CStr::from_ptr(name) }.to_str()?.to_owned();
-    let keys = unsafe { field(pointer, size, offset_of!(SparkDsCreateInfo, option_keys)) }
-        .ok_or("create info does not provide option keys")?;
-    let values = unsafe { field(pointer, size, offset_of!(SparkDsCreateInfo, option_values)) }
-        .ok_or("create info does not provide option values")?;
-    let count = unsafe { field(pointer, size, offset_of!(SparkDsCreateInfo, num_options)) }
-        .ok_or("create info does not provide an option count")?;
-    let options: Options = unsafe { strings(keys, count)? }
-        .into_iter()
-        .zip(unsafe { strings(values, count)? })
-        .collect();
+    let name = unsafe { string(info.name)? };
+    let keys = unsafe { strings(info.option_keys, info.num_options)? };
+    let values = unsafe { strings(info.option_values, info.num_options)? };
+    let options: Options = keys.into_iter().zip(values).collect();
     Ok(CreateInfo::new(name, options))
 }
 
@@ -331,24 +493,62 @@ pub unsafe fn create_info(info: *const SparkDsCreateInfo) -> Result<CreateInfo> 
 /// # Safety
 /// `info` must follow the create_writer contract of the C header.
 pub unsafe fn write_info(info: *const SparkDsWriteInfo) -> Result<(WriteMode, Option<String>)> {
-    let size = unsafe { struct_size(info)? };
-    let pointer = info.cast();
-    let mode: i32 = unsafe { field(pointer, size, offset_of!(SparkDsWriteInfo, mode)) }
-        .ok_or("write info does not provide a mode")?;
-    let query_id: *const c_char =
-        unsafe { field(pointer, size, offset_of!(SparkDsWriteInfo, query_id)) }
-            .ok_or("write info does not provide a query ID")?;
-    let mode = match mode {
-        0 => WriteMode::Append,
-        1 => WriteMode::Truncate,
-        _ => return Err(format!("unsupported native write mode: {mode}").into()),
+    let info = unsafe { input(info)? };
+    let mode = match info.mode {
+        WRITE_APPEND => WriteMode::Append,
+        WRITE_TRUNCATE => WriteMode::Truncate,
+        mode => return Err(format!("unsupported native write mode: {mode}").into()),
     };
-    let query_id = if query_id.is_null() {
-        None
-    } else {
-        Some(unsafe { string(query_id)? })
+    Ok((mode, unsafe { optional_string(info.query_id)? }))
+}
+
+/// The location of the checkpoint of a stream reader.
+///
+/// # Safety
+/// `info` must follow the create_stream_reader contract of the C header.
+pub unsafe fn checkpoint_location(info: *const SparkDsStreamReaderInfo) -> Result<String> {
+    let info = unsafe { input(info)? };
+    unsafe { string(info.checkpoint_location) }
+}
+
+/// The start, the limit, and the end of the run of a request for the latest offset, with the
+/// offsets as JSON.
+///
+/// # Safety
+/// `info` must follow the latest_offset contract of the C header.
+pub unsafe fn latest_offset_info(
+    info: *const SparkDsLatestOffsetInfo,
+) -> Result<LatestOffsetInfo<String>> {
+    let info = unsafe { input(info)? };
+    let limit = unsafe { input(info.limit)? };
+    let limit = match limit.kind {
+        READ_ALL_AVAILABLE => ReadLimit::AllAvailable,
+        READ_MAX_ROWS => ReadLimit::MaxRows(u64::try_from(limit.max_rows)?),
+        kind => return Err(format!("unsupported kind of read limit: {kind}").into()),
     };
-    Ok((mode, query_id))
+    Ok(LatestOffsetInfo {
+        start: unsafe { string(info.start)? },
+        limit,
+        run_end: unsafe { optional_string(info.run_end)? },
+    })
+}
+
+/// Sets the limit that `default_read_limit` returns.
+///
+/// # Safety
+/// `output` must be the SparkDsReadLimit that Spark initialized with its size.
+pub unsafe fn set_read_limit(output: *mut SparkDsReadLimit, limit: ReadLimit) -> Result<()> {
+    let mut value = unsafe { input(output.cast_const())? };
+    match limit {
+        ReadLimit::AllAvailable => value.kind = READ_ALL_AVAILABLE,
+        ReadLimit::MaxRows(rows) => {
+            value.kind = READ_MAX_ROWS;
+            value.max_rows = i64::try_from(rows)
+                .map_err(|_| format!("a read limit of {rows} rows exceeds the native ABI"))?;
+        }
+    }
+    unsafe { output.write_unaligned(value) };
+    Ok(())
 }
 
 /// # Safety
@@ -375,14 +575,6 @@ pub unsafe fn messages<'a>(
             }
         })
         .collect()
-}
-
-pub fn predicate_use(support: FilterSupport) -> i32 {
-    match support {
-        FilterSupport::Unsupported => 0,
-        FilterSupport::PruningOnly => 1,
-        FilterSupport::Exact => 2,
-    }
 }
 
 /// # Safety
@@ -436,11 +628,16 @@ mod tests {
     }
 
     #[test]
-    fn empty_arrays_accept_null_and_truncated_create_info_fails() {
+    fn empty_arrays_accept_null_and_truncated_structures_fail() {
         assert!(unsafe { strings(std::ptr::null(), 0) }.unwrap().is_empty());
         let prefix = size_of::<i64>() as i64;
         let info = (&prefix as *const i64).cast::<SparkDsCreateInfo>();
-        assert!(unsafe { create_info(info) }.is_err());
+        let error = unsafe { create_info(info) }.unwrap_err().to_string();
+        assert_eq!(
+            error,
+            "SparkDsCreateInfo has 8 bytes, fewer than in version 1 of the native ABI"
+        );
+        assert!(unsafe { input::<SparkDsReadInfo>(std::ptr::null()) }.is_err());
     }
 
     #[test]
@@ -466,19 +663,16 @@ mod tests {
 
     #[test]
     fn write_info_carries_the_mode_and_the_query_of_a_streaming_write() {
-        let prefix = size_of::<i64>() as i64;
-        let truncated = (&prefix as *const i64).cast::<SparkDsWriteInfo>();
-        assert!(unsafe { write_info(truncated) }.is_err());
         let mut info = SparkDsWriteInfo {
             size: size_of::<SparkDsWriteInfo>() as i64,
-            mode: 0,
+            mode: WRITE_APPEND,
             query_id: std::ptr::null(),
         };
         assert_eq!(
             unsafe { write_info(&info) }.unwrap(),
             (WriteMode::Append, None)
         );
-        info.mode = 1;
+        info.mode = WRITE_TRUNCATE;
         info.query_id = c"stream".as_ptr();
         assert_eq!(
             unsafe { write_info(&info) }.unwrap(),
@@ -486,6 +680,51 @@ mod tests {
         );
         info.mode = 2;
         assert!(unsafe { write_info(&info) }.is_err());
+    }
+
+    #[test]
+    fn latest_offset_info_carries_the_start_the_limit_and_the_end_of_the_run() {
+        let mut limit = SparkDsReadLimit {
+            size: size_of::<SparkDsReadLimit>() as i64,
+            kind: READ_ALL_AVAILABLE,
+            max_rows: 0,
+        };
+        let mut info = SparkDsLatestOffsetInfo {
+            size: size_of::<SparkDsLatestOffsetInfo>() as i64,
+            start: c"{\"next\":3}".as_ptr(),
+            limit: &limit,
+            run_end: std::ptr::null(),
+        };
+        let parsed = unsafe { latest_offset_info(&info) }.unwrap();
+        assert_eq!(parsed.start, r#"{"next":3}"#);
+        assert_eq!(parsed.limit, ReadLimit::AllAvailable);
+        assert_eq!(parsed.run_end, None);
+
+        limit.kind = READ_MAX_ROWS;
+        limit.max_rows = 5;
+        info.limit = &limit;
+        info.run_end = c"{\"next\":9}".as_ptr();
+        let parsed = unsafe { latest_offset_info(&info) }.unwrap();
+        assert_eq!(parsed.limit, ReadLimit::MaxRows(5));
+        assert_eq!(parsed.run_end.as_deref(), Some(r#"{"next":9}"#));
+
+        limit.kind = 7;
+        info.limit = &limit;
+        assert!(unsafe { latest_offset_info(&info) }.is_err());
+    }
+
+    #[test]
+    fn default_read_limits_set_the_kind_and_the_rows() {
+        let mut limit = SparkDsReadLimit {
+            size: size_of::<SparkDsReadLimit>() as i64,
+            kind: READ_ALL_AVAILABLE,
+            max_rows: 0,
+        };
+        unsafe { set_read_limit(&mut limit, ReadLimit::MaxRows(4)) }.unwrap();
+        assert_eq!((limit.kind, limit.max_rows), (READ_MAX_ROWS, 4));
+        unsafe { set_read_limit(&mut limit, ReadLimit::AllAvailable) }.unwrap();
+        assert_eq!(limit.kind, READ_ALL_AVAILABLE);
+        assert!(unsafe { set_read_limit(&mut limit, ReadLimit::MaxRows(u64::MAX)) }.is_err());
     }
 
     #[test]

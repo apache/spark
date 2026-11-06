@@ -19,7 +19,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "Experimental Rust batch data source SDK for Apache Spark PR #59424"
+description = "Experimental Rust SDK for native data sources of Apache Spark"
 
 [workspace]
 members = [

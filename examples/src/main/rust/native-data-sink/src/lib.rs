@@ -84,8 +84,8 @@ impl DataSource for JsonSink {
 
     fn capabilities(&self) -> Capabilities {
         if self.readonly {
-            // Also removes Truncate, which requires a write.
-            Capabilities::all().without(Capabilities::BATCH_WRITE | Capabilities::STREAMING_WRITE)
+            // A write-only sink without its writes.
+            Capabilities::empty()
         } else {
             Capabilities::all()
         }
@@ -354,8 +354,8 @@ impl JsonWrite {
     }
 }
 
-// The SDK calls each method at most once, never after a successful commit or an
-// abort, so this coordinator does not track its own phase.
+// Spark calls each method at most once, and never aborts a successful commit, so this
+// coordinator does not track its own phase.
 impl BatchWrite for JsonWrite {
     type Factory = JsonWriterFactory;
     type Message = CommitMessage;
@@ -415,8 +415,8 @@ impl StreamingWrite for JsonStreamingWrite {
     }
 }
 
-// Spark can close a write without abort, for example when serializing its factory
-// fails, so an unfinished write also cleans up here.
+// A write can be dropped without abort, for example when creating or serializing its
+// factory fails, so an unfinished write also cleans up here.
 impl Drop for JsonWrite {
     fn drop(&mut self) {
         if !self.committed {
@@ -447,7 +447,7 @@ impl DataWriterFactory for JsonWriterFactory {
         &self,
         context: WriterContext<'task>,
     ) -> Result<PartitionWriter<'task, Self::Message>> {
-        // The SDK checks that each batch has this schema, so the writer checks it once.
+        // Each batch has this schema, so the writer checks it once.
         validate_schema(&context.schema)?;
         let task = context.task;
         if task.is_interrupted() {
@@ -510,7 +510,7 @@ impl JsonTaskWriter<'_> {
     }
 }
 
-// The SDK never writes after a failure, commit, or abort, commits at most once,
+// Spark never writes after a failure, commit, or abort, commits at most once,
 // and never aborts a committed writer, so this writer does not track its phase.
 impl DataWriter for JsonTaskWriter<'_> {
     type Message = CommitMessage;
@@ -903,7 +903,8 @@ mod tests {
         let capabilities = source.capabilities();
         assert!(!capabilities.contains(Capabilities::BATCH_WRITE));
         assert!(!capabilities.contains(Capabilities::STREAMING_WRITE));
-        assert!(!capabilities.contains(Capabilities::TRUNCATE));
+        assert!(!capabilities.contains(Capabilities::BATCH_TRUNCATE));
+        assert!(!capabilities.contains(Capabilities::STREAMING_TRUNCATE));
         assert!(new_write(&source, WriteMode::Append).is_err());
         assert!(new_streaming_write(&source, "query", WriteMode::Append).is_err());
         assert!(!path.exists());

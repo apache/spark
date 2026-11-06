@@ -18,8 +18,9 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    BatchWrite, DataWriterFactory, MicroBatchStream, PartitionReader, PartitionReaderFactory,
-    PartitionWriter, ReaderContext, Result, ScanBuilder, ScanPlan, StreamingWrite, WriterContext,
+    BatchWrite, DataWriterFactory, LatestOffsetInfo, MicroBatchStream, PartitionReader,
+    PartitionReaderFactory, PartitionWriter, ReaderContext, Result, ScanBuilder, ScanPlan,
+    StreamingWrite, WriterContext,
 };
 
 /// The type of an operation that a source does not implement, as in
@@ -56,7 +57,7 @@ impl MicroBatchStream for Unsupported {
         match *self {}
     }
 
-    fn latest_offset(&mut self) -> Result<Self> {
+    fn latest_offset(&mut self, _: LatestOffsetInfo<Self>) -> Result<Self> {
         match *self {}
     }
 

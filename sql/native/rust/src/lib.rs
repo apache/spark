@@ -13,7 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Experimental batch data source SDK for the C ABI proposed in Spark PR #59424.
+//! Experimental SDK for native data sources in Rust, over version 1 of the C ABI of Spark,
+//! `spark_datasource.h`.
 //!
 //! Implement [`DataSource`], naming the types of the operations that it implements: a
 //! [`ScanBuilder`] for batch reads, a [`MicroBatchStream`] for micro-batch streaming reads, a
@@ -25,9 +26,9 @@
 //!
 //! Methods receive their inputs in `#[non_exhaustive]` structs, so that new ABI fields
 //! can reach connectors without breaking them: `*Info` structs on the driver
-//! ([`CreateInfo`], [`ScanInfo`], [`MicroBatchStreamInfo`], [`WriteInfo`],
-//! [`StreamingWriteInfo`], and [`HostInfo`]), and `*Context` structs, which carry the live
-//! [`TaskContext`], on the executors ([`ReaderContext`] and [`WriterContext`]).
+//! ([`CreateInfo`], [`ScanInfo`], [`MicroBatchStreamInfo`], [`LatestOffsetInfo`],
+//! [`WriteInfo`], [`StreamingWriteInfo`], and [`HostInfo`]), and `*Context` structs, which
+//! carry the live [`TaskContext`], on the executors ([`ReaderContext`] and [`WriterContext`]).
 
 use std::collections::BTreeMap;
 
@@ -41,7 +42,6 @@ mod bridge;
 mod capabilities;
 mod export;
 mod host;
-mod predicate;
 mod task;
 mod unsupported;
 mod write;
@@ -49,16 +49,11 @@ mod write;
 /// Implementation details of [`export_data_source!`] and of the SDK's own tests, not an API.
 #[doc(hidden)]
 pub mod __private {
+    pub use crate::bridge::Bridge;
+    pub use crate::export::{initialize, library, Exported};
+
     pub mod abi {
         pub use crate::abi::*;
-    }
-
-    pub mod bridge {
-        pub use crate::bridge::{open_reader, parse_predicates, Bridge};
-    }
-
-    pub mod write {
-        pub use crate::write::*;
     }
 }
 
@@ -68,11 +63,10 @@ pub use host::HostInfo;
 /// the path of the library, once Spark initializes the library.
 ///
 /// Any thread can call them, including in the dependencies of the library. Outside
-/// Spark, for example in unit tests, their messages are dropped. By default, the SDK
-/// passes messages of the `Info` and more severe levels; to pass more, call
-/// `log::set_max_level`, for example in [`DataSource::init`].
+/// Spark, for example in unit tests, their messages are dropped. The SDK sets the level of
+/// the `log` crate to that of the log of Spark, such as `Debug` when Spark logs debug
+/// messages, so the library does not set it.
 pub use log;
-pub use predicate::{LiteralValue, Predicate};
 pub use task::TaskContext;
 pub use unsupported::Unsupported;
 
@@ -175,9 +169,8 @@ pub trait DataSource: Send + Sized + 'static {
     /// [`new_micro_batch_stream`](Self::new_micro_batch_stream) creates, or [`Unsupported`].
     type MicroBatchStream: MicroBatchStream;
 
-    /// Creates the stream of a streaming query that reads [`MicroBatchStreamInfo::schema`],
-    /// which the user may have specified; reject unsupported schemas. Spark pushes nothing
-    /// down into a streaming scan, so its readers return all the columns of the schema.
+    /// Creates the stream of a streaming query that reads the columns of
+    /// [`MicroBatchStreamInfo::schema`]; reject unsupported schemas.
     fn new_micro_batch_stream(
         &self,
         _info: MicroBatchStreamInfo,
@@ -198,8 +191,8 @@ pub trait DataSource: Send + Sized + 'static {
     /// Validate the input schema and create an independent write. Construction may be
     /// followed only by Drop, without commit or abort, so it must not make irreversible
     /// changes. The SDK calls this only while the instance's capabilities include
-    /// `BATCH_WRITE`, and passes [`WriteMode::Truncate`] only when they include `TRUNCATE`
-    /// and the write supports it.
+    /// `BATCH_WRITE`, and passes [`WriteMode::Truncate`] only when they include
+    /// `BATCH_TRUNCATE`, which the write declares with [`BatchWrite::SUPPORTS_TRUNCATE`].
     fn new_write(&self, _info: WriteInfo) -> Result<Self::BatchWrite> {
         Err(
             "DataSource::new_write is not implemented: implement it, or set \
@@ -218,7 +211,8 @@ pub trait DataSource: Send + Sized + 'static {
     /// [`new_write`](Self::new_write), construction may be followed only by Drop, so it must
     /// not make irreversible changes. The SDK calls this only while the instance's
     /// capabilities include `STREAMING_WRITE`, and passes [`WriteMode::Truncate`] only when
-    /// they include `TRUNCATE` and the write supports it.
+    /// they include `STREAMING_TRUNCATE`, which the write declares with
+    /// [`StreamingWrite::SUPPORTS_TRUNCATE`].
     fn new_streaming_write(&self, _info: StreamingWriteInfo) -> Result<Self::StreamingWrite> {
         Err(
             "DataSource::new_streaming_write is not implemented: implement it, or set \
@@ -259,9 +253,11 @@ impl ScanInfo {
 
 /// Negotiates pushdown on the driver, then plans the scan.
 ///
-/// The SDK calls [`plan`](Self::plan) once, when Spark first asks for the partitions,
-/// and caches the result, including a failure. Only the serialized factory and
-/// partitions reach the executors.
+/// Spark calls [`push_limit`](Self::push_limit) and [`prune_columns`](Self::prune_columns),
+/// each at most once and in this order, then [`plan`](Self::plan), and drops the builder.
+/// After a call fails, it makes no other call. It drops a builder without planning it when it
+/// does not read the scan, for example to only explain a query. Only the serialized factory
+/// and partitions reach the executors.
 pub trait ScanBuilder: Send + Sized + 'static {
     type Factory: PartitionReaderFactory;
 
@@ -269,43 +265,21 @@ pub trait ScanBuilder: Send + Sized + 'static {
     #[doc(hidden)]
     const SUPPORTED: bool = true;
 
-    /// Return one result per input predicate in order. Unknown functions and
-    /// types must not be reported as exact. Spark currently rechecks all filters.
-    /// A predicate that the SDK cannot parse arrives as [`Predicate::Unknown`], and
-    /// the SDK reports it as unsupported whatever this method returns for it.
-    fn push_filters(&mut self, filters: &[Predicate]) -> Result<Vec<FilterSupport>> {
-        Ok(vec![FilterSupport::Unsupported; filters.len()])
-    }
-
-    /// Count rows after filtering. Spark currently pushes limits only for
-    /// scans with no filters; the SDK also declines a limit when any predicate
-    /// it received remains residual.
+    /// Count rows. Spark pushes a limit only when the query does not filter the rows, since
+    /// it filters them after reading.
     fn push_limit(&mut self, _limit: usize) -> Result<LimitSupport> {
         Ok(LimitSupport::Unsupported)
     }
 
-    /// On true, output exactly these top-level columns in this order. On false,
-    /// keep the original schema. Empty projection must preserve row counts.
-    /// Retain internally needed filter columns without returning them. Readers get
-    /// the resulting schema in [`ReaderContext::schema`].
-    fn prune_columns(&mut self, _columns: &[String]) -> Result<bool> {
-        Ok(false)
+    /// Tells the scan the top-level columns that the query needs, in order, so that it can
+    /// plan to read only them. There may be none, for example for `SELECT count(*)`: the
+    /// batches then only have a number of rows. Readers get these columns in
+    /// [`ReaderContext::schema`] whether or not the scan implements this method.
+    fn prune_columns(&mut self, _columns: &[String]) -> Result<()> {
+        Ok(())
     }
 
     fn plan(self) -> Result<ScanPlan<Self::Factory>>;
-}
-
-/// How completely a connector evaluates a pushed predicate.
-/// Spark currently rechecks all predicates, including exact ones.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum FilterSupport {
-    /// Implements Spark SQL semantics and returns only matching rows.
-    Exact,
-    /// May skip data that cannot match, but may also return nonmatching rows.
-    PruningOnly,
-    /// Does not evaluate this predicate.
-    Unsupported,
 }
 
 /// Whether a connector limits the rows produced by the whole scan.
@@ -342,8 +316,8 @@ impl<F: PartitionReaderFactory> ScanPlan<F> {
 /// Serializable configuration from which executors open partition readers.
 ///
 /// The factory carries configuration or a snapshot descriptor; open connections and
-/// other live resources in [`open`](Self::open). The SDK serializes the negotiated
-/// schema with the factory, so the factory need not carry it.
+/// other live resources in [`open`](Self::open). Spark passes the schema to read with
+/// each partition, so the factory need not carry it.
 pub trait PartitionReaderFactory: Serialize + DeserializeOwned + Send + 'static {
     type Partition: Serialize + DeserializeOwned + Send + 'static;
 
@@ -360,11 +334,13 @@ pub trait PartitionReaderFactory: Serialize + DeserializeOwned + Send + 'static 
     /// - Batches must own their buffers, because Spark may release the stream before
     ///   its batches.
     ///
-    /// The SDK checks Spark-compatible Arrow types, the negotiated schema and its
+    /// The SDK checks Spark-compatible Arrow types, the schema to read and its
     /// nullability, and zero array offsets recursively. It reports incompatible layouts
-    /// instead of copying buffers. Batches may use any supported Arrow encoding of a
-    /// Spark type, such as `LargeUtf8` for a string, but the first batch determines the
-    /// Arrow schema of the stream, which every later batch must have.
+    /// instead of copying buffers. A batch may have more columns than the schema to read,
+    /// such as all the columns of the source: the SDK keeps those of the schema, by name.
+    /// Batches may use any supported Arrow encoding of a Spark type, such as `LargeUtf8`
+    /// for a string, but the first batch determines the Arrow schema of the stream, which
+    /// every later batch must have.
     fn open<'task>(
         &self,
         partition: Self::Partition,
@@ -376,8 +352,9 @@ pub trait PartitionReaderFactory: Serialize + DeserializeOwned + Send + 'static 
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct ReaderContext<'task> {
-    /// The negotiated schema: the schema to read, or its pruned columns in order.
-    /// The reader returns batches with exactly these columns.
+    /// The schema to read: the columns that the scan reads, in order, which are those of
+    /// [`ScanBuilder::prune_columns`] for a batch scan, and of
+    /// [`MicroBatchStreamInfo::schema`] for a micro-batch.
     pub schema: SchemaRef,
     /// The task that reads the partition.
     pub task: TaskContext<'task>,
@@ -403,14 +380,26 @@ pub type PartitionReader<'task> =
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct MicroBatchStreamInfo {
-    /// The schema to read: the schema of the source, or one that the user specified.
+    /// The columns to read: those of the schema of the source, or of one that the user
+    /// specified, or only the top-level columns of it that the query needs. The readers of
+    /// the micro-batches get it in [`ReaderContext::schema`].
     pub schema: SchemaRef,
+    /// A directory in the checkpoint of the query that is reserved for this source, such as
+    /// `file:/tmp/checkpoint/sources/0`, where the stream may keep what it needs to recover
+    /// from a failure. It stays the same when the query restarts. It is a fully qualified
+    /// Hadoop path, whose characters are not escaped as in a URI, on a file system that the
+    /// library may not be able to access, such as `s3a`. Spark keeps what it needs there under
+    /// the names that start with `_spark`, which the library must not use.
+    pub checkpoint_location: String,
 }
 
 impl MicroBatchStreamInfo {
     /// The information of a stream created outside Spark, for example in a test.
-    pub fn new(schema: SchemaRef) -> Self {
-        Self { schema }
+    pub fn new(schema: SchemaRef, checkpoint_location: impl Into<String>) -> Self {
+        Self {
+            schema,
+            checkpoint_location: checkpoint_location.into(),
+        }
     }
 }
 
@@ -429,13 +418,22 @@ impl MicroBatchStreamInfo {
 /// [`Offset`](Self::Offset), and compares them by that JSON, so serialize a position to the
 /// same JSON each time: for example, use structs and `BTreeMap` rather than `HashMap`. A
 /// restarted query passes the offsets of its checkpoint, which an earlier version of the
-/// library may have written, to `plan` and `commit`.
+/// library may have written, to `latest_offset`, `plan`, and `commit`.
+///
+/// # Admission control
+///
+/// [`default_read_limit`](Self::default_read_limit) limits the data of each micro-batch,
+/// typically with an option of the source. Spark passes the limit to `latest_offset`, except
+/// when a micro-batch reads all the available data, as with `Trigger.Once`. With
+/// `Trigger.AvailableNow`, a run reads the data that was available when it started: with a
+/// limit, in several micro-batches, whose latest offsets must not go beyond
+/// [`LatestOffsetInfo::run_end`].
 ///
 /// # Lifecycle
 ///
 /// - Calls never run concurrently.
-/// - A failed call, including a panic, stops the query, so the SDK returns that failure
-///   from every later call.
+/// - After a call fails, including with a panic, Spark makes no other call: it stops the
+///   query, and drops the stream.
 /// - After a restart, Spark may plan the last range of the query again, so `plan` must
 ///   return partitions that read the same data for the same range.
 pub trait MicroBatchStream: Send + 'static {
@@ -450,11 +448,28 @@ pub trait MicroBatchStream: Send + 'static {
     const SUPPORTED: bool = true;
 
     /// Returns the offset to start from when the query has no checkpoint: the first
-    /// micro-batch reads the data after it.
+    /// micro-batch reads the data after it. Spark keeps it in the checkpoint, and asks only
+    /// when the checkpoint does not have it yet, so a query that restarts before its first
+    /// micro-batch is committed starts from the same offset.
     fn initial_offset(&mut self) -> Result<Self::Offset>;
 
-    /// Returns the offset of the most recent data available.
-    fn latest_offset(&mut self) -> Result<Self::Offset>;
+    /// Returns the limit on the data of each micro-batch. Spark asks once, when the query
+    /// starts. The default, [`ReadLimit::AllAvailable`], reads all the available data in
+    /// each micro-batch.
+    fn default_read_limit(&self) -> Result<ReadLimit> {
+        Ok(ReadLimit::AllAvailable)
+    }
+
+    /// Returns the end of the next micro-batch: the offset of the most recent data after
+    /// [`LatestOffsetInfo::start`], within its limit, and not beyond its end of the run.
+    /// Return `start` when there is no new data. When there is, return an offset after
+    /// `start`, even if the next unit of data, such as a file, is larger than the limit:
+    /// Spark sees no new data otherwise, and never reads further.
+    ///
+    /// With a limit, Spark also asks without a limit for some micro-batches, to report the
+    /// progress of the query, so do not count the calls as micro-batches, or reserve data in
+    /// them.
+    fn latest_offset(&mut self, info: LatestOffsetInfo<Self::Offset>) -> Result<Self::Offset>;
 
     /// Plans the micro-batch that reads the data after `start`, up to and including `end`.
     fn plan(&mut self, start: Self::Offset, end: Self::Offset) -> Result<ScanPlan<Self::Factory>>;
@@ -463,6 +478,46 @@ pub trait MicroBatchStream: Send + 'static {
     /// will not read it again, so that the stream can release it.
     fn commit(&mut self, _end: Self::Offset) -> Result<()> {
         Ok(())
+    }
+}
+
+/// A limit on the data of a micro-batch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ReadLimit {
+    /// All the available data.
+    AllAvailable,
+    /// At most this number of rows, at least 1.
+    MaxRows(u64),
+}
+
+/// What Spark passes to ask a stream for its latest offset.
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub struct LatestOffsetInfo<O> {
+    /// The offset that the next micro-batch starts after: the end of the previous one, or
+    /// the initial offset.
+    pub start: O,
+    /// The limit on the data after `start`: that of
+    /// [`MicroBatchStream::default_read_limit`], or [`ReadLimit::AllAvailable`] when Spark
+    /// reads all the available data, such as for the progress of the query or with
+    /// `Trigger.Once`.
+    pub limit: ReadLimit,
+    /// With `Trigger.AvailableNow` and a limit, the end of the run: the latest offset must not
+    /// go beyond it, so that the run reads the data that was available when it started. It is
+    /// not the end of the next micro-batch. `None` otherwise.
+    pub run_end: Option<O>,
+}
+
+impl<O> LatestOffsetInfo<O> {
+    /// A request without a limit, made outside Spark, for example in a test. Set
+    /// [`limit`](Self::limit) and [`run_end`](Self::run_end) for other requests.
+    pub fn new(start: O) -> Self {
+        Self {
+            start,
+            limit: ReadLimit::AllAvailable,
+            run_end: None,
+        }
     }
 }
 
@@ -507,18 +562,18 @@ pub enum WriteMode {
 ///
 /// # Lifecycle
 ///
-/// The SDK enforces the following, so implementations need not track their own
+/// Spark calls the methods in this order, so implementations need not track their own
 /// phase or guard against repeated calls:
 ///
-/// - `writer_factory` runs at most once, before any task opens a writer.
-/// - `commit` runs at most once, only while no earlier call has failed, including
-///   `writer_factory` and the serialization of its factory. It is skipped, and the
-///   write fails, when any task message is missing or cannot be decoded.
-/// - `abort` runs at most once, never after a successful `commit`. It may follow
-///   a failed `commit`, or run without `commit`.
-/// - Drop runs exactly once, possibly without `commit` or `abort`. Spark closes the
-///   coordinator without `abort` when `writer_factory` or the serialization of its
-///   factory fails, so Drop must also release what only this write staged.
+/// - `writer_factory` runs once, right after [`DataSource::new_write`], before any task
+///   opens a writer. When it fails, or the SDK cannot serialize its factory, the write
+///   fails and the coordinator is dropped without `abort`, so Drop must also release
+///   what only this write staged.
+/// - `commit` runs at most once, when every task succeeded. The SDK fails the write
+///   without calling it when a task message cannot be decoded.
+/// - `abort` runs at most once, never after a successful `commit`. It follows a failed
+///   `commit`, or a failed task, also when computing the data to write failed.
+/// - Drop runs exactly once, possibly without `commit` or `abort`.
 /// - A panic in any method is reported as that method's failure.
 ///
 /// Message `i` of `commit` and `abort` belongs to input partition `i`.
@@ -529,17 +584,16 @@ pub trait BatchWrite: Send + 'static {
     /// The message with which a task attempt reports its staged output to the driver.
     type Message: Serialize + DeserializeOwned + Send + 'static;
 
-    /// Whether the write supports [`WriteMode::Truncate`], which adds the `TRUNCATE`
-    /// capability to batch writes.
+    /// Whether the write supports [`WriteMode::Truncate`], for the save mode "overwrite",
+    /// which adds the `BATCH_TRUNCATE` capability.
     const SUPPORTS_TRUNCATE: bool = false;
 
     /// False only for [`Unsupported`], from which the SDK derives the capabilities.
     #[doc(hidden)]
     const SUPPORTED: bool = true;
 
-    /// Returns the configuration of the task writers. The SDK serializes it once, with
-    /// the schema of the input, and caches the result, including a failure. Include a
-    /// unique operation ID when needed; Spark supplies no batch query ID.
+    /// Returns the configuration of the task writers, which the SDK serializes for them.
+    /// Include a unique operation ID when needed; Spark supplies no batch query ID.
     fn writer_factory(&self) -> Result<Self::Factory>;
 
     /// Publish only the winning attempt from each input partition. Task retries
@@ -591,15 +645,15 @@ impl<'task> WriterContext<'task> {
     }
 }
 
-/// One task attempt's writer. The SDK closes it after commit or abort.
+/// One task attempt's writer. Spark drops it after commit or abort.
 ///
 /// # Lifecycle
 ///
-/// The SDK enforces the following, so implementations need not track their own
+/// Spark calls the methods in this order, so implementations need not track their own
 /// phase or guard against repeated calls:
 ///
-/// - `write` runs zero or more times, and never after any call has failed or
-///   after `commit` or `abort`.
+/// - `write` runs zero or more times, before `commit` or `abort`, and never after a
+///   call has failed.
 /// - `commit` runs at most once, never after a failed `write` or after `abort`.
 /// - `abort` runs at most once, never after a `commit` whose message reached Spark.
 ///   It may follow a failed `write` or `commit`, including a `commit` that returned
@@ -607,13 +661,20 @@ impl<'task> WriterContext<'task> {
 ///   that already finished its output.
 /// - Drop runs exactly once when Spark closes the writer, possibly without
 ///   `commit` or `abort`.
+/// - The writer of a task attempt that Spark kills, such as a speculative one, may still
+///   write, abort, and drop after the driver committed or aborted the write.
 /// - A panic in any method is reported as that method's failure.
 pub trait DataWriter: Send {
     type Message;
 
-    /// Takes ownership of an imported Arrow batch, which may be retained after
-    /// this call. Its columns match [`WriterContext::schema`] by Spark type.
-    /// Process batches incrementally and check task cancellation.
+    /// Takes ownership of an imported Arrow batch, which may be retained after this call,
+    /// but not after the writer is dropped: its buffers belong to the data writer of Spark,
+    /// which frees them once it closes the writer, so do not pass the batch to a thread or a
+    /// value that outlives the writer. It has the schema of [`WriterContext::schema`], and at most
+    /// `spark.sql.execution.arrow.maxRecordsPerBatch` rows. When Spark writes the batches
+    /// of a native scan without converting them to rows, it copies their values as the
+    /// scan returned them, without the checks of a conversion, such as the precision of a
+    /// decimal. Process batches incrementally and check task cancellation.
     fn write(&mut self, batch: RecordBatch) -> Result<()>;
 
     /// Finish staging and return a typed message for the driver. Do not make the
@@ -659,16 +720,18 @@ impl StreamingWriteInfo {
 /// A driver coordinator for the write of one micro-batch, or epoch, of a streaming query,
 /// which also creates the serializable configuration of its task writers.
 ///
-/// Spark creates a write for each micro-batch. The SDK enforces the lifecycle of a
-/// [`BatchWrite`], with the epoch ID of the micro-batch passed to `commit` and `abort`,
-/// and to the task writers in [`WriterContext::epoch_id`].
+/// Spark creates a write for each micro-batch, with the lifecycle of a [`BatchWrite`], and
+/// passes the epoch ID of the micro-batch to `commit` and `abort`, and to the task writers
+/// in [`WriterContext::epoch_id`].
 ///
 /// # Exactly-once output
 ///
 /// Spark may commit an epoch again, with a new write, for example when the query restarts
-/// after a failure: committing an epoch that is already committed must have no effect. The
-/// ID of the query, [`StreamingWriteInfo::query_id`], and the epoch ID identify the output
-/// of a micro-batch, also when other queries write to the same destination.
+/// after a failure: committing an epoch that is already committed must have no effect. A
+/// restarted query may also abort an epoch that an earlier run committed, so `abort` must
+/// only remove what the task writers of its own write wrote. The ID of the query,
+/// [`StreamingWriteInfo::query_id`], and the epoch ID identify the output of a micro-batch,
+/// also when other queries write to the same destination.
 pub trait StreamingWrite: Send + 'static {
     /// The configuration from which each task attempt opens its writer.
     type Factory: DataWriterFactory<Message = Self::Message>;
@@ -677,15 +740,14 @@ pub trait StreamingWrite: Send + 'static {
     type Message: Serialize + DeserializeOwned + Send + 'static;
 
     /// Whether the write supports [`WriteMode::Truncate`], for the output mode "complete",
-    /// which adds the `TRUNCATE` capability.
+    /// which adds the `STREAMING_TRUNCATE` capability.
     const SUPPORTS_TRUNCATE: bool = false;
 
     /// False only for [`Unsupported`], from which the SDK derives the capabilities.
     #[doc(hidden)]
     const SUPPORTED: bool = true;
 
-    /// Returns the configuration of the task writers. The SDK serializes it once, with the
-    /// schema of the input, and caches the result, including a failure.
+    /// Returns the configuration of the task writers, which the SDK serializes for them.
     fn writer_factory(&self) -> Result<Self::Factory>;
 
     /// Publish the winning attempt of each input partition as the output of epoch
