@@ -119,6 +119,10 @@ abstract class Optimizer(catalogManager: CatalogManager)
         CollapseProject,
         OptimizeWindowFunctions,
         CollapseWindow,
+        // The rewrite turns one window operator into two whose lag expressions reference the
+        // prefix window's outputs, so it must run after CollapseWindow: collapsing stacked
+        // windows first lets frames from different levels share a single prefix window.
+        RewriteSlidingFramesAsPrefixDifferences,
         EliminateOffsets,
         EliminateLimits,
         CombineUnions,
