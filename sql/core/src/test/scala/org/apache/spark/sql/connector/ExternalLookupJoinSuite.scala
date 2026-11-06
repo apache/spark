@@ -853,6 +853,30 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("a named external lookup hint marks every relation that it names") {
+    // As with join strategy hints, the name matches each unaliased reference to the table, so
+    // both joins read it through external lookup.
+    withSQLConf(
+        s"spark.sql.catalog.$EXTERNAL_LOOKUP_CATALOG_NAME" ->
+          classOf[ExternalLookupTestCatalog].getName) {
+      withTempView("external_lookup_left") {
+        streamOf(Seq(1, 3).toDF("id")).createOrReplaceTempView("external_lookup_left")
+        val catalogTable = s"$EXTERNAL_LOOKUP_CATALOG_NAME.ns.dual"
+        val twice = sql(
+          s"""
+            |SELECT /*+ EXTERNAL_LOOKUP(dual) */ *
+            |FROM external_lookup_left JOIN $catalogTable USING (id) JOIN $catalogTable USING (id)
+            |""".stripMargin)
+        val run = runStream(twice)
+        assert(run.plan.collect { case join: PreparedExternalLookupJoin => join }.size === 2)
+        QueryTest.sameRows(
+          Seq(Row(1, "engineering", "engineering"), Row(1, "engineering", "research"),
+            Row(1, "research", "engineering"), Row(1, "research", "research")),
+          run.rows).foreach(fail(_))
+      }
+    }
+  }
+
   test("a named external lookup hint targets unaliased, multipart, and aliased relations") {
     withSQLConf(
         s"spark.sql.catalog.$EXTERNAL_LOOKUP_CATALOG_NAME" ->
