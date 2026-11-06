@@ -614,13 +614,9 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
       physicalPlan.execute().collect()
     }
 
-    while (statusStore.executionsCount() < oldCount) {
-      Thread.sleep(100)
-    }
-
-    while (statusStore.executionsList().isEmpty ||
-        statusStore.executionsList().last.metricValues == null) {
-      Thread.sleep(100)
+    eventually(timeout(10.seconds), interval(10.milliseconds)) {
+      val executions = statusStore.executionsList()
+      assert(executions.size > oldCount && executions.last.metricValues != null)
     }
 
     val execId = statusStore.executionsList().last.executionId
