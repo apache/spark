@@ -157,6 +157,9 @@ public class UTF8StringSuite {
     testUpperandLower("ABCXYZ", "abcxyz");
     testUpperandLower("ЀЁЂѺΏỀ", "ѐёђѻώề");
     testUpperandLower("大千世界 数据砖头", "大千世界 数据砖头");
+    // The first case-changing byte is past index 0, so the unchanged prefix is copied first.
+    assertEquals(fromString("ABCDEF"), fromString("ABCdef").toUpperCase());
+    assertEquals(fromString("abcdef"), fromString("abcDEF").toLowerCase());
   }
 
   @Test
