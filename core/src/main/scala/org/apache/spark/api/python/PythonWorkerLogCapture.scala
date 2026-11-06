@@ -43,6 +43,16 @@ private[python] class PythonWorkerLogCapture(
   // Map to track per-worker log writers: workerId(PID) -> (writer, sequenceId)
   private val workerLogWriters = new ConcurrentHashMap[String, (RollingLogWriter, AtomicLong)]()
 
+  // Per-worker count of end-of-logs sentinels processed. The worker emits exactly one sentinel
+  // (an empty-payload marker line) at the end of each task, and processing it closes and saves
+  // that task's log block(s). A task can therefore wait, via `awaitLogsFlushed`, for this count
+  // to advance past a baseline snapshotted before the task ran, which guarantees the task's log
+  // blocks are saved and visible to `python_worker_logs()`.
+  private val workerSentinelCounts = new ConcurrentHashMap[String, AtomicLong]()
+
+  // Monitor used to wake `awaitLogsFlushed` waiters whenever a sentinel is processed.
+  private val sentinelLock = new Object()
+
   /**
    * Creates an InputStream wrapper that captures Python UDF logs from the given stream.
    *
@@ -89,6 +99,32 @@ private[python] class PythonWorkerLogCapture(
   }
 
   /**
+   * Returns the number of end-of-logs sentinels processed so far for the given worker. Callers
+   * snapshot this before a task runs and pass it to [[awaitLogsFlushed]] as the baseline.
+   */
+  def sentinelCount(workerId: String): Long =
+    Option(workerSentinelCounts.get(workerId)).map(_.get()).getOrElse(0L)
+
+  /**
+   * Waits until the given worker has processed a new end-of-logs sentinel beyond `baseline`,
+   * meaning the log block(s) for the task that ran after the baseline snapshot have been saved,
+   * or until `timeoutMs` elapses.
+   *
+   * @return true if a new sentinel was observed, false on timeout.
+   */
+  def awaitLogsFlushed(workerId: String, baseline: Long, timeoutMs: Long): Boolean = {
+    val deadline = System.currentTimeMillis() + timeoutMs
+    sentinelLock.synchronized {
+      var remaining = timeoutMs
+      while (sentinelCount(workerId) <= baseline && remaining > 0) {
+        sentinelLock.wait(remaining)
+        remaining = deadline - System.currentTimeMillis()
+      }
+      sentinelCount(workerId) > baseline
+    }
+  }
+
+  /**
    * Gets or creates a log writer for the specified worker.
    *
    * @param workerId Unique identifier for the worker (typically PID)
@@ -123,7 +159,14 @@ private[python] class PythonWorkerLogCapture(
 
         try {
           if (json.isEmpty) {
+            // End-of-logs sentinel for this worker's current task: close and save its block(s),
+            // then advance the sentinel count and wake any waiter. The count is bumped only after
+            // the writer is closed so that a woken waiter is guaranteed to see the saved block.
             removeAndCloseWorkerLogWriter(workerId)
+            workerSentinelCounts.computeIfAbsent(workerId, _ => new AtomicLong()).incrementAndGet()
+            sentinelLock.synchronized {
+              sentinelLock.notifyAll()
+            }
           } else {
             val (writer, seqId) = getOrCreateLogWriter(workerId)
             writer.writeLog(
