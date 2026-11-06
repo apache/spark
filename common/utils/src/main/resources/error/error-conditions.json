@@ -2393,6 +2393,11 @@
       "Data source table <table> violates the external lookup contract:"
     ],
     "subClass" : {
+      "DECIMAL_OUT_OF_RANGE" : {
+        "message" : [
+          "The lookup result cursor returned a value in the field <field> that does not fit its type <type>."
+        ]
+      },
       "DUPLICATE_SCAN_FIELD" : {
         "message" : [
           "The lookup scan returned the field <field> more than once."
@@ -2416,6 +2421,11 @@
       "NON_POSITIVE_MAX_PARAMETER_ROWS" : {
         "message" : [
           "`maxParameterRowsPerRequest()` returned <value>, but it must be positive."
+        ]
+      },
+      "NULL_IN_NOT_NULL_FIELD" : {
+        "message" : [
+          "The lookup result cursor returned NULL in the field <field>, which the table or the read schema declares NOT NULL."
         ]
       },
       "NULL_LOOKUP_READER" : {

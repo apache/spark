@@ -262,10 +262,12 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
     val prepared = prepare(join)
     assert(prepared.lookupOutput === lookup.output)
     assert(prepared.output === join.output)
-    // The value-row attributes follow the read schema, with its types and nullability.
+    // The value-row attributes follow the read schema, with its types. A column is nullable only
+    // when both the table and the read schema allow nulls: the join fails the task on a null that
+    // either rules out, so `value` stays NOT NULL.
     val relationAttrs = lookup.output.map(attr => attr.name -> attr).toMap
     assert(prepared.lookupInput.map(_.name) === Seq("s", "value", "id"))
-    assert(prepared.lookupInput.map(_.nullable) === Seq(true, true, false))
+    assert(prepared.lookupInput.map(_.nullable) === Seq(true, false, false))
     assert(prepared.lookupInput.head.dataType === StructType.fromDDL("a INT"))
     prepared.lookupInput.foreach { attr =>
       assert(attr.exprId === relationAttrs(attr.name).exprId)
