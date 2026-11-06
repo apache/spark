@@ -18,7 +18,6 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{And, Cast, CheckInvariant, EqualNullSafe, Expression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, RowLevelWrite, V2WriteCommand}
 import org.apache.spark.sql.catalyst.trees.TreePattern.LAMBDA_VARIABLE
@@ -32,8 +31,9 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 
 /** Builds check and generated-column invariants for a write to a resolved V2 table. */
 private[sql] class TableConstraintResolution(
-    val catalogManager: CatalogManager,
-    analyze: LogicalPlan => LogicalPlan) extends SQLConfHelper {
+    catalogManager: => CatalogManager,
+    analyze: LogicalPlan => LogicalPlan,
+    sessionLocalTimeZone: => String) {
 
   /** Adds invariants after the query output has been aligned with the target table. */
   def resolveTableConstraints(
@@ -106,7 +106,7 @@ private[sql] class TableConstraintResolution(
           val colType = CharVarcharUtils.replaceCharVarcharWithString(col.dataType())
           def check(expr: Expression): Expression = CheckInvariant(
             EqualNullSafe(
-              colRef, Cast(expr, colType, Option(conf.sessionLocalTimeZone), ansiEnabled = true)),
+              colRef, Cast(expr, colType, Option(sessionLocalTimeZone), ansiEnabled = true)),
             columnExtractors,
             "Generated Column",
             s"${col.name} <=> $genExprSql")

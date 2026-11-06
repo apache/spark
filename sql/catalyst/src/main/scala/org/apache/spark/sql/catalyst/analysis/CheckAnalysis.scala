@@ -502,7 +502,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
         throw QueryCompilationErrors.inlineTableContainsScalarSubquery(u)
 
       case command: V2PartitionCommand =>
-        PartitionSpecResolution.validate(command)
+        PartitionSpecResolution.validate(command, this)
 
       case o: OverwriteByExpression if o.deleteExpr.exists(_.isInstanceOf[SubqueryExpression]) =>
         o.deleteExpr.failAnalysis (
@@ -986,7 +986,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             a.checkConstraint.failIfCallsUserDefinedFunction()
 
           case alter: AlterTableCommand =>
-            AlterTableValidation.validate(alter)
+            AlterTableValidation.validate(alter, this)
 
           case c: CreateVariable
               if c.resolved && c.defaultExpr.child.containsPattern(PLAN_EXPRESSION) =>

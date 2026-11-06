@@ -36,7 +36,7 @@ private[sql] object PartitionSpecResolution extends QueryErrorsBase {
       partSpec: UnresolvedPartitionSpec,
       partSchema: StructType,
       allowPartitionSpec: Boolean,
-      conf: SQLConf): ResolvedPartitionSpec = {
+      conf: => SQLConf): ResolvedPartitionSpec = {
     val normalizedSpec = normalizePartitionSpec(
       partSpec.spec,
       partSchema,
@@ -57,7 +57,7 @@ private[sql] object PartitionSpecResolution extends QueryErrorsBase {
   def convertToPartIdent(
       partitionSpec: TablePartitionSpec,
       schema: Seq[StructField],
-      conf: SQLConf): InternalRow = {
+      conf: => SQLConf): InternalRow = {
     val partValues = schema.map { part =>
       val raw = partitionSpec.get(part.name).orNull
       val dt = CharVarcharUtils.replaceCharVarcharWithString(part.dataType)
@@ -71,19 +71,21 @@ private[sql] object PartitionSpecResolution extends QueryErrorsBase {
   }
 
   /** Validates that the target supports partition management with a nonempty schema. */
-  def validate(command: V2PartitionCommand): Unit = {
+  def validate(
+      command: V2PartitionCommand,
+      errors: QueryErrorsBase = PartitionSpecResolution): Unit = {
     command.table match {
       case r @ ResolvedTable(_, _, table, _) => table match {
         case t: SupportsPartitionManagement =>
           if (t.partitionSchema.isEmpty) {
             r.failAnalysis(
               errorClass = "INVALID_PARTITION_OPERATION.PARTITION_SCHEMA_IS_EMPTY",
-              messageParameters = Map("name" -> toSQLId(r.name)))
+              messageParameters = Map("name" -> errors.toSQLId(r.name)))
           }
         case _ =>
           r.failAnalysis(
             errorClass = "INVALID_PARTITION_OPERATION.PARTITION_MANAGEMENT_IS_UNSUPPORTED",
-            messageParameters = Map("name" -> toSQLId(r.name)))
+            messageParameters = Map("name" -> errors.toSQLId(r.name)))
       }
       case _ =>
     }

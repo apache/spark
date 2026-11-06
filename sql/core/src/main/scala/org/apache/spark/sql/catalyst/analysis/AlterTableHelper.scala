@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.{SQLConfHelper, TableIdentifier}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.CreateTableHelper.constantFoldDefaultValue
 import org.apache.spark.sql.catalyst.plans.logical.{AlterColumns, AlterColumnSpec, DefaultValueExpression, QualifiedColType}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, ResolveDefaultColumns => DefaultCols}
@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.command.{AlterTableAddColumnsCommand, Alte
 import org.apache.spark.sql.types.{DataType, MetadataBuilder, StringType, StructField}
 
 /** Lowering of resolved V1 column additions, changes and comments. */
-private[sql] object AlterTableHelper extends SQLConfHelper {
+private[sql] object AlterTableHelper {
 
   /** Lowers column additions after name, position and default-value resolution. */
   def lowerAddColumns(
@@ -63,7 +63,8 @@ private[sql] object AlterTableHelper extends SQLConfHelper {
       a: AlterColumns,
       catalog: TableCatalog,
       ident: Identifier,
-      table: V1Table): AlterTableChangeColumnCommand = {
+      table: V1Table,
+      resolver: => Resolver): AlterTableChangeColumnCommand = {
     if (a.specs.size > 1) {
       throw QueryCompilationErrors.unsupportedTableOperationError(
         catalog, ident, "ALTER COLUMN in bulk")
@@ -86,7 +87,7 @@ private[sql] object AlterTableHelper extends SQLConfHelper {
     s.newComment.foreach(c => builder.putString("comment", c))
     val colName = s.column.name.head
     val dataType = s.newDataType.getOrElse {
-      table.schema.findNestedField(Seq(colName), resolver = conf.resolver)
+      table.schema.findNestedField(Seq(colName), resolver = resolver)
         .map {
           case (_, StructField(_, st: StringType, _, metadata)) =>
             CharVarcharUtils.getRawType(metadata).getOrElse(st)

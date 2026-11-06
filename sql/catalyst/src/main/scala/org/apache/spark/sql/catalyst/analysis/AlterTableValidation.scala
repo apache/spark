@@ -27,7 +27,9 @@ import org.apache.spark.sql.util.SchemaUtils
 
 /** Validates ALTER TABLE commands after their tables and columns have been resolved. */
 private[sql] object AlterTableValidation extends QueryErrorsBase {
-  def validate(alter: AlterTableCommand): Unit = {
+  def validate(
+      alter: AlterTableCommand,
+      errors: QueryErrorsBase = AlterTableValidation): Unit = {
     def checkColumnNotExists(op: String, fieldNames: Seq[String], struct: StructType): Unit = {
       if (struct.findNestedField(
           fieldNames, includeCollections = true, alter.conf.resolver).isDefined) {
@@ -35,8 +37,8 @@ private[sql] object AlterTableValidation extends QueryErrorsBase {
           errorClass = "FIELD_ALREADY_EXISTS",
           messageParameters = Map(
             "op" -> op,
-            "fieldNames" -> toSQLId(fieldNames),
-            "struct" -> toSQLType(struct)))
+            "fieldNames" -> errors.toSQLId(fieldNames),
+            "struct" -> errors.toSQLType(struct)))
       }
     }
 
@@ -72,8 +74,8 @@ private[sql] object AlterTableValidation extends QueryErrorsBase {
           alter.failAnalysis(
             errorClass = "NOT_SUPPORTED_CHANGE_SAME_COLUMN",
             messageParameters = Map(
-              "table" -> toSQLId(table.name),
-              "fieldName" -> toSQLId(name)))
+              "table" -> errors.toSQLId(table.name),
+              "fieldName" -> errors.toSQLId(name)))
         }
         specs.foreach {
           case AlterColumnSpec(col: ResolvedFieldName, dataType, nullable, _, _, _, _, _) =>
@@ -86,22 +88,30 @@ private[sql] object AlterTableValidation extends QueryErrorsBase {
               newDataType match {
                 case _: StructType => alter.failAnalysis(
                   "CANNOT_UPDATE_FIELD.STRUCT_TYPE",
-                  Map("table" -> toSQLId(table.name), "fieldName" -> toSQLId(fieldName)))
+                  Map(
+                  "table" -> errors.toSQLId(table.name),
+                  "fieldName" -> errors.toSQLId(fieldName)))
                 case _: MapType => alter.failAnalysis(
                   "CANNOT_UPDATE_FIELD.MAP_TYPE",
-                  Map("table" -> toSQLId(table.name), "fieldName" -> toSQLId(fieldName)))
+                  Map(
+                  "table" -> errors.toSQLId(table.name),
+                  "fieldName" -> errors.toSQLId(fieldName)))
                 case _: ArrayType => alter.failAnalysis(
                   "CANNOT_UPDATE_FIELD.ARRAY_TYPE",
-                  Map("table" -> toSQLId(table.name), "fieldName" -> toSQLId(fieldName)))
+                  Map(
+                  "table" -> errors.toSQLId(table.name),
+                  "fieldName" -> errors.toSQLId(fieldName)))
                 case u: UserDefinedType[_] => alter.failAnalysis(
                   "CANNOT_UPDATE_FIELD.USER_DEFINED_TYPE",
                   Map(
-                    "table" -> toSQLId(table.name),
-                    "fieldName" -> toSQLId(fieldName),
-                    "udtSql" -> toSQLType(u)))
+                    "table" -> errors.toSQLId(table.name),
+                    "fieldName" -> errors.toSQLId(fieldName),
+                    "udtSql" -> errors.toSQLType(u)))
                 case _: CalendarIntervalType | _: AnsiIntervalType => alter.failAnalysis(
                   "CANNOT_UPDATE_FIELD.INTERVAL_TYPE",
-                  Map("table" -> toSQLId(table.name), "fieldName" -> toSQLId(fieldName)))
+                  Map(
+                  "table" -> errors.toSQLId(table.name),
+                  "fieldName" -> errors.toSQLId(fieldName)))
                 case _ => // update is okay
               }
 
@@ -116,11 +126,11 @@ private[sql] object AlterTableValidation extends QueryErrorsBase {
                 alter.failAnalysis(
                   errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
                   messageParameters = Map(
-                    "table" -> toSQLId(table.name),
-                    "originName" -> toSQLId(fieldName),
-                    "originType" -> toSQLType(field.dataType),
-                    "newName" -> toSQLId(fieldName),
-                    "newType" -> toSQLType(newDataType)))
+                    "table" -> errors.toSQLId(table.name),
+                    "originName" -> errors.toSQLId(fieldName),
+                    "originType" -> errors.toSQLType(field.dataType),
+                    "newName" -> errors.toSQLId(fieldName),
+                    "newType" -> errors.toSQLType(newDataType)))
               }
             }
             if (nullable.isDefined) {

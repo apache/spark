@@ -38,7 +38,12 @@ private[sql] object InsertionResolution extends SQLConfHelper {
    * Lowers an INSERT into a V2 table whose input query has been resolved.
    * The caller rejects REPLACE ON/USING; generated partition expressions still need resolution.
    */
-  def resolveInsertInto(i: InsertIntoStatement): V2WriteCommand = {
+  def resolveInsertInto(i: InsertIntoStatement): V2WriteCommand =
+    resolveInsertInto(i, createProjectForByNameQuery)
+
+  def resolveInsertInto(
+      i: InsertIntoStatement,
+      createProject: (String, InsertIntoStatement) => LogicalPlan): V2WriteCommand = {
     val r = i.table.asInstanceOf[DataSourceV2Relation]
     // ifPartitionNotExists is append with validation, but validation is not supported
     if (i.ifPartitionNotExists) {
@@ -47,7 +52,7 @@ private[sql] object InsertionResolution extends SQLConfHelper {
 
     // Create a project if this is an INSERT INTO BY NAME query.
     val projectByName = if (i.userSpecifiedCols.nonEmpty) {
-      Some(createProjectForByNameQuery(r.table.name, i))
+      Some(createProject(r.table.name, i))
     } else {
       None
     }
@@ -120,7 +125,13 @@ private[sql] object InsertionResolution extends SQLConfHelper {
   /** Add a project to use the table column names for INSERT INTO BY NAME */
   def createProjectForByNameQuery(
       tblName: String,
-      i: InsertIntoStatement): LogicalPlan = {
+      i: InsertIntoStatement): LogicalPlan =
+    createProjectForByNameQuery(tblName, i, resolver)
+
+  def createProjectForByNameQuery(
+      tblName: String,
+      i: InsertIntoStatement,
+      resolver: => Resolver): LogicalPlan = {
     SchemaUtils.checkColumnNameDuplication(i.userSpecifiedCols, resolver)
 
     if (i.userSpecifiedCols.size != i.query.output.size) {
