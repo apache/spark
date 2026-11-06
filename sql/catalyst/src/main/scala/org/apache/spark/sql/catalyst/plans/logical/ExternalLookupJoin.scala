@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, BinaryComparison,
-  EqualNullSafe, EqualTo, Expression, ExternalUserDefinedFunction, GreaterThan,
+  EqualNullSafe, EqualTo, Expression, ExprUtils, ExternalUserDefinedFunction, GreaterThan,
   GreaterThanOrEqual, LessThan, LessThanOrEqual, NamedExpression, PythonUDF, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftAnti, LeftOuter, LeftSemi}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXTERNAL_LOOKUP_HINT, EXTERNAL_LOOKUP_JOIN,
@@ -112,7 +112,8 @@ object ExternalLookupJoinShapes {
    * does. A value that reads lookup columns, as in `t.a = t.b`, cannot be a parameter.
    *
    * The lookup column must be of a type on which [[ExternalLookupKeyTypes]] lets Spark offer the
-   * comparison. A comparison on another type is an ordinary conjunct.
+   * comparison, and not a CHAR or VARCHAR column. A comparison on another column is an ordinary
+   * conjunct.
    *
    * @param streamOutput The output of the join's left side, the stream side.
    * @param lookupOutput The output of the join's right side, the lookup side.
@@ -129,7 +130,7 @@ object ExternalLookupJoinShapes {
         Seq(comparison, withOperandsSwapped(comparison)).collectFirst {
           case candidate @ BinaryComparison(lookupField: Attribute, parameter)
               if isLookupComparison(lookupField, parameter) &&
-                isOfferedOn(comparison, lookupField.dataType) =>
+                isOfferedOn(comparison, lookupField, parameter) =>
             LookupComparison(lookupField, parameter, candidate.sqlOperator, nullSafe)
         }
       case _ => None
@@ -142,12 +143,26 @@ object ExternalLookupJoinShapes {
     case _ => false
   }
 
-  /** Whether Spark offers the comparison on a lookup column of this type. */
-  private def isOfferedOn(comparison: BinaryComparison, dataType: DataType): Boolean =
-    comparison match {
-      case _: EqualTo | _: EqualNullSafe => ExternalLookupKeyTypes.supportsEquality(dataType)
-      case _ => ExternalLookupKeyTypes.supportsRange(dataType)
-    }
+  /**
+   * Whether Spark offers the comparison on this lookup column, with this parameter. Spark offers
+   * no comparison on a CHAR or VARCHAR column, whose data type alone does not show it.
+   *
+   * Spark evaluates every parameter on every stream row, before the other join conditions. That
+   * is safe for an equality, as a hash join evaluates its keys on every row too. A range is a
+   * join condition, which a join evaluates only after its keys match, so its parameter must be
+   * one that cannot fail: ExprUtils.canEvaluateUnconditionally must accept it.
+   */
+  private def isOfferedOn(
+      comparison: BinaryComparison,
+      lookupField: Attribute,
+      parameter: Expression): Boolean =
+    !ExternalLookupKeyTypes.isCharOrVarchar(lookupField) && (comparison match {
+      case _: EqualTo | _: EqualNullSafe =>
+        ExternalLookupKeyTypes.supportsEquality(lookupField.dataType)
+      case _ =>
+        ExternalLookupKeyTypes.supportsRange(lookupField.dataType) &&
+          ExprUtils.canEvaluateUnconditionally(parameter)
+    })
 
   /** The same comparison with its operands swapped, so that `a < b` becomes `b > a`. */
   private def withOperandsSwapped(comparison: BinaryComparison): BinaryComparison =
@@ -163,12 +178,15 @@ object ExternalLookupJoinShapes {
   /**
    * Whether a lookup-side projection or filter can evaluate `expression` on the lookup results,
    * inside the join. Python and external UDFs and subqueries are planned as separate operators,
-   * which a lookup-side stage cannot contain.
+   * which a lookup-side stage cannot contain. A non-deterministic expression is not allowed
+   * either: the join evaluates a stage on each returned row, so one stored row could get
+   * different values for different stream rows, which a read of the table never does.
    */
-  def canEvaluateInLookupStage(expression: Expression): Boolean = !(expression.exists {
-    case _: PythonUDF | _: ExternalUserDefinedFunction | _: SubqueryExpression => true
-    case _ => false
-  })
+  def canEvaluateInLookupStage(expression: Expression): Boolean =
+    expression.deterministic && !expression.exists {
+      case _: PythonUDF | _: ExternalUserDefinedFunction | _: SubqueryExpression => true
+      case _ => false
+    }
 }
 
 /** One optimized lookup-side operation, retained in evaluation order. */

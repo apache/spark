@@ -33,8 +33,8 @@ import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.expressions.{Add, Cast, LessThan, Literal, Rand}
-import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, ExternalLookupFilter,
-  LogicalPlan, PreparedExternalLookupJoin}
+import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, LogicalPlan,
+  PreparedExternalLookupJoin}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connector.catalog.{Identifier, SupportsRead, Table, TableCapability,
@@ -654,36 +654,22 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     checkStream(projected, Seq(Row(1), Row(1)))
   }
 
-  test("external lookup preserves non-deterministic projection and filter boundaries") {
+  test("external lookup rejects a non-deterministic lookup-side projection or filter") {
     val rawLookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
-    val lookup = rawLookup
-      .select($"id", $"department", rand(3).as("sample"))
-      .filter($"sample" >= 0.5)
-      .select($"id", $"department")
-    // Both copies of key 1 share one looked-up row set, and the seeded sample is drawn once per
-    // looked-up row, so the duplicates must see the same rows.
     val left = streamOf(Seq(1, 1, 2).toDF("id"))
-
-    checkStream(
-      left.join(lookup, left("id") === lookup("id"), "inner"),
-      Seq(Row(1, 1, "research"), Row(1, 1, "research"), Row(2, 2, "sales")))
-  }
-
-  test("external lookup pushes the filters below a non-deterministic lookup-side boundary") {
-    val rawLookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
-    // The bottom filter reaches the source. The filter on the sample stays a lookup-side stage
-    // above the projection that draws it.
-    val lookup = rawLookup
-      .filter($"department" =!= "research")
-      .select($"id", $"department", rand(3).as("sample"))
-      .filter($"sample" >= 0.5)
-      .select($"id", $"department")
-    val left = streamOf(Seq(1, 2).toDF("id"))
-
-    val run = runStream(left.join(lookup, left("id") === lookup("id"), "inner"))
-    assert(run.rows.forall(_.getString(2) != "research"))
-    assert(SimpleExternalLookupDataSource.pushedPredicateCount.get() > 0)
-    assert(run.lookupJoin.lookupTransforms.exists(_.isInstanceOf[ExternalLookupFilter]))
+    // The join evaluates the lookup-side stages on each returned row, so a random value could
+    // differ between two stream rows that join the same stored row.
+    Seq(
+      rawLookup.select($"id", $"department", rand(3).as("sample")),
+      rawLookup.filter(rand(3) >= 0.5)).foreach { lookup =>
+      checkError(
+        exception = intercept[AnalysisException] {
+          left.join(lookup, left("id") === lookup("id"), "inner")
+        },
+        condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.LOOKUP_PLAN",
+        parameters = Map.empty)
+    }
+    assert(SimpleExternalLookupDataSource.readerCount.get() === 0)
   }
 
   test("external lookup hint rejects invalid placement and relation targets") {
@@ -1287,19 +1273,25 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     checkStream(
       left.join(lookup, left("id") === lookup("id"), "inner"),
       Seq(Row(1, 1), Row(2, 2)))
-    assert(SimpleExternalLookupDataSource.requiredColumns.get() === Seq("id"))
+    // Spark evaluates the accepted filter again on the returned rows, so it asks for the column
+    // that the filter reads.
+    assert(SimpleExternalLookupDataSource.requiredColumns.get() === Seq("id", "department"))
     assert(SimpleExternalLookupDataSource.pushedPredicateCount.get() > 0)
   }
 
-  test("external lookup pushes no filter above a non-deterministic lookup-side filter") {
-    val rawLookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
-    // The source would evaluate a pushed filter before the sample is drawn.
-    val lookup = rawLookup.filter(rand(3) >= 0.5).filter($"department" =!= "research")
+  test("external lookup applies a pushed filter that the source accepts but does not apply") {
+    SimpleExternalLookupDataSource.resetCounters()
+    val lookup = spark.read
+      .format(classOf[SimpleExternalLookupDataSource].getName)
+      .option("ignoreAcceptedFilters", "true")
+      .load()
+      .filter($"department" =!= "research")
     val left = streamOf(Seq(1, 2).toDF("id"))
 
-    val run = runStream(left.join(lookup, left("id") === lookup("id"), "inner"))
-    assert(run.rows.forall(_.getString(2) != "research"))
-    assert(SimpleExternalLookupDataSource.pushedPredicateCount.get() === 0)
+    checkStream(
+      left.join(lookup, left("id") === lookup("id"), "inner"),
+      Seq(Row(1, 1, "engineering"), Row(2, 2, "sales")))
+    assert(SimpleExternalLookupDataSource.pushedPredicateCount.get() > 0)
   }
 
   test("external lookup canonicalizes filters through a relation alias") {
@@ -1360,6 +1352,23 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     checkStream(
       left.join(lookup, left("id") === lookup("id"), "left_anti"),
       Seq(Row(3)))
+  }
+
+  test("semi and anti joins stop evaluating a stream row's residual at its first match") {
+    val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    val left = streamOf(Seq(1, 3).toDF("id"))
+    // Id 1 has two departments, returned in this order: engineering, then research. The residual
+    // would fail on research, so it must not be evaluated once engineering has matched.
+    val residual = when(lookup("department") === "research", raise_error(lit("evaluated")))
+      .otherwise(left("id") > 0)
+
+    Seq("left_semi" -> Seq(Row(1)), "left_anti" -> Seq(Row(3))).foreach {
+      case (joinType, expected) =>
+        SimpleExternalLookupDataSource.resetCounters()
+        checkStream(left.join(lookup, left("id") === lookup("id") && residual, joinType), expected)
+        // The cursor is still read to the end.
+        assert(SimpleExternalLookupDataSource.resultRowsRead.get() === 2)
+    }
   }
 
   test("external lookup reads only the key when no lookup column is read above the join") {
@@ -1515,6 +1524,24 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
         Row(1, 3, 2, "sales")))
     assert(SimpleExternalLookupDataSource.lookupCandidates.get() ===
       Seq((">", "id", IntegerType), ("<=", "id", IntegerType)))
+  }
+
+  test("external lookup joins a stored row with every overlapping range in one request") {
+    SimpleExternalLookupDataSource.resetCounters()
+    val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    // Two shifts that cover employee ids from 1 and from 2: both ranges cover id 2.
+    val shifts = streamOf(Seq(("early", 1), ("late", 2)).toDF("shift", "firstId"))
+
+    checkStream(
+      shifts.join(lookup, lookup("id") >= shifts("firstId"), "inner"),
+      Seq(
+        Row("early", 1, 1, "engineering"),
+        Row("early", 1, 1, "research"),
+        Row("early", 1, 2, "sales"),
+        Row("late", 2, 2, "sales")))
+    // Both ranges are in one request, and the source returns id 2 once for each of them.
+    assert(SimpleExternalLookupDataSource.requestSizes.asScala.toSeq === Seq(2))
+    assert(SimpleExternalLookupDataSource.resultRowsRead.get() === 4)
   }
 
   test("external lookup leaves unselected criteria as Spark residuals") {
@@ -2259,6 +2286,8 @@ object SimpleExternalLookupTable extends Table with SupportsRead {
     val nullKeySelection = options.getBoolean("nullKeySelection", false)
     val selectionMode = options.getOrDefault("selectionMode", "all")
     val nullCursor = options.getBoolean("nullCursor", false)
+    // Accepts the filters on department but returns the rows that fail them.
+    val ignoreAcceptedFilters = options.getBoolean("ignoreAcceptedFilters", false)
     new SupportsExternalLookup
       with SupportsPushDownRequiredColumns
       with SupportsPushDownV2Filters {
@@ -2311,7 +2340,7 @@ object SimpleExternalLookupTable extends Table with SupportsRead {
         }
         if (accepted.nonEmpty) {
           acceptedPredicates = accepted
-          excludeResearch = true
+          excludeResearch = !ignoreAcceptedFilters
           SimpleExternalLookupDataSource.pushedPredicateCount.addAndGet(accepted.length)
           SimpleExternalLookupDataSource.pushedPredicateFields.set(
             accepted.flatMap(fields).map(_.fieldNames().mkString(".")).toSeq)

@@ -24,7 +24,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.ScalarSubquery
+import org.apache.spark.sql.catalyst.expressions.{Rand, ScalarSubquery}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{Distinct, ExternalLookupHint,
   ExternalLookupJoin, Join, JoinHint, LocalRelation, LogicalPlan, Project}
@@ -117,11 +117,17 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
     // subquery cannot be evaluated on the lookup results.
     val subqueryFilter =
       lookupOnly.where(lookupOnly.output(1) === ScalarSubquery(LocalRelation($"v".int)))
+    // Nor can a non-deterministic projection or filter: the join evaluates it on each returned row,
+    // so one stored row could get different values for different stream rows.
+    val randomProjection = lookupOnly.select(lookupOnly.output :+ Rand(3L).as("sample"): _*)
+    val randomFilter = lookupOnly.where(Rand(3L) >= 0.5)
     Seq(
       lookupOnly.limit(1),
       Distinct(lookupOnly.as("t")),
       dual.limit(1).hint("external_lookup"),
-      subqueryFilter).foreach { right =>
+      subqueryFilter,
+      randomProjection,
+      randomFilter).foreach { right =>
       val analyzed = analyze(stream.join(right, Inner, Some(stream.output(1) === right.output(1))))
       Seq[LogicalPlan => Any](CheckExternalLookupJoin, FormExternalLookupJoin(_)).foreach { rule =>
         checkError(

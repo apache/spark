@@ -143,6 +143,7 @@ case class ExternalLookupJoinExec(
       nullSafeParameters,
       lookupKeyCheck,
       child.output,
+      lookupInput,
       lookupTransforms,
       transformedLookup,
       output,
