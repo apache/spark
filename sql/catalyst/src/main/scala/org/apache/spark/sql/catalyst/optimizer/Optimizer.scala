@@ -2271,8 +2271,8 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
   private def inferFilters(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsAnyPattern(FILTER, JOIN)) {
     case filter @ Filter(condition, child) =>
-      val newFilters = filter.constraints --
-        (child.constraints ++ splitConjunctivePredicates(condition))
+      val newFilters = (filter.constraints --
+        (child.constraints ++ splitConjunctivePredicates(condition))).toSeq.filter(canBeFilter)
       if (newFilters.nonEmpty) {
         Filter(And(newFilters.reduce(And), condition), child)
       } else {
@@ -2317,16 +2317,39 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
   }
 
   private def inferNewFilter(plan: LogicalPlan, constraints: ExpressionSet): LogicalPlan = {
-    val newPredicates = constraints
+    val newPredicates = (constraints
       .union(constructIsNotNullConstraints(constraints, plan.output))
       .filter { c =>
         c.references.nonEmpty && c.references.subsetOf(plan.outputSet) && c.deterministic
-      } -- plan.constraints
+      } -- plan.constraints).toSeq.filter(canBeFilter)
     if (newPredicates.isEmpty) {
       plan
     } else {
       Filter(newPredicates.reduce(And), plan)
     }
+  }
+
+  /**
+   * A constraint only says what holds on the rows an operator outputs. As a filter, it also runs
+   * on rows and values the query may never evaluate it on, e.g. `10 / x > 0` from `x = y AND
+   * 10 / y > 0` on a row where `x` is 0 and `y` is not, so only a constraint that cannot fail
+   * becomes a filter. Constant parts count as what they evaluate to, as they are folded right
+   * after this rule, and an uncorrelated subquery as a constant, as it runs once whichever rows
+   * use it. Callers pass the original expressions, because [[ExpressionSet.filter]] tests the
+   * canonicalized ones.
+   */
+  private def canBeFilter(constraint: Expression): Boolean = {
+    conf.legacyInferFailableFiltersFromConstraints || ExprUtils.canEvaluateUnconditionally(
+      ConstantFolding.constantFolding(constraint, isConditionalBranch = true).transformUp {
+        case c: Cast if isNumericUpCast(c.child.dataType, c.dataType) => c.child
+        case i: InSubquery => i.values.map(IsNotNull(_)).reduce[Expression](And)
+        case s: ScalarSubquery => Literal.create(null, s.dataType)
+      })
+  }
+
+  private def isNumericUpCast(from: DataType, to: DataType): Boolean = (from, to) match {
+    case (_: NumericType, _: NumericType) => Cast.canUpCast(from, to)
+    case _ => false
   }
 }
 

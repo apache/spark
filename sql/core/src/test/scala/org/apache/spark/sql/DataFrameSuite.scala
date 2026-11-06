@@ -3022,6 +3022,21 @@ class DataFrameSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-60985: an inferred filter does not raise an error the query does not raise") {
+    withTempPath { dir =>
+      // On (0, 6), neither `x = y` nor `10 / y` fails, whichever is evaluated first.
+      Seq((0L, 6L), (6L, 6L)).toDF("x", "y").write.parquet(dir.getCanonicalPath)
+      val df = spark.read.parquet(dir.getCanonicalPath)
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        checkAnswer(df.where($"x" === $"y" && lit(10L) / $"y" > 0), Row(6L, 6L))
+        checkAnswer(
+          df.select($"x").distinct().join(df.select($"y").distinct(), $"x" === $"y")
+            .where(lit(10L) / $"y" > 0),
+          Row(6L, 6L))
+      }
+    }
+  }
+
   test("SPARK-60528: collect a nested empty struct") {
     val df = spark.range(1).selectExpr("id AS i", "named_struct('a', struct()) AS s")
     checkAnswer(df, Row(0L, Row(Row())))
