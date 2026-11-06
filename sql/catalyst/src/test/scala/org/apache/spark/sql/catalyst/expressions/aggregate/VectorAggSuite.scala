@@ -976,6 +976,63 @@ class VectorAggSuite extends SparkFunSuite {
     }
   }
 
+  test("VectorAvg - double: finite overflow preserves cumulative weights") {
+    Seq(1, 2, 5).foreach { dim =>
+      val (agg, buffer) = createDoubleVectorAvg()
+      val first = Array.tabulate(dim)(i => if (i % 2 == 0) Double.MaxValue else -Double.MaxValue)
+      agg.update(buffer, createDoubleInputRow(first))
+      agg.update(buffer, createDoubleInputRow(first))
+      // The third update overflows the delta. An unweighted midpoint would incorrectly return zero.
+      agg.update(buffer, createDoubleInputRow(first.map(-_)))
+      val expected = Double.MaxValue / 3
+      val tolerance = math.ulp(expected) * 2
+      evalAsDoubleArray(agg, buffer).zipWithIndex.foreach { case (actual, i) =>
+        val e = if (i % 2 == 0) expected else -expected
+        assert(math.abs(actual - e) <= tolerance, s"Expected $e but got $actual")
+      }
+    }
+  }
+
+  test("VectorAvg - double: non-finite deltas at different positions") {
+    val cases = Seq(
+      (Double.MaxValue, -Double.MaxValue, 0.0),
+      (Double.PositiveInfinity, 1.0, Double.PositiveInfinity),
+      (Double.NegativeInfinity, 1.0, Double.NegativeInfinity),
+      (Double.PositiveInfinity, Double.PositiveInfinity, Double.PositiveInfinity),
+      (Double.NegativeInfinity, Double.NegativeInfinity, Double.NegativeInfinity),
+      (Double.PositiveInfinity, Double.NegativeInfinity, Double.NaN),
+      (Double.NaN, Double.NaN, Double.NaN),
+      (Double.NaN, Double.PositiveInfinity, Double.NaN),
+      (Double.NaN, Double.NegativeInfinity, Double.NaN),
+      (Double.NaN, 1.0, Double.NaN))
+    for {
+      dim <- Seq(1, 3, 5, 8)
+      index <- 0 until dim
+      (left, right, expectedValue) <- cases
+      (oldAvg, value) <- Seq((left, right), (right, left))
+    } {
+      val (agg, buffer) = createDoubleVectorAvg()
+      val first = Array.fill(dim)(1.0)
+      val second = Array.fill(dim)(3.0)
+      val expected = Array.fill(dim)(2.0)
+      first(index) = oldAvg
+      second(index) = value
+      expected(index) = expectedValue
+      val rows = Seq(first, second).map(createDoubleInputRow)
+      rows.foreach(row => agg.update(buffer, row))
+      assertResult(expected.map(JDouble.doubleToLongBits))(
+        evalAsDoubleArray(agg, buffer).map(JDouble.doubleToLongBits))
+
+      val (_, buffer1) = createDoubleVectorAvg()
+      val (_, buffer2) = createDoubleVectorAvg()
+      agg.update(buffer1, rows.head)
+      agg.update(buffer2, rows(1))
+      agg.merge(buffer1, buffer2)
+      assertResult(expected.map(JDouble.doubleToLongBits))(
+        evalAsDoubleArray(agg, buffer1).map(JDouble.doubleToLongBits))
+    }
+  }
+
   test("VectorAvg - double: dimension mismatch") {
     val (agg, buffer1) = createDoubleVectorAvg()
     val (_, buffer2) = createDoubleVectorAvg()
