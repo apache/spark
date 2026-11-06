@@ -498,15 +498,6 @@ pub unsafe fn write_info(info: *const SparkDsWriteInfo) -> Result<(WriteMode, Op
     Ok((mode, unsafe { optional_string(info.query_id)? }))
 }
 
-/// The location of the checkpoint of a stream reader.
-///
-/// # Safety
-/// `info` must follow the create_stream_reader contract of the C header.
-pub unsafe fn checkpoint_location(info: *const SparkDsStreamReaderInfo) -> Result<String> {
-    let info = unsafe { input(info)? };
-    unsafe { string(info.checkpoint_location) }
-}
-
 /// The start, the limit, and the end of the run of a request for the latest offset, with the
 /// offsets as JSON.
 ///

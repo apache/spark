@@ -310,7 +310,8 @@ unsafe extern "C" fn create_stream_reader<S: Exported>(
 ) -> c_int {
     abi::call(|| {
         abi::require_output(reader)?;
-        let checkpoint_location = unsafe { abi::checkpoint_location(info)? };
+        let info = unsafe { abi::input(info)? };
+        let checkpoint_location = unsafe { abi::string(info.checkpoint_location)? };
         let schema = unsafe { abi::import_schema(schema)? };
         let info = MicroBatchStreamInfo::new(schema, checkpoint_location);
         let created = S::bridge().create_stream_reader(id(source), info)?;
