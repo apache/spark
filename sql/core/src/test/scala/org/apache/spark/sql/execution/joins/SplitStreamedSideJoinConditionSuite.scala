@@ -230,7 +230,7 @@ class SplitStreamedSideJoinConditionSuite extends QueryTest with SharedSparkSess
   // when it is false or null. The UDF conjunct holds for the matched rows (ids 0..3) and
   // throws for the unmatched ones (ids 4..7), so it throws exactly when it is wrongly
   // hoisted and evaluated before probing. A ScalaUDF does not override `throwable`, so
-  // the old !throwable gate hoisted it; the whitelist keeps it in the residual.
+  // the old !throwable gate hoisted it; the allowlist keeps it in the residual.
   private def throwingUdfJoin: DataFrame = {
     spark.udf.register("throw_unless_true", (v: Boolean) =>
       if (v) true else throw new RuntimeException("throw_unless_true evaluated to false"))

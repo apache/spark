@@ -278,10 +278,10 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
    *     in TRY mode: in LEGACY mode, Add, Subtract, Multiply, Divide, IntegralDivide, Remainder
    *     and Pmod, UnaryMinus and Abs; in TRY mode, which only catches the errors of Add,
    *     Subtract and Multiply, and in which Divide and Remainder behave as in LEGACY mode, those
-   *     five. IntegralDivide, Remainder and Pmod
-   *     over decimals are left out, as `Decimal.quot` and `Decimal.%` raise when the integral
-   *     quotient has more digits than their MathContext holds, e.g. for DECIMAL(38, 0) and
-   *     DECIMAL(3, 3), and so is arithmetic over intervals, which can overflow in every mode.
+   *     five. IntegralDivide, Remainder and Pmod over decimals are left out, as `Decimal.quot`
+   *     and `Decimal.%` raise when the integral quotient has more digits than their MathContext
+   *     holds, e.g. for DECIMAL(38, 0) and DECIMAL(3, 3), and so is arithmetic over intervals,
+   *     which can overflow in every mode.
    * Anything else (other arithmetic, other casts, other functions, UDFs, nested IF/CASE
    * WHEN, ...) conservatively returns false. On top of the allowlist, the expression must be
    * deterministic and must not contain subqueries.
