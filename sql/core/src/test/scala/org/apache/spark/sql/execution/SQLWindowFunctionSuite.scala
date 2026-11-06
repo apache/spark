@@ -314,6 +314,28 @@ class SQLWindowFunctionSuite extends SharedSparkSession {
     }
   }
 
+  test("window function: distinct aggregate buffers are isolated between evaluators") {
+    withSQLConf(ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withTempView("distinctWindowData") {
+        Seq((1, "a"), (2, "b"), (3, "a"), (4, "c"))
+          .toDF("id", "v").createOrReplaceTempView("distinctWindowData")
+        val result = sql(
+          """
+            |SELECT id, count(DISTINCT v) OVER w AS d, count(v) OVER w AS n
+            |FROM distinctWindowData
+            |WINDOW w AS (ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+          """.stripMargin)
+        val expected = Seq(Row(1, 1L, 1L), Row(2, 2L, 2L), Row(3, 2L, 3L), Row(4, 3L, 4L))
+        checkAnswer(result, expected)
+
+        // Both sides of the zip reuse the factory in one task and advance their frames in turn.
+        val rdd = result.rdd
+        val interleaved = rdd.zip(rdd).flatMap { case (left, right) => Seq(left, right) }
+        checkAnswer(spark.createDataFrame(interleaved, result.schema), expected ++ expected)
+      }
+    }
+  }
+
   test("window function: count distinct with a range offset, filter, and multiple columns") {
     withSQLConf(WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1") {
       val data = Seq(

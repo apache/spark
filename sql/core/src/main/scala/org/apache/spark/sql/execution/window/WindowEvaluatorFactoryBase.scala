@@ -283,7 +283,8 @@ trait WindowEvaluatorFactoryBase {
                 distinctColumnAttributeLookup.getOrElse(expression.canonicalized, expression)
             }.asInstanceOf[AggregateFunction]
           }
-        lazy val distinctProcessor = AggregateProcessor(
+        // Each frame needs its own mutable aggregate buffer, even when a factory is reused.
+        def distinctProcessor = AggregateProcessor(
           rewrittenDistinctFunctions,
           ordinal,
           distinctInputAttributes,
