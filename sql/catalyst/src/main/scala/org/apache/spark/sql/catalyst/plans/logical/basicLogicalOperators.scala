@@ -720,6 +720,9 @@ case class Union(
 }
 
 object Join {
+  private val stateValueOrdinalsTag = TreeNodeTag[(Seq[Int], Seq[Int])](
+    "streaming_join_state_value_ordinals")
+
   def computeOutput(
     joinType: JoinType,
     leftOutput: Seq[Attribute],
@@ -780,6 +783,41 @@ case class Join(
   override def output: Seq[Attribute] = {
     val base = Join.computeOutput(joinType, left.output, right.output)
     if (isStateful) WidenStatefulOpNullability.widenOutputForStatefulOp(base) else base
+  }
+
+  // Stream-stream joins filter late rows even when event time is not used by the join condition
+  // or selected downstream. Keep an unambiguous watermarked input attribute from being pruned.
+  override def references: AttributeSet = {
+    val base = super.references
+    if (isStateful) {
+      base ++ AttributeSet(children.flatMap { child =>
+        val watermarkAttributes =
+          child.output.filter(_.metadata.contains(EventTimeWatermark.delayKey))
+        val hasReferencedWatermark = base.intersect(child.outputSet)
+          .exists(_.metadata.contains(EventTimeWatermark.delayKey))
+        if (!hasReferencedWatermark && watermarkAttributes.map(_.exprId).distinct.size == 1) {
+          watermarkAttributes.take(1)
+        } else {
+          Seq.empty
+        }
+      })
+    } else {
+      base
+    }
+  }
+
+  /** Input ordinals retained in the buffered state of this stream-stream join. */
+  private[sql] def stateValueOrdinals: Option[(Seq[Int], Seq[Int])] =
+    getTagValue(Join.stateValueOrdinalsTag)
+
+  private[sql] def setStateValueOrdinals(
+      leftStateValueOrdinals: Seq[Int],
+      rightStateValueOrdinals: Seq[Int]): Unit = {
+    setTagValue(Join.stateValueOrdinalsTag, (leftStateValueOrdinals, rightStateValueOrdinals))
+  }
+
+  private[sql] def clearStateValueOrdinals(): Unit = {
+    unsetTagValue(Join.stateValueOrdinalsTag)
   }
 
   override def metadataOutput: Seq[Attribute] = {

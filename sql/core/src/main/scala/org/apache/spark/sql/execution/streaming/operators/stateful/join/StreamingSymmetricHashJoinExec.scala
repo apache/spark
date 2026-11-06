@@ -147,8 +147,29 @@ case class StreamingSymmetricHashJoinExec(
     stateFormatVersion: Int,
     left: SparkPlan,
     right: SparkPlan,
-    outputMode: Option[OutputMode])
+    outputMode: Option[OutputMode],
+    leftStateValueAttributes: Option[Seq[Attribute]] = None,
+    rightStateValueAttributes: Option[Seq[Attribute]] = None)
     extends BinaryExecNode with StateStoreWriter with SchemaValidationUtils {
+
+  def this(
+      leftKeys: Seq[Expression],
+      rightKeys: Seq[Expression],
+      joinType: JoinType,
+      condition: Option[Expression],
+      stateFormatVersion: Int,
+      left: SparkPlan,
+      right: SparkPlan,
+      leftStateValueAttributes: Option[Seq[Attribute]],
+      rightStateValueAttributes: Option[Seq[Attribute]]) = {
+
+    this(
+      leftKeys, rightKeys, joinType, JoinConditionSplitPredicates(condition, left, right),
+      stateInfo = None,
+      eventTimeWatermarkForLateEvents = None, eventTimeWatermarkForEviction = None,
+      stateWatermarkPredicates = JoinStateWatermarkPredicates(), stateFormatVersion, left, right,
+      None, leftStateValueAttributes, rightStateValueAttributes)
+  }
 
   def this(
       leftKeys: Seq[Expression],
@@ -160,12 +181,36 @@ case class StreamingSymmetricHashJoinExec(
       right: SparkPlan) = {
 
     this(
-      leftKeys, rightKeys, joinType, JoinConditionSplitPredicates(condition, left, right),
-      stateInfo = None,
-      eventTimeWatermarkForLateEvents = None, eventTimeWatermarkForEviction = None,
-      stateWatermarkPredicates = JoinStateWatermarkPredicates(), stateFormatVersion, left, right,
+      leftKeys,
+      rightKeys,
+      joinType,
+      condition,
+      stateFormatVersion,
+      left,
+      right,
+      None,
       None)
   }
+
+  val leftValueAttributes: Seq[Attribute] = leftStateValueAttributes.getOrElse(left.output)
+  val rightValueAttributes: Seq[Attribute] = rightStateValueAttributes.getOrElse(right.output)
+
+  override def references: AttributeSet =
+    AttributeSet(leftKeys ++ rightKeys ++ condition.full.toSeq)
+
+  override protected def stringArgs: Iterator[Any] = Iterator(
+    leftKeys,
+    rightKeys,
+    joinType,
+    condition,
+    stateInfo,
+    eventTimeWatermarkForLateEvents,
+    eventTimeWatermarkForEviction,
+    stateWatermarkPredicates,
+    stateFormatVersion,
+    left,
+    right,
+    outputMode)
 
   if (stateFormatVersion < 2 && joinType != Inner) {
     throw new IllegalArgumentException(
@@ -241,8 +286,8 @@ case class StreamingSymmetricHashJoinExec(
       (stateStoreNames.size, stateStoreNames, 1)
     }
 
-  val nullLeft = new GenericInternalRow(left.output.map(_.withNullability(true)).length)
-  val nullRight = new GenericInternalRow(right.output.map(_.withNullability(true)).length)
+  val nullLeft = new GenericInternalRow(leftValueAttributes.map(_.withNullability(true)).length)
+  val nullRight = new GenericInternalRow(rightValueAttributes.map(_.withNullability(true)).length)
 
   override def requiredChildDistribution: Seq[Distribution] =
     StatefulOpClusteredDistribution(leftKeys, getStateInfo.numPartitions) ::
@@ -250,11 +295,11 @@ case class StreamingSymmetricHashJoinExec(
 
   override def output: Seq[Attribute] = {
     val base = joinType match {
-      case _: InnerLike => left.output ++ right.output
-      case LeftOuter => left.output ++ right.output.map(_.withNullability(true))
-      case RightOuter => left.output.map(_.withNullability(true)) ++ right.output
-      case FullOuter => (left.output ++ right.output).map(_.withNullability(true))
-      case LeftSemi => left.output
+      case _: InnerLike => leftValueAttributes ++ rightValueAttributes
+      case LeftOuter => leftValueAttributes ++ rightValueAttributes.map(_.withNullability(true))
+      case RightOuter => leftValueAttributes.map(_.withNullability(true)) ++ rightValueAttributes
+      case FullOuter => (leftValueAttributes ++ rightValueAttributes).map(_.withNullability(true))
+      case LeftSemi => leftValueAttributes
       case _ => throwBadJoinTypeException()
     }
     WidenStatefulOpNullability.widenOutputForStatefulOp(base)
@@ -300,10 +345,11 @@ case class StreamingSymmetricHashJoinExec(
       shouldBeNullable: Boolean): Map[String, StateStoreColFamilySchema] = {
     assert(useVirtualColumnFamilies)
     val raw = SymmetricHashJoinStateManager
-      .getSchemasForStateStoreWithColFamily(LeftSide, left.output, leftKeys, stateFormatVersion) ++
+      .getSchemasForStateStoreWithColFamily(
+        LeftSide, leftValueAttributes, leftKeys, stateFormatVersion) ++
       SymmetricHashJoinStateManager
         .getSchemasForStateStoreWithColFamily(
-          RightSide, right.output, rightKeys, stateFormatVersion)
+          RightSide, rightValueAttributes, rightKeys, stateFormatVersion)
     raw.map { case (name, cf) =>
       name -> cf.copy(
         keySchema = WidenStatefulOpNullability.widenStateSchema(cf.keySchema),
@@ -342,11 +388,11 @@ case class StreamingSymmetricHashJoinExec(
       var result: Map[String, (StructType, StructType)] = Map.empty
       // get state schema for state stores on left side of the join
       result ++= SymmetricHashJoinStateManager.getSchemaForStateStores(LeftSide,
-        left.output, leftKeys, stateFormatVersion)
+        leftValueAttributes, leftKeys, stateFormatVersion)
 
       // get state schema for state stores on right side of the join
       result ++= SymmetricHashJoinStateManager.getSchemaForStateStores(RightSide,
-        right.output, rightKeys, stateFormatVersion)
+        rightValueAttributes, rightKeys, stateFormatVersion)
 
       // validate and maybe evolve schema for all state stores across both sides of the join
       result.map { case (stateStoreName, (keySchema, valueSchema)) =>
@@ -397,7 +443,7 @@ case class StreamingSymmetricHashJoinExec(
     val checkpointIds = SymmetricHashJoinStateManager.getStateStoreCheckpointIds(
       partitionId, stateInfo.get.stateStoreCkptIds, useVirtualColumnFamilies)
 
-    val inputSchema = left.output ++ right.output
+    val inputSchema = leftValueAttributes ++ rightValueAttributes
     val postJoinFilter =
       Predicate.create(condition.bothSides.getOrElse(Literal(true)), inputSchema).eval _
     // Create left and right side hash joiners and store in the joiner manager.
@@ -407,12 +453,12 @@ case class StreamingSymmetricHashJoinExec(
       StreamingSymmetricHashJoinHelper.findJoinKeyOrdinalForWatermark(leftKeys, rightKeys)
     val joinerManager = OneSideHashJoinerManager(
       new OneSideHashJoiner(
-        LeftSide, left.output, leftKeys, leftInputIter,
+        LeftSide, left.output, leftValueAttributes, leftKeys, leftInputIter,
         condition.leftSideOnly, postJoinFilter, stateWatermarkPredicates.left, partitionId,
         checkpointIds.left.keyToNumValues, checkpointIds.left.keyWithIndexToValue,
         skippedNullValueCount, joinStateManagerStoreGenerator, joinKeyOrdinalForWatermark),
       new OneSideHashJoiner(
-        RightSide, right.output, rightKeys, rightInputIter,
+        RightSide, right.output, rightValueAttributes, rightKeys, rightInputIter,
         condition.rightSideOnly, postJoinFilter, stateWatermarkPredicates.right, partitionId,
         checkpointIds.right.keyToNumValues, checkpointIds.right.keyWithIndexToValue,
         skippedNullValueCount, joinStateManagerStoreGenerator, joinKeyOrdinalForWatermark))
@@ -564,7 +610,7 @@ case class StreamingSymmetricHashJoinExec(
     val outputProjection = if (joinType == LeftSemi) {
       UnsafeProjection.create(output, output)
     } else {
-      UnsafeProjection.create(left.output ++ right.output, output)
+      UnsafeProjection.create(leftValueAttributes ++ rightValueAttributes, output)
     }
     val outputIterWithMetrics = outputIter.map { row =>
       numOutputRows += 1
@@ -644,6 +690,7 @@ case class StreamingSymmetricHashJoinExec(
    *
    * @param joinSide The JoinSide - either left or right.
    * @param inputAttributes The input attributes for this side of the join.
+   * @param stateValueAttributes The attributes retained in this side's buffered state.
    * @param joinKeys The join keys.
    * @param inputIter The iterator of input rows on this side to be joined.
    * @param preJoinFilterExpr A filter over rows on this side. This filter rejects rows that could
@@ -668,6 +715,7 @@ case class StreamingSymmetricHashJoinExec(
   private class OneSideHashJoiner(
       joinSide: JoinSide,
       inputAttributes: Seq[Attribute],
+      stateValueAttributes: Seq[Attribute],
       joinKeys: Seq[Expression],
       inputIter: Iterator[InternalRow],
       preJoinFilterExpr: Option[Expression],
@@ -682,11 +730,11 @@ case class StreamingSymmetricHashJoinExec(
 
     // Filter the joined rows based on the given condition.
     val preJoinFilter =
-      Predicate.create(preJoinFilterExpr.getOrElse(Literal(true)), inputAttributes).eval _
+      Predicate.create(preJoinFilterExpr.getOrElse(Literal(true)), stateValueAttributes).eval _
 
     private val joinStateManager = SymmetricHashJoinStateManager(
       joinSide = joinSide,
-      inputValueAttributes = inputAttributes,
+      inputValueAttributes = stateValueAttributes,
       joinKeys = joinKeys,
       stateInfo = stateInfo,
       storeConf = storeConf,
@@ -699,7 +747,7 @@ case class StreamingSymmetricHashJoinExec(
       joinStoreGenerator = joinStateManagerStoreGenerator,
       joinKeyOrdinalForWatermark = joinKeyOrdinalForWatermark)
 
-    private[this] val keyGenerator = UnsafeProjection.create(joinKeys, inputAttributes)
+    private[this] val keyGenerator = UnsafeProjection.create(joinKeys, stateValueAttributes)
 
     private[this] val stateKeyWatermarkPredicateFunc = stateWatermarkPredicate match {
       case Some(JoinStateKeyWatermarkPredicate(expr, _, _)) =>
@@ -712,7 +760,7 @@ case class StreamingSymmetricHashJoinExec(
 
     private[this] val stateValueWatermarkPredicateFunc = stateWatermarkPredicate match {
       case Some(JoinStateValueWatermarkPredicate(expr, _, _)) =>
-        Predicate.create(expr, inputAttributes).eval _
+        Predicate.create(expr, stateValueAttributes).eval _
       case _ =>
         Predicate.create(Literal(false), Seq.empty).eval _  // false = do not remove if no predicate
     }
@@ -735,8 +783,8 @@ case class StreamingSymmetricHashJoinExec(
         None
       } else {
         val (thisSideAttrs, otherSideAttrs) = joinSide match {
-          case LeftSide => (left.output, right.output)
-          case RightSide => (right.output, left.output)
+          case LeftSide => (leftValueAttributes, rightValueAttributes)
+          case RightSide => (rightValueAttributes, leftValueAttributes)
         }
 
         // Scan bounds must constrain the event-time columns used by the index and probe.
@@ -761,7 +809,7 @@ case class StreamingSymmetricHashJoinExec(
 
     private[this] val eventTimeIdxForRangeScan: Int = scanRangeOffsets.map { _ =>
       WatermarkSupport.findEventTimeColumnIndex(
-        inputAttributes, !allowMultipleStatefulOperators).getOrElse(-1)
+        stateValueAttributes, !allowMultipleStatefulOperators).getOrElse(-1)
     }.getOrElse(-1)
 
     private def computeTimestampRange(thisRow: UnsafeRow): Option[(Long, Long)] = {
@@ -787,7 +835,7 @@ case class StreamingSymmetricHashJoinExec(
 
       val watermarkAttribute = WatermarkSupport.findEventTimeColumn(inputAttributes,
         allowMultipleEventTimeColumns = !allowMultipleStatefulOperators)
-      val nonLateRows =
+      val nonLateInputRows =
         WatermarkSupport.watermarkExpression(
           watermarkAttribute, eventTimeWatermarkForLateEvents) match {
           case Some(watermarkExpr) =>
@@ -796,6 +844,12 @@ case class StreamingSymmetricHashJoinExec(
           case None =>
             inputIter
         }
+      val nonLateRows = if (stateValueAttributes == inputAttributes) {
+        nonLateInputRows
+      } else {
+        val valueProjection = UnsafeProjection.create(stateValueAttributes, inputAttributes)
+        nonLateInputRows.map(valueProjection)
+      }
 
       val generateFilteredJoinedRow: InternalRow => Iterator[InternalRow] = joinSide match {
         case LeftSide if joinType == LeftOuter || joinType == FullOuter =>
@@ -1128,8 +1182,8 @@ case class StreamingSymmetricHashJoinExec(
   override def produceOutputWatermark(inputWatermarkMs: Long): Option[Long] = {
     val (leftStateWatermark, rightStateWatermark) =
       StreamingSymmetricHashJoinHelper.getStateWatermark(
-        left.output, right.output, leftKeys, rightKeys, condition.full, Some(inputWatermarkMs),
-        !allowMultipleStatefulOperators)
+        leftValueAttributes, rightValueAttributes, leftKeys, rightKeys, condition.full,
+        Some(inputWatermarkMs), !allowMultipleStatefulOperators)
 
     if (joinType == LeftSemi) {
       // Only left columns are output. Without a watermarked left column, the watermark is lost;

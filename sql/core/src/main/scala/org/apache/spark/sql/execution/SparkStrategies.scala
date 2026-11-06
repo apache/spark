@@ -27,7 +27,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NamedRelation}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.optimizer.{BuildRight, BuildSide, JoinSelectionHelper, NormalizeFloatingNumbers}
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide,
+  JoinSelectionHelper, NormalizeFloatingNumbers}
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -597,13 +598,33 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   }
 
   object StreamingJoinStrategy extends Strategy {
+    private def attributesAtOrdinals(
+        output: Seq[Attribute],
+        stateValueOrdinals: Seq[Int]): Seq[Attribute] = {
+      require(stateValueOrdinals.forall(ordinal => ordinal >= 0 && ordinal < output.length))
+      stateValueOrdinals.map(output)
+    }
+
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = {
       plan match {
-        case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, otherCondition, _,
+        case join @ ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, otherCondition, _,
               left, right, _) if left.isStreaming && right.isStreaming =>
           val stateVersion = conf.getConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION)
-          new StreamingSymmetricHashJoinExec(leftKeys, rightKeys, joinType, otherCondition,
-            stateVersion, planLater(left), planLater(right)) :: Nil
+          val stateValueOrdinals = join.stateValueOrdinals
+          new StreamingSymmetricHashJoinExec(
+            leftKeys,
+            rightKeys,
+            joinType,
+            otherCondition,
+            stateVersion,
+            planLater(left),
+            planLater(right),
+            stateValueOrdinals.map { case (leftOrdinals, _) =>
+              attributesAtOrdinals(left.output, leftOrdinals)
+            },
+            stateValueOrdinals.map { case (_, rightOrdinals) =>
+              attributesAtOrdinals(right.output, rightOrdinals)
+            }) :: Nil
 
         case Join(left, right, _, _, _) if left.isStreaming && right.isStreaming =>
           throw QueryCompilationErrors.streamJoinStreamWithoutEqualityPredicateUnsupportedError(

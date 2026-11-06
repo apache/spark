@@ -605,7 +605,8 @@ class IncrementalExecution(
           eventTimeWatermarkForEviction = iwEviction,
           stateWatermarkPredicates =
             StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
-              j.left.output, j.right.output, j.leftKeys, j.rightKeys, j.condition.full,
+              j.leftValueAttributes, j.rightValueAttributes,
+              j.leftKeys, j.rightKeys, j.condition.full,
               iwEviction, prevBatchLateEventsWm, !allowMultipleStatefulOperators)
         )
     }
@@ -720,7 +721,8 @@ class IncrementalExecution(
       }
 
       stateStoreWritersWithMetadata = Some(Seq.empty)
-      val planWithSchemas = planWithStateOpId transform StateSchemaAndOperatorMetadataRule.rule
+      val planWithSchemas =
+        planWithStateOpId transform StateSchemaAndOperatorMetadataRule.rule
 
       simulateWatermarkPropagation(planWithSchemas)
       planWithSchemas transform WatermarkPropagationRule.rule
