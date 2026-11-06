@@ -130,7 +130,7 @@ class PythonUDTFSuite extends SharedSparkSession {
       Some(StructType.fromDDL("v ARRAY<VARIANT>"))
     )
 
-  test("SPARK-54055: local session eviction stops a Python UDTF planner only once idle") {
+  test("SPARK-54055: local session eviction retires a busy Python UDTF planner") {
     assume(shouldTestPythonUDFs && !Utils.isWindows)
     withTempDir { tempDir =>
       val uuid = UUID.randomUUID().toString
@@ -145,6 +145,7 @@ class PythonUDTFSuite extends SharedSparkSession {
         |class BlockingAnalyze:
         |    @staticmethod
         |    def analyze():
+        |        os.getcwd()
         |        with open("${started.getCanonicalPath}", "w") as started:
         |            started.write(str(os.getpid()))
         |        deadline = time.monotonic() + 30
@@ -165,15 +166,14 @@ class PythonUDTFSuite extends SharedSparkSession {
       IsolatedSessionState.sessions.put(uuid, session)
       val pool = ThreadUtils.newDaemonSingleThreadExecutor("python-planner-eviction")
       implicit val executionContext: ExecutionContext = ExecutionContext.fromExecutor(pool)
-      val planning = Future {
-        spark.withActive {
-          JobArtifactSet.withActiveJobArtifactState(JobArtifactState(uuid, None)) {
-            val runner = new UserDefinedPythonTableFunctionAnalyzeRunner(
-              udtf.name, udtf.func, Seq.empty, Seq.empty, spark.sessionState.sqlParser)
-            runner.runInPython(useDaemon = true)
-          }
+      def plan() = spark.withActive {
+        JobArtifactSet.withActiveJobArtifactState(JobArtifactState(uuid, None)) {
+          val runner = new UserDefinedPythonTableFunctionAnalyzeRunner(
+            udtf.name, udtf.func, Seq.empty, Seq.empty, spark.sessionState.sqlParser)
+          runner.runInPython(useDaemon = true)
         }
       }
+      val planning = Future { plan() }
       try {
         eventually(timeout(10.seconds), interval(10.milliseconds)) {
           assert(started.isFile)
@@ -194,13 +194,18 @@ class PythonUDTFSuite extends SharedSparkSession {
         assert(ThreadUtils.awaitResult(planning, 10.seconds).schema ==
           StructType.fromDDL("value int"))
 
-        // Once the planner is idle, the next cleanup of the session also stops its daemon, so
-        // that it does not keep running in the deleted session directory.
-        SparkEnv.get.removeExecutorPythonWorkerFactories(uuid)
+        // Finishing the planner stops its retired factory without a second executor cleanup.
         daemon.onExit().get(10, TimeUnit.SECONDS)
         child.onExit().get(10, TimeUnit.SECONDS)
         assert(!daemon.isAlive)
         assert(!child.isAlive)
+
+        // A later planner must use a fresh daemon with a valid working directory.
+        assert(plan().schema == StructType.fromDDL("value int"))
+        val nextDaemon = ProcessHandle.of(Files.readString(started.toPath).toLong).get()
+          .parent().get()
+        assert(nextDaemon.pid() != daemon.pid())
+        assert(directory.isDirectory)
       } finally {
         Files.writeString(resume.toPath, "resume")
         pool.shutdown()
