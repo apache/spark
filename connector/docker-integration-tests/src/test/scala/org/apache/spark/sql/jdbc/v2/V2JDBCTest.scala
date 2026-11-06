@@ -1364,22 +1364,22 @@ private[v2] trait V2JDBCTest
   }
 
   test("SPARK-38431: predicate DELETE through the JDBC catalog") {
-    withTable(s"$catalogName.events") {
-      sql(s"CREATE TABLE $catalogName.events (batch_id INT, amount DECIMAL(10, 2))")
-      sql(s"INSERT INTO $catalogName.events VALUES " +
+    withTable(s"$catalogName.delete_table") {
+      sql(s"CREATE TABLE $catalogName.delete_table (batch_id INT, amount DECIMAL(10, 2))")
+      sql(s"INSERT INTO $catalogName.delete_table VALUES " +
         "(42, 10.50), (42, NULL), (43, 99.99)")
       val kept = Row(43, new java.math.BigDecimal("99.99"))
-      sql(s"DELETE FROM $catalogName.events WHERE batch_id = 42 AND amount = 10.50")
-      checkAnswer(spark.table(s"$catalogName.events"),
+      sql(s"DELETE FROM $catalogName.delete_table WHERE batch_id = 42 AND amount = 10.50")
+      checkAnswer(spark.table(s"$catalogName.delete_table"),
         Seq(Row(42, null), kept))
-      sql(s"DELETE FROM $catalogName.events WHERE amount <=> NULL")
-      checkAnswer(spark.table(s"$catalogName.events"), kept)
+      sql(s"DELETE FROM $catalogName.delete_table WHERE amount <=> NULL")
+      checkAnswer(spark.table(s"$catalogName.delete_table"), kept)
       intercept[AnalysisException] {
-        sql(s"DELETE FROM $catalogName.events WHERE batch_id = 43 OR abs(batch_id) = 42")
+        sql(s"DELETE FROM $catalogName.delete_table WHERE batch_id = 43 OR abs(batch_id) = 42")
       }
-      checkAnswer(spark.table(s"$catalogName.events"), kept)
-      sql(s"DELETE FROM $catalogName.events WHERE batch_id IN (42, 43)")
-      checkAnswer(spark.table(s"$catalogName.events"), Seq.empty)
+      checkAnswer(spark.table(s"$catalogName.delete_table"), kept)
+      sql(s"DELETE FROM $catalogName.delete_table WHERE batch_id IN (42, 43)")
+      checkAnswer(spark.table(s"$catalogName.delete_table"), Seq.empty)
     }
   }
 
