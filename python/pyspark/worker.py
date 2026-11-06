@@ -27,7 +27,6 @@ import json
 import os
 import sys
 import traceback
-from contextlib import nullcontext
 from typing import Any, BinaryIO, Optional
 
 from pyspark import shuffle
@@ -251,28 +250,30 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
             # Flush each output batch so the JVM can read output while still sending input.
             serializer.flush_per_batch = True
 
-        def process():
+        def process(iterator):
+            out_iter = func(split_index, iterator)
+            try:
+                serializer.dump_stream(out_iter, outfile)
+            finally:
+                if hasattr(out_iter, "close"):
+                    out_iter.close()
+
+        def run_process():
             iterator = deserializer.load_stream(input_data_stream)
             if is_pipelined:
                 # Read input batches ahead in a background thread so that reading them overlaps
                 # with computing the UDF and writing its output.
                 queue_depth = int(os.environ.get("SPARK_PIPELINED_UDF_QUEUE_DEPTH", "2"))
-                input_ctx = read_in_thread(iterator, queue_depth)
+                with read_in_thread(iterator, queue_depth) as iterator:
+                    process(iterator)
             else:
-                input_ctx = nullcontext(iterator)
-            with input_ctx as iterator:
-                out_iter = func(split_index, iterator)
-                try:
-                    serializer.dump_stream(out_iter, outfile)
-                finally:
-                    if hasattr(out_iter, "close"):
-                        out_iter.close()
+                process(iterator)
 
         sampling_profiler_enabled = runner_conf.udf_profiler == "sampling"
 
         with metrics.measure("pythonExecutionDurationMs"), capture_outputs():
             if profiler:
-                profiler.profile(process)
+                profiler.profile(run_process)
             elif sampling_profiler_enabled:
                 from pyspark.sql.profiler import ProfileResultsParamV2, WorkerSamplingProfiler
 
@@ -284,10 +285,10 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                     sampling_interval=runner_conf.udf_profiler_sampling_interval,
                     task_context=task_context,
                 ) as profiler:
-                    process()
+                    run_process()
                 profiler.save(accumulator)
             else:
-                process()
+                run_process()
 
         # Cleanup
         # Reset task context to None. This is a guard code to avoid residual context when worker

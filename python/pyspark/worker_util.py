@@ -300,27 +300,21 @@ def read_in_thread(
     stop_event = threading.Event()
     end = _EndOfInput()
 
-    def _put(item: Any) -> bool:
-        # Block until there is room, giving up once the consumer has stopped.
-        while not stop_event.is_set():
-            try:
-                item_queue.put(item, timeout=0.1)
-                return True
-            except queue.Full:
-                continue
-        return False
-
     def _read() -> None:
+        # A put that blocks on a full queue is released by the drain on exit, after which the
+        # stop check returns.
         try:
             for item in iterator:
                 if hasattr(item, "__next__"):
                     item = list(item)
-                if not _put(item) or stop_event.is_set():
+                item_queue.put(item)
+                if stop_event.is_set():
                     return
         except Exception as e:
             end.error = e
         finally:
-            _put(end)
+            if not stop_event.is_set():
+                item_queue.put(end)
 
     def _consume() -> Iterator[Any]:
         while True:
