@@ -23,7 +23,10 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate;
 
 /**
  * A mix-in for a {@link ScanBuilder} that can serve parameterized lookups. The builder may also
- * implement the column-pruning and filter-pushdown mix-ins.
+ * implement the column-pruning and filter-pushdown mix-ins. For a lookup scan, Spark evaluates
+ * every pushed filter again on the returned rows, including the filters that the source accepts,
+ * so the source may return rows that fail a pushed filter. As in any scan, it must not drop a row
+ * that passes them.
  * <p>
  * Spark may also plan a lookup when a streaming query starts, up to
  * {@link ExternalLookup#createReaderFactory()}, and discard the result.
@@ -41,7 +44,9 @@ public interface SupportsExternalLookup extends ScanBuilder {
    * operator, so {@code s.ts < t.event_time} is offered as {@code event_time > ?}. Spark offers
    * {@code =} and {@code <=>} only on a lookup column of an integral type, BOOLEAN, DECIMAL, DATE,
    * TIMESTAMP, TIMESTAMP_NTZ, BINARY, or a STRING or VARCHAR whose collation compares bytes, such
-   * as UTF8_BINARY. It offers no comparison on VARCHAR under
+   * as UTF8_BINARY. It offers {@code <}, {@code <=}, {@code >} and {@code >=} only on a lookup
+   * column of an integral type, DECIMAL, DATE, TIMESTAMP or TIMESTAMP_NTZ, and only when the
+   * parameter cannot fail to evaluate. It offers no comparison on VARCHAR under
    * {@code spark.sql.charVarchar.standardSemantics.enabled}, and never one on FLOAT, DOUBLE, CHAR,
    * a string with another collation, a complex type or any other type. For example:
    * <pre>{@code

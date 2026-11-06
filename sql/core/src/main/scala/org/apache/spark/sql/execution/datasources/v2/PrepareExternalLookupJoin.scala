@@ -147,10 +147,13 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
     val columnNames = AttributeMap(relation.output.map(attr => attr -> attr.name))
     // Filters are pushed before the lookup predicates are selected, as
     // V2ScanRelationPushDown.pushDownFilters pushes them before it prunes the columns of a scan.
-    val postScanFilters = PushDownUtils.pushFilters(
+    // Unlike a batch scan, Spark evaluates every pushed filter again on the returned rows, not only
+    // the ones that the source rejects, so a source that accepts a filter but applies it in another
+    // way, or not at all, cannot change the result.
+    PushDownUtils.pushFilters(
       scanBuilder,
       DataSourceStrategy.normalizeExprs(lookupPlan.filtersPushDown, relation.output),
-      partitionFields = None)._2
+      partitionFields = None)
     val offeredPredicates = offeredCandidates.map { candidate =>
       new V2Predicate(candidate.predicateName, Array[V2Expression](
         FieldReference.column(columnNames(candidate.projectedField)),
@@ -201,7 +204,8 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
       pruneLookupTransforms(lookupOutput ++ residualLookupReferences, lookupPlan.upperStages)
     val segmentFields =
       lookupPlan.fields.filter(field => requiredBySegment.contains(field.toAttribute))
-    val segmentFilter = (postScanFilters ++ lookupPlan.filtersStayUp).reduceOption(And)
+    val segmentFilter =
+      (lookupPlan.filtersPushDown ++ lookupPlan.filtersStayUp).reduceOption(And)
     val requiredColumns = relation.output.filter(
       (AttributeSet(segmentFields.flatMap(_.references)) ++
         segmentFilter.map(_.references).getOrElse(AttributeSet.empty) ++
@@ -383,7 +387,8 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
    * A lookup side, split the way V2ScanRelationPushDown.pruneColumns splits a scan. The segment
    * over the relation is what ScanOperation collapses into one projection and its filters, with
    * aliases substituted. The stages above it are the projections and filters that ScanOperation
-   * cannot collapse, such as a filter above a non-deterministic projection, in evaluation order.
+   * cannot collapse, such as a projection whose costly expression a stage above reads more than
+   * once, in evaluation order.
    */
   private case class LookupPlan(
       relation: DataSourceV2Relation,

@@ -279,7 +279,8 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
     val rangeTypes = Seq("TINYINT", "SMALLINT", "INT", "BIGINT", "DECIMAL(10, 2)", "DATE",
       "TIMESTAMP", "TIMESTAMP_NTZ")
     val equalityOnlyTypes = Seq("BOOLEAN", "BINARY", "STRING", "STRING COLLATE UTF8_BINARY")
-    val neitherTypes = Seq("FLOAT", "DOUBLE", "STRING COLLATE UTF8_LCASE", "STRUCT<a: INT>")
+    val neitherTypes =
+      Seq("FLOAT", "DOUBLE", "CHAR(3)", "VARCHAR(3)", "STRING COLLATE UTF8_LCASE", "STRUCT<a: INT>")
     def offeredFor(codeType: String): Seq[String] = {
       var offered = Seq.empty[String]
       val lookup = lookupRelation(PlanningExternalLookupTable(s"id INT, code $codeType", select = {
@@ -319,6 +320,28 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
         condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_CANDIDATE",
         parameters = Map("table" -> QUOTED_TABLE_NAME))
     }
+  }
+
+  test("a range is a lookup candidate only when its parameter cannot fail") {
+    var offered = Seq.empty[String]
+    val lookup = lookupRelation(PlanningExternalLookupTable("id INT, value INT", select = {
+      candidates =>
+        offered = candidates.map(_.toString).toSeq
+        candidates.take(1)
+    }))
+    val Seq(lookupId, lookupValue) = lookup.output
+    val Seq(streamId, streamLabel) = stream.output
+    // Spark evaluates every parameter on every stream row, but a join evaluates a range only after
+    // its keys match. Spark treats any cast as one that can fail, as an ANSI cast of a string can,
+    // so a range with one stays in the residual. An equality with one is still offered, as a hash
+    // join evaluates its keys on every row too.
+    val labelNumber = streamLabel.cast(IntegerType)
+    val conjuncts =
+      Seq(lookupId === labelNumber, lookupValue >= streamId, lookupValue < labelNumber)
+    val prepared = prepare(lookupJoin(lookup, conjuncts.reduce(_ && _)))
+    assert(offered === Seq("id = ?", "value >= ?"))
+    assert(prepared.lookupParameters === Seq(labelNumber))
+    assert(prepared.residualCondition === Some(conjuncts(1) && conjuncts(2)))
   }
 
   test("the read schema binds to the analyzed lookup attributes by exact name") {

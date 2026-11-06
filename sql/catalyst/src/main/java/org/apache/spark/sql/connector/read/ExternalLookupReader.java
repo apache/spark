@@ -74,15 +74,22 @@ public interface ExternalLookupReader extends Closeable {
    * time zone; BINARY as its bytes; and STRING as UTF-8 bytes, compared byte by byte. A conversion
    * that loses precision, such as to milliseconds, can lose matches.
    * No two rows are equal; a null {@code <=>} parameter equals a null. Only {@code <=>} parameters
-   * may be null at the top level.
+   * may be null at the top level, and a null one matches the rows whose column is null.
    * <p>
    * The cursor must be non-null. Each row's results must be complete, with no cap and no row lost
-   * to paging, and depend only on the row; Spark may reuse them for equal rows. A stored row that
-   * matches several parameter rows is returned once with each of their ordinals, and equal stored
-   * rows are each returned. A source that matches more loosely than Spark may also return pairs
-   * of a row and a parameter row that do not match; Spark drops them. Spark checks the selected
-   * predicates on every returned row, but cannot find a missing one. The input is read-only and
-   * must not be kept after the cursor closes.
+   * to paging, and depend only on the row; Spark may reuse them for equal rows. A table row is
+   * returned once for each parameter row that it matches, with that parameter row's ordinal. One
+   * table row can match several parameter rows, for example under overlapping ranges; it must
+   * then be returned once for each of them:
+   * <pre>{@code
+   *   selected:         id >= ?
+   *   uniqueParameters: [(1), (2)]
+   *   table rows:       (id 1), (id 2)
+   *   cursor yields:    (0, id 1), (0, id 2), (1, id 2)
+   *   => id 2 matches both parameter rows, so it is returned twice
+   * }</pre>
+   * Spark checks the selected predicates on every returned row, but cannot find a missing one.
+   * The input is read-only and must not be kept after the cursor closes.
    * <p>
    * When Spark closes the returned cursor, also at the end of the task, is stated in the
    * documentation of this interface.

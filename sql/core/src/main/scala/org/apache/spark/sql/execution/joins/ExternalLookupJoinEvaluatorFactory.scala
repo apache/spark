@@ -65,6 +65,7 @@ class ExternalLookupJoinEvaluatorFactory(
     nullSafeParameters: Seq[Boolean],
     lookupKeyCheck: Option[Expression],
     streamOutput: Seq[Attribute],
+    lookupInput: Seq[Attribute],
     lookupTransforms: Seq[ExternalLookupTransform],
     transformedLookup: Seq[Attribute],
     output: Seq[Attribute],
@@ -319,7 +320,11 @@ class ExternalLookupJoinEvaluatorFactory(
     }
 
     private def joinMatch(index: Int, lookupRow: InternalRow): Unit = {
-      if (joinOutput.matches(rows(index), lookupRow)) {
+      // A semi or anti join knows a stream row's answer at its first match, so it evaluates the
+      // residual condition no further for that row, as the other join operators do. It still
+      // reads the whole result, for the other stream rows of the key.
+      if (!(joinOutput.answeredByFirstMatch && matched(index)) &&
+          joinOutput.matches(rows(index), lookupRow)) {
         val firstMatch = !matched(index)
         matched(index) = true
         joinOutput.matched(lookupRow, firstMatch).foreach(emit(index, _))
@@ -547,6 +552,9 @@ class ExternalLookupJoinEvaluatorFactory(
 
     /** Whether a stream row passes the stream condition; a row that fails it matches nothing. */
     def canMatch(streamRow: InternalRow): Boolean = streamPredicate.forall(_.eval(streamRow))
+
+    /** Whether the first match decides a stream row's output, as in a semi or anti join. */
+    val answeredByFirstMatch: Boolean = joinType == LeftSemi || joinType == LeftAnti
 
     def matches(streamRow: InternalRow, lookupRow: InternalRow): Boolean =
       residual.forall(_.eval(joinedRow(streamRow, lookupRow)))
