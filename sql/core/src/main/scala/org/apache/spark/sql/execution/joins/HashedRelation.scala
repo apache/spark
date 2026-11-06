@@ -867,7 +867,14 @@ private[execution] final class LongToUnsafeRowMap(
     // Convert to dense mode if it does not require more memory or could fit within L1 cache
     // SPARK-16740: Make sure range doesn't overflow if minKey has a large negative value
     if (range >= 0 && (range < array.size() || range < 1024)) {
-      val denseArray = allocateArray((range + 1).toInt)
+      val denseArray = try {
+        allocateArray((range + 1).toInt)
+      } catch {
+        case _: SparkOutOfMemoryError =>
+          // There is not enough memory to convert, so keep the map sparse. `allocateArray`
+          // releases any memory it acquired before throwing.
+          return
+      }
       denseArray.zeroOut()
       var i = 0
       while (i < array.size()) {

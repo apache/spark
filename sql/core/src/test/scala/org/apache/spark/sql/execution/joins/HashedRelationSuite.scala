@@ -25,9 +25,9 @@ import scala.util.Random
 
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkException
-import org.apache.spark.internal.config.{MEMORY_OFFHEAP_ENABLED, MEMORY_OFFHEAP_SIZE}
+import org.apache.spark.internal.config.{BUFFER_PAGESIZE, MEMORY_OFFHEAP_ENABLED, MEMORY_OFFHEAP_SIZE}
 import org.apache.spark.internal.config.Kryo._
-import org.apache.spark.memory.{TaskMemoryManager, UnifiedMemoryManager}
+import org.apache.spark.memory.{SparkOutOfMemoryError, TaskMemoryManager, UnifiedMemoryManager}
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.catalyst.InternalRow
@@ -757,6 +757,45 @@ abstract class HashedRelationSuite extends SharedSparkSession {
       assert(it.hasNext != ignoresDuplicatedKey)
       map.free()
     }
+  }
+
+  test("SPARK-61051: LongToUnsafeRowMap stays sparse when the dense array does not fit") {
+    // The sparse array (1 MiB) and the page (1 MiB) fit, but the dense array (about 0.5 MiB)
+    // does not, because it is allocated while the sparse array is still alive.
+    val memorySize = ByteUnit.MiB.toBytes(2) + ByteUnit.KiB.toBytes(256)
+    val smallUmm = new UnifiedMemoryManager(
+      new SparkConf()
+        .set(MEMORY_OFFHEAP_ENABLED, useOffHeapMemoryMode)
+        .set(MEMORY_OFFHEAP_SIZE, memorySize)
+        .set(BUFFER_PAGESIZE, ByteUnit.MiB.toBytes(1)),
+      memorySize,
+      memorySize / 2,
+      1)
+    val smallMm = new TaskMemoryManager(smallUmm, 0)
+    val unsafeProj = UnsafeProjection.create(Seq(BoundReference(0, LongType, false)))
+    // Capacity 1 << 16 gives a sparse array of 1 << 17 longs, which 32 keys do not grow.
+    val map = new LongToUnsafeRowMap(smallMm, 1 << 16)
+    val keys = (0 until 32).map(_ * 2048L)
+    keys.foreach(k => map.append(k, unsafeProj(InternalRow(k))))
+    val used = map.getUsed
+    assert(used === ByteUnit.MiB.toBytes(2))
+
+    try {
+      map.optimize()
+    } catch {
+      // SparkOutOfMemoryError is fatal to ScalaTest and would abort the whole suite.
+      case e: SparkOutOfMemoryError =>
+        map.free()
+        fail("optimize() should keep the map sparse when the dense array does not fit", e)
+    }
+    // The map keeps its sparse array and the failed allocation does not leak memory.
+    assert(map.getUsed === used)
+    assert(smallUmm.executionMemoryUsed === used)
+    val resultRow = new UnsafeRow(1)
+    keys.foreach(k => assert(map.getValue(k, resultRow).getLong(0) === k))
+    assert(map.getValue(1L, resultRow) === null)
+    map.free()
+    assert(smallUmm.executionMemoryUsed === 0)
   }
 }
 
