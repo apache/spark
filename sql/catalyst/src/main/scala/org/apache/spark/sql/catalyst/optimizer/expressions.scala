@@ -230,6 +230,16 @@ object ConstantPropagation extends Rule[LogicalPlan] {
   private def safeToReplace(ar: AttributeReference, nullIsFalse: Boolean) =
     !ar.nullable || nullIsFalse
 
+  /**
+   * Replaces attributes in the comparisons of `condition` with their constant values.
+   *
+   * The constant is the value of an attribute only on the rows that pass the whole condition.
+   * The rewritten condition also runs on other rows, e.g. a row with `y = 1` for
+   * `10 / (id - y) > 0 AND y = 0`, and a part of it that becomes constant is folded with no row
+   * at all, e.g. `10 / y` for `y = 0 AND id > 10 / y`. So that this raises no error the original
+   * condition cannot raise, an expression that can fail keeps its attributes, unless all of them
+   * are replaced and the result evaluates without an error.
+   */
   private def replaceConstants(
       condition: Expression,
       equalityPredicates: AttributeMap[(Literal, BinaryComparison)]): Expression = {
@@ -237,14 +247,34 @@ object ConstantPropagation extends Rule[LogicalPlan] {
     val predicates = equalityPredicates.values.map(_._2).toSet
     def replaceInComparison(b: BinaryComparison): Expression = {
       lazy val collationSafeReplacement = isSameCollationAttrRefComparison(b)
-      b transform {
-        case a: AttributeReference
-          if isBinaryStable(a.dataType) || collationSafeReplacement =>
-          constantsMap.getOrElse(a, a)
+      def canReplace(a: Attribute): Boolean =
+        constantsMap.contains(a) && (isBinaryStable(a.dataType) || collationSafeReplacement)
+      def replace(e: Expression): Expression = e match {
+        case a: AttributeReference if canReplace(a) => constantsMap(a)
+        case _ if ExprUtils.isTotalOperator(e) => e.mapChildren(replace)
+        case _ if e.references.nonEmpty && e.references.forall(canReplace) =>
+          val replaced = e.transform { case a: AttributeReference => constantsMap(a) }
+          if (canFold(replaced)) replaced else e
+        case _ => e
       }
+      b.mapChildren(replace)
     }
-    condition.transformWithPruning(_.containsPattern(BINARY_COMPARISON)) {
-      case b: BinaryComparison if !predicates.contains(b) => replaceInComparison(b)
+    def replaceInCondition(e: Expression): Expression = e match {
+      case b: BinaryComparison if predicates.contains(b) => b
+      case b: BinaryComparison => replaceInComparison(b)
+      case _ if ExprUtils.isTotalOperator(e) => e.mapChildren(replaceInCondition)
+      // The children of these include the comparisons of a pulled up correlated condition.
+      case _: InSubquery | _: ListQuery | _: Exists => e.mapChildren(replaceInCondition)
+      case _ => e
+    }
+    replaceInCondition(condition)
+  }
+
+  private def canFold(e: Expression): Boolean = {
+    try {
+      e.foldable && ConstantFolding.constantFolding(e).isInstanceOf[Literal]
+    } catch {
+      case NonFatal(_) => false
     }
   }
 
