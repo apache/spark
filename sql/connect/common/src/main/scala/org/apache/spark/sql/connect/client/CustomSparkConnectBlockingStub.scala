@@ -129,6 +129,18 @@ private[connect] class CustomSparkConnectBlockingStub(
     }
   }
 
+  def validateSession(request: ConfigRequest, timeout: Int): Unit = {
+    val validationStub = if (timeout > 0) {
+      stub.withDeadlineAfter(timeout.toLong, TimeUnit.SECONDS)
+    } else {
+      stub
+    }
+    // Do not retry or fetch error details: validation must respect its own timeout.
+    stubState.responseValidator.verifyResponse {
+      validationStub.config(request)
+    }
+  }
+
   def interrupt(request: InterruptRequest): InterruptResponse = {
     grpcExceptionConverter.convert(
       request.getSessionId,
