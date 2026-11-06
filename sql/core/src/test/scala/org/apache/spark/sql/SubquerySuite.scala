@@ -1430,6 +1430,58 @@ class SubquerySuite extends SharedSparkSession
     }
   }
 
+  test("Nested correlated existence subqueries with join pushdown enabled") {
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      Seq("EXISTS", "NOT EXISTS").foreach { outer =>
+        Seq("EXISTS", "NOT EXISTS").foreach { inner =>
+          val query = s"""
+            |SELECT a.id FROM range(3) a
+            |WHERE $outer (SELECT 1 FROM range(2) b WHERE a.id = b.id
+            |AND $inner (SELECT 1 FROM range(1) c WHERE b.id = c.id))
+            |""".stripMargin
+          val expected = (outer, inner) match {
+            case ("EXISTS", "EXISTS") => Seq(Row(0L))
+            case ("EXISTS", _) => Seq(Row(1L))
+            case (_, "EXISTS") => Seq(Row(1L), Row(2L))
+            case _ => Seq(Row(0L), Row(2L))
+          }
+          checkAnswer(sql(query), expected)
+        }
+      }
+    }
+  }
+
+  test("Correlated existence aggregates with cross joins disabled") {
+    withSQLConf(
+        SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true",
+        SQLConf.CROSS_JOINS_ENABLED.key -> "false") {
+      Seq("EXISTS", "NOT EXISTS").foreach { predicate =>
+        val query = s"""
+          |SELECT a.id FROM range(3) a
+          |WHERE $predicate (SELECT count(*) FROM range(2) b
+          |WHERE a.id = b.id HAVING count(*) = 0)
+          |""".stripMargin
+        val expected = if (predicate == "EXISTS") Seq(Row(2L)) else Seq(Row(0L), Row(1L))
+        checkAnswer(sql(query), expected)
+      }
+    }
+  }
+
+  test("Nested subqueries in existence join conditions with join pushdown enabled") {
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      Seq("EXISTS", "NOT EXISTS").foreach { predicate =>
+        val query = s"""
+          |SELECT a.id FROM range(3) a
+          |WHERE $predicate (SELECT 1 FROM range(2) b
+          |WHERE a.id = b.id OR a.id IN (SELECT c.id FROM range(2) c
+          |WHERE EXISTS (SELECT 1 FROM range(1) d WHERE d.id = c.id)))
+          |""".stripMargin
+        val expected = if (predicate == "EXISTS") Seq(Row(0L), Row(1L)) else Seq(Row(2L))
+        checkAnswer(sql(query), expected)
+      }
+    }
+  }
+
   ignore("SPARK-23957 Remove redundant sort from subquery plan(scalar subquery)") {
     withTempView("t1", "t2", "t3") {
       Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t1")
