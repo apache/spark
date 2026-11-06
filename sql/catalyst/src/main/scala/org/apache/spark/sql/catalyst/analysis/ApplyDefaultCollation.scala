@@ -439,12 +439,14 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
     if (newType == StringType) return plan
 
     def inner(ex: Expression): Expression = ex match {
-      // Skip if we already added a cast in the previous pass. `copy` drops tags, so restore the
-      // user-cast mark (only that one, as in `CollationTypeCoercion.changeType`).
+      // Skip if we already added a cast in the previous pass. `copy` drops tags. Do not restore
+      // USER_SPECIFIED_CAST, which would change auto-generated column names; mark a user cast with
+      // RECOLORED_USER_CAST instead.
       case cast @ Cast(e: DefaultStringProducingExpression, dt, _, _) if newType == dt =>
         val rebuilt = cast.copy(child = e.withNewChildren(e.children.map(inner)))
-        if (cast.containsTag(Cast.USER_SPECIFIED_CAST)) {
-          rebuilt.setTagValue(Cast.USER_SPECIFIED_CAST, ())
+        if (cast.containsTag(Cast.USER_SPECIFIED_CAST) ||
+            cast.containsTag(Cast.RECOLORED_USER_CAST)) {
+          rebuilt.setTagValue(Cast.RECOLORED_USER_CAST, ())
         }
         rebuilt
 

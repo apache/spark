@@ -905,6 +905,42 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-59243: a nested call the built-in owns is not a temp reference") {
+    // Under the default resolution order the built-in precedes a temp `json_array`, so it owns the
+    // nested call at creation and at invocation; the body does not reference the temp function.
+    try {
+      sql("CREATE TEMPORARY FUNCTION json_array(a STRING) RETURNS STRING RETURN 'shadowed'")
+      sql("CREATE FUNCTION perm_json_fn() RETURNS STRING RETURN json_array(json_array(1))")
+      checkAnswer(sql("SELECT perm_json_fn()"), Row("[[1]]"))
+      // The flat call is still rejected by name, as before.
+      val e = intercept[AnalysisException] {
+        sql("CREATE OR REPLACE FUNCTION perm_json_fn() RETURNS STRING RETURN json_array(1)")
+      }
+      assert(e.getCondition == "INVALID_TEMP_OBJ_REFERENCE")
+    } finally {
+      sql("DROP FUNCTION IF EXISTS perm_json_fn")
+      sql("DROP TEMPORARY FUNCTION IF EXISTS json_array")
+    }
+  }
+
+  test("SPARK-59243: a nested call a persistent function owns is not a temp reference") {
+    // The persistent `json_array` precedes the temp one on the PATH, so it owns the nested call.
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+      try {
+        sql("CREATE FUNCTION json_array(a STRING) RETURNS STRING RETURN 'persistent'")
+        sql("CREATE TEMPORARY FUNCTION json_array(a STRING) RETURNS STRING RETURN 'shadowed'")
+        sql("SET PATH = spark_catalog.default, system.session, system.builtin")
+        sql("CREATE FUNCTION perm_json_fn() RETURNS STRING RETURN json_array(json_array(1))")
+        checkAnswer(sql("SELECT spark_catalog.default.perm_json_fn()"), Row("persistent"))
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP FUNCTION IF EXISTS perm_json_fn")
+        sql("DROP FUNCTION IF EXISTS spark_catalog.default.json_array")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS json_array")
+      }
+    }
+  }
+
   test("invalid: a bare star argument in plain JSON_ARRAY is not expanded") {
     Seq("json_array", "builtin.json_array", "system.builtin.json_array").foreach { func =>
       val e = intercept[AnalysisException] {
@@ -1433,6 +1469,23 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
       withView("v") {
         sql(s"CREATE VIEW v DEFAULT COLLATION UTF8_LCASE AS $select")
         checkAnswer(spark.table("v"), expected)
+      }
+    }
+  }
+
+  test("SPARK-59243: default collation keeps auto-generated names of user casts") {
+    // Rebuilding a user cast under a default collation drops USER_SPECIFIED_CAST, as before, so
+    // the auto-generated column name still omits the cast, with or without a deferring sibling.
+    withSQLConf(SQLConf.OBJECT_LEVEL_COLLATIONS_ENABLED.key -> "true") {
+      Seq(
+        "concat(CAST(typeof(1) AS STRING), typeof(2))" -> "concat(typeof(1), typeof(2))",
+        "concat(CAST(typeof(1) AS STRING), typeof(2), (SELECT 'x'))" ->
+          "concat(typeof(1), typeof(2), scalarsubquery())"
+      ).foreach { case (expr, name) =>
+        withTable("t") {
+          sql(s"CREATE TABLE t USING parquet DEFAULT COLLATION UTF8_LCASE AS SELECT $expr")
+          assert(spark.table("t").schema.fieldNames.toSeq == Seq(name), s"for $expr")
+        }
       }
     }
   }
