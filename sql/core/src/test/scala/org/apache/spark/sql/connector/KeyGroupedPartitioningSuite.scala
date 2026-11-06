@@ -27,11 +27,13 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference,
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
-import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryTableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Implicits, Column, Identifier, InMemoryTable, InMemoryTableCatalog, InMemoryTableWithV2FilterCatalog, Table}
+import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.functions._
-import org.apache.spark.sql.connector.distributions.Distributions
+import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions._
 import org.apache.spark.sql.connector.expressions.Expressions._
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder}
 import org.apache.spark.sql.execution.{
   ExtendedMode,
   FormattedMode,
@@ -49,6 +51,7 @@ import org.apache.spark.sql.functions.{col, max}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with ExplainSuiteHelper {
   private val functions = Seq(
@@ -1516,6 +1519,133 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
 
     withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "false") {
       checkAnswer(df, (0 until 12).map(i => Row(i.toLong)))
+    }
+  }
+
+  /**
+   * Runs `f` under the confs of a DPP subquery that reuses no broadcast, and drops the tables of
+   * `catalog` after.
+   */
+  private def withDppSubqueryConfs(catalog: InMemoryTableCatalog)(f: => Unit): Unit = {
+    withSQLConf(
+        SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "10") {
+      try f finally catalog.clearTables()
+    }
+  }
+
+  /** Fills `items` and `purchases` with the ids 1 to 7, with `rowsPerKey` rows in each purchase. */
+  private def insertDppSubqueryRows(ns: String, rowsPerKey: Int): Unit = {
+    sql(s"INSERT INTO $ns.$items VALUES " + (1 to 7).map(i =>
+      s"($i, 'x', 10.0, cast('2020-01-01' as timestamp))").mkString(", "))
+    sql(s"INSERT INTO $ns.$purchases VALUES " + (1 to 7).flatMap(i =>
+      Seq.fill(rowsPerKey)(s"($i, $i.0, cast('2020-01-01' as timestamp))")).mkString(", "))
+  }
+
+  /**
+   * Checks the rows of `query`, and that its join plans no shuffle, with AQE off unless `aqe` says
+   * otherwise. With AQE on, the copies of the join's scan plan their partitions when the result
+   * stage is created and asks `supportsColumnar`, before the DPP subquery prunes the shared `Scan`.
+   * That holds for a scan in the default `PARTITION_DEFINED` columnar support mode.
+   */
+  private def checkStoragePartitionedJoin(
+      query: String,
+      expected: Seq[Row],
+      aqe: Seq[Boolean] = Seq(false)): Unit = {
+    aqe.foreach { enabled =>
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enabled.toString) {
+        val df = sql(query)
+        checkAnswer(df, expected)
+        val plan = df.queryExecution.executedPlan
+        assert(collectShuffles(plan).isEmpty,
+          s"The join should stay storage-partitioned:\n$plan")
+      }
+    }
+  }
+
+  test("SPARK-60752: a DPP subquery's build side does not change the layout of the scan it " +
+    "shares with the join") {
+    // A DPP subquery that does not reuse a broadcast plans its build side again, over the same
+    // `Scan` as the join's `purchases` scan. A scalar subquery filter on `item_id` is a runtime
+    // filter of both, and the subquery runs it first, which prunes the shared `Scan`. The join's
+    // scan is a copy made after planning, when the scalar subquery is replaced by a reused one. Had
+    // it planned its partitions again, it would report fewer of them than `items`, and the join
+    // would fail with "Can't zip RDDs". The V2 filter catalog's scans prune on this predicate.
+    val catalogName = "v2_filter_cat"
+    withSQLConf(
+        s"spark.sql.catalog.$catalogName" -> classOf[InMemoryTableWithV2FilterCatalog].getName) {
+      val v2FilterCatalog = spark.sessionState.catalogManager.catalog(catalogName)
+        .asInstanceOf[InMemoryTableCatalog]
+      val ns = s"$catalogName.ns"
+      withDppSubqueryConfs(v2FilterCatalog) {
+        sql(s"CREATE TABLE $ns.$items (id BIGINT, name STRING, price FLOAT, " +
+          "arrive_time TIMESTAMP) PARTITIONED BY (id)")
+        sql(s"CREATE TABLE $ns.$purchases (item_id BIGINT, price FLOAT, time TIMESTAMP) " +
+          "PARTITIONED BY (item_id)")
+        insertDppSubqueryRows(ns, rowsPerKey = 1)
+        checkStoragePartitionedJoin(
+          s"SELECT i.id, p.price FROM $ns.$items i JOIN $ns.$purchases p " +
+            s"ON i.id = p.item_id WHERE i.id = " +
+            s"(SELECT max(item_id) FROM $ns.$purchases WHERE price > 4.0)",
+          Seq(Row(7L, 7.0f)))
+      }
+    }
+  }
+
+  test("SPARK-60752: a nested DPP filter on a DPP subquery's build side does not change the " +
+    "layout of the scan it shares with the join") {
+    // As above, with a DPP filter from a broadcast dimension as the build side's own runtime
+    // filter, which the in-memory scans prune on. Two rows per key give `purchases` two splits per
+    // key, so a GroupPartitionsExec groups that side. With `flag = 2` the build side's filter
+    // prunes every split.
+    withDppSubqueryConfs(catalog) {
+      createTable(items, itemsColumns, Array(identity("id")))
+      createTable(purchases, purchasesColumns, Array(identity("item_id")))
+      insertDppSubqueryRows("testcat.ns", rowsPerKey = 2)
+      createTable("dim", Array(Column.create("k", LongType), Column.create("flag", IntegerType)),
+        Array.empty)
+      sql("INSERT INTO testcat.ns.dim VALUES " +
+        (1 to 7).map(i => s"($i, ${if (i >= 5) 1 else 0})").mkString(", "))
+      Seq(1 -> (5 to 7), 2 -> Nil).foreach { case (flag, ids) =>
+        checkStoragePartitionedJoin(
+          s"SELECT i.id, p.price FROM testcat.ns.$items i JOIN " +
+            s"(SELECT /*+ BROADCAST(d) */ p.item_id, p.price FROM testcat.ns.$purchases p " +
+            s"JOIN testcat.ns.dim d ON p.item_id = d.k WHERE d.flag = $flag) p " +
+            "ON i.id = p.item_id",
+          ids.flatMap(i => Seq.fill(2)(Row(i.toLong, i.toFloat))))
+      }
+    }
+  }
+
+  test("SPARK-60752: a DPP subquery's build side does not change the layout of a shared scan " +
+    "that declares its columnar support mode, with AQE on") {
+    // A scan that declares its mode plans nothing when `supportsColumnar` asks, so with AQE on the
+    // copies of the join's scan plan after the build side's filter too. This is the nested shape
+    // above, over such a scan, with a dimension match, since an empty broadcast lets AQE drop the
+    // join.
+    val catalogName = "unsupported_columnar_cat"
+    withSQLConf(
+        s"spark.sql.catalog.$catalogName" -> classOf[UnsupportedColumnarModeCatalog].getName) {
+      val modeCatalog = spark.sessionState.catalogManager.catalog(catalogName)
+        .asInstanceOf[UnsupportedColumnarModeCatalog]
+      val ns = s"$catalogName.ns"
+      withDppSubqueryConfs(modeCatalog) {
+        createTable(items, itemsColumns, Array(identity("id")), catalog = modeCatalog)
+        createTable(purchases, purchasesColumns, Array(identity("item_id")),
+          catalog = modeCatalog)
+        insertDppSubqueryRows(ns, rowsPerKey = 2)
+        createTable("dim", Array(Column.create("k", LongType), Column.create("flag", IntegerType)),
+          Array.empty, catalog = modeCatalog)
+        sql(s"INSERT INTO $ns.dim VALUES " +
+          (1 to 7).map(i => s"($i, ${if (i >= 5) 1 else 0})").mkString(", "))
+        checkStoragePartitionedJoin(
+          s"SELECT i.id, p.price FROM $ns.$items i JOIN " +
+            s"(SELECT /*+ BROADCAST(d) */ p.item_id, p.price FROM $ns.$purchases p " +
+            s"JOIN $ns.dim d ON p.item_id = d.k WHERE d.flag = 1) p ON i.id = p.item_id",
+          (5 to 7).flatMap(i => Seq.fill(2)(Row(i.toLong, i.toFloat))),
+          aqe = Seq(true, false))
+      }
     }
   }
 
@@ -7070,5 +7200,51 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
         }
       }
     }
+  }
+}
+
+/**
+ * An in-memory catalog whose scans declare `UNSUPPORTED` as their columnar support mode, so
+ * `supportsColumnar` answers without planning the scan's partitions.
+ */
+class UnsupportedColumnarModeCatalog extends InMemoryTableCatalog {
+  import CatalogV2Implicits._
+
+  // scalastyle:off argcount
+  override def createTable(
+      ident: Identifier,
+      columns: Array[Column],
+      partitions: Array[Transform],
+      properties: java.util.Map[String, String],
+      distribution: Distribution,
+      ordering: Array[SortOrder],
+      requiredNumPartitions: Option[Int],
+      advisoryPartitionSize: Option[Long],
+      constraints: Array[Constraint],
+      distributionStrictlyRequired: Boolean,
+      numRowsPerSplit: Int): Table = {
+    // scalastyle:on argcount
+    val table = new InMemoryTable(s"$name.${ident.quoted}", columns, partitions, properties,
+        constraints, distribution, ordering, requiredNumPartitions, advisoryPartitionSize,
+        distributionStrictlyRequired, numRowsPerSplit) {
+      override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
+        new InMemoryScanBuilder(schema(), options) {
+          // This branch's `InMemoryScanBuilder` has no hook for the scan it builds, so the built
+          // scan is copied into one that declares `UNSUPPORTED`.
+          override def build: Scan = {
+            val built = super.build.asInstanceOf[InMemoryBatchScan]
+            val scan = new InMemoryBatchScan(
+                built.data, built.readSchema, built.tableSchema, built.options) {
+              override def columnarSupportMode(): Scan.ColumnarSupportMode =
+                Scan.ColumnarSupportMode.UNSUPPORTED
+            }
+            scan.pushedFilters = built.pushedFilters
+            scan
+          }
+        }
+    }
+    tables.put(ident, table)
+    namespaces.putIfAbsent(ident.namespace.toList, Map())
+    table
   }
 }
