@@ -52,6 +52,7 @@ import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, MicroBatchScanExec, V2TableWriteExec}
 import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchScan, ColumnarBatchWrite, ColumnarMicroBatchStream, ColumnarScan, ColumnarScanBuilder, ColumnarStreamingWrite, ColumnarStreamOffset}
 import org.apache.spark.sql.execution.datasources.v2.python.{PythonDataSourceV2, UserDefinedPythonDataSource}
+import org.apache.spark.sql.execution.python.ArrowEvalPythonExec
 import org.apache.spark.sql.execution.streaming.runtime.StreamingQueryWrapper
 import org.apache.spark.sql.execution.vectorized.ReusedArrowColumnVector
 import org.apache.spark.sql.functions.lit
@@ -119,23 +120,32 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
 
   // The test libraries record the calls that the order of the calls of the header rules out,
   // which fail the test that made them.
+  // Each test also checks that the buffers of its readers are freed, see checkReadersFreed.
   private def nativeTest(name: String)(f: => Unit): Unit = test(name) {
     assume(toolchain.isDefined, "A C++ compiler and Java 22 or later are required.")
-    try checkingOrderOfCalls(f) finally SparkSession.setActiveSession(spark)
+    try {
+      checkingOrderOfCalls(f)
+      checkReadersFreed()
+    } finally {
+      SparkSession.setActiveSession(spark)
+    }
   }
 
-  override def afterAll(): Unit = {
-    try {
-      // A reader closed while the batch that it returned may still be read, as when a query stops
-      // before the end of a partition, frees the buffers of the batch once it is unreachable. They
-      // are freed before the suites that run next in this JVM, which may count the memory of Arrow.
+  /**
+   * Checks that the buffers of the readers of native data sources are freed. A reader closed while
+   * the batch that it returned may still be read, as when a query stops before the end of a
+   * partition, frees the buffers of the batch once it is unreachable. Each test checks that they
+   * are freed after it, so that a test that leaks a reader fails, and the readers of a test are
+   * freed before the next test, see readerAndAllocator, and before the suites that run next in
+   * this JVM, which may count the memory of Arrow.
+   */
+  private def checkReadersFreed(): Unit = {
+    if (readerAllocators().nonEmpty) {
       eventually(timeout(1.minute), interval(100.milliseconds)) {
         System.gc()
         val readers = readerAllocators()
         assert(readers.isEmpty, readers.map(a => s"${a.getName}: ${a.getAllocatedMemory} bytes"))
       }
-    } finally {
-      super.afterAll()
     }
   }
 
@@ -191,9 +201,14 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     Timestamp.from(Instant.ofEpochSecond(id)))
 
   /** Checks the failure of a next called once the reader of native_range was closed. */
-  private def checkClosed(e: Throwable): Unit = {
-    assert(e.isInstanceOf[IllegalStateException] &&
-      e.getMessage == "The partition reader of the native data source native_range is closed.", e)
+  private def checkClosed(e: Throwable): Unit = e match {
+    case e: SparkException =>
+      checkError(
+        exception = e,
+        condition = "INTERNAL_ERROR",
+        parameters = Map(
+          "message" -> "The partition reader of the native data source native_range is closed."))
+    case _ => fail(s"Unexpected failure: $e", e)
   }
 
   /** Finds the error with the given condition among the causes of a failure. */
@@ -655,16 +670,26 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       name = "native_str", returnType = Some(StringType))
     IntegratedUDFTestUtils.registerTestUDF(udf, session)
     // One batch, two, and many. The test UDF casts its input to string: on the string column
-    // name, the cast is removed, so the batches go to Python as they are.
-    Seq(100, 200, 200000).foreach { end =>
-      val rows = range(session, "end" -> end.toString, "partitions" -> "1", "batch_size" -> "100")
-        .selectExpr("id", "name", "native_str(name) AS udf_name").collect()
-      assert(rows.map(_.getLong(0)).toSeq == (0L until end))
-      rows.foreach { row =>
-        val id = row.getLong(0)
-        val name = if (id % 5 == 0) null else s"n$id"
-        assert(row.getString(1) == name, s"name mismatch for id $id")
-        assert(row.getString(2) == name, s"UDF mismatch for id $id")
+    // name, the cast is removed, so the batches go to Python as they are. With columnar input,
+    // the UDF reads the batches of the reader, whose column vectors are ReusedArrowColumnVectors,
+    // so it copies their pass-through columns rather than keep them past the next batch.
+    Seq(false, true).foreach { columnarInput =>
+      session.conf.set(
+        SQLConf.ARROW_PYSPARK_UDF_COLUMNAR_INPUT_ENABLED.key, columnarInput.toString)
+      Seq(100, 200, 200000).foreach { end =>
+        val df = range(session, "end" -> end.toString, "partitions" -> "1", "batch_size" -> "100")
+          .selectExpr("id", "name", "native_str(name) AS udf_name")
+        val plan = df.queryExecution.executedPlan
+        assert(plan.collectFirst { case e: ArrowEvalPythonExec => e.supportsColumnar }
+          .contains(columnarInput), plan)
+        val rows = df.collect()
+        assert(rows.map(_.getLong(0)).toSeq == (0L until end))
+        rows.foreach { row =>
+          val id = row.getLong(0)
+          val name = if (id % 5 == 0) null else s"n$id"
+          assert(row.getString(1) == name, s"name mismatch for id $id")
+          assert(row.getString(2) == name, s"UDF mismatch for id $id")
+        }
       }
     }
   }
@@ -2472,7 +2497,9 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     val session = newSession(defaultPackage)
     val pool = ThreadUtils.newDaemonSingleThreadExecutor("native-reader")
     // Closes a reader while another thread is in get_next. The reader releases the stream once
-    // get_next returns, also when it fails, and then next returns false or throws.
+    // get_next returns, also when it fails, and then next throws: the error of its read, or the
+    // failure of a next once the reader is closed, so that the thread does not take the close for
+    // the end of the data.
     def closeWhileReading(failing: Boolean): Either[Throwable, Boolean] = {
       val marker = new File(Utils.createTempDir(), "released")
       val options = Seq("end" -> "10", "partitions" -> "1", "slow_read" -> marker.getPath) ++
@@ -2498,7 +2525,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         // it freed is interrupted, and a read outside of a task never is.
         assert(Files.readString(new File(marker.getPath + ".interrupted").toPath) == "false")
         // A reader that was closed reads nothing more, and closing it again does not fail.
-        checkClosed(intercept[IllegalStateException](reader.next()))
+        checkClosed(intercept[SparkException](reader.next()))
         reader.close()
         result
       } finally {
@@ -2508,7 +2535,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       }
     }
     try {
-      assert(closeWhileReading(failing = false) == Right(false))
+      checkClosed(closeWhileReading(failing = false).swap.getOrElse(fail("next did not fail")))
       val error = closeWhileReading(failing = true).swap.getOrElse(fail("next did not fail"))
       assert(error.getMessage.contains("injected failure after a slow get_next"))
     } finally {
@@ -2526,8 +2553,9 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     // exactly those of this test.
     eventually(timeout(1.minute))(assert(NativeLibrary.openTaskContexts() == 0))
     // Closes a reader on this thread once the other thread read a batch, and returns the allocator
-    // of the reader, which is no longer referenced then.
-    def closeWhileRead(): BufferAllocator = {
+    // of the reader, which is no longer referenced then. With `nextAgain`, the other thread then
+    // calls next, which tells that it no longer reads the batch.
+    def closeWhileRead(nextAgain: Boolean): BufferAllocator = {
       val marker = new File(Utils.createTempDir(), "released")
       // get_next does not wait: the file .continue exists.
       new File(marker.getPath + ".continue").createNewFile()
@@ -2545,23 +2573,30 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         assert(readerAllocators().contains(allocator) && allocator.getAllocatedMemory > 0)
         val rows = onPool((0 until reader.get().numRows()).map(reader.get().column(0).getLong))
         assert(rows === (0L until 10L))
-        // A next then fails on either thread, and closing the reader again does nothing.
-        checkClosed(intercept[ExecutionException](onPool(reader.next())).getCause)
-        checkClosed(intercept[IllegalStateException](reader.next()))
+        // Closing the reader again does nothing.
         reader.close()
         assert(readerAllocators().contains(allocator))
+        if (nextAgain) {
+          // A next then fails, and frees the buffers of the batch and the allocator at once: the
+          // test still references the reader, which a Cleaner would wait for.
+          checkClosed(intercept[ExecutionException](onPool(reader.next())).getCause)
+          assert(!readerAllocators().contains(allocator))
+          // So does a next on any thread after that.
+          checkClosed(intercept[SparkException](reader.next()))
+        }
       } finally {
         reader.close()
       }
       allocator
     }
     try {
-      val allocator = closeWhileRead()
+      val allocator = closeWhileRead(nextAgain = false)
       // A Cleaner frees them once the reader and the column vectors of its batch are unreachable.
       eventually(timeout(1.minute), interval(100.milliseconds)) {
         System.gc()
         assert(!readerAllocators().contains(allocator))
       }
+      closeWhileRead(nextAgain = true)
     } finally {
       pool.shutdown()
     }

@@ -639,10 +639,10 @@ object NativeWriterCommitMessage {
  * `PipedRDD`, while `DataSourceRDD` closes the reader once the task completes. The library must
  * not get the release of the stream during get_next, and the task context must stay valid until
  * then, so [[close]] then leaves the release to [[next]], once get_next returns, rather than wait
- * for it and keep the task from completing. That [[next]] then returns false, or throws the error
- * of its read. A [[next]] called once the reader is closed fails without reading from the
- * library, so that such a thread does not take the close for the end of the data: script
- * transformation, for example, then destroys its process.
+ * for it and keep the task from completing. That [[next]] then throws the error of its read, or
+ * fails as a [[next]] called once the reader is closed does, without reading from the library: so
+ * such a thread does not take the close for the end of the data, whether or not it was in
+ * get_next then. Script transformation, for example, then destroys its process.
  *
  * Such a thread may also still read the batch that [[next]] returned last when another thread
  * closes the reader: script transformation gets its first batch on the task thread, and reads its
@@ -652,9 +652,11 @@ object NativeWriterCommitMessage {
  * batch. Otherwise, it releases the stream, the dictionaries and the task at once, since the
  * arrays of a stream may outlive it, and their release does not use the task (see
  * `SparkDsTaskContext` in the header). A Cleaner then frees the buffers of the batch and the
- * allocator once the reader is unreachable, which each of its column vectors keeps it from being.
- * So a reader closed before the end of its stream, as with a LIMIT, holds the buffers of one batch
- * until a garbage collection, which these buffers do not trigger: the JVM does not count them.
+ * allocator once the reader is unreachable, which each of its column vectors keeps it from being,
+ * or once a thread calls [[next]] again, which then fails: that thread no longer reads the batch.
+ * So a reader closed before the end of its stream, as with a LIMIT, and not called again holds the
+ * buffers of one batch until a garbage collection, which these buffers do not trigger: the JVM
+ * does not count them.
  *
  * @param kind the kind of the scan, `NativeLibrary.READ_BATCH` or `READ_MICRO_BATCH`
  * @param partition the partition, whose index in the scan the library gets as `partition_id`
@@ -696,6 +698,10 @@ class NativePartitionReader(
   // read the batch.
   @GuardedBy("this")
   private var batchReturned = false
+  // Frees the buffers of the batch that a consumer may still read once the reader is closed: the
+  // Cleaner does when the reader is unreachable, and next does when it is called again.
+  @GuardedBy("this")
+  private var batchCleanable: Cleaner.Cleanable = _
 
   // Synchronized so that a close on another thread sees the task and the vectors.
   synchronized {
@@ -878,24 +884,33 @@ class NativePartitionReader(
     startReading()
     val hasBatch = Utils.tryWithSafeFinally(readNext())(stopReading())
     synchronized {
-      // A reader that was closed while it read has released the batch that it read.
-      batchReturned = hasBatch && !closed
+      // A reader that was closed while it read has released the batch that it read, and fails as
+      // it does for a next called once it is closed (see the class doc).
+      if (closed) {
+        throw closedError()
+      }
+      batchReturned = hasBatch
       batchReturned
     }
   }
 
   /**
-   * Fails once the reader is closed. Otherwise, the caller no longer reads the batch that next
-   * returned last, if any.
+   * Fails once the reader is closed. In either case, the caller no longer reads the batch that
+   * next returned last, if any, so a closed reader frees its buffers at once.
    */
   private def startReading(): Unit = synchronized {
     if (closed) {
-      throw new IllegalStateException(
-        s"The partition reader of the native data source $name is closed.")
+      if (batchCleanable != null) {
+        batchCleanable.clean()
+      }
+      throw closedError()
     }
     reading = true
     batchReturned = false
   }
+
+  private def closedError(): Throwable = SparkException.internalError(
+    s"The partition reader of the native data source $name is closed.")
 
   private def stopReading(): Unit = synchronized {
     reading = false
@@ -1089,8 +1104,8 @@ class NativePartitionReader(
 
   /**
    * Releases the stream, the dictionaries and the task, and frees the buffers of the batch and then
-   * the allocator: at once with `freeBatch`, and otherwise once the reader is unreachable, as a
-   * consumer may still read the batch (see the class doc).
+   * the allocator: at once with `freeBatch`, and otherwise once the reader is unreachable or next
+   * is called again, as a consumer may still read the batch (see the class doc).
    */
   private def closeResources(freeBatch: Boolean): Unit = {
     Utils.tryWithSafeFinally {
@@ -1114,7 +1129,7 @@ class NativePartitionReader(
       } else {
         // The action must not refer to the reader, which would then never become unreachable.
         val (batchRoot, batchAllocator) = (root, allocator)
-        NativePartitionReader.cleaner.register(this, () =>
+        batchCleanable = NativeHandle.cleaner.register(this, () =>
           Utils.tryLogNonFatalError(
             Utils.tryWithSafeFinally(batchRoot.close())(batchAllocator.close())))
       }
@@ -1124,9 +1139,6 @@ class NativePartitionReader(
 
 object NativePartitionReader {
   import NativeCalls._
-
-  // Frees the buffers of the batches that may still be read when their readers are closed.
-  private val cleaner = Cleaner.create()
 
   /**
    * Initializes the stream at `streamAddress` with the data of a partition for an engine, see
@@ -1441,7 +1453,9 @@ final class NativeHandle(handle: Long, release: Long => Unit) {
 }
 
 object NativeHandle extends Logging {
-  private val cleaner = Cleaner.create()
+  // Also frees the buffers of the batches that may still be read when their readers are closed,
+  // see `NativePartitionReader`.
+  private[ffi] val cleaner = Cleaner.create()
 
   // Must not refer to the handle, which would then never become unreachable.
   private class State(value: Long, release: Long => Unit) extends Runnable {

@@ -62,6 +62,12 @@ import org.apache.spark.unsafe.types.UTF8String;
  * column takes the null_count that the library exported, and only counts the nulls when the
  * library did not.
  *
+ * <p>The vector keeps the addresses of the buffers from one import to the next, whereas
+ * {@link ArrowColumnVector} reads the buffers of its Arrow vector on each access. So nothing may
+ * reallocate the buffers of the Arrow vectors of the reader between two imports, e.g. by growing
+ * them: a consumer that writes them through {@link #getValueVector()}, as by setting their value
+ * count, must keep it at the length of the batch.
+ *
  * <p>The vector returns the decimals that fit their precision in a long, of a scale from 0 to
  * their precision, as the unscaled longs that Spark's own column vectors hold, which Spark adds as
  * longs, rather than as BigDecimals. The other decimals, large strings, binary values, structs,
