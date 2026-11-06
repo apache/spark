@@ -301,7 +301,18 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
   }
 
   test("SPARK-60379: push down shuffle through union") {
-    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key -> "true",
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_LOOK_THROUGH_OPERATORS_ENABLED.key -> "false",
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_NON_COALESCIBLE_BRANCHES_ENABLED
+          .key -> "false",
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_WITH_SUBQUERIES_ENABLED.key -> "false",
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_JOIN_INPUTS_ENABLED.key -> "false",
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_JOIN_BRANCHES_ENABLED.key -> "false",
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_PARTITION_KEYS_SUBSET_OF_CLUSTER_KEYS_ENABLED
+          .key -> "false",
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "true") {
       withTempView("t1", "t2") {
         createTables()
         val df = spark.sql(query)
@@ -421,7 +432,7 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
           }
           if (adaptive) {
             // The 8-partition target passes the floor of 5, but not the elided root repartition's
-            // explicit count of 5. Only the root check rejects this rewrite.
+            // count of 5. Both the root requirement and recorded origin reject this rewrite.
             assert(numShufflesOnUnion(plan) === 1,
               s"the root repartition's layout must be kept:\n$plan")
           }
@@ -1272,6 +1283,25 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
     }
   }
 
+  test("SPARK-60379: root distribution requires every key without an origin record") {
+    withPushDown {
+      val a = attr("a")
+      val b = attr("b")
+      val kept = TestPartitioningPlan(outputPartitioning = hash(a, 2), output = Seq(a, b))
+      val other = TestPartitioningPlan(output = Seq(attr("a"), attr("b")))
+      val union = UnionExec(Seq(kept, other))
+      val relaxed = ClusteredDistribution(Seq(a, b), requireAllClusterKeys = false)
+      val root = PassThroughPlan(ensureShuffle(HashPartitioning(Seq(a, b), 2), union), relaxed)
+      val local = pushDown(root)
+      assert(numShufflesOnUnion(local) === 0)
+      assert(local.outputPartitioning === hash(a, 2))
+      assert(local.outputPartitioning.satisfies(relaxed))
+      assert(org.apache.spark.sql.execution.exchange.PartitioningOrigin.validateNode(local))
+      assert(pushDown(root, Some(relaxed)).fastEquals(root),
+        "the root must retain all requested keys even when the local consumer permits a subset")
+    }
+  }
+
   test("SPARK-60379: do not push down through a union stamped as a plain concatenation") {
     withPushDown {
       val a = attr("id")
@@ -2062,6 +2092,15 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
         fixedCount, original, origin)
       assert(validateOrigin(fixedCount))
       val b = attr("other")
+      Seq(
+        (Seq(hash(b, 4), original), true),
+        (Seq(hash(b, 4), HashPartitioning(Seq(a, b), 4)), false),
+        (Seq(hash(a, 8), hash(b, 8)), false)).foreach { case (members, valid) =>
+        val collection = leaf(a, PartitioningCollection(members))
+        org.apache.spark.sql.execution.exchange.PartitioningOrigin.record(
+          collection, original, origin)
+        assert(validateOrigin(collection) === valid)
+      }
       val twoKeys = HashPartitioning(Seq(a, b), 4)
       Seq(HashPartitioning(Seq(b, a), 8), hash(a, 8)).foreach { from =>
         val invalid = leaf(a, coalesced.copy(from = from))

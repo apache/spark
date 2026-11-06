@@ -2894,8 +2894,8 @@ object SQLConf {
   val CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING =
     buildConf("spark.sql.optimizer.canChangeCachedPlanOutputPartitioning")
       .internal()
-      .doc("Whether to forcibly enable some optimization rules that can change the output " +
-        "partitioning of a cached query when executing it for caching. If it is set to true, " +
+      .doc("Whether to allow optimization rules to change the output partitioning of a cached " +
+        "query when executing it for caching. If it is set to true, " +
         "queries may need an extra shuffle to read the cached data. This configuration is " +
         "disabled by default. When false, " +
         s"${ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS.key} and " +
@@ -8863,9 +8863,10 @@ object SQLConf {
       .internal()
       .doc("When set to true, during AQE query stage preparation a ShuffleExchangeExec with " +
         "hash partitioning added by EnsureRequirements on top of a UnionExec is pushed down " +
-        "below the union, shuffling only the children that do not already report the picked " +
-        "layout. The target count must be at least the smaller of the replaced exchange's " +
-        "count and the effective initial shuffle partition count, including " +
+        "below the union. Eligible children already reporting the picked layout are retained; " +
+        "other children are retargeted or receive a new exchange. The target count must be at " +
+        "least the smaller of the replaced exchange's count and the effective initial shuffle " +
+        "partition count, including " +
         "spark.sql.adaptive.coalescePartitions.initialPartitionNum when set. " +
         "Removing the union's direct shuffle stage " +
         "can reduce AQE skew handling and join conversion opportunities. Keeping a shuffled " +
@@ -8891,7 +8892,8 @@ object SQLConf {
         "a partial window group limit reduce the data on their way, so the child is then " +
         "shuffled before the reduction, which can send substantially more data than the single " +
         "shuffle it replaces. The reducing operator remains above the union; target ranking " +
-        "does not estimate the reduction lost by moved branches. Requires " +
+        "does not estimate the reduction lost by moved branches, so that cost can outweigh " +
+        "the shuffle saving on retained branches. Requires " +
         s"${PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key} to be enabled.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
@@ -8958,8 +8960,10 @@ object SQLConf {
       .internal()
       .doc("When true, allows shuffle push-down in queries containing scalar, IN or dynamic " +
         "pruning subqueries. Independent adaptive plans can make different rewrite decisions, " +
-        "reducing exchange reuse or disabling broadcast-only dynamic partition pruning. " +
-        "When false, push-down is disabled for the main query and all its subqueries.")
+        "reducing exchange reuse or disabling broadcast-only dynamic partition pruning. Failed " +
+        "broadcast reuse can remove the pruning filter and scan all fact partitions, which " +
+        "can outweigh the build-side shuffle saving. When false, push-down is disabled for " +
+        "the main query and all its subqueries.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
