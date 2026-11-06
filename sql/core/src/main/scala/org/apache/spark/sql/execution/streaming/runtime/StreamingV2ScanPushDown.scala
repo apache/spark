@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, RUNTIME_RE
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.connector.catalog.{SupportsRead, TableCapability}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -82,6 +82,19 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
       scanOutput: Option[Seq[AttributeReference]])
 
   /**
+   * Returns the name of a streaming source in the errors of its scan: the parts of its identifier,
+   * with its catalog, or the name of its table.
+   */
+  def sourceName(
+      table: Table,
+      catalog: Option[CatalogPlugin],
+      identifier: Option[Identifier]): Seq[String] = (catalog, identifier) match {
+    case (Some(catalog), Some(identifier)) =>
+      (catalog.name +: identifier.namespace.toSeq) :+ identifier.name
+    case _ => Seq(table.name())
+  }
+
+  /**
    * Returns the columns that each streaming relation of Data Source V2 needs to read, from `plan`
    * optimized as the micro-batches are (see `forStartup`). A relation without an entry reads all
    * its columns, as all do if the optimization fails.
@@ -94,7 +107,7 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
       plan: LogicalPlan,
       offsetLogMetadata: Option[OffsetSeqMetadataBase]): Map[StreamingRelationV2, AttributeSet] = {
     val conf = session.sessionState.conf.clone()
-    offsetLogMetadata.foreach(OffsetSeqMetadata.setSessionConf(_, conf, logChanges = false))
+    offsetLogMetadata.foreach(OffsetSeqMetadata.setConfWithoutLogging(_, conf))
     conf.setConf(SQLConf.CBO_ENABLED, false)
     session.withActive {
       SQLConf.withExistingConf(conf) {
@@ -288,13 +301,15 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
    * @param conf the configuration of the query
    * @param requiredColumns the columns that the query reads from the relation, or None to read
    *                        all its columns
+   * @param source the name of the source in the errors of its scan, see `sourceName`
    */
   def buildScan(
       table: SupportsRead,
       options: CaseInsensitiveStringMap,
       output: Seq[AttributeReference],
       conf: SQLConf,
-      requiredColumns: => Option[AttributeSet])(
+      requiredColumns: => Option[AttributeSet],
+      source: Seq[String])(
       createStream: Scan => SparkDataStream): StreamingScan = {
     val returnsReadSchema = table.capabilities().contains(TableCapability.STREAMING_COLUMN_PRUNING)
     val builder = table.newScanBuilder(options)
@@ -324,8 +339,7 @@ private[sql] object StreamingV2ScanPushDown extends Logging {
         // node outputs them instead, as it did before the capability.
         def invalid(reason: String, cause: Throwable): (Scan, Seq[AttributeReference]) = {
           if (conf.streamingV2ColumnPruningEnabled) {
-            throw QueryExecutionErrors.streamingScanInvalidReadSchemaError(
-              table.name(), reason, cause)
+            throw QueryExecutionErrors.streamingScanInvalidReadSchemaError(source, reason, cause)
           }
           logWarning(log"The read schema of the scan of all the columns of the streaming table " +
             log"${MDC(LogKeys.STREAMING_TABLE, table)} ${MDC(LogKeys.REASON, reason)}. Its scan " +

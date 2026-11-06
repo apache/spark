@@ -6260,14 +6260,15 @@ object SQLConf {
       .doc("When true, the scan of a Data Source V2 streaming source whose table has the " +
         "capability STREAMING_COLUMN_PRUNING only reads the top-level columns that the streaming " +
         "query reads from it, which Spark takes from the plan of the query optimized when the " +
-        "query starts, as it does for batch scans. A query that reads other columns of the " +
+        "query starts, as it does for batch scans: Spark optimizes the query once more when it " +
+        "starts, as it optimizes each micro-batch. A query that reads other columns of the " +
         "source later, for example, after the configuration of the optimizer changes in its " +
         "session, fails with STREAMING_SCAN_MISSING_COLUMNS. When false, the scan reads all the " +
         "columns of the source.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val DISABLE_MAP_KEY_NORMALIZATION =
     buildConf("spark.sql.legacy.disableMapKeyNormalization")

@@ -41,9 +41,10 @@ public interface SupportsPushDownRequiredColumns extends ScanBuilder {
    * pruning applied here.
    * <p>
    * The scans of streaming queries are pruned too, since 4.4.0, if the table returns
-   * {@link org.apache.spark.sql.connector.catalog.TableCapability#STREAMING_COLUMN_PRUNING}: the
-   * readers of the micro-batch and continuous streams of a scan then return the columns of its
-   * read schema, in its order, which Spark asks the scan for before it creates the stream.
+   * {@link org.apache.spark.sql.connector.catalog.TableCapability#STREAMING_COLUMN_PRUNING} and
+   * {@code spark.sql.streaming.v2ColumnPruning.enabled} is true: the readers of the micro-batch and
+   * continuous streams of a scan then return the columns of its read schema, in its order, which
+   * Spark asks the scan for before it creates the stream.
    */
   void pruneColumns(StructType requiredSchema);
 }

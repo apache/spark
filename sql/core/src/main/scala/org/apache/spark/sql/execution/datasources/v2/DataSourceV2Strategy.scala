@@ -48,6 +48,7 @@ import org.apache.spark.sql.execution.{FilterExec, InSubqueryExec, LeafExecNode,
 import org.apache.spark.sql.execution.command.{CommandUtils, MetricViewHelper}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelationWithTable, PushableColumnAndNestedColumn, StorageFilterPlanning}
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
+import org.apache.spark.sql.execution.streaming.runtime.StreamingV2ScanPushDown
 import org.apache.spark.sql.execution.streaming.runtime.StreamingV2ScanPushDown.ScanOfStream
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
@@ -1161,13 +1162,10 @@ private[sql] object DataSourceV2Strategy extends Logging {
     case Some(scanOutput) =>
       val missing = AttributeSet((project ++ filters).flatMap(_.references)) -- scanOutput
       if (missing.nonEmpty) {
-        val source = (relation.catalog, relation.identifier) match {
-          case (Some(catalog), Some(identifier)) =>
-            (catalog.name +: identifier.namespace.toSeq) :+ identifier.name
-          case _ => Seq(relation.name)
-        }
         throw QueryExecutionErrors.streamingScanMissingColumnsError(
-          source, relation.output.filter(missing.contains).map(_.name))
+          StreamingV2ScanPushDown.sourceName(
+            relation.relation.table, relation.catalog, relation.identifier),
+          relation.output.filter(missing.contains).map(_.name))
       }
       scanOutput
     case None =>

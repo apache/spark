@@ -942,24 +942,27 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession
   }
 
   test("streaming read of some of the columns") {
-    withTempView("pruned_stream") {
-      val query = spark.readStream.format(format).option("end", "5").load().select("name")
-        .writeStream
-        .format("memory")
-        .queryName("pruned_stream")
-        .start()
-      try {
-        query.processAllAvailable()
-        // The stream reader gets only the columns that the query reads, which its batches have,
-        // and so does the scan node of the stream.
-        val scans = query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution
-          .executedPlan.collect { case scan: MicroBatchScanExec => scan }
-        assert(scans.map(_.output.map(_.name)) == Seq(Seq("name")))
-        assert(scans.head.scan.readSchema() == StructType.fromDDL("name STRING"))
-      } finally {
-        query.stop()
+    // The pruning of the scans of streaming queries is disabled by default.
+    withSQLConf(SQLConf.STREAMING_V2_COLUMN_PRUNING_ENABLED.key -> "true") {
+      withTempView("pruned_stream") {
+        val query = spark.readStream.format(format).option("end", "5").load().select("name")
+          .writeStream
+          .format("memory")
+          .queryName("pruned_stream")
+          .start()
+        try {
+          query.processAllAvailable()
+          // The stream reader gets only the columns that the query reads, which its batches
+          // have, and so does the scan node of the stream.
+          val scans = query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution
+            .executedPlan.collect { case scan: MicroBatchScanExec => scan }
+          assert(scans.map(_.output.map(_.name)) == Seq(Seq("name")))
+          assert(scans.head.scan.readSchema() == StructType.fromDDL("name STRING"))
+        } finally {
+          query.stop()
+        }
+        checkAnswer(spark.table("pruned_stream"), (0L until 5L).map(id => Row(s"name$id")))
       }
-      checkAnswer(spark.table("pruned_stream"), (0L until 5L).map(id => Row(s"name$id")))
     }
   }
 

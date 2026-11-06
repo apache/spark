@@ -294,7 +294,8 @@ class MicroBatchExecution(
             // reads, so that connectors implementing SupportsMetadataColumns include them in
             // readSchema().
             val streamingScan = StreamingV2ScanPushDown.buildScan(
-              table, options, output, streamConf, requiredColumnsOfSources.get(s))(
+              table, options, output, streamConf, requiredColumnsOfSources.get(s),
+              StreamingV2ScanPushDown.sourceName(table, catalog, identifier))(
               _.toMicroBatchStream(metadataPath))
             val relation = StreamingDataSourceV2Relation(
                 table,

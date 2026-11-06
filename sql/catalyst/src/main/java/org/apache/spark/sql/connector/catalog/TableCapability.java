@@ -183,8 +183,10 @@ public enum TableCapability {
    * scan. By returning this capability, a table declares that the partition readers of such a
    * stream return the columns of {@link org.apache.spark.sql.connector.read.Scan#readSchema()},
    * in its order, as those of the batches of the scan do. Spark asks the scan for its read schema
-   * before it creates the stream, whether the scan reads all the columns or not. Without this
-   * capability, the scans of streaming reads read all the columns of the table, in its order.
+   * before it creates the stream, whether the scan reads all the columns or not. Spark only prunes
+   * the columns of these scans when {@code spark.sql.streaming.v2ColumnPruning.enabled} is true,
+   * which it is not by default. Without this capability, the scans of streaming reads read all the
+   * columns of the table, in its order.
    *
    * @since 4.4.0
    */

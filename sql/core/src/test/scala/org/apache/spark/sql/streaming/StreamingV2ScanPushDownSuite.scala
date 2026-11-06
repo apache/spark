@@ -26,7 +26,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.logging.log4j.Level
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeSet}
@@ -50,6 +50,10 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
   import testImplicits._
 
   private val tbl = "testcat.t"
+
+  // The pruning of the scans of streaming queries is disabled by default.
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.STREAMING_V2_COLUMN_PRUNING_ENABLED, true)
 
   before {
     spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
@@ -635,6 +639,42 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
+  // The values that the optimizer computes from the clock or from the session, which have the
+  // pattern CURRENT_LIKE, by which ComputeCurrentTime and ReplaceCurrentLike find them.
+  Seq(
+    "current_timezone() = 'UTC'",
+    "current_date() > DATE'2000-01-01'",
+    "curdate() > DATE'2000-01-01'",
+    "current_timestamp() > TIMESTAMP'2000-01-01 00:00:00'",
+    "now() > TIMESTAMP'2000-01-01 00:00:00'",
+    "localtimestamp() > TIMESTAMP_NTZ'2000-01-01 00:00:00'",
+    "current_time() >= TIME'00:00:00'",
+    "localtime() >= TIME'00:00:00'",
+    "current_database() = 'default'",
+    "current_schema() = 'default'",
+    "current_catalog() = 'spark_catalog'",
+    "length(current_path()) >= 0",
+    "length(current_user()) >= 0",
+    "length(user()) >= 0",
+    "length(session_user()) >= 0"
+  ).foreach { condition =>
+    test(s"read the columns of a condition on a value of the clock or the session: $condition") {
+      withSourceTable() {
+        // Each micro-batch gets its own value, which may differ from the value when the query
+        // starts, so the condition is not folded then, and the scan reads both columns.
+        val df = spark.readStream.table(tbl).select(expr(s"CASE WHEN $condition THEN data " +
+          "ELSE CAST(extra AS STRING) END AS v"))
+        assert(requiredColumns(df).values.map(_.map(_.name).toSet).toSeq ===
+          Seq(Set("data", "extra")))
+        val holds = sql(s"SELECT $condition").head().getBoolean(0)
+        testStream(df)(
+          ProcessAllAvailable(),
+          assertReadSchema("data", "extra"),
+          CheckAnswer((if (holds) Seq("a", "b") else Seq("10", "20")).map(Row(_)): _*))
+      }
+    }
+  }
+
   Seq(
     "CAST('today' AS DATE) < DATE'2100-01-01'",
     "CAST('12:00:00' AS TIMESTAMP) < TIMESTAMP'2100-01-01 00:00:00'",
@@ -927,7 +967,8 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
-  test("read all the columns when the pruning of streaming scans is disabled") {
+  test("read all the columns when the pruning of streaming scans is disabled, as by default") {
+    assert(!SQLConf.STREAMING_V2_COLUMN_PRUNING_ENABLED.defaultValue.get)
     withSQLConf(SQLConf.STREAMING_V2_COLUMN_PRUNING_ENABLED.key -> "false") {
       withSourceTable() {
         val df = spark.readStream.table(tbl).select("data")
