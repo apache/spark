@@ -189,8 +189,9 @@ the reason. When Spark declines the hint, it does not build a filter in the othe
     other side of the join. Use it when the hinted side matches only a small fraction of the other
     side but Spark does not choose a runtime filter on its own, e.g. because table statistics are
     missing or misleading. The hinted side must produce the same set of rows, with the same join key
-    values, whenever it is evaluated; its other columns may differ. `RUNTIME_FILTER` can be combined
-    with a join strategy hint.
+    values, whenever it is evaluated; its other columns may differ, and it cannot be a stream, though
+    the static side of a stream-static join can be hinted to prune the stream. `RUNTIME_FILTER` can
+    be combined with a join strategy hint.
 
     For a Bloom filter, the hint overrides
     `spark.sql.optimizer.runtime.bloomFilter.creationSideThreshold`,

@@ -19,8 +19,6 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import java.util.Locale
 
-import scala.util.{Left, Right}
-
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
 import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractSingleColumnNullAwareAntiJoin}
@@ -77,13 +75,10 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       materializedSizeInBytes: Option[BigInt] = None,
       hinted: Boolean = false)
 
-  /**
-   * Returns the application side with a runtime filter on its key, or the reason none was built.
-   */
   private def injectFilter(
       filterApplicationSideKey: Expression,
       filterApplicationSidePlan: LogicalPlan,
-      filterCreationSide: FilterCreationSide): Either[String, LogicalPlan] = {
+      filterCreationSide: FilterCreationSide): LogicalPlan = {
     injectBloomFilter(
       filterApplicationSideKey,
       filterApplicationSidePlan,
@@ -94,22 +89,19 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   private def injectBloomFilter(
       filterApplicationSideKey: Expression,
       filterApplicationSidePlan: LogicalPlan,
-      filterCreationSide: FilterCreationSide): Either[String, LogicalPlan] = {
+      filterCreationSide: FilterCreationSide): LogicalPlan = {
     val filterCreationSideKey = filterCreationSide.key
     val filterCreationSidePlan = filterCreationSide.plan
-    val creationSideThresholdConf = if (filterCreationSide.useMaterializedThreshold) {
-      SQLConf.RUNTIME_BLOOM_FILTER_MATERIALIZED_CREATION_SIDE_THRESHOLD
+    val creationSideThreshold = if (filterCreationSide.useMaterializedThreshold) {
+      conf.runtimeFilterMaterializedCreationSideThreshold
     } else {
-      SQLConf.RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD
+      conf.runtimeFilterCreationSideThreshold
     }
-    val creationSideThreshold = conf.getConf(creationSideThresholdConf)
-    val creationSideSize = filterCreationSide.materializedSizeInBytes
-      .getOrElse(filterCreationSidePlan.stats.sizeInBytes)
     // Skip if the filter creation side is too big. This estimates whether the filter is worth its
     // cost, which a hint asserts, so a hinted creation side is not subject to it.
-    if (!filterCreationSide.hinted && creationSideSize > creationSideThreshold) {
-      return Left(s"the creation side ($creationSideSize bytes) exceeds " +
-        s"${creationSideThresholdConf.key} ($creationSideThreshold bytes)")
+    if (!filterCreationSide.hinted && filterCreationSide.materializedSizeInBytes
+        .getOrElse(filterCreationSidePlan.stats.sizeInBytes) > creationSideThreshold) {
+      return filterApplicationSidePlan
     }
     val rowCount = filterCreationSide.materializedRowCount
       .orElse(filterCreationSidePlan.stats.rowCount)
@@ -129,18 +121,18 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     // Runtime filters are introduced after subquery optimization, so the functions in a new
     // creation-side subquery that need an operator of their own cannot be extracted into one.
     if (containsExtractedFunction(aggregate)) {
-      return Left("the creation side contains a Python UDF, Python UDTF or external UDF")
+      return filterApplicationSidePlan
     }
     // The subquery evaluates the creation side again, apart from the join. A non-deterministic
     // filter or key can give it different keys than the join sees. This check does not see into
     // a leaf that returns other rows when read again, like a cache whose plan is not repeatable.
     if (!aggregate.deterministic) {
-      return Left("the creation side is not deterministic")
+      return filterApplicationSidePlan
     }
     val bloomFilterSubquery = ScalarSubquery(aggregate, Nil)
     val filter = BloomFilterMightContain(bloomFilterSubquery,
       new XxHash64(Seq(filterApplicationSideKey)))
-    Right(Filter(filter, filterApplicationSidePlan))
+    Filter(filter, filterApplicationSidePlan)
   }
 
   // Prunes the columns of the new subquery to a fixed point. A hinted creation side can have any
@@ -375,17 +367,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       filterApplicationSide: LogicalPlan,
       filterCreationSide: LogicalPlan,
       filterApplicationSideKey: Expression,
-      filterCreationSideKey: Expression,
-      hinted: Boolean): Either[String, FilterCreationSide] = {
-    if (hinted) {
-      runtimeFilterHintRejection(
-        filterApplicationSideKey, filterCreationSide, filterCreationSideKey).toLeft(
-        FilterCreationSide(
-          filterCreationSideKey,
-          filterCreationSide,
-          useMaterializedThreshold = false,
-          hinted = true))
-    } else if (findExpressionAndTrackLineageDown(
+      filterCreationSideKey: Expression): Option[FilterCreationSide] = {
+    if (findExpressionAndTrackLineageDown(
       filterApplicationSideKey, filterApplicationSide).isDefined &&
       satisfyByteSizeRequirement(filterApplicationSide)) {
       val allowMaterializedCache = UnsafeRowUtils.isBinaryStable(filterCreationSideKey.dataType) &&
@@ -423,7 +406,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
           currentDistinctCount
         }
       }
-      val extracted = if (allowMaterializedCache) {
+      if (allowMaterializedCache) {
         var sawMaterializedLeaf = false
         val selectiveCreationSide = extractSelectiveFilterOverScan(
           filterCreationSide,
@@ -451,9 +434,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
           allowMaterializedCache = false,
           applicationDistinctCount = None)
       }
-      extracted.toRight("no selective creation side")
     } else {
-      Left("the application side does not qualify")
+      None
     }
   }
 
@@ -667,8 +649,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
         }
         lazy val hasShuffle = isProbablyShuffleJoin(left, right, hint)
         // Tries to filter `applicationSide` with a filter built from `creationSide`. Returns the
-        // filtered side, recording the reason when this direction is the hinted one and no filter
-        // was added. Requirements:
+        // filtered side, or `currentApplicationSide` when no filter was added, recording the
+        // reason when this direction is the hinted one. Requirements:
         // 1. The join type supports pruning the application side
         // 2. The application side is not the hinted source, which is never itself filtered
         // 3. The join is a shuffle join, or a broadcast join with a shuffle below it -- an
@@ -685,52 +667,55 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             applicationHinted: Boolean,
             creationHinted: Boolean,
             sideName: String,
-            keyDpps: Seq[DynamicPruningSubquery]): Option[LogicalPlan] = {
-          def blocked(reason: => String): Option[LogicalPlan] = {
-            if (applicationHinted) hintBlocked(reason)
-            None
-          }
+            keyDpps: Seq[DynamicPruningSubquery]): LogicalPlan = {
           if (!canPrune) {
-            // `ExistenceJoin.sql` throws, as the type never appears in SQL.
-            val joinDescription = joinType match {
-              case _: ExistenceJoin => "an existence"
-              case _ => s"a ${joinType.sql.toLowerCase(Locale.ROOT)}"
+            if (applicationHinted) {
+              // `ExistenceJoin.sql` throws, as the type never appears in SQL.
+              val joinDescription = joinType match {
+                case _: ExistenceJoin => "an existence"
+                case _ => s"a ${joinType.sql.toLowerCase(Locale.ROOT)}"
+              }
+              hintBlocked(s"the $sideName side of $joinDescription join cannot be pruned")
             }
-            blocked(s"the $sideName side of $joinDescription join cannot be pruned")
-          } else if (creationHinted ||
-            !(applicationHinted || hasShuffle || probablyHasShuffle(applicationSide))) {
-            None
-          } else if (!applicationHinted &&
-            hasBloomFilter(currentApplicationSide, applicationSideKey)) {
-            // The heuristics add one filter per key; a hinted side adds its own even then.
-            None
+            currentApplicationSide
+          } else if (applicationHinted) {
+            // Unlike the heuristics below, a hinted side adds its own filter even on a key that
+            // already has one.
+            runtimeFilterHintRejection(applicationSideKey, creationSide, creationSideKey) match {
+              case Some(reason) =>
+                hintBlocked(reason)
+                currentApplicationSide
+              case None =>
+                injectFilter(applicationSideKey, currentApplicationSide, FilterCreationSide(
+                  creationSideKey, creationSide, useMaterializedThreshold = false, hinted = true))
+            }
+          } else if (creationHinted || !(hasShuffle || probablyHasShuffle(applicationSide)) ||
+              hasBloomFilter(currentApplicationSide, applicationSideKey)) {
+            currentApplicationSide
           } else {
-            // Without the hint, the creation side leaves out the key's own DPP filters, which
-            // physical planning drops. An expression such as a UDF or a `LIKE` in their build
-            // plan would also stop the search for the creation side, since `isSimpleExpression`
-            // sees the plan of a subquery too. If the key has DPP filters, they are all dropped, so
-            // step 3 above applies. The bloom filter evaluates its creation side again, apart from
-            // the join. Its subquery can also read more of that side than the join does, since
-            // filters on other keys, DPP filters or bloom filters, can narrow only the join's side.
-            // And the bloom filter hashes the bytes of the key, so its type must compare by its
-            // bytes, which a collated string does not.
-            val creationPlan = if (applicationHinted || keyDpps.isEmpty) {
+            // The creation side leaves out the key's own DPP filters, which physical planning
+            // drops. An expression such as a UDF or a `LIKE` in their build plan would also stop
+            // the search for the creation side, since `isSimpleExpression` sees the plan of a
+            // subquery too. If the key has DPP filters, they are all dropped, so step 3 above
+            // applies. The bloom filter evaluates its creation side again, apart from the join. Its
+            // subquery can also read more of that side than the join does, since filters on other
+            // keys, DPP filters or bloom filters, can narrow only the join's side. And the bloom
+            // filter hashes the bytes of the key, so its type must compare by its bytes, which a
+            // collated string does not.
+            val creationPlan = if (keyDpps.isEmpty) {
               creationSide
             } else {
               withoutDppFilters(creationSide, keyDpps.contains)
             }
-            extractBeneficialFilterCreatePlan(applicationSide, creationPlan,
-              applicationSideKey, creationSideKey, applicationHinted)
-              .filterOrElse(c => applicationHinted || keyDpps.isEmpty ||
+            extractBeneficialFilterCreatePlan(
+              applicationSide, creationPlan, applicationSideKey, creationSideKey)
+              .filter(c => keyDpps.isEmpty ||
                 (UnsafeRowUtils.isBinaryStable(applicationSideKey.dataType) &&
-                  canPushDown(applicationSideKey, applicationSide) && canEvaluateAgain(c)),
-                "the creation side cannot stand in for the dropped DPP filters")
+                  canPushDown(applicationSideKey, applicationSide) && canEvaluateAgain(c)))
               // Checked last, as computing the constraints may be costly.
-              .filterOrElse(
-                _ => applicationHinted || !isFixedByLiteral(applicationSide, applicationSideKey),
-                "the key is fixed by a literal")
-              .flatMap(injectFilter(applicationSideKey, currentApplicationSide, _))
-              .fold(reason => blocked(reason), Some(_))
+              .filterNot(_ => isFixedByLiteral(applicationSide, applicationSideKey))
+              .map(injectFilter(applicationSideKey, currentApplicationSide, _))
+              .getOrElse(currentApplicationSide)
           }
         }
         // A DPP filter prunes by whole partitions rather than by rows, so it is preferred: a key
@@ -770,12 +755,12 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
           } else {
             val oldLeft = newLeft
             val oldRight = newRight
-            tryInject(left, newLeft, l, right, r, canPruneLeft(joinType),
-              injectLeftHinted, injectRightHinted, "left", keyDpps).foreach(newLeft = _)
+            newLeft = tryInject(left, newLeft, l, right, r, canPruneLeft(joinType),
+              injectLeftHinted, injectRightHinted, "left", keyDpps)
             // Did we actually inject on the left? If not, try on the right
             if (newLeft.fastEquals(oldLeft)) {
-              tryInject(right, newRight, r, left, l, canPruneRight(joinType),
-                injectRightHinted, injectLeftHinted, "right", keyDpps).foreach(newRight = _)
+              newRight = tryInject(right, newRight, r, left, l, canPruneRight(joinType),
+                injectRightHinted, injectLeftHinted, "right", keyDpps)
             }
             if (!newLeft.fastEquals(oldLeft) || !newRight.fastEquals(oldRight)) {
               filterCounter = filterCounter + 1

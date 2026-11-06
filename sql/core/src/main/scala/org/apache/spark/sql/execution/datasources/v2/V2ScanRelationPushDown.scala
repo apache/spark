@@ -875,9 +875,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
    * Whether the plain-scan path ([[pruneColumns]]) carries a pushdown that a Spark-side scan merge
    * (see `TableCapability.SCAN_MERGING`) cannot reproduce by
    * rebuilding the scan from a fresh `ScanBuilder` and re-applying the pushed filters and pruned
-   * columns. Used to decide the plain-scan `mergeableScan` flag (`!hasBlockingPushdown`), and the
-   * `repeatableScan` flag of every scan without a pushed aggregate, as the rows these pushdowns
-   * return depend on order or chance.
+   * columns. Used only to decide the plain-scan `mergeableScan` flag (`!hasBlockingPushdown`).
    *
    * Scan merging is default-safe: [[DataSourceV2ScanRelation.mergeableScan]] defaults to false and
    * this is the ONLY site that ever sets it true. Every other scan-relation build path -- the
@@ -891,12 +889,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
    *
    * Reproducible (re-applied by the merge), so NOT blocking: `output` (column pruning, via
    * `SupportsPushDownRequiredColumns`) and `pushedPredicates` / `pushedFilterExpressions`
-   * (deterministic filters, re-pushed via `SupportsPushDownV2Filters`). A pushed aggregate never
-   * reaches here; a scan with a pushed join or variant consults this only for `repeatableScan`, as
-   * it is never mergeable. When a new pushdown capability adds plain-scan state to
-   * [[ScanBuilderHolder]], list it in [[hasRowSelectingPushdown]] when it decides which rows the
-   * scan returns, which keeps the scan not-mergeable too. List it here when a merge cannot
-   * reproduce it but it works on each row by itself.
+   * (deterministic filters, re-pushed via `SupportsPushDownV2Filters`). A pushed aggregate, join or
+   * variant never reaches here -- their build rules run first. When a new pushdown capability adds
+   * plain-scan state to [[ScanBuilderHolder]], list it in [[hasRowSelectingPushdown]] when it
+   * decides which rows the scan returns, which keeps the scan not-mergeable too. List it here when
+   * a merge cannot reproduce it but it works on each row by itself.
    */
   private def hasBlockingPushdown(holder: ScanBuilderHolder): Boolean =
     hasRowSelectingPushdown(holder)
@@ -911,8 +908,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
    *
    * It decides the `onlyRowWisePushdowns` flag of the plain and the variant-extraction scans, see
    * [[DataSourceV2ScanRelation.onlyRowWisePushdowns]], and blocks merging, see
-   * [[hasBlockingPushdown]]. A pushed aggregate or join never reaches those builds, and their scans
-   * keep the flag's default.
+   * [[hasBlockingPushdown]]. A pushed aggregate or join scan keeps the flag's default. It also
+   * decides the `repeatableScan` flag of every scan without a pushed aggregate, as the rows these
+   * pushdowns return depend on order or chance.
    */
   private def hasRowSelectingPushdown(holder: ScanBuilderHolder): Boolean =
     holder.pushedLimit.isDefined ||
@@ -924,7 +922,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
    * Whether a pushed join side carries an aggregate or an order- or chance-dependent pushdown. Join
    * pushdown moves each side's pushdowns into
    * [[ScanBuilderHolder.joinedRelationsPushedDownOperators]] (and clears the side's
-   * `pushedSample`), so [[hasBlockingPushdown]] does not see them.
+   * `pushedSample`), so [[hasRowSelectingPushdown]] does not see them.
    */
   private def hasNonRepeatablePushdown(ops: PushedDownOperators): Boolean =
     ops.aggregation.isDefined ||
@@ -971,7 +969,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       // A pushed join cannot be reproduced by rebuilding the scan, so this scan stays not-mergeable
       // (the default `mergeableScan = false`).
       val scanRelation = DataSourceV2ScanRelation(holder.relation, wrappedScan, realOutput,
-        repeatableScan = !hasBlockingPushdown(holder) &&
+        repeatableScan = !hasRowSelectingPushdown(holder) &&
           !holder.joinedRelationsPushedDownOperators.exists(hasNonRepeatablePushdown))
 
       // When join is pushed down, the real output is going to be, for example,
@@ -1004,7 +1002,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       // not-mergeable (the default `mergeableScan = false`).
       val scanRelation = DataSourceV2ScanRelation(holder.relation, wrappedScan, realOutput,
         onlyRowWisePushdowns = !hasRowSelectingPushdown(holder),
-        repeatableScan = !hasBlockingPushdown(holder))
+        repeatableScan = !hasRowSelectingPushdown(holder))
 
       // Create projection to map real output to expected output (with transformed types)
       val outputProjection = realOutput.zip(holder.output).map { case (realAttr, expectedAttr) =>
@@ -1087,7 +1085,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         // (column pruning + deterministic filters) may be fused. See hasBlockingPushdown.
         mergeableScan = !hasBlockingPushdown(sHolder),
         onlyRowWisePushdowns = !hasRowSelectingPushdown(sHolder),
-        repeatableScan = !hasBlockingPushdown(sHolder))
+        repeatableScan = !hasRowSelectingPushdown(sHolder))
 
       val inferredAdjustmentFilters =
         if (shouldAddPostPushdownAdjustmentFilters(scanRelation)) {
