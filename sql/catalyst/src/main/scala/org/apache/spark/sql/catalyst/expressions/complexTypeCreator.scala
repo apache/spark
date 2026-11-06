@@ -47,6 +47,8 @@ import org.apache.spark.util.ArrayImplicits._
  * This trait can be used in an optimization rule such as
  * [[org.apache.spark.sql.catalyst.optimizer.ConstantFolding]] to fold the expressions that
  * do not need to execute, for example, `size(array(c0, c1, c2))`.
+ * [[ExprUtils.canEvaluateUnconditionally]] relies on it too, to evaluate such an expression on
+ * rows it would otherwise not see, so it must not raise for any input of its children.
  */
 trait NoThrow
 
