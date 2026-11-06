@@ -60,10 +60,16 @@ object ResolveExternalLookupHint extends Rule[LogicalPlan] with QueryErrorsBase 
     if (relationNames.isEmpty) {
       ExternalLookupHint(child)
     } else {
+      // As with join strategy hints, a name marks every relation that it matches. `matched` only
+      // tells which names matched nothing.
       val matched = mutable.HashSet.empty[Seq[String]]
-      def matches(identifier: Seq[String]): Boolean = relationNames.find { name =>
-        !matched.contains(name) && ResolveHints.matchedIdentifier(name, identifier, conf.resolver)
-      }.map(matched.add).nonEmpty
+      def matches(identifier: Seq[String]): Boolean = {
+        val names = relationNames.filter { name =>
+          ResolveHints.matchedIdentifier(name, identifier, conf.resolver)
+        }
+        matched ++= names
+        names.nonEmpty
+      }
       // Mirrors the target scoping of ResolveHints.ResolveJoinStrategyHints: a name matches an
       // unaliased (possibly multipart) table or an alias, and does not reach into a view,
       // a WITH clause, or an aliased subquery.
