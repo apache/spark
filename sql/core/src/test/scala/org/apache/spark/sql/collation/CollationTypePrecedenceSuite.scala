@@ -490,6 +490,97 @@ class CollationTypePrecedenceSuite extends SharedSparkSession {
     }
   }
 
+  testFixedPointAndSinglePass("variant_get with a collated target type has implicit strength") {
+    val tableName = "variant_get_tbl"
+    val viewName = "variant_get_view"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (id INT, c STRING COLLATE UNICODE_CI, p STRING, v VARIANT) " +
+        s"USING $dataSource")
+      sql(
+        s"""
+           |INSERT INTO $tableName SELECT id, 'OPEN', 'OPEN', parse_json(j) FROM VALUES
+           |  (1, '{"s": "Open", "a": ["Open"]}'),
+           |  (2, '{"s": "open", "a": ["open"]}'),
+           |  (3, '{"s": "closed", "a": ["closed"]}') AS t(id, j)
+           |""".stripMargin)
+
+      Seq("variant_get", "try_variant_get").foreach { fn =>
+        val lcase = s"$fn(v, '$$.s', 'STRING COLLATE UTF8_LCASE')"
+        val lcaseMap = s"$fn(v, '$$', 'MAP<STRING, STRING COLLATE UTF8_LCASE>')"
+        val mixedStruct = s"$fn(v, '$$', 'STRUCT<s: STRING, t: STRING COLLATE UTF8_LCASE>')"
+        checkAnswer(
+          sql(s"SELECT DISTINCT COLLATION($lcase || 'a') FROM $tableName"),
+          Row(UTF8_LCASE_COLLATION_NAME))
+
+        Seq(
+          s"$lcase = 'OPEN'",
+          s"$lcase IN ('OPEN', 'x')",
+          s"startswith($lcase, 'OP')",
+          s"array_contains($fn(v, '$$.a', 'ARRAY<STRING COLLATE UTF8_LCASE>'), 'OPEN')",
+          s"$fn(v, '$$', 'STRUCT<s: STRING COLLATE UTF8_LCASE>').s = 'OPEN'",
+          s"$lcaseMap['s'] = 'OPEN'",
+          s"element_at($lcaseMap, 's') = 'OPEN'",
+          // The collation of the path does not take part.
+          s"$fn(v, '$$.s' COLLATE UNICODE, 'STRING COLLATE UTF8_LCASE') = 'OPEN'").foreach { cond =>
+          checkAnswer(sql(s"SELECT id FROM $tableName WHERE $cond"), Seq(Row(1), Row(2)))
+        }
+
+        // The UTF8_BINARY field of a partly collated struct stays UTF8_BINARY.
+        checkAnswer(sql(s"SELECT id FROM $tableName WHERE $mixedStruct.s = 'OPEN'"), Seq.empty)
+
+        checkAnswer(
+          sql(s"SELECT id FROM $tableName WHERE $lcase = 'Open' COLLATE UTF8_BINARY"),
+          Seq(Row(1)))
+
+        // Like a column of the target type, it conflicts with other implicit collations.
+        Seq(
+          s"$lcase = c",
+          s"$lcase = p",
+          s"$lcase IN (p, 'x')",
+          s"$fn(v, '$$.s', 'STRING COLLATE UTF8_BINARY') = c",
+          s"$mixedStruct.s = c",
+          s"$lcase || p = 'OPEN'",
+          s"(CASE WHEN id = 1 THEN $lcase ELSE p END) = 'OPEN'",
+          // A cast from VARIANT keeps the Cast rule: default strength, so it conflicts with a
+          // literal of another collation.
+          s"CAST($fn(v, '$$.s') AS STRING COLLATE UTF8_LCASE) = 'OPEN'",
+          s"v:s::STRING COLLATE UTF8_LCASE = 'OPEN'").foreach { cond =>
+          assertIndeterminateCollation(sql(s"SELECT id FROM $tableName WHERE $cond"))
+        }
+        // Combining them gives an indeterminate collation that fails when the result is stored.
+        withTable("variant_get_ctas") {
+          assertIndeterminateCollation(sql(s"CREATE TABLE variant_get_ctas USING $dataSource " +
+            s"AS SELECT coalesce($lcase, p) AS s FROM $tableName"))
+        }
+
+        // A target without an explicit collation keeps default strength.
+        Seq(
+          s"$fn(v, '$$.s', 'STRING') = c",
+          s"array_contains($fn(v, '$$.a', 'ARRAY<STRING>'), c)",
+          s"CAST($fn(v, '$$.s') AS STRING) = c",
+          s"v:s::STRING = c").foreach { cond =>
+          checkAnswer(sql(s"SELECT id FROM $tableName WHERE $cond"), Seq(Row(1), Row(2)))
+        }
+
+        // Under a default collation, an explicit UTF8_BINARY target keeps UTF8_BINARY, and plain
+        // targets, whose type the default collation rewrites, keep default strength.
+        withView(viewName) {
+          sql(
+            s"""
+               |CREATE VIEW $viewName DEFAULT COLLATION UTF8_LCASE AS SELECT
+               |  $fn(v, '$$.s', 'STRING') = 'OPEN' AS plain,
+               |  $fn(v, '$$.s', 'STRING COLLATE UTF8_BINARY') = 'OPEN' AS binary,
+               |  v:s::STRING = 'OPEN' AS plain_cast,
+               |  $fn(v, '$$.s', 'STRING') = c AS plain_col,
+               |  v:s::STRING = c AS plain_cast_col
+               |FROM $tableName WHERE id = 1
+               |""".stripMargin)
+          checkAnswer(sql(s"SELECT * FROM $viewName"), Row(true, false, true, true, true))
+        }
+      }
+    }
+  }
+
   test("str fns without params have default strength") {
     val tableName = "str_fns_tbl"
     val columnCollation = "UNICODE"
