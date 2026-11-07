@@ -21,7 +21,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Add, GenericInternalRow, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Add, GenericInternalRow}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -360,15 +360,11 @@ class LimitPushdownSuite extends PlanTest {
       GlobalLimit(1, Offset(2, LocalLimit(3, testRelation))).analyze)
   }
 
-  test("SPARK-57125: Push down limit through Offset keeps an overflowing sum unevaluated") {
+  test("SPARK-61109: Do not push down limit through Offset if the merged limit overflows") {
     // The analyzer rejects this LocalLimit over Offset, but the optimizer can create one, e.g.
-    // when it pushes a limit into a Union branch. The sum must not be evaluated here, since a
-    // later rule may remove the operator that holds it.
-    val plan = LocalLimit(Literal(Int.MaxValue), Offset(Literal(10), testRelation))
-    comparePlans(
-      LimitPushDown(plan),
-      Offset(Literal(10), LocalLimit(Add(Literal(Int.MaxValue), Literal(10)), testRelation)),
-      checkAnalysis = false)
+    // when it pushes a limit into a Union branch.
+    val plan = LocalLimit(Int.MaxValue, Offset(10, testRelation))
+    comparePlans(LimitPushDown(plan), plan, checkAnalysis = false)
   }
 
   test("SPARK-39511: Push limit 1 to right side if join type is LeftSemiOrAnti") {

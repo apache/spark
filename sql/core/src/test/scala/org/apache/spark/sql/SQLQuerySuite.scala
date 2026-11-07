@@ -5390,6 +5390,33 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
         Seq(Row(3), Row(4), Row(5)))
     }
   }
+
+  test("SPARK-61109: LIMIT and OFFSET whose merged value overflows return the right rows") {
+    // The optimizer merges a limit and an offset that the analyzer did not check together, e.g.
+    // after it pushes the limit into a Union branch or removes a Project between them. All rows
+    // are equal, so that the result does not depend on which rows OFFSET skips. The table has no
+    // known row count, so that the limits are not removed before they are merged.
+    withTable("t") {
+      spark.range(3).selectExpr("0 AS id").write.saveAsTable("t")
+      Seq("true", "false").foreach { ansi =>
+        Seq("", ConstantFolding.ruleName).foreach { excludedRules =>
+          withSQLConf(
+              SQLConf.ANSI_ENABLED.key -> ansi,
+              SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> excludedRules) {
+            checkAnswer(
+              sql("(SELECT * FROM t OFFSET 1) UNION ALL (SELECT * FROM t) LIMIT 2147483647"),
+              Seq.fill(5)(Row(0)))
+            checkAnswer(
+              sql("SELECT * FROM (SELECT * FROM t OFFSET 10) LIMIT 2147483647"),
+              Seq.empty)
+            checkAnswer(
+              sql("SELECT * FROM (SELECT * FROM t OFFSET 2147483647) OFFSET 10"),
+              Seq.empty)
+          }
+        }
+      }
+    }
+  }
 }
 
 case class Foo(bar: Option[String])
