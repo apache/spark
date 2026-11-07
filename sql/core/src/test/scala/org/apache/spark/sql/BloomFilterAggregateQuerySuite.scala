@@ -21,10 +21,12 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLValue
 import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
+import org.apache.spark.sql.catalyst.plans.ExistenceJoin
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.debug.codegenStringSeq
+import org.apache.spark.sql.execution.joins.ShuffledHashJoinExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BinaryType, LongType}
@@ -34,7 +36,7 @@ import org.apache.spark.tags.ExtendedSQLTest
  * Query tests for the Bloom filter aggregate and filter function.
  */
 @ExtendedSQLTest
-class BloomFilterAggregateQuerySuite extends SharedSparkSession {
+class BloomFilterAggregateQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   // Registry requires 3-part identifiers (catalog.database.funcName) for session functions
@@ -423,6 +425,31 @@ class BloomFilterAggregateQuerySuite extends SharedSparkSession {
           }
         }
       }
+    }
+  }
+
+  test("SPARK-60541: a semi join a query wrote is not taken for a per-partition bloom filter") {
+    // It has the shape of the one `InjectRuntimeFilter` adds, an existence join with a filter on
+    // its flag, and would need a shuffle, which is when the planner drops that one. The random
+    // column keeps the filter above the projection of `pk`, so the join's key stays `pk`.
+    val query =
+      """
+        |WITH blooms AS (
+        |  SELECT k, bloom_filter_agg(xxhash64(v)) AS bf
+        |  FROM VALUES (1, 10L), (1, 11L), (2, 20L), (2, 21L) AS t(k, v)
+        |  GROUP BY k)
+        |SELECT x, r >= 0
+        |FROM (SELECT CAST(IF(id = 29, NULL, id % 3) AS INT) AS pk, id AS x, rand() AS r
+        |      FROM range(30)) p
+        |WHERE pk IS NULL OR EXISTS (SELECT /*+ SHUFFLE_HASH(blooms) */ 1 FROM blooms
+        |  WHERE pk = k AND might_contain(bf, xxhash64(x)))
+        |""".stripMargin
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_PER_PARTITION_ENABLED.key -> "true") {
+      val df = spark.sql(query)
+      checkAnswer(df, Seq(Row(10L, true), Row(20L, true), Row(29L, true)))
+      assert(collect(df.queryExecution.executedPlan) {
+        case join: ShuffledHashJoinExec if join.joinType.isInstanceOf[ExistenceJoin] => join
+      }.nonEmpty, df.queryExecution.executedPlan)
     }
   }
 

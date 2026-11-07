@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, BloomFilterMightContain, EqualTo, Expression, ExprId, IsNull, Literal, Or, PredicateHelper, SubqueryExpression, TransformExpression, UnaryExpression, Unevaluable, XxHash64}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, BloomFilterMightContain, EqualTo, Expression, ExprId, GetStructField, IsNull, Literal, Or, PredicateHelper, ScalarSubquery, SubqueryExpression, TransformExpression, UnaryExpression, Unevaluable, XxHash64}
+import org.apache.spark.sql.catalyst.optimizer.InjectRuntimeFilter.{globalBloomFilterOf, perPartitionRuntimeFilter}
 import org.apache.spark.sql.catalyst.plans.ExistenceJoin
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, HintInfo, Join, JoinHint, LogicalPlan, Project, SHUFFLE_HASH}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -84,12 +85,10 @@ object PerPartitionRuntimeFilterPlaceholder extends PredicateHelper {
       }
     }
 
-  /** The key that `plan` checks, when it has the shape of the join of a placeholder's semi join. */
+  /** The key that `plan` checks, when it is the join of a placeholder's semi join. */
   def semiJoinKey(plan: LogicalPlan): Option[Expression] = plan match {
     case Join(_, _, ExistenceJoin(_), Some(condition), _) =>
-      splitConjunctivePredicates(condition).collectFirst {
-        case BloomFilterMightContain(_: Attribute, XxHash64(Seq(key), _)) => key
-      }
+      perPartitionRuntimeFilter(condition).map(_._2)
     case _ => None
   }
 
@@ -119,6 +118,13 @@ object PerPartitionRuntimeFilterPlaceholder extends PredicateHelper {
  *
  * Each semi join reads its creation side again, so a placeholder with more than one copy is
  * dropped, with its per-partition bloom filter. Pushdown puts a copy into every branch of a union.
+ * A placeholder can replace the bloom filter of the whole creation side. It is also dropped when
+ * the subquery of that bloom filter runs anyway, and so reads the creation side too. That subquery
+ * runs anyway when:
+ *  - another check reads it, or a subquery with the same plan;
+ *  - `MergeSubplans` merged it with others.
+ * A semi join that an earlier optimizer pass built, as for an IN subquery that became a join, goes
+ * in those cases too.
  *
  * A placeholder that is no longer a conjunct of a `Filter` becomes `true`. That happens when
  * `MergeSubplans` propagates its filter into a projection. Without it, the query is as it was
@@ -126,16 +132,61 @@ object PerPartitionRuntimeFilterPlaceholder extends PredicateHelper {
  *
  * Nothing can evaluate a placeholder, so this rule cannot be excluded.
  */
-object InsertPerPartitionRuntimeFilterJoins extends Rule[LogicalPlan] {
+object InsertPerPartitionRuntimeFilterJoins extends Rule[LogicalPlan] with PredicateHelper {
   import PerPartitionRuntimeFilterPlaceholder.{placeholdersIn, replaced}
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    val kept = placeholdersIn(plan).groupBy(_.bloomFilter.exprId).collect {
-      case (id, Seq(_)) => id
-    }.toSet
-    withoutLeftovers(
-      replaced(plan)((node, p) => if (kept(p.bloomFilter.exprId)) semiJoin(node, p) else node))
+    // A placeholder with more than one copy is dropped, so only the aggregates of the others can
+    // check a global bloom filter.
+    val singles = placeholdersIn(plan).groupBy(_.bloomFilter.exprId).values.collect {
+      case Seq(p) => p
+    }.toSeq
+    lazy val checks = (plan +: singles.map(_.aggregate)).flatMap(globalChecks)
+    def replacesGlobal(bloomFilter: Attribute): Boolean = {
+      val global = globalBloomFilterOf(bloomFilter)
+      global < 0 || (checks.find(_._1 == global) match {
+        case Some((_, subquery, false)) => checks.count(_._2 == subquery) == 1
+        case _ => false
+      })
+    }
+    val kept = singles.filter(p => replacesGlobal(p.bloomFilter)).map(_.bloomFilter.exprId).toSet
+    // The semi joins an earlier optimizer pass built are judged again, since this pass can check
+    // their global bloom filters elsewhere too. The join of one that goes gives way to its
+    // application side, and the filter on its flag goes too. A flag with no filter right above
+    // the join is true for every row.
+    object StaleJoin {
+      def unapply(plan: LogicalPlan): Option[(LogicalPlan, Attribute)] = plan match {
+        case Join(left, _, ExistenceJoin(exists), Some(condition), _)
+            if perPartitionRuntimeFilter(condition).exists(f => !replacesGlobal(f._1)) =>
+          Some((left, exists))
+        case _ => None
+      }
+    }
+    val withoutStale = if (!conf.runtimeBloomFilterPerPartitionEnabled) {
+      plan
+    } else {
+      plan.transformDown {
+        case Filter(condition, StaleJoin(left, exists)) =>
+          splitConjunctivePredicates(condition).filterNot(_.references.contains(exists))
+            .reduceOption(And).map(Filter(_, left)).getOrElse(left)
+        case StaleJoin(left, exists) =>
+          Project(left.output :+ Alias(Literal.TrueLiteral, exists.name)(exists.exprId), left)
+      }
+    }
+    withoutLeftovers(replaced(withoutStale)((node, p) =>
+      if (kept(p.bloomFilter.exprId)) semiJoin(node, p) else node))
   }
+
+  // The checks of bloom filters of a whole creation side in `plan` and its subqueries. Each has the
+  // exprId of its subquery, the subquery's canonical plan, and whether `MergeSubplans` merged it
+  // with others. Subqueries with the same canonical plan run once.
+  private def globalChecks(plan: LogicalPlan): Seq[(Long, LogicalPlan, Boolean)] =
+    plan.collectWithSubqueries { case node => node.expressions }.flatten.flatMap(_.collect {
+      case BloomFilterMightContain(subquery: ScalarSubquery, _) =>
+        (subquery.exprId.id, subquery.plan.canonicalized, false)
+      case BloomFilterMightContain(GetStructField(subquery: ScalarSubquery, _, _), _) =>
+        (subquery.exprId.id, subquery.plan.canonicalized, true)
+    })
 
   // `plan` with `true` for each placeholder left, in its subqueries too.
   private def withoutLeftovers(plan: LogicalPlan): LogicalPlan =

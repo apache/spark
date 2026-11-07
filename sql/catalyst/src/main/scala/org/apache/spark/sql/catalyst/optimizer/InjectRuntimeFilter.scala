@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{INVOKE, JSON_TO_STRUCT, 
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.MetadataBuilder
 
 /**
  * Insert a runtime filter on one side of the join (we call this side the application side) if
@@ -35,6 +36,30 @@ import org.apache.spark.sql.internal.SQLConf
  * bloom filter but we may add other physical implementations in the future.
  */
 object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with JoinSelectionHelper {
+
+  /**
+   * The metadata key of the bloom filter column of a per-partition bloom filter's aggregate. Its
+   * value is the exprId of the subquery of the global bloom filter that the per-partition one can
+   * replace, or -1 when there is none.
+   */
+  val PER_PARTITION_RUNTIME_FILTER = "__per_partition_runtime_filter"
+
+  /**
+   * For the condition of a semi join of a per-partition bloom filter, the bloom filter column and
+   * the key it checks. The column carries [[PER_PARTITION_RUNTIME_FILTER]].
+   */
+  def perPartitionRuntimeFilter(condition: Expression): Option[(Attribute, Expression)] =
+    splitConjunctivePredicates(condition).collectFirst {
+      case BloomFilterMightContain(bloomFilter: Attribute, XxHash64(Seq(key), _))
+          if bloomFilter.metadata.contains(PER_PARTITION_RUNTIME_FILTER) => (bloomFilter, key)
+    }
+
+  /**
+   * The exprId of the subquery of the global bloom filter that the per-partition one with the
+   * column `bloomFilter` can replace, or -1.
+   */
+  def globalBloomFilterOf(bloomFilter: Attribute): Long =
+    bloomFilter.metadata.getLong(PER_PARTITION_RUNTIME_FILTER)
 
   private case class FilterCreationSide(
       key: Expression,
@@ -51,16 +76,15 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       filterApplicationSidePlan: LogicalPlan,
       filterCreationSide: FilterCreationSide,
       perPartition: Boolean): (LogicalPlan, Boolean, Boolean) = {
-    val planWithBloomFilter =
+    val (planWithBloomFilter, globalBloomFilter) =
       injectBloomFilter(filterApplicationSideKey, filterApplicationSidePlan, filterCreationSide)
     val planWithFilters = if (perPartition) {
       injectPerPartitionRuntimeFilter(
-        filterApplicationSideKey, planWithBloomFilter, filterCreationSide)
+        filterApplicationSideKey, planWithBloomFilter, globalBloomFilter, filterCreationSide)
     } else {
       planWithBloomFilter
     }
-    (planWithFilters, planWithBloomFilter ne filterApplicationSidePlan,
-      planWithFilters ne planWithBloomFilter)
+    (planWithFilters, globalBloomFilter.isDefined, planWithFilters ne planWithBloomFilter)
   }
 
   /**
@@ -74,12 +98,20 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
    * side. Predicate pushdown moves it along the key. [[InsertPerPartitionRuntimeFilterJoins]] then
    * replaces it with the semi join where it landed, or drops it.
    *
-   * The bloom filter `injectBloomFilter` added to `planWithBloomFilter`, if any, stays. A key gets
-   * one per-partition bloom filter at most, so a later join on the same key adds none.
+   * The bloom filter `injectBloomFilter` added to `planWithBloomFilter`, if any, stays.
+   * `ChoosePerPartitionRuntimeFilters` keeps the semi join only when the semi join costs the
+   * application side nothing. It then drops that bloom filter.
+   *
+   * A key gets one per-partition bloom filter at most, so a later join on the same key adds none.
+   *
+   * The bloom filter column carries [[PER_PARTITION_RUNTIME_FILTER]] in its metadata. That is how
+   * this rule, `InsertPerPartitionRuntimeFilterJoins` and `ChoosePerPartitionRuntimeFilters` tell
+   * this semi join from one a query wrote.
    */
   private def injectPerPartitionRuntimeFilter(
       filterApplicationSideKey: Expression,
       planWithBloomFilter: LogicalPlan,
+      globalBloomFilter: Option[ExprId],
       filterCreationSide: FilterCreationSide): LogicalPlan = {
     if (!conf.runtimeBloomFilterPerPartitionEnabled) {
       return planWithBloomFilter
@@ -91,7 +123,10 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       if !hasPerPartitionRuntimeFilter(planWithBloomFilter, filterApplicationSideKey)
       creationPartitionKey = Alias(creation, "partitionKey")()
       bloomFilter = Alias(new BloomFilterAggregate(
-        new XxHash64(Seq(filterCreationSide.key))).toAggregateExpression(), "bloomFilter")()
+        new XxHash64(Seq(filterCreationSide.key))).toAggregateExpression(), "bloomFilter")(
+        explicitMetadata = Some(new MetadataBuilder()
+          .putLong(PER_PARTITION_RUNTIME_FILTER, globalBloomFilter.map(_.id).getOrElse(-1L))
+          .build()))
       aggregate = withNewSubqueryIds(ColumnPruning(PullOutGroupingExpressions(Aggregate(
         Seq(creation), Seq(creationPartitionKey, bloomFilter), filterCreationSide.plan))))
       if canEvaluateApart(aggregate)
@@ -120,7 +155,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
    *
    * The semi join is correct whatever lies between `plan` and the scan, since it checks each row
    * against the bloom filter of its own partition key. A row whose partition key is null passes it,
-   * so the transform may return null for any key.
+   * so the transform may return null for any key. Whether it pays off is up to
+   * `InsertPerPartitionRuntimeFilterJoins` and `ChoosePerPartitionRuntimeFilters`.
    */
   private def partitionTransform(
       key: Expression,
@@ -141,10 +177,12 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     }
   }
 
+  // `filterApplicationSidePlan` with a bloom filter of the whole creation side, if it gets one, and
+  // the exprId of that bloom filter's subquery.
   private def injectBloomFilter(
       filterApplicationSideKey: Expression,
       filterApplicationSidePlan: LogicalPlan,
-      filterCreationSide: FilterCreationSide): LogicalPlan = {
+      filterCreationSide: FilterCreationSide): (LogicalPlan, Option[ExprId]) = {
     val filterCreationSideKey = filterCreationSide.key
     val filterCreationSidePlan = filterCreationSide.plan
     val creationSideThreshold = if (filterCreationSide.useMaterializedThreshold) {
@@ -155,7 +193,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     // Skip if the filter creation side is too big
     if (filterCreationSide.materializedSizeInBytes
         .getOrElse(filterCreationSidePlan.stats.sizeInBytes) > creationSideThreshold) {
-      return filterApplicationSidePlan
+      return (filterApplicationSidePlan, None)
     }
     val rowCount = filterCreationSide.materializedRowCount
       .orElse(filterCreationSidePlan.stats.rowCount)
@@ -170,12 +208,12 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     val aggregate =
       ConstantFolding(ColumnPruning(Aggregate(Nil, Seq(alias), filterCreationSidePlan)))
     if (!canEvaluateApart(aggregate)) {
-      return filterApplicationSidePlan
+      return (filterApplicationSidePlan, None)
     }
     val bloomFilterSubquery = ScalarSubquery(aggregate, Nil)
     val filter = BloomFilterMightContain(bloomFilterSubquery,
       new XxHash64(Seq(filterApplicationSideKey)))
-    Filter(filter, filterApplicationSidePlan)
+    (Filter(filter, filterApplicationSidePlan), Some(bloomFilterSubquery.exprId))
   }
 
   // Whether `aggregate`, the bloom filter aggregate of a creation side, can evaluate that creation

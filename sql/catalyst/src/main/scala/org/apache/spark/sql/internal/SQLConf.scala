@@ -1003,10 +1003,18 @@ object SQLConf {
         "matching partition of the creation side, in a semi join. The semi join calls the " +
         "function of the partition transform on each row of both sides, so that function must " +
         "implement `produceResult` or `invoke`. That semi join is dropped when " +
-        "it would sit in more than one place, as below a union. The number of per-partition " +
+        "it adds a shuffle or cuts the tasks that read the application side. It is also dropped " +
+        "when it would sit in more than one place, as below a union. The same goes when another " +
+        "check or a storage filter of a scan needs the bloom filter of the whole creation side " +
+        "anyway. It goes too when there is that bloom filter and partially clustered " +
+        "distribution would make the semi join read the creation side more than once. It always " +
+        "goes when that distribution would repeat the side the semi join is on. Otherwise " +
+        "it stays and replaces that bloom filter, if there is one. The number of per-partition " +
         "bloom filters has a limit of its own, the value of " +
         s"${RUNTIME_FILTER_NUMBER_THRESHOLD.key}. Once the other runtime filters reach that " +
-        "limit, no per-partition one is added either.")
+        "limit, no per-partition one is added either. Choosing plans the query once more, and " +
+        "once more for each semi join. Adaptive query execution does that again on each " +
+        "re-planning before the semi join runs.")
       .version("5.0.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
