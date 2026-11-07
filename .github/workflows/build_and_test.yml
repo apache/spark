@@ -72,6 +72,10 @@ on:
       codecov_token:
         description: The upload token of codecov.
         required: false
+env:
+  # Sampled upstream pushes test every module, including changes from skipped commits.
+  # Forks still compare against their upstream snapshot for change-based test selection.
+  GITHUB_PREV_SHA: ${{ github.repository != 'apache/spark' && github.event.before || '' }}
 concurrency:
   group: build-test-${{ github.workflow }}-${{ github.repository == 'apache/spark' && github.run_id || github.ref }}
   cancel-in-progress: true
@@ -81,8 +85,6 @@ jobs:
     # `ubuntu-slim` is lighter than `ubuntu-latest`.
     # Please see https://docs.github.com/en/actions/how-tos/write-workflows/choose-where-workflows-run/choose-the-runner-for-a-job#standard-github-hosted-runners-for-public-repositories
     runs-on: ubuntu-slim
-    env:
-      GITHUB_PREV_SHA: ${{ github.event.before }}
     outputs:
       required: ${{ steps.set-outputs.outputs.required }}
       # Pinned so every downstream job checks out the same snapshot, even if `master` advances mid-run.
@@ -197,7 +199,7 @@ jobs:
           precondition="${precondition//$'\n'/}"
           echo "required=$precondition" >> $GITHUB_OUTPUT
         else
-          # This is usually set by scheduled jobs.
+          # Explicit job selections are used by scheduled and sampled post-merge builds.
           precondition='${{ inputs.jobs }}'
           echo $precondition # For debugging
           precondition="${precondition//$'\n'/}"
@@ -348,7 +350,6 @@ jobs:
       INCLUDED_TAGS: ${{ matrix.included-tags }}
       HADOOP_PROFILE: ${{ matrix.hadoop }}
       HIVE_PROFILE: ${{ matrix.hive }}
-      GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
       SKIP_UNIDOC: true
       SKIP_MIMA: true
@@ -529,7 +530,6 @@ jobs:
     env:
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
-      GITHUB_PREV_SHA: ${{ github.event.before }}
     steps:
     - name: Bootstrap composite actions
       uses: actions/checkout@v7
@@ -607,7 +607,7 @@ jobs:
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-streaming, pyspark-structured-streaming, pyspark-structured-streaming-connect' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-connect' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-connect-old-client != 'true' &&  'pyspark-connect-old-client'}}
-          # pyspark-periodic will only run on pre-merge and scheduled CIs, it contains tests that are not sensitive to pyspark code changes.
+          # Periodic tests also run in full post-merge builds, independently of PySpark diffs.
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-periodic != 'true' && 'pyspark-periodic' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-slow' }}
@@ -617,7 +617,6 @@ jobs:
       MODULES_TO_TEST: ${{ matrix.modules }}
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
-      GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
       SKIP_UNIDOC: true
       SKIP_MIMA: true
@@ -759,7 +758,6 @@ jobs:
     env:
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
-      GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
       SKIP_UNIDOC: true
       SKIP_MIMA: true
@@ -857,7 +855,6 @@ jobs:
     env:
       LC_ALL: C.UTF-8
       LANG: C.UTF-8
-      GITHUB_PREV_SHA: ${{ github.event.before }}
       BRANCH: ${{ inputs.branch }}
     container:
       image: ${{ needs.precondition.outputs.image_lint_url_link }}
@@ -974,7 +971,6 @@ jobs:
       LANG: C.UTF-8
       PYSPARK_DRIVER_PYTHON: python3.12
       PYSPARK_PYTHON: python3.12
-      GITHUB_PREV_SHA: ${{ github.event.before }}
     container:
       image: ${{ needs.precondition.outputs.image_docs_url_link }}
     steps:
@@ -1140,7 +1136,6 @@ jobs:
     env:
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
-      GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
       SKIP_UNIDOC: true
       SKIP_MIMA: true
