@@ -27,8 +27,8 @@ import org.apache.spark.deploy.master.Master
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{HOSTS, NUM_REMOVED_WORKERS}
 import org.apache.spark.internal.config.DECOMMISSION_ENABLED
-import org.apache.spark.internal.config.UI.MASTER_UI_DECOMMISSION_ALLOW_MODE
-import org.apache.spark.internal.config.UI.UI_KILL_ENABLED
+import org.apache.spark.internal.config.UI.{MASTER_UI_DECOMMISSION_ALLOW_MODE,
+  UI_KILL_ENABLED, UI_REVERSE_PROXY_URL}
 import org.apache.spark.ui.{SparkUI, WebUI}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.ArrayImplicits._
@@ -69,12 +69,13 @@ class MasterWebUI(
     // with no token could not send one. It stays gated by POST, modify ACLs and
     // spark.master.ui.decommission.allow.mode.
     if (killEnabled) {
+      val killRedirectTarget = "/"
       attachHandler(createRedirectHandler(
-        "/app/kill", "/", masterPage.handleAppKillRequest, httpMethods = Set("POST"),
-        csrfToken = Some(csrfToken)))
+        "/app/kill", killRedirectTarget, masterPage.handleAppKillRequest,
+        httpMethods = Set("POST"), csrfToken = Some(csrfToken)))
       attachHandler(createRedirectHandler(
-        "/driver/kill", "/", masterPage.handleDriverKillRequest, httpMethods = Set("POST"),
-        csrfToken = Some(csrfToken)))
+        "/driver/kill", killRedirectTarget, masterPage.handleDriverKillRequest,
+        httpMethods = Set("POST"), csrfToken = Some(csrfToken)))
     }
     if (decommissionEnabled) {
       attachHandler(createServletHandler("/workers/kill", new HttpServlet {
@@ -104,7 +105,8 @@ class MasterWebUI(
   }
 
   def addProxy(): Unit = {
-    val handler = createProxyHandler(idToUiAddress)
+    val reverseProxyUrl = master.conf.get(UI_REVERSE_PROXY_URL).getOrElse("")
+    val handler = createProxyHandler(idToUiAddress, reverseProxyUrl)
     attachHandler(handler)
   }
 
