@@ -223,4 +223,38 @@ class VariantExpressionEvalUtilsSuite extends SparkFunSuite {
     // Object
     check("[{\"a\" : 13, \"b\" : null}]", expected = false)
   }
+
+  test("canonicalizeVariant reuses canonical input") {
+    val inputs = Seq(
+      new VariantVal(Array(primitiveHeader(NULL)), Array[Byte](VERSION, 0, 0)),
+      new VariantVal(Array(primitiveHeader(INT1), 1), Array[Byte](VERSION, 0, 0)),
+      new VariantVal(
+        Array(objectHeader(false, 1, 1), 2, 0, 1, 0, 2, 4,
+          primitiveHeader(INT1), 1, primitiveHeader(INT1), 2),
+        Array[Byte](VERSION, 2, 0, 1, 2, 'a', 'b')))
+
+    inputs.foreach { input =>
+      assert(VariantExpressionEvalUtils.canonicalizeVariant(input) eq input)
+    }
+  }
+
+  test("canonicalizeVariant rebuilds without mutating input") {
+    val input = new VariantVal(
+      Array(objectHeader(false, 1, 1), 2, 1, 0, 2, 0, 4,
+        primitiveHeader(INT1), 2, primitiveHeader(INT1), 1),
+      Array[Byte](VERSION, 2, 0, 1, 2, 'b', 'a'))
+    val originalValue = input.getValue.clone()
+    val originalMetadata = input.getMetadata.clone()
+    val expected = new VariantVal(
+      Array(objectHeader(false, 1, 1), 2, 0, 1, 0, 2, 4,
+        primitiveHeader(INT1), 1, primitiveHeader(INT1), 2),
+      Array[Byte](VERSION, 2, 0, 1, 2, 'a', 'b'))
+
+    val result = VariantExpressionEvalUtils.canonicalizeVariant(input)
+    assert(result ne input)
+    assert(result === expected)
+    assert(input.getValue === originalValue)
+    assert(input.getMetadata === originalMetadata)
+    assert(VariantExpressionEvalUtils.canonicalizeVariant(result) eq result)
+  }
 }
