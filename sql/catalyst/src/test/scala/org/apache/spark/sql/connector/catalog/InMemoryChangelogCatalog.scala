@@ -150,6 +150,7 @@ class InMemoryChangelogCatalog extends InMemoryCatalog {
  *                                nullable. Defaults to `true`. Tests that need to
  *                                exercise NullPropagation behaviour on a non-nullable
  *                                schema can set this to `false`.
+ * @param metadataColumns metadata columns required by changelog post-processing
  */
 case class ChangelogProperties(
     containsCarryoverRows: Boolean = false,
@@ -158,7 +159,8 @@ case class ChangelogProperties(
     rowIdNames: Seq[String] = Seq.empty,
     rowIdPaths: Seq[Seq[String]] = Seq.empty,
     rowVersionName: Option[String] = None,
-    commitTimestampNullable: Boolean = true)
+    commitTimestampNullable: Boolean = true,
+    metadataColumns: Array[MetadataColumn] = Array.empty)
 
 /**
  * A test [[Changelog]] that returns pre-populated change rows.
@@ -193,6 +195,8 @@ class InMemoryChangelog(
   }
 
   override def hashCode(): Int = readIdentity.hashCode()
+
+  override def metadataColumns(): Array[MetadataColumn] = properties.metadataColumns
 
   override def containsCarryoverRows(): Boolean = properties.containsCarryoverRows
 
