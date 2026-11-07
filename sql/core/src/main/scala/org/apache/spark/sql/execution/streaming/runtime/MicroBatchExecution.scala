@@ -112,11 +112,6 @@ class MicroBatchExecution(
   // in the same way, when OffsetLog v2 is used.
   @volatile protected var sourceIdMap: Map[String, SparkDataStream] = Map.empty
 
-  // Checks, before a micro-batch reads its data, that the query still applies the filters that
-  // the scans of its sources got when it started, see StreamingV2ScanPushDown.checkPushedFilters.
-  // This is initialized with the sources.
-  @volatile private var checkPushedFilters: SparkSession => Unit = _ => ()
-
   override protected def sourceToIdMap: Map[SparkDataStream, String] = sourceIdMap.map(_.swap)
 
   // Sink name for commit log support
@@ -287,7 +282,7 @@ class MicroBatchExecution(
         val dsStr = if (src.nonEmpty) s"[${src.get}]" else ""
         val v2Disabled = disabledSources.contains(src.getOrElse(None).getClass.getCanonicalName)
         if (!v2Disabled && table.supports(TableCapability.MICRO_BATCH_READ)) {
-          val scanRelation = v2ToRelationMap.getOrElseUpdate(s, {
+          v2ToRelationMap.getOrElseUpdate(s, {
             // Materialize source to avoid creating it in every batch
             val metadataPath = StreamingUtils.getMetadataPath(
               sourceIdentifyingName, nextSourceId, resolvedCheckpointRoot)
@@ -319,9 +314,6 @@ class MicroBatchExecution(
               streamingScan.stream, scanOutput = streamingScan.scanOutput,
               pushedFilters = streamingScan.pushedFilters)
           })
-          // Each micro-batch applies the filters that the scan builder got to the rows of the
-          // source, see StreamingV2ScanPushDown.
-          StreamingV2ScanPushDown.withPushedFilters(scanRelation)
         } else if (v1.isEmpty) {
           throw QueryExecutionErrors.microBatchUnsupportedByDataSourceError(
             srcName, sparkSession.sessionState.conf.disabledV2StreamingMicroBatchReaders, table)
@@ -341,14 +333,6 @@ class MicroBatchExecution(
           })
         }
     }
-
-    val pushedFilters = v2ToRelationMap.toSeq.collect {
-      case (relation, scanRelation) if scanRelation.pushedFilters.nonEmpty =>
-        (relation, scanRelation.pushedFilters, StreamingV2ScanPushDown.sourceName(
-          scanRelation.relation.table, scanRelation.catalog, scanRelation.identifier))
-    }
-    checkPushedFilters = session =>
-      StreamingV2ScanPushDown.checkPushedFilters(session, planWithDedupKeys, pushedFilters)
 
     // Extract sources and their sourceIdentifyingName for sourceIdMap mapping
     val sourcesWithNames = _logicalPlan.collect {
@@ -1377,7 +1361,6 @@ class MicroBatchExecution(
     loggingThreadContext.put(LogKeys.BATCH_ID.name, execCtx.batchId.toString)
 
     execCtx.reportTimeTaken("queryPlanning") {
-      checkPushedFilters(sparkSessionToRunBatch)
       execCtx.executionPlan = new IncrementalExecution(
         sparkSessionToRunBatch,
         triggerLogicalPlan,

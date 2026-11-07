@@ -65,11 +65,6 @@ class ContinuousExecution(
 
   @volatile protected var sources: Seq[ContinuousStream] = Seq()
 
-  // Checks, before the query plans its epochs, that it still applies the filters that the scans
-  // of its sources got when it started, see StreamingV2ScanPushDown.checkPushedFilters. This is
-  // initialized with the sources.
-  @volatile private var checkPushedFilters: SparkSession => Unit = _ => ()
-
   def sourceToIdMap: Map[SparkDataStream, String] = Map.empty
 
   // For use only in test harnesses.
@@ -93,7 +88,7 @@ class ContinuousExecution(
           throw QueryExecutionErrors.continuousProcessingUnsupportedByDataSourceError(sourceName)
         }
 
-        val scanRelation = v2ToRelationMap.getOrElseUpdate(s, {
+        v2ToRelationMap.getOrElseUpdate(s, {
           val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
           nextSourceId += 1
           logInfo(log"Reading table [${MDC(STREAMING_TABLE, table)}] " +
@@ -113,21 +108,11 @@ class ContinuousExecution(
             streamingScan.stream, scanOutput = streamingScan.scanOutput,
             pushedFilters = streamingScan.pushedFilters)
         })
-        // The query applies the filters that the scan builder got to the rows of the source, see
-        // StreamingV2ScanPushDown.
-        StreamingV2ScanPushDown.withPushedFilters(scanRelation)
     }
 
     sources = _logicalPlan.collect {
       case r: StreamingDataSourceV2ScanRelation => r.stream.asInstanceOf[ContinuousStream]
     }
-    val pushedFilters = v2ToRelationMap.toSeq.collect {
-      case (relation, scanRelation) if scanRelation.pushedFilters.nonEmpty =>
-        (relation, scanRelation.pushedFilters, StreamingV2ScanPushDown.sourceName(
-          scanRelation.relation.table, scanRelation.catalog, scanRelation.identifier))
-    }
-    checkPushedFilters = session =>
-      StreamingV2ScanPushDown.checkPushedFilters(session, analyzedPlan, pushedFilters)
     uniqueSources = sources.distinct.map(s => s -> ReadLimit.allAvailable()).toMap
 
     // TODO (SPARK-27484): we should add the writing node before the plan is analyzed.
@@ -257,7 +242,6 @@ class ContinuousExecution(
     }
 
     execCtx.reportTimeTaken("queryPlanning") {
-      checkPushedFilters(sparkSessionForQuery)
       execCtx.executionPlan = new IncrementalExecution(
         sparkSessionForQuery,
         withNewSources,

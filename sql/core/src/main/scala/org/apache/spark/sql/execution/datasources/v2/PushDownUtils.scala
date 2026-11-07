@@ -54,29 +54,17 @@ object PushDownUtils extends Logging {
    * Returns whether [[pushFilters]] gives `filter` to `scanBuilder` in some form: whether it
    * translates it to a data source filter or predicate, or whether it is deterministic for a
    * [[SupportsPushDownCatalystFilters]] builder. The other filters are only evaluated after the
-   * scan. [[pushFilters]] decides with it which filters it gives to the builder.
+   * scan. This must decide as [[pushFilters]] does.
    */
   def getsFilter(scanBuilder: ScanBuilder, filter: Expression): Boolean = scanBuilder match {
-    case _: SupportsPushDownFilters => translateFilter(filter, mapping = None).isDefined
+    case _: SupportsPushDownFilters =>
+      DataSourceStrategy.translateFilterWithMapping(filter, None,
+        nestedPredicatePushdownEnabled = true).isDefined
     case _: SupportsPushDownV2Filters =>
-      filter.deterministic && translateFilterV2(filter, mapping = None).isDefined
+      filter.deterministic &&
+        DataSourceV2Strategy.translateFilterV2WithMapping(filter, None).isDefined
     case _: SupportsPushDownCatalystFilters => filter.deterministic
     case _ => false
-  }
-
-  // The translations of `pushFilters` for the builders of data source filters and predicates,
-  // which record the original filters in `mapping`.
-  private def translateFilter(
-      filter: Expression,
-      mapping: Option[mutable.HashMap[sources.Filter, Expression]]): Option[sources.Filter] = {
-    DataSourceStrategy.translateFilterWithMapping(filter, mapping,
-      nestedPredicatePushdownEnabled = true)
-  }
-
-  private def translateFilterV2(
-      filter: Expression,
-      mapping: Option[mutable.HashMap[Predicate, Expression]]): Option[Predicate] = {
-    DataSourceV2Strategy.translateFilterV2WithMapping(filter, mapping)
   }
 
   /**
@@ -110,10 +98,13 @@ object PushDownUtils extends Logging {
         val untranslatableExprs = mutable.ArrayBuffer.empty[Expression]
 
         for (filterExpr <- filters) {
-          if (getsFilter(r, filterExpr)) {
-            translatedFilters += translateFilter(filterExpr, Some(translatedFilterToExpr)).get
-          } else {
+          val translated =
+            DataSourceStrategy.translateFilterWithMapping(filterExpr, Some(translatedFilterToExpr),
+              nestedPredicatePushdownEnabled = true)
+          if (translated.isEmpty) {
             untranslatableExprs += filterExpr
+          } else {
+            translatedFilters += translated.get
           }
         }
 
@@ -139,10 +130,13 @@ object PushDownUtils extends Logging {
         val untranslatableExprs = mutable.ArrayBuffer.empty[Expression]
 
         for (filterExpr <- deterministicFilters) {
-          if (getsFilter(r, filterExpr)) {
-            translatedFilters += translateFilterV2(filterExpr, Some(translatedFilterToExpr)).get
-          } else {
+          val translated =
+            DataSourceV2Strategy.translateFilterV2WithMapping(
+              filterExpr, Some(translatedFilterToExpr))
+          if (translated.isEmpty) {
             untranslatableExprs += filterExpr
+          } else {
+            translatedFilters += translated.get
           }
         }
 
@@ -168,8 +162,7 @@ object PushDownUtils extends Logging {
           ExpressionSet(untranslatableExprs)) ++ nonDeterministicFilters
         (Right(r.pushedPredicates.toImmutableArraySeq), orderedPostScanFilters)
       case r: SupportsPushDownCatalystFilters =>
-        val postScanFilters =
-          r.pushFilters(filters.filter(getsFilter(r, _))) ++ nonDeterministicFilters
+        val postScanFilters = r.pushFilters(deterministicFilters) ++ nonDeterministicFilters
         (Right(r.pushedFilters.toImmutableArraySeq), postScanFilters)
       case _ => (Left(Nil), filters)
     }

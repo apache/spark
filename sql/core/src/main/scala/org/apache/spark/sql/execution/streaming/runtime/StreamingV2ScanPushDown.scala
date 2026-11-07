@@ -24,11 +24,12 @@ import scala.util.control.NonFatal
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, Cast, Expression, ExpressionSet, Generator, OuterReference, PredicateHelper, SubqueryExpression, Unevaluable}
+import org.apache.spark.sql.catalyst.expressions.{AliasHelper, And, Attribute, AttributeMap, AttributeReference, AttributeSet, Cast, EqualNullSafe, EqualTo, Expression, ExpressionSet, Generator, Literal, Or, OuterReference, PredicateHelper, SubqueryExpression, Unevaluable}
+import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
-import org.apache.spark.sql.catalyst.optimizer.{InferFiltersFromConstraints, InferFiltersFromGenerate, ReplaceExpressions}
+import org.apache.spark.sql.catalyst.optimizer.{BooleanSimplification, ConstantFolding, InferFiltersFromConstraints, InferFiltersFromGenerate, ReplaceExpressions}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, CTERelationDef, EventTimeWatermark, Filter, Join, LateralJoin, LeafNode, LogicalPlan, Project, SetOperation, Statistics, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, CTERelationDef, Filter, Join, LateralJoin, LeafNode, LocalRelation, LogicalPlan, Project, SetOperation, Statistics}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, RUNTIME_REPLACEABLE}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -43,7 +44,7 @@ import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.datasources.v2.{PushDownUtils, StreamingDataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetSeqMetadata, OffsetSeqMetadataBase}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{AnyTimeType, DataType, DatetimeType, StringType, StructType, VariantType}
+import org.apache.spark.sql.types.{AnyTimeType, BinaryType, BooleanType, DataType, DatetimeType, DateType, DecimalType, IntegralType, StringType, StructType, TimestampNTZType, TimestampType, VariantType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
@@ -58,13 +59,12 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * gets what the planner takes from the optimized plan for the relation of the source (see
  * `DataSourceV2Strategy`): the projections and the filters over each occurrence of the relation.
  *
- * The plan of each micro-batch applies the filters that the scan builder got to the rows of the
- * relation, which the query applies anyway, so that the scan cannot drop a row that the plan keeps
- * (see `withPushedFilters`), and its optimized plan drops the copies of these filters that the
- * query applies above them (see `withoutRepeatedPushedFilters`). Otherwise, it is the plan without
- * these pushdowns: the optimizer keeps deciding which columns every operator gets, and in which
- * order, including the stateful ones. Only the scan node of the physical plan outputs the columns
- * that the scan reads, and the planner checks that the micro-batch reads no other column of the
+ * The scan may drop the rows that fail the filters that its builder got, so the optimized plan of
+ * each micro-batch must apply them to all the rows that it reads from the source, which it checks
+ * before it reads them (see `checkPushedFilters`). Otherwise, it is the plan without these
+ * pushdowns: the optimizer keeps deciding which columns every operator gets, and in which order,
+ * including the stateful ones. Only the scan node of the physical plan outputs the columns that
+ * the scan reads, and the planner checks that the micro-batch reads no other column of the
  * relation. A scan cannot read other columns once its stream exists, so a micro-batch that does
  * fails with STREAMING_SCAN_MISSING_COLUMNS, as when the configuration of the optimizer changes in
  * the session of the query after it starts so that its plan reads other columns of a source.
@@ -73,7 +73,8 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * apply to the data of all the micro-batches of a streaming query, which the scan of a micro-batch
  * does not read, so they are not pushed down.
  */
-private[sql] object StreamingV2ScanPushDown extends Logging with PredicateHelper {
+private[sql] object StreamingV2ScanPushDown
+  extends Logging with PredicateHelper with AliasHelper {
 
   /**
    * What the optimized plan of a streaming query reads from a streaming relation.
@@ -87,11 +88,10 @@ private[sql] object StreamingV2ScanPushDown extends Logging with PredicateHelper
 
     /**
      * The filters that every occurrence evaluates first, in the same order: the longest common
-     * prefix of the leading pushable filters of the occurrences. Each micro-batch evaluates the
-     * pushed filters first, over the relation (see `withPushedFilters`), so a pushed filter that
-     * may fail on some rows, as a cast or a division does under ANSI, or `raise_error`, must not
-     * see a row that a filter written before it drops. These are the filters for a scan builder
-     * whose filters may fail.
+     * prefix of the leading pushable filters of the occurrences. The scan may evaluate the pushed
+     * filters first, on the rows of the source, so a pushed filter that may fail on some rows, as
+     * a cast or a division does under ANSI, or `raise_error`, must not see a row that a filter
+     * written before it drops. These are the filters for a scan builder whose filters may fail.
      */
     def filters: Seq[Expression] = {
       occurrenceFilters.map(_.takeWhile(isPushable)).reduceOption { (left, right) =>
@@ -129,7 +129,8 @@ private[sql] object StreamingV2ScanPushDown extends Logging with PredicateHelper
    * @param scanOutput the columns of the relation that the scan reads, in the order of its read
    *                   schema, unless these are all its columns in their order
    * @param pushedFilters the filters that the scan builder got, which the scan may apply in any
-   *                      form, so the plan of each micro-batch applies them over the relation
+   *                      form, so the plan of each micro-batch must apply them too (see
+   *                      `checkPushedFilters`)
    */
   case class StreamingScan(
       scan: Scan,
@@ -157,8 +158,8 @@ private[sql] object StreamingV2ScanPushDown extends Logging with PredicateHelper
    * or from generators, so that a scan only gets the filters that the query applies to its own
    * source. A relation without an entry reads all its columns with no filter, as all do if the
    * optimization fails, unless `spark.sql.streaming.v2ScanPushDown.failOnOptimizationError` makes
-   * the failure fail the query, as in the tests of these pushdowns. The plan is not optimized when
-   * no source prunes its columns and the plan has no condition, since nothing could be pushed down.
+   * the failure fail the query, as in the tests. The plan is not optimized when no source prunes
+   * its columns and the plan has no condition, since nothing could be pushed down.
    *
    * @param session the session of the stream
    * @param offsetLogMetadata the metadata of the last entry of the offset log of the query, if any
@@ -240,34 +241,103 @@ private[sql] object StreamingV2ScanPushDown extends Logging with PredicateHelper
   }
 
   /**
-   * Checks that the query still applies the filters that the scans of its sources got when it
-   * started to all the rows that it reads from them, before a micro-batch reads its data: the plan
-   * is optimized again as when the query started (see `columnsAndFiltersOfSources`), with the
-   * configuration of the micro-batch, and each pushed filter must be one of the filters that all
-   * the reads of its relation apply. Otherwise, the value of an expression in a pushed filter
-   * changed after the query started, as a function of the time that `forStartup` does not replace
-   * would, or the configuration of the optimizer changed in the session of the query: the scan may
-   * drop rows that the query keeps, so the query fails before it reads them.
-   *
-   * @param pushedFilters the streaming relations whose scans got filters, with these filters, and
-   *                      the names of their sources in the errors (see `sourceName`)
+   * Checks that `plan`, the optimized plan of a micro-batch, applies the filters that the scans of
+   * its sources got when the query started to all the rows that it reads from them: a scan may
+   * drop the rows that fail its filters, so the plan must drop them too. The conditions that the
+   * plan applies to all the rows of each occurrence of a relation whose scan got filters must
+   * imply these filters (see `impliedBy`). Otherwise, the value of an expression in a pushed
+   * filter changed after the query started, as a function of the time that `forStartup` does not
+   * replace would, or the configuration of the optimizer changed in the session of the query, and
+   * the micro-batch fails before it reads its data.
    */
-  def checkPushedFilters(
-      session: SparkSession,
-      plan: LogicalPlan,
-      pushedFilters: Seq[(StreamingRelationV2, Seq[Expression], Seq[String])]): Unit = {
-    if (pushedFilters.nonEmpty) {
-      val reads = readsOfSources(session, plan, None)
-      pushedFilters.foreach { case (relation, filters, source) =>
-        val applied = ExpressionSet(reads.get(relation).toSeq.flatMap { read =>
-          DataSourceStrategy.normalizeExprs(read.filtersInAnyOrder, relation.output)
-        })
-        val changed = filters.filterNot(applied.contains)
-        if (changed.nonEmpty) {
-          throw QueryExecutionErrors.streamingScanFiltersChangedError(source, changed.map(_.sql))
+  def checkPushedFilters(plan: LogicalPlan): Unit = {
+    val hasPushedFilters = plan.exists {
+      case relation: StreamingDataSourceV2ScanRelation => relation.pushedFilters.nonEmpty
+      case _ => false
+    }
+    if (hasPushedFilters) {
+      conditionsOverRelations(plan, Nil).foreach { case (relation, conditions) =>
+        val unapplied = relation.pushedFilters.filterNot(impliedBy(conditions))
+        if (unapplied.nonEmpty) {
+          throw QueryExecutionErrors.streamingScanFiltersChangedError(
+            sourceName(relation.relation.table, relation.catalog, relation.identifier),
+            unapplied.map(_.sql))
         }
       }
     }
+  }
+
+  // Each occurrence of a streaming relation in `plan`, with the deterministic conditions that the
+  // plan applies to all its rows, given `above`, those that it applies to all the rows of `plan`:
+  // the conditions of the filters over it, through the projections, with the aliases of these in
+  // place of their names, as `PhysicalOperation` finds the filters of a relation. The conditions
+  // over a filter or a projection that is not deterministic do not hold for the rows that it gets.
+  private def conditionsOverRelations(
+      plan: LogicalPlan,
+      above: Seq[Expression]): Seq[(StreamingDataSourceV2ScanRelation, Seq[Expression])] = {
+    plan match {
+      case relation: StreamingDataSourceV2ScanRelation => Seq(relation -> above)
+      case Filter(condition, child) =>
+        val conditions = splitConjunctivePredicates(condition).filter(_.deterministic)
+        conditionsOverRelations(child,
+          if (condition.deterministic) conditions ++ above else conditions)
+      case Project(projectList, child) if projectList.forall(_.deterministic) =>
+        val aliases = getAliasMap(projectList)
+        conditionsOverRelations(child, above.map(replaceAlias(_, aliases)))
+      case other => other.children.flatMap(conditionsOverRelations(_, Nil))
+    }
+  }
+
+  /**
+   * Returns whether a filter is implied by `facts`, the deterministic conditions that hold for all
+   * the rows that a plan keeps from a relation: the facts have it, or its conjuncts, or one of its
+   * disjuncts, also once the columns that the facts make equal to literals have these values, in
+   * the filter and in the facts, and their constants are folded. The optimizer of a micro-batch
+   * puts these values in place of the columns in its filters (see `ConstantPropagation`), e.g.
+   * with an equality that it infers through a join, so that `id > 1` becomes true with `id = 5`,
+   * and `(owner = '' OR id > 5)` becomes `id > 5` with `owner = 'a'`. Only the values of the types
+   * whose equal values are the same replace their columns (see `hasExactEquality`). This may miss
+   * that the facts imply a filter, which fails the micro-batch, but never finds that they imply a
+   * filter that they do not imply.
+   */
+  private def impliedBy(facts: Seq[Expression]): Expression => Boolean = {
+    val values = AttributeMap(facts.collect {
+      case EqualTo(column: Attribute, value: Literal) => column -> value
+      case EqualTo(value: Literal, column: Attribute) => column -> value
+      case EqualNullSafe(column: Attribute, value: Literal) => column -> value
+      case EqualNullSafe(value: Literal, column: Attribute) => column -> value
+    }.filter { case (column, value) =>
+      column.dataType == value.dataType && hasExactEquality(column.dataType)
+    })
+    def withValues(condition: Expression): Expression = folded(condition.transform {
+      case column: Attribute if values.contains(column) => values(column)
+    })
+    val known = ExpressionSet(facts ++ (if (values.nonEmpty) facts.map(withValues) else Nil))
+    def holds(condition: Expression): Boolean = known.contains(condition) || (condition match {
+      case TrueLiteral => true
+      case And(left, right) => holds(left) && holds(right)
+      case Or(left, right) => holds(left) || holds(right)
+      case _ => false
+    })
+    filter => holds(filter) || (values.nonEmpty && holds(withValues(filter)))
+  }
+
+  // Whether the values of `dataType` that are equal are the same, so that a column that is equal
+  // to a value has this value in any expression: not 0.0 and -0.0, which are equal, nor the
+  // strings that a collation finds equal.
+  private def hasExactEquality(dataType: DataType): Boolean = dataType match {
+    case _: IntegralType | _: DecimalType | BooleanType | DateType | TimestampType |
+         TimestampNTZType | BinaryType => true
+    case string: StringType => string.supportsBinaryEquality
+    case _ => false
+  }
+
+  // `condition` with its constants folded, as the optimizer folds them.
+  private def folded(condition: Expression): Expression = {
+    val plan = Filter(condition, LocalRelation(condition.references.toSeq))
+    Try(BooleanSimplification(ConstantFolding(plan))).toOption.collect {
+      case Filter(simplified, _) => simplified
+    }.getOrElse(condition)
   }
 
   /**
@@ -482,8 +552,9 @@ private[sql] object StreamingV2ScanPushDown extends Logging with PredicateHelper
         columns: Seq[AttributeReference],
         filters: Seq[Expression]): Scan = {
       if (filters.nonEmpty) {
-        // The plan of each micro-batch applies these filters to the rows of the source, see
-        // `withPushedFilters`, so the scan may apply any of them, in any form.
+        // Each micro-batch checks that its plan applies these filters to all the rows that it
+        // reads from the source, see `checkPushedFilters`, so the scan may apply any of them, in
+        // any form.
         val (pushed, _) = PushDownUtils.pushFilters(builder, filters, partitionFields = None)
         val taken = pushed.fold(_.mkString(", "), _.mkString(", "))
         logInfo(log"The scan builder of the streaming table " +
@@ -544,6 +615,12 @@ private[sql] object StreamingV2ScanPushDown extends Logging with PredicateHelper
         readOutput(scan.readSchema(), output, columns).map(scan -> _)
       }
     }
+    // The columns and the filters of a scan, in the warnings.
+    def pushdowns(columns: Seq[AttributeReference], filters: Seq[Expression]): String = {
+      val names = if (columns.length < output.length) columns.map(_.name).mkString(", ") else "all"
+      val sqls = if (filters.isEmpty) "none" else filters.map(_.sql).mkString(", ")
+      s"(columns: $names, filters: $sqls)"
+    }
     // Tries the scans of `attempts`, the columns and the filters of each, in order, each from a
     // new scan builder after the first, and then the scan of all the columns with no filter.
     def firstScan(
@@ -557,39 +634,12 @@ private[sql] object StreamingV2ScanPushDown extends Logging with PredicateHelper
             case Success(Left(reason)) => s"its read schema $reason" -> None
             case Failure(e) => s"it failed with $e" -> Some(e)
           }
-          // What the next scan reads: its columns, and its filters if it has some, or no filter
-          // after a scan with filters.
           val (nextColumns, nextFilters) = rest.headOption.getOrElse(output -> Nil)
-          val nextRead = if (nextColumns.length < output.length) {
-            val names = nextColumns.map(_.name).mkString(", ")
-            log"only the columns ${MDC(LogKeys.COLUMN_NAMES, names)}"
-          } else {
-            log"all the columns"
-          }
-          val next = if (nextFilters.nonEmpty) {
-            nextRead + log" with the filters " +
-              log"${MDC(LogKeys.FILTER, nextFilters.map(_.sql).mkString(", "))}"
-          } else if (filters.nonEmpty) {
-            nextRead + log" with no filter"
-          } else {
-            nextRead
-          }
-          val message = if (filters.isEmpty) {
-            log"The scan of the streaming table ${MDC(LogKeys.STREAMING_TABLE, table)} could " +
-              log"not be built to read only the columns " +
-              log"${MDC(LogKeys.COLUMN_NAMES, columns.map(_.name).mkString(", "))}: " +
-              log"${MDC(LogKeys.REASON, reason)}. It reads " + next + log" instead."
-          } else {
-            val names = if (columns.length < output.length) {
-              columns.map(_.name).mkString(", ")
-            } else {
-              "all"
-            }
-            log"The scan of the streaming table ${MDC(LogKeys.STREAMING_TABLE, table)} could " +
-              log"not be built with the pushdowns (columns: ${MDC(LogKeys.COLUMN_NAMES, names)}, " +
-              log"filters: ${MDC(LogKeys.FILTER, filters.map(_.sql).mkString(", "))}): " +
-              log"${MDC(LogKeys.REASON, reason)}. It reads " + next + log" instead."
-          }
+          val message = log"The scan of the streaming table " +
+            log"${MDC(LogKeys.STREAMING_TABLE, table)} could not be built with " +
+            log"${MDC(LogKeys.OLD_VALUE, pushdowns(columns, filters))}: " +
+            log"${MDC(LogKeys.REASON, reason)}. Trying " +
+            log"${MDC(LogKeys.NEW_VALUE, pushdowns(nextColumns, nextFilters))} next."
           cause match {
             case Some(e) => logWarning(message, e)
             case None => logWarning(message)
@@ -654,74 +704,6 @@ private[sql] object StreamingV2ScanPushDown extends Logging with PredicateHelper
     } else {
       Right(readColumns)
     }
-  }
-
-  /**
-   * Returns `relation`, the relation of a streaming source in the plan of the query, with the
-   * filters that its scan builder got applied to its rows. The query applies them anyway, as they
-   * are the filters that it applies to all the rows that it reads from the source, so the plan of
-   * each micro-batch has the same result with them. With them, it also applies all the filters
-   * that the scan may apply, in any form, however the plan of the micro-batch is optimized, so the
-   * scan cannot drop a row that the plan keeps.
-   */
-  def withPushedFilters(relation: StreamingDataSourceV2ScanRelation): LogicalPlan = {
-    relation.pushedFilters.reduceOption(And).map(Filter(_, relation)).getOrElse(relation)
-  }
-
-  /**
-   * Returns `plan`, the optimized plan of a micro-batch of a streaming query whose relations have
-   * their pushed filters (see `withPushedFilters`), without the copies of these filters that it
-   * applies above them: the conjuncts of the filters over a relation that are equal to its pushed
-   * filters, through filters, projections, aliases of subqueries and watermarks, which pass on the
-   * rows that the pushed filters keep with the values of their columns, as they are or under an
-   * alias. Each micro-batch then evaluates the pushed filters once, whether its optimizer could
-   * merge the filters or not. Its optimizer rewrites the filters of the query as the optimizer
-   * rewrote the pushed filters when the query started, so they are compared once optimized.
-   */
-  def withoutRepeatedPushedFilters(plan: LogicalPlan): LogicalPlan = {
-    val hasPushedFilters = plan.exists {
-      case relation: StreamingDataSourceV2ScanRelation => relation.pushedFilters.nonEmpty
-      case _ => false
-    }
-    if (!hasPushedFilters) {
-      plan
-    } else {
-      plan.transformUp {
-        case filter @ Filter(condition, child) =>
-          val pushed = pushedFiltersBelow(child)
-          if (pushed.isEmpty) {
-            filter
-          } else {
-            splitConjunctivePredicates(condition).filterNot(pushed.contains)
-              .reduceOption(And).map(Filter(_, child)).getOrElse(child)
-          }
-      }
-    }
-  }
-
-  /**
-   * Returns the pushed filters of the relation below `plan`, through filters, projections, aliases
-   * of subqueries and watermarks, that hold for the rows of `plan`: those whose columns `plan`
-   * outputs, as they are or under an alias, on these columns.
-   */
-  private def pushedFiltersBelow(plan: LogicalPlan): ExpressionSet = plan match {
-    case Filter(_, relation: StreamingDataSourceV2ScanRelation) =>
-      ExpressionSet(relation.pushedFilters)
-    case Filter(_, child) => pushedFiltersBelow(child)
-    case SubqueryAlias(_, child) => pushedFiltersBelow(child)
-    case watermark: EventTimeWatermark => pushedFiltersBelow(watermark.child)
-    case Project(projectList, child) =>
-      // The columns of the child that the projection outputs, under an alias or as they are.
-      val outputs = AttributeMap(projectList.collect {
-        case alias @ Alias(attribute: Attribute, _) => attribute -> alias.toAttribute
-      } ++ projectList.collect {
-        case attribute: Attribute => attribute -> attribute
-      })
-      ExpressionSet(pushedFiltersBelow(child).collect {
-        case filter if filter.references.forall(outputs.contains) =>
-          filter.transform { case attribute: Attribute => outputs(attribute) }
-      })
-    case _ => ExpressionSet(Nil)
   }
 
   /**

@@ -343,70 +343,68 @@ object OffsetSeqMetadata extends Logging {
     metadata.copy(conf = conf)
   }
 
-  // How the metadata sets a conf of a session, see `setSessionConf`.
-  private sealed trait ConfValue
-  // The value of the conf in the metadata.
-  private case class InMetadata(value: String) extends ConfValue
-  // The value of a conf that the metadata does not have, for backward compatibility.
-  private case class ForMissingConf(value: String) extends ConfValue
-  // A conf that the metadata does not have, whose value in the session prevails.
-  private case object NotInMetadata extends ConfValue
-
-  // The confs that the metadata sets, by their keys in the session, and how.
-  private def confValues(metadata: OffsetSeqMetadataBase): Seq[(String, ConfValue)] = {
-    val keys = relevantSQLConfs.map(entry => entry.key -> entry.key) ++
-      rebindSQLConfsOffsetLogToSession.map { case (inOffsetLog, inSession) =>
-        inOffsetLog.key -> inSession.key
-      }
-    keys.map { case (keyInOffsetLog, keyInSession) =>
-      keyInSession -> metadata.conf.get(keyInOffsetLog).map(InMetadata)
-        .orElse(defaultValueForMissingConf(metadata, keyInOffsetLog).map(ForMissingConf))
-        .getOrElse(NotInMetadata)
-    }
-  }
-
   /**
    * Sets the values of the metadata in `conf`, as `setSessionConf` does, without logging them: for
    * a copy of the configuration of a query, which `setSessionConf` sets with them later.
    */
   def setConfWithoutLogging(metadata: OffsetSeqMetadataBase, conf: SQLConf): Unit = {
-    confValues(metadata).foreach {
-      case (key, InMetadata(value)) => conf.setConfString(key, value)
-      case (key, ForMissingConf(value)) => conf.setConfString(key, value)
-      case (_, NotInMetadata) =>
+    val keys = relevantSQLConfs.map(entry => entry.key -> entry.key) ++
+      rebindSQLConfsOffsetLogToSession.map { case (inOffsetLog, inSession) =>
+        inOffsetLog.key -> inSession.key
+      }
+    keys.foreach { case (keyInOffsetLog, keyInSession) =>
+      metadata.conf.get(keyInOffsetLog)
+        .orElse(defaultValueForMissingConf(metadata, keyInOffsetLog))
+        .foreach(conf.setConfString(keyInSession, _))
     }
   }
 
   /** Set the SparkSession configuration with the values in the metadata */
   def setSessionConf(metadata: OffsetSeqMetadataBase, sessionConf: SQLConf): Unit = {
-    confValues(metadata).foreach {
-      case (confKeyInSession, InMetadata(valueInMetadata)) =>
-        // Config value exists in the metadata, update the session config with this value
-        val optionalValueInSession = sessionConf.getConfString(confKeyInSession, null)
-        if (optionalValueInSession != null && optionalValueInSession != valueInMetadata) {
-          logWarning(log"Updating the value of conf '${MDC(CONFIG, confKeyInSession)}' in " +
-            log"current session from '${MDC(OLD_VALUE, optionalValueInSession)}' " +
-            log"to '${MDC(NEW_VALUE, valueInMetadata)}'.")
-        }
-        sessionConf.setConfString(confKeyInSession, valueInMetadata)
+    def setOneSessionConf(confKeyInOffsetLog: String, confKeyInSession: String): Unit = {
+      metadata.conf.get(confKeyInOffsetLog) match {
 
-      case (confKeyInSession, ForMissingConf(defaultValue)) =>
-        // For backward compatibility, if a config was not recorded in the offset log, then
-        // inject a default value if `defaultValueForMissingConf` returns one.
-        sessionConf.setConfString(confKeyInSession, defaultValue)
-        logWarning(log"Conf '${MDC(CONFIG, confKeyInSession)}' was not found in the offset " +
-          log"log, using default value '${MDC(DEFAULT_VALUE, defaultValue)}'")
+        case Some(valueInMetadata) =>
+          // Config value exists in the metadata, update the session config with this value
+          val optionalValueInSession = sessionConf.getConfString(confKeyInSession, null)
+          if (optionalValueInSession != null && optionalValueInSession != valueInMetadata) {
+            logWarning(log"Updating the value of conf '${MDC(CONFIG, confKeyInSession)}' in " +
+              log"current session from '${MDC(OLD_VALUE, optionalValueInSession)}' " +
+              log"to '${MDC(NEW_VALUE, valueInMetadata)}'.")
+          }
+          sessionConf.setConfString(confKeyInSession, valueInMetadata)
 
-      case (confKeyInSession, NotInMetadata) =>
-        // Otherwise, let the existing conf value in SparkSession prevail.
-        val value = sessionConf.getConfString(confKeyInSession, null)
-        val valueStr = if (value != null) {
-          s" Using existing session conf value '$value'."
-        } else {
-          " No value set in session conf."
-        }
-        logWarning(log"Conf '${MDC(CONFIG, confKeyInSession)}' was not found in the " +
-          log"offset log. ${MDC(TIP, valueStr)}")
+        case None =>
+          // For backward compatibility, if a config was not recorded in the offset log,
+          // then either inject a default value (if `defaultValueForMissingConf` returns one) or
+          // let the existing conf value in SparkSession prevail.
+          defaultValueForMissingConf(metadata, confKeyInOffsetLog) match {
+
+            case Some(defaultValue) =>
+              sessionConf.setConfString(confKeyInSession, defaultValue)
+              logWarning(log"Conf '${MDC(CONFIG, confKeyInSession)}' was not found in the offset " +
+                log"log, using default value '${MDC(DEFAULT_VALUE, defaultValue)}'")
+
+            case None =>
+              val value = sessionConf.getConfString(confKeyInSession, null)
+              val valueStr = if (value != null) {
+                s" Using existing session conf value '$value'."
+              } else {
+                " No value set in session conf."
+              }
+              logWarning(log"Conf '${MDC(CONFIG, confKeyInSession)}' was not found in the " +
+                log"offset log. ${MDC(TIP, valueStr)}")
+          }
+      }
+    }
+
+    OffsetSeqMetadata.relevantSQLConfs.map(_.key).foreach { confKey =>
+      setOneSessionConf(confKey, confKey)
+    }
+
+    rebindSQLConfsOffsetLogToSession.foreach {
+      case (confInOffsetLog, confInSession) =>
+        setOneSessionConf(confInOffsetLog.key, confInSession.key)
     }
   }
 }

@@ -487,9 +487,9 @@ case class StreamingDataSourceV2Relation(
  *                   them rather than from `output`, and check that the plan reads no other column
  *                   of `output`, as `DataSourceV2Strategy` does.
  * @param pushedFilters the filters that the scan builder got, over `output`, which the scan may
- *                      apply in any form. The plan of the query applies them over the relation,
- *                      as it applies them anyway, so that the scan cannot drop a row that the plan
- *                      keeps.
+ *                      apply in any form. The plan of each micro-batch must apply them to all the
+ *                      rows of the relation too, so that the scan cannot drop a row that the plan
+ *                      keeps, which `StreamingV2ScanPushDown.checkPushedFilters` checks.
  */
 case class StreamingDataSourceV2ScanRelation(
     relation: StreamingDataSourceV2Relation,
@@ -510,9 +510,9 @@ case class StreamingDataSourceV2ScanRelation(
     val scanned = scanOutput.map { columns =>
       s", ScanOutput: ${truncatedString(columns, "[", ", ", "]", maxFields)}"
     }
-    // The plan of each micro-batch applies the pushed filters with those of the query, which
-    // explain shows together, so the relation shows the filters that its scan builder was given.
-    // Unlike the PushedFilters of a batch scan, these are not the filters that the builder took.
+    // The filters that the scan builder was given, which the plan of each micro-batch applies
+    // after the scan too. Unlike the PushedFilters of a batch scan, these are not the filters that
+    // the builder took.
     val filters = if (pushedFilters.nonEmpty) {
       s", FiltersOfScanBuilder: ${truncatedString(pushedFilters, "[", ", ", "]", maxFields)}"
     } else {

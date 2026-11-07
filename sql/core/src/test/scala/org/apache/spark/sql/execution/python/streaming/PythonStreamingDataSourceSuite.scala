@@ -638,7 +638,7 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
         }
       }
       assert(!logs.loggingEvents.exists(_.getMessage.getFormattedMessage
-        .contains("could not be built with the pushdowns")))
+        .contains("could not be built with")))
     }
   }
 
