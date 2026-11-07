@@ -53,6 +53,9 @@ class ArrowStreamSerializer(Serializer):
     write_start_stream : bool
         If True, writes the START_ARROW_STREAM marker before the first
         output batch. Default False.
+    flush_per_batch : bool
+        If True, flushes the stream after writing each output batch. Default False.
+        Exposed as the mutable ``flush_per_batch`` attribute.
     collect_timing : bool
         Record combined Arrow IPC and stream I/O time in worker metrics.
         Enable only for UDF paths that report the corresponding SQL metrics.
@@ -72,7 +75,7 @@ class ArrowStreamSerializer(Serializer):
     ) -> None:
         super().__init__()
         self._write_start_stream: bool = write_start_stream
-        self._flush_per_batch: bool = flush_per_batch
+        self.flush_per_batch: bool = flush_per_batch
         self._collect_timing = collect_timing
 
     def dump_stream(self, iterator: Iterable["pa.RecordBatch"], stream: IO[bytes]) -> None:
@@ -98,7 +101,7 @@ class ArrowStreamSerializer(Serializer):
                 writer.write_batch(batch)
                 # In pipelined mode, flush after each batch so the JVM can read output
                 # while still sending input, rather than buffering all output.
-                if self._flush_per_batch:
+                if self.flush_per_batch:
                     stream.flush()
                 if write_timer is not None:
                     write_duration_ns += clock() - start_ns

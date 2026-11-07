@@ -23,6 +23,7 @@ import tempfile
 import threading
 import time
 import unittest
+import warnings
 from typing import Any, Optional
 from unittest.mock import patch
 
@@ -54,6 +55,7 @@ from pyspark.worker_metrics import WorkerMetrics
 
 with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
     from pyspark.worker import main as worker_main
+    from pyspark.worker_util import read_in_thread
 
 
 class WorkerMetricsTests(unittest.TestCase):
@@ -144,6 +146,79 @@ class WorkerMetricsTests(unittest.TestCase):
             with metrics.measure("duration"):
                 pass
         self.assertEqual(metrics.to_dict(), {"duration": 3})
+
+
+class ReadInThreadTests(unittest.TestCase):
+    """Tests for reading the worker input in a background thread, run without a JVM."""
+
+    READER_NAME = "pyspark-pipelined-reader"
+
+    def assert_reader_stopped(self):
+        names = [t.name for t in threading.enumerate()]
+        self.assertNotIn(self.READER_NAME, names)
+
+    def test_source_error_is_reraised_after_preceding_items(self):
+        def source():
+            yield 1
+            yield 2
+            raise ValueError("source failure")
+
+        with read_in_thread(source(), 1) as it:
+            self.assertEqual(next(it), 1)
+            self.assertEqual(next(it), 2)
+            with self.assertRaisesRegex(ValueError, "source failure"):
+                next(it)
+        self.assert_reader_stopped()
+
+    def test_early_exit_stops_reader_blocked_on_full_queue(self):
+        produced = []
+        release = threading.Event()
+
+        def source():
+            for i in range(3):
+                produced.append(i)
+                yield i
+            # Simulates a next read of the input stream that does not return; the reader must
+            # not get here once the consumer has stopped.
+            release.wait()
+            produced.append(3)
+            yield 3
+
+        try:
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                with read_in_thread(source(), 1) as it:
+                    self.assertEqual(next(it), 0)
+                    # The reader fills the queue and then blocks on putting the next item.
+                    eventually(timeout=10, catch_assertions=True)(
+                        lambda: self.assertEqual(len(produced), 3)
+                    )()
+        finally:
+            release.set()
+        self.assertEqual([w for w in caught if issubclass(w.category, RuntimeWarning)], [])
+        self.assert_reader_stopped()
+        self.assertEqual(len(produced), 3)
+
+    def test_warns_when_reader_does_not_exit(self):
+        release = threading.Event()
+
+        def source():
+            yield 0
+            # Simulates a read of the input stream that does not return.
+            release.wait()
+            yield 1
+
+        try:
+            with patch.object(threading.Thread, "join", lambda self, timeout=None: None):
+                with self.assertWarnsRegex(RuntimeWarning, "did not exit within 5s"):
+                    with read_in_thread(source(), 2) as it:
+                        self.assertEqual(next(it), 0)
+        finally:
+            release.set()
+        for t in threading.enumerate():
+            if t.name == self.READER_NAME:
+                t.join(timeout=10)
+        self.assert_reader_stopped()
 
 
 class WorkerInitResponseTests(unittest.TestCase):
