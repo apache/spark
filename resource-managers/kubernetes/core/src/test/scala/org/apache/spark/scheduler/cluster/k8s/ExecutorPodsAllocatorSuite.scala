@@ -911,6 +911,61 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     verify(pvcWithNamespace, never()).resource(any())
   }
 
+  test("SPARK-60778: Do not reuse a PVC mounted by a live executor when no new snapshot arrives") {
+    val prefix = "spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1"
+    val confWithPVC = conf.clone
+      .set(KUBERNETES_DRIVER_OWN_PVC.key, "true")
+      .set(KUBERNETES_DRIVER_REUSE_PVC.key, "true")
+      .set(s"$prefix.mount.path", "/spark-local-dir")
+      .set(s"$prefix.mount.readOnly", "false")
+      .set(s"$prefix.option.claimName", "OnDemand")
+      .set(s"$prefix.option.sizeLimit", "200Gi")
+      .set(s"$prefix.option.storageClass", "gp2")
+
+    // pvc-0 is older than podCreationTimeout, so only the in-use check protects it.
+    val pvc = persistentVolumeClaim("pvc-0", "gp2", "200Gi")
+    pvc.getMetadata
+      .setCreationTimestamp(Instant.now().minus(podCreationTimeout + 1, MILLIS).toString)
+    when(persistentVolumeClaimList.getItems).thenReturn(Seq(pvc).asJava)
+    when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]),
+        meq(kubernetesClient), any(classOf[ResourceProfile])))
+      .thenAnswer((invocation: InvocationOnMock) => {
+      val k8sConf: KubernetesExecutorConf = invocation.getArgument(0)
+      KubernetesExecutorSpec(
+        executorPodWithIdAndVolume(k8sConf.executorId.toInt, k8sConf.resourceProfileId),
+        Seq(persistentVolumeClaim("pvc-0", "gp2", "200Gi")))
+    })
+
+    podsAllocatorUnderTest = new ExecutorPodsAllocator(
+      confWithPVC, secMgr, executorBuilder,
+      kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocatorUnderTest.setExecutorPodsLifecycleManager(lifecycleManager)
+    podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
+
+    // Executor 1 is requested; pvc-0 is not mounted by anyone yet, so it is reused.
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 1))
+    verify(podsWithNamespace).resource(podWithAttachedContainerForIdAndVolume(1))
+    verify(pvcWithNamespace, never()).resource(any())
+
+    // Executor 1 is running and mounts pvc-0.
+    val runningWithVolume = new PodBuilder(podWithAttachedContainerForIdAndVolume(1))
+      .editOrNewStatus()
+        .withPhase("running")
+        .withStartTime(Instant.now.toString)
+        .endStatus()
+      .build()
+    snapshotsStore.updatePod(runningWithVolume)
+    snapshotsStore.notifySubscribers()
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 0)
+
+    // Scale up on a tick that carries no new snapshot. pvc-0 is still mounted by executor 1,
+    // so executor 2 must get a fresh PVC instead of reusing pvc-0.
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 2))
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 1)
+    verify(podsWithNamespace).resource(podWithAttachedContainerForIdAndVolume(2))
+    verify(pvcWithNamespace, times(1)).resource(any())
+  }
+
   test("print the pod name instead of Some(name) if pod is absent") {
     val nonexistentPod = "i-do-not-exist"
     val conf = new SparkConf().set(KUBERNETES_DRIVER_POD_NAME, nonexistentPod)
