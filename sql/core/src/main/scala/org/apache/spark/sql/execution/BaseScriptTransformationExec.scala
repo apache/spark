@@ -108,6 +108,24 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
     (outputStream, proc, inputStream, stderrBuffer)
   }
 
+  /**
+   * Starts the thread that writes the input rows to the process, and destroys the process once
+   * the task completes, as `PipedRDD` does. Otherwise, when the task completes before it reads
+   * the whole output of the process, as under a LIMIT, the process blocks on writing its output
+   * and the thread on writing the rest of the input, so that neither ends.
+   */
+  protected def startWriterThread(writerThread: BaseScriptTransformationWriterThread): Unit = {
+    writerThread.taskContext.addTaskCompletionListener[Unit] { _ =>
+      if (writerThread.proc.isAlive) {
+        writerThread.proc.destroy()
+      }
+      if (writerThread.isAlive) {
+        writerThread.interrupt()
+      }
+    }
+    writerThread.start()
+  }
+
   protected def processIterator(
       inputIterator: Iterator[InternalRow],
       hadoopConf: Configuration): Iterator[InternalRow]

@@ -183,7 +183,7 @@ private[hive] case class HiveScriptTransformationExec(
         writerThread, inputStream, proc, stderrBuffer, outputSerde, outputSoi, hadoopConf)
     }
 
-    writerThread.start()
+    startWriterThread(writerThread)
 
     outputIterator
   }
