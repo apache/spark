@@ -803,7 +803,7 @@ class KMeans(JavaEstimator[KMeansModel], _KMeansParams, JavaMLWritable, JavaMLRe
                  initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20, seed=None, \
                  distanceMeasure="euclidean", weightCol=None, solver="auto", \
                  maxBlockSizeInMB=0.0, \
-                  intermediateStorageLevel="MEMORY_AND_DISK")
+                 intermediateStorageLevel="MEMORY_AND_DISK")
         """
         super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.clustering.KMeans", self.uid)
@@ -837,7 +837,7 @@ class KMeans(JavaEstimator[KMeansModel], _KMeansParams, JavaMLWritable, JavaMLRe
                   initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20, seed=None, \
                   distanceMeasure="euclidean", weightCol=None, solver="auto", \
                   maxBlockSizeInMB=0.0, \
-                   intermediateStorageLevel="MEMORY_AND_DISK")
+                  intermediateStorageLevel="MEMORY_AND_DISK")
 
         Sets params for KMeans.
         """
