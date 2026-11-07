@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.{SortExec, SparkPlan}
+import org.apache.spark.sql.execution.{SortExec, SparkPlan, UnionExec}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledJoin}
 
@@ -53,9 +53,20 @@ case class SimpleCost(numSkewJoins: Int, numShuffles: Int, numLocalSorts: Int) e
 /**
  * A skew join aware implementation of [[CostEvaluator]], which counts the number of
  * [[ShuffleExchangeLike]] nodes, skew join nodes and (optionally) local [[SortExec]] nodes in the
- * plan. See [[SimpleCost]] for how the components are compared.
+ * plan. With union shuffle push-down enabled, tagged new exchanges are excluded and each union
+ * identified by [[PushDownShuffleExchangeThroughUnion.hasPushedShuffle]] counts as one shuffle.
+ * Query-stage contents are not visited. Inspecting the same shape in current and re-planned unions
+ * keeps an equivalent re-plan from gaining a shuffle-cost credit when a moved branch finishes.
+ * Ordinary exchanges and recognized unions have equal weight, with no separate tie-breaker.
+ * This is shape-based compensation, not a record of executed work: pruning the only qualifying
+ * branch can remove the union cost even while the union survives. That decrease can offset an
+ * additional exchange elsewhere, so adoption need not match the push-down-disabled plan.
+ * See [[SimpleCost]] for how the components are compared.
  */
-case class SimpleCostEvaluator(forceOptimizeSkewedJoin: Boolean, countLocalSort: Boolean)
+case class SimpleCostEvaluator(
+    forceOptimizeSkewedJoin: Boolean,
+    countLocalSort: Boolean,
+    pushDownShuffleThroughUnion: Boolean)
   extends CostEvaluator {
 
   override def evaluateCost(plan: SparkPlan): Cost = {
@@ -65,7 +76,12 @@ case class SimpleCostEvaluator(forceOptimizeSkewedJoin: Boolean, countLocalSort:
     plan.foreach {
       case j: ShuffledJoin if forceOptimizeSkewedJoin && j.isSkewJoin => numSkewJoins += 1
       case j: BroadcastHashJoinExec if forceOptimizeSkewedJoin && j.isSkewJoin => numSkewJoins += 1
+      case shuffle: ShuffleExchangeLike if pushDownShuffleThroughUnion &&
+          PushDownShuffleExchangeThroughUnion.isPushedDownShuffle(shuffle) =>
       case _: ShuffleExchangeLike => numShuffles += 1
+      case union: UnionExec if pushDownShuffleThroughUnion &&
+          PushDownShuffleExchangeThroughUnion.hasPushedShuffle(union) =>
+        numShuffles += 1
       case s: SortExec if countLocalSort && !s.global => numLocalSorts += 1
       case _ =>
     }
