@@ -37,8 +37,21 @@ import org.apache.spark.util.ThreadUtils
  * special-casing pipelined shuffles at each call site.
  */
 private[spark] trait ShuffleOutputTrackerMaster {
-  /** Register a shuffle so its outputs can be tracked. `jobId` is used by the streaming tracker. */
-  def registerShuffle(shuffleId: Int, numMaps: Int, numReduces: Int, jobId: Int): Unit
+  /**
+   * Register a shuffle so its outputs can be tracked. `jobId` is used by the streaming tracker.
+   *
+   * `isReliablyStored` is honored only by the `MapOutputTrackerMaster`, which persists it and skips
+   * reliably-stored shuffles on executor/worker loss. The streaming tracker ignores it: a pipelined
+   * shuffle is never registered with the `MapOutputTracker` and its output is located and
+   * invalidated through the streaming task-location registry, not via map-status cleanup, so the
+   * loss handling this flag guards does not apply.
+   */
+  def registerShuffle(
+      shuffleId: Int,
+      numMaps: Int,
+      numReduces: Int,
+      jobId: Int,
+      isReliablyStored: Boolean = false): Unit
   /** Whether the given shuffle is registered with this tracker. */
   def containsShuffle(shuffleId: Int): Boolean
   /** Unregister a shuffle and release its tracked state. */
@@ -237,7 +250,12 @@ private[spark] class StreamingShuffleOutputTrackerMaster(conf: SparkConf)
     pool
   }
 
-  override def registerShuffle(shuffleId: Int, numMaps: Int, numReduces: Int, jobId: Int): Unit = {
+  override def registerShuffle(
+      shuffleId: Int,
+      numMaps: Int,
+      numReduces: Int,
+      jobId: Int,
+      isReliablyStored: Boolean): Unit = {
     logInfo(log"Registering shuffleId ${MDC(LogKeys.SHUFFLE_ID, shuffleId)} with ${
       MDC(LogKeys.NUM_MAPPERS, numMaps)} mappers and ${
       MDC(LogKeys.NUM_REDUCERS, numReduces)} reducers")
