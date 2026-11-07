@@ -3108,13 +3108,12 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       // The connector returns "ab" for a CHAR(5) column, and Spark returns it unpadded.
       val char = readSchemaLookup("char")
       checkStream(left.join(char, left("id") === char("id")), Seq(Row(1, 1, "ab")))
-      // Standard semantics apply the read-side padding anyway, so the table is still rejected.
+      // Standard semantics apply the read-side padding anyway, as a lookup-side stage.
       withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
-        checkError(
-          exception = intercept[AnalysisException](readSchemaLookup("char")),
-          condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.CHAR_VARCHAR_COLUMN",
-          parameters =
-            Map("relation" -> "`ReadSchemaExternalLookupTable`", "column" -> "`name`"))
+        val paddedChar = readSchemaLookup("char")
+        val run = runStream(left.join(paddedChar, left("id") === paddedChar("id")))
+        QueryTest.sameRows(Seq(Row(1, 1, "ab   ")), run.rows).foreach(fail(_))
+        assert(run.lookupJoin.lookupTransforms.nonEmpty)
       }
     }
   }
