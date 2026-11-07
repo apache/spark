@@ -990,6 +990,10 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             CreateTableValidation.validateV2CreateTablePlan(create, SQLConf.get)
 
           case write: V2WriteCommand if write.resolved =>
+            write match {
+              case rowLevelWrite: RowLevelWrite => rowLevelWrite.checkProjectionOrdinals()
+              case _ =>
+            }
             write.query.schema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
 
           case a: AddCheckConstraint if !a.checkConstraint.deterministic =>

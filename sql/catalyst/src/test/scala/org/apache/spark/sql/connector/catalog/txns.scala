@@ -160,6 +160,7 @@ class TxnTable(
     delegate.replacedPartitions = replacedPartitions
     delegate.lastWriteInfo = lastWriteInfo
     delegate.lastWriteLog = lastWriteLog
+    delegate.lastUpdatedColumns = lastUpdatedColumns
     delegate.commits ++= commits
     delegate.increaseVersion()
   }

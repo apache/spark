@@ -112,7 +112,8 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
     }
   }
 
-  private def metadataColumnAssignmentErrors(assignments: Seq[Assignment]): Seq[String] = {
+  private[analysis] def metadataColumnAssignmentErrors(
+      assignments: Seq[Assignment]): Seq[String] = {
     assignments.map(_.key).filter(_.resolved).flatMap(_.references)
       .filter(attr => MetadataAttribute.isValid(attr.metadata))
       .map(_.name)

@@ -44,7 +44,8 @@ import org.apache.spark.util.ArrayImplicits._
  * the data source is capable of handling specific changes, it is useful to first discard entire
  * groups that are not modified. The cost of the runtime query is small as it only projects columns
  * required to evaluate the row level operation condition. The main scan, on the other hand, must
- * project all columns, meaning the cost of reading unaffected groups can dominate the runtime.
+ * project every column the write needs, meaning the cost of reading unaffected groups can dominate
+ * the runtime.
  */
 class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPlan])
   extends Rule[LogicalPlan] with PredicateHelper {
@@ -111,10 +112,9 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
         // and must transform the runtime filter condition to use correct expr IDs for each relation
         // note this only applies to group-based row-level operations (i.e. ReplaceData)
         // see RewriteUpdateTable for more details
-        // the condition may also reference metadata columns resolved from the metadata output
-        // of the target relation, which are not in the table output and must be mapped too
-        val metadataAttrs = (cond.references -- write.table.output).toSeq
-        val attrMap = buildTableToScanAttrMap(write.table.output ++ metadataAttrs, relation.output)
+        // map every column the condition references, which can include metadata columns and
+        // columns the write does not receive
+        val attrMap = buildTableToScanAttrMap(cond.references.toSeq, relation.output)
         val transformedCond = cond transform {
           case attr: AttributeReference if attrMap.contains(attr) => attrMap(attr)
         }
