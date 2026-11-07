@@ -3678,6 +3678,19 @@ class XmlSuite
     }
   }
 
+  test("SPARK-59546: unusable timeFormat does not break XML inference") {
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      for (multiLine <- Seq(false, true)) {
+        val xml = "<ROW><time>plain</time></ROW>"
+        val df = readData(xml, None,
+          baseOptions ++ Map("multiLine" -> multiLine.toString, "timeFormat" -> "EEE HH:mm"))
+        assert(df.schema("time").dataType === StringType)
+        assert(!df.schema.fieldNames.contains("_corrupt_record"))
+        checkAnswer(df, Seq(Row("plain")))
+      }
+    }
+  }
+
   test("validate XML Options") {
     assert(XmlOptions.getAllOptions.size == 33)
     // Please add validation on any new XML options here
