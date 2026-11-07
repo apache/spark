@@ -264,39 +264,39 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   /**
    * @return
-   *   the Byte value that is equal to the rounded decimal.
+   *   the Byte value of the decimal truncated toward zero.
    * @throws ArithmeticException
    *   if the decimal is too big to fit in Byte type.
    */
   private[sql] def roundToByte(): Byte =
-    roundToNumeric[Byte](ByteType, Byte.MaxValue, Byte.MinValue)(_.toByte)(_.toByte)
+    roundToNumeric[Byte](ByteType, Byte.MaxValue, Byte.MinValue)(_.toByte)
 
   /**
    * @return
-   *   the Short value that is equal to the rounded decimal.
+   *   the Short value of the decimal truncated toward zero.
    * @throws ArithmeticException
    *   if the decimal is too big to fit in Short type.
    */
   private[sql] def roundToShort(): Short =
-    roundToNumeric[Short](ShortType, Short.MaxValue, Short.MinValue)(_.toShort)(_.toShort)
+    roundToNumeric[Short](ShortType, Short.MaxValue, Short.MinValue)(_.toShort)
 
   /**
    * @return
-   *   the Int value that is equal to the rounded decimal.
+   *   the Int value of the decimal truncated toward zero.
    * @throws ArithmeticException
    *   if the decimal too big to fit in Int type.
    */
   private[sql] def roundToInt(): Int =
-    roundToNumeric[Int](IntegerType, Int.MaxValue, Int.MinValue)(_.toInt)(_.toInt)
+    roundToNumeric[Int](IntegerType, Int.MaxValue, Int.MinValue)(_.toInt)
 
   private def toSqlValue: String = this.toString + "BD"
 
   private def roundToNumeric[T <: AnyVal](
       integralType: IntegralType,
       maxValue: Int,
-      minValue: Int)(f1: Long => T)(f2: Double => T): T = {
+      minValue: Int)(f: Long => T): T = {
     if (decimalVal.eq(null)) {
-      val numericVal = f1(actualLongVal)
+      val numericVal = f(actualLongVal)
       if (actualLongVal == numericVal) {
         numericVal
       } else {
@@ -306,9 +306,14 @@ final class Decimal extends Ordered[Decimal] with Serializable {
           integralType)
       }
     } else {
-      val doubleVal = decimalVal.toDouble
-      if (Math.floor(doubleVal) <= maxValue && Math.ceil(doubleVal) >= minValue) {
-        f2(doubleVal)
+      // Truncate exactly, as `roundToLong` does. Going through a Double would round a value
+      // whose fraction is close enough to 1 up to the next integer, returning a value one too
+      // high or, at a bound, overflowing.
+      val truncated = decimalVal.bigDecimal.toBigInteger
+      // intValue() keeps only the low 32 bits, so it is exact only when bitLength() < 32.
+      val intVal = truncated.intValue()
+      if (truncated.bitLength() < 32 && intVal <= maxValue && intVal >= minValue) {
+        f(intVal)
       } else {
         throw DataTypeErrors.castingCauseOverflowError(
           toSqlValue,
