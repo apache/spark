@@ -772,6 +772,8 @@ public abstract class AbstractBytesToBytesMapSuite {
     assertThrows(IllegalArgumentException.class,
       () -> new BytesToBytesMap(taskMemoryManager, 1,
               TaskMemoryManager.MAXIMUM_PAGE_SIZE_BYTES + 1));
+    assertThrows(IllegalArgumentException.class,
+      () -> new BytesToBytesMap(taskMemoryManager, 1, 0, PAGE_SIZE_BYTES));
   }
 
   @Test
@@ -812,6 +814,31 @@ public abstract class AbstractBytesToBytesMapSuite {
       newPeakMemory = map.getPeakMemoryUsedBytes();
       assertEquals(previousPeakMemory, newPeakMemory);
 
+    } finally {
+      map.free();
+    }
+  }
+
+  @Test
+  public void dataPagesGrowFromInitialPageSize() {
+    final BytesToBytesMap map = new BytesToBytesMap(taskMemoryManager, 1, 1024, 4096);
+    try {
+      // All records share one key, so the pointer array does not grow and every increase of the
+      // memory consumption is a new data page.
+      final long[] key = new long[]{0};
+      final List<Long> pageSizes = new ArrayList<>();
+      long previousMemory = map.getTotalMemoryConsumption();
+      while (pageSizes.size() < 5) {
+        assertTrue(map.lookup(key, Platform.LONG_ARRAY_OFFSET, 8)
+          .append(key, Platform.LONG_ARRAY_OFFSET, 8, key, Platform.LONG_ARRAY_OFFSET, 8));
+        final long memory = map.getTotalMemoryConsumption();
+        if (memory > previousMemory) {
+          pageSizes.add(memory - previousMemory);
+        }
+        previousMemory = memory;
+      }
+      assertEquals(Arrays.asList(1024L, 2048L, 4096L, 4096L, 4096L), pageSizes);
+      assertEquals(5, map.getNumDataPages());
     } finally {
       map.free();
     }

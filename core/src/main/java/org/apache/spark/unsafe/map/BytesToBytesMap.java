@@ -176,6 +176,12 @@ public final class BytesToBytesMap extends MemoryConsumer {
   private final long pageSizeBytes;
 
   /**
+   * The size of the next data page to allocate. It starts at the initial page size and doubles
+   * with every new page until it reaches {@link #pageSizeBytes}.
+   */
+  private long nextPageSizeBytes;
+
+  /**
    * Number of keys defined in the map.
    */
   private int numKeys;
@@ -240,6 +246,26 @@ public final class BytesToBytesMap extends MemoryConsumer {
       double loadFactor,
       long pageSizeBytes,
       @Nullable KeyOperationsFactory keyOperationsFactory) {
+    this(
+      taskMemoryManager,
+      blockManager,
+      serializerManager,
+      initialCapacity,
+      loadFactor,
+      pageSizeBytes,
+      pageSizeBytes,
+      keyOperationsFactory);
+  }
+
+  private BytesToBytesMap(
+      TaskMemoryManager taskMemoryManager,
+      BlockManager blockManager,
+      SerializerManager serializerManager,
+      int initialCapacity,
+      double loadFactor,
+      long initialPageSizeBytes,
+      long pageSizeBytes,
+      @Nullable KeyOperationsFactory keyOperationsFactory) {
     super(taskMemoryManager, pageSizeBytes, taskMemoryManager.getTungstenMemoryMode());
     this.taskMemoryManager = taskMemoryManager;
     this.blockManager = blockManager;
@@ -259,8 +285,34 @@ public final class BytesToBytesMap extends MemoryConsumer {
       throw new IllegalArgumentException("Page size " + pageSizeBytes + " cannot exceed " +
         TaskMemoryManager.MAXIMUM_PAGE_SIZE_BYTES);
     }
+    if (initialPageSizeBytes <= 0) {
+      throw new IllegalArgumentException("Initial page size must be greater than 0");
+    }
+    this.nextPageSizeBytes = Math.min(initialPageSizeBytes, pageSizeBytes);
     this.initialCapacity = initialCapacity;
     allocate(initialCapacity);
+  }
+
+  /**
+   * Creates a map whose first data page has `initialPageSizeBytes` (at most `pageSizeBytes`), and
+   * whose later pages double in size until they reach `pageSizeBytes`. A map holding little data
+   * then does not reserve a full page. A record larger than the next page gets a page of its size.
+   */
+  public BytesToBytesMap(
+      TaskMemoryManager taskMemoryManager,
+      int initialCapacity,
+      long initialPageSizeBytes,
+      long pageSizeBytes) {
+    this(
+      taskMemoryManager,
+      SparkEnv.get() != null ? SparkEnv.get().blockManager() :  null,
+      SparkEnv.get() != null ? SparkEnv.get().serializerManager() :  null,
+      initialCapacity,
+      // In order to re-use the longArray for sorting, the load factor cannot be larger than 0.5.
+      0.5,
+      initialPageSizeBytes,
+      pageSizeBytes,
+      null);
   }
 
   public BytesToBytesMap(
@@ -1037,18 +1089,20 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * @return whether there is enough space to allocate the new page.
    */
   private boolean acquireNewPage(long required) {
+    final long size = Math.max(nextPageSizeBytes, required);
     final MemoryBlock page;
     try {
-      page = allocatePage(required);
+      page = allocatePage(size, required);
     } catch (SparkOutOfMemoryError e) {
       return false;
     }
     // Retaining exact-fit minimum-retry pages would consume one page-table slot per map entry.
-    if (required < pageSizeBytes && page.size() == required &&
+    if (required < size && page.size() == required &&
         isPageAllocationFromMinimumRetry(page)) {
       freePage(page);
       return false;
     }
+    nextPageSizeBytes = Math.min(pageSizeBytes, nextPageSizeBytes * 2);
     currentPage = page;
     dataPages.add(currentPage);
     UnsafeAlignedOffset.putSize(currentPage.getBaseObject(), currentPage.getBaseOffset(), 0);

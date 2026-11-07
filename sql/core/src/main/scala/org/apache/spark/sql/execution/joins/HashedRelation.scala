@@ -417,6 +417,7 @@ private[joins] class UnsafeHashedRelation(
     binaryMap = new BytesToBytesMap(
       taskMemoryManager,
       (nKeys * 1.5 + 1).toInt, // reduce hash collision
+      UnsafeHashedRelation.INITIAL_PAGE_SIZE_BYTES,
       pageSizeBytes)
 
     var i = 0
@@ -452,6 +453,17 @@ private[joins] class UnsafeHashedRelation(
 
 private[joins] object UnsafeHashedRelation {
 
+  /**
+   * The size of the first data page of the map. Later pages double in size up to the page size.
+   *
+   * Otherwise `BytesToBytesMap` rounds its first page up to the page size (`spark.buffer.pageSize`,
+   * up to 64 MiB), so even a relation with a few rows reserves 64 MiB. A task that keeps many
+   * relations alive at once, e.g. a stage with a chain of shuffled hash joins, then runs out of
+   * execution memory long before the relations hold that much data. Each broadcast relation would
+   * also allocate a full page on the heap of the driver and of every executor.
+   */
+  val INITIAL_PAGE_SIZE_BYTES: Long = 1L << 20
+
   def apply(
       input: Iterator[InternalRow],
       key: Seq[Expression],
@@ -469,6 +481,7 @@ private[joins] object UnsafeHashedRelation {
       taskMemoryManager,
       // Only 70% of the slots can be used before growing, more capacity help to reduce collision
       (sizeEstimate * 1.5 + 1).toInt,
+      INITIAL_PAGE_SIZE_BYTES,
       pageSizeBytes)
 
     // Create a mapping of buildKeys -> rows
