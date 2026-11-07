@@ -6306,6 +6306,21 @@ object SQLConf {
       .stringConf
       .createWithDefault("")
 
+  val STREAMING_V2_COLUMN_PRUNING_ENABLED =
+    buildConf("spark.sql.streaming.v2ColumnPruning.enabled")
+      .doc("When true, the scan of a Data Source V2 streaming source whose table has the " +
+        "capability STREAMING_COLUMN_PRUNING only reads the top-level columns that the streaming " +
+        "query reads from it, which Spark takes from the plan of the query optimized when the " +
+        "query starts, as it does for batch scans: Spark optimizes the query once more when it " +
+        "starts, as it optimizes each micro-batch. A query that reads other columns of the " +
+        "source later, for example, after the configuration of the optimizer changes in its " +
+        "session, fails with STREAMING_SCAN_MISSING_COLUMNS. When false, the scan reads all the " +
+        "columns of the source.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val DISABLE_MAP_KEY_NORMALIZATION =
     buildConf("spark.sql.legacy.disableMapKeyNormalization")
       .internal()
@@ -10322,6 +10337,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def disabledV2StreamingMicroBatchReaders: String =
     getConf(DISABLED_V2_STREAMING_MICROBATCH_READERS)
+
+  def streamingV2ColumnPruningEnabled: Boolean = getConf(STREAMING_V2_COLUMN_PRUNING_ENABLED)
 
   def fastFailFileFormatOutput: Boolean = getConf(FASTFAIL_ON_FILEFORMAT_OUTPUT)
 
