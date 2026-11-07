@@ -1112,6 +1112,10 @@ class CodegenContext extends Logging {
     // `$c1.compare($c2)`, which would not resolve as a Java method call.
     case _: AnyTimestampNanoType => s"$c1.compareTo($c2)"
     case NullType => "0"
+    // GEOMETRY and GEOGRAPHY are not orderable in SQL, but the hash aggregate's spill sorter
+    // still orders grouping keys. BinaryView exposes only `compareTo`, like the interpreted
+    // PhysicalBinaryViewType ordering.
+    case _: GeometryType | _: GeographyType => s"$c1.compareTo($c2)"
     case array: ArrayType =>
       val elementType = array.elementType
       val compareFunc = freshName("compareArray")

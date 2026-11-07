@@ -211,6 +211,30 @@ class GeometryDataFrameSuite extends SharedSparkSession {
       queryContext = Array(ExpectedContext("g", 29, 29)))
   }
 
+  test("SPARK-61081: GROUP BY, DISTINCT and hashing on a Geometry column") {
+    // Four input partitions, so every query below hash-partitions on `g` in a shuffle.
+    val rdd = sparkContext.parallelize(
+      Seq.tabulate(20)(i => Row(Geometry.fromWKB(if (i % 4 == 0) point2 else point1, 4326))), 4)
+    val schema = StructType(Seq(StructField("g", GeometryType(4326), nullable = false)))
+    spark.createDataFrame(rdd, schema).createOrReplaceTempView("geo_t")
+
+    val groupBy = "SELECT COUNT(*) FROM geo_t GROUP BY g"
+    checkAnswer(spark.sql(groupBy), Seq(Row(5L), Row(15L)))
+    checkAnswer(spark.sql("SELECT COUNT(DISTINCT g) FROM geo_t"), Row(2L))
+    checkAnswer(spark.sql("SELECT COUNT(*) FROM (SELECT DISTINCT g FROM geo_t)"), Row(2L))
+    checkAnswer(spark.sql("SELECT approx_count_distinct(g) FROM geo_t"), Row(2L))
+    checkAnswer(
+      spark.sql("SELECT COUNT(*) FROM (SELECT * FROM geo_t DISTRIBUTE BY g)"), Row(20L))
+    checkAnswer(
+      spark.sql("SELECT COUNT(DISTINCT hash(g)), COUNT(DISTINCT xxhash64(g)) FROM geo_t"),
+      Row(2L, 2L))
+
+    // Forces the hash aggregate to spill into its sort-based fallback, which orders the keys.
+    withSQLConf("spark.sql.TungstenAggregate.testFallbackStartsAt" -> "1,2") {
+      checkAnswer(spark.sql(groupBy), Seq(Row(5L), Row(15L)))
+    }
+  }
+
   test("geospatial feature disabled") {
     withSQLConf(SQLConf.GEOSPATIAL_ENABLED.key -> "false") {
       val geometry = Geometry.fromWKB(point1, 4326)
