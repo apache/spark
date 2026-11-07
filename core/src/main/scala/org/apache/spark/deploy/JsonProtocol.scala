@@ -25,7 +25,6 @@ import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, WorkerStateR
 import org.apache.spark.deploy.master._
 import org.apache.spark.deploy.worker.ExecutorRunner
 import org.apache.spark.resource.{ResourceInformation, ResourceRequirement}
-import org.apache.spark.util.Utils
 
 private[deploy] object JsonProtocol {
 
@@ -136,11 +135,7 @@ private[deploy] object JsonProtocol {
    * For compatibility also returns the deprecated `memoryperslave` & `resourcesperslave` fields.
    */
   def writeApplicationDescription(obj: ApplicationDescription, conf: SparkConf): JObject = {
-    val redactedEnvironment = Utils.redact(conf, obj.command.environment.toSeq).toMap
-    val redactedJavaOpts = Utils.redactCommandLineArgs(conf, obj.command.javaOpts)
-    val redactedCommand = obj.command.copy(
-      environment = redactedEnvironment,
-      javaOpts = redactedJavaOpts)
+    val redactedCommand = obj.command.redactedCopy(conf)
     ("name" -> obj.name) ~
     ("cores" -> obj.maxCores.getOrElse(0)) ~
     ("memoryperexecutor" -> obj.memoryPerExecutorMB) ~
