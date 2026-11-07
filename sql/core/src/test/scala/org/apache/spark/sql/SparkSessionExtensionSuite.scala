@@ -51,6 +51,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.COLUMN_BATCH_SIZE
 import org.apache.spark.sql.internal.StaticSQLConf.SPARK_SESSION_EXTENSIONS
+import org.apache.spark.sql.internal.StaticSQLConf.SPARK_SESSION_EXTENSIONS_DEFAULT_LIST
 import org.apache.spark.sql.types.{DataType, Decimal, IntegerType, LongType, Metadata, StructType}
 import org.apache.spark.sql.vectorized.{ColumnarArray, ColumnarBatch, ColumnarMap, ColumnVector}
 import org.apache.spark.unsafe.types.UTF8String
@@ -511,6 +512,78 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
     } finally {
       stop(session)
     }
+  }
+
+  test("SPARK-60483: use the operator default list ahead of user extensions") {
+    val session = SparkSession.builder()
+      .master("local[1]")
+      .config(SPARK_SESSION_EXTENSIONS_DEFAULT_LIST.key, classOf[MyExtensions].getCanonicalName)
+      .config(SPARK_SESSION_EXTENSIONS.key, classOf[MyExtensions2].getCanonicalName)
+      .getOrCreate()
+    try {
+      val orderedRules = Seq(MyRule(session), MyRule2(session))
+      val orderedCheckRules = Seq(MyCheckRule(session), MyCheckRule2(session))
+      assert(session.sessionState.analyzer.extendedResolutionRules.containsSlice(orderedRules))
+      assert(session.sessionState.analyzer.extendedCheckRules.containsSlice(orderedCheckRules))
+      assert(session.sessionState.planner.strategies.containsSlice(
+        Seq(MySparkStrategy(session), MySparkStrategy2(session))))
+    } finally {
+      stop(session)
+    }
+  }
+
+  test("SPARK-60483: use the operator default list when user extensions are unset") {
+    val session = SparkSession.builder()
+      .master("local[1]")
+      .config(SPARK_SESSION_EXTENSIONS_DEFAULT_LIST.key, classOf[MyExtensions].getCanonicalName)
+      .getOrCreate()
+    try {
+      assert(session.sessionState.analyzer.extendedResolutionRules.contains(MyRule(session)))
+      assert(session.sessionState.planner.strategies.contains(MySparkStrategy(session)))
+    } finally {
+      stop(session)
+    }
+  }
+
+  test("SPARK-60483: an extension listed by both the operator and the user is applied once") {
+    // De-duplicated across the two lists (last-win); repeats within a single list stay allowed.
+    val session = SparkSession.builder()
+      .master("local[1]")
+      .config(SPARK_SESSION_EXTENSIONS_DEFAULT_LIST.key, classOf[MyExtensions].getCanonicalName)
+      .config(SPARK_SESSION_EXTENSIONS.key, classOf[MyExtensions].getCanonicalName)
+      .getOrCreate()
+    try {
+      assert(session.sessionState.analyzer.extendedResolutionRules.count(_ === MyRule(session)) ===
+        1)
+    } finally {
+      stop(session)
+    }
+  }
+
+  test("SPARK-60483: a shared extension is applied last-win with user-list repeats kept") {
+    // The shared extension must run only at its user-list positions; plain concatenation,
+    // first-win, and whole-list distinct all give a different rule order here.
+    val appender = new LogAppender("SPARK-60483 dedup warning")
+    withLogAppender(appender) {
+      val session = SparkSession.builder()
+        .master("local[1]")
+        .config(SPARK_SESSION_EXTENSIONS_DEFAULT_LIST.key, classOf[MyExtensions].getCanonicalName)
+        .config(SPARK_SESSION_EXTENSIONS.key, Seq(
+          classOf[MyExtensions].getCanonicalName,
+          classOf[MyExtensions2].getCanonicalName,
+          classOf[MyExtensions].getCanonicalName).mkString(","))
+        .getOrCreate()
+      try {
+        val rules = session.sessionState.analyzer.extendedResolutionRules
+        assert(rules.filter(r => r == MyRule(session) || r == MyRule2(session)) ===
+          Seq(MyRule(session), MyRule2(session), MyRule(session)))
+      } finally {
+        stop(session)
+      }
+    }
+    val messages = appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+    assert(messages.exists(m => m.contains(SPARK_SESSION_EXTENSIONS_DEFAULT_LIST.key) &&
+      m.contains(SPARK_SESSION_EXTENSIONS.key) && m.contains("it is applied where it appears")))
   }
 
   test("use the last registered function name when there are duplicates") {
