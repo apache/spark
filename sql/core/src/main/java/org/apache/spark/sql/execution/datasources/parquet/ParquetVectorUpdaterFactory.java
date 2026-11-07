@@ -94,20 +94,22 @@ public class ParquetVectorUpdaterFactory {
         }
       }
       case INT32 -> {
-        if (sparkType == DataTypes.IntegerType || canReadAsIntDecimal(descriptor, sparkType)) {
+        if ((sparkType == DataTypes.IntegerType && canReadAsIntegral(descriptor)) ||
+          canReadAsIntDecimal(descriptor, sparkType)) {
           return new IntegerUpdater();
         } else if (sparkType == DataTypes.LongType && isUnsignedIntTypeMatched(32)) {
           // In `ParquetToSparkSchemaConverter`, we map parquet UINT32 to our LongType.
           // For unsigned int32, it stores as plain signed int32 in Parquet when dictionary
           // fallbacks. We read them as long values.
           return new UnsignedIntegerUpdater();
-        } else if (sparkType == DataTypes.LongType || canReadAsLongDecimal(descriptor, sparkType)) {
+        } else if ((sparkType == DataTypes.LongType && canReadAsIntegral(descriptor)) ||
+          canReadAsLongDecimal(descriptor, sparkType)) {
           return new IntegerToLongUpdater();
         } else if (canReadAsBinaryDecimal(descriptor, sparkType)) {
           return new IntegerToBinaryUpdater();
-        } else if (sparkType == DataTypes.ByteType) {
+        } else if (sparkType == DataTypes.ByteType && canReadAsIntegral(descriptor)) {
           return new ByteUpdater();
-        } else if (sparkType == DataTypes.ShortType) {
+        } else if (sparkType == DataTypes.ShortType && canReadAsIntegral(descriptor)) {
           return new ShortUpdater();
         } else if (sparkType == DataTypes.DoubleType) {
           return new IntegerToDoubleUpdater();
@@ -133,7 +135,8 @@ public class ParquetVectorUpdaterFactory {
       }
       case INT64 -> {
         // This is where we implement support for the valid type conversions.
-        if (sparkType == DataTypes.LongType || canReadAsLongDecimal(descriptor, sparkType)) {
+        if ((sparkType == DataTypes.LongType && canReadAsIntegral(descriptor)) ||
+          canReadAsLongDecimal(descriptor, sparkType)) {
           if (DecimalType.is32BitDecimalType(sparkType)) {
             return new DowncastLongUpdater();
           } else {
@@ -2017,6 +2020,20 @@ private static class FixedLenByteArrayToDecimalUpdater extends DecimalUpdater {
   private static boolean canReadAsDecimal(ColumnDescriptor descriptor, DataType dt) {
     if (!(dt instanceof DecimalType)) return false;
     return isDecimalTypeMatched(descriptor, dt);
+  }
+
+  /**
+   * Returns whether the column can be read as an integral Spark type. Parquet stores a DECIMAL as
+   * its unscaled value, so this only holds if the scale is 0. Otherwise, e.g. 123.45 stored as
+   * DECIMAL(9, 2) would silently be read as 12345.
+   */
+  private static boolean canReadAsIntegral(ColumnDescriptor descriptor) {
+    LogicalTypeAnnotation typeAnnotation = descriptor.getPrimitiveType().getLogicalTypeAnnotation();
+    if (typeAnnotation instanceof DecimalLogicalTypeAnnotation) {
+      DecimalLogicalTypeAnnotation decimalType = (DecimalLogicalTypeAnnotation) typeAnnotation;
+      return decimalType.getScale() == 0;
+    }
+    return true;
   }
 
   private static boolean isLongDecimal(DataType dt) {
