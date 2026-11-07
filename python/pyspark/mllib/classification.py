@@ -246,7 +246,7 @@ class LogisticRegressionModel(LinearClassificationModel):
 
         x = _convert_to_vector(x)
         if self.numClasses == 2:
-            margin = self.weights.dot(x) + self._intercept  # type: ignore[attr-defined]
+            margin = self.weights.dot(x) + self._intercept
             if margin > 0:
                 prob = 1 / (1 + exp(-margin))
             else:
@@ -272,7 +272,7 @@ class LogisticRegressionModel(LinearClassificationModel):
                         best_class = i + 1
             else:
                 for i in range(0, self._numClasses - 1):
-                    margin = x.dot(self._weightsMatrix[i])  # type: ignore[attr-defined]
+                    margin = x.dot(self._weightsMatrix[i])
                     if margin > max_margin:
                         max_margin = margin
                         best_class = i + 1
@@ -599,7 +599,7 @@ class SVMModel(LinearClassificationModel):
             return x.map(lambda v: self.predict(v))
 
         x = _convert_to_vector(x)
-        margin = self.weights.dot(x) + self.intercept  # type: ignore[attr-defined]
+        margin = self.weights.dot(x) + self.intercept
         if self._threshold is None:
             return margin
         else:
@@ -799,9 +799,7 @@ class NaiveBayesModel(Saveable, Loader["NaiveBayesModel"]):
         if isinstance(x, RDD):
             return x.map(lambda v: self.predict(v))
         x = _convert_to_vector(x)
-        return self.labels[
-            numpy.argmax(self.pi + x.dot(self.theta.transpose()))  # type: ignore[attr-defined]
-        ]
+        return self.labels[numpy.argmax(self.pi + x.dot(self.theta.transpose()))]
 
     def save(self, sc: SparkContext, path: str) -> None:
         """
