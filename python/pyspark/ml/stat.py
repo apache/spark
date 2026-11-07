@@ -271,14 +271,14 @@ class KolmogorovSmirnovTest:
 
             javaTestObj = getattr(_jvm(), "org.apache.spark.ml.stat.KolmogorovSmirnovTest")
             dataset = _py2java(sc, dataset)
-            params = [float(param) for param in params]  # type: ignore[assignment]
+            float_params = [float(param) for param in params]
             return _java2py(
                 sc,
                 javaTestObj.test(
                     dataset,
                     sampleCol,
                     distName,
-                    _jvm().PythonUtils.toSeq(params),
+                    _jvm().PythonUtils.toSeq(float_params),
                 ),
             )
 
