@@ -54,8 +54,8 @@ public interface ExternalLookupReader extends Closeable {
    * {@link ExternalLookup#maxParameterRowsPerRequest()} rows, none of them null. Field {@code i}
    * of each row is the value for the {@code i}-th selected predicate, in Spark's internal
    * representation.
-   * Rows are distinct under Spark SQL equality (NaN equals NaN, {@code -0.0} equals {@code 0.0},
-   * strings compare by collation). Only {@code <=>} parameters may be null at the top level.
+   * No two rows are equal; a null {@code <=>} parameter equals a null. Only {@code <=>} parameters
+   * may be null at the top level.
    * <p>
    * The cursor must be non-null. Each row's results must be complete and depend only on the row;
    * Spark may reuse them for equal rows. The input is read-only and must not be kept after the

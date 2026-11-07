@@ -44,7 +44,7 @@ public interface SupportsExternalLookup extends ScanBuilder {
    *   candidates: [tenant = ?, event_time >= ?, event_time < ?, region = ?]
    *   returned:   [event_time >= ?, tenant = ?]
    *   => each parameter row is (event_time lower bound, tenant);
-   *      Spark itself evaluates event_time < ? and region = ?
+   *      event_time < ? and region = ? stay in Spark's join condition
    * }</pre>
    * <ul>
    *   <li>The result must be non-null and hold offered instances, unchanged, without nulls or
