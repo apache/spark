@@ -140,6 +140,82 @@ class SeriesTestsMixin:
         # Specify an empty index
         self.assert_eq(ps.Series(psser, index=[]), pd.Series(pser, index=[]))
 
+    def _assert_no_index_join(self, psser):
+        from pyspark.sql.utils import is_remote
+
+        # Spark Connect's plan text is not available through the classic query execution.
+        if is_remote():
+            return
+        plan = psser.to_frame().to_spark()._jdf.queryExecution().analyzed().toString()
+        self.assertNotIn("Join", plan)
+
+    def test_series_from_series_index_alignment(self):
+        duplicate_message = "cannot reindex on an axis with duplicate labels"
+
+        # The Series' own index is the same axis, so repeated labels and nulls stay put.
+        pser = pd.Series([1, 2, 3], index=[10, 10, 20], name="x")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(ps.Series(psser, index=psser.index), pd.Series(pser, index=pser.index))
+        self.assert_eq(
+            ps.Series(psser, index=psser.index.rename("k")),
+            pd.Series(pser, index=pser.index.rename("k")),
+        )
+        self.assert_eq(
+            ps.Series(psser, index=psser.index, name="y"),
+            pd.Series(pser, index=pser.index, name="y"),
+        )
+        self._assert_no_index_join(ps.Series(psser, index=psser.index))
+
+        pser = pd.Series([1, 2, 3], index=["a", None, "c"], name="x")
+        psser = ps.from_pandas(pser)
+        got = ps.Series(psser, index=psser.index)
+        self.assert_eq(got, pd.Series(pser, index=pser.index))
+        self._assert_no_index_join(got)
+
+        # Any other index is refused when a label repeats, unless it is that same sequence.
+        pser = pd.Series([1, 2, 3], index=[10, 10, 20], name="x")
+        psser = ps.from_pandas(pser)
+        other = ps.from_pandas(pd.Series([4, 5], index=[10, 30], name="y"))
+        for target in (
+            other.index,
+            pd.Index([10, 30]),
+            pd.Series([10, 30], name="s"),
+            np.array([10, 30]),
+        ):
+            with self.assertRaisesRegex(ValueError, duplicate_message):
+                ps.Series(psser, index=target)
+
+        equal_index = pd.Index([10, 10, 20], name="k", dtype="int32")
+        self.assert_eq(ps.Series(psser, index=equal_index), pd.Series(pser, index=equal_index))
+        same_labels = np.array([10, 10, 20], dtype=np.int32)
+        self.assert_eq(ps.Series(psser, index=same_labels), pd.Series(pser, index=same_labels))
+        copied = ps.from_pandas(pd.Series([9, 8, 7], index=[10, 10, 20], name="z"))
+        self.assert_eq(
+            ps.Series(psser, index=copied.index.rename("k")),
+            pd.Series(pser, index=pser.index.rename("k")),
+        )
+
+        # A pandas Index or Series keeps its name and dtype over a unique source index.
+        pser = pd.Series([1, 2, 3], index=pd.Index([10, 20, 30], name="src"), name="x")
+        psser = ps.from_pandas(pser)
+        target = pd.Index([30, 10], dtype="int32", name="k")
+        self.assert_eq(ps.Series(psser, index=target), pd.Series(pser, index=target))
+        target_ser = pd.Series([30, 10], name="s")
+        self.assert_eq(ps.Series(psser, index=target_ser), pd.Series(pser, index=target_ser))
+        unnamed = pd.Index([30, 10])
+        self.assert_eq(ps.Series(psser, index=unnamed), pd.Series(pser, index=unnamed))
+
+        # Lists and one-element arrays keep the existing reindex path. A list does not
+        # carry an index name, and reindex still keeps the source index name.
+        dup = ps.from_pandas(pd.Series([1, 2, 3], index=[10, 10, 20], name="x"))
+        self.assert_eq(ps.Series(dup, index=[10, 20]), dup.reindex([10, 20]))
+        self.assert_eq(ps.Series(dup, index=np.array([10])), dup.reindex(np.array([10])))
+        self.assert_eq(ps.Series(psser, index=[30, 10]), psser.reindex([30, 10]))
+        self.assert_eq(ps.Series(psser, index=[]), psser.reindex([]))
+
+        with self.assertRaisesRegex(TypeError, "collection of some kind"):
+            ps.Series(psser, index=0)
+
     def test_all_null_series(self):
         pser_a = pd.Series([None, None, None], dtype="float64")
         pser_b = pd.Series([None, None, None], dtype="str")
