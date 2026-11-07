@@ -176,8 +176,13 @@ public final class BytesToBytesMap extends MemoryConsumer {
   private final long pageSizeBytes;
 
   /**
-   * The size of the next data page to allocate. It starts at the initial page size and doubles
-   * with every new page until it reaches {@link #pageSizeBytes}.
+   * The size of the first data page, at most {@link #pageSizeBytes}.
+   */
+  private final long initialPageSizeBytes;
+
+  /**
+   * The size of the next data page to allocate. It starts at {@link #initialPageSizeBytes} and
+   * doubles with every new page until it reaches {@link #pageSizeBytes}.
    */
   private long nextPageSizeBytes;
 
@@ -263,8 +268,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
       SerializerManager serializerManager,
       int initialCapacity,
       double loadFactor,
-      long initialPageSizeBytes,
       long pageSizeBytes,
+      long initialPageSizeBytes,
       @Nullable KeyOperationsFactory keyOperationsFactory) {
     super(taskMemoryManager, pageSizeBytes, taskMemoryManager.getTungstenMemoryMode());
     this.taskMemoryManager = taskMemoryManager;
@@ -288,7 +293,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
     if (initialPageSizeBytes <= 0) {
       throw new IllegalArgumentException("Initial page size must be greater than 0");
     }
-    this.nextPageSizeBytes = Math.min(initialPageSizeBytes, pageSizeBytes);
+    this.initialPageSizeBytes = Math.min(initialPageSizeBytes, pageSizeBytes);
+    this.nextPageSizeBytes = this.initialPageSizeBytes;
     this.initialCapacity = initialCapacity;
     allocate(initialCapacity);
   }
@@ -301,8 +307,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
   public BytesToBytesMap(
       TaskMemoryManager taskMemoryManager,
       int initialCapacity,
-      long initialPageSizeBytes,
-      long pageSizeBytes) {
+      long pageSizeBytes,
+      long initialPageSizeBytes) {
     this(
       taskMemoryManager,
       SparkEnv.get() != null ? SparkEnv.get().blockManager() :  null,
@@ -310,8 +316,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
       initialCapacity,
       // In order to re-use the longArray for sorting, the load factor cannot be larger than 0.5.
       0.5,
-      initialPageSizeBytes,
       pageSizeBytes,
+      initialPageSizeBytes,
       null);
   }
 
@@ -1248,6 +1254,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
     canGrowArray = true;
     currentPage = null;
     pageCursor = 0;
+    nextPageSizeBytes = initialPageSizeBytes;
     if (longArray != null) {
       freeArray(longArray);
     }

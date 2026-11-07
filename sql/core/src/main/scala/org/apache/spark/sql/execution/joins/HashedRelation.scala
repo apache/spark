@@ -417,8 +417,8 @@ private[joins] class UnsafeHashedRelation(
     binaryMap = new BytesToBytesMap(
       taskMemoryManager,
       (nKeys * 1.5 + 1).toInt, // reduce hash collision
-      UnsafeHashedRelation.INITIAL_PAGE_SIZE_BYTES,
-      pageSizeBytes)
+      pageSizeBytes,
+      UnsafeHashedRelation.INITIAL_PAGE_SIZE_BYTES)
 
     var i = 0
     var keyBuffer = new Array[Byte](1024)
@@ -481,8 +481,8 @@ private[joins] object UnsafeHashedRelation {
       taskMemoryManager,
       // Only 70% of the slots can be used before growing, more capacity help to reduce collision
       (sizeEstimate * 1.5 + 1).toInt,
-      INITIAL_PAGE_SIZE_BYTES,
-      pageSizeBytes)
+      pageSizeBytes,
+      INITIAL_PAGE_SIZE_BYTES)
 
     // Create a mapping of buildKeys -> rows
     val keyGenerator = UnsafeProjection.create(key)

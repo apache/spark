@@ -24,6 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
 import org.apache.spark.SparkConf
+import org.apache.spark.SparkEnv
 import org.apache.spark.SparkException
 import org.apache.spark.internal.config.{BUFFER_PAGESIZE, MEMORY_OFFHEAP_ENABLED, MEMORY_OFFHEAP_SIZE}
 import org.apache.spark.internal.config.Kryo._
@@ -142,9 +143,10 @@ abstract class HashedRelationSuite extends SharedSparkSession {
   }
 
   test("SPARK-61082: many UnsafeHashedRelations fit in one task when each holds little data") {
-    // UnsafeHashedRelation takes its page size from SparkEnv (about 64 MiB in tests), not from this
-    // memory manager. 16 relations rounded up to a full page each would need about 1 GiB, 4x the
-    // memory available.
+    // UnsafeHashedRelation takes its page size from SparkEnv, not from this memory manager. With a
+    // page larger than 16 MiB, 16 relations rounded up to a full page each would need more than
+    // the 256 MiB available.
+    assert(SparkEnv.get.memoryManager.pageSizeBytes > ByteUnit.MiB.toBytes(16))
     val smallUmm = newMemoryManager(ByteUnit.MiB.toBytes(64), ByteUnit.MiB.toBytes(256))
     val smallMm = new TaskMemoryManager(smallUmm, 0)
     val buildKey = Seq(BoundReference(0, StringType, false))
@@ -183,15 +185,22 @@ abstract class HashedRelationSuite extends SharedSparkSession {
     val toUnsafeRow = UnsafeProjection.create(Array[DataType](StringType))
     val row = toUnsafeRow(InternalRow(UTF8String.fromString("a"))).copy()
     val relation = HashedRelation(Iterator(row), buildKey, taskMemoryManager = mm)
-    val ser = sparkContext.env.serializer.newInstance()
-    val deserialized = ser.deserialize[UnsafeHashedRelation](ser.serialize(relation))
+    val serializers = Seq(
+      new JavaSerializer(new SparkConf()).newInstance(),
+      new KryoSerializer(new SparkConf().set(KRYO_REFERENCE_TRACKING, false)).newInstance())
     try {
       assert(relation.estimatedSize < 2 * UnsafeHashedRelation.INITIAL_PAGE_SIZE_BYTES)
-      assert(deserialized.estimatedSize < 2 * UnsafeHashedRelation.INITIAL_PAGE_SIZE_BYTES)
-      assert(deserialized.getValue(row) === row)
+      serializers.foreach { ser =>
+        val deserialized = ser.deserialize[UnsafeHashedRelation](ser.serialize(relation))
+        try {
+          assert(deserialized.estimatedSize < 2 * UnsafeHashedRelation.INITIAL_PAGE_SIZE_BYTES)
+          assert(deserialized.getValue(row) === row)
+        } finally {
+          deserialized.close()
+        }
+      }
     } finally {
       relation.close()
-      deserialized.close()
     }
   }
 
