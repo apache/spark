@@ -32,7 +32,7 @@ import org.apache.parquet.bytes.BytesInput
 import org.apache.parquet.column.{ColumnDescriptor, Encoding, ParquetProperties}
 import org.apache.parquet.column.impl.ColumnWriteStoreV1
 import org.apache.parquet.column.page._
-import org.apache.parquet.column.page.mem.MemPageStore
+import org.apache.parquet.column.page.mem.{MemPageReader, MemPageStore}
 import org.apache.parquet.column.statistics.Statistics
 import org.apache.parquet.hadoop.ParquetInputFormat
 import org.apache.parquet.io.ParquetDecodingException
@@ -495,6 +495,106 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
           (0 to 15),
           batchSize = batchSize, dictionaryEnabled = dictionaryEnabled)
       }
+    }
+  }
+
+  test("SPARK-60490: primitive type - PLAIN page followed by a dictionary page in the same batch") {
+    val parquetSchema = MessageTypeParser.parseMessageType(
+      "message root { optional int32 a; }")
+    val ty = parquetSchema.asGroupType().getType("a").asPrimitiveType()
+    val cd = new ColumnDescriptor(Array("a"), ty, 0, 1)
+    // The dictionary page repeats values, otherwise the writer falls back to PLAIN.
+    val dictValues = Seq.fill(5)(7) :+ 8
+    val readStore = writeMixedEncodingPages(cd, maxDefinitionLevel = 1, Seq(
+      EncodedPage(Seq.fill(3)(0), Seq.fill(3)(1), Seq(1, 2, 3), dictionaryEncoded = false),
+      EncodedPage(Seq.fill(6)(0), Seq.fill(6)(1), dictValues, dictionaryEncoded = true)))
+    // Any batch size above 3 reads the PLAIN page and the start of the dictionary page into the
+    // same batch.
+    for (batchSize <- 4 to 9; useOffHeap <- Seq(false, true)) {
+      checkAnswer(9, parquetSchema, readStore, (Seq(1, 2, 3) ++ dictValues).map(Row(_)),
+        batchSize, useOffHeap = useOffHeap)
+    }
+  }
+
+  test("SPARK-60490: nested type - PLAIN page followed by a dictionary page in the same batch") {
+    val (parquetSchema, cd) = arraySchema("int32")
+    // One element per row: the batch holds no more values than rows.
+    val singleElementValues = Seq.fill(5)(7) :+ 8
+    val singleElementStore = writeMixedEncodingPages(cd, maxDefinitionLevel = 3, Seq(
+      EncodedPage(Seq(0, 0), Seq(3, 3), Seq(1, 2), dictionaryEncoded = false),
+      EncodedPage(Seq.fill(6)(0), Seq.fill(6)(3), singleElementValues, dictionaryEncoded = true)))
+    for (batchSize <- 3 to 8; useOffHeap <- Seq(false, true)) {
+      checkAnswer(8, parquetSchema, singleElementStore,
+        (Seq(1, 2) ++ singleElementValues).map(i => Row(Seq(i))), batchSize,
+        useOffHeap = useOffHeap)
+    }
+  }
+
+  test("SPARK-60490: nested type - PLAIN page followed by a dictionary page, multi-element rows") {
+    val (parquetSchema, cd) = arraySchema("int32")
+    // Five elements per row: the batch holds more values than rows.
+    val rls = Seq(0, 1, 1, 1, 1, 0, 1, 1, 1, 1)
+    val multiElementValues = Seq.fill(5)(7) ++ Seq.fill(5)(8)
+    val multiElementStore = writeMixedEncodingPages(cd, maxDefinitionLevel = 3, Seq(
+      EncodedPage(rls, Seq.fill(10)(3), 1 to 10, dictionaryEncoded = false),
+      EncodedPage(rls, Seq.fill(10)(3), multiElementValues, dictionaryEncoded = true)))
+    for (batchSize <- 3 to 4; useOffHeap <- Seq(false, true)) {
+      checkAnswer(4, parquetSchema, multiElementStore,
+        ((1 to 10) ++ multiElementValues).grouped(5).map(Row(_)).toSeq, batchSize,
+        useOffHeap = useOffHeap)
+    }
+  }
+
+  test("SPARK-60490: PLAIN page followed by a dictionary page in the same batch, with row ranges") {
+    // Row ranges skip rows at the start of both pages, so the first rows a batch reads from the
+    // dictionary page are not the first rows of the page, and a batch can start in the middle of
+    // the dictionary page.
+    val ranges = Some(Seq((1L, 1L), (4L, 8L)))
+    val primitiveSchema = MessageTypeParser.parseMessageType(
+      "message root { optional int32 a; }")
+    val ty = primitiveSchema.asGroupType().getType("a").asPrimitiveType()
+    val primitiveStore = writeMixedEncodingPages(new ColumnDescriptor(Array("a"), ty, 0, 1),
+      maxDefinitionLevel = 1, Seq(
+        EncodedPage(Seq.fill(3)(0), Seq.fill(3)(1), Seq(1, 2, 3), dictionaryEncoded = false),
+        EncodedPage(Seq.fill(6)(0), Seq.fill(6)(1), Seq(7, 7, 7, 7, 7, 8),
+          dictionaryEncoded = true)),
+      ranges)
+    for (batchSize <- 1 to 6; useOffHeap <- Seq(false, true)) {
+      checkAnswer(6, primitiveSchema, primitiveStore, Seq(2, 7, 7, 7, 7, 8).map(Row(_)),
+        batchSize, useOffHeap = useOffHeap)
+    }
+
+    val (nestedSchema, cd) = arraySchema("int32")
+    val rls = Seq(0, 1, 0, 1, 0, 1)
+    val nestedStore = writeMixedEncodingPages(cd, maxDefinitionLevel = 3, Seq(
+      EncodedPage(rls, Seq.fill(6)(3), 1 to 6, dictionaryEncoded = false),
+      EncodedPage(rls ++ rls, Seq.fill(12)(3), Seq.fill(10)(7) ++ Seq(8, 8),
+        dictionaryEncoded = true)),
+      ranges)
+    val nestedExpected = Seq(Seq(3, 4), Seq(7, 7), Seq(7, 7), Seq(7, 7), Seq(7, 7), Seq(8, 8))
+    for (batchSize <- 1 to 6; useOffHeap <- Seq(false, true)) {
+      checkAnswer(6, nestedSchema, nestedStore, nestedExpected.map(Row(_)), batchSize,
+        useOffHeap = useOffHeap)
+    }
+  }
+
+  test("SPARK-60490: nested type - dictionary, PLAIN and dictionary pages in the same batch") {
+    // A string array column whose pages fall back from dictionary to PLAIN and then return to
+    // dictionary encoding. Some writers do this, unlike parquet-mr, whose fallback to PLAIN is
+    // permanent for the column chunk.
+    val (parquetSchema, cd) = arraySchema("binary", Some("UTF8"))
+    val rls = Seq(0, 1, 1, 0, 1)
+    val dls = Seq.fill(5)(3)
+    val readStore = writeMixedEncodingPages(cd, maxDefinitionLevel = 3, Seq(
+      EncodedPage(rls, dls, Seq("x", "x", "x", "x", "y"), dictionaryEncoded = true),
+      EncodedPage(rls, dls, Seq("a", "b", "c", "d", "e"), dictionaryEncoded = false),
+      EncodedPage(rls, dls, Seq("x", "y", "y", "y", "y"), dictionaryEncoded = true)))
+    val expected = Seq(
+      Seq("x", "x", "x"), Seq("x", "y"),
+      Seq("a", "b", "c"), Seq("d", "e"),
+      Seq("x", "y", "y"), Seq("y", "y")).map(Row(_))
+    for (batchSize <- 1 to 6; useOffHeap <- Seq(false, true)) {
+      checkAnswer(6, parquetSchema, readStore, expected, batchSize, useOffHeap = useOffHeap)
     }
   }
 
@@ -1033,6 +1133,82 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
   }
 
   /**
+   * The file schema and the element column of an optional array column `_1`, whose elements are
+   * of the Parquet primitive type `elementType`, annotated with `logicalType` if given.
+   */
+  private def arraySchema(
+      elementType: String,
+      logicalType: Option[String] = None): (MessageType, ColumnDescriptor) = {
+    val annotation = logicalType.map(t => s" ($t)").getOrElse("")
+    val parquetSchema = MessageTypeParser.parseMessageType(
+      s"""message root {
+         |  optional group _1 (LIST) {
+         |    repeated group list {
+         |      optional $elementType a$annotation;
+         |    }
+         |  }
+         |}
+         |""".stripMargin)
+    val ty = parquetSchema.getType("_1", "list", "a").asPrimitiveType()
+    (parquetSchema, new ColumnDescriptor(Array("_1", "list", "a"), ty, 1, 3))
+  }
+
+  /** A data page given as its repetition levels, definition levels and values. */
+  private case class EncodedPage(
+      repetitionLevels: Seq[Int],
+      definitionLevels: Seq[Int],
+      values: Seq[Any],
+      dictionaryEncoded: Boolean)
+
+  /**
+   * Returns a row group with a single column chunk made of `pages`, in order, each PLAIN or
+   * dictionary encoded. Parquet writers normally fall back from dictionary to PLAIN for good, so
+   * a dictionary page after a PLAIN one can't be produced with `writeDataPage` alone. The
+   * dictionary pages are written separately, so they must have the same distinct values in the
+   * same order of first appearance for their dictionaries to match. `rowIndexRanges` are the row
+   * ranges to read, as returned by column index filtering.
+   */
+  private def writeMixedEncodingPages(
+      columnDesc: ColumnDescriptor,
+      maxDefinitionLevel: Int,
+      pages: Seq[EncodedPage],
+      rowIndexRanges: Option[Seq[(Long, Long)]] = None): PageReadStore = {
+    import scala.jdk.CollectionConverters._
+
+    val written = pages.map { page =>
+      val store = new MemPageStore(page.repetitionLevels.count(_ == 0))
+      writeDataPage(columnDesc, store, page.repetitionLevels, page.definitionLevels, page.values,
+        maxDefinitionLevel, page.dictionaryEncoded)
+      val reader = store.getPageReader(columnDesc)
+      val dictionary = Option(reader.readDictionaryPage())
+      val dataPage = reader.readPage().asInstanceOf[DataPageV1]
+      assert(dataPage.getValueEncoding.usesDictionary == page.dictionaryEncoded,
+        s"the page was written with ${dataPage.getValueEncoding}")
+      (dictionary, dataPage)
+    }
+    val dictionaries = written.flatMap(_._1).map { d =>
+      (d.getBytes.toByteArray.toSeq, d.getDictionarySize, d.getEncoding)
+    }.distinct
+    assert(dictionaries.length <= 1, "the dictionary pages have different dictionaries")
+    val dictionary = dictionaries.headOption.map { case (bytes, size, encoding) =>
+      new DictionaryPage(BytesInput.from(bytes.toArray), size, encoding)
+    }.orNull
+
+    val numRows = pages.map(_.repetitionLevels.count(_ == 0))
+    val numValues = pages.map(_.repetitionLevels.length).sum
+    val chunk = new PageReadStore {
+      override def getPageReader(descriptor: ColumnDescriptor): PageReader =
+        new MemPageReader(numValues, written.map(_._2: DataPage).iterator.asJava, dictionary)
+      // With row ranges, the row count is the number of rows to read, as with column index
+      // filtering.
+      override def getRowCount: Long =
+        rowIndexRanges.map(_.map { case (start, end) => end - start + 1 }.sum)
+          .getOrElse(numRows.sum.toLong)
+    }
+    TestPageReadStore(chunk, numRows.scanLeft(0L)(_ + _).init, rowIndexRanges)
+  }
+
+  /**
    * Reads a row group of the optional column `a` of type `columnType`, with an optional
    * dictionary page and one data page of `valueCount` values, and returns the error of reading
    * it with the vectorized reader.
@@ -1069,6 +1245,16 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
       readStore: PageReadStore,
       expected: Seq[Row],
       batchSize: Int): Unit = {
+    checkAnswer(totalRowCount, fileSchema, readStore, expected, batchSize, useOffHeap = true)
+  }
+
+  private def checkAnswer(
+      totalRowCount: Int,
+      fileSchema: MessageType,
+      readStore: PageReadStore,
+      expected: Seq[Row],
+      batchSize: Int,
+      useOffHeap: Boolean): Unit = {
     import scala.jdk.CollectionConverters._
 
     val recordReader = new VectorizedParquetRecordReader(
@@ -1077,7 +1263,7 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
       "UTC",
       "CORRECTED",
       "UTC",
-      true,
+      useOffHeap,
       batchSize)
     recordReader.initialize(fileSchema, fileSchema,
       TestParquetRowGroupReader(Seq(readStore)), totalRowCount)
@@ -1099,6 +1285,8 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
       })
       i += 1
     }
+    assert(!expectedRowIt.hasNext, s"the reader returned only $i of ${expected.length} rows")
+    assert(!recordReader.nextKeyValue(), s"the reader returned more than ${expected.length} rows")
 
     // SPARK-60098: Verify correct closure.
     recordReader.close()
