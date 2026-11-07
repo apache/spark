@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.{Collections, IdentityHashMap}
 
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, EqualNullSafe, EqualTo,
-  Expression, ExprUtils, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, EqualNullSafe,
+  EqualTo, Expression, ExprUtils, PredicateHelper}
 import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupJoin, ExternalLookupKeyTypes,
   LogicalPlan, PreparedExternalLookupJoin}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -83,9 +83,13 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
         throw QueryCompilationErrors.unsupportedExternalLookupJoinError(
           "SCAN_BUILDER", Map("table" -> toSQLId(tableName)))
     }
+    // A column is offered under the table's name for it. Under case-insensitive analysis, the
+    // condition may spell it in another case, as `ID` for `id`, with the same exprId; filter
+    // pushdown renames it the same way, with DataSourceStrategy.normalizeExprs.
+    val columnNames = AttributeMap(relation.output.map(attr => attr -> attr.name))
     val offeredPredicates = offeredCandidates.map { candidate =>
       new V2Predicate(candidate.predicateName, Array[V2Expression](
-        FieldReference.column(candidate.projectedField.name),
+        FieldReference.column(columnNames(candidate.projectedField)),
         new LookupParameter(candidate.parameter.dataType)))
     }.toArray
     // A copy, so a connector that reorders the array in place cannot break the identity mapping.

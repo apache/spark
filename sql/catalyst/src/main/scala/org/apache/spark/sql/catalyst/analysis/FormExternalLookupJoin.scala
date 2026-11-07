@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupJoin, Join, JoinStrategyHint,
-  LogicalPlan}
+  LogicalPlan, ResolvedHint}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.JOIN
 import org.apache.spark.sql.connector.catalog.Table
@@ -29,7 +29,8 @@ import org.apache.spark.sql.execution.datasources.v2.ExternalLookupRelations
 
 /**
  * Classifies a join for external lookup. [[CheckExternalLookupJoin]] and [[FormExternalLookupJoin]]
- * share it, so a join that passes analysis is exactly a join that the optimizer converts.
+ * share it, so analysis rejects every join that the optimizer cannot convert, except one without
+ * a condition: see [[CheckExternalLookupJoin]].
  *
  * A join is an external lookup join when its right side reads a table that supports external
  * lookup but not batch read. It must be a stream-static join: the left side is a streaming query,
@@ -38,7 +39,11 @@ import org.apache.spark.sql.execution.datasources.v2.ExternalLookupRelations
  */
 object ExternalLookupJoinEligibility extends QueryErrorsBase {
   sealed trait Eligibility
-  /** The join reads no lookup-only table and stays an ordinary join. */
+  /**
+   * The join stays an ordinary join: the classifier recognizes no lookup-only relation as either
+   * of its sides. A lookup-only relation under another operator, such as a projection or an
+   * alias, is not recognized yet, and fails later as a batch scan.
+   */
   case object NotLookupJoin extends Eligibility
   /** The join runs as an external lookup join. */
   case object Eligible extends Eligibility
@@ -54,12 +59,23 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
     // TODO: look through projections, filters and aliases above the lookup relation.
     // TODO: allow the EXTERNAL_LOOKUP hint once it is introduced, and classify the joins it opts
     //   in.
-    (ExternalLookupRelations.lookupOnlyTable(join.left),
-      ExternalLookupRelations.lookupOnlyTable(join.right)) match {
+    (ExternalLookupRelations.lookupOnlyTable(join.left), lookupOnlyTableOnRight(join)) match {
       case (Some(table), _) => ineligible("LOOKUP_TABLE_ON_LEFT", table)
       case (None, Some(table)) => lookupJoinEligibility(join, table)
       case (None, None) => NotLookupJoin
     }
+  }
+
+  /**
+   * The lookup-only table on the join's right side, also under a strategy hint, which is where a
+   * broadcast hint usually goes in a stream-static join. The hint is then reported as conflicting.
+   */
+  private def lookupOnlyTableOnRight(join: Join): Option[Table] = {
+    def underStrategyHints(plan: LogicalPlan): LogicalPlan = plan match {
+      case ResolvedHint(child, hint) if hint.strategy.isDefined => underStrategyHints(child)
+      case other => other
+    }
+    ExternalLookupRelations.lookupOnlyTable(underStrategyHints(join.right))
   }
 
   private def lookupJoinEligibility(join: Join, table: Table): Eligibility = {

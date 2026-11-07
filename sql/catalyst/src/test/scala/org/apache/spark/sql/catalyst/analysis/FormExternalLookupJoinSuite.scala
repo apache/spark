@@ -105,6 +105,15 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
       (stream.hint("shuffle_hash").join(lookupOnly, Inner, Some(idsEqual)),
         "CONFLICTING_JOIN_STRATEGY", Map("strategy" -> "SHUFFLE_HASH")),
       (stream.hint("shuffle_replicate_nl").join(lookupOnly, Inner, Some(idsEqual)),
+        "CONFLICTING_JOIN_STRATEGY", Map("strategy" -> "SHUFFLE_REPLICATE_NL")),
+      // The same on the lookup side, where a broadcast hint usually goes in a stream-static join.
+      (stream.join(lookupOnly.hint("broadcast"), Inner, Some(idsEqual)),
+        "CONFLICTING_JOIN_STRATEGY", Map("strategy" -> "BROADCAST")),
+      (stream.join(lookupOnly.hint("merge"), Inner, Some(idsEqual)),
+        "CONFLICTING_JOIN_STRATEGY", Map("strategy" -> "MERGE")),
+      (stream.join(lookupOnly.hint("shuffle_hash"), Inner, Some(idsEqual)),
+        "CONFLICTING_JOIN_STRATEGY", Map("strategy" -> "SHUFFLE_HASH")),
+      (stream.join(lookupOnly.hint("shuffle_replicate_nl"), Inner, Some(idsEqual)),
         "CONFLICTING_JOIN_STRATEGY", Map("strategy" -> "SHUFFLE_REPLICATE_NL"))).foreach {
       case (plan, subClass, parameters) =>
         val analyzed = analyze(plan)

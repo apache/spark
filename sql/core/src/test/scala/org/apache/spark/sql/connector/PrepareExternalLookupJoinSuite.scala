@@ -187,6 +187,32 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
     }
   }
 
+  test("a read schema may declare NOT NULL where the table allows nulls") {
+    // A connector that never returns a null may say so, at the top level and in nested fields.
+    val lookup = lookupRelation(PlanningExternalLookupTable(
+      "id INT, value STRING, s STRUCT<a: INT>",
+      readSchemaDDL = Some("id INT, value STRING NOT NULL, s STRUCT<a: INT NOT NULL>")))
+    val join = lookupJoinOnId(lookup)
+    val prepared = prepare(join)
+    assert(prepared.output === join.output)
+    assert(prepared.lookupInput.map(_.nullable) === Seq(true, false, true))
+    assert(prepared.lookupInput(2).dataType === StructType.fromDDL("a INT NOT NULL"))
+  }
+
+  test("a candidate names the lookup column as the table schema spells it") {
+    var offered = Seq.empty[String]
+    val lookup = lookupRelation(PlanningExternalLookupTable(select = { candidates =>
+      offered = candidates.map(_.toString).toSeq
+      candidates.filter(_.children()(0) == FieldReference.column("id"))
+    }))
+    // Under case-insensitive analysis, a condition that writes `ID` resolves to the column `id`,
+    // with the same exprId and the query's spelling.
+    val idAsWritten = lookup.output.head.withName("ID")
+    val prepared = prepare(lookupJoin(lookup, stream.output.head === idAsWritten))
+    assert(offered === Seq("id = ?"))
+    assert(prepared.lookupParameters === Seq(stream.output.head))
+  }
+
   test("the read schema must cover every lookup column with its data type") {
     Seq(
       ("id INT", "MISSING_SCAN_FIELD"),
