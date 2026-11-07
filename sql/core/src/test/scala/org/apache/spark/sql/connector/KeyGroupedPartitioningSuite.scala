@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.Complete
 import org.apache.spark.sql.catalyst.plans.{Cross, ExistenceJoin, Inner, JoinType, LeftAnti, LeftSemi, LeftSingle, RightOuter}
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.{HASH_ROUTING, KeyedPartitioning, PartitioningCollection, REPLICATED_FOR_JOIN, ROUTING_LOST, SPLIT_FOR_JOIN}
-import org.apache.spark.sql.connector.catalog.{BufferedRows, Column, Identifier, InMemoryBaseTable, InMemoryCatalystRuntimeFilterCatalog, InMemoryTable, InMemoryTableCatalog}
+import org.apache.spark.sql.connector.catalog.{BufferedRows, Column, Identifier, InMemoryBaseTable, InMemoryCatalystRuntimeFilterCatalog, InMemoryTable, InMemoryTableCatalog, InMemoryWithV2FilterCatalog}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
@@ -448,9 +448,10 @@ trait KeyGroupedPartitioningRuntimeFilterTests extends KeyGroupedPartitioningSui
       // `translateRuntimeFilterV2` cannot translate a cast, so no filter reaches the scan and the
       // re-planning path never runs.
       //
-      // Only the V2 instance of this trait reaches that path with a pruned key. The Catalyst
-      // fixture's scan keeps the full table schema, so `store_id` stays in the output and nothing
-      // is projected away; that instance runs a no-pruning variant of the same query.
+      // Only `KeyGroupedPartitioningRuntimeFilterSuite` reaches that path with a pruned key. The
+      // scans of the V2 filter and Catalyst fixtures keep the full table schema, so `store_id`
+      // stays in the output and nothing is projected away; those suites run the same query with
+      // no column pruned.
       val df = sql(
         s"SELECT p.item_id, p.price from testcat.ns.$items i, testcat.ns.$purchases p " +
           "WHERE i.id = p.item_id AND i.price > 20.0 ORDER BY p.item_id, p.price")
@@ -621,11 +622,11 @@ trait KeyGroupedPartitioningRuntimeFilterTests extends KeyGroupedPartitioningSui
     "shares with the join") {
     // A DPP subquery that does not reuse a broadcast plans its build side again, over the same
     // `Scan` as the join's `purchases` scan. A scalar subquery filter on `item_id` is a runtime
-    // filter of both, and the subquery runs it first, which prunes the shared `Scan`. The join's
-    // scan is a copy made after planning, when the scalar subquery is replaced by a reused one. Had
-    // it planned its partitions again, it would report fewer of them than `items`, and the join
-    // would fail with "Can't zip RDDs". Of the two suites that run this, only the Catalyst one
-    // prunes on this predicate.
+    // filter of both, and the subquery runs it first, which prunes the shared `Scan` if it filters
+    // itself in place. The join's scan is a copy made after planning, when the scalar subquery is
+    // replaced by a reused one. Had it planned its partitions again, it would report fewer of them
+    // than `items`, and the join would fail with "Can't zip RDDs". Of the suites that run this,
+    // only the V2 filter one prunes the shared `Scan` on this predicate.
     withDppSubqueryTables(rowsPerKey = 1) {
       checkStoragePartitionedJoin(
         s"SELECT i.id, p.price FROM testcat.ns.$items i JOIN testcat.ns.$purchases p " +
@@ -638,9 +639,10 @@ trait KeyGroupedPartitioningRuntimeFilterTests extends KeyGroupedPartitioningSui
   test("SPARK-60752: a nested DPP filter on a DPP subquery's build side does not change the " +
     "layout of the scan it shares with the join") {
     // As above, with a DPP filter from a broadcast dimension as the build side's own runtime
-    // filter, which every fixture prunes on. Two rows per key give `purchases` two splits per key,
-    // so a GroupPartitionsExec groups that side and checks the layout of the copied scan. With
-    // `flag = 2` the build side's filter prunes every split.
+    // filter, on which every scan that filters itself in place prunes the shared `Scan`. Two rows
+    // per key give `purchases` two splits per key, so a GroupPartitionsExec groups that side and
+    // checks the layout of the copied scan. With `flag = 2` the build side's filter prunes every
+    // split.
     val dim = "dim"
     withDppSubqueryTables(rowsPerKey = 2) {
       createTable(dim, Array(Column.create("k", LongType), Column.create("flag", IntegerType)),
@@ -11606,6 +11608,24 @@ class KeyGroupedPartitioningSuite
 @ExtendedSQLTest
 class KeyGroupedPartitioningRuntimeFilterSuite
   extends KeyGroupedPartitioningSuiteBase with KeyGroupedPartitioningRuntimeFilterTests {
+
+  after {
+    catalog.clearTables()
+  }
+}
+
+/**
+ * Runs the runtime filtering tests against a catalog whose scans take runtime filters as connector
+ * predicates, via [[org.apache.spark.sql.connector.read.SupportsRuntimeV2Filtering]]. Over a
+ * single identity partition column they filter themselves in place on `=` and `IN`, so one node's
+ * runtime filter prunes a scan it shares with another node (SPARK-60752).
+ */
+@ExtendedSQLTest
+class KeyGroupedPartitioningV2FilterRuntimeFilterSuite
+  extends KeyGroupedPartitioningSuiteBase with KeyGroupedPartitioningRuntimeFilterTests {
+
+  override protected def catalogClassName: String =
+    classOf[InMemoryWithV2FilterCatalog].getName
 
   after {
     catalog.clearTables()

@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, RuntimePartitionPruningFileScan}
 
 /**
  * Dynamic partition pruning optimization is performed based on the type and
@@ -233,6 +233,10 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
 
   private def hasSelectivePredicate(plan: LogicalPlan): Boolean = plan.exists {
     case f: Filter => isLikelySelective(f.condition)
+    // A built-in V2 file scan takes its partition filters in without leaving a `Filter` above it,
+    // where V1 keeps one.
+    case r: DataSourceV2ScanRelation if r.scan.isInstanceOf[RuntimePartitionPruningFileScan] =>
+      r.pushedFilters.exists(isLikelySelective)
     case _ => false
   }
 

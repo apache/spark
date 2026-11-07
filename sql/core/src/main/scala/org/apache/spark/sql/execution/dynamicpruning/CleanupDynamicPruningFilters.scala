@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelationWithTable}
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, RuntimePartitionPruningFileScan}
 
 /**
  *  Removes the filter nodes with dynamic pruning that were not pushed down to the scan.
@@ -34,24 +34,35 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
  */
 object CleanupDynamicPruningFilters extends Rule[LogicalPlan] with PredicateHelper {
 
+  private val equalityKey: PartialFunction[Expression, Expression] = {
+    case EqualTo(l, r) if l.deterministic && r.foldable => l
+    case EqualTo(l, r) if r.deterministic && l.foldable => r
+    case EqualNullSafe(l, r) if l.deterministic && r.foldable => l
+    case EqualNullSafe(l, r) if r.deterministic && l.foldable => r
+  }
+
   private def collectEqualityConditionExpressions(condition: Expression): Seq[Expression] = {
-    splitConjunctivePredicates(condition).flatMap(_.collect {
-      case EqualTo(l, r) if l.deterministic && r.foldable => l
-      case EqualTo(l, r) if r.deterministic && l.foldable => r
-      case EqualNullSafe(l, r) if l.deterministic && r.foldable => l
-      case EqualNullSafe(l, r) if r.deterministic && l.foldable => r
-    })
+    splitConjunctivePredicates(condition).flatMap(_.collect(equalityKey))
   }
 
   /**
-   * If a partition key already has equality conditions, then its DPP filter is useless and
-   * can't prune anything. So we should remove it.
+   * Removes the DPP filter on a partition key that an equality condition already fixes. Such a
+   * filter can prune only when the build side lacks the fixed value, which this rule gives up. An
+   * equality anywhere in a conjunct of `condition` counts, including one below `NOT` or `OR`.
+   *
+   * For a built-in V2 file scan the equality may be in `pushedFilters` instead: the scan applies
+   * them to its file listing rather than leaving them to a `Filter` above it. Only their top-level
+   * `=` and `<=>` conjuncts count, so a pushed `part <> 3` or `part = 3 OR part = 4` keeps the DPP
+   * filter.
    */
-  private def removeUnnecessaryDynamicPruningSubquery(plan: LogicalPlan): LogicalPlan = {
+  private def removeUnnecessaryDynamicPruningSubquery(
+      plan: LogicalPlan,
+      pushedFilters: Seq[Expression] = Seq.empty): LogicalPlan = {
     plan.transformWithPruning(_.containsPattern(DYNAMIC_PRUNING_SUBQUERY)) {
       case f @ Filter(condition, _) =>
         lazy val unnecessaryPruningKeys =
-          ExpressionSet(collectEqualityConditionExpressions(condition))
+          ExpressionSet(collectEqualityConditionExpressions(condition) ++
+            pushedFilters.flatMap(splitConjunctivePredicates).collect(equalityKey))
         val newCondition = condition.transformWithPruning(
           _.containsPattern(DYNAMIC_PRUNING_SUBQUERY)) {
           case dynamicPruning: DynamicPruningSubquery
@@ -79,9 +90,14 @@ object CleanupDynamicPruningFilters extends Rule[LogicalPlan] with PredicateHelp
       case p @ NodeWithOnlyDeterministicProjectAndFilter(
           HiveTableRelation(_, _, _, _, _)) =>
         removeUnnecessaryDynamicPruningSubquery(p)
-      case p @ NodeWithOnlyDeterministicProjectAndFilter(
-          _: DataSourceV2ScanRelation) =>
-        removeUnnecessaryDynamicPruningSubquery(p)
+      // Only a built-in file scan is known to prune what it plans with a partition filter it fully
+      // took. Another DSv2 source may apply such a filter row by row and leave the pruning to DPP.
+      case p @ NodeWithOnlyDeterministicProjectAndFilter(r: DataSourceV2ScanRelation) =>
+        val pushedFilters = r.scan match {
+          case _: RuntimePartitionPruningFileScan => r.pushedFilters
+          case _ => Seq.empty
+        }
+        removeUnnecessaryDynamicPruningSubquery(p, pushedFilters)
       // remove any Filters with DynamicPruning that didn't get pushed down to PhysicalOperation.
       case f @ Filter(condition, _) =>
         val newCondition = condition.transformWithPruning(

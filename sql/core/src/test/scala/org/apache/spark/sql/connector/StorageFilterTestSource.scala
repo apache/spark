@@ -241,8 +241,11 @@ class StorageFilterTestScanBuilder(tableSchema: StructType, options: CaseInsensi
           with SupportsRuntimeCatalystFiltering {
         override def filterAttributes(): Array[NamedReference] = Array(FieldReference.column("k"))
         override def fullyPushedFilterAttributes(): Array[NamedReference] = filterAttributes()
-        override def filter(expressions: Array[Expression]): Unit =
-          StorageFilterTestSource.runtimeFilterCalls.incrementAndGet()
+        override def planInputPartitionsWithRuntimeFilters(
+            expressions: Array[Expression]): Array[InputPartition] = {
+          if (expressions.nonEmpty) StorageFilterTestSource.runtimeFilterCalls.incrementAndGet()
+          planInputPartitions()
+        }
       }
       case _ => new StorageFilterTestScan(schema, factory, declared, numPartitions)
     }
