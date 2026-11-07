@@ -41,6 +41,7 @@ import org.apache.spark.sql.execution.ExplainUtils.stripAQEPlan
 import org.apache.spark.sql.execution.datasources.v2.{AlterTableExec, CreateTableExec, DataSourceV2Relation, DataSourceV2ScanRelation, ReplaceTableExec}
 import org.apache.spark.sql.functions.{lit, sum}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.{Filter, IsNotNull, Or, StringContains}
 import org.apache.spark.sql.types.{BooleanType, CalendarIntervalType, DoubleType, IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.sql.util.SchemaUtils
@@ -1594,6 +1595,33 @@ class DataSourceV2DataFrameSuite
     df.queryExecution.optimizedPlan.collectFirst {
       case scan: DataSourceV2ScanRelation => scan
     }.get
+  }
+
+  test("RLIKE simplification controls V2 filter pushdown") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (id INT, value STRING) USING foo")
+      sql(s"INSERT INTO $tableName VALUES (1, 'foo'), (2, 'xxbarxx'), (3, 'baz'), (4, NULL)")
+
+      def query: DataFrame = spark.table(tableName).where("value RLIKE 'foo|bar'").select("id")
+      def pushedFilters(df: DataFrame): Seq[Filter] = scanRelationOf(df).scan match {
+        case scan: InMemoryBaseTable#InMemoryBatchScan => scan.pushedFilters.toSeq
+        case other => fail(s"unexpected scan type ${other.getClass.getName}")
+      }
+
+      // Disabled mode pushes only the inferred nullability filter. Enabled mode translates
+      // the RLike alternation as one disjunction of Contains predicates.
+      val disabled = query
+      assert(pushedFilters(disabled).toSet == Set(IsNotNull("value")))
+      checkAnswer(disabled, Seq(Row(1), Row(2)))
+
+      withSQLConf(SQLConf.RLIKE_SIMPLIFICATION_ENABLED.key -> "true") {
+        val enabled = query
+        assert(pushedFilters(enabled).toSet == Set(
+          Or(StringContains("value", "foo"), StringContains("value", "bar"))))
+        checkAnswer(enabled, Seq(Row(1), Row(2)))
+      }
+    }
   }
 
   private def checkDefaultValues(

@@ -18,8 +18,8 @@
 package org.apache.spark.sql
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkIllegalArgumentException, SparkRuntimeException}
+import org.apache.spark.sql.catalyst.expressions.{Contains, IsNotNull, RLike}
 import org.apache.spark.sql.catalyst.expressions.Cast._
-import org.apache.spark.sql.catalyst.expressions.IsNotNull
 import org.apache.spark.sql.execution.{FilterExec, FormattedMode, WholeStageCodegenExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -177,6 +177,31 @@ class StringFunctionsSuite extends SharedSparkSession {
       Row(false, false, false) :: Row(true, true, true) :: Nil)
   }
 
+  // scalastyle:off nonascii
+  test("rlike simplification preserves literal alternation results") {
+    val df = Seq[String](
+      "a foo b", "a bar b", "baz", "", null, "foo\nbar", "\u03b1\u03b2").toDF("value")
+    val testCases = Seq(
+      ".*(foo|bar).*" -> Seq[Any](true, true, false, false, null, true, false),
+      "foo" -> Seq[Any](true, false, false, false, null, true, false),
+      "bar|baz" -> Seq[Any](false, true, true, false, null, true, false),
+      "\u03b1|\u03b2" -> Seq[Any](false, false, false, false, null, false, true))
+
+    withSQLConf(
+        SQLConf.RLIKE_SIMPLIFICATION_ENABLED.key -> "true",
+        SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY") {
+      val query = df.filter(rlike($"value", lit(".*(foo|bar).*")))
+      val optimizedExpressions = query.queryExecution.optimizedPlan.expressions
+      assert(optimizedExpressions.exists(_.exists(_.isInstanceOf[Contains])))
+      assert(!optimizedExpressions.exists(_.exists(_.isInstanceOf[RLike])))
+
+      testCases.foreach { case (pattern, expected) =>
+        checkAnswer(df.select(rlike($"value", lit(pattern))), expected.map(Row(_)))
+      }
+    }
+  }
+
+  // scalastyle:on nonascii
   test("string regexp_count") {
     val df = Seq(
       ("1a 2b 14m", "\\d+"),
