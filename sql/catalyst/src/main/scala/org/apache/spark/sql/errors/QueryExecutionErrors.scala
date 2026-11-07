@@ -3778,4 +3778,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       context = Array.empty,
       summary = "")
   }
+
+  def parseSqlAnalyzeRequiresSession(): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "PARSE_SQL_ANALYZE_REQUIRES_SESSION",
+      messageParameters = Map("functionName" -> toSQLId("parse_sql")))
+  }
+
+  def parseSqlAnalyzeUnsupportedScript(): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "PARSE_SQL_ANALYZE_UNSUPPORTED_SCRIPT",
+      messageParameters = Map("functionName" -> toSQLId("parse_sql")))
+  }
 }
