@@ -65,6 +65,9 @@ class ContinuousExecution(
 
   @volatile protected var sources: Seq[ContinuousStream] = Seq()
 
+  // The rewrites of the filters that the scans of the sources got, which the epochs check.
+  private val pushedFilterRewrites = new StreamingV2ScanPushDown.PushedFilterRewrites
+
   def sourceToIdMap: Map[SparkDataStream, String] = Map.empty
 
   // For use only in test harnesses.
@@ -78,8 +81,8 @@ class ContinuousExecution(
     var nextSourceId = 0
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
     val streamConf = sparkSessionForStream.sessionState.conf
-    lazy val requiredColumnsOfSources =
-      StreamingV2ScanPushDown.requiredColumnsOfSources(sparkSessionForStream, analyzedPlan, None)
+    lazy val columnsAndFiltersOfSources =
+      StreamingV2ScanPushDown.columnsAndFiltersOfSources(sparkSessionForStream, analyzedPlan, None)
     val _logicalPlan = analyzedPlan.transform {
       case s @ StreamingRelationV2(ds, sourceName, table: SupportsRead, options, output,
         catalog, identifier, _, _) =>
@@ -94,18 +97,19 @@ class ContinuousExecution(
           logInfo(log"Reading table [${MDC(STREAMING_TABLE, table)}] " +
             log"from DataSourceV2 named '${MDC(STREAMING_DATA_SOURCE_NAME, sourceName)}' " +
             log"${MDC(STREAMING_DATA_SOURCE_DESCRIPTION, dsStr)}")
-          // The scan reads the columns that the query reads from the source, see
+          // The scan gets the columns and the filters that the query reads from the source, see
           // StreamingV2ScanPushDown. The output includes the metadata columns that the query
           // reads, so that connectors implementing SupportsMetadataColumns include them in
           // readSchema().
           val streamingScan = StreamingV2ScanPushDown.buildScan(
-            table, options, output, streamConf, requiredColumnsOfSources.get(s),
+            table, options, output, streamConf, columnsAndFiltersOfSources.get(s),
             StreamingV2ScanPushDown.sourceName(table, catalog, identifier))(
             _.toContinuousStream(metadataPath))
           val relation = StreamingDataSourceV2Relation(
               table, output, catalog, identifier, options, metadataPath)
           StreamingDataSourceV2ScanRelation(relation, streamingScan.scan, output,
-            streamingScan.stream, scanOutput = streamingScan.scanOutput)
+            streamingScan.stream, scanOutput = streamingScan.scanOutput,
+            pushedFilters = streamingScan.pushedFilters)
         })
     }
 
@@ -252,7 +256,8 @@ class ContinuousExecution(
         None,
         execCtx.offsetSeqMetadata,
         WatermarkPropagator.noop(),
-        false)
+        false,
+        pushedFilterRewrites = pushedFilterRewrites)
       execCtx.executionPlan.executedPlan // Force the lazy generation of execution plan
     }
 
