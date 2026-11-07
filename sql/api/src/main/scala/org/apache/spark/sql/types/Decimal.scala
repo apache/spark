@@ -560,10 +560,12 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     if (that.isZero) null
     else {
       val (a, b) = (toJavaBigDecimal, that.toJavaBigDecimal)
-      val r = try a.remainder(b, MATH_CONTEXT) catch {
-        case e: ArithmeticException =>
-          a.remainder(b, integralQuotientContext(a, b, e))
-      }
+      val r =
+        try a.remainder(b, MATH_CONTEXT)
+        catch {
+          case e: ArithmeticException =>
+            a.remainder(b, integralQuotientContext(a, b, e))
+        }
       Decimal(r)
     }
 
@@ -571,10 +573,12 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     if (that.isZero) null
     else {
       val (a, b) = (toJavaBigDecimal, that.toJavaBigDecimal)
-      val q = try a.divideToIntegralValue(b, MATH_CONTEXT) catch {
-        case e: ArithmeticException =>
-          a.divideToIntegralValue(b, integralQuotientContext(a, b, e))
-      }
+      val q =
+        try a.divideToIntegralValue(b, MATH_CONTEXT)
+        catch {
+          case e: ArithmeticException =>
+            a.divideToIntegralValue(b, integralQuotientContext(a, b, e))
+        }
       Decimal(q)
     }
 
