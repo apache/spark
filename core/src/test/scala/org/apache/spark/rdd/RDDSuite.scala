@@ -918,6 +918,72 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
     assert(c.cartesian[Int](a).collect().toList.sorted === c_cartesian_a)
   }
 
+  test("SPARK-59877: CartesianRDD includes both parent locations by default") {
+    val left = new LocationPrefRDD(sc.parallelize(Seq(1), 1), _ => Seq("left", "shared"))
+    val right = new LocationPrefRDD(sc.parallelize(Seq(2), 1), _ => Seq("right", "shared"))
+    val cartesian = new CartesianRDD(sc, left, right)
+    assert(cartesian.preferredLocations(cartesian.partitions.head) ===
+      Seq("left", "shared", "right"))
+  }
+
+  test("SPARK-59877: CartesianRDD can prefer first-parent locations") {
+    val left = new LocationPrefRDD(sc.parallelize(Seq(1), 1), _ => Seq("left", "shared"))
+    val right = new LocationPrefRDD(sc.parallelize(Seq(2), 1), _ => Seq("right", "shared"))
+    val cartesian = new CartesianRDD(
+      sc, left, right, preferLeftLocations = true)
+    assert(cartesian.preferredLocations(cartesian.partitions.head) ===
+      Seq("left", "shared"))
+  }
+
+  test("SPARK-59877: scheduler finds left locations through narrow dependencies") {
+    val left = new LocationPrefRDD(sc.parallelize(Seq(1), 1), _ => Seq("left"))
+    val right = new LocationPrefRDD(sc.parallelize(Seq(2), 1), _ => Seq("right"))
+    Seq(left.map(identity), left.map(identity).map(identity)).foreach { wrappedLeft =>
+      val cartesian = new CartesianRDD(sc, wrappedLeft, right, preferLeftLocations = true)
+      assert(cartesian.preferredLocations(cartesian.partitions.head).isEmpty)
+      assert(sc.dagScheduler.getPreferredLocs(cartesian, 0).map(_.host) === Seq("left"))
+    }
+  }
+
+  test("SPARK-59877: scheduler falls back to second-parent locations") {
+    val left = sc.parallelize(Seq(1), 1)
+    val right = new LocationPrefRDD(sc.parallelize(Seq(2), 1), _ => Seq("right", "shared"))
+    val cartesian = new CartesianRDD(sc, left, right, preferLeftLocations = true)
+    assert(cartesian.preferredLocations(cartesian.partitions.head).isEmpty)
+    assert(sc.dagScheduler.getPreferredLocs(cartesian, 0).map(_.host) === Seq("right", "shared"))
+  }
+
+  test("SPARK-59877: scheduler does not cross a shuffle for Cartesian locality") {
+    val left = new LocationPrefRDD(sc.parallelize(Seq(1), 1), _ => Seq("left"))
+    val right = new LocationPrefRDD(sc.parallelize(Seq(2), 1), _ => Seq("right"))
+    val shuffled = left.map(i => (i, i)).partitionBy(new HashPartitioner(1))
+    val cartesian = new CartesianRDD(sc, shuffled, right, preferLeftLocations = true)
+    assert(sc.dagScheduler.getPreferredLocs(cartesian, 0).map(_.host) === Seq("right"))
+  }
+
+  test("SPARK-59877: scheduler checks later narrow parents and visits a diamond once") {
+    val visits = new AtomicInteger()
+    val empty = new LocationPrefRDD(sc.parallelize(Seq(1), 1), _ => {
+      visits.incrementAndGet()
+      Nil
+    })
+    def merge(parents: RDD[Int]*): RDD[Int] = {
+      new RDD[Int](sc, parents.map(new OneToOneDependency(_))) {
+        override def getPartitions: Array[Partition] = parents.head.partitions
+        override def compute(split: Partition, context: TaskContext): Iterator[Int] = Iterator.empty
+      }
+    }
+    val diamond = (0 until 12).foldLeft(empty: RDD[Int]) { (parent, _) =>
+      merge(parent, parent.map(identity))
+    }
+    val located = new LocationPrefRDD(sc.parallelize(Seq(2), 1), _ => Seq("left"))
+    val left = merge(diamond, located)
+    val right = new LocationPrefRDD(sc.parallelize(Seq(3), 1), _ => Seq("right"))
+    val cartesian = new CartesianRDD(sc, left, right, preferLeftLocations = true)
+    assert(sc.dagScheduler.getPreferredLocs(cartesian, 0).map(_.host) === Seq("left"))
+    assert(visits.get() === 1)
+  }
+
   test("SPARK-48656: number of cartesian partitions overflow") {
     val numSlices: Int = 65536
     val rdd1 = sc.parallelize(Seq(1, 2, 3), numSlices = numSlices)

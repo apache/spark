@@ -1090,9 +1090,17 @@ object StateStoreProvider extends Logging {
       stateSchemaProvider: Option[StateSchemaProvider]): StateStoreProvider = {
     hadoopConf.set(StreamExecution.RUN_ID_KEY, providerId.queryRunId.toString)
     val provider = create(storeConf.providerClass)
-    provider.init(providerId.storeId, keySchema, valueSchema, keyStateEncoderSpec,
-      useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey, stateSchemaProvider)
-    provider
+    try {
+      provider.init(providerId.storeId, keySchema, valueSchema, keyStateEncoderSpec,
+        useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey, stateSchemaProvider)
+      provider
+    } catch {
+      case NonFatal(initError) =>
+        Utils.tryLogNonFatalError {
+          StateStore.queueProviderForClose(providerId, provider, storeConf)
+        }
+        throw initError
+    }
   }
 
   /**
@@ -1576,10 +1584,17 @@ object StateStore extends Logging {
     if (version < 0) {
       throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
     }
-    val (storeProvider, _) = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
-      keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey,
-      stateSchemaBroadcast)
-    storeProvider.getReadStore(version, stateStoreCkptId)
+    withClosedProviderRetry(storeProviderId, storeConf) {
+      getStateStoreProvider(storeProviderId, keySchema, valueSchema,
+        keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey,
+        stateSchemaBroadcast)
+    } {
+      StateStoreProvider.createAndInit(storeProviderId, keySchema, valueSchema,
+        keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey,
+        stateSchemaBroadcast)
+    } { (storeProvider, _) =>
+      storeProvider.getReadStore(version, stateStoreCkptId)
+    }
   }
 
   /**
@@ -1650,12 +1665,85 @@ object StateStore extends Logging {
     if (version < 0) {
       throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
     }
-    val (storeProvider, shouldForceSnapshotUpload) = getStateStoreProvider(storeProviderId,
-      keySchema, valueSchema, keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf,
-      useMultipleValuesPerKey, stateSchemaBroadcast)
-    storeProvider.getStore(version, stateStoreCkptId, shouldForceSnapshotUpload)
+    withClosedProviderRetry(storeProviderId, storeConf) {
+      getStateStoreProvider(storeProviderId,
+        keySchema, valueSchema, keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf,
+        useMultipleValuesPerKey, stateSchemaBroadcast)
+    } {
+      StateStoreProvider.createAndInit(storeProviderId, keySchema, valueSchema,
+        keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey,
+        stateSchemaBroadcast)
+    } { (storeProvider, shouldForceSnapshotUpload) =>
+      storeProvider.getStore(version, stateStoreCkptId, shouldForceSnapshotUpload)
+    }
   }
   // scalastyle:on
+
+  private def withClosedProviderRetry[T <: ReadStateStore](
+      storeProviderId: StateStoreProviderId,
+      storeConf: StateStoreConf)(
+      getProvider: => (StateStoreProvider, Boolean))(
+      createProvider: => StateStoreProvider)(
+      loadStore: (StateStoreProvider, Boolean) => T): T = {
+    val (firstProvider, firstShouldForceSnapshotUpload) = getProvider
+    try {
+      loadStore(firstProvider, firstShouldForceSnapshotUpload)
+    } catch {
+      case _: StateStoreProviderClosed =>
+        val hasReplacement = loadedProviders.synchronized {
+          if (loadedProviders.get(storeProviderId).exists(_ eq firstProvider)) {
+            loadedProviders.remove(storeProviderId)
+          }
+          loadedProviders.contains(storeProviderId)
+        }
+        if (hasReplacement) {
+          // Retry only once. A second close race propagates to the task's normal retry handling.
+          val (provider, shouldForceSnapshotUpload) = getProvider
+          return loadStore(provider, shouldForceSnapshotUpload)
+        }
+        // An unpublished provider cannot be closed by maintenance before store acquisition.
+        val replacementProvider = createProvider
+        val store = try {
+          loadStore(replacementProvider, firstShouldForceSnapshotUpload)
+        } catch {
+          case NonFatal(loadError) =>
+            queueProviderForClose(storeProviderId, replacementProvider, storeConf)
+            throw loadError
+        }
+        val published = try {
+          loadedProviders.synchronized {
+            if (loadedProviders.contains(storeProviderId)) {
+              false
+            } else {
+              loadedProviders.put(storeProviderId, replacementProvider)
+              // Reuse normal reporting after publication while the cache lock pins this entry.
+              getProvider
+              true
+            }
+          }
+        } catch {
+          case NonFatal(reportError) =>
+            Utils.tryLogNonFatalError { store.abort() }
+            val removed = loadedProviders.synchronized {
+              if (loadedProviders.get(storeProviderId).exists(_ eq replacementProvider)) {
+                loadedProviders.remove(storeProviderId)
+              } else {
+                None
+              }
+            }
+            removed.foreach(queueProviderForClose(storeProviderId, _, storeConf))
+            throw reportError
+        }
+        if (!published) {
+          // Return the acquired store; switching to the published provider reopens the close race.
+          // Ownership-move unloading already queues providers held by tasks. If close times out,
+          // closeProvider marks the provider unloaded without reaching rocksDB.close(), so it
+          // skips later close attempts. This pre-existing risk belongs to the shared lifecycle.
+          queueProviderForClose(storeProviderId, replacementProvider, storeConf)
+        }
+        store
+    }
+  }
 
   /*
    * @return (StateStoreProvider, shouldForceSnapshotUpload)
@@ -1731,6 +1819,17 @@ object StateStore extends Logging {
 
       (provider, shouldForceSnapshotUpload)
     }
+  }
+
+  private[state] def queueProviderForClose(
+      storeProviderId: StateStoreProviderId,
+      provider: StateStoreProvider,
+      storeConf: StateStoreConf): Unit = loadedProviders.synchronized {
+    // Task threads must queue providers, including failed unpublished ones, never close them.
+    // Maintenance serializes closure with other maintenance work through maintenanceLock.
+    unloadedProvidersToClose.add((storeProviderId, provider, MaintenanceOpRequest.All))
+    startMaintenanceIfNeeded(storeConf)
+    if (maintenanceTask != null) maintenanceTask.triggerNow()
   }
 
   /** Runs maintenance and then unload a state store provider */
@@ -1865,10 +1964,13 @@ object StateStore extends Logging {
     val maintenanceShutdownTimeout = storeConf.stateStoreMaintenanceShutdownTimeout
     val maintenanceForceShutdownTimeout = storeConf.stateStoreMaintenanceForceShutdownTimeout
     loadedProviders.synchronized {
-      if (SparkEnv.get != null && !isMaintenanceRunning && !storeConf.unloadOnCommit) {
+      if (SparkEnv.get != null && !isMaintenanceRunning &&
+          (!storeConf.unloadOnCommit || !unloadedProvidersToClose.isEmpty)) {
         maintenanceTask = new MaintenanceTask(
           storeConf.maintenanceInterval,
-          task = { processUnloadedOnly => doMaintenance(storeConf, processUnloadedOnly) }
+          task = { processUnloadedOnly =>
+            doMaintenance(storeConf, processUnloadedOnly || storeConf.unloadOnCommit)
+          }
         )
         // Separate pools for snapshot and cleanup to prevent one operation type
         // from starving the other when pool threads are saturated.
