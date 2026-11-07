@@ -28,14 +28,16 @@ import scala.reflect.{classTag, ClassTag}
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkArithmeticException, SparkRuntimeException, SparkUnsupportedOperationException}
-import org.apache.spark.sql.{Encoder, Encoders, Row}
+import org.apache.spark.sql.{AnalysisException, Encoder, Encoders, Row}
 import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, OptionalData, PrimitiveData, ScalaReflection, ScroogeLikeExample}
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
+import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer.ResolveNewInstance
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BinaryEncoder, EncoderField, IterableEncoder, MapEncoder, OptionEncoder, PrimitiveIntEncoder, ProductEncoder, TimestampEncoder, TransformingEncoder}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, NaNvl}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, NaNvl}
+import org.apache.spark.sql.catalyst.expressions.objects.NewInstance
 import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
-import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils.{instantToMicros, microsToInstant}
@@ -287,6 +289,31 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
       MalformedClassObject.MalformedNameExample(42),
       "nested Scala class should work",
       useFallback = true)
+  }
+
+  class OuterClassForTest {
+    class InnerClassForTest
+  }
+
+  test("SPARK-60216: inner class encoder missing outer scope") {
+    val innerClass = classOf[OuterClassForTest#InnerClassForTest]
+
+    val newInst = NewInstance(
+      cls = innerClass,
+      arguments = Seq.empty,
+      propagateNull = false,
+      dataType = ObjectType(innerClass)
+    )
+
+    val e = intercept[AnalysisException] {
+      ResolveNewInstance(Project(Seq(Alias(newInst, "a")()), LocalRelation()))
+    }
+
+    checkError(
+      exception = e,
+      condition = "INNER_CLASS_ENCODER_UNSUPPORTED",
+      parameters = Map("className" -> innerClass.getName)
+    )
   }
 
   productTest(PrimitiveData(1, 1, 1, 1, 1, 1, true))
