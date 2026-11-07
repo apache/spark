@@ -85,7 +85,7 @@ object DataWritingCommand {
    * or [[InsertIntoHiveTable]] command to write data, they both inherit metrics from
    * [[DataWritingCommand]], but after running [[InsertIntoHadoopFsRelationCommand]]
    * or [[InsertIntoHiveTable]], we only update metrics in these two command through
-   * [[BasicWriteJobStatsTracker]], we also need to propogate metrics to the command
+   * [[BasicWriteJobStatsTracker]], we also need to propagate metrics to the command
    * that actually calls [[InsertIntoHadoopFsRelationCommand]] or [[InsertIntoHiveTable]].
    *
    * @param sparkContext Current SparkContext.
