@@ -461,6 +461,14 @@ abstract class HashedRelationSuite extends SharedSparkSession {
     assert(java.util.Arrays.equals(os.toByteArray, os2.toByteArray))
   }
 
+  test("SPARK-61078: LongToUnsafeRowMap does not allocate memory before deserialization") {
+    // JavaSerializer creates the map with the no-arg constructor, and KryoSerializer creates it
+    // with `Kryo.newInstance`. Then `read()` allocates `array` and `page`.
+    assert(new LongToUnsafeRowMap().getUsed === 0)
+    val kryo = new KryoSerializer(new SparkConf).newKryo()
+    assert(kryo.newInstance(classOf[LongToUnsafeRowMap]).getUsed === 0)
+  }
+
   test("SPARK-31511: Make BytesToBytesMap iterators thread-safe") {
     val ser = sparkContext.env.serializer.newInstance()
     val key = Seq(BoundReference(0, LongType, false))
