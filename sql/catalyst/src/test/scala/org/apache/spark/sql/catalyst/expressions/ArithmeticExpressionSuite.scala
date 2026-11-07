@@ -776,16 +776,18 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     }
   }
 
-  test("SPARK-61050: Remainder, Pmod and IntegralDivide of decimals with a 41-digit quotient") {
+  test("SPARK-61050: decimal Remainder, Pmod and IntegralDivide with a 40- or 76-digit quotient") {
     val left = Literal(Decimal(BigDecimal("9" * 38)), DecimalType(38, 0))
-    val right = Literal(Decimal(BigDecimal("0.007"), 3, 3), DecimalType(3, 3))
-    Seq(EvalMode.LEGACY, EvalMode.ANSI).foreach { mode =>
-      checkEvaluation(Remainder(left, right, mode), Decimal(BigDecimal("0.006"), 3, 3))
-      checkEvaluation(Pmod(left, right, mode), Decimal(BigDecimal("0.006"), 3, 3))
+    Seq(("0.07", 2, "0.02"), ("7E-38", 38, "2E-38")).foreach { case (divisor, scale, rem) =>
+      val right = Literal(Decimal(BigDecimal(divisor), scale, scale), DecimalType(scale, scale))
+      Seq(EvalMode.LEGACY, EvalMode.ANSI).foreach { mode =>
+        checkEvaluation(Remainder(left, right, mode), Decimal(BigDecimal(rem), scale, scale))
+        checkEvaluation(Pmod(left, right, mode), Decimal(BigDecimal(rem), scale, scale))
+      }
+      checkEvaluation(IntegralDivide(left, right, EvalMode.LEGACY), null)
+      checkExceptionInExpression[SparkArithmeticException](
+        IntegralDivide(left, right, EvalMode.ANSI), "NUMERIC_VALUE_OUT_OF_RANGE")
     }
-    checkEvaluation(IntegralDivide(left, right, EvalMode.LEGACY), null)
-    checkExceptionInExpression[SparkArithmeticException](
-      IntegralDivide(left, right, EvalMode.ANSI), "NUMERIC_VALUE_OUT_OF_RANGE")
   }
 
   test("SPARK-24598: overflow on long returns wrong result") {
