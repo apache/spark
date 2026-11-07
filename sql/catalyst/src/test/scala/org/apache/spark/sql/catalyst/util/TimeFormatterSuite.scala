@@ -207,4 +207,35 @@ class TimeFormatterSuite extends SparkFunSuite with SQLHelper {
         "targetType" -> "\"TIME(6)\"",
         "ansiConfig" -> "\"spark.sql.ansi.enabled\""))
   }
+
+  test("parseOptional returns None instead of throwing on unparseable times") {
+    // The default (pattern-less) formatter delegates to stringToTime.
+    val defaultFormatter = new DefaultTimeFormatter(
+      locale = DateFormatter.defaultLocale,
+      isParsing = true)
+    assert(defaultFormatter.parseOptional("01:02:03").contains(defaultFormatter.parse("01:02:03")))
+    assert(defaultFormatter.parseOptional("x123").isEmpty)
+
+    // The Iso8601 formatter uses parseUnresolved and must consume the whole input.
+    val isoFormatter = new Iso8601TimeFormatter("HH:mm:ss", DateFormatter.defaultLocale,
+      isParsing = true)
+    assert(isoFormatter.parseOptional("01:02:03").contains(isoFormatter.parse("01:02:03")))
+    assert(isoFormatter.parseOptional("abc").isEmpty)
+    // A prefix/partial match must be rejected (full-string consumption).
+    assert(isoFormatter.parseOptional("01:02:03xxx").isEmpty)
+  }
+
+  test("parseOptional has the same clock-hour and AM/PM semantics as parse") {
+    for (hour <- Seq("HH", "hh", "KK", "kk");
+        input <- Seq("11:30:01", "13:30:01", "00:30:01", "24:00:00")) {
+      val formatter = TimeFormatter(s"$hour:mm:ss", isParsing = true)
+      assert(formatter.parseOptional(input) === scala.util.Try(formatter.parse(input)).toOption,
+        s"$hour:mm:ss on $input")
+    }
+    val formatter = TimeFormatter("hh:mm:ss a", isParsing = true)
+    for (input <- Seq("03:30:00 PM", "13:30:00 PM")) {
+      assert(formatter.parseOptional(input) === scala.util.Try(formatter.parse(input)).toOption,
+        s"hh:mm:ss a on $input")
+    }
+  }
 }
