@@ -73,6 +73,18 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(new ToTime(Literal("00:00:00"), Literal("HH:mm:ss")).dataType === TimeType())
   }
 
+  test("SPARK-61087: to_time truncates the result to TIME(6)") {
+    checkEvaluation(new ToTime(Literal("00:00:00.1234567")), localTime(0, 0, 0, 123456))
+    checkEvaluation(
+      new ToTime(Literal("00:00:00.123456789"), Literal("HH:mm:ss.SSSSSSSSS")),
+      localTime(0, 0, 0, 123456))
+    checkEvaluation(
+      new ToTime(
+        NonFoldableLiteral("23:59:59.999999999"),
+        NonFoldableLiteral("HH:mm:ss.SSSSSSSSS")),
+      localTime(23, 59, 59, 999999))
+  }
+
   test("HourExpressionBuilder") {
     // Empty expressions list
     checkError(
@@ -678,6 +690,21 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(TimeFromSeconds(Literal.create(null, DecimalType(14, 6))), null)
     checkEvaluation(TimeFromMillis(Literal.create(null, LongType)), null)
     checkEvaluation(TimeFromMicros(Literal.create(null, LongType)), null)
+  }
+
+  test("SPARK-61087: time_from_seconds truncates the result to TIME(6)") {
+    checkEvaluation(TimeFromSeconds(Literal(Decimal("0.0000001"))), 0L)
+    checkEvaluation(TimeFromSeconds(Literal(Decimal("52200.123456789"))), 52200123456000L)
+    checkEvaluation(TimeFromSeconds(Literal(0.0000001)), 0L)
+    checkEvaluation(TimeFromSeconds(Literal(52200.1234567)), 52200123456000L)
+
+    // Negative values are rejected before truncation.
+    checkExceptionInExpression[SparkDateTimeException](
+      TimeFromSeconds(Literal(Decimal("-0.0000001"))),
+      "Invalid TIME value")
+    checkExceptionInExpression[SparkDateTimeException](
+      TimeFromSeconds(Literal(-0.0000001)),
+      "Invalid TIME value")
   }
 
   test("TIME to numeric extractions") {

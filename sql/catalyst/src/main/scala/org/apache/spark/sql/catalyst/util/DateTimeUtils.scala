@@ -28,7 +28,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.{QueryContext, SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{DataType, Decimal, DoubleExactNumeric, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.types.{DataType, Decimal, DoubleExactNumeric, TimestampNTZType, TimestampType, TimeType}
 import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String}
 
 /**
@@ -1171,23 +1171,29 @@ object DateTimeUtils extends SparkDateTimeUtils {
   /**
    * Creates a TIME value from seconds since midnight (decimal type).
    * @param seconds Seconds (0 to 86399.999999)
-   * @return Nanoseconds since midnight
+   * @return Nanoseconds since midnight, truncated to microsecond precision
    */
-  def timeFromSeconds(seconds: Decimal): Long = withTimeConversionErrorHandling {
-    val operand = new java.math.BigDecimal(NANOS_PER_SECOND)
-    seconds.toJavaBigDecimal.multiply(operand).longValueExact()
+  def timeFromSeconds(seconds: Decimal): Long = {
+    val nanos = withTimeConversionErrorHandling {
+      val operand = new java.math.BigDecimal(NANOS_PER_SECOND)
+      seconds.toJavaBigDecimal.multiply(operand).longValueExact()
+    }
+    truncateTimeToPrecision(nanos, TimeType.MICROS_PRECISION)
   }
 
   /**
    * Creates a TIME value from seconds since midnight (floating point type).
    * @param seconds Seconds (0 to 86399.999999)
-   * @return Nanoseconds since midnight
+   * @return Nanoseconds since midnight, truncated to microsecond precision
    */
-  def timeFromSeconds(seconds: Double): Long = withTimeConversionErrorHandling {
-    if (seconds.isNaN || seconds.isInfinite) {
-      throw new DateTimeException("Cannot convert NaN or Infinite value to TIME")
+  def timeFromSeconds(seconds: Double): Long = {
+    val nanos = withTimeConversionErrorHandling {
+      if (seconds.isNaN || seconds.isInfinite) {
+        throw new DateTimeException("Cannot convert NaN or Infinite value to TIME")
+      }
+      (seconds * NANOS_PER_SECOND).toLong
     }
-    (seconds * NANOS_PER_SECOND).toLong
+    truncateTimeToPrecision(nanos, TimeType.MICROS_PRECISION)
   }
 
   /**

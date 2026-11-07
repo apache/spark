@@ -135,12 +135,18 @@ case class ToTimeParser(fmt: Option[String]) {
     }
   }
 
-  def parse(s: UTF8String): Long = withErrorCondition(s, fmt)(formatter.parse(s.toString))
+  // The parser keeps up to nanoseconds, but `to_time` returns TIME(6).
+  private def truncate(nanos: Long): Long =
+    DateTimeUtils.truncateTimeToPrecision(nanos, TimeType.DEFAULT_PRECISION)
+
+  def parse(s: UTF8String): Long = withErrorCondition(s, fmt) {
+    truncate(formatter.parse(s.toString))
+  }
 
   def parse(s: UTF8String, fmt: UTF8String): Long = {
     val format = fmt.toString
     withErrorCondition(s, Some(format)) {
-      TimeFormatter(format, isParsing = true).parse(s.toString)
+      truncate(TimeFormatter(format, isParsing = true).parse(s.toString))
     }
   }
 }
