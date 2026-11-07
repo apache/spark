@@ -330,6 +330,8 @@ udf_worker = Module(
     ],
     sbt_test_goals=[
         "udf-worker-core/test",
+        "udf-worker-grpc/test",
+        "core/testOnly org.apache.spark.SparkEnvUDFDispatcherSuite",
     ],
 )
 

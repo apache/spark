@@ -1,0 +1,203 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~ Licensed to the Apache Software Foundation (ASF) under one or more
+  ~ contributor license agreements.  See the NOTICE file distributed with
+  ~ this work for additional information regarding copyright ownership.
+  ~ The ASF licenses this file to You under the Apache License, Version 2.0
+  ~ (the "License"); you may not use this file except in compliance with
+  ~ the License.  You may obtain a copy of the License at
+  ~
+  ~    http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
+
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                             http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>org.apache.spark</groupId>
+    <artifactId>spark-parent_2.13</artifactId>
+    <version>5.0.0-SNAPSHOT</version>
+    <relativePath>../../../pom.xml</relativePath>
+  </parent>
+
+  <artifactId>spark-udf-worker-runtime_2.13</artifactId>
+  <packaging>jar</packaging>
+  <name>Spark Project UDF Worker Runtime</name>
+  <url>https://spark.apache.org/</url>
+
+  <properties>
+    <sbt.project.name>udf-worker-runtime</sbt.project.name>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-udf-worker-grpc_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.google.protobuf</groupId>
+      <artifactId>protobuf-java</artifactId>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>failureaccess</artifactId>
+      <scope>compile</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <configuration combine.self="override">
+          <!--
+            Packages the proto, core, and grpc modules with protobuf-java and
+            Guava, then relocates those libraries under
+            org.sparkproject.spark_udf_worker. Engine classes call
+            WorkerMessages and do not name com.google.protobuf. Netty stays
+            unrelocated because the Unix domain socket natives ship with
+            spark-core. Maven and sbt use these same relocation prefixes.
+          -->
+          <shadedArtifactAttached>false</shadedArtifactAttached>
+          <createDependencyReducedPom>true</createDependencyReducedPom>
+          <artifactSet>
+            <includes>
+              <include>org.apache.spark:spark-udf-worker-proto_${scala.binary.version}</include>
+              <include>org.apache.spark:spark-udf-worker-core_${scala.binary.version}</include>
+              <include>org.apache.spark:spark-udf-worker-grpc_${scala.binary.version}</include>
+              <include>io.grpc:*</include>
+              <include>com.google.protobuf:protobuf-java</include>
+              <include>com.google.api.grpc:proto-google-common-protos</include>
+              <include>io.perfmark:perfmark-api</include>
+              <include>com.google.android:annotations</include>
+              <include>org.codehaus.mojo:animal-sniffer-annotations</include>
+              <include>com.google.code.gson:gson</include>
+              <include>com.google.guava:guava</include>
+              <include>com.google.guava:failureaccess</include>
+            </includes>
+          </artifactSet>
+          <relocations>
+            <relocation>
+              <pattern>com.google.protobuf</pattern>
+              <shadedPattern>${spark.shade.packageName}.spark_udf_worker.protobuf</shadedPattern>
+              <includes>
+                <include>com.google.protobuf.**</include>
+              </includes>
+            </relocation>
+            <relocation>
+              <pattern>io.grpc</pattern>
+              <shadedPattern>${spark.shade.packageName}.spark_udf_worker.grpc</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>io.perfmark</pattern>
+              <shadedPattern>${spark.shade.packageName}.spark_udf_worker.io_perfmark</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>android.annotation</pattern>
+              <shadedPattern>${spark.shade.packageName}.spark_udf_worker.android_annotation</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>org.codehaus.mojo.animal_sniffer</pattern>
+              <shadedPattern>${spark.shade.packageName}.spark_udf_worker.animal_sniffer</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.gson</pattern>
+              <shadedPattern>${spark.shade.packageName}.spark_udf_worker.gson</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.common</pattern>
+              <shadedPattern>${spark.shade.packageName}.spark_udf_worker.guava</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.thirdparty</pattern>
+              <shadedPattern>${spark.shade.packageName}.spark_udf_worker.guava.thirdparty</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>${spark.shade.packageName}.guava</pattern>
+              <shadedPattern>${spark.shade.packageName}.spark_udf_worker.guava</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.api</pattern>
+              <shadedPattern>${spark.shade.packageName}.spark_udf_worker.google_protos.api</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.apps</pattern>
+              <shadedPattern>${spark.shade.packageName}.spark_udf_worker.google_protos.apps</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.cloud</pattern>
+              <shadedPattern>${spark.shade.packageName}.spark_udf_worker.google_protos.cloud</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.geo</pattern>
+              <shadedPattern>${spark.shade.packageName}.spark_udf_worker.google_protos.geo</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.logging</pattern>
+              <shadedPattern>${spark.shade.packageName}.spark_udf_worker.google_protos.logging</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.longrunning</pattern>
+              <shadedPattern>${spark.shade.packageName}.spark_udf_worker.google_protos.longrunning</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.rpc</pattern>
+              <shadedPattern>${spark.shade.packageName}.spark_udf_worker.google_protos.rpc</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.shopping</pattern>
+              <shadedPattern>${spark.shade.packageName}.spark_udf_worker.google_protos.shopping</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.type</pattern>
+              <shadedPattern>${spark.shade.packageName}.spark_udf_worker.google_protos.type</shadedPattern>
+            </relocation>
+          </relocations>
+          <filters>
+            <filter>
+              <artifact>*:*</artifact>
+              <excludes>
+                <exclude>google/protobuf/**</exclude>
+                <exclude>**/*.proto</exclude>
+                <exclude>org/apache/spark/unused/**</exclude>
+                <exclude>META-INF/maven/org.spark-project.spark/unused/**</exclude>
+                <exclude>META-INF/*.SF</exclude>
+                <exclude>META-INF/*.DSA</exclude>
+                <exclude>META-INF/*.RSA</exclude>
+                <exclude>META-INF/versions/*/module-info.class</exclude>
+              </excludes>
+            </filter>
+          </filters>
+          <transformers>
+            <transformer implementation=
+                "org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+          </transformers>
+        </configuration>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>
