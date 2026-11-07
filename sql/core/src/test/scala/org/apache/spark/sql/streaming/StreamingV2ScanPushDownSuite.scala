@@ -30,13 +30,14 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{DataFrame, Encoder, Encoders, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow}
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, AttributeSet, Cast, EqualTo, EvalMode, Expression, Floor, GreaterThan, GreaterThanOrEqual, If, IsNotNull, LeafExpression, LessThan, Literal, Or, Rand, RLike, ScalarSubquery}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, ArrayContains, AttributeSet, Cast, EqualTo, EvalMode, Expression, Floor, GetStructField, GreaterThan, GreaterThanOrEqual, If, IsNotNull, LeafExpression, LessThan, Literal, Or, Rand, RLike, ScalarSubquery}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.optimizer.{ColumnPruning, PruneFilters}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.classic.{Dataset, ExpressionUtils, SparkSession}
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryBaseTable, InMemoryTableCatalog, SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
@@ -49,7 +50,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
 import org.apache.spark.sql.sources.{Filter => SourceFilter}
-import org.apache.spark.sql.types.{BooleanType, CharType, DataType, IntegerType, LongType, StringType, StructType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, CharType, DataType, IntegerType, LongType, StringType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -1115,6 +1116,19 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
         assertNotOverSources("< 3"),
         CheckAnswer(Row(2L), Row(0L)))
     }
+    // Also on a struct key, whose value the micro-batch puts in place of the column in k.a > 0.
+    withTable(tbl) {
+      createTable(tbl, "k struct<a: int>, v string", filtering)
+      sql(s"INSERT INTO $tbl VALUES (named_struct('a', 1), 'x'), (named_struct('a', 0), 'y')")
+      val source = spark.readStream.table(tbl).where("k.a > 0")
+      val static = spark.range(0, 1).selectExpr("named_struct('a', CAST(id AS INT) + 1) AS sk")
+        .where("sk = named_struct('a', 1)")
+      testStream(source.join(static, source("k") === static("sk")).select("v"))(
+        ProcessAllAvailable(),
+        assertPushedFilters("GreaterThan(k.a,0)"),
+        assertNotOverSources("> 0"),
+        CheckAnswer(Row("x")))
+    }
     // Also on a double key, whose value the micro-batch puts where the column is compared: -0.0
     // compares as 0.0 does.
     withTable(tbl) {
@@ -1171,7 +1185,13 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
         AddData(input, (5L, "a")),
         ProcessAllAvailable(),
         CheckAnswer(Row("abc"), Row("ab"), Row("a")),
-        AssertOnQuery(_ => checks.get() == checksOfFirstBatch))
+        AssertOnQuery(_ => checks.get() == checksOfFirstBatch),
+        // A query that restarts rewrites it again, as the rewrites belong to the query.
+        StopStream,
+        StartStream(),
+        AddData(input, (5L, "abcd")),
+        ProcessAllAvailable(),
+        AssertOnQuery(_ => checks.get() > checksOfFirstBatch))
     } finally {
       spark.experimental.extraOptimizations = Nil
     }
@@ -1416,7 +1436,8 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
 
   test("check that the plan of each micro-batch implies the filters that its scans got") {
     withTable(tbl) {
-      createTable(tbl, "id bigint, data string, d double, e int, t time")
+      createTable(tbl,
+        "id bigint, data string, d double, e int, t time, k struct<a: int>, xs array<int>")
       // A relation of the source, whose pushed filters each case sets.
       var relation: StreamingDataSourceV2ScanRelation = null
       testStream(spark.readStream.table(tbl))(
@@ -1427,7 +1448,7 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
           }.get
           true
         })
-      val Seq(id, data, d, e, t) = relation.output
+      val Seq(id, data, d, e, t, k, xs) = relation.output
       // Checks the plan of a micro-batch that `plan` makes of the relation, once the scan of the
       // relation got `pushed`.
       def check(pushed: Expression)(plan: LogicalPlan => LogicalPlan): Unit = {
@@ -1463,7 +1484,10 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
         Filter(idAbove1, Project(Seq(id, Alias(Rand(Literal(0L)), "r")()), relation))
       })
       assert(!accepts(idAbove1)(relation => Filter(idAbove1, Filter(random, relation))))
-      assert(accepts(idAbove1)(Filter(And(random, idAbove1), _)))
+      // A filter that is not deterministic gets its rows before its conjuncts after the first
+      // nondeterministic one, but not before those that it evaluates first.
+      assert(!accepts(idAbove1)(Filter(And(random, idAbove1), _)))
+      assert(accepts(idAbove1)(Filter(And(idAbove1, random), _)))
       // With the values of the columns that the plan makes equal to literals.
       assert(accepts(idAbove1)(Filter(EqualTo(id, Literal(5L)), _)))
       assert(!accepts(idAbove1)(Filter(EqualTo(id, Literal(0L)), _)))
@@ -1475,6 +1499,14 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
         Filter(EqualTo(id, Literal(5L)), _)))
       assert(accepts(GreaterThan(t, Literal(LocalTime.of(0, 0, 1))))(
         Filter(EqualTo(t, Literal(LocalTime.of(12, 0))), _)))
+      // Also for a struct or an array of such values, whose literal may have another nullability.
+      val struct = Literal.create(InternalRow(1),
+        StructType(Seq(StructField("a", IntegerType, nullable = false))))
+      assert(accepts(GreaterThan(GetStructField(k, 0, Some("a")), Literal(0)))(
+        Filter(EqualTo(k, struct), _)))
+      val array = Literal.create(ArrayData.toArrayData(Array(1, 2)),
+        ArrayType(IntegerType, containsNull = false))
+      assert(accepts(ArrayContains(xs, Literal(2)))(Filter(EqualTo(xs, array), _)))
       // And once the optimizer of the micro-batch rewrote it, as it rewrites the plan.
       assert(accepts(LessThan(Cast(e, LongType), id))(
         Filter(And(EqualTo(id, Literal(5L)), LessThan(e, Literal(5))), _)))

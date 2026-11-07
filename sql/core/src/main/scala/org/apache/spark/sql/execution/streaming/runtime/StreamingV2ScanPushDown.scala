@@ -46,7 +46,7 @@ import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.datasources.v2.{PushDownUtils, StreamingDataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetSeqMetadata, OffsetSeqMetadataBase}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{AnyTimeType, BinaryType, BooleanType, DataType, DatetimeType, DateType, DayTimeIntervalType, DecimalType, DoubleType, FloatType, IntegralType, StringType, StructType, TimestampNTZType, TimestampType, TimeType, VariantType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{AnyTimestampNanoType, AnyTimeType, ArrayType, BinaryType, BooleanType, DataType, DatetimeType, DateType, DayTimeIntervalType, DecimalType, DoubleType, FloatType, IntegralType, StringType, StructType, TimestampNTZType, TimestampType, TimeType, VariantType, YearMonthIntervalType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
@@ -630,7 +630,10 @@ private[sql] object StreamingV2ScanPushDown
    * follow, and the micro-batch fails before it reads its data, with the failure of the optimizer
    * as its cause if there is one.
    */
-  def checkPushedFilters(session: SparkSession, plan: LogicalPlan): Unit = {
+  def checkPushedFilters(
+      session: SparkSession,
+      plan: LogicalPlan,
+      rewrites: PushedFilterRewrites = new PushedFilterRewrites): Unit = {
     val hasPushedFilters = plan.exists {
       case relation: StreamingDataSourceV2ScanRelation => relation.pushedFilters.nonEmpty
       case _ => false
@@ -642,20 +645,15 @@ private[sql] object StreamingV2ScanPushDown
       // The conjuncts of `condition` once the optimizer of the micro-batch optimizes a filter of
       // `relation` with it, none if it folds into true, which the next micro-batches reuse.
       def optimized(relation: StreamingDataSourceV2ScanRelation)(
-          condition: Expression): Option[Seq[Expression]] = {
-        val key = condition.canonicalized
-        Option(optimizedConditions.getIfPresent(key)).getOrElse {
-          val rewritten = SQLConf.withExistingConf(optimizerConf) {
-            session.sessionState.optimizer.execute(
-              Filter(condition, relation.copy(pushedFilters = Nil)))
-          } match {
-            case Filter(optimizedCondition, _: StreamingDataSourceV2ScanRelation) =>
-              Some(splitConjunctivePredicates(optimizedCondition))
-            case _: StreamingDataSourceV2ScanRelation => Some(Nil)
-            case _ => None
-          }
-          optimizedConditions.put(key, rewritten)
-          rewritten
+          condition: Expression): Option[Seq[Expression]] = rewrites(condition) {
+        SQLConf.withExistingConf(optimizerConf) {
+          session.sessionState.optimizer.execute(
+            Filter(condition, relation.copy(pushedFilters = Nil)))
+        } match {
+          case Filter(optimizedCondition, _: StreamingDataSourceV2ScanRelation) =>
+            Some(splitConjunctivePredicates(optimizedCondition))
+          case _: StreamingDataSourceV2ScanRelation => Some(Nil)
+          case _ => None
         }
       }
       conditionsOverRelations(plan, Nil).foreach { case (relation, conditions) =>
@@ -674,26 +672,47 @@ private[sql] object StreamingV2ScanPushDown
     }
   }
 
-  // The conditions that the optimizer of a micro-batch rewrote for `checkPushedFilters`, by the
-  // condition canonicalized: the micro-batches of a query check the same filters with the same
-  // values, which the optimizer rewrites in the same way.
-  private val optimizedConditions: Cache[Expression, Option[Seq[Expression]]] =
-    CacheBuilder.newBuilder().maximumSize(100).build[Expression, Option[Seq[Expression]]]()
+  /**
+   * The conditions that the optimizer of a micro-batch rewrote for `checkPushedFilters`, by the
+   * condition canonicalized, which a streaming query keeps for its micro-batches: they check the
+   * same filters with the same values, which its optimizer rewrites in the same way. A query that
+   * restarts gets a new one, with the configuration that it restarts with.
+   */
+  class PushedFilterRewrites {
+    private val rewrites: Cache[Expression, Option[Seq[Expression]]] =
+      CacheBuilder.newBuilder().maximumSize(100).build[Expression, Option[Seq[Expression]]]()
+
+    def apply(condition: Expression)(
+        rewrite: => Option[Seq[Expression]]): Option[Seq[Expression]] = {
+      val key = condition.canonicalized
+      Option(rewrites.getIfPresent(key)).getOrElse {
+        val rewritten = rewrite
+        rewrites.put(key, rewritten)
+        rewritten
+      }
+    }
+  }
 
   // Each occurrence of a streaming relation in `plan`, with the deterministic conditions that the
   // plan applies to all its rows, given `above`, those that it applies to all the rows of `plan`:
   // the conditions of the filters over it, through the projections, with the aliases of these in
   // place of their names, as `PhysicalOperation` finds the filters of a relation. The conditions
-  // over a filter or a projection that is not deterministic do not hold for the rows that it gets.
+  // over a filter or a projection that is not deterministic do not hold for the rows that it gets,
+  // nor do the conjuncts of such a filter after its first nondeterministic one, which sees the rows
+  // that these drop: only the leading deterministic ones, as when the query starts.
   private def conditionsOverRelations(
       plan: LogicalPlan,
       above: Seq[Expression]): Seq[(StreamingDataSourceV2ScanRelation, Seq[Expression])] = {
     plan match {
       case relation: StreamingDataSourceV2ScanRelation => Seq(relation -> above)
       case Filter(condition, child) =>
-        val conditions = splitConjunctivePredicates(condition).filter(_.deterministic)
-        conditionsOverRelations(child,
-          if (condition.deterministic) conditions ++ above else conditions)
+        val conditions = splitConjunctivePredicates(condition)
+        val applied = if (condition.deterministic) {
+          conditions ++ above
+        } else {
+          conditions.takeWhile(_.deterministic)
+        }
+        conditionsOverRelations(child, applied)
       case Project(projectList, child) if projectList.forall(_.deterministic) =>
         val aliases = getAliasMap(projectList)
         conditionsOverRelations(child, above.map(replaceAlias(_, aliases)))
@@ -714,9 +733,11 @@ private[sql] object StreamingV2ScanPushDown
    * types whose equal values are the same (see `hasExactEquality`), and for the floating types,
    * whose equal values only differ for 0.0 and -0.0, and for NaN values, which Spark evaluates
    * alike: a column equal to zero is 0.0 or -0.0, so the filter must hold with each, as
-   * `floor(d) >= 0` does, unlike `CAST(d AS STRING) = '0.0'`. This may miss that the facts imply a
-   * filter, which fails the micro-batch, but never finds that they imply a filter that they do not
-   * imply, as long as the rules of the optimizer keep what the filters mean.
+   * `floor(d) >= 0` does, unlike `CAST(d AS STRING) = '0.0'`. A string of a collation that is not
+   * binary gets no value, also where `ConstantPropagation` puts it in a comparison of two columns
+   * of this collation. This may miss that the facts imply a filter, which fails the micro-batch,
+   * but never finds that they imply a filter that they do not imply, as long as the rules of the
+   * optimizer keep what the filters mean.
    */
   private def impliedBy(
       facts: Seq[Expression],
@@ -738,7 +759,7 @@ private[sql] object StreamingV2ScanPushDown
       case EqualNullSafe(column: Attribute, value: Literal) => column -> value
       case EqualNullSafe(value: Literal, column: Attribute) => column -> value
     }.filter { case (column, value) =>
-      column.dataType == value.dataType &&
+      DataType.equalsIgnoreNullability(column.dataType, value.dataType) &&
         (hasExactEquality(column.dataType) || isFloating(column.dataType))
     })
     filter => noRow || holds(filter) || {
@@ -760,12 +781,14 @@ private[sql] object StreamingV2ScanPushDown
 
   // Whether the values of `dataType` that are equal are the same, so that a column that is equal
   // to a value has this value in any expression: not 0.0 and -0.0, which are equal, nor the
-  // strings that a collation finds equal.
+  // strings that a collation finds equal, nor the structs and arrays that have such values.
   private def hasExactEquality(dataType: DataType): Boolean = dataType match {
     case _: IntegralType | _: DecimalType | BooleanType | DateType | TimestampType |
-         TimestampNTZType | _: TimeType | _: DayTimeIntervalType | _: YearMonthIntervalType |
-         BinaryType => true
+         TimestampNTZType | _: AnyTimestampNanoType | _: TimeType | _: DayTimeIntervalType |
+         _: YearMonthIntervalType | BinaryType => true
     case string: StringType => string.supportsBinaryEquality
+    case struct: StructType => struct.fields.forall(field => hasExactEquality(field.dataType))
+    case array: ArrayType => hasExactEquality(array.elementType)
     case _ => false
   }
 

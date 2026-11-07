@@ -65,6 +65,9 @@ class ContinuousExecution(
 
   @volatile protected var sources: Seq[ContinuousStream] = Seq()
 
+  // The rewrites of the filters that the scans of the sources got, which the epochs check.
+  private val pushedFilterRewrites = new StreamingV2ScanPushDown.PushedFilterRewrites
+
   def sourceToIdMap: Map[SparkDataStream, String] = Map.empty
 
   // For use only in test harnesses.
@@ -253,7 +256,8 @@ class ContinuousExecution(
         None,
         execCtx.offsetSeqMetadata,
         WatermarkPropagator.noop(),
-        false)
+        false,
+        pushedFilterRewrites = pushedFilterRewrites)
       execCtx.executionPlan.executedPlan // Force the lazy generation of execution plan
     }
 

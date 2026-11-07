@@ -195,6 +195,9 @@ class MicroBatchExecution(
   // into every subsequent batch's query plan.
   private val stateSchemaMetadatas = MutableMap[Long, StateSchemaBroadcast]()
 
+  // The rewrites of the filters that the scans of the sources got, which the micro-batches check.
+  private val pushedFilterRewrites = new StreamingV2ScanPushDown.PushedFilterRewrites
+
   /**
    * Cached result of the first `offsetLog.getLatest()` call. Reused by both
    * `logicalPlan` (to determine `enforceNamed`) and `initializeExecution` (to seed
@@ -1376,7 +1379,8 @@ class MicroBatchExecution(
         currentStateStoreCkptId,
         stateSchemaMetadatas,
         isTerminatingTrigger = trigger.isInstanceOf[AvailableNowTrigger.type],
-        isRealTimeMode = trigger.isInstanceOf[RealTimeTrigger])
+        isRealTimeMode = trigger.isInstanceOf[RealTimeTrigger],
+        pushedFilterRewrites = pushedFilterRewrites)
       execCtx.executionPlan.executedPlan // Force the lazy generation of execution plan
     }
     // Set up StateStore commit tracking before execution begins
