@@ -1399,6 +1399,170 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     }
   }
 
+  gridTest("ORDER BY aggregates resolve input columns before output aliases")(
+    Seq(false, true)) { singlePassEnabled =>
+    withSQLConf(
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePassEnabled.toString,
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+      SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+      def checkQuery(sqlText: String, expectedAnswer: Seq[Row]): Unit = {
+        val df = sql(sqlText)
+        assert(df.queryExecution.analyzed.resolved)
+        // The single-pass analyzer does not support the encoder plans created by checkAnswer.
+        withSQLConf(
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false",
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+          checkAnswer(df, expectedAnswer)
+        }
+      }
+
+      val input =
+        """FROM VALUES ('a', 1), ('a', 10), ('b', 2), ('b', 3), ('c', 4), ('c', 5)
+          |  AS scores(team, score)
+          |GROUP BY team
+          |""".stripMargin
+      val query = "SELECT team, min(score) AS score\n" + input
+      val orderedByMax = Seq(Row("b", 2), Row("c", 4), Row("a", 1))
+      val orderedByAlias = Seq(Row("a", 1), Row("b", 2), Row("c", 4))
+
+      checkQuery(query + "ORDER BY max(score)", orderedByMax)
+      checkQuery(query + "ORDER BY max(scores.score)", orderedByMax)
+      checkQuery(query + "ORDER BY min(score)", orderedByAlias)
+      checkQuery(query + "ORDER BY score", orderedByAlias)
+      checkQuery(query + "ORDER BY abs(score)", orderedByAlias)
+      checkQuery(query + "ORDER BY max(score) - score, team", orderedByMax)
+      checkQuery(
+        query + "HAVING min(score) < 3 ORDER BY max(score)",
+        Seq(Row("b", 2), Row("a", 1)))
+      checkQuery(query + "HAVING max(score) > 4", Seq(Row("a", 1), Row("c", 4)))
+      checkQuery(
+        "SELECT team, min(score) > 0 AS score\n" + input + "ORDER BY sum(score)",
+        Seq(Row("b", true), Row("c", true), Row("a", true)))
+      checkQuery(
+        """SELECT team, min(score) AS score
+          |FROM VALUES
+          |  ('a', named_struct('value', 1)), ('a', named_struct('value', 10)),
+          |  ('b', named_struct('value', 2)), ('b', named_struct('value', 3)),
+          |  ('c', named_struct('value', 4)), ('c', named_struct('value', 5))
+          |  AS scores(team, score)
+          |GROUP BY team
+          |ORDER BY max(score.value)""".stripMargin,
+        Seq(Row("b", Row(2)), Row("c", Row(4)), Row("a", Row(1))))
+
+    }
+  }
+
+  gridTest("ORDER BY alias scope interactions")(
+    for {
+      singlePassEnabled <- Seq(false, true)
+      ansiEnabled <- Seq(false, true)
+      interaction <- Seq("struct extraction", "nested scalar coercion", "explicit cast",
+        "scalar field naming")
+    } yield (singlePassEnabled, ansiEnabled, interaction)) {
+    case (singlePassEnabled, ansiEnabled, interaction) =>
+      withSQLConf(
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePassEnabled.toString,
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+        SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        val (sqlText, expectedAnswer) = interaction match {
+          case "struct extraction" =>
+            (
+              """SELECT k, named_struct('y', min(a.y), 'x', min(a.x)) AS a
+                |FROM VALUES
+                |  (1, named_struct('x', 10, 'y', 20)),
+                |  (2, named_struct('x', 30, 'y', 5)) AS t(k, a)
+                |GROUP BY k
+                |ORDER BY max(a['x'])""".stripMargin,
+              Seq(Row(1, Row(20, 10)), Row(2, Row(5, 30))))
+          case "nested scalar coercion" =>
+            (
+              """SELECT team, CAST(min(score) AS STRING) AS score
+                |FROM VALUES ('a', 9007199254740992L), ('b', 9007199254740993L)
+                |  AS scores(team, score)
+                |GROUP BY team
+                |ORDER BY max(abs(score)), team DESC""".stripMargin,
+              Seq(Row("a", "9007199254740992"), Row("b", "9007199254740993")))
+          case "scalar field naming" =>
+            (
+              """SELECT a FROM VALUES (array(2)), (array(1)) AS t(a)
+                |GROUP BY a
+                |ORDER BY arrays_zip(a)[0].a""".stripMargin,
+              Seq(Row(Seq(1)), Row(Seq(2))))
+          case "explicit cast" =>
+            (
+              """SELECT team, CAST(min(score) AS STRING) AS score
+                |FROM VALUES ('a', 9007199254740992L), ('b', 9007199254740993L)
+                |  AS scores(team, score)
+                |GROUP BY team
+                |ORDER BY max(abs(CAST(score AS DOUBLE))), team DESC""".stripMargin,
+              Seq(Row("b", "9007199254740993"), Row("a", "9007199254740992")))
+        }
+        val df = sql(sqlText)
+        assert(df.queryExecution.analyzed.resolved)
+        // Resolve the SQL with the requested analyzer before using the encoder test harness.
+        withSQLConf(
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false",
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+          checkAnswer(df, expectedAnswer)
+        }
+      }
+  }
+
+  gridTest("ORDER BY struct preserves grouped field names")(
+    for {
+      singlePassEnabled <- Seq(false, true)
+      scenario <- Seq("DataFrame column", "DataFrame nested field", "DataFrame alias", "SQL column",
+        "SQL nested field", "SQL output alias", "SQL unnamed expression")
+    } yield (singlePassEnabled, scenario)) {
+    case (singlePassEnabled, scenario) =>
+      withSQLConf(
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePassEnabled.toString,
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+        val (df, expectedAnswer) = scenario match {
+          case "DataFrame column" =>
+            (spark.range(2).groupBy("id").count()
+              .orderBy(struct(col("id")).getField("id").desc),
+              Seq(Row(1L, 1L), Row(0L, 1L)))
+          case "DataFrame nested field" =>
+            (spark.range(2).select(struct(col("id")).as("a")).groupBy("a").count()
+              .orderBy(struct(col("a.id")).getField("id").desc),
+              Seq(Row(Row(1L), 1L), Row(Row(0L), 1L)))
+          case "DataFrame alias" =>
+            (spark.range(2).groupBy("id").count()
+              .orderBy(struct(col("id").as("key")).getField("key").desc),
+              Seq(Row(1L, 1L), Row(0L, 1L)))
+          case "SQL column" =>
+            (sql("""SELECT id FROM VALUES (2), (1) AS t(id)
+                   |GROUP BY id ORDER BY struct(id).id""".stripMargin),
+              Seq(Row(1), Row(2)))
+          case "SQL nested field" =>
+            (sql("""SELECT a FROM VALUES (named_struct('id', 2)), (named_struct('id', 1))
+                   |  AS t(a) GROUP BY a ORDER BY struct(a.id).id""".stripMargin),
+              Seq(Row(Row(1)), Row(Row(2))))
+          case "SQL output alias" =>
+            (sql("""SELECT team, min(score) AS score
+                   |FROM VALUES ('a', 1), ('a', 10), ('b', 2), ('b', 3) AS t(team, score)
+                   |GROUP BY team ORDER BY struct(score).score""".stripMargin),
+              Seq(Row("a", 1), Row("b", 2)))
+          case "SQL unnamed expression" =>
+            (sql("""SELECT id FROM VALUES (2), (1) AS t(id)
+                   |GROUP BY id ORDER BY struct(id + 1).col1""".stripMargin),
+              Seq(Row(1), Row(2)))
+        }
+        assert(df.queryExecution.analyzed.resolved)
+        withSQLConf(
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false",
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+          checkAnswer(df, expectedAnswer)
+        }
+      }
+  }
+
   test("SPARK-7952: fix the equality check between boolean and numeric types") {
     // If ANSI mode is on, Spark disallows comparing Int with Boolean.
     if (!conf.ansiEnabled) {
