@@ -34,11 +34,11 @@ controls only the top-level array elements.
 
 A call without any clause or `FORMAT JSON`, nested or not, resolves like an ordinary function call,
 so a same-named function placed before `system.builtin` in the SQL `PATH`, or a replacement
-injected by a session extension, can own it. A constructor written directly as another
-constructor's value always means the built-in. Qualifying every level
-(e.g. `builtin.json_array(builtin.json_array(1))`) selects the built-in over a function in the
-`PATH`; adding a clause (e.g. `json_array(json_array(1) NULL ON NULL)`) always selects it, even
-over an extension's replacement.
+injected by a session extension, can own it. Each nested call is resolved on its own, exactly like
+the outer one. Qualifying every level (e.g. `builtin.json_array(builtin.json_array(1))`) selects
+the built-in over a function in the `PATH`; adding a clause to every level
+(e.g. `json_array(json_array(1 NULL ON NULL) NULL ON NULL)`) always selects it, even over an
+extension's replacement.
 
 ### Syntax
 

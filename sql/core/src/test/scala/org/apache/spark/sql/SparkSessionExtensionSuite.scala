@@ -232,7 +232,7 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
 
   test("SPARK-59243: injected json_array replacement wins a nested clause-free call") {
     // An injected replacement must own `json_array(json_array(1))`, as it owns the flat call. It
-    // returns its argument count, so the result is 1 (the inner built-in call) iff it won.
+    // returns its argument count, so the result is 1 iff it won (it owns the inner call too).
     val extensions = create { extensions =>
       extensions.injectFunction((
         FunctionIdentifier("json_array"),
@@ -257,9 +257,12 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
         assert(
           session.sql(query).collect() === Array(Row(1)),
           "injected replacement should win the nested call")
-        // A clause selects Spark's constructor; qualifying does not, as the replacement owns it.
+        // A clause selects Spark's constructor for that call only; qualifying does not, as the
+        // replacement owns it.
         assert(session.sql("SELECT json_array(json_array(1) NULL ON NULL)").collect() ===
-          Array(Row("[[1]]")))
+          Array(Row("[1]")))
+        assert(session.sql("SELECT json_array(json_array(1 NULL ON NULL) NULL ON NULL)")
+          .collect() === Array(Row("[[1]]")))
         assert(session.sql("SELECT builtin.json_array(builtin.json_array(1))").collect() ===
           Array(Row(1)))
       } finally {

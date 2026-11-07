@@ -2740,12 +2740,13 @@ class Analyzer(
               case r: RoutedJsonConstructor => r.toStock
               case s: StockJsonConstructor => s
             }
-            if (!stock.childrenResolved) {
-              // A child may still become a JSON producer (e.g. inside a lambda), so wait.
-              stock
-            } else {
+            stock match {
               // Set the time zone now, so the parent sees a resolved child in this pass.
-              ResolveStockJsonConstructors.materialize(stock)
+              case s: StockJsonConstructor if s.childrenResolved =>
+                ResolveStockJsonConstructors.materialize(s)
+              // A child may still become a JSON producer (e.g. inside a lambda), so wait. A
+              // built-in JSON_QUERY resolves on its own.
+              case other => other
             }
 
           case u if !u.childrenResolved => u // Skip until children are resolved.

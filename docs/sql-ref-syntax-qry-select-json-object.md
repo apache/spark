@@ -34,12 +34,11 @@ controls only the top-level object members.
 
 A call without any clause or `FORMAT JSON`, nested or not, resolves like an ordinary function call,
 so a same-named function placed before `system.builtin` in the SQL `PATH`, or a replacement
-injected by a session extension, can own it. A constructor written directly as another
-constructor's value always means the built-in. Qualifying every level
-(e.g. `builtin.json_object('a', builtin.json_object('b', 1))`) selects the built-in over a
-function in the `PATH`; adding a clause
-(e.g. `json_object('a' VALUE json_object('b' VALUE 1) NULL ON NULL)`) always selects it, even
-over an extension's replacement.
+injected by a session extension, can own it. Each nested call is resolved on its own, exactly like
+the outer one. Qualifying every level (e.g. `builtin.json_object('a', builtin.json_object('b', 1))`)
+selects the built-in over a function in the `PATH`; adding a clause to every level
+(e.g. `json_object('a' VALUE json_object('b' VALUE 1 NULL ON NULL) NULL ON NULL)`) always selects
+it, even over an extension's replacement.
 
 This is an initial subset of the SQL:2016 `JSON_OBJECT` constructor. It supports the key/value
 members, the value-level `FORMAT JSON` marker, the `{ NULL | ABSENT } ON NULL` clause, and a

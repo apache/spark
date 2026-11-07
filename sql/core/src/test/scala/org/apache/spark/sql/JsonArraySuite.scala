@@ -587,11 +587,11 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
         checkAnswer(
           sql("""SELECT builtin.json_array(builtin.json_query('{"a":{"x":1}}', '$.a'))"""),
           Row("""[{"x":1}]"""))
-        // A JSON_QUERY written as a direct constructor argument stays the stock built-in under a
-        // json_query shadow, so the stock-owned outer call still splices it.
+        // A clause-free JSON_QUERY written as a constructor's value routes too, so the shadow owns
+        // it and the built-in outer call quotes the shadow's plain string.
         checkAnswer(
           sql("""SELECT json_array(json_query('{"a":{"x":1}}', '$.a') NULL ON NULL)"""),
-          Row("""[{"x":1}]"""))
+          Row("""["shadowed"]"""))
         // Plain scalar and predicate children are still ordinary function calls. Use an explicit
         // outer NULL clause to keep the parent on the direct path while the children are shadowed.
         checkAnswer(
@@ -823,8 +823,7 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
       try {
         sql("CREATE TEMPORARY FUNCTION json_array(a STRING) RETURNS STRING RETURN 'shadowed'")
         sql("SET PATH = system.session, system.builtin")
-        // The inner json_array(1) is a grammar element (built-in) producing "[1]"; the outer
-        // clause-free call routes, so the temp shadows it.
+        // Both clause-free calls route, so the temp shadows each of them.
         checkAnswer(sql("SELECT json_array(json_array(1))"), Row("shadowed"))
         // Strict single-pass routes the outer clause-free call to the shadow owner too, but the
         // owner is a SQL function, which the single-pass analyzer does not yet resolve: it reaches
@@ -838,9 +837,46 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
         }
         // Qualifying every level selects Spark's constructor and splices.
         checkAnswer(sql("SELECT builtin.json_array(builtin.json_array(1))"), Row("[[1]]"))
+        // A clause selects the built-in for its own call only: the clause-free inner call is still
+        // the shadow's, and its plain string is quoted, as for a flat argument.
+        checkAnswer(sql("SELECT json_array(json_array(1) NULL ON NULL)"), Row("""["shadowed"]"""))
+        checkAnswer(
+          sql("SELECT json_array(json_array(1 NULL ON NULL) NULL ON NULL)"), Row("[[1]]"))
+        // An explicit FORMAT JSON validates the shadow's text, as it would any other string.
+        val e = intercept[SparkRuntimeException] {
+          sql("SELECT json_array(json_array(1) FORMAT JSON)").collect()
+        }
+        assert(e.getCondition == "INVALID_JSON_FORMAT_JSON_VALUE")
       } finally {
         sql("SET PATH = DEFAULT_PATH")
         sql("DROP TEMPORARY FUNCTION IF EXISTS json_array")
+      }
+    }
+  }
+
+  test("SPARK-59243: a JSON_QUERY written as a constructor value is shadowed like a flat call") {
+    val query = """SELECT json_array(json_query('{"a":{"x":1}}', '$.a'))"""
+    checkAnswer(sql(query), Row("""[{"x":1}]"""))
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "second") {
+      try {
+        sql("CREATE TEMPORARY FUNCTION json_query(a STRING, b STRING) RETURNS STRING " +
+          "RETURN 'shadowed'")
+        // Under the default order the built-in owns the nested call, so a persistent body using it
+        // does not reference the temp function.
+        sql(s"CREATE FUNCTION perm_json_fn() RETURNS STRING RETURN ${query.stripPrefix("SELECT ")}")
+        checkAnswer(sql("SELECT perm_json_fn()"), Row("""[{"x":1}]"""))
+        sql("SET PATH = system.session, system.builtin")
+        // The shadow owns the inner call; the built-in outer call quotes its plain string.
+        checkAnswer(sql(query), Row("""["shadowed"]"""))
+        checkAnswer(
+          sql("""SELECT json_object('k' VALUE json_query('{"a":1}', '$.a'))"""),
+          Row("""{"k":"shadowed"}"""))
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP FUNCTION IF EXISTS perm_json_fn")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS json_query")
       }
     }
   }
@@ -881,8 +917,13 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
       try {
         sql("CREATE TEMPORARY FUNCTION json_array(a STRING) RETURNS STRING RETURN 'shadowed'")
         sql("SET PATH = system.session, system.builtin")
-        // The routed nested call is a reference to the temp shadow, like the flat call.
-        Seq("json_array(1)", "json_array(json_array(1))").foreach { body =>
+        // The routed nested call is a reference to the temp shadow, like the flat call, including
+        // a clause-free call nested in a clause-bearing one.
+        Seq(
+          "json_array(1)",
+          "json_array(json_array(1))",
+          "json_array(json_array(1) NULL ON NULL)"
+        ).foreach { body =>
           val e = intercept[AnalysisException] {
             sql(s"CREATE FUNCTION perm_json_fn() RETURNS STRING RETURN $body")
           }
@@ -891,7 +932,7 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
         // Stock-owned (clause-bearing or FORMAT JSON) bodies do not reference the temp shadow.
         Seq(
           "json_array(1 NULL ON NULL)" -> "[1]",
-          "json_array(json_array(1) NULL ON NULL)" -> "[[1]]",
+          "json_array(json_array(1 NULL ON NULL) NULL ON NULL)" -> "[[1]]",
           "json_array('[1]' FORMAT JSON)" -> "[[1]]"
         ).foreach { case (body, expected) =>
           sql(s"CREATE OR REPLACE FUNCTION perm_json_fn() RETURNS STRING RETURN $body")
@@ -1111,7 +1152,11 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
         sql("CREATE TEMPORARY FUNCTION json_array(a STRING) RETURNS STRING RETURN 'x'")
         sql("SET PATH = system.session, system.builtin")
         // A routed nested call references the same-named function, like the flat call.
-        Seq("json_array(a)", "json_array(json_array(1))").foreach { body =>
+        Seq(
+          "json_array(a)",
+          "json_array(json_array(1))",
+          "json_array(json_array(1) NULL ON NULL)"
+        ).foreach { body =>
           val e = intercept[AnalysisException] {
             sql("CREATE OR REPLACE TEMPORARY FUNCTION json_array(a STRING) " +
               s"RETURNS STRING RETURN $body")
@@ -1120,7 +1165,7 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
         }
         // Stock-owned (clause-bearing or FORMAT JSON) bodies are not routine calls.
         Seq(
-          "json_array(json_array(1) NULL ON NULL)" -> "[[1]]",
+          "json_array(json_array(1 NULL ON NULL) NULL ON NULL)" -> "[[1]]",
           "json_array('[1]' FORMAT JSON)" -> "[[1]]"
         ).foreach { case (body, expected) =>
           sql("CREATE OR REPLACE TEMPORARY FUNCTION json_array(a STRING) " +
@@ -1153,8 +1198,9 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-59243: a built-in-owned nested call checks the PATH no more than a flat call") {
-    // A lambda body takes several iterations to resolve; the owner must be looked up only once.
+  test("SPARK-59243: a built-in-owned nested call checks the PATH no more than flat calls") {
+    // A lambda body takes several iterations to resolve; each call's owner must be looked up only
+    // once, so two nested calls cost no more than two flat calls.
     withSQLConf(
       SQLConf.PATH_ENABLED.key -> "true",
       SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
@@ -1168,7 +1214,8 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
       }
       try {
         sql("SET PATH = lookup_cnt_cat.fns, system.builtin")
-        val flat = lookups("SELECT transform(array(1, 2), x -> json_array(x))")
+        val flat =
+          lookups("SELECT transform(array(1, 2), x -> concat(json_array(x), json_array(x)))")
         val nested = lookups("SELECT transform(array(1, 2), x -> json_array(json_array(x)))")
         assert(nested <= flat, s"nested=$nested flat=$flat")
         checkAnswer(
@@ -1191,7 +1238,9 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
         UnboundJsonArrayShadowFunction)
       try {
         sql("SET PATH = path_json_array_cat.fns, system.builtin")
-        val query = "SELECT json_array(*, json_array(1)) FROM VALUES (1, 'x') AS t(a, b)"
+        // The clause keeps the inner call built-in, so the shadow receives its JSON text.
+        val query =
+          "SELECT json_array(*, json_array(1 NULL ON NULL)) FROM VALUES (1, 'x') AS t(a, b)"
         // Default mode runs the dual-run comparison, so this also asserts the single-pass resolver
         // routes to the V2 owner identically to fixed-point before the result is produced.
         checkAnswer(sql(query), Row("v2 persistent"))
@@ -1422,8 +1471,8 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
       SQLConf.PATH_ENABLED.key -> "true",
       SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "second") {
       Seq(
-        // The inner call is a direct constructor argument, so it stays stock (`[1]`, length 3).
-        "INT" -> "length(a)" -> Row(3, 1),
+        // The shadow owns both levels: the inner call returns length('1') = 1, as the flat call.
+        "INT" -> "length(a)" -> Row(1, 1),
         "STRING" -> "'shadowed'" -> Row("shadowed", "shadowed")
       ).foreach { case ((returnType, body), expected) =>
         try {
