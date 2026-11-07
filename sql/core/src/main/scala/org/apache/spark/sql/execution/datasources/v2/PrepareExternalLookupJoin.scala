@@ -255,10 +255,8 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
       Set("<", "<=", ">", ">=").contains(predicate.predicateName)
     }
     val parameterRowsPerRequest = if (selectsRange) 1 else maxParameterRowsPerRequest
-    // At present, Spark caches nothing for a join that selects a range comparison. With ranges,
-    // one stored row can match several parameter rows of a request, and the source must return it
-    // once for each, which Spark cannot check. A cached result would repeat a lost match for every
-    // later stream row with the same parameters.
+    // At present, Spark caches nothing for a join that selects a range comparison: range values,
+    // such as event times, rarely repeat, so cached entries would rarely be used.
     val cacheOptions =
       if (selectsRange) join.cacheOptions.copy(enabled = false) else join.cacheOptions
 

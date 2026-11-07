@@ -2532,6 +2532,7 @@ object SQLConf {
 
   val JOIN_EXTERNAL_LOOKUP_CACHE_ENABLED =
     buildConf("spark.sql.join.externalLookup.cache.enabled")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .doc("When true, external lookup join caches the complete lookup result of each key, " +
         "including a key with no result, within a task, per input partition (a task that reads " +
         "several input partitions, e.g. after coalesce, has one cache per partition). A cached " +
@@ -2544,6 +2545,7 @@ object SQLConf {
 
   val JOIN_EXTERNAL_LOOKUP_CACHE_MAX_ENTRIES =
     buildConf("spark.sql.join.externalLookup.cache.maxEntries")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .doc("Maximum number of lookup keys in one external lookup join cache, that is per input " +
         "partition of a task. Beyond it, the least recently used key is evicted.")
       .version("4.4.0")
@@ -2553,6 +2555,7 @@ object SQLConf {
 
   val JOIN_EXTERNAL_LOOKUP_CACHE_TTL =
     buildConf("spark.sql.join.externalLookup.cache.ttl")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .doc("Time-to-live of a cached external lookup join result. A value of 0 disables " +
         "expiration.")
       .version("4.4.0")
@@ -2562,6 +2565,7 @@ object SQLConf {
 
   val JOIN_EXTERNAL_LOOKUP_CACHE_MAX_ROWS_PER_KEY =
     buildConf("spark.sql.join.externalLookup.cache.maxRowsPerKey")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .doc("Maximum number of result rows, after lookup-side projections and filters, that " +
         "external lookup join caches for one lookup key. The rows of a key with more are " +
         "returned but not cached.")
