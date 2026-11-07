@@ -153,6 +153,9 @@ object TypeUtils extends QueryErrorsBase {
     if (!conf.timestampNanosTypesEnabled && containsTimestampNanosType(dataType)) {
       throw DataTypeErrors.timestampNanosTypesNotEnabledError()
     }
+    if (!conf.isFileTypeEnabled && dataType.existsRecursively(_.isInstanceOf[FileType])) {
+      throw QueryCompilationErrors.unsupportedFileTypeError()
+    }
     if (!conf.geospatialEnabled && dataType.existsRecursively(isGeoSpatialType)) {
       throw new org.apache.spark.sql.AnalysisException(
         errorClass = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED",

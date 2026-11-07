@@ -94,6 +94,73 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
     comparePlans(optimized2, expected)
   }
 
+  test("SPARK-60229: not optimize from_json + to_json with CHAR/VARCHAR map keys") {
+    // CHAR/VARCHAR attributes are rejected at analysis unless one of these flags is on.
+    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      val options = Map.empty[String, String]
+
+      def roundTrip(
+          schema: DataType, child: Expression, standardSemantics: Boolean): Expression =
+        JsonToStructs(
+          schema,
+          options,
+          StructsToJson(options, child),
+          charVarcharStandardSemantics = standardSemantics)
+
+      val charMap = MapType(CharType(3), IntegerType)
+      val varcharMap = MapType(VarcharType(3), IntegerType)
+      val stringMap = MapType(StringType, IntegerType)
+      val nestedCharMap = StructType(Seq(
+        StructField("m", charMap),
+        StructField("tail", IntegerType)))
+      val arrayCharMap = ArrayType(charMap)
+
+      val mapRel = LocalRelation(Symbol("m").map(CharType(3), IntegerType).notNull)
+      val charRoundTrip = roundTrip(charMap, Symbol("m").attr, standardSemantics = true)
+      val query = mapRel.select(charRoundTrip.as("m"))
+      val optimized = Optimizer.execute(query.analyze)
+      val expected = mapRel.select(charRoundTrip.as("m")).analyze
+      comparePlans(optimized, expected)
+
+      val varcharRel = LocalRelation(Symbol("m").map(VarcharType(3), IntegerType).notNull)
+      val varcharQuery = varcharRel.select(
+        roundTrip(varcharMap, Symbol("m").attr, standardSemantics = true).as("m"))
+      comparePlans(
+        Optimizer.execute(varcharQuery.analyze),
+        varcharRel.select(
+          roundTrip(varcharMap, Symbol("m").attr, standardSemantics = true).as("m")).analyze)
+
+      val nestedRel = LocalRelation($"s".struct(nestedCharMap).notNull)
+      val nestedQuery =
+        nestedRel.select(roundTrip(nestedCharMap, $"s", standardSemantics = true).as("s"))
+      comparePlans(
+        Optimizer.execute(nestedQuery.analyze),
+        nestedRel.select(roundTrip(nestedCharMap, $"s", standardSemantics = true).as("s")).analyze)
+
+      val arrayRel = LocalRelation($"a".array(arrayCharMap).notNull)
+      val arrayQuery =
+        arrayRel.select(roundTrip(arrayCharMap, $"a", standardSemantics = true).as("a"))
+      comparePlans(
+        Optimizer.execute(arrayQuery.analyze),
+        arrayRel.select(roundTrip(arrayCharMap, $"a", standardSemantics = true).as("a")).analyze)
+
+      // STRING keys have no length check, so the round-trip is still folded.
+      val stringRel = LocalRelation(Symbol("m").map(StringType, IntegerType).notNull)
+      val stringQuery = stringRel.select(
+        roundTrip(stringMap, Symbol("m").attr, standardSemantics = true).as("m"))
+      comparePlans(
+        Optimizer.execute(stringQuery.analyze),
+        stringRel.select($"m".as("m")).analyze)
+
+      // Flag off: the check is not applied, so folding remains valid.
+      val offQuery = mapRel.select(
+        roundTrip(charMap, Symbol("m").attr, standardSemantics = false).as("m"))
+      comparePlans(
+        Optimizer.execute(offQuery.analyze),
+        mapRel.select($"m".as("m")).analyze)
+    }
+  }
+
   test("SPARK-32948: not optimize from_json + to_json if schema is different") {
     val options = Map.empty[String, String]
     val schema = StructType.fromDDL("a int")

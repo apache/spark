@@ -49,6 +49,4 @@ case class ScriptInputOutputSchema(
     outputSerdeProps: Seq[(String, String)],
     recordReaderClass: Option[String],
     recordWriterClass: Option[String],
-    schemaLess: Boolean,
-    // Bound while the script is parsed under the direct-query or persisted-view SQLConf.
-    standardCharVarcharSemantics: Boolean = false)
+    schemaLess: Boolean)

@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import java.io.{BufferedReader, EOFException, InputStream, InputStreamReader, IOException}
+import java.io.{EOFException, InputStream, InputStreamReader, IOException}
 import java.nio.charset.{CodingErrorAction, StandardCharsets}
 
 import scala.annotation.tailrec
@@ -26,7 +26,7 @@ import com.fasterxml.jackson.core.{JsonParseException, JsonProcessingException}
 import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.History
 import org.apache.spark.scheduler.ReplayListenerBus._
@@ -50,6 +50,14 @@ private[spark] class ReplayListenerBus(
   private[scheduler] val effectiveMaxLineLength =
     ReplayListenerBus.normalizeMaxLineLength(maxLineLength)
 
+  private var skippedLines = 0L
+
+  /**
+   * Number of over-long lines skipped so far by replay calls on an [[InputStream]]. The
+   * `Iterator[String]` overload does not apply the limit, so it never updates this count.
+   */
+  private[spark] def numSkippedLines: Long = skippedLines
+
   /**
    * Replay each event in the order maintained in the given stream. The stream is expected to
    * contain one JSON-encoded SparkListenerEvent per line.
@@ -72,8 +80,23 @@ private[spark] class ReplayListenerBus(
       sourceName: String,
       maybeTruncated: Boolean = false,
       eventsFilter: ReplayEventsFilter = SELECT_ALL_FILTER): Boolean = {
-    val lines = boundedLines(logData, sourceName)
-    replayEntries(lines, sourceName, maybeTruncated, eventsFilter)
+    replayFromOffset(logData, sourceName, 0L, maybeTruncated, eventsFilter)
+  }
+
+  /**
+   * Variant of [[replay()]] for a stream positioned at the start of a line that begins at
+   * `startOffset` bytes into the (uncompressed) source. A positive `startOffset` is added to
+   * the diagnostics so that the reported line numbers, which count from the start of the
+   * stream, can be located in the source.
+   */
+  private[spark] def replayFromOffset(
+      logData: InputStream,
+      sourceName: String,
+      startOffset: Long,
+      maybeTruncated: Boolean,
+      eventsFilter: ReplayEventsFilter): Boolean = {
+    val lines = boundedLines(logData, sourceName, startOffset)
+    replayEntries(lines, sourceName, startOffset, maybeTruncated, eventsFilter)
   }
 
   /**
@@ -84,17 +107,32 @@ private[spark] class ReplayListenerBus(
    */
   private def boundedLines(
       logData: InputStream,
-      sourceName: String): Iterator[(String, Int)] = {
+      sourceName: String,
+      startOffset: Long): Iterator[(String, Int)] = {
     // Fail on malformed input like Source.getLines() does instead of replacing it.
     val decoder = StandardCharsets.UTF_8.newDecoder()
       .onMalformedInput(CodingErrorAction.REPORT)
       .onUnmappableCharacter(CodingErrorAction.REPORT)
-    val reader = new BufferedReader(new InputStreamReader(logData, decoder))
+    // Read decoded characters in bulk and scan them for '\n', instead of calling read() per
+    // character on a BufferedReader, which takes a lock on every call.
+    val reader = new InputStreamReader(logData, decoder)
     new Iterator[(String, Int)] {
+      private val chars = new Array[Char](8192)
+      private var pos = 0
+      private var len = 0
       private var nextLine: (String, Int) = _
       private var lineIndex = 0
       private var lineFetched = false
       private var warned = false
+
+      /** Makes at least one unread character available; returns false at EOF. */
+      private def fill(): Boolean = {
+        while (pos == len && len != -1) {
+          len = reader.read(chars)
+          pos = 0
+        }
+        len != -1
+      }
 
       override def hasNext: Boolean = {
         if (!lineFetched) {
@@ -116,25 +154,29 @@ private[spark] class ReplayListenerBus(
 
       @tailrec private def fetchLine(): (String, Int) = {
         val buffer = new BoundedLineBuffer(effectiveMaxLineLength)
-        var c = reader.read()
-        if (c == -1) {
+        if (!fill()) {
           null
         } else {
           val index = lineIndex
           lineIndex += 1
-          while (c != -1 && c != '\n') {
-            buffer.append(c.toChar)
-            c = reader.read()
+          var endOfLine = false
+          while (!endOfLine && fill()) {
+            val i = buffer.appendUntilNewline(chars, pos, len)
+            endOfLine = i < len
+            pos = if (endOfLine) i + 1 else i
           }
           val maybeLine = buffer.result()
           if (maybeLine.isEmpty) {
             if (!warned) {
               logWarning(log"Skipped event log lines longer than " +
                 log"${MDC(MAX_SIZE, effectiveMaxLineLength)} bytes in " +
-                log"${MDC(FILE_NAME, sourceName)}; first skipped line: ${MDC(LINE_NUM, index + 1)}")
+                log"${MDC(FILE_NAME, sourceName)}; first skipped line: " +
+                log"${MDC(LINE_NUM, index + 1)}" + lineOrigin(startOffset))
               warned = true
             }
-            logDebug(s"Skipped event log line ${index + 1} in $sourceName")
+            skippedLines += 1
+            logDebug(s"Skipped event log line ${index + 1} in $sourceName" +
+              lineOrigin(startOffset).message)
             fetchLine()
           } else {
             (maybeLine.get, index)
@@ -153,12 +195,13 @@ private[spark] class ReplayListenerBus(
       sourceName: String,
       maybeTruncated: Boolean,
       eventsFilter: ReplayEventsFilter): Boolean = {
-    replayEntries(lines.zipWithIndex, sourceName, maybeTruncated, eventsFilter)
+    replayEntries(lines.zipWithIndex, sourceName, 0L, maybeTruncated, eventsFilter)
   }
 
   private def replayEntries(
       lines: Iterator[(String, Int)],
       sourceName: String,
+      startOffset: Long,
       maybeTruncated: Boolean,
       eventsFilter: ReplayEventsFilter): Boolean = {
     var currentLine: String = null
@@ -202,8 +245,8 @@ private[spark] class ReplayListenerBus(
               throw jpe
             } else {
               logWarning(log"Got JsonParseException from log file ${MDC(FILE_NAME, sourceName)}" +
-                log" at line ${MDC(LINE_NUM, lineNumber)}, " +
-                log"the file might not have finished writing cleanly.")
+                log" at line ${MDC(LINE_NUM, lineNumber)}" + lineOrigin(startOffset) +
+                log", the file might not have finished writing cleanly.")
             }
         }
       }
@@ -215,7 +258,7 @@ private[spark] class ReplayListenerBus(
       case _: EOFException if maybeTruncated => false
       case jpe: JsonProcessingException =>
         logError(log"Exception parsing Spark event log: ${MDC(PATH, sourceName)} " +
-          log"at line ${MDC(LINE_NUM, lineNumber)}")
+          log"at line ${MDC(LINE_NUM, lineNumber)}" + lineOrigin(startOffset))
         throw jpe
       case ioe: IOException =>
         throw ioe
@@ -223,9 +266,19 @@ private[spark] class ReplayListenerBus(
         logError(log"Exception parsing Spark event log: ${MDC(PATH, sourceName)}", e)
         val prefix = Option(currentLine).map(_.take(1024)).orNull
         val length = Option(currentLine).fold(0)(_.length)
-        logError(log"Malformed line #${MDC(LINE_NUM, lineNumber)}: ${MDC(LINE, prefix)} " +
+        logError(log"Malformed line #${MDC(LINE_NUM, lineNumber)}" + lineOrigin(startOffset) +
+          log": ${MDC(LINE, prefix)} " +
           log"(line length: ${MDC(SIZE, length)} characters; showing at most 1024)\n")
         false
+    }
+  }
+
+  /** Describes where line numbers start when the replay does not start at the source start. */
+  private def lineOrigin(startOffset: Long): MessageWithContext = {
+    if (startOffset > 0) {
+      log" (lines counted from uncompressed byte offset ${MDC(OFFSET, startOffset)})"
+    } else {
+      log""
     }
   }
 
@@ -273,18 +326,40 @@ private[spark] object ReplayListenerBus {
 
     def capacity: Int = buffer.capacity()
 
-    def append(c: Char): Unit = {
+    /**
+     * Appends `chars` from `start` up to the first '\n' before `end`, and returns the index of
+     * that '\n', or `end` if there is none. The line ending is found and the UTF-8 length is
+     * counted in a single pass. Once the line exceeds the allowance, its retained prefix is
+     * released and the rest of the line is only scanned for '\n'.
+     */
+    def appendUntilNewline(chars: Array[Char], start: Int, end: Int): Int = {
+      var i = start
+      // Reserve one extra byte for a possible CR in the line ending.
+      while (i < end && chars(i) != '\n' && byteLength <= bufferLimit) {
+        byteLength += utf8Width(chars(i))
+        i += 1
+      }
       if (byteLength <= bufferLimit) {
-        // The strict decoder emits valid surrogate pairs: count two bytes per half.
-        byteLength += (if (c < 0x80) 1 else if (c < 0x800 || Character.isSurrogate(c)) 2 else 3)
-        // Reserve one extra byte for a possible CR in the line ending.
-        if (byteLength <= bufferLimit) {
-          buffer.append(c)
-        } else {
-          // The line will be skipped; release the retained prefix while draining.
-          buffer.setLength(0)
-          buffer.trimToSize()
+        buffer.append(chars, start, i - start)
+      } else {
+        release()
+        while (i < end && chars(i) != '\n') {
+          i += 1
         }
+      }
+      i
+    }
+
+    // The strict decoder emits valid surrogate pairs: count two bytes per half.
+    private def utf8Width(c: Char): Int = {
+      if (c < 0x80) 1 else if (c < 0x800 || Character.isSurrogate(c)) 2 else 3
+    }
+
+    // The line will be skipped; release the retained prefix while draining.
+    private def release(): Unit = {
+      if (buffer.capacity() > 0) {
+        buffer.setLength(0)
+        buffer.trimToSize()
       }
     }
 

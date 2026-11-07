@@ -161,91 +161,7 @@ case class DescribeRelationJsonCommand(
    * Differs from `json` in DataType.scala by providing additional fields for some types.
    */
   private def jsonType(dataType: DataType): JValue = {
-    dataType match {
-      case arrayType: ArrayType =>
-        JObject(
-          "name" -> JString("array"),
-          "element_type" -> jsonType(arrayType.elementType),
-          "element_nullable" -> JBool(arrayType.containsNull)
-        )
-
-      case mapType: MapType =>
-        JObject(
-          "name" -> JString("map"),
-          "key_type" -> jsonType(mapType.keyType),
-          "value_type" -> jsonType(mapType.valueType),
-          "value_nullable" -> JBool(mapType.valueContainsNull)
-        )
-
-      case structType: StructType =>
-        val fieldsJson = structType.fields.map { field =>
-          val baseJson = List(
-            "name" -> JString(field.name),
-            "type" -> jsonType(field.dataType),
-            "nullable" -> JBool(field.nullable)
-          )
-          val commentJson = field.getComment().map(comment => "comment" -> JString(comment)).toList
-          val defaultJson =
-            field.getCurrentDefaultValue().map(default => "default" -> JString(default)).toList
-
-          JObject(baseJson ++ commentJson ++ defaultJson: _*)
-        }.toList
-
-        JObject(
-          "name" -> JString("struct"),
-          "fields" -> JArray(fieldsJson)
-        )
-
-      case decimalType: DecimalType =>
-        JObject(
-          "name" -> JString("decimal"),
-          "precision" -> JInt(decimalType.precision),
-          "scale" -> JInt(decimalType.scale)
-        )
-
-      case varcharType: VarcharType =>
-        JObject(
-          "name" -> JString("varchar"),
-          "length" -> JInt(varcharType.length)
-        )
-
-      case charType: CharType =>
-        JObject(
-          "name" -> JString("char"),
-          "length" -> JInt(charType.length)
-        )
-
-      // Only override TimestampType; TimestampType_NTZ type is already timestamp_ntz
-      case _: TimestampType =>
-        JObject("name" -> JString("timestamp_ltz"))
-
-      case yearMonthIntervalType: YearMonthIntervalType =>
-        def getFieldName(field: Byte): String = YearMonthIntervalType.fieldToString(field)
-
-        JObject(
-          "name" -> JString("interval"),
-          "start_unit" -> JString(getFieldName(yearMonthIntervalType.startField)),
-          "end_unit" -> JString(getFieldName(yearMonthIntervalType.endField))
-        )
-
-      case dayTimeIntervalType: DayTimeIntervalType =>
-        def getFieldName(field: Byte): String = DayTimeIntervalType.fieldToString(field)
-
-        JObject(
-          "name" -> JString("interval"),
-          "start_unit" -> JString(getFieldName(dayTimeIntervalType.startField)),
-          "end_unit" -> JString(getFieldName(dayTimeIntervalType.endField))
-        )
-
-      case stringType: StringType =>
-        JObject(
-          "name" -> JString("string"),
-          "collation" -> JString(stringType.collationName)
-        )
-
-      case _ =>
-        JObject("name" -> JString(dataType.simpleString))
-    }
+    DescribeRelationJsonCommand.jsonType(dataType)
   }
 
   private def describeColsJson(
@@ -350,5 +266,77 @@ case class DescribeRelationJsonCommand(
 
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = {
     copy(child = newChild)
+  }
+}
+
+object DescribeRelationJsonCommand {
+  /** Same JSON type object as `DESCRIBE TABLE EXTENDED AS JSON` `columns[].type`. */
+  private[sql] def jsonType(dataType: DataType): JValue = {
+    dataType match {
+      case arrayType: ArrayType =>
+        JObject(
+          "name" -> JString("array"),
+          "element_type" -> jsonType(arrayType.elementType),
+          "element_nullable" -> JBool(arrayType.containsNull)
+        )
+      case mapType: MapType =>
+        JObject(
+          "name" -> JString("map"),
+          "key_type" -> jsonType(mapType.keyType),
+          "value_type" -> jsonType(mapType.valueType),
+          "value_nullable" -> JBool(mapType.valueContainsNull)
+        )
+      case structType: StructType =>
+        val fieldsJson = structType.fields.map { field =>
+          val baseJson = List(
+            "name" -> JString(field.name),
+            "type" -> jsonType(field.dataType),
+            "nullable" -> JBool(field.nullable)
+          )
+          val commentJson = field.getComment().map(comment => "comment" -> JString(comment)).toList
+          val defaultJson =
+            field.getCurrentDefaultValue().map(default => "default" -> JString(default)).toList
+          JObject(baseJson ++ commentJson ++ defaultJson: _*)
+        }.toList
+        JObject(
+          "name" -> JString("struct"),
+          "fields" -> JArray(fieldsJson)
+        )
+      case decimalType: DecimalType =>
+        JObject(
+          "name" -> JString("decimal"),
+          "precision" -> JInt(decimalType.precision),
+          "scale" -> JInt(decimalType.scale)
+        )
+      case varcharType: VarcharType =>
+        JObject("name" -> JString("varchar"), "length" -> JInt(varcharType.length))
+      case charType: CharType =>
+        JObject("name" -> JString("char"), "length" -> JInt(charType.length))
+      case _: TimestampType =>
+        JObject("name" -> JString("timestamp_ltz"))
+      case yearMonthIntervalType: YearMonthIntervalType =>
+        JObject(
+          "name" -> JString("interval"),
+          "start_unit" -> JString(
+            YearMonthIntervalType.fieldToString(yearMonthIntervalType.startField)),
+          "end_unit" -> JString(
+            YearMonthIntervalType.fieldToString(yearMonthIntervalType.endField))
+        )
+      case dayTimeIntervalType: DayTimeIntervalType =>
+        JObject(
+          "name" -> JString("interval"),
+          "start_unit" -> JString(
+            DayTimeIntervalType.fieldToString(dayTimeIntervalType.startField)),
+          "end_unit" -> JString(
+            DayTimeIntervalType.fieldToString(dayTimeIntervalType.endField))
+        )
+      case stringType: StringType =>
+        JObject(
+          "name" -> JString("string"),
+          "collation" -> JString(stringType.collationName)
+        )
+      case _ =>
+        JObject("name" -> JString(dataType.simpleString))
+    }
   }
 }

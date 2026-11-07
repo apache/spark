@@ -21,7 +21,8 @@ import java.io.{File, IOException, PrintStream}
 import java.net.URI
 import java.text.ParseException
 import java.util.UUID
-import java.util.concurrent.{CancellationException, TimeUnit}
+import java.util.concurrent.{Callable, CancellationException, ExecutionException, FutureTask, TimeoutException, TimeUnit}
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.ReentrantLock
 
 import scala.jdk.CollectionConverters._
@@ -62,17 +63,28 @@ private[spark] object MavenUtils extends Logging {
     }
   }
 
-  private def acquireIvyLock(isCancelled: () => Boolean): Unit = {
-    def checkCancelled(): Unit = {
-      if (isCancelled() || Thread.currentThread().isInterrupted) {
-        throw new CancellationException("Maven dependency resolution was cancelled")
-      }
-    }
+  private class IvyResolutionCancellation {
+    private val requested = new AtomicBoolean(false)
 
-    checkCancelled()
+    def isCancelled: Boolean = requested.get()
+
+    def cancel(resolutionThread: Thread): Unit = {
+      requested.set(true)
+      resolutionThread.interrupt()
+    }
+  }
+
+  private def checkCancelled(isCancelled: () => Boolean): Unit = {
+    if (isCancelled() || Thread.currentThread().isInterrupted) {
+      throw new CancellationException("Maven dependency resolution was cancelled")
+    }
+  }
+
+  private def acquireIvyLock(isCancelled: () => Boolean): Unit = {
+    checkCancelled(isCancelled)
     try {
       while (!ivyLock.tryLock(ivyLockPollIntervalMs, TimeUnit.MILLISECONDS)) {
-        checkCancelled()
+        checkCancelled(isCancelled)
       }
     } catch {
       case _: InterruptedException =>
@@ -80,10 +92,69 @@ private[spark] object MavenUtils extends Logging {
         throw new CancellationException("Maven dependency resolution was cancelled")
     }
     try {
-      checkCancelled()
+      checkCancelled(isCancelled)
     } catch {
       case e: Throwable =>
         ivyLock.unlock()
+        throw e
+    }
+  }
+
+  private def runWithCancellation[T](isCancelled: () => Boolean)(
+      body: IvyResolutionCancellation => T): T = {
+    checkCancelled(isCancelled)
+    val cancellation = new IvyResolutionCancellation
+    val task = new FutureTask[T](new Callable[T] {
+      override def call(): T = body(cancellation)
+    })
+    val resolutionThread = new Thread(task, "spark-ivy-resolution")
+    resolutionThread.setDaemon(true)
+    resolutionThread.start()
+
+    def cancelAndWait(): Unit = {
+      var wasInterrupted = Thread.interrupted()
+      try {
+        cancellation.cancel(resolutionThread)
+        while (resolutionThread.isAlive) {
+          try {
+            resolutionThread.join()
+          } catch {
+            case _: InterruptedException => wasInterrupted = true
+          }
+        }
+      } finally {
+        if (wasInterrupted) {
+          Thread.currentThread().interrupt()
+        }
+      }
+    }
+
+    try {
+      var result: T = null.asInstanceOf[T]
+      var completed = false
+      while (!completed) {
+        checkCancelled(isCancelled)
+        try {
+          result = task.get(ivyLockPollIntervalMs, TimeUnit.MILLISECONDS)
+          completed = true
+        } catch {
+          case _: TimeoutException =>
+        }
+      }
+      checkCancelled(isCancelled)
+      result
+    } catch {
+      case _: InterruptedException =>
+        cancelAndWait()
+        Thread.currentThread().interrupt()
+        throw new CancellationException("Maven dependency resolution was cancelled")
+      case e: CancellationException =>
+        cancelAndWait()
+        throw e
+      case e: ExecutionException =>
+        throw e.getCause
+      case e: Throwable =>
+        cancelAndWait()
         throw e
     }
   }
@@ -524,14 +595,14 @@ private[spark] object MavenUtils extends Logging {
       exclusions: Seq[String] = Nil,
       isTest: Boolean = false)(
       implicit printStream: PrintStream): Seq[String] = {
-    resolveMavenCoordinatesWithCancellation(
+    resolveMavenCoordinatesInternal(
       coordinates,
       ivySettings,
       noCacheIvySettings,
       transitive,
       exclusions,
       isTest,
-      () => false)
+      None)
   }
 
   private[spark] def resolveMavenCoordinatesWithCancellation(
@@ -546,6 +617,32 @@ private[spark] object MavenUtils extends Logging {
     if (coordinates == null || coordinates.trim.isEmpty) {
       Nil
     } else {
+      runWithCancellation(isCancelled) { cancellation =>
+        resolveMavenCoordinatesInternal(
+          coordinates,
+          ivySettings,
+          noCacheIvySettings,
+          transitive,
+          exclusions,
+          isTest,
+          Some(cancellation))
+      }
+    }
+  }
+
+  private def resolveMavenCoordinatesInternal(
+      coordinates: String,
+      ivySettings: IvySettings,
+      noCacheIvySettings: Option[IvySettings],
+      transitive: Boolean,
+      exclusions: Seq[String],
+      isTest: Boolean,
+      cancellation: Option[IvyResolutionCancellation])(
+      implicit printStream: PrintStream): Seq[String] = {
+    if (coordinates == null || coordinates.trim.isEmpty) {
+      Nil
+    } else {
+      val isCancelled = () => cancellation.exists(_.isCancelled)
       acquireIvyLock(isCancelled)
       val sysOut = System.out
       // Default configuration name for ivy
@@ -573,6 +670,9 @@ private[spark] object MavenUtils extends Logging {
           val resolveOptions = new ResolveOptions
           resolveOptions.setTransitive(transitive)
           val retrieveOptions = new RetrieveOptions
+          if (cancellation.isDefined) {
+            retrieveOptions.setOverwriteMode(RetrieveOptions.OVERWRITEMODE_DIFFERENT)
+          }
           // Turn downloading and logging off for testing
           if (isTest) {
             resolveOptions.setDownload(false)
@@ -595,7 +695,9 @@ private[spark] object MavenUtils extends Logging {
             md.addExcludeRule(createExclusion(e + ":*", ivySettings, ivyConfName))
           }
           // resolve dependencies
+          checkCancelled(isCancelled)
           val rr: ResolveReport = ivy.resolve(md, resolveOptions)
+          checkCancelled(isCancelled)
           if (rr.hasError) {
             // SPARK-46302: When there are some corrupted jars in the local maven repo,
             // we try to continue without the cache
@@ -612,19 +714,25 @@ private[spark] object MavenUtils extends Logging {
 
               val noCacheIvy = Ivy.newInstance(noCacheIvySettings.get)
               withIvyContext(noCacheIvy) {
+                checkCancelled(isCancelled)
                 val noCacheRr = noCacheIvy.resolve(md, resolveOptions)
+                checkCancelled(isCancelled)
                 if (noCacheRr.hasError) {
                   throw new RuntimeException(noCacheRr.getAllProblemMessages.toString)
                 }
+                checkCancelled(isCancelled)
                 noCacheIvy.retrieve(
                   noCacheRr.getModuleDescriptor.getModuleRevisionId, retrieveOptions)
+                checkCancelled(isCancelled)
                 resolveDependencyPaths(noCacheRr.getArtifacts.toArray, packagesDirectory)
               }
             } else {
               throw new RuntimeException(rr.getAllProblemMessages.toString)
             }
           } else {
+            checkCancelled(isCancelled)
             ivy.retrieve(rr.getModuleDescriptor.getModuleRevisionId, retrieveOptions)
+            checkCancelled(isCancelled)
             resolveDependencyPaths(rr.getArtifacts.toArray, packagesDirectory)
           }
         }

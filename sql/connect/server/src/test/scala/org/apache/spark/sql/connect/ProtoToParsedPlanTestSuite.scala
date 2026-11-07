@@ -123,6 +123,7 @@ class ProtoToParsedPlanTestSuite extends SharedSparkSession with ResourceHelper 
         "org.apache.spark.sql.connect.plugin.ExampleExpressionPlugin")
       .set(org.apache.spark.sql.internal.SQLConf.ANSI_ENABLED.key, false.toString)
       .set(org.apache.spark.sql.internal.SQLConf.USE_COMMON_EXPR_ID_FOR_ALIAS.key, false.toString)
+      .set(SQLConf.BIN_BY_ENABLED.key, true.toString)
   }
 
   protected val suiteBaseResourcePath = commonResourcePath.resolve("query-tests")

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import java.time.{LocalDate, LocalDateTime, ZoneId}
+import java.time.{LocalDate, LocalDateTime, LocalTime, ZoneId}
 
 import scala.collection.immutable.HashSet
 
@@ -43,7 +43,8 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
   }
 
   val testRelation: LocalRelation = LocalRelation($"a".short, $"b".float,
-    $"c".decimal(5, 2), $"d".boolean, $"e".timestamp, $"f".timestampNTZ, $"g".date)
+    $"c".decimal(5, 2), $"d".boolean, $"e".timestamp, $"f".timestampNTZ, $"g".date,
+    AttributeReference("h", TimeType(6))())
   val f: BoundReference = $"a".short.canBeNull.at(0)
   val f2: BoundReference = $"b".float.canBeNull.at(1)
   val f3: BoundReference = $"c".decimal(5, 2).canBeNull.at(2)
@@ -51,6 +52,7 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
   val f5: BoundReference = $"e".timestamp.notNull.at(4)
   val f6: BoundReference = $"f".timestampNTZ.canBeNull.at(5)
   val f7: BoundReference = $"g".date.canBeNull.at(6)
+  val f8: BoundReference = AttributeReference("h", TimeType(6))().canBeNull.at(7)
 
   test("unwrap casts when literal == max") {
     val v = Short.MaxValue
@@ -502,12 +504,71 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
     doTest(tsNtzLit4)
   }
 
+  test("SPARK-60355: Support unwrap time type to time type with a larger precision") {
+    // The literal is representable as TIME(6), so the cast is moved to the literal side.
+    Seq(time("12:00:00.1", 9), time("00:00:00", 9), time("23:59:59.999999", 7)).foreach { lit =>
+      val v = Literal(lit.value, f8.dataType)
+      assertEquivalent(Cast(f8, lit.dataType) > lit, f8 > v)
+      assertEquivalent(Cast(f8, lit.dataType) >= lit, f8 >= v)
+      assertEquivalent(Cast(f8, lit.dataType) === lit, f8 === v)
+      assertEquivalent(Cast(f8, lit.dataType) <=> lit, f8 <=> v)
+      assertEquivalent(Cast(f8, lit.dataType) <= lit, f8 <= v)
+      assertEquivalent(Cast(f8, lit.dataType) < lit, f8 < v)
+      assertEquivalent(lit < Cast(f8, lit.dataType), v < f8)
+    }
+
+    // The literal has more fractional digits than TIME(6), so it is truncated to TIME(6), which
+    // rounds it down.
+    Seq(
+      time("12:00:00.100000001", 9) -> time("12:00:00.1", 6),
+      time("23:59:59.999999999", 9) -> time("23:59:59.999999", 6),
+      time("12:00:00.1000005", 7) -> time("12:00:00.1", 6)
+    ).foreach { case (lit, v) =>
+      assertEquivalent(Cast(f8, lit.dataType) > lit, f8 > v)
+      assertEquivalent(Cast(f8, lit.dataType) >= lit, f8 > v)
+      assertEquivalent(Cast(f8, lit.dataType) === lit, falseIfNotNull(f8))
+      assertEquivalent(Cast(f8, lit.dataType) <=> lit, FalseLiteral)
+      assertEquivalent(Cast(f8, lit.dataType) <= lit, f8 <= v)
+      assertEquivalent(Cast(f8, lit.dataType) < lit, f8 <= v)
+      assertEquivalent(lit < Cast(f8, lit.dataType), v < f8)
+    }
+
+    // Neither a null literal nor a cast to a smaller precision is unwrapped.
+    Seq(
+      Cast(f8, TimeType(9)) === Literal(null, TimeType(9)),
+      Cast(f8, TimeType(3)) === time("12:00:00.1", 3)
+    ).foreach { e =>
+      assertEquivalent(e, e)
+    }
+
+    checkInAndInSet(
+      In(Cast(f8, TimeType(9)),
+        Seq(time("12:00:00.1", 9), time("12:00:00.100000001", 9), time("00:00:00", 9))),
+      f8.in(time("12:00:00.1", 6), time("00:00:00", 6)))
+    checkInAndInSet(
+      In(Cast(f8, TimeType(9)), Seq(time("12:00:00.100000001", 9))),
+      falseIfNotNull(f8))
+    val nullLit = Literal(null, TimeType(9))
+    checkInAndInSet(
+      In(Cast(f8, TimeType(9)), Seq(nullLit, time("12:00:00.1", 9))),
+      f8.in(nullLit.cast(TimeType(6)), time("12:00:00.1", 6)))
+  }
+
   private val ts1 = LocalDateTime.of(2023, 1, 1, 23, 59, 59, 99999000)
   private val ts2 = LocalDateTime.of(2023, 1, 1, 23, 59, 59, 999998000)
   private val ts3 = LocalDateTime.of(9999, 12, 31, 23, 59, 59, 999999999)
   private val ts4 = LocalDateTime.of(1, 1, 1, 0, 0, 0, 0)
 
   private val dt1 = java.sql.Date.valueOf("2023-01-01")
+
+  private val tm1 = LocalTime.of(12, 0, 0, 100000000)
+  private val tm2 = LocalTime.of(12, 0, 0, 100001000)
+  private val tm3 = LocalTime.of(23, 59, 59, 999999000)
+  private val tm4 = LocalTime.MIDNIGHT
+  private val tm5 = LocalTime.of(12, 0, 0, 99999000)
+
+  private def time(s: String, precision: Int): Literal =
+    Literal(LocalTime.parse(s).toNanoOfDay, TimeType(precision))
 
   private def castInt(e: Expression): Expression = Cast(e, IntegerType)
   private def castDouble(e: Expression): Expression = Cast(e, DoubleType)
@@ -530,16 +591,18 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
 
     if (evaluate) {
       Seq(
-        (100.toShort, 3.14.toFloat, decimal2(100), true, ts1, ts1, dt1),
-        (-300.toShort, 3.1415927.toFloat, decimal2(-3000.50), false, ts2, ts2, dt1),
-        (null, Float.NaN, decimal2(12345.6789), null, null, null, null),
-        (null, null, null, null, null, null, null),
-        (Short.MaxValue, Float.PositiveInfinity, decimal2(Short.MaxValue), true, ts3, ts3, dt1),
-        (Short.MinValue, Float.NegativeInfinity, decimal2(Short.MinValue), false, ts4, ts4, dt1),
-        (0.toShort, Float.MaxValue, decimal2(0), null, null, null, null),
-        (0.toShort, Float.MinValue, decimal2(0.01), null, null, null, null)
+        (100.toShort, 3.14.toFloat, decimal2(100), true, ts1, ts1, dt1, tm1),
+        (-300.toShort, 3.1415927.toFloat, decimal2(-3000.50), false, ts2, ts2, dt1, tm2),
+        (null, Float.NaN, decimal2(12345.6789), null, null, null, null, null),
+        (null, null, null, null, null, null, null, null),
+        (Short.MaxValue, Float.PositiveInfinity, decimal2(Short.MaxValue), true, ts3, ts3, dt1,
+          tm3),
+        (Short.MinValue, Float.NegativeInfinity, decimal2(Short.MinValue), false, ts4, ts4, dt1,
+          tm4),
+        (0.toShort, Float.MaxValue, decimal2(0), null, null, null, null, tm5),
+        (0.toShort, Float.MinValue, decimal2(0.01), null, null, null, null, null)
       ).foreach(v => {
-        val row = create_row(v._1, v._2, v._3, v._4, v._5, v._6, v._7)
+        val row = create_row(v._1, v._2, v._3, v._4, v._5, v._6, v._7, v._8)
         checkEvaluation(e1, e2.eval(row), row)
       })
     }

@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CharVarcharUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.{AbstractMapType, StringTypeWithCollation}
-import org.apache.spark.sql.types.{DataType, MapType, StringType, StructType, VariantType}
+import org.apache.spark.sql.types.{DataType, FileType, MapType, StringType, StructType, VariantType}
 import org.apache.spark.unsafe.types.UTF8String
 
 object ExprUtils extends EvalHelper with QueryErrorsBase {
@@ -44,6 +44,12 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
             s.toString,
             DataType.fromDDL,
             DataType.fromJson)
+          // The DDL parser rejects FILE when the type is disabled, but `fromJson` does not, as
+          // it also restores persisted schemas. Reject FILE in a JSON schema argument here.
+          if (!SQLConf.get.isFileTypeEnabled &&
+            dataType.existsRecursively(_.isInstanceOf[FileType])) {
+            throw QueryCompilationErrors.unsupportedFileTypeError()
+          }
           CharVarcharUtils.failIfHasCharVarchar(dataType)
         case _ => throw QueryCompilationErrors.unexpectedSchemaTypeError(exp)
 
@@ -262,11 +268,18 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
 
   private def canEvaluateUnconditionallyInternal(e: Expression): Boolean = e match {
     case _: AttributeReference | _: Literal => true
-    case _: GetStructField | _: GetArrayStructFields | _: GetMapValue =>
-      e.children.forall(canEvaluateUnconditionallyInternal)
+    case _ if isTotalOperator(e) => e.children.forall(canEvaluateUnconditionallyInternal)
+    case _ => false
+  }
+
+  /**
+   * Returns true if `e` itself cannot raise an error, whatever the values of its children. See
+   * [[canEvaluateUnconditionally]] for the whitelist.
+   */
+  def isTotalOperator(e: Expression): Boolean = e match {
+    case _: GetStructField | _: GetArrayStructFields | _: GetMapValue => true
     case _: And | _: Or | _: Not | _: BinaryComparison | _: IsNull | _: IsNotNull |
-         _: IsNaN | _: NullIf | _: Coalesce | _: In | _: InSet =>
-      e.children.forall(canEvaluateUnconditionallyInternal)
+         _: IsNaN | _: NullIf | _: Coalesce | _: In | _: InSet => true
     case _ => false
   }
 }
