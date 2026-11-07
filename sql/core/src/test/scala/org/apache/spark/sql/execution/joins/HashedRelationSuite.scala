@@ -24,6 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
 import org.apache.spark.SparkConf
+import org.apache.spark.SparkEnv
 import org.apache.spark.SparkException
 import org.apache.spark.internal.config.{BUFFER_PAGESIZE, MEMORY_OFFHEAP_ENABLED, MEMORY_OFFHEAP_SIZE}
 import org.apache.spark.internal.config.Kryo._
@@ -139,6 +140,68 @@ abstract class HashedRelationSuite extends SharedSparkSession {
     hashed2.writeExternal(out2)
     out2.flush()
     assert(java.util.Arrays.equals(os2.toByteArray, os.toByteArray))
+  }
+
+  test("SPARK-61082: many UnsafeHashedRelations fit in one task when each holds little data") {
+    // UnsafeHashedRelation takes its page size from SparkEnv, not from this memory manager. With a
+    // page larger than 16 MiB, 16 relations rounded up to a full page each would need more than
+    // the 256 MiB available.
+    assert(SparkEnv.get.memoryManager.pageSizeBytes > ByteUnit.MiB.toBytes(16))
+    val smallUmm = newMemoryManager(ByteUnit.MiB.toBytes(64), ByteUnit.MiB.toBytes(256))
+    val smallMm = new TaskMemoryManager(smallUmm, 0)
+    val buildKey = Seq(BoundReference(0, StringType, false))
+    val toUnsafeRow = UnsafeProjection.create(Array[DataType](StringType, IntegerType))
+    val toUnsafeKey = UnsafeProjection.create(Array[DataType](StringType))
+    val relations = ArrayBuffer.empty[HashedRelation]
+    try {
+      (0 until 16).foreach { i =>
+        val rows = (0 until 10).map { k =>
+          toUnsafeRow(InternalRow(UTF8String.fromString(s"key$k"), k + i)).copy()
+        }
+        val relation = HashedRelation(rows.iterator, buildKey, taskMemoryManager = smallMm)
+        assert(relation.isInstanceOf[UnsafeHashedRelation])
+        relations += relation
+      }
+      relations.zipWithIndex.foreach { case (relation, i) =>
+        assert(relation.estimatedSize < 2 * UnsafeHashedRelation.INITIAL_PAGE_SIZE_BYTES)
+        (0 until 10).foreach { k =>
+          val key = toUnsafeKey(InternalRow(UTF8String.fromString(s"key$k")))
+          assert(relation.getValue(key).getInt(1) === k + i)
+        }
+      }
+    } catch {
+      // SparkOutOfMemoryError is fatal to ScalaTest and would abort the whole suite.
+      case e: SparkOutOfMemoryError =>
+        fail("Could not build 16 small UnsafeHashedRelations in one task", e)
+    } finally {
+      relations.foreach(_.close())
+    }
+    assert(smallUmm.executionMemoryUsed === 0)
+  }
+
+  test("SPARK-61082: UnsafeHashedRelation does not round its page up to the page size") {
+    // The single string column is also the key, so a row is its own key.
+    val buildKey = Seq(BoundReference(0, StringType, false))
+    val toUnsafeRow = UnsafeProjection.create(Array[DataType](StringType))
+    val row = toUnsafeRow(InternalRow(UTF8String.fromString("a"))).copy()
+    val relation = HashedRelation(Iterator(row), buildKey, taskMemoryManager = mm)
+    val serializers = Seq(
+      new JavaSerializer(new SparkConf()).newInstance(),
+      new KryoSerializer(new SparkConf().set(KRYO_REFERENCE_TRACKING, false)).newInstance())
+    try {
+      assert(relation.estimatedSize < 2 * UnsafeHashedRelation.INITIAL_PAGE_SIZE_BYTES)
+      serializers.foreach { ser =>
+        val deserialized = ser.deserialize[UnsafeHashedRelation](ser.serialize(relation))
+        try {
+          assert(deserialized.estimatedSize < 2 * UnsafeHashedRelation.INITIAL_PAGE_SIZE_BYTES)
+          assert(deserialized.getValue(row) === row)
+        } finally {
+          deserialized.close()
+        }
+      }
+    } finally {
+      relation.close()
+    }
   }
 
   test("LongToUnsafeRowMap") {
