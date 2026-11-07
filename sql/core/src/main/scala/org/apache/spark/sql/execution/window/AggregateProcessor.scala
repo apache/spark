@@ -36,7 +36,7 @@ import org.apache.spark.util.ArrayImplicits._
  * require the size of the partition processed and this value is exposed to them when
  * the processor is constructed.
  *
- * Processing of distinct aggregates is currently not supported.
+ * DISTINCT input de-duplication is handled by the caller before rows reach this processor.
  *
  * The implementation is split into an object which takes care of construction, and the actual
  * processor class.
