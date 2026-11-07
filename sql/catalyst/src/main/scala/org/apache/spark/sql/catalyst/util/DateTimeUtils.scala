@@ -878,6 +878,32 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
+   * Whether `input` is one of the special values that read the current date or time: 'now',
+   * 'today', 'tomorrow' and 'yesterday'.
+   *
+   * @param input A string to check. It can contain trailing or leading whitespaces.
+   */
+  private[sql] def isCurrentSpecialValue(input: String): Boolean = {
+    extractSpecialValue(input.trim).exists {
+      case "now" | "today" | "tomorrow" | "yesterday" => true
+      case _ => false
+    }
+  }
+
+  /**
+   * Whether `input` is a valid timestamp string with only a time part, which a cast to a timestamp
+   * with local time zone completes with the current date.
+   */
+  private[sql] def isTimeOnlyTimestamp(input: UTF8String): Boolean = {
+    try {
+      val (segments, _, justTime) = parseTimestampString(input)
+      segments.nonEmpty && justTime && stringToTimestamp(input, ZoneOffset.UTC).isDefined
+    } catch {
+      case NonFatal(_) => false
+    }
+  }
+
+  /**
    * Subtracts two dates expressed as days since 1970-01-01.
    *
    * @param endDay The end date, exclusive

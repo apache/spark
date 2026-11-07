@@ -38,6 +38,12 @@ object LiteralFunctionResolution {
     }
   }
 
+  /** Whether `nameParts` is the name of a literal function, which `resolve` resolves. */
+  def isLiteralFunction(nameParts: Seq[String]): Boolean = {
+    nameParts.length == 1 &&
+      literalFunctions.exists(func => caseInsensitiveResolution(func._1, nameParts.head))
+  }
+
   // support CURRENT_DATE, CURRENT_TIMESTAMP, CURRENT_TIME,
   //  CURRENT_USER, USER, SESSION_USER and grouping__id
   private val literalFunctions: Seq[(String, () => Expression, Expression => String)] = Seq(

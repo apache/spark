@@ -386,8 +386,10 @@ case class AddCheckConstraint(
     analyzedQuery: Option[LogicalPlan] = None) extends UnaryCommand with KeepAnalyzedQuery {
 
   // The optimizer replaces the filtered scan with an empty relation if no row can violate the
-  // check, so keep the analyzed child to find the table when planning.
-  override def storeAnalyzedQuery(): Command = copy(analyzedQuery = Some(child))
+  // check, so keep the analyzed child to find the table when planning. The constraint decides
+  // here, with its condition analyzed, whether to store a predicate.
+  override def storeAnalyzedQuery(): Command = copy(
+    checkConstraint = checkConstraint.markAsAnalyzed(), analyzedQuery = Some(child))
 
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
     copy(child = newChild)

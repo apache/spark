@@ -44,7 +44,7 @@ import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
-import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
+import org.apache.spark.sql.catalyst.trees.TreePattern.{PARAMETER, UNRESOLVED_IDENTIFIER}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, CollationFactory, DateTimeConstants, DateTimeUtils, EvaluateUnresolvedInlineTable, IntervalUtils, WriteDistributionAndOrdering}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, fractionalSecondsDigits, getZoneId, stringToDate, stringToTime, stringToTimestamp, stringToTimestampLTZNanos, stringToTimestampNTZNanos, stringToTimestampWithoutTimeZone}
@@ -7189,11 +7189,27 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitCheckConstraint(ctx: CheckConstraintContext): CheckConstraint =
     withOrigin(ctx) {
       val condition = getOriginalText(ctx.expr)
+      val child = expression(ctx.booleanExpression())
       CheckConstraint(
-        child = expression(ctx.booleanExpression()),
-        condition = condition)
+        child = child,
+        condition = condition,
+        keepPredicate = child.containsAnyPattern(PARAMETER, UNRESOLVED_IDENTIFIER) ||
+          hasCurrentLikeKeyword(ctx.booleanExpression()) ||
+          child.exists {
+            case u: UnresolvedAttribute =>
+              u.nameParts.length > 1 || LiteralFunctionResolution.isLiteralFunction(u.nameParts)
+            case _ => false
+          })
     }
 
+  /**
+   * Whether `tree` has a keyword such as `current_date` or `user` without parentheses, which parses
+   * as a column name or as the function depending on `spark.sql.ansi.enforceReservedKeywords`.
+   */
+  private def hasCurrentLikeKeyword(tree: ParseTree): Boolean = tree match {
+    case c: CurrentLikeContext => c.name.getType != SqlBaseParser.CURRENT_PATH
+    case _ => (0 until tree.getChildCount).exists(i => hasCurrentLikeKeyword(tree.getChild(i)))
+  }
 
   override def visitUniqueConstraint(ctx: UniqueConstraintContext): TableConstraint =
     withOrigin(ctx) {
