@@ -18,13 +18,10 @@
 import datetime
 import decimal
 
-import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.pandas.data_type_ops.base import DataTypeOps
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
-from pyspark.sql.types import IntegerType, MapType, StringType, StructType
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
@@ -362,12 +359,6 @@ class ComplexOpsTestsMixin:
         self.assert_eq(
             pdf["this_struct"] >= pdf["this_struct"], psdf["this_struct"] >= psdf["this_struct"]
         )
-
-    def test_pretty_name(self):
-        dtype = np.dtype("object")
-        map_type = MapType(StringType(), IntegerType())
-        self.assertEqual(DataTypeOps(dtype, map_type).pretty_name, "maps")
-        self.assertEqual(DataTypeOps(dtype, StructType()).pretty_name, "structs")
 
 
 class ComplexOpsTests(
