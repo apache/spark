@@ -1322,6 +1322,45 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
       checkAnswer(result, df)
     }
   }
+
+  test("SPARK-60362: IS NULL on a nested field keeps rows whose parent struct is NULL") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val input = sql(
+        """SELECT CASE
+          |  WHEN id = 0 THEN NULL
+          |  WHEN id = 1 THEN named_struct('m', CAST(NULL AS STRUCT<c: BIGINT>))
+          |  WHEN id = 2 THEN named_struct('m', named_struct('c', CAST(NULL AS BIGINT)))
+          |  ELSE named_struct('m', named_struct('c', id))
+          |END AS a, id AS x FROM range(4)""".stripMargin)
+      input.coalesce(1).write.orc(path)
+      val expected = Seq(
+        "a.m.c IS NULL" -> Seq(Row(null, 0L), Row(Row(null), 1L), Row(Row(Row(null)), 2L)),
+        "a.m IS NULL" -> Seq(Row(null, 0L), Row(Row(null), 1L)),
+        "a IS NULL" -> Seq(Row(null, 0L)),
+        "a.m.c IS NOT NULL" -> Seq(Row(Row(Row(3L)), 3L)),
+        "a.m.c <=> NULL" -> Seq(Row(null, 0L), Row(Row(null), 1L), Row(Row(Row(null)), 2L)),
+        "NOT (a.m.c IS NOT NULL)" ->
+          Seq(Row(null, 0L), Row(Row(null), 1L), Row(Row(Row(null)), 2L)),
+        "a.m.c IS NULL OR a.m.c = 99" ->
+          Seq(Row(null, 0L), Row(Row(null), 1L), Row(Row(Row(null)), 2L)),
+        "a.m.c IS NULL AND x = 0" -> Seq(Row(null, 0L)),
+        "a.m.c = 3" -> Seq(Row(Row(Row(3L)), 3L))
+      )
+      Seq(true, false).foreach { pushdown =>
+        Seq(true, false).foreach { vectorized =>
+          withSQLConf(
+              SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> pushdown.toString,
+              SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+            val df = spark.read.orc(path)
+            expected.foreach { case (cond, rows) =>
+              checkAnswer(df.where(cond), rows)
+            }
+          }
+        }
+      }
+    }
+  }
 }
 
 class OrcV1QuerySuite extends OrcQuerySuite {
