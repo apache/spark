@@ -848,3 +848,97 @@ Project [year#x, dotNET#xL, s#x]
                +- Project [y#x, s#x]
                   +- SubqueryAlias years
                      +- LocalRelation [y#x, s#x]
+
+
+-- !query
+SELECT * FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  count(DISTINCT *)
+  FOR course IN ('dotNET', 'Java')
+)
+-- !query analysis
+Project [dotNET#xL, Java#xL]
++- Project [__pivot_count(DISTINCT __auto_generated_subquery_name.year, __auto_generated_subquery_name.course, __auto_generated_subquery_name.earnings) AS `count(DISTINCT __auto_generated_subquery_name.year, __auto_generated_subquery_name.course, __auto_generated_subquery_name.earnings)`#x[0] AS dotNET#xL, __pivot_count(DISTINCT __auto_generated_subquery_name.year, __auto_generated_subquery_name.course, __auto_generated_subquery_name.earnings) AS `count(DISTINCT __auto_generated_subquery_name.year, __auto_generated_subquery_name.course, __auto_generated_subquery_name.earnings)`#x[1] AS Java#xL]
+   +- Aggregate [pivotfirst(course#x, count(DISTINCT __auto_generated_subquery_name.year, __auto_generated_subquery_name.course, __auto_generated_subquery_name.earnings)#xL, dotNET, Java, 0, 0) AS __pivot_count(DISTINCT __auto_generated_subquery_name.year, __auto_generated_subquery_name.course, __auto_generated_subquery_name.earnings) AS `count(DISTINCT __auto_generated_subquery_name.year, __auto_generated_subquery_name.course, __auto_generated_subquery_name.earnings)`#x]
+      +- Aggregate [course#x], [course#x, count(distinct year#x, course#x, earnings#x) AS count(DISTINCT __auto_generated_subquery_name.year, __auto_generated_subquery_name.course, __auto_generated_subquery_name.earnings)#xL]
+         +- SubqueryAlias __auto_generated_subquery_name
+            +- Project [year#x, course#x, earnings#x]
+               +- SubqueryAlias coursesales
+                  +- View (`courseSales`, [course#x, year#x, earnings#x])
+                     +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+                        +- Project [course#x, year#x, earnings#x]
+                           +- SubqueryAlias courseSales
+                              +- LocalRelation [course#x, year#x, earnings#x]
+
+
+-- !query
+SELECT * FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  max(struct(*))
+  FOR course IN ('dotNET', 'Java')
+)
+-- !query analysis
+Project [dotNET#x, Java#x]
++- Aggregate [max(if ((course#x <=> cast(dotNET as string))) struct(year, year#x, course, course#x, earnings, earnings#x) else cast(null as struct<year:int,course:string,earnings:int>)) AS dotNET#x, max(if ((course#x <=> cast(Java as string))) struct(year, year#x, course, course#x, earnings, earnings#x) else cast(null as struct<year:int,course:string,earnings:int>)) AS Java#x]
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Project [year#x, course#x, earnings#x]
+         +- SubqueryAlias coursesales
+            +- View (`courseSales`, [course#x, year#x, earnings#x])
+               +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+                  +- Project [course#x, year#x, earnings#x]
+                     +- SubqueryAlias courseSales
+                        +- LocalRelation [course#x, year#x, earnings#x]
+
+
+-- !query
+SELECT * FROM courseSales
+PIVOT (
+  *
+  FOR year IN (2012, 2013)
+)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_USAGE_OF_STAR_OR_REGEX",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "elem" : "'*'",
+    "prettyName" : "Pivot"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 37,
+    "stopIndex" : 37,
+    "fragment" : "*"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM courseSales
+PIVOT (
+  * IN (1, 2)
+  FOR year IN (2012, 2013)
+)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_USAGE_OF_STAR_OR_REGEX",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "elem" : "'*'",
+    "prettyName" : "Pivot"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 37,
+    "stopIndex" : 37,
+    "fragment" : "*"
+  } ]
+}
