@@ -7152,17 +7152,28 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     # the column list passed to the pivot_table().
                     # E.g. if column is b and values is ['b','e'],
                     # then ['2_b', '2_e', '3_b', '3_e'].
+                    # Both parts can contain '_', so do not split the name. Spark emits, for each
+                    # pivot value, one column per aggregation in the order of agg_cols, so pair
+                    # each column with its value column by position.
+                    agg_names = [
+                        self._internal.spark_column_name_for(label)
+                        for label in (agg_columns if isinstance(aggfunc, dict) else values)
+                    ]
+                    pivoted = [
+                        (name, agg_names[i % len(agg_names)]) for i, name in enumerate(data_columns)
+                    ]
 
                     # We sort the columns of Spark DataFrame by values.
-                    data_columns.sort(key=lambda x: x.split("_", 1)[1])
+                    pivoted.sort(key=lambda x: x[1])
+                    data_columns = [name for name, _ in pivoted]
                     sdf = sdf.select(index_columns + data_columns)
 
                     column_name_to_index = dict(
                         zip(self._internal.data_spark_column_names, self._internal.column_labels)
                     )
                     column_labels = [
-                        tuple(list(column_name_to_index[name.split("_")[1]]) + [name.split("_")[0]])
-                        for name in data_columns
+                        tuple(list(column_name_to_index[agg_name]) + [name[: -len(agg_name) - 1]])
+                        for name, agg_name in pivoted
                     ]
                     column_label_names = (
                         [cast(Optional[Name], None)] * column_labels_level(values)
