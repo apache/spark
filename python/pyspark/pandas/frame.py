@@ -14452,9 +14452,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
             return align_diff_frames(apply_op, this, that, fillna=True, how="full")
         else:
-            # DataFrame and Series
-            this = inputs[0]
-            assert all(inp is this for inp in inputs if isinstance(inp, DataFrame))
+            # DataFrame, Series, and scalar. The DataFrame is not always inputs[0]:
+            # np.gcd(2, psdf) puts the scalar first. Each column keeps that operand order.
+            frames = [inp for inp in inputs if isinstance(inp, DataFrame)]
+            this = frames[0] if frames else inputs[0]
+            assert all(inp is this for inp in frames)
             column_labels = this._internal.column_labels
 
             def apply_ufunc(label: Label) -> Any:

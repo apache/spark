@@ -33,6 +33,7 @@ from pyspark.sql.types import (
     DoubleType,
     FloatType,
     IntegralType,
+    LongType,
     NullType,
     NumericType,
     TimestampNTZType,
@@ -607,8 +608,19 @@ def maybe_dispatch_ufunc_to_spark_func(
 
         @no_type_check
         def convert_arguments(*args):
-            args = [F.lit(inp) for inp in args]
-            return np_spark_map_func(*args)
+            # shiftleft/shiftright take their result type from the value being shifted.
+            # An untyped Python int, bool, or NumPy int8/int16/int32 literal is narrower
+            # than long, so a scalar on the left of an int64 Series would shift in 32 bits.
+            widen_shift_value = op_name in ("left_shift", "right_shift") and isinstance(
+                ser_or_index.spark.data_type, LongType
+            )
+            columns = []
+            for i, inp in enumerate(args):
+                literal = F.lit(inp)
+                if widen_shift_value and i == 0 and _is_signed_integral_scalar(inp):
+                    literal = literal.cast(LongType())
+                columns.append(literal)
+            return np_spark_map_func(*columns)
 
         if isinstance(inputs[0], IndexOpsMixin):
             return column_op(convert_arguments)(*inputs)
@@ -616,7 +628,14 @@ def maybe_dispatch_ufunc_to_spark_func(
         # column_op takes the Series or Index as its first argument, but the left operand can be
         # a scalar, e.g. np.gcd(2, psser). Move the Series or Index to the front for column_op and
         # restore the original operand order before applying the function.
-        pos = next(i for i, inp in enumerate(inputs) if isinstance(inp, IndexOpsMixin))
+        # NumPy also calls this when the only pandas-on-Spark object is the where= mask.
+        # next() with no default raises StopIteration, which map() treats as the end.
+        pos = next(
+            (i for i, inp in enumerate(inputs) if isinstance(inp, IndexOpsMixin)),
+            None,
+        )
+        if pos is None:
+            return NotImplemented
 
         @no_type_check
         def convert_reordered_arguments(*args):
@@ -627,6 +646,15 @@ def maybe_dispatch_ufunc_to_spark_func(
         )
     else:
         return NotImplemented
+
+
+def _is_signed_integral_scalar(value: Any) -> bool:
+    """True when ``value`` is an integral scalar that ``F.lit`` may store narrower than long."""
+    if isinstance(value, (bool, np.bool_)):
+        return True
+    if isinstance(value, np.integer):
+        return bool(np.issubdtype(value.dtype, np.signedinteger))
+    return isinstance(value, int)
 
 
 def _test() -> None:
