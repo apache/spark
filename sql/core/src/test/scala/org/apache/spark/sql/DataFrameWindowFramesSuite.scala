@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.SparkArithmeticException
 import org.apache.spark.sql.catalyst.expressions.{Literal, NonFoldableLiteral}
 import org.apache.spark.sql.catalyst.optimizer.EliminateWindowPartitions
 import org.apache.spark.sql.catalyst.plans.logical.{Window => WindowNode}
@@ -648,5 +649,38 @@ class DataFrameWindowFramesSuite extends SharedSparkSession {
         Row("a", 0, "x", null),
         Row("a", 1, "x", "x"),
         Row("b", 0, null, null)))
+  }
+
+  test("SPARK-59859: range frame ordered by a date fails when an integer offset overflows") {
+    withTempView("dates") {
+      Seq("2020-01-01", "2020-01-02", "2020-01-05").toDF("s")
+        .select($"s".cast("date").as("d"))
+        .createOrReplaceTempView("dates")
+      Seq(true, false).foreach { ansiEnabled =>
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+          // The bound `d - 2147483647` fits in the range of dates.
+          checkAnswer(
+            sql("SELECT count(*) OVER (ORDER BY d " +
+              "RANGE BETWEEN 2147483647 PRECEDING AND CURRENT ROW) FROM dates"),
+            Row(1) :: Row(2) :: Row(3) :: Nil)
+          // The bound `d + 2147483647` overflows.
+          checkError(
+            exception = intercept[SparkArithmeticException] {
+              sql("SELECT count(*) OVER (ORDER BY d " +
+                "RANGE BETWEEN CURRENT ROW AND 2147483647 FOLLOWING) FROM dates").collect()
+            },
+            condition = "DATETIME_OVERFLOW",
+            parameters = Map("operation" -> "add 2147483647 days to DATE '2020-01-01'"))
+          // In descending order, the bound of a PRECEDING offset is `d + 2147483647`.
+          checkError(
+            exception = intercept[SparkArithmeticException] {
+              sql("SELECT count(*) OVER (ORDER BY d DESC " +
+                "RANGE BETWEEN 2147483647 PRECEDING AND CURRENT ROW) FROM dates").collect()
+            },
+            condition = "DATETIME_OVERFLOW",
+            parameters = Map("operation" -> "add 2147483647 days to DATE '2020-01-05'"))
+        }
+      }
+    }
   }
 }
