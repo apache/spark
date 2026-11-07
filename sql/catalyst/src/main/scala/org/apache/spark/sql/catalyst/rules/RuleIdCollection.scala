@@ -85,11 +85,13 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.DeduplicateRelations" ::
       "org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases" ::
       "org.apache.spark.sql.catalyst.analysis.EliminateUnions" ::
+      "org.apache.spark.sql.catalyst.analysis.FormExternalLookupJoin" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveCollationName" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveDefaultColumns" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveEventTimeWatermark" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveExecuteImmediate" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveExpressionsWithNamePlaceholders" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveExternalLookupHint" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveGroupByAll" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveHigherOrderFunctions" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveHints$ResolveCoalesceHints" ::
