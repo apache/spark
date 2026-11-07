@@ -18,12 +18,18 @@
 import unittest
 
 from pyspark.errors import PySparkValueError
-from pyspark.sql.connect.streaming.query import StreamingQuery as ConnectStreamingQuery
-from pyspark.sql.connect.streaming.query import (
-    StreamingQueryManager as ConnectStreamingQueryManager,
-)
 from pyspark.sql.streaming.query import StreamingQuery, StreamingQueryManager
-from pyspark.testing.utils import PySparkErrorTestUtils
+from pyspark.testing.utils import (
+    PySparkErrorTestUtils,
+    connect_requirement_message,
+    should_test_connect,
+)
+
+if should_test_connect:
+    from pyspark.sql.connect.streaming.query import StreamingQuery as ConnectStreamingQuery
+    from pyspark.sql.connect.streaming.query import (
+        StreamingQueryManager as ConnectStreamingQueryManager,
+    )
 
 
 class StreamingQueryTimeoutValidationTests(unittest.TestCase, PySparkErrorTestUtils):
@@ -51,6 +57,7 @@ class StreamingQueryTimeoutValidationTests(unittest.TestCase, PySparkErrorTestUt
             messageParameters={"arg_name": "timeout", "arg_value": "-5"},
         )
 
+    @unittest.skipIf(not should_test_connect, connect_requirement_message)
     def test_connect_await_termination_reports_negative_value(self):
         query = ConnectStreamingQuery(session=None, queryId="q", runId="r")
         with self.assertRaises(PySparkValueError) as pe:
@@ -61,6 +68,7 @@ class StreamingQueryTimeoutValidationTests(unittest.TestCase, PySparkErrorTestUt
             messageParameters={"arg_name": "timeout", "arg_value": "-5"},
         )
 
+    @unittest.skipIf(not should_test_connect, connect_requirement_message)
     def test_connect_await_any_termination_reports_negative_value(self):
         manager = ConnectStreamingQueryManager(session=None)
         with self.assertRaises(PySparkValueError) as pe:
