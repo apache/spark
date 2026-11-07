@@ -204,7 +204,10 @@ public enum TableCapability {
    * watermark, are not pushed. The filters of a {@code SupportsPushDownFilters} builder compare
    * columns with values, which cannot fail, so it gets such filters whatever their order among
    * the filters over the relation. A builder whose filters may fail on some rows, as a cast does
-   * with ANSI, only gets the filters that the query applies before any other filter.
+   * with ANSI, only gets the filters that the query applies before any other filter, in their
+   * order, and the streams of its scans must not evaluate a filter on a row that a filter before
+   * it drops, as Spark does not, so that each filter only sees the rows that the query evaluates it
+   * on.
    * <p>
    * Spark builds the scan of a streaming read once, when the query starts, from the plan of the
    * query optimized then, and creates the micro-batch or continuous stream of the read from that

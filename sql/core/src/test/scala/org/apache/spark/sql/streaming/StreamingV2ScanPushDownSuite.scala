@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.streaming
 
+import java.time.LocalTime
 import java.util
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
@@ -29,7 +30,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{DataFrame, Encoder, Encoders, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow}
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, AttributeSet, Cast, EqualTo, EvalMode, Expression, GreaterThan, IsNotNull, LeafExpression, Literal, Or, Rand, RLike, ScalarSubquery}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, AttributeSet, Cast, EqualTo, EvalMode, Expression, GreaterThan, If, IsNotNull, LeafExpression, LessThan, Literal, Or, Rand, RLike, ScalarSubquery}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.optimizer.{ColumnPruning, PruneFilters}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project, WithCTE}
@@ -48,7 +49,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
 import org.apache.spark.sql.sources.{Filter => SourceFilter}
-import org.apache.spark.sql.types.{CharType, DataType, IntegerType, StringType, StructType}
+import org.apache.spark.sql.types.{CharType, DataType, IntegerType, LongType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -149,6 +150,19 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
       names.nonEmpty && names.subsetOf(columns.toSet)
     }.filterNot(_.isInstanceOf[IsNotNull])
     assert(conditions.length === 1, conditions)
+    true
+  }
+
+  /**
+   * Checks that no filter that the last micro-batch applies to the rows of its streaming sources
+   * has `sql` in its SQL.
+   */
+  private def assertNotOverSources(sql: String): StreamAction = AssertOnQuery { query =>
+    val conditions = query.lastExecution.optimizedPlan.collect {
+      case Filter(condition, _: StreamingDataSourceV2ScanRelation) =>
+        splitConjunctivePredicates(condition)
+    }.flatten
+    assert(conditions.nonEmpty && !conditions.exists(_.sql.contains(sql)), conditions)
     true
   }
 
@@ -1077,16 +1091,40 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
       testStream(folded.join(static, folded("b") === static("x")).select("a"))(
         ProcessAllAvailable(),
         assertPushedFilters("LessThan(b,3)"),
-        AssertOnQuery { query =>
-          val conditions = query.lastExecution.optimizedPlan.collect {
-            case Filter(condition, _: StreamingDataSourceV2ScanRelation) =>
-              splitConjunctivePredicates(condition)
-          }.flatten
-          assert(!conditions.exists(_.sql.contains("< 3")), conditions)
-          true
-        },
+        assertNotOverSources("< 3"),
         CheckAnswer(Row(2L), Row(0L)))
     }
+    // Also on a double key, whose value the micro-batch puts where the column is compared: -0.0
+    // compares as 0.0 does.
+    withTable(tbl) {
+      createTable(tbl, "d double, v string", filtering)
+      sql(s"INSERT INTO $tbl VALUES (0.0, 'a'), (CAST('-0.0' AS DOUBLE), 'b'), (1.0, 'c')")
+      val source = spark.readStream.table(tbl).where("d > -1.0")
+      val static = spark.range(0, 1).selectExpr("CAST(id AS DOUBLE) AS x").where("x = 0.0")
+      testStream(source.join(static, source("d") === static("x")).select("v"))(
+        ProcessAllAvailable(),
+        assertPushedFilters("GreaterThan(d,-1.0)"),
+        assertNotOverSources("> -1.0"),
+        CheckAnswer(Row("a"), Row("b")))
+    }
+  }
+
+  test("plan the micro-batches whose optimizer rewrites a pushed filter with an inferred value") {
+    val input = MemoryStream[(Long, String)]
+    val table = new FilterStreamTable(input, catalyst = true)
+    val source = Dataset.ofRows(spark, StreamingRelationV2(None, table.name(), table,
+      CaseInsensitiveStringMap.empty(), DataTypeUtils.toAttributes(table.schema()), None, None,
+      None)).toDF("id", "payload").where("CAST(length(payload) AS BIGINT) < id")
+    val static = spark.range(5, 6).toDF("k").where("k = 5")
+    // A micro-batch infers id = 5 through the join, and the optimizer then unwraps the cast of the
+    // filter that the builder got, so the micro-batch has length(payload) < 5.
+    testStream(source.join(static, source("id") === static("k")).select("payload"))(
+      StartStream(),
+      AddData(input, (5L, "abc"), (5L, "abcdef"), (3L, "a")),
+      ProcessAllAvailable(),
+      AssertOnQuery(_ => table.pushed.length == 1 && table.pushed.head.contains("CAST")),
+      assertNotOverSources("CAST"),
+      CheckAnswer(Row("abc")))
   }
 
   test("read all the columns with no filter from a table without the capabilities") {
@@ -1303,20 +1341,20 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
 
   test("check that the plan of each micro-batch implies the filters that its scans got") {
     withTable(tbl) {
-      createTable(tbl, "id bigint, data string, d double")
+      createTable(tbl, "id bigint, data string, d double, e int, t time")
       testStream(spark.readStream.table(tbl))(
         ProcessAllAvailable(),
         AssertOnQuery { query =>
           val relation = query.logicalPlan.collectFirst {
             case relation: StreamingDataSourceV2ScanRelation => relation
           }.get
-          val Seq(id, data, d) = relation.output
+          val Seq(id, data, d, e, t) = relation.output
           // Whether the check accepts the plan of a micro-batch that `plan` makes of the relation,
           // once the scan of the relation got `pushed`.
           def accepts(pushed: Expression)(plan: LogicalPlan => LogicalPlan): Boolean = {
             try {
               StreamingV2ScanPushDown.checkPushedFilters(
-                plan(relation.copy(pushedFilters = Seq(pushed))))
+                spark, plan(relation.copy(pushedFilters = Seq(pushed))))
               true
             } catch {
               case e: SparkException if e.getCondition == "STREAMING_SCAN_FILTERS_CHANGED" => false
@@ -1348,7 +1386,17 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
           assert(!accepts(either)(Filter(EqualTo(data, Literal("a")), _)))
           assert(accepts(EqualTo(Cast(id, StringType), Literal("5")))(
             Filter(EqualTo(id, Literal(5L)), _)))
-          // But not with 0.0 for a double, which is -0.0 on some rows that the plan keeps.
+          assert(accepts(GreaterThan(t, Literal(LocalTime.of(0, 0, 1))))(
+            Filter(EqualTo(t, Literal(LocalTime.of(12, 0))), _)))
+          // And once the optimizer of the micro-batch rewrote it, as it rewrites the plan.
+          assert(accepts(LessThan(Cast(e, LongType), id))(
+            Filter(And(EqualTo(id, Literal(5L)), LessThan(e, Literal(5))), _)))
+          assert(accepts(If(EqualTo(data, Literal("")), GreaterThan(id, Literal(5L)),
+              GreaterThan(id, Literal(3L))))(
+            Filter(And(EqualTo(data, Literal("a")), GreaterThan(id, Literal(3L))), _)))
+          // A double has the value of 0.0 where it is compared, as -0.0 compares as 0.0 does, but
+          // not elsewhere, as in its cast to a string, which is "-0.0" on some rows.
+          assert(accepts(GreaterThan(d, Literal(-1.0)))(Filter(EqualTo(d, Literal(0.0)), _)))
           assert(!accepts(EqualTo(Cast(d, StringType), Literal("0.0")))(
             Filter(EqualTo(d, Literal(0.0)), _)))
           true

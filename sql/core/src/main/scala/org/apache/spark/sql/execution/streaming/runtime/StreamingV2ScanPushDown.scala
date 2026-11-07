@@ -24,12 +24,12 @@ import scala.util.control.NonFatal
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.expressions.{AliasHelper, And, Attribute, AttributeMap, AttributeReference, AttributeSet, Cast, EqualNullSafe, EqualTo, Expression, ExpressionSet, Generator, Literal, Or, OuterReference, PredicateHelper, SubqueryExpression, Unevaluable}
+import org.apache.spark.sql.catalyst.expressions.{AliasHelper, And, Attribute, AttributeMap, AttributeReference, AttributeSet, BinaryComparison, Cast, EqualNullSafe, EqualTo, Expression, ExpressionSet, Generator, Literal, Or, OuterReference, PredicateHelper, SubqueryExpression, Unevaluable}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
-import org.apache.spark.sql.catalyst.optimizer.{BooleanSimplification, ConstantFolding, InferFiltersFromConstraints, InferFiltersFromGenerate, ReplaceExpressions}
+import org.apache.spark.sql.catalyst.optimizer.{InferFiltersFromConstraints, InferFiltersFromGenerate, ReplaceExpressions}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, CTERelationDef, Filter, Join, LateralJoin, LeafNode, LocalRelation, LogicalPlan, Project, SetOperation, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, CTERelationDef, Filter, Join, LateralJoin, LeafNode, LogicalPlan, Project, SetOperation, Statistics}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, RUNTIME_REPLACEABLE}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -44,7 +44,7 @@ import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.datasources.v2.{PushDownUtils, StreamingDataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetSeqMetadata, OffsetSeqMetadataBase}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{AnyTimeType, BinaryType, BooleanType, DataType, DatetimeType, DateType, DecimalType, IntegralType, StringType, StructType, TimestampNTZType, TimestampType, VariantType}
+import org.apache.spark.sql.types.{AnyTimeType, BinaryType, BooleanType, DataType, DatetimeType, DateType, DayTimeIntervalType, DecimalType, DoubleType, FloatType, IntegralType, StringType, StructType, TimestampNTZType, TimestampType, TimeType, VariantType, YearMonthIntervalType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
@@ -188,9 +188,7 @@ private[sql] object StreamingV2ScanPushDown
     val conf = session.sessionState.conf.clone()
     offsetLogMetadata.foreach(OffsetSeqMetadata.setConfWithoutLogging(_, conf))
     conf.setConf(SQLConf.CBO_ENABLED, false)
-    conf.setConfString(SQLConf.OPTIMIZER_EXCLUDED_RULES.key,
-      (conf.optimizerExcludedRules.toSeq ++
-        Seq(InferFiltersFromConstraints.ruleName, InferFiltersFromGenerate.ruleName)).mkString(","))
+    withoutInferredFilters(conf)
     val prunesColumns = conf.streamingV2ColumnPruningEnabled && plan.exists {
       case relation: StreamingRelationV2 =>
         relation.table.capabilities().contains(TableCapability.STREAMING_COLUMN_PRUNING)
@@ -241,23 +239,39 @@ private[sql] object StreamingV2ScanPushDown
   }
 
   /**
-   * Checks that `plan`, the optimized plan of a micro-batch, applies the filters that the scans of
-   * its sources got when the query started to all the rows that it reads from them: a scan may
-   * drop the rows that fail its filters, so the plan must drop them too. The conditions that the
-   * plan applies to all the rows of each occurrence of a relation whose scan got filters must
-   * imply these filters (see `impliedBy`). Otherwise, the value of an expression in a pushed
+   * Checks that `plan`, the optimized plan of a micro-batch in `session`, applies the filters that
+   * the scans of its sources got when the query started to all the rows that it reads from them:
+   * a scan may drop the rows that fail its filters, so the plan must drop them too. The conditions
+   * that the plan applies to all the rows of each occurrence of a relation whose scan got filters
+   * must imply these filters (see `impliedBy`). Otherwise, the value of an expression in a pushed
    * filter changed after the query started, as a function of the time that `forStartup` does not
-   * replace would, or the configuration of the optimizer changed in the session of the query, and
-   * the micro-batch fails before it reads its data.
+   * replace would, or the configuration of the optimizer changed in the session of the query, or
+   * the optimizer of the micro-batch rewrote a pushed filter in a way that `impliedBy` does not
+   * follow, and the micro-batch fails before it reads its data.
    */
-  def checkPushedFilters(plan: LogicalPlan): Unit = {
+  def checkPushedFilters(session: SparkSession, plan: LogicalPlan): Unit = {
     val hasPushedFilters = plan.exists {
       case relation: StreamingDataSourceV2ScanRelation => relation.pushedFilters.nonEmpty
       case _ => false
     }
     if (hasPushedFilters) {
+      // The configuration of the micro-batch, without the rules that infer filters, which would
+      // add conditions to those that `impliedBy` gets from the optimizer.
+      lazy val optimizerConf = withoutInferredFilters(session.sessionState.conf.clone())
       conditionsOverRelations(plan, Nil).foreach { case (relation, conditions) =>
-        val unapplied = relation.pushedFilters.filterNot(impliedBy(conditions))
+        // The conjuncts of `condition` once the optimizer of the micro-batch optimizes a filter
+        // of the relation with it, none if it folds into true, or nothing if it folds into false.
+        def optimized(condition: Expression): Option[Seq[Expression]] = Try {
+          SQLConf.withExistingConf(optimizerConf) {
+            session.sessionState.optimizer.execute(
+              Filter(condition, relation.copy(pushedFilters = Nil)))
+          }
+        }.toOption.collect {
+          case Filter(optimizedCondition, _: StreamingDataSourceV2ScanRelation) =>
+            splitConjunctivePredicates(optimizedCondition)
+          case _: StreamingDataSourceV2ScanRelation => Nil
+        }
+        val unapplied = relation.pushedFilters.filterNot(impliedBy(conditions, optimized))
         if (unapplied.nonEmpty) {
           throw QueryExecutionErrors.streamingScanFiltersChangedError(
             sourceName(relation.relation.table, relation.catalog, relation.identifier),
@@ -291,35 +305,53 @@ private[sql] object StreamingV2ScanPushDown
   /**
    * Returns whether a filter is implied by `facts`, the deterministic conditions that hold for all
    * the rows that a plan keeps from a relation: the facts have it, or its conjuncts, or one of its
-   * disjuncts, also once the columns that the facts make equal to literals have these values, in
-   * the filter and in the facts, and their constants are folded. The optimizer of a micro-batch
-   * puts these values in place of the columns in its filters (see `ConstantPropagation`), e.g.
-   * with an equality that it infers through a join, so that `id > 1` becomes true with `id = 5`,
-   * and `(owner = '' OR id > 5)` becomes `id > 5` with `owner = 'a'`. Only the values of the types
-   * whose equal values are the same replace their columns (see `hasExactEquality`). This may miss
+   * disjuncts, also once the columns that the facts make equal to literals have these values in
+   * it, and `optimize`, the optimizer of the micro-batch, rewrote it. The optimizer of a
+   * micro-batch puts these values in place of the columns in its filters (see
+   * `ConstantPropagation`), e.g. with an equality that it infers through a join, and rewrites the
+   * filters with the other rules of the same batch, so that `id > 1` becomes true with `id = 5`,
+   * and `CAST(extra AS BIGINT) < id` becomes `extra < 5`. The values replace their columns
+   * anywhere for the types whose equal values are the same (see `hasExactEquality`), and only
+   * where the columns are compared for the floating types: Spark compares 0.0 and -0.0 as equal,
+   * and NaN and NaN, so a column equal to 0.0 compares with any value as 0.0 does. This may miss
    * that the facts imply a filter, which fails the micro-batch, but never finds that they imply a
-   * filter that they do not imply.
+   * filter that they do not imply, as long as the rules of the optimizer keep what the filters
+   * mean.
    */
-  private def impliedBy(facts: Seq[Expression]): Expression => Boolean = {
-    val values = AttributeMap(facts.collect {
-      case EqualTo(column: Attribute, value: Literal) => column -> value
-      case EqualTo(value: Literal, column: Attribute) => column -> value
-      case EqualNullSafe(column: Attribute, value: Literal) => column -> value
-      case EqualNullSafe(value: Literal, column: Attribute) => column -> value
-    }.filter { case (column, value) =>
-      column.dataType == value.dataType && hasExactEquality(column.dataType)
-    })
-    def withValues(condition: Expression): Expression = folded(condition.transform {
-      case column: Attribute if values.contains(column) => values(column)
-    })
-    val known = ExpressionSet(facts ++ (if (values.nonEmpty) facts.map(withValues) else Nil))
+  private def impliedBy(
+      facts: Seq[Expression],
+      optimize: Expression => Option[Seq[Expression]]): Expression => Boolean = {
+    val known = ExpressionSet(facts)
     def holds(condition: Expression): Boolean = known.contains(condition) || (condition match {
       case TrueLiteral => true
       case And(left, right) => holds(left) && holds(right)
       case Or(left, right) => holds(left) || holds(right)
       case _ => false
     })
-    filter => holds(filter) || (values.nonEmpty && holds(withValues(filter)))
+    val equalities = facts.collect {
+      case EqualTo(column: Attribute, value: Literal) => column -> value
+      case EqualTo(value: Literal, column: Attribute) => column -> value
+      case EqualNullSafe(column: Attribute, value: Literal) => column -> value
+      case EqualNullSafe(value: Literal, column: Attribute) => column -> value
+    }.filter { case (column, value) => column.dataType == value.dataType }
+    val values = AttributeMap(equalities.filter { case (column, _) =>
+      hasExactEquality(column.dataType)
+    })
+    val comparedValues = AttributeMap(equalities.filter { case (column, _) =>
+      column.dataType == FloatType || column.dataType == DoubleType
+    })
+    def withValues(condition: Expression): Expression = condition.transformUp {
+      case column: Attribute if values.contains(column) => values(column)
+      case comparison: BinaryComparison if comparedValues.nonEmpty =>
+        comparison.mapChildren {
+          case column: Attribute if comparedValues.contains(column) => comparedValues(column)
+          case operand => operand
+        }
+    }
+    filter => holds(filter) || ((values.nonEmpty || comparedValues.nonEmpty) && {
+      val withTheValues = withValues(filter)
+      !withTheValues.fastEquals(filter) && optimize(withTheValues).exists(_.forall(holds))
+    })
   }
 
   // Whether the values of `dataType` that are equal are the same, so that a column that is equal
@@ -327,17 +359,19 @@ private[sql] object StreamingV2ScanPushDown
   // strings that a collation finds equal.
   private def hasExactEquality(dataType: DataType): Boolean = dataType match {
     case _: IntegralType | _: DecimalType | BooleanType | DateType | TimestampType |
-         TimestampNTZType | BinaryType => true
+         TimestampNTZType | _: TimeType | _: DayTimeIntervalType | _: YearMonthIntervalType |
+         BinaryType => true
     case string: StringType => string.supportsBinaryEquality
     case _ => false
   }
 
-  // `condition` with its constants folded, as the optimizer folds them.
-  private def folded(condition: Expression): Expression = {
-    val plan = Filter(condition, LocalRelation(condition.references.toSeq))
-    Try(BooleanSimplification(ConstantFolding(plan))).toOption.collect {
-      case Filter(simplified, _) => simplified
-    }.getOrElse(condition)
+  // `conf` without the rules of the optimizer that infer filters from the constraints of a plan or
+  // from its generators.
+  private def withoutInferredFilters(conf: SQLConf): SQLConf = {
+    conf.setConfString(SQLConf.OPTIMIZER_EXCLUDED_RULES.key,
+      (conf.optimizerExcludedRules.toSeq ++
+        Seq(InferFiltersFromConstraints.ruleName, InferFiltersFromGenerate.ruleName)).mkString(","))
+    conf
   }
 
   /**
@@ -532,8 +566,9 @@ private[sql] object StreamingV2ScanPushDown
     // which cannot fail, so it gets those that all the reads apply, wherever they are. The
     // predicates of a `SupportsPushDownV2Filters` builder and the filters of the others may fail
     // on some rows, as a cast does with ANSI, so they are the leading filters of the reads, up to
-    // the first that the builder does not get: none runs before a filter written before it.
-    // `PushDownUtils.pushFilters` decides which filters the builder gets in the same way.
+    // the first that the builder does not get, in their order, which the streams evaluate them in
+    // (see `TableCapability.STREAMING_FILTER_PUSHDOWN`): none runs before a filter written before
+    // it. `PushDownUtils.pushFilters` decides which filters the builder gets in the same way.
     def gets(filter: Expression): Boolean = PushDownUtils.getsFilter(builder, filter)
     val filters = known.filter(_ => pushesFilters)
       .map { r =>

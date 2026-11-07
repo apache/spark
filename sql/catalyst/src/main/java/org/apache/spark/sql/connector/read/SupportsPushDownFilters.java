@@ -36,8 +36,9 @@ public interface SupportsPushDownFilters extends ScanBuilder {
    * filters must be interpreted as ANDed together.
    * <p>
    * The scans of streaming queries get the filters too, since 4.4.0, if the table returns
-   * {@link org.apache.spark.sql.connector.catalog.TableCapability#STREAMING_FILTER_PUSHDOWN}.
-   * Spark evaluates all of them after a streaming scan, also those that this does not return.
+   * {@link org.apache.spark.sql.connector.catalog.TableCapability#STREAMING_FILTER_PUSHDOWN} and
+   * {@code spark.sql.streaming.v2FilterPushdown.enabled} is true. Spark evaluates all of them
+   * after a streaming scan, also those that this does not return.
    */
   Filter[] pushFilters(Filter[] filters);
 

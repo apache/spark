@@ -1310,9 +1310,9 @@ object InMemoryBaseTable {
 }
 
 /**
- * A partition for [[InMemoryBaseTable]] micro-batch streaming reads, holding a slice of rows.
+ * A partition for [[InMemoryBaseTable]] micro-batch streaming reads: the rows of a micro-batch that
+ * pass the filters of its stream, each with its position in the micro-batch.
  */
-/** The rows of a micro-batch, with their positions in it. */
 case class InMemoryMicroBatchPartition(rows: Seq[(InternalRow, Int)]) extends InputPartition
 
 /**

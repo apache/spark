@@ -153,7 +153,7 @@ class IncrementalExecution(
     // The scans of the sources may drop the rows that fail the filters that they got when the
     // query started, which the plan must still apply to all the rows that it reads, see
     // StreamingV2ScanPushDown.
-    StreamingV2ScanPushDown.checkPushedFilters(optimized)
+    StreamingV2ScanPushDown.checkPushedFilters(sparkSession, optimized)
     WidenStatefulOperatorAttributeNullability(optimized)
   }
 
