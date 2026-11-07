@@ -2908,6 +2908,11 @@
           "Create the table <tableName>."
         ]
       },
+      "DELETE_FROM_TABLE" : {
+        "message" : [
+          "Delete rows from the table <tableName>."
+        ]
+      },
       "DROP_INDEX" : {
         "message" : [
           "Drop the index <indexName> in the <tableName> table."

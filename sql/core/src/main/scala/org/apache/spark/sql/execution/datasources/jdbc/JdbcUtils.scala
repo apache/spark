@@ -88,6 +88,10 @@ object JdbcUtils extends Logging with SQLConfHelper {
     executeStatement(conn, options, dialect.dropTable(table))
   }
 
+  def deleteFromTable(conn: Connection, options: JDBCOptions, condition: String): Unit = {
+    executeStatement(conn, options, s"DELETE FROM ${options.tableOrQuery} WHERE $condition")
+  }
+
   /**
    * Truncates a table from the JDBC database without side effects.
    */

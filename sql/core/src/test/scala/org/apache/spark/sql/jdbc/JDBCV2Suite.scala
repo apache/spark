@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, DriverManager}
+import java.sql.{Connection, DriverManager, SQLException}
 import java.util.{HexFormat, Properties}
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
@@ -25,9 +25,11 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
+import org.mockito.ArgumentMatchers.anyString
+import org.mockito.Mockito._
 import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen.JavaStrLenStaticMagic
 
-import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentException}
+import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, IndexAlreadyExistsException, NoSuchIndexException}
@@ -36,15 +38,16 @@ import org.apache.spark.sql.connector.{IntegralAverage, StrLen}
 import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
-import org.apache.spark.sql.connector.expressions.Expression
+import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, GeneralScalarExpression, LiteralValue}
+import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And, Not, Or, Predicate}
 import org.apache.spark.sql.execution.{FormattedMode, RowDataSourceScanExec}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCDatabaseMetadata, JDBCOptions, JDBCRDD}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
-import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
+import org.apache.spark.sql.execution.datasources.v2.jdbc.{JDBCTable, JDBCTableCatalog}
 import org.apache.spark.sql.functions.{abs, acos, asin, atan, atan2, avg, ceil, coalesce, cos, cosh, cot, count, count_distinct, degrees, exp, floor, lit, log => logarithm, log10, not, pow, radians, round, signum, sin, sinh, sqrt, sum, tan, tanh, udf, when}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
+import org.apache.spark.sql.types.{DataType, Decimal, DecimalType, IntegerType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -1898,6 +1901,234 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
 
       sql("INSERT OVERWRITE h2.test.abc SELECT 'bob', 4")
       checkAnswer(sql("SELECT name, id FROM h2.test.abc"), Row("bob", 4))
+    }
+  }
+
+  gridTest("SPARK-38431: SQL DELETE predicates")(Seq(
+    "id = 2" -> Seq(1, 3, 4),
+    "id <> 2" -> Seq(2),
+    "id < 2" -> Seq(2, 3, 4),
+    "id <= 2" -> Seq(3, 4),
+    "id > 2" -> Seq(1, 2),
+    "id >= 2" -> Seq(1),
+    "2 < id" -> Seq(1, 2),
+    "id IN (1, 3)" -> Seq(2, 4),
+    "id NOT IN (1, 3)" -> Seq(1, 3),
+    "amount IS NULL" -> Seq(1, 2, 4),
+    "amount IS NOT NULL" -> Seq(3),
+    "amount <=> 10.50" -> Seq(2, 3, 4),
+    "NOT (amount <=> 10.50)" -> Seq(1),
+    "amount <=> NULL" -> Seq(1, 2, 4),
+    "amount = 40.25" -> Seq(1, 2, 3),
+    "amount IN (10.50, 40.25)" -> Seq(2, 3),
+    "id = 1 OR id = 2 AND amount = 20.00" -> Seq(3, 4),
+    "(id = 1 OR id = 2) AND amount = 20.00" -> Seq(1, 3, 4),
+    "NOT (id = 1 OR id = 2)" -> Seq(1, 2),
+    "id = 42" -> Seq(1, 2, 3, 4),
+    "id IN (2, NULL)" -> Seq(1, 3, 4),
+    "id NOT IN (2, NULL)" -> Seq(1, 2, 3, 4),
+    "FALSE" -> Seq(1, 2, 3, 4),
+    "TRUE" -> Seq.empty,
+    "" -> Seq.empty)) { case (condition, remaining) =>
+    withTable("h2.test.abc") {
+      sql("CREATE TABLE h2.test.abc (id INT, amount DECIMAL(10, 2))")
+      sql("INSERT INTO h2.test.abc VALUES (1, 10.50), (2, 20.00), " +
+        "(3, NULL), (4, 40.25)")
+      val where = if (condition.isEmpty) "" else s" WHERE $condition"
+      sql(s"DELETE FROM h2.test.abc$where")
+      checkAnswer(sql("SELECT id FROM h2.test.abc"), remaining.map(Row(_)))
+    }
+  }
+
+  test("SPARK-38431: SQL DELETE quotes identifiers and refreshes cached data") {
+    withTable("h2.test.`delete.table`") {
+      sql("CREATE TABLE h2.test.`delete.table` (`batch.id` INT, `event name` STRING)")
+      sql("INSERT INTO h2.test.`delete.table` VALUES (42, 'delete'), (43, 'keep')")
+      val df = spark.table("h2.test.`delete.table`").cache()
+      try {
+        checkAnswer(df, Seq(Row(42, "delete"), Row(43, "keep")))
+        sql("DELETE FROM h2.test.`delete.table` WHERE `batch.id` = 42")
+        checkAnswer(df, Row(43, "keep"))
+      } finally {
+        df.unpersist()
+      }
+    }
+  }
+
+  test("SPARK-38431: SQL DELETE rejects unsupported conditions without deleting rows") {
+    withTable("h2.test.abc") {
+      sql("CREATE TABLE h2.test.abc AS SELECT * FROM h2.test.people")
+      val conditions = Seq(
+        "abs(id) = 1",
+        "id = 1 AND abs(id) = 2",
+        "id = 1 OR abs(id) = 2",
+        "NOT (id = 1 OR abs(id) = 2)",
+        "id + 1 = 2",
+        "id = id",
+        "CAST(id AS STRING) = '1'",
+        "name = 'fred'",
+        "name <=> 'mary'",
+        "name IN ('fred', 'mary')",
+        "id IN (SELECT id FROM h2.test.people)")
+      conditions.foreach { condition =>
+        intercept[AnalysisException] {
+          sql(s"DELETE FROM h2.test.abc WHERE $condition")
+        }
+        checkAnswer(spark.table("h2.test.abc"), Seq(Row("fred", 1), Row("mary", 2)))
+      }
+    }
+  }
+
+  test("SPARK-38431: SQL DELETE rejects unsupported literal types without deleting rows") {
+    withTable("h2.test.types") {
+      sql("CREATE TABLE h2.test.types " +
+        "(id INT, s STRING, d DATE, ts TIMESTAMP, f DOUBLE, b BOOLEAN)")
+      sql("INSERT INTO h2.test.types VALUES " +
+        "(1, 'x', DATE'2024-01-01', TIMESTAMP'2024-01-01 00:00:00', 1.5, true)")
+      val conditions = Seq(
+        "s = 'x'",
+        "d = DATE'2024-01-01'",
+        "ts = TIMESTAMP'2024-01-01 00:00:00'",
+        "f = 1.5",
+        "b = true")
+      conditions.foreach { condition =>
+        intercept[AnalysisException] {
+          sql(s"DELETE FROM h2.test.types WHERE $condition")
+        }
+        checkAnswer(sql("SELECT id FROM h2.test.types"), Row(1))
+      }
+    }
+  }
+
+  test("SPARK-38431: JDBC DELETE validates all predicates before connecting") {
+    withTable("h2.test.abc") {
+      sql("CREATE TABLE h2.test.abc AS SELECT * FROM h2.test.people")
+      val table = Catalogs.load("h2", conf).asInstanceOf[TableCatalog]
+        .loadTable(Identifier.of(Array("test"), "abc")).asInstanceOf[JDBCTable]
+      val id = FieldReference("ID")
+      val one = LiteralValue(1, IntegerType)
+      val eq = new Predicate("=", Array[Expression](id, one))
+      val smallDecimal = LiteralValue(Decimal(BigDecimal("0.0000001")), DecimalType(10, 7))
+      val unsupported = Seq(
+        new Predicate("=", Array[Expression](
+          new GeneralScalarExpression("ABS", Array[Expression](id)), one)),
+        new Predicate("=", Array[Expression](id, id)),
+        new Predicate("=", Array[Expression](FieldReference(Seq("a", "b")), one)),
+        new Predicate("=", Array[Expression](id, new AlwaysTrue())),
+        new Predicate("=", Array[Expression](
+          FieldReference("NAME"), LiteralValue(UTF8String.fromString("fred"), StringType))),
+        new Predicate("=", Array[Expression](id, smallDecimal)),
+        new Predicate("IN", Array[Expression](id)),
+        new Predicate("=", Array.empty[Expression]))
+      val connections = new AtomicInteger()
+      val dialect = new H2Dialect() {
+        override def compileExpression(expr: Expression): Option[String] = expr match {
+          case p: Predicate if p.name() == "<" => None
+          case _ => super.compileExpression(expr)
+        }
+
+        override def createConnectionFactory(options: JDBCOptions): Int => Connection = {
+          val factory = super.createConnectionFactory(options)
+          partitionId => {
+            connections.incrementAndGet()
+            factory(partitionId)
+          }
+        }
+      }
+      JdbcDialects.unregisterDialect(h2Dialect)
+      JdbcDialects.registerDialect(dialect)
+      try {
+        assert(table.canDeleteWhere(Array(eq, new AlwaysFalse())))
+        assert(table.canDeleteWhere(Array.empty[Predicate]))
+        unsupported.foreach { predicate =>
+          Seq(
+            Array(eq, predicate),
+            Array[Predicate](new And(eq, predicate)),
+            Array[Predicate](new Or(eq, predicate)),
+            Array[Predicate](new Not(new Or(eq, predicate)))).foreach { predicates =>
+            assert(!table.canDeleteWhere(predicates))
+            intercept[IllegalArgumentException] {
+              table.deleteWhere(predicates)
+            }
+          }
+        }
+        val rejected = Array(eq, new Predicate("<", Array[Expression](id, one)))
+        assert(!table.canDeleteWhere(rejected))
+        intercept[IllegalArgumentException] {
+          table.deleteWhere(rejected)
+        }
+        assert(connections.get() == 0)
+      } finally {
+        JdbcDialects.unregisterDialect(dialect)
+        JdbcDialects.registerDialect(h2Dialect)
+      }
+      checkAnswer(spark.table("h2.test.abc"), Seq(Row("fred", 1), Row("mary", 2)))
+    }
+  }
+
+  test("SPARK-38431: JDBC DELETE executes one statement and closes resources on failure") {
+    withTable("h2.test.abc") {
+      sql("CREATE TABLE h2.test.abc AS SELECT * FROM h2.test.people")
+      val loaded = Catalogs.load("h2", conf).asInstanceOf[TableCatalog]
+        .loadTable(Identifier.of(Array("test"), "abc")).asInstanceOf[JDBCTable]
+      val options = new JDBCOptions(loaded.jdbcOptions.parameters + ("queryTimeout" -> "10"))
+      val table = loaded.copy(jdbcOptions = options)
+      val eq = new Predicate("=", Array[Expression](
+        FieldReference("ID"), LiteralValue(1, IntegerType)))
+      val connections = new ConcurrentLinkedQueue[Connection]()
+      var fail = false
+      val dialect = new H2Dialect() {
+        override def createConnectionFactory(options: JDBCOptions): Int => Connection = {
+          val factory = super.createConnectionFactory(options)
+          partitionId => {
+            val conn = spy(factory(partitionId))
+            val statement = spy(conn.createStatement())
+            if (fail) {
+              doThrow(new SQLException("delete failed", "HY000"))
+                .when(statement).executeUpdate(anyString())
+            }
+            doReturn(statement).when(conn).createStatement()
+            connections.add(conn)
+            conn
+          }
+        }
+      }
+      JdbcDialects.unregisterDialect(h2Dialect)
+      JdbcDialects.registerDialect(dialect)
+      try {
+        table.deleteWhere(Array(eq))
+        assert(connections.size() == 1)
+        val conn = connections.poll()
+        val statement = conn.createStatement()
+        verify(statement).executeUpdate("DELETE FROM \"test\".\"abc\" WHERE (\"ID\" = 1)")
+        verify(statement, times(1)).executeUpdate(anyString())
+        verify(statement).setQueryTimeout(10)
+        verify(statement).close()
+        verify(conn).close()
+        verify(statement, never()).executeQuery(anyString())
+
+        fail = true
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            table.deleteWhere(Array(eq))
+          },
+          condition = "FAILED_JDBC.DELETE_FROM_TABLE",
+          parameters = Map("url" -> options.getRedactUrl(), "tableName" -> "`test`.`abc`"))
+        assert(connections.size() == 1)
+        val failed = connections.poll()
+        verify(failed.createStatement()).close()
+        verify(failed).close()
+        fail = false
+        table.deleteWhere(Array.empty[Predicate])
+        val all = connections.poll()
+        verify(all.createStatement()).executeUpdate("DELETE FROM \"test\".\"abc\" WHERE 1 = 1")
+        verify(all.createStatement()).close()
+        verify(all).close()
+      } finally {
+        JdbcDialects.unregisterDialect(dialect)
+        JdbcDialects.registerDialect(h2Dialect)
+      }
+      checkAnswer(spark.table("h2.test.abc"), Seq.empty)
     }
   }
 

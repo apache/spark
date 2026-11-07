@@ -784,6 +784,29 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     }
   }
 
+  test("delete from a cached target table refreshes its cache") {
+    withCache(tableNameAsString) {
+      createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+        """{ "pk": 1, "id": 1, "dep": "hr" }
+          |{ "pk": 2, "id": 1, "dep": "hardware" }
+          |{ "pk": 3, "id": 2, "dep": "hardware" }
+          |{ "pk": 4, "id": 3, "dep": "hr" }
+          |""".stripMargin)
+
+      sql(s"CACHE TABLE $tableNameAsString")
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(1, 1, "hr") :: Row(2, 1, "hardware") ::
+          Row(3, 2, "hardware") :: Row(4, 3, "hr") :: Nil)
+
+      sql(s"DELETE FROM $tableNameAsString WHERE id <= 1")
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(3, 2, "hardware") :: Row(4, 3, "hr") :: Nil)
+    }
+  }
+
   test("delete without condition executed as delete with filters") {
     createAndInitTable("pk INT NOT NULL, id INT, dep INT",
       """{ "pk": 1, "id": 1, "dep": 100 }

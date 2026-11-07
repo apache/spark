@@ -25,14 +25,16 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.catalog.index.{SupportsIndex, TableIndex}
-import org.apache.spark.sql.connector.expressions.NamedReference
+import org.apache.spark.sql.connector.expressions.{Expression, Literal, NamedReference}
+import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, Predicate}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
 import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCDatabaseMetadata, JDBCOptions, JdbcOptionsInWrite, JdbcUtils}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.jdbc.JdbcDialects
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{ByteType, Decimal, DecimalType, IntegerType, LongType, ShortType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 
 case class JDBCTable(
     ident: Identifier,
@@ -43,6 +45,7 @@ case class JDBCTable(
   extends Table
   with SupportsRead
   with SupportsWrite
+  with SupportsDeleteV2
   with SupportsIndex
   with DataTypeErrorsBase {
 
@@ -79,6 +82,77 @@ case class JDBCTable(
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
     val mergedOptions = new JdbcOptionsInWrite(mergeOptions(info.options))
     JDBCWriteBuilder(schema, mergedOptions)
+  }
+
+  override def canDeleteWhere(predicates: Array[Predicate]): Boolean = {
+    predicates.forall(compileDeletePredicate(_).isDefined)
+  }
+
+  override def deleteWhere(predicates: Array[Predicate]): Unit = {
+    val filters = predicates.map { predicate =>
+      compileDeletePredicate(predicate).getOrElse {
+        throw new IllegalArgumentException(
+          s"Unsupported JDBC delete predicate: ${predicate.name()}")
+      }
+    }
+    val condition = if (filters.isEmpty) "1 = 1" else filters.map(f => s"($f)").mkString(" AND ")
+    JdbcUtils.withConnection(jdbcOptions) { conn =>
+      JdbcUtils.classifyException(
+        condition = "FAILED_JDBC.DELETE_FROM_TABLE",
+        messageParameters = Map(
+          "url" -> jdbcOptions.getRedactUrl(),
+          "tableName" -> toSQLId(ident.namespace().toImmutableArraySeq :+ ident.name())),
+        dialect = JdbcDialects.get(jdbcOptions.url),
+        description = s"Failed to delete from table ${name()}",
+        isRuntime = true) {
+        JdbcUtils.deleteFromTable(conn, jdbcOptions, condition)
+      }
+    }
+  }
+
+  private def compileDeletePredicate(predicate: Predicate): Option[String] = {
+    def isColumn(expr: Expression): Boolean = expr match {
+      case ref: NamedReference => ref.fieldNames().length == 1
+      case _ => false
+    }
+
+    def isLiteral(expr: Expression): Boolean = expr match {
+      case lit: Literal[_] if lit.value() == null => true
+      case lit: Literal[_] => lit.dataType() match {
+        case _: IntegerType | _: LongType | _: ShortType | _: ByteType => true
+        case _: DecimalType =>
+          val bigDecimal = lit.value().asInstanceOf[Decimal].toJavaBigDecimal
+          bigDecimal.toString == bigDecimal.toPlainString
+        case _ => false
+      }
+      case _ => false
+    }
+
+    def supported(expr: Expression): Boolean = expr match {
+      case _: AlwaysTrue | _: AlwaysFalse => true
+      case p: Predicate =>
+        val children = p.children()
+        p.name() match {
+          case "AND" | "OR" => children.length == 2 && children.forall(supported)
+          case "NOT" => children.length == 1 && supported(children.head)
+          case "IS_NULL" | "IS_NOT_NULL" =>
+            children.length == 1 && isColumn(children.head)
+          case "IN" =>
+            children.length >= 2 && isColumn(children.head) && children.tail.forall(isLiteral)
+          case "=" | "<>" | "<=>" | "<" | "<=" | ">" | ">=" =>
+            children.length == 2 &&
+              ((isColumn(children(0)) && isLiteral(children(1))) ||
+                (isLiteral(children(0)) && isColumn(children(1))))
+          case _ => false
+        }
+      case _ => false
+    }
+
+    if (supported(predicate)) {
+      JdbcDialects.get(jdbcOptions.url).compileExpression(predicate)
+    } else {
+      None
+    }
   }
 
   override def createIndex(
