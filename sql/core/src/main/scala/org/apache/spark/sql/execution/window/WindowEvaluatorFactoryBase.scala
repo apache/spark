@@ -480,11 +480,13 @@ trait WindowEvaluatorFactoryBase {
     if (frameType == RangeFrame) {
       return Some(8)
     }
-    val w: Option[Int] = (lower, upper) match {
-      case (CurrentRow, CurrentRow) => Some(1)
-      case (IntegerLiteral(lo), IntegerLiteral(hi)) => Some(math.abs(hi - lo) + 1)
-      case (CurrentRow, IntegerLiteral(hi)) => Some(math.abs(hi) + 1)
-      case (IntegerLiteral(lo), CurrentRow) => Some(math.abs(lo) + 1)
+    // The offsets are Ints that may be as large as Int.MaxValue, so the width must be computed
+    // in Long: `abs(hi) + 1` and `hi - lo` both overflow an Int for such offsets.
+    val w: Option[Long] = (lower, upper) match {
+      case (CurrentRow, CurrentRow) => Some(1L)
+      case (IntegerLiteral(lo), IntegerLiteral(hi)) => Some(math.abs(hi.toLong - lo.toLong) + 1)
+      case (CurrentRow, IntegerLiteral(hi)) => Some(math.abs(hi.toLong) + 1)
+      case (IntegerLiteral(lo), CurrentRow) => Some(math.abs(lo.toLong) + 1)
       case _ => None
     }
     // `ceil(W / blockSize)` is the minimum number of blocks a single frame can
@@ -493,7 +495,8 @@ trait WindowEvaluatorFactoryBase {
     // block (so the cursor temporarily holds the previous block as well) and
     // the symmetric case at the right edge -- without this slack the LRU
     // would thrash on the boundary blocks every time the cursor advances.
-    w.map(ww => math.ceil(ww.toDouble / blockSize).toInt + 2).orElse(Some(8))
+    // W is at most 2^32 and the block size is at least 16, so the result fits in an Int.
+    w.map(ww => ((ww + blockSize - 1) / blockSize + 2).toInt).orElse(Some(8))
   }
 
 }
