@@ -35,12 +35,16 @@ public interface SupportsExternalLookup extends ScanBuilder {
    * lookup-side {@link NamedReference} with a {@link LookupParameter}; the array is never empty. In
    * every offered comparison the reference is {@code children()[0]} and the parameter is
    * {@code children()[1]}: when the query writes the lookup column on the right, Spark flips the
-   * operator, so {@code s.ts < t.event_time} is offered as {@code event_time > ?}. For example:
+   * operator, so {@code s.ts < t.event_time} is offered as {@code event_time > ?}. Spark offers
+   * {@code =} and {@code <=>} only on a lookup column of an integral type, BOOLEAN, DECIMAL, DATE,
+   * TIMESTAMP, TIMESTAMP_NTZ, BINARY, or a STRING whose collation compares bytes, such as
+   * UTF8_BINARY. It never offers a comparison on FLOAT, DOUBLE, CHAR, VARCHAR, a string with
+   * another collation, a complex type or any other type. For example:
    * <pre>{@code
    *   candidates: [tenant = ?, event_time >= ?, event_time < ?, region = ?]
    *   returned:   [event_time >= ?, tenant = ?]
    *   => each parameter row is (event_time lower bound, tenant);
-   *      Spark itself evaluates event_time < ? and region = ?
+   *      event_time < ? and region = ? stay in Spark's join condition
    * }</pre>
    * <ul>
    *   <li>The result must be non-null and hold offered instances, unchanged, without nulls or
@@ -48,8 +52,11 @@ public interface SupportsExternalLookup extends ScanBuilder {
    *   <li>Each offered predicate has exactly one {@link LookupParameter}, so field {@code i} of
    *   every parameter row is the value for the {@code i}-th returned predicate. A field may
    *   appear in several predicates, as range bounds do.</li>
-   *   <li>Each selected predicate must hold with Spark semantics, and results must be complete
-   *   for their conjunction. Unsupported names or shapes must not be selected.</li>
+   *   <li>Spark evaluates every selected predicate again on each returned row and drops a row
+   *   that fails it, so extra rows do no harm. Spark cannot recover a missing row: for each
+   *   parameter row, the source must return every row that satisfies all selected predicates under
+   *   Spark semantics. Do not select a predicate that the source cannot evaluate that way, and do
+   *   not select unsupported names or shapes.</li>
    *   <li>An empty result means no access path fits; the query then fails.</li>
    *   <li>The input array and its elements are read-only.</li>
    * </ul>
