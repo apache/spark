@@ -870,9 +870,10 @@ private[execution] final class LongToUnsafeRowMap(
       val denseArray = try {
         allocateArray((range + 1).toInt)
       } catch {
-        case _: SparkOutOfMemoryError =>
+        case e: SparkOutOfMemoryError if e.getCondition == "UNABLE_TO_ACQUIRE_MEMORY" =>
           // There is not enough memory to convert, so keep the map sparse. `allocateArray`
-          // releases any memory it acquired before throwing.
+          // releases any memory it acquired before throwing. Other errors, such as a failed
+          // spill of another consumer, still fail the task.
           return
       }
       denseArray.zeroOut()

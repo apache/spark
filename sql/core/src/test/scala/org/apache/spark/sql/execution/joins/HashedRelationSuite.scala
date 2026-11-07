@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.joins
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, IOException, ObjectInputStream, ObjectOutputStream}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -27,7 +27,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.SparkException
 import org.apache.spark.internal.config.{BUFFER_PAGESIZE, MEMORY_OFFHEAP_ENABLED, MEMORY_OFFHEAP_SIZE}
 import org.apache.spark.internal.config.Kryo._
-import org.apache.spark.memory.{SparkOutOfMemoryError, TaskMemoryManager, UnifiedMemoryManager}
+import org.apache.spark.memory.{MemoryConsumer, SparkOutOfMemoryError, TaskMemoryManager, UnifiedMemoryManager}
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.catalyst.InternalRow
@@ -794,6 +794,18 @@ abstract class HashedRelationSuite extends SharedSparkSession {
     val resultRow = new UnsafeRow(1)
     keys.foreach(k => assert(map.getValue(k, resultRow).getLong(0) === k))
     assert(map.getValue(1L, resultRow) === null)
+
+    // A failed spill of another consumer is not a lack of memory, so optimize() does not hide it.
+    val failingConsumer = new MemoryConsumer(smallMm, smallMm.getTungstenMemoryMode) {
+      override def spill(size: Long, trigger: MemoryConsumer): Long = {
+        throw new IOException("Injected spill failure")
+      }
+    }
+    val remaining = memorySize - used
+    assert(failingConsumer.acquireMemory(remaining) === remaining)
+    val e = intercept[SparkOutOfMemoryError](map.optimize())
+    assert(e.getCondition === "SPILL_OUT_OF_MEMORY")
+    failingConsumer.freeMemory(remaining)
     map.free()
     assert(smallUmm.executionMemoryUsed === 0)
   }
