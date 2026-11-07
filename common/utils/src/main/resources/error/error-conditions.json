@@ -5101,6 +5101,11 @@
           "expects a positive integer, but got <actual>."
         ]
       },
+      "PARSE_SQL_MODE" : {
+        "message" : [
+          "expects one of 'PARSE', 'ANALYZE', but got <invalidValue>."
+        ]
+      },
       "PATTERN" : {
         "message" : [
           "<value>."
@@ -6932,6 +6937,18 @@
       "The function <funcName> doesn't support the <mode> mode. Acceptable modes are PERMISSIVE and FAILFAST."
     ],
     "sqlState" : "42601"
+  },
+  "PARSE_SQL_ANALYZE_REQUIRES_SESSION" : {
+    "message" : [
+      "<functionName> ANALYZE needs an active Spark session with catalog access. ANALYZE is evaluated on the driver; a missing session usually means the call ran in a task."
+    ],
+    "sqlState" : "0A000"
+  },
+  "PARSE_SQL_ANALYZE_UNSUPPORTED_SCRIPT" : {
+    "message" : [
+      "<functionName> ANALYZE does not analyze SQL scripts. Use PARSE for BEGIN ... END, or analyze each statement separately."
+    ],
+    "sqlState" : "0A000"
   },
   "PARSE_SYNTAX_ERROR" : {
     "message" : [
