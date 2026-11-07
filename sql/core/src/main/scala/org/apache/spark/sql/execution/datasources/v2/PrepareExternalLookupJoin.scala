@@ -33,7 +33,7 @@ import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, F
 import org.apache.spark.sql.connector.expressions.filter.{Predicate => V2Predicate}
 import org.apache.spark.sql.connector.read.{LookupParameter, SupportsExternalLookup}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
-import org.apache.spark.sql.types.{BooleanType, DataType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, DataType, MapType, StructType}
 
 /** Finalizes an optimized external lookup side immediately before ordinary V2 scan preparation. */
 object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
@@ -158,10 +158,10 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
     val scan = nonNull(scanBuilder.build(), "ScanBuilder.build()")
     // Fields bind to table columns by exact name, as in `PushDownUtils.toOutputAttrs`. CHAR and
     // VARCHAR are read as STRING, and nullability, including nested nullability, does not count
-    // for the match. The value-row attributes take the read schema's type. A top-level column is
-    // nullable only when both the table and the read schema allow nulls: the join fails the task
-    // on a null that either rules out, because Spark relied on the table's nullability while it
-    // optimized the query.
+    // for the match. The value-row attributes take the read schema's type, where a column, nested
+    // field, array element or map value is nullable only when both the table and the read schema
+    // allow nulls: the join fails the task on a null that either rules out, because Spark relied
+    // on the table's nullability while it optimized the query.
     val readSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(
       nonNull(scan.readSchema(), "Scan.readSchema()"))
     val columnsByName = relation.output.groupBy(_.name)
@@ -169,7 +169,8 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
       columnsByName.getOrElse(field.name, Nil).find { attr =>
         DataType.equalsIgnoreNullability(attr.dataType, field.dataType)
       }.map { attr =>
-        attr.withDataType(field.dataType).withNullability(attr.nullable && field.nullable)
+        attr.withDataType(withStricterNullability(attr.dataType, field.dataType))
+          .withNullability(attr.nullable && field.nullable)
       }.getOrElse {
         throw QueryCompilationErrors.invalidDataSourceExternalLookupError(
           tableName, "UNKNOWN_SCAN_FIELD", Map("field" -> toSQLId(Seq(field.name))))
@@ -216,6 +217,31 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
       residual.reduceOption(And))
     joinFilter.reduceOption(And).map(Filter(_, prepared)).getOrElse(prepared)
   }
+
+  /**
+   * The read schema's type of a column, where a nested field, array element or map value is
+   * nullable only when the table's type allows nulls there too. The two types differ only in
+   * nullability.
+   */
+  private def withStricterNullability(tableType: DataType, readType: DataType): DataType =
+    (tableType, readType) match {
+      case (table: StructType, read: StructType) =>
+        StructType(table.fields.zip(read.fields).map { case (tableField, readField) =>
+          readField.copy(
+            dataType = withStricterNullability(tableField.dataType, readField.dataType),
+            nullable = tableField.nullable && readField.nullable)
+        })
+      case (table: ArrayType, read: ArrayType) =>
+        ArrayType(
+          withStricterNullability(table.elementType, read.elementType),
+          table.containsNull && read.containsNull)
+      case (table: MapType, read: MapType) =>
+        MapType(
+          withStricterNullability(table.keyType, read.keyType),
+          withStricterNullability(table.valueType, read.valueType),
+          table.valueContainsNull && read.valueContainsNull)
+      case _ => readType
+    }
 
   /** A Python or external UDF in the conjunct that reads lookup columns. */
   private def lookupSideUDF(join: ExternalLookupJoin, conjunct: Expression): Option[Expression] =

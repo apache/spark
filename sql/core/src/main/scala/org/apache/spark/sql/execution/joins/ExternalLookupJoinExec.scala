@@ -48,8 +48,9 @@ case class ExternalLookupJoinExec(
     child: SparkPlan) extends UnaryExecNode with SupportsCustomDriverMetrics with PredicateHelper {
 
   // The connector's value rows follow the read schema, which `lookupInput` describes. The lookup
-  // columns keep their analyzed order, and take the read schema's types and nullability, which can
-  // be wider than the table's.
+  // columns keep their analyzed order and take the read schema's types. Their nullability, at
+  // every nested level, combines the table's and the read schema's: a field is NOT NULL when
+  // either says so.
   private lazy val inputByLookupOutput = AttributeMap(lookupInput.map(attr => attr -> attr))
   private lazy val lookupColumns = lookupOutput.map(inputByLookupOutput)
 

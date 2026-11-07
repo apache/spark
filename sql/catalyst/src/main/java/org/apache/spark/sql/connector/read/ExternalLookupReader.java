@@ -30,9 +30,10 @@ import org.apache.spark.sql.connector.metric.CustomTaskMetric;
  *   <li>Calls to a reader and its cursors are sequential, but may come from different threads.
  *   The one exception is the end of the task: if another thread is still consuming the join,
  *   Spark may call {@link #close()} on the reader, and {@code close()} on its open cursor, while
- *   one call from that thread is in progress. Spark starts no new call after the close, so
- *   implementations must tolerate {@code close()} during an in-progress call, for example by
- *   cancelling or failing that call.</li>
+ *   one call from that thread is in progress. Implementations must tolerate {@code close()}
+ *   during an in-progress call, for example by cancelling or failing that call. Spark starts no
+ *   new call once it has seen the close, but a call may start while {@code close()} runs. Such
+ *   a call must tolerate the close too, for example by failing.</li>
  *   <li>Requests are not snapshot boundaries: results may mix source versions.</li>
  *   <li>Retried or speculative tasks may send the same request again, so a source must
  *   tolerate repeated requests. This does not allow repeated result rows.</li>
@@ -68,8 +69,12 @@ public interface ExternalLookupReader extends Closeable {
    * returned once for each parameter row that it matches: a row that matches two parameter rows
    * is returned twice, once with each ordinal. Spark checks the selected predicates on every
    * returned row, but cannot find a missing one. The input is read-only and must not be kept
-   * after the cursor closes. Spark closes every cursor it obtains, including one it has read to
-   * the end, before the next call and before closing this reader.
+   * after the cursor closes.
+   * <p>
+   * If the task ends while this method is in progress, Spark closes this reader first, and then
+   * closes the cursor that the call returns. Closing that cursor must work after the reader is
+   * closed. Otherwise, Spark closes every cursor it obtains, including one it has read to the
+   * end, before the next call and before closing this reader.
    */
   ExternalLookupResultCursor lookupBatch(InternalRow[] uniqueParameters) throws IOException;
 
