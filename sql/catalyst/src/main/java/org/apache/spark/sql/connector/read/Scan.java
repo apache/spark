@@ -86,9 +86,10 @@ public interface Scan {
    * {@code DATA_SOURCE_EXTERNAL_LOOKUP_NOT_SUPPORTED}; data sources must override it if the table
    * reports {@link TableCapability#EXTERNAL_LOOKUP}. Spark calls it at most once, on the driver.
    * {@link #readSchema()} describes the returned value rows and must list only top-level table
-   * columns, each at most once, with the table's name and data type; its nullability may be
-   * weaker than the table's. Returned values must still satisfy both: a column that the table or
-   * the read schema declares NOT NULL must never hold a null. The columns may be in any order.
+   * columns, each at most once, with the table's name and data type; its nullability may differ
+   * from the table's, at any nested level. Returned values must satisfy both, nested fields
+   * included: a field that the table or the read schema declares NOT NULL must never hold a null,
+   * or the task fails. The columns may be in any order.
    * They must include every column passed to {@link SupportsPushDownRequiredColumns#pruneColumns},
    * or every table column if the builder was not pruned.
    *
