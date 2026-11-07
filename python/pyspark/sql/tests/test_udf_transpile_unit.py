@@ -180,26 +180,72 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 "when both transpilePyUDFs and ANSI mode are enabled",
             )
 
-    def test_get_transpilers_warns_on_unknown_names(self):
-        import warnings
-
+    def test_get_transpilers_reports_unknown_names(self):
         for names, expected, unknown in [
-            ("catalyst", [CatalystTranspiler], None),
-            ("catalyst,catalist", [CatalystTranspiler], "catalist"),
-            ("catalist", [], "catalist"),
+            ("catalyst", [CatalystTranspiler], []),
+            ("catalyst,catalist", [CatalystTranspiler], ["catalist"]),
+            ("catalist", [], ["catalist"]),
+            ("catalyst,", [CatalystTranspiler], []),
+            ("catalyst,,catalyst", [CatalystTranspiler, CatalystTranspiler], []),
+            ("catalyst, ", [CatalystTranspiler], []),
+            (" catalyst", [], [" catalyst"]),
         ]:
             with self.subTest(names=names):
                 with self.sql_conf({"spark.sql.experimental.optimizer.pyTranspilers": names}):
-                    with warnings.catch_warnings(record=True) as caught:
-                        warnings.simplefilter("always")
-                        transpilers = _get_transpilers(self.spark)
+                    transpilers, unknown_names = _get_transpilers(self.spark)
                 self.assertEqual([type(t) for t in transpilers], expected)
-                messages = [str(w.message) for w in caught if "pyTranspilers" in str(w.message)]
-                if unknown is None:
-                    self.assertEqual(messages, [])
-                else:
-                    self.assertEqual(len(messages), 1)
-                    self.assertIn(repr(unknown), messages[0])
+                self.assertEqual(unknown_names, unknown)
+
+    def test_udf_transpile_warns_on_unknown_names(self):
+        import warnings
+
+        from pyspark.sql.transpile import AbstractTranspiler
+
+        def plus_one(x):
+            return x + 1
+
+        expected = (
+            "Ignoring unknown transpilers ['catalist'] in "
+            "spark.sql.experimental.optimizer.pyTranspilers; registered transpilers are "
+            f"{sorted(AbstractTranspiler.varieties)}"
+        )
+        with self.sql_conf(
+            dict(
+                _TRANSPILE_ON,
+                **{"spark.sql.experimental.optimizer.pyTranspilers": "catalyst,catalist"},
+            )
+        ):
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                pudf = UserDefinedFunction(plus_one, LongType())
+            self.assertTrue(pudf.transpiled)
+            self.assertEqual([str(w.message) for w in caught], [expected])
+
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                warnings.filterwarnings("ignore", message="Unable to transpile UDF")
+                with self.assertRaises(UserWarning) as raised:
+                    UserDefinedFunction(plus_one, LongType())
+            self.assertEqual(str(raised.exception), expected)
+
+            with warnings.catch_warnings():
+                warnings.filterwarnings("error", message="Ignoring unknown transpilers")
+                with self.assertRaises(UserWarning) as raised:
+                    UserDefinedFunction(plus_one, LongType())
+            self.assertEqual(str(raised.exception), expected)
+
+        for names in ("catalyst", "catalyst,", "catalyst,,catalyst", "catalyst, "):
+            with self.subTest(names=names):
+                with self.sql_conf(
+                    dict(
+                        _TRANSPILE_ON,
+                        **{"spark.sql.experimental.optimizer.pyTranspilers": names},
+                    )
+                ):
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("error")
+                        pudf = UserDefinedFunction(plus_one, LongType())
+                    self.assertTrue(pudf.transpiled)
 
     def test_udf_transpile_does_not_mask_char_varchar_ddl(self):
         # DDL CHAR/VARCHAR is parsed via ``returnType`` inside the optional
