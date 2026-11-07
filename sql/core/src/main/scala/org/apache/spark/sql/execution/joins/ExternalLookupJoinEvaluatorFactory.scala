@@ -71,6 +71,7 @@ class ExternalLookupJoinEvaluatorFactory(
     residualCondition: Option[Expression],
     readerFactory: ExternalLookupReaderFactory,
     maxParameterRowsPerRequest: Int,
+    maxBatchBytes: Long,
     metrics: ExternalLookupJoinMetrics,
     readerMetrics: ExternalLookupReaderMetrics)
   extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
@@ -127,11 +128,21 @@ class ExternalLookupJoinEvaluatorFactory(
       if (inputExhausted && !batch.hasNext) reader.close()
     }
 
+    private lazy val toUnsafe = UnsafeProjection.create(streamOutput, streamOutput)
+
     // An array, because a batch's rows are read by position for every key, match and output row.
+    // The batch holds its rows until its request is read, so it stops once their copies reach
+    // maxBatchBytes, as well as at maxParameterRowsPerRequest rows. It always takes one row.
     private def readBatch(): Array[InternalRow] = {
       val rows = mutable.ArrayBuffer.empty[InternalRow]
-      while (rows.length < maxParameterRowsPerRequest && input.hasNext) {
-        rows += input.next().copy()
+      var bytes = 0L
+      while (rows.length < maxParameterRowsPerRequest && bytes < maxBatchBytes && input.hasNext) {
+        val row = input.next() match {
+          case unsafe: UnsafeRow => unsafe.copy()
+          case other => toUnsafe(other).copy()
+        }
+        bytes += row.getSizeInBytes
+        rows += row
       }
       rows.toArray
     }
@@ -183,12 +194,11 @@ class ExternalLookupJoinEvaluatorFactory(
     }
     private val requestedKeys = keyEntries.keys.toArray
 
-    private val lookupStartNanos = System.nanoTime()
     // No connector request, and no reader, when no key can match. The connector gets copies of
     // the request rows, so that the ones that Spark checks the results against stay its own.
     private var cursor: ExternalLookupResultCursor =
       if (keyEntries.isEmpty) EmptyLookupCursor
-      else reader.lookup(keyEntries.values.map(_.requestRow.copy()).toArray)
+      else connectorCall(reader.lookup(keyEntries.values.map(_.requestRow.copy()).toArray))
 
     override def hasNext: Boolean = {
       tryFillPending()
@@ -208,10 +218,16 @@ class ExternalLookupJoinEvaluatorFactory(
         while (pending.isEmpty && advanceCursor()) {
           reader.resultRowRead()
           // A close() during either call fails the read before Spark copies or joins the row.
+          val start = System.nanoTime()
           val ordinal = cursor.inputOrdinal()
           reader.ensureOpen()
           val connectorRow = cursor.get()
+          metrics.lookupTime += System.nanoTime() - start
           reader.ensureOpen()
+          if (connectorRow == null) {
+            throw QueryExecutionErrors.invalidDataSourceExternalLookupError(
+              tableName, "NULL_RESULT_ROW")
+          }
           val key = requestedKey(ordinal)
           val resultRow = resultRows.validatedCopy(connectorRow)
           if (parameters.selectedPredicatesHold(keyEntries(key).requestRow, resultRow)) {
@@ -234,9 +250,18 @@ class ExternalLookupJoinEvaluatorFactory(
      */
     private def advanceCursor(): Boolean = (cursor ne EmptyLookupCursor) && {
       reader.ensureOpen()
-      val advanced = cursor.next()
+      val advanced = connectorCall(cursor.next())
       reader.ensureOpen()
       advanced
+    }
+
+    /**
+     * Runs a connector call and adds its time to the lookup time metric, which counts only the
+     * time in the connector, not that of the work above the join while a cursor is open.
+     */
+    private def connectorCall[T](call: => T): T = {
+      val start = System.nanoTime()
+      try call finally metrics.lookupTime += System.nanoTime() - start
     }
 
     private def requestedKey(ordinal: Int): UnsafeRow = {
@@ -267,9 +292,8 @@ class ExternalLookupJoinEvaluatorFactory(
     private def finishCursor(completed: Boolean): Unit = if (cursor ne EmptyLookupCursor) {
       cursor = EmptyLookupCursor
       try {
-        reader.closeCursor()
+        connectorCall(reader.closeCursor())
       } finally {
-        metrics.lookupTime += System.nanoTime() - lookupStartNanos
         reader.updateMetrics()
       }
       if (completed) keyEntries.values.foreach(_.rowIndexes.foreach(finish))
@@ -474,12 +498,13 @@ class ExternalLookupJoinEvaluatorFactory(
   /**
    * The connector reader of one partition and its active cursor. The reader is opened by the
    * first request, and closed once, after the last batch or when the task completes. A thread
-   * other than the task's may still drive the join then: closing may overlap the one connector
-   * call in progress, but no request, cursor advance, row read or new reader follows it. Requests
-   * and cursor calls take no lock, so closing does not wait for them. Metrics reads do: closing
-   * keeps the reader's final metrics under the lock of the task's `TaskLookupReaders`, so it can
-   * wait for a metrics read in progress, which calls `currentMetricsValues()` on the task's
-   * readers.
+   * other than the task's may still drive the join then. Closing may overlap the one connector
+   * call in progress and Spark's read of the current row, and it reads the metrics of the task's
+   * readers while that call runs. Once the join has seen the close, it starts no request, cursor
+   * advance, row read or new reader. Requests and cursor calls take no lock, so closing does not
+   * wait for them. Metrics reads do: closing keeps the reader's final metrics under the lock of
+   * the task's `TaskLookupReaders`, so it can wait for a metrics read in progress, which calls
+   * `currentMetricsValues()` on the task's readers.
    */
   private class LookupReader {
     private val taskReaders = readerMetrics.forCurrentTask()
@@ -495,7 +520,12 @@ class ExternalLookupJoinEvaluatorFactory(
       ensureOpen()
       metrics.requests += 1
       metrics.parameterRows += requestRows.length
-      val reader = Option(openReader.get()).getOrElse(createReader())
+      val reader = Option(openReader.get()).getOrElse {
+        // A close() since the check above took the reader. It marks the reader closed first, so
+        // this check sees it, and no second reader is created.
+        ensureOpen()
+        createReader()
+      }
       val cursor = Option(reader.lookupBatch(requestRows.asInstanceOf[Array[InternalRow]]))
         .getOrElse {
           throw QueryExecutionErrors.invalidDataSourceExternalLookupError(

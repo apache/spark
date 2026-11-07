@@ -2413,6 +2413,11 @@
           "The lookup result cursor returned the input ordinal <ordinal>, but the request had <numParameterRows> parameter rows."
         ]
       },
+      "LOOKUP_ONLY_TABLE_WITH_V1_READ" : {
+        "message" : [
+          "The table reports EXTERNAL_LOOKUP without BATCH_READ, but its provider <provider> also has a V1 read path. A table that supports both batch reads and lookups must report BATCH_READ and EXTERNAL_LOOKUP. Otherwise, remove the V1 read path from the provider."
+        ]
+      },
       "MISSING_SCAN_FIELD" : {
         "message" : [
           "The lookup scan did not return the table column <field>, which the join requires."
@@ -2441,6 +2446,11 @@
       "NULL_RESULT_CURSOR" : {
         "message" : [
           "`lookupBatch()` returned null."
+        ]
+      },
+      "NULL_RESULT_ROW" : {
+        "message" : [
+          "The lookup result cursor returned null from `get()`."
         ]
       },
       "UNKNOWN_SCAN_FIELD" : {

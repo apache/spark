@@ -167,6 +167,11 @@ public enum TableCapability {
    * implement {@link SupportsRead}, its scan builder must implement
    * {@link org.apache.spark.sql.connector.read.SupportsExternalLookup}, and the built scan must
    * implement {@link org.apache.spark.sql.connector.read.Scan#toExternalLookup()}.
+   * <p>
+   * A table that supports both batch reads and lookups reports both {@link #BATCH_READ} and this
+   * capability. A table that reports this capability without {@link #BATCH_READ} is lookup-only,
+   * and its provider must then have no V1 read path, such as {@code RelationProvider}: Spark
+   * fails a read of such a provider rather than choose between the two.
    *
    * @since 4.4.0
    */

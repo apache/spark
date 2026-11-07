@@ -22,11 +22,13 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, AttributeSet,
   BoundReference, EqualNullSafe, EqualTo, Expression, ExprUtils, PredicateHelper}
 import org.apache.spark.sql.catalyst.plans.{JoinType, LeftOuter}
+import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.connector.metric.CustomTaskMetric
 import org.apache.spark.sql.connector.read.{ExternalLookupReaderFactory, Scan}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.datasources.v2.SupportsCustomDriverMetrics
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
 /**
@@ -58,6 +60,9 @@ case class ExternalLookupJoinExec(
     case LeftOuter => child.output ++ lookupColumns.map(_.withNullability(true))
     case _ => child.output ++ lookupColumns
   }
+
+  // Each task joins its input rows where they are, so the stream side's partitioning holds.
+  override def outputPartitioning: Partitioning = child.outputPartitioning
 
   // The conjuncts of the residual condition that read only stream columns, and the rest. A stream
   // row that fails the first cannot match, so the join checks them on each stream row before the
@@ -137,6 +142,7 @@ case class ExternalLookupJoinExec(
       }),
       readerFactory,
       math.min(ExternalLookupJoinExec.MAX_PARAMETER_ROWS_PER_REQUEST, maxParameterRowsPerRequest),
+      conf.getConf(SQLConf.JOIN_EXTERNAL_LOOKUP_MAX_BATCH_BYTES),
       ExternalLookupJoinMetrics(
         outputRows = longMetric("numOutputRows"),
         inputRows = longMetric("numInputRows"),

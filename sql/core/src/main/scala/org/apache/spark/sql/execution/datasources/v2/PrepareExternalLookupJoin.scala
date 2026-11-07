@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.LeftOuter
 import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupJoin, ExternalLookupKeyTypes,
   Filter, LogicalPlan, PreparedExternalLookupJoin, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.EXTERNAL_LOOKUP_JOIN
+import org.apache.spark.sql.catalyst.trees.TreePattern.{DATA_SOURCE_V2_RELATION, EXTERNAL_LOOKUP_JOIN}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.{SupportsRead, TableCapability}
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference}
@@ -45,9 +45,11 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
     }
     // Prepared lookup joins no longer contain their lookup relation, so a lookup-only table that
     // is still read here cannot run.
-    prepared.foreach { node =>
-      ExternalLookupRelations.lookupOnlyTable(node).foreach { table =>
-        throw QueryCompilationErrors.unsupportedBatchReadError(table)
+    if (prepared.containsPattern(DATA_SOURCE_V2_RELATION)) {
+      prepared.foreach { node =>
+        ExternalLookupRelations.lookupOnlyTable(node).foreach { table =>
+          throw QueryCompilationErrors.unsupportedBatchReadError(table)
+        }
       }
     }
     prepared

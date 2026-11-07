@@ -2530,6 +2530,17 @@ object SQLConf {
     .bytesConf(ByteUnit.BYTE)
     .createWithDefault(8L << 30)
 
+  val JOIN_EXTERNAL_LOOKUP_MAX_BATCH_BYTES =
+    buildConf("spark.sql.join.externalLookup.maxBatchBytes")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .doc("Maximum total size in bytes of the input rows that an external lookup join holds " +
+        "for one lookup request. A request always takes at least one row, and never more rows " +
+        "than the source allows, or 1000.")
+      .version("4.4.0")
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(_ > 0, "External lookup join max batch bytes must be positive")
+      .createWithDefaultString("64m")
+
   val INTERRUPT_ON_CANCEL = buildConf("spark.sql.execution.interruptOnCancel")
     .doc("When true, all running tasks will be interrupted if one cancels a query.")
     .version("4.0.0")

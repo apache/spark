@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupJoin, Join, Jo
   LogicalPlan, ResolvedHint}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.WriteToStream
-import org.apache.spark.sql.catalyst.trees.TreePattern.JOIN
+import org.apache.spark.sql.catalyst.trees.TreePattern.{DATA_SOURCE_V2_RELATION, JOIN}
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.execution.datasources.v2.ExternalLookupRelations
@@ -131,7 +131,8 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
  */
 object CheckExternalLookupJoin extends (LogicalPlan => Unit) {
   override def apply(plan: LogicalPlan): Unit = {
-    if (plan.containsPattern(JOIN)) {
+    // Only a DSv2 relation can be a lookup-only table, so other plans need no walk.
+    if (plan.containsAllPatterns(JOIN, DATA_SOURCE_V2_RELATION)) {
       val complete = plan.isInstanceOf[WriteToStream]
       plan.foreachUp {
         case join: Join if join.resolved =>

@@ -34,10 +34,14 @@ import org.apache.spark.sql.connector.metric.CustomTaskMetric;
  *   during an in-progress call, for example by cancelling or failing that call. Spark starts no
  *   new call once it has seen the close. A call that Spark checked just before the close can
  *   still reach the source during or after {@code close()}. It must tolerate the close too, for
- *   example by failing.</li>
+ *   example by failing. At the end of the task, Spark may also call
+ *   {@link #currentMetricsValues()}, on this reader and on the task's other readers, while a call
+ *   is in progress on another thread, so that method must be safe to call concurrently and must
+ *   not wait for the call in progress.</li>
  *   <li>Requests are not snapshot boundaries: results may mix source versions.</li>
  *   <li>Retried or speculative tasks may send the same request again, so a source must
- *   tolerate repeated requests. This does not allow repeated result rows.</li>
+ *   tolerate repeated requests. Within one request, matches are returned as
+ *   {@link #lookupBatch} describes.</li>
  *   <li>Implementations should respond to thread interruption if their client supports it.</li>
  * </ul>
  *
@@ -66,12 +70,12 @@ public interface ExternalLookupReader extends Closeable {
    * may be null at the top level.
    * <p>
    * The cursor must be non-null. Each row's results must be complete, with no cap and no row lost
-   * to paging, and depend only on the row; Spark may reuse them for equal rows. Under Spark
-   * semantics, a stored row matches at most one parameter row of a request. If the source matches
-   * more loosely, it may return a row once for each parameter row that it considers a match, with
-   * that ordinal; Spark drops the pairs that fail its check. Spark checks the selected predicates
-   * on every returned row, but cannot find a missing one. The input is read-only and must not be
-   * kept after the cursor closes.
+   * to paging, and depend only on the row; Spark may reuse them for equal rows. A stored row that
+   * matches several parameter rows is returned once with each of their ordinals, and equal stored
+   * rows are each returned. A source that matches more loosely than Spark may also return pairs
+   * of a row and a parameter row that do not match; Spark drops them. Spark checks the selected
+   * predicates on every returned row, but cannot find a missing one. The input is read-only and
+   * must not be kept after the cursor closes.
    * <p>
    * If the task ends while this method is in progress, Spark closes this reader first, and then
    * closes the cursor that the call returns. Closing that cursor must work after the reader is

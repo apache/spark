@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.joins
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, PreparedExternalLookupJoin}
 import org.apache.spark.sql.execution.{SparkPlan, SparkStrategy}
 
-/** Plans resolved external lookup joins. */
+/** Plans the external lookup joins that [[PrepareExternalLookupJoin]] prepared. */
 object ExternalLookupJoinStrategy extends SparkStrategy {
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case lookup: PreparedExternalLookupJoin =>

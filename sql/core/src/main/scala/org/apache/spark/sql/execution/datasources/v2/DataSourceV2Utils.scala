@@ -32,12 +32,13 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SessionConfigSupport, StagedTable, StagingTableCatalog, SupportsCatalogOptions, SupportsRead, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, EXTERNAL_LOOKUP}
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
-import org.apache.spark.sql.execution.datasources.DataSource
+import org.apache.spark.sql.execution.datasources.{DataSource, FileFormat}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.{RelationProvider, SchemaRelationProvider}
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -153,6 +154,17 @@ private[sql] object DataSourceV2Utils extends Logging {
       case _: SupportsRead if table.supports(BATCH_READ) =>
         Option(DataSourceV2Relation.create(table, catalog, ident, dsOptions, timeTravelSpec))
       case _: SupportsRead if table.supports(EXTERNAL_LOOKUP) =>
+        // The V1 fallback would serve batch reads of a lookup-only table, which the table does
+        // not declare, so the provider must not offer one.
+        provider match {
+          case _: RelationProvider | _: SchemaRelationProvider | _: FileFormat |
+              _: FileDataSourceV2 =>
+            throw QueryCompilationErrors.invalidDataSourceExternalLookupError(
+              table.name(),
+              "LOOKUP_ONLY_TABLE_WITH_V1_READ",
+              Map("provider" -> provider.getClass.getName))
+          case _ =>
+        }
         Option(ExternalLookupRelation(
           DataSourceV2Relation.create(table, catalog, ident, dsOptions, timeTravelSpec)))
       case _ => None
