@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CharVarcharUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.{AbstractMapType, StringTypeWithCollation}
-import org.apache.spark.sql.types.{BooleanType, DataType, DateType, DecimalType, FileType, MapType, NumericType, StringHelper, StringType, StructType, TimestampNTZType, TimestampType, VariantType}
+import org.apache.spark.sql.types.{BooleanType, DataType, DateType, DecimalType, DoubleType, FileType, FloatType, FractionalType, MapType, NumericType, StringHelper, StringType, StructType, TimestampNTZType, TimestampType, VariantType}
 import org.apache.spark.unsafe.types.UTF8String
 
 object ExprUtils extends EvalHelper with QueryErrorsBase {
@@ -248,7 +248,7 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
    * so it also runs for streamed rows that have no match.
    *
    * Only an allowlist of total, deterministic expressions qualifies:
-   *   - leaves: attribute references and literals;
+   *   - leaves: attribute references, literals and the collation of a Collate;
    *   - total accessors: GetStructField, GetArrayStructFields and GetMapValue never throw.
    *     Note that GetArrayItem/ElementAt are NOT included: they throw on invalid ordinals
    *     when ANSI mode is on;
@@ -261,14 +261,16 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
    *     and RLike, which raise on an invalid pattern;
    *   - Length and OctetLength, which only count the characters or bytes of a string or binary,
    *     and with which `LikeSimplification` guards a StartsWith and an EndsWith;
+   *   - Collate, which only changes the collation in the type of a string (`COLLATE`);
    *   - Substring, which returns an empty string for a position out of range;
    *   - the fields of a date or a timestamp, such as Year and Hour (GetDateField and
    *     GetTimeField), which only read the date or time of a valid value;
    *   - in every mode: a cast that widens a numeric type to another one (`Cast.canUpCast`),
    *     such as the INT to BIGINT cast that type coercion adds to a comparison, or a cast of a
-   *     DECIMAL(18, 0), whose values all fit, to BIGINT; a cast of a timestamp to a date; and a
-   *     cast of a number or a boolean to a STRING, not to a CHAR or VARCHAR, which checks the
-   *     length;
+   *     DECIMAL(18, 0), whose values all fit, to BIGINT; a cast of a DECIMAL to a FLOAT or a
+   *     DOUBLE, which rounds; a cast of a timestamp to a date; and a cast of a number other than
+   *     a FLOAT or DOUBLE, a boolean or a string to a STRING of any collation, not to a CHAR or
+   *     VARCHAR, which checks the length;
    *   - outside ANSI mode, the casts that return NULL, wrap or clamp for a value they can not
    *     convert: in LEGACY mode, the ones `Cast.isNoThrowLegacyCast` accepts, between numbers,
    *     booleans and strings, except to a CHAR or VARCHAR, and from a string to a date or a
@@ -279,10 +281,20 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
    *     in TRY mode: in LEGACY mode, Add, Subtract, Multiply, Divide, IntegralDivide, Remainder
    *     and Pmod, UnaryMinus and Abs; in TRY mode, which only catches the errors of Add,
    *     Subtract and Multiply, and in which Divide and Remainder behave as in LEGACY mode, those
-   *     five. IntegralDivide, Remainder and Pmod over decimals are left out, as `Decimal.quot`
-   *     and `Decimal.%` raise when the integral quotient has more digits than their MathContext
-   *     holds, e.g. for DECIMAL(38, 0) and DECIMAL(3, 3), and so is arithmetic over intervals,
-   *     which can overflow in every mode.
+   *     five. Arithmetic over intervals is left out, which over a DAY TO SECOND or YEAR TO MONTH
+   *     interval can overflow in every mode;
+   *   - in every mode, also in ANSI mode, Add, Subtract and Multiply over FLOAT and DOUBLE, which
+   *     return an infinity or NaN rather than raising, and UnaryMinus and Abs over FLOAT, DOUBLE
+   *     and DECIMAL, which only check for an overflow over the integral types.
+   * In every mode, a cast of a value with a FLOAT or DOUBLE in it to a type with a STRING or a
+   * VARIANT in it is left out, although such a cast to a STRING or a VARIANT can not fail: it
+   * tells -0.0 from 0.0, which are equal, and `InferFiltersFromConstraints` and
+   * `ConstantPropagation` replace an attribute with a value equal to it under the operators this
+   * check accepts (`isTotalOperator`). Outside TRY mode, and in TRY mode from a string, the
+   * casts from or to a decimal of a negative scale (`spark.sql.legacy.allowNegativeScaleOfDecimal`)
+   * are left out, as `Decimal.toLong` raises for one, and in every mode so is the binary
+   * arithmetic over one, as `Decimal.%` raises for a very negative one. UnaryMinus and Abs only
+   * negate one and are kept.
    * Anything else (other arithmetic, other casts, other functions, UDFs, nested IF/CASE
    * WHEN, ...) conservatively returns false. On top of the allowlist, the expression must be
    * deterministic and must not contain subqueries.
@@ -306,10 +318,20 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
   // Whether a cast can not fail. A cast of a date to a timestamp is left out also in LEGACY mode,
   // as converting a date far from the epoch to microseconds overflows there.
   private def cannotFailCast(c: Cast): Boolean = (c.child.dataType, c.dataType) match {
+    // Left out whether or not it can fail, as it may tell -0.0 from 0.0: see
+    // `canEvaluateUnconditionally`.
+    case (from, to) if tellsSignedZeros(from, to) => false
+    // TRY mode catches the errors of the cast, but not from a string, which runs the LEGACY cast.
+    case (from, to) if hasNegativeScale(from) || hasNegativeScale(to) =>
+      c.evalMode == EvalMode.TRY && !from.isInstanceOf[StringType]
     case (from, to) if isNumericUpCast(from, to) => true
+    // `Decimal.toDouble` and `Decimal.toFloat` round, and do not check the range in ANSI mode.
+    case (_: DecimalType, FloatType | DoubleType) => true
     case (TimestampType | TimestampNTZType, DateType) => true
-    // A CHAR or VARCHAR target checks the length of the string.
-    case (_: NumericType | BooleanType, s: StringType) if StringHelper.isPlainString(s) => true
+    // A CHAR or VARCHAR target checks the length of the string. A string to a STRING of another
+    // collation, as `CollationTypeCoercion` adds for an explicit `COLLATE`, keeps the value.
+    case (_: NumericType | BooleanType | _: StringType, s: StringType)
+        if StringHelper.isPlainString(s) => true
     case _ if c.evalMode == EvalMode.TRY => true
     // `Cast.isNoThrowLegacyCast` covers the numbers, booleans and strings. A string to a date or
     // a timestamp does not raise in LEGACY mode either: the parsers catch the errors and return
@@ -320,41 +342,78 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
     case _ => false
   }
 
-  // Whether numeric arithmetic can not fail, in its own eval mode.
-  private def cannotFailArithmetic(b: BinaryArithmetic): Boolean = {
-    val decimal = b.children.exists(_.dataType.isInstanceOf[DecimalType])
-    b.children.forall(_.dataType.isInstanceOf[NumericType]) && b.evalMode != EvalMode.ANSI &&
-      (b match {
-        case _: Add | _: Subtract | _: Multiply | _: Divide => true
-        // `Decimal.quot` and `Decimal.%` raise when the integral quotient is too long.
-        case _: Remainder => !decimal
-        // `DivModLike` and Pmod override `eval` without the catch of TRY mode, and IntegralDivide
-        // and Pmod check a zero divisor there as in ANSI mode.
-        case _: IntegralDivide | _: Pmod => !decimal && b.evalMode == EvalMode.LEGACY
-        case _ => false
-      })
+  // Whether the source type has a FLOAT or DOUBLE and the target type a STRING or VARIANT in it,
+  // so that the cast may keep the sign of a zero, e.g. -0.0 as '-0.0'. This is conservative: it
+  // does not match the fields of the types.
+  private def tellsSignedZeros(from: DataType, to: DataType): Boolean =
+    from.existsRecursively(t => t == FloatType || t == DoubleType) &&
+      to.existsRecursively(t => t.isInstanceOf[StringType] || t == VariantType)
+
+  private def hasNegativeScale(dt: DataType): Boolean = dt.existsRecursively {
+    case d: DecimalType => d.scale < 0
+    case _ => false
   }
 
+  // Whether numeric arithmetic can not fail, in its own eval mode.
+  private def cannotFailArithmetic(b: BinaryArithmetic): Boolean = {
+    b.children.forall(isNumericOfNonNegativeScale) && (b match {
+      // Over FLOAT and DOUBLE, they do not check for an overflow, also in ANSI mode. Divide,
+      // Remainder and Pmod raise on a zero divisor in ANSI mode, also over them.
+      case _: Add | _: Subtract | _: Multiply if b.children.forall(isFloatOrDouble) => true
+      case _ if b.evalMode == EvalMode.ANSI => false
+      case _: Add | _: Subtract | _: Multiply | _: Divide | _: Remainder => true
+      // `DivModLike` and Pmod override `eval` without the catch of TRY mode, and IntegralDivide
+      // and Pmod check a zero divisor there as in ANSI mode.
+      case _: IntegralDivide | _: Pmod => b.evalMode == EvalMode.LEGACY
+      case _ => false
+    })
+  }
+
+  private def isNumericOfNonNegativeScale(e: Expression): Boolean =
+    e.dataType.isInstanceOf[NumericType] && !hasNegativeScale(e.dataType)
+
+  // Not DECIMAL: Add, Subtract and Multiply over it check for an overflow in ANSI mode.
+  private def isFloatOrDouble(e: Expression): Boolean = e.dataType match {
+    case FloatType | DoubleType => true
+    case _ => false
+  }
+
+  // Whether UnaryMinus or Abs can not fail: over numbers, they check for an overflow only over the
+  // integral types, and only when `failOnError` is set. Over a DAY TO SECOND or YEAR TO MONTH
+  // interval, they can overflow in every mode, and intervals are left out.
+  private def cannotFailUnaryArithmetic(child: Expression, failOnError: Boolean): Boolean =
+    child.dataType match {
+      case _: FractionalType => true
+      case _: NumericType => !failOnError
+      case _ => false
+    }
+
   private def canEvaluateUnconditionallyInternal(e: Expression): Boolean = e match {
-    case _: AttributeReference | _: Literal => true
+    // The collation of a Collate evaluates to its name; it only sets the type.
+    case _: AttributeReference | _: Literal | _: ResolvedCollation => true
     case _ if isTotalOperator(e) => e.children.forall(canEvaluateUnconditionallyInternal)
     case _ => false
   }
 
   /**
-   * Returns true if `e` itself cannot raise an error, whatever the values of its children. See
-   * [[canEvaluateUnconditionally]] for the whitelist.
+   * Returns true if `e` itself cannot raise an error, whatever the values of its children of
+   * their current types. See [[canEvaluateUnconditionally]] for the allowlist.
+   * `ConstantPropagation` replaces a child with a value equal to it under such an expression, so
+   * it must also give equal results for equal children, e.g. a cast of a DOUBLE to a STRING is
+   * left out, as it tells -0.0 from 0.0. Strings of a non-binary collation are guarded by the
+   * callers instead.
    */
   def isTotalOperator(e: Expression): Boolean = e match {
-    case _: GetStructField | _: GetArrayStructFields | _: GetMapValue | _: NoThrow => true
+    case _: GetStructField | _: GetArrayStructFields | _: GetMapValue | _: NoThrow | _: Collate =>
+      true
     case _: And | _: Or | _: Not | _: BinaryComparison | _: IsNull | _: IsNotNull |
          _: IsNaN | _: NullIf | _: Coalesce | _: In | _: InSet | _: Size | _: StartsWith |
          _: EndsWith | _: Contains | _: Length | _: OctetLength | _: Substring | _: GetDateField |
          _: GetTimeField => true
     case c: Cast => cannotFailCast(c)
     case b: BinaryArithmetic => cannotFailArithmetic(b)
-    case u: UnaryMinus => !u.failOnError && u.child.dataType.isInstanceOf[NumericType]
-    case a: Abs => !a.failOnError && a.child.dataType.isInstanceOf[NumericType]
+    case u: UnaryMinus => cannotFailUnaryArithmetic(u.child, u.failOnError)
+    case a: Abs => cannotFailUnaryArithmetic(a.child, a.failOnError)
     case _ => false
   }
 }

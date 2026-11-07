@@ -1856,11 +1856,11 @@ object SQLConf {
       .internal()
       .doc("When true, the query optimizer also infers a filter from data constraints when " +
         "evaluating it can fail or is otherwise observable, such as `10 / x > 0` from " +
-        "`x = y AND 10 / y > 0`, or a UDF. Such a filter runs on rows that the query does not " +
-        "evaluate the expression on, so the query can raise an error that it does not raise " +
-        "without the filter. When false, only a filter that `ExprUtils." +
+        "`x = y AND 10 / y > 0` in ANSI mode, or a UDF. Such a filter runs on rows that the " +
+        "query does not evaluate the expression on, so the query can raise an error that it " +
+        "does not raise without the filter. When false, only a filter that `ExprUtils." +
         "canEvaluateUnconditionally` accepts is inferred, which also leaves out some " +
-        "expressions that cannot fail, such as `LIKE 'a%'`.")
+        "expressions that cannot fail, such as `upper(s) = 'A'`.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf

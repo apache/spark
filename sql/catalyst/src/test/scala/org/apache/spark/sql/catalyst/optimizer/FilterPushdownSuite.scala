@@ -159,12 +159,18 @@ class FilterPushdownSuite extends PlanTest {
 
   test("SPARK-60882: a condition that can not fail is combined ahead of a non-deterministic " +
     "or throwable one") {
-    // An addition or a division with ANSI mode off, and a substring, can not fail, so they are
+    // An addition or a division with ANSI mode off, a multiplication of doubles also with ANSI
+    // mode on, a substring and a string search with an explicit COLLATE can not fail, so they are
     // combined with the filter below, as a comparison is.
     val legacy = NumericEvalContext(EvalMode.LEGACY)
+    val ansi = NumericEvalContext(EvalMode.ANSI)
     Seq(Rand(0) > 0.1, IsNull(RaiseError(Literal("boom")))).foreach { blocker =>
       Seq[Expression](Add($"a", Literal(1), legacy) > 0, Divide($"b", $"a", legacy) > 1,
-          Substring($"a".cast(StringType), Literal(1), Literal(2)) === "1").foreach { cannotFail =>
+          Multiply($"a".cast(DoubleType), Literal(1.1), ansi) > 100,
+          Substring($"a".cast(StringType), Literal(1), Literal(2)) === "1",
+          Contains(Collate($"a".cast(StringType), ResolvedCollation("UNICODE_CI")),
+            Substring($"b".cast(StringType), Literal(1), Literal(1)))
+      ).foreach { cannotFail =>
         val originalQuery = testRelation
           .where($"c" === 1)
           .where(blocker && cannotFail)

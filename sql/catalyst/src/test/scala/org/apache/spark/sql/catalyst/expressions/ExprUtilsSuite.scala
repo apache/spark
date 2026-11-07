@@ -20,34 +20,42 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
-import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CharType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType, StructField, StructType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType, VarcharType, YearMonthIntervalType}
+import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CharType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, ShortType, StringType, StructField, StructType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType, VarcharType, VariantType, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.UTF8String
 
-class ExprUtilsSuite extends SparkFunSuite {
+class ExprUtilsSuite extends SparkFunSuite with SQLHelper {
 
   private val a = AttributeReference("a", LongType)()
   private val ansi = NumericEvalContext(EvalMode.ANSI)
   private val legacy = NumericEvalContext(EvalMode.LEGACY)
   private val tryMode = NumericEvalContext(EvalMode.TRY)
 
-  // Evaluates `build` over input columns of type `t` on every pair of `values`, and NULL when
-  // the columns are nullable, without and with code generation.
-  private def evalPairs(t: DataType, values: Seq[Any])(
-      build: (Expression, Expression) => Expression): Unit = {
+  // Evaluates `build` over input columns of the given types on every combination of their
+  // values, and NULL when the columns are nullable, without and with code generation.
+  private def evalRows(columns: (DataType, Seq[Any])*)(
+      build: Seq[Expression] => Expression): Unit = {
     Seq(true, false).foreach { nullable =>
-      val e = build(BoundReference(0, t, nullable), BoundReference(1, t, nullable))
+      val e = build(columns.zipWithIndex.map { case ((t, _), i) => BoundReference(i, t, nullable) })
       val projection = GenerateUnsafeProjection.generate(Seq(e))
-      val inputs = if (nullable) values :+ null else values
-      for (l <- inputs; r <- inputs) {
-        val row = InternalRow(l, r)
+      val inputs = columns.map { case (_, values) => if (nullable) values :+ null else values }
+      inputs.foldLeft(Seq(Seq.empty[Any])) { (rows, columnValues) =>
+        for (r <- rows; v <- columnValues) yield r :+ v
+      }.foreach { rowValues =>
+        val row = InternalRow.fromSeq(rowValues)
         e.eval(row)
         projection(row)
       }
     }
   }
 
+  private def evalPairs(t: DataType, values: Seq[Any])(
+      build: (Expression, Expression) => Expression): Unit =
+    evalRows((t, values), (t, values))(c => build(c(0), c(1)))
+
   private def evalEach(t: DataType, values: Seq[Any])(build: Expression => Expression): Unit =
-    evalPairs(t, values)((l, _) => build(l))
+    evalRows((t, values))(c => build(c(0)))
 
   test("canEvaluateUnconditionally: allowlisted total expressions") {
     assert(ExprUtils.canEvaluateUnconditionally(a))
@@ -90,12 +98,12 @@ class ExprUtilsSuite extends SparkFunSuite {
       Cast(i, DecimalType(20, 0), evalMode = EvalMode.ANSI)))
     // A decimal to an integral type is an up-cast only when every value fits: DECIMAL(18, 0) to
     // BIGINT, but not DECIMAL(19, 0), which can overflow in ANSI mode.
-    assert(ExprUtils.canEvaluateUnconditionally(Cast(AttributeReference("d", DecimalType(18, 0))(),
-      LongType, evalMode = EvalMode.ANSI)))
     for ((precision, to) <- Seq((18, LongType), (9, IntegerType), (4, ShortType), (2, ByteType))) {
       assert(Cast.canUpCast(DecimalType(precision, 0), to), to)
+      val d = AttributeReference("d", DecimalType(precision, 0))()
+      assert(ExprUtils.canEvaluateUnconditionally(Cast(d, to, evalMode = EvalMode.ANSI)), to)
       evalEach(DecimalType(precision, 0),
-        Seq("-" + "9" * precision, "9" * precision).map(d => Decimal(BigDecimal(d))))(
+        Seq("-" + "9" * precision, "9" * precision).map(v => Decimal(BigDecimal(v))))(
         Cast(_, to, evalMode = EvalMode.ANSI))
     }
     assert(!Cast.canUpCast(DecimalType(19, 0), LongType))
@@ -115,7 +123,7 @@ class ExprUtilsSuite extends SparkFunSuite {
   }
 
   test("SPARK-60882: canEvaluateUnconditionally: string prefix, suffix, containment and " +
-    "length checks and a field of a struct built from plain values are included") {
+    "length checks, COLLATE and a field of a struct built from plain values are included") {
     val s = AttributeReference("s", StringType)()
     // `LIKE 'ab%c'` becomes the last one.
     Seq(StartsWith(s, Literal("abc")), EndsWith(s, Literal("abc")), Contains(s, s),
@@ -149,6 +157,15 @@ class ExprUtilsSuite extends SparkFunSuite {
     assert(!ExprUtils.canEvaluateUnconditionally(RLike(s, Literal("abc"))))
     assert(!ExprUtils.canEvaluateUnconditionally(StartsWith(Upper(s), Literal("abc"))))
     assert(!ExprUtils.canEvaluateUnconditionally(Length(Upper(s))))
+    // Also with an explicit COLLATE: `contains(s COLLATE UNICODE_CI, s)` is analyzed to a
+    // `Collate`, and a cast of the other side to the collation, in the session's eval mode.
+    def collate(e: Expression): Expression = Collate(e, ResolvedCollation("UNICODE_CI"))
+    assert(ExprUtils.canEvaluateUnconditionally(
+      Contains(collate(s), Cast(s, StringType("UNICODE_CI"), evalMode = EvalMode.ANSI))))
+    assert(!ExprUtils.canEvaluateUnconditionally(Contains(collate(Upper(s)), collate(s))))
+    Seq("UTF8_BINARY", "UNICODE_CI", "UTF8_LCASE_RTRIM").foreach { collation =>
+      evalEach(StringType, values)(Collate(_, ResolvedCollation(collation)))
+    }
 
     // A struct built from plain values, and a field of it, but not when another field can fail.
     def field(values: Expression*): Expression = GetStructField(CreateNamedStruct(
@@ -159,8 +176,8 @@ class ExprUtilsSuite extends SparkFunSuite {
     assert(ExprUtils.canEvaluateUnconditionally(CreateNamedStruct(Seq(Literal("f0"), a))))
     assert(!ExprUtils.canEvaluateUnconditionally(
       CreateNamedStruct(Seq(Literal("f0"), Add(a, Literal(1L), ansi)))))
-    // So is an array, as both are marked `NoThrow`, but not a map, which raises on a NULL or, by
-    // default, a duplicate key (SPARK-60849).
+    // So is an array, as both are marked `NoThrow`, but not a map, which raises on a NULL key or,
+    // by default, a duplicate key (SPARK-60849).
     assert(!ExprUtils.canEvaluateUnconditionally(CreateMap(Seq(a, Literal(1)))))
     intercept[SparkRuntimeException](
       CreateMap(Seq(Literal(1L), Literal(1), Literal(1L), Literal(2))).eval())
@@ -169,7 +186,7 @@ class ExprUtilsSuite extends SparkFunSuite {
     assert(!ExprUtils.canEvaluateUnconditionally(CreateArray(Seq(a, Add(a, Literal(1L), ansi)))))
   }
 
-  test("SPARK-60882: canEvaluateUnconditionally: numeric arithmetic outside ANSI mode") {
+  test("SPARK-60882: canEvaluateUnconditionally: numeric arithmetic that can not fail") {
     val i = AttributeReference("i", IntegerType)()
     def binary(ctx: NumericEvalContext): Seq[Expression] = Seq(Add(a, a, ctx),
       Subtract(a, a, ctx), Multiply(a, a, ctx), Divide(Cast(a, DoubleType), Literal(0.0), ctx),
@@ -185,6 +202,37 @@ class ExprUtilsSuite extends SparkFunSuite {
     assert(!ExprUtils.canEvaluateUnconditionally(Add(failing, a, legacy)))
     assert(!ExprUtils.canEvaluateUnconditionally(UnaryMinus(failing, failOnError = false)))
     assert(!ExprUtils.canEvaluateUnconditionally(Abs(failing, failOnError = false)))
+    // In ANSI mode too, Add, Subtract and Multiply over FLOAT and DOUBLE return an infinity or NaN,
+    // and UnaryMinus and Abs over FLOAT, DOUBLE and DECIMAL do not check for an overflow. Divide,
+    // Remainder and Pmod raise on a zero divisor, and Add over the integral types or DECIMAL on an
+    // overflow.
+    Seq(FloatType, DoubleType).foreach { t =>
+      val x = AttributeReference("x", t)()
+      Seq(Add(x, x, ansi), Subtract(x, x, ansi), Multiply(x, x, ansi)).foreach { e =>
+        assert(ExprUtils.canEvaluateUnconditionally(e), e)
+      }
+      Seq(Divide(x, x, ansi), Remainder(x, x, ansi), Pmod(x, x, ansi)).foreach { e =>
+        assert(!ExprUtils.canEvaluateUnconditionally(e), e)
+      }
+    }
+    Seq(FloatType, DoubleType, DecimalType(10, 2)).foreach { t =>
+      val x = AttributeReference("x", t)()
+      assert(ExprUtils.canEvaluateUnconditionally(UnaryMinus(x, failOnError = true)), t)
+      assert(ExprUtils.canEvaluateUnconditionally(Abs(x, failOnError = true)), t)
+    }
+    Seq(IntegerType, ShortType, ByteType).foreach { t =>
+      val x = AttributeReference("x", t)()
+      assert(!ExprUtils.canEvaluateUnconditionally(Add(x, x, ansi)), t)
+      assert(!ExprUtils.canEvaluateUnconditionally(UnaryMinus(x, failOnError = true)), t)
+    }
+    intercept[ArithmeticException](Divide(Literal(1.0), Literal(0.0), ansi).eval())
+    val maxDecimal = Literal(Decimal(BigDecimal("9" * 38)), DecimalType(38, 0))
+    val decimalAdd = Add(maxDecimal, maxDecimal, ansi)
+    assert(!ExprUtils.canEvaluateUnconditionally(decimalAdd))
+    intercept[ArithmeticException](decimalAdd.eval())
+    // Analysis casts both sides to one type; this only pins that every child must be a FLOAT or a
+    // DOUBLE.
+    assert(!ExprUtils.canEvaluateUnconditionally(Add(Literal(1.0), maxDecimal, ansi)))
     // TRY mode catches the errors of Add, Subtract and Multiply, and Divide and Remainder only
     // check a zero divisor in ANSI mode, but IntegralDivide and Pmod raise there.
     Seq(Add(a, a, tryMode), Subtract(a, a, tryMode), Multiply(a, a, tryMode),
@@ -195,21 +243,38 @@ class ExprUtilsSuite extends SparkFunSuite {
         assert(!ExprUtils.canEvaluateUnconditionally(e), e)
         intercept[ArithmeticException](e.eval())
       }
-    // IntegralDivide, Remainder and Pmod over decimals raise when the integral quotient has more
-    // digits than the MathContext of `Decimal` holds.
+    // Also over decimals whose integral quotient has more digits than the MathContext of
+    // `Decimal` holds (SPARK-61050).
     val big = Literal(Decimal(BigDecimal("9" * 38)), DecimalType(38, 0))
     val small = Literal(Decimal(BigDecimal("0.007"), 3, 3), DecimalType(3, 3))
     Seq(IntegralDivide(big, small, legacy), Remainder(big, small, legacy),
-        Remainder(big, small, tryMode), Pmod(big, small, legacy)).foreach { e =>
-      assert(!ExprUtils.canEvaluateUnconditionally(e), e)
-      intercept[ArithmeticException](e.eval())
+        Remainder(big, small, tryMode), Pmod(big, small, legacy), Divide(big, small, legacy),
+        Divide(big, small, tryMode)).foreach { e =>
+      assert(ExprUtils.canEvaluateUnconditionally(e), e)
+      e.eval()
     }
-    assert(ExprUtils.canEvaluateUnconditionally(Divide(big, small, legacy)))
-    // Divide and the other arithmetic over decimals of different scales do not raise.
-    Seq(legacy, tryMode).foreach { ctx =>
-      assert(Divide(big, small, ctx).eval() == null)
+    // But not over a decimal of a negative scale, for which `Decimal.%` can raise, also in TRY
+    // mode.
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      val veryNegative = DecimalType(1, -2147483000)
+      Seq(legacy, tryMode).foreach { ctx =>
+        assert(!ExprUtils.canEvaluateUnconditionally(Remainder(
+          AttributeReference("n", veryNegative)(), Literal(Decimal(3), DecimalType(1, 0)), ctx)))
+        intercept[ArithmeticException](Remainder(BoundReference(0, veryNegative, true),
+          BoundReference(1, DecimalType(1, 0), true), ctx)
+          .eval(InternalRow(Decimal.createUnsafe(1L, 1, -2147483000), Decimal(3))))
+      }
+      // UnaryMinus and Abs only negate one.
+      val negativeScale = DecimalType(3, -2)
+      Seq[Expression => Expression](UnaryMinus(_, failOnError = true),
+          Abs(_, failOnError = true)).foreach { build =>
+        val n = AttributeReference("n", negativeScale)()
+        assert(ExprUtils.canEvaluateUnconditionally(build(n)))
+        evalEach(negativeScale, Seq(Decimal.createUnsafe(-999L, 3, -2)))(build)
+      }
     }
-    // Arithmetic over intervals overflows in every mode, also UnaryMinus and Abs.
+    // Arithmetic over DAY TO SECOND and YEAR TO MONTH intervals overflows in every mode, also
+    // UnaryMinus and Abs.
     val maxInterval = Literal(Long.MaxValue, DayTimeIntervalType())
     val intervalAdd = Add(maxInterval, maxInterval, legacy)
     assert(!ExprUtils.canEvaluateUnconditionally(intervalAdd))
@@ -228,9 +293,10 @@ class ExprUtilsSuite extends SparkFunSuite {
     val ints = (IntegerType, Seq(Int.MinValue, -1, 0, 1, Int.MaxValue))
     val shorts = (ShortType, Seq(Short.MinValue, -1.toShort, 0.toShort, Short.MaxValue))
     val bytes = (ByteType, Seq(Byte.MinValue, -1.toByte, 0.toByte, Byte.MaxValue))
-    val floats = (FloatType, Seq(Float.NegativeInfinity, -1.0f, 0.0f, Float.NaN, Float.MaxValue))
-    val doubles =
-      (DoubleType, Seq(Double.NegativeInfinity, -1.0, 0.0, Double.NaN, Double.MaxValue))
+    val floats = (FloatType, Seq(Float.NegativeInfinity, -1.0f, 0.0f, Float.NaN, Float.MaxValue,
+      Float.PositiveInfinity))
+    val doubles = (DoubleType, Seq(Double.NegativeInfinity, -1.0, 0.0, Double.NaN,
+      Double.MaxValue, Double.PositiveInfinity))
     val decimals = (DecimalType(38, 0),
       Seq("-" + "9" * 38, "0", "1", "9" * 38).map(d => Decimal(BigDecimal(d))))
     // A small divisor makes the quotient overflow.
@@ -245,11 +311,21 @@ class ExprUtilsSuite extends SparkFunSuite {
       evalPairs(t, values)((l, _) => UnaryMinus(l, failOnError = false))
       evalPairs(t, values)((l, _) => Abs(l, failOnError = false))
     }
-    for ((t, values) <- nonDecimals) {
+    for ((t, values) <- Seq(floats, doubles)) {
+      Seq[(Expression, Expression) => Expression](Add(_, _, ansi), Subtract(_, _, ansi),
+        Multiply(_, _, ansi)).foreach(evalPairs(t, values))
+    }
+    for ((t, values) <- Seq(floats, doubles, decimals, smallDecimals)) {
+      evalEach(t, values)(UnaryMinus(_, failOnError = true))
+      evalEach(t, values)(Abs(_, failOnError = true))
+    }
+    for ((t, values) <- nonDecimals ++ Seq(decimals, smallDecimals)) {
       Seq(legacy, tryMode).foreach(ctx => evalPairs(t, values)(Remainder(_, _, ctx)))
       evalPairs(t, values)(Pmod(_, _, legacy))
     }
-    evalPairs(longs._1, longs._2)(IntegralDivide(_, _, legacy))
+    for ((t, values) <- Seq(longs, decimals, smallDecimals)) {
+      evalPairs(t, values)(IntegralDivide(_, _, legacy))
+    }
     for ((t, values) <- Seq(doubles, decimals, smallDecimals); ctx <- Seq(legacy, tryMode)) {
       evalPairs(t, values)(Divide(_, _, ctx))
     }
@@ -259,15 +335,12 @@ class ExprUtilsSuite extends SparkFunSuite {
           (decimals, (DecimalType(3, 3), Seq(Decimal(BigDecimal("0.007"), 3, 3)))))) {
       val ctx = NumericEvalContext(mode, allowLoss)
       Seq[(Expression, Expression) => Expression](Add(_, _, ctx), Subtract(_, _, ctx),
-        Multiply(_, _, ctx), Divide(_, _, ctx)).foreach { build =>
-        val e = build(BoundReference(0, l._1, nullable = true), BoundReference(1, r._1,
-          nullable = true))
-        val projection = GenerateUnsafeProjection.generate(Seq(e))
-        for (lv <- l._2 :+ null; rv <- r._2 :+ null) {
-          val row = InternalRow(lv, rv)
-          e.eval(row)
-          projection(row)
-        }
+        Multiply(_, _, ctx), Divide(_, _, ctx), Remainder(_, _, ctx)).foreach { build =>
+        evalRows(l, r)(c => build(c(0), c(1)))
+      }
+      if (mode == EvalMode.LEGACY) {
+        Seq[(Expression, Expression) => Expression](IntegralDivide(_, _, ctx), Pmod(_, _, ctx))
+          .foreach(build => evalRows(l, r)(c => build(c(0), c(1))))
       }
     }
   }
@@ -278,20 +351,76 @@ class ExprUtilsSuite extends SparkFunSuite {
     val date = AttributeReference("date", DateType)()
     def cast(e: Expression, to: DataType, mode: EvalMode.Value): Cast =
       Cast(e, to, Some("America/Los_Angeles"), mode)
-    // In every mode: a timestamp to a date, and a number or a boolean to a string.
+    // In every mode: a timestamp to a date, a decimal to a FLOAT or DOUBLE, and a number, a
+    // boolean or a string to a STRING of any collation.
     Seq(EvalMode.ANSI, EvalMode.LEGACY, EvalMode.TRY).foreach { mode =>
       Seq[(Expression, DataType)]((ts, DateType),
           (AttributeReference("ntz", TimestampNTZType)(), DateType), (a, StringType),
           (AttributeReference("d", DecimalType(10, 2))(), StringType),
-          (AttributeReference("b", BooleanType)(), StringType)).foreach { case (e, to) =>
-        assert(ExprUtils.canEvaluateUnconditionally(cast(e, to, mode)), (e, to, mode))
+          (AttributeReference("b", BooleanType)(), StringType),
+          (AttributeReference("d", DecimalType(38, 0))(), DoubleType),
+          (AttributeReference("d", DecimalType(10, 2))(), FloatType), (s, StringType),
+          (s, StringType("UNICODE_CI")),
+          (AttributeReference("v", VarcharType(3))(), StringType("UTF8_LCASE"))).foreach {
+        case (e, to) =>
+          assert(ExprUtils.canEvaluateUnconditionally(cast(e, to, mode)), (e, to, mode))
+      }
+    }
+    // A FLOAT or DOUBLE to a number or a boolean in LEGACY and TRY mode, but not to a string.
+    for (mode <- Seq(EvalMode.LEGACY, EvalMode.TRY); from <- Seq(FloatType, DoubleType);
+        to <- Seq[DataType](LongType, DecimalType(10, 2), BooleanType)) {
+      assert(ExprUtils.canEvaluateUnconditionally(
+        cast(AttributeReference("x", from)(), to, mode)), (from, to, mode))
+    }
+    // Not from or to a decimal of a negative scale (`spark.sql.legacy.allowNegativeScaleOfDecimal`)
+    // outside TRY mode, nor from a string in TRY mode, which runs the LEGACY cast: `Decimal.toLong`
+    // raises for one.
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      val negativeScale = DecimalType(3, -2)
+      Seq[(Expression, DataType)]((AttributeReference("n", negativeScale)(), LongType),
+          (a, negativeScale)).foreach { case (e, to) =>
+        assert(!ExprUtils.canEvaluateUnconditionally(cast(e, to, EvalMode.LEGACY)), to)
+        assert(ExprUtils.canEvaluateUnconditionally(cast(e, to, EvalMode.TRY)), to)
+      }
+      assert(!ExprUtils.canEvaluateUnconditionally(cast(s, negativeScale, EvalMode.TRY)))
+      intercept[ArrayIndexOutOfBoundsException](cast(BoundReference(0, negativeScale, true),
+        LongType, EvalMode.LEGACY).eval(InternalRow(Decimal.createUnsafe(123L, 3, -2))))
+      // The accepted TRY casts do not raise.
+      evalEach(negativeScale, Seq(Decimal.createUnsafe(123L, 3, -2)))(
+        cast(_, LongType, EvalMode.TRY))
+      evalEach(LongType, Seq(Long.MinValue, 0L, Long.MaxValue))(
+        cast(_, negativeScale, EvalMode.TRY))
+    }
+    // Not a FLOAT or DOUBLE to a string, also inside a struct, an array or a map, or to a
+    // variant, in any mode: the string tells -0.0 from 0.0, which are equal.
+    assert(EqualTo(Literal(-0.0), Literal(0.0)).eval() == true)
+    assert(cast(Literal(-0.0), StringType, EvalMode.ANSI).eval() != cast(Literal(0.0), StringType,
+      EvalMode.ANSI).eval())
+    val doubles = AttributeReference("ds", ArrayType(DoubleType))()
+    Seq[(Expression, DataType)]((AttributeReference("f", FloatType)(), StringType),
+        (AttributeReference("x", DoubleType)(), StringType("UNICODE_CI")),
+        (doubles, StringType), (doubles, ArrayType(StringType)),
+        (AttributeReference("sd", StructType(Seq(StructField("v", DoubleType))))(),
+          StructType(Seq(StructField("v", StringType)))),
+        (AttributeReference("md", MapType(IntegerType, DoubleType))(),
+          MapType(IntegerType, StringType)),
+        (AttributeReference("x", DoubleType)(), VariantType)).foreach { case (e, to) =>
+      Seq(EvalMode.ANSI, EvalMode.LEGACY, EvalMode.TRY).foreach { mode =>
+        assert(!ExprUtils.canEvaluateUnconditionally(cast(e, to, mode)), (e, to, mode))
       }
     }
     // Not to a CHAR or VARCHAR, which checks the length.
     Seq[DataType](CharType(3), VarcharType(3)).foreach { to =>
       assert(!ExprUtils.canEvaluateUnconditionally(cast(a, to, EvalMode.LEGACY)), to)
       intercept[SparkRuntimeException](cast(Literal(12345L), to, EvalMode.LEGACY).eval())
+      assert(!ExprUtils.canEvaluateUnconditionally(cast(s, to, EvalMode.ANSI)), to)
+      intercept[SparkRuntimeException](cast(Literal("abcd"), to, EvalMode.ANSI).eval())
     }
+    // Not a decimal to a narrower decimal, which raises in ANSI mode.
+    assert(!ExprUtils.canEvaluateUnconditionally(
+      cast(AttributeReference("d", DecimalType(38, 0))(), DecimalType(5, 2), EvalMode.ANSI)))
+    intercept[ArithmeticException](cast(Literal(Decimal(BigDecimal("9" * 38)), DecimalType(38, 0)),
+      DecimalType(5, 2), EvalMode.ANSI).eval())
     // In LEGACY mode, the casts that return NULL or wrap for a value they can not convert.
     Seq[(Expression, DataType)]((a, IntegerType), (a, ByteType), (a, DecimalType(5, 2)),
         (s, IntegerType), (s, DoubleType), (s, DecimalType(5, 2)), (s, BooleanType),
@@ -301,7 +430,7 @@ class ExprUtilsSuite extends SparkFunSuite {
     }
     // And the other casts `Cast.isNoThrowLegacyCast` accepts.
     Seq[(Expression, DataType)]((AttributeReference("b", BooleanType)(), IntegerType),
-        (a, BooleanType), (s, StringType("UNICODE_CI"))).foreach { case (e, to) =>
+        (a, BooleanType)).foreach { case (e, to) =>
       assert(Cast.isNoThrowLegacyCast(e.dataType, to), (e, to))
       assert(ExprUtils.canEvaluateUnconditionally(cast(e, to, EvalMode.LEGACY)), (e, to))
     }
@@ -347,10 +476,9 @@ class ExprUtilsSuite extends SparkFunSuite {
             DecimalType(5, 2), DecimalType(1, 1), BooleanType)) {
         evalEach(from, values)(cast(_, to, mode))
       }
-      // From and to strings of other collations and from a VARCHAR.
-      evalEach(StringType, strings)(cast(_, StringType("UNICODE_CI"), mode))
+      // From strings of other collations and from a VARCHAR.
       for (from <- Seq(StringType("UTF8_LCASE"), VarcharType(3)); to <- Seq(IntegerType,
-          DateType, StringType)) {
+          DateType)) {
         evalEach(from, strings)(cast(_, to, mode))
       }
     }
@@ -366,11 +494,23 @@ class ExprUtilsSuite extends SparkFunSuite {
       evalEach(StringType, strings)(cast(_, to, EvalMode.TRY))
     }
     for (mode <- Seq(EvalMode.ANSI, EvalMode.LEGACY, EvalMode.TRY)) {
-      for ((from, values) <- numbers :+ (BooleanType, Seq(true, false))) {
+      for ((from, values) <- numbers.filterNot(n => n._1 == DoubleType || n._1 == FloatType) :+
+          (BooleanType, Seq(true, false))) {
         evalEach(from, values)(cast(_, StringType, mode))
       }
       for (from <- Seq(TimestampType, TimestampNTZType)) {
         evalEach(from, Seq(Long.MinValue, 0L, Long.MaxValue))(cast(_, DateType, mode))
+      }
+      for ((from, values) <- Seq[(DataType, Seq[Any])]((DecimalType(38, 0),
+            Seq("-" + "9" * 38, "9" * 38).map(d => Decimal(BigDecimal(d)))),
+          (DecimalType(38, 37), Seq("-9." + "9" * 37, "9." + "9" * 37)
+            .map(d => Decimal(BigDecimal(d), 38, 37))));
+          to <- Seq(FloatType, DoubleType)) {
+        evalEach(from, values)(cast(_, to, mode))
+      }
+      for (from <- Seq(StringType, StringType("UTF8_LCASE"), VarcharType(3), CharType(3));
+          to <- Seq(StringType, StringType("UNICODE_CI"))) {
+        evalEach(from, strings)(cast(_, to, mode))
       }
     }
   }
@@ -413,9 +553,9 @@ class ExprUtilsSuite extends SparkFunSuite {
     val nonAscii = Seq(0xE9, 'a', 0x4E2D).map(_.toChar).mkString
     val strings = Seq("", "abc", nonAscii).map(UTF8String.fromString) ++
       Seq(Array(0xFF, 'a'), Array('a', 0xE2)).map(b => UTF8String.fromBytes(b.map(_.toByte)))
-    for (pos <- positions; len <- positions) {
-      evalEach(StringType, strings)(Substring(_, Literal(pos), Literal(len)))
-      evalEach(BinaryType, strings.map(_.getBytes))(Substring(_, Literal(pos), Literal(len)))
+    for (input <- Seq((StringType, strings), (BinaryType, strings.map(_.getBytes)))) {
+      evalRows(input, (IntegerType, positions), (IntegerType, positions))(c =>
+        Substring(c(0), c(1), c(2)))
     }
   }
 
