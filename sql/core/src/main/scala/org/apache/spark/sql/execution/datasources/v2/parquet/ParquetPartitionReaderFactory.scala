@@ -51,7 +51,6 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
  *
  * @param sqlConf SQL configuration.
  * @param broadcastedConf Broadcast serializable Hadoop Configuration.
- * @param dataSchema Schema of Parquet files.
  * @param readDataSchema Required schema of Parquet files.
  * @param partitionSchema Schema of partitions.
  * @param filters Filters to be pushed down in the batch scan.
@@ -61,7 +60,6 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
 case class ParquetPartitionReaderFactory(
     sqlConf: SQLConf,
     broadcastedConf: Broadcast[SerializableConfiguration],
-    dataSchema: StructType,
     readDataSchema: StructType,
     partitionSchema: StructType,
     filters: Array[Filter],
@@ -141,7 +139,7 @@ case class ParquetPartitionReaderFactory(
 
           if (openedFooter.footer != null && !openedFooter.footer.getBlocks.isEmpty) {
             ParquetUtils.createAggInternalRowFromFooter(openedFooter.footer,
-              file.urlEncodedPath, dataSchema, partitionSchema, aggregation.get,
+              file.urlEncodedPath, isCaseSensitive, partitionSchema, aggregation.get,
               readDataSchema, file.partitionValues,
               getDatetimeRebaseSpec(openedFooter.footer.getFileMetaData))
           } else {
@@ -187,7 +185,7 @@ case class ParquetPartitionReaderFactory(
 
           if (openedFooter.footer != null && !openedFooter.footer.getBlocks.isEmpty) {
             val row = ParquetUtils.createAggInternalRowFromFooter(openedFooter.footer,
-              file.urlEncodedPath, dataSchema, partitionSchema, aggregation.get,
+              file.urlEncodedPath, isCaseSensitive, partitionSchema, aggregation.get,
               readDataSchema, file.partitionValues,
               getDatetimeRebaseSpec(openedFooter.footer.getFileMetaData))
             AggregatePushDownUtils.convertAggregatesRowToBatch(

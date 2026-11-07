@@ -20,17 +20,19 @@ package org.apache.spark.sql.execution.datasources
 import java.sql.{Date, Timestamp}
 import java.time.LocalTime
 
-import org.apache.spark.{SparkConf, SparkUnsupportedOperationException}
+import scala.reflect.ClassTag
+
+import org.apache.spark.{SparkConf, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{DataFrame, ExplainSuiteHelper, Row}
 import org.apache.spark.sql.catalyst.optimizer.CollapseGroupedSumOfCount
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
-import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
+import org.apache.spark.sql.execution.datasources.parquet.{ParquetTest, ParquetUtils}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.functions.min
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{BinaryType, BooleanType, ByteType, DateType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType, StructField, StructType, TimestampType, TimeType}
+import org.apache.spark.sql.types.{BinaryType, BooleanType, ByteType, DateType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, Metadata, MetadataBuilder, ShortType, StringType, StructField, StructType, TimestampType, TimeType}
 import org.apache.spark.tags.SlowSQLTest
 
 /**
@@ -62,7 +64,9 @@ trait FileSourceAggregatePushDownSuite
     withSQLConf(aggPushDownEnabledKey -> "true") {
       withDataSourceTable(data, "t") {
         val count = sql("SELECT Count(_1) FROM t")
-        checkPushedInfo(count, "PushedAggregation: [COUNT(_1)]")
+        // The Parquet footer has no null count for a nested column (SPARK-60598).
+        val expected = if (format == "parquet") "[]" else "[COUNT(_1)]"
+        checkPushedInfo(count, s"PushedAggregation: $expected")
         checkAnswer(count, Seq(Row(10)))
       }
     }
@@ -716,7 +720,7 @@ trait FileSourceAggregatePushDownSuite
     }
   }
 
-  private def checkPushedInfo(df: DataFrame, expectedPlanFragment: String): Unit = {
+  protected def checkPushedInfo(df: DataFrame, expectedPlanFragment: String): Unit = {
     df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         checkKeywordsExistsInExplain(df, expectedPlanFragment)
@@ -741,6 +745,8 @@ class ParquetV1AggregatePushDownSuite extends ParquetAggregatePushDownSuite {
 
 @SlowSQLTest
 class ParquetV2AggregatePushDownSuite extends ParquetAggregatePushDownSuite {
+
+  import testImplicits._
 
   override protected def sparkConf: SparkConf =
     super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "")
@@ -773,17 +779,145 @@ class ParquetV2AggregatePushDownSuite extends ParquetAggregatePushDownSuite {
     }
   }
 
+  test("SPARK-60598: aggregate push-down reads the right column after a nested column") {
+    Seq("false", "true").foreach { enableVectorizedReader =>
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        // `s`, `arr` and `m` have several leaf column chunks each, so a later column's
+        // position among the top-level fields is not its position among the column chunks.
+        Seq(((100, 200), Seq(7, 8), Map(9 -> 10), Some(1), 2, true),
+            ((300, 400), Seq(11), Map(12 -> 13), None, 6, false),
+            ((500, 600), Seq.empty[Int], Map.empty[Int, Int], Some(5), 4, false))
+          .toDF("s", "arr", "m", "a", "b", "c")
+          .coalesce(1).write.parquet(path)
+        withTempView("t") {
+          spark.read.parquet(path).createOrReplaceTempView("t")
+          withSQLConf(
+            aggPushDownEnabledKey -> "true",
+            vectorizedReaderEnabledKey -> enableVectorizedReader) {
+            val df = sql("SELECT max(a), min(b), count(a), max(c), min(c) FROM t")
+            checkPushedInfo(df, "PushedAggregation: [MAX(a), MIN(b), COUNT(a), MAX(c), MIN(c)]")
+            checkAnswer(df, Row(5, 2, 2, true, false))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60598: COUNT of a nested column is not pushed down") {
+    Seq("false", "true").foreach { enableVectorizedReader =>
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        // The footer only has statistics for the leaf columns. A non-null struct whose first
+        // field is null, and an empty array, are both null in the first leaf column, so its
+        // null count is not the number of null values of the column.
+        sql("SELECT named_struct('x', CAST(NULL AS INT), 'y', 1) AS s, array() AS arr, " +
+            "map(1, 2) AS m " +
+          "UNION ALL SELECT NULL, NULL, NULL " +
+          "UNION ALL SELECT named_struct('x', 3, 'y', 4), array(5), map()")
+          .coalesce(1).write.parquet(path)
+        withTempView("t") {
+          spark.read.parquet(path).createOrReplaceTempView("t")
+          withSQLConf(
+            aggPushDownEnabledKey -> "true",
+            vectorizedReaderEnabledKey -> enableVectorizedReader) {
+            val df = sql("SELECT count(s), count(arr), count(m) FROM t")
+            checkPushedInfo(df, "PushedAggregation: []")
+            checkAnswer(df, Row(2, 2, 2))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60598: aggregate push-down with a user schema that differs from the file schema") {
+    Seq("false", "true").foreach { enableVectorizedReader =>
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        Seq((1, 10L, 100), (2, 20L, 200)).toDF("x", "a", "b").coalesce(1).write.parquet(path)
+        withTempView("t") {
+          // The data schema lists `b` (as `B`) before `a`, leaves out `x`, and adds `z`, which
+          // the file does not have.
+          spark.read.schema("B INT, a LONG, z INT").parquet(path).createOrReplaceTempView("t")
+          withSQLConf(
+            aggPushDownEnabledKey -> "true",
+            vectorizedReaderEnabledKey -> enableVectorizedReader) {
+            val df = sql("SELECT max(a), min(B), count(B), count(z) FROM t")
+            checkPushedInfo(df, "PushedAggregation: [MAX(a), MIN(B), COUNT(B), COUNT(z)]")
+            checkAnswer(df, Row(20L, 100, 2, 0))
+            // A column the file does not have is all null, so it has no min or max either.
+            Seq("min", "max").foreach { agg =>
+              checkErrorMatchPVals(
+                exception = interceptAggPushDownError(s"SELECT $agg(z) FROM t"),
+                condition = "PARQUET_AGGREGATE_PUSH_DOWN_UNSUPPORTED.NO_MIN_MAX",
+                parameters = Map("filePath" -> ".*", "config" -> aggPushDownEnabledKey))
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60598: aggregate push-down fails on an ambiguous case-insensitive column match") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        spark.range(3).selectExpr("id AS a", "id * 2 AS A").coalesce(1).write.parquet(path)
+      }
+      withTempView("t") {
+        spark.read.schema("a LONG").parquet(path).createOrReplaceTempView("t")
+        withSQLConf(aggPushDownEnabledKey -> "true") {
+          // The reader fails in the same way for this file (see `ParquetReadSupport`).
+          val e = interceptCause[SparkRuntimeException]("SELECT max(a) FROM t")
+          checkError(
+            exception = e,
+            condition = "_LEGACY_ERROR_TEMP_2093",
+            parameters = Map("requiredFieldName" -> "a", "matchedOrcFields" -> "[a, A]"))
+        }
+      }
+    }
+  }
+
+  test("SPARK-60598: aggregate push-down is not used with field ID reading") {
+    def withId(id: Int): Metadata =
+      new MetadataBuilder().putLong(ParquetUtils.FIELD_ID_METADATA_KEY, id).build()
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val writeSchema = new StructType()
+        .add("random", IntegerType, nullable = true, withId(1))
+        .add("name", StringType, nullable = true, withId(0))
+      spark.createDataFrame(
+        java.util.Arrays.asList(Row(100, "text"), Row(200, "more"), Row(null, "n")), writeSchema)
+        .coalesce(1).write.parquet(path)
+      // The field ID selects the file column `random`, whose name differs from `a`.
+      val readSchema = new StructType().add("a", IntegerType, nullable = true, withId(1))
+      withTempView("t") {
+        spark.read.schema(readSchema).parquet(path).createOrReplaceTempView("t")
+        withSQLConf(
+          aggPushDownEnabledKey -> "true",
+          SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key -> "true") {
+          val df = sql("SELECT count(a), max(a), min(a) FROM t")
+          checkPushedInfo(df, "PushedAggregation: []")
+          checkAnswer(df, Row(2, 200, 100))
+        }
+      }
+    }
+  }
+
   // The error originates in the executor-side partition reader, so it may be wrapped in a
   // higher-level exception. Walk the cause chain to find the structured Spark exception.
-  private def interceptAggPushDownError(query: String): SparkUnsupportedOperationException = {
+  private def interceptAggPushDownError(query: String): SparkUnsupportedOperationException =
+    interceptCause[SparkUnsupportedOperationException](query)
+
+  private def interceptCause[T <: Throwable](query: String)(implicit tag: ClassTag[T]): T = {
     val e = intercept[Exception](spark.sql(query).collect())
     var cause: Throwable = e
-    while (cause != null && !cause.isInstanceOf[SparkUnsupportedOperationException]) {
+    while (cause != null && !tag.runtimeClass.isInstance(cause)) {
       cause = cause.getCause
     }
     assert(cause != null,
-      s"Expected a SparkUnsupportedOperationException but got: $e")
-    cause.asInstanceOf[SparkUnsupportedOperationException]
+      s"Expected a ${tag.runtimeClass.getSimpleName} but got: $e")
+    cause.asInstanceOf[T]
   }
 }
 

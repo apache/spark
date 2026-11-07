@@ -41,6 +41,7 @@ import org.apache.spark.sql.catalyst.expressions.JoinedRow
 import org.apache.spark.sql.catalyst.expressions.variant.VariantExpressionEvalUtils
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Count, CountStar, Max, Min}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, DataSourceUtils, OutputWriter, OutputWriterFactory}
 import org.apache.spark.sql.execution.datasources.parquet.types.ops.ParquetTypeOps
 import org.apache.spark.sql.execution.datasources.v2.V2ColumnUtils
@@ -249,14 +250,14 @@ object ParquetUtils extends Logging {
   private[sql] def createAggInternalRowFromFooter(
       footer: ParquetMetadata,
       filePath: String,
-      dataSchema: StructType,
+      isCaseSensitive: Boolean,
       partitionSchema: StructType,
       aggregation: Aggregation,
       aggSchema: StructType,
       partitionValues: InternalRow,
       datetimeRebaseSpec: RebaseSpec): InternalRow = {
     val (primitiveTypes, values) = getPushedDownAggResult(
-      footer, filePath, dataSchema, partitionSchema, aggregation)
+      footer, filePath, isCaseSensitive, partitionSchema, aggregation)
 
     val builder = Types.buildMessage
     primitiveTypes.foreach(t => builder.addField(t))
@@ -323,12 +324,30 @@ object ParquetUtils extends Logging {
   private[sql] def getPushedDownAggResult(
       footer: ParquetMetadata,
       filePath: String,
-      dataSchema: StructType,
+      isCaseSensitive: Boolean,
       partitionSchema: StructType,
       aggregation: Aggregation)
   : (Array[PrimitiveType], Array[Any]) = {
-    val footerFileMetaData = footer.getFileMetaData
-    val fields = footerFileMetaData.getSchema.getFields
+    // The column chunks of a row group follow the leaf columns of the file schema, and a nested
+    // column has one chunk per leaf, so a column's position among the top-level fields is not
+    // the index of its chunk. The file may also order its columns differently from the data
+    // schema. Aggregates are only pushed down for top-level primitive columns, so find the
+    // chunk index by matching the column name against the top-level leaves of the file schema.
+    // Returns -1 if the file does not have the column.
+    val leafColumns = footer.getFileMetaData.getSchema.getColumns
+    val columnIndexes = mutable.HashMap.empty[String, Int]
+    def columnIndex(colName: String): Int = columnIndexes.getOrElseUpdate(colName, {
+      val matches = (0 until leafColumns.size).filter { i =>
+        val path = leafColumns.get(i).getPath
+        path.length == 1 &&
+          (if (isCaseSensitive) path.head == colName else path.head.equalsIgnoreCase(colName))
+      }
+      if (matches.length > 1) {
+        throw QueryExecutionErrors.foundDuplicateFieldInCaseInsensitiveModeError(
+          colName, matches.map(i => leafColumns.get(i).getPath.head).mkString("[", ", ", "]"))
+      }
+      matches.headOption.getOrElse(-1)
+    })
     val blocks = footer.getBlocks
     val primitiveTypeBuilder = mutable.ArrayBuilder.make[PrimitiveType]
     val valuesBuilder = mutable.ArrayBuilder.make[Any]
@@ -344,7 +363,7 @@ object ParquetUtils extends Logging {
         agg match {
           case max: Max if V2ColumnUtils.extractV2Column(max.column).isDefined =>
             val colName = V2ColumnUtils.extractV2Column(max.column).get
-            index = dataSchema.getFieldIndex(colName).getOrElse(-1)
+            index = columnIndex(colName)
             schemaName = "max(" + colName + ")"
             val currentMax = getCurrentBlockMaxOrMin(filePath, blockMetaData, index, true)
             if (value == None || currentMax.asInstanceOf[Comparable[Any]].compareTo(value) > 0) {
@@ -352,7 +371,7 @@ object ParquetUtils extends Logging {
             }
           case min: Min if V2ColumnUtils.extractV2Column(min.column).isDefined =>
             val colName = V2ColumnUtils.extractV2Column(min.column).get
-            index = dataSchema.getFieldIndex(colName).getOrElse(-1)
+            index = columnIndex(colName)
             schemaName = "min(" + colName + ")"
             val currentMin = getCurrentBlockMaxOrMin(filePath, blockMetaData, index, false)
             if (value == None || currentMin.asInstanceOf[Comparable[Any]].compareTo(value) < 0) {
@@ -368,9 +387,11 @@ object ParquetUtils extends Logging {
             }
             isCount = true
             if (!isPartitionCol) {
-              index = dataSchema.getFieldIndex(colName).getOrElse(-1)
-              // Count(*) includes the null values, but Count(colName) doesn't.
-              rowCount -= getNumNulls(filePath, blockMetaData, index)
+              index = columnIndex(colName)
+              // Count(*) includes the null values, but Count(colName) doesn't. A column the
+              // file does not have is all null.
+              rowCount -= (if (index < 0) block.getRowCount
+                else getNumNulls(filePath, blockMetaData, index))
             }
           case _: CountStar =>
             schemaName = "count(*)"
@@ -384,10 +405,10 @@ object ParquetUtils extends Logging {
         primitiveTypeBuilder += Types.required(PrimitiveTypeName.INT64).named(schemaName);
       } else {
         valuesBuilder += value
-        val field = fields.get(index)
-        primitiveTypeBuilder += Types.required(field.asPrimitiveType.getPrimitiveTypeName)
+        val field = leafColumns.get(index).getPrimitiveType
+        primitiveTypeBuilder += Types.required(field.getPrimitiveTypeName)
           .as(field.getLogicalTypeAnnotation)
-          .length(field.asPrimitiveType.getTypeLength)
+          .length(field.getTypeLength)
           .named(schemaName)
       }
     }
@@ -404,14 +425,15 @@ object ParquetUtils extends Logging {
       columnChunkMetaData: util.List[ColumnChunkMetaData],
       i: Int,
       isMax: Boolean): Any = {
-    val statistics = columnChunkMetaData.get(i).getStatistics
-    if (!statistics.hasNonNullValue) {
+    // A column the file does not have (i < 0) is all null, so it has no min or max either.
+    if (i < 0 || !columnChunkMetaData.get(i).getStatistics.hasNonNullValue) {
       throw new SparkUnsupportedOperationException(
         errorClass = "PARQUET_AGGREGATE_PUSH_DOWN_UNSUPPORTED.NO_MIN_MAX",
         messageParameters = Map(
           "filePath" -> filePath,
           "config" -> PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key))
     } else {
+      val statistics = columnChunkMetaData.get(i).getStatistics
       if (isMax) statistics.genericGetMax else statistics.genericGetMin
     }
   }
