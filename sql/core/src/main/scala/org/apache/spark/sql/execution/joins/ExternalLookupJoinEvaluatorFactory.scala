@@ -26,15 +26,17 @@ import org.apache.spark.{PartitionEvaluator, PartitionEvaluatorFactory, SparkExc
   SparkIllegalStateException, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, CollationKey, Expression,
-  GenericInternalRow, JoinedRow, Predicate, UnsafeProjection, UnsafeRow}
+  GenericInternalRow, JoinedRow, Predicate, SpecializedGetters, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.optimizer.NormalizeFloatingNumbers
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftOuter}
+import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.connector.metric.CustomTaskMetric
 import org.apache.spark.sql.connector.read.{ExternalLookupReader, ExternalLookupReaderFactory,
   ExternalLookupResultCursor}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric}
-import org.apache.spark.sql.types.{Decimal, DecimalType}
+import org.apache.spark.sql.types.{ArrayType, DataType, Decimal, DecimalType, MapType,
+  StructType}
 import org.apache.spark.util.Utils
 
 /**
@@ -211,11 +213,7 @@ class ExternalLookupJoinEvaluatorFactory(
             joinResultRow(key, resultRow)
           }
         }
-        if (pending.isEmpty) {
-          // A close() while the cursor was read may have ended it early.
-          if (cursor ne EmptyLookupCursor) reader.ensureOpen()
-          finishCursor(completed = true)
-        }
+        if (pending.isEmpty) finishCursor(completed = true)
       } catch {
         case error: Throwable =>
           Utils.tryWithSafeFinally(throw error) {
@@ -224,10 +222,16 @@ class ExternalLookupJoinEvaluatorFactory(
       }
     }
 
-    /** Advances the connector's cursor, unless the reader was closed meanwhile. */
+    /**
+     * Advances the connector's cursor, unless the reader was closed meanwhile. A close() while
+     * next() ran fails the read once next() returns: Spark then reads no row from the closed
+     * cursor, and does not take a missing row for a complete result.
+     */
     private def advanceCursor(): Boolean = (cursor ne EmptyLookupCursor) && {
       reader.ensureOpen()
-      cursor.next()
+      val advanced = cursor.next()
+      reader.ensureOpen()
+      advanced
     }
 
     private def requestedKey(ordinal: Int): UnsafeRow = {
@@ -285,45 +289,97 @@ class ExternalLookupJoinEvaluatorFactory(
     override def close(): Unit = {}
   }
 
+  /** A check of one value slot: a field of a row, or an element of an array. */
+  private type SlotCheck = (SpecializedGetters, Int) => Unit
+
   /**
    * Validates each row that the connector returns, and copies it once into Spark's own row before
    * Spark checks, joins or keeps it. A connector may reuse its row and its buffers, byte arrays
-   * included, so a row that Spark still holds must not share them. A value that breaks its
-   * column's type fails the task: a null in a column that the table or the read schema declares
-   * NOT NULL, or a decimal that does not fit its precision and scale. Spark already relied on
-   * them while it optimized the query.
+   * included, so a row that Spark still holds must not share them. A value that breaks its type
+   * fails the task, at any nested level: a null in a field, array element or map value that the
+   * table or the read schema declares NOT NULL, or a decimal that does not fit its precision and
+   * scale. Spark already relied on them while it optimized the query. The checks are built once
+   * from the read schema, and a field whose type has nothing to check costs nothing per row.
    */
   private class LookupResultRows {
     private val copy = UnsafeProjection.create(lookupInput, lookupInput)
-    private val notNullFields = lookupInput.zipWithIndex.filterNot(_._1.nullable)
-    private val decimalFields = lookupInput.zipWithIndex.collect {
-      case (field, ordinal) if field.dataType.isInstanceOf[DecimalType] =>
-        (field, ordinal, field.dataType.asInstanceOf[DecimalType])
+    private val fieldChecks = lookupInput.zipWithIndex.flatMap { case (field, ordinal) =>
+      slotCheck(field.dataType, field.nullable, Seq(field.name)).map(ordinal -> _)
     }
 
     /** The row, validated and copied into a row that Spark owns. */
     def validatedCopy(resultRow: InternalRow): UnsafeRow = {
-      notNullFields.foreach { case (field, ordinal) =>
-        if (resultRow.isNullAt(ordinal)) {
-          throw QueryExecutionErrors.invalidDataSourceExternalLookupError(
-            tableName,
-            "NULL_IN_NOT_NULL_FIELD",
-            Map("field" -> QueryExecutionErrors.toSQLId(Seq(field.name))))
-        }
-      }
-      decimalFields.foreach { case (field, ordinal, decimalType) =>
-        if (!resultRow.isNullAt(ordinal) &&
-            !fits(resultRow.getDecimal(ordinal, decimalType.precision, decimalType.scale),
-              decimalType)) {
-          throw QueryExecutionErrors.invalidDataSourceExternalLookupError(
-            tableName,
-            "DECIMAL_OUT_OF_RANGE",
-            Map(
-              "field" -> QueryExecutionErrors.toSQLId(Seq(field.name)),
-              "type" -> QueryExecutionErrors.toSQLType(decimalType)))
-        }
-      }
+      fieldChecks.foreach { case (ordinal, check) => check(resultRow, ordinal) }
       copy(resultRow).copy()
+    }
+
+    /** The check of a slot of this type, at this field path, or None if it has nothing to check. */
+    private def slotCheck(
+        dataType: DataType,
+        nullable: Boolean,
+        path: Seq[String]): Option[SlotCheck] = {
+      val valueCheck = nonNullValueCheck(dataType, path)
+      if (nullable && valueCheck.isEmpty) {
+        None
+      } else {
+        Some { (values, ordinal) =>
+          if (!values.isNullAt(ordinal)) {
+            valueCheck.foreach(_(values, ordinal))
+          } else if (!nullable) {
+            throw QueryExecutionErrors.invalidDataSourceExternalLookupError(
+              tableName,
+              "NULL_IN_NOT_NULL_FIELD",
+              Map("field" -> QueryExecutionErrors.toSQLId(path)))
+          }
+        }
+      }
+    }
+
+    /** The check of a value that is not null, or None if its type has nothing to check. */
+    private def nonNullValueCheck(dataType: DataType, path: Seq[String]): Option[SlotCheck] =
+      dataType match {
+        case decimalType: DecimalType => Some { (values, ordinal) =>
+          val value = values.getDecimal(ordinal, decimalType.precision, decimalType.scale)
+          if (!fits(value, decimalType)) {
+            throw QueryExecutionErrors.invalidDataSourceExternalLookupError(
+              tableName,
+              "DECIMAL_OUT_OF_RANGE",
+              Map(
+                "field" -> QueryExecutionErrors.toSQLId(path),
+                "type" -> QueryExecutionErrors.toSQLType(decimalType)))
+          }
+        }
+        case structType: StructType =>
+          val checks = structType.fields.toSeq.zipWithIndex.flatMap { case (field, ordinal) =>
+            slotCheck(field.dataType, field.nullable, path :+ field.name).map(ordinal -> _)
+          }
+          Option.when(checks.nonEmpty) { (values, ordinal) =>
+            val struct = values.getStruct(ordinal, structType.length)
+            checks.foreach { case (fieldOrdinal, check) => check(struct, fieldOrdinal) }
+          }
+        case arrayType: ArrayType =>
+          slotCheck(arrayType.elementType, arrayType.containsNull, path :+ "element").map {
+            check => (values, ordinal) => eachElement(values.getArray(ordinal), check)
+          }
+        case mapType: MapType =>
+          // Spark maps have no null keys, so a key is checked only for what it holds.
+          val keyCheck = slotCheck(mapType.keyType, nullable = true, path :+ "key")
+          val valueCheck =
+            slotCheck(mapType.valueType, mapType.valueContainsNull, path :+ "value")
+          Option.when(keyCheck.nonEmpty || valueCheck.nonEmpty) { (values, ordinal) =>
+            val map = values.getMap(ordinal)
+            keyCheck.foreach(eachElement(map.keyArray(), _))
+            valueCheck.foreach(eachElement(map.valueArray(), _))
+          }
+        case _ => None
+      }
+
+    private def eachElement(array: ArrayData, check: SlotCheck): Unit = {
+      var index = 0
+      while (index < array.numElements()) {
+        check(array, index)
+        index += 1
+      }
     }
 
     /** Whether the decimal has its type's precision and scale without rounding. */
@@ -414,10 +470,11 @@ class ExternalLookupJoinEvaluatorFactory(
    * The connector reader of one partition and its active cursor. The reader is opened by the
    * first request, and closed once, after the last batch or when the task completes. A thread
    * other than the task's may still drive the join then: closing may overlap the one connector
-   * call in progress, but no request, cursor advance or new reader follows it. Requests and cursor
-   * calls take no lock, so closing does not wait for them. Metrics reads do: closing keeps the
-   * reader's final metrics under the lock of the task's `TaskLookupReaders`, so it can wait for
-   * a metrics read in progress, which calls `currentMetricsValues()` on the task's readers.
+   * call in progress, but no request, cursor advance, row read or new reader follows it. Requests
+   * and cursor calls take no lock, so closing does not wait for them. Metrics reads do: closing
+   * keeps the reader's final metrics under the lock of the task's `TaskLookupReaders`, so it can
+   * wait for a metrics read in progress, which calls `currentMetricsValues()` on the task's
+   * readers.
    */
   private class LookupReader {
     private val taskReaders = readerMetrics.forCurrentTask()

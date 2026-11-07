@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.expressions.{Add, Cast, LessThan, Literal, Rand}
 import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, LogicalPlan,
   PreparedExternalLookupJoin}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connector.catalog.{Identifier, SupportsRead, Table, TableCapability,
   TableCatalog, TableChange, TableProvider}
@@ -206,7 +207,13 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       (misconfigured("nullUnderNotNullReadSchema"), "NULL_IN_NOT_NULL_FIELD",
         table ++ Map("field" -> "`department`")),
       (misconfigured("decimalOutOfRange"), "DECIMAL_OUT_OF_RANGE",
-        table ++ Map("field" -> "`amount`", "type" -> "\"DECIMAL(5,2)\""))).foreach {
+        table ++ Map("field" -> "`amount`", "type" -> "\"DECIMAL(5,2)\"")),
+      // The same checks reach nested values: a decimal array element with too many digits, and
+      // a decimal map value that would need rounding.
+      (misconfigured("nestedDecimalOutOfRange"), "DECIMAL_OUT_OF_RANGE",
+        table ++ Map("field" -> "`amounts`.`element`", "type" -> "\"DECIMAL(5,2)\"")),
+      (misconfigured("nestedDecimalRounding"), "DECIMAL_OUT_OF_RANGE",
+        table ++ Map("field" -> "`rates`.`value`", "type" -> "\"DECIMAL(5,2)\""))).foreach {
       case (lookup, subClass, parameters) =>
         checkError(
           exception = streamFailure[SparkRuntimeException](
@@ -654,7 +661,10 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     val input = CoalesceExec(1,
       LocalTableScanExec(outerJoin.child.output, Seq(InternalRow(1), InternalRow(3)), None))
     Seq(
-      "cursorFailure" -> 0, "closeBetweenResultRows" -> 1, "closeAtCursorEnd" -> 2).foreach {
+      "cursorFailure" -> 0,
+      "closeDuringNext" -> 0,
+      "closeBetweenResultRows" -> 1,
+      "closeAtCursorEnd" -> 2).foreach {
       case (failure, outputRows) =>
         SimpleExternalLookupDataSource.resetCounters()
         val readerFactory = outerJoin.readerFactory match {
@@ -675,12 +685,16 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
               completeTask()
             case "closeAtCursorEnd" =>
               SimpleExternalLookupDataSource.beforeCursorEnds.set(completeTask)
+            // The cursor had a row when the close came, but Spark reads no row from it.
+            case "closeDuringNext" =>
+              SimpleExternalLookupDataSource.beforeNextReturns.set(completeTask)
             case _ =>
           }
           intercept[Exception] {
             while (rows.hasNext) rows.next()
           }
           assert(failingJoin.metrics("numOutputRows").value === outputRows, failure)
+          assert(SimpleExternalLookupDataSource.rowReadsAfterClose.get() === 0, failure)
         } finally {
           TaskContext.unset()
         }
@@ -753,11 +767,20 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     checkStream(
       left.join(reordered, left("id") === reordered("id")),
       Seq(Row(1, 1, "ab"), Row(2, 2, "ab")))
-    // The table declares `s.a` NOT NULL, but the read schema allows the null returned for id 2.
+    // The table declares `s.a` NOT NULL and the read schema does not, which the binding accepts.
+    // Returned values must satisfy both, so the null that the connector returns for id 2 fails
+    // the task.
     val nested = readSchemaLookup("nested")
+    val firstId = streamOf(Seq(1).toDF("id"))
     checkStream(
-      left.join(nested, left("id") === nested("id")).select(left("id"), to_json(nested("s"))),
-      Seq(Row(1, "{\"a\":10}"), Row(2, "{}")))
+      firstId.join(nested, firstId("id") === nested("id"))
+        .select(firstId("id"), to_json(nested("s"))),
+      Seq(Row(1, "{\"a\":10}")))
+    checkError(
+      exception = streamFailure[SparkRuntimeException](
+        left.join(nested, left("id") === nested("id"))),
+      condition = "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.NULL_IN_NOT_NULL_FIELD",
+      parameters = Map("table" -> "`ReadSchemaExternalLookupTable`", "field" -> "`s`.`a`"))
     // A field whose type really differs is still rejected.
     val wrongType = readSchemaLookup("wrongType")
     checkError(
@@ -894,8 +917,15 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
         assert(SimpleExternalLookupDataSource.readerCount.get() === readers)
         assert(SimpleExternalLookupDataSource.requestCount.get() === requests)
         assert(SimpleExternalLookupDataSource.resultRowsRead.get() === resultRowsRead)
-        assert(SimpleExternalLookupDataSource.closeEvents.asScala.toSeq.sorted ===
-          Seq.fill(requests)("cursor") ++ Seq.fill(readers)("reader"))
+        // The close closes the cursor before the reader. A cursor that a request in progress
+        // returns after the close is closed after the reader.
+        val closeEvents = completion match {
+          case "beforeEval" | "beforeRequest" => Seq.empty
+          case "duringReaderCreation" => Seq("reader")
+          case "duringRequest" => Seq("reader", "cursor")
+          case _ => Seq("cursor", "reader")
+        }
+        assert(SimpleExternalLookupDataSource.closeEvents.asScala.toSeq === closeEvents)
         checkError(
           exception = failure.get().asInstanceOf[SparkException],
           condition = "INTERNAL_ERROR",
@@ -1099,6 +1129,10 @@ object SimpleExternalLookupDataSource {
   val afterParameterRowsRead = new AtomicReference[Array[InternalRow] => Unit](_ => ())
   // Called when a cursor reaches its end, before it reports it.
   val beforeCursorEnds = new AtomicReference[() => Unit](() => ())
+  // Called when a cursor has advanced to a row, before next() returns.
+  val beforeNextReturns = new AtomicReference[() => Unit](() => ())
+  // The get() and inputOrdinal() calls on a closed cursor.
+  val rowReadsAfterClose = new AtomicInteger(0)
   val lookupCandidates =
     new AtomicReference(Seq.empty[(String, String, DataType)])
   val lookupCandidateDescriptions = new AtomicReference(Seq.empty[String])
@@ -1128,6 +1162,8 @@ object SimpleExternalLookupDataSource {
     beforeLookupReturns.set(() => ())
     afterParameterRowsRead.set(_ => ())
     beforeCursorEnds.set(() => ())
+    beforeNextReturns.set(() => ())
+    rowReadsAfterClose.set(0)
     lookupCandidates.set(Seq.empty)
     lookupCandidateDescriptions.set(Seq.empty)
     departmentsById.set(INITIAL_DEPARTMENTS_BY_ID)
@@ -1353,9 +1389,14 @@ case class SimpleExternalLookupReaderFactory(
         } else {
           results
         },
-        onNext = () => SimpleExternalLookupDataSource.resultRowsRead.incrementAndGet(),
+        onNext = () => {
+          SimpleExternalLookupDataSource.resultRowsRead.incrementAndGet()
+          SimpleExternalLookupDataSource.beforeNextReturns.get()()
+        },
         onEnd = () => SimpleExternalLookupDataSource.beforeCursorEnds.get()(),
-        onClose = () => SimpleExternalLookupDataSource.closeEvents.add("cursor"))
+        onClose = () => SimpleExternalLookupDataSource.closeEvents.add("cursor"),
+        onReadAfterClose =
+          () => SimpleExternalLookupDataSource.rowReadsAfterClose.incrementAndGet())
     }
 
     override def currentMetricsValues():
@@ -1479,9 +1520,11 @@ class TestExternalLookupResultCursor(
     results: Iterator[(Int, InternalRow)],
     onNext: () => Unit = () => (),
     onEnd: () => Unit = () => (),
-    onClose: () => Unit = () => ())
+    onClose: () => Unit = () => (),
+    onReadAfterClose: () => Unit = () => ())
     extends ExternalLookupResultCursor {
   private var current: (Int, InternalRow) = _
+  @volatile private var closed = false
 
   override def next(): Boolean = if (results.hasNext) {
     current = results.next()
@@ -1493,9 +1536,20 @@ class TestExternalLookupResultCursor(
     false
   }
 
-  override def get(): InternalRow = current._2
-  override def inputOrdinal(): Int = current._1
-  override def close(): Unit = onClose()
+  override def get(): InternalRow = {
+    if (closed) onReadAfterClose()
+    current._2
+  }
+
+  override def inputOrdinal(): Int = {
+    if (closed) onReadAfterClose()
+    current._1
+  }
+
+  override def close(): Unit = {
+    closed = true
+    onClose()
+  }
 }
 
 class SemanticKeyExternalLookupDataSource extends TableProvider {
@@ -1782,6 +1836,8 @@ case class MisconfiguredExternalLookupTable(kind: String) extends Table with Sup
   override def schema(): StructType = kind match {
     case "nullUnderNotNullReadSchema" => StructType.fromDDL("id INT, department STRING")
     case "decimalOutOfRange" => StructType.fromDDL("id INT, amount DECIMAL(5, 2)")
+    case "nestedDecimalOutOfRange" => StructType.fromDDL("id INT, amounts ARRAY<DECIMAL(5, 2)>")
+    case "nestedDecimalRounding" => StructType.fromDDL("id INT, rates MAP<STRING, DECIMAL(5, 2)>")
     case _ => SimpleExternalLookupDataSource.outputSchema
   }
   override def capabilities(): java.util.Set[TableCapability] = kind match {
@@ -1802,7 +1858,7 @@ case class MisconfiguredExternalLookupTable(kind: String) extends Table with Sup
           NoExternalLookupScan(new StructType().add("id", "int").add("id", "int"))
         case "noExternalLookup" => NoExternalLookupScan(schema())
         case "invalidOrdinal" | "nullReader" | "nullValue" | "nullUnderNotNullReadSchema" |
-            "decimalOutOfRange" => new Scan {
+            "decimalOutOfRange" | "nestedDecimalOutOfRange" | "nestedDecimalRounding" => new Scan {
           override def readSchema(): StructType = kind match {
             case "nullUnderNotNullReadSchema" =>
               StructType.fromDDL("id INT, department STRING NOT NULL")
@@ -1849,6 +1905,23 @@ case class MisconfiguredExternalLookupReaderFactory(kind: String)
       override def lookupBatch(keys: Array[InternalRow]): ExternalLookupResultCursor =
         new TestExternalLookupResultCursor(
           Iterator(0 -> InternalRow(keys(0).getInt(0), Decimal(BigDecimal("12345.678")))))
+      override def close(): Unit = {}
+    }
+    // A DECIMAL(5, 2) array element with more digits than its type allows.
+    case "nestedDecimalOutOfRange" => new ExternalLookupReader {
+      override def lookupBatch(keys: Array[InternalRow]): ExternalLookupResultCursor =
+        new TestExternalLookupResultCursor(Iterator(0 -> InternalRow(
+          keys(0).getInt(0), new GenericArrayData(Array[Any](Decimal(BigDecimal("12345.67")))))))
+      override def close(): Unit = {}
+    }
+    // A DECIMAL(5, 2) map value with more decimal places than its type allows.
+    case "nestedDecimalRounding" => new ExternalLookupReader {
+      override def lookupBatch(keys: Array[InternalRow]): ExternalLookupResultCursor =
+        new TestExternalLookupResultCursor(Iterator(0 -> InternalRow(
+          keys(0).getInt(0),
+          new ArrayBasedMapData(
+            new GenericArrayData(Array[Any](UTF8String.fromString("EUR"))),
+            new GenericArrayData(Array[Any](Decimal(BigDecimal("1.234"))))))))
       override def close(): Unit = {}
     }
   }
