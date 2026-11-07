@@ -24,6 +24,7 @@ import java.util.zip.{ZipInputStream, ZipOutputStream}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.mockito.Mockito.{spy, times, verify}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkFunSuite}
@@ -257,6 +258,26 @@ class RollingEventLogFilesReaderSuite extends EventLogFileReadersSuite {
       fileSystem.delete(appStatusFile, false)
       assert(EventLogFileReader(fileSystem, new Path(logPathCompleted)).isEmpty)
     }
+  }
+
+  test("SPARK-48575: rolling event log directory should be listed only once") {
+    val conf = getLoggingConf(testDirPath)
+    conf.set(EVENT_LOG_ENABLE_ROLLING, true)
+    val writer = createWriter("app", None, testDirPath.toUri, conf,
+      SparkHadoopUtil.get.newConfiguration(conf))
+    writer.start()
+    writeTestEvents(writer, "dummy", 1024)
+    writer.stop()
+
+    val path = new Path(getCurrentLogPath(writer.logPath, isCompleted = true))
+    val status = fileSystem.getFileStatus(path)
+    val spiedFs = spy(fileSystem)
+    val reader = EventLogFileReader(spiedFs, status).get
+    assert(reader.lastIndex.isDefined)
+    assert(reader.completed)
+    assert(reader.listEventLogFiles.nonEmpty)
+    assert(reader.rootModificationTime === Some(status.getModificationTime))
+    verify(spiedFs, times(1)).listStatus(status.getPath)
   }
 
   allCodecs.foreach { codecShortName =>
