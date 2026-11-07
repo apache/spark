@@ -58,17 +58,25 @@ class ClusteringTestsMixin:
             .select("weight", "features")
         )
 
+        self.assertEqual(KMeans().getIntermediateStorageLevel(), "MEMORY_AND_DISK")
         km = KMeans(
             k=2,
             maxIter=2,
             weightCol="weight",
+            intermediateStorageLevel="DISK_ONLY",
         )
         self.assertEqual(km.getK(), 2)
         self.assertEqual(km.getMaxIter(), 2)
         self.assertEqual(km.getWeightCol(), "weight")
+        self.assertEqual(km.getIntermediateStorageLevel(), "DISK_ONLY")
+        km.setParams(intermediateStorageLevel="MEMORY_ONLY")
+        self.assertEqual(km.getIntermediateStorageLevel(), "MEMORY_ONLY")
+        km.setParams(intermediateStorageLevel="DISK_ONLY")
+        self.assertEqual(km.getIntermediateStorageLevel(), "DISK_ONLY")
 
         model = km.fit(df)
         self.assertEqual(km.uid, model.uid)
+        self.assertEqual(model.getIntermediateStorageLevel(), "DISK_ONLY")
 
         centers = model.clusterCenters()
         self.assertEqual(len(centers), 2)
