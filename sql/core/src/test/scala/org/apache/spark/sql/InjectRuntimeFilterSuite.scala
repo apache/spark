@@ -1352,11 +1352,11 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     "deterministic") {
     // The build plan of the DPP filter would be the creation side of the bloom filter. A bloom
     // filter would evaluate it again, apart from the join, and could drop rows (SPARK-60808).
-    // Cleanup drops such a DPP filter.
+    // Cleanup drops such a DPP filter. Without DPP, SPARK-60808 keeps the bloom filter out too.
     val query = "select * from bf5part join (select * from bf2 where a2 = 36 and " +
       "cast(reflect('java.lang.Math', 'random') as double) < 2.0) d on bf5part.f5 = d.c2"
     withDppTestConf() {
-      assertBloomFilterWithoutDpp(query)
+      assertBloomFilterWithoutDpp(query, 0)
       assert(bloomFilterKeys(query).isEmpty)
       assert(dynamicPruningFilters(query).isEmpty)
     }
@@ -1366,7 +1366,7 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     "side") {
     // Nothing broadcasts `f`, the deterministic build plan of the DPP filter on `d.k`, so that
     // filter is dropped. `d` is too small to take a bloom filter, so `f` would take one, built
-    // from `d`, which is not deterministic (SPARK-60808).
+    // from `d`, which is not deterministic (SPARK-60808). Without DPP, SPARK-60808 keeps it out.
     withTable("ndd", "ndf") {
       spark.range(40).selectExpr("id as k", "id as w").write.partitionBy("k").saveAsTable("ndd")
       spark.range(40000).selectExpr("id % 40 as k", "id as v").write.saveAsTable("ndf")
@@ -1380,7 +1380,7 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
           SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key ->
             (nddSize + 1).toString,
           SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
-        assertBloomFilterWithoutDpp(query)
+        assertBloomFilterWithoutDpp(query, 0)
         assert(bloomFilterKeys(query).isEmpty)
       }
     }
