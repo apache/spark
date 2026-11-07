@@ -1863,6 +1863,33 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertGreater(self._eval_python_count(joined), 0, self._optimized_plan(joined))
             self.assertEqual([(4.0, 2.0, 2.0)], [tuple(r) for r in joined.collect()])
 
+    def test_udf_transpile_keeps_the_cross_join_guard(self):
+        # SPARK-58780: with cross joins disabled, a UDF that is the only thing tying a join's sides
+        # together must still fail the query as a cartesian product, as it does with transpilation
+        # off. Lowered, it read both sides and passed the check, then ran as a CartesianProduct.
+        from pyspark.errors import AnalysisException
+        from pyspark.sql.functions import col
+
+        same = lambda a, b: a == b  # noqa: E731
+        with self.sql_conf({**_TRANSPILE_ON, "spark.sql.crossJoin.enabled": False}):
+            u = UserDefinedFunction(same, BooleanType())
+            self.assertTrue(u.transpiled)
+            left = self.spark.createDataFrame([(1,), (2,)], "a long")
+            right = self.spark.createDataFrame([(1,), (3,)], "b long")
+
+            for name, df in [
+                ("join condition", left.join(right, u("a", "b"))),
+                ("filter above the join", left.join(right).where(u("a", "b"))),
+            ]:
+                with self.subTest(name):
+                    with self.assertRaisesRegex(AnalysisException, "cartesian product"):
+                        df.collect()
+
+            # A real key keeps the check satisfied, so the call is still lowered.
+            keyed = left.join(right, (col("a") == col("b")) & u("a", "b"))
+            self.assertEqual(0, self._eval_python_count(keyed), self._optimized_plan(keyed))
+            self.assertEqual([(1, 1)], [tuple(r) for r in keyed.collect()])
+
     def test_udf_transpile_survives_an_argument_the_analyzer_moved(self):
         # SPARK-58626: PullOutNondeterministic pulls a nondeterministic call into a projection below
         # an operator that cannot hold one, leaving an attribute where the call was -- and so no
