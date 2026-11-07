@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.{SPARK_REVISION, SPARK_VERSION_SHORT}
+import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions.Hex
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.functions._
@@ -134,6 +135,43 @@ class MiscFunctionsSuite extends SharedSparkSession {
       df3.select(aes_decrypt(unbase64(base64(
         aes_encrypt(col("input"), col("key")))), col("key")).cast(StringType)),
       Seq(Row("Spark")))
+  }
+
+  test("SPARK-60934: null and foldable aes_encrypt stay one value") {
+    // A null IV never reaches the cipher. A foldable IV or mode is one ciphertext.
+    // An empty IV still draws, so a join must reject it.
+    checkAnswer(
+      sql("SELECT hex(aes_encrypt('abc', '1234567890123456', 'GCM', 'NONE', " +
+        "CAST(NULL AS BINARY)))"),
+      Row(null))
+    checkAnswer(
+      sql("SELECT count(*) FROM VALUES (1) AS t(id) JOIN VALUES (1) AS u(id) " +
+        "ON aes_encrypt('abc', '1234567890123456', 'GCM', 'NONE', " +
+        "CAST(NULL AS BINARY)) = CAST(NULL AS BINARY)"),
+      Row(0))
+    checkAnswer(
+      sql("WITH c AS (SELECT aes_encrypt('abc', '1234567890123456') AS enc) " +
+        "SELECT a.enc = b.enc FROM c a JOIN c b"),
+      Row(true))
+    checkAnswer(
+      sql("SELECT aes_encrypt('abc', '1234567890123456') = " +
+        "aes_encrypt('abc', '1234567890123456')"),
+      Row(false))
+    checkAnswer(
+      sql("SELECT count(*) FROM VALUES (1) AS t(id) JOIN VALUES (1) AS u(id) " +
+        "ON aes_encrypt('abc', '1234567890123456', 'GCM', 'NONE', " +
+        "unhex('000000000000000000000000')) = CAST(NULL AS BINARY)"),
+      Row(0))
+    checkAnswer(
+      sql("SELECT count(*) FROM VALUES (1) AS t(id) JOIN VALUES (1) AS u(id) " +
+        "ON aes_encrypt('abc', '1234567890123456', upper('ecb')) = " +
+        "CAST(NULL AS BINARY)"),
+      Row(0))
+    val emptyIv = intercept[ExtendedAnalysisException] {
+      sql("SELECT count(*) FROM VALUES (1) AS t(id) JOIN VALUES (1) AS u(id) " +
+        "ON aes_encrypt('abc', '1234567890123456', 'GCM', 'NONE', X'') = X'00'").collect()
+    }
+    assert(emptyIv.getCondition === "INVALID_NON_DETERMINISTIC_EXPRESSIONS")
   }
 
   test("aes_decrypt") {
