@@ -29,7 +29,7 @@ import org.apache.spark.internal.config.{BUFFER_PAGESIZE, MEMORY_OFFHEAP_ENABLED
 import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.memory.{SparkOutOfMemoryError, TaskMemoryManager, UnifiedMemoryManager}
 import org.apache.spark.network.util.ByteUnit
-import org.apache.spark.serializer.KryoSerializer
+import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.internal.SQLConf
@@ -319,8 +319,8 @@ abstract class HashedRelationSuite extends SharedSparkSession {
   }
 
   /**
-   * Creates a memory manager whose page size is set explicitly, so that the tests below do not
-   * depend on the page size derived from the JVM heap and the number of cores.
+   * Creates a memory manager whose page size is set explicitly, so that the maps built on it do
+   * not depend on the page size derived from the JVM heap and the number of cores.
    */
   private def newMemoryManager(pageSize: Long, memorySize: Long): UnifiedMemoryManager = {
     new UnifiedMemoryManager(
@@ -342,13 +342,13 @@ abstract class HashedRelationSuite extends SharedSparkSession {
     val arrayBytes = 32 * 8L
     val map = new LongToUnsafeRowMap(largeMm, 16)
     assert(map.getMode === largeMm.getTungstenMemoryMode)
-    assert(map.getUsed === arrayBytes + LongToUnsafeRowMap.MIN_PAGE_SIZE_BYTES)
+    assert(map.getUsed === arrayBytes + LongToUnsafeRowMap.INITIAL_PAGE_SIZE_BYTES)
 
     // A value larger than the initial page doubles the page to 2 MiB, not 64 MiB.
     val unsafeProj = UnsafeProjection.create(Array[DataType](StringType))
     val bigStr = UTF8String.fromString("x".repeat(3 << 19))
     map.append(0L, unsafeProj(InternalRow(bigStr)))
-    assert(map.getUsed === arrayBytes + 2 * LongToUnsafeRowMap.MIN_PAGE_SIZE_BYTES)
+    assert(map.getUsed === arrayBytes + 2 * LongToUnsafeRowMap.INITIAL_PAGE_SIZE_BYTES)
 
     val resultRow = new UnsafeRow(1)
     assert(map.getValue(0L, resultRow).getUTF8String(0) === bigStr)
@@ -362,7 +362,6 @@ abstract class HashedRelationSuite extends SharedSparkSession {
     val smallMm = new TaskMemoryManager(smallUmm, 0)
     val unsafeProj = UnsafeProjection.create(Seq(BoundReference(0, LongType, false)))
     val maps = ArrayBuffer.empty[LongToUnsafeRowMap]
-    var built = false
     try {
       (0 until 16).foreach { i =>
         val map = new LongToUnsafeRowMap(smallMm, 16)
@@ -370,33 +369,31 @@ abstract class HashedRelationSuite extends SharedSparkSession {
         (0 until 10).foreach(k => map.append(k, unsafeProj(InternalRow(k.toLong + i))))
         map.optimize()
       }
-      built = true
+      maps.zipWithIndex.foreach { case (map, i) =>
+        assert(map.getUsed < 2 * LongToUnsafeRowMap.INITIAL_PAGE_SIZE_BYTES)
+        val resultRow = new UnsafeRow(1)
+        (0 until 10).foreach(k => assert(map.getValue(k, resultRow).getLong(0) === k + i))
+      }
     } catch {
       // SparkOutOfMemoryError is fatal to ScalaTest and would abort the whole suite.
       case e: SparkOutOfMemoryError =>
         fail("Could not build 16 small LongToUnsafeRowMaps in one task", e)
     } finally {
-      if (!built) {
-        maps.foreach(_.free())
-      }
+      maps.foreach(_.free())
     }
-    maps.zipWithIndex.foreach { case (map, i) =>
-      assert(map.getUsed < 2 * LongToUnsafeRowMap.MIN_PAGE_SIZE_BYTES)
-      val resultRow = new UnsafeRow(1)
-      (0 until 10).foreach(k => assert(map.getValue(k, resultRow).getLong(0) === k + i))
-    }
-    maps.foreach(_.free())
     assert(smallUmm.executionMemoryUsed === 0)
   }
 
-  test("SPARK-60998: deserialized LongToUnsafeRowMap does not round its page up to the page size") {
+  test("SPARK-60998: deserialized LongToUnsafeRowMap allocates exactly what it reads") {
     val largeUmm = newMemoryManager(ByteUnit.MiB.toBytes(64), ByteUnit.GiB.toBytes(1))
     val largeMm = new TaskMemoryManager(largeUmm, 0)
     val unsafeProj = UnsafeProjection.create(Array[DataType](LongType))
-    val ser = sparkContext.env.serializer.newInstance()
+    val serializers = Seq(
+      new JavaSerializer(new SparkConf()).newInstance(),
+      new KryoSerializer(new SparkConf().set(KRYO_REFERENCE_TRACKING, false)).newInstance())
 
     // Both a non-empty map and an empty map, whose serialized page has length 0.
-    Seq(10, 0).foreach { numRows =>
+    for (ser <- serializers; numRows <- Seq(10, 0)) {
       val originalMap = new LongToUnsafeRowMap(largeMm, 16)
       (0 until numRows).foreach(k => originalMap.append(k, unsafeProj(InternalRow(k * 2L))))
       if (numRows > 0) {
@@ -404,8 +401,18 @@ abstract class HashedRelationSuite extends SharedSparkSession {
       }
       val deserializedMap = ser.deserialize[LongToUnsafeRowMap](ser.serialize(originalMap))
 
-      assert(originalMap.getUsed < 2 * LongToUnsafeRowMap.MIN_PAGE_SIZE_BYTES)
-      assert(deserializedMap.getUsed < 2 * LongToUnsafeRowMap.MIN_PAGE_SIZE_BYTES)
+      // The deserialized map does not use `largeMm`: it is created by the no-arg constructor,
+      // which builds its own memory manager. It allocates the array and the page it reads. After
+      // `optimize()`, the keys 0 until 10 use a dense array of 10 longs, and each value takes a
+      // 16-byte UnsafeRow plus an 8-byte pointer. The empty map keeps its sparse array of 32
+      // longs, and its empty page is rounded up to `MIN_PAGE_SIZE_BYTES`.
+      val expectedUsed = if (numRows > 0) {
+        numRows * 8L + numRows * 24L
+      } else {
+        32 * 8L + LongToUnsafeRowMap.MIN_PAGE_SIZE_BYTES
+      }
+      assert(originalMap.getUsed < 2 * LongToUnsafeRowMap.INITIAL_PAGE_SIZE_BYTES)
+      assert(deserializedMap.getUsed === expectedUsed)
       val resultRow = new UnsafeRow(1)
       (0 until numRows).foreach { k =>
         assert(deserializedMap.getValue(k, resultRow).getLong(0) === k * 2L)
@@ -413,6 +420,7 @@ abstract class HashedRelationSuite extends SharedSparkSession {
       assert(deserializedMap.getValue(numRows, resultRow) === null)
       originalMap.free()
       deserializedMap.free()
+      assert(deserializedMap.getUsed === 0)
     }
     assert(largeUmm.executionMemoryUsed === 0)
   }
