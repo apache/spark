@@ -209,6 +209,30 @@ class CatalogSuite extends ConnectFunSuite with RemoteSparkSession with SQLHelpe
     }
   }
 
+  test("SPARK-50569: clearCache can be scoped to the current session") {
+    val otherSession = spark.newSession()
+    val firstView = "clear_cache_first_view"
+    val secondView = "clear_cache_second_view"
+    try {
+      spark.range(1).createTempView(firstView)
+      otherSession.range(1, 2).createTempView(secondView)
+      spark.catalog.cacheTable(firstView)
+      otherSession.catalog.cacheTable(secondView)
+
+      spark.catalog.clearCache(allSessions = false)
+
+      assert(!spark.catalog.isCached(firstView))
+      assert(otherSession.catalog.isCached(secondView))
+      otherSession.catalog.clearCache(allSessions = false)
+      assert(!otherSession.catalog.isCached(secondView))
+    } finally {
+      spark.catalog.clearCache()
+      spark.catalog.dropTempView(firstView)
+      otherSession.catalog.dropTempView(secondView)
+      otherSession.close()
+    }
+  }
+
   test("TempView APIs") {
     val viewName = "view1"
     val globalViewName = "g_view1"
