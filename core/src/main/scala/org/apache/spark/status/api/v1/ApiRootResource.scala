@@ -61,7 +61,18 @@ private[spark] object ApiRootResource {
     val jerseyContext = new ServletContextHandler(ServletContextHandler.NO_SESSIONS)
     jerseyContext.setContextPath("/api")
     val holder: ServletHolder = new ServletHolder(classOf[ServletContainer])
-    holder.setInitParameter(ServerProperties.PROVIDER_PACKAGES, "org.apache.spark.status.api.v1")
+    // Register the JAX-RS resources explicitly by class name instead of scanning
+    // the package. Package scanning (PROVIDER_PACKAGES) relies on the classpath
+    // being enumerable from the filesystem, which fails when spark-core is loaded
+    // from a non-scannable location (e.g. an OSGi bundle where resources are
+    // exposed as "bundleresource://" URLs, or a shaded/modular classpath). The
+    // root resource ApiRootResource and the JacksonMessageWriter provider are
+    // sufficient; all nested resources are reached via sub-resource locators.
+    holder.setInitParameter(
+      ServerProperties.PROVIDER_CLASSNAMES,
+      Seq(
+        classOf[ApiRootResource].getName,
+        classOf[JacksonMessageWriter].getName).mkString(","))
     UIRootFromServletContext.setUiRoot(jerseyContext, uiRoot)
     jerseyContext.addServlet(holder, "/*")
     jerseyContext
