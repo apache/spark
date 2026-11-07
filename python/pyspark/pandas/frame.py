@@ -93,6 +93,7 @@ from pyspark.pandas.correlation import (
     CORRELATION_VALUE_2_COLUMN,
     compute,
 )
+from pyspark.pandas.extensions import CachedAccessor as TypedCachedAccessor
 from pyspark.pandas.generic import Frame
 from pyspark.pandas.internal import (
     HIDDEN_COLUMNS,
@@ -1033,7 +1034,7 @@ class DataFrame(Frame, Generic[T]):
     spark = CachedAccessor("spark", SparkFrameMethods)
 
     # create accessor for pandas-on-Spark specific methods.
-    pandas_on_spark = CachedAccessor("pandas_on_spark", PandasOnSparkFrameMethods)
+    pandas_on_spark = TypedCachedAccessor("pandas_on_spark", PandasOnSparkFrameMethods)
 
     @no_type_check
     def hist(self, bins=10, **kwds):
