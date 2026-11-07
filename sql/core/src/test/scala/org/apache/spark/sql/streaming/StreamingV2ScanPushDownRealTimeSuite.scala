@@ -27,12 +27,13 @@ import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
-import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder, SupportsPushDownRequiredColumns}
+import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, PartitionOffset, SupportsRealTimeRead}
 import org.apache.spark.sql.connector.read.streaming.SupportsRealTimeRead.RecordStatus
 import org.apache.spark.sql.execution.datasources.v2.{RealTimeStreamScanExec, StreamingDataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemorySink, LowLatencyMemoryStream}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -71,6 +72,32 @@ class StreamingV2ScanPushDownRealTimeSuite extends StreamRealTimeModeSuiteBase {
       AddData(input, (4L, "d", 5), (5L, "e", 50)),
       CheckAnswer("b", "c", "e"))
   }
+
+  test("push down the filters of a real-time query") {
+    withSQLConf(SQLConf.STREAMING_V2_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      val input = new PruningLowLatencyStream(spark)
+      val table = new PruningRealTimeTable(input, takesFilters = true)
+      val df = Dataset.ofRows(spark, StreamingRelationV2(None, "pruning_real_time", table,
+        CaseInsensitiveStringMap.empty(), DataTypeUtils.toAttributes(table.schema()), None, None,
+        None)).toDF("id", "data", "extra").where("extra > 10").select("data")
+      // The scan builder gets the filter, which each batch applies after the scan too, as its
+      // check finds.
+      testStream(df, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
+        StartStream(),
+        AddData(input, (1L, "a", 10), (2L, "b", 20), (3L, "c", 30)),
+        CheckAnswer("b", "c"),
+        AssertOnQuery { query =>
+          assert(table.pushed === Seq("GreaterThan(_3,10)"))
+          val pushed = query.logicalPlan.collect {
+            case relation: StreamingDataSourceV2ScanRelation => relation.pushedFilters
+          }
+          assert(pushed.map(_.map(_.references.map(_.name).toSet)) === Seq(Seq(Set("_3"))))
+          true
+        },
+        AddData(input, (4L, "d", 5), (5L, "e", 50)),
+        CheckAnswer("b", "c", "e"))
+    }
+  }
 }
 
 /**
@@ -99,20 +126,42 @@ private object PruningLowLatencyStream {
     Encoders.tuple(Encoders.scalaLong, Encoders.STRING, Encoders.scalaInt)
 }
 
-/** A table over a [[PruningLowLatencyStream]], whose scans only read the columns they are asked. */
-private class PruningRealTimeTable(input: PruningLowLatencyStream)
+/**
+ * A table over a [[PruningLowLatencyStream]], whose scans only read the columns they are asked.
+ * With `takesFilters`, it declares STREAMING_FILTER_PUSHDOWN, and its scan builder takes all the
+ * filters, which it records, while its streams return all the rows.
+ */
+private class PruningRealTimeTable(input: PruningLowLatencyStream, takesFilters: Boolean = false)
   extends Table with SupportsRead {
+  @volatile var pushed: Seq[String] = Nil
 
   override def name(): String = "pruning_real_time"
 
   override def schema(): StructType = input.fullSchema()
 
-  override def capabilities(): util.Set[TableCapability] =
-    util.EnumSet.of(TableCapability.MICRO_BATCH_READ, TableCapability.STREAMING_COLUMN_PRUNING)
+  override def capabilities(): util.Set[TableCapability] = {
+    val capabilities = util.EnumSet.of(
+      TableCapability.MICRO_BATCH_READ, TableCapability.STREAMING_COLUMN_PRUNING)
+    if (takesFilters) capabilities.add(TableCapability.STREAMING_FILTER_PUSHDOWN)
+    capabilities
+  }
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-    new ScanBuilder with SupportsPushDownRequiredColumns {
+    new ScanBuilder with SupportsPushDownRequiredColumns with SupportsPushDownFilters {
       private var columns = schema()
+      private var filters = Array.empty[Filter]
+
+      override def pushFilters(filters: Array[Filter]): Array[Filter] = {
+        if (takesFilters) {
+          this.filters = filters
+          pushed = filters.map(_.toString).toSeq
+          filters
+        } else {
+          filters
+        }
+      }
+
+      override def pushedFilters(): Array[Filter] = filters
 
       override def pruneColumns(requiredSchema: StructType): Unit = {
         columns = StructType(requiredSchema.fieldNames.map(schema()(_)))

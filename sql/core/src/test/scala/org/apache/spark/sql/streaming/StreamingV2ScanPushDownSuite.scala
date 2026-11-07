@@ -30,9 +30,9 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{DataFrame, Encoder, Encoders, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow}
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, ArrayContains, AttributeSet, Cast, EqualTo, EvalMode, Expression, Floor, GetStructField, GreaterThan, GreaterThanOrEqual, If, IsNotNull, LeafExpression, LessThan, Literal, Or, Rand, RLike, ScalarSubquery}
+import org.apache.spark.sql.catalyst.expressions.{Add, Alias, And, ArrayContains, AttributeSet, Cast, Divide, EqualTo, EvalMode, Expression, Floor, GetStructField, GreaterThan, GreaterThanOrEqual, IsNotNull, LeafExpression, LessThan, Literal, Or, Rand, RLike, ScalarSubquery}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.optimizer.{ColumnPruning, PruneFilters}
+import org.apache.spark.sql.catalyst.optimizer.{ColumnPruning, InferFiltersFromConstraints, InferFiltersFromGenerate, PruneFilters}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
@@ -77,7 +77,7 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
   private val filtering = InMemoryBaseTable.SIMULATE_STREAMING_FILTERS -> "true"
 
   /**
-   * Creates the in-memory `table` with `columns`, `properties`, and the capability
+   * Creates the in-memory `table` with `columns`, `properties`, and the capabilities
    * STREAMING_COLUMN_PRUNING and STREAMING_FILTER_PUSHDOWN, which in-memory tables
    * do not have by default.
    */
@@ -96,10 +96,11 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
-  /** The columns that a streaming query needs from each of its sources, when it starts. */
+  /** What a streaming query reads from each of its sources, when it starts. */
   private def reads(df: DataFrame): Map[StreamingRelationV2, StreamingV2ScanPushDown.Reads] =
     StreamingV2ScanPushDown.columnsAndFiltersOfSources(spark, df.queryExecution.analyzed, None)
 
+  /** The columns that a streaming query needs from each of its sources, when it starts. */
   private def requiredColumns(df: DataFrame): Map[StreamingRelationV2, AttributeSet] =
     reads(df).map { case (relation, read) => relation -> read.requiredColumns }
 
@@ -140,7 +141,7 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
   }
 
   /**
-   * Checks that the last micro-batch evaluates the filters on `column` once, apart from the
+   * Checks that the last micro-batch evaluates the filters on `columns` once, apart from the
    * IsNotNull that the optimizer infers.
    */
   private def assertEvaluatedOnce(columns: String*): StreamAction = AssertOnQuery { query =>
@@ -994,16 +995,17 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
-  test("push down no filter after a filter that is not pushed down") {
+  test("push down no filter that may fail after a filter that is not pushed down") {
     withTable(tbl) {
       createTable(tbl, "id bigint, owner string, qty int, payload string")
       sql(s"INSERT INTO $tbl VALUES (1, current_user(), 1, '1'), (2, 'other', 0, 'abc')")
       val raise = "CASE WHEN qty <= 0 THEN raise_error('bad qty') ELSE true END"
       val source = spark.readStream.table(tbl)
       // The filter on the owner has a value of each micro-batch, so it is not pushed down, and
-      // neither is any filter written after it: each micro-batch evaluates the pushed filters
-      // first, so a filter that fails on the row of the other owner, as the cast of its payload
-      // does with ANSI, or the error raised for its quantity 0, would fail the query.
+      // neither is a filter written after it that may fail: the streams may evaluate the pushed
+      // filters first, on the rows of the source, so a filter that fails on the row of the other
+      // owner, as the cast of its payload does with ANSI, or the error raised for its quantity 0,
+      // would fail the query.
       Seq(raise -> Nil, "CAST(payload AS INT) > 0" -> Nil, "id > 0" -> Seq("GreaterThan(id,0)"))
         .foreach { case (filter, taken) =>
           val df = source.where(s"owner = current_user() AND $filter")
@@ -1215,8 +1217,8 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
   test("fail the query when the read schema of a scan of all the columns with filters does not " +
       "follow the relation") {
     val input = MemoryStream[(Long, String, Int)]
-    val table = new UnknownColumnFilterTable(input)
-    val df = Dataset.ofRows(spark, StreamingRelationV2(None, "unknown_column_filter", table,
+    val table = new UnknownColumnReadSchemaTable(input, takesFilters = true)
+    val df = Dataset.ofRows(spark, StreamingRelationV2(None, "unknown_column_read_schema", table,
       CaseInsensitiveStringMap.empty(), DataTypeUtils.toAttributes(table.schema()), None, None,
       None)).toDF("id", "data", "extra").where("extra > 10")
     val logs = new LogAppender("the read schema of a scan of all the columns with filters")
@@ -1246,13 +1248,6 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
         assertReadSchema("id", "data", "extra"),
         assertScanOutputs(Seq("id", "data", "extra")),
         assertPushedFilters(),
-        AssertOnQuery { query =>
-          // The plan of the query only applies the filter of the query.
-          val relations = query.logicalPlan.collect {
-            case relation: StreamingDataSourceV2ScanRelation => relation
-          }
-          relations.nonEmpty && relations.forall(_.pushedFilters.isEmpty)
-        },
         CheckAnswer(Row("b")))
     }
   }
@@ -1393,6 +1388,8 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
           plan
         }
       }
+      // The tests fail on a failure of the optimization at the start by default.
+      assert(SQLConf.STREAMING_V2_SCAN_PUSHDOWN_FAIL_ON_ERROR.defaultValue.contains(true))
       withSourceTable() {
         spark.experimental.extraOptimizations = Seq(failing)
         val logs = new LogAppender("the failure of the optimization at the start")
@@ -1442,7 +1439,7 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
           checkError(e.asInstanceOf[SparkException],
             condition = "STREAMING_SCAN_FILTERS_CHANGED",
             parameters = Map(
-              "filters" -> "(testcat.t.extra < 1)",
+              "filters" -> "\"(extra < 1)\"",
               "source" -> "`testcat`.`t`",
               "config" -> s"\"${SQLConf.STREAMING_V2_FILTER_PUSHDOWN_ENABLED.key}\""))
         })
@@ -1530,12 +1527,28 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
       assert(accepts(GreaterThan(kd, Literal(0.0)))(Filter(EqualTo(f, structOf(1.0)), _)))
       assert(!accepts(EqualTo(Cast(kd, StringType), Literal("0.0")))(
         Filter(EqualTo(f, structOf(0.0)), _)))
-      // And once the optimizer of the micro-batch rewrote it, as it rewrites the plan.
-      assert(accepts(LessThan(Cast(e, LongType), id))(
-        Filter(And(EqualTo(id, Literal(5L)), LessThan(e, Literal(5))), _)))
-      assert(accepts(If(EqualTo(data, Literal("")), GreaterThan(id, Literal(5L)),
-          GreaterThan(id, Literal(3L))))(
-        Filter(And(EqualTo(data, Literal("a")), GreaterThan(id, Literal(3L))), _)))
+      // And once the optimizer of the micro-batch rewrote it, as it rewrites the plan: the plans
+      // below are those that the optimizer makes of the pushed filter with the conditions.
+      def optimized(conditions: Expression*)(relation: LogicalPlan): LogicalPlan = {
+        withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+            Seq(InferFiltersFromConstraints.ruleName, InferFiltersFromGenerate.ruleName)
+              .mkString(",")) {
+          spark.sessionState.optimizer.execute(Filter(conditions.reduce(And), relation))
+        }
+      }
+      val castBelow = LessThan(Cast(e, LongType), id)
+      assert(accepts(castBelow)(optimized(EqualTo(id, Literal(5L)), castBelow)))
+      // In part, as the optimizer keeps the columns of an expression that may fail: with e = 1,
+      // (id + e > 3 AND e > 0) OR id > 9 becomes id + e > 3 OR id > 9.
+      val part = Or(And(GreaterThan(Add(id, Cast(e, LongType)), Literal(3L)),
+        GreaterThan(e, Literal(0))), GreaterThan(id, Literal(9L)))
+      assert(accepts(part)(optimized(EqualTo(e, Literal(1)), part)))
+      // Or into true, without the division by 0 that it keeps.
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        val division = Or(GreaterThan(Divide(Literal(10.0), Cast(id, DoubleType)), Literal(1.0)),
+          LessThan(id, Literal(1L)))
+        assert(accepts(division)(optimized(EqualTo(id, Literal(0L)), division)))
+      }
       // A double equal to 0.0 is 0.0 or -0.0, so the filter must hold with both, as when the
       // double is compared, or in its floor, but not in its cast to a string, which is "-0.0" on
       // some rows. A double equal to another value has this value.
@@ -1738,11 +1751,22 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
       val inline = sql("SELECT * FROM VALUES (2, current_date()) AS s(k, d)")
       val df = source.where("extra > 10").join(inline, source("id") === inline("k"))
         .select("data", "d")
-      val sourceReads = reads(df).values.toSeq
-      assert(sourceReads.map(_.requiredColumns.map(_.name).toSet) ===
+      assert(requiredColumns(df).values.map(_.map(_.name).toSet).toSeq ===
         Seq(Set("id", "data", "extra")))
-      assert(sourceReads.flatMap(_.filters).map(_.references.map(_.name).toSet) ===
-        Seq(Set("extra")))
+      assert(pushed(df) === Seq(Set("extra")))
+    }
+  }
+
+  test("push down no filter that the reads of a source apply with another zero") {
+    withTable(tbl) {
+      createTable(tbl, "x double")
+      val source = spark.readStream.table(tbl)
+      // x IN (0.0, 1.0) and x IN (-0.0, 1.0) are semantically equal, but the check of the
+      // micro-batches tells them apart, so the scan gets neither.
+      val df = source.where(col("x").isin(0.0, 1.0)).union(source.where(col("x").isin(-0.0, 1.0)))
+      assert(pushed(df) === Nil)
+      assert(pushed(source.where(col("x").isin(0.0, 1.0))
+        .union(source.where(col("x").isin(0.0, 1.0)))) === Seq(Set("x")))
     }
   }
 
@@ -1984,21 +2008,23 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
     // Two filters above the projection, which the micro-batch combines.
     "two filters" -> ((df: DataFrame) =>
       df.withColumn("pt", current_timestamp()).where("extra > 10").where("data = 'b'")
-        .select("data", "pt"), Seq(Seq("extra"), Seq("data"))),
+        .select("data", "pt"), Seq(Seq("extra"), Seq("data")),
+      Seq("GreaterThan(extra,10)", "EqualTo(data,b)")),
     // A filter that the optimizer rewrites, as id > CAST(1 AS BIGINT), whose pushed filter is
     // optimized too.
     "a rewritten filter" -> ((df: DataFrame) =>
       df.withColumn("pt", current_timestamp()).where("id > 1").select("data", "pt"),
-      Seq(Seq("id"))),
+      Seq(Seq("id")), Seq("GreaterThan(id,1)")),
     // A filter on an alias of the column of the pushed filter.
     "a filter on an alias" -> ((df: DataFrame) =>
       df.select(col("data"), col("extra").as("e"), current_timestamp().as("pt"))
-        .where("e > 10").select("data", "pt"), Seq(Seq("e", "extra"))),
+        .where("e > 10").select("data", "pt"), Seq(Seq("e", "extra")),
+      Seq("GreaterThan(extra,10)")),
     // A filter above a watermark, which keeps the rows and the columns of its child.
     "a filter above a watermark" -> ((df: DataFrame) =>
       df.withColumn("pt", current_timestamp()).withWatermark("pt", "10 seconds")
-        .where("extra > 10").select("data"), Seq(Seq("extra")))
-  ).foreach { case (name, (query, columns)) =>
+        .where("extra > 10").select("data"), Seq(Seq("extra")), Seq("GreaterThan(extra,10)"))
+  ).foreach { case (name, (query, columns, pushedFilters)) =>
     test(s"evaluate the pushed filters once with $name above a projection of a value of each " +
         "micro-batch") {
       withSourceTable() {
@@ -2006,7 +2032,7 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
         withoutPruneFilters.foreach { confs =>
           withSQLConf(confs.toSeq: _*) {
             testStream(df)(
-              ProcessAllAvailable() +:
+              Seq(ProcessAllAvailable(), assertPushedFilters(pushedFilters: _*)) ++
                 columns.map(names => assertEvaluatedOnce(names: _*)): _*)
           }
         }
@@ -2039,8 +2065,8 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
   test("push down the filters to a scan of all the columns whose read schema does not follow " +
       "the relation, without the column pruning") {
     val input = MemoryStream[(Long, String, Int)]
-    val table = new UnknownColumnFilterTable(input)
-    val df = Dataset.ofRows(spark, StreamingRelationV2(None, "unknown_column_filter", table,
+    val table = new UnknownColumnReadSchemaTable(input, takesFilters = true)
+    val df = Dataset.ofRows(spark, StreamingRelationV2(None, "unknown_column_read_schema", table,
       CaseInsensitiveStringMap.empty(), DataTypeUtils.toAttributes(table.schema()), None, None,
       None)).toDF("id", "data", "extra").where("extra > 10").select("data")
     val logs = new LogAppender("the read schema of a scan of all the columns with filters")
@@ -2104,8 +2130,8 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
       }
   }
 
-  test("push down only the leading predicates that a V2 filter builder gets") {
-    val table = new V2FilterTable
+  test("push down only the leading predicates that a V2 filter builder gets, or that cannot fail") {
+    val table = new FilterStreamTable(MemoryStream[(Long, String)], catalyst = false)
     val output = DataTypeUtils.toAttributes(table.schema())
     val payload = output(1)
     // RLIKE cannot be translated to a predicate of the source, while the cast can, and fails on
@@ -2125,6 +2151,9 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
     assert(table.pushed.isEmpty)
     assert(pushed(positive, matches) === Seq(positive))
     assert(table.pushed.length === 1)
+    // Also a predicate that cannot fail, wherever it is.
+    val idAbove1 = GreaterThan(output.head, Literal(1L))
+    assert(pushed(matches, positive, idAbove1) === Seq(idAbove1))
   }
 
   test("push down the filters that a V1 filter builder takes wherever they are") {
@@ -2279,27 +2308,6 @@ private class PruningContinuousReaderFactory(
   }
 }
 
-/** A table whose scan builder takes V2 predicates, which it records. */
-private class V2FilterTable extends Table with SupportsRead {
-  var pushed: Array[Predicate] = Array.empty
-  override def name(): String = "v2_filters"
-  override def schema(): StructType = StructType.fromDDL("id BIGINT, payload STRING")
-  override def capabilities(): util.Set[TableCapability] = util.EnumSet.of(
-    TableCapability.MICRO_BATCH_READ, TableCapability.STREAMING_FILTER_PUSHDOWN)
-  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-    new ScanBuilder with SupportsPushDownV2Filters {
-      override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
-        pushed = predicates
-        predicates
-      }
-      override def pushedPredicates(): Array[Predicate] = pushed
-      override def build(): Scan = new Scan {
-        override def readSchema(): StructType = schema()
-      }
-    }
-  }
-}
-
 /** A batch table that counts the scan builders that it creates, which cannot build a scan. */
 private class CountingBatchTable extends Table with SupportsRead {
   val scanBuilders = new AtomicInteger()
@@ -2319,41 +2327,31 @@ private class CountingBatchTable extends Table with SupportsRead {
 
 /**
  * A table over a memory stream that declares STREAMING_COLUMN_PRUNING, whose scans have a column
- * in their read schema that the table does not have.
+ * in their read schema that the table does not have. With `takesFilters`, it declares
+ * STREAMING_FILTER_PUSHDOWN too, and its scan builder takes all the filters, which it records.
  */
-private class UnknownColumnReadSchemaTable(input: MemoryStream[_]) extends Table with SupportsRead {
+private class UnknownColumnReadSchemaTable(input: MemoryStream[_], takesFilters: Boolean = false)
+  extends Table with SupportsRead {
+  @volatile var pushed: Seq[String] = Nil
+
   override def name(): String = "unknown_column_read_schema"
 
   override def schema(): StructType = input.fullSchema()
 
-  override def capabilities(): util.Set[TableCapability] =
-    util.EnumSet.of(TableCapability.MICRO_BATCH_READ, TableCapability.STREAMING_COLUMN_PRUNING)
+  override def capabilities(): util.Set[TableCapability] = {
+    val capabilities = util.EnumSet.of(
+      TableCapability.MICRO_BATCH_READ, TableCapability.STREAMING_COLUMN_PRUNING)
+    if (takesFilters) capabilities.add(TableCapability.STREAMING_FILTER_PUSHDOWN)
+    capabilities
+  }
 
-  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = () => new Scan {
+  private def scan(): Scan = new Scan {
     override def readSchema(): StructType = schema().add("unknown", "int")
 
     override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = input
   }
-}
 
-/**
- * A table over a memory stream that declares STREAMING_COLUMN_PRUNING and
- * STREAMING_FILTER_PUSHDOWN, whose scans have a column in their read schema that the table does not
- * have, and whose scan builder takes all the filters, which it records.
- */
-private class UnknownColumnFilterTable(input: MemoryStream[_]) extends Table with SupportsRead {
-  @volatile var pushed: Seq[String] = Nil
-
-  override def name(): String = "unknown_column_filter"
-
-  override def schema(): StructType = input.fullSchema()
-
-  override def capabilities(): util.Set[TableCapability] = util.EnumSet.of(
-    TableCapability.MICRO_BATCH_READ,
-    TableCapability.STREAMING_COLUMN_PRUNING,
-    TableCapability.STREAMING_FILTER_PUSHDOWN)
-
-  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = if (takesFilters) {
     new ScanBuilder with SupportsPushDownFilters {
       private var filters = Array.empty[SourceFilter]
 
@@ -2365,12 +2363,10 @@ private class UnknownColumnFilterTable(input: MemoryStream[_]) extends Table wit
 
       override def pushedFilters(): Array[SourceFilter] = filters
 
-      override def build(): Scan = new Scan {
-        override def readSchema(): StructType = schema().add("unknown", "int")
-
-        override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = input
-      }
+      override def build(): Scan = scan()
     }
+  } else {
+    () => scan()
   }
 }
 

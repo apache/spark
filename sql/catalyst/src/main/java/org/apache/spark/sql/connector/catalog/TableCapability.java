@@ -204,10 +204,11 @@ public enum TableCapability {
    * watermark, are not pushed. The filters of a {@code SupportsPushDownFilters} builder compare
    * columns with values, which cannot fail, so it gets such filters whatever their order among
    * the filters over the relation. A builder whose filters may fail on some rows, as a cast does
-   * with ANSI, only gets the filters that the query applies before any other filter, in their
-   * order, and the streams of its scans must not evaluate a filter on a row that a filter before
-   * it drops, so that a filter does not see a row that the query drops with a filter written
-   * before it. Spark may still evaluate other conditions before these filters in a micro-batch,
+   * with ANSI, gets the filters that the query applies before any other filter, in their order,
+   * and then those that cannot fail, such as comparisons of columns with values, wherever they
+   * are. The streams of its scans must not evaluate a filter on a row that a filter before it
+   * drops, so that a filter does not see a row that the query drops with a filter written before
+   * it. Spark may still evaluate other conditions before these filters in a micro-batch,
    * such as those that it infers from them, e.g. {@code a > 5} from {@code a = b AND b > 5}, or
    * an equality with a literal that it moves first, so such a condition may drop a row in Spark
    * on which a pushed filter that may fail, such as a division with ANSI, fails in the stream.
