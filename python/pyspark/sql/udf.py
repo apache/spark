@@ -271,6 +271,7 @@ class UserDefinedFunction:
                 value = session.conf.get(key, default)
             return value is not None and value.lower() == "true"
 
+        guarded_constructs: list[str] = []
         try:
             transpile_enabled = (
                 deterministic
@@ -308,6 +309,7 @@ class UserDefinedFunction:
                     self._transpiled_param_names,
                     self._transpiled_input_categories,
                     positional_only,
+                    guarded_constructs,
                 ) = _transpile_func(session, func, self.returnType)
                 self._positional_only_param_names = frozenset(positional_only)
                 if not self.transpiled:
@@ -329,6 +331,15 @@ class UserDefinedFunction:
             self._transpiled_param_names = []
             self._transpiled_input_categories = []
             self._positional_only_param_names = frozenset()
+        if guarded_constructs:
+            constructs = " and ".join(guarded_constructs)
+            warnings.warn(
+                f"Python UDF {func}: its transpiled form includes NULL guards for "
+                f"{constructs}. They raise when the transpiled form runs on NULL "
+                "input. Add `is not None` guards around these operations or filter "
+                "NULLs upstream.",
+                UserWarning,
+            )
 
     @staticmethod
     def _check_return_type(returnType: DataType, evalType: int) -> None:
