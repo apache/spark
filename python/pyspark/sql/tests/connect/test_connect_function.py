@@ -917,6 +917,36 @@ class SparkConnectFunctionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
                     sdf.select(scol.over(swin)).toPandas(),
                 )
 
+        # test collect_union: it takes an array-typed column, and its element order is
+        # unspecified, so the windowed result is sorted.
+        for cwin, swin in [
+            (CW.partitionBy("a"), SW.partitionBy("a")),
+            (
+                CW.partitionBy("a").orderBy("b").rowsBetween(CW.unboundedPreceding, CW.currentRow),
+                SW.partitionBy("a").orderBy("b").rowsBetween(SW.unboundedPreceding, SW.currentRow),
+            ),
+            (
+                CW.partitionBy("a").orderBy("b").rowsBetween(-1, 1),
+                SW.partitionBy("a").orderBy("b").rowsBetween(-1, 1),
+            ),
+            (
+                CW.partitionBy("a").orderBy("b").rangeBetween(-1, CW.currentRow),
+                SW.partitionBy("a").orderBy("b").rangeBetween(-1, SW.currentRow),
+            ),
+            (
+                CW.partitionBy("a").orderBy("b").rowsBetween(CW.unboundedPreceding, -1),
+                SW.partitionBy("a").orderBy("b").rowsBetween(SW.unboundedPreceding, -1),
+            ),
+        ]:
+            self.assert_eq(
+                cdf.select(
+                    CF.sort_array(CF.collect_union(CF.array("b", "c")).over(cwin))
+                ).toPandas(),
+                sdf.select(
+                    SF.sort_array(SF.collect_union(SF.array("b", "c")).over(swin))
+                ).toPandas(),
+            )
+
         # check error
         with self.assertRaises(PySparkValueError) as pe:
             cdf.select(CF.sum("a").over(CW.orderBy("b").rowsBetween(0, (1 << 33)))).show()
