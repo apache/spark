@@ -1228,16 +1228,11 @@ case class HashAggregateExec(
       val boundUpdateExprs = updateExprs.map { updateExprsForOneFunc =>
         bindReferences(updateExprsForOneFunc, inputAttrs)
       }
-      val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExprs.flatten)
-      val effectiveCodes = ctx.evaluateSubExprEliminationState(subExprs.states.values)
-      val unsafeRowBufferEvals = boundUpdateExprs.map { boundUpdateExprsForOneFunc =>
-        ctx.withSubExprEliminationExprs(subExprs.states) {
-          boundUpdateExprsForOneFunc.map(_.genCode(ctx))
-        }
-      }
+      val (subExprs, effectiveCodes, unsafeRowBufferEvals) =
+        generateUpdateExprsCode(ctx, boundUpdateExprs)
 
       val aggCodeBlocks = updateExprs.indices.map { i =>
-        val rowBufferEvalsForOneFunc = unsafeRowBufferEvals(i)
+        val (subExprCode, rowBufferEvalsForOneFunc) = unsafeRowBufferEvals(i)
         val boundUpdateExprsForOneFunc = boundUpdateExprs(i)
         val bufferOffset = bufferStartOffsets(i)
 
@@ -1250,6 +1245,7 @@ case class HashAggregateExec(
           CodeGenerator.updateColumn(unsafeRowBuffer, dt, bufferOffset + j, ev, nullable)
         }
         code"""
+           |$subExprCode
            |${ctx.registerComment(s"evaluate aggregate function for ${aggNames(i)}")}
            |${evaluateVariables(rowBufferEvalsForOneFunc)}
            |${ctx.registerComment("update unsafe row buffer")}
@@ -1274,15 +1270,11 @@ case class HashAggregateExec(
           val boundUpdateExprs = updateExprs.map { updateExprsForOneFunc =>
             bindReferences(updateExprsForOneFunc, inputAttrs)
           }
-          val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExprs.flatten)
-          val effectiveCodes = ctx.evaluateSubExprEliminationState(subExprs.states.values)
-          val fastRowEvals = boundUpdateExprs.map { boundUpdateExprsForOneFunc =>
-            ctx.withSubExprEliminationExprs(subExprs.states) {
-              boundUpdateExprsForOneFunc.map(_.genCode(ctx))
-            }
-          }
+          val (subExprs, effectiveCodes, fastRowEvals) =
+            generateUpdateExprsCode(ctx, boundUpdateExprs)
 
-          val aggCodeBlocks = fastRowEvals.zipWithIndex.map { case (fastRowEvalsForOneFunc, i) =>
+          val aggCodeBlocks = fastRowEvals.indices.map { i =>
+            val (subExprCode, fastRowEvalsForOneFunc) = fastRowEvals(i)
             val boundUpdateExprsForOneFunc = boundUpdateExprs(i)
             val bufferOffset = bufferStartOffsets(i)
             // All the update code for aggregation buffers should be placed in the end
@@ -1295,6 +1287,7 @@ case class HashAggregateExec(
                 isVectorized = true)
             }
             code"""
+               |$subExprCode
                |${ctx.registerComment(s"evaluate aggregate function for ${aggNames(i)}")}
                |${evaluateVariables(fastRowEvalsForOneFunc)}
                |${ctx.registerComment("update fast row")}

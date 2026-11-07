@@ -234,16 +234,11 @@ trait AggregateCodegenSupport
     val boundUpdateExprs = updateExprs.map { updateExprsForOneFunc =>
       bindReferences(updateExprsForOneFunc, inputAttrs)
     }
-    val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExprs.flatten)
-    val effectiveCodes = ctx.evaluateSubExprEliminationState(subExprs.states.values)
-    val bufferEvals = boundUpdateExprs.map { boundUpdateExprsForOneFunc =>
-      ctx.withSubExprEliminationExprs(subExprs.states) {
-        boundUpdateExprsForOneFunc.map(_.genCode(ctx))
-      }
-    }
+    val (subExprs, effectiveCodes, bufferEvals) = generateUpdateExprsCode(ctx, boundUpdateExprs)
 
     val aggNames = functions.map(_.prettyName)
-    val aggCodeBlocks = bufferEvals.zipWithIndex.map { case (bufferEvalsForOneFunc, i) =>
+    val aggCodeBlocks = bufferEvals.indices.map { i =>
+      val (subExprCode, bufferEvalsForOneFunc) = bufferEvals(i)
       val bufVarsForOneFunc = bufVars(i)
       // All the update code for aggregation buffers should be placed in the end
       // of each aggregation function code.
@@ -255,6 +250,7 @@ trait AggregateCodegenSupport
       }
       code"""
             |${ctx.registerComment(s"do aggregate for ${aggNames(i)}")}
+            |$subExprCode
             |${ctx.registerComment("evaluate aggregate function")}
             |${evaluateVariables(bufferEvalsForOneFunc)}
             |${ctx.registerComment("update aggregation buffers")}
@@ -271,6 +267,40 @@ trait AggregateCodegenSupport
        |// evaluate aggregate functions and update aggregation buffers
        |$codeToEvalAggFuncs
      """.stripMargin
+  }
+
+  /**
+   * Generates the update expressions and their common subexpressions.
+   *
+   * Functions without a FILTER clause share subexpressions before all the updates. A function
+   * with a FILTER clause evaluates its own subexpressions after its FILTER check.
+   */
+  protected def generateUpdateExprsCode(
+      ctx: CodegenContext,
+      boundUpdateExprs: Seq[Seq[Expression]])
+    : (SubExprCodes, String, Seq[(String, Seq[ExprCode])]) = {
+    val hasFilter = aggregateExpressions.map { e =>
+      (e.mode == Partial || e.mode == Complete) && e.filter.isDefined
+    }
+    val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(
+      boundUpdateExprs.zip(hasFilter).filterNot(_._2).flatMap(_._1))
+    val effectiveCodes = ctx.evaluateSubExprEliminationState(subExprs.states.values)
+    val evals = boundUpdateExprs.zip(hasFilter).map {
+      case (boundUpdateExprsForOneFunc, true) =>
+        val subExprsForOneFunc =
+          ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExprsForOneFunc)
+        val subExprCode = ctx.evaluateSubExprEliminationState(subExprsForOneFunc.states.values)
+        val evalsForOneFunc = ctx.withSubExprEliminationExprs(subExprsForOneFunc.states) {
+          boundUpdateExprsForOneFunc.map(_.genCode(ctx))
+        }
+        (subExprCode, evalsForOneFunc)
+      case (boundUpdateExprsForOneFunc, false) =>
+        val evalsForOneFunc = ctx.withSubExprEliminationExprs(subExprs.states) {
+          boundUpdateExprsForOneFunc.map(_.genCode(ctx))
+        }
+        ("", evalsForOneFunc)
+    }
+    (subExprs, effectiveCodes, evals)
   }
 
   /**
