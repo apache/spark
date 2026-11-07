@@ -1956,6 +1956,27 @@ class DatasetSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-61088: self-join of a checkpointed Dataset should not use the partitioning, " +
+      "ordering and constraints of the other copy") {
+    // The partitioning, the ordering and the constraints refer to `t.id`, while the output is
+    // `s.id`. With AQE, the checkpoint would not keep the partitioning and the ordering.
+    val cp = withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      spark.range(16).as("t").where($"t.id" > 5).repartition($"t.id")
+        .sortWithinPartitions($"t.id").as("s").localCheckpoint()
+    }
+    val renewed = cp.logicalPlan.asInstanceOf[LogicalRDD].newInstance()
+    assert(renewed.outputOrdering.map(_.references) === Seq(renewed.outputSet))
+    val (x, y) = (cp.as("x"), cp.as("y"))
+    val agg = broadcast(x).join(y, $"x.id" % 2 === $"y.id" % 2).groupBy($"x.id").count()
+    checkAnswer(agg, (6L until 16L).map(Row(_, 5L)))
+    val outer = x.join(y, $"x.id" === $"y.id" + 1, "right_outer").where($"y.id" > 0)
+    checkAnswer(outer, (6L until 15L).map(i => Row(i + 1, i)) :+ Row(null, 15L))
+
+    // The output columns sharing an exprId keep their names.
+    val cp2 = spark.range(3).select($"id", $"ID").localCheckpoint()
+    assert(cp2.join(cp2).columns === Array("id", "ID", "id", "ID"))
+  }
+
   test("Dataset().localCheckpoint() lazy with StorageLevel") {
     val df = spark.range(10).repartition($"id" % 2)
     val checkpointedDf = df.localCheckpoint(eager = false, StorageLevel.DISK_ONLY)
