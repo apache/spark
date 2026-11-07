@@ -38,7 +38,14 @@ object TableCapabilityCheck extends (LogicalPlan => Unit) {
 
   override def apply(plan: LogicalPlan): Unit = {
     plan foreach {
-      case r: DataSourceV2Relation if !r.table.supports(BATCH_READ) =>
+      // A table that supports external lookup may be read by a lookup join formed later, e.g.
+      // when a DataFrame over it is joined. PrepareExternalLookupJoin rejects it when it remains
+      // a plain scan after lookup joins are prepared.
+      case r: DataSourceV2Relation
+          if !r.table.supports(BATCH_READ) && !r.table.supports(EXTERNAL_LOOKUP) =>
+        throw QueryCompilationErrors.unsupportedBatchReadError(r.table)
+
+      case r: ExternalLookupRelation if !r.table.supports(EXTERNAL_LOOKUP) =>
         throw QueryCompilationErrors.unsupportedBatchReadError(r.table)
 
       case r: StreamingRelationV2 if !r.table.supportsAny(MICRO_BATCH_READ, CONTINUOUS_READ) =>
