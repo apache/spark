@@ -626,6 +626,7 @@ VARIANT Functions
     try_variant_insert
     try_variant_set
     variant_array_append
+    variant_array_length
     variant_delete
     variant_from_arrays
     variant_from_entries
