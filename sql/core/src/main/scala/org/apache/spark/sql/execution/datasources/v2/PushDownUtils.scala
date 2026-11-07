@@ -683,14 +683,17 @@ object PushDownUtils extends Logging {
       scanBuilder: ScanBuilder,
       relation: DataSourceV2Relation,
       projects: Seq[NamedExpression],
-      filters: Seq[Expression]): (Scan, Seq[AttributeReference]) = {
+      filters: Seq[Expression],
+      rootFieldProjects: Option[Seq[NamedExpression]] = None,
+      extraRootFields: Seq[SchemaPruning.RootField] = Nil): (Scan, Seq[AttributeReference]) = {
     val exprs = projects ++ filters
     val requiredColumns = AttributeSet(exprs.flatMap(_.references))
     val neededOutput = relation.output.filter(requiredColumns.contains)
 
     scanBuilder match {
       case r: SupportsPushDownRequiredColumns if SQLConf.get.nestedSchemaPruningEnabled =>
-        val rootFields = SchemaPruning.identifyRootFields(projects, filters)
+        val rootFields = SchemaPruning.identifyRootFields(
+          rootFieldProjects.getOrElse(projects), filters, extraRootFields)
         val prunedSchema = if (rootFields.nonEmpty) {
           SchemaPruning.pruneSchema(relation.schema, rootFields)
         } else {
