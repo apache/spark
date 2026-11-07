@@ -27,8 +27,8 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{EXTERNAL_LOOKUP_HINT, EX
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.read.{ExternalLookupReaderFactory, Scan}
 import org.apache.spark.sql.types.{BinaryType, BooleanType, ByteType, CharType, DataType,
-  DateType, DecimalType, IntegerType, LongType, ShortType, StringType, TimestampNTZType,
-  TimestampType, VarcharType}
+  DateType, DecimalType, IntegerType, IntegralType, LongType, ShortType, StringType,
+  TimestampNTZType, TimestampType, VarcharType}
 
 /**
  * Marks the plan below it as the lookup side that the `EXTERNAL_LOOKUP` hint asks an external
@@ -165,17 +165,27 @@ object ExternalLookupJoinShapes {
 
   /**
    * Whether a range parameter cannot fail: ExprUtils.canEvaluateUnconditionally accepts it, or it
-   * is a widening cast of such a value between types on which Spark offers a range. Analysis adds
-   * such a cast when the stream side has a narrower type than the lookup column, as an INT column
-   * compared with a BIGINT key, and `Cast.canUpCast` ensures that it cannot fail.
+   * is a widening numeric cast of such a value. Analysis adds such a cast when the stream side has
+   * a narrower type than the lookup column, as an INT column compared with a BIGINT key.
    */
   private def cannotFail(parameter: Expression): Boolean = parameter match {
     case cast: Cast =>
-      Cast.canUpCast(cast.child.dataType, cast.dataType) &&
-        ExternalLookupKeyTypes.supportsRange(cast.child.dataType) &&
-        ExternalLookupKeyTypes.supportsRange(cast.dataType) &&
+      isTotalNumericWidening(cast.child.dataType, cast.dataType) &&
         ExprUtils.canEvaluateUnconditionally(cast.child)
     case _ => ExprUtils.canEvaluateUnconditionally(parameter)
+  }
+
+  /**
+   * Whether a cast converts every value of its source type: an integral type to a wider one, or
+   * an integral type or DECIMAL to a DECIMAL with room for all of its digits. `Cast.canUpCast`
+   * is not enough: it also accepts casts that fail on some values, as a far-future DATE overflows
+   * a TIMESTAMP, and 9999999999999999999 as DECIMAL(19, 0) exceeds BIGINT under ANSI.
+   */
+  private def isTotalNumericWidening(from: DataType, to: DataType): Boolean = (from, to) match {
+    case (from: IntegralType, to: IntegralType) => from.defaultSize < to.defaultSize
+    case (from: IntegralType, to: DecimalType) => to.isWiderThan(from)
+    case (from: DecimalType, to: DecimalType) => to.isWiderThan(from)
+    case _ => false
   }
 
   /** The same comparison with its operands swapped, so that `a < b` becomes `b > a`. */

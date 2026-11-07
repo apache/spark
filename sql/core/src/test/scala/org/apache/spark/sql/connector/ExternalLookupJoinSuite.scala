@@ -54,8 +54,8 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.StreamingDedu
 import org.apache.spark.sql.execution.streaming.runtime.{IncrementalExecution, MemoryStream,
   StreamingQueryWrapper}
 import org.apache.spark.sql.execution.streaming.sources.LowLatencyMemoryStream
-import org.apache.spark.sql.functions.{broadcast, coalesce, col, concat, expr, length, lit, max,
-  raise_error, rand, to_json, upper, when}
+import org.apache.spark.sql.functions.{broadcast, coalesce, col, concat, date_from_unix_date,
+  expr, length, lit, max, raise_error, rand, to_json, upper, when}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{StreamingQueryException, StreamRealTimeModeE2ESuiteBase}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -1582,6 +1582,23 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       Seq((">=", "id", IntegerType)))
   }
 
+  test("a range with a cast that can fail is not offered, so an unmatched row does not fail") {
+    ValidityExternalLookupTable.offered.set(Seq.empty)
+    val rates = spark.read.format(classOf[ValidityExternalLookupDataSource].getName).load()
+    // An event on the last day that a DATE can hold. Its cast to TIMESTAMP_NTZ overflows, and no
+    // rate is stored for its id. A join evaluates the range only for the rows whose id matches,
+    // so this event must not fail the query.
+    val events = streamOf(Seq((2, Int.MaxValue)).toDF("id", "dayNumber"))
+      .select($"id", date_from_unix_date($"dayNumber").as("day"))
+    val condition = rates("id") === events("id") &&
+      rates("validFrom") >= events("day").cast("timestamp_ntz")
+
+    checkStream(
+      events.join(rates, condition, "left_outer").select(events("id"), rates("id")),
+      Seq(Row(2, null)))
+    assert(ValidityExternalLookupTable.offered.get() === Seq("id = ?"))
+  }
+
   test("external lookup leaves unselected criteria as Spark residuals") {
     SimpleExternalLookupDataSource.resetCounters()
     val lookup = spark.read
@@ -2623,6 +2640,55 @@ case class CompositeExternalLookupScan(
     TestExternalLookup(
       100,
       CompositeExternalLookupReaderFactory(requiredSchema, selectedLookupPredicates))
+}
+
+class ValidityExternalLookupDataSource extends TableProvider {
+  override def inferSchema(options: CaseInsensitiveStringMap): StructType =
+    ValidityExternalLookupTable.schema()
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: java.util.Map[String, String]): Table = ValidityExternalLookupTable
+}
+
+/**
+ * A lookup-only table of rates, each valid from a time, which holds one rate, for id 1. Its
+ * source selects every offered predicate.
+ */
+object ValidityExternalLookupTable extends Table with SupportsRead {
+  // The descriptions of the predicates that Spark offered.
+  val offered = new AtomicReference(Seq.empty[String])
+
+  override def name(): String = "ValidityExternalLookupTable"
+  override def schema(): StructType = StructType.fromDDL("id INT, validFrom TIMESTAMP_NTZ")
+  override def capabilities(): java.util.Set[TableCapability] =
+    java.util.EnumSet.of(EXTERNAL_LOOKUP)
+
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
+    new SupportsExternalLookup {
+      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Predicate] = {
+        offered.set(candidates.map(_.toString).toSeq)
+        candidates
+      }
+      override def build(): Scan = new Scan {
+        override def readSchema(): StructType = schema()
+        override def toExternalLookup(): ExternalLookup =
+          TestExternalLookup(100, ValidityExternalLookupReaderFactory)
+      }
+    }
+}
+
+/** Returns the rate of id 1, valid from 1970-01-01, for each parameter row that asks for id 1. */
+object ValidityExternalLookupReaderFactory extends ExternalLookupReaderFactory {
+  override def createReader(): ExternalLookupReader = new ExternalLookupReader {
+    override def lookupBatch(keys: Array[InternalRow]): ExternalLookupResultCursor =
+      new TestExternalLookupResultCursor(keys.iterator.zipWithIndex.collect {
+        case (key, ordinal) if key.getInt(0) == 1 => ordinal -> InternalRow(1, 0L)
+      })
+
+    override def close(): Unit = {}
+  }
 }
 
 case class CompositeExternalLookupReaderFactory(

@@ -69,11 +69,12 @@ public interface ExternalLookupReader extends Closeable {
    * The cursor must be non-null. Each row's results must be complete: every stored row that
    * passes the filters this source reports as pushed and for which all selected predicates hold,
    * under Spark semantics, with no cap and no row lost to paging. They may omit a row that fails a
-   * pushed filter. They depend only on the row; Spark may reuse them for equal rows. A table row
-   * is returned once for each parameter row that it matches: a row that matches two parameter
-   * rows is returned twice, once with each ordinal. Spark checks the selected predicates on every
-   * returned row, but cannot find a missing one. The input is read-only and must not be kept after
-   * the cursor closes.
+   * pushed filter. They depend only on the row; Spark may reuse them for equal rows. Under Spark
+   * semantics, a stored row matches at most one parameter row of a request. If the source matches
+   * more loosely, it may return a row once for each parameter row that it considers a match, with
+   * that ordinal; Spark drops the pairs that fail its check. Spark checks the selected predicates
+   * on every returned row, but cannot find a missing one. The input is read-only and must not be
+   * kept after the cursor closes.
    * <p>
    * If the task ends while this method is in progress, Spark closes this reader first, and then
    * closes the cursor that the call returns. Closing that cursor must work after the reader is
