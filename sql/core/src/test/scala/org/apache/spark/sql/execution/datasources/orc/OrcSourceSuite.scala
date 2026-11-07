@@ -36,8 +36,11 @@ import org.apache.orc.impl.RecordReaderImpl
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{QueryTestBase, Row, SPARK_VERSION_METADATA_KEY}
+import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, SchemaMergeUtils}
 import org.apache.spark.sql.execution.datasources.orc.OrcCompressionCodec._
+import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -669,6 +672,100 @@ abstract class OrcSourceSuite extends OrcSuite with SharedSparkSession {
          |  PATH '${new File(orcTableAsDir.getAbsolutePath).toURI}'
          |)
        """.stripMargin)
+  }
+
+  for (vectorized <- Seq("true", "false")) {
+    test(s"SPARK-60123: read collated ORC strings, vectorized=$vectorized") {
+      withSQLConf(
+        SQLConf.ORC_IMPLEMENTATION.key -> "native",
+        SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized) {
+        withTable("t_orc_collated") {
+          sql(
+            """
+              |CREATE TABLE t_orc_collated (
+              |  k STRING COLLATE UTF8_LCASE
+              |) USING ORC
+              |""".stripMargin)
+
+          sql("INSERT INTO t_orc_collated VALUES ('a'), ('A'), ('b')")
+
+          val table = spark.table("t_orc_collated")
+          val readBack = spark.read.schema(table.schema).orc(table.inputFiles.toSeq: _*)
+          val useV1 = spark.sessionState.conf.getConf(SQLConf.USE_V1_SOURCE_LIST)
+            .split(",").contains("orc")
+
+          assert(readBack.queryExecution.executedPlan.exists {
+            case _: FileSourceScanExec => useV1
+            case scan: BatchScanExec => !useV1 && scan.scan.isInstanceOf[OrcScan]
+            case _ => false
+          })
+
+          Seq(table, readBack).foreach { df =>
+            checkAnswer(
+              df.select("k"),
+              Seq(Row("a"), Row("A"), Row("b")))
+
+            checkAnswer(
+              df.filter("k = 'a'").select("k"),
+              Seq(Row("a"), Row("A")))
+          }
+        }
+      }
+    }
+  }
+
+  for (vectorized <- Seq("true", "false")) {
+    test(s"SPARK-60123: read nested collated ORC strings, vectorized=$vectorized") {
+      withSQLConf(
+        SQLConf.ORC_IMPLEMENTATION.key -> "native",
+        SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized,
+        SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
+        withTable("t_orc_nested") {
+          sql(
+            """
+              |CREATE TABLE t_orc_nested (
+              |  s STRUCT<k: STRING COLLATE UTF8_LCASE>,
+              |  a ARRAY<STRING COLLATE UTF8_LCASE>,
+              |  m MAP<STRING, STRING COLLATE UTF8_LCASE>
+              |) USING ORC
+              |""".stripMargin)
+
+          sql(
+            """
+              |INSERT INTO t_orc_nested VALUES
+              |  (named_struct('k', 'a'), array('a'), map('key', 'a')),
+              |  (named_struct('k', 'A'), array('A'), map('key', 'A')),
+              |  (named_struct('k', 'b'), array('b'), map('key', 'b'))
+              |""".stripMargin)
+
+          val table = spark.table("t_orc_nested")
+          val readBack = spark.read.schema(table.schema).orc(table.inputFiles.toSeq: _*)
+          val useV1 = spark.sessionState.conf.getConf(SQLConf.USE_V1_SOURCE_LIST)
+            .split(",").contains("orc")
+
+          assert(readBack.queryExecution.executedPlan.exists {
+            case _: FileSourceScanExec => useV1
+            case scan: BatchScanExec => !useV1 && scan.scan.isInstanceOf[OrcScan]
+            case _ => false
+          })
+
+          Seq(table, readBack).foreach { df =>
+            checkAnswer(
+              df.select("s", "a", "m"),
+              Seq(
+                Row(Row("a"), Seq("a"), Map("key" -> "a")),
+                Row(Row("A"), Seq("A"), Map("key" -> "A")),
+                Row(Row("b"), Seq("b"), Map("key" -> "b"))))
+
+            Seq("s.k", "a[0]", "m['key']").foreach { expression =>
+              checkAnswer(
+                df.filter(s"$expression = 'a'").selectExpr(expression),
+                Seq(Row("a"), Row("A")))
+            }
+          }
+        }
+      }
+    }
   }
 
   test("SPARK-58814: positional ORC evolution preserves standard CHAR semantics") {
