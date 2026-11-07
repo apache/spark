@@ -1956,6 +1956,20 @@ class DatasetSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-61088: self-join of a checkpointed Dataset should not use the partitioning " +
+      "and constraints of the other copy") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      // The partitioning and the constraints refer to `t.id`, while the output is `s.id`.
+      val cp = spark.range(16).as("t").where($"t.id" > 5).repartition($"t.id").as("s")
+        .localCheckpoint()
+      val (x, y) = (cp.as("x"), cp.as("y"))
+      val agg = broadcast(x).join(y, $"x.id" % 2 === $"y.id" % 2).groupBy($"x.id").count()
+      checkAnswer(agg, (6L until 16L).map(Row(_, 5L)))
+      val outer = x.join(y, $"x.id" === $"y.id" + 1, "right_outer").where($"y.id" > 0)
+      checkAnswer(outer, (6L until 15L).map(i => Row(i + 1, i)) :+ Row(null, 15L))
+    }
+  }
+
   test("Dataset().localCheckpoint() lazy with StorageLevel") {
     val df = spark.range(10).repartition($"id" % 2)
     val checkpointedDf = df.localCheckpoint(eager = false, StorageLevel.DISK_ONLY)
