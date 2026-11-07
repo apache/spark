@@ -62,7 +62,8 @@ class ParquetToSparkSchemaConverter(
     inferTimestampNTZ: Boolean = SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.defaultValue.get,
     nanosAsLong: Boolean = SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.defaultValue.get,
     timestampNanosTypesEnabled: Boolean = false,
-    useFieldId: Boolean = SQLConf.PARQUET_FIELD_ID_READ_ENABLED.defaultValue.get,
+    private[parquet] val useFieldId: Boolean =
+      SQLConf.PARQUET_FIELD_ID_READ_ENABLED.defaultValue.get,
     val ignoreVariantAnnotation: Boolean =
       SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.defaultValue.get,
     val respectUnknownTypeAnnotation: Boolean =
