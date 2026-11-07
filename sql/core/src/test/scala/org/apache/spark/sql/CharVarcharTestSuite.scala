@@ -1773,6 +1773,31 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-60534: mixed CHAR/VARCHAR coalesce does not constrain numeric fallbacks") {
+    for {
+      ansi <- Seq(false, true)
+      typeName <- Seq("CHAR", "VARCHAR")
+      collation <- Seq("UTF8_BINARY", "UTF8_LCASE")
+    } {
+      withSQLConf(
+        SQLConf.ANSI_ENABLED.key -> ansi.toString,
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+        val input = s"cast(null AS $typeName(1) COLLATE $collation)"
+        val expectedType = if (ansi) LongType else StringType(collation)
+        val expected = if (ansi) Row(123L) else Row("123")
+        Seq(s"coalesce($input, 123)", s"coalesce(123, $input)").foreach { expr =>
+          val df = sql(s"SELECT $expr AS r")
+          assert(df.schema.head.dataType === expectedType)
+          checkAnswer(df, expected)
+        }
+
+        val zero = sql(s"SELECT zeroifnull($input) AS r")
+        assert(zero.schema.head.dataType === expectedType)
+        checkAnswer(zero, if (ansi) Row(0L) else Row("0"))
+      }
+    }
+  }
+
   test("SPARK-58794: ImplicitTypeCasts promotes CHAR/VARCHAR to STRING") {
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
       def analyzed(sqlText: String): LogicalPlan = sql(sqlText).queryExecution.analyzed
