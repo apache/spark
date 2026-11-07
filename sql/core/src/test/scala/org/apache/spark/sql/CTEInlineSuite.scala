@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, UnresolvedRelat
 import org.apache.spark.sql.catalyst.expressions.{Alias, And, GreaterThan, LessThan, Literal, Or, Rand}
 import org.apache.spark.sql.catalyst.optimizer.InlineCTE
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.adaptive._
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.internal.SQLConf
@@ -31,6 +32,42 @@ abstract class CTEInlineSuiteBase
   with AdaptiveSparkPlanHelper {
 
   import testImplicits._
+
+  // Thresholds below 101 use LogicalRDD; a higher threshold exercises LocalRelation substitution.
+  test("SPARK-60860: nested nulls in recursive CTEs with local and RDD-backed iterations") {
+    for {
+      localRelationLimit <- Seq(0, 100, 200)
+      legacy <- Seq(false, true)
+      introduceNull <- Seq(false, true)
+    } {
+      withSQLConf(
+        SQLConf.LEGACY_RECURSIVE_CTE_USE_ANCHOR_NESTED_NULLABILITY.key -> legacy.toString,
+        SQLConf.CTE_RECURSION_ANCHOR_ROWS_LIMIT_TO_CONVERT_TO_LOCAL_RELATION.key ->
+          localRelationLimit.toString) {
+        val appender = new LogAppender("recursive nested nullability")
+        withLogAppender(appender, loggerNames = Seq(classOf[LogicalRDD].getName)) {
+          val result = sql(
+            s"""WITH RECURSIVE r(id, n, a, saw_null) AS (
+              |  SELECT id, 0, ${if (introduceNull) "array(1)" else "array(CAST(NULL AS INT))"},
+              |    false FROM range(101)
+              |  UNION ALL
+              |  SELECT id, n + 1,
+              |    ${if (introduceNull) "array(CAST(NULL AS INT))" else "array(1)"},
+              |    exists(a, x -> x IS NULL)
+              |  FROM r WHERE n < 2
+              |)
+              |SELECT n, saw_null, count(*) FROM r GROUP BY n, saw_null
+              |""".stripMargin)
+          checkAnswer(result, Seq(Row(0, false, 101L), Row(1, !introduceNull, 101L),
+            Row(2, introduceNull && !legacy, 101L)))
+        }
+        // Legacy RDD iterations provide a positive control for the warning capture and RDD path.
+        val hasMismatchWarning = appender.loggingEvents.exists(_.getMessage.getFormattedMessage
+          .contains("The output columns are expected to the same"))
+        assert(hasMismatchWarning == (legacy && localRelationLimit < 101))
+      }
+    }
+  }
 
   test("SPARK-36447: non-deterministic CTE dedup") {
     withTempView("t") {

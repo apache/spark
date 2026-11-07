@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans.{Cross, Inner, LeftAnti, LeftOuter, L
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Updates CTE references with the resolve output attributes of corresponding CTE definitions.
@@ -311,10 +312,14 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
       columnNames: Option[Seq[String]]) = {
     recursion.transformUpWithSubqueriesAndPruning(_.containsPattern(CTE)) {
       case r: CTERelationRef if r.recursive && r.cteId == cteDefId =>
-        // We mark the output of UnionLoopRef as nullable as it may become NULL in the following
-        // iterations.
-        val ref =
-          UnionLoopRef(r.cteId, anchor.output.map(_.newInstance().withNullability(true)), false)
+        // Later iterations can introduce nulls at any depth, even with a non-null anchor.
+        val useAnchorNullability =
+          conf.getConf(SQLConf.LEGACY_RECURSIVE_CTE_USE_ANCHOR_NESTED_NULLABILITY)
+        val output = anchor.output.map { attr =>
+          val dataType = if (useAnchorNullability) attr.dataType else attr.dataType.asNullable
+          attr.newInstance().withDataType(dataType).withNullability(true)
+        }
+        val ref = UnionLoopRef(r.cteId, output, accumulated = false)
         columnNames.map(UnresolvedSubqueryColumnAliases(_, ref)).getOrElse(ref)
     }
   }

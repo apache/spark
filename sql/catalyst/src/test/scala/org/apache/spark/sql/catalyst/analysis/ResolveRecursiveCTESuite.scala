@@ -18,12 +18,80 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types._
 
 class ResolveRecursiveCTESuite extends AnalysisTest {
+  // Recursive references must allow nested nulls without changing the anchor's schema.
+  test("SPARK-60860: recursive reference output has nullable nested types") {
+    val types = Seq(
+      ArrayType(IntegerType, containsNull = false),
+      StructType(Seq(StructField("x", ArrayType(IntegerType, containsNull = false), false))),
+      MapType(
+        StructType(Seq(StructField("key", IntegerType, false))),
+        ArrayType(IntegerType, containsNull = false), valueContainsNull = false))
+    for {
+      dataType <- types
+      columnNames <- Seq(None, Some(Seq("renamed")))
+      legacy <- Seq(false, true)
+    } {
+      withSQLConf(
+        SQLConf.LEGACY_RECURSIVE_CTE_USE_ANCHOR_NESTED_NULLABILITY.key -> legacy.toString) {
+        val cteId = 0L
+        val anchor = LocalRelation(AttributeReference("value", dataType, nullable = false)())
+        val cteRef = CTERelationRef(cteId, _resolved = false, Nil, isStreaming = false)
+        val recursion = cteRef.copy(recursive = true).subquery("t")
+        val union = anchor.union(recursion)
+        val definition = columnNames.map(UnresolvedSubqueryColumnAliases(_, union)).getOrElse(union)
+        val plan = WithCTE(cteRef, Seq(CTERelationDef(definition.subquery("t"), cteId)))
+
+        val analyzed = getAnalyzer.execute(plan)
+        assert(analyzed.resolved)
+        val loop = analyzed.collectFirst { case u: UnionLoop => u }.get
+        val ref = loop.recursion.collectFirst { case r: UnionLoopRef => r }.get
+        assert(loop.anchor.output.head.dataType == dataType)
+        assert(!loop.anchor.output.head.nullable)
+        val expectedType = if (legacy) dataType else dataType.asNullable
+        assert(ref.output.head.dataType == expectedType)
+        assert(ref.output.head.nullable)
+        assert(loop.output.head.dataType == expectedType)
+        assert(analyzed.output.head.dataType == expectedType)
+      }
+    }
+  }
+
+  // The legacy setting restores coercion as well as the recursive reference's schema.
+  test("SPARK-60860: legacy recursive struct coercion") {
+    for {
+      legacy <- Seq(false, true)
+      rule <- Seq(TypeCoercion.WidenSetOperationTypes, AnsiTypeCoercion.WidenSetOperationTypes)
+    } {
+      withSQLConf(
+        SQLConf.CASE_SENSITIVE.key -> "false",
+        SQLConf.LEGACY_RECURSIVE_CTE_USE_ANCHOR_NESTED_NULLABILITY.key -> legacy.toString) {
+        val anchorType = StructType(Seq(StructField("x", LongType, nullable = false)))
+        val recursionType = StructType(Seq(StructField("X", IntegerType, nullable = true)))
+        val anchor = LocalRelation(AttributeReference("s", anchorType)())
+        val recursion = LocalRelation(AttributeReference("s", recursionType)())
+        val loop = UnionLoop(0, anchor, recursion, anchor.output.map(_.exprId))
+        if (legacy) {
+          val error = intercept[SparkException] { rule(loop) }
+          assert(error.getCondition == "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE")
+        } else {
+          val widened = rule(loop).asInstanceOf[UnionLoop]
+          assert(widened.resolved)
+          assert(widened.anchor.output.head.dataType == anchorType)
+          assert(widened.recursion.output.head.dataType == anchorType.asNullable)
+        }
+      }
+    }
+  }
+
   // Motivated by:
   // WITH RECURSIVE t AS (SELECT 1 UNION ALL SELECT * FROM t) SELECT * FROM t;
   test("ResolveWithCTE rule on recursive CTE without UnresolvedSubqueryColumnAliases") {

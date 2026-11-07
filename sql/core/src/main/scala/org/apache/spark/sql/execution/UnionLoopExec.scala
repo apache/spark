@@ -223,13 +223,16 @@ case class UnionLoopExec(
               }
               p.copy(projectList = prevPlanToRefMapping)
             case _ =>
+              val allowCompatibleNullability =
+                !conf.getConf(SQLConf.LEGACY_RECURSIVE_CTE_USE_ANCHOR_NESTED_NULLABILITY)
               val logicalRDD = LogicalRDD.fromDataset(
                 prevDF.queryExecution.withRegularShuffle.toRdd, prevDF,
-                prevDF.isStreaming).newInstance()
+                prevDF.isStreaming,
+                allowCompatibleNullability = allowCompatibleNullability).newInstance()
               prevPlan = logicalRDD
               val optimizedPlan = prevDF.queryExecution.optimizedPlan
               val (stats, constraints) = rewriteStatsAndConstraints(r, optimizedPlan,
-                sameOutput = false)
+                sameOutput = false, allowCompatibleNullability = allowCompatibleNullability)
               logicalRDD.copy(output = r.output)(
                 prevDF.sparkSession, stats, constraints, fromCheckpoint = false)
           }

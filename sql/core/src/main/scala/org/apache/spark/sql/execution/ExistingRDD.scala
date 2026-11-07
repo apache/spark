@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.collection.Utils
 
 object ExternalRDD {
@@ -179,13 +180,15 @@ case class LogicalRDD(
 object LogicalRDD extends Logging {
   /**
    * Create a new LogicalRDD based on existing Dataset. Stats and constraints are inherited from
-   * origin Dataset.
+   * origin Dataset. Recursive CTE substitution can opt into compatible nested nullability;
+   * other callers require identical nested types.
    */
   private[sql] def fromDataset(
       rdd: RDD[InternalRow],
       originDataset: Dataset[_],
       isStreaming: Boolean,
-      fromCheckpoint: Boolean = false): LogicalRDD = {
+      fromCheckpoint: Boolean = false,
+      allowCompatibleNullability: Boolean = false): LogicalRDD = {
     // Takes the first leaf partitioning whenever we see a `PartitioningCollection`. Otherwise the
     // size of `PartitioningCollection` may grow exponentially for queries involving deep inner
     // joins.
@@ -201,7 +204,8 @@ object LogicalRDD extends Logging {
     val optimizedPlan = originDataset.queryExecution.optimizedPlan
     val executedPlan = originDataset.queryExecution.executedPlan
 
-    val (stats, constraints) = rewriteStatsAndConstraints(logicalPlan, optimizedPlan)
+    val (stats, constraints) = rewriteStatsAndConstraints(
+      logicalPlan, optimizedPlan, allowCompatibleNullability = allowCompatibleNullability)
 
     LogicalRDD(
       originDataset.logicalPlan.output,
@@ -213,13 +217,20 @@ object LogicalRDD extends Logging {
     )(originDataset.sparkSession, stats, constraints, fromCheckpoint)
   }
 
+  // Associate outputs with matching names and types for rewriting statistics and constraints.
   private[sql] def buildOutputAssocForRewrite(
       source: Seq[Attribute],
-      destination: Seq[Attribute]): Option[Map[Attribute, Attribute]] = {
-    // We check the name and type, allowing nullability, exprId, metadata, qualifier be different
-    // E.g. This could happen during optimization phase.
+      destination: Seq[Attribute],
+      allowCompatibleNullability: Boolean = false): Option[Map[Attribute, Attribute]] = {
+    // Optimization can change exprId, metadata, and qualifier. Recursive references can also
+    // opt into widening nested nullability; narrowing would not preserve the source's guarantees.
     val rewrite = source.zip(destination).flatMap { case (attr1, attr2) =>
-      if (attr1.name == attr2.name && attr1.dataType == attr2.dataType) {
+      val compatible = if (allowCompatibleNullability) {
+        DataType.equalsIgnoreCompatibleNullability(attr1.dataType, attr2.dataType)
+      } else {
+        attr1.dataType == attr2.dataType
+      }
+      if (attr1.name == attr2.name && compatible) {
         Some(attr1 -> attr2)
       } else {
         None
@@ -238,9 +249,15 @@ object LogicalRDD extends Logging {
   // output
   private[sql] def buildOutputAssocForRewriteWithNewOutput(
       source: Seq[Attribute],
-      destination: Seq[Attribute]): Option[Map[Attribute, Attribute]] = {
+      destination: Seq[Attribute],
+      allowCompatibleNullability: Boolean = false): Option[Map[Attribute, Attribute]] = {
     val rewrite = source.zip(destination).flatMap { case (attr1, attr2) =>
-      if (attr1.dataType == attr2.dataType) {
+      val compatible = if (allowCompatibleNullability) {
+        DataType.equalsIgnoreCompatibleNullability(attr1.dataType, attr2.dataType)
+      } else {
+        attr1.dataType == attr2.dataType
+      }
+      if (compatible) {
         Some(attr1 -> attr2)
       } else {
         None
@@ -254,14 +271,18 @@ object LogicalRDD extends Logging {
     }
   }
 
+  // Rebind statistics and constraints to the logical output, using exact nested types by default.
   private[sql] def rewriteStatsAndConstraints(
       logicalPlan: LogicalPlan,
       optimizedPlan: LogicalPlan,
-      sameOutput: Boolean = true): (Option[Statistics], Option[ExpressionSet]) = {
+      sameOutput: Boolean = true,
+      allowCompatibleNullability: Boolean = false): (Option[Statistics], Option[ExpressionSet]) = {
     val rewrite = if (sameOutput) {
-      buildOutputAssocForRewrite(optimizedPlan.output, logicalPlan.output)
+      buildOutputAssocForRewrite(
+        optimizedPlan.output, logicalPlan.output, allowCompatibleNullability)
     } else {
-      buildOutputAssocForRewriteWithNewOutput(optimizedPlan.output, logicalPlan.output)
+      buildOutputAssocForRewriteWithNewOutput(
+        optimizedPlan.output, logicalPlan.output, allowCompatibleNullability)
     }
 
     rewrite.map { rw =>
