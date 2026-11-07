@@ -16,6 +16,7 @@
 #
 import contextlib
 import functools
+import inspect
 import os
 import shutil
 import tempfile
@@ -41,6 +42,26 @@ if should_test_connect:
     from pyspark.sql.connect.dataframe import DataFrame
     from pyspark.sql.connect.plan import SQL, LogicalPlan, Range, Read
     from pyspark.sql.connect.session import SparkSession
+
+
+def disable_ml_cache_cleanup() -> Callable:
+    """
+    Replace ``SparkConnectClient._cleanup_ml_cache`` with a no-op and return the real method.
+
+    Every client runs the cleanup from an atexit hook, which hangs the test process at exit when
+    there is no server. The real method stays reachable through ``__wrapped__``, so this is safe
+    to call from several test modules and when a module is imported twice.
+    """
+    from pyspark.sql.connect.client import SparkConnectClient
+
+    real_cleanup_ml_cache = inspect.unwrap(SparkConnectClient._cleanup_ml_cache)
+
+    @functools.wraps(real_cleanup_ml_cache)
+    def _skip_cleanup_ml_cache(self: SparkConnectClient) -> None:
+        pass
+
+    SparkConnectClient._cleanup_ml_cache = _skip_cleanup_ml_cache
+    return real_cleanup_ml_cache
 
 
 class MockRemoteSession:
