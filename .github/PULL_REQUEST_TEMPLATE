@@ -52,8 +52,8 @@ If benchmark tests were added, please run the benchmarks in GitHub Actions for t
 
 ### Was this patch authored or co-authored using generative AI tooling?
 <!--
-If generative AI tooling has been used in the process of authoring this patch, please include the
-phrase: 'Generated-by: ' followed by the name of the tool and its version.
 If no, write 'No'.
+If generative AI tooling was used in the process of authoring this patch, please include the phrase: `Assisted-by: <Name of Tool> <Version>`
+If it doesn't apply to the tool you used, you may leave out the `<Version>`.
 Please refer to the [ASF Generative Tooling Guidance](https://www.apache.org/legal/generative-tooling.html) for details.
 -->
