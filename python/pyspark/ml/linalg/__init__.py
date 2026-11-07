@@ -26,6 +26,7 @@ SciPy is available in their environment.
 import array
 import struct
 import sys
+from abc import ABCMeta, abstractmethod
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -281,13 +282,24 @@ class MatrixUDT(UserDefinedType, metaclass=DataTypeSingleton):
         return "matrix"
 
 
-class Vector:
-    __UDT__ = VectorUDT()
-
+class Vector(metaclass=ABCMeta):
     """
     Abstract class for DenseVector and SparseVector
     """
 
+    __UDT__ = VectorUDT()
+
+    @abstractmethod
+    def norm(self, p: "NormType") -> np.float64:
+        """Calculates the norm of the vector."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def squared_distance(self, other: "VectorLike") -> np.float64:
+        """Squared distance from another vector."""
+        raise NotImplementedError
+
+    @abstractmethod
     def toArray(self) -> np.ndarray:
         """
         Convert the vector into an numpy.ndarray
@@ -296,6 +308,7 @@ class Vector:
         """
         raise NotImplementedError
 
+    @abstractmethod
     def __len__(self) -> int:
         raise NotImplementedError
 
@@ -345,7 +358,7 @@ class DenseVector(Vector):
         """
         return np.count_nonzero(self.array)
 
-    def norm(self, p: "NormType") -> np.floating[Any]:
+    def norm(self, p: "NormType") -> np.float64:
         """
         Calculates the norm of a DenseVector.
 
@@ -406,7 +419,7 @@ class DenseVector(Vector):
             else:
                 return np.dot(self.toArray(), other)  # type: ignore[call-overload]
 
-    def squared_distance(self, other: Iterable[float]) -> np.float64:
+    def squared_distance(self, other: "VectorLike") -> np.float64:
         """
         Squared distance of two Vectors.
 
@@ -433,12 +446,12 @@ class DenseVector(Vector):
             ...
         AssertionError: dimension mismatch
         """
-        assert len(self) == _vector_size(other), "dimension mismatch"  # type: ignore[arg-type]
+        assert len(self) == _vector_size(other), "dimension mismatch"
         if isinstance(other, SparseVector):
             return other.squared_distance(self)
         elif _have_scipy and scipy.sparse.issparse(other):
             assert isinstance(other, scipy.sparse.spmatrix), "other must be a scipy.sparse.spmatrix"
-            return _convert_to_vector(other).squared_distance(self)  # type: ignore[attr-defined]
+            return _convert_to_vector(other).squared_distance(self)
 
         if isinstance(other, Vector):
             other = other.toArray()
@@ -641,7 +654,7 @@ class SparseVector(Vector):
         """
         return np.count_nonzero(self.values)
 
-    def norm(self, p: "NormType") -> np.floating[Any]:
+    def norm(self, p: "NormType") -> np.float64:
         """
         Calculates the norm of a SparseVector.
 
@@ -967,14 +980,14 @@ class Vectors:
         51.0
         """
         v1, v2 = _convert_to_vector(v1), _convert_to_vector(v2)
-        return v1.squared_distance(v2)  # type: ignore[attr-defined]
+        return v1.squared_distance(v2)
 
     @staticmethod
     def norm(vector: Vector, p: "NormType") -> np.float64:
         """
         Find norm of the given vector.
         """
-        return _convert_to_vector(vector).norm(p)  # type: ignore[attr-defined]
+        return _convert_to_vector(vector).norm(p)
 
     @staticmethod
     def zeros(size: int) -> DenseVector:
