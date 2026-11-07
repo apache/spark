@@ -1149,6 +1149,12 @@ select 3 as x, 4 as y
 select 3 as x, 4 as y
 |> aggregate sum(y) group by -1 as grp;
 
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 2 as `grp 2`;
+
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 2 as IDENTIFIER('grp');
+
 -- Aliases are allowed on grouping expressions other than integer literals.
 select 3 as x, 4 as y
 |> aggregate sum(y) group by x as grp;

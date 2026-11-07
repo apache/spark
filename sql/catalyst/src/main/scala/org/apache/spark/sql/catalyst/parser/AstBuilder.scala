@@ -8511,9 +8511,19 @@ class AstBuilder extends DataTypeAstBuilder
           // aliased grouping expression rather than the whole clause.
           if (conf.groupByOrdinal &&
               !conf.getConf(SQLConf.LEGACY_ALLOW_ALIASED_PIPE_AGGREGATE_ORDINALS)) {
-            a.groupingExpressions.foreach {
-              case alias @ Alias(Literal(_: Int, IntegerType), _) =>
-                CurrentOrigin.withOrigin(alias.origin) { error("aliases on GROUP BY ordinals") }
+            // This is a syntax error rather than an unsupported case, so it does not use `error`.
+            // Report the alias text as written in the source, matching the regular GROUP BY path.
+            a.groupingExpressions.zip(c.groupingExpressions.asScala).foreach {
+              case (alias @ Alias(Literal(_: Int, IntegerType), _), n) =>
+                CurrentOrigin.withOrigin(alias.origin) {
+                  val aliasText = n.name.getText
+                  throw new ParseException(
+                    errorClass = "PARSE_SYNTAX_ERROR",
+                    messageParameters = Map(
+                      "error" -> s"'$aliasText'",
+                      "hint" -> s": extra input '$aliasText'"),
+                    ctx = c)
+                }
               case _ =>
             }
           }

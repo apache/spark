@@ -558,9 +558,9 @@ class PlanParserSuite extends AnalysisTest {
       val start = query.lastIndexOf(groupingExpression)
       checkError(
         exception = parseException(query),
-        condition = "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
-        sqlState = Some("0A000"),
-        parameters = Map("case" -> "aliases on GROUP BY ordinals"),
+        condition = "PARSE_SYNTAX_ERROR",
+        sqlState = Some("42601"),
+        parameters = Map("error" -> "'grp'", "hint" -> ": extra input 'grp'"),
         context = ExpectedContext(
           fragment = groupingExpression,
           start = start,
@@ -572,6 +572,57 @@ class PlanParserSuite extends AnalysisTest {
         condition = "PARSE_SYNTAX_ERROR",
         sqlState = Some("42601"),
         parameters = Map("error" -> "'grp'", "hint" -> ": extra input 'grp'"))
+    }
+  }
+
+  test("SPARK-60715: pipe AGGREGATE reports syntax errors for aliased GROUP BY ordinals") {
+    Seq(
+      ("VALUES (1, 10), (2, 20), (1, 30) AS tab(x, y) " +
+        "|> AGGREGATE SUM(y) GROUP BY 1 AS alias", "alias"),
+      ("FROM po_t |> AGGREGATE sum(b) AS s GROUP BY 1 AS k |> ORDER BY k", "k")
+    ).foreach { case (query, alias) =>
+      val groupingExpression = s"1 AS $alias"
+      val start = query.indexOf(groupingExpression)
+      checkError(
+        exception = parseException(query),
+        condition = "PARSE_SYNTAX_ERROR",
+        sqlState = Some("42601"),
+        parameters = Map("error" -> s"'$alias'", "hint" -> s": extra input '$alias'"),
+        context = ExpectedContext(
+          fragment = groupingExpression,
+          start = start,
+          stop = start + groupingExpression.length - 1))
+    }
+  }
+
+  test(
+    "SPARK-60715: pipe AGGREGATE reports quoted and IDENTIFIER() aliases like regular GROUP BY") {
+    Seq(
+      ("`foo bar`", "foo bar"),
+      ("IDENTIFIER('foo')", "IDENTIFIER('foo')")
+    ).foreach { case (alias, reportedText) =>
+      val groupingExpression = s"1 AS $alias"
+      val query = s"TABLE t |> AGGREGATE sum(x) AS s GROUP BY $groupingExpression"
+      val start = query.indexOf(groupingExpression)
+      val parameters = Map(
+        "error" -> s"'$reportedText'",
+        "hint" -> s": extra input '$reportedText'")
+      checkError(
+        exception = parseException(query),
+        condition = "PARSE_SYNTAX_ERROR",
+        sqlState = Some("42601"),
+        parameters = parameters,
+        context = ExpectedContext(
+          fragment = groupingExpression,
+          start = start,
+          stop = start + groupingExpression.length - 1))
+
+      // Regular GROUP BY reports the same text.
+      checkError(
+        exception = parseException(s"SELECT x, sum(x) FROM t GROUP BY $groupingExpression"),
+        condition = "PARSE_SYNTAX_ERROR",
+        sqlState = Some("42601"),
+        parameters = parameters)
     }
   }
 
