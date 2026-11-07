@@ -747,7 +747,7 @@ class LinearSVC(
                  maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction", \
                  fitIntercept=True, standardization=True, threshold=0.0, weightCol=None, \
                  aggregationDepth=2, maxBlockSizeInMB=0.0, \
-                  intermediateStorageLevel="MEMORY_AND_DISK"):
+                 intermediateStorageLevel="MEMORY_AND_DISK"):
         """
         super().__init__()
         self._java_obj = self._new_java_obj(
@@ -781,7 +781,7 @@ class LinearSVC(
                   maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction", \
                   fitIntercept=True, standardization=True, threshold=0.0, weightCol=None, \
                   aggregationDepth=2, maxBlockSizeInMB=0.0, \
-                   intermediateStorageLevel="MEMORY_AND_DISK"):
+                  intermediateStorageLevel="MEMORY_AND_DISK"):
         Sets params for Linear SVM Classifier.
         """
         kwargs = self._input_kwargs
@@ -1343,7 +1343,7 @@ class LogisticRegression(
                  lowerBoundsOnCoefficients=None, upperBoundsOnCoefficients=None, \
                  lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None, \
                  maxBlockSizeInMB=0.0, \
-                  intermediateStorageLevel="MEMORY_AND_DISK"):
+                 intermediateStorageLevel="MEMORY_AND_DISK"):
         If the threshold and thresholds Params are both set, they must be equivalent.
         """
         super().__init__()
@@ -1445,7 +1445,7 @@ class LogisticRegression(
                   lowerBoundsOnCoefficients=None, upperBoundsOnCoefficients=None, \
                   lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None, \
                   maxBlockSizeInMB=0.0, \
-                   intermediateStorageLevel="MEMORY_AND_DISK"):
+                  intermediateStorageLevel="MEMORY_AND_DISK"):
         Sets params for logistic regression.
         If the threshold and thresholds Params are both set, they must be equivalent.
         """
@@ -4167,7 +4167,7 @@ class FMClassifier(
                  factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0, \
                  miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0, \
                  tol=1e-6, solver="adamW", thresholds=None, seed=None, \
-                  intermediateStorageLevel="MEMORY_AND_DISK")
+                 intermediateStorageLevel="MEMORY_AND_DISK")
         """
         super().__init__()
         self._java_obj = self._new_java_obj(
@@ -4206,7 +4206,7 @@ class FMClassifier(
                   factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0, \
                   miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0, \
                   tol=1e-6, solver="adamW", thresholds=None, seed=None, \
-                   intermediateStorageLevel="MEMORY_AND_DISK")
+                  intermediateStorageLevel="MEMORY_AND_DISK")
         Sets Params for FMClassifier.
         """
         kwargs = self._input_kwargs
