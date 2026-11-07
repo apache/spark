@@ -521,6 +521,40 @@ class ConstantFoldingSuite extends PlanTest {
         testRelation.select(comparison($"a", nullIntLit).as("o")).analyze)
     }
   }
+
+  test("SPARK-61676: Fold a conditional expression whose children fold to literals") {
+    val emptySubquery = ScalarSubquery(LocalRelation($"x".int))
+    val sizeOfArray = Size(CreateArray(Seq($"a")))
+
+    Seq(
+      Coalesce(Seq(emptySubquery, Literal(2))) -> 2,
+      If(IsNull(emptySubquery), Literal(1), Literal(2)) -> 1,
+      CaseWhen(Seq((IsNull(emptySubquery), Literal(1))), Literal(2)) -> 1,
+      Coalesce(Seq(sizeOfArray, Literal(2))) -> 1,
+      If(sizeOfArray > 0, Literal(1), Literal(2)) -> 1,
+      CaseWhen(Seq((sizeOfArray > 0, Literal(1))), Literal(2)) -> 1
+    ).foreach { case (conditional, expected) =>
+      comparePlans(
+        Optimize.execute(testRelation.select(conditional.as("o")).analyze),
+        testRelation.select(Literal(expected).as("o")).analyze)
+    }
+
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val failingCoalesce =
+        Coalesce(Seq(ScalarSubquery(LocalRelation($"x".double)), Divide(1, 0)))
+      // The folded conditional fails like any other foldable expression.
+      intercept[SparkArithmeticException] {
+        Optimize.execute(testRelation.select(failingCoalesce.as("o")).analyze)
+      }
+      // Inside a conditional branch, the failure is suppressed and the expression is kept.
+      val optimized = Optimize.execute(
+        testRelation.select(If($"a" > 0, failingCoalesce, Literal(1d)).as("o")).analyze)
+      val failedToEvaluate = optimized.expressions.flatMap(_.collect {
+        case c: Coalesce if c.getTagValue(ConstantFolding.FAILED_TO_EVALUATE).isDefined => c
+      })
+      assert(failedToEvaluate.size == 1)
+    }
+  }
 }
 
 case class SerializableBoxedInt(intVal: Int) {

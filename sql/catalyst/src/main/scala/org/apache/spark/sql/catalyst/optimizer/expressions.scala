@@ -85,7 +85,14 @@ object ConstantFolding extends Rule[LogicalPlan] {
       e: Expression,
       isConditionalBranch: Boolean = false): Expression = e match {
     case c: ConditionalExpression if !c.foldable =>
-      c.mapChildren(constantFolding(_, isConditionalBranch = true))
+      val newC = c.mapChildren(constantFolding(_, isConditionalBranch = true))
+      // A child may have folded to a literal (e.g. a ScalarSubquery with no rows), so fold the
+      // conditional itself when it became foldable, like the `other` case below.
+      if (newC.foldable) {
+        tryFold(newC, isConditionalBranch)
+      } else {
+        newC
+      }
 
     // Skip redundant folding of literals. This rule is technically not necessary. Placing this
     // here avoids running the next rule for Literal values, which would create a new Literal
