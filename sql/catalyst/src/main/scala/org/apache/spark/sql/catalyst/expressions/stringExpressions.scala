@@ -3057,6 +3057,7 @@ case class Levenshtein(
     val thresholdEval = threshold.map(_.eval(input))
     thresholdEval match {
       case Some(v) =>
+        if (v == null) return null
         leftEval.asInstanceOf[UTF8String].levenshteinDistance(rightEval.asInstanceOf[UTF8String],
           v.asInstanceOf[Int])
       case _ =>
