@@ -41,10 +41,11 @@ import org.apache.spark.sql.catalyst.analysis.{CheckExternalLookupJoin,
 import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Attribute, AttributeMap,
   AttributeReference, Cast, EqualTo, Expression, GenericInternalRow, LessThan, Literal,
   NamedExpression, Rand, UnsafeProjection, Upper}
-import org.apache.spark.sql.catalyst.plans.{Inner, QueryPlan}
+import org.apache.spark.sql.catalyst.optimizer.{EliminateOuterJoin, PushDownPredicates}
+import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, QueryPlan}
 import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, ExternalLookupCacheOptions,
   ExternalLookupFilter, ExternalLookupHint, ExternalLookupHintCacheOptions, ExternalLookupJoin,
-  ExternalLookupProject, ExternalLookupTransform, Join, JoinHint, LeafNode, LogicalPlan,
+  ExternalLookupProject, ExternalLookupTransform, Filter, Join, JoinHint, LeafNode, LogicalPlan,
   PreparedExternalLookupJoin, RepartitionByExpression}
 import org.apache.spark.sql.catalyst.trees.TreePattern.LOOKUP_ONLY_RELATION
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
@@ -1352,9 +1353,9 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       Seq(Row(1, "one", 1, "engineering"), Row(1, "one", 1, "research"),
         Row(2, "two", 2, "sales"), Row(3, "three", null, null)))
 
-    // Only comparisons of a lookup field with a stream-side value are offered. The connector
-    // selects `id = ?`, and Spark evaluates the other conjuncts: the stream-side one on each stream
-    // row before the lookup, and the others on the joined rows.
+    // Only comparisons of a lookup field with a stream-side value or a constant are offered. The
+    // connector selects `id = ?`, and Spark evaluates the other conjuncts: the stream-side one on
+    // each stream row before the lookup, and `length(department) > id` on the lookup side.
     SimpleExternalLookupDataSource.resetCounters()
     val flagged = streamOf(Seq((1, true), (2, true), (1, false)).toDF("id", "flag"))
     checkStream(
@@ -2903,9 +2904,10 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
   }
 
   test("external lookup batches rows with null keys, failing rows and repeated keys") {
-    // Up to three stream rows per request. An inner join leaves out the row with a null key and
-    // the unverified row, so its batches are [1, 1, 3] and [2]. A left outer join keeps them, so
-    // its batches are [1, null, 1] and [2, 3, 2], and requests no parameter for them.
+    // Up to three stream rows per request. An inner join leaves out the row with a null key, and
+    // predicate pushdown moves `verified` below it, as below an ordinary join, so the unverified
+    // row does not reach it: its batches are [1, 1, 3] and [2]. A left outer join keeps both rows,
+    // so its batches are [1, null, 1] and [2, 3, 2], and requests no parameter for them.
     val lookup = spark.read
       .format(classOf[SimpleExternalLookupDataSource].getName)
       .option("maxBatchSize", "3")
@@ -2920,7 +2922,7 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     // The rows, request sizes and the metrics: input rows, batches, requests, parameter rows and
     // output rows.
     Seq(
-      ("inner", inner, Seq(2, 1), Seq(6, 2, 2, 3, 5)),
+      ("inner", inner, Seq(2, 1), Seq(5, 2, 2, 3, 5)),
       ("left_outer", inner ++ unmatched, Seq(1, 2), Seq(6, 2, 2, 3, 8))).foreach {
       case (joinType, expected, requestSizes, metricValues) =>
         SimpleExternalLookupDataSource.resetCounters()
@@ -3271,6 +3273,75 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       events.join(rates, condition, "left_outer").select(events("id"), rates("id")),
       Seq(Row(2, null)))
     assert(ValidityExternalLookupTable.offered.get() === Seq("id = ?"))
+  }
+
+  test("predicates move below an external lookup join as they do below a join") {
+    val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    val left = streamOf(Seq((1, true), (2, false), (3, true)).toDF("id", "flag"))
+    val key = left("id") === lookup("id")
+    def check(joined: DataFrame, expected: Set[Row], requestedKeys: Seq[Int]): Unit = {
+      SimpleExternalLookupDataSource.resetCounters()
+      assert(runStream(joined).rows.toSet === expected)
+      assert(SimpleExternalLookupDataSource.requestedKeys.asScala.toSeq === requestedKeys)
+    }
+    val matched = Set(Row(1, true, 1, "engineering"), Row(1, true, 1, "research"))
+
+    // A filter above the join moves into the stream side, so the rows it rejects are not looked up.
+    Seq(
+      "inner" -> matched,
+      "left_outer" -> (matched + Row(3, true, null, null)),
+      "left_semi" -> Set(Row(1, true)),
+      "left_anti" -> Set(Row(3, true))).foreach { case (joinType, expected) =>
+      check(left.join(lookup, key, joinType).where(left("flag")), expected, Seq(1, 3))
+    }
+    // So does a stream-side conjunct of the join condition, except under a left outer or left
+    // anti join, where it decides which stream rows find a match and stays in the condition. Key 2
+    // is not requested there either: the join checks the conjunct on each stream row before the
+    // lookup, and a row that fails it cannot match.
+    Seq(
+      "inner" -> matched,
+      "left_semi" -> Set(Row(1, true)),
+      "left_outer" -> (matched + Row(2, false, null, null) + Row(3, true, null, null)),
+      "left_anti" -> Set(Row(2, false), Row(3, true))).foreach { case (joinType, expected) =>
+      check(left.join(lookup, key && left("flag"), joinType), expected, Seq(1, 3))
+    }
+    // A lookup-side conjunct of the join condition goes onto the lookup side, and so to the
+    // connector, which applies it.
+    check(
+      left.join(lookup, key && lookup("department") =!= "research"),
+      Set(Row(1, true, 1, "engineering"), Row(2, false, 2, "sales")),
+      Seq(1, 2, 3))
+    assert(SimpleExternalLookupDataSource.pushedPredicateFields.get() === Seq("department"))
+
+    // A filter above a left outer join that rejects the null lookup columns of a stream row without
+    // a match makes the join inner, as for a join. The filter then goes onto the lookup side, and
+    // so to the connector.
+    SimpleExternalLookupDataSource.resetCounters()
+    val run =
+      runStream(left.join(lookup, key, "left_outer").where(lookup("department") =!= "research"))
+    QueryTest.sameRows(
+      Seq(Row(1, true, 1, "engineering"), Row(2, false, 2, "sales")), run.rows).foreach(fail(_))
+    assert(run.plan.collectFirst { case join: PreparedExternalLookupJoin => join.joinType } ===
+      Some(Inner))
+    assert(SimpleExternalLookupDataSource.pushedPredicateFields.get() === Seq("department"))
+    // Each of the two rules keeps the result on its own, so excluding either one loses only the
+    // pushdown. Without EliminateOuterJoin the join stays left outer, and without
+    // PushDownPredicates it becomes inner. Either way the filter stays above the join.
+    Seq(EliminateOuterJoin.ruleName -> LeftOuter, PushDownPredicates.ruleName -> Inner).foreach {
+      case (excludedRule, joinType) =>
+        withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> excludedRule) {
+          SimpleExternalLookupDataSource.resetCounters()
+          val excludedRun = runStream(
+            left.join(lookup, key, "left_outer").where(lookup("department") =!= "research"))
+          QueryTest.sameRows(
+            Seq(Row(1, true, 1, "engineering"), Row(2, false, 2, "sales")),
+            excludedRun.rows).foreach(fail(_))
+          assert(excludedRun.plan.collectFirst {
+            case Filter(_, join: PreparedExternalLookupJoin) => join.joinType
+          } === Some(joinType))
+          assert(SimpleExternalLookupDataSource.pushedPredicateCount.get() === 0)
+        }
+    }
   }
 
   test("external lookup leaves unselected criteria as Spark residuals") {
@@ -5433,8 +5504,14 @@ object SimpleExternalLookupTable extends Table with SupportsRead {
             case child: Predicate => fields(child)
             case _ => Seq.empty
           }
+        // Only the predicate that this source applies, `department <> 'research'`.
         val (accepted, rejected) = predicates.partition { predicate =>
-          fields(predicate).exists(_.fieldNames().sameElements(Array("department")))
+          predicate.name() == "NOT" && (predicate.children()(0) match {
+            case equality: Predicate =>
+              equality.name() == "=" &&
+                equality.children().map(_.toString).sameElements(Array("department", "'research'"))
+            case _ => false
+          })
         }
         if (accepted.nonEmpty) {
           acceptedPredicates = accepted
