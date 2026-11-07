@@ -2996,6 +2996,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
+  def subtractDatesOverflowError(endDay: Int, startDay: Int): ArithmeticException = {
+    val end = toSQLValue(DateTimeUtils.daysToLocalDate(endDay), DateType)
+    val start = toSQLValue(DateTimeUtils.daysToLocalDate(startDay), DateType)
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Map("operation" -> s"subtract $start from $end"),
+      context = Array.empty,
+      summary = "")
+  }
+
   def invalidBucketFile(path: String): Throwable = {
     new SparkException(
       errorClass = "INVALID_BUCKET_FILE",

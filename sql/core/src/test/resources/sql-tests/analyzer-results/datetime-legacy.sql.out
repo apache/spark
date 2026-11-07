@@ -956,6 +956,41 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
+select datediff(date_from_unix_date(2147483647), date_from_unix_date(0))
+-- !query analysis
+Project [datediff(date_from_unix_date(2147483647), date_from_unix_date(0)) AS datediff(date_from_unix_date(2147483647), date_from_unix_date(0))#x]
++- OneRowRelation
+
+
+-- !query
+select datediff(date_from_unix_date(2147483647), date_from_unix_date(-1))
+-- !query analysis
+Project [datediff(date_from_unix_date(2147483647), date_from_unix_date(-1)) AS datediff(date_from_unix_date(2147483647), date_from_unix_date(-1))#x]
++- OneRowRelation
+
+
+-- !query
+select date_diff(date_from_unix_date(-2), date_from_unix_date(2147483647))
+-- !query analysis
+Project [date_diff(date_from_unix_date(-2), date_from_unix_date(2147483647)) AS date_diff(date_from_unix_date(-2), date_from_unix_date(2147483647))#x]
++- OneRowRelation
+
+
+-- !query
+select date_from_unix_date(2147483647) - date_from_unix_date(-1)
+-- !query analysis
+Project [(date_from_unix_date(2147483647) - date_from_unix_date(-1)) AS (date_from_unix_date(2147483647) - date_from_unix_date(-1))#x]
++- OneRowRelation
+
+
+-- !query
+select try_subtract(date_from_unix_date(2147483647), date_from_unix_date(-1))
+-- !query analysis
+Project [try_subtract(date_from_unix_date(2147483647), date_from_unix_date(-1)) AS try_subtract(date_from_unix_date(2147483647), date_from_unix_date(-1))#x]
++- OneRowRelation
+
+
+-- !query
 select timestamp '2019-01-01\t'
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
