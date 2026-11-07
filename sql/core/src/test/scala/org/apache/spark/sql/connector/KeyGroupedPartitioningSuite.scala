@@ -4289,6 +4289,297 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     }
   }
 
+  test("SPARK-60460: nested SPJ shuffles when merged values differ from a one-side shuffle") {
+    val idCol = Array(Column.create("id", IntegerType))
+    createTable("pa", idCol, Array(identity("id")))
+    sql("INSERT INTO testcat.ns.pa VALUES (1), (2), (3)")
+    createTable("pd", idCol, Array.empty)
+    sql("INSERT INTO testcat.ns.pd VALUES (1), (2), (3)")
+    createTable("pc", idCol, Array(identity("id")))
+    sql("INSERT INTO testcat.ns.pc VALUES (1), (2), (3), (4), (5)")
+    // No key in common, so the filtered merge is empty. Retargeting the exchange onto it would
+    // give the shuffle zero partitions.
+    createTable("px", idCol, Array(identity("id")))
+    sql("INSERT INTO testcat.ns.px VALUES (7)")
+
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+        val df = sql(
+          """
+            |SELECT /*+ MERGE(pa, pd, pc) */ pa.id, pd.id, pc.id
+            |FROM testcat.ns.pa JOIN testcat.ns.pd ON pa.id = pd.id
+            |JOIN testcat.ns.pc ON pa.id = pc.id
+            |""".stripMargin)
+        checkAnswer(df, Seq(Row(1, 1, 1), Row(2, 2, 2), Row(3, 3, 3)))
+        // pd's shuffle stays at pa's 3 keys. The inner join's output is shuffled onto pc's 5.
+        val shuffles = collectAllShuffles(df.queryExecution.executedPlan)
+        assert(shuffles.map(_.outputPartitioning.numPartitions).sorted == Seq(3, 5),
+          s"expected shuffles of 3 and 5 partitions, got:\n${df.queryExecution.executedPlan}")
+
+        // The nested join on the right reaches the same check on that child.
+        val swapped = sql(
+          """
+            |SELECT /*+ MERGE(pa, pd, pc) */ pc.id, pa.id, pd.id
+            |FROM testcat.ns.pc JOIN (testcat.ns.pa JOIN testcat.ns.pd ON pa.id = pd.id)
+            |ON pc.id = pa.id
+            |""".stripMargin)
+        checkAnswer(swapped, Seq(Row(1, 1, 1), Row(2, 2, 2), Row(3, 3, 3)))
+      }
+
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "true") {
+        val df = sql(
+          """
+            |SELECT /*+ MERGE(pa, pd, px) */ pa.id, pd.id, px.id
+            |FROM testcat.ns.pa JOIN testcat.ns.pd ON pa.id = pd.id
+            |JOIN testcat.ns.px ON pa.id = px.id
+            |""".stripMargin)
+        checkAnswer(df, Seq.empty)
+      }
+    }
+  }
+
+  test("SPARK-60460: nested SPJ shuffles when a one-side shuffle's values are reordered") {
+    val cols = Array(Column.create("store", IntegerType), Column.create("dept", IntegerType))
+    createTable("sa", cols, Array(identity("store"), identity("dept")))
+    createTable("sb", cols, Array.empty)
+    createTable("sc", cols, Array(identity("dept")))
+    // Projected onto dept, sa's keys appear as 20 then 10. The outer join sorts them to 10, 20.
+    sql("INSERT INTO testcat.ns.sa VALUES (1, 20), (2, 10)")
+    sql("INSERT INTO testcat.ns.sb VALUES (0, 10), (0, 20)")
+    sql("INSERT INTO testcat.ns.sc VALUES (0, 10), (0, 20)")
+
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false") {
+        val df = sql(
+          """
+            |SELECT /*+ MERGE(sa, sb, sc) */ sa.store, sa.dept, sb.dept, sc.dept
+            |FROM testcat.ns.sa JOIN testcat.ns.sb ON sa.dept = sb.dept
+            |JOIN testcat.ns.sc ON sa.dept = sc.dept
+            |""".stripMargin)
+        checkAnswer(df, Seq(Row(1, 20, 20, 20), Row(2, 10, 10, 10)))
+      }
+    }
+  }
+
+  test("SPARK-60460: nested SPJ shuffles when partition filtering changes a one-side shuffle") {
+    val idCol = Array(Column.create("id", IntegerType))
+    createTable("pa", idCol, Array(identity("id")))
+    sql("INSERT INTO testcat.ns.pa VALUES (1), (2), (3)")
+    createTable("pd", idCol, Array.empty)
+    sql("INSERT INTO testcat.ns.pd VALUES (1), (2), (3)")
+    createTable("pc", idCol, Array(identity("id")))
+    sql("INSERT INTO testcat.ns.pc VALUES (2), (3), (4)")
+
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "true") {
+        val df = sql(
+          """
+            |SELECT /*+ MERGE(pa, pd, pc) */ pa.id, pd.id, pc.id
+            |FROM testcat.ns.pa JOIN testcat.ns.pd ON pa.id = pd.id
+            |RIGHT JOIN testcat.ns.pc ON pa.id = pc.id
+            |""".stripMargin)
+        checkAnswer(df, Seq(Row(2, 2, 2), Row(3, 3, 3), Row(null, null, 4)))
+      }
+    }
+  }
+
+  test("SPARK-60460: nested SPJ shuffles when a reducer would change a one-side shuffle") {
+    val idCol = Array(Column.create("id", LongType))
+    createTable("l12", idCol, Array(bucket(12, "id")))
+    createTable("l4", idCol, Array(bucket(4, "id")))
+    createTable("ld", idCol, Array.empty)
+    Seq("l12", "l4", "ld").foreach(t => sql(s"INSERT INTO testcat.ns.$t SELECT id FROM range(24)"))
+
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        val df = sql(
+          """
+            |SELECT /*+ MERGE(l12, ld, l4) */ l12.id, ld.id, l4.id
+            |FROM testcat.ns.l12 JOIN testcat.ns.ld ON l12.id = ld.id
+            |JOIN testcat.ns.l4 ON l12.id = l4.id
+            |""".stripMargin)
+        checkAnswer(df, (0L until 24L).map(i => Row(i, i, i)))
+        val shuffles = collectAllShuffles(df.queryExecution.executedPlan)
+        assert(shuffles.size == 2,
+          s"expected ld's shuffle and one more, got:\n${df.queryExecution.executedPlan}")
+      }
+    }
+  }
+
+  test("SPARK-60460: nested SPJ shuffles when join key positions narrow a one-side shuffle") {
+    val cols = Array(
+      Column.create("store", IntegerType),
+      Column.create("dept", IntegerType),
+      Column.create("data", StringType))
+    createTable("sa", cols, Array(identity("store"), identity("dept")))
+    createTable("sb", cols, Array.empty)
+    createTable("sc", cols, Array(identity("dept")))
+    // Three (store, dept) pairs and two depts. Pushing dept leaves sb's exchange at 3 partitions.
+    sql("INSERT INTO testcat.ns.sa VALUES (1, 10, 'a1'), (2, 10, 'a2'), (1, 20, 'a3')")
+    sql("INSERT INTO testcat.ns.sb VALUES (1, 10, 'b1'), (2, 10, 'b2'), (1, 20, 'b3')")
+    sql("INSERT INTO testcat.ns.sc VALUES (0, 10, 'c10'), (0, 20, 'c20')")
+
+    val pairCols = Array(Column.create("store", IntegerType), Column.create("dept", IntegerType))
+    createTable("da", pairCols, Array(identity("store"), identity("dept")))
+    createTable("db", pairCols, Array.empty)
+    createTable("de", Array(Column.create("k", IntegerType), Column.create("dept", IntegerType)),
+      Array(identity("k"), identity("dept")))
+    sql("INSERT INTO testcat.ns.da VALUES (1, 20), (3, 20), (2, 10)")
+    sql("INSERT INTO testcat.ns.db VALUES (1, 20), (3, 20), (2, 10)")
+    sql("INSERT INTO testcat.ns.de VALUES (1, 20), (2, 10)")
+
+    createTable("ea", cols, Array(identity("store"), identity("dept")))
+    createTable("eb", cols, Array.empty)
+    createTable("ec", cols, Array(identity("store")))
+    sql("INSERT INTO testcat.ns.ea VALUES (1, 10, 'a1'), (2, 10, 'a2'), (1, 20, 'a3')")
+    sql("INSERT INTO testcat.ns.eb VALUES (1, 10, 'b1'), (2, 10, 'b2'), (1, 20, 'b3')")
+    sql("INSERT INTO testcat.ns.ec VALUES (1, 0, 'c1'), (2, 0, 'c2')")
+
+    // An extra dept keeps both sides at 3 partitions. branch-4.1 then drops (2, 10, b2, c10).
+    createTable("fa", cols, Array(identity("store"), identity("dept")))
+    createTable("fb", cols, Array.empty)
+    createTable("fc", cols, Array(identity("dept")))
+    sql("INSERT INTO testcat.ns.fa VALUES (1, 10, 'a1'), (2, 10, 'a2'), (1, 20, 'a3')")
+    sql("INSERT INTO testcat.ns.fb VALUES (1, 10, 'b1'), (2, 10, 'b2'), (1, 20, 'b3')")
+    sql("INSERT INTO testcat.ns.fc VALUES (0, 10, 'c10'), (0, 20, 'c20'), (0, 30, 'c30')")
+
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false") {
+        checkAnswer(
+          sql(
+            """
+              |SELECT /*+ MERGE(sa, sb, sc) */ sa.store, sa.dept, sb.data, sc.data
+              |FROM testcat.ns.sa JOIN testcat.ns.sb
+              |ON sa.store = sb.store AND sa.dept = sb.dept
+              |JOIN testcat.ns.sc ON sa.dept = sc.dept
+              |""".stripMargin),
+          Seq(Row(1, 10, "b1", "c10"), Row(2, 10, "b2", "c10"), Row(1, 20, "b3", "c20")))
+        checkAnswer(
+          sql(
+            """
+              |SELECT /*+ MERGE(da, db, de) */ da.store, da.dept, db.store, de.k
+              |FROM testcat.ns.da JOIN testcat.ns.db
+              |ON da.store = db.store AND da.dept = db.dept
+              |JOIN testcat.ns.de ON da.dept = de.dept
+              |""".stripMargin),
+          Seq(Row(1, 20, 1, 1), Row(3, 20, 3, 1), Row(2, 10, 2, 2)))
+        checkAnswer(
+          sql(
+            """
+              |SELECT /*+ MERGE(ea, eb, ec) */ ea.store, ea.dept, eb.data, ec.data
+              |FROM testcat.ns.ea JOIN testcat.ns.eb
+              |ON ea.store = eb.store AND ea.dept = eb.dept
+              |JOIN testcat.ns.ec ON ea.store = ec.store
+              |""".stripMargin),
+          Seq(Row(1, 10, "b1", "c1"), Row(2, 10, "b2", "c2"), Row(1, 20, "b3", "c1")))
+        checkAnswer(
+          sql(
+            """
+              |SELECT /*+ MERGE(fa, fb, fc) */ fa.store, fa.dept, fb.data, fc.data
+              |FROM testcat.ns.fa JOIN testcat.ns.fb
+              |ON fa.store = fb.store AND fa.dept = fb.dept
+              |JOIN testcat.ns.fc ON fa.dept = fc.dept
+              |""".stripMargin),
+          Seq(Row(1, 10, "b1", "c10"), Row(2, 10, "b2", "c10"), Row(1, 20, "b3", "c20")))
+        // The nested join on the right. branch-4.1 drops (2, 10, b2, c10) for this side too.
+        checkAnswer(
+          sql(
+            """
+              |SELECT /*+ MERGE(fa, fb, fc) */ fa.store, fa.dept, fb.data, fc.data
+              |FROM testcat.ns.fc JOIN
+              |(testcat.ns.fa JOIN testcat.ns.fb ON fa.store = fb.store AND fa.dept = fb.dept)
+              |ON fa.dept = fc.dept
+              |""".stripMargin),
+          Seq(Row(1, 10, "b1", "c10"), Row(2, 10, "b2", "c10"), Row(1, 20, "b3", "c20")))
+      }
+    }
+  }
+
+  test("SPARK-60460: nested SPJ keeps a one-side shuffle the outer key does not narrow") {
+    val idCol = Array(Column.create("id", IntegerType))
+    createTable("pa", idCol, Array(identity("id")))
+    sql("INSERT INTO testcat.ns.pa VALUES (1), (2), (3)")
+    createTable("pd", idCol, Array.empty)
+    sql("INSERT INTO testcat.ns.pd VALUES (1), (2), (3)")
+    createTable("pe", idCol, Array.empty)
+    sql("INSERT INTO testcat.ns.pe VALUES (1), (2), (3)")
+
+    Seq(true, false).foreach { subset =>
+      Seq(true, false).foreach { aqe =>
+        withSQLConf(
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> subset.toString,
+          SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false") {
+          val df = sql(
+            """
+              |SELECT /*+ MERGE(pa, pd, pe) */ pa.id, pd.id, pe.id
+              |FROM testcat.ns.pa JOIN testcat.ns.pd ON pa.id = pd.id
+              |JOIN testcat.ns.pe ON pa.id = pe.id
+              |""".stripMargin)
+          checkAnswer(df, Seq(Row(1, 1, 1), Row(2, 2, 2), Row(3, 3, 3)))
+          val shuffles = collectAllShuffles(df.queryExecution.executedPlan)
+          assert(shuffles.size == 2,
+            s"pd and pe should each shuffle once, got:\n${df.queryExecution.executedPlan}")
+        }
+      }
+    }
+  }
+
+  test("SPARK-60460: nested SPJ pushes past a one-side shuffle that has the merged values") {
+    val idCol = Array(Column.create("id", IntegerType))
+    createTable("pa", idCol, Array(identity("id")))
+    sql("INSERT INTO testcat.ns.pa VALUES (1), (2), (3)")
+    createTable("pd", idCol, Array.empty)
+    sql("INSERT INTO testcat.ns.pd VALUES (1), (2), (3)")
+    createTable("pc", idCol, Array(identity("id")))
+    sql("INSERT INTO testcat.ns.pc VALUES (1), (2)")
+
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+        val df = sql(
+          """
+            |SELECT /*+ MERGE(pa, pd, pc) */ pa.id, pd.id, pc.id
+            |FROM testcat.ns.pa JOIN testcat.ns.pd ON pa.id = pd.id
+            |JOIN testcat.ns.pc ON pa.id = pc.id
+            |""".stripMargin)
+        checkAnswer(df, Seq(Row(1, 1, 1), Row(2, 2, 2)))
+        // pd's shuffle already has the merged keys: pc's scan is padded, nothing else shuffles.
+        assert(collectAllShuffles(df.queryExecution.executedPlan).size == 1,
+          s"only pd should shuffle, got:\n${df.queryExecution.executedPlan}")
+      }
+    }
+  }
+
   test("SPARK-48012: one-side shuffle with partition transforms") {
     val items_partitions = Array(bucket(2, "id"), identity("arrive_time"))
     val items_partitions2 = Array(identity("arrive_time"), bucket(2, "id"))

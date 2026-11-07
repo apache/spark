@@ -230,7 +230,11 @@ case class EnsureRequirements(
             !childrenIndexes.contains(idx) =>
           child
         case ((child, dist), idx) =>
-          if (bestMemberOpt.isDefined && matchedIndexes.contains(idx)) {
+          // A nested one-side shuffle keeps its own layout. Join key positions that narrow it
+          // would regroup the scan beside it and leave the shuffle behind, so this child is
+          // shuffled onto the best spec instead.
+          if (bestMemberOpt.isDefined && matchedIndexes.contains(idx) &&
+              !positionsRegroupBesideShuffle(child, specs(idx), bestMemberOpt.get)) {
             // The positions come from this child's own matching member, since they index into its
             // own partition expressions -- the chosen best member only says which member of it the
             // two sides agreed on.
@@ -700,14 +704,24 @@ case class EnsureRequirements(
         }
 
         // Now we need to push-down the common partition information to the scan in each child.
-        newLeft = populateSpjParams(
-          left, commonPartitionValues = Some(mergedPartValues),
-          joinKeyPositions = leftSpec.joinKeyPositions, reducers = leftReducers,
-          applyPartialClustering = applyPartialClustering, replicatePartitions = replicateLeftSide)
-        newRight = populateSpjParams(
-          right, commonPartitionValues = Some(mergedPartValues),
-          joinKeyPositions = rightSpec.joinKeyPositions, reducers = rightReducers,
-          applyPartialClustering = applyPartialClustering, replicatePartitions = replicateRightSide)
+        // A one-side shuffle under either child was planned at its own values. The push is
+        // sound only when every such shuffle already has these values, in this order, and no
+        // reducer. Otherwise the outer join shuffles.
+        if (nestedShufflesFollowPush(left, mergedPartValues, leftReducers) &&
+            nestedShufflesFollowPush(right, mergedPartValues, rightReducers)) {
+          newLeft = populateSpjParams(
+            left, commonPartitionValues = Some(mergedPartValues),
+            joinKeyPositions = leftSpec.joinKeyPositions, reducers = leftReducers,
+            applyPartialClustering = applyPartialClustering,
+            replicatePartitions = replicateLeftSide)
+          newRight = populateSpjParams(
+            right, commonPartitionValues = Some(mergedPartValues),
+            joinKeyPositions = rightSpec.joinKeyPositions, reducers = rightReducers,
+            applyPartialClustering = applyPartialClustering,
+            replicatePartitions = replicateRightSide)
+        } else {
+          isCompatible = false
+        }
       }
     }
 
@@ -900,6 +914,67 @@ case class EnsureRequirements(
     case _: ShuffleExchangeLike | _: BroadcastExchangeLike => false
     case scan: BatchScanExec => scan.spjParams.reducers.exists(_.exists(_.isDefined))
     case other => other.children.exists(hasReducedScanOutsideJoin)
+  }
+
+  /** Partition rows a push expands to, one per output partition. */
+  private def pushedPartitionRows(values: Seq[(InternalRow, Int)]): Seq[InternalRow] =
+    values.flatMap { case (row, n) => Seq.fill(n)(row) }
+
+  private def samePartitionValues(
+      partitioning: KeyGroupedPartitioning,
+      rows: Seq[InternalRow]): Boolean =
+    partitioning.partitionValues.length == rows.length &&
+      partitioning.partitionValues.zip(rows).forall { case (left, right) =>
+        left.numFields == partitioning.expressions.length &&
+          left.numFields == right.numFields &&
+          InternalRowComparableWrapper(left, partitioning.expressions) ==
+            InternalRowComparableWrapper(right, partitioning.expressions)
+      }
+
+  /**
+   * Whether every key-grouped shuffle [[populateSpjParams]] would reach below `plan` already has
+   * `values`. The push stops at such a shuffle, which was planned at its own values, so the push
+   * is sound only when it changes nothing there: the same values in the same order, and no
+   * reducer. The walk stops where the push stops.
+   */
+  private def nestedShufflesFollowPush(
+      plan: SparkPlan,
+      values: Seq[(InternalRow, Int)],
+      reducers: Option[Seq[Option[Reducer[_, _]]]]): Boolean = plan match {
+    case _: BroadcastExchangeLike => true
+    case s @ (_: ShuffleExchangeLike | _: ShuffleQueryStageExec | _: ReusedExchangeExec) =>
+      s.outputPartitioning match {
+        case k: KeyGroupedPartitioning =>
+          reducers.forall(_.forall(_.isEmpty)) &&
+            samePartitionValues(k, pushedPartitionRows(values))
+        case _ => false
+      }
+    case other => other.children.forall(nestedShufflesFollowPush(_, values, reducers))
+  }
+
+  /**
+   * Whether pushing the join key positions of the member of `spec` that matches `bestMember`
+   * would regroup a scan beside a one-side shuffle below `plan`. The shuffle keeps its own
+   * layout, so only positions that select all of its partition expressions keep the two aligned.
+   * The walk stops where the push stops.
+   */
+  private def positionsRegroupBesideShuffle(
+      plan: SparkPlan,
+      spec: ShuffleSpec,
+      bestMember: ShuffleSpec): Boolean = {
+    def regroups(p: SparkPlan, positions: Seq[Int]): Boolean = p match {
+      case _: BroadcastExchangeLike => false
+      case s @ (_: ShuffleExchangeLike | _: ShuffleQueryStageExec | _: ReusedExchangeExec) =>
+        s.outputPartitioning match {
+          case k: KeyGroupedPartitioning => positions != k.expressions.indices
+          case _ => false
+        }
+      case other => other.children.exists(regroups(_, positions))
+    }
+    flattenSpec(spec).find(bestMember.isCompatibleWith) match {
+      case Some(KeyGroupedShuffleSpec(_, _, Some(positions))) => regroups(plan, positions)
+      case _ => false
+    }
   }
 
   /**
