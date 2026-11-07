@@ -568,9 +568,11 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   private def submitMapStage(
       shuffleDep: ShuffleDependency[_, _, _],
       listener: JobListener = jobListener,
-      artifacts: JobArtifactSet = JobArtifactSet.getActiveOrDefault(sc)): Int = {
+      artifacts: JobArtifactSet = JobArtifactSet.getActiveOrDefault(sc),
+      properties: Properties = null): Int = {
     val jobId = scheduler.nextJobId.getAndIncrement()
-    runEvent(MapStageSubmitted(jobId, shuffleDep, CallSite("", ""), listener, artifacts))
+    runEvent(MapStageSubmitted(jobId, shuffleDep, CallSite("", ""), listener, artifacts,
+      properties))
     jobId
   }
 
@@ -3960,6 +3962,137 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // Job successfully ended
     assert(results === Map(0 -> 11, 1 -> 12))
     results.clear()
+    assertDataStructuresEmpty()
+  }
+
+  test("SPARK-60548: abort stage if checksum mismatch detected in attempt 0 of a recreated " +
+    "stage with succeeding result stage in completed jobs") {
+    val executionId = 60548L
+    val properties = new Properties()
+    properties.setProperty(SparkContext.SQL_EXECUTION_ID_KEY, executionId.toString)
+    try {
+      val producerRdd = new MyRDD(sc, 2, Nil)
+      val producerDep = new ShuffleDependency(
+        producerRdd,
+        new HashPartitioner(2),
+        _checksumMismatchFullRetryEnabled = true,
+        checksumMismatchQueryLevelRollbackEnabled = true)
+      val firstResultRdd = new MyRDD(sc, 2, List(producerDep), tracker = mapOutputTracker)
+      submit(firstResultRdd, Array(0, 1), properties = properties)
+      completeShuffleMapStageSuccessfully(0, 0, 2, checksumVal = 100)
+      completeNextResultStageWithSuccess(1, 0)
+      assertDataStructuresEmpty()
+
+      // Lose output before submitting the next job, so the recreated producer stage recomputes
+      // the lost partition in its attempt 0 instead of being skipped.
+      runEvent(ExecutorLost("hostA-exec", ExecutorExited(-100, false, "executor lost")))
+      assert(mapOutputTracker.findMissingPartitions(producerDep.shuffleId) === Some(Seq(0)))
+      val secondResultRdd = new MyRDD(sc, 2, List(producerDep), tracker = mapOutputTracker)
+      submit(secondResultRdd, Array(0, 1), properties = properties)
+      val recompute = taskSets(2)
+      assert(recompute.stageId != 0)
+      assert(recompute.stageAttemptId === 0)
+      assert(recompute.tasks.map(_.partitionId).toSeq === Seq(0))
+      completeShuffleMapStageSuccessfully(recompute.stageId, 0, 2, Seq("hostC"),
+        checksumVal = 101)
+
+      assert(failure != null && failure.getMessage.contains(
+        "cannot rollback completed result stages"))
+      assertDataStructuresEmpty()
+    } finally {
+      scheduler.cleanupQueryJobs(executionId)
+    }
+  }
+
+  test("SPARK-60548: clean up shuffle data for the succeeding available shuffle map stages " +
+    "in completed jobs if checksum mismatch detected in attempt 0 of a recreated stage") {
+    val executionId = 60548L
+    val properties = new Properties()
+    properties.setProperty(SparkContext.SQL_EXECUTION_ID_KEY, executionId.toString)
+    try {
+      val producerRdd = new MyRDD(sc, 3, Nil)
+      val producerDep = new ShuffleDependency(
+        producerRdd,
+        new HashPartitioner(2),
+        _checksumMismatchFullRetryEnabled = true,
+        checksumMismatchQueryLevelRollbackEnabled = true)
+      val consumerRdd = new MyRDD(sc, 2, List(producerDep), tracker = mapOutputTracker)
+      val consumerDep = new ShuffleDependency(consumerRdd, new HashPartitioner(2))
+      submitMapStage(consumerDep, properties = properties)
+      completeShuffleMapStageSuccessfully(0, 0, 2, Seq("hostA", "hostA", "hostB"),
+        checksumVal = 100)
+      completeShuffleMapStageSuccessfully(1, 0, 2, Seq("hostC", "hostD"), checksumVal = 200)
+      assertDataStructuresEmpty()
+
+      // Lose two of the three producer partitions, so attempt 0 of the recreated producer stage
+      // detects two checksum mismatches, which must trigger only one rollback.
+      runEvent(ExecutorLost("hostA-exec", ExecutorExited(-100, false, "executor lost")))
+      assert(mapOutputTracker.findMissingPartitions(producerDep.shuffleId) === Some(Seq(0, 1)))
+      val resultRdd = new MyRDD(sc, 2, List(producerDep), tracker = mapOutputTracker)
+      submit(resultRdd, Array(0, 1), properties = properties)
+      val recompute = taskSets(2)
+      assert(recompute.stageId != 0)
+      assert(recompute.stageAttemptId === 0)
+      assert(recompute.tasks.map(_.partitionId).toSeq === Seq(0, 1))
+      completeShuffleMapStageSuccessfully(recompute.stageId, 0, 2, Seq("hostE", "hostF"),
+        checksumVal = 101)
+
+      // The output of the completed consumer stage is cleaned up once, and the result stage
+      // which has not started yet reads the recomputed data.
+      assert(failure === null)
+      assert(mapOutputTracker.getNumAvailableOutputs(consumerDep.shuffleId) === 0)
+      verify(mapOutputTracker, times(1)).unregisterAllMapAndMergeOutput(consumerDep.shuffleId)
+      completeAndCheckAnswer(taskSets(3), Seq((Success, 11), (Success, 12)),
+        Map(0 -> 11, 1 -> 12))
+
+      // A new job depending on the consumer shuffle reruns all of its tasks.
+      submitMapStage(consumerDep, properties = properties)
+      val consumerRetry = taskSets(4)
+      assert(consumerRetry.shuffleId.contains(consumerDep.shuffleId))
+      assert(consumerRetry.tasks.map(_.partitionId).toSeq === Seq(0, 1))
+      completeShuffleMapStageSuccessfully(consumerRetry.stageId, consumerRetry.stageAttemptId,
+        2, checksumVal = 200)
+      assertDataStructuresEmpty()
+    } finally {
+      scheduler.cleanupQueryJobs(executionId)
+    }
+  }
+
+  test("SPARK-60548: abort stage if a late task of a failed attempt 0 replaces the map " +
+    "output with a different checksum") {
+    val parentRdd = new MyRDD(sc, 2, Nil)
+    val parentDep = new ShuffleDependency(parentRdd, new HashPartitioner(2))
+    val producerRdd = new MyRDD(sc, 2, List(parentDep), tracker = mapOutputTracker)
+    val producerDep = new ShuffleDependency(
+      producerRdd,
+      new HashPartitioner(2),
+      _checksumMismatchFullRetryEnabled = true,
+      checksumMismatchQueryLevelRollbackEnabled = false)
+    val resultRdd = new MyRDD(sc, 2, List(producerDep), tracker = mapOutputTracker)
+    submit(resultRdd, Array(0, 1))
+    completeShuffleMapStageSuccessfully(0, 0, 2, Seq("hostA", "hostB"))
+
+    // Attempt 0 of the producer stage fails while its task for partition 1 keeps running.
+    val producerAttempt0 = taskSet(1, 0)
+    assert(producerAttempt0.shuffleId.contains(producerDep.shuffleId))
+    runEvent(makeCompletionEvent(
+      producerAttempt0.tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), parentDep.shuffleId, 0L, 0, 0, "ignored"),
+      null))
+    scheduler.resubmitFailedStages()
+    completeShuffleMapStageSuccessfully(0, 1, 2, Seq("hostC"))
+    val producerAttempt1 = taskSet(1, 1)
+    assert(producerAttempt1.tasks.map(_.partitionId).toSeq === Seq(0, 1))
+    completeShuffleMapStageSuccessfully(1, 1, 2, Seq("hostC", "hostD"), checksumVal = 100)
+    val resultAttempt = taskSet(2, 0)
+    runEvent(makeCompletionEvent(resultAttempt.tasks(0), Success, 42))
+
+    // The late task finishes after attempt 1 recomputed partition 1 and the result stage
+    // finished partition 0, replacing the output of partition 1 with different data.
+    runEvent(makeCompletionEvent(
+      producerAttempt0.tasks(1), Success, makeMapStatus("hostB", 2, checksumVal = 101)))
+
+    assert(failure != null && failure.getMessage.contains("cannot rollback the ResultStage"))
     assertDataStructuresEmpty()
   }
 
