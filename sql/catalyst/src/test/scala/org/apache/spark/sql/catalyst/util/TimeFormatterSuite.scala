@@ -224,4 +224,18 @@ class TimeFormatterSuite extends SparkFunSuite with SQLHelper {
     // A prefix/partial match must be rejected (full-string consumption).
     assert(isoFormatter.parseOptional("01:02:03xxx").isEmpty)
   }
+
+  test("parseOptional has the same clock-hour and AM/PM semantics as parse") {
+    for (hour <- Seq("HH", "hh", "KK", "kk");
+        input <- Seq("11:30:01", "13:30:01", "00:30:01", "24:00:00")) {
+      val formatter = TimeFormatter(s"$hour:mm:ss", isParsing = true)
+      assert(formatter.parseOptional(input) === scala.util.Try(formatter.parse(input)).toOption,
+        s"$hour:mm:ss on $input")
+    }
+    val formatter = TimeFormatter("hh:mm:ss a", isParsing = true)
+    for (input <- Seq("03:30:00 PM", "13:30:00 PM")) {
+      assert(formatter.parseOptional(input) === scala.util.Try(formatter.parse(input)).toOption,
+        s"hh:mm:ss a on $input")
+    }
+  }
 }
