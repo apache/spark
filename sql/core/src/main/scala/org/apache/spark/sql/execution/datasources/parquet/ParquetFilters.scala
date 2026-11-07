@@ -793,6 +793,14 @@ class ParquetFilters(
   private val makeInPredicate:
     PartialFunction[ParquetSchemaType, (Array[String], Array[Any]) => FilterPredicate] = {
 
+    case ParquetBooleanType =>
+      (n: Array[String], values: Array[Any]) =>
+        val set = new HashSet[JBoolean]()
+        for (value <- values) {
+          set.add(value.asInstanceOf[JBoolean])
+        }
+        FilterApi.in(booleanColumn(n), set)
+
     case ParquetByteType | ParquetShortType | ParquetIntegerType =>
       (n: Array[String], values: Array[Any]) =>
         val set = new HashSet[Integer]()
@@ -1242,9 +1250,11 @@ class ParquetFilters(
           }.reduceLeftOption(FilterApi.or)
         } else if (canPartialPushDownConjuncts) {
           if (values.contains(null)) {
-            Seq(makeEq.lift(fieldType).map(_(fieldNames, null)),
-              makeInPredicate.lift(fieldType).map(_(fieldNames, values.filter(_ != null)))
-            ).flatten.reduceLeftOption(FilterApi.or)
+            // Push both disjuncts or neither: either one alone is stricter than the IN.
+            for {
+              eqNull <- makeEq.lift(fieldType).map(_(fieldNames, null))
+              in <- makeInPredicate.lift(fieldType).map(_(fieldNames, values.filter(_ != null)))
+            } yield FilterApi.or(eqNull, in)
           } else {
             makeInPredicate.lift(fieldType).map(_(fieldNames, values))
           }
