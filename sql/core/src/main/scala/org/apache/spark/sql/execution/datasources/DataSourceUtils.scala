@@ -49,20 +49,20 @@ import org.apache.spark.util.Utils
 object DataSourceUtils extends PredicateHelper {
 
   /**
-   * Merges write options into a Hadoop configuration. Keys "path" and "paths" are excluded.
-   * This ensures per-write options are present in the conf even if they were added to the
-   * options map after the Hadoop conf was originally created.
+   * Merges data source options into a Hadoop configuration. Keys "path" and "paths" are excluded.
+   * Callers are expected to pass a map that preserves the original key casing; an unmodified
+   * [[CaseInsensitiveMap]] is also unwrapped to its `originalMap` as a safeguard.
    */
-  def mergeWriteOptionsIntoHadoopConf(
+  def mergeOptionsIntoHadoopConf(
       options: Map[String, String], conf: Configuration): Unit = {
-    // CaseInsensitiveMap.iterator yields lowercased keys, but Hadoop Configuration is
-    // case-sensitive. Use the original map to preserve the user's key casing.
+    // Hadoop Configuration is case-sensitive. Callers should pass a map with the original keys,
+    // and we also unwrap CaseInsensitiveMap here since its iterator yields lowercased keys.
     val rawOptions = options match {
       case ci: CaseInsensitiveMap[String @unchecked] => ci.originalMap
       case other => other
     }
     rawOptions.foreach { case (k, v) =>
-      if ((v ne null) && k != "path" && k != "paths") {
+      if ((v ne null) && !k.equalsIgnoreCase("path") && !k.equalsIgnoreCase("paths")) {
         conf.set(k, v)
       }
     }
@@ -70,7 +70,7 @@ object DataSourceUtils extends PredicateHelper {
 
   /**
    * Sets a key in the Hadoop configuration only if it is not already present. Per-write
-   * options should be merged into the conf first (via [[mergeWriteOptionsIntoHadoopConf]]),
+   * options should be merged into the conf first (via [[mergeOptionsIntoHadoopConf]]),
    * so a non-null value means the user explicitly set a per-write option which should take
    * precedence over the session-level SQLConf default.
    */

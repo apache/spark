@@ -66,7 +66,7 @@ abstract class FileTable(
       // We are reading from the results of a streaming query. We will load files from
       // the metadata log instead of listing them using HDFS APIs.
       new MetadataLogFileIndex(sparkSession, new Path(paths.head),
-        options.asScala.toMap, userSpecifiedSchema)
+        caseSensitiveMap, userSpecifiedSchema)
     } else {
       // This is a non-streaming file based datasource.
       val ignoredPathSegmentRegex =

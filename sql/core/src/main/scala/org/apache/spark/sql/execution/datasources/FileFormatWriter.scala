@@ -108,7 +108,7 @@ object FileFormatWriter extends Logging {
 
     // Merge write options into the job's configuration so that per-write options
     // take precedence over session-level defaults set later in prepareWrite.
-    DataSourceUtils.mergeWriteOptionsIntoHadoopConf(options, job.getConfiguration)
+    DataSourceUtils.mergeOptionsIntoHadoopConf(options, job.getConfiguration)
 
     val partitionSet = AttributeSet(partitionColumns)
     // cleanup the internal metadata information of

@@ -41,7 +41,7 @@ case class OrcTable(
     OrcScanBuilder(sparkSession, fileIndex, schema, dataSchema, mergedOptions(options))
 
   override def inferSchema(files: Seq[FileStatus]): Option[StructType] =
-    OrcUtils.inferSchema(sparkSession, files, options.asScala.toMap)
+    OrcUtils.inferSchema(sparkSession, files, options.asCaseSensitiveMap.asScala.toMap)
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
     new WriteBuilder {

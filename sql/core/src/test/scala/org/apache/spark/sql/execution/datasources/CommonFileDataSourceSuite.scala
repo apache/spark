@@ -45,7 +45,7 @@ trait CommonFileDataSourceSuite extends SQLHelper {
       Seq(false, true).foreach { mergeSchema =>
         withTempPath { dir =>
           val path = dir.getAbsolutePath
-          val conf = Map("ds_option" -> "value", "mergeSchema" -> mergeSchema.toString)
+          val conf = Map("ds_Option" -> "value", "mergeSchema" -> mergeSchema.toString)
           inputDataset
             .write
             .options(conf)
