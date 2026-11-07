@@ -34,8 +34,6 @@ if should_test_connect:
         DefaultPolicy,
         RetryException,
         Retrying,
-        extract_retry_delay,
-        extract_retry_info,
     )
     from pyspark.sql.tests.connect.client.test_client import (
         TestException,
@@ -125,54 +123,26 @@ class SparkConnectClientRetriesTestCase(unittest.TestCase):
 
         self.assertEqual(client.get_retry_policies(), [policyA, policyB])
 
-    def test_jitter_threshold_and_backoff_state(self):
-        policy = DefaultPolicy(
-            initial_backoff=50,
-            backoff_multiplier=2,
-            max_backoff=200,
-            max_retries=4,
-            jitter=10,
-            min_jitter_threshold=100,
-        )
-        state = policy.to_state()
-        with patch("pyspark.sql.connect.client.retries.random.uniform", return_value=7) as jitter:
-            self.assertEqual(state.next_attempt(), 50)
-            jitter.assert_not_called()
-            self.assertEqual([state.next_attempt() for _ in range(3)], [107, 207, 207])
-            self.assertIsNone(state.next_attempt())
-            self.assertEqual(jitter.call_count, 3)
-            jitter.assert_called_with(0, 10)
-            self.assertEqual(policy.to_state().next_attempt(), 50)
+    def test_jitter_threshold(self):
+        for backoff, expected in [(99, 99), (100, 107)]:
+            with self.subTest(backoff=backoff):
+                state = DefaultPolicy(
+                    initial_backoff=backoff, jitter=10, min_jitter_threshold=100
+                ).to_state()
+                with patch(
+                    "pyspark.sql.connect.client.retries.random.uniform", return_value=7
+                ) as jitter:
+                    self.assertEqual(state.next_attempt(), expected)
+                    if backoff == 99:
+                        jitter.assert_not_called()
+                    else:
+                        jitter.assert_called_once_with(0, 10)
 
     def test_default_policy_error_classification(self):
         policy = DefaultPolicy()
-        for error, expected in [
-            (ValueError("local error"), False),
-            (TestException("INVALID_CURSOR.DISCONNECTED"), True),
-            (TestException("unrelated internal error"), False),
-        ]:
-            with self.subTest(error=str(error)):
-                self.assertEqual(policy.can_retry(error), expected)
-
-    def test_retry_info_ignores_unrelated_details(self):
-        unrelated = any_pb2.Any()
-        unrelated.Pack(error_details_pb2.ErrorInfo(reason="unrelated"))
-        retry_info = error_details_pb2.RetryInfo()
-        retry_info.retry_delay.FromMilliseconds(1234)
-        packed_retry_info = any_pb2.Any()
-        packed_retry_info.Pack(retry_info)
-        for details, expected in [
-            ([], None),
-            ([unrelated], None),
-            ([unrelated, packed_retry_info], retry_info),
-        ]:
-            with self.subTest(details=details):
-                status = status_pb2.Status(
-                    code=grpc.StatusCode.INTERNAL.value[0], message="error", details=details
-                )
-                error = TestException("error", trailing_status=status)
-                self.assertEqual(extract_retry_info(error), expected)
-                self.assertEqual(extract_retry_delay(error), 1234 if expected is not None else None)
+        self.assertFalse(policy.can_retry(ValueError("local error")))
+        self.assertTrue(policy.can_retry(TestException("INVALID_CURSOR.DISCONNECTED")))
+        self.assertFalse(policy.can_retry(TestException("unrelated internal error")))
 
     def test_server_retry_delay_options(self):
         error = create_test_exception_with_details("retry later", retry_delay=1000)

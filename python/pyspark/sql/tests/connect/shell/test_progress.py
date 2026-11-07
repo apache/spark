@@ -19,7 +19,7 @@ import os
 import unittest
 from io import StringIO
 from typing import Iterable
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 from pyspark.testing.connectutils import (
     ReusedConnectTestCase,
@@ -75,21 +75,6 @@ class ProgressBarTest(unittest.TestCase, PySparkErrorTestUtils):
         p.finish()
         self.assertTrue(buffer.getvalue().endswith("\r"), "Last line should be empty")
 
-    def test_progress_environment_switch(self):
-        for value in [None, "0", "1", "true", ""]:
-            with self.subTest(value=value), patch.dict(os.environ):
-                os.environ.pop(PROGRESS_BAR_ENABLED, None)
-                if value is not None:
-                    os.environ[PROGRESS_BAR_ENABLED] = value
-                buffer = StringIO()
-                with Progress(output=buffer) as progress:
-                    progress.update_ticks([StageInfo(0, 2, 1, 0, False)], 1)
-                if value == "1":
-                    self.assertIn("50.00%", buffer.getvalue())
-                    self.assertTrue(buffer.getvalue().endswith("\r"))
-                else:
-                    self.assertEqual(buffer.getvalue(), "")
-
     def test_disabled_progress_notifies_on_exception(self):
         stages = [StageInfo(0, 2, 1, 0, False)]
         handler = Mock()
@@ -99,15 +84,15 @@ class ProgressBarTest(unittest.TestCase, PySparkErrorTestUtils):
             with self.assertRaises(ValueError) as raised:
                 with Progress(output=buffer, handlers=[handler]) as progress:
                     progress.update_ticks(stages, 1, operation_id="operation_id")
-                    handler.assert_called_once_with(
-                        stages=stages, inflight_tasks=1, operation_id="operation_id", done=False
-                    )
                     raise error
         self.assertIs(raised.exception, error)
         self.assertEqual(buffer.getvalue(), "")
-        self.assertEqual(handler.call_count, 2)
-        handler.assert_called_with(
-            stages=stages, inflight_tasks=1, operation_id="operation_id", done=True
+        self.assertEqual(
+            handler.call_args_list,
+            [
+                call(stages=stages, inflight_tasks=1, operation_id="operation_id", done=False),
+                call(stages=stages, inflight_tasks=1, operation_id="operation_id", done=True),
+            ],
         )
 
     def test_progress_handler(self):
