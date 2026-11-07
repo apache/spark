@@ -20,6 +20,7 @@ package org.apache.spark.sql.connect.service
 import java.util.UUID
 
 import org.apache.spark.SparkSQLException
+import org.apache.spark.sql.connector.catalog.CloseableCatalog
 import org.apache.spark.sql.test.SharedSparkSession
 
 class SparkConnectCloneSessionSuite extends SharedSparkSession {
@@ -274,5 +275,33 @@ class SparkConnectCloneSessionSuite extends SharedSparkSession {
     Files.deleteIfExists(clonedOnlyFile)
     sourceSession.artifactManager.close()
     clonedSession.artifactManager.close()
+  }
+
+  test("closing the source session does not close catalogs of the cloned session") {
+    val sourceKey = SessionKey("testUser", UUID.randomUUID.toString)
+    val targetSessionId = UUID.randomUUID.toString
+
+    val sourceSession = SparkConnectService.sessionManager
+      .getOrCreateIsolatedSession(sourceKey, None)
+    sourceSession.session.conf
+      .set("spark.sql.catalog.closeable", classOf[CloseableCatalog].getName)
+    val sourceCatalog = sourceSession.withSession {
+      _.sessionState.catalogManager.catalog("closeable").asInstanceOf[CloseableCatalog]
+    }
+
+    val clonedSession = SparkConnectService.sessionManager
+      .cloneSession(sourceKey, targetSessionId, None)
+    val clonedCatalog = clonedSession.withSession {
+      _.sessionState.catalogManager.catalog("closeable").asInstanceOf[CloseableCatalog]
+    }
+    // The cloned session loads its own catalog instance.
+    assert(clonedCatalog ne sourceCatalog)
+
+    SparkConnectService.sessionManager.closeSession(sourceKey)
+    assert(sourceCatalog.closed)
+    assert(!clonedCatalog.closed)
+
+    SparkConnectService.sessionManager.closeSession(clonedSession.key)
+    assert(clonedCatalog.closed)
   }
 }
