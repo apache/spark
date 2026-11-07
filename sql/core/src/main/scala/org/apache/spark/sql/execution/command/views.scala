@@ -38,6 +38,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{IdentifierHelp
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSourceV2Relation}
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
+import org.apache.spark.sql.metricview.logical.{MetricViewPlaceholder, ResolvedMetricView}
 import org.apache.spark.sql.types.{MetadataBuilder, StructType}
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.ArrayImplicits._
@@ -616,20 +617,27 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
       plan: LogicalPlan,
       path: Seq[Seq[String]],
       viewIdent: Seq[String]): Unit = {
-    plan match {
-      case v: View =>
-        val ident = v.desc.fullIdent
+    // A metric view read by the plan is a `ResolvedMetricView`, or a `MetricViewPlaceholder`
+    // when it is the source of another metric view, not a `View`.
+    val viewRef = plan match {
+      case v: View => Some(v.desc.fullIdent)
+      case mv: ResolvedMetricView => Some(mv.identifier)
+      case mv: MetricViewPlaceholder => Some(mv.metadata.fullIdent)
+      case _ => None
+    }
+    viewRef match {
+      case Some(ident) =>
         val newPath = path :+ ident
         // If the table identifier equals to the `viewIdent`, current view node is the same with
         // the altered view. We detect a view reference cycle, should throw an AnalysisException.
         if (ident == viewIdent) {
           throw QueryCompilationErrors.recursiveViewDetectedError(viewIdent, newPath)
         } else {
-          v.children.foreach { child =>
+          plan.children.foreach { child =>
             checkCyclicViewReference(child, newPath, viewIdent)
           }
         }
-      case _ =>
+      case None =>
         plan.children.foreach(child => checkCyclicViewReference(child, path, viewIdent))
     }
 
