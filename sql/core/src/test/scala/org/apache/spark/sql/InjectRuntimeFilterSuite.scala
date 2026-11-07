@@ -517,6 +517,40 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
     }
   }
 
+  test("SPARK-60808: do not add bloom filter whose creation side is not deterministic") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val queries = Seq(
+        "select * from bf2 where a2 = 62 and rand() < 0.5",
+        "select if(rand() < 0.5, c2, null) c2 from bf2 where a2 = 62",
+        // The bloom filter does not read `r`.
+        "select c2, rand() r from bf2 where a2 = 62"
+      ).map(creationSide => s"select * from bf1 join ($creationSide) t on bf1.c1 = t.c2")
+      assert(queries.map(q => getNumBloomFilters(sql(q).queryExecution.optimizedPlan)) ==
+        Seq(0, 0, 1))
+    }
+  }
+
+  test("SPARK-60808: a non-deterministic creation side does not lose join rows") {
+    withTable("dim", "fact") {
+      sql("CREATE TABLE dim USING parquet AS SELECT cast(id AS INT) k FROM range(200)")
+      sql("CREATE TABLE fact USING parquet AS SELECT cast(id % 200 AS INT) k FROM range(20000)")
+      withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "1",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        // Every `dim.k` is in `fact`. `rand()` would pick the same rows in each scan of the same
+        // files, so the filter calls `java.lang.Math.random` instead.
+        checkAnswer(sql(
+          """SELECT count_if(f.k IS NULL)
+            |FROM (SELECT k FROM dim
+            |  WHERE cast(reflect('java.lang.Math', 'random') AS DOUBLE) < 0.5) d
+            |LEFT JOIN fact f ON d.k = f.k""".stripMargin), Row(0L))
+        // A deterministic creation side gets a bloom filter with these tables and settings.
+        assert(getNumBloomFilters(sql("SELECT * FROM (SELECT k FROM dim WHERE k < 100) d " +
+          "LEFT JOIN fact f ON d.k = f.k").queryExecution.optimizedPlan) == 1)
+      }
+    }
+  }
+
   test("Support Left Semi join in row level runtime filters") {
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "32") {
