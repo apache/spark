@@ -547,6 +547,34 @@ Project [id#xL, sum_rows#xL]
 
 
 -- !query
+CREATE OR REPLACE TEMP VIEW v_window AS
+SELECT i.id, sum(i.id) over (order by i.id groups between 1 preceding and 1 following) as sum_rows FROM range(1, 11) i
+-- !query analysis
+CreateViewCommand `v_window`, SELECT i.id, sum(i.id) over (order by i.id groups between 1 preceding and 1 following) as sum_rows FROM range(1, 11) i, false, true, LocalTempView, UNSUPPORTED, true
+   +- Project [id#xL, sum_rows#xL]
+      +- Project [id#xL, sum_rows#xL, sum_rows#xL]
+         +- Window [sum(id#xL) windowspecdefinition(id#xL ASC NULLS FIRST, specifiedwindowframe(GroupFrame, -1, 1)) AS sum_rows#xL], [id#xL ASC NULLS FIRST]
+            +- Project [id#xL]
+               +- SubqueryAlias i
+                  +- Range (1, 11, step=1)
+
+
+-- !query
+SELECT * FROM v_window
+-- !query analysis
+Project [id#xL, sum_rows#xL]
++- SubqueryAlias v_window
+   +- View (`v_window`, [id#xL, sum_rows#xL])
+      +- Project [cast(id#xL as bigint) AS id#xL, cast(sum_rows#xL as bigint) AS sum_rows#xL]
+         +- Project [id#xL, sum_rows#xL]
+            +- Project [id#xL, sum_rows#xL, sum_rows#xL]
+               +- Window [sum(id#xL) windowspecdefinition(id#xL ASC NULLS FIRST, specifiedwindowframe(GroupFrame, -1, 1)) AS sum_rows#xL], [id#xL ASC NULLS FIRST]
+                  +- Project [id#xL]
+                     +- SubqueryAlias i
+                        +- Range (1, 11, step=1)
+
+
+-- !query
 DROP VIEW v_window
 -- !query analysis
 DropTempViewCommand v_window, false

@@ -91,6 +91,8 @@ case class WindowSpecDefinition(
             "valueBoundaryType" -> toSQLType(f.valueBoundary.head.dataType)
           )
         )
+      case f: SpecifiedWindowFrame if f.frameType == GroupFrame && orderSpec.isEmpty =>
+        DataTypeMismatch(errorSubClass = "GROUPS_FRAME_WITHOUT_ORDER")
       case _ => TypeCheckSuccess
     }
   }
@@ -157,6 +159,39 @@ case object RowFrame extends FrameType {
 case object RangeFrame extends FrameType {
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
   override def sql: String = "RANGE"
+}
+
+/**
+ * A frame whose integral offsets count peer groups in the window ordering.
+ */
+case object GroupFrame extends FrameType {
+  override def inputType: AbstractDataType = IntegerType
+  override def sql: String = "GROUPS"
+}
+
+/**
+ * Validates a SQL GROUPS offset before PRECEDING negates it. Keep the original magnitude through
+ * analysis so parameter binding cannot turn a negative offset into a valid signed boundary.
+ */
+case class GroupFrameOffset(child: Expression)
+  extends RuntimeReplaceable with UnaryLike[Expression] {
+  override def replacement: Expression = child
+  override def foldable: Boolean = child.foldable
+  override def sql: String = child.sql
+  // Frame descriptions should display the offset, not its analysis-only validation wrapper.
+  override def toString: String = child.toString
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (child.foldable && child.dataType == IntegerType &&
+        Option(child.eval()).exists(_.asInstanceOf[Int] < 0)) {
+      DataTypeMismatch(errorSubClass = "GROUPS_FRAME_NEGATIVE_OFFSET")
+    } else {
+      TypeCheckSuccess
+    }
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): GroupFrameOffset =
+    copy(child = newChild)
 }
 
 /**
@@ -272,6 +307,8 @@ case class SpecifiedWindowFrame(
   private def boundarySql(expr: Expression): String = expr match {
     case e: SpecialFrameBoundary => e.sql
     case UnaryMinus(n, _) => n.sql + " PRECEDING"
+    case IntegerLiteral(offset) if frameType == GroupFrame && offset < 0 =>
+      s"${-offset} PRECEDING"
     case e: Expression => e.sql + " FOLLOWING"
   }
 
@@ -301,6 +338,11 @@ case class SpecifiedWindowFrame(
           "exprType" -> toSQLType(e.dataType),
           "expectedType" -> toSQLType(frameType.inputType)
         )
+      )
+    case e: Expression if frameType == GroupFrame && e.eval() == null =>
+      DataTypeMismatch(
+        errorSubClass = "GROUPS_FRAME_NULL_OFFSET",
+        messageParameters = Map("location" -> location)
       )
     case _ => TypeCheckSuccess
   }
