@@ -25,6 +25,7 @@ import com.google.common.cache.{Cache, CacheBuilder}
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, LogKeys}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.{AliasHelper, And, Attribute, AttributeMap, AttributeReference, AttributeSet, Cast, EqualNullSafe, EqualTo, Expression, ExpressionSet, Generator, Literal, Or, OuterReference, PredicateHelper, SubqueryExpression, Unevaluable}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
@@ -35,7 +36,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, CTERelationDef, Fi
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, RUNTIME_REPLACEABLE}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.{truncatedString, ArrayData, CharVarcharUtils}
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
@@ -540,13 +541,15 @@ private[sql] object StreamingV2ScanPushDown
       attempts match {
         case Seq() => scanOfAllColumns(builder) -> Nil
         case (columns, filters) +: rest =>
-          val (reason, cause) = Try(scanWith(builder, columns, filters)) match {
+          val (reason, cause, next) = Try(scanWith(builder, columns, filters)) match {
             case Success(Right((scan, scanOutput))) =>
               return (scan -> scanOutput.getOrElse(outputOfAllColumns(scan))) -> filters
-            case Success(Left(reason)) => s"its read schema $reason" -> None
-            case Failure(e) => s"it failed with $e" -> Some(e)
+            // The read schema of the next scans of these columns would not follow them either.
+            case Success(Left(reason)) =>
+              (s"its read schema $reason", None, rest.filterNot(_._1 == columns))
+            case Failure(e) => (s"it failed with $e", Some(e), rest)
           }
-          val (nextColumns, nextFilters) = rest.headOption.getOrElse(output -> Nil)
+          val (nextColumns, nextFilters) = next.headOption.getOrElse(output -> Nil)
           val message = log"The scan of the streaming table " +
             log"${MDC(LogKeys.STREAMING_TABLE, table)} could not be built with " +
             log"${MDC(LogKeys.OLD_VALUE, pushdowns(columns, filters))}: " +
@@ -556,7 +559,7 @@ private[sql] object StreamingV2ScanPushDown
             case Some(e) => logWarning(message, e)
             case None => logWarning(message)
           }
-          firstScan(rest, table.newScanBuilder(options))
+          firstScan(next, table.newScanBuilder(options))
       }
     }
 
@@ -733,11 +736,12 @@ private[sql] object StreamingV2ScanPushDown
    * types whose equal values are the same (see `hasExactEquality`), and for the floating types,
    * whose equal values only differ for 0.0 and -0.0, and for NaN values, which Spark evaluates
    * alike: a column equal to zero is 0.0 or -0.0, so the filter must hold with each, as
-   * `floor(d) >= 0` does, unlike `CAST(d AS STRING) = '0.0'`. A string of a collation that is not
-   * binary gets no value, also where `ConstantPropagation` puts it in a comparison of two columns
-   * of this collation. This may miss that the facts imply a filter, which fails the micro-batch,
-   * but never finds that they imply a filter that they do not imply, as long as the rules of the
-   * optimizer keep what the filters mean.
+   * `floor(d) >= 0` does, unlike `CAST(d AS STRING) = '0.0'`. A struct or an array with floating
+   * fields or elements gets its value if it has no 0.0 or -0.0 in them. A string of a collation
+   * that is not binary gets no value, also where `ConstantPropagation` puts it in a comparison of
+   * two columns of this collation. This may miss that the facts imply a filter, which fails the
+   * micro-batch, but never finds that they imply a filter that they do not imply, as long as the
+   * rules of the optimizer keep what the filters mean.
    */
   private def impliedBy(
       facts: Seq[Expression],
@@ -760,7 +764,9 @@ private[sql] object StreamingV2ScanPushDown
       case EqualNullSafe(value: Literal, column: Attribute) => column -> value
     }.filter { case (column, value) =>
       DataType.equalsIgnoreNullability(column.dataType, value.dataType) &&
-        (hasExactEquality(column.dataType) || isFloating(column.dataType))
+        (hasExactEquality(column.dataType) || isFloating(column.dataType) ||
+          (hasExactEquality(column.dataType, floating = true) &&
+            hasNoFloatingZero(value.value, value.dataType)))
     })
     filter => noRow || holds(filter) || {
       val columns = filter.references.filter(values.contains)
@@ -782,14 +788,35 @@ private[sql] object StreamingV2ScanPushDown
   // Whether the values of `dataType` that are equal are the same, so that a column that is equal
   // to a value has this value in any expression: not 0.0 and -0.0, which are equal, nor the
   // strings that a collation finds equal, nor the structs and arrays that have such values.
-  private def hasExactEquality(dataType: DataType): Boolean = dataType match {
-    case _: IntegralType | _: DecimalType | BooleanType | DateType | TimestampType |
-         TimestampNTZType | _: AnyTimestampNanoType | _: TimeType | _: DayTimeIntervalType |
-         _: YearMonthIntervalType | BinaryType => true
-    case string: StringType => string.supportsBinaryEquality
-    case struct: StructType => struct.fields.forall(field => hasExactEquality(field.dataType))
-    case array: ArrayType => hasExactEquality(array.elementType)
-    case _ => false
+  // With `floating`, the floating types count as such too, for a value that has no 0.0 or -0.0 in
+  // them (see `hasNoFloatingZero`): the other equal floating values are the same, or NaN values,
+  // which Spark evaluates alike.
+  private def hasExactEquality(dataType: DataType, floating: Boolean = false): Boolean =
+    dataType match {
+      case _: IntegralType | _: DecimalType | BooleanType | DateType | TimestampType |
+           TimestampNTZType | _: AnyTimestampNanoType | _: TimeType | _: DayTimeIntervalType |
+           _: YearMonthIntervalType | BinaryType => true
+      case FloatType | DoubleType => floating
+      case string: StringType => string.supportsBinaryEquality
+      case struct: StructType =>
+        struct.fields.forall(field => hasExactEquality(field.dataType, floating))
+      case array: ArrayType => hasExactEquality(array.elementType, floating)
+      case _ => false
+    }
+
+  // Whether `value`, of `dataType`, has no 0.0 or -0.0 in its fields and elements.
+  private def hasNoFloatingZero(value: Any, dataType: DataType): Boolean = (value, dataType) match {
+    case (double: Double, DoubleType) => double != 0.0
+    case (float: Float, FloatType) => float != 0.0f
+    case (row: InternalRow, struct: StructType) =>
+      struct.fields.indices.forall { i =>
+        row.isNullAt(i) || hasNoFloatingZero(row.get(i, struct(i).dataType), struct(i).dataType)
+      }
+    case (array: ArrayData, ArrayType(elementType, _)) =>
+      (0 until array.numElements()).forall { i =>
+        array.isNullAt(i) || hasNoFloatingZero(array.get(i, elementType), elementType)
+      }
+    case _ => true
   }
 
   private def isFloating(dataType: DataType): Boolean =

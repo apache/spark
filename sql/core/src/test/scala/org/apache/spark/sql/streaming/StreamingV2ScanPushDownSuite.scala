@@ -50,7 +50,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
 import org.apache.spark.sql.sources.{Filter => SourceFilter}
-import org.apache.spark.sql.types.{ArrayType, BooleanType, CharType, DataType, IntegerType, LongType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, CharType, DataType, DoubleType, IntegerType, LongType, StringType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -1129,6 +1129,21 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
         assertNotOverSources("> 0"),
         CheckAnswer(Row("x")))
     }
+    // And on a struct key with a double, whose value has no 0.0 or -0.0.
+    withTable(tbl) {
+      createTable(tbl, "k struct<a: double>, v string", filtering)
+      sql(s"INSERT INTO $tbl VALUES (named_struct('a', 1.0D), 'x'), " +
+        "(named_struct('a', -1.0D), 'y')")
+      val source = spark.readStream.table(tbl).where("k.a > 0")
+      val static = spark.range(0, 1)
+        .selectExpr("named_struct('a', CAST(id AS DOUBLE) + 1.0D) AS sk")
+        .where("sk = named_struct('a', 1.0D)")
+      testStream(source.join(static, source("k") === static("sk")).select("v"))(
+        ProcessAllAvailable(),
+        assertPushedFilters("GreaterThan(k.a,0.0)"),
+        assertNotOverSources("> 0"),
+        CheckAnswer(Row("x")))
+    }
     // Also on a double key, whose value the micro-batch puts where the column is compared: -0.0
     // compares as 0.0 does.
     withTable(tbl) {
@@ -1437,7 +1452,8 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
   test("check that the plan of each micro-batch implies the filters that its scans got") {
     withTable(tbl) {
       createTable(tbl,
-        "id bigint, data string, d double, e int, t time, k struct<a: int>, xs array<int>")
+        "id bigint, data string, d double, e int, t time, k struct<a: int>, xs array<int>, " +
+          "f struct<a: double>")
       // A relation of the source, whose pushed filters each case sets.
       var relation: StreamingDataSourceV2ScanRelation = null
       testStream(spark.readStream.table(tbl))(
@@ -1448,7 +1464,7 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
           }.get
           true
         })
-      val Seq(id, data, d, e, t, k, xs) = relation.output
+      val Seq(id, data, d, e, t, k, xs, f) = relation.output
       // Checks the plan of a micro-batch that `plan` makes of the relation, once the scan of the
       // relation got `pushed`.
       def check(pushed: Expression)(plan: LogicalPlan => LogicalPlan): Unit = {
@@ -1507,6 +1523,13 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
       val array = Literal.create(ArrayData.toArrayData(Array(1, 2)),
         ArrayType(IntegerType, containsNull = false))
       assert(accepts(ArrayContains(xs, Literal(2)))(Filter(EqualTo(xs, array), _)))
+      // A struct of a double gets its value if it is not 0.0 or -0.0.
+      def structOf(value: Double): Literal = Literal.create(InternalRow(value),
+        StructType(Seq(StructField("a", DoubleType, nullable = false))))
+      val kd = GetStructField(f, 0, Some("a"))
+      assert(accepts(GreaterThan(kd, Literal(0.0)))(Filter(EqualTo(f, structOf(1.0)), _)))
+      assert(!accepts(EqualTo(Cast(kd, StringType), Literal("0.0")))(
+        Filter(EqualTo(f, structOf(0.0)), _)))
       // And once the optimizer of the micro-batch rewrote it, as it rewrites the plan.
       assert(accepts(LessThan(Cast(e, LongType), id))(
         Filter(And(EqualTo(id, Literal(5L)), LessThan(e, Literal(5))), _)))
@@ -1993,13 +2016,23 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
 
   test("read all the columns with the filters when only the column pruning fails") {
     // The pruned scans of the table do not have the column data, so the scan reads all the
-    // columns, still with the filter.
+    // columns, still with the filter, without trying the same columns with no filter first.
     withSourceTable(InMemoryBaseTable.SIMULATE_INCOMPLETE_COLUMN_PRUNING -> "true") {
-      testStream(spark.readStream.table(tbl).where("extra > 10").select("data"))(
-        ProcessAllAvailable(),
-        assertReadSchema("id", "data", "extra"),
-        assertPushedFilters("GreaterThan(extra,10)"),
-        CheckAnswer(Row("b")))
+      val logs = new LogAppender("the fallback after a pruned read schema")
+      withLogAppender(logs,
+          loggerNames = Seq(StreamingV2ScanPushDown.getClass.getName.stripSuffix("$")),
+          level = Some(Level.WARN)) {
+        testStream(spark.readStream.table(tbl).where("extra > 10").select("data"))(
+          ProcessAllAvailable(),
+          assertReadSchema("id", "data", "extra"),
+          assertPushedFilters("GreaterThan(extra,10)"),
+          CheckAnswer(Row("b")))
+      }
+      val warnings = logs.loggingEvents.map(_.getMessage.getFormattedMessage)
+        .filter(_.contains("could not be built"))
+      assert(warnings.length === 1 &&
+        warnings.head.contains("Trying (columns: all, filters: (testcat.t.extra > 10)) next."),
+        warnings)
     }
   }
 

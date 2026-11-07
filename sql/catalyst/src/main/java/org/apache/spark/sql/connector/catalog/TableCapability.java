@@ -206,8 +206,11 @@ public enum TableCapability {
    * the filters over the relation. A builder whose filters may fail on some rows, as a cast does
    * with ANSI, only gets the filters that the query applies before any other filter, in their
    * order, and the streams of its scans must not evaluate a filter on a row that a filter before
-   * it drops, as Spark does not, so that each filter only sees the rows that the query evaluates it
-   * on.
+   * it drops, so that a filter does not see a row that the query drops with a filter written
+   * before it. Spark may still evaluate other conditions before these filters in a micro-batch,
+   * such as those that it infers from them, e.g. {@code a > 5} from {@code a = b AND b > 5}, or
+   * an equality with a literal that it moves first, so such a condition may drop a row in Spark
+   * on which a pushed filter that may fail, such as a division with ANSI, fails in the stream.
    * <p>
    * Spark builds the scan of a streaming read once, when the query starts, from the plan of the
    * query optimized then, and creates the micro-batch or continuous stream of the read from that

@@ -65,8 +65,10 @@ public interface SupportsPushDownV2Filters extends ScanBuilder {
    * {@link org.apache.spark.sql.connector.catalog.TableCapability#STREAMING_FILTER_PUSHDOWN} and
    * {@code spark.sql.streaming.v2FilterPushdown.enabled} is true: the predicates that the query
    * applies first, in their order, which the streams of the scan must not evaluate on a row that a
-   * predicate before them drops. Spark evaluates all of them after a streaming scan, also those
-   * that this does not return.
+   * predicate before them drops (see
+   * {@link org.apache.spark.sql.connector.catalog.TableCapability#STREAMING_FILTER_PUSHDOWN} for
+   * the conditions that Spark may evaluate before them). Spark evaluates all of them after a
+   * streaming scan, also those that this does not return.
    */
   Predicate[] pushPredicates(Predicate[] predicates);
 
