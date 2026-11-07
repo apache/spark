@@ -51,7 +51,7 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
     sc: SparkContext,
     var rdd1 : RDD[T],
     var rdd2 : RDD[U],
-    preferFirstParentLocations: Boolean = false)
+    preferLeftLocations: Boolean = false)
   extends RDD[(T, U)](sc, Nil)
   with Serializable {
 
@@ -73,37 +73,10 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
     val currSplit = split.asInstanceOf[CartesianPartition]
-    val firstParentLocations = if (preferFirstParentLocations) {
-      preferredLocationsThroughNarrowDependencies(rdd1, currSplit.s1)
+    if (preferLeftLocations) {
+      rdd1.preferredLocations(currSplit.s1).distinct
     } else {
-      rdd1.preferredLocations(currSplit.s1)
-    }
-    if (preferFirstParentLocations && firstParentLocations.nonEmpty) {
-      firstParentLocations.distinct
-    } else {
-      (firstParentLocations ++ rdd2.preferredLocations(currSplit.s2)).distinct
-    }
-  }
-
-  private def preferredLocationsThroughNarrowDependencies(
-      rdd: RDD[_],
-      partition: Partition): Seq[String] = {
-    // SQL map/codegen wrappers can have no locality of their own while hiding a StateStoreRDD.
-    // Follow their narrow partition mapping so Cartesian siblings remain local to the state store.
-    val locations = rdd.preferredLocations(partition)
-    if (locations.nonEmpty) {
-      locations
-    } else {
-      rdd.dependencies.iterator
-        .collect { case dependency: NarrowDependency[_] => dependency }
-        .flatMap { dependency =>
-          dependency.getParents(partition.index).iterator.map { parentIndex =>
-            preferredLocationsThroughNarrowDependencies(
-              dependency.rdd, dependency.rdd.partitions(parentIndex))
-          }
-        }
-        .find(_.nonEmpty)
-        .getOrElse(Nil)
+      (rdd1.preferredLocations(currSplit.s1) ++ rdd2.preferredLocations(currSplit.s2)).distinct
     }
   }
 

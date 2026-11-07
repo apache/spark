@@ -17,17 +17,19 @@
 
 package org.apache.spark.sql.streaming
 
-import org.apache.spark.{NarrowDependency, Partition, SparkConf, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.rdd.{CartesianPartition, RDD}
 import org.apache.spark.sql.LocalSparkSession.withSparkSession
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.execution.{ProjectExec, RDDScanExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.{CartesianProductExec, UnsafeCartesianRDD}
 import org.apache.spark.sql.execution.streaming.operators.stateful.StreamingDeduplicateExec
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
-import org.apache.spark.sql.execution.streaming.state.{BaseStateStoreRDD, RocksDBStateStoreProvider}
+import org.apache.spark.sql.execution.streaming.state.{RocksDBStateStoreProvider, StateStoreId, StateStoreProviderId}
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
 
@@ -47,9 +49,11 @@ class StreamingCartesianStateStorePlacementSuite
       .set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
   }
 
-  test("SPARK-59877: constant-key join over a stateful dedup plans a Cartesian product that " +
-    "fans one state partition out to independently scheduled tasks") {
-    withSparkSession(SparkSession.builder().config(getSparkConf()).getOrCreate()) { spark =>
+  gridTest("SPARK-59877: Cartesian state-store locality with checkpoint format")(Seq(1, 2)) {
+    checkpointFormat =>
+    val builder = SparkSession.builder().config(getSparkConf())
+      .config(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key, checkpointFormat)
+    withSparkSession(builder.getOrCreate()) { spark =>
       import spark.implicits._
 
       val input = MemoryStream[Int](spark)
@@ -66,8 +70,11 @@ class StreamingCartesianStateStorePlacementSuite
       try {
         input.addData((0 until 5): _*)
         query.processAllAvailable()
-        val plan = stripAQEPlan(
-          query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.executedPlan)
+        input.addData((3 until 8): _*)
+        query.processAllAvailable()
+        assert(spark.table("spark59877_out").count() === 64)
+        val streamingQuery = query.asInstanceOf[StreamingQueryWrapper].streamingQuery
+        val plan = stripAQEPlan(streamingQuery.lastExecution.executedPlan)
 
         val cartesians = collect(plan) { case c: CartesianProductExec => c }
         assert(cartesians.nonEmpty, s"expected a CartesianProductExec, got plan:\n$plan")
@@ -81,37 +88,56 @@ class StreamingCartesianStateStorePlacementSuite
           s"expected >= 2 right partitions so Cartesian output fans out to shared state " +
             s"partitions, got $rightPartitions")
 
-        val rightWithLocations = spark.sparkContext.makeRDD[InternalRow](
+        val stateInfo = collect(cartesian.left) {
+          case dedup: StreamingDeduplicateExec => dedup.stateInfo.get
+        }.head
+        val coordinator = streamingQuery.sparkSession.streams.stateStoreCoordinator
+        val sc = spark.sparkContext
+        def checkLocations(plan: CartesianProductExec): Unit = {
+          val rdd = plan.execute().dependencies.head.rdd.asInstanceOf[UnsafeCartesianRDD]
+          rdd.partitions.take(rightPartitions).foreach { partition =>
+            val leftPartition = partition.asInstanceOf[CartesianPartition].s1.index
+            val providerId = StateStoreProviderId(
+              StateStoreId(stateInfo.checkpointLocation, stateInfo.operatorId, leftPartition),
+              stateInfo.queryRunId)
+            val expected = coordinator.getLocation(providerId).toSeq
+            assert(expected.nonEmpty, "expected the coordinator to track the stateful partition")
+            assert(sc.dagScheduler.getPreferredLocs(rdd, partition.index).map(_.toString) ===
+              expected)
+          }
+        }
+        checkLocations(cartesian)
+
+        val rightWithLocations = sc.makeRDD[InternalRow](
           (0 until rightPartitions).map { partitionId =>
             (InternalRow.empty, Seq(s"right-$partitionId"))
           })
+        // Keep the synthetic locations visible at the Cartesian input, without scan wrappers.
+        val rightScan = new RDDScanExec(
+          cartesian.right.output, rightWithLocations, "right-locations") {
+          override protected def doExecute(): RDD[InternalRow] = rightWithLocations
+        }
         val wrappedLeft = ProjectExec(cartesian.left.output, cartesian.left)
-        val locationAwareCartesian = cartesian.copy(
-          left = wrappedLeft,
-          right = RDDScanExec(cartesian.right.output, rightWithLocations, "right-with-locations"))
-        val cartesianRdd = locationAwareCartesian.execute().dependencies.head.rdd
-          .asInstanceOf[UnsafeCartesianRDD]
-        val siblingPartitions = cartesianRdd.partitions.take(rightPartitions)
-        val firstSibling = siblingPartitions.head.asInstanceOf[CartesianPartition]
-        assert(cartesianRdd.rdd1.preferredLocations(firstSibling.s1).isEmpty,
-          "expected the ProjectExec RDD wrapper to hide its parent's preferred location")
-        def stateStoreLocations(rdd: RDD[_], partition: Partition): Seq[String] = rdd match {
-          case _: BaseStateStoreRDD[_, _] => rdd.preferredLocations(partition)
-          case _ =>
-            rdd.dependencies.iterator.collect { case dependency: NarrowDependency[_] => dependency }
-              .flatMap { dependency =>
-                dependency.getParents(partition.index).iterator.map { parentIndex =>
-                  stateStoreLocations(dependency.rdd, dependency.rdd.partitions(parentIndex))
-                }
-              }
-              .find(_.nonEmpty)
-              .getOrElse(Nil)
+        checkLocations(cartesian.copy(left = wrappedLeft, right = rightScan))
+
+        val leftWithLocations = sc.makeRDD(Seq((InternalRow.empty, Seq("left"))))
+        // An exchange with its own locality distinguishes preference from the default union.
+        val exchange = new ShuffleExchangeExec(SinglePartition, wrappedLeft) {
+          override protected def doExecute(): RDD[InternalRow] = leftWithLocations
         }
-        val leftLocations = stateStoreLocations(cartesianRdd.rdd1, firstSibling.s1).distinct
-        assert(leftLocations.nonEmpty, "expected the stateful left input to have a location")
-        siblingPartitions.foreach { partition =>
-          assert(cartesianRdd.preferredLocations(partition) === leftLocations)
+        val exchangedRdd = cartesian.copy(left = exchange, right = rightScan)
+          .execute().dependencies.head.rdd
+        assert(sc.dagScheduler.getPreferredLocs(exchangedRdd, 0).map(_.host) ===
+          Seq("left", "right-0"))
+
+        val leftScan = new RDDScanExec(
+          cartesian.left.output, leftWithLocations, "left-locations") {
+          override protected def doExecute(): RDD[InternalRow] = leftWithLocations
         }
+        val stateless = cartesian.copy(left = leftScan, right = rightScan)
+        val statelessRdd = stateless.execute().dependencies.head.rdd
+        assert(sc.dagScheduler.getPreferredLocs(statelessRdd, 0).map(_.host) ===
+          Seq("left", "right-0"))
       } finally {
         query.stop()
       }
