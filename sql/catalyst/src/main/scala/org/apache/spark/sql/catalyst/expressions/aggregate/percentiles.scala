@@ -535,10 +535,18 @@ case class PercentileDisc(
       super.getPercentile(accumulatedCounts, percentile)
     } else {
       // `percentile_disc(p)` returns the value with the smallest `cume_dist()` value given that is
-      // greater than or equal to `p` so `position` here is `p` adjusted by max position.
-      val position = accumulatedCounts.last._2 * percentile
-
-      val higher = position.ceil.toLong
+      // greater than or equal to `p`, so `higher` is the smallest row count `k` with
+      // `k / total >= p`. A double `total * p` can land just above a whole number (e.g.
+      // 25 * 0.28 is 7.000000000000001), so the estimate is corrected by comparing as
+      // `cume_dist()` does, by dividing. A NaN percentage keeps `higher` at 0 (the first value).
+      val total = accumulatedCounts.last._2
+      var higher = (total * percentile).ceil.toLong
+      while (higher > 0 && (higher - 1).toDouble / total >= percentile) {
+        higher -= 1
+      }
+      while (higher < total && higher.toDouble / total < percentile) {
+        higher += 1
+      }
 
       // Use binary search to find the higher position.
       val countsArray = accumulatedCounts.map(_._2).toArray[Long]

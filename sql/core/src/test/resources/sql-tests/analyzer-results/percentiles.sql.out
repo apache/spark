@@ -1551,3 +1551,33 @@ Aggregate [percentile(distinct col1#x, cast(0.5 as double), 1, 0, 0, false) FILT
 DROP VIEW aggr_double
 -- !query analysis
 DropTempViewCommand aggr_double, false
+
+
+-- !query
+SELECT
+  percentile_disc(0.28) WITHIN GROUP (ORDER BY id),
+  percentile_disc(0.28) WITHIN GROUP (ORDER BY id DESC)
+FROM range(1, 26)
+-- !query analysis
+Aggregate [percentile_disc(id#xL, cast(0.28 as double), false, 0, 0, false) AS percentile_disc(0.28) WITHIN GROUP (ORDER BY id)#x, percentile_disc(id#xL, cast(0.28 as double), true, 0, 0, false) AS percentile_disc(0.28) WITHIN GROUP (ORDER BY id DESC)#x]
++- Range (1, 26, step=1)
+
+
+-- !query
+SELECT min(id) FROM (SELECT id, cume_dist() OVER (ORDER BY id) AS cd FROM range(1, 26)) WHERE cd >= 0.28
+-- !query analysis
+Aggregate [min(id#xL) AS min(id)#xL]
++- Filter (cd#x >= cast(0.28 as double))
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Project [id#xL, cd#x]
+         +- Project [id#xL, cd#x, cd#x]
+            +- Window [cume_dist() windowspecdefinition(id#xL ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS cd#x], [id#xL ASC NULLS FIRST]
+               +- Project [id#xL]
+                  +- Range (1, 26, step=1)
+
+
+-- !query
+SELECT percentile_disc(0.56) WITHIN GROUP (ORDER BY id) FROM range(1, 51)
+-- !query analysis
+Aggregate [percentile_disc(id#xL, cast(0.56 as double), false, 0, 0, false) AS percentile_disc(0.56) WITHIN GROUP (ORDER BY id)#x]
++- Range (1, 51, step=1)
