@@ -43,6 +43,7 @@ if should_test_connect:
         lit,
         max,
         min,
+        partitioning,
         sum,
     )
     from pyspark.sql.connect.observation import Observation
@@ -1024,6 +1025,28 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
             errorClass="VALUE_NOT_POSITIVE",
             messageParameters={"arg_name": "numPartitions", "arg_value": "-1"},
         )
+
+    def test_partitioning_bucket_expression(self):
+        for buckets in [4, col("bucket_count")]:
+            for value in ["value", col("value")]:
+                with self.subTest(buckets=str(buckets), value=str(value)):
+                    expression = partitioning.bucket(buckets, value).to_plan(self.connect)
+                    function = expression.unresolved_function
+                    self.assertEqual(function.function_name, "bucket")
+                    self.assertEqual(len(function.arguments), 2)
+                    expected = lit(buckets) if isinstance(buckets, int) else buckets
+                    self.assertEqual(function.arguments[0], expected.to_plan(self.connect))
+                    self.assertEqual(function.arguments[1], col("value").to_plan(self.connect))
+
+    def test_partitioning_time_expressions(self):
+        for name in ["years", "months", "days", "hours"]:
+            for value in ["event_time", col("event_time")]:
+                with self.subTest(name=name, value=str(value)):
+                    expression = getattr(partitioning, name)(value).to_plan(self.connect)
+                    function = expression.unresolved_function
+                    self.assertEqual(function.function_name, name)
+                    self.assertEqual(len(function.arguments), 1)
+                    self.assertEqual(function.arguments[0], col("event_time").to_plan(self.connect))
 
     def test_repartition_by_expression(self):
         # SPARK-41354: test dataframe.repartition(expressions)
