@@ -584,6 +584,8 @@ jobs:
           - >-
             pyspark-sql, pyspark-resource, pyspark-testing, pyspark-core, pyspark-errors, pyspark-logger
           - >-
+            pyspark-sql-slow
+          - >-
             pyspark-mllib, pyspark-ml, pyspark-ml-connect, pyspark-pipelines
           - >-
             pyspark-streaming, pyspark-structured-streaming, pyspark-structured-streaming-connect
@@ -601,8 +603,18 @@ jobs:
             pyspark-pandas-connect
           - >-
             pyspark-pandas-slow-connect
+        include:
+          # The transpile differential fuzzer needs a much larger per-test
+          # timeout than the 450s the fast pyspark-sql group shares. At 10
+          # hypothesis examples the whole file runs ~1900s on CI runners; the
+          # extra room lets us fuzz harder (20 examples, ~2900s) and still
+          # keep comfortable margin under the 3600s budget.
+          - modules: pyspark-sql-slow
+            pyspark_test_timeout: 3600
+            run_hypothesis_max_examples: 20
         exclude:
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-sql, pyspark-resource, pyspark-testing, pyspark-core, pyspark-errors, pyspark-logger' }}
+          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-sql-slow' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-mllib, pyspark-ml, pyspark-ml-connect' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-streaming, pyspark-structured-streaming, pyspark-structured-streaming-connect' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-connect' }}
@@ -624,12 +636,14 @@ jobs:
       SKIP_PACKAGING: true
       METASPACE_SIZE: 1g
       BRANCH: ${{ inputs.branch }}
-      PYSPARK_TEST_TIMEOUT: 450
+      PYSPARK_TEST_TIMEOUT: ${{ matrix.pyspark_test_timeout || 450 }}
       RUN_HYPOTHESIS: ${{ fromJson(needs.precondition.outputs.required).transpile }}
       # Each generated example runs two full Spark jobs (transpiled vs. interpreted
       # differential), so the local default of 1000 blows past PYSPARK_TEST_TIMEOUT.
       # Cap CI fuzz volume; the explicit @example edge seeds still always run.
-      RUN_HYPOTHESIS_MAX_EXAMPLES: 50
+      # The fast pyspark-sql group keeps a tight cap (10); the slow pyspark-sql-slow
+      # group overrides this to 20 since it has its own larger per-test timeout.
+      RUN_HYPOTHESIS_MAX_EXAMPLES: ${{ matrix.run_hypothesis_max_examples || 10 }}
     steps:
     - name: Bootstrap composite actions
       uses: actions/checkout@v7
