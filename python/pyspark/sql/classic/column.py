@@ -445,11 +445,18 @@ class Column(ParentColumn):
     def startswith(
         self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
     ) -> ParentColumn:
+        # The JVM `startsWith` is overloaded for `Column` and `String`. Always pass a `Column` so
+        # that Py4J does not pick the `Column` overload with a null argument for `None`.
+        if not isinstance(other, ParentColumn):
+            other = Column(_create_column_from_literal(other))
         return _bin_op("startsWith", self, other)
 
     def endswith(
         self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
     ) -> ParentColumn:
+        # See the comment in `startswith`.
+        if not isinstance(other, ParentColumn):
+            other = Column(_create_column_from_literal(other))
         return _bin_op("endsWith", self, other)
 
     def like(self: ParentColumn, other: str) -> ParentColumn:
