@@ -685,7 +685,6 @@ class WithColumns(LogicalPlan):
         metadata: Optional[Sequence[str]] = None,
     ) -> None:
         assert isinstance(columnNames, list)
-        assert len(columnNames) > 0
         assert all(isinstance(c, str) for c in columnNames)
 
         assert isinstance(columns, list)
