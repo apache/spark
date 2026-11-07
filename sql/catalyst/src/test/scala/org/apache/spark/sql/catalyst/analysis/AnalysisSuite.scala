@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import java.lang.management.ManagementFactory
-import java.util.{TimeZone, UUID}
+import java.util.{Set => JSet, TimeZone, UUID}
 
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
@@ -43,7 +43,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
+import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryTable, Table, TableCapability}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
@@ -52,6 +52,92 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class AnalysisSuite extends AnalysisTest with Matchers {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
+
+  gridTest("insertion column projection preserves caller-owned aliases")(
+      Seq(IntegerType, StructType(Seq(StructField("input", IntegerType, nullable = false))),
+        ArrayType(StructType(Seq(StructField("input", IntegerType))), containsNull = false),
+        MapType(StringType, StructType(Seq(StructField("input", IntegerType))),
+          valueContainsNull = false))) { inputType =>
+    val renamedType = inputType match {
+      case struct: StructType => StructType(struct.fields.map(_.copy(name = "target")))
+      case ArrayType(struct: StructType, containsNull) =>
+        ArrayType(StructType(struct.fields.map(_.copy(name = "target"))), containsNull)
+      case MapType(keyType, struct: StructType, valueContainsNull) =>
+        MapType(keyType, StructType(struct.fields.map(_.copy(name = "target"))), valueContainsNull)
+      case other => other
+    }
+    val input = AttributeReference("input", inputType)()
+    val target = AttributeReference("target", renamedType)()
+    val expressionId = NamedExpression.newExprId
+    var aliasesCreated = 0
+    val projected = InsertionResolution.resolveByNameColumn(input, target, (child, name) => {
+      aliasesCreated += 1
+      Alias(child, name)(exprId = expressionId)
+    })
+    assert(aliasesCreated == 1)
+    assert(projected.exprId == expressionId)
+    assert(projected.name == target.name)
+    val expectedChild = inputType match {
+      case _: StructType | _: ArrayType | _: MapType => Cast(input, renamedType)
+      case _ => input
+    }
+    assert(projected.child == expectedChild)
+  }
+
+  test("insertion base preserves overridden resolver dispatch") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      var reads = 0
+      val rule = new ResolveInsertionBase {
+        override def resolver: Resolver = {
+          reads += 1
+          caseInsensitiveResolution
+        }
+        override def apply(plan: LogicalPlan): LogicalPlan =
+          createProjectForByNameQuery("t", plan.asInstanceOf[InsertIntoStatement])
+      }
+      val target = TestRelation(Seq(AttributeReference("TARGET", IntegerType)()))
+      val query = LocalRelation(AttributeReference("input", IntegerType)())
+      val insert = InsertIntoStatement(
+        target, Map.empty, Seq("target"), query,
+        overwrite = false, ifPartitionNotExists = false)
+      val projected = rule(insert).asInstanceOf[Project]
+      assert(projected.projectList.map(_.name) == Seq("target"))
+      assert(reads == 2)
+    }
+  }
+
+  gridTest("command validation preserves the analyzer's error formatters")(
+      Seq("alter", "partition")) { commandType =>
+    val table = new Table {
+      override def name(): String = "formatting"
+      override def columns(): Array[Column] = Array(Column.create("i", IntegerType))
+      override def capabilities(): JSet[TableCapability] = JSet.of[TableCapability]()
+    }
+    val target = ResolvedTable.create(
+      FakeV2SessionCatalog, Identifier.of(Array("default"), "t"), table)
+    val analyzer = new Analyzer(SimpleAnalyzer.catalogManager) {
+      override def toSQLId(name: String): String = "CUSTOM_STRING:" + name
+      override def toSQLId(names: Seq[String]): String = "CUSTOM_PATH:" + names.mkString(".")
+      override def toSQLType(dataType: AbstractDataType): String = "CUSTOM_TYPE"
+    }
+    commandType match {
+      case "alter" =>
+        val command = AddColumns(target, Seq(QualifiedColType(
+          None, "i", IntegerType, nullable = true, None, None, None)))
+        checkError(
+          exception = intercept[AnalysisException](analyzer.checkAnalysis(command)),
+          condition = "FIELD_ALREADY_EXISTS",
+          parameters = Map("op" -> "add", "fieldNames" -> "CUSTOM_PATH:i",
+            "struct" -> "CUSTOM_TYPE"))
+      case "partition" =>
+        checkError(
+          exception = intercept[AnalysisException] {
+            analyzer.checkAnalysis(ShowPartitions(target, None))
+          },
+          condition = "INVALID_PARTITION_OPERATION.PARTITION_MANAGEMENT_IS_UNSUPPORTED",
+          parameters = Map("name" -> ("CUSTOM_STRING:" + target.name)))
+    }
+  }
 
   test("resolve a table specification without changing option evaluation or other fields") {
     val specification = UnresolvedTableSpec(
