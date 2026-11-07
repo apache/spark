@@ -32,6 +32,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.History
 import org.apache.spark.internal.config.UI._
+import org.apache.spark.status.AppHistoryServerPlugin
 import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationInfo, UIRoot}
 import org.apache.spark.ui.{SparkUI, UIUtils, WebUI}
 import org.apache.spark.util.{ShutdownHookManager, SystemClock, Utils}
@@ -155,12 +156,50 @@ class HistoryServer(
     attachHandler(ApiRootResource.getServletHandler(this))
 
     addStaticHandler(SparkUI.STATIC_RESOURCE_DIR)
+    setupPluginStaticResources(AppHistoryServerPlugin.loadPlugins())
     addRenderLogHandler(this, conf)
 
     val contextHandler = new ServletContextHandler
     contextHandler.setContextPath(HistoryServer.UI_PATH_PREFIX)
     contextHandler.addServlet(new ServletHolder(loaderServlet), "/*")
     attachHandler(contextHandler)
+  }
+
+  /**
+   * Registers the static resources declared by the given plugins, as (classpath resource
+   * directory, URL path) pairs.
+   *
+   * A failure never prevents the History Server from starting. It is logged as a warning and
+   * the rest is still registered:
+   *  - if reading a plugin's `staticResources` throws, that plugin is skipped;
+   *  - each declared entry is registered independently, so one failing entry (for example a
+   *    missing directory) does not skip the plugin's later entries.
+   *
+   * A path that is not under `/static/` is rejected as a failing entry, because it could
+   * otherwise shadow the History Server's own routes.
+   */
+  private[history] def setupPluginStaticResources(
+      plugins: Seq[AppHistoryServerPlugin]): Unit = {
+    plugins.foreach { plugin =>
+      try {
+        plugin.staticResources.foreach { case (dir, path) =>
+          try {
+            require(path.startsWith(HistoryServer.PLUGIN_STATIC_PATH_PREFIX),
+              s"path must be under ${HistoryServer.PLUGIN_STATIC_PATH_PREFIX}")
+            addStaticHandler(dir, path)
+          } catch {
+            case t if NonFatal(t) || t.isInstanceOf[LinkageError] =>
+              logWarning(log"Failed to set up static resources from " +
+                log"${MDC(RESOURCE_NAME, dir)} at ${MDC(PATH, path)} for " +
+                log"${MDC(CLASS_NAME, plugin.getClass.getName)}", t)
+          }
+        }
+      } catch {
+        case t if NonFatal(t) || t.isInstanceOf[LinkageError] =>
+          logWarning(log"Failed to get the static resources declared by " +
+            log"${MDC(CLASS_NAME, plugin.getClass.getName)}", t)
+      }
+    }
   }
 
   /** Bind to the HTTP server behind this web interface. */
@@ -174,14 +213,22 @@ class HistoryServer(
     provider.stop()
   }
 
-  /** Attach a reconstructed UI to this server. Only valid after bind(). */
+  /**
+   * Attach a reconstructed UI to this server. Only valid after bind().
+   *
+   * A handler whose context path the History Server already serves (e.g. /static/sql) is not
+   * attached: the server's own handler is attached first and always answers, so the
+   * application's copy could never receive a request. Skipping it avoids wrapping, starting and
+   * adding it to the root handler on every UI load.
+   */
   override def attachSparkUI(
       appId: String,
       attemptId: Option[String],
       ui: SparkUI,
       completed: Boolean): Unit = {
     assert(serverInfo.isDefined, "HistoryServer must be bound before attaching SparkUIs")
-    ui.getHandlers.foreach { handler =>
+    val servedPaths = getHandlers.map(_.getContextPath).toSet
+    ui.getHandlers.filterNot(h => servedPaths.contains(h.getContextPath)).foreach { handler =>
       serverInfo.get.addHandler(handler, ui.securityManager)
     }
   }
@@ -300,6 +347,9 @@ object HistoryServer extends Logging {
   private lazy val conf = new SparkConf
 
   val UI_PATH_PREFIX = "/history"
+
+  // Plugin static resource paths must be under this prefix so they cannot shadow other routes
+  private[history] val PLUGIN_STATIC_PATH_PREFIX = "/static/"
 
   def main(argStrings: Array[String]): Unit = {
     Utils.resetStructuredLogging()

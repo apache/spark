@@ -34,6 +34,9 @@ class SQLHistoryServerPlugin extends AppHistoryServerPlugin {
     }
   }
 
+  override def staticResources: Seq[(String, String)] =
+    Seq(SQLTab.STATIC_RESOURCE)
+
   override def displayOrder: Int = 0
 }
 

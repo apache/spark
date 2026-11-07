@@ -20,7 +20,7 @@ package org.apache.spark.deploy.history
 import java.io.{ByteArrayInputStream, File, FileNotFoundException, InputStream, IOException, SequenceInputStream}
 import java.lang.{Long => JLong}
 import java.nio.charset.CharacterCodingException
-import java.util.{Date, NoSuchElementException, ServiceLoader}
+import java.util.{Date, NoSuchElementException}
 import java.util.concurrent.{ConcurrentHashMap, ExecutorService, TimeUnit}
 import java.util.zip.ZipOutputStream
 
@@ -447,7 +447,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       attempt.info.startTime.getTime(), attempt.info.appSparkVersion)
 
     // place the tab in UI based on the display order
-    loadPlugins().toSeq.sortBy(_.displayOrder).foreach(_.setupUI(ui))
+    AppHistoryServerPlugin.loadPlugins().sortBy(_.displayOrder).foreach(_.setupUI(ui))
 
     val loadedUI = LoadedAppUI(ui)
     synchronized {
@@ -1439,7 +1439,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     replayBus.addListener(listener)
 
     for {
-      plugin <- loadPlugins()
+      plugin <- AppHistoryServerPlugin.loadPluginsOrFail()
       listener <- plugin.createListeners(conf, trackingStore)
     } replayBus.addListener(listener)
 
@@ -1717,10 +1717,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
 
     store
-  }
-
-  private def loadPlugins(): Iterable[AppHistoryServerPlugin] = {
-    ServiceLoader.load(classOf[AppHistoryServerPlugin], Utils.getContextOrSparkClassLoader).asScala
   }
 
   /** For testing. Returns internal data about a single attempt. */
