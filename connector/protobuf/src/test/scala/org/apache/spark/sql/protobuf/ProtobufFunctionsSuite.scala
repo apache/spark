@@ -18,7 +18,11 @@ package org.apache.spark.sql.protobuf
 
 import java.sql.Timestamp
 import java.time.{Duration, LocalTime}
+import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.concurrent.atomic.AtomicBoolean
 
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.{Any => AnyProto, BoolValue, ByteString, BytesValue, DoubleValue, DynamicMessage, FloatValue, Int32Value, Int64Value, StringValue, UInt32Value, UInt64Value}
@@ -26,6 +30,9 @@ import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, CreateMap, Expression, ExprId, FromProtobuf, LeafExpression, Literal, ToProtobuf}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.functions.{array, lit, map, struct, typedLit}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.protobuf.protos.Proto2Messages.Proto2AllTypes
@@ -37,6 +44,23 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.{ProtobufUtils => CommonProtobufUtils}
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ThreadUtils
+
+/** A test string literal that runs onEval before returning, to pause or fail evaluation. */
+private case class StringLiteralWithEvalHook(
+    value: String,
+    onEval: () => Unit)
+  extends LeafExpression with CodegenFallback {
+
+  override def foldable: Boolean = true
+  override def nullable: Boolean = false
+  override def dataType: DataType = StringType
+
+  override def eval(input: InternalRow): Any = {
+    onEval()
+    UTF8String.fromString(value)
+  }
+}
 
 class ProtobufFunctionsSuite extends SharedSparkSession with ProtobufTestBase
   with Serializable {
@@ -96,6 +120,33 @@ class ProtobufFunctionsSuite extends SharedSparkSession with ProtobufTestBase
     descBytesOpt match {
       case Some(descBytes) => functions.to_protobuf(col, messageName, descBytes)
       case None => functions.to_protobuf(col, messageName)
+    }
+  }
+
+  private def protobufExpressionWithOptions(
+      functionName: String,
+      options: Expression): (Expression, AttributeReference) = {
+    val dataType = if (functionName == "FROM_PROTOBUF") {
+      BinaryType
+    } else {
+      StructType(Seq(StructField("other", StringType)))
+    }
+    val data = AttributeReference("data", dataType)(exprId = ExprId(1))
+    val expression = if (functionName == "FROM_PROTOBUF") {
+      FromProtobuf(data, Literal("OtherExample"), Literal(testFileDesc), options)
+    } else {
+      ToProtobuf(data, Literal("OtherExample"), Literal(testFileDesc), options)
+    }
+    (expression, data)
+  }
+
+  private def canonicalizedOptions(
+      expression: Expression,
+      data: AttributeReference): Map[String, String] = {
+    QueryPlan.normalizeExpressions(expression, Seq(data)) match {
+      case from: ProtobufDataToCatalyst => from.options
+      case to: CatalystDataToProtobuf => to.options
+      case other => fail(s"Unexpected canonicalized expression: ${other.getClass.getName}")
     }
   }
 
@@ -2440,6 +2491,71 @@ class ProtobufFunctionsSuite extends SharedSparkSession with ProtobufTestBase
           start = 10,
           stop = fragment.length + 9))
       )
+    }
+  }
+
+  Seq("FROM_PROTOBUF", "TO_PROTOBUF").foreach { functionName =>
+    gridTest(s"SPARK-60945: $functionName options survive overlapping canonicalization")(
+      Seq("EXCEPTION", "LAST_WIN")) { policy =>
+      withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> policy) {
+        val firstEvaluationPaused = new CountDownLatch(1)
+        val resumeFirstEvaluation = new CountDownLatch(1)
+        val pauseOnNextEval = new AtomicBoolean(true)
+        val secondKey = StringLiteralWithEvalHook("key2", () => {
+          if (pauseOnNextEval.compareAndSet(true, false)) {
+            firstEvaluationPaused.countDown()
+            assert(resumeFirstEvaluation.await(1, TimeUnit.MINUTES),
+              "first evaluation was never resumed")
+          }
+        })
+        val options = CreateMap(Seq(
+          Literal("key1"), Literal("value1"), secondKey, Literal("value2")))
+        val expectedOptions = Map("key1" -> "value1", "key2" -> "value2")
+        val (expression, data) = protobufExpressionWithOptions(functionName, options)
+        val sqlConf = SQLConf.get
+        val executor = ThreadUtils.newDaemonSingleThreadExecutor("protobuf-options-race-test")
+        val executionContext = ExecutionContext.fromExecutorService(executor)
+        try {
+          val firstEvaluation = Future {
+            SQLConf.withExistingConf(sqlConf) {
+              canonicalizedOptions(expression, data)
+            }
+          }(executionContext)
+          assert(firstEvaluationPaused.await(1, TimeUnit.MINUTES),
+            "first canonicalization never paused")
+          // The first evaluation has inserted key1 and is paused while evaluating key2.
+          assert(canonicalizedOptions(expression, data) == expectedOptions)
+          resumeFirstEvaluation.countDown()
+          assert(ThreadUtils.awaitResult(firstEvaluation, 1.minute) == expectedOptions)
+        } finally {
+          resumeFirstEvaluation.countDown()
+          executor.shutdownNow()
+          assert(executor.awaitTermination(10, TimeUnit.SECONDS))
+        }
+      }
+    }
+
+    test(s"SPARK-60945: $functionName options survive a failed evaluation") {
+      withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> "EXCEPTION") {
+        val failOnNextEval = new AtomicBoolean(true)
+        val expectedFailure = new RuntimeException("first options evaluation failed")
+        val secondKey = StringLiteralWithEvalHook("key2", () => {
+          if (failOnNextEval.compareAndSet(true, false)) {
+            throw expectedFailure
+          }
+        })
+        val options = CreateMap(Seq(
+          Literal("key1"), Literal("value1"), secondKey, Literal("value2")))
+        val expectedOptions = Map("key1" -> "value1", "key2" -> "value2")
+        val (expression, data) = protobufExpressionWithOptions(functionName, options)
+        val failure = intercept[RuntimeException] {
+          QueryPlan.normalizeExpressions(expression, Seq(data))
+        }
+        assert(failure eq expectedFailure)
+
+        // Retrying must not reuse the partial map left by the failed evaluation.
+        assert(canonicalizedOptions(expression, data) == expectedOptions)
+      }
     }
   }
 

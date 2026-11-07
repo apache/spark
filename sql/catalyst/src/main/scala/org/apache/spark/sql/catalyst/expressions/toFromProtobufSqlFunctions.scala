@@ -167,7 +167,10 @@ case class FromProtobuf(
       case bytes: Array[Byte] => Some(bytes)
       case null => None
     }
-    val optionsValue: Map[String, String] = options.eval() match {
+    // Concurrent canonicalization can evaluate the same CreateMap and corrupt its map builder.
+    // Copy stateful options to avoid duplicate-key errors and mismatched key/value array lengths.
+    val freshOptions = options.freshCopyIfContainsStatefulExpression()
+    val optionsValue: Map[String, String] = freshOptions.eval() match {
       case a: ArrayBasedMapData if a.keyArray.array.nonEmpty =>
         val keys: Array[String] = a.keyArray.array.map(_.toString)
         val values: Array[String] = a.valueArray.array.map(_.toString)
@@ -334,7 +337,10 @@ case class ToProtobuf(
       case bytes: Array[Byte] => Some(bytes)
       case null => None
     }
-    val optionsValue: Map[String, String] = options.eval() match {
+    // Concurrent canonicalization can evaluate the same CreateMap and corrupt its map builder.
+    // Copy stateful options to avoid duplicate-key errors and mismatched key/value array lengths.
+    val freshOptions = options.freshCopyIfContainsStatefulExpression()
+    val optionsValue: Map[String, String] = freshOptions.eval() match {
       case a: ArrayBasedMapData if a.keyArray.array.nonEmpty =>
         val keys: Array[String] = a.keyArray.array.map(_.toString)
         val values: Array[String] = a.valueArray.array.map(_.toString)
