@@ -91,6 +91,7 @@ object TreePattern extends Enumeration  {
   val REGEXP_EXTRACT_FAMILY: Value = Value
   val REGEXP_REPLACE: Value = Value
   val RESOLVED_STAR: Value = Value
+  val RLIKE: Value = Value
   val RUNTIME_REPLACEABLE: Value = Value
   val SEMI_STRUCTURED_EXTRACT: Value = Value
   val SCALAR_SUBQUERY: Value = Value
