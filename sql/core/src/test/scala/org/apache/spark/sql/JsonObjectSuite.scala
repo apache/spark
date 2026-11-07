@@ -1347,7 +1347,8 @@ world'))"""))
           "json_object('a', 'x')",
           "json_object('a', json_object('b', 1))",
           "json_object('a' VALUE json_object('b' VALUE 1))",
-          "json_object('a': json_object('b': 1))"
+          "json_object('a': json_object('b': 1))",
+          "json_object('a' VALUE json_object('b' VALUE 1) ABSENT ON NULL)"
         ).foreach { body =>
           val e = intercept[AnalysisException] {
             sql(s"CREATE FUNCTION perm_json_fn() RETURNS STRING RETURN $body")
@@ -1357,7 +1358,8 @@ world'))"""))
         // Stock-owned (clause-bearing or FORMAT JSON) bodies do not reference the temp shadow.
         Seq(
           "json_object('a' VALUE 1 NULL ON NULL)" -> """{"a":1}""",
-          "json_object('a' VALUE json_object('b' VALUE 1) ABSENT ON NULL)" -> """{"a":{"b":1}}""",
+          "json_object('a' VALUE json_object('b' VALUE 1 NULL ON NULL) ABSENT ON NULL)" ->
+            """{"a":{"b":1}}""",
           "json_object('id' VALUE '[1]' FORMAT JSON)" -> """{"id":[1]}"""
         ).foreach { case (body, expected) =>
           sql(s"CREATE OR REPLACE FUNCTION perm_json_fn() RETURNS STRING RETURN $body")
@@ -1411,7 +1413,8 @@ world'))"""))
           "json_object(a, b)",
           "json_object('a', json_object('b', 1))",
           "json_object('a' VALUE json_object('b' VALUE 1))",
-          "json_object('a': json_object('b': 1))"
+          "json_object('a': json_object('b': 1))",
+          "json_object('a' VALUE json_object('b' VALUE 1) NULL ON NULL)"
         ).foreach { body =>
           val e = intercept[AnalysisException] {
             sql("CREATE OR REPLACE TEMPORARY FUNCTION json_object(a STRING, b STRING) " +
@@ -1421,7 +1424,7 @@ world'))"""))
         }
         // Stock-owned (clause-bearing or FORMAT JSON) bodies are not routine calls.
         Seq(
-          "json_object('a' VALUE json_object('b' VALUE 1) NULL ON NULL)" ->
+          "json_object('a' VALUE json_object('b' VALUE 1 NULL ON NULL) NULL ON NULL)" ->
             """{"a":{"b":1}}""",
           "json_object('id' VALUE '[1]' FORMAT JSON)" -> """{"id":[1]}"""
         ).foreach { case (body, expected) =>
@@ -1444,10 +1447,13 @@ world'))"""))
       try {
         sql("CREATE TEMPORARY FUNCTION json_object(a STRING, b STRING) RETURNS STRING RETURN b")
         sql("SET PATH = system.session, system.builtin")
-        checkAnswer(sql("SELECT json_object('a', json_object('b', 1))"), Row("""{"b":1}"""))
+        // The shadow owns the inner json_object too, as it would in a flat call: it returns '1'.
+        checkAnswer(sql("SELECT json_object('a', json_object('b', 1))"), Row("1"))
+        checkAnswer(sql("SELECT json_object('a', builtin.json_object('b', 1))"),
+          Row("""{"b":1}"""))
         checkAnswer(sql("SELECT json_object('a', json_array(1))"), Row("[1]"))
         checkAnswer(
-          sql("SELECT json_object('a' VALUE json_object('b' VALUE 1))"),
+          sql("SELECT json_object('a' VALUE json_object('b' VALUE 1 NULL ON NULL))"),
           Row("""{"b":1}"""))
         checkAnswer(sql("SELECT json_object('a' VALUE builtin.json_array(1))"), Row("[1]"))
       } finally {
@@ -1458,9 +1464,9 @@ world'))"""))
   }
 
   test("a nested JSON_OBJECT in key position routes through resolution and can be shadowed") {
-    // Keys are never spliced raw, so a nested constructor in key position stays routable (unlike a
-    // value-position one) and a shadowing routine applies to it. A RETURNING clause keeps the outer
-    // call a direct constructor, so only the inner call's routing is exercised.
+    // Keys are never spliced raw, so a nested constructor in key position is a plain function call
+    // and a shadowing routine applies to it. A RETURNING clause keeps the outer call with the
+    // built-in, so only the inner call's routing is exercised.
     val query = "SELECT json_object(json_object('b', 1) VALUE 2 RETURNING STRING)"
     // Absent a shadowing routine the inner call resolves to the built-in, so the key is its JSON.
     checkAnswer(sql(query), Row("""{"{\"b\":1}":2}"""))
@@ -1691,9 +1697,9 @@ world'))"""))
           "k2 STRING, v3 STRING) RETURNS STRING RETURN 'shadowed-5'")
         sql("SET PATH = system.session, system.builtin")
         Seq(
-          "SELECT json_object('a' VALUE *, 'b' VALUE json_object('c' VALUE 1)) " +
+          "SELECT json_object('a' VALUE *, 'b' VALUE json_object('c' VALUE 1 NULL ON NULL)) " +
             "FROM VALUES ('id', 7) AS t(a, b)",
-          "SELECT json_object('a': *, 'b': json_object('c': 1)) " +
+          "SELECT json_object('a': *, 'b': json_object('c': 1 NULL ON NULL)) " +
             "FROM VALUES ('id', 7) AS t(a, b)"
         ).foreach { query =>
           checkAnswer(sql(query), Row("shadowed-5"))

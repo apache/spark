@@ -1325,6 +1325,19 @@ object ImplicitlyFormattedAsJson {
   }
 
   /**
+   * The parser's splice decision: like [[isImplicitlyJson]], but false for a
+   * [[RoutedJsonConstructor]], whose owner (and so whether it emits JSON) is not known yet. The
+   * enclosing constructor decides it from the resolved argument instead.
+   */
+  @scala.annotation.tailrec
+  def isLexicallySpliced(e: Expression): Boolean = e match {
+    case c: Collate => isLexicallySpliced(c.child)
+    case _: RoutedJsonConstructor => false
+    case i: ImplicitlyFormattedAsJson => i.emitsImplicitJsonText
+    case _ => false
+  }
+
+  /**
    * The splice decision for a resolved argument, used by the builders and by the parser wrappers
    * when they finalize their flags. Like [[isImplicitlyJson]], but also sees through:
    *  - an `Alias`, e.g. a GROUP BY alias that fixed-point analysis substitutes with the alias kept;
@@ -1748,7 +1761,8 @@ object JsonArray {
 /**
  * A parsed `JSON_ARRAY(...)` / `JSON_OBJECT(...)` that keeps the parser's splice flags until its
  * children resolve; the resolved children can then add splices the parser could not see (e.g. a
- * qualified `builtin.json_array(...)` argument).
+ * qualified `builtin.json_array(...)` argument). [[UnresolvedRoutedJsonQuery]] has no flags; it
+ * only marks a `JSON_QUERY(...)` constructor value as a possible JSON producer.
  *
  * The built-in owns a [[StockJsonConstructor]]. A [[RoutedJsonConstructor]] can be owned by a
  * same-named routine or an `injectFunction` replacement, and then resolves as an ordinary call.
@@ -1758,7 +1772,7 @@ sealed trait UnresolvedJsonConstructor extends Unevaluable with ImplicitlyFormat
   /** The arguments a routine owning the call receives. */
   def arguments: Seq[Expression] = children
   /** The built-in expression, with the splice flags finalized. */
-  def toBuiltin: TimeZoneAwareExpression
+  def toBuiltin: Expression
   /** The ordinary call this stands for when a routine owns the name. */
   def toUnresolvedFunction: UnresolvedFunction = CurrentOrigin.withOrigin(origin) {
     UnresolvedFunction(prettyName, arguments, isDistinct = false)
@@ -1772,13 +1786,13 @@ sealed trait UnresolvedJsonConstructor extends Unevaluable with ImplicitlyFormat
 
 /**
  * An [[UnresolvedJsonConstructor]] the built-in owns: a call with a clause or explicit
- * `FORMAT JSON`, a call written directly as another constructor's value (the inner `JSON_ARRAY(1)`
- * in `JSON_ARRAY(JSON_ARRAY(1))`), or a routed call the built-in turned out to own.
+ * `FORMAT JSON`, or a routed call the built-in turned out to own.
  */
 sealed trait StockJsonConstructor
   extends UnresolvedJsonConstructor
   with DefaultStringProducingExpression {
   def returning: DataType
+  override def toBuiltin: TimeZoneAwareExpression
   final override def routeThroughResolution: Boolean = false
   // Report the RETURNING type, so an explicit `RETURNING STRING COLLATE c` is not recolored to the
   // object or view default collation.
@@ -1802,9 +1816,15 @@ sealed trait StockJsonConstructor
  */
 sealed trait RoutedJsonConstructor extends UnresolvedJsonConstructor {
   final override def routeThroughResolution: Boolean = true
-  /** The built-in-owned form with the clause-free defaults, once the built-in owns the call. */
-  def toStock: StockJsonConstructor
-  override def toBuiltin: TimeZoneAwareExpression = toStock.toBuiltin
+  /**
+   * The built-in-owned form with the clause-free defaults, once the built-in owns the call: a
+   * [[StockJsonConstructor]], or for `JSON_QUERY` the built-in expression itself.
+   */
+  def toStock: Expression
+  override def toBuiltin: Expression = toStock match {
+    case s: StockJsonConstructor => s.toBuiltin
+    case e => e
+  }
 }
 
 case class UnresolvedJsonArray(
@@ -1829,7 +1849,10 @@ case class UnresolvedJsonArray(
   }
 }
 
-/** A clause-free `JSON_ARRAY(...)` with a nested JSON producer argument. */
+/**
+ * A clause-free `JSON_ARRAY(...)` with a nested JSON producer argument, or one written directly as
+ * a JSON constructor's value.
+ */
 case class UnresolvedRoutedJsonArray(values: Seq[Expression], formatJson: Seq[Boolean])
   extends RoutedJsonConstructor {
   assert(values.length == formatJson.length,
@@ -1867,7 +1890,10 @@ case class UnresolvedJsonObject(
   }
 }
 
-/** A clause-free `JSON_OBJECT(...)` with a nested JSON producer value. */
+/**
+ * A clause-free `JSON_OBJECT(...)` with a nested JSON producer value, or one written directly as a
+ * JSON constructor's value.
+ */
 case class UnresolvedRoutedJsonObject(members: Seq[(Expression, Expression)], rawJson: Seq[Boolean])
   extends RoutedJsonConstructor {
   assert(members.length == rawJson.length,
@@ -1882,6 +1908,22 @@ case class UnresolvedRoutedJsonObject(members: Seq[(Expression, Expression)], ra
 
   override def toStock: UnresolvedJsonObject = UnresolvedJsonObject(
     members, rawJson, members.map(_ => false), JsonConstructorNullBehavior.Null, StringType)
+}
+
+/**
+ * A clause-free `JSON_QUERY(...)` written directly as a JSON constructor's value. It routes like
+ * the flat call; the wrapper only tells the enclosing constructor that this value may emit JSON.
+ */
+case class UnresolvedRoutedJsonQuery(child: Expression, path: String)
+  extends RoutedJsonConstructor {
+  override def children: Seq[Expression] = Seq(child)
+  override def arguments: Seq[Expression] = Seq(child, Literal(path))
+  override def prettyName: String = "json_query"
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): UnresolvedRoutedJsonQuery =
+    copy(child = newChildren.head)
+
+  override def toStock: JsonQuery = JsonQueryExpressionBuilder.buildWithPath(child, path)
 }
 
 // Built-in forms for the plain SQL/JSON constructor and path-function calls that `AstBuilder`
@@ -2022,7 +2064,7 @@ object JsonValueExpressionBuilder extends JsonPathExpressionBuilder {
   since = "4.4.0",
   group = "json_funcs")
 object JsonQueryExpressionBuilder extends JsonPathExpressionBuilder {
-  override protected def buildWithPath(jsonExpr: Expression, path: String): Expression =
+  override protected[expressions] def buildWithPath(jsonExpr: Expression, path: String): JsonQuery =
     JsonQuery(
       jsonExpr, path, StringType, JsonQueryWrapper.Without, JsonQueryQuotes.Keep,
       JsonQueryBehavior.Null, JsonQueryBehavior.Null)
@@ -2559,8 +2601,7 @@ case class JsonObjectKeyGuard(child: Expression) extends UnaryExpression with No
  *   JSON_OBJECT()                                       -> '{}'
  *
  * A clause-free call without explicit `FORMAT JSON` routes through function resolution, so a
- * same-named routine can shadow `json_object`, unless it is written directly as another
- * constructor's value (a call in key position still routes). A call with a nested producer value
+ * same-named routine can shadow `json_object`. A call with a nested producer value
  * keeps its splice flags in an [[UnresolvedRoutedJsonObject]]; a shadow receives plain key/value
  * arguments. Other calls are owned by the built-in (see [[StockJsonConstructor]]).
  * The user-facing reference lives in `docs/sql-ref-syntax-qry-select-json-object.md`.
