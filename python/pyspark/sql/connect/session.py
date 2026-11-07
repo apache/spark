@@ -429,6 +429,13 @@ class SparkSession:
 
     table.__doc__ = PySparkSession.table.__doc__
 
+    def getOrCreate(self, path: str, create: Callable[[], ParentDataFrame]) -> ParentDataFrame:
+        raise PySparkNotImplementedError(
+            errorClass="NOT_IMPLEMENTED", messageParameters={"feature": "getOrCreate"}
+        )
+
+    getOrCreate.__doc__ = PySparkSession.getOrCreate.__doc__
+
     @property
     def read(self) -> "DataFrameReader":
         return DataFrameReader(self)

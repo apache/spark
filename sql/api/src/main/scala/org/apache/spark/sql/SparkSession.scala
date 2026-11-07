@@ -343,6 +343,29 @@ abstract class SparkSession extends Serializable with Closeable {
   @ClassicOnly
   def baseRelationToDataFrame(baseRelation: BaseRelation): DataFrame
 
+  /**
+   * Returns the `DataFrame` stored at `path`, computing and storing it first if it is not already
+   * there. The dataset is stored as Parquet.
+   *
+   * This lets a rerun skip work that an earlier run finished. `create` is evaluated only when
+   * `path` does not already hold a complete dataset:
+   *
+   * {{{
+   *   val df = spark.getOrCreate(path, () => expensiveTransform(src))
+   * }}}
+   *
+   * Completeness is tracked with a marker file written under `path` once the data is stored, so a
+   * path left behind by an interrupted write is recomputed rather than read back as if it were
+   * finished. The caller supplies `path`, so a scheduled pipeline can keep its runs apart by
+   * including a run identifier in it.
+   *
+   * @note
+   *   this is only supported in Classic.
+   * @since 4.4.0
+   */
+  @ClassicOnly
+  def getOrCreate(path: String, create: () => DataFrame): DataFrame
+
   /* ------------------------------- *
    |  Methods for creating DataSets  |
    * ------------------------------- */
