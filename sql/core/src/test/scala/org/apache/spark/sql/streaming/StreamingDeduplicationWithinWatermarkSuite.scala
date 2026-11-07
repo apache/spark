@@ -17,14 +17,20 @@
 
 package org.apache.spark.sql.streaming
 
-import org.apache.spark.sql.{AnalysisException, Dataset, SaveMode}
+import org.apache.spark.SparkException
+import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, SaveMode}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Append
 import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorsUtils
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types.{LongType, StringType, StructType}
 import org.apache.spark.tags.SlowSQLTest
+
+object StreamingDeduplicationWithinWatermarkSuite {
+  @volatile var failAfterCleanup = false
+}
 
 @SlowSQLTest
 class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest
@@ -165,46 +171,316 @@ class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest
     )
   }
 
-  test("incremental cleanup factor does not change dropDuplicatesWithinWatermark output") {
-    // dropDuplicatesWithinWatermark deliberately does not participate in incremental cleanup
-    // (its dedup key excludes the event time, so mid-batch eviction of a shared key could change
-    // the output). Setting a non-zero incrementalCleanupFactor must therefore leave the output and
-    // per-batch state counts identical to the default -- this is the same sequence as
-    // "deduplicate with subset of columns which event time column is not in subset".
-    withSQLConf(SQLConf.STREAMING_STATE_INCREMENTAL_CLEANUP_FACTOR.key -> "10") {
-      val inputData = MemoryStream[(String, Int)]
-      val result = inputData.toDS()
-        .withColumn("eventTime", timestamp_seconds($"_2"))
-        .withWatermark("eventTime", "2 seconds")
-        .dropDuplicatesWithinWatermark("_1")
-        .select($"_1", $"eventTime".cast("long").as[Long])
+  private def deduplicateWithinWatermark(input: MemoryStream[(String, Int)]): DataFrame = {
+    input.toDS()
+      .withColumn("eventTime", timestamp_seconds($"_2"))
+      .withWatermark("eventTime", "10 seconds")
+      .dropDuplicatesWithinWatermark("_1")
+      .select($"_1", $"eventTime".cast("long").as[Long])
+  }
+
+  private def assertCleanupMetrics(
+      removed: Long,
+      incremental: Long,
+      scanned: Option[Long] = None): AssertOnQuery = {
+    AssertOnQuery(s"Check cleanup metrics: removed=$removed, incremental=$incremental") { q =>
+      val operator = q.lastProgress.stateOperators.head
+      assert(operator.numRowsRemoved === removed)
+      assert(operator.customMetrics.get("numRowsIncrementallyRemoved").longValue() === incremental)
+      val numScanned = operator.customMetrics.get("numRowsReadDuringEviction").longValue()
+      assert(numScanned >= removed)
+      scanned.foreach(expected => assert(numScanned === expected))
+      true
+    }
+  }
+
+  gridTest("incremental cleanup protects duplicates within the watermark delay")(
+      Seq(0L, 1L)) { factor =>
+    withSQLConf(
+      SQLConf.STREAMING_STATE_INCREMENTAL_CLEANUP_FACTOR.key -> factor.toString,
+      SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      val inputData = MemoryStream[(String, Int)](1)
+      val result = deduplicateWithinWatermark(inputData)
 
       testStream(result, Append)(
-        AddData(inputData, "a" -> 17),
-        CheckNewAnswer("a" -> 17),
-        assertNumStateRows(total = 1, updated = 1),
-
-        AddData(inputData, "a" -> 16),
-        CheckNewAnswer(),
-        assertNumStateRows(total = 1, updated = 0),
-
-        AddData(inputData, "a" -> 13),
-        CheckNewAnswer(),
-        assertNumStateRows(total = 1, updated = 0, droppedByWatermark = 1),
-
-        AddData(inputData, "b" -> 22, "c" -> 21),
-        CheckNewAnswer("b" -> 22, "c" -> 21),
+        AddData(inputData, "a" -> 15, "clock" -> 30),
+        CheckNewAnswer("a" -> 15, "clock" -> 30),
         assertNumStateRows(total = 2, updated = 2),
 
-        // "a" -> 21 is emitted as new because the earlier "a" state expired and was evicted at the
-        // previous batch end -- unchanged from the factor-0 path.
-        AddData(inputData, "a" -> 21),
-        CheckNewAnswer("a" -> 21),
+        AddData(inputData, "advance" -> 40),
+        CheckNewAnswer("advance" -> 40),
         assertNumStateRows(total = 3, updated = 1),
 
-        AddData(inputData, "d" -> 25),
-        CheckNewAnswer("d" -> 25),
-        assertNumStateRows(total = 2, updated = 1)
+        // Late input is filtered at 20, but batch-end eviction can use 30. "a" expires at 25;
+        // evicting it incrementally at 30 would let the non-late duplicate at 24 through.
+        AddData(inputData, "probe" -> 40, "a" -> 24, "a" -> 20),
+        CheckNewAnswer("probe" -> 40),
+        assertNumStateRows(
+          total = if (factor == 0) 3 else 4, updated = 1, droppedByWatermark = 1),
+        assertCleanupMetrics(removed = if (factor == 0) 1 else 0, incremental = 0)
+      )
+    }
+  }
+
+  gridTest("incremental cleanup drains remaining expired state after checkpoint restart")(
+      Seq(1L, 2L, 10L)) { factor =>
+    withSQLConf(
+      SQLConf.STREAMING_STATE_INCREMENTAL_CLEANUP_FACTOR.key -> factor.toString,
+      SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      val inputData = MemoryStream[(String, Int)](1)
+      val result = deduplicateWithinWatermark(inputData)
+
+      testStream(result, Append)(
+        AddData(inputData, "a" -> 1, "b" -> 10, "c" -> 21, "d" -> 30, "e" -> 42),
+        CheckNewAnswer("a" -> 1, "b" -> 10, "c" -> 21, "d" -> 30, "e" -> 42),
+        assertNumStateRows(total = 5, updated = 5),
+
+        AddData(inputData, "g" -> 51),
+        CheckNewAnswer("g" -> 51),
+        assertNumStateRows(total = 6, updated = 1),
+        assertCleanupMetrics(removed = 0, incremental = 0),
+        StopStream,
+        StartStream(),
+
+        // The restored late-events watermark is 32. Three old entries have expired; one input
+        // removes at most factor entries incrementally, and completion must remove the rest.
+        AddData(inputData, "h" -> 51),
+        CheckNewAnswer("h" -> 51),
+        assertNumStateRows(total = 4, updated = 1),
+        assertCleanupMetrics(removed = 3, incremental = math.min(factor, 3L)),
+        StopStream,
+        StartStream(),
+
+        // A removed key can be admitted again, but its next within-window duplicate is dropped.
+        AddData(inputData, "a" -> 52, "a" -> 53),
+        CheckNewAnswer("a" -> 52),
+        assertNumStateRows(total = 4, updated = 1),
+        assertCleanupMetrics(removed = 1, incremental = 1)
+      )
+    }
+  }
+
+  test("incremental cleanup drains a no-data batch using the late-events watermark") {
+    withSQLConf(
+      SQLConf.STREAMING_STATE_INCREMENTAL_CLEANUP_FACTOR.key -> "1",
+      SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "true",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      val inputData = MemoryStream[(String, Int)](1)
+      val result = deduplicateWithinWatermark(inputData)
+      val clock = new StreamManualClock
+
+      testStream(result, Append)(
+        AddData(inputData, "a" -> 10, "b" -> 15, "clock" -> 30),
+        StartStream(Trigger.ProcessingTime("1 second"), clock),
+        CheckNewAnswer("a" -> 10, "b" -> 15, "clock" -> 30),
+        WaitUntilBatchProcessed(0),
+        assertNumStateRows(total = 3, updated = 3),
+
+        AddData(inputData, "advance" -> 40),
+        AdvanceManualClock(1000L),
+        WaitUntilBatchProcessed(1),
+        CheckNewAnswer("advance" -> 40),
+        assertNumStateRows(total = 4, updated = 1),
+        assertCleanupMetrics(removed = 0, incremental = 0),
+
+        // The empty batch has late watermark 20 and eviction watermark 30. Only "a" expires;
+        // "b" (expiry 25) must survive, even though there are no input rows to drive cleanup.
+        AdvanceManualClock(1000L),
+        WaitUntilBatchProcessed(2),
+        CheckNewAnswer(),
+        Execute { q =>
+          assert(q.lastProgress.batchId === 2)
+          assert(q.lastProgress.numInputRows === 0)
+        },
+        assertNumStateRows(total = 3, updated = 0),
+        assertCleanupMetrics(removed = 1, incremental = 0, scanned = Some(4L))
+      )
+    }
+  }
+
+  test("incremental cleanup supports the legacy watermark propagator") {
+    withSQLConf(
+      SQLConf.STREAMING_STATE_INCREMENTAL_CLEANUP_FACTOR.key -> "1",
+      SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> "false",
+      SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      val inputData = MemoryStream[(String, Int)](1)
+      val result = deduplicateWithinWatermark(inputData)
+
+      testStream(result, Append)(
+        AddData(inputData, "a" -> 10, "clock" -> 30),
+        CheckNewAnswer("a" -> 10, "clock" -> 30),
+        assertNumStateRows(total = 2, updated = 2),
+
+        // Both watermark thresholds are 20 with the legacy propagator, so "a" can be evicted.
+        AddData(inputData, "advance" -> 40),
+        CheckNewAnswer("advance" -> 40),
+        assertNumStateRows(total = 2, updated = 1),
+        assertCleanupMetrics(removed = 1, incremental = 1),
+
+        AddData(inputData, "a" -> 31, "a" -> 32),
+        CheckNewAnswer("a" -> 31),
+        assertNumStateRows(total = 3, updated = 1),
+        assertCleanupMetrics(removed = 0, incremental = 0)
+      )
+    }
+  }
+
+  test("incremental cleanup rolls back an uncommitted batch before retry") {
+    withSQLConf(
+      SQLConf.STREAMING_STATE_INCREMENTAL_CLEANUP_FACTOR.key -> "1",
+      SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      val inputData = MemoryStream[(String, Int)](1)
+      val result = deduplicateWithinWatermark(inputData).as[(String, Long)].map { row =>
+        // The first output row is produced after per-record cleanup but before completion commits.
+        if (row._1 == "probe" && StreamingDeduplicationWithinWatermarkSuite.failAfterCleanup) {
+          sys.error("injected failure after incremental cleanup")
+        }
+        row
+      }
+
+      try {
+        testStream(result, Append)(
+          AddData(inputData, "expired" -> 1, "a" -> 15, "clock" -> 30),
+          CheckNewAnswer("expired" -> 1, "a" -> 15, "clock" -> 30),
+          assertNumStateRows(total = 3, updated = 3),
+          AddData(inputData, "advance" -> 40),
+          CheckNewAnswer("advance" -> 40),
+          assertNumStateRows(total = 4, updated = 1),
+
+          // "expired" is eligible at the late-events watermark of 20, while "a" (expiry 25)
+          // must survive both the failed attempt and replay of its non-late duplicate at 24.
+          Execute { _ => StreamingDeduplicationWithinWatermarkSuite.failAfterCleanup = true },
+          AddData(inputData, "probe" -> 40, "a" -> 24),
+          ExpectFailure[SparkException] { error =>
+            assert(error.getMessage.contains("injected failure after incremental cleanup"))
+          },
+          Execute { _ => StreamingDeduplicationWithinWatermarkSuite.failAfterCleanup = false },
+          StartStream(),
+          CheckNewAnswer("probe" -> 40),
+          assertNumStateRows(total = 4, updated = 1),
+          assertCleanupMetrics(removed = 1, incremental = 1)
+        )
+      } finally {
+        StreamingDeduplicationWithinWatermarkSuite.failAfterCleanup = false
+      }
+    }
+  }
+
+  gridTest("incremental cleanup expires entries at the watermark boundary")(
+      Seq(false, true)) { onlyLateInput =>
+    withSQLConf(
+      SQLConf.STREAMING_STATE_INCREMENTAL_CLEANUP_FACTOR.key -> "1",
+      SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      val inputData = MemoryStream[(String, Int)](1)
+      val result = deduplicateWithinWatermark(inputData)
+      val lastInput = if (onlyLateInput) "a" -> 20 else "probe" -> 40
+      val lastAnswer = if (onlyLateInput) CheckNewAnswer() else CheckNewAnswer("probe" -> 40)
+
+      testStream(result, Append)(
+        AddData(inputData, "a" -> 10, "clock" -> 30),
+        CheckNewAnswer("a" -> 10, "clock" -> 30),
+        assertNumStateRows(total = 2, updated = 2),
+        AddData(inputData, "advance" -> 40),
+        CheckNewAnswer("advance" -> 40),
+        assertNumStateRows(total = 3, updated = 1),
+
+        // The late-events watermark equals "a"'s expiration, 20. Even when all input is late,
+        // the completion-time drain must evict the entry without counting it as incremental.
+        AddData(inputData, lastInput),
+        lastAnswer,
+        assertNumStateRows(
+          total = if (onlyLateInput) 2 else 3,
+          updated = if (onlyLateInput) 0 else 1,
+          droppedByWatermark = if (onlyLateInput) 1 else 0),
+        assertCleanupMetrics(
+          removed = 1,
+          incremental = if (onlyLateInput) 0 else 1,
+          scanned = if (onlyLateInput) Some(3L) else None)
+      )
+    }
+  }
+
+  test("incremental cleanup can be enabled and disabled across checkpoint restarts") {
+    val factorKey = SQLConf.STREAMING_STATE_INCREMENTAL_CLEANUP_FACTOR.key
+    withSQLConf(
+      factorKey -> "0",
+      SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      val inputData = MemoryStream[(String, Int)](1)
+      val result = deduplicateWithinWatermark(inputData)
+
+      testStream(result, Append)(
+        AddData(inputData, "a" -> 15, "clock" -> 30),
+        CheckNewAnswer("a" -> 15, "clock" -> 30),
+        assertNumStateRows(total = 2, updated = 2),
+        AddData(inputData, "advance" -> 40),
+        CheckNewAnswer("advance" -> 40),
+        assertNumStateRows(total = 3, updated = 1),
+        StopStream,
+
+        // Read the existing batch-end-only state with incremental cleanup enabled. At the
+        // late-events watermark of 20, "a" (expiry 25) is not yet eligible for removal.
+        StartStream(additionalConfs = Map(factorKey -> "1")),
+        AddData(inputData, "probe" -> 40),
+        CheckNewAnswer("probe" -> 40),
+        assertNumStateRows(total = 4, updated = 1),
+        assertCleanupMetrics(removed = 0, incremental = 0),
+        StopStream,
+
+        // The same checkpoint can return to batch-end cleanup without a state migration.
+        StartStream(additionalConfs = Map(factorKey -> "0")),
+        AddData(inputData, "tick" -> 50),
+        CheckNewAnswer("tick" -> 50),
+        assertNumStateRows(total = 4, updated = 1),
+        assertCleanupMetrics(removed = 1, incremental = 0)
+      )
+    }
+  }
+
+  gridTest("incremental cleanup can readmit a key outside the watermark delay")(
+      Seq(false, true)) { duplicateFirst =>
+    withSQLConf(
+      SQLConf.STREAMING_STATE_INCREMENTAL_CLEANUP_FACTOR.key -> "1",
+      SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      val inputData = MemoryStream[(String, Int)](1)
+      val result = deduplicateWithinWatermark(inputData)
+      val rows = if (duplicateFirst) {
+        Seq("a" -> 28, "probe" -> 40)
+      } else {
+        Seq("probe" -> 40, "a" -> 28)
+      }
+      val expected = if (duplicateFirst) Seq("probe" -> 40) else rows
+
+      testStream(result, Append)(
+        AddData(inputData, "a" -> 10, "clock" -> 35),
+        CheckNewAnswer("a" -> 10, "clock" -> 35),
+        assertNumStateRows(total = 2, updated = 2),
+        AddData(inputData, "advance" -> 40),
+        CheckNewAnswer("advance" -> 40),
+        assertNumStateRows(total = 3, updated = 1),
+
+        // Only "a" has expired at the late-events watermark of 25. The lookup precedes cleanup,
+        // so a first-row duplicate is suppressed, but cleanup on "probe" can admit a later one.
+        // The 18-second timestamp spread is outside the guaranteed 10-second interval.
+        AddData(inputData, rows: _*),
+        CheckNewAnswer(expected.head, expected.tail: _*),
+        assertNumStateRows(
+          total = if (duplicateFirst) 3 else 4, updated = if (duplicateFirst) 1 else 2),
+        assertCleanupMetrics(removed = 1, incremental = 1),
+        StopStream,
+        StartStream(),
+
+        // Reopening must preserve a replacement entry, or leave the removed key absent.
+        AddData(inputData, "a" -> 31, "a" -> 32),
+        (if (duplicateFirst) CheckNewAnswer("a" -> 31) else CheckNewAnswer()),
+        assertNumStateRows(total = 4, updated = if (duplicateFirst) 1 else 0),
+        assertCleanupMetrics(removed = 0, incremental = 0)
       )
     }
   }
@@ -248,24 +524,27 @@ class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest
     }
   }
 
-  test("SPARK-46676: canonicalization of StreamingDeduplicateWithinWatermarkExec should work") {
-    withTempDir { checkpoint =>
-      val dedupeInputData = MemoryStream[(String, Int)]
-      val dedupe = dedupeInputData.toDS()
-        .withColumn("eventTime", timestamp_seconds($"_2"))
-        .withWatermark("eventTime", "10 second")
-        .dropDuplicatesWithinWatermark("_1")
-        .select($"_1", $"eventTime".cast("long").as[Long])
+  gridTest("SPARK-46676: canonicalization of StreamingDeduplicateWithinWatermarkExec should work")(
+      Seq(0L, 1L)) { factor =>
+    withSQLConf(SQLConf.STREAMING_STATE_INCREMENTAL_CLEANUP_FACTOR.key -> factor.toString) {
+      withTempDir { checkpoint =>
+        val dedupeInputData = MemoryStream[(String, Int)]
+        val dedupe = dedupeInputData.toDS()
+          .withColumn("eventTime", timestamp_seconds($"_2"))
+          .withWatermark("eventTime", "10 second")
+          .dropDuplicatesWithinWatermark("_1")
+          .select($"_1", $"eventTime".cast("long").as[Long])
 
-      testStream(dedupe, Append)(
-        StartStream(checkpointLocation = checkpoint.getCanonicalPath),
-        AddData(dedupeInputData, "a" -> 1),
-        CheckNewAnswer("a" -> 1),
-        Execute { q =>
-          // This threw out error before SPARK-46676.
-          q.lastExecution.executedPlan.canonicalized
-        }
-      )
+        testStream(dedupe, Append)(
+          StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+          AddData(dedupeInputData, "a" -> 1),
+          CheckNewAnswer("a" -> 1),
+          Execute { q =>
+            // This threw out error before SPARK-46676.
+            q.lastExecution.executedPlan.canonicalized
+          }
+        )
+      }
     }
   }
 
@@ -303,3 +582,7 @@ class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest
     )
   }
 }
+
+@SlowSQLTest
+class RocksDBStateStoreStreamingDeduplicationWithinWatermarkSuite
+  extends StreamingDeduplicationWithinWatermarkSuite with RocksDBStateStoreTest
