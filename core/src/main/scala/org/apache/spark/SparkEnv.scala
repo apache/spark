@@ -20,6 +20,7 @@ package org.apache.spark
 import java.io.File
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
+import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.concurrent
 import scala.collection.mutable
@@ -30,6 +31,7 @@ import com.google.common.base.Preconditions
 import com.google.common.cache.CacheBuilder
 import org.apache.hadoop.conf.Configuration
 
+import org.apache.spark.SparkEnv.PythonWorkersKey
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.python.{PythonWorker, PythonWorkerFactory, PythonWorkerHandle}
 import org.apache.spark.broadcast.BroadcastManager
@@ -206,16 +208,12 @@ class SparkEnv (
 
   @volatile private[spark] var isStopped = false
 
-  /**
-   * A key for PythonWorkerFactory cache.
-   * @param pythonExec The python executable to run the Python worker.
-   * @param workerModule The worker module to be called in the worker, e.g., "pyspark.worker".
-   * @param daemonModule The daemon module name to reuse the worker, e.g., "pyspark.daemon".
-   * @param envVars The environment variables for the worker.
-   */
-  private case class PythonWorkersKey(
-      pythonExec: String, workerModule: String, daemonModule: String, envVars: Map[String, String])
+  @GuardedBy("this")
   private val pythonWorkers = mutable.HashMap[PythonWorkersKey, PythonWorkerFactory]()
+
+  // Evicted planners retain their original factory until their last worker finishes.
+  @GuardedBy("this")
+  private val retiringPythonWorkers = mutable.HashMap[PythonWorkerFactory, PythonWorkersKey]()
 
   /**
    * :: Experimental ::
@@ -290,7 +288,7 @@ class SparkEnv (
       }
     }
     if (shouldStop) {
-      pythonWorkers.values.foreach(_.stop())
+      removePythonWorkerFactories((_, _) => true)
       udfDispatcherManager.foreach(_.close())
       mapOutputTracker.stop()
       _streamingShuffleOutputTracker.foreach(_.stop())
@@ -326,15 +324,11 @@ class SparkEnv (
   }
 
   private[spark] def createPythonWorker(
-      pythonExec: String,
-      workerModule: String,
-      daemonModule: String,
-      envVars: Map[String, String],
+      key: PythonWorkersKey,
       useDaemon: Boolean): (PythonWorker, Option[PythonWorkerHandle]) = {
     synchronized {
-      val key = PythonWorkersKey(pythonExec, workerModule, daemonModule, envVars)
       val workerFactory = pythonWorkers.getOrElseUpdate(key, new PythonWorkerFactory(
-          pythonExec, workerModule, daemonModule, envVars, useDaemon))
+          key.pythonExec, key.workerModule, key.daemonModule, key.envVars, useDaemon))
       if (workerFactory.useDaemonEnabled != useDaemon) {
         throw SparkException.internalError("PythonWorkerFactory is already created with " +
           s"useDaemon = ${workerFactory.useDaemonEnabled}, but now is requested with " +
@@ -343,6 +337,15 @@ class SparkEnv (
       }
       workerFactory.create()
     }
+  }
+
+  private[spark] def createPythonWorker(
+      pythonExec: String,
+      workerModule: String,
+      daemonModule: String,
+      envVars: Map[String, String],
+      useDaemon: Boolean): (PythonWorker, Option[PythonWorkerHandle]) = {
+    createPythonWorker(PythonWorkersKey(pythonExec, workerModule, daemonModule, envVars), useDaemon)
   }
 
   private[spark] def createPythonWorker(
@@ -364,16 +367,52 @@ class SparkEnv (
       pythonExec, workerModule, daemonModule, envVars, useDaemon)
   }
 
+  private def finishPythonWorker(
+      key: PythonWorkersKey,
+      worker: PythonWorker,
+      reuseWorker: Boolean): Unit = {
+    val retired = synchronized {
+      retiringPythonWorkers.keysIterator.find(_.ownsWorker(worker)) match {
+        case Some(factory) =>
+          // This worker must not enter a replacement factory's pool, even with the same key.
+          Utils.tryLogNonFatalError {
+            factory.stopWorker(worker)
+          }
+          worker.stop()
+          if (factory.hasActiveWorkers) {
+            None
+          } else {
+            retiringPythonWorkers.remove(factory)
+            Some(factory)
+          }
+        case None =>
+          pythonWorkers.get(key) match {
+            case Some(factory) if reuseWorker => factory.releaseWorker(worker)
+            case Some(factory) => factory.stopWorker(worker)
+            // The factory was removed, so close our end instead of returning it to a pool.
+            case None => worker.stop()
+          }
+          None
+      }
+    }
+    retired.foreach { factory =>
+      Utils.tryLogNonFatalError {
+        factory.stop()
+      }
+    }
+  }
+
+  private[spark] def destroyPythonWorker(key: PythonWorkersKey, worker: PythonWorker): Unit = {
+    finishPythonWorker(key, worker, reuseWorker = false)
+  }
+
   private[spark] def destroyPythonWorker(
       pythonExec: String,
       workerModule: String,
       daemonModule: String,
       envVars: Map[String, String],
       worker: PythonWorker): Unit = {
-    synchronized {
-      val key = PythonWorkersKey(pythonExec, workerModule, daemonModule, envVars)
-      pythonWorkers.get(key).foreach(_.stopWorker(worker))
-    }
+    destroyPythonWorker(PythonWorkersKey(pythonExec, workerModule, daemonModule, envVars), worker)
   }
 
   private[spark] def destroyPythonWorker(
@@ -385,16 +424,17 @@ class SparkEnv (
       pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule, envVars, worker)
   }
 
+  private[spark] def releasePythonWorker(key: PythonWorkersKey, worker: PythonWorker): Unit = {
+    finishPythonWorker(key, worker, reuseWorker = true)
+  }
+
   private[spark] def releasePythonWorker(
       pythonExec: String,
       workerModule: String,
       daemonModule: String,
       envVars: Map[String, String],
       worker: PythonWorker): Unit = {
-    synchronized {
-      val key = PythonWorkersKey(pythonExec, workerModule, daemonModule, envVars)
-      pythonWorkers.get(key).foreach(_.releaseWorker(worker))
-    }
+    releasePythonWorker(PythonWorkersKey(pythonExec, workerModule, daemonModule, envVars), worker)
   }
 
   private[spark] def releasePythonWorker(
@@ -404,6 +444,54 @@ class SparkEnv (
       worker: PythonWorker): Unit = {
     releasePythonWorker(
       pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule, envVars, worker)
+  }
+
+  /**
+   * Stops a session's Python worker factories once its executor-side state is cleaned up, i.e.
+   * after eviction and after every task using the session has finished. In local mode, driver
+   * planners share this SparkEnv without holding a task reference, so busy planner factories
+   * are retired from the cache immediately and stopped when their last worker finishes.
+   */
+  private[spark] def removeExecutorPythonWorkerFactories(artifactUUID: String): Unit = {
+    removePythonWorkerFactories(
+      (key, _) => key.jobArtifactUUID.contains(artifactUUID), retireBusyDrivers = true)
+  }
+
+  /** Stops a session's driver planner Python worker factories when the session is cleaned up. */
+  private[spark] def removeDriverPythonWorkerFactories(artifactUUID: String): Unit = {
+    removePythonWorkerFactories { (key, _) =>
+      key.driverOwned && key.jobArtifactUUID.contains(artifactUUID)
+    }
+  }
+
+  /**
+   * Removes the matching factories under the lock, so that no further worker is created from
+   * them, and stops them outside of it, so that other sessions' workers are not blocked.
+   */
+  private def removePythonWorkerFactories(
+      shouldRemove: (PythonWorkersKey, PythonWorkerFactory) => Boolean,
+      retireBusyDrivers: Boolean = false): Unit = {
+    val removed = synchronized {
+      val matching = pythonWorkers.filter { case (key, factory) => shouldRemove(key, factory) }
+      val retiring = retiringPythonWorkers.filter {
+        case (factory, key) => shouldRemove(key, factory)
+      }
+      pythonWorkers --= matching.keys
+      retiringPythonWorkers --= retiring.keys
+      (matching.toSeq.map(_.swap) ++ retiring.toSeq).flatMap { case (factory, key) =>
+        if (retireBusyDrivers && key.driverOwned && factory.hasActiveWorkers) {
+          retiringPythonWorkers.put(factory, key)
+          None
+        } else {
+          Some(factory)
+        }
+      }
+    }
+    removed.foreach { factory =>
+      Utils.tryLogNonFatalError {
+        factory.stop()
+      }
+    }
   }
 
   private[spark] def initializeShuffleManager(): Unit = {
@@ -527,6 +615,24 @@ class SparkEnv (
 
 object SparkEnv extends Logging {
   @volatile private var env: SparkEnv = _
+
+  /**
+   * A key for PythonWorkerFactory cache.
+   * @param pythonExec The python executable to run the Python worker.
+   * @param workerModule The worker module to be called in the worker, e.g., "pyspark.worker".
+   * @param daemonModule The daemon module name to reuse the worker, e.g., "pyspark.daemon".
+   * @param envVars The environment variables for the worker.
+   * @param driverOwned Whether the factory belongs to a driver-side planner, not executor tasks.
+   *                    Such factories are not covered by executor session reference counts.
+   */
+  private[spark] case class PythonWorkersKey(
+      pythonExec: String,
+      workerModule: String,
+      daemonModule: String,
+      envVars: Map[String, String],
+      driverOwned: Boolean = false) {
+    def jobArtifactUUID: Option[String] = envVars.get("SPARK_JOB_ARTIFACT_UUID")
+  }
 
   private[spark] val driverSystemName = "sparkDriver"
   private[spark] val executorSystemName = "sparkExecutor"
