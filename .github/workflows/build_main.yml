@@ -36,7 +36,7 @@ jobs:
     if: github.repository == 'apache/spark' || github.ref != 'refs/heads/master'
     uses: ./.github/workflows/build_and_test.yml
     with:
-      # Sampled upstream pushes cover all jobs, including changes from skipped commits.
+      # Sampled upstream pushes run the full job matrix.
       # Fork pushes keep the reusable workflow's change-based selection.
       jobs: >-
         ${{ github.repository == 'apache/spark' && '{
