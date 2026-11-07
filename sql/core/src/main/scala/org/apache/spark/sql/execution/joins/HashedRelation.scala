@@ -222,6 +222,9 @@ private[joins] class UnsafeHashedRelation(
 
   override def estimatedSize: Long = binaryMap.getTotalMemoryConsumption
 
+  // Visible for testing: the page size that the map grows its data pages up to.
+  private[joins] def mapPageSizeBytes: Long = binaryMap.getPageSizeBytes
+
   // re-used in get()/getValue()/getWithKeyIndex()/getValueWithKeyIndex()/valuesWithKeyIndex()
   var resultRow = new UnsafeRow(numFields)
 
@@ -417,7 +420,8 @@ private[joins] class UnsafeHashedRelation(
     binaryMap = new BytesToBytesMap(
       taskMemoryManager,
       (nKeys * 1.5 + 1).toInt, // reduce hash collision
-      pageSizeBytes)
+      pageSizeBytes,
+      UnsafeHashedRelation.INITIAL_PAGE_SIZE_BYTES)
 
     var i = 0
     var keyBuffer = new Array[Byte](1024)
@@ -452,6 +456,18 @@ private[joins] class UnsafeHashedRelation(
 
 private[joins] object UnsafeHashedRelation {
 
+  /**
+   * The size of the first data page of the map. Later pages double in size until they add up to
+   * the page size, and then all pages have the page size.
+   *
+   * Otherwise `BytesToBytesMap` rounds its first page up to the page size (`spark.buffer.pageSize`
+   * or a default of up to 64 MiB), so even a few rows reserve a full page. A task that keeps many
+   * relations alive at once, e.g. a stage with a chain of shuffled hash joins, then runs out of
+   * execution memory long before the relations hold that much data. Each broadcast relation would
+   * also allocate a full page on the heap of the driver and of every executor.
+   */
+  val INITIAL_PAGE_SIZE_BYTES: Long = 1L << 20
+
   def apply(
       input: Iterator[InternalRow],
       key: Seq[Expression],
@@ -469,7 +485,8 @@ private[joins] object UnsafeHashedRelation {
       taskMemoryManager,
       // Only 70% of the slots can be used before growing, more capacity help to reduce collision
       (sizeEstimate * 1.5 + 1).toInt,
-      pageSizeBytes)
+      pageSizeBytes,
+      INITIAL_PAGE_SIZE_BYTES)
 
     // Create a mapping of buildKeys -> rows
     val keyGenerator = UnsafeProjection.create(key)
