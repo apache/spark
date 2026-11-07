@@ -429,7 +429,36 @@ abstract class JdbcDialect extends Serializable with Logging {
               "funcName" -> e.name()))
         }
         inputToSQL(e.children()(0))
+      case e: GeneralScalarExpression if isLikeStringPredicate(e.name()) =>
+        buildLikeStringPredicate(e).getOrElse(visitUnexpectedExpr(e))
       case _ => super.build(expr)
+    }
+
+    protected def likeEscapeChar: Char = '\\'
+
+    override protected def escapeSpecialCharsForLikePattern(str: String): String =
+      str.flatMap {
+        case c @ ('_' | '%') => s"$likeEscapeChar$c"
+        case c if c == likeEscapeChar => s"$c$c"
+        case c => c.toString
+      }
+
+    private def buildLikeStringPredicate(e: GeneralScalarExpression): Option[String] = {
+      val children = e.children()
+      if (children.length != 2) return None
+      children(1) match {
+        case lit: Literal[_] if lit.value() != null && lit.dataType().isInstanceOf[StringType] =>
+          val escaped = escapeSpecialCharsForLikePattern(lit.value().toString)
+          val pattern = e.name() match {
+            case "STARTS_WITH" => escaped + "%"
+            case "ENDS_WITH" => "%" + escaped
+            case _ => "%" + escaped + "%"
+          }
+          val col = build(children(0))
+          val escape = compileValue(likeEscapeChar.toString)
+          Some(s"$col LIKE ${compileValue(pattern)} ESCAPE $escape")
+        case _ => None
+      }
     }
 
     // Some dialects do not support boolean type and this convenient util function is
