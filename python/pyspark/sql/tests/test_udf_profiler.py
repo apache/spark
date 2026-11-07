@@ -783,6 +783,7 @@ class UDFProfiler2TestsMixin:
             {
                 "spark.sql.pyspark.udf.profiler": "sampling",
                 "spark.sql.pyspark.udf.profiler.samplingInterval": "10",
+                "spark.sql.pyspark.udf.profiler.samplingAggregation": "task",
             }
         ):
             self.spark.range(10, numPartitions=2).select(busy_add1("id")).collect()
@@ -823,11 +824,82 @@ class UDFProfiler2TestsMixin:
         self.assertEqual(0, len(self.sampling_profile_results))
         self.assertEqual(0, len(self.spark._profiler_collector._profile_results))
 
+    def test_sampling_profiler_aggregation(self):
+        import time
+
+        @udf("long")
+        def busy_add1(x):
+            time.sleep(0.05)
+            return x + 1
+
+        df = self.spark.range(10, numPartitions=2).select(busy_add1("id"))
+
+        # Two tasks in one stage of one query.
+        for level, num_results in [("task", 2), ("stage", 1), ("query", 1)]:
+            with self.subTest(level=level):
+                with self.sql_conf(
+                    {
+                        "spark.sql.pyspark.udf.profiler": "sampling",
+                        "spark.sql.pyspark.udf.profiler.samplingInterval": "10",
+                        "spark.sql.pyspark.udf.profiler.samplingAggregation": level,
+                    }
+                ):
+                    df.collect()
+
+                results = self.sampling_profile_results
+                self.spark.profile.clear()
+                self.assertEqual(num_results, len(results), str(list(results)))
+                for key, result in results.items():
+                    self.assertTrue(key.startswith(f"sampling_{level}_"), key)
+                    # Call trees are keyed by thread name, so main threads of tasks merge.
+                    self.assertIn("MainThread", result["callstack"])
+
+    def test_sampling_profiler_merge_threads_by_name(self):
+        import threading
+        import time
+
+        @udf("long")
+        def add1_in_thread(x):
+            t = threading.Thread(target=time.sleep, args=(0.05,), name="helper")
+            t.start()
+            t.join()
+            return x + 1
+
+        with self.sql_conf(
+            {
+                "spark.sql.pyspark.udf.profiler": "sampling",
+                "spark.sql.pyspark.udf.profiler.samplingInterval": "10",
+                "spark.sql.pyspark.udf.profiler.samplingAggregation": "stage",
+            }
+        ):
+            self.spark.range(10, numPartitions=2).select(add1_in_thread("id")).collect()
+
+        results = list(self.sampling_profile_results.values())
+        self.assertEqual(1, len(results))
+        # The threads of both tasks are merged by name into one call tree per name.
+        self.assertEqual({"MainThread", "helper"}, set(results[0]["callstack"]))
+
 
 class UDFProfiler2Tests(UDFProfiler2TestsMixin, ReusedSQLTestCase):
     def setUp(self) -> None:
         super().setUp()
         self.spark._profiler_collector._accumulator._value = {}
+
+    def test_sampling_profiler_aggregation_query_unknown(self):
+        @udf("long")
+        def add1(x):
+            return x + 1
+
+        # Under `df.rdd` the UDF does not run in a SQL query, so there is no query id.
+        with self.sql_conf(
+            {
+                "spark.sql.pyspark.udf.profiler": "sampling",
+                "spark.sql.pyspark.udf.profiler.samplingAggregation": "query",
+            }
+        ):
+            self.spark.range(10, numPartitions=2).select(add1("id")).rdd.collect()
+
+        self.assertEqual(["sampling_query_unknown"], list(self.sampling_profile_results))
 
 
 if __name__ == "__main__":
