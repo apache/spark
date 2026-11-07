@@ -536,18 +536,34 @@ object DateTimeUtils extends SparkDateTimeUtils {
     }
   }
 
+  // Long arithmetic: `dayOfWeek - 1 - startDay` and the sum overflow Int near the DATE bounds.
+  private def nextDateForDayOfWeek(startDay: Long, dayOfWeek: Int): Long = {
+    startDay + 1 + Math.floorMod(dayOfWeek - 1 - startDay, 7L)
+  }
+
   /**
    * Returns the first date which is later than startDate and is of the given dayOfWeek.
    * dayOfWeek is an integer ranges in [0, 6], and 0 is Thu, 1 is Fri, etc,.
+   * @throws org.apache.spark.SparkArithmeticException if the result is later than the maximum DATE.
    */
   def getNextDateForDayOfWeek(startDay: Int, dayOfWeek: Int): Int = {
-    startDay + 1 + ((dayOfWeek - 1 - startDay) % 7 + 7) % 7
+    val result = nextDateForDayOfWeek(startDay, dayOfWeek)
+    if (result > Int.MaxValue) {
+      val dayName = DayOfWeek.THURSDAY.plus(dayOfWeek).toString
+      throw QueryExecutionErrors.nextDayOverflowError(startDay, dayName)
+    }
+    result.toInt
   }
 
-  /** Returns last day of the month for the given number of days since 1970-01-01. */
+  /**
+   * Returns last day of the month for the given number of days since 1970-01-01.
+   * @throws org.apache.spark.SparkArithmeticException if the result is later than the maximum DATE.
+   */
   def getLastDayOfMonth(days: Int): Int = {
     val localDate = daysToLocalDate(days)
-    (days - localDate.getDayOfMonth) + localDate.lengthOfMonth()
+    val result = days - localDate.getDayOfMonth.toLong + localDate.lengthOfMonth()
+    if (result > Int.MaxValue) throw QueryExecutionErrors.lastDayOverflowError(days)
+    result.toInt
   }
 
   // The constants are visible for testing purpose only.
@@ -575,7 +591,9 @@ object DateTimeUtils extends SparkDateTimeUtils {
    */
   def truncDate(days: Int, level: Int): Int = {
     level match {
-      case TRUNC_TO_WEEK => getNextDateForDayOfWeek(days - 7, MONDAY)
+      // `days - 7L` so the subtraction does not wrap. Near the minimum DATE, trunc still wraps
+      // (this `.toInt`, and the Int arithmetic of the other levels); that is a trunc follow-up.
+      case TRUNC_TO_WEEK => nextDateForDayOfWeek(days - 7L, MONDAY).toInt
       case TRUNC_TO_MONTH => days - getDayOfMonth(days) + 1
       case TRUNC_TO_QUARTER =>
         val ld = daysToLocalDate(days)

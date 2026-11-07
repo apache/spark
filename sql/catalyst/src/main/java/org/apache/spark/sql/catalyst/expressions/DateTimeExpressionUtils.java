@@ -196,7 +196,9 @@ public final class DateTimeExpressionUtils {
    * ({@code failOnError = true}). The {@code SparkIllegalArgumentException}
    * thrown by {@code DateTimeUtils.getDayOfWeekFromString} for an invalid
    * day-of-week string propagates to the caller unchanged (in ANSI mode the
-   * caller wants exactly that exception), so no try/catch wrapper is emitted.
+   * caller wants exactly that exception), so no try/catch wrapper is emitted;
+   * the {@code DATETIME_OVERFLOW} error of {@code getNextDateForDayOfWeek}
+   * propagates the same way.
    */
   public static int getNextDateExact(int startDate, UTF8String dayOfWeek) {
     int dow = DateTimeUtils.getDayOfWeekFromString(dayOfWeek);
