@@ -21,13 +21,15 @@ import java.io.Closeable
 import java.util.Properties
 
 import org.apache.spark.annotation.{DeveloperApi, Evolving, Since}
-import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.executor.{CommitDeniedException, TaskMetrics}
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.{PARTITION_ID, STAGE_ATTEMPT_ID, STAGE_ID, TASK_ATTEMPT_ID}
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.scheduler.Task
 import org.apache.spark.shuffle.FetchFailedException
-import org.apache.spark.util.{AccumulatorV2, PostStatusUpdateListener, TaskCompletionListener, TaskFailureListener, TaskInterruptListener}
+import org.apache.spark.util.{AccumulatorV2, CausedBy, PostStatusUpdateListener, TaskCompletionListener, TaskFailureListener, TaskInterruptListener}
 
 
 object TaskContext {
@@ -244,6 +246,14 @@ abstract class TaskContext extends Serializable {
     } catch {
       case e: Throwable =>
         // Catch all errors; run task failure and completion callbacks, and rethrow the exception.
+        // Log the error first. The executor logs it only once the listeners have run, which a
+        // listener that crashes or hangs the executor prevents.
+        try {
+          TaskFailureLogger.logBeforeListeners(this, e)
+        } catch {
+          case t: Throwable =>
+            e.addSuppressed(t)
+        }
         try {
           markTaskFailed(e)
         } catch {
@@ -411,4 +421,35 @@ abstract class TaskContext extends Serializable {
    * }}}
    */
   private[spark] def createResourceUninterruptibly[T <: Closeable](resourceBuilder: => T): T
+}
+
+/**
+ * Logs a task body failure before the task listeners run. The executor logs the failure only once
+ * the listeners have run, so a listener that crashes or hangs the executor, e.g. while releasing
+ * native resources, would otherwise leave no record of what failed the task.
+ *
+ * A separate object, as `TaskContext` is public API and must not pick up `Logging`'s members.
+ */
+private[spark] object TaskFailureLogger extends Logging {
+
+  /**
+   * Logs `error` at warning level with its stack trace, unless the executor is not going to
+   * report it as an error either: a killed task, a fetch failure, a denied commit and a failure
+   * while the executor stops are reported at a lower level or without the stack trace.
+   */
+  def logBeforeListeners(context: TaskContext, error: Throwable): Unit = {
+    val expectedFailure = context.isInterrupted() || context.fetchFailed.isDefined ||
+      Option(SparkEnv.get).exists(_.isStopped) || (error match {
+        case _: TaskKilledException => true
+        case CausedBy(_: CommitDeniedException) => true
+        case _ => false
+      })
+    if (!expectedFailure) {
+      val stage = log"${MDC(STAGE_ID, context.stageId())}." +
+        log"${MDC(STAGE_ATTEMPT_ID, context.stageAttemptNumber())}"
+      logWarning(log"Task ${MDC(TASK_ATTEMPT_ID, context.taskAttemptId())} in stage " + stage +
+        log" (partition ${MDC(PARTITION_ID, context.partitionId())}) failed. Its task " +
+        log"listeners run next; the executor reports the failure once they have run.", error)
+    }
+  }
 }
