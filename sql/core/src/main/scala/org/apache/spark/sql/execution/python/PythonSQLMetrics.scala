@@ -21,6 +21,8 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 
 trait PythonSQLMetrics { self: SparkPlan =>
+  // Register all phase metrics; Python decides whether to collect them.
+  // A zero pythonNumTimingReports means detailed timing data is unavailable.
   protected val pythonMetrics: Map[String, SQLMetric] = {
     sizeMetricsDesc.map { case (k, v) =>
       k -> SQLMetrics.createSizeMetric(sparkContext, v)
@@ -28,7 +30,7 @@ trait PythonSQLMetrics { self: SparkPlan =>
       k -> SQLMetrics.createTimingMetric(sparkContext, v)
     } ++ otherMetricsDesc.map { case (k, v) =>
       k -> SQLMetrics.createMetric(sparkContext, v)
-    } ++ additionalMetrics
+    } ++ additionalMetrics ++ createPythonPhaseMetrics()
   }
 
   // The metrics and their descriptions, by kind. An operator may override them, e.g. to leave

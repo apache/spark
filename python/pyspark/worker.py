@@ -257,6 +257,8 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
             Pipelined variant of process() that pre-fetches input batches in a background
             reader thread while the main thread computes the UDF and writes output.
             This allows input deserialization to overlap with UDF computation.
+            Detailed phase timing is disabled in this mode. General worker timing and
+            pythonNumPipelinedTasks are still reported.
             """
             import queue
             import threading

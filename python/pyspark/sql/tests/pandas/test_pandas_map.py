@@ -627,6 +627,72 @@ class MapInPandasTests(MapInPandasTestsMixin, ReusedSQLTestCase):
         time.tzset()
         ReusedSQLTestCase.tearDownClass()
 
+    def test_phase_metrics(self):
+        def rebatch(dfs):
+            frames = list(dfs)
+            time.sleep(0.01)
+            if frames:
+                combined = pd.concat(frames)
+                yield combined.iloc[:1]
+                yield combined.iloc[1:]
+
+        phase_names = (
+            "pythonDataReadTime",
+            "pythonInputPreparationTime",
+            "pythonUDFExecutionTime",
+            "pythonOutputPreparationTime",
+            "pythonDataWriteTime",
+        )
+        with self.sql_conf(
+            {
+                "spark.sql.execution.arrow.maxRecordsPerBatch": "2",
+                "spark.sql.adaptive.enabled": "false",
+                "spark.sql.execution.pythonUDF.detailedTiming.enabled": "true",
+            }
+        ):
+            for num_rows, legacy in ((5, False), (0, False), (5, True)):
+                with (
+                    self.subTest(num_rows=num_rows, legacy=legacy),
+                    self.sql_conf(
+                        {
+                            "spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": str(
+                                legacy
+                            ).lower()
+                        }
+                    ),
+                ):
+                    data = self.spark.createDataFrame(
+                        self.sc.parallelize([(i,) for i in range(num_rows)], 1), "id long"
+                    )
+                    result = data.mapInPandas(rebatch, "id long")
+                    self.assertEqual(result.collect(), [Row(i) for i in range(num_rows)])
+                    metrics = result._jdf.queryExecution().executedPlan().metrics()
+                    self.assertEqual(metrics.apply("pythonNumTimingReports").value(), 1)
+                    self.assertEqual(
+                        metrics.apply("pythonNumTimedBatches").value(), (num_rows + 1) // 2
+                    )
+                    phases = [metrics.apply(name).value() for name in phase_names]
+                    self.assertTrue(all(value >= 0 for value in phases))
+                    self.assertGreaterEqual(phases[2], 10)
+                    self.assertLessEqual(sum(phases), metrics.apply("pythonProcessingTime").value())
+
+    def test_phase_metrics_follow_execution_config(self):
+        timing_conf = "spark.sql.execution.pythonUDF.detailedTiming.enabled"
+        with self.sql_conf({"spark.sql.adaptive.enabled": "false"}):
+            for enabled in (True, False):
+                with self.subTest(enabled=enabled):
+                    with self.sql_conf({timing_conf: str(enabled).lower()}):
+                        result = self.spark.range(2, numPartitions=1).mapInPandas(
+                            lambda dfs: dfs, "id long"
+                        )
+                        metrics = result._jdf.queryExecution().executedPlan().metrics()
+                        self.assertTrue(metrics.contains("pythonNumTimingReports"))
+                    with self.sql_conf({timing_conf: str(not enabled).lower()}):
+                        self.assertEqual(result.collect(), [Row(0), Row(1)])
+                    self.assertEqual(
+                        metrics.apply("pythonNumTimingReports").value(), int(not enabled)
+                    )
+
 
 if __name__ == "__main__":
     from pyspark.testing import main
