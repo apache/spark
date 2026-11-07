@@ -89,7 +89,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
    *
    * `injectPerPartitionBloomFilter` then adds its [[PerPartitionRuntimeFilterSubquery]]. Predicate
    * pushdown moves it along the key. [[InsertPerPartitionRuntimeFilterJoins]] then builds the semi
-   * join where it landed.
+   * join where it landed. `ChoosePerPartitionRuntimeFilters` keeps the semi join only when it adds
+   * no shuffle and cuts no tasks that read the application side.
    *
    * A key gets one per-partition bloom filter at most, so a later join on the same key adds none.
    */

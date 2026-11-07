@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, HintInfo,
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{PER_PARTITION_RUNTIME_FILTER_SUBQUERY, TreePattern}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
-import org.apache.spark.sql.types.BooleanType
+import org.apache.spark.sql.types.{BooleanType, Metadata, MetadataBuilder}
 
 /**
  * The placeholder of a per-partition runtime bloom filter of `key`, the join key of the application
@@ -78,12 +78,31 @@ case class PerPartitionRuntimeFilterSubquery(
 
 object PerPartitionRuntimeFilterSubquery extends PredicateHelper {
 
-  /** The key that `plan` checks, when it has the shape of the join of a placeholder's semi join. */
+  /**
+   * The metadata key of the bloom filter column of a per-partition bloom filter's aggregate.
+   * [[InsertPerPartitionRuntimeFilterJoins]] sets it. That is how [[InjectRuntimeFilter]] and
+   * `ChoosePerPartitionRuntimeFilters` tell the semi join from one a query wrote.
+   */
+  private val PER_PARTITION_RUNTIME_FILTER = "__per_partition_runtime_filter"
+
+  /** The metadata of the bloom filter column of a per-partition bloom filter's aggregate. */
+  private[optimizer] def bloomFilterMetadata: Metadata =
+    new MetadataBuilder().putBoolean(PER_PARTITION_RUNTIME_FILTER, true).build()
+
+  /**
+   * For the condition of a semi join of a per-partition bloom filter, the bloom filter column and
+   * the key it checks. The column carries [[PER_PARTITION_RUNTIME_FILTER]].
+   */
+  def perPartitionRuntimeFilter(condition: Expression): Option[(Attribute, Expression)] =
+    splitConjunctivePredicates(condition).collectFirst {
+      case BloomFilterMightContain(bloomFilter: Attribute, XxHash64(Seq(key), _))
+          if bloomFilter.metadata.contains(PER_PARTITION_RUNTIME_FILTER) => (bloomFilter, key)
+    }
+
+  /** The key that `plan` checks, when it is the join of a placeholder's semi join. */
   def semiJoinKey(plan: LogicalPlan): Option[Expression] = plan match {
     case Join(_, _, ExistenceJoin(_), Some(condition), _) =>
-      splitConjunctivePredicates(condition).collectFirst {
-        case BloomFilterMightContain(_: Attribute, XxHash64(Seq(key), _)) => key
-      }
+      perPartitionRuntimeFilter(condition).map(_._2)
     case _ => None
   }
 
@@ -128,7 +147,8 @@ object PerPartitionRuntimeFilterSubquery extends PredicateHelper {
  * The rule cannot be excluded, since a placeholder cannot be evaluated.
  */
 object InsertPerPartitionRuntimeFilterJoins extends Rule[LogicalPlan] {
-  import PerPartitionRuntimeFilterSubquery.{withoutPlaceholders, WithPlaceholders}
+  import PerPartitionRuntimeFilterSubquery.{bloomFilterMetadata, withoutPlaceholders,
+    WithPlaceholders}
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan match {
     case _: Subquery => plan
@@ -181,7 +201,7 @@ object InsertPerPartitionRuntimeFilterJoins extends Rule[LogicalPlan] {
     } yield {
       val creationPartitionKey = Alias(creation, "partitionKey")()
       val bloomFilter = Alias(new BloomFilterAggregate(new XxHash64(Seq(creationKey)))
-        .toAggregateExpression(), "bloomFilter")()
+        .toAggregateExpression(), "bloomFilter")(explicitMetadata = Some(bloomFilterMetadata))
       val aggregate = PullOutGroupingExpressions(Aggregate(
         Seq(creation), Seq(creationPartitionKey, bloomFilter), placeholder.plan))
       val partitionKey = Alias(application, "partitionKey")()

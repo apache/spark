@@ -19,11 +19,13 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{BloomFilterMightContain, DynamicPruningSubquery, Expression, GetStructField, PlanExpression, ScalarSubquery, TransformExpression}
 import org.apache.spark.sql.catalyst.optimizer.{InsertPerPartitionRuntimeFilterJoins, PerPartitionRuntimeFilterSubquery}
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, Inner}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, LogicalPlan, Union}
+import org.apache.spark.sql.catalyst.plans.physical.RangePartitioning
 import org.apache.spark.sql.catalyst.trees.TreePattern.PER_PARTITION_RUNTIME_FILTER_SUBQUERY
 import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryCatalystRuntimeFilterCatalog, InMemoryTableCatalog}
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, BucketFunction, ScalarFunction, UnboundBucketFunction, UnboundFunction, UnboundIntBucketFunction}
@@ -31,7 +33,8 @@ import org.apache.spark.sql.connector.expressions.Expressions.{bucket, identity}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.{InputAdapter, ProjectExec, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation}
-import org.apache.spark.sql.execution.joins.ShuffledHashJoinExec
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastNestedLoopJoinExec, CartesianProductExec, ShuffledHashJoinExec}
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StructType}
 import org.apache.spark.tags.DataSourceV2Test
@@ -228,6 +231,9 @@ class PerPartitionRuntimeFilterSuite extends KeyGroupedPartitioningSuiteBase {
   private def executedSemiJoins(plan: SparkPlan): Seq[ShuffledHashJoinExec] =
     collect(plan) { case j: ShuffledHashJoinExec if j.joinType.isInstanceOf[ExistenceJoin] => j }
 
+  private def executedShuffles(plan: SparkPlan): Seq[ShuffleExchangeExec] =
+    collect(plan) { case s: ShuffleExchangeExec => s }
+
   test("a creation side within the size threshold gets only a bloom filter of all its keys") {
     createTables()
     val df = join()
@@ -244,6 +250,270 @@ class PerPartitionRuntimeFilterSuite extends KeyGroupedPartitioningSuiteBase {
       val plan = df.queryExecution.optimizedPlan
       assert(perPartitionSemiJoins(df).size == 1 && !hasGlobalBloomFilter(plan), plan)
       checkAnswer(df, expectedRows)
+    }
+  }
+
+  Seq(true, false).foreach { adaptive =>
+    test(s"the semi join stays when it pairs (AQE $adaptive)") {
+      createTables()
+      withSQLConf(ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString) {
+        withoutGlobalBloomFilter("dim") {
+          val df = join()
+          checkAnswer(df, expectedRows)
+          val plan = df.queryExecution.executedPlan
+          assert(executedSemiJoins(plan).size == 1, plan)
+          assert(executedShuffles(plan).isEmpty,
+            "the semi join pairs the partitions as the join does")
+        }
+      }
+    }
+
+    test(s"the semi join goes when it would shuffle (AQE $adaptive)") {
+      // Without pushing the partition values, the two sides' different keys cannot pair.
+      createTables()
+      withSQLConf(
+          ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString,
+          V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "false") {
+        withoutGlobalBloomFilter("dim") {
+          val df = join()
+          assert(perPartitionSemiJoins(df).size == 1, "test setup: the rule added it")
+          checkAnswer(df, expectedRows)
+          val plan = df.queryExecution.executedPlan
+          assert(executedSemiJoins(plan).isEmpty, plan)
+          assert(collect(plan) { case p @ ProjectExec(_, _: ProjectExec) => p }.isEmpty,
+            s"the semi join's projection must go with it:\n$plan")
+        }
+      }
+    }
+
+    test(s"the semi join goes when the join shuffles the application side anyway (AQE $adaptive)") {
+      // The join's keys are more than the partition key, so it shuffles both sides. The semi join
+      // would group the application side's splits ahead of that shuffle.
+      createTwoKeyTables()
+      withSQLConf(ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString) {
+        withoutGlobalBloomFilter("dim") {
+          val df = sql("SELECT f.id, f.v FROM testcat.ns.fact f JOIN testcat.ns.dim d " +
+            "ON f.id = d.id AND f.x = d.x WHERE d.flag = 1")
+          assert(perPartitionSemiJoins(df).size == 1, "test setup: the rule added it")
+          checkAnswer(df, expectedRows)
+          val plan = df.queryExecution.executedPlan
+          assert(executedShuffles(plan).nonEmpty, s"test setup: the join must shuffle:\n$plan")
+          assert(executedSemiJoins(plan).isEmpty, plan)
+        }
+      }
+    }
+
+    test(s"a semi join that goes takes no free one with it (AQE $adaptive)") {
+      // Without pushed partition values, the semi join of `fact2` cannot pair with `dim2`, which
+      // has one partition key only, and shuffles. The semi join of `fact1` pairs, as the joins
+      // above do. Judged next to the other one, it would look as if it cut tasks.
+      Seq("fact1" -> "v", "fact2" -> "w").foreach { case (name, column) =>
+        createTable(name, Array(Column.create("id", LongType), Column.create(column, IntegerType)),
+          Array(bucket(4, "id")))
+        // Two inserts, so that each partition key has more than one split.
+        Seq(0 until 8, 8 until 16).foreach { ids =>
+          sql(s"INSERT INTO testcat.ns.$name VALUES " + ids.map(i => s"($i, $i)").mkString(", "))
+        }
+      }
+      createIdTable("dim", "flag", (0 until 16).map(i => s"($i, ${i % 2})").mkString(", "))
+      // As many rows as `dim`, all with the partition key 1.
+      createIdTable("dim2", "flag", (1 until 64 by 4).map(i => s"($i, 1)").mkString(", "))
+      val threshold = (creationSideSize("dim").min(creationSideSize("dim2")) + 1) / 2
+      withSQLConf(
+          ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString,
+          V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "false",
+          RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> threshold.toString) {
+        val df = sql("SELECT f1.id, f1.v, f2.w FROM testcat.ns.fact1 f1 JOIN testcat.ns.fact2 f2 " +
+          "ON f1.id = f2.id JOIN testcat.ns.dim d1 ON f1.id = d1.id JOIN testcat.ns.dim2 d2 " +
+          "ON f2.id = d2.id WHERE d1.flag = 1 AND d2.flag = 1")
+        assert(perPartitionSemiJoins(df).size == 2, "test setup: the rule added both")
+        checkAnswer(df, Seq(1, 5, 9, 13).map(i => Row(i, i, i)))
+        val plan = df.queryExecution.executedPlan
+        val semiJoins = executedSemiJoins(plan)
+        assert(semiJoins.size == 1 && semiJoins.head.left.collectLeaves().exists {
+          case scan: BatchScanExec => scan.table.name().split('.').last == "fact1"
+          case _ => false
+        }, s"the semi join of `fact1` must stay:\n$plan")
+      }
+    }
+
+    test(s"with partially clustered distribution, the semi join keeps the application side's " +
+        s"splits (AQE $adaptive)") {
+      // The creation side's aggregate is the smaller side, so it is the one that repeats, once for
+      // each split of the application side.
+      createTables(numFactRows = 400)
+      withSQLConf(
+          ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString,
+          V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true") {
+        withoutGlobalBloomFilter("dim") {
+          val df = join()
+          checkAnswer(df, expectedRows)
+          val plan = df.queryExecution.executedPlan
+          val semiJoins = executedSemiJoins(plan)
+          assert(semiJoins.size == 1, plan)
+          assert(semiJoins.head.left.outputPartitioning.numPartitions > 4,
+            s"the application side must keep its splits:\n$plan")
+        }
+      }
+    }
+
+    test(s"the semi join stays when the side it is on is read more than once (AQE $adaptive)") {
+      // A cartesian product reads each side once for each partition of the other. A broadcast
+      // nested loop join that also returns the broadcast rows with no match reads its streamed side
+      // twice. A range shuffle reads its child once to sample it, and once more to shuffle it.
+      // Each read runs the semi join again, together with the scan of `fact` below it.
+      createTables()
+      createOtherTable()
+      val semiJoinSide = "SELECT f.id, f.v FROM testcat.ns.fact f JOIN testcat.ns.dim d " +
+        "ON f.id = d.id WHERE d.flag = 1"
+      withSQLConf(ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString) {
+        withoutGlobalBloomFilter("dim") {
+          Seq(
+            s"SELECT count(*), sum(x.v) FROM ($semiJoinSide) x CROSS JOIN testcat.ns.other o" ->
+              Seq(Row(64, 2880)),
+            s"SELECT count(*), sum(x.v) FROM ($semiJoinSide) x FULL OUTER JOIN " +
+              "testcat.ns.other o ON x.v < o.id" -> Seq(Row(19, 220)),
+            s"$semiJoinSide ORDER BY f.v" -> expectedRows).foreach { case (query, answer) =>
+            val df = sql(query)
+            assert(perPartitionSemiJoins(df).size == 1, df.queryExecution.optimizedPlan)
+            checkAnswer(df, answer)
+            val plan = df.queryExecution.executedPlan
+            assert(collect(plan) {
+              case j: CartesianProductExec => j
+              case j: BroadcastNestedLoopJoinExec => j
+              case s: ShuffleExchangeExec if s.outputPartitioning.isInstanceOf[RangePartitioning] =>
+                s
+            }.size == 1, s"test setup: the semi join's side must be read again:\n$plan")
+            assert(executedSemiJoins(plan).size == 1, plan)
+          }
+        }
+      }
+    }
+
+    test(s"with partially clustered distribution, the semi join stays when the join repeats the " +
+        s"side it is on (AQE $adaptive)") {
+      // `fact` is the smaller side, so the join repeats it and keeps the splits of `dim`. Each
+      // repeat runs the semi join again, together with the scan of `fact` below it. The existence
+      // join of the semi join is estimated from `fact` (SPARK-61534), so the join still repeats
+      // `fact`.
+      createIdTable("fact", "v", "(1, 10), (2, 20), (3, 30), (5, 50)")
+      createIdTable("dim", "flag", (0 until 64).map(i => s"($i, ${i % 2})").mkString(", "))
+      // The join of `fact` and `dim`, with its answer checked.
+      def checkedJoin(): DataFrame = {
+        val df = join()
+        checkAnswer(df, Seq(Row(1, 10), Row(3, 30), Row(5, 50)))
+        df
+      }
+      // The partitions of the join of `fact` and `dim`.
+      def joinPartitions(plan: SparkPlan): Seq[Int] = collect(plan) {
+        case j: BaseJoinExec if j.joinType == Inner => j.outputPartitioning.numPartitions
+      }
+      withSQLConf(
+          ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString,
+          V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true") {
+        withoutGlobalBloomFilter("dim") {
+          val without = withSQLConf(RUNTIME_BLOOM_FILTER_PER_PARTITION_ENABLED.key -> "false") {
+            joinPartitions(checkedJoin().queryExecution.executedPlan)
+          }
+          assert(without.size == 1 && without.head > 4,
+            s"test setup: the join must keep the splits of `dim`, got $without")
+          val plan = checkedJoin().queryExecution.executedPlan
+          assert(executedSemiJoins(plan).size == 1, plan)
+          assert(joinPartitions(plan) == without, plan)
+        }
+      }
+    }
+
+    test(s"with partially clustered distribution, the semi join goes when it would group the " +
+        s"splits the join keeps (AQE $adaptive)") {
+      // The application side is the smaller side of the semi join here, which an existence join
+      // cannot repeat. So the semi join would group the splits the join itself keeps apart. A
+      // limit, a top-N or a write above the join reports one partition or none, however many
+      // tasks read below it.
+      createTables()
+      createTable("target", Array(Column.create("id", LongType), Column.create("v", IntegerType)),
+        Array.empty)
+      withSQLConf(
+          ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString,
+          V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true") {
+        withoutGlobalBloomFilter("dim") {
+          Seq(join(), join().limit(100), join().orderBy("id").limit(100)).foreach { df =>
+            assert(perPartitionSemiJoins(df).size == 1, "test setup: the rule added it")
+            checkAnswer(df, expectedRows)
+            val plan = df.queryExecution.executedPlan
+            assert(executedSemiJoins(plan).isEmpty, plan)
+          }
+          val writes = withQueryExecutionsCaptured(spark) {
+            sql("INSERT INTO testcat.ns.target SELECT f.id, f.v FROM testcat.ns.fact f " +
+              "JOIN testcat.ns.dim d ON f.id = d.id WHERE d.flag = 1")
+          }
+          assert(writes.flatMap(_.optimizedPlan.collect(perPartitionSemiJoin)).size == 1,
+            "test setup: the rule added it")
+          val write = writes.map(_.executedPlan)
+          checkAnswer(spark.table("testcat.ns.target"), expectedRows)
+          assert(write.flatMap(executedSemiJoins).isEmpty, write)
+        }
+      }
+    }
+
+    test(s"the semi join follows the join key through a join below it (AQE $adaptive)") {
+      // The application side is the storage-partitioned join of `fact` and `other`. Pushdown puts
+      // the placeholder of the semi join on `fact`, below that join, and the semi join is built
+      // there. So the join gets only the rows it keeps.
+      createTables()
+      withSQLConf(ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString) {
+        withoutGlobalBloomFilter("dim") {
+          val df = joinOverJoin()
+          checkAnswer(df, expectedRows)
+          val plan = df.queryExecution.executedPlan
+          assert(executedSemiJoins(plan).size == 1, plan)
+          assert(executedShuffles(plan).isEmpty, plan)
+          // The join of `fact` and `other` is the inner join with no other one below it.
+          def isInner(p: SparkPlan): Boolean = p match {
+            case j: BaseJoinExec => j.joinType == Inner
+            case _ => false
+          }
+          val joinBelow = collect(plan) {
+            case j: BaseJoinExec if isInner(j) && !j.children.exists(_.exists(isInner)) => j
+          }
+          assert(joinBelow.size == 1, plan)
+          assert(joinBelow.head.metrics("numOutputRows").value == expectedRows.size, plan)
+        }
+      }
+    }
+
+    test(s"the semi join follows a renamed join key (AQE $adaptive)") {
+      // The placeholder is pushed below the rename, so it checks `id` rather than `fid`.
+      createTables()
+      withSQLConf(ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString) {
+        withoutGlobalBloomFilter("dim") {
+          val df = sql("SELECT f.fid, f.v FROM (SELECT id AS fid, v FROM testcat.ns.fact) f " +
+            "JOIN testcat.ns.dim d ON f.fid = d.id WHERE d.flag = 1")
+          val keys =
+            perPartitionSemiJoins(df).flatMap(PerPartitionRuntimeFilterSubquery.semiJoinKey)
+          assert(keys.map(_.references.map(_.name).toSet) == Seq(Set("id")),
+            df.queryExecution.optimizedPlan)
+          checkAnswer(df, expectedRows)
+          val plan = df.queryExecution.executedPlan
+          assert(executedSemiJoins(plan).size == 1, plan)
+        }
+      }
+    }
+  }
+
+  test("the semi joins of a plan optimized with the conf on are judged with it off") {
+    // The semi join would shuffle, as in "the semi join goes when it would shuffle".
+    createTables()
+    withSQLConf(V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "false") {
+      withoutGlobalBloomFilter("dim") {
+        val df = join()
+        assert(perPartitionSemiJoins(df).size == 1, "test setup: the rule added it")
+        withSQLConf(RUNTIME_BLOOM_FILTER_PER_PARTITION_ENABLED.key -> "false") {
+          checkAnswer(df, expectedRows)
+          assert(executedSemiJoins(df.queryExecution.executedPlan).isEmpty,
+            df.queryExecution.executedPlan)
+        }
+      }
     }
   }
 

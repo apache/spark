@@ -1020,10 +1020,14 @@ object SQLConf {
         "application side is then checked against the bloom filter of the matching partition " +
         "of the creation side, in a semi join. The semi join calls the function of the " +
         "partition transform on each row of both sides, so that function must implement " +
-        "`produceResult` or `invoke`. That semi join is dropped when it would sit in more than " +
-        "one place, as below a union. The number of per-partition bloom filters has a limit of " +
-        s"its own, the value of ${RUNTIME_FILTER_NUMBER_THRESHOLD.key}. Once the other runtime " +
-        "filters reach that limit, no per-partition one is added either.")
+        "`produceResult` or `invoke`. That semi join is dropped when it adds a shuffle or cuts " +
+        "the tasks that read the application side, or when it would sit in more than one " +
+        "place, as below a union. To check the shuffles and the tasks, Spark plans the query " +
+        "once more, and up to once more for each semi join. Adaptive query execution does that " +
+        "again on each re-planning before the semi join runs. The number of per-partition " +
+        "bloom filters has a limit of its own, the value of " +
+        s"${RUNTIME_FILTER_NUMBER_THRESHOLD.key}. Once the other runtime filters reach that " +
+        "limit, no per-partition one is added either.")
       .version("5.0.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
