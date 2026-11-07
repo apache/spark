@@ -23,6 +23,7 @@ import signal
 import struct
 import sys
 import unittest
+from collections import deque
 from decimal import Decimal
 from itertools import zip_longest
 from time import sleep, time
@@ -1302,9 +1303,72 @@ def assertDataFrameEqual(
         expected_list = expected
 
     if not checkRowOrder:
-        # rename duplicate columns for sorting
+        # Sort rows deterministically before comparison.
         actual_list = sorted(actual_list, key=lambda x: str(x))
         expected_list = sorted(expected_list, key=lambda x: str(x))
+
+        # Align approximately equal rows without relying on string ordering.
+        if len(actual_list) == len(expected_list) and not all(
+            compare_rows(actual_row, expected_row)
+            for actual_row, expected_row in zip(actual_list, expected_list)
+        ):
+            size = len(actual_list)
+            matched_expected = [-1] * size
+            matched_actual = [-1] * size
+
+            # Exact matches provide an efficient starting point.
+            exact_matches = {}
+            for j, row in enumerate(expected_list):
+                exact_matches.setdefault(str(row), []).append(j)
+
+            for i, row in enumerate(actual_list):
+                candidates = exact_matches.get(str(row))
+                if candidates:
+                    j = candidates.pop()
+                    if compare_rows(row, expected_list[j]):
+                        matched_actual[i] = j
+                        matched_expected[j] = i
+
+            # Find augmenting paths iteratively, allowing reassignment
+            # of previously matched rows when tolerances overlap.
+            def augment(start_index):
+                queue = deque([start_index])
+                visited_actual = {start_index}
+                parent_expected = {}
+
+                while queue:
+                    i = queue.popleft()
+                    for j, expected_row in enumerate(expected_list):
+                        if j in parent_expected:
+                            continue
+                        if not compare_rows(actual_list[i], expected_row):
+                            continue
+
+                        parent_expected[j] = i
+                        previous = matched_expected[j]
+
+                        if previous == -1:
+                            while True:
+                                i = parent_expected[j]
+                                old_j = matched_actual[i]
+                                matched_actual[i] = j
+                                matched_expected[j] = i
+                                if old_j == -1:
+                                    return True
+                                j = old_j
+
+                        if previous not in visited_actual:
+                            visited_actual.add(previous)
+                            queue.append(previous)
+
+                return False
+
+            for i in range(size):
+                if matched_actual[i] == -1 and not augment(i):
+                    break
+
+            if all(j != -1 for j in matched_actual):
+                expected_list = [expected_list[j] for j in matched_actual]
 
     assert_rows_equal(actual_list, expected_list, maxErrors=maxErrors, showOnlyDiff=showOnlyDiff)
 
