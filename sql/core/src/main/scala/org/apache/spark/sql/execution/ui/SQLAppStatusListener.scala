@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.ui
 
-import java.util.{Arrays, Date, NoSuchElementException}
+import java.util.{Date, NoSuchElementException}
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -275,25 +275,27 @@ class SQLAppStatusListener(
       maxMetricsFromAllStages(id) = updated
     }
 
-    exec.driverAccumUpdates.foreach { case (id, value) =>
-      if (accumIds.contains(id)) {
+    // Group updates by accumulator id so that each id is appended once,
+    // avoiding repeated array copies.
+    exec.driverAccumUpdates
+      .filter { case (id, _) => accumIds.contains(id) }
+      .groupBy(_._1)
+      .foreach { case (id, updatesForId) =>
+        val values = updatesForId.map(_._2)
         val prev = allMetrics.getOrElse(id, null)
-        val updated = if (prev != null) {
+        if (prev != null) {
           // If the driver updates same metrics as tasks and has higher value then remove
           // that entry from maxMetricsFromAllStage. This would make stringValue function default
           // to "driver" that would be displayed on UI.
-          if (maxMetricsFromAllStages.contains(id) && value > maxMetricsFromAllStages(id)(0)) {
+          if (maxMetricsFromAllStages.contains(id) &&
+              values.max > maxMetricsFromAllStages(id)(0)) {
             maxMetricsFromAllStages.remove(id)
           }
-          val _copy = Arrays.copyOf(prev, prev.length + 1)
-          _copy(prev.length) = value
-          _copy
+          allMetrics(id) = prev ++ values
         } else {
-          Array(value)
+          allMetrics(id) = values.toArray
         }
-        allMetrics(id) = updated
       }
-    }
 
     val aggregatedMetrics = allMetrics.map { case (id, values) =>
       id -> metricAggregationMethods(id)(values, maxMetricsFromAllStages.getOrElse(id,
@@ -506,7 +508,7 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
 
   var jobs = Map[Int, JobExecutionStatus]()
   var stages = Set[Int]()
-  var driverAccumUpdates = Seq[(Long, Long)]()
+  var driverAccumUpdates = Vector[(Long, Long)]()
 
   @volatile var metricsValues: Map[Long, String] = null
 
