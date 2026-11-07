@@ -4836,6 +4836,40 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       cause = cause)
   }
 
+  def invalidExternalLookupHintError(
+      errorSubClass: String,
+      messageParameters: Map[String, String] = Map.empty): Throwable = {
+    new AnalysisException(
+      errorClass = s"INVALID_EXTERNAL_LOOKUP_HINT.$errorSubClass",
+      messageParameters = messageParameters)
+  }
+
+  def invalidExternalLookupOptionError(
+      option: String,
+      errorSubClass: String,
+      messageParameters: Map[String, String] = Map.empty): Throwable = {
+    new AnalysisException(
+      errorClass = s"INVALID_EXTERNAL_LOOKUP_OPTION.$errorSubClass",
+      messageParameters = Map("option" -> toDSOption(option)) ++ messageParameters)
+  }
+
+  def unsupportedExternalLookupJoinError(
+      errorSubClass: String,
+      messageParameters: Map[String, String] = Map.empty): Throwable = {
+    new AnalysisException(
+      errorClass = s"EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.$errorSubClass",
+      messageParameters = messageParameters)
+  }
+
+  def invalidDataSourceExternalLookupError(
+      table: String,
+      errorSubClass: String,
+      messageParameters: Map[String, String] = Map.empty): Throwable = {
+    new AnalysisException(
+      errorClass = s"DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.$errorSubClass",
+      messageParameters = Map("table" -> toSQLId(table)) ++ messageParameters)
+  }
+
   def foundMultipleXMLDataSourceError(provider: String,
       sourceNames: Seq[String],
       externalSource: String): Throwable = {

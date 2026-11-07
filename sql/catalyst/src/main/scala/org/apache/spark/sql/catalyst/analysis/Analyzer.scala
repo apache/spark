@@ -713,7 +713,12 @@ class Analyzer(
       new ResolveHints.DisableHints),
     Batch("Hints", fixedPoint,
       Seq(ResolveHints.ResolveJoinStrategyHints,
-        ResolveHints.ResolveCoalesceHints) ++
+        ResolveHints.ResolveCoalesceHints,
+        // Must run after Disable Hints, which removes it when hints are disabled, and before
+        // Remove Unresolved Hints, which would drop it as unrecognized. Its order relative to the
+        // other hint rules does not matter: a strategy hint and this hint on the same relation
+        // resolve to separate nodes either way.
+        ResolveExternalLookupHint) ++
         hintResolutionRules: _*),
     Batch("Simple Sanity Check", Once,
       LookupFunctions),

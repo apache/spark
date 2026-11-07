@@ -1568,6 +1568,22 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case j @ Join(_, right, LeftExistence(_), _, _) =>
       j.copy(right = prunedChild(right, j.references))
 
+    // An external lookup join keeps only the lookup columns that its parent reads. Its lookup side
+    // is pruned to them in the next pass, once the join no longer references the others.
+    case p @ Project(_, j: ExternalLookupJoin)
+        if !AttributeSet(j.requiredLookupOutput).subsetOf(p.references) =>
+      val required = p.references ++ j.references
+      p.copy(child = j.copy(
+        left = prunedChild(j.left, required),
+        right = prunedChild(j.right, required),
+        requiredLookupOutput = j.requiredLookupOutput.filter(p.references.contains)))
+
+    // A semi or anti external lookup join outputs no lookup column, like a Left Existence Join.
+    case j @ ExternalLookupJoin(_, right, LeftSemi | LeftAnti, _, _, _)
+        if j.requiredLookupOutput.nonEmpty || !right.outputSet.subsetOf(j.references) =>
+      val withoutLookupOutput = j.copy(requiredLookupOutput = Seq.empty)
+      withoutLookupOutput.copy(right = prunedChild(right, withoutLookupOutput.references))
+
     // all the columns will be used to compare, so we can't prune them
     case p @ Project(_, _: SetOperation) => p
     case p @ Project(_, _: Distinct) => p
@@ -2610,7 +2626,7 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
  */
 object PushDownPredicates extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsAnyPattern(FILTER, JOIN, AS_OF_JOIN)) {
+    _.containsAnyPattern(FILTER, JOIN, AS_OF_JOIN, EXTERNAL_LOOKUP_JOIN)) {
     CombineFilters.applyLocally
       .orElse(PushPredicateThroughNonJoin.applyLocally)
       .orElse(PushPredicateThroughJoin.applyLocally)
@@ -3199,6 +3215,35 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
     (leftEvaluateCondition, rightEvaluateCondition, commonCondition ++ stayUp)
   }
 
+  /**
+   * [[split]] for an external lookup join, which also returns the conjuncts that must not move.
+   * Moving a conjunct onto the lookup side must not turn a query that runs without it into one
+   * that fails to plan:
+   *  - A comparison that lookup planning can offer as a lookup candidate, such as `t.dept = 'x'`,
+   *    stays with the common conditions, in the join condition, so that the connector can still
+   *    select it as an access path.
+   *  - A conjunct over lookup columns that a lookup-side stage cannot evaluate, such as one with
+   *    a Python UDF or a subquery, is pinned: it is neither pushed nor moved into the condition.
+   *  - A conjunct without references, such as a literal, belongs to neither side. It stays with
+   *    the common conditions, so that a condition that folds to false keeps its result without a
+   *    lookup, instead of leaving a join whose stream side is empty.
+   *
+   * @return (canEvaluateInLeft, canEvaluateInRight, haveToEvaluateInBoth, pinned)
+   */
+  private def splitLookupJoin(condition: Seq[Expression], join: ExternalLookupJoin) = {
+    val (pinned, movable) = condition.partition { cond =>
+      cond.references.exists(join.right.outputSet.contains) &&
+        !ExternalLookupJoinShapes.canEvaluateInLookupStage(cond)
+    }
+    val (withoutReferences, withReferences) = movable.partition(_.references.isEmpty)
+    val (left, right, common) = split(withReferences, join.left, join.right)
+    val (candidates, rightOnly) = right.partition { cond =>
+      ExternalLookupJoinShapes.lookupComparison(
+        cond, join.left.outputSet, join.right.outputSet).isDefined
+    }
+    (left, rightOnly, candidates ++ common ++ withoutReferences, pinned)
+  }
+
   private def canPushThrough(joinType: JoinType): Boolean = joinType match {
     case _: InnerLike | LeftSemi | RightOuter | LeftOuter | LeftSingle |
          LeftAnti | ExistenceJoin(_) => true
@@ -3293,6 +3338,62 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
         case other =>
           throw SparkException.internalError(s"Unexpected join type: $other")
       }
+    // The same for an external lookup join. The conjuncts keep their written order where they stay.
+    case f @ Filter(filterCondition, j: ExternalLookupJoin) =>
+      val conjuncts = splitConjunctivePredicates(filterCondition)
+      val (leftFilterConditions, rightFilterConditions, commonFilterCondition, _) =
+        splitLookupJoin(conjuncts, j)
+      val (newJoinConditions, rightFilterConditionsToPush) = j.joinType match {
+        case Inner =>
+          // don't push throwable expressions into join condition
+          (commonFilterCondition.filter(cond => canEvaluateWithinJoin(cond) && !cond.throwable),
+            rightFilterConditions)
+        // A filter on lookup columns above a left outer join also removes the null-padded rows of
+        // stream rows without a match, so it stays above. EliminateOuterJoin first makes the join
+        // inner when the filter rejects nulls. A semi or anti join outputs no lookup column.
+        case LeftOuter | LeftSemi | LeftAnti => (Nil, Nil)
+        case other =>
+          throw SparkException.internalError(s"Unexpected external lookup join type: $other")
+      }
+      val pushed = leftFilterConditions ++ rightFilterConditionsToPush ++ newJoinConditions
+      if (pushed.isEmpty) {
+        f
+      } else {
+        val newJoin = j.copy(
+          left = leftFilterConditions.
+            reduceLeftOption(And).map(Filter(_, j.left)).getOrElse(j.left),
+          right = rightFilterConditionsToPush.
+            reduceLeftOption(And).map(Filter(_, j.right)).getOrElse(j.right),
+          condition = (j.condition.toSeq ++ newJoinConditions).reduceLeftOption(And))
+        conjuncts.filterNot(pushed.contains).
+          reduceLeftOption(And).map(Filter(_, newJoin)).getOrElse(newJoin)
+      }
+
+    // Push the join filter of an external lookup join into its children.
+    case j: ExternalLookupJoin =>
+      val conjuncts = j.condition.map(splitConjunctivePredicates).getOrElse(Nil)
+      val (leftJoinConditions, rightJoinConditions, _, _) = splitLookupJoin(conjuncts, j)
+      val leftJoinConditionsToPush = j.joinType match {
+        case Inner | LeftSemi => leftJoinConditions
+        // A stream-side conjunct decides which stream rows find a match, so it stays in the
+        // condition. The lookup join checks it on each stream row before the lookup.
+        case LeftOuter | LeftAnti => Nil
+        case other =>
+          throw SparkException.internalError(s"Unexpected external lookup join type: $other")
+      }
+      if (leftJoinConditionsToPush.isEmpty && rightJoinConditions.isEmpty) {
+        j
+      } else {
+        j.copy(
+          left = leftJoinConditionsToPush.
+            reduceLeftOption(And).map(Filter(_, j.left)).getOrElse(j.left),
+          right = rightJoinConditions.
+            reduceLeftOption(And).map(Filter(_, j.right)).getOrElse(j.right),
+          condition = conjuncts.filterNot(cond =>
+            leftJoinConditionsToPush.contains(cond) || rightJoinConditions.contains(cond)).
+            reduceLeftOption(And))
+      }
+
     // Left-side WHERE predicate can run before the ASOF join, but a right-side one cannot
     case f @ Filter(filterCondition, j: AsOfJoin) =>
       val (leftFilterConditions, rightFilterConditions, commonFilterCondition) =
