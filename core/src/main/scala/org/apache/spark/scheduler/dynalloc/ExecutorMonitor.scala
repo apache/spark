@@ -460,6 +460,9 @@ private[spark] class ExecutorMonitor(
     }
   }
 
+  // Executors no longer hold the shuffle's files, so they need not be kept around for it.
+  override def shuffleFilesRemoved(shuffleId: Int): Unit = shuffleCleaned(shuffleId)
+
   override def broadcastCleaned(broadcastId: Long): Unit = { }
 
   override def accumCleaned(accId: Long): Unit = { }
