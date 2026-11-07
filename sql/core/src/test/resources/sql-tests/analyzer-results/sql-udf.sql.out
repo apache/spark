@@ -3504,6 +3504,50 @@ Project [spark_catalog.default.foo3_2e1(occurrences#x, instance_start_time#x) AS
 
 
 -- !query
+CREATE FUNCTION foo3_2e2(x INT) RETURNS INT RETURN
+WITH t AS (SELECT c1, SUM(c2) AS s FROM t2 WHERE c1 = x GROUP BY c1)
+SELECT s FROM t
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo3_2e2, x INT, INT, WITH t AS (SELECT c1, SUM(c2) AS s FROM t2 WHERE c1 = x GROUP BY c1)
+SELECT s FROM t, false, false, false, false
+
+
+-- !query
+SET spark.sql.optimizer.scalarSubqueryUseSingleJoin=false
+-- !query analysis
+SetCommand (spark.sql.optimizer.scalarSubqueryUseSingleJoin,Some(false))
+
+
+-- !query
+SELECT c1, foo3_2e2(c1) FROM t1
+-- !query analysis
+Project [c1#x, spark_catalog.default.foo3_2e2(x#x) AS spark_catalog.default.foo3_2e2(c1)#x]
+:  +- WithCTE
+:     :- CTERelationDef xxxx, false
+:     :  +- SubqueryAlias t
+:     :     +- Aggregate [c1#x], [c1#x, sum(c2#x) AS s#xL]
+:     :        +- Filter (c1#x = outer(x#x))
+:     :           +- SubqueryAlias spark_catalog.default.t2
+:     :              +- View (`spark_catalog`.`default`.`t2`, [c1#x, c2#x])
+:     :                 +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+:     :                    +- LocalRelation [col1#x, col2#x]
+:     +- Project [s#xL]
+:        +- SubqueryAlias t
+:           +- CTERelationRef xxxx, true, [c1#x, s#xL], false, false
++- Project [c1#x, c2#x, cast(c1#x as int) AS x#x]
+   +- SubqueryAlias spark_catalog.default.t1
+      +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+RESET spark.sql.optimizer.scalarSubqueryUseSingleJoin
+-- !query analysis
+ResetCommand spark.sql.optimizer.scalarSubqueryUseSingleJoin
+
+
+-- !query
 SET spark.sql.ansi.enabled=true
 -- !query analysis
 SetCommand (spark.sql.ansi.enabled,Some(true))
@@ -5349,6 +5393,12 @@ DropFunctionCommand spark_catalog.default.foo3_2d2, true, false
 DROP FUNCTION IF EXISTS foo3_2e1
 -- !query analysis
 DropFunctionCommand spark_catalog.default.foo3_2e1, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_2e2
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_2e2, true, false
 
 
 -- !query

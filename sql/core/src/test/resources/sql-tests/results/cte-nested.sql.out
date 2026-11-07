@@ -56,6 +56,54 @@ struct<scalarsubquery(id):bigint>
 
 
 -- !query
+SELECT (
+  WITH correlated AS (SELECT * FROM VALUES (0), (1) AS r(id) WHERE r.id = o.id),
+  unreferenced AS (SELECT * FROM VALUES (0), (1) AS l(id) LEFT JOIN correlated ON l.id = correlated.id)
+  SELECT 1
+) FROM VALUES (0) AS o(id)
+-- !query schema
+struct<scalarsubquery(id):int>
+-- !query output
+1
+
+
+-- !query
+SELECT (
+  WITH correlated AS (SELECT * FROM VALUES (0), (1) AS r(id) WHERE r.id = o.id),
+  unreferenced AS (SELECT * FROM VALUES (0), (1) AS l(id) LEFT JOIN correlated ON l.id = correlated.id)
+  SELECT count(*) FROM correlated
+) FROM VALUES (0) AS o(id)
+-- !query schema
+struct<scalarsubquery(id):bigint>
+-- !query output
+1
+
+
+-- !query
+SELECT * FROM VALUES (0) AS o(id) WHERE EXISTS (
+  WITH correlated AS (SELECT * FROM VALUES (0), (1) AS r(id) WHERE r.id = o.id),
+  unreferenced AS (SELECT * FROM VALUES (0), (1) AS l(id) FULL OUTER JOIN correlated ON l.id = correlated.id)
+  SELECT 1
+)
+-- !query schema
+struct<id:int>
+-- !query output
+0
+
+
+-- !query
+SELECT * FROM VALUES (0) AS o(id) WHERE EXISTS (
+  WITH correlated AS (SELECT * FROM VALUES (0), (1) AS r(id) WHERE r.id = o.id),
+  unreferenced AS (SELECT * FROM VALUES (0), (1) AS l(id) FULL OUTER JOIN correlated ON l.id = correlated.id)
+  SELECT * FROM correlated
+)
+-- !query schema
+struct<id:int>
+-- !query output
+0
+
+
+-- !query
 SELECT * FROM
   (
    WITH cte AS (SELECT * FROM range(10))
