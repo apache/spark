@@ -822,23 +822,34 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   @Test
   public void dataPagesGrowFromInitialPageSize() {
-    final BytesToBytesMap map = new BytesToBytesMap(taskMemoryManager, 1, 4096, 1024);
+    final BytesToBytesMap map = new BytesToBytesMap(taskMemoryManager, 1, 6144, 1024);
     try {
+      // The pages double from 1 KiB, and the last growing page is cut to the 3 KiB left, so the
+      // growing pages add up to exactly one page size before the pages of 6 KiB begin.
+      assertEquals(1024, appendUntilNewDataPage(map, 1));
+      assertEquals(2048, appendUntilNewDataPage(map, 1));
+      assertEquals(3072, appendUntilNewDataPage(map, 1));
+      assertEquals(6144, appendUntilNewDataPage(map, 1));
+      assertEquals(6144, appendUntilNewDataPage(map, 1));
+
+      // reset() starts again from the initial page size.
+      map.reset();
       assertEquals(1024, appendUntilNewDataPage(map, 1));
       // A record larger than the next page size, 2 KiB, gets a page of its own size: the record
       // count of the page, the two lengths, the key, the value and the pointer to the next value.
       final int largeValueWords = 300;
       assertEquals(3L * UnsafeAlignedOffset.getUaoSize() + 8 + largeValueWords * 8L + 8,
         appendUntilNewDataPage(map, largeValueWords));
-      assertEquals(4096, appendUntilNewDataPage(map, 1));
-      assertEquals(4096, appendUntilNewDataPage(map, 1));
-      assertEquals(4, map.getNumDataPages());
-
-      // reset() starts again from the initial page size.
-      map.reset();
-      assertEquals(1024, appendUntilNewDataPage(map, 1));
     } finally {
       map.free();
+    }
+
+    // An initial page size larger than the page size is capped at the page size.
+    final BytesToBytesMap cappedMap = new BytesToBytesMap(taskMemoryManager, 1, 1024, 4096);
+    try {
+      assertEquals(1024, appendUntilNewDataPage(cappedMap, 1));
+    } finally {
+      cappedMap.free();
     }
   }
 

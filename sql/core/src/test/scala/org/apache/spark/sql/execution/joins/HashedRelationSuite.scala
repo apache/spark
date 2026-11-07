@@ -188,12 +188,16 @@ abstract class HashedRelationSuite extends SharedSparkSession {
     val serializers = Seq(
       new JavaSerializer(new SparkConf()).newInstance(),
       new KryoSerializer(new SparkConf().set(KRYO_REFERENCE_TRACKING, false)).newInstance())
+    // The map grows its pages up to the SparkEnv page size, not up to the initial page size.
+    val pageSize = SparkEnv.get.memoryManager.pageSizeBytes
     try {
       assert(relation.estimatedSize < 2 * UnsafeHashedRelation.INITIAL_PAGE_SIZE_BYTES)
+      assert(relation.asInstanceOf[UnsafeHashedRelation].mapPageSizeBytes === pageSize)
       serializers.foreach { ser =>
         val deserialized = ser.deserialize[UnsafeHashedRelation](ser.serialize(relation))
         try {
           assert(deserialized.estimatedSize < 2 * UnsafeHashedRelation.INITIAL_PAGE_SIZE_BYTES)
+          assert(deserialized.mapPageSizeBytes === pageSize)
           assert(deserialized.getValue(row) === row)
         } finally {
           deserialized.close()
