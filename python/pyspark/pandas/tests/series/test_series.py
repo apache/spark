@@ -216,6 +216,117 @@ class SeriesTestsMixin:
         with self.assertRaisesRegex(TypeError, "collection of some kind"):
             ps.Series(psser, index=0)
 
+    def test_series_from_series_duplicate_null_index(self):
+        duplicate_message = "cannot reindex on an axis with duplicate labels"
+
+        def assert_same_axis(pser, targets):
+            psser = ps.from_pandas(pser)
+            for target, pandas_target in targets:
+                self.assert_eq(
+                    ps.Series(psser, index=target),
+                    pd.Series(pser, index=pandas_target),
+                )
+            self._assert_no_index_join(ps.Series(psser, index=psser.index))
+            return psser
+
+        def assert_different_axis(psser, targets):
+            for target in targets:
+                with self.assertRaisesRegex(ValueError, duplicate_message):
+                    ps.Series(psser, index=target)
+
+        # Repeated nulls are duplicate labels. The same axis keeps its values.
+        pser = pd.Series([1, 2], index=[None, None], name="x")
+        copied = pd.Index([None, None], dtype=object)
+        named = pd.Index([None, None], dtype=object, name="k")
+        psser = assert_same_axis(
+            pser,
+            [
+                (ps.from_pandas(pser).index, pser.index),
+                (copied, copied),
+                (named, named),
+                (pd.Series([None, None], name="k"), pd.Series([None, None], name="k")),
+                (np.array([None, None], dtype=object), np.array([None, None], dtype=object)),
+                (
+                    ps.from_pandas(pd.Series([9, 8], index=[None, None])).index,
+                    pd.Index([None, None], dtype=object),
+                ),
+            ],
+        )
+        # The first target above builds another Series, so compare the caller's own index too.
+        self.assert_eq(ps.Series(psser, index=psser.index), pd.Series(pser, index=pser.index))
+        copied_index = psser.index.to_pandas()
+        self.assert_eq(
+            ps.Series(psser, index=copied_index),
+            pd.Series(pser, index=copied_index),
+        )
+        assert_different_axis(
+            psser,
+            [
+                pd.Index([None], dtype=object),
+                pd.Index(["a", "b"]),
+                pd.Series([None, "a"]),
+                np.array(["a", "b"], dtype=object),
+                ps.from_pandas(pd.Series([4, 5], index=["a", "b"])).index,
+            ],
+        )
+
+        # A repeated null alongside another label, and a repeated label alongside null.
+        # Numeric labels with null become a float index; an object array is a different
+        # dtype and is covered by the object cases above.
+        for labels in (["a", None, None], ["a", None, "a"]):
+            pser = pd.Series([1, 2, 3], index=labels, name="x")
+            psser = assert_same_axis(
+                pser,
+                [
+                    (pd.Index(labels), pd.Index(labels)),
+                    (np.array(labels, dtype=object), np.array(labels, dtype=object)),
+                    (
+                        ps.from_pandas(pd.Series([9, 8, 7], index=labels)).index,
+                        pd.Index(labels),
+                    ),
+                ],
+            )
+            self.assert_eq(
+                ps.Series(psser, index=psser.index),
+                pd.Series(pser, index=pser.index),
+            )
+            assert_different_axis(
+                psser,
+                [pd.Index(["b", "b"]), np.array(["z", None], dtype=object)],
+            )
+
+        labels = [10, 10, None]
+        pser = pd.Series([1, 2, 3], index=labels, name="x")
+        psser = assert_same_axis(
+            pser,
+            [
+                (pd.Index(labels), pd.Index(labels)),
+                (
+                    ps.from_pandas(pd.Series([9, 8, 7], index=labels)).index,
+                    pd.Index(labels),
+                ),
+            ],
+        )
+        self.assert_eq(ps.Series(psser, index=psser.index), pd.Series(pser, index=pser.index))
+        assert_different_axis(psser, [pd.Index([10, None]), pd.Index([None, 10, 10])])
+
+        # One null is not a duplicate, so a non-null target still aligns.
+        pser = pd.Series([1, 2], index=["a", None], name="x")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(
+            ps.Series(psser, index=pd.Index(["a"])),
+            pd.Series(pser, index=pd.Index(["a"])),
+        )
+
+        # Lists, tuples, and one-element arrays stay on reindex. That path can still
+        # multiply a repeated non-null label and can fail to match a repeated null.
+        # These assertions lock that existing behavior.
+        dup = ps.from_pandas(pd.Series([1, 2], index=[None, None], name="x"))
+        for target in ([None, None], (None, None), np.array([None], dtype=object)):
+            self.assert_eq(ps.Series(dup, index=target), dup.reindex(target))
+        repeated = ps.from_pandas(pd.Series([1, 2, 3], index=[10, 10, 20], name="x"))
+        self.assert_eq(ps.Series(repeated, index=(10, 20)), repeated.reindex((10, 20)))
+
     def test_all_null_series(self):
         pser_a = pd.Series([None, None, None], dtype="float64")
         pser_b = pd.Series([None, None, None], dtype="str")

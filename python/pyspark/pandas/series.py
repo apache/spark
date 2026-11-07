@@ -7654,6 +7654,27 @@ def _index_argument_follows_axis_rules(index: Any) -> bool:
     return isinstance(index, np.ndarray) and index.ndim == 1 and index.size > 1
 
 
+def _index_repeats_a_label(index: "Index") -> bool:
+    """Return whether any label, including null, occurs more than once.
+
+    ``Index.is_unique`` uses Spark ``count`` and ``countDistinct``, which ignore
+    nulls. Pandas counts a repeated null as a duplicate label.
+    """
+    if index.nlevels != 1:
+        return not index.is_unique
+
+    sdf = index._internal.spark_frame.select(index.spark.column.alias("__label__"))
+    scol = scol_for(sdf, "__label__")
+    missing = scol.isNull()
+    if isinstance(index.spark.data_type, (FloatType, DoubleType)):
+        # Pandas treats NaN as a missing label, and Spark does not store it as null.
+        missing = missing | F.isnan(scol)
+    repeated_value = F.count(scol) != F.countDistinct(scol)
+    repeated_missing = F.sum(F.when(missing, 1).otherwise(0)) > 1
+    duplicated = F.coalesce(repeated_value | repeated_missing, F.lit(False))
+    return bool(sdf.select(duplicated).first()[0])
+
+
 def _labels_equal_series_index(data: "Series", index: Any) -> bool:
     """True when ``index`` has ``data``'s labels in the same order, including nulls."""
     from pyspark.pandas.indexes.base import Index as PSIndex
@@ -7669,7 +7690,7 @@ def _with_index_names(data: "Series", index_names: List[Optional[Label]]) -> "Se
     if list(data._internal.index_names) == names:
         return data
     updated = data._internal.copy(index_names=names)
-    return cast(Series, first_series(DataFrame(updated)))
+    return first_series(DataFrame(updated))
 
 
 def _with_index_name_and_dtype(data: "Series", name: Any, dtype: Any) -> "Series":
@@ -7697,7 +7718,7 @@ def _with_index_name_and_dtype(data: "Series", name: Any, dtype: Any) -> "Series
         index_fields=fields,
         index_names=index_names,
     )
-    return cast(Series, first_series(DataFrame(updated)))
+    return first_series(DataFrame(updated))
 
 
 def _adopt_index_metadata(data: "Series", index: Any) -> "Series":
@@ -7731,11 +7752,10 @@ def _align_series_index(data: "Series", index: Any) -> "Series":
         return _with_index_names(data, index._internal.index_names)
 
     if _index_argument_follows_axis_rules(index):
-        if not data.index.is_unique:
+        if _index_repeats_a_label(data.index):
             # Same labels are the original axis, so pandas keeps every row. A different
-            # target cannot be aligned by a value join once a non-null label repeats.
-            # Index.is_unique uses Spark's count, which ignores nulls, so an index whose
-            # only repeated labels are null is not rejected here.
+            # target cannot be aligned by a value join once a label, including null,
+            # repeats.
             if _labels_equal_series_index(data, index):
                 return _adopt_index_metadata(data, index)
             raise ValueError(_DUPLICATE_AXIS_MESSAGE)
