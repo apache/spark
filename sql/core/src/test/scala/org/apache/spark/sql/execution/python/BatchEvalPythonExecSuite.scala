@@ -35,7 +35,7 @@ import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePointUDT, SharedSparkSession}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{BinaryView, UTF8String}
 
 class BatchEvalPythonExecSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
@@ -98,10 +98,30 @@ class BatchEvalPythonExecSuite extends SharedSparkSession
     assert(estimate(projectedRow) === 6000L)
     assert(estimate(InternalRow(null, null, 1)) === 0L)
 
+    // Geometry and Geography arguments are sized by their BinaryView byte count.
+    val geoRow = new GenericInternalRow(Array[Any](
+      BinaryView.fromBytes(Array.fill[Byte](1500)(1)),
+      BinaryView.fromBytes(Array.fill[Byte](700)(1))))
+    val geoEstimate = BatchEvalPythonExec
+      .projectedInputPayloadSizeEstimator(Seq(
+        GeometryType(GeometryType.GEOMETRY_DEFAULT_SRID),
+        GeographyType(GeographyType.GEOGRAPHY_DEFAULT_SRID)))
+      .get
+    assert(geoEstimate(geoRow) === 2200L)
+
     // Fixed-width and nested inputs are intentionally not estimated.
     assert(BatchEvalPythonExec
       .projectedInputPayloadSizeEstimator(Seq(IntegerType, ArrayType(StringType)))
       .isEmpty)
+  }
+
+  test("SPARK-59824: projected UDF input payload estimator counts UTF-8 bytes") {
+    val estimate = BatchEvalPythonExec
+      .projectedInputPayloadSizeEstimator(Seq(StringType))
+      .get
+    // scalastyle:off nonascii
+    assert(estimate(InternalRow(UTF8String.fromString("\u20ac" * 1000))) === 3000L)
+    // scalastyle:on nonascii
   }
 
   test("SPARK-59824: pickle UDF row-size guard rejects a computed projected argument") {
@@ -157,39 +177,43 @@ class BatchEvalPythonExecSuite extends SharedSparkSession
         "actualRowSize" -> "1200"))
   }
 
-  test("SPARK-59824: pickle UDF row-size guard uses SQLConf settings") {
+  test("SPARK-59824: pickle UDF row-size guard forwards SQLConf settings") {
     val configuredMaxRowSize = 1000L
     val maxRowHeapFraction = configuredMaxRowSize.toDouble / Runtime.getRuntime.maxMemory()
     val expectedMaxRowSize =
       (Runtime.getRuntime.maxMemory() * maxRowHeapFraction).toLong
-    withSQLConf(
-      SQLConf.PYTHON_UDF_ROW_SIZE_GUARD_ENABLED.key -> "true",
-      SQLConf.PYTHON_UDF_ROW_SIZE_GUARD_MAX_ROW_HEAP_FRACTION.key ->
-        maxRowHeapFraction.toString) {
-      val taskAttr = AttributeReference("s", StringType)()
-      val pythonUdf = PythonUDF(
-        "dummy", new DummyUDF, StringType, Seq(taskAttr), PythonEvalType.SQL_BATCHED_UDF,
-        udfDeterministic = true)
-      class TestBatchEvalPythonExec extends BatchEvalPythonExec(
-          Seq(pythonUdf),
-          Seq(AttributeReference("result", StringType)()),
-          LocalTableScanExec(Seq(taskAttr), Nil, None)) {
-        def testEvaluatorFactory: BatchEvalPythonEvaluatorFactory =
-          evaluatorFactory.asInstanceOf[BatchEvalPythonEvaluatorFactory]
-      }
-      val plan = new TestBatchEvalPythonExec
-      val oversizedRow = InternalRow(
-        UTF8String.fromString("x" * (expectedMaxRowSize.toInt + 1)))
-      checkError(
-        exception = intercept[SparkRuntimeException] {
-          plan.testEvaluatorFactory.getInputIterator(
-            Iterator(oversizedRow), StructType.fromDDL("s STRING")).next()
-        },
-        condition = "UDF_LIMITS.ROW_SIZE",
-        parameters = Map(
-          "maxRowSize" -> expectedMaxRowSize.toString,
-          "actualRowSize" -> (expectedMaxRowSize + 1).toString))
+    val taskAttr = AttributeReference("s", StringType)()
+    val pythonUdf = PythonUDF(
+      "dummy", new DummyUDF, StringType, Seq(taskAttr), PythonEvalType.SQL_BATCHED_UDF,
+      udfDeterministic = true)
+    class TestBatchEvalPythonExec extends BatchEvalPythonExec(
+        Seq(pythonUdf),
+        Seq(AttributeReference("result", StringType)()),
+        LocalTableScanExec(Seq(taskAttr), Nil, None)) {
+      def testEvaluatorFactory: BatchEvalPythonEvaluatorFactory =
+        evaluatorFactory.asInstanceOf[BatchEvalPythonEvaluatorFactory]
     }
+    val plan = new TestBatchEvalPythonExec
+    val oversizedRow = InternalRow(
+      UTF8String.fromString("x" * (expectedMaxRowSize.toInt + 1)))
+    val schema = StructType.fromDDL("s STRING")
+    EvaluatePython.registerPicklers()
+    def inputIterator(enabled: Boolean): Iterator[Array[Byte]] = withSQLConf(
+        SQLConf.PYTHON_UDF_ROW_SIZE_GUARD_ENABLED.key -> enabled.toString,
+        SQLConf.PYTHON_UDF_ROW_SIZE_GUARD_MAX_ROW_HEAP_FRACTION.key ->
+          maxRowHeapFraction.toString) {
+      plan.testEvaluatorFactory.getInputIterator(Iterator(oversizedRow), schema)
+    }
+
+    assert(inputIterator(enabled = false).next().nonEmpty)
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        inputIterator(enabled = true).next()
+      },
+      condition = "UDF_LIMITS.ROW_SIZE",
+      parameters = Map(
+        "maxRowSize" -> expectedMaxRowSize.toString,
+        "actualRowSize" -> (expectedMaxRowSize + 1).toString))
   }
 
   test("SPARK-59824: pickle UDF row-size guard disabled no-op and strict boundary") {
