@@ -4455,7 +4455,8 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     sql("INSERT INTO testcat.ns.eb VALUES (1, 10, 'b1'), (2, 10, 'b2'), (1, 20, 'b3')")
     sql("INSERT INTO testcat.ns.ec VALUES (1, 0, 'c1'), (2, 0, 'c2')")
 
-    // An extra dept keeps both sides at 3 partitions. branch-4.1 then drops (2, 10, b2, c10).
+    // An extra dept keeps both sides at 3 partitions. Without the guard, the push drops
+    // (2, 10, b2, c10).
     createTable("fa", cols, Array(identity("store"), identity("dept")))
     createTable("fb", cols, Array.empty)
     createTable("fc", cols, Array(identity("dept")))
@@ -4506,7 +4507,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
               |JOIN testcat.ns.fc ON fa.dept = fc.dept
               |""".stripMargin),
           Seq(Row(1, 10, "b1", "c10"), Row(2, 10, "b2", "c10"), Row(1, 20, "b3", "c20")))
-        // The nested join on the right. branch-4.1 drops (2, 10, b2, c10) for this side too.
+        // The nested join on the right. Without the guard, the push drops (2, 10, b2, c10).
         checkAnswer(
           sql(
             """

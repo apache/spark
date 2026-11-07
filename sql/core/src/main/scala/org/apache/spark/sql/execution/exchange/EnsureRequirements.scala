@@ -720,6 +720,9 @@ case class EnsureRequirements(
             applyPartialClustering = applyPartialClustering,
             replicatePartitions = replicateRightSide)
         } else {
+          // "Pushing common partition values" was logged above, before this check.
+          logInfo("Not pushing common partition values: a one-side shuffle below this join " +
+            "was planned on other values")
           isCompatible = false
         }
       }
