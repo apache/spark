@@ -272,6 +272,135 @@ abstract class HashedRelationSuite extends SharedSparkSession {
     map2.free()
   }
 
+  test("LongToUnsafeRowMap shrinks an over-allocated sparse array at optimize time") {
+    val unsafeProj = UnsafeProjection.create(Seq(BoundReference(0, LongType, false)))
+
+    // Many rows share 3 keys spread far apart, so the initial array is sized by the row
+    // count (2 * nextPow2(N) longs) while the load factor invariant of updateIndex only
+    // needs 16 longs for 3 keys. Keys far apart also keep optimize() from switching to
+    // the dense mode, which is preferred whenever it applies.
+    val keys = Array(-1000000000000L, 0L, 1000000000000L)
+    val N = 99999
+    val map = new LongToUnsafeRowMap(mm, N)
+    var i = 0
+    while (i < N) {
+      val k = keys(i % 3)
+      map.append(k, unsafeProj(InternalRow(k)))
+      i += 1
+    }
+
+    // Capture the page size via the difference, so the assertions do not depend on the
+    // details of page growth.
+    var n = 1
+    while (n < N) n *= 2
+    val pageBytes = map.getTotalMemoryConsumption - n * 2L * 8
+    map.optimize()
+    // The smallest power-of-two array keeping numKeys * 4 <= array.size() for 3 keys.
+    assert(map.getTotalMemoryConsumption === pageBytes + 16L * 8)
+
+    val row = unsafeProj(InternalRow(0L)).copy()
+    keys.foreach { k =>
+      val r = map.get(k, row)
+      var c = 0
+      while (r.hasNext) {
+        assert(r.next().getLong(0) === k)
+        c += 1
+      }
+      assert(c === N / 3)
+    }
+    assert(map.getValue(12345L, row) eq null)
+    // keys() has production consumers on broadcast relations (e.g. dynamic partition
+    // pruning), so the shrunk map must still serve it.
+    assert(map.keys().map(_.getLong(0)).toSet === keys.toSet)
+    // A second optimize() must be a no-op: the shrunk array is already minimal.
+    map.optimize()
+    assert(map.getTotalMemoryConsumption === pageBytes + 16L * 8)
+    map.free()
+  }
+
+  test("LongToUnsafeRowMap keeps a right-sized sparse array unchanged") {
+    val unsafeProj = UnsafeProjection.create(Seq(BoundReference(0, LongType, false)))
+
+    // With unique keys the growth in updateIndex/growArray already leaves the array at
+    // the minimal size for the load factor invariant, so optimize() must not rehash.
+    val N = 100000
+    val keys = (0 until N).map(i => i * 0x9E3779B97F4A7C15L).toArray
+    val map = new LongToUnsafeRowMap(mm, N)
+    keys.foreach { k =>
+      map.append(k, unsafeProj(InternalRow(k)))
+    }
+    val before = map.getTotalMemoryConsumption
+    map.optimize()
+    assert(map.getTotalMemoryConsumption === before)
+
+    val row = unsafeProj(InternalRow(0L)).copy()
+    keys.foreach { k =>
+      assert(map.getValue(k, row).getLong(0) === k)
+    }
+    map.free()
+  }
+
+  test("LongToUnsafeRowMap serialization carries the shrunk sparse array") {
+    val unsafeProj = UnsafeProjection.create(Seq(BoundReference(0, LongType, false)))
+
+    val keys = Array(-1000000000000L, 0L, 1000000000000L)
+    val N = 999
+    val map = new LongToUnsafeRowMap(mm, N)
+    var i = 0
+    while (i < N) {
+      val k = keys(i % 3)
+      map.append(k, unsafeProj(InternalRow(k)))
+      i += 1
+    }
+    map.optimize()
+
+    // write() ships the sparse array verbatim: with the shrunk 16-long index the payload
+    // is the index plus N rows (24 bytes each) and the stream framing, well under the
+    // un-shrunk index alone (2 * nextPow2(N) * 8 = 16384 bytes).
+    val os = new ByteArrayOutputStream()
+    val out = new ObjectOutputStream(os)
+    map.writeExternal(out)
+    out.flush()
+    assert(os.toByteArray.length < 16L * 8 + N * 24 + 1024)
+    map.free()
+
+    val in = new ObjectInputStream(new ByteArrayInputStream(os.toByteArray))
+    val map2 = new LongToUnsafeRowMap(mm, 1)
+    map2.readExternal(in)
+    val row = unsafeProj(InternalRow(0L)).copy()
+    keys.foreach { k =>
+      val r = map2.get(k, row)
+      var c = 0
+      while (r.hasNext) {
+        assert(r.next().getLong(0) === k)
+        c += 1
+      }
+      assert(c === N / 3)
+    }
+    map2.free()
+  }
+
+  test("LongToUnsafeRowMap collapses an empty map via the existing dense-mode path") {
+    val unsafeProj = UnsafeProjection.create(Seq(BoundReference(0, LongType, false)))
+    // No appends: minKey/maxKey stay at their sentinel values, so maxKey - minKey wraps
+    // around to exactly 1, which is always < 1024. optimize() therefore always takes the
+    // pre-existing dense-mode branch for an empty map, never shrinkArray() (numKeys == 0
+    // is unreachable there: any append() that is not a duplicate also updates
+    // minKey/maxKey, so a non-empty map never leaves them at their sentinel values).
+    // This test is a regression guard on that pre-existing behavior, not new coverage of
+    // the shrink added by this PR.
+    val map = new LongToUnsafeRowMap(mm, 4096)
+    val pageBytes = map.getTotalMemoryConsumption - 8192L * 8
+    map.optimize()
+    assert(map.getTotalMemoryConsumption === pageBytes + 2L * 8)
+
+    val row = unsafeProj(InternalRow(0L)).copy()
+    assert(map.getValue(0L, row) eq null)
+    assert(map.get(0L, row) eq null)
+    assert(!map.keys().hasNext)
+    map.free()
+  }
+
   test("SPARK-24257: insert big values into LongToUnsafeRowMap") {
     val unsafeProj = UnsafeProjection.create(Array[DataType](StringType))
     val map = new LongToUnsafeRowMap(mm, 1)
