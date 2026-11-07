@@ -30,7 +30,7 @@ import org.apache.spark.sql.execution.datasources.orc.OrcQueryTest
 import org.apache.spark.sql.hive.{HiveSessionCatalog, HiveUtils}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{GeographyType, GeometryType, TimeType}
+import org.apache.spark.sql.types.{GeographyType, GeometryType, StructType, TimestampNTZType, TimeType}
 import org.apache.spark.util.Utils
 
 class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
@@ -480,6 +480,56 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
               condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
               parameters = expectedParams)
           }
+        }
+      }
+    }
+  }
+
+  test("SPARK-61132: TIMESTAMP_NTZ is unsupported in Hive ORC") {
+    withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> "hive") {
+      withTempDir { dir =>
+        val tempDir = new File(dir, "files").getCanonicalPath
+        val expectedParams = Map(
+          "columnName" -> "`ts`",
+          "columnType" -> s"\"${TimestampNTZType.sql}\"",
+          "format" -> "ORC")
+        // write path
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("SELECT TIMESTAMP_NTZ'1970-01-01 00:00:01' AS ts")
+              .write.format("orc").mode("overwrite").save(tempDir)
+          },
+          condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+          parameters = expectedParams)
+        // write path, nested
+        val nestedType = new StructType().add("ts", TimestampNTZType, nullable = false)
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("SELECT named_struct('ts', TIMESTAMP_NTZ'1970-01-01 00:00:01') AS s")
+              .write.format("orc").mode("overwrite").save(tempDir)
+          },
+          condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+          parameters = Map(
+            "columnName" -> "`s`",
+            "columnType" -> s"\"${nestedType.sql}\"",
+            "format" -> "ORC"))
+        // read path
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("SELECT TIMESTAMP_LTZ'1970-01-01 00:00:01' AS ts")
+              .write.format("orc").mode("overwrite").save(tempDir)
+            spark.read.schema("ts TIMESTAMP_NTZ").format("orc").load(tempDir).collect()
+          },
+          condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+          parameters = expectedParams)
+        // CREATE TABLE
+        withTable("t") {
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql("CREATE TABLE t (ts TIMESTAMP_NTZ) USING ORC")
+            },
+            condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+            parameters = expectedParams)
         }
       }
     }

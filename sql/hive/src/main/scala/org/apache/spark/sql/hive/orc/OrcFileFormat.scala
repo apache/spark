@@ -202,6 +202,8 @@ case class OrcFileFormat() extends FileFormat
     case _: AnsiIntervalType => false
     case _: TimeType => false
     case _: GeometryType | _: GeographyType => false
+    // Hive has no TIMESTAMP_NTZ type, so the Hive ORC serde cannot store it.
+    case _: TimestampNTZType => false
     case _: AtomicType => true
 
     case st: StructType => st.forall { f => supportDataType(f.dataType) }
