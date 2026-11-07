@@ -1443,6 +1443,7 @@ def _transpile_func(
                     [],
                     [],
                     [],
+                    [],
                 )
             spoken_for = int(
                 inspect.isfunction(call_entry) or isinstance(call_entry, classmethod)
