@@ -30,7 +30,7 @@ regardless of a given database.
 
 ### Syntax
 ```sql
-SHOW VIEWS [ { FROM | IN } database_name ] [ LIKE regex_pattern ]
+SHOW VIEWS [ { FROM | IN } database_name ] [ LIKE regex_pattern ] [ AS JSON ]
 ```
 
 ### Parameters
@@ -46,6 +46,39 @@ SHOW VIEWS [ { FROM | IN } database_name ] [ LIKE regex_pattern ]
      * `*` alone matches 0 or more characters and `|` is used to separate multiple different regular expressions,
        any of which can match.
      * The leading and trailing blanks are trimmed in the input pattern before processing. The pattern match is case-insensitive.
+
+* **AS JSON**
+
+     An optional parameter to return the view list as a single-row JSON document instead of the
+     default tabular format.
+
+     **Syntax:** `[ AS JSON ]`
+
+     **Output schema:** A single column named `json_metadata` of type `STRING NOT NULL`.
+
+     **Schema:**
+
+     Below is the full JSON schema.
+     In actual output, the JSON is not pretty-printed (see Examples).
+
+     ```json
+     {
+       "views": [
+         {
+           "namespace": ["database_name", ...],
+           "viewName": "view_name",
+           "isTemporary": false
+         }, ...
+       ]
+     }
+     ```
+
+     | Field | Type | Description |
+     |---|---|---|
+     | `views` | array of objects | One element per view. The array is empty when no view matches. Elements appear in the order returned by the underlying catalog. |
+     | `namespace` | array of strings | The multi-part namespace holding the view. Empty for a local temporary view, which belongs to no database. |
+     | `viewName` | string | The name of the view. |
+     | `isTemporary` | boolean | Whether the view is a temporary view. |
 
 ### Examples
 ```sql
@@ -108,6 +141,30 @@ SHOW VIEWS LIKE 'sam|suj|temp*';
 | default     | suj        | false        |
 |             | temp2      | true         |
 +-------------+------------+--------------+
+
+-- List all views from default database matching the pattern `sam*` in JSON format
+SHOW VIEWS FROM default LIKE 'sam*' AS JSON;
++------------------------------------------------------------------------------------------------------------------------------------------+
+|json_metadata                                                                                                                             |
++------------------------------------------------------------------------------------------------------------------------------------------+
+|{"views":[{"namespace":["default"],"viewName":"sam","isTemporary":false},{"namespace":["default"],"viewName":"sam1","isTemporary":false}]}|
++------------------------------------------------------------------------------------------------------------------------------------------+
+
+-- List all views in global temp view database in JSON format
+SHOW VIEWS IN global_temp AS JSON;
++--------------------------------------------------------------------------------------------------------------------------------------+
+|json_metadata                                                                                                                         |
++--------------------------------------------------------------------------------------------------------------------------------------+
+|{"views":[{"namespace":["global_temp"],"viewName":"temp1","isTemporary":true},{"namespace":[],"viewName":"temp2","isTemporary":true}]}|
++--------------------------------------------------------------------------------------------------------------------------------------+
+
+-- When no view matches, AS JSON returns an empty array
+SHOW VIEWS FROM default LIKE 'no_such_view' AS JSON;
++-------------+
+|json_metadata|
++-------------+
+|{"views":[]} |
++-------------+
 ```
 
 ### Related statements
