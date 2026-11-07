@@ -137,7 +137,8 @@ case class LogicalRDD(
     val rewrittenConstraints = originConstraints.map(rewriteConstraints(_, rewrite))
 
     LogicalRDD(
-      output.map(rewrite),
+      // Swap only the exprId, so that the columns sharing an exprId keep their own names.
+      output.map(a => a.withExprId(rewrite(a).exprId)),
       rdd,
       rewrittenPartitioning,
       rewrittenOrdering,
