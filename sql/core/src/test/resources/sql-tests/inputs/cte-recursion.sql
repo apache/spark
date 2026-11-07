@@ -744,6 +744,158 @@ WITH RECURSIVE t1(n) AS (
 )
 SELECT * FROM t1 LIMIT 25;
 
+-- Recursion writes NULLs into nested types that the anchor built as non-nullable
+SET spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation=0;
+
+WITH RECURSIVE t1(lvl, arr) AS (
+    SELECT 0, ARRAY(id) FROM range(3)
+    UNION ALL
+    SELECT lvl + 1, IF(lvl = 0, ARRAY(CAST(NULL AS BIGINT)), ARRAY(arr[0] + 1))
+    FROM t1 WHERE lvl < 2
+)
+SELECT * FROM t1;
+
+WITH RECURSIVE t1(lvl, m) AS (
+    SELECT 0, MAP('k', id) FROM range(3)
+    UNION ALL
+    SELECT lvl + 1, IF(lvl = 0, MAP('k', CAST(NULL AS BIGINT)), MAP('k', m['k'] + 1))
+    FROM t1 WHERE lvl < 2
+)
+SELECT * FROM t1;
+
+WITH RECURSIVE t1(lvl, s) AS (
+    SELECT 0, NAMED_STRUCT('a', ARRAY(id)) FROM range(3)
+    UNION ALL
+    SELECT lvl + 1,
+           IF(lvl = 0, NAMED_STRUCT('a', ARRAY(CAST(NULL AS BIGINT))), NAMED_STRUCT('a', ARRAY(s.a[0] + 1)))
+    FROM t1 WHERE lvl < 2
+)
+SELECT * FROM t1;
+
+WITH RECURSIVE t1(lvl, arr) AS (
+    SELECT 0, ARRAY(NAMED_STRUCT('a', id)) FROM range(3)
+    UNION ALL
+    SELECT lvl + 1,
+           IF(lvl = 0, ARRAY(CAST(NULL AS STRUCT<a: BIGINT>)), ARRAY(NAMED_STRUCT('a', arr[0].a + 1)))
+    FROM t1 WHERE lvl < 2
+)
+SELECT * FROM t1;
+
+-- The recursion writes a top-level NULL into a column the anchor built as non-nullable
+WITH RECURSIVE t1(lvl, n) AS (
+    SELECT 0, id FROM range(3)
+    UNION ALL
+    SELECT lvl + 1, IF(lvl = 0, NULL, n + 1) FROM t1 WHERE lvl < 2
+)
+SELECT * FROM t1;
+
+-- `b` copies `a`, so it can only hold NULLs once `a` does
+WITH RECURSIVE t1(lvl, a, b, c) AS (
+    SELECT 0, ARRAY(id), ARRAY(id), ARRAY(id) FROM range(3)
+    UNION ALL
+    SELECT lvl + 1, IF(lvl = 0, ARRAY(CAST(NULL AS BIGINT)), a), a, ARRAY(b[0] + 1)
+    FROM t1 WHERE lvl < 3
+)
+SELECT * FROM t1;
+
+-- The definition starts with an inner WITH, with and without a column list
+WITH RECURSIVE t1(lvl, arr) AS (
+    WITH x AS (SELECT id FROM range(3))
+    SELECT 0, ARRAY(id) FROM x
+    UNION ALL
+    SELECT lvl + 1, IF(lvl = 0, ARRAY(CAST(NULL AS BIGINT)), ARRAY(arr[0] + 1))
+    FROM t1 WHERE lvl < 2
+)
+SELECT * FROM t1;
+
+WITH RECURSIVE t1 AS (
+    WITH x AS (SELECT id FROM range(3))
+    SELECT 0 AS lvl, ARRAY(id) AS arr FROM x
+    UNION ALL
+    SELECT lvl + 1, IF(lvl = 0, ARRAY(CAST(NULL AS BIGINT)), ARRAY(arr[0] + 1))
+    FROM t1 WHERE lvl < 2
+)
+SELECT * FROM t1;
+
+-- The widened column is read in the outer query
+WITH RECURSIVE t1(lvl, arr) AS (
+    SELECT 0, ARRAY(id) FROM range(3)
+    UNION ALL
+    SELECT lvl + 1, IF(lvl = 0, ARRAY(CAST(NULL AS BIGINT)), ARRAY(arr[0] + 1))
+    FROM t1 WHERE lvl < 2
+)
+SELECT lvl, EXISTS(arr, x -> x IS NULL), arr[0] IS NULL FROM t1;
+
+SET spark.sql.ansi.enabled=false;
+
+WITH RECURSIVE t1(lvl, arr) AS (
+    SELECT 0, ARRAY(id) FROM range(3)
+    UNION ALL
+    SELECT lvl + 1, IF(lvl = 0, ARRAY(CAST(NULL AS BIGINT)), ARRAY(arr[0] + 1))
+    FROM t1 WHERE lvl < 2
+)
+SELECT * FROM t1;
+
+SET spark.sql.ansi.enabled=true;
+
+SET spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation=100;
+
+-- Same with small steps converted to local relations, kept in codegen by a join
+WITH RECURSIVE t1(lvl, arr) AS (
+    SELECT 0, ARRAY(id) FROM range(3)
+    UNION ALL
+    SELECT lvl + 1, IF(lvl = 0, ARRAY(CAST(NULL AS BIGINT)), ARRAY(arr[0] + 1))
+    FROM t1 CROSS JOIN range(1) WHERE lvl < 2
+)
+SELECT * FROM t1;
+
+-- A struct passed through the recursion keeps the anchor's nested types
+WITH RECURSIVE t1(n, s) AS (
+    SELECT 1, NAMED_STRUCT('a', 1)
+    UNION ALL
+    SELECT n + 1, CAST(s AS STRUCT<a: INT NOT NULL>) FROM t1 WHERE n < 3
+)
+SELECT * FROM t1;
+
+-- An array passed through the recursion while another column needs a cast
+WITH RECURSIVE t1(s, arr) AS (
+    SELECT 'a', ARRAY(1)
+    UNION ALL
+    SELECT NULL, arr FROM t1 WHERE s IS NOT NULL
+)
+SELECT * FROM t1;
+
+WITH RECURSIVE t1(n, m, arr) AS (
+    SELECT 1, CAST(1 AS BIGINT), ARRAY(1)
+    UNION ALL
+    SELECT n + 1, n + 1, arr FROM t1 WHERE n < 3
+)
+SELECT * FROM t1;
+
+-- The recursion writes a NULL element while another column needs a cast
+WITH RECURSIVE t1(n, m, arr) AS (
+    SELECT 1, CAST(1 AS BIGINT), ARRAY(1)
+    UNION ALL
+    SELECT n + 1, n + 1, ARRAY(CAST(NULL AS INT)) FROM t1 WHERE n < 3
+)
+SELECT * FROM t1;
+
+-- The recursion writes a NULL element into a column that needs a cast
+WITH RECURSIVE t1(n, arr) AS (
+    SELECT 1, ARRAY(CAST(1 AS BIGINT))
+    UNION ALL
+    SELECT n + 1, ARRAY(CAST(NULL AS INT)) FROM t1 WHERE n < 3
+)
+SELECT * FROM t1;
+
+-- Struct field names that differ only in case keep the anchor's names
+WITH RECURSIVE t1(n, m, s) AS (
+    SELECT 1, CAST(1 AS BIGINT), NAMED_STRUCT('A', 1)
+    UNION ALL
+    SELECT n + 1, n + 1, NAMED_STRUCT('a', CAST(NULL AS INT)) FROM t1 WHERE n < 3
+)
+SELECT * FROM t1;
+
 -- Two calls to same rCTE with and without limit
 WITH RECURSIVE t1(n) AS (
     SELECT 1

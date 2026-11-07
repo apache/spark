@@ -19,17 +19,27 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
+import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReference, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.{Cross, Inner, LeftAnti, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
+import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
  * Updates CTE references with the resolve output attributes of corresponding CTE definitions.
  */
 object ResolveWithCTE extends Rule[LogicalPlan] {
+  // The CTE definition child a UnionLoop was built from, to rebuild the loop with wider
+  // self-reference types.
+  private val LOOP_ORIGIN = TreeNodeTag[LogicalPlan]("unionLoopOrigin")
+
+  // The self-reference types and nullability to rebuild a recursive CTE definition with.
+  private val SELF_REFERENCE_TYPES = TreeNodeTag[Seq[(DataType, Boolean)]]("selfReferenceTypes")
+
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (plan.containsAllPatterns(CTE)) {
       // A helper map definitionID->Definition. Used for non-recursive CTE definitions only, either
@@ -49,7 +59,7 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
       cteDefMap: mutable.HashMap[Long, CTERelationDef]): LogicalPlan = {
     plan.resolveOperatorsDownWithPruning(_.containsAllPatterns(CTE)) {
       case withCTE @ WithCTE(_, cteDefs) =>
-        val newCTEDefs = cteDefs.map {
+        val newCTEDefs = cteDefs.map(widenSelfReference).map {
           // cteDef in the first case is either recursive and all the recursive CTERelationRefs
           // are already substituted to UnionLoopRef in the previous pass, or it is not recursive
           // at all. In both cases we need to put it in the map in case it is resolved.
@@ -79,12 +89,14 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                 if (!anchor.resolved) {
                   cteDef
                 } else {
+                  val refTypes = selfReferenceTypes(cteDef, anchor)
                   val loop = UnionLoop(
                     cteDef.id,
                     anchor,
-                    rewriteRecursiveCTERefs(recursion, anchor, cteDef.id, None),
+                    rewriteRecursiveCTERefs(recursion, anchor, cteDef.id, None, Some(refTypes)),
                     anchor.output.map(_.newInstance().exprId),
                     maxDepth = cteDef.maxDepth)
+                  loop.setTagValue(LOOP_ORIGIN, cteDef.child)
                   cteDef.copy(child = alias.copy(child = loop))
                 }
 
@@ -94,18 +106,20 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                 if (!anchor.resolved) {
                   cteDef
                 } else {
+                  val refTypes = selfReferenceTypes(cteDef, anchor)
                   // We need to check whether any of the inner CTEs has a self reference and replace
                   // it if needed
                   val newInnerCteDefs = innerCteDefs.map { innerCteDef =>
                     innerCteDef.copy(child = rewriteRecursiveCTERefs(
-                      innerCteDef.child, anchor, cteDef.id, None))
+                      innerCteDef.child, anchor, cteDef.id, None, Some(refTypes)))
                   }
                   val loop = UnionLoop(
                     cteDef.id,
                     anchor,
-                    rewriteRecursiveCTERefs(recursion, anchor, cteDef.id, None),
+                    rewriteRecursiveCTERefs(recursion, anchor, cteDef.id, None, Some(refTypes)),
                     anchor.output.map(_.newInstance().exprId),
                     maxDepth = cteDef.maxDepth)
+                  loop.setTagValue(LOOP_ORIGIN, cteDef.child)
                   cteDef.copy(child = alias.copy(child = withCTE.copy(
                     plan = loop, cteDefs = newInnerCteDefs)))
                 }
@@ -120,12 +134,15 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                 if (!anchor.resolved) {
                   cteDef
                 } else {
+                  val refTypes = selfReferenceTypes(cteDef, anchor)
                   val loop = UnionLoop(
                     cteDef.id,
                     anchor,
-                    rewriteRecursiveCTERefs(recursion, anchor, cteDef.id, Some(colNames)),
+                    rewriteRecursiveCTERefs(
+                      recursion, anchor, cteDef.id, Some(colNames), Some(refTypes)),
                     anchor.output.map(_.newInstance().exprId),
                     maxDepth = cteDef.maxDepth)
+                  loop.setTagValue(LOOP_ORIGIN, cteDef.child)
                   cteDef.copy(child = alias.copy(child = columnAlias.copy(child = loop)))
                 }
 
@@ -139,18 +156,21 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
                 if (!anchor.resolved) {
                   cteDef
                 } else {
+                  val refTypes = selfReferenceTypes(cteDef, anchor)
                   // We need to check whether any of the inner CTEs has a self reference and replace
                   // it if needed
                   val newInnerCteDefs = innerCteDefs.map { innerCteDef =>
                     innerCteDef.copy(child = rewriteRecursiveCTERefs(
-                      innerCteDef.child, anchor, cteDef.id, Some(colNames)))
+                      innerCteDef.child, anchor, cteDef.id, Some(colNames), Some(refTypes)))
                   }
                   val loop = UnionLoop(
                     cteDef.id,
                     anchor,
-                    rewriteRecursiveCTERefs(recursion, anchor, cteDef.id, Some(colNames)),
+                    rewriteRecursiveCTERefs(
+                      recursion, anchor, cteDef.id, Some(colNames), Some(refTypes)),
                     anchor.output.map(_.newInstance().exprId),
                     maxDepth = cteDef.maxDepth)
+                  loop.setTagValue(LOOP_ORIGIN, cteDef.child)
                   cteDef.copy(child = alias.copy(child = columnAlias.copy(
                     child = withCTE.copy(plan = loop, cteDefs = newInnerCteDefs))))
                 }
@@ -303,20 +323,99 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
   // Assumes that `anchor` is already resolved. If `columnNames` is set (which happens if an
   // UnresolvedSubqueryColumnAliases is atop a Union) also places an UnresolvedSubqueryColumnAliases
   // node above UnionLoopRef. At some later stage UnresolvedSubqueryColumnAliases gets resolved to
-  // a Project node.
+  // a Project node. `refTypes` overrides the anchor's data types and nullability for the
+  // UnionLoopRef output.
   private def rewriteRecursiveCTERefs(
       recursion: LogicalPlan,
       anchor: LogicalPlan,
       cteDefId: Long,
-      columnNames: Option[Seq[String]]) = {
+      columnNames: Option[Seq[String]],
+      refTypes: Option[Seq[(DataType, Boolean)]] = None) = {
+    val types = refTypes.getOrElse(outputTypes(anchor))
     recursion.transformUpWithSubqueriesAndPruning(_.containsPattern(CTE)) {
       case r: CTERelationRef if r.recursive && r.cteId == cteDefId =>
-        // We mark the output of UnionLoopRef as nullable as it may become NULL in the following
-        // iterations.
-        val ref =
-          UnionLoopRef(r.cteId, anchor.output.map(_.newInstance().withNullability(true)), false)
+        val output = anchor.output.zip(types).map { case (a, (dt, nullable)) =>
+          a.newInstance().withNullability(nullable).withDataType(dt)
+        }
+        val ref = UnionLoopRef(r.cteId, output, false)
         columnNames.map(UnresolvedSubqueryColumnAliases(_, ref)).getOrElse(ref)
     }
+  }
+
+  private def outputTypes(plan: LogicalPlan): Seq[(DataType, Boolean)] =
+    plan.output.map(a => (a.dataType, a.nullable))
+
+  // The anchor's types, unless widenSelfReference has found wider ones.
+  private def selfReferenceTypes(
+      cteDef: CTERelationDef,
+      anchor: LogicalPlan): Seq[(DataType, Boolean)] =
+    cteDef.getTagValue(SELF_REFERENCE_TYPES).getOrElse(outputTypes(anchor))
+
+  // The self-reference starts with the anchor's types and nullability, but the recursion can
+  // write NULLs that they do not allow, e.g. ARRAY(CAST(NULL AS INT)) for an ARRAY(1) anchor. Once
+  // the loop is resolved, widens the self-reference's nullability, top-level and nested, to the
+  // anchor's and recursion's and rebuilds the loop from the original definition. This repeats
+  // until nothing widens.
+  // TODO: Copies of values that Spark types as nullable whatever their inputs, such as arr[0] or
+  // array_append results, still widen even if they never hold NULLs.
+  private def widenSelfReference(cteDef: CTERelationDef): CTERelationDef = {
+    val loop = if (cteDef.hasSelfReferenceAsUnionLoopRef) {
+      cteDef.child.collectFirst { case l: UnionLoop if l.id == cteDef.id => l }
+    } else {
+      None
+    }
+    loop.filter(_.resolved) match {
+      case Some(l) =>
+        val refTypes = cteDef.child.collectFirstWithSubqueries {
+          case r: UnionLoopRef if r.loopId == cteDef.id => outputTypes(r)
+        }.get
+        val childOutputs = Seq(l.anchor, l.recursion).map(withLaterNullability(_).output)
+        val widened = refTypes.zipWithIndex.map { case (refType, i) =>
+          childOutputs.foldLeft(refType) { case ((dt, nullable), output) =>
+            (StructType.unionLikeMerge(dt, output(i).dataType), nullable || output(i).nullable)
+          }
+        }
+        if (widened == refTypes) {
+          cteDef
+        } else {
+          l.getTagValue(LOOP_ORIGIN) match {
+            case Some(child) =>
+              val restored = cteDef.copy(child = child)
+              restored.setTagValue(SELF_REFERENCE_TYPES, widened)
+              restored
+            case None =>
+              throw SparkException.internalError("The self-reference of recursive CTE " +
+                s"${cteDef.id} needs wider types ${widened.map(_._1.sql).mkString(", ")}, but " +
+                "the loop has no origin to rebuild it from.")
+          }
+        }
+      case None => cteDef
+    }
+  }
+
+  // Applies to a copy the nullability that later analysis adds: primitive Scala UDFs only become
+  // nullable in the "ScalaUDF Null Handling" batch, and references keep the types they were
+  // resolved with. So the self-reference also covers those NULLs.
+  private def withLaterNullability(plan: LogicalPlan): LogicalPlan = {
+    val handled = refreshAttributeTypes(HandleNullInputsForUDF(plan))
+    if (handled.fastEquals(plan)) plan else withLaterNullability(handled)
+  }
+
+  // Like UpdateAttributeNullability, but also takes the data type of the child's output attribute
+  // where it is more nullable.
+  private def refreshAttributeTypes(plan: LogicalPlan): LogicalPlan = plan.transformUp {
+    case p if p.children.nonEmpty && p.childrenResolved =>
+      val childOutput = AttributeMap(p.children.flatMap(_.output).map(a => a -> a))
+      p.transformExpressions {
+        case a: AttributeReference if childOutput.contains(a) =>
+          val c = childOutput(a)
+          val dataType = if (DataType.equalsIgnoreCompatibleNullability(a.dataType, c.dataType)) {
+            c.dataType
+          } else {
+            a.dataType
+          }
+          a.withNullability(a.nullable || c.nullable).withDataType(dataType)
+      }
   }
 
   /**

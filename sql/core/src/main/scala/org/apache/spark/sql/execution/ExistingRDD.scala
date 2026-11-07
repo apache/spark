@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.collection.Utils
 
 object ExternalRDD {
@@ -235,12 +236,12 @@ object LogicalRDD extends Logging {
 
   // A version of buildOutputAssocForRewrite which doesn't assume that the names are the same,
   // because the new output can have different names. Used when copying the LogicalRDD with a new
-  // output
+  // output, which may be more nullable in nested types.
   private[sql] def buildOutputAssocForRewriteWithNewOutput(
       source: Seq[Attribute],
       destination: Seq[Attribute]): Option[Map[Attribute, Attribute]] = {
     val rewrite = source.zip(destination).flatMap { case (attr1, attr2) =>
-      if (attr1.dataType == attr2.dataType) {
+      if (DataType.equalsIgnoreCompatibleNullability(attr1.dataType, attr2.dataType)) {
         Some(attr1 -> attr2)
       } else {
         None
@@ -266,7 +267,9 @@ object LogicalRDD extends Logging {
 
     rewrite.map { rw =>
       val rewrittenStatistics = rewriteStatistics(optimizedPlan.stats, rw)
-      val rewrittenConstraints = rewriteConstraints(optimizedPlan.constraints, rw)
+      // Drop constraints that no longer resolve against a more nullable new output, e.g. casts.
+      val rewrittenConstraints =
+        rewriteConstraints(optimizedPlan.constraints, rw).filter(_.resolved)
 
       (Some(rewrittenStatistics), Some(rewrittenConstraints))
     }.getOrElse {

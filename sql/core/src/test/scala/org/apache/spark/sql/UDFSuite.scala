@@ -480,6 +480,60 @@ class UDFSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-60875: NULLs from a primitive Scala UDF in a recursive CTE are read back as NULL") {
+    spark.udf.register("f", (x: Long) => x + 1)
+    // Steps of 200 rows are materialized, so the recursion reads them through generated code.
+    def nullsPerLevel(anchor: String, recursion: String): DataFrame = sql(
+      s"""WITH RECURSIVE t(lvl, arr, was_null) AS (
+         |  $anchor
+         |  UNION ALL
+         |  $recursion
+         |)
+         |SELECT lvl, count_if(was_null) FROM t GROUP BY lvl ORDER BY lvl""".stripMargin)
+
+    // The anchor writes the NULLs, and the recursion passes them through.
+    checkAnswer(
+      nullsPerLevel(
+        "SELECT 0, ARRAY(f(IF(id % 2 = 0, CAST(NULL AS BIGINT), id))), false FROM range(200)",
+        "SELECT lvl + 1, arr, arr[0] IS NULL FROM t WHERE lvl < 1"),
+      Seq(Row(0, 0L), Row(1, 100L)))
+
+    // Same, with the array built in a subquery of the anchor.
+    checkAnswer(
+      nullsPerLevel(
+        """SELECT 0, a, false
+          |FROM (SELECT ARRAY(f(IF(id % 2 = 0, CAST(NULL AS BIGINT), id))) AS a FROM range(200))
+          |""".stripMargin,
+        "SELECT lvl + 1, arr, arr[0] IS NULL FROM t WHERE lvl < 1"),
+      Seq(Row(0, 0L), Row(1, 100L)))
+
+    // The recursion writes the NULLs into an array built in a subquery.
+    checkAnswer(
+      nullsPerLevel(
+        "SELECT 0, ARRAY(id), false FROM range(200)",
+        """SELECT lvl + 1, a, arr[0] IS NULL
+          |FROM (SELECT lvl, arr, ARRAY(f(IF(lvl = 0, CAST(NULL AS BIGINT), arr[0]))) AS a FROM t)
+          |WHERE lvl < 2""".stripMargin),
+      Seq(Row(0, 0L), Row(1, 0L), Row(2, 200L)))
+
+    // The recursion writes the NULLs.
+    checkAnswer(
+      nullsPerLevel(
+        "SELECT 0, ARRAY(id), false FROM range(200)",
+        """SELECT lvl + 1, ARRAY(f(IF(lvl = 0, CAST(NULL AS BIGINT), arr[0]))), arr[0] IS NULL
+          |FROM t WHERE lvl < 2""".stripMargin),
+      Seq(Row(0, 0L), Row(1, 0L), Row(2, 200L)))
+
+    // The UDF that writes the NULLs is fed by another UDF, which becomes nullable first.
+    checkAnswer(
+      nullsPerLevel(
+        "SELECT 0, ARRAY(id), false FROM range(200)",
+        """SELECT lvl + 1, ARRAY(f(y)), x IS NULL
+          |FROM (SELECT lvl, arr[0] AS x, f(IF(lvl = 0, CAST(NULL AS BIGINT), arr[0])) AS y FROM t)
+          |WHERE lvl < 2""".stripMargin),
+      Seq(Row(0, 0L), Row(1, 0L), Row(2, 200L)))
+  }
+
   test("SPARK-25044 Verify null input handling for primitive types - with udf()") {
     val input = Seq(
       (null, Integer.valueOf(1), "x"),
