@@ -2962,6 +2962,11 @@
         "message" : [
           "<message>"
         ]
+      },
+      "WRITE" : {
+        "message" : [
+          "Write rows to the table <tableName>."
+        ]
       }
     },
     "sqlState" : "HV000"
