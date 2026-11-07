@@ -725,7 +725,6 @@ private[ml] class FeedForwardTrainer(
   private var _seed = this.getClass.getName.hashCode.toLong
   private var _weights: Vector = null
   private var _stackSize = 128
-  private var _intermediateStorageLevel = StorageLevel.MEMORY_AND_DISK
   private var dataStacker = new DataStacker(_stackSize, inputSize, outputSize)
   private var _gradient: Gradient = new ANNGradient(topology, dataStacker)
   private var _updater: Updater = new ANNUpdater()
@@ -769,14 +768,6 @@ private[ml] class FeedForwardTrainer(
   def setStackSize(value: Int): this.type = {
     _stackSize = value
     dataStacker = new DataStacker(value, inputSize, outputSize)
-    this
-  }
-
-  /**
-   * Sets the storage level for intermediate training data.
-   */
-  def setIntermediateStorageLevel(value: StorageLevel): this.type = {
-    _intermediateStorageLevel = value
     this
   }
 
@@ -862,7 +853,7 @@ private[ml] class FeedForwardTrainer(
       (v._1, OldVectors.fromML(v._2))
     }
     val handlePersistence = trainData.getStorageLevel == StorageLevel.NONE
-    if (handlePersistence) trainData.persist(_intermediateStorageLevel)
+    if (handlePersistence) trainData.persist(StorageLevel.MEMORY_AND_DISK)
     val (newWeights, lossHistory) = optimizer match {
       case lbfgs: LBFGS => lbfgs.optimizeWithLossReturned(trainData, w)
       case sgd: GradientDescent => sgd.optimizeWithLossReturned(trainData, w)

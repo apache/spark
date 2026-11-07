@@ -67,7 +67,6 @@ class ClassificationTestsMixin:
             LogisticRegression(maxIter=2),
             LinearSVC(maxIter=2),
             FMClassifier(maxIter=2, seed=42),
-            MultilayerPerceptronClassifier(layers=[2, 3, 2], maxIter=2, seed=42),
         ]
         for classifier in classifiers:
             with self.subTest(classifier=type(classifier).__name__):

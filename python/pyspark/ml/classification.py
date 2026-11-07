@@ -3099,7 +3099,6 @@ class _MultilayerPerceptronParams(
     HasStepSize,
     HasSolver,
     HasBlockSize,
-    HasIntermediateStorageLevel,
 ):
     """
     Params for :py:class:`MultilayerPerceptronClassifier`.
@@ -3345,13 +3344,6 @@ class MultilayerPerceptronClassifier(
         Sets the value of :py:attr:`solver`.
         """
         return self._set(solver=value)
-
-    @since("4.4.0")
-    def setIntermediateStorageLevel(self, value: str) -> "MultilayerPerceptronClassifier":
-        """
-        Sets the value of :py:attr:`intermediateStorageLevel`.
-        """
-        return self._set(intermediateStorageLevel=value)
 
 
 class MultilayerPerceptronClassificationModel(

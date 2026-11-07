@@ -40,9 +40,7 @@ class ClassifierStorageLevelSuite
     Map[String, Estimator[_] with HasIntermediateStorageLevel with MLWritable](
       "LogisticRegression" -> new LogisticRegression().setMaxIter(2),
       "LinearSVC" -> new LinearSVC().setMaxIter(2),
-      "FMClassifier" -> new FMClassifier().setMaxIter(2).setSeed(42),
-      "MultilayerPerceptronClassifier" -> new MultilayerPerceptronClassifier()
-        .setLayers(Array(2, 3, 2)).setMaxIter(2).setSeed(42))) { classifier =>
+      "FMClassifier" -> new FMClassifier().setMaxIter(2).setSeed(42))) { classifier =>
     assert(classifier.getIntermediateStorageLevel === "MEMORY_AND_DISK")
     Seq("NONE", "invalid").foreach { level =>
       intercept[IllegalArgumentException] {

@@ -31,13 +31,11 @@ import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.sql._
-import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.VersionUtils.majorMinorVersion
 
 /** Params for Multilayer Perceptron. */
 private[classification] trait MultilayerPerceptronParams extends ProbabilisticClassifierParams
-  with HasSeed with HasMaxIter with HasTol with HasStepSize with HasSolver with HasBlockSize
-  with HasIntermediateStorageLevel {
+  with HasSeed with HasMaxIter with HasTol with HasStepSize with HasSolver with HasBlockSize {
 
   import MultilayerPerceptronClassifier._
 
@@ -121,10 +119,6 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
   @Since("1.5.0")
   def setBlockSize(value: Int): this.type = set(blockSize, value)
 
-  /** @group expertSetParam */
-  @Since("4.4.0")
-  def setIntermediateStorageLevel(value: String): this.type = set(intermediateStorageLevel, value)
-
   /**
    * Sets the value of param [[solver]].
    * Default is "l-bfgs".
@@ -203,7 +197,7 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     instr.logParams(this, labelCol, featuresCol, predictionCol, rawPredictionCol, layers, maxIter,
-      tol, blockSize, solver, stepSize, seed, thresholds, intermediateStorageLevel)
+      tol, blockSize, solver, stepSize, seed, thresholds)
 
     val myLayers = $(layers)
     val labels = myLayers.last
@@ -247,7 +241,6 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
         s"The solver $solver is not supported by MultilayerPerceptronClassifier.")
     }
     trainer.setStackSize($(blockSize))
-    trainer.setIntermediateStorageLevel(StorageLevel.fromString($(intermediateStorageLevel)))
     val (mlpModel, objectiveHistory) = trainer.train(data)
     createModel(dataset, mlpModel.weights, objectiveHistory)
   }
