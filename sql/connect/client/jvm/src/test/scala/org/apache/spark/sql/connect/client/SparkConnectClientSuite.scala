@@ -32,9 +32,9 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SparkException, SparkThrowable}
+import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkThrowable}
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, AnalyzePlanRequest, AnalyzePlanResponse, ArtifactStatusesRequest, ArtifactStatusesResponse, ExecutePlanRequest, ExecutePlanResponse, Relation, SparkConnectServiceGrpc, SQL}
+import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, AnalyzePlanRequest, AnalyzePlanResponse, ArtifactStatusesRequest, ArtifactStatusesResponse, ExecutePlanRequest, ExecutePlanResponse, FetchErrorDetailsResponse, Relation, SparkConnectServiceGrpc, SQL}
 import org.apache.spark.sql.connect.SparkSession
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.connect.test.ConnectFunSuite
@@ -391,6 +391,49 @@ class SparkConnectClientSuite extends ConnectFunSuite {
         assert(error.getCondition == legacyErrorClass)
         assert(error.getSqlState == "XXKCM")
     }
+  }
+
+  test("errorsToThrowable preserves unknown IllegalArgumentException error class") {
+    val errorClass = "UNKNOWN_ILLEGAL_ARGUMENT"
+    val message = "Server-rendered illegal argument"
+    val messageParameters = Map("argument" -> "value")
+    val sqlState = "XX000"
+    val causeMessage = "underlying cause"
+    val queryContext = FetchErrorDetailsResponse.QueryContext
+      .newBuilder()
+      .setContextType(FetchErrorDetailsResponse.QueryContext.ContextType.SQL)
+      .setFragment("SELECT invalid_argument")
+      .build()
+    val sparkThrowable = FetchErrorDetailsResponse.SparkThrowable
+      .newBuilder()
+      .setErrorClass(errorClass)
+      .setSqlState(sqlState)
+      .putAllMessageParameters(messageParameters.asJava)
+      .addQueryContexts(queryContext)
+      .build()
+    val cause = FetchErrorDetailsResponse.Error
+      .newBuilder()
+      .setMessage(causeMessage)
+      .addErrorTypeHierarchy(classOf[RuntimeException].getName)
+      .build()
+    val error = FetchErrorDetailsResponse.Error
+      .newBuilder()
+      .setMessage(message)
+      .addErrorTypeHierarchy(classOf[IllegalArgumentException].getName)
+      .setSparkThrowable(sparkThrowable)
+      .setCauseIdx(1)
+      .build()
+
+    val exception = GrpcExceptionConverter
+      .errorsToThrowable(0, Seq(error, cause))
+      .asInstanceOf[SparkIllegalArgumentException]
+
+    assert(exception.getMessage == message)
+    assert(exception.getCondition == errorClass)
+    assert(exception.getMessageParameters.asScala == messageParameters)
+    assert(exception.getQueryContext.map(_.fragment()).toSeq == Seq("SELECT invalid_argument"))
+    assert(exception.getCause.getMessage.contains(causeMessage))
+    assert(exception.getSqlState == sqlState)
   }
 
   private case class TestPackURI(

@@ -522,7 +522,7 @@ private[spark] class SparkNumberFormatException private(
 /**
  * Illegal argument exception thrown from Spark with an error class.
  */
-private[spark] class SparkIllegalArgumentException private(
+private[spark] class SparkIllegalArgumentException private[spark](
     message: String,
     cause: Option[Throwable],
     errorClass: Option[String],
