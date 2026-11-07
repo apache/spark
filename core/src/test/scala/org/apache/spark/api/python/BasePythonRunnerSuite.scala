@@ -17,14 +17,14 @@
 
 package org.apache.spark.api.python
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, Closeable, DataInputStream, DataOutputStream, EOFException}
+import java.io.{BufferedInputStream, BufferedOutputStream, ByteArrayInputStream, ByteArrayOutputStream, Closeable, DataInputStream, DataOutputStream, EOFException}
 import java.net.{InetAddress, InetSocketAddress}
 import java.nio.ByteBuffer
 import java.nio.channels.{Channels, ClosedByInterruptException, ServerSocketChannel, SocketChannel}
 import java.nio.charset.StandardCharsets
 import java.util.Collections
-import java.util.concurrent.{CountDownLatch, TimeUnit}
-import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
+import java.util.concurrent.{CountDownLatch, FutureTask, TimeUnit}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong, AtomicReference}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
@@ -35,7 +35,8 @@ import org.apache.logging.log4j.Level
 import org.scalatest.concurrent.Eventually.{eventually, timeout}
 
 import org.apache.spark.{SharedSparkContext, SparkEnv, SparkException, SparkFunSuite, TaskContext}
-import org.apache.spark.util.TaskCompletionListener
+import org.apache.spark.api.python.BasePythonRunner.PythonWorkerInputStream
+import org.apache.spark.util.{AccumulatorV2, TaskCompletionListener}
 
 class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
 
@@ -838,6 +839,312 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
   private val initErrorJson =
     "{\"error\":{\"message\":\"bad\",\"traceback\":\"Traceback ...\\nValueError: bad\"," +
       "\"errorClass\":\"ValueError\",\"isPayloadError\":true}}"
+
+  private class TimingAccumulator extends AccumulatorV2[Long, Long] {
+    private var total = 0L
+    override def isZero: Boolean = total == 0L
+    override def value: Long = total
+    override def add(v: Long): Unit = total += v
+    override def reset(): Unit = total = 0L
+    override def merge(other: AccumulatorV2[Long, Long]): Unit = add(other.value)
+    override def copy(): TimingAccumulator = {
+      val result = new TimingAccumulator
+      result.add(total)
+      result
+    }
+  }
+
+  private class InitTimingPythonRunner extends PythonRunner(Seq(ChainedPythonFunctions(Seq(
+      SimplePythonFunction(Seq.empty, Collections.emptyMap(), Collections.emptyList(),
+        "python3", "3", Collections.emptyList(), null)))), None) {
+    val recordedMetrics: Map[String, TimingAccumulator] = Seq(
+      "pythonBootTime", "pythonInitTime", "pythonTotalTime", "pythonProcessingTime")
+      .map(_ -> new TimingAccumulator).toMap
+    override protected val metrics: Map[String, AccumulatorV2[Long, Long]] = recordedMetrics
+
+    def writer(
+        worker: PythonWorker,
+        input: Iterator[Array[Byte]],
+        context: TaskContext): Writer = newWriter(SparkEnv.get, worker, input, 0, context)
+
+    def reader(
+        stream: DataInputStream,
+        startTime: Long,
+        context: TaskContext,
+        worker: PythonWorker = null,
+        inputWriter: Writer = null): Iterator[Array[Byte]] = {
+      val writer = if (inputWriter == null) {
+        newWriter(SparkEnv.get, worker, Iterator.empty, 0, context)
+      } else {
+        inputWriter
+      }
+      newReaderIterator(stream, writer, startTime,
+        SparkEnv.get, worker, None, new AtomicBoolean(true), context)
+    }
+  }
+
+  private def initTimingStream(bootTime: Long, finishTime: Long): PythonWorkerInputStream = {
+    val buffer = new ByteArrayOutputStream()
+    val output = new DataOutputStream(buffer)
+    output.writeInt(SpecialLengths.START_OF_INIT_RESPONSE)
+    PythonWorkerUtils.writeUTF("{}", output)
+    output.writeInt(0) // An empty result lets the consumer pause before the metrics report.
+    output.writeInt(SpecialLengths.METRICS_DATA)
+    val report = metricsReport.replace("\"bootTimestampMs\":1250",
+      "\"bootTimestampMs\":" + bootTime)
+      .replace("\"initTimestampMs\":2500", "\"initTimestampMs\":" + (finishTime - 20L))
+      .replace("\"finishTimestampMs\":3750", "\"finishTimestampMs\":" + finishTime)
+    PythonWorkerUtils.writeUTF(report, output)
+    output.writeInt(SpecialLengths.END_OF_DATA_SECTION)
+    output.writeInt(0) // No accumulator updates.
+    output.writeInt(SpecialLengths.END_OF_STREAM)
+    new PythonWorkerInputStream(
+      new BufferedInputStream(new ByteArrayInputStream(buffer.toByteArray)),
+      BasePythonRunner.readInitResponseFrame)
+  }
+
+  gridTest("captured init time survives later buffered output reads")(Seq(20L, -500L)) {
+      bootOffset =>
+    val runner = new InitTimingPythonRunner
+    val context = TaskContext.empty()
+    val startTime = System.currentTimeMillis() - 1000L
+    val initializationStartTime = startTime + math.max(0L, bootOffset)
+    val stream = initTimingStream(startTime + bootOffset, startTime + 50L)
+    val beforeInitResponse = System.currentTimeMillis()
+    val response = stream.initResponse.get
+    val afterInitResponse = System.currentTimeMillis()
+    val reader = runner.reader(stream, startTime, context)
+    Thread.sleep(100L)
+    assert(reader.next().isEmpty)
+    Thread.sleep(100L)
+    val logAppender = new LogAppender("Python worker lifecycle timings")
+    withLogAppender(logAppender, level = Some(Level.INFO)) {
+      assert(!reader.hasNext)
+    }
+    assert(logAppender.loggingEvents.exists { event =>
+      event.getMessage.getFormattedMessage.contains("finish = 20 - ")
+    })
+
+    val init = runner.recordedMetrics("pythonInitTime").value
+    assert(init == response.receivedAtMs - initializationStartTime)
+    assert(init >= beforeInitResponse - initializationStartTime)
+    assert(init <= afterInitResponse - initializationStartTime)
+    assert(runner.recordedMetrics("pythonBootTime").value == math.max(0L, bootOffset))
+    assert(runner.recordedMetrics("pythonTotalTime").value == 50L)
+    assert(runner.recordedMetrics("pythonProcessingTime").value == 42L)
+    assert(context.taskMetrics.memoryBytesSpilled == 7L)
+    assert(context.taskMetrics.diskBytesSpilled == 9L)
+  }
+
+  gridTest("init response is read before row production in both modes")(
+      Seq(false, true)) { pipelined =>
+    val runner = new InitTimingPythonRunner
+    val server = ServerSocketChannel.open()
+    server.bind(new InetSocketAddress(InetAddress.getLoopbackAddress, 0))
+    val channel = SocketChannel.open(server.getLocalAddress)
+    val pythonSide = server.accept()
+    val worker = PythonWorker(channel).refreshNonBlocking()
+    val context = TaskContext.empty()
+    val allowInput = new CountDownLatch(1)
+    val inputPulls = new AtomicInteger(0)
+    val initReadComplete = new AtomicBoolean(false)
+    val responseSentAt = new AtomicLong(0L)
+    val firstInputPullTime = new AtomicLong(0L)
+    val startTime = System.currentTimeMillis()
+    pythonSide.socket().setSoTimeout(10000)
+
+    val peer = new FutureTask[Unit](() => {
+      try {
+        val input = new DataInputStream(new BufferedInputStream(pythonSide.socket().getInputStream))
+        val output = new DataOutputStream(
+          new BufferedOutputStream(pythonSide.socket().getOutputStream))
+        assert(input.readInt() == SpecialLengths.START_OF_INIT_MESSAGE)
+        val command = new Array[Byte](input.readInt())
+        input.readFully(command)
+        val pythonInitTime = System.currentTimeMillis()
+        output.writeInt(SpecialLengths.START_OF_INIT_RESPONSE)
+        output.flush()
+        Thread.sleep(20L)
+        responseSentAt.set(System.currentTimeMillis())
+        PythonWorkerUtils.writeUTF("{}", output)
+        output.flush()
+
+        assert(input.readInt() == 1)
+        assert(input.readByte() == 1)
+        assert(input.readInt() == SpecialLengths.END_OF_DATA_SECTION)
+        assert(input.readInt() == SpecialLengths.END_OF_STREAM)
+        val finishTime = System.currentTimeMillis()
+        val report = metricsReport.replace("\"bootTimestampMs\":1250",
+          "\"bootTimestampMs\":" + startTime)
+          .replace("\"initTimestampMs\":2500", "\"initTimestampMs\":" + pythonInitTime)
+          .replace("\"finishTimestampMs\":3750", "\"finishTimestampMs\":" + finishTime)
+        output.writeInt(0)
+        output.writeInt(SpecialLengths.METRICS_DATA)
+        PythonWorkerUtils.writeUTF(report, output)
+        output.writeInt(SpecialLengths.END_OF_DATA_SECTION)
+        output.writeInt(0)
+        output.writeInt(SpecialLengths.END_OF_STREAM)
+        output.flush()
+      } finally {
+        pythonSide.close()
+      }
+    })
+    val peerThread = startThread(peer.run())
+    try {
+      val rows = Iterator.single(Array[Byte](1)).map { row =>
+        assert(responseSentAt.get() != 0L, "Row input was pulled before the init response")
+        firstInputPullTime.set(System.currentTimeMillis())
+        if (!pipelined) {
+          assert(initReadComplete.get(), "Row input was pulled during the init response read")
+        }
+        inputPulls.incrementAndGet()
+        assert(allowInput.await(10, TimeUnit.SECONDS))
+        row
+      }
+      val writer = runner.writer(worker, rows, context)
+      val stream = if (pipelined) {
+        runner.createPipelinedDataIn(worker, writer, None, context)
+      } else {
+        val input = new runner.ReaderInputStream(worker, writer, None,
+          idleTimeoutSeconds = 0L, killOnIdleTimeout = false, context = context)
+        new PythonWorkerInputStream(new BufferedInputStream(input), input.readInitResponse)
+      }
+      val streamCreatedAt = System.currentTimeMillis()
+      if (pipelined) {
+        Thread.sleep(100L)
+      } else {
+        assert(responseSentAt.get() == 0L)
+      }
+      val response = stream.initResponse.get
+      val initializedAt = System.currentTimeMillis()
+      assert(response.error.isEmpty)
+      initReadComplete.set(true)
+      if (pipelined) {
+        assert(response.receivedAtMs <= streamCreatedAt)
+      }
+      if (!pipelined) {
+        assert(inputPulls.get() == 0)
+      }
+      val reader = runner.reader(stream, startTime, context, worker, writer)
+      Thread.sleep(100L)
+      allowInput.countDown()
+      assert(reader.next().isEmpty)
+      assert(!reader.hasNext)
+      peer.get(10, TimeUnit.SECONDS)
+
+      val init = runner.recordedMetrics("pythonInitTime").value
+      assert(init == response.receivedAtMs - startTime)
+      assert(init >= responseSentAt.get() - startTime)
+      assert(init <= initializedAt - startTime)
+      assert(inputPulls.get() == 1)
+      assert(firstInputPullTime.get() >= response.receivedAtMs)
+      assert(runner.recordedMetrics("pythonBootTime").value == 0L)
+      assert(runner.recordedMetrics("pythonProcessingTime").value == 42L)
+      assert(context.taskMetrics.memoryBytesSpilled == 7L)
+      assert(context.taskMetrics.diskBytesSpilled == 9L)
+    } finally {
+      allowInput.countDown()
+      context.markTaskCompleted(None)
+      worker.stop()
+      pythonSide.close()
+      server.close()
+      peerThread.join(10000)
+      assert(!peerThread.isAlive)
+    }
+  }
+
+  gridTest("pipelined init failures do not start row input")(Seq(false, true)) { truncated =>
+    val runner = new InitTimingPythonRunner
+    val server = ServerSocketChannel.open()
+    server.bind(new InetSocketAddress(InetAddress.getLoopbackAddress, 0))
+    val channel = SocketChannel.open(server.getLocalAddress)
+    val pythonSide = server.accept()
+    val worker = PythonWorker(channel).refreshNonBlocking()
+    val context = TaskContext.empty()
+    val inputPulls = new AtomicInteger(0)
+    pythonSide.socket().setSoTimeout(10000)
+    val peer = new FutureTask[Unit](() => {
+      try {
+        val input = new DataInputStream(pythonSide.socket().getInputStream)
+        assert(input.readInt() == SpecialLengths.START_OF_INIT_MESSAGE)
+        input.readFully(new Array[Byte](input.readInt()))
+        val output = new DataOutputStream(pythonSide.socket().getOutputStream)
+        output.writeInt(SpecialLengths.START_OF_INIT_RESPONSE)
+        if (truncated) {
+          output.writeInt(2)
+          output.writeByte('{')
+        } else {
+          PythonWorkerUtils.writeUTF(initErrorJson, output)
+        }
+        output.flush()
+      } finally {
+        pythonSide.close()
+      }
+    })
+    val peerThread = startThread(peer.run())
+    try {
+      val rows = Iterator.single(Array[Byte](1)).map { row =>
+        inputPulls.incrementAndGet()
+        row
+      }
+      val writer = runner.writer(worker, rows, context)
+      val stream = runner.createPipelinedDataIn(worker, writer, None, context)
+      val reader = runner.reader(stream, System.currentTimeMillis(), context, worker, writer)
+      if (truncated) {
+        val error = intercept[SparkException](reader.hasNext)
+        assert(error.getCause.isInstanceOf[EOFException])
+      } else {
+        val error = intercept[PythonException](reader.hasNext)
+        assert(error.getMessage.contains("ValueError: bad"))
+      }
+      peer.get(10, TimeUnit.SECONDS)
+      context.markTaskCompleted(None)
+      assert(inputPulls.get() == 0)
+      assert(runner.recordedMetrics.values.forall(_.value == 0L))
+    } finally {
+      context.markTaskCompleted(None)
+      worker.stop()
+      pythonSide.close()
+      server.close()
+      peerThread.join(10000)
+      assert(!peerThread.isAlive)
+    }
+  }
+
+  test("prefetched init errors are reported through the output reader") {
+    val buffer = new ByteArrayOutputStream()
+    val output = new DataOutputStream(buffer)
+    output.writeInt(SpecialLengths.START_OF_INIT_RESPONSE)
+    PythonWorkerUtils.writeUTF(initErrorJson, output)
+    val runner = new InitTimingPythonRunner
+    val stream = new PythonWorkerInputStream(new ByteArrayInputStream(buffer.toByteArray),
+      BasePythonRunner.readInitResponseFrame)
+    assert(stream.initResponse.get.error.isDefined)
+    val reader = runner.reader(stream, System.currentTimeMillis(), TaskContext.empty())
+    val error = intercept[PythonException] {
+      reader.hasNext
+    }
+    assert(error.getMessage.contains("ValueError: bad"))
+    assert(runner.recordedMetrics.values.forall(_.value == 0L))
+  }
+
+  test("prefetched init IO failures use the existing reader exception handling") {
+    val buffer = new ByteArrayOutputStream()
+    val output = new DataOutputStream(buffer)
+    output.writeInt(SpecialLengths.START_OF_INIT_RESPONSE)
+    output.writeInt(2)
+    output.writeByte('{')
+    val stream = new PythonWorkerInputStream(new ByteArrayInputStream(buffer.toByteArray),
+      BasePythonRunner.readInitResponseFrame)
+    assert(stream.initResponse.isFailure)
+    val runner = new InitTimingPythonRunner
+    val reader = runner.reader(stream, System.currentTimeMillis(), TaskContext.empty())
+    val error = intercept[SparkException] {
+      reader.hasNext
+    }
+    assert(error.getCause.isInstanceOf[EOFException])
+    assert(runner.recordedMetrics.values.forall(_.value == 0L))
+  }
 
   test("SPARK-60613: read an init response and leave the following sections aligned") {
     Seq("{}", "{\"futureField\":1}").foreach { json =>
