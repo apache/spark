@@ -20,11 +20,16 @@ package org.apache.spark.deploy
 import java.io.File
 import java.util.UUID
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
-import org.apache.spark.internal.config.{SHUFFLE_SERVICE_DB_ENABLED, SHUFFLE_SERVICE_ENABLED}
+import org.apache.spark.{LocalRootDirsTest, SecurityManager, SparkConf, SparkContext, SparkFunSuite,
+  TestUtils}
+import org.apache.spark.internal.config.{
+  SHUFFLE_SERVICE_DB_ENABLED,
+  SHUFFLE_SERVICE_ENABLED,
+  SHUFFLE_SERVICE_PORT,
+  SHUFFLE_SERVICE_REQUIRE_APP_SCOPED_LOCAL_DIRS}
 import org.apache.spark.util.Utils
 
-class ExternalShuffleServiceLocalDirsSuite extends SparkFunSuite {
+class ExternalShuffleServiceLocalDirsSuite extends SparkFunSuite with LocalRootDirsTest {
 
   test("validateLocalDirs only accepts localDirs under the configured local directories") {
     val sparkConf = new SparkConf()
@@ -47,6 +52,102 @@ class ExternalShuffleServiceLocalDirsSuite extends SparkFunSuite {
       }
     } finally {
       Utils.deleteRecursively(contained)
+    }
+  }
+
+  test("requireAppScopedLocalDirs restricts localDirs to the registering app's directory") {
+    val sparkConf = new SparkConf()
+      .set(SHUFFLE_SERVICE_ENABLED, true)
+      .set(SHUFFLE_SERVICE_DB_ENABLED, false)
+      .set(SHUFFLE_SERVICE_REQUIRE_APP_SCOPED_LOCAL_DIRS, true)
+      .set("spark.local.dir", System.getProperty("java.io.tmpdir"))
+    val service = new ExternalShuffleService(sparkConf, new SecurityManager(sparkConf))
+    val handler = service.getBlockHandler
+
+    val root = new File(Utils.getConfiguredLocalDirs(sparkConf).head)
+    val appId = s"app-${UUID.randomUUID()}"
+    val otherAppId = s"app-${UUID.randomUUID()}"
+    // The layout the Worker creates: <root>/spark-*/executor-*/<appId>.
+    val workerRoot = new File(root, s"spark-${UUID.randomUUID()}")
+    val executorRoot = new File(workerRoot, s"executor-${UUID.randomUUID()}")
+    val appScoped = new File(executorRoot, appId)
+    val otherAppScoped = new File(executorRoot, otherAppId)
+    // The pre-upgrade Worker layout: directly under a root, no appId segment.
+    val unscoped = new File(root, s"blockmgr-${UUID.randomUUID()}")
+    assert(appScoped.mkdirs() && otherAppScoped.mkdirs() && unscoped.mkdirs())
+    try {
+      // A localDir inside the registering application's own directory is accepted.
+      handler.validateLocalDirs(Array(appScoped.getAbsolutePath), appId)
+
+      // A directory under a different application id is rejected even though it is contained
+      // under a configured root.
+      intercept[IllegalArgumentException] {
+        handler.validateLocalDirs(Array(otherAppScoped.getAbsolutePath), appId)
+      }
+
+      // A contained directory without the appId as a path segment (what a Worker without
+      // the per-app layout would report) is rejected.
+      intercept[IllegalArgumentException] {
+        handler.validateLocalDirs(Array(unscoped.getAbsolutePath), appId)
+      }
+
+      // Root containment is still enforced with app scoping on.
+      intercept[IllegalArgumentException] {
+        handler.validateLocalDirs(Array("/etc"), appId)
+      }
+    } finally {
+      Utils.deleteRecursively(workerRoot)
+      Utils.deleteRecursively(unscoped)
+    }
+  }
+
+  test("local-cluster executors register app-scoped local dirs end to end") {
+    val root = Utils.createTempDir(namePrefix = "ess-e2e-root")
+    val serviceConf = new SparkConf()
+      .set(SHUFFLE_SERVICE_ENABLED, true)
+      .set(SHUFFLE_SERVICE_DB_ENABLED, false)
+      .set(SHUFFLE_SERVICE_REQUIRE_APP_SCOPED_LOCAL_DIRS, true)
+      .set(SHUFFLE_SERVICE_PORT, 0)
+      .set("spark.local.dir", root.getAbsolutePath)
+    val service = new ExternalShuffleService(serviceConf, new SecurityManager(serviceConf))
+    var sc: SparkContext = null
+    try {
+      service.start()
+      val conf = new SparkConf()
+        .setAppName("app-scoped-local-dirs-e2e")
+        .setMaster("local-cluster[2,1,1024]")
+        .set(SHUFFLE_SERVICE_ENABLED, true)
+        .set(SHUFFLE_SERVICE_PORT, service.boundPort)
+        .set("spark.local.dir", root.getAbsolutePath)
+      sc = new SparkContext(conf)
+      val appId = sc.applicationId
+      // One core per worker, so the application's two executors land on different Workers.
+      // If the shuffle service rejected the registrations, the executors would never come up.
+      TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
+      assert(sc.parallelize(1 to 100, 4).map(i => (i % 10, i)).groupByKey().count() === 10)
+
+      val appDirs = root.listFiles().toSeq
+        .filter(d => d.isDirectory && d.getName.startsWith("spark-"))
+        .flatMap(_.listFiles())
+        .filter(d => d.isDirectory && d.getName.startsWith("executor-"))
+        .flatMap(_.listFiles())
+        .filter(d => d.isDirectory && d.getName == appId)
+      // Each executor has its own random directory above the application leaf.
+      assert(appDirs.length == 2)
+      assert(appDirs.map(_.getParentFile.getName).distinct.length == 2)
+      // The registered dirs satisfy the app-scoping check for this application only.
+      appDirs.foreach { d =>
+        service.getBlockHandler.validateLocalDirs(Array(d.getAbsolutePath), appId)
+        intercept[IllegalArgumentException] {
+          service.getBlockHandler.validateLocalDirs(Array(d.getAbsolutePath), "other-app")
+        }
+      }
+    } finally {
+      if (sc != null) {
+        sc.stop()
+      }
+      service.stop()
+      Utils.deleteRecursively(root)
     }
   }
 }

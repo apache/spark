@@ -79,14 +79,47 @@ public class LocalDirValidatorSuite {
   }
 
   @Test
-  public void acceptsContainedAppScopedDir() throws Exception {
+  public void acceptsYarnAppScopedDir() throws Exception {
     File root = Files.createTempDirectory("ess-nm-local").toFile();
     try {
       File ownDir = new File(root, "usercache/u/appcache/app0/blockmgr-x");
       assertTrue(ownDir.mkdirs(), "precondition: directory created");
       LocalDirValidator validator = new LocalDirValidator(new String[] { root.getPath() }, true);
-      // Must not throw.
       validator.validate(new String[] { ownDir.getPath() }, "app0");
+    } finally {
+      JavaUtils.deleteRecursively(root);
+    }
+  }
+
+  @Test
+  public void acceptsContainedStandaloneAppScopedDir() throws Exception {
+    File root = Files.createTempDirectory("ess-nm-local").toFile();
+    try {
+      File ownDir = new File(root, "spark-random/executor-random/app0");
+      File blockMgrDir = new File(ownDir, "blockmgr-random");
+      assertTrue(blockMgrDir.mkdirs(), "precondition: directory created");
+      LocalDirValidator validator = new LocalDirValidator(new String[] { root.getPath() }, true);
+      // Both the app dir and the blockmgr dir below it must be accepted.
+      validator.validate(new String[] { ownDir.getPath() }, "app0");
+      validator.validate(new String[] { blockMgrDir.getPath() }, "app0");
+    } finally {
+      JavaUtils.deleteRecursively(root);
+    }
+  }
+
+  @Test
+  public void validatesUrlEncodedAppIdAtTheExactStandaloneLeaf() throws Exception {
+    File root = Files.createTempDirectory("ess-nm-local").toFile();
+    try {
+      String appId = "app:0/1";
+      File ownDir = new File(root, "spark-random/executor-random/app%3A0%2F1");
+      File nested = new File(root, "spark-random/executor-random/other/app%3A0%2F1");
+      assertTrue(ownDir.mkdirs(), "precondition: app directory created");
+      assertTrue(nested.mkdirs(), "precondition: nested directory created");
+      LocalDirValidator validator = new LocalDirValidator(new String[] { root.getPath() }, true);
+      validator.validate(new String[] { ownDir.getPath() }, appId);
+      assertThrows(IllegalArgumentException.class,
+        () -> validator.validate(new String[] { nested.getPath() }, appId));
     } finally {
       JavaUtils.deleteRecursively(root);
     }

@@ -502,6 +502,28 @@ SPARK_WORKER_OPTS supports the following system properties:
   <td>3.4.0</td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.service.requireAppScopedLocalDirs</code></td>
+  <td>false</td>
+  <td>
+    When true, the external shuffle service only accepts executor registrations whose local
+    directories are <code>spark-*/executor-*/&lt;url-encoded-appId&gt;</code>, optionally
+    followed by <code>blockmgr-*</code>, under one of the service's configured local directory
+    roots. This guards against mis-registration
+    (e.g. a bug or race mixing up application directories); it is not an isolation boundary
+    against malicious applications, because the application id is supplied by the client and
+    standalone authentication does not bind a registration to a particular application id.
+    Workers on this version preserve the random root and executor directories and add the
+    URL-encoded application id as the final path segment. For a rolling upgrade, first upgrade
+    every Worker, then set this to true on the shuffle service: enabling it while executors
+    launched by older Workers are still registering rejects their registrations. The check
+    happens only at registration: with <code>spark.shuffle.service.db.enabled</code>,
+    registrations restored from the local database when the service restarts are not
+    re-validated, so registrations made before the upgrade keep being served across restarts.
+    This only affects standalone mode.
+  </td>
+  <td>4.4.0</td>
+</tr>
+<tr>
   <td><code>spark.storage.cleanupFilesAfterExecutorExit</code></td>
   <td>true</td>
   <td>

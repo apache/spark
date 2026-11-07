@@ -443,4 +443,44 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter with P
     assert(getHeartbeatTask(worker) == heartbeatTask)
     assert(getWorkDirCleanupTask(worker) == workDirCleanupTask)
   }
+
+  test("app cleanup uses the LaunchExecutor local dir layout") {
+    val externalShuffleServiceSupplier = new Supplier[ExternalShuffleService] {
+      override def get: ExternalShuffleService = shuffleService
+    }
+    val worker = makeWorker(new SparkConf(), externalShuffleServiceSupplier)
+    val appId = "app:20260922000000/0001"
+    val appDir = new File(worker.createExecutorLocalDirs(appId).head)
+    val executorDir = appDir.getParentFile
+    val secondAppId = "app-empty-parent"
+    val secondAppDir = new File(worker.createExecutorLocalDirs(secondAppId).head)
+    val secondExecutorDir = secondAppDir.getParentFile
+    try {
+      // Exercise the production helper rather than hand-building the directory layout.
+      assert(appDir.getName === "app%3A20260922000000%2F0001")
+      assert(executorDir.getName.startsWith("executor-"))
+      assert(executorDir.getParentFile.getName.startsWith("spark-"))
+      val sibling = new File(executorDir, "sibling")
+      assert(sibling.mkdir())
+      worker.appDirectories(appId) = Seq(appDir.getAbsolutePath)
+      worker.finishedApps += appId
+      worker.handleExecutorStateChanged(
+        ExecutorStateChanged(appId, 0, ExecutorState.EXITED, None, None))
+      eventually(timeout(1.second), interval(10.milliseconds)) {
+        assert(!appDir.exists())
+      }
+      assert(sibling.exists())
+
+      worker.appDirectories(secondAppId) = Seq(secondAppDir.getAbsolutePath)
+      worker.finishedApps += secondAppId
+      worker.handleExecutorStateChanged(
+        ExecutorStateChanged(secondAppId, 0, ExecutorState.EXITED, None, None))
+      eventually(timeout(1.second), interval(10.milliseconds)) {
+        assert(!secondExecutorDir.exists())
+      }
+    } finally {
+      Utils.deleteRecursively(executorDir)
+      Utils.deleteRecursively(secondExecutorDir)
+    }
+  }
 }
