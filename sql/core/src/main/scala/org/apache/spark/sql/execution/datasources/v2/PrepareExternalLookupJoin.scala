@@ -268,13 +268,20 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
     }
     val readerFactory =
       nonNull(externalLookup.createReaderFactory(), "ExternalLookup.createReaderFactory()")
+    // With a range selected, one stored row can match several parameter rows of one request, and
+    // the source would have to return it once for each of them, with each ordinal. Spark cannot
+    // detect a missing one, so it sends one parameter row per request then.
+    val selectsRange = selectedPredicates.exists { predicate =>
+      Set("<", "<=", ">", ">=").contains(predicate.predicateName)
+    }
+    val parameterRowsPerRequest = if (selectsRange) 1 else maxParameterRowsPerRequest
 
     val prepared = PreparedExternalLookupJoin(
       join.left,
       tableName,
       scan,
       readerFactory,
-      maxParameterRowsPerRequest,
+      parameterRowsPerRequest,
       lookupInput,
       lookupOutput,
       rebindLookupTransforms(segmentStages ++ prunedUpperStages, lookupInput),

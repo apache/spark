@@ -2581,8 +2581,11 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     val lookup = spark.read
       .format(classOf[CompositeExternalLookupDataSource].getName)
       .load()
+    // In tenant 1, the range from 0 covers the stored ids 1 and 3, so each of them joins two
+    // stream rows of the same tenant.
     val left = streamOf(Seq(
       (1, 1, 3),
+      (1, 0, 4),
       (1, 2, 4),
       (2, 0, 2),
       (3, 0, 10)).toDF("tenant", "start", "end"))
@@ -2594,6 +2597,8 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       left.join(lookup, condition, "inner"),
       Seq(
         Row(1, 1, 3, 1, 1, "one-one"),
+        Row(1, 0, 4, 1, 1, "one-one"),
+        Row(1, 0, 4, 1, 3, "one-three"),
         Row(1, 2, 4, 1, 3, "one-three"),
         Row(2, 0, 2, 2, 1, "two-one")))
     assert(CompositeExternalLookupDataSource.selectedLookupPredicates.get() === Seq(
@@ -2635,22 +2640,55 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       Seq((">", "id", IntegerType), ("<=", "id", IntegerType)))
   }
 
-  test("external lookup joins a stored row with every overlapping range in one request") {
-    SimpleExternalLookupDataSource.resetCounters()
+  test("external lookup sends one parameter row per request when it selects a range") {
     val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
-    // Two shifts that cover employee ids from 1 and from 2: both ranges cover id 2.
-    val shifts = streamOf(Seq(("early", 1), ("late", 2)).toDF("shift", "firstId"))
+    // Three shifts that cover employee ids from 1, from 2 and from 3. Ids 1 and 2 are stored, so
+    // id 2 is in the first two ranges. Each range is a request of its own, so the store returns
+    // id 2 once in each, and each shift joins it once.
+    val shifts = streamOf(Seq(("early", 1), ("late", 2), ("night", 3)).toDF("shift", "firstId"))
+    val early = Seq(
+      Row("early", 1, 1, "engineering"),
+      Row("early", 1, 1, "research"),
+      Row("early", 1, 2, "sales"))
+    val late = Seq(Row("late", 2, 2, "sales"))
 
+    Seq(
+      "inner" -> (early ++ late),
+      "left_outer" -> (early ++ late :+ Row("night", 3, null, null)),
+      "left_semi" -> Seq(Row("early", 1), Row("late", 2)),
+      "left_anti" -> Seq(Row("night", 3))).foreach { case (joinType, expected) =>
+      SimpleExternalLookupDataSource.resetCounters()
+      checkStream(shifts.join(lookup, lookup("id") >= shifts("firstId"), joinType), expected)
+      assert(SimpleExternalLookupDataSource.requestSizes.asScala.toSeq === Seq(1, 1, 1), joinType)
+    }
+    // An equality-only lookup still sends the three ids in one request.
+    SimpleExternalLookupDataSource.resetCounters()
     checkStream(
-      shifts.join(lookup, lookup("id") >= shifts("firstId"), "inner"),
+      shifts.join(lookup, lookup("id") === shifts("firstId")),
       Seq(
         Row("early", 1, 1, "engineering"),
         Row("early", 1, 1, "research"),
-        Row("early", 1, 2, "sales"),
         Row("late", 2, 2, "sales")))
-    // Both ranges are in one request, and the source returns id 2 once for each of them.
-    assert(SimpleExternalLookupDataSource.requestSizes.asScala.toSeq === Seq(2))
-    assert(SimpleExternalLookupDataSource.resultRowsRead.get() === 4)
+    assert(SimpleExternalLookupDataSource.requestSizes.asScala.toSeq === Seq(3))
+  }
+
+  test("a range on a widened stream column runs as an external lookup join") {
+    val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    // Shifts that start at an employee id held as SMALLINT. Analysis casts it to the INT `id`,
+    // and the cast cannot fail, so Spark offers the range to the store instead of failing with
+    // NO_LOOKUP_CANDIDATE.
+    val shifts =
+      streamOf(Seq(("early", 1.toShort), ("late", 2.toShort)).toDF("shift", "firstId"))
+
+    checkStream(
+      shifts.join(lookup, lookup("id") >= shifts("firstId")),
+      Seq(
+        Row("early", 1.toShort, 1, "engineering"),
+        Row("early", 1.toShort, 1, "research"),
+        Row("early", 1.toShort, 2, "sales"),
+        Row("late", 2.toShort, 2, "sales")))
+    assert(SimpleExternalLookupDataSource.lookupCandidates.get() ===
+      Seq((">=", "id", IntegerType)))
   }
 
   test("external lookup leaves unselected criteria as Spark residuals") {

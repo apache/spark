@@ -19,9 +19,9 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSeq, AttributeSet,
-  BinaryComparison, EqualNullSafe, EqualTo, Expression, ExprUtils, ExternalUserDefinedFunction,
-  GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, NamedExpression, PythonUDF,
-  SubqueryExpression}
+  BinaryComparison, Cast, EqualNullSafe, EqualTo, Expression, ExprUtils,
+  ExternalUserDefinedFunction, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual,
+  NamedExpression, PythonUDF, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftAnti, LeftOuter, LeftSemi,
   QueryPlan}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXTERNAL_LOOKUP_HINT, EXTERNAL_LOOKUP_JOIN,
@@ -157,7 +157,7 @@ object ExternalLookupJoinShapes {
    * Spark evaluates every parameter on every stream row, before the other join conditions. That
    * is safe for an equality, as a hash join evaluates its keys on every row too. A range is a
    * join condition, which a join evaluates only after its keys match, so its parameter must be
-   * one that cannot fail: ExprUtils.canEvaluateUnconditionally must accept it.
+   * one that cannot fail, as `cannotFail` decides.
    */
   private def isOfferedOn(
       comparison: BinaryComparison,
@@ -165,8 +165,22 @@ object ExternalLookupJoinShapes {
       parameter: Expression): Boolean = comparison match {
     case _: EqualTo | _: EqualNullSafe => ExternalLookupKeyTypes.supportsEquality(lookupField)
     case _ =>
-      ExternalLookupKeyTypes.supportsRange(lookupField.dataType) &&
-        ExprUtils.canEvaluateUnconditionally(parameter)
+      ExternalLookupKeyTypes.supportsRange(lookupField.dataType) && cannotFail(parameter)
+  }
+
+  /**
+   * Whether a range parameter cannot fail: ExprUtils.canEvaluateUnconditionally accepts it, or it
+   * is a widening cast of such a value between types on which Spark offers a range. Analysis adds
+   * such a cast when the stream side has a narrower type than the lookup column, as an INT column
+   * compared with a BIGINT key, and `Cast.canUpCast` ensures that it cannot fail.
+   */
+  private def cannotFail(parameter: Expression): Boolean = parameter match {
+    case cast: Cast =>
+      Cast.canUpCast(cast.child.dataType, cast.dataType) &&
+        ExternalLookupKeyTypes.supportsRange(cast.child.dataType) &&
+        ExternalLookupKeyTypes.supportsRange(cast.dataType) &&
+        ExprUtils.canEvaluateUnconditionally(cast.child)
+    case _ => ExprUtils.canEvaluateUnconditionally(parameter)
   }
 
   /** The same comparison with its operands swapped, so that `a < b` becomes `b > a`. */
