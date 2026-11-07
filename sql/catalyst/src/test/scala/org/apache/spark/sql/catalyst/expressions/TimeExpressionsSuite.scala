@@ -73,6 +73,33 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(new ToTime(Literal("00:00:00"), Literal("HH:mm:ss")).dataType === TimeType())
   }
 
+  test("SPARK-61087: to_time and time_from_seconds truncate to their TIME(6) result type") {
+    Seq(
+      "00:00:00.1234567" -> localTime(0, 0, 0, 123456),
+      "23:59:59.999999999" -> localTime(23, 59, 59, 999999)).foreach { case (str, expected) =>
+      checkEvaluation(new ToTime(Literal(str)), expected)
+      checkEvaluation(new ToTime(NonFoldableLiteral(str)), expected)
+      checkEvaluation(TryEval(new ToTime(Literal(str))), expected)
+    }
+    Seq(Literal("HH:mm:ss.SSSSSSSSS"), NonFoldableLiteral("HH:mm:ss.SSSSSSSSS")).foreach { fmt =>
+      checkEvaluation(
+        new ToTime(Literal("12:00:00.123456789"), fmt), localTime(12, 0, 0, 123456))
+    }
+
+    checkEvaluation(TimeFromSeconds(Literal(Decimal("0.0000001"))), 0L)
+    checkEvaluation(TimeFromSeconds(Literal(Decimal("52200.1234567"))), 52200123456000L)
+    // More than 9 fractional digits used to fail with an overflow error.
+    checkEvaluation(TimeFromSeconds(Literal(Decimal("1.0000000001"))), 1000000000L)
+    checkEvaluation(TimeFromSeconds(Literal(1.0E-7)), 0L)
+    checkEvaluation(TimeFromSeconds(Literal(3.0E-6)), 3000L)
+    checkEvaluation(TimeFromSeconds(Literal(52200.5)), 52200500000000L)
+    // A negative input below one microsecond is still out of range.
+    checkExceptionInExpression[SparkDateTimeException](
+      TimeFromSeconds(Literal(Decimal("-0.0000001"))), "Invalid TIME value")
+    checkExceptionInExpression[SparkDateTimeException](
+      TimeFromSeconds(Literal(-1.0E-7)), "Invalid TIME value")
+  }
+
   test("HourExpressionBuilder") {
     // Empty expressions list
     checkError(
