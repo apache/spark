@@ -311,17 +311,74 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       testConstraintsAfterJoin(originalLeft, originalRight, left, right, Inner, condition)
     }
 
-    Seq(Some("left.a".attr === "right.b".attr.cast(IntegerType)),
-      Some("right.b".attr.cast(IntegerType) === "left.a".attr)).foreach { condition =>
-      testConstraintsAfterJoin(
-        originalLeft,
-        originalRight,
-        left,
-        testRelation2.where(IsNotNull($"b") && $"b".attr.cast(IntegerType) === 1)
-          .subquery("right"),
-        Inner,
-        condition)
+    // A narrowing cast can fail in ANSI mode, so it is not inferred.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      Seq(Some("left.a".attr === "right.b".attr.cast(IntegerType)),
+        Some("right.b".attr.cast(IntegerType) === "left.a".attr)).foreach { condition =>
+        testConstraintsAfterJoin(originalLeft, originalRight, left, right, Inner, condition)
+      }
     }
+  }
+
+  private def failable(e: Expression): Expression =
+    Divide(Literal(10.0), e, EvalMode.ANSI) > 0.0
+
+  test("SPARK-60985: a constraint that can fail is not inferred as a filter") {
+    val relation = LocalRelation($"x".double, $"y".double)
+    val query = relation.where($"x" === $"y" && failable($"y")).analyze
+    val notNullAndQuery = IsNotNull($"x") && IsNotNull($"y") && $"x" === $"y" && failable($"y")
+
+    comparePlans(InferFiltersFromConstraints(query), relation.where(notNullAndQuery).analyze)
+    withSQLConf(SQLConf.LEGACY_INFER_FAILABLE_FILTERS_FROM_CONSTRAINTS.key -> "true") {
+      comparePlans(
+        InferFiltersFromConstraints(query),
+        relation.where(failable($"x") && notNullAndQuery).analyze)
+    }
+  }
+
+  test("SPARK-60985: a constraint that can fail is not inferred on the other side of a join") {
+    val left = LocalRelation($"x".double)
+    val right = LocalRelation($"y".double)
+    testConstraintsAfterJoin(
+      left.subquery("l"),
+      right.where(failable($"y")).subquery("r"),
+      left.where(IsNotNull($"x")).subquery("l"),
+      right.where(IsNotNull($"y") && failable($"y")).subquery("r"),
+      Inner,
+      Some("l.x".attr === "r.y".attr))
+  }
+
+  test("SPARK-60985: a constraint on an uncorrelated subquery is inferred as a filter") {
+    val relation = LocalRelation($"x".int, $"y".int)
+    val values = LocalRelation($"a".int).select($"a")
+    val scalar = ScalarSubquery(LocalRelation($"a".int).select(max($"a")))
+    def in(e: Expression): Expression = InSubquery(Seq(e), ListQuery(values))
+    val query = relation.where($"x" === $"y" && in($"y") && $"y" > scalar).analyze
+    val inferred = InferFiltersFromConstraints(query).collectFirst {
+      case Filter(condition, _) => splitConjunctivePredicates(condition)
+    }.get
+    assert(inferred.count(_.isInstanceOf[InSubquery]) === 2, inferred)
+    assert(inferred.count(_.isInstanceOf[GreaterThan]) === 2, inferred)
+  }
+
+  test("SPARK-60985: an integral remainder by a non-zero constant is inferred") {
+    val relation = LocalRelation($"x".int, $"y".int)
+    def even(e: Expression): Expression = Remainder(e, Literal(2), EvalMode.ANSI) === 0
+    val query = relation.where($"x" === $"y" && even($"y")).analyze
+    comparePlans(
+      InferFiltersFromConstraints(query),
+      relation.where(IsNotNull($"x") && IsNotNull($"y") && $"x" === $"y" &&
+        even($"y") && even($"x")).analyze)
+  }
+
+  test("SPARK-60985: a constraint whose canonical form is MultiCommutativeOp is inferred") {
+    val relation = LocalRelation($"x".int, $"y".int)
+    def anyOf(e: Expression): Expression = e === 1 || e === 2 || e === 3
+    val query = relation.where($"x" === $"y" && anyOf($"y")).analyze
+    comparePlans(
+      InferFiltersFromConstraints(query),
+      relation.where(IsNotNull($"x") && IsNotNull($"y") && $"x" === $"y" &&
+        anyOf($"y") && anyOf($"x")).analyze)
   }
 
   test("SPARK-36978: IsNotNull constraints on structs should apply at the member field " +
