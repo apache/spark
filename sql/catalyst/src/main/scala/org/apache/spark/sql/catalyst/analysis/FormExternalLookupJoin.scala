@@ -26,8 +26,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupHint, External
   JoinStrategyHint, LogicalPlan, ResolvedHint, SubqueryAlias, UnaryNode, View}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.WriteToStream
-import org.apache.spark.sql.catalyst.trees.TreePattern.{EXTERNAL_LOOKUP_HINT, JOIN,
-  LOOKUP_ONLY_RELATION}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{DATA_SOURCE_V2_RELATION,
+  EXTERNAL_LOOKUP_HINT, JOIN}
 import org.apache.spark.sql.connector.catalog.TableCapability
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.execution.datasources.v2.ExternalLookupRelations
@@ -47,7 +47,11 @@ import org.apache.spark.sql.execution.datasources.v2.ExternalLookupRelations
  */
 object ExternalLookupJoinEligibility extends QueryErrorsBase {
   sealed trait Eligibility
-  /** The join neither reads a lookup-only table nor has the hint, and stays an ordinary join. */
+  /**
+   * The join stays an ordinary join: it has no `EXTERNAL_LOOKUP` hint, and neither of its inputs is
+   * a lookup-only relation, directly or below unary operators. A lookup-only relation below another
+   * operator, such as a union, is not recognized, and fails later as a batch scan.
+   */
   case object NotLookupJoin extends Eligibility
   /** The join runs as an external lookup join. */
   case object Eligible extends Eligibility
@@ -196,9 +200,10 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
  */
 object CheckExternalLookupJoin extends (LogicalPlan => Unit) {
   override def apply(plan: LogicalPlan): Unit = {
-    // Only a join over a lookup-only table can be an external lookup join, and the relation of
-    // such a table carries LOOKUP_ONLY_RELATION, so other plans need no walk.
-    if (plan.containsAllPatterns(JOIN, LOOKUP_ONLY_RELATION)) {
+    // A join must run as a lookup join only over a lookup-only table, which is a DSv2 relation, or
+    // under the hint, so other plans need no walk.
+    if (plan.containsPattern(JOIN) &&
+        plan.containsAnyPattern(DATA_SOURCE_V2_RELATION, EXTERNAL_LOOKUP_HINT)) {
       val complete = plan.isInstanceOf[WriteToStream]
       plan.foreachUp {
         case join: Join if join.resolved =>

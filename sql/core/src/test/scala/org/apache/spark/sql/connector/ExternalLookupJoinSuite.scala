@@ -1147,6 +1147,29 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("a SQL subquery over lookup columns in the join condition of a lookup join is rejected") {
+    withSQLConf(
+        s"spark.sql.catalog.$EXTERNAL_LOOKUP_CATALOG_NAME" ->
+          classOf[ExternalLookupTestCatalog].getName) {
+      withTempView("events", "codes") {
+        streamOf(Seq(1).toDF("id")).createOrReplaceTempView("events")
+        Seq(1).toDF("code").createOrReplaceTempView("codes")
+        // A correlated subquery cannot be written in a Dataset join condition, but can in SQL.
+        Seq(
+          "EXISTS (SELECT 1 FROM codes WHERE codes.code = l.id)",
+          "l.id IN (SELECT code FROM codes)").foreach { subquery =>
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"SELECT * FROM events e JOIN $EXTERNAL_LOOKUP_CATALOG_NAME.ns.lookup l " +
+                s"ON e.id = l.id AND $subquery")
+            },
+            condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.SUBQUERY_IN_JOIN_CONDITION",
+            parameters = Map("relation" -> "`SimpleExternalLookupTable`"))
+        }
+      }
+    }
+  }
+
   test("Dataset join APIs that analyze a join plan lookup joins or fail with a named error") {
     val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
     val left = streamOf(Seq((1, 2)).toDF("sender", "receiver"))

@@ -126,6 +126,21 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
     assert(FormExternalLookupJoin(stray) == dual)
   }
 
+  test("validation rejects the hint on a join that reads no DSv2 table") {
+    val other = LocalRelation($"k".int, $"k2".int)
+    Seq(
+      stream.join(other.hint("external_lookup"), Inner, Some(stream.output(1) === other.output(0)))
+        -> "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.LOOKUP_PLAN",
+      stream.hint("external_lookup").join(other, Inner, Some(stream.output(1) === other.output(0)))
+        -> "INVALID_EXTERNAL_LOOKUP_HINT.NOT_ON_LOOKUP_SIDE").foreach { case (join, condition) =>
+      val analyzed = analyze(join)
+      checkError(
+        exception = intercept[AnalysisException](CheckExternalLookupJoin(analyzed)),
+        condition = condition,
+        parameters = Map.empty)
+    }
+  }
+
   test("a lookup side with another operator above the table fails in validation") {
     val dual = tableWith(BATCH_READ, EXTERNAL_LOOKUP)
     // Projections and filters on the lookup side are not supported, so they fail in validation,
