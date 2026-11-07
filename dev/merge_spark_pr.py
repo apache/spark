@@ -888,7 +888,7 @@ def remove_inherited_post_merge_ci_skip(message):
 
     marker_index += len(message) - len(tail)
     before = message[:marker_index].rstrip()
-    after = message[marker_index + len(marker):].strip()
+    after = message[marker_index + len(marker) :].strip()
     return "\n\n".join(part for part in (before, after) if part) + "\n"
 
 
@@ -896,15 +896,17 @@ def amend_commit_message(message):
     """Replace the current commit's message with the in-memory multi-line ``message``."""
     # The command is an argument list rather than a shell string, so -m safely receives the
     # complete multi-line message without shell quoting or a temporary file.
-    git.run([
-        "git",
-        "commit",
-        "--amend",
-        "--allow-empty",
-        "--cleanup=verbatim",
-        "-m",
-        message,
-    ])
+    git.run(
+        [
+            "git",
+            "commit",
+            "--amend",
+            "--allow-empty",
+            "--cleanup=verbatim",
+            "-m",
+            message,
+        ]
+    )
 
 
 # merge the requested PR and return the merge hash
