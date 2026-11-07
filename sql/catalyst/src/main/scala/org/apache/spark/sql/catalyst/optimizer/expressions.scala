@@ -141,7 +141,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
  * - Using this mapping, replace occurrence of the attributes with the corresponding constant values
  *   in the AND node.
  */
-object ConstantPropagation extends Rule[LogicalPlan] {
+object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
     _.containsAllPatterns(LITERAL, FILTER, BINARY_COMPARISON), ruleId) {
     case f: Filter =>
@@ -195,8 +195,10 @@ object ConstantPropagation extends Rule[LogicalPlan] {
           traverse(a.right, replaceChildren = false, nullIsFalse)
         val equalityPredicates = equalityPredicatesLeft ++ equalityPredicatesRight
         val newSelf = if (equalityPredicates.nonEmpty && replaceChildren) {
-          Some(And(replaceConstants(newLeft.getOrElse(a.left), equalityPredicates),
-            replaceConstants(newRight.getOrElse(a.right), equalityPredicates)))
+          Some(moveEqualitiesFirst(
+            And(replaceConstants(newLeft.getOrElse(a.left), equalityPredicates),
+              replaceConstants(newRight.getOrElse(a.right), equalityPredicates)),
+            equalityPredicates))
         } else {
           if (newLeft.isDefined || newRight.isDefined) {
             Some(And(newLeft.getOrElse(a.left), newRight.getOrElse(a.right)))
@@ -230,6 +232,16 @@ object ConstantPropagation extends Rule[LogicalPlan] {
   private def safeToReplace(ar: AttributeReference, nullIsFalse: Boolean) =
     !ar.nullable || nullIsFalse
 
+  /**
+   * Replaces attributes in the comparisons of `condition` with their constant values.
+   *
+   * The constant is the value of an attribute only on the rows that pass the whole condition.
+   * The rewritten condition also runs on other rows, e.g. a row with `y = 1` for
+   * `10 / (id - y) > 0 AND y = 0`, and a part of it that becomes constant is folded with no row
+   * at all, e.g. `10 / y` for `y = 0 AND id > 10 / y`. So that this raises no error the original
+   * condition cannot raise, an expression that can fail keeps its attributes, unless all of them
+   * are replaced and the result evaluates without an error.
+   */
   private def replaceConstants(
       condition: Expression,
       equalityPredicates: AttributeMap[(Literal, BinaryComparison)]): Expression = {
@@ -237,14 +249,64 @@ object ConstantPropagation extends Rule[LogicalPlan] {
     val predicates = equalityPredicates.values.map(_._2).toSet
     def replaceInComparison(b: BinaryComparison): Expression = {
       lazy val collationSafeReplacement = isSameCollationAttrRefComparison(b)
-      b transform {
-        case a: AttributeReference
-          if isBinaryStable(a.dataType) || collationSafeReplacement =>
-          constantsMap.getOrElse(a, a)
+      def canReplace(a: Attribute): Boolean =
+        constantsMap.contains(a) && (isBinaryStable(a.dataType) || collationSafeReplacement)
+      def replace(e: Expression): Expression = e match {
+        case a: AttributeReference if canReplace(a) => constantsMap(a)
+        case _ if ExprUtils.isTotalOperator(e) => e.mapChildren(replace)
+        case _ if e.references.nonEmpty && e.references.forall(canReplace) =>
+          fold(e.transform { case a: AttributeReference if canReplace(a) => constantsMap(a) })
+            .getOrElse(e)
+        case _ => e
       }
+      b.mapChildren(replace)
     }
-    condition.transformWithPruning(_.containsPattern(BINARY_COMPARISON)) {
-      case b: BinaryComparison if !predicates.contains(b) => replaceInComparison(b)
+    def replaceInCondition(e: Expression): Expression = e match {
+      case b: BinaryComparison if predicates.contains(b) => b
+      case b: BinaryComparison => replaceInComparison(b)
+      case _ if ExprUtils.isTotalOperator(e) => e.mapChildren(replaceInCondition)
+      // The children of these include the comparisons of a pulled up correlated condition.
+      case _: InSubquery | _: ListQuery | _: Exists => e.mapChildren(replaceInCondition)
+      case _ => e
+    }
+    replaceInCondition(condition)
+  }
+
+  /** Returns the literal that `e` folds to, or None if it is not constant or fails to fold. */
+  private def fold(e: Expression): Option[Literal] = {
+    if (e.foldable) {
+      try {
+        Some(ConstantFolding.constantFolding(e)).collect { case l: Literal => l }
+      } catch {
+        case NonFatal(_) => None
+      }
+    } else {
+      None
+    }
+  }
+
+  /**
+   * Moves the equalities ahead of the other conjuncts of `condition` if one that can fail still
+   * refers to a propagated attribute. Such a conjunct also runs on rows where an equality does
+   * not hold, with the value of the row, while a guard over the same attribute may be folded
+   * away, e.g. `n / d > 1` for `d <> 0 AND n / d > 1 AND d = 5`. An equality between an
+   * attribute and a literal cannot fail, so running it first raises no error.
+   */
+  private def moveEqualitiesFirst(
+      condition: Expression,
+      equalityPredicates: AttributeMap[(Literal, BinaryComparison)]): Expression = {
+    val predicates = equalityPredicates.values.map(_._2).toSet[Expression]
+    val propagated = AttributeSet(equalityPredicates.keys)
+    val conjuncts = splitConjunctivePredicates(condition)
+    val (equalities, others) = conjuncts.partition(predicates.contains)
+    val reordered = equalities ++ others
+    val keepsFailable = others.exists { c =>
+      c.references.intersect(propagated).nonEmpty && !ExprUtils.canEvaluateUnconditionally(c)
+    }
+    if (keepsFailable && reordered != conjuncts) {
+      reordered.reduce(And)
+    } else {
+      condition
     }
   }
 

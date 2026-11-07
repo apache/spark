@@ -22,8 +22,10 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.DoubleType
 
 /**
  * Unit tests for constant propagation in expressions.
@@ -213,5 +215,44 @@ class ConstantPropagationSuite extends PlanTest {
     comparePlans(
       Optimize.execute(testRelation.where(Not(columnA === 1 && columnA === columnA + 2)).analyze),
       testRelation.where(Not(columnA === 1) || Not(columnA === columnA + 2)).analyze)
+  }
+
+  test("SPARK-60983: Do not propagate a constant into an expression that can fail") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      def divide(e: Expression): Expression = Divide(Literal(10.0), e.cast(DoubleType))
+
+      // The conjunct can also run on rows where `b` is not 0. With `b` replaced, it would divide by
+      // zero on such a row with `c` = 0, where `c - b` is not 0.
+      val notConstant =
+        testRelation.where(divide(columnC - columnB) > Literal(0.0) && columnB === 0).analyze
+      comparePlans(Optimize.execute(notConstant), notConstant)
+
+      // It can become constant, but keeps the attribute if it fails: no row may reach it.
+      val failsToFold = testRelation.where(columnB === 0 && columnA > divide(columnB)).analyze
+      comparePlans(Optimize.execute(failsToFold), failsToFold)
+
+      comparePlans(
+        Optimize.execute(testRelation.where(columnB === 2 && columnA > divide(columnB)).analyze),
+        testRelation.where(columnB === 2 && columnA > Literal(5.0)).analyze)
+
+      // An expression that fails on its own does not stop the other side of the comparison.
+      comparePlans(
+        Optimize.execute(testRelation.where(columnB === 2 && divide(columnC) > columnB).analyze),
+        testRelation.where(columnB === 2 && divide(columnC) > Literal(2.0)).analyze)
+
+      // The guard `b <> 0` becomes TRUE, so the equality goes ahead of the conjunct that keeps `b`.
+      val guarded = Optimize.execute(testRelation
+        .where(columnB =!= 0 && divide(columnC - columnB) > Literal(0.0) && columnB === 5).analyze)
+      comparePlans(guarded,
+        testRelation.where(columnB === 5 && divide(columnC - columnB) > Literal(0.0)).analyze)
+      val Filter(guardedCondition, _) = guarded
+      assert(splitConjunctivePredicates(guardedCondition).head.sql == "(b = 5)")
+
+      // The condition of an IF decides whether the branch that can fail runs.
+      val conditional = testRelation
+        .where(If(columnC > columnB, Literal(true), divide(columnC) > Literal(0.0)) &&
+          columnB === 0).analyze
+      comparePlans(Optimize.execute(conditional), conditional)
+    }
   }
 }

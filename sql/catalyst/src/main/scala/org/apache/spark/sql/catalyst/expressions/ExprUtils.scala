@@ -268,11 +268,18 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
 
   private def canEvaluateUnconditionallyInternal(e: Expression): Boolean = e match {
     case _: AttributeReference | _: Literal => true
-    case _: GetStructField | _: GetArrayStructFields | _: GetMapValue =>
-      e.children.forall(canEvaluateUnconditionallyInternal)
+    case _ if isTotalOperator(e) => e.children.forall(canEvaluateUnconditionallyInternal)
+    case _ => false
+  }
+
+  /**
+   * Returns true if `e` itself cannot raise an error, whatever the values of its children. See
+   * [[canEvaluateUnconditionally]] for the whitelist.
+   */
+  def isTotalOperator(e: Expression): Boolean = e match {
+    case _: GetStructField | _: GetArrayStructFields | _: GetMapValue => true
     case _: And | _: Or | _: Not | _: BinaryComparison | _: IsNull | _: IsNotNull |
-         _: IsNaN | _: NullIf | _: Coalesce | _: In | _: InSet =>
-      e.children.forall(canEvaluateUnconditionallyInternal)
+         _: IsNaN | _: NullIf | _: Coalesce | _: In | _: InSet => true
     case _ => false
   }
 }
