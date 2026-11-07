@@ -37,7 +37,8 @@ import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation,
   ExternalLookupRelation, PrepareExternalLookupJoin}
 import org.apache.spark.sql.execution.externalUDF.PlanExternalUDFs
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
-import org.apache.spark.sql.types.{BooleanType, IntegerType, LongType, StructType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, IntegerType, LongType, MapType,
+  StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.udf.worker.UDFWorkerSpecification
 
@@ -192,6 +193,23 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
     }
   }
 
+  test("nullability merges at every nested level, in arrays and maps too") {
+    // The table rules out nulls in `tags` elements and `scores` values, and the read schema rules
+    // them out in `labels` elements. Each value-row attribute keeps the stricter of the two.
+    def schemaWith(tagsNull: Boolean, scoresNull: Boolean, labelsNull: Boolean): StructType =
+      new StructType()
+        .add("id", IntegerType)
+        .add("tags", ArrayType(IntegerType, tagsNull))
+        .add("scores", MapType(StringType, IntegerType, scoresNull))
+        .add("labels", ArrayType(StringType, labelsNull))
+    val lookup = lookupRelation(PlanningExternalLookupTable(
+      tableSchema = Some(schemaWith(tagsNull = false, scoresNull = false, labelsNull = true)),
+      lookupReadSchema = Some(schemaWith(tagsNull = true, scoresNull = true, labelsNull = false))))
+    val prepared = prepare(lookupJoinOnId(lookup))
+    assert(prepared.lookupInput.map(_.dataType) ===
+      schemaWith(tagsNull = false, scoresNull = false, labelsNull = false).map(_.dataType))
+  }
+
   test("the read schema must cover every lookup column with its data type") {
     Seq(
       ("id INT", "MISSING_SCAN_FIELD"),
@@ -287,10 +305,13 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
 case class PlanningExternalLookupTable(
     schemaDDL: String = "id INT, value STRING NOT NULL",
     readSchemaDDL: Option[String] = None,
-    select: Array[Predicate] => Array[Predicate] = PlanningExternalLookupTable.selectIdEqualities)
+    select: Array[Predicate] => Array[Predicate] = PlanningExternalLookupTable.selectIdEqualities,
+    // For nullability that DDL cannot write, such as of array elements.
+    tableSchema: Option[StructType] = None,
+    lookupReadSchema: Option[StructType] = None)
   extends Table with SupportsRead {
   override def name(): String = "PlanningExternalLookupTable"
-  override def schema(): StructType = StructType.fromDDL(schemaDDL)
+  override def schema(): StructType = tableSchema.getOrElse(StructType.fromDDL(schemaDDL))
   override def capabilities(): java.util.Set[TableCapability] =
     java.util.EnumSet.of(EXTERNAL_LOOKUP)
 
@@ -300,7 +321,7 @@ case class PlanningExternalLookupTable(
         select(candidates)
       override def build(): Scan = new Scan {
         override def readSchema(): StructType =
-          readSchemaDDL.map(StructType.fromDDL).getOrElse(schema())
+          lookupReadSchema.orElse(readSchemaDDL.map(StructType.fromDDL)).getOrElse(schema())
         override def toExternalLookup(): ExternalLookup = new ExternalLookup {
           override def maxParameterRowsPerRequest(): Int = 1
           override def createReaderFactory(): ExternalLookupReaderFactory =

@@ -59,8 +59,8 @@ import org.apache.spark.sql.functions.{coalesce, col, concat, expr, length, lit,
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{StreamingQueryException, StreamRealTimeModeE2ESuiteBase}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DataType, Decimal, DoubleType, IntegerType, StringType,
-  StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, Decimal, DoubleType, IntegerType,
+  MapType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -213,7 +213,12 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       (misconfigured("nestedDecimalOutOfRange"), "DECIMAL_OUT_OF_RANGE",
         table ++ Map("field" -> "`amounts`.`element`", "type" -> "\"DECIMAL(5,2)\"")),
       (misconfigured("nestedDecimalRounding"), "DECIMAL_OUT_OF_RANGE",
-        table ++ Map("field" -> "`rates`.`value`", "type" -> "\"DECIMAL(5,2)\""))).foreach {
+        table ++ Map("field" -> "`rates`.`value`", "type" -> "\"DECIMAL(5,2)\"")),
+      // A map key is never null, whether it is a primitive or a struct.
+      (misconfigured("nullMapKey"), "NULL_IN_NOT_NULL_FIELD",
+        table ++ Map("field" -> "`labels`.`key`")),
+      (misconfigured("nullComplexMapKey"), "NULL_IN_NOT_NULL_FIELD",
+        table ++ Map("field" -> "`parts`.`key`"))).foreach {
       case (lookup, subClass, parameters) =>
         checkError(
           exception = streamFailure[SparkRuntimeException](
@@ -663,6 +668,7 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     Seq(
       "cursorFailure" -> 0,
       "closeDuringNext" -> 0,
+      "closeDuringGet" -> 0,
       "closeBetweenResultRows" -> 1,
       "closeAtCursorEnd" -> 2).foreach {
       case (failure, outputRows) =>
@@ -688,6 +694,9 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
             // The cursor had a row when the close came, but Spark reads no row from it.
             case "closeDuringNext" =>
               SimpleExternalLookupDataSource.beforeNextReturns.set(completeTask)
+            // The close comes while the row is read, so Spark neither copies nor joins it.
+            case "closeDuringGet" =>
+              SimpleExternalLookupDataSource.beforeGetReturns.set(completeTask)
             case _ =>
           }
           intercept[Exception] {
@@ -788,6 +797,23 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
         left.join(wrongType, left("id") === wrongType("id"))),
       condition = "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.UNKNOWN_SCAN_FIELD",
       parameters = Map("table" -> "`ReadSchemaExternalLookupTable`", "field" -> "`name`"))
+  }
+
+  test("external lookup checks nested nulls against the stricter of the two schemas") {
+    // At each nested level, the table rules out a null that the read schema allows, and the
+    // connector returns that null.
+    val left = streamOf(Seq(1).toDF("id"))
+    Seq(
+      "nullArrayElement" -> "`tags`.`element`",
+      "nullMapValue" -> "`scores`.`value`",
+      "nullStructInArray" -> "`items`.`element`.`a`").foreach { case (kind, field) =>
+      val lookup = readSchemaLookup(kind)
+      checkError(
+        exception = streamFailure[SparkRuntimeException](
+          left.join(lookup, left("id") === lookup("id"))),
+        condition = "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.NULL_IN_NOT_NULL_FIELD",
+        parameters = Map("table" -> "`ReadSchemaExternalLookupTable`", "field" -> field))
+    }
   }
 
   test("a lookup-only table that needs read-side CHAR or VARCHAR handling is rejected") {
@@ -1131,6 +1157,8 @@ object SimpleExternalLookupDataSource {
   val beforeCursorEnds = new AtomicReference[() => Unit](() => ())
   // Called when a cursor has advanced to a row, before next() returns.
   val beforeNextReturns = new AtomicReference[() => Unit](() => ())
+  // Called when the join reads a row with get(), before it returns.
+  val beforeGetReturns = new AtomicReference[() => Unit](() => ())
   // The get() and inputOrdinal() calls on a closed cursor.
   val rowReadsAfterClose = new AtomicInteger(0)
   val lookupCandidates =
@@ -1163,6 +1191,7 @@ object SimpleExternalLookupDataSource {
     afterParameterRowsRead.set(_ => ())
     beforeCursorEnds.set(() => ())
     beforeNextReturns.set(() => ())
+    beforeGetReturns.set(() => ())
     rowReadsAfterClose.set(0)
     lookupCandidates.set(Seq.empty)
     lookupCandidateDescriptions.set(Seq.empty)
@@ -1396,7 +1425,8 @@ case class SimpleExternalLookupReaderFactory(
         onEnd = () => SimpleExternalLookupDataSource.beforeCursorEnds.get()(),
         onClose = () => SimpleExternalLookupDataSource.closeEvents.add("cursor"),
         onReadAfterClose =
-          () => SimpleExternalLookupDataSource.rowReadsAfterClose.incrementAndGet())
+          () => SimpleExternalLookupDataSource.rowReadsAfterClose.incrementAndGet(),
+        onGet = () => SimpleExternalLookupDataSource.beforeGetReturns.get()())
     }
 
     override def currentMetricsValues():
@@ -1521,7 +1551,8 @@ class TestExternalLookupResultCursor(
     onNext: () => Unit = () => (),
     onEnd: () => Unit = () => (),
     onClose: () => Unit = () => (),
-    onReadAfterClose: () => Unit = () => ())
+    onReadAfterClose: () => Unit = () => (),
+    onGet: () => Unit = () => ())
     extends ExternalLookupResultCursor {
   private var current: (Int, InternalRow) = _
   @volatile private var closed = false
@@ -1538,6 +1569,7 @@ class TestExternalLookupResultCursor(
 
   override def get(): InternalRow = {
     if (closed) onReadAfterClose()
+    onGet()
     current._2
   }
 
@@ -1714,6 +1746,15 @@ case class ReadSchemaExternalLookupTable(kind: String) extends Table with Suppor
       .add("id", IntegerType)
       .add("s", new StructType().add("a", IntegerType, nullable = false))
     case "wrongType" | "reordered" => StructType.fromDDL("id INT, name STRING")
+    case "nullArrayElement" => new StructType()
+      .add("id", IntegerType)
+      .add("tags", ArrayType(IntegerType, containsNull = false))
+    case "nullMapValue" => new StructType()
+      .add("id", IntegerType)
+      .add("scores", MapType(StringType, IntegerType, valueContainsNull = false))
+    case "nullStructInArray" => new StructType()
+      .add("id", IntegerType)
+      .add("items", ArrayType(new StructType().add("a", IntegerType, nullable = false)))
   }
   override def capabilities(): java.util.Set[TableCapability] =
     java.util.EnumSet.of(EXTERNAL_LOOKUP)
@@ -1724,6 +1765,16 @@ case class ReadSchemaExternalLookupTable(kind: String) extends Table with Suppor
       .add("s", new StructType().add("a", IntegerType))
     case "wrongType" => StructType.fromDDL("id INT, name INT")
     case "reordered" => StructType.fromDDL("name STRING, id INT")
+    // Each of these allows the null that the table rules out.
+    case "nullArrayElement" => new StructType()
+      .add("id", IntegerType)
+      .add("tags", ArrayType(IntegerType, containsNull = true))
+    case "nullMapValue" => new StructType()
+      .add("id", IntegerType)
+      .add("scores", MapType(StringType, IntegerType, valueContainsNull = true))
+    case "nullStructInArray" => new StructType()
+      .add("id", IntegerType)
+      .add("items", ArrayType(new StructType().add("a", IntegerType)))
     case _ => schema()
   }
 
@@ -1752,6 +1803,12 @@ case class ReadSchemaExternalLookupReaderFactory(kind: String)
         ordinal -> (kind match {
           case "nested" => InternalRow(id, InternalRow(if (id == 2) null else id * 10))
           case "reordered" => InternalRow(name, id)
+          case "nullArrayElement" => InternalRow(id, new GenericArrayData(Array[Any](id, null)))
+          case "nullMapValue" => InternalRow(id, new ArrayBasedMapData(
+            new GenericArrayData(Array[Any](UTF8String.fromString("math"))),
+            new GenericArrayData(Array[Any](null))))
+          case "nullStructInArray" =>
+            InternalRow(id, new GenericArrayData(Array[Any](InternalRow(null))))
           case _ => InternalRow(id, name)
         })
       }
@@ -1838,6 +1895,8 @@ case class MisconfiguredExternalLookupTable(kind: String) extends Table with Sup
     case "decimalOutOfRange" => StructType.fromDDL("id INT, amount DECIMAL(5, 2)")
     case "nestedDecimalOutOfRange" => StructType.fromDDL("id INT, amounts ARRAY<DECIMAL(5, 2)>")
     case "nestedDecimalRounding" => StructType.fromDDL("id INT, rates MAP<STRING, DECIMAL(5, 2)>")
+    case "nullMapKey" => StructType.fromDDL("id INT, labels MAP<INT, STRING>")
+    case "nullComplexMapKey" => StructType.fromDDL("id INT, parts MAP<STRUCT<a: INT>, STRING>")
     case _ => SimpleExternalLookupDataSource.outputSchema
   }
   override def capabilities(): java.util.Set[TableCapability] = kind match {
@@ -1858,7 +1917,8 @@ case class MisconfiguredExternalLookupTable(kind: String) extends Table with Sup
           NoExternalLookupScan(new StructType().add("id", "int").add("id", "int"))
         case "noExternalLookup" => NoExternalLookupScan(schema())
         case "invalidOrdinal" | "nullReader" | "nullValue" | "nullUnderNotNullReadSchema" |
-            "decimalOutOfRange" | "nestedDecimalOutOfRange" | "nestedDecimalRounding" => new Scan {
+            "decimalOutOfRange" | "nestedDecimalOutOfRange" | "nestedDecimalRounding" |
+            "nullMapKey" | "nullComplexMapKey" => new Scan {
           override def readSchema(): StructType = kind match {
             case "nullUnderNotNullReadSchema" =>
               StructType.fromDDL("id INT, department STRING NOT NULL")
@@ -1912,6 +1972,16 @@ case class MisconfiguredExternalLookupReaderFactory(kind: String)
       override def lookupBatch(keys: Array[InternalRow]): ExternalLookupResultCursor =
         new TestExternalLookupResultCursor(Iterator(0 -> InternalRow(
           keys(0).getInt(0), new GenericArrayData(Array[Any](Decimal(BigDecimal("12345.67")))))))
+      override def close(): Unit = {}
+    }
+    // A map with a null key, which no map may hold.
+    case "nullMapKey" | "nullComplexMapKey" => new ExternalLookupReader {
+      override def lookupBatch(keys: Array[InternalRow]): ExternalLookupResultCursor =
+        new TestExternalLookupResultCursor(Iterator(0 -> InternalRow(
+          keys(0).getInt(0),
+          new ArrayBasedMapData(
+            new GenericArrayData(Array[Any](null)),
+            new GenericArrayData(Array[Any](UTF8String.fromString("x")))))))
       override def close(): Unit = {}
     }
     // A DECIMAL(5, 2) map value with more decimal places than its type allows.
