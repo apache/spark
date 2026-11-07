@@ -555,6 +555,21 @@ class FrameReindexingMixin:
             psdf.drop_duplicates([10, 20], keep=keep).sort_index(),
         )
 
+    def test_drop_duplicates_with_dotted_column_names(self):
+        pdf = pd.DataFrame({"customer.id": [1, 1, 2], "value": [10, 20, 30]})
+        psdf = ps.from_pandas(pdf)
+
+        for keep in ["first", "last", False]:
+            with self.subTest(keep=keep):
+                self.assert_eq(
+                    pdf.drop_duplicates(subset=["customer.id"], keep=keep).sort_index(),
+                    psdf.drop_duplicates(subset=["customer.id"], keep=keep).sort_index(),
+                )
+                self.assert_eq(
+                    pdf.duplicated(subset=["customer.id"], keep=keep).sort_index(),
+                    psdf.duplicated(subset=["customer.id"], keep=keep).sort_index(),
+                )
+
     def test_duplicated(self):
         pdf = pd.DataFrame(
             {"a": [1, 1, 2, 3], "b": [1, 1, 1, 4], "c": [1, 1, 1, 5]}, index=np.random.rand(4)
