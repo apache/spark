@@ -162,7 +162,7 @@ object VariantExpressionEvalUtils {
       legacyPathBackslashAsLiteral: Boolean): VariantVal = {
     val v = new Variant(input.getValue, input.getMetadata)
     try {
-      val valVal = castToVariant(value, valueDataType)
+      val valVal = castToVariant(value, valueDataType, functionName)
       val valVariant = new Variant(valVal.getValue, valVal.getMetadata)
       val out = VariantBuilder.insertAtPath(v, javaSegments, valVariant)
       new VariantVal(out.getValue, out.getMetadata)
@@ -214,7 +214,7 @@ object VariantExpressionEvalUtils {
       legacyPathBackslashAsLiteral: Boolean): VariantVal = {
     val v = new Variant(input.getValue, input.getMetadata)
     try {
-      val valVal = castToVariant(value, valueDataType)
+      val valVal = castToVariant(value, valueDataType, functionName)
       val valVariant = new Variant(valVal.getValue, valVal.getMetadata)
       val out = VariantBuilder.setAtPath(v, javaSegments, valVariant, createIfMissing)
       new VariantVal(out.getValue, out.getMetadata)
@@ -264,7 +264,7 @@ object VariantExpressionEvalUtils {
       legacyPathBackslashAsLiteral: Boolean): VariantVal = {
     val v = new Variant(input.getValue, input.getMetadata)
     try {
-      val valVal = castToVariant(value, valueDataType)
+      val valVal = castToVariant(value, valueDataType, functionName)
       val valVariant = new Variant(valVal.getValue, valVal.getMetadata)
       val out = VariantBuilder.arrayAppendAtPath(v, javaSegments, valVariant)
       new VariantVal(out.getValue, out.getMetadata)
@@ -321,13 +321,25 @@ object VariantExpressionEvalUtils {
   }
 
   /** Cast a Spark value from `dataType` into the variant type. */
-  def castToVariant(input: Any, dataType: DataType): VariantVal = {
+  def castToVariant(input: Any, dataType: DataType): VariantVal =
+    castToVariant(input, dataType, "cast")
+
+  /**
+   * Cast a Spark value from `dataType` into the variant type. A result over the size limit raises
+   * `VARIANT_SIZE_LIMIT` with `functionName`.
+   */
+  def castToVariant(input: Any, dataType: DataType, functionName: String): VariantVal = {
     // Enforce strict check because it is illegal for input struct/map/variant to contain duplicate
     // keys.
     val builder = new VariantBuilder(false)
-    buildVariant(builder, input, dataType)
-    val v = builder.result()
-    new VariantVal(v.getValue, v.getMetadata)
+    try {
+      buildVariant(builder, input, dataType)
+      val v = builder.result()
+      new VariantVal(v.getValue, v.getMetadata)
+    } catch {
+      case _: VariantSizeLimitException =>
+        throw QueryExecutionErrors.variantSizeLimitError(VariantUtil.SIZE_LIMIT, functionName)
+    }
   }
 
   /**

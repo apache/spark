@@ -1180,6 +1180,17 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkFailure(true, toVariantObject = true)
     checkFailure(Literal.create(Literal.create(Period.ofMonths(0))), toVariantObject = true)
     checkFailure(Map(1 -> 1), toVariantObject = true)
+
+    // A result over the size limit raises VARIANT_SIZE_LIMIT naming the function.
+    val tooBig = "x".repeat(16 * 1024 * 1024)
+    checkErrorInExpression[SparkRuntimeException](
+      Cast(Literal(tooBig), VariantType, evalMode = EvalMode.ANSI),
+      "VARIANT_SIZE_LIMIT",
+      Map("sizeLimit" -> "16.0 MiB", "functionName" -> "`cast`"))
+    checkErrorInExpression[SparkRuntimeException](
+      ToVariantObject(Literal.create(Array(tooBig))),
+      "VARIANT_SIZE_LIMIT",
+      Map("sizeLimit" -> "16.0 MiB", "functionName" -> "`to_variant_object`"))
   }
 
   test("SPARK-58672: validate char/varchar input types in to_variant_object") {
