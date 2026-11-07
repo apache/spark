@@ -17,6 +17,8 @@
 
 package org.apache.spark.shuffle
 
+import java.util.Optional
+
 import org.apache.spark.annotation.DeveloperApi
 
 /**
@@ -36,8 +38,10 @@ abstract class ShuffleHandle(val shuffleId: Int) extends Serializable {
    * honor this flag; the scheduler rejects a non-`None` value on a pipelined dependency.
    *
    * Per-shuffle override of the app-global `ShuffleDriverComponents.supportsReliableStorage()`:
-   * `Some(value)` is authoritative for this shuffle; `None` (the default) means "no per-shuffle
-   * information", so the global flag is used and managers that don't set it keep legacy behavior.
+   * a present value is authoritative for this shuffle. Empty (the default) means "no per-shuffle
+   * information", so the shuffle takes the global flag. A manager that sets neither keeps today's
+   * behavior. With the global flag on, an empty value marks the shuffle reliable, so its output is
+   * also kept on worker loss and on a FetchFailed for another shuffle.
    */
-  def reliablyStored: Option[Boolean] = None
+  def reliablyStored: Optional[java.lang.Boolean] = Optional.empty()
 }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import java.util.{ArrayList => JArrayList, Collections => JCollections, Properties}
+import java.util.{ArrayList => JArrayList, Collections => JCollections, Optional, Properties}
 import java.util.concurrent.{CountDownLatch, Delayed, LinkedBlockingQueue, ScheduledFuture, TimeUnit}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong, AtomicReference}
 
@@ -26,6 +26,7 @@ import scala.collection.immutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
 import scala.concurrent.Promise
 import scala.jdk.CollectionConverters._
+import scala.jdk.OptionConverters._
 import scala.language.reflectiveCalls
 import scala.util.control.NonFatal
 
@@ -166,7 +167,8 @@ class ReliablyStoredShuffleDependency(
   extends ShuffleDependency[Int, Int, Int](rdd, partitioner) {
   override val shuffleHandle: ShuffleHandle =
     new BaseShuffleHandle(shuffleId, this) {
-      override def reliablyStored: Option[Boolean] = reliablyStoredSignal
+      override def reliablyStored: Optional[java.lang.Boolean] =
+        reliablyStoredSignal.map(Boolean.box).toJava
     }
 }
 
@@ -1207,6 +1209,49 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     intercept[MetadataFetchFailedException] {
       mapOutputTracker.getMapSizesByExecutorId(fallbackDep.shuffleId, 0)
     }
+  }
+
+  /**
+   * Global supportsReliableStorage on, two shuffles whose handles leave reliablyStored empty, both
+   * completed on hostA / hostB. Returns the two dependencies.
+   */
+  private def submitGlobalReliableEmptyHandleJob()
+      : (ShuffleDependency[Int, Int, Nothing], ShuffleDependency[Int, Int, Nothing]) = {
+    conf.set(config.SHUFFLE_SERVICE_ENABLED.key, "false")
+    conf.set(config.SHUFFLE_IO_PLUGIN_CLASS.key,
+      classOf[TestShuffleDataIOWithMockedComponents].getName)
+    when(sc.shuffleDriverComponents.supportsReliableStorage()).thenReturn(true)
+    val depA = new ShuffleDependency(new MyRDD(sc, 2, Nil), new HashPartitioner(1))
+    val depB = new ShuffleDependency(new MyRDD(sc, 2, Nil), new HashPartitioner(1))
+    assert(!depA.shuffleHandle.reliablyStored.isPresent)
+    submit(new MyRDD(sc, 1, List(depA, depB), tracker = mapOutputTracker), Array(0))
+    completeShuffleMapStageSuccessfully(0, 0, 1)
+    completeShuffleMapStageSuccessfully(1, 0, 1)
+    (depA, depB)
+  }
+
+  test("SPARK-59138: with global supportsReliableStorage and empty handles, executor loss " +
+    "neither scans nor bumps the epoch") {
+    val (depA, _) = submitGlobalReliableEmptyHandleJob()
+    val epochBefore = mapOutputTracker.getEpoch
+    runEvent(ExecutorLost("hostA-exec", ExecutorKilled))
+    verify(mapOutputTracker, never()).removeOutputsOnExecutor("hostA-exec", true)
+    assert(mapOutputTracker.getEpoch === epochBefore)
+    assert(mapOutputTracker.getNumAvailableOutputs(depA.shuffleId) === 2)
+  }
+
+  test("SPARK-59138: with global supportsReliableStorage and empty handles, worker removal keeps " +
+    "outputs and a FetchFailed clears only the failed shuffle") {
+    val (depA, depB) = submitGlobalReliableEmptyHandleJob()
+
+    runEvent(WorkerRemoved("worker-hostA", "hostA", "ignored"))
+    assert(mapOutputTracker.getNumAvailableOutputs(depA.shuffleId) === 2)
+    assert(mapOutputTracker.getNumAvailableOutputs(depB.shuffleId) === 2)
+
+    runEvent(makeCompletionEvent(taskSets(2).tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), depA.shuffleId, 0L, 0, 0, "ignored"), null))
+    assert(mapOutputTracker.getNumAvailableOutputs(depA.shuffleId) === 1)
+    assert(mapOutputTracker.getNumAvailableOutputs(depB.shuffleId) === 2)
   }
 
   test("SPARK-59138: a duplicate same-epoch FetchFailed for a reliable shuffle is fenced by the " +
@@ -7295,7 +7340,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   test("pipelined shuffle: a regular-shuffle prefix feeding a pipelined producer is rejected") {
     // An UNMATERIALIZED regular shuffle in the PREFIX that feeds a pipelined producer
     // (regularRoot --regular--> producer(pipelined) --pipelined--> consumer) is rejected: the
-    // prefix stage would have to run while gang-admitted producers hold slots. Once the prefix is
+    // prefix stage would have to run while gang-admitted producers hold slots blocked on
+    // transport backpressure, which admission does not account for. Once the prefix is
     // MATERIALIZED the same shape is accepted (see the materialized-prefix test below).
     val regularRoot = new MyRDD(sc, 2, Nil)
     val regularDep = new ShuffleDependency(regularRoot, new HashPartitioner(2))
@@ -7317,10 +7363,13 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   test("pipelined shuffle: a fully-materialized regular prefix below the suffix is accepted") {
-    // The materialized-prefix mixed shape (what adaptive execution produces). First job
-    // materializes the regular shuffle; the second job's pipelined producer reads that output, so
-    // the prefix stage is skipped and only the gang runs. Prefix map side (2) and reduce side (3)
-    // are asymmetric on purpose: completeness is measured in MAP outputs, not the reduce side.
+    // The materialized-prefix mixed shape (the one adaptive execution produces: prior jobs
+    // materialize the prefix stages, the final job runs the pipelined tail). First job
+    // materializes the regular shuffle; the second job's pipelined producer reads that
+    // materialized output, so the prefix stage is skipped and only the gang runs. The prefix's
+    // map side (2) and reduce side (3) are deliberately asymmetric: materialization
+    // completeness must be measured in MAP outputs, and a symmetric count would hide a check
+    // against the wrong side.
     val regularRoot = new MyRDD(sc, 2, Nil)
     val regularDep = new ShuffleDependency(regularRoot, new HashPartitioner(3))
     val prefixReader = new MyRDD(sc, 3, List(regularDep), tracker = mapOutputTracker)
@@ -7354,10 +7403,14 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
   test("pipelined shuffle: losing a materialized prefix's output mid-group aborts the whole " +
       "group, not a lone prefix resubmit") {
-    // If a materialized prefix's output is LOST while the gang is running, a base-scheduler
-    // lone-stage resubmit of the prefix would deadlock (the gang holds all slots). This is the one
-    // FetchFailed path where the failing consumer reads OUTSIDE its group; it must still route to a
-    // whole-group abort (isPipelinedGroupMember keys off the FAILING STAGE, not the failed fetch).
+    // The materialized-prefix mixed shape does not need a slot to re-run its prefix -- but if the
+    // prefix's shuffle output is LOST while the gang is running (FetchFailed / executor loss), a
+    // base-scheduler lone-stage resubmit of the prefix would deadlock: the gang holds all slots
+    // (producers blocked on backpressure), leaving no slot for the prefix to recompute into. This
+    // is the one FetchFailed path where the failing consumer reads OUTSIDE its group (the external
+    // prefix), which the group-internal FetchFailed test does not exercise. It must still route to
+    // a whole-group abort, because isPipelinedGroupMember keys off the FAILING STAGE (the pipelined
+    // producer reading the prefix is a group member) regardless of which shuffle's fetch failed.
     val regularRoot = new MyRDD(sc, 2, Nil)
     val regularDep = new ShuffleDependency(regularRoot, new HashPartitioner(3))
     val prefixReader = new MyRDD(sc, 3, List(regularDep), tracker = mapOutputTracker)
@@ -7399,10 +7452,11 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
   test("pipelined shuffle: an all-pipelined group with no regular prefix classifies identically " +
       "under the materialized-prefix relaxation (a previously-valid shape is unchanged)") {
-    // The materialized-prefix mixed shape is admitted only by adaptive execution; an all-pipelined
-    // job (no regular boundary) never hits the relaxed path, so it classifies identically before
-    // and after the relaxation. The relaxation is a strict superset: every previously-valid shape
-    // is unchanged.
+    // The prefix relaxation (classifyJobShuffleShape) keys purely off dependency TYPE, so it is
+    // open to any PipelinedShuffleDependency. But the materialized-prefix mixed shape it newly
+    // admits is produced only by adaptive execution; an all-pipelined job (no regular boundary)
+    // never hits the relaxed path, so it classifies identically before and after the relaxation
+    // -- the relaxation is a strict superset that leaves every previously-valid shape unchanged.
     val producerRdd = new MyRDD(sc, 2, Nil)
     val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
     val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
@@ -7427,10 +7481,15 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   test("pipelined shuffle: a non-mixed job is classified by the cheap kinds pre-pass") {
-    // A COST property (both paths return the same shape for a non-mixed job, so no result assertion
-    // distinguishes them). What is pinned is the contract the pre-pass rests on: for each of the
-    // three non-mixed shapes the kinds pre-pass alone determines the answer. If a future change
-    // makes the shape depend on the precise walk for these graphs, these equalities break.
+    // Shuffle-shape preflight runs on every job submission, including on deployments that never
+    // enable this feature, so a non-mixed job must not pay the precise (RDD, belowRegular)-keyed
+    // walk that only a pipelined/regular MIX needs.
+    //
+    // This is a COST property, not a behavioral one: for a non-mixed job both paths return the same
+    // shape, so no assertion on the result can distinguish them. What is pinned here instead is the
+    // contract the pre-pass rests on -- the kinds pre-pass alone determines the answer for a
+    // non-mixed graph -- for each of the three non-mixed shapes. If a future change makes the
+    // shape depend on the precise walk for these graphs, these equalities break.
     def shapeOf(rdd: MyRDD): (Boolean, Boolean, Boolean) = {
       val sh = scheduler.classifyJobShuffleShape(rdd)
       (sh.hasPipelined, sh.hasUnmaterializedRegularBoundary, sh.hasPipelinedBelowRegular)
@@ -7468,10 +7527,12 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   test("pipelined shuffle: a manager that does not consume the live-reduce hint gets no hint") {
-    // The live-reduce hint and per-run epoch exist for a transport whose writer PARKS on a
-    // partition nobody drains (the in-process channel). The RPC streaming transport (the default,
-    // what Real-Time Mode runs on) reads neither, so a pipelined job on it must be left exactly as
-    // without this feature: no cloned Properties, no epoch, no live set, no partial-read abort.
+    // The scheduler's live-reduce-partition hint and per-run epoch exist for a transport whose
+    // writer PARKS on a partition nobody drains (the in-process channel's bounded queue). The RPC
+    // streaming transport -- the default `spark.shuffle.manager.incremental`, and what Real-Time
+    // Mode runs on -- reads neither property, so a pipelined job on it must be left exactly as it
+    // is without this feature: no cloned Properties, no epoch, no live set, and no partial-read
+    // abort whose remedy (disabling the batch SQL flag) does not even apply to it.
     assert(!sc.env.pipelinedShuffleManager.supportsLiveReducePartitionHints,
       "precondition: the default incremental manager does not consume the hint")
 
@@ -7737,14 +7798,15 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   test("pipelined shuffle: an explicit reliablyStored value on a pipelined dependency is " +
     "rejected") {
     // reliablyStored is a map-output-tracker contract; the streaming tracker ignores it. A
-    // pipelined handle opting into Some(_) would silently get no guarantee, so the producer-stage
+    // pipelined handle setting a value would silently get no guarantee, so the producer-stage
     // check must reject it before any stage is created.
     val producerRdd = new MyRDD(sc, 2, Nil)
     val pipelinedDep = new PipelinedShuffleDependency[Int, Int, Int](producerRdd,
         new HashPartitioner(2)) {
       override val shuffleHandle: ShuffleHandle =
         new BaseShuffleHandle(shuffleId, this) {
-          override def reliablyStored: Option[Boolean] = Some(true)
+          override def reliablyStored: Optional[java.lang.Boolean] =
+            Optional.of(java.lang.Boolean.TRUE)
         }
     }
     val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
