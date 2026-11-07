@@ -64,13 +64,18 @@ class ClassificationTestsMixin:
             ["label", "features"],
         )
         classifiers = [
-            LogisticRegression(maxIter=2),
-            LinearSVC(maxIter=2),
-            FMClassifier(maxIter=2, seed=42),
+            LogisticRegression(maxIter=2, intermediateStorageLevel="DISK_ONLY"),
+            LinearSVC(maxIter=2, intermediateStorageLevel="DISK_ONLY"),
+            FMClassifier(maxIter=2, seed=42, intermediateStorageLevel="DISK_ONLY"),
         ]
         for classifier in classifiers:
             with self.subTest(classifier=type(classifier).__name__):
-                self.assertEqual(classifier.getIntermediateStorageLevel(), "MEMORY_AND_DISK")
+                self.assertEqual(
+                    type(classifier)().getIntermediateStorageLevel(), "MEMORY_AND_DISK"
+                )
+                self.assertEqual(classifier.getIntermediateStorageLevel(), "DISK_ONLY")
+                classifier.setParams(intermediateStorageLevel="MEMORY_ONLY")
+                self.assertEqual(classifier.getIntermediateStorageLevel(), "MEMORY_ONLY")
                 classifier.setIntermediateStorageLevel("DISK_ONLY")
                 self.assertEqual(classifier.getIntermediateStorageLevel(), "DISK_ONLY")
                 model = classifier.fit(dataset)
