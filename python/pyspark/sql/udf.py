@@ -271,6 +271,7 @@ class UserDefinedFunction:
                 value = session.conf.get(key, default)
             return value is not None and value.lower() == "true"
 
+        unknown_transpilers: list[str] = []
         try:
             transpile_enabled = (
                 deterministic
@@ -296,7 +297,7 @@ class UserDefinedFunction:
                 transpile_enabled = False
             if transpile_enabled and session:
                 # Import only if needed, also avoid circular import loops.
-                from pyspark.sql.transpile import _transpile_func
+                from pyspark.sql.transpile import AbstractTranspiler, _transpile_func
 
                 # ``self.returnType`` parses (and caches) the declared return
                 # type; the transpiler needs the parsed form to decide whether
@@ -308,6 +309,7 @@ class UserDefinedFunction:
                     self._transpiled_param_names,
                     self._transpiled_input_categories,
                     positional_only,
+                    unknown_transpilers,
                 ) = _transpile_func(session, func, self.returnType)
                 self._positional_only_param_names = frozenset(positional_only)
                 if not self.transpiled:
@@ -329,6 +331,12 @@ class UserDefinedFunction:
             self._transpiled_param_names = []
             self._transpiled_input_categories = []
             self._positional_only_param_names = frozenset()
+        if unknown_transpilers:
+            warnings.warn(
+                f"Ignoring unknown transpilers {unknown_transpilers} in "
+                "spark.sql.experimental.optimizer.pyTranspilers; registered transpilers are "
+                f"{sorted(AbstractTranspiler.varieties)}"
+            )
 
     @staticmethod
     def _check_return_type(returnType: DataType, evalType: int) -> None:
