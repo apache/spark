@@ -2,81 +2,81 @@
 Benchmark ZStandardCompressionCodec
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1022-azure
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Benchmark ZStandardCompressionCodec:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------------------
-Compression 10000 times at level 1 without buffer pool            685            693           9          0.0       68495.8       1.0X
-Compression 10000 times at level 2 without buffer pool            729            731           2          0.0       72854.9       0.9X
-Compression 10000 times at level 3 without buffer pool            823            824           1          0.0       82301.4       0.8X
-Compression 10000 times at level 1 with buffer pool               602            605           3          0.0       60220.4       1.1X
-Compression 10000 times at level 2 with buffer pool               636            638           2          0.0       63564.6       1.1X
-Compression 10000 times at level 3 with buffer pool               742            743           1          0.0       74186.5       0.9X
+Compression 10000 times at level 1 without buffer pool            699            707           8          0.0       69925.7       1.0X
+Compression 10000 times at level 2 without buffer pool            728            731           2          0.0       72832.0       1.0X
+Compression 10000 times at level 3 without buffer pool            855            856           1          0.0       85542.1       0.8X
+Compression 10000 times at level 1 with buffer pool               599            601           3          0.0       59930.7       1.2X
+Compression 10000 times at level 2 with buffer pool               627            628           1          0.0       62669.5       1.1X
+Compression 10000 times at level 3 with buffer pool               760            761           1          0.0       75979.8       0.9X
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1022-azure
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Benchmark ZStandardCompressionCodec:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------------------------
-Decompression 10000 times from level 1 without buffer pool            652            652           1          0.0       65167.1       1.0X
-Decompression 10000 times from level 2 without buffer pool            645            648           3          0.0       64479.4       1.0X
-Decompression 10000 times from level 3 without buffer pool            652            652           0          0.0       65158.1       1.0X
-Decompression 10000 times from level 1 with buffer pool               573            574           1          0.0       57323.5       1.1X
-Decompression 10000 times from level 2 with buffer pool               572            573           1          0.0       57192.9       1.1X
-Decompression 10000 times from level 3 with buffer pool               572            574           2          0.0       57240.0       1.1X
+Decompression 10000 times from level 1 without buffer pool            663            664           1          0.0       66318.6       1.0X
+Decompression 10000 times from level 2 without buffer pool            663            664           1          0.0       66298.7       1.0X
+Decompression 10000 times from level 3 without buffer pool            662            663           1          0.0       66205.3       1.0X
+Decompression 10000 times from level 1 with buffer pool               576            576           0          0.0       57601.9       1.2X
+Decompression 10000 times from level 2 with buffer pool               576            578           2          0.0       57638.0       1.2X
+Decompression 10000 times from level 3 with buffer pool               575            577           1          0.0       57547.1       1.2X
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1022-azure
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Parallel Compression at level 3:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Parallel Compression with 0 workers                  72             74           1          0.0      564993.8       1.0X
-Parallel Compression with 1 workers                  72             75           3          0.0      560325.2       1.0X
-Parallel Compression with 2 workers                  54             57           3          0.0      424336.8       1.3X
-Parallel Compression with 4 workers                  48             51           2          0.0      375598.6       1.5X
-Parallel Compression with 8 workers                  47             50           2          0.0      364974.5       1.5X
-Parallel Compression with 16 workers                 47             51           2          0.0      369351.1       1.5X
+Parallel Compression with 0 workers                  73             74           1          0.0      571657.4       1.0X
+Parallel Compression with 1 workers                  80             83           5          0.0      624224.8       0.9X
+Parallel Compression with 2 workers                  72             75           3          0.0      565435.0       1.0X
+Parallel Compression with 4 workers                  72             74           2          0.0      559905.9       1.0X
+Parallel Compression with 8 workers                  88             91           3          0.0      684404.4       0.8X
+Parallel Compression with 16 workers                119            123           4          0.0      930126.3       0.6X
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1022-azure
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Parallel Compression at level 9:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Parallel Compression with 0 workers                 263            264           1          0.0     2054467.0       1.0X
-Parallel Compression with 1 workers                 300            301           1          0.0     2344391.1       0.9X
-Parallel Compression with 2 workers                 166            174           7          0.0     1298543.1       1.6X
-Parallel Compression with 4 workers                 161            165           3          0.0     1259485.5       1.6X
-Parallel Compression with 8 workers                 162            168           4          0.0     1267148.5       1.6X
-Parallel Compression with 16 workers                166            169           2          0.0     1295491.4       1.6X
+Parallel Compression with 0 workers                 260            261           1          0.0     2034008.0       1.0X
+Parallel Compression with 1 workers                 316            320           6          0.0     2466286.5       0.8X
+Parallel Compression with 2 workers                 201            208           7          0.0     1571862.7       1.3X
+Parallel Compression with 4 workers                 201            205           3          0.0     1572101.5       1.3X
+Parallel Compression with 8 workers                 219            226           5          0.0     1708818.5       1.2X
+Parallel Compression with 16 workers                231            235           3          0.0     1801619.4       1.1X
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1022-azure
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Compression at level 1:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Compression by strategy -1                           60             62           2          0.0      472420.7       1.0X
-Compression by strategy 1                            59             61           1          0.0      463814.3       1.0X
-Compression by strategy 3                            93             94           1          0.0      727981.1       0.6X
-Compression by strategy 5                           253            255           2          0.0     1977012.0       0.2X
-Compression by strategy 7                           301            303           1          0.0     2353865.5       0.2X
-Compression by strategy 9                           303            304           1          0.0     2368279.4       0.2X
+Compression by strategy -1                           61             62           1          0.0      478634.2       1.0X
+Compression by strategy 1                            61             62           1          0.0      476649.0       1.0X
+Compression by strategy 3                            93             94           1          0.0      729172.4       0.7X
+Compression by strategy 5                           252            253           0          0.0     1972602.1       0.2X
+Compression by strategy 7                           301            301           0          0.0     2350877.9       0.2X
+Compression by strategy 9                           301            305          11          0.0     2350242.6       0.2X
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1022-azure
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Compression at level 3:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Compression by strategy -1                           71             72           1          0.0      556827.6       1.0X
-Compression by strategy 1                            60             61           1          0.0      466520.4       1.2X
-Compression by strategy 3                            93             94           1          0.0      723961.9       0.8X
-Compression by strategy 5                           259            261           1          0.0     2026244.8       0.3X
-Compression by strategy 7                           311            313           2          0.0     2430870.3       0.2X
-Compression by strategy 9                           310            312           1          0.0     2423793.5       0.2X
+Compression by strategy -1                           74             75           1          0.0      575320.7       1.0X
+Compression by strategy 1                            62             63           1          0.0      481758.0       1.2X
+Compression by strategy 3                            95             96           1          0.0      740690.8       0.8X
+Compression by strategy 5                           258            259           0          0.0     2018030.8       0.3X
+Compression by strategy 7                           311            312           1          0.0     2426694.4       0.2X
+Compression by strategy 9                           311            311           0          0.0     2426752.7       0.2X
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1022-azure
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Compression at level 9:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Compression by strategy -1                          261            262           1          0.0     2036948.4       1.0X
-Compression by strategy 1                            60             62           1          0.0      472012.4       4.3X
-Compression by strategy 3                            93             95           1          0.0      728252.9       2.8X
-Compression by strategy 5                           262            263           1          0.0     2046583.8       1.0X
-Compression by strategy 7                           314            317           1          0.0     2457023.3       0.8X
-Compression by strategy 9                           309            314           2          0.0     2415788.7       0.8X
+Compression by strategy -1                          260            261           1          0.0     2028536.0       1.0X
+Compression by strategy 1                            63             64           1          0.0      489321.2       4.1X
+Compression by strategy 3                            95             96           1          0.0      742231.5       2.7X
+Compression by strategy 5                           259            260           1          0.0     2024310.8       1.0X
+Compression by strategy 7                           312            312           0          0.0     2437418.1       0.8X
+Compression by strategy 9                           312            312           1          0.0     2435461.9       0.8X
 
 

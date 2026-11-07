@@ -2,58 +2,58 @@
 UDF with mixed input types
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 long/nullable int/string to string:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------------
-long/nullable int/string to string wholestage off             45             51           9          2.2         447.2       1.0X
-long/nullable int/string to string wholestage on              43             49           4          2.3         429.0       1.0X
+long/nullable int/string to string wholestage off            109            135          36          0.9        1093.5       1.0X
+long/nullable int/string to string wholestage on              62             71          11          1.6         624.7       1.8X
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 long/nullable int/string to option:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------------
-long/nullable int/string to option wholestage off             32             32           0          3.1         320.1       1.0X
-long/nullable int/string to option wholestage on              31             31           1          3.3         306.3       1.0X
+long/nullable int/string to option wholestage off             57             58           1          1.7         573.2       1.0X
+long/nullable int/string to option wholestage on              41             48           9          2.4         411.4       1.4X
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 long/nullable int/string to primitive:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------------------
-long/nullable int/string to primitive wholestage off             29             34           7          3.4         290.1       1.0X
-long/nullable int/string to primitive wholestage on              26             31           5          3.8         260.5       1.1X
+long/nullable int/string to primitive wholestage off             47             48           2          2.1         466.1       1.0X
+long/nullable int/string to primitive wholestage on              43             44           2          2.3         429.3       1.1X
 
 
 ================================================================================================
 UDF with primitive types
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 long/nullable int to string:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------
-long/nullable int to string wholestage off             27             28           1          3.7         273.9       1.0X
-long/nullable int to string wholestage on              29             34           6          3.5         288.7       0.9X
+long/nullable int to string wholestage off             30             35           7          3.3         302.1       1.0X
+long/nullable int to string wholestage on              32             33           2          3.2         316.5       1.0X
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 long/nullable int to option:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------
-long/nullable int to option wholestage off             21             22           1          4.8         210.0       1.0X
-long/nullable int to option wholestage on              23             27           6          4.4         225.9       0.9X
+long/nullable int to option wholestage off             23             29           9          4.4         228.2       1.0X
+long/nullable int to option wholestage on              28             31           4          3.6         279.1       0.8X
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 long/nullable int to primitive:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -----------------------------------------------------------------------------------------------------------------------------
-long/nullable int to primitive wholestage off             20             24           5          5.0         202.0       1.0X
-long/nullable int to primitive wholestage on              19             21           2          5.3         187.2       1.1X
+long/nullable int to primitive wholestage off             23             23           0          4.3         231.8       1.0X
+long/nullable int to primitive wholestage on              20             24           4          5.1         195.5       1.2X
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 UDF identity overhead:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Baseline                                             13             15           2          7.8         127.4       1.0X
-With identity UDF                                    16             19           3          6.1         164.5       0.8X
+Baseline                                             17             17           1          5.9         169.5       1.0X
+With identity UDF                                    23             26           6          4.4         226.6       0.7X
 
 

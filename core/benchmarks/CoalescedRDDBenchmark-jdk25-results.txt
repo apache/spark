@@ -2,39 +2,39 @@
 Coalesced RDD , large scale
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
-INTEL(R) XEON(R) PLATINUM 8573C
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1017-azure
+AMD EPYC 7763 64-Core Processor
 Coalesced RDD:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ----------------------------------------------------------------------------------------------------------------------------
-Coalesce Num Partitions: 100 Num Hosts: 1               164            176          15          0.6        1643.4       1.0X
-Coalesce Num Partitions: 100 Num Hosts: 5               122            126           5          0.8        1220.9       1.3X
-Coalesce Num Partitions: 100 Num Hosts: 10               94            106          12          1.1         943.7       1.7X
-Coalesce Num Partitions: 100 Num Hosts: 20               97            105           9          1.0         972.1       1.7X
-Coalesce Num Partitions: 100 Num Hosts: 40              117            118           1          0.9        1167.6       1.4X
-Coalesce Num Partitions: 100 Num Hosts: 80              102            107           6          1.0        1023.9       1.6X
-Coalesce Num Partitions: 500 Num Hosts: 1               394            396           2          0.3        3937.3       0.4X
-Coalesce Num Partitions: 500 Num Hosts: 5               178            178           0          0.6        1777.6       0.9X
-Coalesce Num Partitions: 500 Num Hosts: 10              127            133           9          0.8        1265.8       1.3X
-Coalesce Num Partitions: 500 Num Hosts: 20              111            119           8          0.9        1108.8       1.5X
-Coalesce Num Partitions: 500 Num Hosts: 40              113            119           8          0.9        1126.5       1.5X
-Coalesce Num Partitions: 500 Num Hosts: 80              124            126           1          0.8        1239.9       1.3X
-Coalesce Num Partitions: 1000 Num Hosts: 1              670            673           2          0.1        6704.1       0.2X
-Coalesce Num Partitions: 1000 Num Hosts: 5              214            217           4          0.5        2140.5       0.8X
-Coalesce Num Partitions: 1000 Num Hosts: 10             146            155          10          0.7        1457.0       1.1X
-Coalesce Num Partitions: 1000 Num Hosts: 20             122            125           3          0.8        1220.2       1.3X
-Coalesce Num Partitions: 1000 Num Hosts: 40             108            115           9          0.9        1077.2       1.5X
-Coalesce Num Partitions: 1000 Num Hosts: 80             109            113           6          0.9        1094.9       1.5X
-Coalesce Num Partitions: 5000 Num Hosts: 1             2802           2816          15          0.0       28020.3       0.1X
-Coalesce Num Partitions: 5000 Num Hosts: 5              648            650           2          0.2        6485.0       0.3X
-Coalesce Num Partitions: 5000 Num Hosts: 10             378            385           8          0.3        3784.1       0.4X
-Coalesce Num Partitions: 5000 Num Hosts: 20             241            242           1          0.4        2411.4       0.7X
-Coalesce Num Partitions: 5000 Num Hosts: 40             181            184           3          0.6        1813.1       0.9X
-Coalesce Num Partitions: 5000 Num Hosts: 80             134            143          12          0.7        1342.5       1.2X
-Coalesce Num Partitions: 10000 Num Hosts: 1            5272           5280          10          0.0       52716.2       0.0X
-Coalesce Num Partitions: 10000 Num Hosts: 5            1140           1143           4          0.1       11403.3       0.1X
-Coalesce Num Partitions: 10000 Num Hosts: 10            622            625           3          0.2        6218.7       0.3X
-Coalesce Num Partitions: 10000 Num Hosts: 20            372            377           5          0.3        3721.6       0.4X
-Coalesce Num Partitions: 10000 Num Hosts: 40            246            250           4          0.4        2455.9       0.7X
-Coalesce Num Partitions: 10000 Num Hosts: 80            185            189           3          0.5        1853.1       0.9X
+Coalesce Num Partitions: 100 Num Hosts: 1               302            315          12          0.3        3023.0       1.0X
+Coalesce Num Partitions: 100 Num Hosts: 5               140            146           5          0.7        1402.8       2.2X
+Coalesce Num Partitions: 100 Num Hosts: 10              125            128           3          0.8        1248.2       2.4X
+Coalesce Num Partitions: 100 Num Hosts: 20              169            173           4          0.6        1690.2       1.8X
+Coalesce Num Partitions: 100 Num Hosts: 40              100            102           1          1.0        1002.2       3.0X
+Coalesce Num Partitions: 100 Num Hosts: 80              100            101           1          1.0         999.4       3.0X
+Coalesce Num Partitions: 500 Num Hosts: 1              1001           1011           9          0.1       10011.9       0.3X
+Coalesce Num Partitions: 500 Num Hosts: 5               307            309           2          0.3        3070.7       1.0X
+Coalesce Num Partitions: 500 Num Hosts: 10              273            275           3          0.4        2725.4       1.1X
+Coalesce Num Partitions: 500 Num Hosts: 20              144            145           1          0.7        1436.3       2.1X
+Coalesce Num Partitions: 500 Num Hosts: 40              129            133           5          0.8        1289.5       2.3X
+Coalesce Num Partitions: 500 Num Hosts: 80              117            120           3          0.9        1166.5       2.6X
+Coalesce Num Partitions: 1000 Num Hosts: 1             1893           1910          20          0.1       18928.8       0.2X
+Coalesce Num Partitions: 1000 Num Hosts: 5              449            455           7          0.2        4491.5       0.7X
+Coalesce Num Partitions: 1000 Num Hosts: 10             340            343           5          0.3        3401.2       0.9X
+Coalesce Num Partitions: 1000 Num Hosts: 20             190            197           9          0.5        1898.5       1.6X
+Coalesce Num Partitions: 1000 Num Hosts: 40             140            145           4          0.7        1397.2       2.2X
+Coalesce Num Partitions: 1000 Num Hosts: 80             121            122           1          0.8        1207.8       2.5X
+Coalesce Num Partitions: 5000 Num Hosts: 1             8725           8787          55          0.0       87251.9       0.0X
+Coalesce Num Partitions: 5000 Num Hosts: 5             2024           2026           3          0.0       20236.6       0.1X
+Coalesce Num Partitions: 5000 Num Hosts: 10            1086           1095          11          0.1       10857.5       0.3X
+Coalesce Num Partitions: 5000 Num Hosts: 20             605            609           5          0.2        6053.4       0.5X
+Coalesce Num Partitions: 5000 Num Hosts: 40             342            343           0          0.3        3424.0       0.9X
+Coalesce Num Partitions: 5000 Num Hosts: 80             225            227           2          0.4        2251.9       1.3X
+Coalesce Num Partitions: 10000 Num Hosts: 1           16417          16700         372          0.0      164165.5       0.0X
+Coalesce Num Partitions: 10000 Num Hosts: 5            3969           3981          15          0.0       39686.4       0.1X
+Coalesce Num Partitions: 10000 Num Hosts: 10           2045           2050           5          0.0       20452.1       0.1X
+Coalesce Num Partitions: 10000 Num Hosts: 20           1074           1079           5          0.1       10738.6       0.3X
+Coalesce Num Partitions: 10000 Num Hosts: 40            593            594           1          0.2        5930.6       0.5X
+Coalesce Num Partitions: 10000 Num Hosts: 80            360            369          12          0.3        3600.3       0.8X
 
 

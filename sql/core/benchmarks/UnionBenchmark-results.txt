@@ -2,479 +2,479 @@
 Union plain (N=2)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union plain, N=2:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                          59             89          20          0.3        2958.6       1.0X
-codegen=on                                           29             41          10          0.7        1439.9       2.1X
+codegen=off                                          21             30           6          0.9        1066.1       1.0X
+codegen=on                                           18             26           6          1.1         922.0       1.2X
 
 
 ================================================================================================
 Union plain (N=4)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union plain, N=4:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                          35             47          12          1.1         882.6       1.0X
-codegen=on                                           29             48          15          1.4         733.6       1.2X
+codegen=off                                          24             30           5          1.7         600.7       1.0X
+codegen=on                                           22             32           7          1.8         557.8       1.1X
 
 
 ================================================================================================
 Union plain (N=8)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union plain, N=8:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                          49             61           9          1.6         612.4       1.0X
-codegen=on                                           44             55           8          1.8         553.2       1.1X
+codegen=off                                          36             47           7          2.2         450.3       1.0X
+codegen=on                                           30             41           7          2.6         380.8       1.2X
 
 
 ================================================================================================
 Union plain (N=16)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union plain, N=16:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                          90            117          20          1.8         563.5       1.0X
-codegen=on                                           66             84          13          2.4         414.7       1.4X
+codegen=off                                          64             75          12          2.5         400.2       1.0X
+codegen=on                                           54             61           7          3.0         336.5       1.2X
 
 
 ================================================================================================
 Union plain (N=32)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union plain, N=32:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                         178            203          19          1.8         556.6       1.0X
-codegen=on                                          132            143          10          2.4         413.3       1.3X
+codegen=off                                         146            156           8          2.2         454.8       1.0X
+codegen=on                                          115            125           8          2.8         357.9       1.3X
 
 
 ================================================================================================
 Union plain (N=64)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union plain, N=64:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                        1435           1437           4          0.4        2241.5       1.0X
-codegen=on                                          339            349          10          1.9         530.3       4.2X
+codegen=off                                        1023           1130         151          0.6        1598.6       1.0X
+codegen=on                                          301            316          19          2.1         470.0       3.4X
 
 
 ================================================================================================
 Union plain (N=128)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union plain, N=128:                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                        2833           3008         248          0.5        2213.1       1.0X
-codegen=on                                          925            933           8          1.4         722.5       3.1X
+codegen=off                                        2525           2643         167          0.5        1972.7       1.0X
+codegen=on                                          867            871           5          1.5         677.5       2.9X
 
 
 ================================================================================================
 Union plain (N=256)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union plain, N=256:                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                        6822           6844          32          0.4        2664.8       1.0X
-codegen=on                                         2915           2988         102          0.9        1138.8       2.3X
+codegen=off                                        6663           6712          69          0.4        2602.8       1.0X
+codegen=on                                         2912           2932          28          0.9        1137.5       2.3X
 
 
 ================================================================================================
 Union plain (N=512)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union plain, N=512:                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                       20404          20460          79          0.3        3985.2       1.0X
-codegen=on                                        10992          11066         104          0.5        2146.8       1.9X
+codegen=off                                       20064          20089          35          0.3        3918.8       1.0X
+codegen=on                                        10786          10940         218          0.5        2106.6       1.9X
 
 
 ================================================================================================
 Union plain (N=1024)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union plain, N=1024:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                       67396          67410          19          0.2        6581.7       1.0X
-codegen=on                                        43669          46828        4467          0.2        4264.5       1.5X
+codegen=off                                       66900          68990        2956          0.2        6533.2       1.0X
+codegen=on                                        47964          48991        1452          0.2        4684.0       1.4X
 
 
 ================================================================================================
 Union type widening (N=2)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union type widening, N=2:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                          15             20           5          1.4         734.4       1.0X
-codegen=on                                           13             17           4          1.5         645.2       1.1X
+codegen=off                                          12             16           4          1.7         589.4       1.0X
+codegen=on                                           11             14           4          1.8         562.2       1.0X
 
 
 ================================================================================================
 Union type widening (N=4)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union type widening, N=4:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                          22             27           6          1.8         561.4       1.0X
-codegen=on                                           20             22           2          2.0         496.4       1.1X
+codegen=off                                          18             22           4          2.2         448.5       1.0X
+codegen=on                                           17             19           2          2.3         431.2       1.0X
 
 
 ================================================================================================
 Union type widening (N=8)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union type widening, N=8:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                          39             42           3          2.0         488.6       1.0X
-codegen=on                                           34             36           2          2.4         420.6       1.2X
+codegen=off                                          33             38           5          2.4         414.5       1.0X
+codegen=on                                           30             32           2          2.6         380.2       1.1X
 
 
 ================================================================================================
 Union type widening (N=16)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union type widening, N=16:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                          79             84           5          2.0         494.5       1.0X
-codegen=on                                           65             70           4          2.5         405.5       1.2X
+codegen=off                                          66             69           2          2.4         414.9       1.0X
+codegen=on                                           59             61           2          2.7         366.0       1.1X
 
 
 ================================================================================================
 Union type widening (N=32)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union type widening, N=32:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                         180            186           5          1.8         561.2       1.0X
-codegen=on                                          143            148           4          2.2         445.6       1.3X
+codegen=off                                         157            164           6          2.0         489.7       1.0X
+codegen=on                                          129            133           4          2.5         402.9       1.2X
 
 
 ================================================================================================
 Union type widening (N=64)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union type widening, N=64:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                        1319           1360          58          0.5        2061.0       1.0X
-codegen=on                                          368            374           4          1.7         574.6       3.6X
+codegen=off                                        1058           1058           0          0.6        1653.2       1.0X
+codegen=on                                          343            360          13          1.9         535.7       3.1X
 
 
 ================================================================================================
 Union type widening (N=128)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union type widening, N=128:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                        2783           2890         152          0.5        2174.1       1.0X
-codegen=on                                         1055           1069          20          1.2         824.2       2.6X
+codegen=off                                        2864           2901          53          0.4        2237.6       1.0X
+codegen=on                                         1002           1005           4          1.3         783.0       2.9X
 
 
 ================================================================================================
 Union type widening (N=256)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union type widening, N=256:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                        7484           7516          46          0.3        2923.4       1.0X
-codegen=on                                         3864           3925          86          0.7        1509.6       1.9X
+codegen=off                                        7560           7584          34          0.3        2953.2       1.0X
+codegen=on                                         3330           3346          23          0.8        1300.7       2.3X
 
 
 ================================================================================================
 Union type widening (N=512)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union type widening, N=512:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                       22172          22429         364          0.2        4330.4       1.0X
-codegen=on                                        13129          13554         601          0.4        2564.2       1.7X
+codegen=off                                       22732          22857         176          0.2        4439.9       1.0X
+codegen=on                                        12671          12738          94          0.4        2474.8       1.8X
 
 
 ================================================================================================
 Union type widening (N=1024)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union type widening, N=1024:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                       75362          75783         595          0.1        7359.6       1.0X
-codegen=on                                        51240          53747        3544          0.2        5003.9       1.5X
+codegen=off                                       73379          73634         359          0.1        7166.0       1.0X
+codegen=on                                        51998          53221        1729          0.2        5077.9       1.4X
 
 
 ================================================================================================
 Union per-child ops (N=2)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union per-child ops, N=2:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                          17             21           4          1.2         830.0       1.0X
-codegen=on                                           15             18           3          1.3         753.2       1.1X
+codegen=off                                          13             16           4          1.6         644.3       1.0X
+codegen=on                                           13             17           5          1.6         632.3       1.0X
 
 
 ================================================================================================
 Union per-child ops (N=4)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union per-child ops, N=4:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                          26             29           4          1.6         639.7       1.0X
-codegen=on                                           23             25           1          1.7         581.2       1.1X
+codegen=off                                          22             26           5          1.8         540.6       1.0X
+codegen=on                                           20             24           5          2.0         505.0       1.1X
 
 
 ================================================================================================
 Union per-child ops (N=8)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union per-child ops, N=8:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                          45             48           3          1.8         566.0       1.0X
-codegen=on                                           40             42           2          2.0         494.8       1.1X
+codegen=off                                          40             47           7          2.0         505.2       1.0X
+codegen=on                                           37             44           8          2.1         468.0       1.1X
 
 
 ================================================================================================
 Union per-child ops (N=16)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union per-child ops, N=16:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                          92             98           9          1.7         574.6       1.0X
-codegen=on                                           78             82           3          2.0         489.0       1.2X
+codegen=off                                          82             96          16          2.0         511.3       1.0X
+codegen=on                                           73             76           2          2.2         453.9       1.1X
 
 
 ================================================================================================
 Union per-child ops (N=32)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union per-child ops, N=32:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                         215            219           4          1.5         673.3       1.0X
-codegen=on                                          172            177           4          1.9         536.3       1.3X
+codegen=off                                         190            215          31          1.7         593.3       1.0X
+codegen=on                                          162            172          10          2.0         507.7       1.2X
 
 
 ================================================================================================
 Union per-child ops (N=64)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union per-child ops, N=64:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                        1352           1379          37          0.5        2113.2       1.0X
-codegen=on                                          438            442           4          1.5         684.1       3.1X
+codegen=off                                        1427           1454          39          0.4        2229.5       1.0X
+codegen=on                                          417            431          25          1.5         650.9       3.4X
 
 
 ================================================================================================
 Union per-child ops (N=128)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union per-child ops, N=128:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                        3785           3835          70          0.3        2957.3       1.0X
-codegen=on                                         1281           1297          24          1.0        1000.4       3.0X
+codegen=off                                        3424           3433          12          0.4        2675.3       1.0X
+codegen=on                                         1195           1227          46          1.1         933.7       2.9X
 
 
 ================================================================================================
 Union per-child ops (N=256)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union per-child ops, N=256:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                        9790           9806          23          0.3        3824.2       1.0X
-codegen=on                                         4042           4201         225          0.6        1578.7       2.4X
+codegen=off                                        9002           9034          45          0.3        3516.5       1.0X
+codegen=on                                         3903           3991         124          0.7        1524.6       2.3X
 
 
 ================================================================================================
 Union per-child ops (N=512)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union per-child ops, N=512:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                       25662          26059         562          0.2        5012.1       1.0X
-codegen=on                                        14046          14380         472          0.4        2743.4       1.8X
+codegen=off                                       25812          25840          41          0.2        5041.3       1.0X
+codegen=on                                        14422          14687         375          0.4        2816.7       1.8X
 
 
 ================================================================================================
 Union per-child ops (N=1024)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union per-child ops, N=1024:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                       81522          82208         970          0.1        7961.2       1.0X
-codegen=on                                        64561          67106        3600          0.2        6304.7       1.3X
+codegen=off                                       84092          84114          30          0.1        8212.2       1.0X
+codegen=on                                        61946          62925        1384          0.2        6049.4       1.4X
 
 
 ================================================================================================
 Union + downstream aggregate (N=2)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union + downstream aggregate, N=2:        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                          68             89          21          0.3        3409.9       1.0X
-codegen=on                                           49             65          13          0.4        2430.2       1.4X
+codegen=off                                          36             52          13          0.6        1815.2       1.0X
+codegen=on                                           32             43          11          0.6        1580.3       1.1X
 
 
 ================================================================================================
 Union + downstream aggregate (N=4)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union + downstream aggregate, N=4:        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                          62             90          16          0.6        1559.9       1.0X
-codegen=on                                           64             96          19          0.6        1590.6       1.0X
+codegen=off                                          41             61          15          1.0        1028.8       1.0X
+codegen=on                                           41             66          21          1.0        1026.2       1.0X
 
 
 ================================================================================================
 Union + downstream aggregate (N=8)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union + downstream aggregate, N=8:        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                         129            169          19          0.6        1608.6       1.0X
-codegen=on                                           71             86          11          1.1         890.2       1.8X
+codegen=off                                          66             89          15          1.2         830.9       1.0X
+codegen=on                                           64             85          18          1.2         801.4       1.0X
 
 
 ================================================================================================
 Union + downstream aggregate (N=16)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union + downstream aggregate, N=16:       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                         147            207          27          1.1         920.8       1.0X
-codegen=on                                          129            144          12          1.2         804.3       1.1X
+codegen=off                                         146            188          26          1.1         910.1       1.0X
+codegen=on                                          117            138          26          1.4         730.1       1.2X
 
 
 ================================================================================================
 Union + downstream aggregate (N=32)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union + downstream aggregate, N=32:       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                         323            342          18          1.0        1010.8       1.0X
-codegen=on                                          292            325          29          1.1         913.7       1.1X
+codegen=off                                         332            367          22          1.0        1037.7       1.0X
+codegen=on                                          254            295          42          1.3         794.0       1.3X
 
 
 ================================================================================================
 Union + downstream aggregate (N=64)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union + downstream aggregate, N=64:       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                        1702           1868         235          0.4        2658.7       1.0X
-codegen=on                                          705            709           6          0.9        1100.8       2.4X
+codegen=off                                        1563           1643         114          0.4        2441.8       1.0X
+codegen=on                                          647            699          84          1.0        1010.2       2.4X
 
 
 ================================================================================================
 Union + downstream aggregate (N=128)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union + downstream aggregate, N=128:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                        4076           4123          67          0.3        3184.3       1.0X
-codegen=on                                         2028           2139         157          0.6        1584.5       2.0X
+codegen=off                                        3461           3541         113          0.4        2703.8       1.0X
+codegen=on                                         1744           1764          28          0.7        1362.7       2.0X
 
 
 ================================================================================================
 Union + downstream aggregate (N=256)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union + downstream aggregate, N=256:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                       11047          11073          36          0.2        4315.4       1.0X
-codegen=on                                         6465           6497          45          0.4        2525.4       1.7X
+codegen=off                                        9538           9587          69          0.3        3725.8       1.0X
+codegen=on                                         6165           6251         121          0.4        2408.2       1.5X
 
 
 ================================================================================================
 Union + downstream aggregate (N=512)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union + downstream aggregate, N=512:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                       34298          34363          91          0.1        6698.9       1.0X
-codegen=on                                        23836          25124        1822          0.2        4655.5       1.4X
+codegen=off                                       29061          29366         432          0.2        5675.9       1.0X
+codegen=on                                        20774          21310         758          0.2        4057.4       1.4X
 
 
 ================================================================================================
 Union + downstream aggregate (N=1024)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1017-azure
 AMD EPYC 7763 64-Core Processor
 Union + downstream aggregate, N=1024:     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen=off                                      116468         117298        1174          0.1       11373.8       1.0X
-codegen=on                                        93686          97399        5251          0.1        9149.0       1.2X
+codegen=off                                       99131          99264         187          0.1        9680.8       1.0X
+codegen=on                                        83497          90445        9826          0.1        8154.0       1.2X
 
 

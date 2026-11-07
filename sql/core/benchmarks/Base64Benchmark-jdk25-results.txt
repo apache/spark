@@ -1,56 +1,56 @@
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1017-azure
+AMD EPYC 7763 64-Core Processor
 encode for 1:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-java                                               1750           1787          40         11.4          87.5       1.0X
-apache                                             8167           8191          40          2.4         408.3       0.2X
+java                                               1678           1685           9         11.9          83.9       1.0X
+apache                                            12899          12904           7          1.6         645.0       0.1X
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1017-azure
+AMD EPYC 7763 64-Core Processor
 encode for 3:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-java                                               2110           2112           2          9.5         105.5       1.0X
-apache                                             9318           9344          22          2.1         465.9       0.2X
+java                                               2061           2069           7          9.7         103.0       1.0X
+apache                                            14487          14499          15          1.4         724.4       0.1X
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1017-azure
+AMD EPYC 7763 64-Core Processor
 encode for 5:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-java                                               2417           2421           4          8.3         120.8       1.0X
-apache                                            10450          10495          55          1.9         522.5       0.2X
+java                                               2362           2368           6          8.5         118.1       1.0X
+apache                                            15793          15875          72          1.3         789.7       0.1X
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1017-azure
+AMD EPYC 7763 64-Core Processor
 encode for 7:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-java                                               2254           2282          44          8.9         112.7       1.0X
-apache                                            11417          11470          47          1.8         570.9       0.2X
+java                                               2180           2194          15          9.2         109.0       1.0X
+apache                                            16862          16885          30          1.2         843.1       0.1X
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1017-azure
+AMD EPYC 7763 64-Core Processor
 decode for 1:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-java                                               2659           2691          49          7.5         132.9       1.0X
-apache                                             9175           9201          39          2.2         458.8       0.3X
+java                                               2707           2714           7          7.4         135.4       1.0X
+apache                                            14426          14520          82          1.4         721.3       0.2X
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1017-azure
+AMD EPYC 7763 64-Core Processor
 decode for 3:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-java                                               3274           3294          20          6.1         163.7       1.0X
-apache                                            10591          10699          94          1.9         529.6       0.3X
+java                                               3239           3244           4          6.2         161.9       1.0X
+apache                                            16106          16190          75          1.2         805.3       0.2X
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1017-azure
+AMD EPYC 7763 64-Core Processor
 decode for 5:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-java                                               4059           4068          15          4.9         203.0       1.0X
-apache                                            12496          12535          35          1.6         624.8       0.3X
+java                                               4093           4099          10          4.9         204.6       1.0X
+apache                                            18177          18218          63          1.1         908.9       0.2X
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1017-azure
+AMD EPYC 7763 64-Core Processor
 decode for 7:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-java                                               4218           4226           8          4.7         210.9       1.0X
-apache                                            13546          13561          14          1.5         677.3       0.3X
+java                                               4687           4693           8          4.3         234.3       1.0X
+apache                                            19504          19595          79          1.0         975.2       0.2X
 
