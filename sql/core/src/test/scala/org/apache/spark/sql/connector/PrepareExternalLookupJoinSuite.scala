@@ -233,24 +233,29 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
 
   test("a range is a lookup candidate only when its parameter cannot fail") {
     var offered = Seq.empty[String]
-    val lookup = lookupRelation(PlanningExternalLookupTable("id INT, value INT", select = {
-      candidates =>
-        offered = candidates.map(_.toString).toSeq
-        candidates.take(1)
-    }))
-    val Seq(lookupId, lookupValue) = lookup.output
+    val lookup =
+      lookupRelation(PlanningExternalLookupTable("id INT, value INT, total BIGINT", select = {
+        candidates =>
+          offered = candidates.map(_.toString).toSeq
+          candidates.take(1)
+      }))
+    val Seq(lookupId, lookupValue, lookupTotal) = lookup.output
     val Seq(streamId, streamLabel) = stream.output
     // Spark evaluates every parameter on every stream row, but a join evaluates a range only after
-    // its keys match. Spark treats any cast as one that can fail, as an ANSI cast of a string can,
-    // so a range with one stays in the residual. An equality with one is still offered, as a hash
-    // join evaluates its keys on every row too.
+    // its keys match. A cast of a string to a number can fail, as in ANSI mode, so a range with one
+    // stays in the residual. A widening cast, as of the INT `streamId` to BIGINT, cannot fail, so
+    // a range with one is offered. An equality with a cast that can fail is still offered, as a
+    // hash join evaluates its keys on every row too.
     val labelNumber = streamLabel.cast(IntegerType)
-    val conjuncts =
-      Seq(lookupId === labelNumber, lookupValue >= streamId, lookupValue < labelNumber)
+    val conjuncts = Seq(
+      lookupId === labelNumber,
+      lookupValue >= streamId,
+      lookupValue < labelNumber,
+      lookupTotal >= streamId.cast(LongType))
     val prepared = prepare(lookupJoin(lookup, conjuncts.reduce(_ && _)))
-    assert(offered === Seq("id = ?", "value >= ?"))
+    assert(offered === Seq("id = ?", "value >= ?", "total >= ?"))
     assert(prepared.lookupParameters === Seq(labelNumber))
-    assert(prepared.residualCondition === Some(conjuncts(1) && conjuncts(2)))
+    assert(prepared.residualCondition === Some(conjuncts.drop(1).reduce(_ && _)))
   }
 
   test("the read schema binds to the analyzed lookup attributes by exact name") {

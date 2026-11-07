@@ -24,9 +24,9 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate;
 /**
  * A mix-in for a {@link ScanBuilder} that can serve parameterized lookups. The builder may also
  * implement the column-pruning and filter-pushdown mix-ins. For a lookup scan, Spark evaluates
- * every pushed filter again on the returned rows, including the filters that the source accepts,
- * so the source may return rows that fail a pushed filter. As in any scan, it must not drop a row
- * that passes them.
+ * every lookup-side filter again on the returned rows, including the filters that the source
+ * reports as pushed, so the source may return rows that fail them. It may omit only rows that
+ * fail a filter that it reports as pushed, as {@link ExternalLookupReader#lookupBatch} says.
  *
  * @since 4.4.0
  */
@@ -43,7 +43,8 @@ public interface SupportsExternalLookup extends ScanBuilder {
    * TIMESTAMP, TIMESTAMP_NTZ, BINARY, or a STRING whose collation compares bytes, such as
    * UTF8_BINARY. It offers {@code <}, {@code <=}, {@code >} and {@code >=} only on a lookup column
    * of an integral type, DECIMAL, DATE, TIMESTAMP or TIMESTAMP_NTZ, and only when the parameter
-   * cannot fail to evaluate. It never offers a comparison on FLOAT, DOUBLE, CHAR, VARCHAR, a
+   * cannot fail to evaluate. When a selected predicate is a range comparison, each request holds
+   * exactly one parameter row. It never offers a comparison on FLOAT, DOUBLE, CHAR, VARCHAR, a
    * string with another collation, a complex type or any other type. For example:
    * <pre>{@code
    *   candidates: [tenant = ?, event_time >= ?, event_time < ?, region = ?]
@@ -59,9 +60,10 @@ public interface SupportsExternalLookup extends ScanBuilder {
    *   appear in several predicates, as range bounds do.</li>
    *   <li>Spark evaluates every selected predicate again on each returned row and drops a row
    *   that fails it, so extra rows do no harm. Spark cannot recover a missing row: for each
-   *   parameter row, the source must return every row that satisfies all selected predicates under
-   *   Spark semantics. Do not select a predicate that the source cannot evaluate that way, and do
-   *   not select unsupported names or shapes.</li>
+   *   parameter row, the source must return every row that passes the filters this source reports
+   *   as pushed and satisfies all selected predicates under Spark semantics, as
+   *   {@link ExternalLookupReader#lookupBatch} defines. Do not select a predicate that the source
+   *   cannot evaluate that way, and do not select unsupported names or shapes.</li>
    *   <li>An empty result means no access path fits; the query then fails.</li>
    *   <li>The input array and its elements are read-only.</li>
    * </ul>
@@ -69,12 +71,14 @@ public interface SupportsExternalLookup extends ScanBuilder {
    * pushdown and before column pruning. Besides filter pushdown and column pruning, Spark calls
    * no pushdown method on a lookup builder (aggregate, limit, top-N, offset, sample, join or
    * variant). Spark passes only whole top-level columns to {@code pruneColumns}, never nested
-   * fields. The selection must survive {@code pruneColumns} and {@link #build()}. For example,
-   * with a streaming {@code s}:
+   * fields. Spark always keeps the columns that the selected predicates read in the pruned schema,
+   * because it evaluates the predicates on them. So returned rows must carry the stored values of
+   * those columns. The selection must survive {@code pruneColumns} and {@link #build()}. For
+   * example, with a streaming {@code s}:
    * <pre>{@code
    *   SELECT s.*, t.name FROM s JOIN t ON t.id = s.id
-   *   => selected [id = ?], then pruneColumns(<name>), so readSchema() includes name;
-   *      the connector must still look up by id
+   *   => selected [id = ?], then pruneColumns(<id, name>);
+   *      Spark keeps id because it evaluates id = ? on every returned row
    * }</pre>
    */
   Predicate[] selectLookupPredicates(Predicate[] candidates);
