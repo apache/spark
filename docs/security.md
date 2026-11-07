@@ -463,7 +463,7 @@ To enable authorization in the SHS, a few extra options are used:
   <td>
     Specifies whether ACLs should be checked to authorize users viewing the applications in
     the history server. If enabled, access control checks are performed regardless of what the
-    individual applications had set for <code>spark.ui.acls.enable</code>. The application owner
+    individual applications had set for <code>spark.acls.enable</code>. The application owner
     will always have authorization to view their own application and any users specified via
     <code>spark.ui.view.acls</code> and groups specified via <code>spark.ui.view.acls.groups</code>
     when the application was run will also have authorization to view that application.
