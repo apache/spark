@@ -533,10 +533,11 @@ private[joins] object UnsafeHashedRelation {
  *
  * see http://java-performance.info/implementing-world-fastest-java-int-to-int-hash-map/
  */
-private[execution] final class LongToUnsafeRowMap(
+private[execution] final class LongToUnsafeRowMap private (
     val mm: TaskMemoryManager,
     capacity: Int,
-    ignoresDuplicatedKey: Boolean = false)
+    ignoresDuplicatedKey: Boolean,
+    allocateOnInit: Boolean)
   extends MemoryConsumer(mm, LongToUnsafeRowMap.MIN_PAGE_SIZE_BYTES, mm.getTungstenMemoryMode)
   with Externalizable with KryoSerializable {
 
@@ -573,7 +574,11 @@ private[execution] final class LongToUnsafeRowMap(
   // The number of unique keys.
   private var numKeys = 0L
 
-  // needed by serializer
+  def this(mm: TaskMemoryManager, capacity: Int, ignoresDuplicatedKey: Boolean = false) =
+    this(mm, capacity, ignoresDuplicatedKey, allocateOnInit = true)
+
+  // needed by serializer. `read()` allocates `array` and `page` with the serialized sizes,
+  // so skip the allocations in `init()`.
   def this() = {
     this(
       new TaskMemoryManager(
@@ -583,7 +588,9 @@ private[execution] final class LongToUnsafeRowMap(
           Runtime.getRuntime.maxMemory / 2,
           1),
         0),
-      0)
+      0,
+      ignoresDuplicatedKey = false,
+      allocateOnInit = false)
   }
 
   private def init(): Unit = {
@@ -599,7 +606,7 @@ private[execution] final class LongToUnsafeRowMap(
     }
   }
 
-  init()
+  if (allocateOnInit) init()
 
   def spill(size: Long, trigger: MemoryConsumer): Long = 0L
 
@@ -976,11 +983,11 @@ private[execution] final class LongToUnsafeRowMap(
 
     val length = readLong().toInt
     mask = length - 2
-    freeArray(array)
+    if (array != null) freeArray(array)
     array = allocateArray(length)
     readData(readBuffer, array.memoryBlock.getBaseObject, array.memoryBlock.getBaseOffset, length)
     val pageLength = readLong().toInt
-    freePage(page)
+    if (page != null) freePage(page)
     // Use Long multiplication: pageLength can be up to 1 << 30 (8 GiB page / 8),
     // and `Int * Int` overflows at that bound, leading to a 0-byte allocatePage
     // and a subsequent cursor that runs past the page's end.
