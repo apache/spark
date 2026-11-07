@@ -119,6 +119,18 @@ case class UnionLoopRef(
  *                        regardless of determinism or reference count. This lets a producer
  *                        force the CTE to be materialized instead of duplicated, e.g. when the
  *                        CTE wraps a non-deterministic source that must be evaluated exactly once.
+ *                        A materialized definition must be self-contained: it cannot carry an
+ *                        outer reference across its boundary, because after materialization
+ *                        there is no surrounding operator to resolve the reference against.
+ *                        [[InlineCTE]] validates this and rejects escaping references with an
+ *                        internal error, while tolerating correlations that resolve inside the
+ *                        definition body. The validation matches outer references by exprId,
+ *                        which is exact only for plans produced by a single analysis pass. A
+ *                        plan stitched from already-analyzed plans can carry a duplicated
+ *                        exprId, so an escaping reference may then slip through validation,
+ *                        and, depending on where the duplicate lives, the query either fails
+ *                        during binding or binds the escaping reference to an unintended
+ *                        input. See the validation comment in [[InlineCTE]] for details.
  */
 case class CTERelationDef(
     child: LogicalPlan,
