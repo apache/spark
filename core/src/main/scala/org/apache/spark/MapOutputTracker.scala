@@ -39,7 +39,7 @@ import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
-import org.apache.spark.scheduler.{MapStatus, MergeStatus, ShuffleOutputStatus}
+import org.apache.spark.scheduler.{MapStatus, MapStatusChecksum, MergeStatus, ShuffleOutputStatus}
 import org.apache.spark.shuffle.MetadataFetchFailedException
 import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId, ShuffleMergedBlockId}
 import org.apache.spark.util._
@@ -1628,6 +1628,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
                     s" for shuffle $shuffleId: " + e.getCause)
             }
             logInfo("Got the map/merge output locations")
+            MapStatusChecksum.verify(shuffleId, fetchedMapStatuses, conf)
             mapStatuses.put(shuffleId, fetchedMapStatuses)
             mergeStatuses.put(shuffleId, fetchedMergeStatuses)
           }
@@ -1660,6 +1661,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
                     e.getCause)
             }
             logInfo("Got the map output locations")
+            MapStatusChecksum.verify(shuffleId, fetchedStatuses, conf)
             mapStatuses.put(shuffleId, fetchedStatuses)
           }
           logDebug(s"Fetching map output statuses for shuffle $shuffleId took " +
