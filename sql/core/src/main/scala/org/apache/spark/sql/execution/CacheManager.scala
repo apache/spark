@@ -333,17 +333,20 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         // If the cache buffer has already been loaded, we don't need to recompile the cached plan,
         // as it does not rely on the plan that has been uncached anymore, it will just produce
         // data from the cache buffer.
-        // Note that the `CachedRDDBuilder.isCachedColumnBuffersLoaded` call is a non-locking
-        // status test and may not return the most accurate cache buffer state. So the worse case
-        // scenario can be:
+        // Note that `CachedRDDBuilder.isCachedColumnBuffersLoaded` takes the builder's monitor,
+        // which `cachedColumnBuffers` can hold for the whole cache materialization (e.g. a cached
+        // plan with a shuffle under AQE). Test the plan match first so an uncache only waits on
+        // entries that actually depend on the uncached plan, never on unrelated in-progress
+        // materializations. The status may also be stale by the time it is acted on, so the
+        // worst case scenario can be:
         // 1) The buffer has been loaded, but `isCachedColumnBuffersLoaded` returns false, then we
         //    will clear the buffer and re-compiled the plan. It is inefficient but doesn't affect
         //    correctness.
         // 2) The buffer has been cleared, but `isCachedColumnBuffersLoaded` returns true, then we
         //    will keep it as it is. It means the physical plan has been re-compiled already in the
         //    other thread.
-        val cacheAlreadyLoaded = cd.cachedRepresentation.cacheBuilder.isCachedColumnBuffersLoaded
-        cd.plan.exists(isMatchedPlan) && !cacheAlreadyLoaded
+        cd.plan.exists(isMatchedPlan) &&
+          !cd.cachedRepresentation.cacheBuilder.isCachedColumnBuffersLoaded
       })
     }
   }
