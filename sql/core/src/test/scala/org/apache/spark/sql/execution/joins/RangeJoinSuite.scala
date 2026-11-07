@@ -414,10 +414,11 @@ class RangeJoinSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("left semi and left anti lazy probes over a build with no common point") {
+  test("left semi and left anti early-exit over a build with no common point") {
     // Staggered build intervals share no common point, so the probe cannot take
-    // the all-rows shortcut and must walk the interval tree instead. With codegen
-    // both on and off, the walk is lazy: the first matching candidate ends the probe.
+    // the all-rows shortcut. The condition counter only sees accepted candidates:
+    // the first match ends a semi/anti probe. Walk laziness itself is pinned by
+    // the pendingSpans tests in RangeRelationSuite.
     val n = 2000
     val staggered = spark.createDataFrame(
       sparkContext.parallelize((0 until n).map(i => Row(i, i + 100))),

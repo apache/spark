@@ -93,9 +93,9 @@ object LogicalQueryStageStrategy extends Strategy {
         None
       } else {
         plan match {
-          case j @ Join(_, _, _, Some(cond), _) =>
+          case j @ Join(_, _, joinType, Some(cond), _) =>
             j match {
-              case ExtractRangeJoinKeys(joinType, leftKeys, rightKeys, rangeJoinKind) =>
+              case ExtractRangeJoinKeys(leftKeys, rightKeys, rangeJoinKind) =>
                 def fromStage(
                     mode: RangeRelationBroadcastMode,
                     bqs: BroadcastQueryStageExec,

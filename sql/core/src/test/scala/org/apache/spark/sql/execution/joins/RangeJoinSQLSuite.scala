@@ -27,13 +27,13 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.DoubleType
+import org.apache.spark.sql.types.{Decimal, DecimalType, DoubleType}
 
 /**
  * Planner and end-to-end coverage for broadcast range join.
  *
  * Which condition is recognized: `ExtractRangeJoinKeysSuite`.
- * What the index returns: `RangeIndexSuite`.
+ * What the index returns: `RangeRelationSuite`.
  * What the operator returns: `RangeJoinSuite`.
  * This suite checks that the planner chooses the operator, and that the SQL
  * result matches broadcast nested loop join where that comparison is the point.
@@ -105,24 +105,41 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
       "ON a.lo < b.hi AND b.lo < a.hi",
     "SELECT a.lo, a.hi, b.lo, b.hi FROM intervals_a a LEFT JOIN intervals_b b ON a.hi < b.lo",
     "SELECT /*+ BROADCAST(a) */ a.lo, b.hi FROM intervals_a a JOIN intervals_b b ON a.lo < b.hi",
-    // DOUBLE keys stay on the boxed interval index (see setupDoubleIntervalViews), unlike
-    // the INT two-key overlap above, which is long-specialized.
+    // DOUBLE keys are long-specialized too (see setupDoubleIntervalViews), same as the
+    // INT two-key overlap above; str_ranges_a/b below cover the boxed interval index.
     "SELECT a.lo, a.hi, b.lo, b.hi FROM dbl_ranges_a a JOIN dbl_ranges_b b " +
       "ON a.lo < b.hi AND b.lo < a.hi",
-    // Double and string keys stay on the boxed point index, so these queries reach
-    // its generated probe code (or, interpreted, the per-index dispatch in
+    // STRING keys stay on the boxed interval index (see setupStringIntervalViews), with
+    // two real, distinct per-row bounds on each side - unlike str_points/str_ranges below,
+    // where the streamed side probes with one point used as both bounds.
+    "SELECT a.lo, a.hi, b.lo, b.hi FROM str_ranges_a a JOIN str_ranges_b b " +
+      "ON a.lo < b.hi AND b.lo < a.hi",
+    // Wide decimal and string keys stay on the boxed point index (DOUBLE does not -
+    // see setupPartialRangeViews), so these queries reach its generated probe code
+    // (or, interpreted, the per-index dispatch in
     // BroadcastRangeJoinExec.makeCandidateFn), which int partial ranges never do.
     // The partial-range fixtures include probe values equal to build keys, so an
     // inclusive (<=/>=) scan wired to its exclusive counterpart by mistake would
     // drop those boundary matches.
-    "SELECT p.d, b.lo FROM dbl_partial_points p JOIN dbl_partial_bounds b ON p.d < b.lo",
-    "SELECT p.d, b.lo FROM dbl_partial_bounds b JOIN dbl_partial_points p ON p.d > b.lo",
-    "SELECT p.d, b.lo FROM dbl_partial_points p JOIN dbl_partial_bounds b ON p.d <= b.lo",
-    "SELECT p.d, b.lo FROM dbl_partial_bounds b JOIN dbl_partial_points p ON p.d >= b.lo",
+    "SELECT p.d, b.lo FROM wide_dec_partial_points p JOIN wide_dec_partial_bounds b " +
+      "ON p.d < b.lo",
+    "SELECT p.d, b.lo FROM wide_dec_partial_bounds b JOIN wide_dec_partial_points p " +
+      "ON p.d > b.lo",
+    "SELECT p.d, b.lo FROM wide_dec_partial_points p JOIN wide_dec_partial_bounds b " +
+      "ON p.d <= b.lo",
+    "SELECT p.d, b.lo FROM wide_dec_partial_bounds b JOIN wide_dec_partial_points p " +
+      "ON p.d >= b.lo",
     "SELECT p.s, b.lo FROM str_partial_points p JOIN str_partial_bounds b ON p.s < b.lo",
     "SELECT p.s, b.lo FROM str_partial_bounds b JOIN str_partial_points p ON p.s > b.lo",
     "SELECT p.s, b.lo FROM str_partial_points p JOIN str_partial_bounds b ON p.s <= b.lo",
-    "SELECT p.s, b.lo FROM str_partial_bounds b JOIN str_partial_points p ON p.s >= b.lo")
+    "SELECT p.s, b.lo FROM str_partial_bounds b JOIN str_partial_points p ON p.s >= b.lo",
+    // Boolean, date, and timestamp keys each map to the long family differently
+    // (0/1, int, long); the boolean fixture includes a null point. The three
+    // standalone tests that used to cover these are gone - this pair runs
+    // every query under both codegen modes.
+    "SELECT p.p, r.lo, r.hi FROM bool_points p JOIN bool_ranges r ON p.p >= r.lo AND p.p <= r.hi",
+    "SELECT p.d, r.lo, r.hi FROM dt_points p JOIN dt_ranges r ON p.d BETWEEN r.lo AND r.hi",
+    "SELECT p.t, r.lo, r.hi FROM ts_points p JOIN ts_ranges r ON p.t BETWEEN r.lo AND r.hi")
 
   private def setupIpLookupViews(): Unit = {
     sql(
@@ -174,11 +191,34 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
   }
 
   /**
-   * Two-column DOUBLE ranges, so a two-key interval-overlap query here builds a boxed
-   * `IntervalIndex` (DoubleType has no bit-preserving long encoding) with both bounds
-   * supplied by the streamed side - the `case intervals: IntervalIndex` branch of
-   * `BroadcastRangeJoinExec.makeCandidateFn` that `intervals_a`/`intervals_b` (INT,
-   * long-specialized) never reaches.
+   * Two-column STRING ranges, so a two-key interval-overlap query here builds a boxed
+   * `IntervalIndex` - the `case intervals: IntervalIndex` branch of
+   * `BroadcastRangeJoinExec.makeCandidateFn` that `intervals_a`/`intervals_b` (INT) and
+   * `dbl_ranges_a`/`dbl_ranges_b` (DOUBLE) never reach, since both map to one
+   * order-preserving long (see `RangeIndex.longKey`) and build `LongIntervalIndex`
+   * instead. StringType has no such mapping, so this stays on the boxed index with
+   * two real, distinct per-row bounds on each side.
+   */
+  private def setupStringIntervalViews(): Unit = {
+    sql(
+      """
+        |CREATE OR REPLACE TEMP VIEW str_ranges_a(lo, hi) AS VALUES
+        |  ('b', 'c'), ('c', 'd'), ('c', 'e'), ('d', 'h')
+        |""".stripMargin)
+    sql(
+      """
+        |CREATE OR REPLACE TEMP VIEW str_ranges_b(lo, hi) AS VALUES
+        |  ('a', 'b'), ('z', 'zz'), ('d', 'f'), ('h', 'j')
+        |""".stripMargin)
+  }
+
+  /**
+   * Two-column DOUBLE ranges. `DoubleType` maps to one order-preserving long (see
+   * `RangeIndex.longKey`), so a two-key interval-overlap query here builds a
+   * `LongIntervalIndex`, same as `intervals_a`/`intervals_b` (INT); boxed `IntervalIndex`
+   * coverage comes from `str_ranges_a`/`str_ranges_b` above instead. This view still
+   * covers `DoubleType` specifically: NaN and signed-zero ordering, and the long
+   * encoding's `DoublePrefixComparator` bridge.
    */
   private def setupDoubleIntervalViews(): Unit = {
     // An unsuffixed literal like `1.0` resolves to DECIMAL, not DOUBLE (only `1.0D` or a
@@ -236,19 +276,31 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
    * Points and bounds for single-inequality joins on boxed key families. Each points
    * view includes values equal to a bound, so the inclusive (<=/>=) queries in
    * `probeCoverageQueries` exercise the boundary, not just the strict (</>) ones.
+   *
+   * DOUBLE is not among these families: like the INT partial-range queries elsewhere,
+   * it maps to one order-preserving long (see `RangeIndex.longKey`) and builds a
+   * `LongPointIndex`. `DECIMAL(20, 2)` (precision 20, above `Decimal.MAX_LONG_DIGITS`)
+   * stands in for the boxed numeric case instead.
    */
   private def setupPartialRangeViews(): Unit = {
     sql(
       """
-        |CREATE OR REPLACE TEMP VIEW dbl_partial_points(d) AS VALUES
-        |  (0.5), (1.0), (3.0), (4.0), (6.0), (7.5),
-        |  (CAST(NULL AS DOUBLE))
+        |CREATE OR REPLACE TEMP VIEW wide_dec_partial_points(d) AS VALUES
+        |  (CAST(0.5 AS DECIMAL(20, 2))), (CAST(1.0 AS DECIMAL(20, 2))),
+        |  (CAST(3.0 AS DECIMAL(20, 2))), (CAST(4.0 AS DECIMAL(20, 2))),
+        |  (CAST(6.0 AS DECIMAL(20, 2))), (CAST(7.5 AS DECIMAL(20, 2))),
+        |  (CAST(NULL AS DECIMAL(20, 2)))
         |""".stripMargin)
     sql(
       """
-        |CREATE OR REPLACE TEMP VIEW dbl_partial_bounds(lo) AS VALUES
-        |  (1.0), (4.0), (7.5)
+        |CREATE OR REPLACE TEMP VIEW wide_dec_partial_bounds(lo) AS VALUES
+        |  (CAST(1.0 AS DECIMAL(20, 2))), (CAST(4.0 AS DECIMAL(20, 2))),
+        |  (CAST(7.5 AS DECIMAL(20, 2)))
         |""".stripMargin)
+    assert(sql("SELECT d FROM wide_dec_partial_points").schema.fields.forall { f =>
+      f.dataType.isInstanceOf[DecimalType] &&
+        f.dataType.asInstanceOf[DecimalType].precision > Decimal.MAX_LONG_DIGITS
+    })
     sql(
       """
         |CREATE OR REPLACE TEMP VIEW str_partial_points(s) AS VALUES
@@ -285,6 +337,22 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
         |CREATE OR REPLACE TEMP VIEW ts_points(t) AS VALUES
         |  (TIMESTAMP'2024-01-01 06:00:00'),
         |  (TIMESTAMP'2024-01-01 18:00:00')
+        |""".stripMargin)
+  }
+
+  private def setupBooleanViews(): Unit = {
+    sql(
+      """
+        |CREATE OR REPLACE TEMP VIEW bool_ranges(lo, hi) AS VALUES
+        |  (false, true),
+        |  (true, true)
+        |""".stripMargin)
+    sql(
+      """
+        |CREATE OR REPLACE TEMP VIEW bool_points(p) AS VALUES
+        |  (false),
+        |  (true),
+        |  (CAST(NULL AS BOOLEAN))
         |""".stripMargin)
   }
 
@@ -365,21 +433,40 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
     }
   }
 
-  test("supported join types match nested loop; full outer does not") {
+  test("a hint that resolves no broadcast side still allows a by-size range join") {
+    // MERGE does not apply to a non-equi join (no equi-join keys to sort-merge on), so
+    // it resolves no side for either a hinted range join or a hinted nested loop join.
+    // Falling through to `createNonEquiJoin()` without first retrying the by-size range
+    // join would plan a nested loop join here even though both sides are well within
+    // the broadcast threshold, same as the unhinted query.
     setupIpLookupViews()
-    Seq(
-      s"SELECT s.id, l.zip_id FROM signin_ip s LEFT JOIN ip_lookup l ON $pointCond",
-      s"SELECT s.id, l.zip_id FROM signin_ip s RIGHT JOIN ip_lookup l ON $pointCond",
-      s"SELECT s.id FROM signin_ip s LEFT SEMI JOIN ip_lookup l ON $pointCond",
-      s"SELECT s.id FROM signin_ip s LEFT ANTI JOIN ip_lookup l ON $pointCond"
-    ).foreach { query =>
-      val expected = sql(query).collect()
-      withRangeJoin() {
-        val df = sql(query)
-        assert(findRangeJoin(df.queryExecution.executedPlan).size == 1, query)
-        checkAnswer(df, expected)
-      }
+    val unhinted = sql(
+      s"SELECT s.id, l.zip_id FROM signin_ip s JOIN ip_lookup l ON $pointCond")
+    withRangeJoin() {
+      val hinted = sql(
+        "SELECT /*+ MERGE(s) */ s.id, l.zip_id FROM signin_ip s JOIN ip_lookup l " +
+          s"ON $pointCond")
+      assert(findRangeJoin(hinted.queryExecution.executedPlan).size == 1)
+      checkAnswer(hinted, unhinted)
     }
+  }
+
+  test("neither side broadcastable falls back to nested loop, not an unbounded range join") {
+    // getNonEquiJoinBuildSide's last resort still returns a build side for a left
+    // outer join when nothing is broadcastable. BroadcastRangeJoinExec.supports is
+    // only structural, so upgrading that side to a range join would broadcast a
+    // relation that was never confirmed small (and can fail at maxBroadcastTableSize).
+    setupIpLookupViews()
+    withRangeJoin(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val df = sql(
+        s"SELECT s.id, l.zip_id FROM signin_ip s LEFT JOIN ip_lookup l ON $pointCond")
+      assert(findRangeJoin(df.queryExecution.executedPlan).isEmpty)
+      assert(findBroadcastNestedLoopJoin(df.queryExecution.executedPlan).size == 1)
+    }
+  }
+
+  test("full outer does not plan a range join") {
+    setupIpLookupViews()
     val fullOuter =
       s"SELECT s.id, l.zip_id FROM signin_ip s FULL OUTER JOIN ip_lookup l ON $pointCond"
     withRangeJoin() {
@@ -554,12 +641,12 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
       sql("CREATE TABLE varchar_points(p VARCHAR(5)) USING parquet")
       sql("INSERT INTO varchar_points VALUES ('ab'), ('zz')")
 
-      val charQuery =
-        "SELECT /*+ BROADCAST(r) */ p.p, r.lo, r.hi FROM char_points p JOIN char_ranges r " +
-          "ON p.p >= r.lo AND p.p <= r.hi"
       // CHAR(5) blank-pads 'ab' to 'ab   ', so it matches both the ('aa', 'ab') and the
       // ('ab   ', 'ab   ') range: trailing-space-only values must compare equal, not just
       // round-trip unchanged.
+      val charQuery =
+        "SELECT /*+ BROADCAST(r) */ p.p, r.lo, r.hi FROM char_points p JOIN char_ranges r " +
+          "ON p.p >= r.lo AND p.p <= r.hi"
       val varcharQuery =
         "SELECT /*+ BROADCAST(r) */ p.p, r.lo, r.hi FROM varchar_points p JOIN char_ranges r " +
           "ON p.p >= r.lo AND p.p <= r.hi"
@@ -576,53 +663,16 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
     }
   }
 
-  test("date and timestamp range joins match the nested loop result") {
-    setupDateAndTimestampViews()
-    val dateQuery =
-      "SELECT p.d, r.lo, r.hi FROM dt_points p JOIN dt_ranges r ON p.d BETWEEN r.lo AND r.hi"
-    val tsQuery =
-      "SELECT p.t, r.lo, r.hi FROM ts_points p JOIN ts_ranges r ON p.t BETWEEN r.lo AND r.hi"
-    Seq(dateQuery, tsQuery).foreach { query =>
-      val expected = sql(query).collect()
-      withRangeJoin() {
-        val df = sql(query)
-        assert(findRangeJoin(df.queryExecution.executedPlan).size == 1, query)
-        checkAnswer(df, expected)
-      }
-    }
-  }
-
-  test("boolean range joins match the nested loop result, including a null point") {
-    sql(
-      """
-        |CREATE OR REPLACE TEMP VIEW bool_ranges(lo, hi) AS VALUES
-        |  (false, true),
-        |  (true, true)
-        |""".stripMargin)
-    sql(
-      """
-        |CREATE OR REPLACE TEMP VIEW bool_points(p) AS VALUES
-        |  (false),
-        |  (true),
-        |  (CAST(NULL AS BOOLEAN))
-        |""".stripMargin)
-    val query = "SELECT p.p, r.lo, r.hi FROM bool_points p JOIN bool_ranges r " +
-      "ON p.p >= r.lo AND p.p <= r.hi"
-    val expected = sql(query).collect()
-    withRangeJoin() {
-      val df = sql(query)
-      assert(findRangeJoin(df.queryExecution.executedPlan).size == 1, query)
-      checkAnswer(df, expected)
-    }
-  }
-
   test("whole-stage codegen covers each range-join probe") {
     setupIpLookupViews()
     setupDecimalViews()
     setupCollatedStrings()
     setupIntervalViews()
+    setupStringIntervalViews()
     setupDoubleIntervalViews()
     setupPartialRangeViews()
+    setupDateAndTimestampViews()
+    setupBooleanViews()
     probeCoverageQueries.foreach { query =>
       val expected = sql(query).collect()
       withRangeJoin(
@@ -643,41 +693,12 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
     setupDecimalViews()
     setupCollatedStrings()
     setupIntervalViews()
+    setupStringIntervalViews()
     setupDoubleIntervalViews()
     setupPartialRangeViews()
-    probeCoverageQueries.foreach { query =>
-      val expected = sql(query).collect()
-      withRangeJoin(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
-        val df = sql(query)
-        checkAnswer(df, expected)
-        assert(findRangeJoin(df.queryExecution.executedPlan).size == 1, query)
-        assert(!rangeJoinIsCodegen(df.queryExecution.executedPlan), query)
-      }
-    }
-  }
-
-  test("boolean and date/timestamp range joins match the nested loop result " +
-      "with codegen off") {
-    sql(
-      """
-        |CREATE OR REPLACE TEMP VIEW bool_ranges2(lo, hi) AS VALUES
-        |  (false, true),
-        |  (true, true)
-        |""".stripMargin)
-    sql(
-      """
-        |CREATE OR REPLACE TEMP VIEW bool_points2(p) AS VALUES
-        |  (false),
-        |  (true),
-        |  (CAST(NULL AS BOOLEAN))
-        |""".stripMargin)
     setupDateAndTimestampViews()
-    val queries = Seq(
-      "SELECT p.p, r.lo, r.hi FROM bool_points2 p JOIN bool_ranges2 r " +
-        "ON p.p >= r.lo AND p.p <= r.hi",
-      "SELECT p.d, r.lo, r.hi FROM dt_points p JOIN dt_ranges r ON p.d BETWEEN r.lo AND r.hi",
-      "SELECT p.t, r.lo, r.hi FROM ts_points p JOIN ts_ranges r ON p.t BETWEEN r.lo AND r.hi")
-    queries.foreach { query =>
+    setupBooleanViews()
+    probeCoverageQueries.foreach { query =>
       val expected = sql(query).collect()
       withRangeJoin(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
         val df = sql(query)
@@ -805,13 +826,14 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
 
   test("outer loop's stream-reuse ordering holds when the join falls out of codegen") {
     // An output wider than spark.sql.codegen.maxFields excludes the join itself from
-    // whole-stage codegen (CollapseCodegenStages.supportCodegen), but a streamed child
-    // that supports codegen on its own still gets its own whole-stage region beneath an
-    // InputAdapter. range() is such a child: its generated iterator reuses one output row
-    // across calls, unlike a VALUES view (LocalTableScanExec), which CollapseCodegenStages
-    // never makes a whole-stage root and which hands out its own rows. outerJoin's loop
-    // must check `streamRow` before `stream.hasNext`, or this reused row is overwritten
-    // while candidates for the current streamed row are still pending.
+    // whole-stage codegen (CollapseCodegenStages.supportCodegen). CollapseCodegenStages
+    // then wraps the streamed range() child directly in its own WholeStageCodegenExec;
+    // InputAdapter is only inserted under a parent that still supports codegen, so this
+    // plan has no InputAdapter. range()'s generated iterator reuses one output row across
+    // calls, unlike a VALUES view (LocalTableScanExec), which never becomes a whole-stage
+    // root and hands out its own rows. outerJoin's loop must check `streamRow` before
+    // `stream.hasNext`, or this reused row is overwritten while candidates for the
+    // current streamed row are still pending.
     sql(
       "CREATE OR REPLACE TEMP VIEW stream_reuse_bounds(b) AS VALUES " +
         "(10L), (20L), (30L), (40L), (50L)")

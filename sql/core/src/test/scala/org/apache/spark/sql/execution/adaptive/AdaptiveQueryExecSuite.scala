@@ -36,7 +36,8 @@ import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, BindReferences, EqualTo, Expression, IsNull, LessThan, Literal, Or, SortOrder}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, EliminateLimits}
-import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, Inner, LeftAnti, LeftSemi, LeftSingle}
+import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, Inner, LeftAnti, LeftOuter,
+  LeftSemi, LeftSingle}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, EmptyRelation, GlobalLimit, Join, JoinHint, LeafNode, LocalRelation, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.plans.physical.{CoalescedNullAwareHashPartitioning, SinglePartition}
 import org.apache.spark.sql.classic.Strategy
@@ -3050,6 +3051,7 @@ class AdaptiveQueryExecSuite
       val join = Join(left, stage(modeFor(lo)), Inner, Some(cond), JoinHint.NONE)
       val planned = LogicalQueryStageStrategy(join).head.asInstanceOf[BroadcastRangeJoinExec]
       assert(planned.rightKeys.head.semanticEquals(lo))
+      assert(planned.buildSide == BuildRight)
 
       val mismatched = join.copy(right = stage(modeFor(hi)))
       assert(LogicalQueryStageStrategy(mismatched).isEmpty)
@@ -3058,6 +3060,48 @@ class AdaptiveQueryExecSuite
       val wrongKindMode = RangeRelationBroadcastMode(Seq(boundLo), IntervalIndexKind)
       val mismatchedKind = join.copy(right = stage(wrongKindMode))
       assert(LogicalQueryStageStrategy(mismatchedKind).isEmpty)
+    }
+  }
+
+  test("LogicalQueryStageStrategy reuses a left-side range broadcast only for the same keys") {
+    // Mirror of the right-stage test above: BuildLeft reuse (inner with a left stage,
+    // or right outer) must keep matching against the left keys and refuse a mismatched
+    // mode or an unsupported join type over that stage.
+    val leftLo = AttributeReference("lo", IntegerType)()
+    val leftHi = AttributeReference("hi", IntegerType)()
+    val rightAttr = AttributeReference("a", IntegerType)()
+    val left = LocalRelation(leftLo, leftHi)
+    val right = LocalRelation(rightAttr)
+    val cond = LessThan(rightAttr, leftLo)
+
+    def stage(mode: RangeRelationBroadcastMode): LogicalQueryStage = {
+      val scan = LocalTableScanExec(left.output, Nil, None)
+      val exchange = BroadcastExchangeExec(mode, scan)
+      LogicalQueryStage(left, BroadcastQueryStageExec(0, exchange, exchange))
+    }
+
+    def modeFor(buildKey: AttributeReference): RangeRelationBroadcastMode = {
+      val bound: Expression = BindReferences.bindReference(buildKey, left.output)
+      RangeRelationBroadcastMode(Seq(bound), PointIndexKind)
+    }
+
+    withSQLConf(SQLConf.BROADCAST_RANGE_JOIN_ENABLED.key -> "true") {
+      val join = Join(stage(modeFor(leftLo)), right, Inner, Some(cond), JoinHint.NONE)
+      val planned = LogicalQueryStageStrategy(join).head.asInstanceOf[BroadcastRangeJoinExec]
+      assert(planned.leftKeys.head.semanticEquals(leftLo))
+      assert(planned.buildSide == BuildLeft)
+
+      val mismatched = join.copy(left = stage(modeFor(leftHi)))
+      assert(LogicalQueryStageStrategy(mismatched).isEmpty)
+
+      val boundLo: Expression = BindReferences.bindReference(leftLo, left.output)
+      val wrongKindMode = RangeRelationBroadcastMode(Seq(boundLo), IntervalIndexKind)
+      val mismatchedKind = join.copy(left = stage(wrongKindMode))
+      assert(LogicalQueryStageStrategy(mismatchedKind).isEmpty)
+
+      // Left outer never builds the left side, so a left stage must not be reused.
+      val leftOuter = Join(stage(modeFor(leftLo)), right, LeftOuter, Some(cond), JoinHint.NONE)
+      assert(LogicalQueryStageStrategy(leftOuter).isEmpty)
     }
   }
 

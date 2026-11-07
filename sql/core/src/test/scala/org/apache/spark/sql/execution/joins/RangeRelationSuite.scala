@@ -33,7 +33,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * and the broadcast-mode routing that picks between the two families.
  * Operator-level behavior is covered by `RangeJoinSuite`.
  */
-class RangeIndexSuite extends SparkFunSuite {
+class RangeRelationSuite extends SparkFunSuite {
 
   private def row(id: Int): InternalRow = InternalRow(id)
 
@@ -401,7 +401,9 @@ class RangeIndexSuite extends SparkFunSuite {
     // Double's own `==` already treats -0.0 and 0.0 as equal, so `PhysicalDataType.ordering`
     // (which SQL requires to distinguish them from every other value, but not from each other)
     // merges them exactly like the UTF8String/Array[Byte] keys above: a probe on either
-    // sign finds rows stored under both.
+    // sign finds rows stored under both. Production float/double builds use the long
+    // family via DoublePrefixComparator, which also folds -0.0 into 0.0; the long
+    // assertions below pin that path.
     val negZero: Any = -0.0
     val posZero: Any = 0.0
     val ordering = PhysicalDataType.ordering(DoubleType)
@@ -416,6 +418,57 @@ class RangeIndexSuite extends SparkFunSuite {
     val index = buildIntervals(DoubleType, intervals.toSeq)
     assert(ids(index.overlapping(negZero, negZero)).sorted == List(0, 1))
     assert(ids(index.overlapping(posZero, posZero)).sorted == List(0, 1))
+
+    val longPoints = RangeRelationBroadcastMode(
+      Seq(BoundReference(0, DoubleType, nullable = true)), PointIndexKind)
+      .transform(Array(InternalRow(-0.0, 0), InternalRow(0.0, 1)))
+      .asInstanceOf[LongPointIndex]
+    val negLong = RangeIndex.requiredLongKey(DoubleType).value(-0.0)
+    val posLong = RangeIndex.requiredLongKey(DoubleType).value(0.0)
+    assert(negLong == posLong)
+    assert(longPoints.upTo(negLong).map(_.getInt(1)).toSet == Set(0, 1))
+    assert(longPoints.from(posLong).map(_.getInt(1)).toSet == Set(0, 1))
+
+    val longIntervals = RangeRelationBroadcastMode(
+      Seq(BoundReference(0, DoubleType, nullable = true),
+        BoundReference(1, DoubleType, nullable = true)),
+      IntervalIndexKind)
+      .transform(Array(InternalRow(-5.0, -0.0, 0), InternalRow(0.0, 5.0, 1)))
+      .asInstanceOf[LongIntervalIndex]
+    assert(longIntervals.overlapping(negLong, negLong).map(_.getInt(2)).toList.sorted ==
+      List(0, 1))
+    assert(longIntervals.overlapping(posLong, posLong).map(_.getInt(2)).toList.sorted ==
+      List(0, 1))
+  }
+
+  test("long float and double indexes honor NaN and Infinity SQL order") {
+    val toLong: Any => Long = RangeIndex.requiredLongKey(DoubleType).value
+    val longIdx = RangeRelationBroadcastMode(
+      Seq(BoundReference(0, DoubleType, nullable = true),
+        BoundReference(1, DoubleType, nullable = true)),
+      IntervalIndexKind)
+      .transform(Array(
+        InternalRow(1.0, Double.PositiveInfinity, 1),
+        InternalRow(Double.NegativeInfinity, -1.0, 2),
+        InternalRow(Double.NaN, Double.NaN, 3)))
+      .asInstanceOf[LongIntervalIndex]
+    assert(longIdx.overlapping(toLong(5.0), toLong(5.0)).map(_.getInt(2)).toList == List(1))
+    assert(longIdx.overlapping(toLong(Double.PositiveInfinity), toLong(Double.PositiveInfinity))
+      .map(_.getInt(2)).toList == List(1))
+    assert(longIdx.overlapping(toLong(-5.0), toLong(-5.0)).map(_.getInt(2)).toList == List(2))
+    assert(longIdx.overlapping(toLong(Double.NegativeInfinity), toLong(Double.NegativeInfinity))
+      .map(_.getInt(2)).toList == List(2))
+    assert(longIdx.overlapping(toLong(Double.NaN), toLong(Double.NaN))
+      .map(_.getInt(2)).toList == List(3))
+    assert(longIdx.overlapping(toLong(0.0), toLong(0.0)).isEmpty)
+
+    val floatIdx = RangeRelationBroadcastMode(
+      Seq(BoundReference(0, FloatType, nullable = true)), PointIndexKind)
+      .transform(Array(InternalRow(Float.NaN, 0), InternalRow(1.0f, 1)))
+      .asInstanceOf[LongPointIndex]
+    val nanLong = RangeIndex.requiredLongKey(FloatType).value(Float.NaN)
+    assert(floatIdx.upTo(nanLong).map(_.getInt(1)).toSet == Set(0, 1))
+    assert(floatIdx.fromExclusive(nanLong).map(_.getInt(1)).isEmpty)
   }
 
   test("a nested probe does not drop rows from the outer iterator") {
@@ -705,15 +758,19 @@ class RangeIndexSuite extends SparkFunSuite {
         ser: org.apache.spark.serializer.SerializerInstance, index: A): A =
       ser.deserialize[A](ser.serialize(index))
 
-    val windows = Seq((5.0, 5.0, List(0)), (25.0, 25.0, List(1)), (45.0, 45.0, List(2)),
-      (5.0, 25.0, List(0, 1)), (25.0, 45.0, List(1, 2)))
-    val spans = Seq(span(0.0, 10.0, 0), span(20.0, 30.0, 1), span(40.0, 50.0, 2))
+    // Sized above SMALL_BUILD_OVERLAP_ROWS so a restored probe must walk.
+    val n = RangeIndex.SMALL_BUILD_OVERLAP_ROWS + 4
+    val windows = Seq(
+      (5.0, 5.0, List(0)),
+      ((n - 1) * 20.0 + 5.0, (n - 1) * 20.0 + 5.0, List(n - 1)),
+      (5.0, 25.0, List(0, 1)))
+    val spans = (0 until n).map(i => span(i * 20.0, i * 20.0 + 10.0, i))
     val boxed = buildIntervals(DoubleType, spans)
     val longIdx = RangeRelationBroadcastMode(
       Seq(BoundReference(1, IntegerType, nullable = true),
         BoundReference(2, IntegerType, nullable = true)),
       IntervalIndexKind)
-      .transform(Array(InternalRow(0, 0, 10), InternalRow(1, 20, 30), InternalRow(2, 40, 50)))
+      .transform((0 until n).map(i => InternalRow(i, i * 20, i * 20 + 10)).toArray)
       .asInstanceOf[LongIntervalIndex]
 
     windows.foreach { case (low, high, expected) =>
@@ -855,46 +912,63 @@ class RangeIndexSuite extends SparkFunSuite {
     // Disjoint intervals and distinct points share no core, but a window
     // spanning max-low and min-high still covers every interval, so the
     // direct all-rows scan answers it and no walk iterator is built. A
-    // window covering some but not all intervals keeps the walk.
-    val disjoint = buildIntervals(Seq(span(0, 10, 0), span(20, 30, 1)))
-    assert(probeIds(disjoint, -5, 35).sorted == List(0, 1))
-    assert(!disjoint.overlapping(-5, 35).isInstanceOf[OverlapIterator])
-    assert(probeIds(disjoint, 5, 25).sorted == List(0, 1))
-    assert(!disjoint.overlapping(5, 25).isInstanceOf[OverlapIterator])
+    // window covering some but not all intervals keeps the walk. Builds are
+    // sized above SMALL_BUILD_OVERLAP_ROWS so the tiny-build linear scan
+    // does not mask the all-covering vs walk distinction.
+    val cutoff = RangeIndex.SMALL_BUILD_OVERLAP_ROWS
+    val n = cutoff + 4
+    val lastLow = (n - 1) * 20
+    val disjoint = buildIntervals((0 until n).map(i => span(i * 20, i * 20 + 10, i)))
+    // probeHigh must reach the greatest low for the all-covering shortcut.
+    assert(probeIds(disjoint, -5, lastLow + 15).sorted == (0 until n).toList)
+    assert(!disjoint.overlapping(-5, lastLow + 15).isInstanceOf[OverlapIterator])
     assert(probeIds(disjoint, 5, 15) == List(0))
     assert(disjoint.overlapping(5, 15).isInstanceOf[OverlapIterator])
 
-    val points = buildIntervals(Seq(span(1, 1, 1), span(5, 5, 5)))
-    assert(probeIds(points, 0, 6).sorted == List(1, 5))
-    assert(!points.overlapping(0, 6).isInstanceOf[OverlapIterator])
-    assert(probeIds(points, 4, 5) == List(5))
+    val points = buildIntervals((0 until n).map(i => span(i * 2, i * 2, i)))
+    assert(probeIds(points, -1, (n - 1) * 2 + 2).sorted == (0 until n).toList)
+    assert(!points.overlapping(-1, (n - 1) * 2 + 2).isInstanceOf[OverlapIterator])
+    assert(probeIds(points, 4, 5) == List(2))
     assert(points.overlapping(4, 5).isInstanceOf[OverlapIterator])
+
+    val longRows = (0 until n).map(i => InternalRow(i * 20, i * 20 + 10)).toArray
+    val longIdx = RangeRelationBroadcastMode(
+      Seq(BoundReference(0, IntegerType, nullable = true),
+        BoundReference(1, IntegerType, nullable = true)),
+      IntervalIndexKind)
+      .transform(longRows)
+      .asInstanceOf[LongIntervalIndex]
+    assert(longIdx.overlapping(-5L, (lastLow + 15).toLong).map(_.getInt(0)).toSet ==
+      (0 until n).map(_ * 20).toSet)
+    assert(!longIdx.overlapping(-5L, (lastLow + 15).toLong).isInstanceOf[LongOverlapIterator])
+    assert(longIdx.overlapping(5L, 15L).map(_.getInt(0)).toList == List(0))
+    assert(longIdx.overlapping(5L, 15L).isInstanceOf[LongOverlapIterator])
+  }
+
+  test("tiny interval builds scan linearly without a walk iterator") {
+    // Builds at or below SMALL_BUILD_OVERLAP_ROWS skip the tree walk but still
+    // return only overlapping rows.
+    val cutoff = RangeIndex.SMALL_BUILD_OVERLAP_ROWS
+    val boxed = buildIntervals((0 until cutoff).map(i => span(i * 20, i * 20 + 10, i)))
+    assert(!boxed.overlapping(5, 15).isInstanceOf[OverlapIterator])
+    assert(probeIds(boxed, 5, 15) == List(0))
+    assert(probeIds(boxed, -5, cutoff * 20 + 15).sorted == (0 until cutoff).toList)
 
     val longIdx = RangeRelationBroadcastMode(
       Seq(BoundReference(0, IntegerType, nullable = true),
         BoundReference(1, IntegerType, nullable = true)),
       IntervalIndexKind)
-      .transform(Array(InternalRow(0, 10), InternalRow(20, 30)))
+      .transform((0 until cutoff).map(i => InternalRow(i * 20, i * 20 + 10)).toArray)
       .asInstanceOf[LongIntervalIndex]
-    assert(longIdx.overlapping(-5L, 35L).map(_.getInt(0)).toSet == Set(0, 20))
-    assert(!longIdx.overlapping(-5L, 35L).isInstanceOf[LongOverlapIterator])
+    assert(!longIdx.overlapping(5L, 15L).isInstanceOf[LongOverlapIterator])
     assert(longIdx.overlapping(5L, 15L).map(_.getInt(0)).toList == List(0))
-    assert(longIdx.overlapping(5L, 15L).isInstanceOf[LongOverlapIterator])
   }
 
   test("overlap iterator sizes its scratch stack to tree depth, not row count") {
-    // The scratch stack is pre-sized off `lows.length` alone (tree depth), independent of
-    // data distribution. Bounding against that same depth formula (rather than a fixed
-    // magic number) still catches a regression to O(row count) sizing, without breaking
-    // if the depth-to-capacity multiplier or the floor constant is tuned to a different
-    // (but still O(log n)) value.
+    // OverlapIterator sizes stacks at max(8, depth * 3). The assertion uses a
+    // fixed depth * 4 ceiling that catches O(row count); it is not meant to
+    // track retuning of that multiplier or floor.
     def depthOf(n: Int): Int = 32 - java.lang.Integer.numberOfLeadingZeros(n)
-
-    val oneRowIndex = buildIntervals(Seq(span(0, 10, 0)))
-    val oneRowIter = oneRowIndex.overlapping(15, 15).asInstanceOf[OverlapIterator]
-    assert(oneRowIter.stackCapacity <= math.max(8, depthOf(1) * 4),
-      s"a one-row index should need only a handful of scratch slots, " +
-        s"got ${oneRowIter.stackCapacity}")
 
     val n = 10000
     val largeIndex = buildIntervals((0 until n).map(i => span(i, i + 100, i)))
@@ -960,32 +1034,32 @@ class RangeIndexSuite extends SparkFunSuite {
     assert(RangeRelationBroadcastMode(
       Seq(BoundReference(0, IntegerType, nullable = true)), PointIndexKind)
       .transform(Array(InternalRow(5, 1))).isInstanceOf[LongPointIndex])
-    // Floating point has no bit-preserving SQL order, and strings are not one long.
-    // Pinned for both kinds and both widths: signed zero and NaN need the boxed
-    // ordering's special-cased comparator, not a bit-preserving long encoding.
+    // Float and double map through DoublePrefixComparator to an order-preserving
+    // long; both kinds take the long family.
     assert(RangeRelationBroadcastMode(
       Seq(BoundReference(0, FloatType, nullable = true)), PointIndexKind)
-      .transform(Array(InternalRow(1.0f, 1))).isInstanceOf[PointIndex])
+      .transform(Array(InternalRow(1.0f, 1))).isInstanceOf[LongPointIndex])
     assert(RangeRelationBroadcastMode(
       Seq(BoundReference(0, DoubleType, nullable = true)), PointIndexKind)
-      .transform(Array(InternalRow(1.0, 1))).isInstanceOf[PointIndex])
+      .transform(Array(InternalRow(1.0, 1))).isInstanceOf[LongPointIndex])
     assert(RangeRelationBroadcastMode(
       Seq(BoundReference(0, FloatType, nullable = true),
         BoundReference(1, FloatType, nullable = true)),
       IntervalIndexKind)
-      .transform(Array(InternalRow(1.0f, 2.0f, 1))).isInstanceOf[IntervalIndex])
+      .transform(Array(InternalRow(1.0f, 2.0f, 1))).isInstanceOf[LongIntervalIndex])
     assert(RangeRelationBroadcastMode(
       Seq(BoundReference(0, DoubleType, nullable = true),
         BoundReference(1, DoubleType, nullable = true)),
       IntervalIndexKind)
-      .transform(Array(InternalRow(1.0, 2.0, 1))).isInstanceOf[IntervalIndex])
+      .transform(Array(InternalRow(1.0, 2.0, 1))).isInstanceOf[LongIntervalIndex])
+    // Strings are not one long.
     assert(RangeRelationBroadcastMode(
       Seq(BoundReference(0, StringType, nullable = true),
         BoundReference(1, StringType, nullable = true)),
       IntervalIndexKind)
       .transform(Array(InternalRow(
         UTF8String.fromString("a"), UTF8String.fromString("b"), 1))).isInstanceOf[IntervalIndex])
-    // A compact decimal (precision <= 18) is representable as a scaled long.
+    // A compact decimal (precision <= 18) maps to its unscaled long.
     assert(RangeRelationBroadcastMode(
       Seq(BoundReference(0, DecimalType(10, 2), nullable = true)), PointIndexKind)
       .transform(Array(InternalRow(Decimal(1.0), 1))).isInstanceOf[LongPointIndex])
@@ -1022,15 +1096,35 @@ class RangeIndexSuite extends SparkFunSuite {
     val generic = buildIntervals(spans)
     val longIdx = longIndex(spans)
     assert(longIdx.estimatedSize > 0)
-    // A window that meets the core skips the walk and still answers everything.
+    // Same keys with a wider row payload must charge more than the key arrays alone.
+    val wideLong = RangeRelationBroadcastMode(
+      Seq(BoundReference(0, IntegerType, nullable = true),
+        BoundReference(1, IntegerType, nullable = true)),
+      IntervalIndexKind)
+      .transform(spans.map(t =>
+        InternalRow(t._1, t._2, t._3.getInt(0), UTF8String.fromString("x" * 64))).toArray)
+      .asInstanceOf[LongIntervalIndex]
+    assert(wideLong.estimatedSize > longIdx.estimatedSize)
+    val emptyLong = RangeRelationBroadcastMode(
+      Seq(BoundReference(0, IntegerType, nullable = true),
+        BoundReference(1, IntegerType, nullable = true)),
+      IntervalIndexKind)
+      .transform(Array.empty[InternalRow])
+      .asInstanceOf[LongIntervalIndex]
+    // Keys alone already exceed an empty index; rows push the estimate further.
+    assert(longIdx.estimatedSize > emptyLong.estimatedSize)
+    // A window that meets the core (or a tiny-build linear scan) skips the walk
+    // iterator and still answers everything.
     assert(!longIdx.overlapping(9L, 9L).isInstanceOf[LongOverlapIterator])
     assert(longIdx.overlapping(9L, 9L).map(_.getInt(2)).toList.sorted == List(0, 1, 2, 3))
     Seq((2, 2), (5, 7), (9, 9), (13, 12), (11, 11), (15, 15), (20, 30))
       .foreach { case (lo, hi) => assertSameWindow(generic, longIdx, lo, hi) }
 
     // Randomized sets cross-check the families independently: the generic index
-    // is itself brute-force verified, so this pins the walk, the lo/hi swap,
-    // and null drops without recomputing expectations by hand.
+    // is itself brute-force verified, so this pins the walk and the lo/hi swap
+    // without recomputing expectations by hand. Null drops are covered by the
+    // fixed fixture above (and by the point-index fixtures), not by these
+    // rand.nextInt draws.
     val rand = new scala.util.Random(42)
     val bound = 50
     for (_ <- 0 until 20) {
@@ -1048,18 +1142,19 @@ class RangeIndexSuite extends SparkFunSuite {
   }
 
   test("LongIntervalIndex.coreLow/coreHigh use infinite-bound empty-set identities") {
-    // Defensive consistency fix, not a live-bug regression test: overlapping()'s own
-    // `if (lows.isEmpty) return Iterator.empty` guard already short-circuits before either
-    // field is ever read on an empty index, so an all-covering probe window never actually
-    // reaches this comparison for one - it would in fact pass (vacuously, for every window),
-    // not fail, since probeLow <= Long.MaxValue and probeHigh >= Long.MinValue always hold.
-    // IntervalIndex.coreLow/coreHigh return null for an empty index instead: the two families
-    // use different empty-set sentinels, which is fine since neither currently depends on it.
+    // Empty long indexes use MinValue/MaxValue so every window would pass the
+    // all-covering comparison; overlapping() returns Iterator.empty on
+    // lows.isEmpty before those fields are read. The boxed family uses null
+    // sentinels instead - the two families differ, and neither path depends on
+    // the empty identity for a live probe.
     assert(LongIntervalIndex.coreLow(Array.empty[Long]) == Long.MinValue)
     assert(LongIntervalIndex.coreHigh(Array.empty[Long]) == Long.MaxValue)
   }
 
   test("long overlap iterator sizes its scratch stack to tree depth, not row count") {
+    // LongOverlapIterator sizes stacks at max(8, depth * 3). The assertion uses
+    // a fixed depth * 4 ceiling that catches O(row count); it is not meant to
+    // track retuning of that multiplier or floor.
     def depthOf(n: Int): Int = 32 - java.lang.Integer.numberOfLeadingZeros(n)
     val n = 10000
     val index = RangeRelationBroadcastMode(
@@ -1110,6 +1205,15 @@ class RangeIndexSuite extends SparkFunSuite {
         InternalRow(null, true, 2)))
       .asInstanceOf[LongIntervalIndex]
     assert(longIdx.estimatedSize > 0)
+    val wideBool = RangeRelationBroadcastMode(
+      Seq(BoundReference(0, BooleanType, nullable = true),
+        BoundReference(1, BooleanType, nullable = true)),
+      IntervalIndexKind)
+      .transform(Array(
+        InternalRow(false, true, 0, UTF8String.fromString("x" * 64)),
+        InternalRow(true, true, 1, UTF8String.fromString("y" * 64))))
+      .asInstanceOf[LongIntervalIndex]
+    assert(wideBool.estimatedSize > longIdx.estimatedSize)
     Seq((false, false), (true, true), (false, true)).foreach { case (lo, hi) =>
       val expected = probeIds(generic, lo, hi).sorted
       val actual = longIdx
@@ -1138,10 +1242,17 @@ class RangeIndexSuite extends SparkFunSuite {
     val generic = buildPoints(IntegerType, keyed.toSeq)
     val longIdx = longIndex(keyed.toSeq)
     Seq(0, 1, 4, 5, 6, 8, 9).foreach(v => assertSameBounds(generic, longIdx, v))
+    val widePoint = RangeRelationBroadcastMode(
+      Seq(BoundReference(0, IntegerType, nullable = true)), PointIndexKind)
+      .transform(keyed.map(t =>
+        InternalRow(t._1, t._2.getInt(0), UTF8String.fromString("x" * 64))).toArray)
+      .asInstanceOf[LongPointIndex]
+    assert(widePoint.estimatedSize > longIdx.estimatedSize)
 
     // Randomized sets cross-check the families independently: the generic index
     // is itself brute-force verified, so this pins the long path's bound search
-    // and null handling without recomputing expectations by hand.
+    // without recomputing expectations by hand. Null handling is covered by the
+    // fixed fixture above, not by these rand.nextInt draws.
     val rand = new scala.util.Random(42)
     val bound = 50
     for (_ <- 0 until 20) {

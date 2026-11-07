@@ -25,7 +25,8 @@ import org.apache.spark.sql.types.{DayTimeIntervalType, DoubleType, IntegerType}
 
 /**
  * Plan-level coverage for [[ExtractRangeJoinKeys]]: which condition shapes are
- * recognized, which `RangeJoinKind` tag is produced, and what residual remains.
+ * recognized and which `RangeJoinKind` tag is produced. Leftover conjuncts stay
+ * on the join condition; the extractor does not return a residual separately.
  */
 class ExtractRangeJoinKeysSuite extends PlanTest {
 
@@ -53,7 +54,7 @@ class ExtractRangeJoinKeysSuite extends PlanTest {
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression]): Unit = {
     join(left, right, cond) match {
-      case ExtractRangeJoinKeys(_, actualLeft, actualRight, rangeJoinKind) =>
+      case ExtractRangeJoinKeys(actualLeft, actualRight, rangeJoinKind) =>
         assert(rangeJoinKind === expected)
         assert(actualLeft === leftKeys)
         assert(actualRight === rightKeys)

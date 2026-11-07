@@ -1281,18 +1281,33 @@ object SQLConf {
 
   val BROADCAST_RANGE_JOIN_ENABLED = buildConf("spark.sql.join.broadcastRangeJoin.enabled")
     .internal()
-    .doc("When true, a non-equi join is planned as a broadcast range join instead of a broadcast " +
-      "nested loop join when it tests whether a value falls inside a range, whether two ranges " +
-      "overlap, or compares the two sides once with `<`, `<=`, `>`, or `>=`. Each range key must " +
-      "be deterministic, of boolean, integer, floating-point, decimal, string, binary, date, or " +
-      "timestamp type, and drawn entirely from one side. The broadcast side is sorted and " +
-      "indexed once, which evaluates the range key of every broadcast row. When probing, " +
-      "each row of the other side evaluates its range key and reads only the part of the index " +
-      "that can match it. Keys are evaluated before any pair is tested, so a key expression that " +
-      "throws an error can fail a query that a nested loop join would have completed. The range " +
-      "join is much faster when that part is small, somewhat slower when it covers most of the " +
-      "broadcast side. The cost of building the index grows with the size of the broadcast side " +
-      "and can outweigh the scans the range join saves. This is disabled by default.")
+    .doc("When true, a non-equi join whose condition is a range predicate (a value in a " +
+      "range, two ranges overlapping, or a single `<`/`<=`/`>`/`>=` comparison) may be " +
+      "planned as a broadcast range join instead of a broadcast nested loop join. Each " +
+      "range key must be deterministic, of boolean, integer, floating-point, decimal, " +
+      "string, binary, date, or timestamp type, and drawn entirely from one side. Planning " +
+      "still requires a side that is broadcastable by size or by a BROADCAST hint and that " +
+      "BroadcastRangeJoinExec can build: either side for inner joins, the right side for " +
+      "left outer, semi, and anti joins, the left side for right outer joins, and never a " +
+      "full outer join. An unsupported hinted side, a full outer join, and an unhinted join " +
+      "with no small side keep the previous plan (a cartesian product for an inner join, " +
+      "otherwise a nested loop join). The broadcast side is sorted and indexed once, which " +
+      "evaluates the range key of every broadcast row. When probing, each row of the other " +
+      "side evaluates its range key and reads only the part of the index that can match it. " +
+      "Keys are evaluated before any pair is tested, so a key expression that throws can " +
+      "fail a query that a nested loop join would have completed. The range join is much " +
+      "faster when that part is small. It can be slower under interleaved overlap, where " +
+      "the tree cannot prune whole miss runs; collated string and other boxed key families " +
+      "reach that regime sooner than long-specialized keys (including float and double), " +
+      "while fully overlapping builds stay near parity via the all-covering shortcut. Tiny " +
+      "builds (a handful of ranges) skip the tree walk and scan stored rows linearly so they " +
+      "stay near parity with the nested loop join. Building the index costs driver-side work " +
+      "that grows with the broadcast side and can outweigh the scans the range join saves - " +
+      "most visibly when a BROADCAST hint forces a large build side that only a handful of " +
+      "streamed rows ever probe, where that one-time cost has few scans to amortize against. " +
+      "BroadcastExchangeExec also charges the index's retained memory against " +
+      "maxBroadcastTableSize, so a hinted or raised-threshold build can fail where a nested " +
+      "loop join ran. This is disabled by default.")
     .version("4.4.0")
     .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .booleanConf

@@ -360,10 +360,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       // If it is not an equi-join, a broadcast hint is considered first:
       //   1. When range join is enabled and the condition is a range predicate,
-      //      pick a broadcast range join if the hinted build side is one
-      //      BroadcastRangeJoinExec supports. Both sides hinted: the smaller
-      //      side, when that side is supported. An unsupported hinted side
-      //      falls through.
+      //      pick a broadcast range join if a hinted build side is one
+      //      BroadcastRangeJoinExec supports. Both sides hinted: an unsupported
+      //      hinted side is dropped first, so an inner join builds the smaller
+      //      side, left outer/semi/anti build the right side, and right outer
+      //      builds the left side. Only when every hinted side is unsupported
+      //      does planning fall through.
       //   2. Otherwise a broadcast hint picks broadcast nested loop join. Both
       //      sides hinted: the smaller side for inner and full joins, the left
       //      side for a right join, and the right side for a left join.
@@ -375,6 +377,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       //      pick a broadcast range join on a side BroadcastRangeJoinExec
       //      supports. Both sides small: the smaller side when it is supported.
       //      The preserved side of an outer, semi, or anti join is not built.
+      //      A last-resort nested-loop build side that was never confirmed
+      //      broadcastable by hint or size is not upgraded to a range join.
       //   2. Pick broadcast nested loop join if one side is small enough to
       //      broadcast. If only the left side is broadcastable and it is a left
       //      join, or only the right side is broadcastable and it is a right
@@ -387,68 +391,37 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       //      side for a right join, and the right side for a left join.
       case j @ logical.Join(left, right, joinType, condition, hint) =>
         checkHintNonEquiJoin(hint)
-
-        def createRangeJoin(onlyLookingAtHint: Boolean) = {
-          /**
-           * Which side to broadcast for the range join. A hint-only pass honors a
-           * BROADCAST hint. Otherwise a side qualifies when it is small enough and
-           * is not marked NO_BROADCAST_AND_REPLICATION. `allowed` drops a side
-           * BroadcastRangeJoinExec cannot build. Both sides qualify: the smaller one.
-           */
-          def broadcastSide(allowed: BuildSide => Boolean): Option[BuildSide] = {
-            def qualifies(
-                plan: LogicalPlan,
-                broadcastHint: Boolean,
-                blocked: Boolean): Boolean = {
-              if (onlyLookingAtHint) {
-                broadcastHint
-              } else {
-                canBroadcastBySize(plan, conf) && !blocked
+        // Range join needs a side that is actually broadcastable by hint or size.
+        // getNonEquiJoinBuildSide's last resort still returns a build side for
+        // non-inner-like joins when nothing qualifies; BroadcastRangeJoinExec.supports
+        // is only structural, so upgrading that side would plan an unbounded range join.
+        def sideBroadcastQualified(buildSide: BuildSide): Boolean = buildSide match {
+          case BuildLeft =>
+            hintToBroadcastLeft(hint) ||
+              (canBroadcastBySize(left, conf) && !hintToNotBroadcastAndReplicateLeft(hint))
+          case BuildRight =>
+            hintToBroadcastRight(hint) ||
+              (canBroadcastBySize(right, conf) && !hintToNotBroadcastAndReplicateRight(hint))
+        }
+        getNonEquiJoinBuildSide(j, conf) match {
+          case Some(buildSide) =>
+            val rangeJoinExec = if (conf.broadcastRangeJoinEnabled &&
+              BroadcastRangeJoinExec.supports(joinType, buildSide) &&
+              sideBroadcastQualified(buildSide)) {
+              ExtractRangeJoinKeys.unapply(plan).map { case (leftKeys, rightKeys, rangeJoinKind) =>
+                joins.BroadcastRangeJoinExec(planLater(left), planLater(right),
+                  buildSide, joinType, leftKeys, rightKeys, condition, rangeJoinKind)
               }
-            }
-            val canBuildLeft = qualifies(left, hintToBroadcastLeft(hint),
-              hintToNotBroadcastAndReplicateLeft(hint)) && allowed(BuildLeft)
-            val canBuildRight = qualifies(right, hintToBroadcastRight(hint),
-              hintToNotBroadcastAndReplicateRight(hint)) && allowed(BuildRight)
-            if (canBuildLeft && canBuildRight) {
-              Some(getSmallerSide(left, right))
-            } else if (canBuildLeft) {
-              Some(BuildLeft)
-            } else if (canBuildRight) {
-              Some(BuildRight)
             } else {
               None
             }
-          }
 
-          if (conf.broadcastRangeJoinEnabled) {
-            plan match {
-              case ExtractRangeJoinKeys(_, leftKeys, rightKeys, rangeJoinKind) =>
-                val allowed = BroadcastRangeJoinExec.supports(joinType, _: BuildSide)
-                broadcastSide(allowed).map { buildSide =>
-                  Seq(BroadcastRangeJoinExec(
-                    planLater(left), planLater(right), buildSide, joinType,
-                    leftKeys, rightKeys, condition, rangeJoinKind))
-                }
-              case _ => None
-            }
-          } else {
-            None
-          }
-        }
-
-        def createNonEquiJoin() = getNonEquiJoinBuildSide(j, conf) match {
-          case Some(buildSide) =>
-            Seq(joins.BroadcastNestedLoopJoinExec(
-              planLater(left), planLater(right), buildSide, joinType, condition))
+            Seq(rangeJoinExec.getOrElse {
+              joins.BroadcastNestedLoopJoinExec(planLater(left), planLater(right),
+                buildSide, joinType, condition)
+            })
           case None =>
             Seq(joins.CartesianProductExec(planLater(left), planLater(right), condition))
-        }
-
-        if (hint.isEmpty) {
-          createRangeJoin(onlyLookingAtHint = false).getOrElse(createNonEquiJoin())
-        } else {
-          createRangeJoin(onlyLookingAtHint = true).getOrElse(createNonEquiJoin())
         }
 
       // --- Cases where this strategy does not apply ---------------------------------------------

@@ -42,7 +42,11 @@ import org.apache.spark.sql.types.StringType
  * More cases probe the cost model directly: a streamed side of 1, 10, 100,
  * 1000, 5000, or 10000 rows, where range join pays to sort the whole build
  * side instead of one nested-loop scan, and a fully overlapping inner join,
- * where every pair matches and the index prunes nothing.
+ * where every pair matches and the index prunes nothing. The same tiny-probe
+ * shape is repeated against a 1,000,000-row build: a `BROADCAST`-hinted large
+ * dimension table probed by a handful of streamed keys, where the one-time
+ * build cost this measures is largest relative to the nested-loop scan it
+ * replaces.
  *
  * Staggered-overlap builds cover the regime between those: a fraction of build
  * intervals -- from a small minority at 5%/10%/25% to half or more at 50%/90% --
@@ -53,7 +57,8 @@ import org.apache.spark.sql.types.StringType
  * misses are visited and rejected. At 5%, 10%, and 25%, misses run in long
  * stretches, so the walk also prunes whole subtrees; see the comment above
  * `staggerBuild` for those counts.
- * Long and double (boxed) keys run at 5%, 10%, 25%, 50%, and 90% overlap.
+ * Long and double keys run at 5%, 10%, 25%, 50%, and 90% overlap. Tiny builds
+ * of 8, 16, 32, and 64 ranges measure the small-build all-rows probe path.
  *
  * To run this benchmark:
  * {{{
@@ -167,6 +172,17 @@ object RangeJoinBenchmark extends SqlBasedBenchmark {
     (col("id") * width + (width - 1)).as("hi")))
   private lazy val largePoints: DataFrame = cached(spark.range(largeProbeRows).select(
     ((col("id") * width + width / 2) % lit(largeBuildRows.toLong * width)).as("p")))
+
+  // M approx 1, 10, 100 against the 1,000,000-row build above: the realistic shape of
+  // a `BROADCAST`-hinted large dimension table probed by a handful of streamed keys,
+  // where range join's one-time build cost is largest relative to the single
+  // nested-loop scan it replaces. `tinyProbeRowCounts` above only measures that same
+  // cost against the much smaller `buildRows`.
+  private val largeTinyProbeRowCounts = Seq(1, 10, 100)
+  private lazy val largeTinyPoints: Map[Int, DataFrame] = largeTinyProbeRowCounts.map { n =>
+    n -> cached(spark.range(n).select(
+      ((col("id") * width + width / 2) % lit(largeBuildRows.toLong * width)).as("p")))
+  }.toMap
 
   // Staggered high-overlap builds. Every miss interval ends before the probe window
   // starts and every span interval covers it, and the build has no common core, so
@@ -321,6 +337,7 @@ object RangeJoinBenchmark extends SqlBasedBenchmark {
     fullPoints
     largeRanges
     largePoints
+    largeTinyPoints
     dateRanges
     datePoints
     timestampRanges
@@ -380,6 +397,13 @@ object RangeJoinBenchmark extends SqlBasedBenchmark {
         s"point-in-range inner, large build (probe=$largeProbeRows, ranges=$largeBuildRows)",
         largeProbeRows, "PointInRangeJoin") {
       largePoints.join(broadcast(largeRanges), pointCond, "inner")
+    }
+    largeTinyProbeRowCounts.foreach { n =>
+      compare(
+          s"point-in-range inner, large build tiny probe (probe=$n, ranges=$largeBuildRows)",
+          largeBuildRows, "PointInRangeJoin") {
+        largeTinyPoints(n).join(broadcast(largeRanges), pointCond, "inner")
+      }
     }
   }
 
@@ -492,6 +516,41 @@ object RangeJoinBenchmark extends SqlBasedBenchmark {
     }
   }
 
+  private def tinyBuildCases(): Unit = {
+    // Selective point-in-range against tiny dimension tables: the small-build
+    // probe path must stay near nested-loop parity for builds around
+    // SMALL_BUILD_OVERLAP_ROWS, and pull ahead once the walk amortizes.
+    val tinyBuildSizes = Seq(8, 16, 32, 64)
+    val tinyProbe = 10000000
+    tinyBuildSizes.foreach { n =>
+      val tinyRanges = cached(spark.range(n).select(
+        (col("id") * width).as("lo"),
+        (col("id") * width + (width - 1)).as("hi")))
+      val tinyDoubleRanges = cached(tinyRanges.select(
+        col("lo").cast("double").as("lo"),
+        col("hi").cast("double").as("hi")))
+      val stream = cached(spark.range(tinyProbe).select(
+        ((col("id") * width + width / 2) % lit(n.toLong * width)).as("p")))
+      val streamDouble = cached(stream.select(col("p").cast("double").as("p")))
+      compare(s"point-in-range inner, tiny build (probe=$tinyProbe, ranges=$n)",
+        tinyProbe, "PointInRangeJoin") {
+        stream.join(broadcast(tinyRanges), pointCond, "inner")
+      }
+      compare(s"point-in-range left outer, tiny build (probe=$tinyProbe, ranges=$n)",
+        tinyProbe, "PointInRangeJoin") {
+        stream.join(broadcast(tinyRanges), pointCond, "left")
+      }
+      compare(s"point-in-range inner, tiny double build (probe=$tinyProbe, ranges=$n)",
+        tinyProbe, "PointInRangeJoin") {
+        streamDouble.join(broadcast(tinyDoubleRanges), pointCond, "inner")
+      }
+      compare(s"point-in-range left outer, tiny double build (probe=$tinyProbe, ranges=$n)",
+        tinyProbe, "PointInRangeJoin") {
+        streamDouble.join(broadcast(tinyDoubleRanges), pointCond, "left")
+      }
+    }
+  }
+
   private def staggeredOverlapCases(): Unit = {
     val n = s"probe=$staggerProbeRows, ranges=$staggerBuildRows"
     val longBuilds = Seq(
@@ -506,8 +565,8 @@ object RangeJoinBenchmark extends SqlBasedBenchmark {
         staggerProbeLong.join(broadcast(df), overlapCond, "inner")
       }
     }
-    // Double keys stay on the generic boxed index, so the same regime rides
-    // Ordering[Any] at every tree node.
+    // Double keys share the long-index encoding; staggered overlap still
+    // stresses walk cost when the tree cannot prune miss runs.
     val doubleBuilds = Seq(
       (5, staggerBuild5Double),
       (10, staggerBuild10Double),
@@ -530,6 +589,7 @@ object RangeJoinBenchmark extends SqlBasedBenchmark {
       partialLessCases()
       partialGreaterCases()
       keyTypeCases()
+      tinyBuildCases()
       staggeredOverlapCases()
     }
   }

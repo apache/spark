@@ -479,10 +479,10 @@ final case class GreaterPartialRangeJoin(override val strict: Boolean) extends P
  * is evaluated for every candidate.
  */
 object ExtractRangeJoinKeys extends PredicateHelper {
-  type ReturnType = (JoinType, Seq[Expression], Seq[Expression], RangeJoinKind)
+  type ReturnType = (Seq[Expression], Seq[Expression], RangeJoinKind)
 
   def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
-    case Join(left, right, joinType, Some(condition), _) =>
+    case Join(left, right, _, Some(condition), _) =>
       val predicates = splitConjunctivePredicates(condition)
       val rangePreds = predicates.collect {
         case RangePredicate(dt, low, high, strict) if supportedType(dt) => (dt, low, high, strict)
@@ -490,9 +490,9 @@ object ExtractRangeJoinKeys extends PredicateHelper {
       if (rangePreds.isEmpty) {
         None
       } else {
-        pointInRange(rangePreds, left, right, joinType)
-          .orElse(intervalOverlap(rangePreds, left, right, joinType))
-          .orElse(partialRange(rangePreds, left, right, joinType))
+        pointInRange(rangePreds, left, right)
+          .orElse(intervalOverlap(rangePreds, left, right))
+          .orElse(partialRange(rangePreds, left, right))
       }
     case _ => None
   }
@@ -517,7 +517,6 @@ object ExtractRangeJoinKeys extends PredicateHelper {
       rangePreds: Seq[(DataType, Expression, Expression, Boolean)],
       left: LogicalPlan,
       right: LogicalPlan,
-      joinType: JoinType,
       rangeJoinKind: RangeJoinKind)(
       shape: PartialFunction[(Expression, Expression, Expression, Expression),
         (Seq[Expression], Seq[Expression])]): Option[ReturnType] = {
@@ -527,7 +526,7 @@ object ExtractRangeJoinKeys extends PredicateHelper {
           place(keysA, keysB, left, right).filter { case (l, r) =>
             supportedKeys(l, r)
           }.map { case (leftKeys, rightKeys) =>
-            (joinType, leftKeys, rightKeys, rangeJoinKind)
+            (leftKeys, rightKeys, rangeJoinKind)
           }
         }
       case _ => None
@@ -537,9 +536,8 @@ object ExtractRangeJoinKeys extends PredicateHelper {
   private def pointInRange(
       rangePreds: Seq[(DataType, Expression, Expression, Boolean)],
       left: LogicalPlan,
-      right: LogicalPlan,
-      joinType: JoinType): Option[ReturnType] = {
-    pairJoin(rangePreds, left, right, joinType, PointInRangeJoin)({
+      right: LogicalPlan): Option[ReturnType] = {
+    pairJoin(rangePreds, left, right, PointInRangeJoin)({
       case (l1, h1, l2, h2)
           if h1.semanticEquals(l2) && !l1.semanticEquals(h2) && l1.dataType == h2.dataType =>
         (Seq(l2), Seq(l1, h2))
@@ -573,9 +571,8 @@ object ExtractRangeJoinKeys extends PredicateHelper {
   private def intervalOverlap(
       rangePreds: Seq[(DataType, Expression, Expression, Boolean)],
       left: LogicalPlan,
-      right: LogicalPlan,
-      joinType: JoinType): Option[ReturnType] = {
-    pairJoin(rangePreds, left, right, joinType, IntervalOverlapJoin)({
+      right: LogicalPlan): Option[ReturnType] = {
+    pairJoin(rangePreds, left, right, IntervalOverlapJoin)({
       case (l1, h1, l2, h2)
           if !l1.semanticEquals(h2) && !l2.semanticEquals(h1) &&
             l1.dataType == h2.dataType && l2.dataType == h1.dataType =>
@@ -593,8 +590,7 @@ object ExtractRangeJoinKeys extends PredicateHelper {
   private def partialRange(
       rangePreds: Seq[(DataType, Expression, Expression, Boolean)],
       left: LogicalPlan,
-      right: LogicalPlan,
-      joinType: JoinType): Option[ReturnType] = {
+      right: LogicalPlan): Option[ReturnType] = {
     rangePreds.iterator.flatMap { case (_, low, high, strict) =>
       if (low.semanticEquals(high) || low.dataType != high.dataType ||
           !supportedKeys(Seq(low, high))) {
@@ -607,7 +603,7 @@ object ExtractRangeJoinKeys extends PredicateHelper {
           } else {
             GreaterPartialRangeJoin(strict)
           }
-          (joinType, leftKeys, rightKeys, rangeJoinKind)
+          (leftKeys, rightKeys, rangeJoinKind)
         }
       }
     }.nextOption()
