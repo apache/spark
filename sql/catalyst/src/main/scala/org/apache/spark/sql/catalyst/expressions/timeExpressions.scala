@@ -427,7 +427,8 @@ case class SecondsOfTime(child: Expression)
 
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr) - Returns the second component of the given expression.
+    _FUNC_(expr) - Returns the second component of the given expression as an integer,
+    discarding fractional seconds.
 
     If `expr` is a TIMESTAMP or a string that can be cast to timestamp,
     it returns the second of that timestamp.
@@ -451,6 +452,10 @@ case class SecondsOfTime(child: Expression)
        59
       > SELECT _FUNC_(TIME'13:25:59.999999');
        59
+  """,
+  note = """
+    To include fractional seconds in a decimal result, use `extract(SECOND FROM expr)`
+    or `date_part('SECOND', expr)` instead.
   """,
   since = "1.5.0",
   group = "datetime_funcs")
