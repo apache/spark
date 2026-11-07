@@ -23,6 +23,7 @@ import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql
 import org.apache.spark.sql.{AnalysisException, Column, Encoder}
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute, UnresolvedOrdinal}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -193,7 +194,7 @@ class RelationalGroupedDataset protected[sql](
 
   /** @inheritdoc */
   override def pivot(pivotColumn: Column): RelationalGroupedDataset =
-    pivot(pivotColumn, collectPivotValues(df, pivotColumn))
+    pivot(pivotColumn, collectPivotValues(df, pivotColumn).map(Column(_)))
 
   /** @inheritdoc */
   def pivot(pivotColumn: Column, values: Seq[Any]): RelationalGroupedDataset = {
@@ -664,7 +665,7 @@ private[sql] object RelationalGroupedDataset {
     case expr: Expression => Alias(expr, toPrettySQL(expr))()
   }
 
-  private[sql] def collectPivotValues(df: DataFrame, pivotColumn: Column): Seq[Any] = {
+  private[sql] def collectPivotValues(df: DataFrame, pivotColumn: Column): Seq[Literal] = {
     if (df.isStreaming) {
       throw new AnalysisException(
         errorClass = "_LEGACY_ERROR_TEMP_3063",
@@ -673,12 +674,15 @@ private[sql] object RelationalGroupedDataset {
     // This is to prevent unintended OOM errors when the number of distinct values is large
     val maxValues = df.sparkSession.sessionState.conf.dataFramePivotMaxValues
     // Get the distinct values of the column and sort them so its consistent
-    val values = df.select(pivotColumn)
+    val pivotDf = df.select(pivotColumn)
+    val dataType = pivotDf.schema.head.dataType
+    val toCatalyst = CatalystTypeConverters.createToCatalystConverter(dataType)
+    val values = pivotDf
       .distinct()
       .limit(maxValues + 1)
       .sort(pivotColumn) // ensure that the output columns are in a consistent logical order
       .collect()
-      .map(_.get(0))
+      .map(row => Literal(toCatalyst(row.get(0)), dataType))
       .toImmutableArraySeq
 
     if (values.length > maxValues) {
