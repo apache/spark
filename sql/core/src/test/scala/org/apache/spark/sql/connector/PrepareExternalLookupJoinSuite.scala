@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.FormExternalLookupJoin
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference,
-  AttributeSet, BindReferences, Coalesce, Expression, ExternalUserDefinedFunction, Literal,
+  AttributeSet, BindReferences, Cast, Coalesce, Expression, ExternalUserDefinedFunction, Literal,
   Predicate => CatalystPredicate}
 import org.apache.spark.sql.catalyst.optimizer.ColumnPruning
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftOuter, PlanTest}
@@ -40,7 +40,7 @@ import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation,
 import org.apache.spark.sql.execution.externalUDF.PlanExternalUDFs
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{ArrayType, BooleanType, IntegerType, LongType, MapType,
-  StringType, StructType}
+  StringType, StructType, TimestampNTZType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.udf.worker.UDFWorkerSpecification
 import org.apache.spark.unsafe.types.UTF8String
@@ -324,26 +324,35 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
 
   test("a range is a lookup candidate only when its parameter cannot fail") {
     var offered = Seq.empty[String]
-    val lookup =
-      lookupRelation(PlanningExternalLookupTable("id INT, value INT, total BIGINT", select = {
-        candidates =>
-          offered = candidates.map(_.toString).toSeq
-          candidates.take(1)
+    val lookup = lookupRelation(PlanningExternalLookupTable(
+      "id INT, value INT, total BIGINT, localTime TIMESTAMP_NTZ, time TIMESTAMP",
+      select = { candidates =>
+        offered = candidates.map(_.toString).toSeq
+        candidates.take(1)
       }))
-    val Seq(lookupId, lookupValue, lookupTotal) = lookup.output
+    val Seq(lookupId, lookupValue, lookupTotal, lookupLocalTime, lookupTime) = lookup.output
     val Seq(streamId, streamLabel) = stream.output
+    val (streamDay, streamLocalTime, streamAmount) =
+      ($"streamDay".date, $"streamLocalTime".timestampNTZ, $"streamAmount".decimal(19, 0))
     // Spark evaluates every parameter on every stream row, but a join evaluates a range only after
-    // its keys match. A cast of a string to a number can fail, as in ANSI mode, so a range with one
-    // stays in the residual. A widening cast, as of the INT `streamId` to BIGINT, cannot fail, so
-    // a range with one is offered. An equality with a cast that can fail is still offered, as a
-    // hash join evaluates its keys on every row too.
+    // its keys match. A widening numeric cast, as of the INT `streamId` to BIGINT, cannot fail, so
+    // a range with one is offered. Other casts stay in the residual, as each can fail on some
+    // values: a string that is not a number, a far-future DATE or a TIMESTAMP_NTZ near the limits
+    // as a timestamp, and DECIMAL(19, 0) as BIGINT under ANSI. An equality with a cast that can
+    // fail is still offered, as a hash join evaluates its keys on every row too.
     val labelNumber = streamLabel.cast(IntegerType)
     val conjuncts = Seq(
       lookupId === labelNumber,
       lookupValue >= streamId,
       lookupValue < labelNumber,
-      lookupTotal >= streamId.cast(LongType))
-    val prepared = prepare(lookupJoin(lookup, conjuncts.reduce(_ && _)))
+      lookupTotal >= streamId.cast(LongType),
+      lookupLocalTime >= Cast(streamDay, TimestampNTZType),
+      lookupTime >= Cast(streamDay, TimestampType, Some("UTC")),
+      lookupTime >= Cast(streamLocalTime, TimestampType, Some("UTC")),
+      lookupTotal >= streamAmount.cast(LongType))
+    val left = LocalRelation(
+      Seq(streamId, streamLabel, streamDay, streamLocalTime, streamAmount), isStreaming = true)
+    val prepared = prepare(lookupJoin(lookup, conjuncts.reduce(_ && _), left = left))
     assert(offered === Seq("id = ?", "value >= ?", "total >= ?"))
     assert(prepared.lookupParameters === Seq(labelNumber))
     assert(prepared.residualCondition === Some(conjuncts.drop(1).reduce(_ && _)))
