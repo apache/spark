@@ -207,8 +207,13 @@ class ExternalLookupJoinEvaluatorFactory(
       try {
         while (pending.isEmpty && advanceCursor()) {
           reader.resultRowRead()
-          val key = requestedKey(cursor.inputOrdinal())
-          val resultRow = resultRows.validatedCopy(cursor.get())
+          // A close() during either call fails the read before Spark copies or joins the row.
+          val ordinal = cursor.inputOrdinal()
+          reader.ensureOpen()
+          val connectorRow = cursor.get()
+          reader.ensureOpen()
+          val key = requestedKey(ordinal)
+          val resultRow = resultRows.validatedCopy(connectorRow)
           if (parameters.selectedPredicatesHold(keyEntries(key).requestRow, resultRow)) {
             joinResultRow(key, resultRow)
           }
@@ -362,8 +367,8 @@ class ExternalLookupJoinEvaluatorFactory(
             check => (values, ordinal) => eachElement(values.getArray(ordinal), check)
           }
         case mapType: MapType =>
-          // Spark maps have no null keys, so a key is checked only for what it holds.
-          val keyCheck = slotCheck(mapType.keyType, nullable = true, path :+ "key")
+          // A map key is never null, whatever the value's nullability.
+          val keyCheck = slotCheck(mapType.keyType, nullable = false, path :+ "key")
           val valueCheck =
             slotCheck(mapType.valueType, mapType.valueContainsNull, path :+ "value")
           Option.when(keyCheck.nonEmpty || valueCheck.nonEmpty) { (values, ordinal) =>
