@@ -11,6 +11,30 @@ The Apache Software Foundation (ASF) imposes [resource usage limits][limit] on G
 [limit]: https://infra.apache.org/github-actions-policy.html
 [usage]: https://github.com/apache/spark/actions/metrics/usage
 
+### Spread scheduled workloads across three-day phases
+
+Scheduled workloads use hourly UTC slots across three day-of-month phases:
+
+| Phase | Dates | Cron day-of-month field |
+| --- | --- | --- |
+| 1 | 1, 4, 7, ... | `1-31/3` |
+| 2 | 2, 5, 8, ... | `2-31/3` |
+| 3 | 3, 6, 9, ... | `3-31/3` |
+
+Each occupied slot starts at minute 17, with one scheduled workload per hour.
+Phase 2 at 06:17 and phase 3 at 18:17 are idle. The build-status updater keeps
+its separate schedule. Other event triggers are unaffected.
+
+The phases restart each month, so intervals are approximately three days rather
+than exactly 72 hours. Scheduled starts can be delayed, and running workflows
+can overlap.
+
+Maintenance-branch schedulers run on the default branch and dispatch workflows
+to their target branches. When changing a branch schedule, update both its
+`on.schedule` cron and the matching `github.event.schedule` condition. Preserve
+the skip-if-unchanged check. When assigning a new slot, check the schedules in
+all workflows to avoid starting another workload in the same phase and hour.
+
 ### Push heavy workflows out to forks
 
 Workflows triggered by `on: pull_request` [count against the base repo's (i.e. this repo's) activity limits][base]. For this reason it's [important] to use `on: push` for heavy workflows. `on: push` workflows count against the fork's limits and not ours, enabling more jobs to run concurrently.

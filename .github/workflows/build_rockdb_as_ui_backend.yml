@@ -21,7 +21,7 @@ name: "Build / RocksDB as UI Backend (JDK 21, Scala 2.13)"
 
 on:
   schedule:
-    - cron: '0 6 */2 * *'
+    - cron: '17 10 3-31/3 * *'
   workflow_dispatch:
 
 jobs:
