@@ -477,10 +477,12 @@ private[spark] object ClosureCleaner extends Logging {
         parent = null, outerThis, capturingClass, accessedFields)
       cloneIndyLambda(func, clonedOuterThis, lambdaProxy).getOrElse {
         val outerField = func.getClass.getDeclaredField("arg$1")
-        // SPARK-37072: When Java 17 is used and `outerField` is read-only,
+        // SPARK-37072: When `outerField` is read-only,
         // the content of `outerField` cannot be set by reflect api directly.
         // But we can remove the `final` modifier of `outerField` before set value
         // and reset the modifier after set value.
+        // This path is reached only on Java 21 when `jdk.reflect.useDirectMethodHandle` is not
+        // `true`, e.g., with `-Djdk.reflect.useDirectMethodHandle=false`.
         setFieldAndIgnoreModifiers(func, outerField, clonedOuterThis)
         func
       }
@@ -616,7 +618,7 @@ private[spark] object ClosureCleaner extends Logging {
   }
 
   private def setFieldAndIgnoreModifiers(obj: AnyRef, field: Field, value: AnyRef): Unit = {
-    val modifiersField = getFinalModifiersFieldForJava17(field)
+    val modifiersField = getFinalModifiersField(field)
     modifiersField
       .foreach(m => m.setInt(field, field.getModifiers & ~Modifier.FINAL))
     field.setAccessible(true)
@@ -627,9 +629,10 @@ private[spark] object ClosureCleaner extends Logging {
   }
 
   /**
-   * This method is used to get the final modifier field when on Java 17.
+   * This method is used to get the `modifiers` field of `java.lang.reflect.Field`
+   * when the given `field` is final, so that the `final` modifier can be removed temporarily.
    */
-  private def getFinalModifiersFieldForJava17(field: Field): Option[Field] = {
+  private def getFinalModifiersField(field: Field): Option[Field] = {
     if (Modifier.isFinal(field.getModifiers)) {
       val methodGetDeclaredFields0 = classOf[Class[_]]
         .getDeclaredMethod("getDeclaredFields0", classOf[Boolean])
@@ -664,8 +667,7 @@ private[spark] object ClosureCleaner extends Logging {
     val javaVersion = Runtime.version().feature()
     val useClone = System.getProperty("spark.cloneBasedClosureCleaner.enabled") == "true" ||
       System.getenv("SPARK_CLONE_BASED_CLOSURE_CLEANER") == "1" || javaVersion >= 22 ||
-      (javaVersion >= 18 &&
-        System.getProperty("jdk.reflect.useDirectMethodHandle", "true") == "true")
+      System.getProperty("jdk.reflect.useDirectMethodHandle", "true") == "true"
 
     if (useClone) {
       val factory = makeClonedIndyLambdaFactory(indyLambda.getClass, lambdaProxy)

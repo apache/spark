@@ -17,15 +17,15 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.catalog.CatalogTable
-import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, ColumnDefinition, CreateTable, LogicalPlan, ReplaceColumns, ReplaceTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, CreateTable, LogicalPlan, ReplaceColumns, ReplaceTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.execution.command.{AlterTableAddColumnsCommand, AlterTableChangeColumnCommand, CreateDataSourceTableCommand, CreateTableCommand}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.StructType
 
 object ReplaceCharWithVarchar extends Rule[LogicalPlan] {
+  import CreateTableHelper._
+
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (!conf.getConf(SQLConf.CHAR_AS_VARCHAR)) return plan
 
@@ -61,13 +61,5 @@ object ReplaceCharWithVarchar extends Rule[LogicalPlan] {
         cmd.copy(newColumn = cmd.newColumn.copy(
           dataType = CharVarcharUtils.replaceCharWithVarchar(cmd.newColumn.dataType)))
     }
-  }
-
-  private def replaceCharWithVarcharInColumn(col: ColumnDefinition): ColumnDefinition = {
-    col.copy(dataType = CharVarcharUtils.replaceCharWithVarchar(col.dataType))
-  }
-
-  private def replaceCharWithVarcharInTableMeta(tbl: CatalogTable): CatalogTable = {
-    tbl.copy(schema = CharVarcharUtils.replaceCharWithVarchar(tbl.schema).asInstanceOf[StructType])
   }
 }
