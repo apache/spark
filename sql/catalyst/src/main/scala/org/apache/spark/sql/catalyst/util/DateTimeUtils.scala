@@ -1186,7 +1186,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
     if (seconds.isNaN || seconds.isInfinite) {
       throw new DateTimeException("Cannot convert NaN or Infinite value to TIME")
     }
-    // Use the shortest decimal form, as CAST(double AS DECIMAL) does, to avoid floating-point error.
+    // Use the shortest decimal form like CAST(double AS DECIMAL) to avoid floating-point error.
     secondsToMicrosPrecisionNanos(java.math.BigDecimal.valueOf(seconds))
   }
 
