@@ -1856,11 +1856,11 @@ object SQLConf {
       .internal()
       .doc("When true, the query optimizer also infers a filter from data constraints when " +
         "evaluating it can fail or is otherwise observable, such as `10 / x > 0` from " +
-        "`x = y AND 10 / y > 0`, or a UDF. Such a filter runs on rows that the query does not " +
-        "evaluate the expression on, so the query can raise an error that it does not raise " +
-        "without the filter. When false, only a filter that `ExprUtils." +
+        "`x = y AND 10 / y > 0` in ANSI mode, or a UDF. Such a filter runs on rows that the " +
+        "query does not evaluate the expression on, so the query can raise an error that it " +
+        "does not raise without the filter. When false, only a filter that `ExprUtils." +
         "canEvaluateUnconditionally` accepts is inferred, which also leaves out some " +
-        "expressions that cannot fail, such as `LIKE 'a%'`.")
+        "expressions that cannot fail, such as `upper(s) = 'A'`.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
@@ -3544,8 +3544,8 @@ object SQLConf {
         "(including user-written FILTER on a plain column), so the first " +
         "aggregate's output cardinality stays bounded by the un-rewritten " +
         "plan. A child that is not safe to evaluate unconditionally (for example " +
-        "a division, which can throw) keeps the raw Expand key. When false, both " +
-        "the IF/CASE rewrite and the union-of-filters guard are disabled. The " +
+        "a division in ANSI mode, which can throw) keeps the raw Expand key. " +
+        "When false, both the IF/CASE rewrite and the union-of-filters guard are disabled. The " +
         "IF/CASE rewrite is only applied to base expressions that are safe to " +
         "evaluate unconditionally (e.g. plain columns), so the short-circuit " +
         "semantics of IF/CASE WHEN are preserved. A condition that contains a " +
