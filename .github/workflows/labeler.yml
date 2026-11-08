@@ -71,7 +71,7 @@ jobs:
               --event schedule --status success --limit 1 --json startedAt \
               --jq '.[0].startedAt // empty')
             if [ -n "$last_success" ]; then
-              # Keep a short overlap for PR updates during the previous run.
+              # Keep a short overlap to catch PR updates missed near the previous run's start.
               since=$(date -u -d "$last_success - 10 minutes" +%Y-%m-%dT%H:%M:%SZ)
             else
               since=$(date -u -d "12 hours ago" +%Y-%m-%dT%H:%M:%SZ)
@@ -80,7 +80,7 @@ jobs:
             echo "Listing PRs updated since $since"
           fi
           numbers=$(gh api --method GET --paginate "repos/$GITHUB_REPOSITORY/issues" \
-            "${filters[@]}" -f sort=updated -f direction=asc \
+            "${filters[@]}" -f sort=updated -f direction=desc \
             -f per_page=100 --jq '.[] | select(.pull_request != null) | .number')
           echo "PRs to label: $(tr '\n' ' ' <<< "$numbers")"
           if [ -n "$numbers" ]; then

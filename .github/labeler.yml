@@ -297,13 +297,13 @@ UDF:
   - changed-files:
     - all-globs-to-any-file: [
         '**/*{UDAF,udaf,UDF,udf,UDTF,udtf,UserDefined*Aggregat*,UserDefined*Function*,UserDefinedScalar*}*',
-        '!**/*.sql.out',
         '!**/*-results.txt',
+        '!**/*.sql.out',
         ]
     - all-globs-to-any-file: [
         '**/udf/**/*',
-        '!**/*.sql.out',
         '!**/*-results.txt',
+        '!**/*.sql.out',
         ]
     - any-glob-to-any-file: [
         'python/pyspark/eval_handlers/**/*',
