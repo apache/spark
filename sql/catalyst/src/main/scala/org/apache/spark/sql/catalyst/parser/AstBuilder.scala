@@ -7189,27 +7189,28 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitCheckConstraint(ctx: CheckConstraintContext): CheckConstraint =
     withOrigin(ctx) {
       val condition = getOriginalText(ctx.expr)
-      val child = expression(ctx.booleanExpression())
       CheckConstraint(
-        child = child,
-        condition = condition,
-        keepPredicate = child.containsAnyPattern(PARAMETER, UNRESOLVED_IDENTIFIER) ||
-          hasCurrentLikeKeyword(ctx.booleanExpression()) ||
-          child.exists {
-            case u: UnresolvedAttribute =>
-              u.nameParts.length > 1 || LiteralFunctionResolution.isLiteralFunction(u.nameParts)
-            case _ => false
-          })
+        child = expression(ctx.booleanExpression()),
+        condition = condition)
     }
 
   /**
-   * Whether `tree` has a keyword such as `current_date` or `user` without parentheses, which parses
-   * as a column name or as the function depending on `spark.sql.ansi.enforceReservedKeywords`.
+   * Whether a write that parses the condition of a CHECK constraint again can resolve it
+   * differently from the ALTER TABLE, so that the constraint keeps its predicate; see
+   * `CheckConstraint.withPredicateDecision`. A keyword such as `current_date` or `user` without
+   * parentheses parses as a name, or as the function under
+   * `spark.sql.ansi.enforceReservedKeywords`, which is the only way the parser builds these
+   * functions.
    */
-  private def hasCurrentLikeKeyword(tree: ParseTree): Boolean = tree match {
-    case c: CurrentLikeContext => c.name.getType != SqlBaseParser.CURRENT_PATH
-    case _ => (0 until tree.getChildCount).exists(i => hasCurrentLikeKeyword(tree.getChild(i)))
-  }
+  private def keepsCheckPredicate(condition: Expression): Boolean =
+    condition.containsAnyPattern(PARAMETER, UNRESOLVED_IDENTIFIER) || condition.exists {
+      case u: UnresolvedAttribute =>
+        u.nameParts.length > 1 || LiteralFunctionResolution.isLiteralFunction(u.nameParts)
+      case v: UnresolvedNamedLambdaVariable =>
+        v.nameParts.length > 1 || LiteralFunctionResolution.isLiteralFunction(v.nameParts)
+      case _: CurrentDate | _: CurrentTimestamp | _: CurrentTime | _: CurrentUser => true
+      case _ => false
+    }
 
   override def visitUniqueConstraint(ctx: UniqueConstraintContext): TableConstraint =
     withOrigin(ctx) {
@@ -7272,7 +7273,7 @@ class AstBuilder extends DataTypeAstBuilder
           case c: CheckConstraint =>
             val relation = createUnresolvedRelation(ctx.identifierReference)
             val child = Filter(Not(c.child), relation)
-            AddCheckConstraint(child, c)
+            AddCheckConstraint(child, c.copy(keepPredicate = keepsCheckPredicate(c.child)))
           case _ =>
             val child = UnresolvedTable(identifiers, "ALTER TABLE ... ADD CONSTRAINT")
             AddConstraint(child, namedConstraint)

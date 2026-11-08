@@ -342,7 +342,7 @@ object SpecialDatetimeValues extends Rule[LogicalPlan] {
   }
 
   private val specialDatetimeRewrite: PartialFunction[Expression, Expression] = {
-    case cast @ FoldableStringCast(e, dt) =>
+    case cast @ Cast(e, dt, _, _) if rewrites(dt) && isConstantString(e) =>
       Option(e.eval())
         .flatMap(s => conv(dt)(s.toString, cast.zoneId))
         .map(Literal(_, dt))
@@ -351,15 +351,6 @@ object SpecialDatetimeValues extends Rule[LogicalPlan] {
 
   private def isConstantString(e: Expression): Boolean =
     e.foldable && e.dataType.isInstanceOf[StringType]
-
-  /** A cast of a foldable string to a type in `conv`. */
-  private object FoldableStringCast {
-    def unapply(cast: Cast): Option[(Expression, DataType)] = cast match {
-      case Cast(child, dt, _, _) if conv.contains(dt) && isConstantString(child) =>
-        Some((child, dt))
-      case _ => None
-    }
-  }
 }
 
 object ReplaceTranspose extends Rule[LogicalPlan] {

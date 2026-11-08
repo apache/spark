@@ -155,12 +155,17 @@ case class CheckConstraint(
     }
   }
 
+  // The two flags are printed only when set, so that the plan string of a constraint without
+  // them stays as it was.
   override def stringArgs: Iterator[Any] =
-    Iterator(child, condition, userProvidedName, tableName, userProvidedCharacteristic)
+    Iterator(child, condition, userProvidedName, tableName, userProvidedCharacteristic) ++
+      Iterator("keepPredicate").filter(_ => keepPredicate) ++
+      Iterator("omitPredicate").filter(_ => omitPredicate)
 
   /**
-   * Decides, once ALTER TABLE has analyzed the condition, whether to store the constraint without
-   * a predicate (`omitPredicate`).
+   * Decides from the analyzed condition whether to store the constraint without a predicate
+   * (`omitPredicate`). `AddCheckConstraint.storeAnalyzedQuery` calls this at the end of the
+   * analysis of an ALTER TABLE.
    *
    * A write parses `condition` again, with its own settings. It cannot bind a parameter marker
    * that the legacy parameter substitution leaves there, resolves an IDENTIFIER clause in its own
@@ -173,19 +178,19 @@ case class CheckConstraint(
    * built from the optimized plan, as before. So does one that calls a user-defined function,
    * which the analysis rejects next and which is not evaluated here.
    */
-  def markAsAnalyzed(): CheckConstraint = copy(omitPredicate =
+  def withPredicateDecision(): CheckConstraint = copy(omitPredicate =
     !keepPredicate && StoredExpressionFunctions.findUserDefinedFunctionCall(child).isEmpty &&
       !CheckConstraint.resolvesDifferentlyOnWrite(child) &&
       CheckConstraint.readsCurrentContext(child))
 
   // ALTER TABLE builds the constraint from the optimized plan, where the current time, date,
   // catalog, user and the like are replaced by their values at the time of the ALTER TABLE. A
-  // condition that `markAsAnalyzed` finds reading one is stored without a predicate, so that
-  // writes check `predicateSql`.
+  // condition that `withPredicateDecision` finds reading one is stored without a predicate, so
+  // that writes check `predicateSql`.
   // The predicate is not built from the analyzed condition, as the default value of a column is,
   // because `V2ExpressionBuilder` folds `CAST('today' AS DATE)` there as an ordinary cast. Only
-  // ALTER TABLE calls `markAsAnalyzed`, so CREATE and REPLACE TABLE always store the predicate if
-  // there is one.
+  // `AddCheckConstraint` decides, so CREATE and REPLACE TABLE always store the predicate if there
+  // is one.
   def toV2Constraint: Constraint = {
     val predicate = if (omitPredicate) {
       null

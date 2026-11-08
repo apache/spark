@@ -23,13 +23,15 @@ import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen.JavaStrL
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.{AnalysisException, MapTypeBufferAgg, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.plans.logical.Filter
+import org.apache.spark.sql.catalyst.plans.NormalizePlan
+import org.apache.spark.sql.catalyst.plans.logical.{AddCheckConstraint, Filter, LogicalPlan}
 import org.apache.spark.sql.catalyst.util.AttributeNameParser
 import org.apache.spark.sql.catalyst.util.QuotingUtils.quoteNameParts
 import org.apache.spark.sql.connector.{StrLen, StrLenDefault, StrLenMagic}
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryCatalog, Table, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.catalog.constraints.{Check, Constraint}
 import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, UnboundFunction}
+import org.apache.spark.sql.execution.CommandExecutionMode
 import org.apache.spark.sql.execution.command.DDLCommandTestUtils
 import org.apache.spark.sql.functions.udaf
 import org.apache.spark.sql.internal.SQLConf
@@ -294,6 +296,22 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         assert(error.getCondition == "CHECK_CONSTRAINT_VIOLATION")
         assert(error.getMessageParameters.get("constraintName") == "valid_time")
       }
+    }
+  }
+
+  test("SPARK-60032: Normalizing an optimized ALTER TABLE keeps the decision of the analysis") {
+    // `NormalizePlan` calls `storeAnalyzedQuery` again. In the optimized plan the condition holds
+    // the time of the ALTER TABLE, so deciding there would store the predicate.
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT, created TIMESTAMP) $defaultUsing")
+      val plan = spark.sessionState.sqlParser.parsePlan(
+        s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK (created <= current_timestamp())")
+      val qe = spark.sessionState.executePlan(plan, CommandExecutionMode.SKIP)
+      def omitsPredicate(p: LogicalPlan): Boolean = p.collectFirst {
+        case a: AddCheckConstraint => a.checkConstraint.omitPredicate
+      }.getOrElse(fail(s"Expected AddCheckConstraint, but got: $p"))
+      assert(omitsPredicate(qe.analyzed))
+      assert(omitsPredicate(NormalizePlan(qe.optimizedPlan)))
     }
   }
 
