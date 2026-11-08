@@ -1231,13 +1231,53 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   test("SPARK-59138: with global supportsReliableStorage and empty handles, executor loss " +
-    "neither scans nor bumps the epoch") {
-    val (depA, _) = submitGlobalReliableEmptyHandleJob()
+    "neither scans nor bumps the epoch, and a later FetchFailed clears only the failed shuffle") {
+    val (depA, depB) = submitGlobalReliableEmptyHandleJob()
     val epochBefore = mapOutputTracker.getEpoch
     runEvent(ExecutorLost("hostA-exec", ExecutorKilled))
     verify(mapOutputTracker, never()).removeOutputsOnExecutor("hostA-exec", true)
     assert(mapOutputTracker.getEpoch === epochBefore)
     assert(mapOutputTracker.getNumAvailableOutputs(depA.shuffleId) === 2)
+
+    runEvent(makeCompletionEvent(taskSets(2).tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), depA.shuffleId, 0L, 0, 0, "ignored"), null))
+    assert(mapOutputTracker.getNumAvailableOutputs(depA.shuffleId) === 1)
+    assert(mapOutputTracker.getNumAvailableOutputs(depB.shuffleId) === 2)
+  }
+
+  for (pushBased <- Seq(false, true)) {
+    test("SPARK-59138: with global supportsReliableStorage and empty handles, worker-host loss " +
+      s"keeps map output (pushBased=$pushBased)") {
+      // Without push-based shuffle there's nothing to remove, so no pass and no epoch bump. With
+      // it, the host pass still runs to drop the host's merge results.
+      if (pushBased) {
+        initPushBasedShuffleConfs(conf)
+        DAGSchedulerSuite.clearMergerLocs()
+        DAGSchedulerSuite.addMergerLocs(Seq("hostA", "hostB"))
+      }
+      val (depA, depB) = submitGlobalReliableEmptyHandleJob()
+      def hasMergeResultOnHostA: Boolean = mapOutputTracker.shuffleStatuses(depA.shuffleId)
+        .mergeStatuses.exists(s => s != null && s.location.host == "hostA")
+      if (pushBased) {
+        mapOutputTracker.registerMergeResult(depA.shuffleId, 0,
+          makeMergeStatus("hostA", depA.shuffleMergeId, isShufflePushMerger = true))
+        assert(hasMergeResultOnHostA)
+      }
+      val epochBefore = mapOutputTracker.getEpoch
+
+      runEvent(ExecutorLost("hostA-exec", ExecutorProcessLost("", Some("hostA"))))
+
+      assert(mapOutputTracker.getNumAvailableOutputs(depA.shuffleId) === 2)
+      assert(mapOutputTracker.getNumAvailableOutputs(depB.shuffleId) === 2)
+      if (pushBased) {
+        verify(mapOutputTracker, times(1)).removeOutputsOnHost("hostA", true)
+        assert(!hasMergeResultOnHostA)
+        assert(mapOutputTracker.getEpoch > epochBefore)
+      } else {
+        verify(mapOutputTracker, never()).removeOutputsOnHost("hostA", true)
+        assert(mapOutputTracker.getEpoch === epochBefore)
+      }
+    }
   }
 
   test("SPARK-59138: with global supportsReliableStorage and empty handles, worker removal keeps " +
@@ -1328,7 +1368,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     completeShuffleMapStageSuccessfully(localStageId, 0, 2, hostNames = Seq("hostA", "hostA"))
 
     // First FetchFailed for L clears both hostA maps and stamps the executor fence; L resubmits.
-    runEvent(makeCompletionEvent(taskSets(0).tasks(0),
+    runEvent(makeCompletionEvent(taskSets(1).tasks(0),
       FetchFailed(makeBlockManagerId("hostA"), localShuffleId, 0L, 0, 0, "ignored"), null))
     assert(mapOutputTracker.getNumAvailableOutputs(localShuffleId) === 0)
     scheduler.resubmitFailedStages()
@@ -1342,7 +1382,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
     // Delayed same-epoch duplicate FetchFailed for L's still-missing map 1 must be fenced: no
     // second cleanup, and map 0 survives.
-    runEvent(makeCompletionEvent(taskSets(0).tasks(1),
+    runEvent(makeCompletionEvent(taskSets(1).tasks(1),
       FetchFailed(makeBlockManagerId("hostA"), localShuffleId, 1L, 1, 1, "ignored"), null))
 
     verify(mapOutputTracker, times(1))
@@ -1434,6 +1474,53 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       .removeOutputsOnExecutor("hostA-exec", true, Some(reliableDep.shuffleId), true)
   }
 
+  test("SPARK-59138: a reliable-shuffle bypass records its fence at the executor fence, so an " +
+    "older straggler for that shuffle stays fenced") {
+    // L's cleanup at epoch 10 stamps the executor fence at 10. R's FetchFailed at epoch 7 bypasses
+    // it. Another R FetchFailed at epoch 9 predates the same fence, so it must not bypass again.
+    conf.set(config.SHUFFLE_SERVICE_ENABLED.key, "false")
+
+    val reliableRdd = new MyRDD(sc, 2, Nil)
+    val reliableDep = new ReliablyStoredShuffleDependency(reliableRdd, new HashPartitioner(2))
+    val localRdd = new MyRDD(sc, 2, Nil)
+    val localDep = new ShuffleDependency(localRdd, new HashPartitioner(2))
+    val reduceRdd = new MyRDD(sc, 2, List(reliableDep, localDep), tracker = mapOutputTracker)
+    submit(reduceRdd, Array(0, 1))
+
+    completeShuffleMapStageSuccessfully(0, 0, 2)
+    completeShuffleMapStageSuccessfully(1, 0, 2)
+
+    taskSets(2).tasks(0).epoch = 10
+    runEvent(makeCompletionEvent(taskSets(2).tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), localDep.shuffleId, 0L, 0, 0, "ignored"), null))
+
+    taskSets(2).tasks(1).epoch = 7
+    runEvent(makeCompletionEvent(taskSets(2).tasks(1),
+      FetchFailed(makeBlockManagerId("hostA"), reliableDep.shuffleId, 0L, 0, 1, "ignored"), null))
+
+    taskSets(2).tasks(1).epoch = 9
+    runEvent(makeCompletionEvent(taskSets(2).tasks(1),
+      FetchFailed(makeBlockManagerId("hostA"), reliableDep.shuffleId, 1L, 1, 1, "ignored"), null))
+
+    verify(mapOutputTracker, times(1))
+      .removeOutputsOnExecutor("hostA-exec", true, Some(reliableDep.shuffleId), true)
+  }
+
+  test("SPARK-59138: a FetchFailed for an ordinary shuffle records no reliable-loss fence entry") {
+    conf.set(config.SHUFFLE_SERVICE_ENABLED.key, "false")
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
+    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
+    submit(reduceRdd, Array(0, 1))
+    completeShuffleMapStageSuccessfully(0, 0, 2)
+
+    runEvent(makeCompletionEvent(taskSets(1).tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), shuffleDep.shuffleId, 0L, 0, 0, "ignored"), null))
+
+    assert(mapOutputTracker.getNumAvailableOutputs(shuffleDep.shuffleId) === 1)
+    assert(scheduler.reliableShuffleFileLostEpochSize === 0)
+  }
+
   test("SPARK-59138: reliable-loss fence entries are retired when their shuffle is cleaned up") {
     // A reliable FetchFailed records a (executor, shuffleId) fence entry. These must be bounded by
     // live shuffles: cleaning up the shuffle's map stage must drop its entries, otherwise replaced
@@ -1441,7 +1528,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val (jobId, reliableDep) =
       submitReliableShuffleJob(numMaps = 2, numReduces = 2, hostNames = Seq("hostA", "hostA"))
 
-    // Reliable FetchFailed bypasses the executor fence and records a per-shuffle fence entry.
+    // Reliable FetchFailed runs a genuine cleanup and records a per-shuffle fence entry.
     runEvent(makeCompletionEvent(taskSets(1).tasks(0),
       FetchFailed(makeBlockManagerId("hostA"), reliableDep.shuffleId, 0L, 0, 0, "ignored"), null))
     assert(scheduler.reliableShuffleFileLostEpochSize === 1)
@@ -1483,8 +1570,10 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     "output") {
     // A merged-chunk failure (mapIndex == -1) says nothing about the reliable original map output,
     // so it must not take the reliable bypass (failedShuffleId stays None). The stale merge result
-    // is dropped, but the reliable map output survives as valid fallback.
+    // is dropped, but the reliable map output survives as valid fallback. Host-level unregister
+    // is on so that, without the mapIndex guard, the bypass would clear the host's map output.
     initPushBasedShuffleConfs(conf)
+    conf.set(config.UNREGISTER_OUTPUT_ON_HOST_ON_FETCH_FAILURE, true)
     DAGSchedulerSuite.clearMergerLocs()
     DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
     scheduler = new MyDAGScheduler(

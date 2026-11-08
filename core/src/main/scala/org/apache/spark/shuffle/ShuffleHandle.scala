@@ -40,8 +40,9 @@ abstract class ShuffleHandle(val shuffleId: Int) extends Serializable {
    * Per-shuffle override of the app-global `ShuffleDriverComponents.supportsReliableStorage()`:
    * a present value is authoritative for this shuffle. Empty (the default) means "no per-shuffle
    * information", so the shuffle takes the global flag. A manager that sets neither keeps today's
-   * behavior. With the global flag on, an empty value marks the shuffle reliable, so its output is
-   * also kept on worker loss and on a FetchFailed for another shuffle.
+   * behavior. With the global flag on, an empty value marks the shuffle reliable, so worker removal
+   * keeps its map output (dropping only push-merge results), and a map-output FetchFailed clears
+   * only the failed shuffle rather than every shuffle on the executor or host.
    */
   def reliablyStored: Optional[java.lang.Boolean] = Optional.empty()
 }
