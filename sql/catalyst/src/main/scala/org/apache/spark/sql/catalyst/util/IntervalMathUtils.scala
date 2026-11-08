@@ -29,17 +29,19 @@ import org.apache.spark.sql.types.Decimal
  */
 object IntervalMathUtils {
 
-  def addExact(a: Int, b: Int): Int = withOverflow(Math.addExact(a, b), "try_add")
+  def addExact(a: Int, b: Int): Int = withOverflow(Math.addExact(a, b), "try_add", null)
 
-  def addExact(a: Long, b: Long): Long = withOverflow(Math.addExact(a, b), "try_add")
+  def addExact(a: Long, b: Long): Long = withOverflow(Math.addExact(a, b), "try_add", null)
 
-  def subtractExact(a: Int, b: Int): Int = withOverflow(Math.subtractExact(a, b), "try_subtract")
+  def subtractExact(a: Int, b: Int): Int =
+    withOverflow(Math.subtractExact(a, b), "try_subtract", null)
 
-  def subtractExact(a: Long, b: Long): Long = withOverflow(Math.subtractExact(a, b), "try_subtract")
+  def subtractExact(a: Long, b: Long): Long =
+    withOverflow(Math.subtractExact(a, b), "try_subtract", null)
 
-  def negateExact(a: Int): Int = withOverflow(Math.negateExact(a))
+  def negateExact(a: Int): Int = withOverflow(Math.negateExact(a), "", null)
 
-  def negateExact(a: Long): Long = withOverflow(Math.negateExact(a))
+  def negateExact(a: Long): Long = withOverflow(Math.negateExact(a), "", null)
 
   // The divisions of a year-month interval, in months, and of a day-time interval, in micros, by
   // a number, rounded half up. The interpreted and the generated code of `DivideYMInterval` and
@@ -109,10 +111,7 @@ object IntervalMathUtils {
     if (isZero) throw QueryExecutionErrors.intervalDividedByZeroError(context)
   }
 
-  private def withOverflow[A](
-      f: => A,
-      suggestedFunc: String = "",
-      context: QueryContext = null): A = {
+  private def withOverflow[A](f: => A, suggestedFunc: String, context: QueryContext): A = {
     try {
       f
     } catch {

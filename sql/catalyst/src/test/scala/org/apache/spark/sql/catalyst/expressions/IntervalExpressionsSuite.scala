@@ -502,15 +502,14 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-60746: the min interval divided by -1 raises the same error in every mode") {
     // An integral divisor is checked before the division, a decimal or a fractional one when the
     // rounded quotient does not fit the interval type.
-    val expectedErrMsg = intervalDivideOverflowErrMsg
     Seq(-1.toByte, -1.toShort, -1, -1L, Decimal(-1), -1.0f, -1.0d).foreach { num =>
       withClue(s"divisor $num: ") {
         checkExceptionInExpression[SparkArithmeticException](
           DivideYMInterval(Literal(Period.ofMonths(Int.MinValue)), Literal(num)),
-          expectedErrMsg)
+          intervalDivideOverflowErrMsg)
         checkExceptionInExpression[SparkArithmeticException](
           DivideDTInterval(Literal(Duration.of(Long.MinValue, ChronoUnit.MICROS)), Literal(num)),
-          expectedErrMsg)
+          intervalDivideOverflowErrMsg)
       }
     }
   }

@@ -752,7 +752,7 @@ trait IntervalDivide extends BinaryExpression {
 case class DivideYMInterval(
     interval: Expression,
     num: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with IntervalDivide with Serializable {
+  extends IntervalDivide with ImplicitCastInputTypes with Serializable {
   override def nullIntolerant: Boolean = true
   override def left: Expression = interval
   override def right: Expression = num
@@ -786,7 +786,7 @@ case class DivideYMInterval(
 case class DivideDTInterval(
     interval: Expression,
     num: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with IntervalDivide with Serializable {
+  extends IntervalDivide with ImplicitCastInputTypes with Serializable {
   override def nullIntolerant: Boolean = true
 
   override def left: Expression = interval
