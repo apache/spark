@@ -2325,18 +2325,18 @@ class CodegenContext extends Logging {
   /**
    * Checks and sets up the state and codegen for subexpression elimination. This finds the
    * common subexpressions, generates the functions that evaluate those expressions and populates
-   * the mapping of common subexpressions to the generated functions. Returns each common
-   * subexpression with the call of its function, in an order that evaluates a subexpression
-   * before the subexpressions that reference it.
+   * the mapping of common subexpressions to the generated functions. Returns the calls of the
+   * functions, in an order that evaluates a subexpression before the subexpressions that
+   * reference it.
    */
-  private def subexpressionElimination(expressions: Seq[Expression]): Seq[(Expression, String)] = {
+  private def subexpressionElimination(expressions: Seq[Expression]): Seq[String] = {
     // Add each expression tree and compute the common subexpressions.
     expressions.foreach(equivalentExpressions.addExprTree(_))
 
     // Get all the expressions that appear at least twice and set up the state for subexpression
     // elimination.
     val commonExprs = equivalentExpressions.getCommonSubexpressions
-    commonExprs.map(expr => expr -> generateSubexprFunction(expr))
+    commonExprs.map(generateSubexprFunction)
   }
 
   /**
@@ -2363,8 +2363,9 @@ class CodegenContext extends Logging {
          """.stripMargin
 
     // Add a state and a mapping of the common subexpressions that are associate with this
-    // state. Adding this expression to subExprEliminationExprMap means it will call `fn`
-    // when it is code generated. This decision should be a cost based one.
+    // state. Registering the state in `subExprEliminationExprs` makes the code generated for an
+    // expression equal to this one read the state instead of evaluating it; the caller places the
+    // returned call of `fn` before that code. This decision should be a cost based one.
     //
     // The cost of doing subexpression elimination is:
     //   1. Extra function call, although this is probably *good* as the JIT can decide to
@@ -2397,7 +2398,7 @@ class CodegenContext extends Logging {
     // as well because some expressions may implement `CodegenFallback`.
     val cleanedExpressions = expressions.map(_.freshCopyIfContainsStatefulExpression())
     if (doSubexpressionElimination) {
-      subexprFunctions ++= subexpressionElimination(cleanedExpressions).map(_._2)
+      subexprFunctions ++= subexpressionElimination(cleanedExpressions)
     }
     cleanedExpressions.map(e => e.genCode(this))
   }
@@ -2426,10 +2427,11 @@ class CodegenContext extends Logging {
    * its conjuncts, keeping an AND of the top-level chain that is itself a common subexpression as
    * one conjunct, which reads the state of the subexpression. The common subexpressions that a
    * conjunct contains are evaluated by functions called just before the first conjunct that
-   * references them, instead of before the whole predicate (SPARK-60332); any other AND of the
-   * chain is not, since the conjuncts are generated one by one. Returns, per conjunct, the code
-   * of the calls to put before it and the code of the conjunct, or None, generating nothing, when
-   * no subexpression is eliminated: the caller then generates the predicate as a whole.
+   * references them, instead of before the whole predicate (SPARK-60332). The other ANDs of the
+   * chain are not generated themselves; only the conjuncts they join are, one by one. Returns,
+   * per conjunct, the code of the calls to put before it and the code of the conjunct, or None,
+   * generating nothing, when no subexpression is eliminated: the caller then generates the
+   * predicate as a whole.
    *
    * The function of a subexpression that contains an eliminated subexpression reads the state
    * of the latter, so the calls are ordered by their dependencies: a contained subexpression is
@@ -2450,16 +2452,14 @@ class CodegenContext extends Logging {
         split(left) ++ split(right)
       case _ => Seq(e)
     }
-    val conjuncts = split(cleanedPredicate)
-    // The common subexpressions, a contained one before the ones that contain it, that some
-    // conjunct contains.
-    val commonExprs = allCommonExprs.filter { expr =>
-      firstReferencingExpression(conjuncts, ExpressionEquals(expr)) >= 0
-    }
-    if (commonExprs.isEmpty) {
+    if (allCommonExprs.isEmpty) {
       None
     } else {
-      val calls = commonExprs.map(expr => ExpressionEquals(expr) -> generateSubexprFunction(expr))
+      // Every common subexpression is a conjunct or lies inside one, since only the ANDs that are
+      // not common are split. A contained one comes before the ones that contain it.
+      val conjuncts = split(cleanedPredicate)
+      val calls =
+        allCommonExprs.map(expr => ExpressionEquals(expr) -> generateSubexprFunction(expr))
       val codes = conjuncts.map(e => e.genCode(this))
       val callOf = calls.toMap
       val eliminated = calls.map(_._1)
@@ -2467,6 +2467,8 @@ class CodegenContext extends Logging {
       def dependencies(expr: Expression): Seq[ExpressionEquals] = eliminated.filter { dep =>
         expr.children.exists(_.exists(e => ExpressionEquals(e) == dep))
       }
+      // The eliminated subexpressions by the conjunct that first references them, found once.
+      val byFirstReference = eliminated.groupBy(e => firstReferencingExpression(conjuncts, e))
       val emitted = mutable.HashSet.empty[ExpressionEquals]
       Some(codes.zipWithIndex.map { case (code, k) =>
         val callsBefore = mutable.ArrayBuffer.empty[String]
@@ -2477,7 +2479,7 @@ class CodegenContext extends Logging {
             callsBefore += callOf(subexpr)
           }
         }
-        eliminated.filter(e => firstReferencingExpression(conjuncts, e) == k).foreach(emit)
+        byFirstReference.getOrElse(k, Nil).foreach(emit)
         val subexprs = if (callsBefore.isEmpty) {
           ""
         } else {

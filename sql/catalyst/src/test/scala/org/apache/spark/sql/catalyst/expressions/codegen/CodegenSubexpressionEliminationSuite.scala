@@ -108,9 +108,9 @@ class CodegenSubexpressionEliminationSuite extends SparkFunSuite with SQLHelper 
 
   test("SPARK-60332: GeneratePredicate evaluates a contained common subexpression before the " +
       "conjunct that first references the containing one") {
-    // `(a + b) + c` is common to the last three conjuncts, and the IF branch of the first one
-    // holds `(a + c) + b`, equal to it under the canonicalization of `+`, but without `a + b`,
-    // which is common to the last three conjuncts too. The function of `(a + b) + c` reads the
+    // `(a + b) + c` is common to the second and the third conjuncts, and the IF branch of the
+    // first one holds `(a + c) + b`, equal to it under the canonicalization of `+`, but without
+    // `a + b`, which is common to the last three conjuncts. The function of `(a + b) + c` reads the
     // state of `a + b`, so `a + b` is evaluated before the first conjunct, which references the
     // containing subexpression, not before the second, which is the first to reference `a + b`:
     // otherwise `(a + b) + c` would read the default or the previous row's `a + b`.
@@ -122,9 +122,11 @@ class CodegenSubexpressionEliminationSuite extends SparkFunSuite with SQLHelper 
       GreaterThan(Add(a, b), Literal(5)))
     val instance = GeneratePredicate.generate(cond, useSubexprElimination = true)
     instance.initialize(0)
-    // Rows with different values, in both orders, so that a stale state shows.
-    val rows =
-      Seq(InternalRow(3, 3, 1, 1, 0), InternalRow(1, 1, 1, 1, 1), InternalRow(3, 3, 1, 1, 0))
+    // Rows with different values, in both orders, so that a stale state shows. The last one
+    // takes the IF branch and passes every conjunct, so a stale `(a + b) + c` or `a + b` from the
+    // row before it, -4 or -5, would drop it.
+    val rows = Seq(InternalRow(3, 3, 1, 1, 0), InternalRow(1, 1, 1, 1, 1),
+      InternalRow(3, 3, 1, 1, 0), InternalRow(-5, 0, 1, 1, 0), InternalRow(3, 3, 1, 1, 1))
     rows.foreach { row =>
       assert(instance.eval(row) === cond.eval(row), row)
     }
@@ -159,8 +161,9 @@ class CodegenSubexpressionEliminationSuite extends SparkFunSuite with SQLHelper 
     withSQLConf(SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1000") {
       val instance = GeneratePredicate.generate(cond, useSubexprElimination = true)
       instance.initialize(0)
-      // All TRUE, a FALSE one, and NULL ones.
-      Seq(InternalRow(1), InternalRow(-1000), InternalRow(null)).foreach { row =>
+      // All TRUE, a FALSE one, and NULL ones, then all TRUE again, which the NULL conjuncts of
+      // the row before it must not affect.
+      Seq(InternalRow(1), InternalRow(-1000), InternalRow(null), InternalRow(1)).foreach { row =>
         val expected = cond.eval(row)
         assert(instance.eval(row) === (expected != null && expected.asInstanceOf[Boolean]), row)
       }

@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions._
 /**
  * Generates bytecode that evaluates a boolean [[Expression]] on a given input [[InternalRow]].
  */
-object GeneratePredicate extends CodeGenerator[Expression, BasePredicate] with PredicateHelper {
+object GeneratePredicate extends CodeGenerator[Expression, BasePredicate] {
 
   protected def canonicalize(in: Expression): Expression = ExpressionCanonicalizer.execute(in)
 
@@ -45,7 +45,7 @@ object GeneratePredicate extends CodeGenerator[Expression, BasePredicate] with P
     // whole-stage codegen of a filter do (SPARK-60332). The conjuncts are evaluated like
     // `And.eval`: a FALSE one stops the evaluation, a NULL one does not, and the condition is TRUE
     // only if all of them are. Otherwise the condition is generated as a whole, as before.
-    val severalConjuncts = splitConjunctivePredicates(predicate).length > 1
+    val severalConjuncts = predicate.isInstanceOf[And]
     val conjunctCodes = if (useSubexprElimination && severalConjuncts) {
       ctx.generateConjunctsWithSubexprCodes(predicate)
     } else {
