@@ -642,4 +642,29 @@ class SQLFunctionSuite extends SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-60805: a catalog-qualified cycle is detected under case-sensitive analysis") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      withUserDefinedFunction("cs_in" -> false, "cs_out" -> false) {
+        sql("CREATE FUNCTION cs_in() RETURNS INT RETURN 1")
+        sql("CREATE FUNCTION cs_out() RETURNS INT RETURN SPARK_CATALOG.default.cs_in()")
+        checkAnswer(sql("SELECT cs_out()"), Row(1))
+        val e = intercept[AnalysisException] {
+          sql("CREATE OR REPLACE FUNCTION cs_in() RETURNS INT " +
+            "RETURN SPARK_CATALOG.default.cs_out()")
+        }
+        assert(e.getCondition == "CYCLIC_FUNCTION_REFERENCE", e.getMessage)
+      }
+      withUserDefinedFunction("cs_tin" -> false, "cs_tout" -> false) {
+        sql("CREATE FUNCTION cs_tin() RETURNS TABLE (a INT) RETURN SELECT 1")
+        sql("CREATE FUNCTION cs_tout() RETURNS TABLE (a INT) " +
+          "RETURN SELECT * FROM SPARK_CATALOG.default.cs_tin()")
+        val e = intercept[AnalysisException] {
+          sql("CREATE OR REPLACE FUNCTION cs_tin() RETURNS TABLE (a INT) " +
+            "RETURN SELECT * FROM SPARK_CATALOG.default.cs_tout()")
+        }
+        assert(e.getCondition == "CYCLIC_FUNCTION_REFERENCE", e.getMessage)
+      }
+    }
+  }
 }
