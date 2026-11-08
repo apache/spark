@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.ml
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.{Expression, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExprUtils, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, FalseLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
@@ -35,6 +35,10 @@ import org.apache.spark.sql.types._
 case class VectorToArray(child: Expression, elementType: DataType) extends UnaryExpression {
   require(elementType == DoubleType || elementType == FloatType,
     "VectorToArray requires a double or float element type.")
+
+  def this(child: Expression, elementType: Expression) = {
+    this(child, ExprUtils.evalTypeExpr(elementType))
+  }
 
   override def prettyName: String = "ml_vector_to_array"
 
