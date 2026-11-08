@@ -65,13 +65,19 @@ class CatalogIdentifierResolution(override val catalogManager: CatalogManager)
     ResolvedNamespace(currentCatalog, catalogManager.currentNamespace.toImmutableArraySeq)
   }
 
-  /** Resolves a namespace name, loading its metadata only when requested. */
+  /**
+   * Resolves a namespace name, preserving its origin and tags and loading metadata on request.
+   */
   def resolveUnresolvedNamespace(unresolvedNamespace: UnresolvedNamespace): ResolvedNamespace = {
-    unresolvedNamespace match {
-      case UnresolvedNamespace(Seq(), fetchMetadata) =>
-        resolveNamespace(currentCatalog, Seq.empty[String], fetchMetadata)
-      case UnresolvedNamespace(CatalogAndNamespace(catalog, namespace), fetchMetadata) =>
-        resolveNamespace(catalog, namespace, fetchMetadata)
+    CurrentOrigin.withOrigin(unresolvedNamespace.origin) {
+      val resolvedNamespace = unresolvedNamespace match {
+        case UnresolvedNamespace(Seq(), fetchMetadata) =>
+          resolveNamespace(currentCatalog, Seq.empty[String], fetchMetadata)
+        case UnresolvedNamespace(CatalogAndNamespace(catalog, namespace), fetchMetadata) =>
+          resolveNamespace(catalog, namespace, fetchMetadata)
+      }
+      resolvedNamespace.copyTagsFrom(unresolvedNamespace)
+      resolvedNamespace
     }
   }
 

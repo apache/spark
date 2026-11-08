@@ -136,6 +136,13 @@ class CatalogSuite extends AnalysisTest {
       val tag = TreeNodeTag[String]("namespace")
       val unresolved = CurrentOrigin.withOrigin(origin) { UnresolvedNamespace(name) }
       unresolved.setTagValue(tag, "preserved")
+      val callerOrigin = Origin(line = Some(12), startPosition = Some(3))
+      CurrentOrigin.withOrigin(callerOrigin) {
+        val directResolved = resolution.resolveUnresolvedNamespace(unresolved)
+        assert(directResolved.origin == origin)
+        assert(directResolved.getTagValue(tag) == Some("preserved"))
+        assert(CurrentOrigin.get == callerOrigin)
+      }
       val resolved = new ResolveCatalogs(manager).apply(unresolved)
       assert(resolved.origin == origin)
       assert(resolved.getTagValue(tag) == Some("preserved"))

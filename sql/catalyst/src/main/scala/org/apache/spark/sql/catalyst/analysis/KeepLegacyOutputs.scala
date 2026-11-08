@@ -45,7 +45,10 @@ object KeepLegacyOutputs extends Rule[LogicalPlan] {
     }
   }
 
-  /** Applies the legacy SHOW TABLES schema without changing output expression IDs. */
+  /**
+   * Applies the legacy SHOW TABLES schema, preserving output expression IDs, when
+   * `spark.sql.legacy.keepCommandOutputSchema` is enabled; otherwise returns the plan unchanged.
+   */
   def keepLegacyShowTablesOutput(showTables: ShowTables): ShowTables = {
     if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
       assert(showTables.output.length == 3)
@@ -55,7 +58,7 @@ object KeepLegacyOutputs extends Rule[LogicalPlan] {
     }
   }
 
-  /** Renames the first SHOW TABLES output column to its legacy name. */
+  /** Unconditionally renames the first SHOW TABLES output column to its legacy name. */
   def withLegacyShowTablesDatabaseColumn(output: Seq[Attribute]): Seq[Attribute] = {
     output.head.withName("database") +: output.tail
   }
