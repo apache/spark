@@ -529,8 +529,9 @@ arrow::Result<JsonSink> JsonSink::Make(const CreateInfo& info) {
     readonly = option->second == "true";
     options.erase(option);
   }
-  // Spark passes the checkpoint of a streaming query among the options of its sink.
+  // Spark passes the checkpoint and the name of a streaming query among the options of its sink.
   options.erase("checkpointlocation");
+  options.erase("queryname");
   if (!options.empty()) {
     std::string keys;
     for (const auto& [key, value] : options) {

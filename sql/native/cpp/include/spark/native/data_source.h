@@ -25,9 +25,9 @@
 //
 // Methods receive their inputs in structs with constructors, so that new ABI fields can reach
 // connectors without breaking them: *Info structs on the driver (CreateInfo, ScanInfo,
-// MicroBatchStreamInfo, LatestOffsetInfo, WriteInfo, StreamingWriteInfo, and HostInfo), and
-// *Context structs, which carry the live TaskContext, on the executors (ReaderContext and
-// WriterContext).
+// MicroBatchStreamInfo, LatestOffsetInfo, WriteInfo, and StreamingWriteInfo), *Context structs,
+// which carry the live TaskContext, on the executors (ReaderContext and WriterContext), and
+// HostInfo, which DataSource::Init gets in every JVM, executors included.
 //
 // Errors are arrow::Status values. The SDK also reports an exception that connector code throws as
 // the error of the call. Destructors must not throw, as C++ requires.
@@ -274,8 +274,10 @@ class ScanBuilder {
 
   virtual ~ScanBuilder() = default;
 
-  /// Counts rows. Spark pushes a limit only when the query does not filter the rows, since it
-  /// filters them after reading.
+  /// Receives the LIMIT of the query. Returns LimitSupport::kGlobal when the whole scan then
+  /// returns at most `limit` rows, or LimitSupport::kUnsupported, the default, when it may return
+  /// more; Spark applies the limit again after reading either way. Spark pushes a limit only when
+  /// the query does not filter the rows, since it filters them after reading.
   virtual arrow::Result<LimitSupport> PushLimit(int64_t limit) {
     (void)limit;
     return LimitSupport::kUnsupported;
@@ -632,9 +634,13 @@ struct StreamingWriteInfo {
 /// A driver coordinator for the write of one micro-batch, or epoch, of a streaming query, which
 /// also creates the serializable configuration of its task writers.
 ///
-/// Spark creates a write for each micro-batch, with the lifecycle of a BatchWrite, and passes the
+/// Spark creates a write for each micro-batch, with the calls of a BatchWrite, and passes the
 /// epoch ID of the micro-batch to Commit and Abort, and to the task writers in
-/// WriterContext::epoch_id.
+/// WriterContext::epoch_id. Its destruction is deferred, unlike that of a BatchWrite: Spark
+/// destroys the write of a micro-batch only after it creates that of the next one, and the last
+/// write of a query once it is no longer referenced, possibly long after the query stops and on
+/// another thread. Release what a micro-batch holds, such as a lock on the destination, in Commit
+/// and Abort rather than in the destructor.
 ///
 /// Exactly-once output: Spark may commit an epoch again, with a new write, for example when the
 /// query restarts after a failure: committing an epoch that is already committed must have no

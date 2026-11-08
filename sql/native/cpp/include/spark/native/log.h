@@ -96,9 +96,14 @@ inline std::string EscapeNul(std::string_view message) {
 }  // namespace internal
 
 /// The most verbose level of the messages that reach Spark: that of the log of Spark, which the SDK
-/// follows, so a library does not set it.
-inline LogLevel MaxLogLevel() {
-  return static_cast<LogLevel>(internal::max_log_level.load(std::memory_order_relaxed));
+/// follows, so a library does not set it. Nothing when Spark logs no level of the library, for
+/// example when its logger is OFF.
+inline std::optional<LogLevel> MaxLogLevel() {
+  int32_t level = internal::max_log_level.load(std::memory_order_relaxed);
+  if (level == 0) {
+    return std::nullopt;
+  }
+  return static_cast<LogLevel>(level);
 }
 
 /// Whether a message of `level` reaches the log of Spark, which requires Spark to have initialized

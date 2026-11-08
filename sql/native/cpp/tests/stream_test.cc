@@ -14,7 +14,11 @@
 // limitations under the License.
 
 #include <atomic>
+#include <cstdint>
 #include <stdexcept>
+#include <string>
+#include <string_view>
+#include <vector>
 
 #include <arrow/api.h>
 #include <arrow/c/bridge.h>
@@ -77,6 +81,30 @@ std::shared_ptr<arrow::Array> Int64s(const std::vector<std::optional<int64_t>>& 
     }
   }
   return builder.Finish().ValueOrDie();
+}
+
+std::shared_ptr<arrow::Array> Int32s(const std::vector<std::optional<int32_t>>& values) {
+  arrow::Int32Builder builder;
+  for (const auto& value : values) {
+    if (value) {
+      (void)builder.Append(*value);
+    } else {
+      (void)builder.AppendNull();
+    }
+  }
+  return builder.Finish().ValueOrDie();
+}
+
+/// A string or binary array of `type` with the given offsets over `data`, which may be invalid.
+template <typename Offset>
+std::shared_ptr<arrow::Array> Strings(std::shared_ptr<arrow::DataType> type,
+                                      std::vector<Offset> offsets, std::string data) {
+  auto length = static_cast<int64_t>(offsets.size()) - 1;
+  return arrow::MakeArray(arrow::ArrayData::Make(
+      std::move(type), length,
+      {nullptr, arrow::Buffer::FromVector(std::move(offsets)),
+       arrow::Buffer::FromString(std::move(data))},
+      0));
 }
 
 std::shared_ptr<arrow::RecordBatch> Ids(const std::vector<std::optional<int64_t>>& values,
@@ -404,6 +432,94 @@ TEST(ListElementsAndMapValuesRespectTheirNullability) {
   auto batch = arrow::RecordBatch::Make(actual, 1, {map});
   CHECK_CONTAINS(BatchError(batch, required).value_or(""), "The column map.value has a null");
   CHECK(!BatchError(batch, actual).has_value());
+}
+
+TEST(MapEntriesShorterThanTheirKeysAndItemsAreCheckedByTheirLength) {
+  // Arrow accepts struct children longer than their struct: the null item is past the entries.
+  auto type = arrow::map(arrow::utf8(), arrow::int32());
+  arrow::StringBuilder keys;
+  CHECK_OK(keys.AppendValues({"a", "b", "c"}));
+  ASSIGN_OR_FAIL(std::shared_ptr<arrow::Array> key_values, keys.Finish());
+  auto entries = std::make_shared<arrow::StructArray>(
+      static_cast<const arrow::MapType&>(*type).value_type(), 2,
+      arrow::ArrayVector{key_values, Int32s({1, 2, std::nullopt})});
+  auto map = std::make_shared<arrow::MapArray>(
+      type, 1, arrow::Buffer::FromVector(std::vector<int32_t>{0, 2}), entries);
+  auto actual = arrow::schema({arrow::field("map", type)});
+  auto required = arrow::schema(
+      {arrow::field("map", std::make_shared<arrow::MapType>(
+                               arrow::utf8(), arrow::field("value", arrow::int32(), false)))});
+  CHECK(!BatchError(arrow::RecordBatch::Make(actual, 1, {map}), required).has_value());
+}
+
+TEST(StringOffsetsMustNotDecreaseInsideTheirData) {
+  // RecordBatch::Validate() accepts these offsets, which only end within the data.
+  std::vector<std::shared_ptr<arrow::Array>> columns = {
+      Strings<int32_t>(arrow::utf8(), {0, 100, 3}, "abc"),
+      Strings<int32_t>(arrow::binary(), {0, 100, 3}, "abc"),
+      Strings<int64_t>(arrow::large_utf8(), {0, 100, 3}, "abc"),
+      Strings<int64_t>(arrow::large_binary(), {0, 100, 3}, "abc"),
+  };
+  for (const auto& column : columns) {
+    auto field = arrow::field("text", column->type());
+    CHECK_CONTAINS(BatchError(arrow::RecordBatch::Make(arrow::schema({field}), 2, {column}),
+                              arrow::schema({field}))
+                       .value_or(""),
+                   "decreasing offsets");
+    ASSIGN_OR_FAIL(std::shared_ptr<arrow::Array> nested,
+                   arrow::StructArray::Make({column}, arrow::FieldVector{field}));
+    auto nested_schema = arrow::schema({arrow::field("nested", nested->type())});
+    CHECK_CONTAINS(BatchError(arrow::RecordBatch::Make(nested_schema, 2, {nested}), nested_schema)
+                       .value_or(""),
+                   "decreasing offsets");
+    auto list = std::make_shared<arrow::ListArray>(
+        arrow::list(field), 1, arrow::Buffer::FromVector(std::vector<int32_t>{0, 2}), column);
+    auto list_schema = arrow::schema({arrow::field("list", list->type())});
+    CHECK_CONTAINS(
+        BatchError(arrow::RecordBatch::Make(list_schema, 1, {list}), list_schema).value_or(""),
+        "decreasing offsets");
+  }
+  // Offsets that do not start at 0 are valid.
+  auto shifted = Strings<int32_t>(arrow::utf8(), {1, 2, 3}, "abc");
+  auto schema = arrow::schema({arrow::field("text", arrow::utf8())});
+  CHECK(!BatchError(arrow::RecordBatch::Make(schema, 2, {shifted}), schema).has_value());
+}
+
+TEST(StringViewsMustNameARangeOfAnExistingDataBuffer) {
+  for (const auto& type : {arrow::utf8_view(), arrow::binary_view()}) {
+    auto field = arrow::field("text", type);
+    auto schema = arrow::schema({field});
+    for (auto [buffer_index, view_offset] :
+         {std::make_pair(0, 0), std::make_pair(0, 8), std::make_pair(1, 0)}) {
+      arrow::BinaryViewType::c_type view{};
+      view.ref.size = 16;
+      view.ref.buffer_index = buffer_index;
+      view.ref.offset = view_offset;
+      // The data buffer has 16 bytes, so only the view at offset 0 of buffer 0 is valid.
+      auto column = arrow::MakeArray(arrow::ArrayData::Make(
+          type, 1,
+          {nullptr, arrow::Buffer::FromVector(std::vector<arrow::BinaryViewType::c_type>{view}),
+           arrow::Buffer::FromString(std::string(16, 'x'))},
+          0));
+      std::optional<std::string> error =
+          BatchError(arrow::RecordBatch::Make(schema, 1, {column}), schema);
+      CHECK_EQ(error.has_value(), buffer_index != 0 || view_offset != 0);
+      if (error) {
+        CHECK_CONTAINS(*error, "data buffer");
+      }
+    }
+  }
+  // Inline and out-of-line views of a builder export, with their values.
+  arrow::StringViewBuilder builder;
+  CHECK_OK(builder.Append(std::string_view("short")));
+  CHECK_OK(builder.Append(std::string_view("a value longer than twelve bytes")));
+  ASSIGN_OR_FAIL(std::shared_ptr<arrow::Array> views, builder.Finish());
+  auto schema = arrow::schema({arrow::field("text", arrow::utf8_view())});
+  Exported exported;
+  Export(exported, {arrow::RecordBatch::Make(schema, 2, {views})}, schema, schema);
+  std::shared_ptr<arrow::RecordBatchReader> reader = Import(exported);
+  ASSIGN_OR_FAIL(auto batch, reader->Next());
+  CHECK(batch->column(0)->Equals(*views));
 }
 
 TEST(ABatchCannotChangeTheSchemaOfTheStream) {

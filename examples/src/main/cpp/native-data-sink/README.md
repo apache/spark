@@ -41,9 +41,9 @@ small example.
 | `path` | Required | Absolute directory shared by the driver and every executor |
 | `readonly` | `false` | Remove all the capabilities, which are those of writes, when `true` |
 
-Unknown options are rejected, except `checkpointLocation`, which Spark passes to the sink of a
-streaming query. Source creation and capability discovery do not create files. The default
-instance advertises only native `BATCH_WRITE`, `STREAMING_WRITE`, `BATCH_TRUNCATE`, and
+Unknown options are rejected, except `checkpointLocation` and `queryName`, which Spark passes to
+the sink of a streaming query. Source creation and capability discovery do not create files. The
+default instance advertises only native `BATCH_WRITE`, `STREAMING_WRITE`, `BATCH_TRUNCATE`, and
 `STREAMING_TRUNCATE`; it does not advertise reads. Spark performs its native capability check
 again with the operation's effective options.
 

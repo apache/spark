@@ -13,6 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <cstddef>
+#include <cstdint>
 #include <stdexcept>
 #include <thread>
 
@@ -79,6 +81,37 @@ TEST(EmptyArraysAcceptNullAndTruncatedStructuresFail) {
   CHECK_EQ(truncated.status().message(),
            std::string("SparkDsCreateInfo has 8 bytes, fewer than in version 1 of the native ABI"));
   CHECK(!internal::Input<SparkDsReadInfo>(nullptr, "SparkDsReadInfo").ok());
+}
+
+namespace {
+
+// A structure of version 1 as a later header could compile it, with an appended field.
+struct GrownStructure {
+  int64_t size;
+  int64_t first;
+  int64_t appended;
+};
+
+}  // namespace
+
+namespace spark::native::internal {
+template <>
+inline constexpr size_t kVersion1Size<GrownStructure> =
+    offsetof(GrownStructure, first) + sizeof(int64_t);
+}  // namespace spark::native::internal
+
+TEST(StructuresAreReadUpToTheSizeThatSparkPasses) {
+  GrownStructure passed{offsetof(GrownStructure, appended), 5, 9};
+  ASSIGN_OR_FAIL(GrownStructure read, internal::Input(&passed, "GrownStructure"));
+  CHECK_EQ(read.first, int64_t{5});
+  CHECK_EQ(read.appended, int64_t{0});
+  passed.size = sizeof(GrownStructure);
+  ASSIGN_OR_FAIL(GrownStructure full, internal::Input(&passed, "GrownStructure"));
+  CHECK_EQ(full.appended, int64_t{9});
+  passed.size = sizeof(int64_t);
+  arrow::Result<GrownStructure> truncated = internal::Input(&passed, "GrownStructure");
+  CHECK(!truncated.ok());
+  CHECK_CONTAINS(truncated.status().message(), "version 1");
 }
 
 TEST(CreateInfoCarriesTheSourceNameAndOptions) {

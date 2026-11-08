@@ -89,9 +89,10 @@ below.
 
 The inputs of these methods are structs with constructors, so that new ABI fields can reach
 connectors without breaking them: `*Info` structs on the driver (`CreateInfo`, `ScanInfo`,
-`MicroBatchStreamInfo`, `LatestOffsetInfo`, `WriteInfo`, `StreamingWriteInfo`, and `HostInfo`),
-and `*Context` structs, which carry the live `TaskContext`, on the executors (`ReaderContext` and
-`WriterContext`). `ScanPlan` has a constructor for the same reason.
+`MicroBatchStreamInfo`, `LatestOffsetInfo`, `WriteInfo`, and `StreamingWriteInfo`), `*Context`
+structs, which carry the live `TaskContext`, on the executors (`ReaderContext` and
+`WriterContext`), and `HostInfo`, which `DataSource::Init` gets in every JVM, executors included.
+`ScanPlan` has a constructor for the same reason.
 
 ```text
 Driver:
@@ -120,7 +121,10 @@ independent readers.
 
 A reader may keep its `TaskContext` until Spark releases the stream, and a writer until Spark
 closes it. Every host provides the task IDs of version 1 of the ABI, so the SDK rejects a shorter
-task context, as it rejects any structure shorter than in version 1.
+task context, as it rejects any structure shorter than its layout in version 1. It compares with
+that layout, not with the header it is compiled against: a later version 1 header may append
+fields, which read as zero when Spark passes a smaller structure, and the SDK sets only the fields
+that fit in a structure that Spark fills.
 `TaskContext::IsInterrupted()` calls Spark's live cancellation callback, which for a reader is
 also true once the task ended; check it during long operations, and use timeouts for blocking
 I/O. `TaskContext::ForTesting()`, with its `With*` methods and `InterruptedBy`, builds a context
@@ -309,9 +313,13 @@ query: Spark makes no other call on the stream before it closes it.
 
 Streaming writes reuse the task writers of batch writes. Spark creates a `StreamingWrite` for
 each micro-batch, from a `StreamingWriteInfo` with the ID of the query, which stays the same
-across restarts. It follows the lifecycle of a `BatchWrite`; the SDK passes the epoch ID of the
+across restarts. It gets the calls of a `BatchWrite`; the SDK passes the epoch ID of the
 micro-batch to `Commit` and `Abort`, and gives it to the task writers in
-`WriterContext::epoch_id`. Spark may commit an epoch again after a restart, with a new write, so
+`WriterContext::epoch_id`. Its destruction is deferred, though: Spark destroys the write of a
+micro-batch only after it creates that of the next one, and the last write of a query once it is
+no longer referenced, possibly long after the query stops and on another thread. Release what a
+micro-batch holds, such as a lock on the destination, in `Commit` and `Abort` rather than in the
+destructor. Spark may commit an epoch again after a restart, with a new write, so
 a write must skip an epoch that is already committed: the query ID and the epoch ID identify the
 output of a micro-batch. A restarted query may also abort an epoch that an earlier run
 committed, so an abort removes only what its own task writers wrote. The [file sink][sink]
@@ -337,7 +345,11 @@ another thread.
 
 The SDK checks the schema of the reader against the schema to read before exporting the stream,
 and checks each batch: its schema, its `arrow::RecordBatch::Validate()`, because the C data
-interface does not carry buffer sizes for Spark to check, and its recursive array offsets. It
+interface does not carry buffer sizes for Spark to check, and its recursive array offsets. Since
+`Validate()` does not check every offset of a string or binary array, nor the views of a view
+array, the SDK also checks, at any level, that offsets never decrease and stay within the data
+buffer, and that each view names an existing data buffer and a range within it, without reading
+the values or validating UTF-8. It
 compares Spark logical types, ignoring nullability and Arrow metadata, accepting the supported
 string and binary encodings and equivalent timestamp time zones. It rejects unsupported types,
 schema drift, and nonzero array offsets with explicit errors. It does not silently copy arrays,

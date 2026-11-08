@@ -171,8 +171,15 @@ TEST(InitializationLoggingAndCapabilitiesFollowTheSourceLifecycle) {
   CHECK(sn::IsLogEnabled(sn::LogLevel::kDebug));
   sn::LogDebug("a debug message");
   sn::LogTrace("a dropped trace message");
+  CHECK(sn::MaxLogLevel() == std::optional<sn::LogLevel>(sn::LogLevel::kDebug));
   library.close(operation.source);
+  // A host that logs no level of the library, for example with its logger OFF.
+  host_level = 0;
+  sn::internal::FollowLogLevel();
+  CHECK(!sn::MaxLogLevel().has_value());
+  CHECK(!sn::IsLogEnabled(sn::LogLevel::kError));
   host_level = SPARK_DS_LOG_INFO;
+  sn::internal::FollowLogLevel();
   {
     std::lock_guard<std::mutex> lock(mutex);
     CHECK(std::vector(logs.begin() + 1, logs.end()) ==

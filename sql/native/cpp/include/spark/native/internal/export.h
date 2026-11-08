@@ -47,9 +47,11 @@
 /// The types that the source names in DataSource determine its operations: the SDK installs the
 /// native callbacks of each operation whose type is not Unsupported, and leaves the others null.
 /// Batch and streaming operations share the executor callbacks, read and the data writer
-/// callbacks. The only exported symbol is spark_ds_init: build the library with hidden symbol
-/// visibility, as spark_add_native_data_source in CMake does, so that the SDK and its
-/// dependencies stay private to the library.
+/// callbacks. Export only spark_ds_init, as spark_add_native_data_source in CMake does, with
+/// hidden symbol visibility and a linker version script on Linux, or -exported_symbol on macOS:
+/// hidden visibility alone still exports the instantiations of the templates of Arrow and of the
+/// standard library, which other libraries of the process could then interpose. The shared Arrow
+/// library itself is not private to the library.
 #define SPARK_EXPORT_DATA_SOURCE(SourceType)                                     \
   extern "C" SPARK_DS_EXPORT int spark_ds_init(const SparkDsHost* host,          \
                                                const SparkDsLibrary** library) { \

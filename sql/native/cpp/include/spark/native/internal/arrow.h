@@ -20,6 +20,8 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -154,6 +156,25 @@ arrow::Result<std::vector<bool>> Elements(const arrow::ListArray& list, Valid va
   return mask;
 }
 
+/// Whether CheckNulls has something to check below a value of `type`: a descendant that the schema
+/// declares not nullable, or the offsets of a list or a map. Otherwise it builds no mask.
+inline bool HasNestedChecks(const arrow::DataType& type) {
+  switch (type.id()) {
+    case arrow::Type::STRUCT:
+      for (const auto& child : type.fields()) {
+        if (!child->nullable() || HasNestedChecks(*child->type())) {
+          return true;
+        }
+      }
+      return false;
+    case arrow::Type::LIST:
+    case arrow::Type::MAP:
+      return true;
+    default:
+      return false;
+  }
+}
+
 /// Rejects a null where the schema to read declares a column, a field, an element, or a map value
 /// not nullable, unless its parent is null, as Spark does after reading. `referenced` tells
 /// which values belong to a parent value that is not null.
@@ -170,6 +191,9 @@ inline arrow::Status CheckNulls(const arrow::Array& array, const arrow::Field& f
                                       "nullable");
       }
     }
+  }
+  if (!HasNestedChecks(*field.type())) {
+    return arrow::Status::OK();
   }
   auto valid = [&](int64_t index) { return array.IsValid(index) && is_referenced(index); };
   switch (field.type()->id()) {
@@ -197,10 +221,14 @@ inline arrow::Status CheckNulls(const arrow::Array& array, const arrow::Field& f
       const auto& maps = static_cast<const arrow::MapArray&>(array);
       ARROW_ASSIGN_OR_RAISE(std::vector<bool> mask, Elements(maps, valid));
       const auto& type = static_cast<const arrow::MapType&>(*field.type());
+      // The keys and the items adjusted to the length of the entries, which the mask has: Arrow
+      // accepts struct children that are longer than their struct.
+      const auto& entries = static_cast<const arrow::StructArray&>(*maps.values());
       // Spark does not allow null keys.
+      ARROW_RETURN_NOT_OK(CheckNulls(*entries.field(0), *type.key_field()->WithNullable(false),
+                                     column + ".key", &mask));
       ARROW_RETURN_NOT_OK(
-          CheckNulls(*maps.keys(), *type.key_field()->WithNullable(false), column + ".key", &mask));
-      ARROW_RETURN_NOT_OK(CheckNulls(*maps.items(), *type.item_field(), column + ".value", &mask));
+          CheckNulls(*entries.field(1), *type.item_field(), column + ".value", &mask));
       break;
     }
     default:
@@ -209,13 +237,90 @@ inline arrow::Status CheckNulls(const arrow::Array& array, const arrow::Field& f
   return arrow::Status::OK();
 }
 
+/// Checks that the offsets of a string or binary array, which RecordBatch::Validate() has checked
+/// to have length + 1 values, never decrease and stay within its data buffer. Validate() checks
+/// only the last one, and Spark reads the values by address.
+template <typename Offset>
+arrow::Status CheckOffsets(const arrow::ArrayData& data) {
+  if (data.length == 0) {
+    return arrow::Status::OK();
+  }
+  const Offset* offsets = data.GetValues<Offset>(1);
+  int64_t size =
+      data.buffers.size() > 2 && data.buffers[2] != nullptr ? data.buffers[2]->size() : 0;
+  if (offsets == nullptr || offsets[0] < 0) {
+    return arrow::Status::Invalid(data.type->ToString(), " array has a negative first offset");
+  }
+  for (int64_t index = 0; index < data.length; ++index) {
+    if (offsets[index + 1] < offsets[index]) {
+      return arrow::Status::Invalid(data.type->ToString(), " array has decreasing offsets at ",
+                                    index);
+    }
+  }
+  if (static_cast<int64_t>(offsets[data.length]) > size) {
+    return arrow::Status::Invalid(data.type->ToString(),
+                                  " array has offsets past its data buffer of ", size, " bytes");
+  }
+  return arrow::Status::OK();
+}
+
+/// Checks that each view of a string or binary view array that is not null, and not inline, names
+/// an existing data buffer and a range within it, which Validate() does not check.
+inline arrow::Status CheckViews(const arrow::ArrayData& data) {
+  using View = arrow::BinaryViewType::c_type;
+  const View* views = data.GetValues<View>(1);
+  for (int64_t index = 0; index < data.length; ++index) {
+    if (data.IsNull(index)) {
+      continue;
+    }
+    const View& view = views[index];
+    if (view.size() < 0) {
+      return arrow::Status::Invalid(data.type->ToString(), " array has a negative length at ",
+                                    index);
+    }
+    if (view.is_inline()) {
+      continue;
+    }
+    int32_t buffer = view.ref.buffer_index;
+    if (buffer < 0 || static_cast<size_t>(buffer) + 2 >= data.buffers.size() ||
+        data.buffers[static_cast<size_t>(buffer) + 2] == nullptr) {
+      return arrow::Status::Invalid(data.type->ToString(), " array names a missing data buffer at ",
+                                    index);
+    }
+    int64_t size = data.buffers[static_cast<size_t>(buffer) + 2]->size();
+    if (view.ref.offset < 0 ||
+        static_cast<int64_t>(view.ref.offset) + static_cast<int64_t>(view.size()) > size) {
+      return arrow::Status::Invalid(data.type->ToString(),
+                                    " array has a view past its data buffer at ", index);
+    }
+  }
+  return arrow::Status::OK();
+}
+
 /// Arrow Java ignores the offsets of the arrays that it imports, so Spark rejects an array with an
-/// offset other than 0, at any level.
+/// offset other than 0, at any level. Also checks that the buffers of string and binary arrays
+/// hold their values, at any level, without reading the values.
 inline arrow::Status ValidateLayout(const arrow::ArrayData& data) {
   if (data.offset != 0) {
     return arrow::Status::Invalid(
         "Spark requires zero Arrow array offsets: ", data.type->ToString(), " has offset ",
         data.offset, "; normalize sliced arrays");
+  }
+  switch (data.type->id()) {
+    case arrow::Type::STRING:
+    case arrow::Type::BINARY:
+      ARROW_RETURN_NOT_OK(CheckOffsets<int32_t>(data));
+      break;
+    case arrow::Type::LARGE_STRING:
+    case arrow::Type::LARGE_BINARY:
+      ARROW_RETURN_NOT_OK(CheckOffsets<int64_t>(data));
+      break;
+    case arrow::Type::STRING_VIEW:
+    case arrow::Type::BINARY_VIEW:
+      ARROW_RETURN_NOT_OK(CheckViews(data));
+      break;
+    default:
+      break;
   }
   for (const auto& child : data.child_data) {
     ARROW_RETURN_NOT_OK(ValidateLayout(*child));
@@ -362,7 +467,9 @@ class ExportedStream {
     if (columns_) {
       ARROW_ASSIGN_OR_RAISE(batch, batch->SelectColumns(*columns_));
     }
-    // Spark cannot check the sizes of the buffers, so check that they hold their values.
+    // Spark cannot check the sizes of the buffers, so check that they hold their values: Validate()
+    // checks the sizes of the buffers, and ValidateLayout every offset and view of the strings and
+    // binary data, which Validate() does not.
     ARROW_RETURN_NOT_OK(batch->Validate());
     for (int index = 0; index < batch->num_columns(); ++index) {
       const auto& column = batch->column(index);

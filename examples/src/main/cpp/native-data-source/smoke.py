@@ -17,6 +17,8 @@
 """Run with Java 22+ and spark-submit from a distribution with native data sources (4.4.0+)."""
 
 import argparse
+import contextlib
+import io
 from pathlib import Path
 import tempfile
 
@@ -49,7 +51,12 @@ def main():
             (i, f"row-{i}") for i in range(31)
         ]
 
-        # Spark pushes a limit only to a scan whose rows it does not filter.
+        # Spark pushes a limit only to a scan whose rows it does not filter. It applies the limit
+        # again after reading, so check that the scan accepted it.
+        plan = io.StringIO()
+        with contextlib.redirect_stdout(plan):
+            df.limit(4).explain(mode="formatted")
+        assert "PushedLimit: LIMIT 4" in plan.getvalue(), plan.getvalue()
         unfiltered_limit = df.limit(4).collect()
         assert len(unfiltered_limit) == 4
         assert all(0 <= row.id < 31 for row in unfiltered_limit)

@@ -322,10 +322,11 @@ TEST(StreamingWritesPublishEachEpochOfAQueryOnce) {
   CHECK_EQ(truncated.epochs.at("query"), int64_t{2});
 }
 
-TEST(StreamingQueriesPassTheirCheckpointAmongTheOptions) {
+TEST(StreamingQueriesPassTheirCheckpointAndNameAmongTheOptions) {
   TempDirectory directory;
   std::string path = directory.path().string();
   CHECK(MakeSink({{"path", path}, {"checkpointlocation", "/tmp/c"}}).ok());
+  CHECK(MakeSink({{"path", path}, {"checkpointlocation", "/tmp/c"}, {"queryname", "q"}}).ok());
   CHECK(!MakeSink({{"path", path}, {"unknown", "1"}}).ok());
   CHECK(!MakeSink({{"path", "relative/path"}}).ok());
   CHECK(!MakeSink({}).ok());

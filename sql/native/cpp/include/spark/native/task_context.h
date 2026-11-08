@@ -15,7 +15,9 @@
 
 #pragma once
 
+#include <algorithm>
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 
@@ -130,19 +132,22 @@ class TaskContext {
 namespace internal {
 
 /// Wraps the context that Spark passes, which has every field of version 1 of the ABI. Fields are
-/// only appended to the structure, so every host has them.
+/// only appended to the structure, so every host has them, and a later version 1 header can have
+/// more than an earlier release of Spark passes: those read as zero.
 inline arrow::Result<TaskContext> ImportTaskContext(const SparkDsTaskContext* task) {
+  constexpr size_t kVersion1Size =
+      offsetof(SparkDsTaskContext, is_interrupted) + sizeof(SparkDsTaskContext::is_interrupted);
   if (task == nullptr) {
     return arrow::Status::Invalid("null task context");
   }
   int64_t size;
   std::memcpy(&size, task, sizeof(size));
-  if (size < static_cast<int64_t>(sizeof(SparkDsTaskContext))) {
+  if (size < 0 || static_cast<uint64_t>(size) < kVersion1Size) {
     return arrow::Status::Invalid("the task context has ", size,
                                   " bytes, fewer than in version 1 of the native ABI");
   }
-  SparkDsTaskContext copy;
-  std::memcpy(&copy, task, sizeof(copy));
+  SparkDsTaskContext copy{};
+  std::memcpy(&copy, task, std::min(static_cast<size_t>(size), sizeof(copy)));
   TaskContext context;
   context.stage_id_ = copy.stage_id;
   context.stage_attempt_number_ = copy.stage_attempt_number;

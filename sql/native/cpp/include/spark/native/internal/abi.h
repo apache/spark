@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -120,18 +121,45 @@ std::optional<T> FieldOf(const void* pointer, int64_t size, size_t offset) {
   return value;
 }
 
+/// The size of a structure in version 1 of the ABI: the end of its last field of version 1. A
+/// later version 1 header can append fields, so sizeof of the compiled structure can be larger
+/// than what an earlier release of Spark passes.
+template <typename T>
+inline constexpr size_t kVersion1Size = 0;
+
+#define SPARK_NATIVE_VERSION1_END(type, field)                         \
+  template <>                                                          \
+  inline constexpr size_t kVersion1Size<type> = offsetof(type, field) + \
+                                                sizeof(type::field)
+
+SPARK_NATIVE_VERSION1_END(SparkDsCreateInfo, num_options);
+SPARK_NATIVE_VERSION1_END(SparkDsStreamReaderInfo, checkpoint_location);
+SPARK_NATIVE_VERSION1_END(SparkDsReadLimit, max_rows);
+SPARK_NATIVE_VERSION1_END(SparkDsLatestOffsetInfo, run_end);
+SPARK_NATIVE_VERSION1_END(SparkDsStreamPartitionsInfo, end);
+SPARK_NATIVE_VERSION1_END(SparkDsCommitOffsetInfo, end);
+SPARK_NATIVE_VERSION1_END(SparkDsReadInfo, partition_length);
+SPARK_NATIVE_VERSION1_END(SparkDsWriteInfo, query_id);
+SPARK_NATIVE_VERSION1_END(SparkDsDataWriterInfo, epoch_id);
+SPARK_NATIVE_VERSION1_END(SparkDsFinishWriteInfo, rejected);
+
+#undef SPARK_NATIVE_VERSION1_END
+
 /// Copies a structure that Spark passes, which has every field of version 1 of the ABI: fields are
-/// only appended to the structures, so a shorter one is an error, not partly read. `name` is the
-/// name of the structure in errors.
+/// only appended to the structures, so a shorter one is an error, not partly read. The fields of
+/// the compiled structure beyond the size that Spark passes are zero. `name` is the name of the
+/// structure in errors.
 template <typename T>
 arrow::Result<T> Input(const T* pointer, const char* name) {
+  static_assert(kVersion1Size<T> > 0 && kVersion1Size<T> <= sizeof(T),
+                "the version 1 size of the structure is not declared");
   ARROW_ASSIGN_OR_RAISE(int64_t size, StructSize(pointer));
-  if (size < static_cast<int64_t>(sizeof(T))) {
+  if (static_cast<uint64_t>(size) < kVersion1Size<T>) {
     return arrow::Status::Invalid(name, " has ", size,
                                   " bytes, fewer than in version 1 of the native ABI");
   }
-  T value;
-  std::memcpy(&value, pointer, sizeof(T));
+  T value{};
+  std::memcpy(&value, pointer, std::min(static_cast<size_t>(size), sizeof(T)));
   return value;
 }
 
@@ -280,7 +308,7 @@ inline arrow::Result<LatestOffsetInfo<std::string>> ReadLatestOffsetInfo(
 }
 
 /// Sets the limit that default_read_limit returns, in the structure that Spark initialized with
-/// its size.
+/// its size, writing only the fields that fit in that size.
 inline arrow::Status SetReadLimit(SparkDsReadLimit* output, const ReadLimit& limit) {
   ARROW_ASSIGN_OR_RAISE(SparkDsReadLimit value, Input(output, "SparkDsReadLimit"));
   switch (limit.kind()) {
@@ -292,7 +320,7 @@ inline arrow::Status SetReadLimit(SparkDsReadLimit* output, const ReadLimit& lim
       value.max_rows = limit.max_rows();
       break;
   }
-  std::memcpy(output, &value, sizeof(value));
+  std::memcpy(output, &value, std::min(static_cast<size_t>(value.size), sizeof(value)));
   return arrow::Status::OK();
 }
 

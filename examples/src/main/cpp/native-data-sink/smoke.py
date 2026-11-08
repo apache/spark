@@ -135,6 +135,8 @@ def main():
                     spark.readStream.schema("id BIGINT, label STRING")
                     .json(str(source))
                     .writeStream.format("cpp_sdk_sink")
+                    # Spark passes the name of the query among the options of the sink.
+                    .queryName("cpp_sdk_sink_smoke")
                     .option("checkpointLocation", str(base / "checkpoint"))
                     .trigger(availableNow=True)
                     .start(str(output))
