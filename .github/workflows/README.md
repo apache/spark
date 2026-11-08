@@ -13,18 +13,18 @@ The Apache Software Foundation (ASF) imposes [resource usage limits][limit] on G
 
 ### Reduce and stagger scheduled workloads
 
-Use daily, three-day, or weekly cadences for scheduled workloads. Move two-day
-workloads to three days and four- or six-day workloads to weekly. Keep Pages,
-stale-PR cleanup, and the base-image cache daily. The build-status updater
+Use daily, three-day, or weekly cadences for scheduled workloads. Move most
+two-day workloads to three days and four- or six-day workloads to weekly.
+Also run Python 3.12 macOS26, minimum-dependency Python, and SparkR Windows
+weekly. Keep Pages, stale-PR cleanup, and the base-image cache daily. The build-status updater
 keeps its separate schedule.
 
 Reserve these UTC hours for workloads outside the three-day cadence:
 
 | UTC hour | Workloads |
 | --- | --- |
-| 00 | Daily stale-PR cleanup at 00:30 |
-| 04 | Daily base-image cache at 04:17, alongside weekly variants |
-| 08, 20 | Weekly variants at minute 17 |
+| 00 | Daily base-image cache at 00:17 and stale-PR cleanup at 00:30 |
+| 04, 08, 20 | Weekly variants at minute 17 |
 | 11 | Weekly branch-3.5 scheduler on Sunday at 11:00 |
 | 12 | Daily Pages at 12:30 |
 
@@ -37,6 +37,7 @@ Their configured starts are:
 | Weekday | UTC | Workload | Branch |
 | --- | --- | --- | --- |
 | Monday | 04:17 | [Maven macOS](build_maven_java21_macos26.yml) | master |
+| Monday | 08:17 | [SparkR Windows](build_sparkr_window.yml) | master |
 | Monday | 20:17 | [Python no-GIL](build_python_3.14_nogil.yml) | master |
 | Tuesday | 08:17 | [Python 3.11](build_python_3.11.yml) | branch-4.0 |
 | Tuesday | 20:17 | [Unix domain socket](build_uds.yml) | master |
@@ -44,7 +45,9 @@ Their configured starts are:
 | Wednesday | 20:17 | [Python classic](build_python_3.12_classic_only.yml) | master |
 | Thursday | 04:17 | [Maven Java 21](build_maven_java21.yml) | branch-4.0 |
 | Thursday | 08:17 | [Non-ANSI](build_non_ansi.yml) | branch-4.0 |
+| Thursday | 20:17 | [Python min deps](build_python_minimum.yml) | master |
 | Friday | 04:17 | [Maven ARM](build_maven_java21_arm.yml) | master |
+| Friday | 08:17 | [Python macOS](build_python_3.12_macos26.yml) | master |
 | Friday | 20:17 | [Python ARM](build_python_3.12_arm.yml) | master |
 | Saturday | 04:17 | [Maven](build_maven.yml) | branch-4.0 |
 | Saturday | 08:17 | [Java 17](build_java17.yml) | branch-4.0 |
@@ -59,9 +62,9 @@ off-hour choice; weekday, hour, and phase assignments distribute load without
 ranking jobs by importance. An individual interval can be shortened later if
 faster feedback is justified.
 
-Some overlap is allowed, including the daily cache and weekly builds at 04:17.
-Scheduled starts can be delayed, and running workflows can overlap even when
-their configured starts differ.
+The daily cache and stale-PR cleanup share the 00 UTC hour, at 00:17 and
+00:30 respectively. Some overlap is allowed. Scheduled starts can be delayed,
+and running workflows can overlap even when their configured starts differ.
 
 Maintenance-branch schedulers run on the default branch and dispatch workflows
 to their target branches. When changing a branch schedule, update both its
