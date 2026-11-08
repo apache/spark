@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.annotation.nowarn
 import scala.collection.mutable
+import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, LogKeys}
@@ -272,7 +273,8 @@ object PushDownUtils extends Logging {
    * A filter is kept only if it references attributes the scan declared filterable and passes
    * `isPushablePartitionFilter`, the check `DataSourceV2Strategy` uses to drop a pushed filter's
    * `FilterExec`. A DPP filter degraded to true is removed, as the V2 path does by not translating
-   * it.
+   * it. `DataSourceV2Strategy` already plans only filters over the declared attributes, so the
+   * first check matters only for a scan node built elsewhere.
    */
   private def catalystRuntimeFilters(
       scan: SupportsRuntimeCatalystFiltering,
@@ -297,8 +299,23 @@ object PushDownUtils extends Logging {
    * the trait gets a forwarder, so it and its subclasses take the general path.
    */
   private def implementsOnlyDeprecatedFilter(scan: SupportsRuntimeCatalystFiltering): Boolean =
-    scan.getClass.getMethod("planInputPartitionsWithRuntimeFilters", classOf[Array[Expression]])
-      .getDeclaringClass == classOf[SupportsRuntimeCatalystFiltering]
+    inheritsDefaultReplanning.get(scan.getClass)
+
+  /**
+   * [[implementsOnlyDeprecatedFilter]], one reflective lookup per class. The lookup can resolve
+   * the public methods of the class and its supertypes, so a method whose signature names a class
+   * the class loader cannot load fails it, with a `LinkageError` or whatever the loader throws.
+   * Such a class takes the general path, as a Scala scan compiled against this version does.
+   */
+  private val inheritsDefaultReplanning: ClassValue[java.lang.Boolean] =
+    new ClassValue[java.lang.Boolean] {
+      override def computeValue(c: Class[_]): java.lang.Boolean = try {
+        c.getMethod("planInputPartitionsWithRuntimeFilters", classOf[Array[Expression]])
+          .getDeclaringClass == classOf[SupportsRuntimeCatalystFiltering]
+      } catch {
+        case NonFatal(_) | _: LinkageError => false
+      }
+    }
 
   /** Pushes the screened filters through the deprecated `filter`, as Spark 4.3 did. */
   @nowarn("cat=deprecation")

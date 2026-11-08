@@ -223,4 +223,8 @@ trait FileScan extends Scan
       name.toLowerCase(Locale.ROOT)
     }
   }
+
+  // A separate name, since widening `normalizeName` would clash with a method of that name in a
+  // subclass outside Spark.
+  private[v2] def normalizePartitionColumnName(name: String): String = normalizeName(name)
 }

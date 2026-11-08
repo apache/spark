@@ -124,7 +124,10 @@ trait SupportsRuntimeCatalystFiltering extends Scan {
   /**
    * Filters this scan with runtime Catalyst expressions, the method Spark 4.3 called. A scan that
    * implements only this keeps working through the default of
-   * [[planInputPartitionsWithRuntimeFilters]]; a new scan implements that method instead.
+   * [[planInputPartitionsWithRuntimeFilters]]; a new scan implements that method instead. A Scala
+   * scan compiled against this version should implement that method as well: Spark cannot tell such
+   * a scan from a new one, so it plans the scan again when screening removes every runtime filter,
+   * where Spark 4.3 read the partitions it had planned.
    */
   @deprecated("Implement planInputPartitionsWithRuntimeFilters instead", "4.4.0")
   def filter(expressions: Array[Expression]): Unit =

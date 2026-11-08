@@ -91,7 +91,8 @@ object CleanupDynamicPruningFilters extends Rule[LogicalPlan] with PredicateHelp
           HiveTableRelation(_, _, _, _, _)) =>
         removeUnnecessaryDynamicPruningSubquery(p)
       // Only a built-in file scan is known to prune what it plans with a partition filter it fully
-      // took. Another DSv2 source may apply such a filter row by row and leave the pruning to DPP.
+      // took. Another DSv2 source may apply such a filter row by row and leave the pruning to DPP,
+      // so this rule does not count its pushed filters.
       case p @ NodeWithOnlyDeterministicProjectAndFilter(r: DataSourceV2ScanRelation) =>
         val pushedFilters = r.scan match {
           case _: RuntimePartitionPruningFileScan => r.pushedFilters

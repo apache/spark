@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{REPLACE_DATA, WRITE_DELT
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.connector.read.Scan
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, MERGE, UPDATE}
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Implicits, DataSourceV2Relation, DataSourceV2ScanRelation}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Implicits, DataSourceV2Relation, DataSourceV2ScanRelation, RuntimePartitionPruningFileScan}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -53,9 +53,12 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transformDownWithPruning(
       _.containsAnyPattern(REPLACE_DATA, WRITE_DELTA)) {
+    // A built-in file scan does not record the groups each call returned, which a write that
+    // replaces the groups it read relies on.
     case GroupBasedRowLevelOperation(replaceData, _, Some(cond),
         r: DataSourceV2ScanRelation)
-        if canInjectGroupFilters(cond, r) =>
+        if canInjectGroupFilters(cond, r) &&
+          !r.scan.isInstanceOf[RuntimePartitionPruningFileScan] =>
       injectGroupFilters(replaceData, cond, r.scan, r.declaredRuntimeFilterAttrs)
 
     case DeltaBasedRowLevelOperation(writeDelta, _, Some(cond),

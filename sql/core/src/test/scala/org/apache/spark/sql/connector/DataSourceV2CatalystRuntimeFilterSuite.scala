@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector
 
-import test.org.apache.spark.sql.connector.JavaDeprecatedFilterScan
+import test.org.apache.spark.sql.connector.{JavaDeprecatedFilterScan, JavaLinkageFilterScan}
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
@@ -41,6 +41,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SupportsRuntimeCatalystFiltering
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
+import org.apache.spark.util.Utils
 
 /**
  * Tests for scans that implement
@@ -573,7 +574,10 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
       val pruned = new LegacyFilterScan
       assert(replan(pruned, Seq(EqualTo(partAttr, Literal(3)))) === Seq(3))
       assert(pruned.filterCalls === 1 && pruned.pushed === Seq(EqualTo(partAttr, Literal(3))))
-      // Spark 4.3 never called `filter` when every runtime filter was screened out.
+      // This Scala scan takes the general path, and the trait's default
+      // `planInputPartitionsWithRuntimeFilters` skips `filter` when every runtime filter was
+      // screened out, as Spark 4.3 did. It plans the scan again, which matches the
+      // `originalPartitions` passed here.
       val screened = new LegacyFilterScan
       assert(replan(screened, Seq(DynamicPruningExpression(Literal.TrueLiteral))) === (0 until 5))
       assert(screened.filterCalls === 0)
@@ -616,6 +620,58 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
       val scalaScan = new LegacyFilterScan
       assert(!push(scalaScan, Seq(EqualTo(partAttr, Literal(3)))))
       assert(scalaScan.filterCalls === 0)
+    }
+  }
+
+  test("a scan whose public methods cannot all be resolved still gets its runtime filters") {
+    val tbl = s"$catalogName.tbl_linkage"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Source PARTITIONED BY (part)")
+      val scanRelation = sql(s"SELECT * FROM $tbl").queryExecution.optimizedPlan.collectFirst {
+        case r: DataSourceV2ScanRelation => r
+      }.getOrElse(fail("Expected a DataSourceV2ScanRelation"))
+      val partAttr = scanRelation.output.find(_.name == "part").get
+      val scanName = classOf[JavaLinkageFilterScan].getName
+      val missingName = classOf[JavaLinkageFilterScan.Missing].getName
+      val bytes = Utils.tryWithResource(getClass.getClassLoader.getResourceAsStream(
+        scanName.replace('.', '/') + ".class"))(_.readAllBytes())
+      // Defines the scan class itself, so `Missing` resolves through it, and fails loading
+      // `Missing` with what `reject` throws.
+      def loadScan(reject: String => Nothing, expected: Class[_ <: Throwable]): Scan = {
+        val loader = new ClassLoader(getClass.getClassLoader) {
+          override def loadClass(name: String, resolve: Boolean): Class[_] =
+            getClassLoadingLock(name).synchronized {
+              if (name == scanName) {
+                Option(findLoadedClass(name)).getOrElse(defineClass(name, bytes, 0, bytes.length))
+              } else if (name == missingName) {
+                reject(name)
+              } else {
+                super.loadClass(name, resolve)
+              }
+            }
+        }
+        val scan = loader.loadClass(scanName).getDeclaredConstructor().newInstance()
+        val e = intercept[Throwable](scan.getClass.getMethods)
+        assert(expected.isInstance(e), e)
+        scan.asInstanceOf[Scan]
+      }
+      def replan(scan: Scan, filter: Expression): Seq[InputPartition] =
+        PushDownUtils.replanWithRuntimeFilters(scan, Seq(filter), scanRelation.relation.table,
+          scanRelation.output, None, Seq(LegacyPartition(42))).flatten
+      // A missing class surfaces as a LinkageError; a loader may also throw something else.
+      Seq[(String => Nothing, Class[_ <: Throwable])](
+        (name => throw new ClassNotFoundException(name), classOf[NoClassDefFoundError]),
+        (name => throw new IllegalStateException(s"$name relocated away"),
+          classOf[IllegalStateException])).foreach { case (reject, expected) =>
+        val scan = loadScan(reject, expected)
+        assert(replan(scan, EqualTo(partAttr, Literal(3)))
+          .map(_.asInstanceOf[JavaDeprecatedFilterScan.Part].part) === Seq(3))
+        // The general path plans a scan again when every filter is screened out, where the 4.3
+        // route would read the partitions passed in.
+        val screened = scan.getClass.getDeclaredConstructor().newInstance().asInstanceOf[Scan]
+        assert(replan(screened, DynamicPruningExpression(Literal.TrueLiteral))
+          .map(_.asInstanceOf[JavaDeprecatedFilterScan.Part].part) === (0 until 5))
+      }
     }
   }
 
@@ -962,7 +1018,11 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
 
 private case class LegacyPartition(part: Int) extends InputPartition
 
-/** A scan written against Spark 4.3, which implements only the since-deprecated `filter`. */
+/**
+ * A scan that implements only the since-deprecated `filter`, as one written against Spark 4.3 does.
+ * Compiled against this version, it gets a forwarder for `planInputPartitionsWithRuntimeFilters`,
+ * so Spark takes it for a new scan.
+ */
 private class LegacyFilterScan extends SupportsRuntimeCatalystFiltering with Batch {
   private var parts: Seq[Int] = 0 until 5
   var pushed: Seq[Expression] = Seq.empty

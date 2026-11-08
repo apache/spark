@@ -19,10 +19,13 @@ package org.apache.spark.sql.connector
 
 import java.io.File
 
+import org.apache.logging.log4j.Level
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, DynamicPruningExpression, DynamicPruningSubquery, EqualTo, Expression, GreaterThanOrEqual, Literal}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, DynamicPruningExpression, DynamicPruningSubquery, EqualTo, Expression, GreaterThanOrEqual, In, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
+import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog
 import org.apache.spark.sql.connector.read.InputPartition
 import org.apache.spark.sql.execution.{FilterExec, ScalarSubquery}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
@@ -301,7 +304,14 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
           val dpp = sql(
             """SELECT f.id FROM fact_str f JOIN dim d
               |ON f.part = d.dim_id WHERE d.dim_val = 7 AND f.id <> 3""".stripMargin)
-          checkAnswer(dpp, Row(7))
+          val logAppender = new LogAppender("runtime filter evaluation failure")
+          withLogAppender(logAppender, Seq(classOf[ParquetScan].getName), Some(Level.WARN)) {
+            checkAnswer(dpp, Row(7))
+          }
+          assert(logAppender.loggingEvents.exists { e =>
+            e.getLevel == Level.WARN && e.getMessage.getFormattedMessage.contains(
+              "on which a runtime filter could not be evaluated: 1.")
+          }, s"expected a warning, got ${logAppender.loggingEvents.map(_.getMessage)}")
           assert(factScanOf(dpp).runtimeFilters.exists(_.isInstanceOf[DynamicPruningExpression]),
             s"expected a DPP filter, got ${factScanOf(dpp).runtimeFilters}")
           assert(readDirs(dpp) === Seq("7", "abc"))
@@ -364,6 +374,27 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
           Array(EqualTo(partAttr, Literal(3))))) === Seq(3))
         assert(partValues(scan.planInputPartitions()) === (0 until 10))
         assert(listings === 1, s"expected one listing, got $listings")
+      }
+    }
+  }
+
+  test("only a scan with runtime-filterable columns keeps its file listing") {
+    // Nothing reads the listing of another scan again, so planning packs it without keeping it.
+    withDppV2Conf {
+      withTempDir { dir =>
+        writeFactAndDim(dir)
+        val df = sql("SELECT f.id FROM fact f")
+        df.collect()
+        val base = collectFirst(df.queryExecution.executedPlan) {
+          case b: BatchScanExec => b.scan.asInstanceOf[ParquetScan]
+        }.getOrElse(fail(s"no scan in:\n${df.queryExecution.executedPlan}"))
+        assert(base.filterAttributes().isEmpty)
+        var listings = 0
+        val scan = withListingHook(base) { listings += 1 }
+        scan.planInputPartitions()
+        scan.planInputPartitionsWithRuntimeFilters(
+          Array(EqualTo(AttributeReference("part", IntegerType)(), Literal(3))))
+        assert(listings === 2, s"expected the runtime-filtered call to list again, got $listings")
       }
     }
   }
@@ -716,6 +747,37 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
               assert(numOutputRows == 50,
                 s"expected the fact scan to read the 5 odd partitions, got $numOutputRows rows")
             }
+          }
+        }
+      }
+    }
+  }
+
+  test("DPP for a dimension whose filter a connector scan took in fully") {
+    // The in-memory scan takes `dp IN (1, 3)` on its single identity partition column in fully,
+    // so no `Filter` above it keeps a selective predicate.
+    withDppV2Conf {
+      withSQLConf("spark.sql.catalog.dpp_mem" -> classOf[InMemoryTableCatalog].getName) {
+        withTempDir { dir =>
+          writeFactAndDim(dir)
+          withTable("dpp_mem.dim_mem") {
+            sql("CREATE TABLE dpp_mem.dim_mem (k BIGINT, dp INT) PARTITIONED BY (dp)")
+            sql("INSERT INTO dpp_mem.dim_mem VALUES " +
+              (0 until 10).map(k => s"($k, ${k % 4})").mkString(", "))
+            val df = sql(
+              """SELECT f.id FROM fact f JOIN dpp_mem.dim_mem d
+                |ON f.part = d.k WHERE d.dp IN (1, 3)""".stripMargin)
+            val optimized = df.queryExecution.optimizedPlan
+            val dimRelation = optimized.collectFirst {
+              case r: DataSourceV2ScanRelation if r.output.exists(_.name == "k") => r
+            }.getOrElse(fail(s"no dimension scan in:\n$optimized"))
+            assert(dimRelation.pushedFilters.exists(_.isInstanceOf[In]),
+              s"expected the pushed IN filter:\n$optimized")
+            assert(collectDppFilters(optimized).nonEmpty, s"expected DPP, got\n$optimized")
+            checkAnswer(df, (0 until 100).filter(_ % 2 == 1).map(i => Row(i.toLong)))
+            val numOutputRows = factScanOf(df).metrics("numOutputRows").value
+            assert(numOutputRows == 50,
+              s"expected the fact scan to read the 5 odd partitions, got $numOutputRows rows")
           }
         }
       }
