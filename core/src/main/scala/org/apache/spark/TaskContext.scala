@@ -21,15 +21,16 @@ import java.io.Closeable
 import java.util.Properties
 
 import org.apache.spark.annotation.{DeveloperApi, Evolving, Since}
-import org.apache.spark.executor.{CommitDeniedException, TaskMetrics}
+import org.apache.spark.executor.{Executor, TaskMetrics}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{PARTITION_ID, STAGE_ATTEMPT_ID, STAGE_ID, TASK_ATTEMPT_ID}
+import org.apache.spark.internal.config.KILL_ON_FATAL_ERROR_DEPTH
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.scheduler.Task
 import org.apache.spark.shuffle.FetchFailedException
-import org.apache.spark.util.{AccumulatorV2, CausedBy, PostStatusUpdateListener, TaskCompletionListener, TaskFailureListener, TaskInterruptListener}
+import org.apache.spark.util.{AccumulatorV2, PostStatusUpdateListener, TaskCompletionListener, TaskFailureListener, TaskInterruptListener}
 
 
 object TaskContext {
@@ -431,17 +432,16 @@ private[spark] object TaskFailureLogger extends Logging {
 
   /**
    * Logs `error` at warning level with its stack trace, unless the executor is not going to
-   * report it as an error either: a killed task, a fetch failure, a denied commit and a failure
-   * while the executor stops are reported at a lower level or without the stack trace.
+   * report it as an error either, see `Executor.isReportedAsError`, or is stopping, in which
+   * case it logs the error without the stack trace (SPARK-19147).
    */
   def logBeforeListeners(context: TaskContext, error: Throwable): Unit = {
-    val expectedFailure = context.isInterrupted() || context.fetchFailed.isDefined ||
-      Option(SparkEnv.get).exists(_.isStopped) || (error match {
-        case _: TaskKilledException => true
-        case CausedBy(_: CommitDeniedException) => true
-        case _ => false
-      })
-    if (!expectedFailure) {
+    // A task cannot start without a SparkEnv, so a missing one means that `SparkContext.stop`
+    // cleared it in local mode while the task was still running.
+    val env = SparkEnv.get
+    val reportedAsError = env != null && !env.isStopped &&
+      Executor.isReportedAsError(error, context, env.conf.get(KILL_ON_FATAL_ERROR_DEPTH))
+    if (reportedAsError) {
       val stage = log"${MDC(STAGE_ID, context.stageId())}." +
         log"${MDC(STAGE_ATTEMPT_ID, context.stageAttemptNumber())}"
       logWarning(log"Task ${MDC(TASK_ATTEMPT_ID, context.taskAttemptId())} in stage " + stage +
