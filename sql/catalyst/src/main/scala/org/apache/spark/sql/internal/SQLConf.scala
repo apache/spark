@@ -2533,8 +2533,9 @@ object SQLConf {
   val JOIN_EXTERNAL_LOOKUP_MAX_BATCH_BYTES =
     buildConf("spark.sql.join.externalLookup.maxBatchBytes")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
-      .doc("Maximum total size in bytes of the input rows that an external lookup join holds " +
-        "for one lookup request. A request always takes at least one row, and never more rows " +
+      .doc("Size in bytes of input rows at which an external lookup join stops adding rows to " +
+        "a lookup request. The row that reaches this size stays in the request, so a request " +
+        "can exceed it by one row. A request always takes at least one row, and never more rows " +
         "than the source allows, or 1000.")
       .version("4.4.0")
       .bytesConf(ByteUnit.BYTE)

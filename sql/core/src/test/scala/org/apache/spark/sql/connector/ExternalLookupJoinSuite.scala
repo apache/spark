@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.connector
 
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeUnit}
-import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
 
 import scala.collection.mutable
 import scala.concurrent.duration._
@@ -32,8 +33,10 @@ import org.apache.spark.sql.IntegratedUDFTestUtils.{shouldTestPythonUDFs, TestPy
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-import org.apache.spark.sql.catalyst.expressions.{Add, Cast, LessThan, Literal, Rand}
-import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, LogicalPlan,
+import org.apache.spark.sql.catalyst.expressions.{Add, Attribute, AttributeReference, Cast,
+  EqualTo, GenericInternalRow, LessThan, Literal, Rand}
+import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, LeafNode, LogicalPlan,
   PreparedExternalLookupJoin}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.classic.Dataset
@@ -1172,6 +1175,174 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  /**
+   * Runs the join of `lookupJoin` over stream row 1 in a task, on a consuming thread, and ends the
+   * task on another thread once the consumer has reached `hook`, which then blocks it until
+   * `whileBlocked` has run. Returns the consumer's failure.
+   */
+  private def endTaskWhileConsumerIsIn(
+      lookupJoin: ExternalLookupJoinExec,
+      hook: AtomicReference[() => Unit])(whileBlocked: Thread => Unit): Throwable = {
+    val rdd = lookupJoin
+      .copy(child = LocalTableScanExec(lookupJoin.child.output, Seq(InternalRow(1)), None))
+      .execute()
+    SimpleExternalLookupDataSource.resetCounters()
+    val reached = new CountDownLatch(1)
+    val release = new CountDownLatch(1)
+    val first = new AtomicBoolean(true)
+    hook.set { () =>
+      if (first.getAndSet(false)) {
+        reached.countDown()
+        assert(release.await(30, TimeUnit.SECONDS))
+      }
+    }
+    val context = TaskContext.empty()
+    TaskContext.setTaskContext(context)
+    try {
+      val rows = rdd.iterator(rdd.partitions.head, context)
+      val failure = new AtomicReference[Throwable]()
+      val consumer = new Thread(() => {
+        try {
+          while (rows.hasNext) rows.next()
+        } catch {
+          case error: Throwable => failure.set(error)
+        }
+      })
+      consumer.start()
+      try {
+        assert(reached.await(10, TimeUnit.SECONDS))
+        val completion = new Thread(() => context.markTaskCompleted(None))
+        completion.start()
+        whileBlocked(completion)
+      } finally {
+        release.countDown()
+        consumer.join(TimeUnit.SECONDS.toMillis(10))
+      }
+      assert(consumer.isAlive === false)
+      failure.get()
+    } finally {
+      TaskContext.unset()
+    }
+  }
+
+  test("once the join has seen the task end, it makes no connector call") {
+    val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    val left = streamOf(Seq(1).toDF("id"))
+    val lookupJoin = runStream(left.join(lookup, left("id") === lookup("id"))).lookupJoin
+    // The consumer is inside the cursor's next() or get() when the task ends on another thread.
+    Seq(
+      "next" -> SimpleExternalLookupDataSource.beforeNextReturns,
+      "get" -> SimpleExternalLookupDataSource.beforeGetReturns).foreach { case (call, hook) =>
+      var metricSamples = 0
+      var resultRowsRead = 0
+      val failure = endTaskWhileConsumerIsIn(lookupJoin, hook) { completion =>
+        // The close does not wait for the call: it closes the cursor, then the reader.
+        completion.join(TimeUnit.SECONDS.toMillis(10))
+        assert(completion.isAlive === false, call)
+        assert(SimpleExternalLookupDataSource.closeEvents.asScala.toSeq === Seq("cursor", "reader"))
+        metricSamples = SimpleExternalLookupDataSource.metricSamples.get()
+        resultRowsRead = SimpleExternalLookupDataSource.resultRowsRead.get()
+      }
+      checkError(
+        exception = failure.asInstanceOf[SparkException],
+        condition = "INTERNAL_ERROR",
+        parameters = Map("message" -> "External lookup reader used after it was closed"))
+      // When the call returns, the consumer sees the close and leaves the cursor and the reader's
+      // metrics to it: each is closed once, and no call follows.
+      assert(SimpleExternalLookupDataSource.closeEvents.asScala.toSeq === Seq("cursor", "reader"))
+      assert(SimpleExternalLookupDataSource.metricSamples.get() === metricSamples, call)
+      assert(SimpleExternalLookupDataSource.resultRowsRead.get() === resultRowsRead, call)
+      assert(SimpleExternalLookupDataSource.rowReadsAfterClose.get() === 0, call)
+    }
+  }
+
+  test("task completion closes the reader only after a copy of a value row in progress") {
+    val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    val left = streamOf(Seq(1).toDF("id"))
+    val lookupJoin = runStream(left.join(lookup, left("id") === lookup("id"))).lookupJoin
+    // The consumer is copying the first value row when the task ends on another thread.
+    val failure = endTaskWhileConsumerIsIn(
+        lookupJoin, SimpleExternalLookupDataSource.beforeValueRead) { completion =>
+      // The close closes the cursor, which must leave the row readable, and then waits for the
+      // copy before it closes the reader, which may own the memory behind the row.
+      eventually(timeout(10.seconds)) {
+        assert(SimpleExternalLookupDataSource.closeEvents.asScala.toSeq === Seq("cursor"))
+      }
+      completion.join(500)
+      assert(completion.isAlive)
+      assert(SimpleExternalLookupDataSource.closeEvents.asScala.toSeq === Seq("cursor"))
+    }
+    // After the copy, the reader is closed, and the consumer then fails on its next read.
+    assert(SimpleExternalLookupDataSource.closeEvents.asScala.toSeq === Seq("cursor", "reader"))
+    checkError(
+      exception = failure.asInstanceOf[SparkException],
+      condition = "INTERNAL_ERROR",
+      parameters = Map("message" -> "External lookup reader used after it was closed"))
+    assert(SimpleExternalLookupDataSource.rowReadsAfterClose.get() === 0)
+  }
+
+  test("the command check walks each subquery of a command once") {
+    // Ten levels of IN subqueries over ordinary tables. A walk of both a node's subqueries and its
+    // inner children, which default to them, would visit the innermost plan 1024 times.
+    val innermost = InnerChildrenCountingRelation(Seq(AttributeReference("v", IntegerType)()))
+    var query: DataFrame = Dataset.ofRows(spark, innermost)
+    (1 to 10).foreach { _ => query = Seq(1).toDF("v").where(col("v").isin(query)) }
+    val command = SaveIntoDataSourceCommand(
+      query.queryExecution.analyzed, new RecordingV1WriteSource, Map.empty, SaveMode.Overwrite)
+    InnerChildrenCountingRelation.calls.set(0)
+    TableCapabilityCheck(command)
+    assert(InnerChildrenCountingRelation.calls.get() === 1)
+  }
+
+  test("an external lookup join matches each offered key type exactly") {
+    // For each type: the stored keys, and a key that is not stored. Each request holds the two
+    // distinct keys of three stream rows, and the source also returns a row with another key for
+    // each, which Spark drops when it checks the selected key.
+    Seq(
+      ("BIGINT", Seq("10000000000", "20000000000"), "30000000000"),
+      ("SMALLINT", Seq("1", "2"), "3"),
+      ("TINYINT", Seq("1", "2"), "3"),
+      ("BOOLEAN", Seq("true"), "false"),
+      ("DECIMAL(10, 4)", Seq("1.2345", "2.5"), "1.2346"),
+      ("DATE", Seq("DATE'2026-01-01'", "DATE'2026-01-02'"), "DATE'2026-01-03'"),
+      ("TIMESTAMP", Seq("TIMESTAMP'2026-01-01 10:00:00.000001'",
+        "TIMESTAMP'2026-01-01 10:00:00.000002'"), "TIMESTAMP'2026-01-01 10:00:00.000003'"),
+      ("TIMESTAMP_NTZ", Seq("TIMESTAMP_NTZ'2026-01-01 10:00:00.000001'",
+        "TIMESTAMP_NTZ'2026-01-01 10:00:00.000002'"), "TIMESTAMP_NTZ'2026-01-01 10:00:00.000003'"),
+      ("BINARY", Seq("X'0102'", "X'010203'"), "X'01'")).foreach {
+      case (keyType, stored, missing) =>
+        val dataType = DataType.fromDDL(keyType)
+        def internalValue(literal: String): Any =
+          sql(s"SELECT CAST($literal AS $keyType)").queryExecution.executedPlan.executeCollect()
+            .head.get(0, dataType)
+        TypedKeyExternalLookupTable.storedRows.set(
+          stored.map(internalValue).zip(Seq("first", "second")))
+        TypedKeyExternalLookupTable.otherKeys.set(Seq(internalValue(missing)))
+        TypedKeyExternalLookupTable.requestSizes.clear()
+        val events = streamOf(sql(s"SELECT CAST(key AS $keyType) AS key, tag FROM VALUES " +
+          s"(${stored.head}, 'a'), (${stored.head}, 'b'), ($missing, 'c') AS t(key, tag)"))
+        val lookup = spark.read
+          .format(classOf[TypedKeyExternalLookupDataSource].getName)
+          .option("keyType", keyType)
+          .load()
+        checkStream(
+          events.join(lookup, events("key") === lookup("key"), "left_outer")
+            .select(events("tag"), lookup("payload")),
+          Seq(Row("a", "first"), Row("b", "first"), Row("c", null)))
+        assert(TypedKeyExternalLookupTable.requestSizes.asScala.toSeq === Seq(2), keyType)
+    }
+  }
+
+  test("external lookup copies a value row that the connector reuses with its buffers") {
+    val lookup = spark.read.format(classOf[ReusedRowExternalLookupDataSource].getName).load()
+    val left = streamOf(Seq(1, 2, 1).toDF("id"))
+    def payload(byte: Int): Array[Byte] = Array.fill[Byte](4)(byte.toByte)
+    val matchesOfOne = Seq(Row(1, 1, "alpha", payload(1)), Row(1, 1, "beta", payload(2)))
+    checkStream(
+      left.join(lookup, left("id") === lookup("id")),
+      matchesOfOne ++ matchesOfOne :+ Row(2, 2, "gamma", payload(3)))
+  }
+
   test("task completion closes the reader without waiting for the request in progress") {
     val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
     val left = streamOf(Seq(1).toDF("id"))
@@ -1543,6 +1714,8 @@ object SimpleExternalLookupDataSource {
   val beforeGetReturns = new AtomicReference[() => Unit](() => ())
   // The get() and inputOrdinal() calls on a closed cursor.
   val rowReadsAfterClose = new AtomicInteger(0)
+  // Called when Spark reads a string value of a returned row, as it does when it copies the row.
+  val beforeValueRead = new AtomicReference[() => Unit](() => ())
   val lookupCandidates =
     new AtomicReference(Seq.empty[(String, String, DataType)])
   val lookupCandidateDescriptions = new AtomicReference(Seq.empty[String])
@@ -1575,6 +1748,7 @@ object SimpleExternalLookupDataSource {
     beforeNextReturns.set(() => ())
     beforeGetReturns.set(() => ())
     rowReadsAfterClose.set(0)
+    beforeValueRead.set(() => ())
     lookupCandidates.set(Seq.empty)
     lookupCandidateDescriptions.set(Seq.empty)
     departmentsById.set(INITIAL_DEPARTMENTS_BY_ID)
@@ -1780,10 +1954,10 @@ case class SimpleExternalLookupReaderFactory(
         }.flatMap { case (id, departments) => departments.iterator.map(id -> _) }
           .filterNot { case (_, department) => excludeResearch && department == "research" }
           .map { case (id, department) =>
-          ordinal -> InternalRow.fromSeq(requiredColumns.map {
+          ordinal -> new HookedValueRow(requiredColumns.map {
               case "id" => id.map(Int.box).orNull
               case "department" => UTF8String.fromString(department)
-            })
+            }.toArray[Any])
         }
       }.toArray.iterator
       if (mutateAfterRequest) {
@@ -2413,4 +2587,160 @@ case class TestExternalLookup(
     factory: ExternalLookupReaderFactory) extends ExternalLookup {
   override def maxParameterRowsPerRequest(): Int = maxRequestSize
   override def createReaderFactory(): ExternalLookupReaderFactory = factory
+}
+
+/** A value row whose string reads first run a hook, as the row of a connector could. */
+class HookedValueRow(values: Array[Any]) extends GenericInternalRow(values) {
+  override def getUTF8String(ordinal: Int): UTF8String = {
+    SimpleExternalLookupDataSource.beforeValueRead.get()()
+    super.getUTF8String(ordinal)
+  }
+}
+
+/** A relation that counts how often a plan walk asks it for its inner children. */
+case class InnerChildrenCountingRelation(output: Seq[Attribute]) extends LeafNode {
+  override def innerChildren: Seq[QueryPlan[_]] = {
+    InnerChildrenCountingRelation.calls.incrementAndGet()
+    Nil
+  }
+}
+
+object InnerChildrenCountingRelation {
+  val calls = new AtomicInteger()
+}
+
+class TypedKeyExternalLookupDataSource extends TableProvider {
+  override def inferSchema(options: CaseInsensitiveStringMap): StructType =
+    TypedKeyExternalLookupTable.schema(options.get("keyType"))
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: java.util.Map[String, String]): Table =
+    TypedKeyExternalLookupTable(new CaseInsensitiveStringMap(properties).get("keyType"))
+}
+
+/**
+ * A lookup-only table keyed on a column of the given type, whose rows the test sets. For each
+ * parameter row, its source returns the stored rows with that key, and one row with another key.
+ */
+case class TypedKeyExternalLookupTable(keyType: String) extends Table with SupportsRead {
+  override def name(): String = "TypedKeyExternalLookupTable"
+  override def schema(): StructType = TypedKeyExternalLookupTable.schema(keyType)
+  override def capabilities(): java.util.Set[TableCapability] =
+    java.util.EnumSet.of(EXTERNAL_LOOKUP)
+
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
+    new SupportsExternalLookup {
+      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Predicate] =
+        candidates.filter(_.name() == "=").take(1)
+      override def build(): Scan = new Scan {
+        override def readSchema(): StructType = schema()
+        override def toExternalLookup(): ExternalLookup = TestExternalLookup(
+          100, TypedKeyExternalLookupReaderFactory(DataType.fromDDL(keyType)))
+      }
+    }
+}
+
+object TypedKeyExternalLookupTable {
+  def schema(keyType: String): StructType =
+    new StructType().add("key", DataType.fromDDL(keyType)).add("payload", "string")
+  // The stored rows, as the internal value of the key and a payload.
+  val storedRows = new AtomicReference(Seq.empty[(Any, String)])
+  // Keys of no stored row, which the source may return as rows that do not match.
+  val otherKeys = new AtomicReference(Seq.empty[Any])
+  val requestSizes = new ConcurrentLinkedQueue[Int]()
+}
+
+case class TypedKeyExternalLookupReaderFactory(keyType: DataType)
+  extends ExternalLookupReaderFactory {
+  override def createReader(): ExternalLookupReader = new ExternalLookupReader {
+    private def sameKey(first: Any, second: Any): Boolean =
+      EqualTo(Literal(first, keyType), Literal(second, keyType)).eval() == true
+
+    override def lookupBatch(keys: Array[InternalRow]): ExternalLookupResultCursor = {
+      TypedKeyExternalLookupTable.requestSizes.add(keys.length)
+      val stored = TypedKeyExternalLookupTable.storedRows.get()
+      val results = keys.iterator.zipWithIndex.flatMap { case (key, ordinal) =>
+        val parameter = key.get(0, keyType)
+        val matches = stored.filter { case (storedKey, _) => sameKey(storedKey, parameter) }
+        val other = (stored.map(_._1) ++ TypedKeyExternalLookupTable.otherKeys.get())
+          .find(!sameKey(_, parameter)).map(_ -> "other")
+        (matches ++ other).map { case (rowKey, payload) =>
+          ordinal -> InternalRow(rowKey, UTF8String.fromString(payload))
+        }
+      }
+      new TestExternalLookupResultCursor(results)
+    }
+
+    override def close(): Unit = {}
+  }
+}
+
+class ReusedRowExternalLookupDataSource extends TableProvider {
+  override def inferSchema(options: CaseInsensitiveStringMap): StructType =
+    ReusedRowExternalLookupTable.schema()
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: java.util.Map[String, String]): Table = ReusedRowExternalLookupTable
+}
+
+/** A lookup-only table whose cursor reuses one value row and its buffers for every result. */
+object ReusedRowExternalLookupTable extends Table with SupportsRead {
+  val values: Map[Int, Seq[(String, Array[Byte])]] = Map(
+    1 -> Seq("alpha" -> Array.fill[Byte](4)(1), "beta" -> Array.fill[Byte](4)(2)),
+    2 -> Seq("gamma" -> Array.fill[Byte](4)(3)))
+
+  override def name(): String = "ReusedRowExternalLookupTable"
+  override def schema(): StructType = StructType.fromDDL("id INT, name STRING, payload BINARY")
+  override def capabilities(): java.util.Set[TableCapability] =
+    java.util.EnumSet.of(EXTERNAL_LOOKUP)
+
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
+    new SupportsExternalLookup {
+      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Predicate] =
+        candidates.filter(_.name() == "=").take(1)
+      override def build(): Scan = new Scan {
+        override def readSchema(): StructType = schema()
+        override def toExternalLookup(): ExternalLookup =
+          TestExternalLookup(100, ReusedRowExternalLookupReaderFactory)
+      }
+    }
+}
+
+object ReusedRowExternalLookupReaderFactory extends ExternalLookupReaderFactory {
+  override def createReader(): ExternalLookupReader = new ExternalLookupReader {
+    override def lookupBatch(keys: Array[InternalRow]): ExternalLookupResultCursor = {
+      val results = keys.iterator.zipWithIndex.flatMap { case (key, ordinal) =>
+        ReusedRowExternalLookupTable.values.getOrElse(key.getInt(0), Nil).iterator.map {
+          case (name, payload) => (ordinal, key.getInt(0), name, payload)
+        }
+      }
+      new ExternalLookupResultCursor {
+        private val row = new GenericInternalRow(3)
+        private val nameBuffer = new Array[Byte](16)
+        private val payloadBuffer = new Array[Byte](4)
+        private var ordinal = -1
+
+        override def next(): Boolean = results.hasNext && {
+          val (resultOrdinal, id, name, payload) = results.next()
+          val nameBytes = name.getBytes(StandardCharsets.UTF_8)
+          System.arraycopy(nameBytes, 0, nameBuffer, 0, nameBytes.length)
+          System.arraycopy(payload, 0, payloadBuffer, 0, payload.length)
+          ordinal = resultOrdinal
+          row.update(0, id)
+          row.update(1, UTF8String.fromBytes(nameBuffer, 0, nameBytes.length))
+          row.update(2, payloadBuffer)
+          true
+        }
+        override def inputOrdinal(): Int = ordinal
+        override def get(): InternalRow = row
+        override def close(): Unit = {}
+      }
+    }
+
+    override def close(): Unit = {}
+  }
 }

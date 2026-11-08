@@ -146,11 +146,15 @@ object TableCapabilityCheck extends (LogicalPlan => Unit) {
           }
           node.children.foreach(rejectLookupOnlyReads)
       }
-      if (plan.containsPattern(PLAN_EXPRESSION)) plan.subqueries.foreach(rejectLookupOnlyReads)
     }
-    plan.innerChildren.foreach {
-      case inner: LogicalPlan => rejectLookupOnlyReads(inner)
-      case _ =>
+    // A node's inner children are its subqueries unless it holds other plans, such as a V1 write
+    // command's query, so each plan is walked once: the inner children, then the subqueries that
+    // are not among them. Walking both would double the work at each level of nested subqueries.
+    val innerPlans = plan.innerChildren.collect { case inner: LogicalPlan => inner }
+    innerPlans.foreach(rejectLookupOnlyReads)
+    if (plan.containsPattern(PLAN_EXPRESSION)) {
+      plan.subqueries.filterNot(subquery => innerPlans.exists(_ eq subquery))
+        .foreach(rejectLookupOnlyReads)
     }
   }
 }

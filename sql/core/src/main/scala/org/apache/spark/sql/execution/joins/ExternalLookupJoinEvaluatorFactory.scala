@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.joins
 
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
+import java.util.concurrent.locks.LockSupport
 
 import scala.collection.mutable
 
@@ -132,7 +133,8 @@ class ExternalLookupJoinEvaluatorFactory(
 
     // An array, because a batch's rows are read by position for every key, match and output row.
     // The batch holds its rows until its request is read, so it stops once their copies reach
-    // maxBatchBytes, as well as at maxParameterRowsPerRequest rows. It always takes one row.
+    // maxBatchBytes, keeping the row that reaches it, as well as at maxParameterRowsPerRequest
+    // rows. It always takes one row.
     private def readBatch(): Array[InternalRow] = {
       val rows = mutable.ArrayBuffer.empty[InternalRow]
       var bytes = 0L
@@ -223,13 +225,12 @@ class ExternalLookupJoinEvaluatorFactory(
           reader.ensureOpen()
           val connectorRow = cursor.get()
           metrics.lookupTime += System.nanoTime() - start
-          reader.ensureOpen()
           if (connectorRow == null) {
             throw QueryExecutionErrors.invalidDataSourceExternalLookupError(
               tableName, "NULL_RESULT_ROW")
           }
           val key = requestedKey(ordinal)
-          val resultRow = resultRows.validatedCopy(connectorRow)
+          val resultRow = reader.copyRow(resultRows.validatedCopy(connectorRow))
           if (parameters.selectedPredicatesHold(keyEntries(key).requestRow, resultRow)) {
             joinResultRow(key, resultRow)
           }
@@ -287,14 +288,18 @@ class ExternalLookupJoinEvaluatorFactory(
     /**
      * Closes the cursor once. After a complete read, finishes every stream row that was waiting for
      * its results. After a failure or a close, the results may be partial, so it finishes none:
-     * a row without a match could be a row whose match was never read.
+     * a row without a match could be a row whose match was never read. Once the reader is closed,
+     * its close owns the cursor and the reader's metrics, so the join makes no further connector
+     * call.
      */
     private def finishCursor(completed: Boolean): Unit = if (cursor ne EmptyLookupCursor) {
       cursor = EmptyLookupCursor
-      try {
-        connectorCall(reader.closeCursor())
-      } finally {
-        reader.updateMetrics()
+      if (!reader.isClosed) {
+        try {
+          connectorCall(reader.closeCursor())
+        } finally {
+          reader.updateMetrics()
+        }
       }
       if (completed) keyEntries.values.foreach(_.rowIndexes.foreach(finish))
     }
@@ -498,17 +503,20 @@ class ExternalLookupJoinEvaluatorFactory(
   /**
    * The connector reader of one partition and its active cursor. The reader is opened by the
    * first request, and closed once, after the last batch or when the task completes. A thread
-   * other than the task's may still drive the join then. Closing may overlap the one connector
-   * call in progress and Spark's read of the current row, and it reads the metrics of the task's
-   * readers while that call runs. Once the join has seen the close, it starts no request, cursor
-   * advance, row read or new reader. Requests and cursor calls take no lock, so closing does not
-   * wait for them. Metrics reads do: closing keeps the reader's final metrics under the lock of
-   * the task's `TaskLookupReaders`, so it can wait for a metrics read in progress, which calls
-   * `currentMetricsValues()` on the task's readers.
+   * other than the task's may still drive the join then. The close then owns every close: it
+   * closes the active cursor, keeps the reader's final metrics, waits for a copy of a value row
+   * in progress, and closes the reader. Once the join has seen the close, it makes no further
+   * connector call, not even to close its cursor. Closing may overlap the one connector call in
+   * progress, which it does not wait for, and it reads the metrics of the task's readers while that
+   * call runs. Requests, cursor calls and copies take no lock. Metrics reads do: closing keeps the
+   * reader's final metrics under the lock of the task's `TaskLookupReaders`, so it can wait for a
+   * metrics read in progress, which calls `currentMetricsValues()` on the task's readers.
    */
   private class LookupReader {
     private val taskReaders = readerMetrics.forCurrentTask()
     private val closed = new AtomicBoolean(false)
+    // Set while Spark copies a value row that the cursor returned.
+    private val copying = new AtomicBoolean(false)
     // Each is taken by exactly one of the join and close(), so it is closed once.
     private val openReader = new AtomicReference[ExternalLookupReader]()
     private val activeCursor = new AtomicReference[ExternalLookupResultCursor]()
@@ -560,6 +568,24 @@ class ExternalLookupJoinEvaluatorFactory(
       throw SparkException.internalError("External lookup reader used after it was closed")
     }
 
+    def isClosed: Boolean = closed.get()
+
+    /**
+     * Runs Spark's copy of a value row that the cursor returned. A close() that comes first fails
+     * the read before the copy. One that comes during the copy waits for it to end before it
+     * closes the reader, which may own the memory behind the row. The close waits only for this
+     * copy, never for a connector request, cursor advance or row fetch.
+     */
+    def copyRow[T](copy: => T): T = {
+      copying.set(true)
+      try {
+        ensureOpen()
+        copy
+      } finally {
+        copying.set(false)
+      }
+    }
+
     /** Samples the connector metrics every [[CustomMetrics.NUM_ROWS_PER_UPDATE]] result rows. */
     def resultRowRead(): Unit = {
       resultRowsSinceMetricsUpdate += 1
@@ -578,7 +604,12 @@ class ExternalLookupJoinEvaluatorFactory(
       ExternalLookupJoinExec.closeResources(
         closeCursor(),
         if (reader != null) taskReaders.closing(reader),
-        if (reader != null) reader.close())
+        if (reader != null) {
+          // A copy that started before the close saw it is still reading the row. The flags are
+          // volatile, so either the copy sees the close and does not start, or this sees the copy.
+          while (copying.get()) LockSupport.parkNanos(10000L)
+          reader.close()
+        })
     }
   }
 }

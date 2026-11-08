@@ -36,7 +36,8 @@ import org.apache.spark.sql.catalyst.InternalRow;
  * fails. Spark closes every cursor, which may be before its end. At the end of the task, Spark
  * may still be reading the row that {@link #get()} returned, and its buffers, while
  * {@code close()} runs on another thread, so {@code close()} must leave that row safe to read,
- * for example by deferring the release of its memory.
+ * for example by deferring the release of its memory. Spark closes the reader only after that
+ * read ends.
  *
  * @since 4.4.0
  */
