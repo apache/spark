@@ -156,7 +156,8 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
     // assert the guard admits it.
     checkResolverGuard("""SELECT JSON_OBJECT('a' VALUE 1 RETURNING STRING)""")
     checkResolverGuard("""SELECT JSON_OBJECT('a' VALUE '[1]' FORMAT JSON)""")
-    // A value-nested JSON_OBJECT keeps the direct wrapper before finalization.
+    // Both levels of a value-nested JSON_OBJECT parse to UnresolvedRoutedJsonObject; the guard
+    // checks them like the flat call before admitting the built-in.
     checkResolverGuard("""SELECT JSON_OBJECT('a' VALUE JSON_OBJECT('b' VALUE 1))""")
     // A plan built on an analyzed query holds the resolved constructors; assert the guard admits
     // them. They are time-zone aware, so the TimeZoneAwareExpression arm already covers them.

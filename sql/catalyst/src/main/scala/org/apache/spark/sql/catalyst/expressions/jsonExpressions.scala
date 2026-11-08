@@ -2847,8 +2847,8 @@ object JsonObjectExpr {
    * `Collate`. `Collate` only annotates the string's collation and does not change the JSON text,
    * so `JSON_OBJECT('a' VALUE JSON_OBJECT('b' VALUE 1) COLLATE ...)` still splices the nested
    * object. A `Cast` is deliberately NOT seen through: an explicit `CAST(... AS STRING)` is the way
-   * to cancel raw splicing and force the value to be quoted. Used by the parser for lexical
-   * constructor detection and by SQL rendering; qualified/routed builders instead use
+   * to cancel raw splicing and force the value to be quoted. Used by JSON_OBJECT's SQL rendering;
+   * the parser uses `ImplicitlyFormattedAsJson.isLexicallySpliced`, and the builders use
    * `ImplicitlyFormattedAsJson.splicesThroughCollationCast` on resolved values.
    */
   def rawJsonValue(e: Expression): Option[ImplicitlyFormattedAsJson] = e match {

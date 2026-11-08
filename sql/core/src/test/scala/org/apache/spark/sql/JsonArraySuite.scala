@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{NoSuchFunctionException, NoSuchNamespaceException, Star}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, NoSuchFunctionException, NoSuchNamespaceException, Star}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.analysis.resolver.ExplicitlyUnsupportedResolverFeature
 import org.apache.spark.sql.catalyst.expressions.{
@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   UnresolvedJsonConstructor
 }
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project, Range}
+import org.apache.spark.sql.connector.ConstantStringOfAnyArity
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, InMemoryCatalog}
 import org.apache.spark.sql.connector.catalog.functions.{
   BoundFunction,
@@ -982,6 +983,79 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-59243: the nested temp-reference check reads the path the body resolves under") {
+    // A CREATE FUNCTION that a procedure issues runs inside the CALL's analysis pass. Memoize a
+    // path on an enclosing context, as that pass would, before the SET PATH that precedes it.
+    val builtin = Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.BUILTIN_NAMESPACE)
+    val session = Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_NAMESPACE)
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "second") {
+      try {
+        sql("CREATE TEMPORARY FUNCTION json_array(a STRING) RETURNS STRING RETURN 'shadowed'")
+        val body = "json_array(json_array(1))"
+        AnalysisContext.withNewAnalysisContext {
+          AnalysisContext.get.memoizedResolutionPath(Seq(builtin, session))
+          sql("SET PATH = system.session, system.builtin")
+          val e = intercept[AnalysisException] {
+            sql(s"CREATE FUNCTION perm_json_fn() RETURNS STRING RETURN $body")
+          }
+          assert(e.getCondition == "INVALID_TEMP_OBJ_REFERENCE")
+        }
+        AnalysisContext.withNewAnalysisContext {
+          AnalysisContext.get.memoizedResolutionPath(Seq(session, builtin))
+          sql("SET PATH = system.builtin, system.session")
+          sql(s"CREATE FUNCTION perm_json_fn() RETURNS STRING RETURN $body")
+        }
+        checkAnswer(sql("SELECT spark_catalog.default.perm_json_fn()"), Row("[[1]]"))
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP FUNCTION IF EXISTS perm_json_fn")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS json_array")
+      }
+    }
+  }
+
+  test("SPARK-59243: a routine owns a nested call whose arguments resolve late") {
+    // A routine-owned nested call waits for a lambda variable or a scalar subquery to resolve,
+    // like the flat call, instead of falling back to the built-in.
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "second") {
+      try {
+        sql("CREATE TEMPORARY FUNCTION json_array(a STRING) RETURNS STRING " +
+          "RETURN concat('f(', a, ')')")
+        sql("SET PATH = system.session, system.builtin")
+        checkAnswer(sql("SELECT json_array(json_array((SELECT 'x')))"), Row("f(f(x))"))
+        // A SQL function cannot be called in a lambda, so use a Scala UDF there.
+        sql("DROP TEMPORARY FUNCTION json_array")
+        spark.udf.register("json_array", (a: String) => s"f($a)")
+        checkAnswer(
+          sql("SELECT transform(array('x'), x -> json_array(json_array(x)))"),
+          Row(Seq("f(f(x))")))
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS json_array")
+      }
+    }
+    // A V2 function binds to the argument types, so it is the owner that needs the wait.
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      "spark.sql.catalog.late_json_array_cat" -> classOf[InMemoryCatalog].getName) {
+      val catalog = spark.sessionState.catalogManager.catalog("late_json_array_cat")
+        .asInstanceOf[InMemoryCatalog]
+      catalog.createFunction(
+        Identifier.of(Array("fns"), "json_array"), ConstantStringOfAnyArity("v2"))
+      try {
+        sql("SET PATH = late_json_array_cat.fns, system.builtin")
+        checkAnswer(sql("SELECT json_array(json_array((SELECT 'x')))"), Row("v2"))
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        catalog.clearFunctions()
+      }
+    }
+  }
+
   test("invalid: a bare star argument in plain JSON_ARRAY is not expanded") {
     Seq("json_array", "builtin.json_array", "system.builtin.json_array").foreach { func =>
       val e = intercept[AnalysisException] {
@@ -1553,6 +1627,25 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
         val schema = spark.table("v").schema
         assert(schema("a").dataType === StringType("UTF8_LCASE"))
         assert(schema("b").dataType === StringType("UTF8_BINARY"))
+      }
+    }
+  }
+
+  test("SPARK-59243: an explicit RETURNING collation survives a late-resolving child") {
+    // The scalar subquery resolves after ResolveFunctions, so the default-collation rule sees the
+    // unmaterialized wrapper, which must report the RETURNING type.
+    val select = "SELECT json_array((SELECT 1) RETURNING STRING COLLATE UTF8_BINARY) AS j"
+    withSQLConf(SQLConf.OBJECT_LEVEL_COLLATIONS_ENABLED.key -> "true") {
+      withTable("t") {
+        sql(s"CREATE TABLE t DEFAULT COLLATION UTF8_LCASE AS $select")
+        assert(spark.table("t").schema("j").dataType === StringType("UTF8_BINARY"))
+        checkAnswer(spark.table("t"), Row("[1]"))
+      }
+      withView("v") {
+        // Reading the view runs both analyzers (dual-run in tests).
+        sql(s"CREATE VIEW v DEFAULT COLLATION UTF8_LCASE AS $select")
+        assert(spark.table("v").schema("j").dataType === StringType("UTF8_BINARY"))
+        checkAnswer(spark.table("v"), Row("[1]"))
       }
     }
   }

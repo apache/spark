@@ -36,6 +36,8 @@ import org.apache.spark.sql.catalyst.expressions.{
 }
 import org.apache.spark.sql.catalyst.parser.{ParseException, SparkParserBailErrorStrategy, SqlBaseLexer, SqlBaseParser}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join}
+import org.apache.spark.sql.connector.ConstantStringOfAnyArity
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryCatalog}
 import org.apache.spark.sql.execution.{ProjectExec, WholeStageCodegenExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -1720,6 +1722,70 @@ world'))"""))
     }
   }
 
+  test("SPARK-59243: a routine owns a nested JSON_OBJECT whose arguments resolve late") {
+    // A routine-owned nested call waits for a lambda variable or a scalar subquery to resolve,
+    // like the flat call, instead of falling back to the built-in.
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "second") {
+      try {
+        sql("CREATE TEMPORARY FUNCTION json_object(k STRING, v STRING) RETURNS STRING " +
+          "RETURN concat(k, '(', v, ')')")
+        sql("SET PATH = system.session, system.builtin")
+        checkAnswer(
+          sql("SELECT json_object('a' VALUE json_object('b' VALUE (SELECT 'x')))"),
+          Row("a(b(x))"))
+        // A SQL function cannot be called in a lambda, so use a Scala UDF there.
+        sql("DROP TEMPORARY FUNCTION json_object")
+        spark.udf.register("json_object", (k: String, v: String) => s"$k($v)")
+        checkAnswer(
+          sql("SELECT transform(array('x'), x -> json_object('a', json_object('b', x)))"),
+          Row(Seq("a(b(x))")))
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS json_object")
+      }
+    }
+    // A V2 function binds to the argument types, so it is the owner that needs the wait.
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      "spark.sql.catalog.late_json_object_cat" -> classOf[InMemoryCatalog].getName) {
+      val catalog = spark.sessionState.catalogManager.catalog("late_json_object_cat")
+        .asInstanceOf[InMemoryCatalog]
+      catalog.createFunction(
+        Identifier.of(Array("fns"), "json_object"), ConstantStringOfAnyArity("v2"))
+      try {
+        sql("SET PATH = late_json_object_cat.fns, system.builtin")
+        checkAnswer(
+          sql("SELECT json_object('a' VALUE json_object('b' VALUE (SELECT 'x')))"),
+          Row("v2"))
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        catalog.clearFunctions()
+      }
+    }
+  }
+
+  test("SPARK-59243: an explicit RETURNING collation survives a late-resolving JSON_OBJECT value") {
+    // The scalar subquery resolves after ResolveFunctions, so the default-collation rule sees the
+    // unmaterialized wrapper, which must report the RETURNING type.
+    val select =
+      "SELECT json_object('a' VALUE (SELECT 1) RETURNING STRING COLLATE UTF8_BINARY) AS j"
+    withSQLConf(SQLConf.OBJECT_LEVEL_COLLATIONS_ENABLED.key -> "true") {
+      withTable("t") {
+        sql(s"CREATE TABLE t DEFAULT COLLATION UTF8_LCASE AS $select")
+        assert(spark.table("t").schema("j").dataType === StringType("UTF8_BINARY"))
+        checkAnswer(spark.table("t"), Row("""{"a":1}"""))
+      }
+      withView("v") {
+        // Reading the view runs both analyzers (dual-run in tests).
+        sql(s"CREATE VIEW v DEFAULT COLLATION UTF8_LCASE AS $select")
+        assert(spark.table("v").schema("j").dataType === StringType("UTF8_BINARY"))
+        checkAnswer(spark.table("v"), Row("""{"a":1}"""))
+      }
+    }
+  }
+
   test("json_object is registered as a built-in function") {
     assert(spark.sessionState.catalog.isBuiltinFunction("json_object"))
   }
@@ -1729,8 +1795,8 @@ world'))"""))
       Seq(
         "SELECT json_object('id', 7)",
         "SELECT json_object('vals', array(*)) FROM VALUES (1, 2) AS t(a, b)",
-        // A routed nested producer keeps its raw-splice flag in UnresolvedRoutedJsonObject until
-        // the stock built-in path finalizes it.
+        // The routed wrappers carry no raw-splice flag; the built-in sets it from the resolved
+        // nested producer.
         "SELECT json_object('a', json_object('b', 1))",
         "SELECT json_object('a' VALUE json_object('b' VALUE 1), " +
           "'c' VALUE builtin.json_object('d', 2))"
@@ -1745,8 +1811,8 @@ world'))"""))
         assert(!analyzed.exists(_.expressions.exists(_.exists(
           _.isInstanceOf[UnresolvedJsonConstructor]))),
           s"wrapper should not survive analysis for $query")
-        // The wrapper must preserve rawJson = true, not merely disappear: otherwise the nested
-        // object would be quoted instead of spliced raw.
+        // The built-in must set rawJson = true from the resolved nested object: otherwise it
+        // would be quoted instead of spliced raw.
         if (query.contains("json_object('a', json_object('b', 1))")) {
           val objs = analyzed.expressions.flatMap(_.collect { case j: JsonObjectExpr => j })
           val outer = objs.filter(_.members.exists { case (_, v) =>
