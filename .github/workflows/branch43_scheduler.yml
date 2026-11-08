@@ -21,14 +21,14 @@ name: "Branch-4.3 CI Scheduler"
 
 on:
   schedule:
-    - cron: '17 1 2-31/3 * *'
-    - cron: '17 9 3-31/3 * *'
-    - cron: '17 15 1-31/3 * *'
+    - cron: '17 4 2-31/3 * *'
+    - cron: '17 11 3-31/3 * *'
+    - cron: '17 12 1-31/3 * *'
     - cron: '17 17 1-31/3 * *'
     - cron: '17 18 3-31/3 * *'
     - cron: '17 19 1-31/3 * *'
     - cron: '17 19 3-31/3 * *'
-    - cron: '17 21 1-31/3 * *'
+    - cron: '17 20 1-31/3 * *'
   workflow_dispatch:
     inputs:
       target:
@@ -63,21 +63,21 @@ jobs:
           sparse-checkout: dev
       - name: Maven Build
         if: >-
-          github.event.schedule == '17 9 3-31/3 * *' ||
+          github.event.schedule == '17 11 3-31/3 * *' ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'maven' || inputs.target == 'all'))
         run: |
           ./dev/dispatch-if-changed.sh build_maven.yml branch-4.3
       - name: Maven Java 21 Build
         if: >-
-          github.event.schedule == '17 21 1-31/3 * *' ||
+          github.event.schedule == '17 20 1-31/3 * *' ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'maven_java21' || inputs.target == 'all'))
         run: |
           ./dev/dispatch-if-changed.sh build_maven_java21.yml branch-4.3
       - name: Java 17 Build
         if: >-
-          github.event.schedule == '17 15 1-31/3 * *' ||
+          github.event.schedule == '17 12 1-31/3 * *' ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'java17' || inputs.target == 'all'))
         run: |
@@ -98,7 +98,7 @@ jobs:
           ./dev/dispatch-if-changed.sh build_java25.yml branch-4.3
       - name: Non-ANSI Build
         if: >-
-          github.event.schedule == '17 1 2-31/3 * *' ||
+          github.event.schedule == '17 4 2-31/3 * *' ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'non_ansi' || inputs.target == 'all'))
         run: |

@@ -24,7 +24,7 @@ on:
     - cron: '17 2 1-31/3 * *'
     - cron: '17 6 2-31/3 * *'
     - cron: '17 7 2-31/3 * *'
-    - cron: '17 9 1-31/3 * *'
+    - cron: '17 11 1-31/3 * *'
     - cron: '17 13 2-31/3 * *'
     - cron: '17 14 3-31/3 * *'
     - cron: '17 18 2-31/3 * *'
@@ -77,7 +77,7 @@ jobs:
           ./dev/dispatch-if-changed.sh build_maven_java21.yml branch-4.2
       - name: Java 17 Build
         if: >-
-          github.event.schedule == '17 9 1-31/3 * *' ||
+          github.event.schedule == '17 11 1-31/3 * *' ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'java17' || inputs.target == 'all'))
         run: |
