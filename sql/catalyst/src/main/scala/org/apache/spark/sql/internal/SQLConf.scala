@@ -5252,7 +5252,12 @@ object SQLConf {
         "shuffle relative to the original plan. Shared shuffles may use fewer partition keys, " +
         "which can hurt performance for low-cardinality or skewed keys. The per-partition top-k " +
         "optimization is retained only when preserving it does not require an extra shuffle. " +
-        "Reordering can also combine the rank calculation with an expression that does not " +
+        "Array, map, and binary window outputs are treated as wide and kept above later window " +
+        "shuffles when possible, even when this means giving up top-k. When a reorder that " +
+        "does not pin a rank window saves no window shuffle, the original order is retained " +
+        "if a join, aggregate, or window above can reuse its final partitioning but not the " +
+        "reordered partitioning. Reordering can also combine the rank calculation with an " +
+        "expression that does not " +
         "support early stopping, such as an aggregate with a non-expanding frame, disabling " +
         "top-k even without an extra shuffle. When false, a window is moved before an " +
         "adjacent window only when its PARTITION BY columns are a strict subset of " +

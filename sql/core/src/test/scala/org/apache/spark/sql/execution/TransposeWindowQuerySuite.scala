@@ -1106,6 +1106,42 @@ class TransposeWindowQuerySuite extends QueryTest with SharedSparkSession
     }
   }
 
+  test("equal-cost window reorder preserves partitioning used by a sort-merge join") {
+    // The source order a, b and the wide-first order b, a both pay two window exchanges.
+    // Only source order leaves the join input on hash(k1), so preserving it avoids the
+    // left side's third exchange and third sort; the right side pays one of each.
+    val query =
+      """
+        |WITH w AS (
+        |  SELECT k1, k3, v,
+        |    collect_list(v) OVER (PARTITION BY k3 ORDER BY v) AS a,
+        |    sum(v) OVER (PARTITION BY k1 ORDER BY v) AS b
+        |  FROM t
+        |  WHERE v < 40
+        |)
+        |SELECT /*+ MERGE(u) */ w.k1, w.k3, w.v, w.a, w.b, u.u
+        |FROM w JOIN (SELECT k1, v AS u FROM t) u ON w.k1 = u.k1
+        |""".stripMargin
+
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withInput {
+        val actualDf = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+          val df = sql(query)
+          assert(numExchanges(df) == 3)
+          assert(numSorts(df) == 3)
+          planned(df)
+        }
+        val expected = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "false") {
+          val df = sql(query)
+          assert(numExchanges(df) == 3)
+          assert(numSorts(df) == 3)
+          df.collect()
+        }
+        checkAnswer(actualDf, expected)
+      }
+    }
+  }
+
   test("a stack the pin would reorder to a riding order is emitted unpinned") {
     // sum m and rank rn share [k1, k2] and the k1 ordering, and the x sum's longer
     // (k1, v) ordering separates them from the incomparable [k3] sum. The pinned order puts

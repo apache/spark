@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   Concat, CurrentRow, DenseRank, Expression, In, Literal, NamedExpression, Rand, RowFrame,
   RowNumber, SpecifiedWindowFrame, UnboundedFollowing, UnboundedPreceding,
   WindowExpression, WindowSpecDefinition}
-import org.apache.spark.sql.catalyst.expressions.aggregate.{CollectList, ListAgg, Max}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{CollectList, HllSketchAgg, ListAgg, Max}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Window, WindowGroupLimit}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -581,6 +581,28 @@ class TransposeWindowSuite extends PlanTest {
     }
   }
 
+  test("binary window outputs rank as wide") {
+    // h [k1, k2] rides b's [k1] exchange. Both group orders cost two exchanges, but h's
+    // binary sketch must stay above the [k4] exchange rather than cross it on every row.
+    val query = wideRelation
+      .window(Seq(sum(v).as("b")), Seq(k1), order)
+      .window(Seq(sum(v).as("a")), Seq(k4), order)
+      .window(Seq(new HllSketchAgg(v).toAggregateExpression().as("h")), Seq(k1, k2), order)
+
+    val analyzed = query.analyze
+    val correctAnswer = wideRelation
+      .window(Seq(sum(v).as("a")), Seq(k4), order)
+      .window(Seq(sum(v).as("b")), Seq(k1), order)
+      .window(Seq(new HllSketchAgg(v).toAggregateExpression().as("h")), Seq(k1, k2), order)
+      .select(k1, k2, k3, k4, v, u, $"b", $"a", $"h")
+
+    withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+      val once = TransposeWindow.apply(analyzed)
+      comparePlans(once, correctAnswer.analyze)
+      comparePlans(once, TransposeWindow.apply(once))
+    }
+  }
+
   test("a running listagg window ranks as wide output") {
     // `listagg` extends `Collect` but returns the child type, so its result is a string that
     // only grows with the frame. A type-only wide check misses it, and first appearance
@@ -676,6 +698,85 @@ class TransposeWindowSuite extends PlanTest {
       val once = TransposeWindow.apply(analyzed)
       comparePlans(once, correctAnswer.analyze)
       comparePlans(once, TransposeWindow.apply(once))
+    }
+  }
+
+  test("parent clustering keeps the source order on an exchange-count tie") {
+    // Both window orders pay two exchanges. Source order ends on b's [k1] exchange, which
+    // the aggregate reuses; the wide-first tie-break would end on a's [k3] exchange and
+    // make the aggregate shuffle again.
+    val stacked = wideRelation
+      .window(Seq(CollectList(v).toAggregateExpression().as("a")), Seq(k3), order)
+      .window(Seq(sum(v).as("b")), Seq(k1), order)
+    val analyzed = stacked.groupBy(k1)(sum(v).as("total")).analyze
+
+    withReorderOn {
+      val once = TransposeWindow.apply(analyzed)
+      comparePlans(once, analyzed)
+      comparePlans(TransposeWindow.apply(once), once)
+    }
+  }
+
+  test("parent clustering reaches a chain through a project and filter") {
+    // The derived project cuts the upper window off from the lower chain and renames k1.
+    // Resolving parent_k1 to k1 shows that the upper window still consumes the lower
+    // chain's [k1] partitioning. The filter preserves it.
+    val stacked = wideRelation
+      .window(Seq(CollectList(v).toAggregateExpression().as("a")), Seq(k3), order)
+      .window(Seq(sum(v).as("b")), Seq(k1), order)
+    val analyzed = stacked
+      .select($"k1".as("parent_k1"), k2, k3, k4, v, u, $"a", $"b",
+        ($"v" + 1).as("derived"))
+      .where($"v" > 0)
+      .window(Seq(sum($"derived").as("w")), Seq($"parent_k1"), Seq($"parent_k1".asc))
+      .analyze
+
+    withReorderOn {
+      val once = TransposeWindow.apply(analyzed)
+      comparePlans(once, analyzed)
+      comparePlans(TransposeWindow.apply(once), once)
+    }
+  }
+
+  test("parent clustering uses the right join side's renamed key") {
+    // The left key is deliberately different. The right chain ends on b's [k1] exchange
+    // in source order, and its transparent rename to right_key must resolve back to k1.
+    // Using leftKeys for the right child, or failing to peel the rename, would reorder it.
+    val left = wideRelation.select($"k2".as("left_key"))
+    val right = wideRelation
+      .window(Seq(CollectList(v).toAggregateExpression().as("a")), Seq(k3), order)
+      .window(Seq(sum(v).as("b")), Seq(k1), order)
+      .select($"k1".as("right_key"), k2, k3, k4, v, u, $"a", $"b")
+    val analyzed = left.join(right, condition = Some($"left_key" === $"right_key")).analyze
+
+    withReorderOn {
+      val once = TransposeWindow.apply(analyzed)
+      comparePlans(once, analyzed)
+      comparePlans(TransposeWindow.apply(once), once)
+    }
+  }
+
+  test("parent clustering does not block a reorder that saves an exchange") {
+    // Source order pays three exchanges and ends on keyed's [k1], which the aggregate
+    // reuses. Grouping pays two: rider joins keyed's [k1] group and wide's [k3] group
+    // goes last. The parent cannot veto that saving even though it must shuffle by [k1].
+    val query = wideRelation
+      .window(Seq(sum(v).as("rider")), Seq(k1, k2), order)
+      .window(Seq(CollectList(v).toAggregateExpression().as("wide")), Seq(k3), order)
+      .window(Seq(sum(v).as("keyed")), Seq(k1), order)
+      .groupBy(k1)(sum(v).as("total"))
+
+    val correctAnswer = wideRelation
+      .window(Seq(sum(v).as("keyed")), Seq(k1), order)
+      .window(Seq(sum(v).as("rider")), Seq(k1, k2), order)
+      .window(Seq(CollectList(v).toAggregateExpression().as("wide")), Seq(k3), order)
+      .select(k1, k2, k3, k4, v, u, $"rider", $"wide", $"keyed")
+      .groupBy(k1)(sum(v).as("total"))
+
+    withReorderOn {
+      val once = TransposeWindow.apply(query.analyze)
+      comparePlans(once, correctAnswer.analyze)
+      comparePlans(TransposeWindow.apply(once), once)
     }
   }
 
@@ -1760,22 +1861,29 @@ class TransposeWindowSuite extends PlanTest {
     }
   }
 
-  test("rank filter pin overrides the wide-output group ranking") {
-    // evs [k4] is the wide group and would rank last, but the pinned rn rides only the
-    // [k1, k2] group's exchange, which must therefore stay last; the original order is
-    // already that order, so the plan is unchanged and the group limit still fires.
+  test("rank filter pin does not move a wide group below another exchange") {
+    // Pinning rn would move evs below s's [k1] exchange so rn can ride it. The unpinned
+    // order costs the same two exchanges and keeps evs on top, so width wins over top-k.
     val query = wideRelation
+      .window(Seq(sum(v).as("s")), Seq(k1), order)
       .window(Seq(CollectList(v).toAggregateExpression().as("evs")), Seq(k4), order)
-      .window(Seq(sum(v).as("sum_f")), Seq(k1, k2), order)
-      .window(Seq(rankOnK1K2K3), Seq(k1, k2, k3), order)
+      .window(Seq(rankOnK1K2), Seq(k1, k2), order)
       .where($"rn" <= 1)
 
     val analyzed = query.analyze
+    val correctAnswer = wideRelation
+      .window(Seq(sum(v).as("s")), Seq(k1), order)
+      .window(Seq(rankOnK1K2), Seq(k1, k2), order)
+      .window(Seq(CollectList(v).toAggregateExpression().as("evs")), Seq(k4), order)
+      .select(k1, k2, k3, k4, v, u, $"s", $"evs", $"rn")
+      .where($"rn" <= 1)
 
     withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
-      comparePlans(Optimize.execute(analyzed), analyzed)
-      assert(OptimizeWithGroupLimit.execute(analyzed)
-        .collect { case _: WindowGroupLimit => () }.nonEmpty)
+      val once = TransposeWindow.apply(analyzed)
+      comparePlans(once, correctAnswer.analyze)
+      assert(OptimizeWithGroupLimit.execute(once)
+        .collect { case _: WindowGroupLimit => () }.isEmpty)
+      comparePlans(TransposeWindow.apply(once), once)
     }
   }
 
@@ -2539,6 +2647,36 @@ class TransposeWindowSuite extends PlanTest {
       comparePlans(TransposeWindow.apply(once), once)
       assert(OptimizeWithGroupLimit.execute(once)
         .collect { case _: WindowGroupLimit => () }.size == 1)
+    }
+  }
+
+  test("rank filter below other windows does not duplicate a hoisted link's outputs") {
+    // The [k1] group moves above [k4] so rn rides its exchange. The link originally between
+    // rn and the sums must pass each sum through once to restore the filter's output.
+    val query = wideRelation
+      .window(Seq(rankOnK1K2K3), Seq(k1, k2, k3), order)
+      .select(k1, k2, k3, k4, v, u, $"rn".as("rank"))
+      .window(Seq(sum(v).as("sum_a")), Seq(k1), order)
+      .window(Seq(sum(v).as("sum_b")), Seq(k4), order)
+      .where($"rank" <= 1)
+
+    val analyzed = query.analyze
+    val correctAnswer = wideRelation
+      .window(Seq(sum(v).as("sum_b")), Seq(k4), order)
+      .window(Seq(sum(v).as("sum_a")), Seq(k1), order)
+      .select(k1, k2, k3, k4, v, u, $"sum_a", $"sum_b")
+      .window(Seq(rankOnK1K2K3), Seq(k1, k2, k3), order)
+      .select(k1, k2, k3, k4, v, u, $"rn".as("rank"), $"sum_a", $"sum_b")
+      .where($"rank" <= 1)
+
+    withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+      val once = TransposeWindow.apply(analyzed)
+      comparePlans(once, correctAnswer.analyze)
+      assert(once.output == analyzed.output)
+      SimpleAnalyzer.checkAnalysis(once)
+      assert(OptimizeWithGroupLimit.execute(once)
+        .collect { case _: WindowGroupLimit => () }.size == 1)
+      comparePlans(TransposeWindow.apply(once), once)
     }
   }
 
