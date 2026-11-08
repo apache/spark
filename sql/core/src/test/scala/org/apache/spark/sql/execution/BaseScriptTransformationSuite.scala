@@ -20,11 +20,14 @@ package org.apache.spark.sql.execution
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Period}
 
+import scala.jdk.CollectionConverters._
+
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.Assertions._
 import org.scalatest.exceptions.TestFailedException
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkException, SparkRuntimeException, SparkThrowable, TaskContext,
     TestUtils}
@@ -429,6 +432,29 @@ abstract class BaseScriptTransformationSuite extends QueryTest {
       QueryTest.executePlan(plan, spark.sqlContext)
     }
     assert(e.getMessage.contains("Subprocess exited with status"))
+    assert(uncaughtExceptionHandler.exception.isEmpty)
+  }
+
+  test("TRANSFORM destroys the script when its task completes before reading all its output") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+
+    def writerThreads(): Set[Thread] = Thread.getAllStackTraces.keySet.asScala
+      .filter(thread => thread.getName.endsWith("WriterThread-Feed") && thread.isAlive).toSet
+    val before = writerThreads()
+    // The script echoes much more input than the pipes hold, while the task reads one row of its
+    // output: the script then blocks on writing its output, and the writer thread on writing the
+    // input, until the script is destroyed.
+    val plan = createScriptTransformationExec(
+      script = "cat",
+      output = Seq(AttributeReference("id", StringType)()),
+      child = spark.range(0, 1000000, 1, 1).queryExecution.sparkPlan,
+      ioschema = defaultIOSchema)
+    assert(plan.execute().mapPartitions(rows => Iterator(rows.take(1).size)).collect() ===
+      Array(1))
+    eventually(timeout(60.seconds)) {
+      assert((writerThreads() -- before).isEmpty)
+    }
+    // The writer thread is not interrupted, so that its wait for the script does not throw.
     assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 

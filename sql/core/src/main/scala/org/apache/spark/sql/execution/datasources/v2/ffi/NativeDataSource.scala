@@ -657,8 +657,10 @@ object NativeWriterCommitMessage {
  * So a reader closed before the end of its stream, as with a LIMIT, and not called again holds the
  * buffers of one batch until a garbage collection, which these buffers do not trigger: the JVM
  * does not count them. Under `DataSourceRDD`, only a garbage collection frees them: its
- * `PartitionIterator` drops the reader once it closes it, so a thread that asks the iterator for
- * the next batch then fails without calling [[next]].
+ * `PartitionIterator` drops the reader once it closes it, and never calls [[next]] on it again,
+ * even for a thread that then asks the iterator for the next batch. That is the only effect of
+ * `DataSourceRDD` here: however the iterator then answers that thread, the thread does not get
+ * the batch, and a [[next]] called on the reader would free the buffers at once and fail.
  *
  * @param kind the kind of the scan, `NativeLibrary.READ_BATCH` or `READ_MICRO_BATCH`
  * @param partition the partition, whose index in the scan the library gets as `partition_id`
@@ -905,7 +907,10 @@ class NativePartitionReader(
 
   /**
    * Fails once the reader is closed. In either case, the caller no longer reads the batch that
-   * next returned last, if any, so a closed reader frees its buffers at once.
+   * next returned last, if any, so a closed reader frees its buffers at once. This assumes that no
+   * other thread still reads that batch, as an open reader does when it imports the next batch,
+   * which releases the buffers of the previous one: a consumer that hands a batch to another
+   * thread must not call next until that thread is done with the batch.
    */
   private def startReading(): Unit = synchronized {
     if (closed) {

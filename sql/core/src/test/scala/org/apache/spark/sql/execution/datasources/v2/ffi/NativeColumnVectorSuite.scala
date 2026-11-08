@@ -306,6 +306,8 @@ class NativeColumnVectorSuite extends SparkFunSuite {
         assert(top.toDebugString === "Decimal(compact, 123456789999999999, 18, 9)")
         assert(top.roundToInt() === 123456789)
         assert(nested.toDebugString === "Decimal(expanded, 123456789.999999999, 18, 9)")
+        // A known inconsistency rather than the intended result, which is the exact 123456789 of
+        // the top-level column: it is the rounding of the BigDecimals of every ArrowColumnVector.
         assert(nested.roundToInt() === 123456790)
       }
     }
@@ -409,6 +411,9 @@ class NativeColumnVectorSuite extends SparkFunSuite {
         val column = native(vector)
         assert(column.isInstanceOf[ReusedArrowColumnVector])
         column.closeIfFreeable()
+        assert(column.getInt(2) === 2)
+        // Nor does a consumer that closes it free the buffers that it reads: the reader does.
+        column.close()
         assert(column.getInt(2) === 2)
       }
     }

@@ -474,7 +474,9 @@ typedef struct SparkDsCommitOffsetInfo {
  * engine may also keep the arrays and the schemas of the stream after it released the stream, and
  * so may Spark: when a query stops reading a stream before its end, as with a LIMIT, Spark may
  * release the last array that it read only once it no longer references the batch, from a JVM
- * Cleaner thread. So the release of an array or a schema must not use the stream or the task.
+ * Cleaner thread. So the release of an array or a schema must not use the stream or the task. It
+ * should also be quick and not block, e.g. on a lock or on a runtime that another thread holds:
+ * Spark shares that thread with the release of the other objects that it no longer references.
  */
 typedef struct SparkDsTaskContext {
   /* The size of this struct in the header that Spark was built with, as in SparkDsHost. */

@@ -113,15 +113,15 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
    * the task completes, as `PipedRDD` does. Otherwise, when the task completes before it reads
    * the whole output of the process, as under a LIMIT, the process blocks on writing its output
    * and the thread on writing the rest of the input, so that neither ends.
+   *
+   * Unlike `PipedRDD`, it does not interrupt the thread, which then fails on its next write to the
+   * destroyed process: an interrupt would make the thread's wait for the process throw an
+   * `InterruptedException`, which would reach `SparkUncaughtExceptionHandler` and exit the
+   * executor (see SPARK-25158).
    */
   protected def startWriterThread(writerThread: BaseScriptTransformationWriterThread): Unit = {
     writerThread.taskContext.addTaskCompletionListener[Unit] { _ =>
-      if (writerThread.proc.isAlive) {
-        writerThread.proc.destroy()
-      }
-      if (writerThread.isAlive) {
-        writerThread.interrupt()
-      }
+      writerThread.destroyProcessOnTaskCompletion()
     }
     writerThread.start()
   }
@@ -312,6 +312,19 @@ abstract class BaseScriptTransformationWriterThread extends Thread with Logging 
   /** Contains the exception thrown while writing the parent iterator to the external process. */
   def exception: Option[Throwable] = Option(_exception)
 
+  // Whether the process was destroyed as the task completed before the process ended. The task
+  // then no longer reads the output of the process, so the failure of the thread and the exit
+  // status of the process are expected, and not logged as errors.
+  @volatile private var destroyedOnTaskCompletion = false
+
+  /** Destroys the process if it is still alive once the task completes. */
+  private[execution] def destroyProcessOnTaskCompletion(): Unit = {
+    if (proc.isAlive) {
+      destroyedOnTaskCompletion = true
+      proc.destroy()
+    }
+  }
+
   protected def processRows(): Unit
 
   protected def processRowsWithoutSerde(): Unit = {
@@ -360,12 +373,16 @@ abstract class BaseScriptTransformationWriterThread extends Thread with Logging 
         // Javadoc this call will not throw an exception:
         _exception = t
         proc.destroy()
-        logError(log"Thread-${MDC(CLASS_NAME, this.getClass.getSimpleName)}-Feed " +
-          log"exit cause by: ", t)
+        if (destroyedOnTaskCompletion) {
+          logDebug(s"Thread-${this.getClass.getSimpleName}-Feed exit after the task completed", t)
+        } else {
+          logError(log"Thread-${MDC(CLASS_NAME, this.getClass.getSimpleName)}-Feed " +
+            log"exit cause by: ", t)
+        }
     } finally {
       try {
         Utils.tryLogNonFatalError(outputStream.close())
-        if (proc.waitFor() != 0) {
+        if (proc.waitFor() != 0 && !destroyedOnTaskCompletion) {
           logError(log"${MDC(STDERR, stderrBuffer.toString)}") // log the stderr circular buffer
         }
       } catch {

@@ -64,6 +64,15 @@ import org.apache.spark.unsafe.types.UTF8String;
  * column takes the null_count that the library exported, and only counts the nulls when the
  * library did not.
  *
+ * <p>As the vector does not check the bounds and the reference count of the buffers, a consumer
+ * must read only the rows of the current batch, below its number of rows, and only until next is
+ * called again, as for the other column vectors that Spark reuses across batches: a read of
+ * another row, e.g. through a row of the batch that the consumer kept after next, reads out of
+ * range or freed memory, and may crash the JVM rather than throw. The vector does not free its
+ * Arrow vector on {@link #close()}, which the reader frees with the other vectors of the batch, so
+ * that a consumer that closes the batch, rather than releasing it with
+ * {@link #closeIfFreeable()}, does not free the buffers that the vector reads.
+ *
  * <p>The vector keeps the addresses of the buffers from one import to the next, whereas
  * {@link ArrowColumnVector} reads the buffers of its Arrow vector on each access. So nothing may
  * reallocate the buffers of the Arrow vectors of the reader between two imports, e.g. by growing
@@ -116,6 +125,11 @@ class NativeColumnVector extends ReusedArrowColumnVector {
   NativeColumnVector(ValueVector vector, Object reader) {
     super(vector);
     this.reader = reader;
+  }
+
+  @Override
+  public void close() {
+    // no-op: the reader frees the Arrow vector, whose buffers the vector reads at their addresses.
   }
 
   /**
