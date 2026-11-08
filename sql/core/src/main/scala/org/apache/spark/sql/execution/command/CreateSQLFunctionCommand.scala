@@ -363,7 +363,12 @@ case class CreateSQLFunctionCommand(
       child.flatMap {
         case w: UnresolvedWith if !w.resolved => w.innerChildren.flatMap(collectTempFunctions)
         case plan if !plan.resolved =>
-          plan.expressions.flatMap(_.flatMap {
+          val tempTableFunction = plan match {
+            case u: UnresolvedTableValuedFunction if isTemporaryFunctionName(catalog, u.name) =>
+              Seq(u.name.last)
+            case _ => Seq.empty
+          }
+          tempTableFunction ++ plan.expressions.flatMap(_.flatMap {
             case e: SubqueryExpression => collectTempFunctions(e.plan)
             case e: UnresolvedFunction if isTemporaryFunctionName(catalog, e.nameParts) =>
               Seq(e.nameParts.last)
