@@ -23,7 +23,6 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.column import Column
     from pyspark.sql.connect.dataframe import DataFrame
     from pyspark.sql.connect.session import SparkSession
-    from pyspark.sql.dataframe import DataFrame as ParentDataFrame
 
 
 class TableValuedFunction:
@@ -38,8 +37,10 @@ class TableValuedFunction:
         end: Optional[int] = None,
         step: int = 1,
         numPartitions: Optional[int] = None,
-    ) -> "ParentDataFrame":
-        return self._sparkSession.range(start, end, step, numPartitions)
+    ) -> "DataFrame":
+        return self._sparkSession.range(  # type: ignore[return-value]
+            start, end, step, numPartitions
+        )
 
     range.__doc__ = PySparkTableValuedFunction.range.__doc__
 

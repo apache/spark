@@ -835,9 +835,9 @@ class SparkSession:
                 max_batch_of_chunks_size_bytes,
             )
 
-        df: ParentDataFrame = DataFrame(plan, self)
+        df = DataFrame(plan, self)
         if _cols is not None and len(_cols) > 0:
-            df = df.toDF(*_cols)
+            df = df.toDF(*_cols)  # type: ignore[assignment]
         return df
 
     createDataFrame.__doc__ = PySparkSession.createDataFrame.__doc__
