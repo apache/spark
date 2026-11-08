@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanLike
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, REPARTITION_BY_NUM, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.joins.SortMergeAsOfJoinExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -528,6 +529,39 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
       }
       // `codegenUnions`, not `fusedUnions`: what the denylist owes is that this union takes no part
       // in codegen at any depth, and without it the union would root a stage here.
+      assert(codegenUnions(fused).isEmpty,
+        s"the denylist has to keep this union out of codegen:\n${fused.queryExecution}")
+    }
+  }
+
+  test("Sort-merge ASOF join child union correctness") {
+    // A generated ASOF join reads two RDDs, like SMJ, so UnionExec has to fall back for that
+    // child. A fused union would fail the query, since each child must give it one RDD.
+    withSQLConf(
+      SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> "true",
+      SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val (fused, _) = assertFlagParity { () =>
+        // `joinAsOf` is on the classic Dataset, so build the inputs from `spark.range`.
+        val left = spark.range(10).select(col("id").as("k"), (col("id") * 2).as("ts"))
+        val right = spark.range(10).select(col("id").as("k"), (col("id") * 2 - 1).as("ts"))
+        left.joinAsOf(right, left("ts"), right("ts"), usingColumns = Seq("k"),
+            joinType = "inner", tolerance = null, allowExactMatches = true,
+            direction = "backward")
+          .select(left("k"), right("ts"))
+          .union(rangeDF(100, 103).select(col("id").as("k"), col("id").as("ts")))
+      }
+      checkAnswer(fused,
+        (0L until 10L).map(k => Row(k, 2 * k - 1)) ++ (100L until 103L).map(k => Row(k, k)))
+      // The ASOF join has to run in a codegen stage, or this test does not reach the denylist.
+      def inStage(plan: SparkPlan): Boolean = plan match {
+        case _: SortMergeAsOfJoinExec => true
+        case _: InputAdapter => false
+        case other => other.children.exists(inStage)
+      }
+      assert(collect(fused.queryExecution.executedPlan) {
+        case stage: WholeStageCodegenExec if inStage(stage.child) => stage
+      }.nonEmpty, s"expected the ASOF join in a codegen stage:\n${fused.queryExecution}")
       assert(codegenUnions(fused).isEmpty,
         s"the denylist has to keep this union out of codegen:\n${fused.queryExecution}")
     }

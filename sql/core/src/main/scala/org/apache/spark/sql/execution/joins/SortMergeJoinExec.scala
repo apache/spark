@@ -23,7 +23,6 @@ import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans._
@@ -185,42 +184,6 @@ case class SortMergeJoinExec(
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     streamedPlan.execute() :: bufferedPlan.execute() :: Nil
-  }
-
-  private def createJoinKey(
-      ctx: CodegenContext,
-      row: String,
-      keys: Seq[Expression],
-      input: Seq[Attribute]): Seq[ExprCode] = {
-    ctx.INPUT_ROW = row
-    ctx.currentVars = null
-    bindReferences(keys, input).map(_.genCode(ctx))
-  }
-
-  private def copyKeys(ctx: CodegenContext, vars: Seq[ExprCode]): Seq[ExprCode] = {
-    vars.zipWithIndex.map { case (ev, i) =>
-      ctx.addBufferedState(leftKeys(i).dataType, "value", ev.value)
-    }
-  }
-
-  private def genComparison(ctx: CodegenContext, a: Seq[ExprCode], b: Seq[ExprCode]): String = {
-    // The first key compare always runs, so emit it unguarded. Each subsequent key compare runs
-    // only when previous keys were equal (comp == 0).
-    val pairs = a.zip(b).zipWithIndex
-    val firstCompare = pairs.headOption.map { case ((l, r), i) =>
-      s"comp = ${ctx.genComp(leftKeys(i).dataType, l.value, r.value)};"
-    }.getOrElse("comp = 0;")
-    val restCompares = pairs.drop(1).map { case ((l, r), i) =>
-      s"""
-         |if (comp == 0) {
-         |  comp = ${ctx.genComp(leftKeys(i).dataType, l.value, r.value)};
-         |}
-       """.stripMargin.trim
-    }
-    s"""
-       |$firstCompare
-       |${restCompares.mkString("\n")}
-     """.stripMargin
   }
 
   /**

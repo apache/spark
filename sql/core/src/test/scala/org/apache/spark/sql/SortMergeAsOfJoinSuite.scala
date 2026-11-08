@@ -23,9 +23,10 @@ import java.time.{Duration, Instant, LocalDateTime}
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.expressions.{BinaryComparison, Expression, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual}
-import org.apache.spark.sql.catalyst.plans.{AsOfJoinDirection, Backward, Forward}
+import org.apache.spark.sql.catalyst.plans.{AsOfJoinDirection, Backward, Forward, Nearest}
 import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.{InputAdapter, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.joins.SortMergeAsOfJoinExec
 import org.apache.spark.sql.internal.SQLConf
@@ -67,19 +68,40 @@ class SortMergeAsOfJoinSuite extends QueryTest
     (df1, df2)
   }
 
-  // Like checkAnswer, but also asserts the right-side buffer spilled (spillSize > 0).
-  private def checkAnswerAndSpill(df: classic.DataFrame, expectedAnswer: Seq[Row]): Unit = {
-    checkAnswer(df, expectedAnswer)
-    val op = collectFirst(df.queryExecution.executedPlan) {
-      case s: SortMergeAsOfJoinExec => s
+  // Like checkAnswer, but also asserts the right-side buffer spilled (spillSize > 0). Runs with
+  // the ASOF join codegen off and on, so both paths must handle the spilled buffer.
+  private def checkAnswerAndSpill(df: => classic.DataFrame, expectedAnswer: Seq[Row]): Unit = {
+    Seq(false, true).foreach { codegen =>
+      withClue(s"ASOF join codegen $codegen: ") {
+        withSQLConf(SQLConf.ENABLE_SORT_MERGE_AS_OF_JOIN_CODEGEN.key -> codegen.toString) {
+          val query = df
+          checkAnswer(query, expectedAnswer)
+          val op = collectFirst(query.queryExecution.executedPlan) {
+            case s: SortMergeAsOfJoinExec => s
+          }
+          assert(op.isDefined,
+            s"Expected SortMergeAsOfJoinExec in plan:\n${query.queryExecution.executedPlan}")
+          assert(op.get.metrics("spillSize").value > 0,
+            s"Expected the right-side buffer to spill (spillSize > 0), " +
+              s"got ${op.get.metrics("spillSize").value}")
+          assert(op.get.metrics("numAsOfCursorTasks").value == 0,
+            "Expected the buffered scan, but a task used the cursor scan")
+          assert(isGenerated(query.queryExecution.executedPlan, op.get) ==
+            (codegen && op.get.direction != Nearest),
+            s"Unexpected ASOF join codegen in plan:\n${query.queryExecution.executedPlan}")
+        }
+      }
     }
-    assert(op.isDefined,
-      s"Expected SortMergeAsOfJoinExec in plan:\n${df.queryExecution.executedPlan}")
-    assert(op.get.metrics("spillSize").value > 0,
-      s"Expected the right-side buffer to spill (spillSize > 0), " +
-        s"got ${op.get.metrics("spillSize").value}")
-    assert(op.get.metrics("numAsOfCursorTasks").value == 0,
-      "Expected the buffered scan, but a task used the cursor scan")
+  }
+
+  // Whether `join` runs in a codegen stage, and not only in a stage below it.
+  private def isGenerated(plan: SparkPlan, join: SortMergeAsOfJoinExec): Boolean = {
+    def inStage(node: SparkPlan): Boolean = node match {
+      case j: SortMergeAsOfJoinExec => j eq join
+      case _: InputAdapter => false
+      case other => other.children.exists(inStage)
+    }
+    collect(plan) { case stage: WholeStageCodegenExec if inStage(stage.child) => stage }.nonEmpty
   }
 
   /**
