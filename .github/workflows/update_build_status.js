@@ -315,13 +315,6 @@ module.exports = async ({github, context, core, env = process.env, log = console
         const run = pr.branch == 'master' || pr.buildRun?.conclusion == 'skipped'
           ? undefined : pr.buildRun
         if (!run) {
-          if (!pr.buildRun && pr.forkRunsTruncated && pr.branch != 'master') {
-            // The run may be among the fork's check suites the page left out.
-            log.error(ref + ': no build_main.yml run in the first fork check '
-              + 'suites; raise the limits in prPageQuery')
-            failedPRs.add(pr.number)
-            continue
-          }
           // Already provided guidance, or still within the run-registration grace period.
           if (pr.buildChecks.some(cr => cr.conclusion == 'action_required')
               || Date.parse(pr.updatedAt) > runGraceSince) {
