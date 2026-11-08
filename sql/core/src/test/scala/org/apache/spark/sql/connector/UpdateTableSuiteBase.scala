@@ -245,6 +245,44 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 1)
   }
 
+  test("SPARK-60978: update keeps columns whose names differ only by case") {
+    // such a table can only be created and read in a case-sensitive session
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      createAndInitTable("pk INT NOT NULL, salary INT, SALARY INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "SALARY": 200, "dep": "hr" }
+          |{ "pk": 2, "salary": 300, "SALARY": 400, "dep": "hr" }
+          |""".stripMargin)
+    }
+
+    // the statement does not name the colliding columns so it is not ambiguous
+    sql(s"UPDATE $tableNameAsString SET pk = 3 WHERE pk = 1")
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(3, 100, 200, "hr") :: Row(2, 300, 400, "hr") :: Nil)
+    }
+  }
+
+  test("SPARK-60979: update keeps columns whose names differ only by case and type") {
+    // such a table can only be created and read in a case-sensitive session
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      createAndInitTable("pk INT NOT NULL, salary INT NOT NULL, SALARY STRING, dep STRING",
+        """{ "pk": 1, "salary": 100, "SALARY": null, "dep": "hr" }
+          |{ "pk": 2, "salary": 300, "SALARY": "x", "dep": "hr" }
+          |""".stripMargin)
+    }
+
+    // the statement does not name the colliding columns so it is not ambiguous
+    sql(s"UPDATE $tableNameAsString SET pk = 3 WHERE pk = 1")
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(3, 100, null, "hr") :: Row(2, 300, "x", "hr") :: Nil)
+    }
+  }
+
   test("update non-existing records") {
     createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
       """{ "pk": 1, "salary": 100, "dep": "hr" }

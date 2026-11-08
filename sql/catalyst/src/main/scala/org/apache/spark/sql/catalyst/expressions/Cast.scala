@@ -594,6 +594,21 @@ object Cast extends QueryErrorsBase {
     case _ => false
   }
 
+  /**
+   * Returns true if a LEGACY cast from `from` type to `to` type never fails at runtime. Among
+   * numeric, boolean and string types, except to CHAR/VARCHAR, it wraps around or saturates on
+   * overflow, or returns null, instead of failing. Returns false for other LEGACY casts, some of
+   * which can fail, for example from an interval to a number, from a string to an interval, and
+   * to CHAR/VARCHAR. The patterns matched reflect the current implementation in the Cast node and
+   * must stay in sync with it.
+   */
+  def isNoThrowLegacyCast(from: DataType, to: DataType): Boolean = (from, to) match {
+    case (_: NumericType | BooleanType | _: StringType, _: NumericType | BooleanType) => true
+    case (_: NumericType | BooleanType | _: StringType, s: StringType) =>
+      StringHelper.isPlainString(s)
+    case _ => false
+  }
+
   def resolvableNullability(from: Boolean, to: Boolean): Boolean = !from || to
 
   /**
@@ -801,10 +816,6 @@ case class Cast(
   } else {
     (child.dataType, dataType) match {
       case (_: StringType, BinaryType) => child.nullable
-      // TODO: Implement a more accurate method for checking whether a decimal value can be cast
-      //       as integral types without overflow. Currently, the cast can overflow even if
-      //       "Cast.canUpCast" method returns true.
-      case (_: DecimalType, _: IntegralType) => true
       case _ => child.nullable || !Cast.canUpCast(child.dataType, dataType)
     }
   }

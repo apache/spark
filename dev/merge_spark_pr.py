@@ -112,6 +112,14 @@ SKIP_VERSION_CHECK = os.environ.get("SKIP_VERSION_CHECK", "")
 # Path of this script relative to the repo root, used to fetch the canonical copy from master.
 MERGE_SCRIPT_REPO_PATH = "dev/merge_spark_pr.py"
 
+# Run the push-triggered post-merge workflows at each branch's configured commit interval.
+# Other commits get GitHub's documented workflow-skip trailer after a visible warning.
+# See https://docs.github.com/en/actions/how-tos/manage-workflow-runs/skip-workflow-runs
+POST_MERGE_CI_INTERVALS = {"master": 10, "branch-4.x": 10}
+POST_MERGE_CI_SKIP_TRAILER = "skip-checks: true"
+# Covers the trailer plus the cherry-pick attribution and committer sign-off added by -sx.
+POST_MERGE_CI_TRAILER_SEARCH_LENGTH = 256
+
 
 def semver_branch_rank(name):
     """
@@ -828,6 +836,79 @@ def clean_up():
             git.run("git branch -D %s" % branch)
 
 
+def should_skip_post_merge_ci(target_ref):
+    """Return whether the next commit on ``target_ref`` should skip post-merge CI.
+
+    The branch history count matches the check formerly performed in ``build_main.yml``.
+    """
+    interval = POST_MERGE_CI_INTERVALS.get(target_ref)
+    if interval is None:
+        return False
+
+    commit_count = int(git.run(["git", "rev-list", "--count", "HEAD"]).strip()) + 1
+    if commit_count % interval == 0:
+        print(
+            "Post-merge CI will run on %s: commit count %s is divisible by %s."
+            % (target_ref, commit_count, interval)
+        )
+        return False
+
+    print_error(
+        "WARNING: Post-merge CI will be skipped on %s because commit count %s is not "
+        "divisible by %s. GitHub's %r trailer will be added."
+        % (target_ref, commit_count, interval, POST_MERGE_CI_SKIP_TRAILER)
+    )
+    return True
+
+
+def append_post_merge_ci_skip(message):
+    """Append the workflow-skip trailer after GitHub's required two empty lines.
+
+    >>> append_post_merge_ci_skip("Subject\\n")
+    'Subject\\n\\n\\nskip-checks: true\\n'
+    """
+    return "%s\n\n\n%s\n" % (message.rstrip(), POST_MERGE_CI_SKIP_TRAILER)
+
+
+def remove_inherited_post_merge_ci_skip(message):
+    """Remove an inherited skip trailer found near the end of a cherry-pick message.
+
+    >>> message = "Subject\\n\\nskip-checks: true\\n(cherry picked from commit abc)\\n"
+    >>> remove_inherited_post_merge_ci_skip(message)
+    'Subject\\n\\n(cherry picked from commit abc)\\n'
+    >>> distant = "Subject\\n\\nskip-checks: true\\n" + "x" * 256 + "\\n"
+    >>> remove_inherited_post_merge_ci_skip(distant) == distant
+    True
+    """
+    tail = message[-POST_MERGE_CI_TRAILER_SEARCH_LENGTH:]
+    marker = "\n%s\n" % POST_MERGE_CI_SKIP_TRAILER
+    marker_index = tail.rfind(marker)
+    if marker_index == -1:
+        return message
+
+    marker_index += len(message) - len(tail)
+    before = message[:marker_index].rstrip()
+    after = message[marker_index + len(marker) :].strip()
+    return "\n\n".join(part for part in (before, after) if part) + "\n"
+
+
+def amend_commit_message(message):
+    """Replace the current commit's message with the in-memory multi-line ``message``."""
+    # The command is an argument list rather than a shell string, so -m safely receives the
+    # complete multi-line message without shell quoting or a temporary file.
+    git.run(
+        [
+            "git",
+            "commit",
+            "--amend",
+            "--allow-empty",
+            "--cleanup=verbatim",
+            "-m",
+            message,
+        ]
+    )
+
+
 # merge the requested PR and return the merge hash
 def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_authors):
     pr_branch_name = "%s_MERGE_PR_%s" % (BRANCH_PREFIX, pr_num)
@@ -835,6 +916,7 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
     git.run("git fetch %s pull/%s/head:%s" % (PR_REMOTE_NAME, pr_num, pr_branch_name))
     git.run("git fetch %s %s:%s" % (PUSH_REMOTE_NAME, target_ref, target_branch_name))
     git.run("git checkout %s" % target_branch_name)
+    skip_post_merge_ci = should_skip_post_merge_ci(target_ref)
 
     had_conflicts = False
     try:
@@ -882,7 +964,15 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
 
     merge_message_flags += ["-m", authors]
 
-    git.run(["git", "commit", '--author="%s"' % primary_author] + merge_message_flags)
+    if skip_post_merge_ci:
+        # A leading newline plus git's paragraph separator leaves the two empty lines which
+        # GitHub requires before the skip-checks trailer. --cleanup=verbatim preserves them.
+        merge_message_flags += ["-m", "\n%s" % POST_MERGE_CI_SKIP_TRAILER]
+
+    git.run(
+        ["git", "commit", "--cleanup=verbatim", '--author="%s"' % primary_author]
+        + merge_message_flags
+    )
 
     continue_maybe(
         "Merge complete (local ref %s). Push to %s?" % (target_branch_name, PUSH_REMOTE_NAME)
@@ -913,6 +1003,7 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref):
     git.run("git fetch %s %s:%s" % (PUSH_REMOTE_NAME, pick_ref, pick_branch_name))
     git.run("git checkout %s" % pick_branch_name)
     pick_head = git.run("git rev-parse HEAD").strip()
+    skip_post_merge_ci = should_skip_post_merge_ci(pick_ref)
 
     try:
         git.run(
@@ -945,6 +1036,13 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref):
             )
         else:
             print("Cherry-pick already completed manually; continuing with the backport.")
+
+    raw_message = git.run(["git", "log", "-1", "--format=%B"])
+    updated_message = remove_inherited_post_merge_ci_skip(raw_message)
+    if skip_post_merge_ci:
+        updated_message = append_post_merge_ci_skip(updated_message)
+    if updated_message != raw_message:
+        amend_commit_message(updated_message)
 
     continue_maybe(
         "Pick complete (local ref %s). Push to %s?" % (pick_branch_name, PUSH_REMOTE_NAME)

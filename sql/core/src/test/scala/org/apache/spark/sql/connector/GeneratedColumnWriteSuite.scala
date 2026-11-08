@@ -19,17 +19,29 @@ package org.apache.spark.sql.connector
 
 import java.util.Collections
 
+import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen.JavaStrLenStaticMagic
+
 import org.apache.spark.{SparkRuntimeException, SparkThrowable}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
-import org.apache.spark.sql.catalyst.QueryPlanningTracker
+import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.expressions.CheckInvariant
 import org.apache.spark.sql.catalyst.util.GeneratedColumn
 import org.apache.spark.sql.connector.catalog.{Column, GenerationExpression, Identifier, InMemoryCatalog, InMemoryRowLevelOperationTableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
+import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, GeneralScalarExpression, Transform}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType, StructType}
+import org.apache.spark.sql.types.{DataType, IntegerType, MetadataBuilder, StringType, StructType}
+import org.apache.spark.unsafe.types.UTF8String
+
+// A V2 function that a test binds to the name of a built-in function to shadow it.
+private object ConstantString extends ScalarFunction[UTF8String] {
+  override def inputTypes(): Array[DataType] = Array(StringType)
+  override def resultType(): DataType = StringType
+  override def name(): String = "constant_string"
+  override def produceResult(input: InternalRow): UTF8String = UTF8String.fromString("OK")
+}
 
 /**
  * Tests for generated column auto-fill and constraint enforcement during writes.
@@ -456,6 +468,69 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
           "constraintName" -> "Generated Column",
           "expression" -> """b <=> concat(a, '"')""",
           "values" -> " - b : q"))
+    }
+  }
+
+  private def addFunction(name: String, function: UnboundFunction): Unit = {
+    catalog("testcat").asInstanceOf[InMemoryCatalog]
+      .createFunction(Identifier.of(Array("ns"), name), function)
+  }
+
+  test("SPARK-60866: generation expression cannot call a V2 function with a magic method") {
+    val tblName = "my_tab"
+    Seq(
+      StrLenMagic -> "`strlen_magic`",
+      new JavaStrLenStaticMagic -> "`strlen`"
+    ).foreach { case (function, functionName) =>
+      addFunction("strlen", StrLen(function))
+      withTable(s"testcat.$tblName") {
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"""CREATE TABLE testcat.$tblName(
+                   |  s STRING,
+                   |  g INT GENERATED ALWAYS AS (testcat.ns.strlen(s))
+                   |) USING foo""".stripMargin)
+          },
+          condition = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+          parameters = Map(
+            "fieldName" -> "g",
+            "expressionStr" -> "testcat.ns.strlen(s)",
+            "reason" -> s"failed to resolve $functionName to a built-in function"))
+      }
+    }
+  }
+
+  test("SPARK-60866: SQL path does not shadow a built-in function of a generation expression") {
+    val tblName = "my_tab"
+    addFunction("upper", StrLen(ConstantString))
+    withTable(s"testcat.$tblName") {
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  s STRING,
+             |  g STRING GENERATED ALWAYS AS (upper(s))
+             |) USING foo""".stripMargin)
+      withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+        sql("SET PATH = testcat.ns, system.builtin")
+        try {
+          // The path does shadow the built-in function outside of the generation expression.
+          checkAnswer(sql("SELECT upper('x')"), Row("OK"))
+          sql(s"INSERT INTO testcat.$tblName(s) VALUES ('x')")
+          checkAnswer(spark.table(s"testcat.$tblName"), Row("x", "X"))
+          sql(s"INSERT INTO testcat.$tblName VALUES ('y', 'Y')")
+          checkError(
+            exception = intercept[SparkRuntimeException] {
+              sql(s"INSERT INTO testcat.$tblName VALUES ('z', 'OK')")
+            },
+            condition = "CHECK_CONSTRAINT_VIOLATION",
+            sqlState = "23001",
+            parameters = Map(
+              "constraintName" -> "Generated Column",
+              "expression" -> "g <=> upper(s)",
+              "values" -> " - g : OK"))
+          checkAnswer(spark.table(s"testcat.$tblName"), Seq(Row("x", "X"), Row("y", "Y")))
+        } finally {
+          sql("SET PATH = DEFAULT_PATH")
+        }
+      }
     }
   }
 
@@ -1106,6 +1181,43 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
             "expressionStr" -> "CAST('12:00:00' AS TIME)",
             "reason" -> "TIME type is not supported in generated columns"))
       }
+    }
+  }
+
+  test("SPARK-60857: CREATE TABLE rejects a struct generation expression with other field names") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      // An auto-filled value lines up the struct fields with the column type by name under the
+      // writer's resolver, while the check of a provided value lines them up by position. So a row
+      // that Spark auto-filled from the first expression would fail the check when a later write
+      // carries it, and a case-sensitive writer could not auto-fill the second one.
+      Seq(
+        "named_struct('y', a, 'x', b)" -> "struct<y:int,x:int>",
+        "named_struct('X', b, 'Y', a)" -> "struct<X:int,Y:int>").foreach { case (expr, exprType) =>
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"""CREATE TABLE testcat.$tblName(
+                   |  a INT,
+                   |  b INT,
+                   |  s STRUCT<x: INT, y: INT> GENERATED ALWAYS AS ($expr)
+                   |) USING foo""".stripMargin)
+          },
+          condition = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+          parameters = Map(
+            "fieldName" -> "s",
+            "expressionStr" -> expr,
+            "reason" -> (s"generation expression data type $exprType names its struct " +
+              "fields differently from column data type struct<x:int,y:int>")))
+      }
+
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  a INT,
+             |  b INT,
+             |  s STRUCT<x: INT, y: INT> GENERATED ALWAYS AS (named_struct('x', b, 'y', a))
+             |) USING foo""".stripMargin)
+      sql(s"INSERT INTO testcat.$tblName(a, b) VALUES (1, 2)")
+      sql(s"INSERT INTO testcat.$tblName SELECT * FROM testcat.$tblName")
+      checkAnswer(spark.table(s"testcat.$tblName"), Seq.fill(2)(Row(1, 2, Row(2, 1))))
     }
   }
 
