@@ -84,9 +84,11 @@ JSON_OBJECT ( [ key, value [, key, value] ... ]
     `JSON_OBJECT('a' VALUE JSON_QUERY('{"o":{"x":1}}', '$.o'))` produces `{"a":{"x":1}}`). A
     `JSON_QUERY` with `OMIT QUOTES` returns an ordinary string, so it is quoted like any other value
     (e.g. `JSON_OBJECT('n' VALUE JSON_QUERY('{"n":"Ada"}', '$.n' OMIT QUOTES))` produces
-    `{"n":"Ada"}`). Without `FORMAT JSON`, an ordinary string value is always quoted, even when its
-    contents are themselves valid JSON text (e.g. `JSON_OBJECT('a' VALUE '{"b":1}')` produces
-    `{"a":"{\"b\":1}"}`). Implicit raw splicing applies to the direct syntax above, to the
+    `{"n":"Ada"}`). As an exception, a `GROUP BY` alias of a JSON producer stands for that producer
+    and is spliced; other column references, including a lateral column alias, are quoted. Without
+    `FORMAT JSON`, an ordinary string value is always quoted, even when its contents are themselves
+    valid JSON text (e.g. `JSON_OBJECT('a' VALUE '{"b":1}')` produces `{"a":"{\"b\":1}"}`).
+    Implicit raw splicing applies to the direct syntax above, to the
     unqualified comma form (e.g. `json_object('a', json_object('b', 1))`), and to a qualified or
     otherwise generic routed call (e.g. `builtin.json_object('a', json_object('b', 1))`); each
     produces `{"a":{"b":1}}` when Spark's built-in owns every call (see above; an extension's

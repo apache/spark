@@ -1313,9 +1313,11 @@ trait ImplicitlyFormattedAsJson extends Expression {
 
 object ImplicitlyFormattedAsJson {
   /**
-   * Whether `e` emits JSON text, so a JSON constructor splices it instead of quoting it. Sees
-   * through `Collate`, which only changes the collation, but not `Cast`: `CAST(... AS STRING)` is
-   * how a user (and `JsonArray.sql`) asks for the value to be quoted.
+   * Whether `e` may emit JSON text: true also for a [[RoutedJsonConstructor]], whose owner is not
+   * decided yet. The splice decision itself is [[isLexicallySpliced]] in the parser and
+   * [[splicesThroughCollationCast]] for a resolved argument. Sees through `Collate`, which only
+   * changes the collation, but not `Cast`: `CAST(... AS STRING)` is how a user (and
+   * `JsonArray.sql`) asks for the value to be quoted.
    */
   @scala.annotation.tailrec
   def isImplicitlyJson(e: Expression): Boolean = e match {

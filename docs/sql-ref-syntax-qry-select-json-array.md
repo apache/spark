@@ -68,8 +68,10 @@ JSON_ARRAY ( [ value [ FORMAT JSON ] [, ...] ]
     `ON NULL` behavior, exactly as a non-`FORMAT JSON` `NULL` would). At runtime, a non-null
     `FORMAT JSON` value must contain exactly one well-formed JSON value; malformed text or multiple
     top-level values raise an error. This decision is fixed from the query text and does not depend
-    on query optimization: a `JSON_ARRAY` result that reaches an argument through a column reference
-    is a plain `STRING` and is quoted, whether or not the optimizer inlines it.
+    on query optimization: a `JSON_ARRAY` result that reaches an argument through a column
+    reference, including a lateral column alias, is a plain `STRING` and is quoted, whether or not
+    the optimizer inlines it. The exception is a `GROUP BY` alias of a JSON producer, which stands
+    for that producer and is spliced.
 
 * **{ NULL | ABSENT } ON NULL**
 

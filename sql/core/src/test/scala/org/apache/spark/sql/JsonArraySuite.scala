@@ -765,6 +765,8 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
       }
     }
     keys.foreach(key => checkAnswer(sql(s"$select, $key"), Row("[1]")))
+    // A lateral column alias is a column reference, so it is quoted.
+    checkAnswer(sql("SELECT json_array(1) AS a, json_array(a)"), Row("[1]", """["[1]"]"""))
     // A DataFrame call passing an aliased nested constructor splices it too.
     checkAnswer(
       spark.range(1).select(call_function("json_array", expr("json_array(1)").as("x"))),
@@ -826,15 +828,15 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
         sql("SET PATH = system.session, system.builtin")
         // Both clause-free calls route, so the temp shadows each of them.
         checkAnswer(sql("SELECT json_array(json_array(1))"), Row("shadowed"))
-        // Strict single-pass routes the outer clause-free call to the shadow owner too, but the
-        // owner is a SQL function, which the single-pass analyzer does not yet resolve: it reaches
-        // that owner (proving the routing) and then aborts with an
-        // ExplicitlyUnsupportedResolverFeature on the SQL function body. The guard-gated modes fall
-        // back to fixed-point, which produces the shadow result asserted above.
+        // Strict single-pass routes the outer clause-free call to the shadow too. The built-in owns
+        // the clause-bearing inner call, so only the outer call can reach the SQL function, which
+        // single-pass does not resolve yet (the guard-gated modes fall back to fixed-point).
         withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
           intercept[ExplicitlyUnsupportedResolverFeature] {
-            sql("SELECT json_array(json_array(1))").queryExecution.analyzed
+            sql("SELECT json_array(json_array(1 NULL ON NULL))").queryExecution.analyzed
           }
+          // With the built-in owning the outer call, the same query analyzes.
+          sql("SELECT builtin.json_array(json_array(1 NULL ON NULL))").queryExecution.analyzed
         }
         // Qualifying every level selects Spark's constructor and splices.
         checkAnswer(sql("SELECT builtin.json_array(builtin.json_array(1))"), Row("[[1]]"))
@@ -1837,11 +1839,16 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     val cases = for {
       child <- Seq("date_format(ts, 'yyyy')", "CAST(ts AS STRING)", "(SELECT 1)", "1 + '1'")
       shape <- shapes
+      // Clause-bearing (stock) and clause-free nested (routed) constructors.
       ctor <- Seq(
-        s"JSON_OBJECT('d' VALUE $child NULL ON NULL)", s"JSON_ARRAY($child RETURNING STRING)")
+        s"JSON_OBJECT('d' VALUE $child NULL ON NULL)", s"JSON_ARRAY($child RETURNING STRING)",
+        s"JSON_OBJECT('d' VALUE JSON_OBJECT('e' VALUE $child))", s"JSON_ARRAY(JSON_ARRAY($child))")
     } yield (shape.format(ctor), shape.format(s"CAST($child AS STRING)"))
     val lambda = s"SELECT transform(arr, x -> %s) AS j $from"
-    (cases :+ (lambda.format("JSON_ARRAY(x NULL ON NULL)"), lambda.format("CAST(x AS STRING)")))
+    val lambdaCases = Seq("JSON_ARRAY(x NULL ON NULL)", "JSON_ARRAY(JSON_ARRAY(x))",
+      "JSON_OBJECT('d' VALUE JSON_OBJECT('e' VALUE x))")
+      .map(ctor => (lambda.format(ctor), lambda.format("CAST(x AS STRING)")))
+    (cases ++ lambdaCases)
       .foreach { case (query, baseline) =>
         assert(iterations(query) <= iterations(baseline), s"for $query")
       }
