@@ -195,10 +195,9 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
           traverse(a.right, replaceChildren = false, nullIsFalse)
         val equalityPredicates = equalityPredicatesLeft ++ equalityPredicatesRight
         val newSelf = if (equalityPredicates.nonEmpty && replaceChildren) {
+          val unreplaced = And(newLeft.getOrElse(a.left), newRight.getOrElse(a.right))
           Some(moveEqualitiesFirst(
-            And(replaceConstants(newLeft.getOrElse(a.left), equalityPredicates),
-              replaceConstants(newRight.getOrElse(a.right), equalityPredicates)),
-            equalityPredicates))
+            unreplaced, replaceConstants(unreplaced, equalityPredicates), equalityPredicates))
         } else {
           if (newLeft.isDefined || newRight.isDefined) {
             Some(And(newLeft.getOrElse(a.left), newRight.getOrElse(a.right)))
@@ -240,7 +239,10 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
    * `10 / (id - y) > 0 AND y = 0`, and a part of it that becomes constant is folded with no row
    * at all, e.g. `10 / y` for `y = 0 AND id > 10 / y`. So that this raises no error the original
    * condition cannot raise, an expression that can fail keeps its attributes, unless all of them
-   * are replaced and the result evaluates without an error.
+   * are replaced and the result evaluates without an error. For the same reason, an operand of an
+   * AND, OR, COALESCE or IN in a conjunct is rewritten only if no operand after it can fail, as it
+   * decides whether they run, e.g. `y < 3` in `(y < 3 OR 10 / x > 1) AND y = 5`. The conjuncts of
+   * `condition` itself are rewritten regardless, and [[moveEqualitiesFirst]] orders them.
    */
   private def replaceConstants(
       condition: Expression,
@@ -253,6 +255,7 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
         constantsMap.contains(a) && (isBinaryStable(a.dataType) || collationSafeReplacement)
       def replace(e: Expression): Expression = e match {
         case a: AttributeReference if canReplace(a) => constantsMap(a)
+        case _: And | _: Or | _: Coalesce | _: In => replaceOperands(e, replace)
         case _ if ExprUtils.isTotalOperator(e) => e.mapChildren(replace)
         case _ if e.references.nonEmpty && e.references.forall(canReplace) =>
           fold(e.transform { case a: AttributeReference if canReplace(a) => constantsMap(a) })
@@ -264,12 +267,31 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
     def replaceInCondition(e: Expression): Expression = e match {
       case b: BinaryComparison if predicates.contains(b) => b
       case b: BinaryComparison => replaceInComparison(b)
+      case _: And | _: Or | _: Coalesce | _: In => replaceOperands(e, replaceInCondition)
       case _ if ExprUtils.isTotalOperator(e) => e.mapChildren(replaceInCondition)
       // The children of these include the comparisons of a pulled up correlated condition.
       case _: InSubquery | _: ListQuery | _: Exists => e.mapChildren(replaceInCondition)
       case _ => e
     }
-    replaceInCondition(condition)
+    def replaceInConjuncts(e: Expression): Expression = e match {
+      case a: And => a.mapChildren(replaceInConjuncts)
+      case _ => replaceInCondition(e)
+    }
+    replaceInConjuncts(condition)
+  }
+
+  /**
+   * Rewrites the operands of `e`, which short-circuits, with `f`. An operand decides whether the
+   * ones after it run, so it is rewritten only if none of those, as rewritten, can fail.
+   */
+  private def replaceOperands(e: Expression, f: Expression => Expression): Expression = {
+    val (newChildren, _) = e.children.foldRight((List.empty[Expression], false)) {
+      case (child, (laterChildren, laterCanFail)) =>
+        val newChild = if (laterCanFail) child else f(child)
+        (newChild :: laterChildren,
+          laterCanFail || !ExprUtils.canEvaluateUnconditionally(newChild))
+    }
+    e.withNewChildren(newChildren)
   }
 
   /** Returns the literal that `e` folds to, or None if it is not constant or fails to fold. */
@@ -286,13 +308,16 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   /**
-   * Moves the equalities ahead of the other conjuncts of `condition` if one that can fail still
-   * refers to a propagated attribute. Such a conjunct also runs on rows where an equality does
-   * not hold, with the value of the row, while a guard over the same attribute may be folded
-   * away, e.g. `n / d > 1` for `d <> 0 AND n / d > 1 AND d = 5`. An equality between an
-   * attribute and a literal cannot fail, so running it first raises no error.
+   * Moves the equalities ahead of the other conjuncts of `condition`, the rewritten `original`, if
+   * one that can fail still refers to a propagated attribute. Such a conjunct also runs on rows
+   * where an equality does not hold, with the value of the row, while a guard over the same
+   * attribute may be folded away, e.g. `n / d > 1` for `d <> 0 AND n / d > 1 AND d = 5`. The
+   * same holds for a conjunct that can fail after one that is rewritten, as that one decides
+   * whether it runs, e.g. `10 / x > 0` for `y > 0 AND 10 / x > 0 AND y = 1`. An equality between
+   * an attribute and a literal cannot fail, so running it first raises no error.
    */
   private def moveEqualitiesFirst(
+      original: Expression,
       condition: Expression,
       equalityPredicates: AttributeMap[(Literal, BinaryComparison)]): Expression = {
     val predicates = equalityPredicates.values.map(_._2).toSet[Expression]
@@ -303,7 +328,11 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
     val keepsFailable = others.exists { c =>
       c.references.intersect(propagated).nonEmpty && !ExprUtils.canEvaluateUnconditionally(c)
     }
-    if (keepsFailable && reordered != conjuncts) {
+    val firstRewritten = splitConjunctivePredicates(original).zip(conjuncts)
+      .indexWhere { case (before, after) => !before.fastEquals(after) }
+    val unmasksFailable = firstRewritten >= 0 &&
+      conjuncts.drop(firstRewritten + 1).exists(!ExprUtils.canEvaluateUnconditionally(_))
+    if ((keepsFailable || unmasksFailable) && reordered != conjuncts) {
       reordered.reduce(And)
     } else {
       condition
