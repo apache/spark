@@ -32,6 +32,9 @@ object NondeterministicExpressionCollection {
           case nondeterministicExpr: Nondeterministic => nondeterministicExpr
           case udf: UserDefinedExpression if !udf.deterministic => udf
           case udf: ExternalUserDefinedFunction if !udf.deterministic => udf
+          // AesEncrypt draws an IV without extending Nondeterministic. That
+          // trait would also mark ECB and an explicit IV nondeterministic.
+          case aes: AesEncrypt if !aes.deterministic => aes
         }
 
         for (nondeterministicExpr <- leafNondeterministic.distinct) {
