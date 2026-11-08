@@ -469,8 +469,10 @@ case class PreparedExternalLookupJoin(
 /**
  * The types of lookup columns on which Spark offers a comparison to the connector as a lookup
  * candidate. The connector evaluates a selected candidate in its store, so Spark offers only types
- * whose values a store compares as Spark does. A comparison on any other type stays in Spark's
- * residual condition.
+ * whose values a store compares as Spark does. Spark evaluates a comparison on any other type
+ * itself: in the residual condition, or, when it reads only lookup columns, in a lookup-side stage,
+ * where predicate pushdown moves it. There the connector may also receive it as a pushed filter,
+ * which Spark evaluates again on the returned rows.
  */
 object ExternalLookupKeyTypes {
   /**

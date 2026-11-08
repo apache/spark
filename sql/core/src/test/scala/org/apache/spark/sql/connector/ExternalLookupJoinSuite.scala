@@ -1353,9 +1353,10 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       Seq(Row(1, "one", 1, "engineering"), Row(1, "one", 1, "research"),
         Row(2, "two", 2, "sales"), Row(3, "three", null, null)))
 
-    // Only comparisons of a lookup field with a stream-side value or a constant are offered. The
-    // connector selects `id = ?`, and Spark evaluates the other conjuncts: the stream-side one on
-    // each stream row before the lookup, and `length(department) > id` on the lookup side.
+    // Only comparisons of a lookup field with a stream-side value are offered here. The connector
+    // selects `id = ?`, and Spark evaluates the other conjuncts: the stream-side one on each stream
+    // row before the lookup, and the two others on the lookup side. The join keeps `id = ?` as its
+    // key, so the comparison with a constant goes there too, as a pushed filter.
     SimpleExternalLookupDataSource.resetCounters()
     val flagged = streamOf(Seq((1, true), (2, true), (1, false)).toDF("id", "flag"))
     checkStream(
@@ -1365,8 +1366,7 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
           lookup("department") === "engineering" && length(lookup("department")) > lookup("id"),
         "left_outer"),
       Seq(Row(1, true, 1, "engineering"), Row(2, true, null, null), Row(1, false, null, null)))
-    assert(SimpleExternalLookupDataSource.lookupCandidates.get() ===
-      Seq(("=", "id", IntegerType), ("=", "department", StringType)))
+    assert(SimpleExternalLookupDataSource.lookupCandidates.get() === Seq(("=", "id", IntegerType)))
   }
 
   test("a stream row that fails a stream-side conjunct of the condition is not looked up") {
@@ -3341,6 +3341,88 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
           } === Some(joinType))
           assert(SimpleExternalLookupDataSource.pushedPredicateCount.get() === 0)
         }
+    }
+  }
+
+  test("a moved conjunct over withField or dropFields values runs on the lookup side") {
+    val lookup = readSchemaLookup("struct")
+    val left = streamOf(Seq(1, 2).toDF("id"))
+    val key = left("id") === lookup("id")
+    Seq(
+      lookup("info").dropFields("seats") === struct(lit("pro").as("plan")),
+      lookup("info").withField("seats", lit(0)) ===
+        struct(lit("pro").as("plan"), lit(0).as("seats"))).foreach { conjunct =>
+      Seq(
+        "inner" -> Seq(Row(1, 1, Row("pro", 10))),
+        "left_outer" -> Seq(Row(1, 1, Row("pro", 10)), Row(2, null, null))).foreach {
+        case (joinType, expected) =>
+          val joined = left.join(lookup, key && conjunct, joinType)
+          val run = runStream(joined)
+          QueryTest.sameRows(expected, run.rows).foreach(fail(_))
+          assert(run.lookupJoin.lookupTransforms.nonEmpty, joinType)
+          // Without the pushdown, the conjunct stays in the residual condition, with the same rows.
+          withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> PushDownPredicates.ruleName) {
+            val residualRun = runStream(joined)
+            QueryTest.sameRows(run.rows, residualRun.rows).foreach(fail(_))
+            assert(residualRun.lookupJoin.lookupTransforms.isEmpty, joinType)
+          }
+      }
+    }
+  }
+
+  test("a conjunct that can fail moves out of a lookup join's condition as out of a join's") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+      // Without the hint, a table that also supports batch reads runs an ordinary join.
+      val dual = spark.read.format(classOf[DualCapabilityExternalLookupDataSource].getName).load()
+      // Shifts that employees report. Employee 99 is not stored and reports hours that are not a
+      // number, so casting them fails.
+      val shifts = streamOf(Seq((1, "8"), (99, "bad")).toDF("id", "hours"))
+      def joinShifts(right: DataFrame, joinType: String): DataFrame = shifts.join(
+        right, shifts("id") === right("id") && shifts("hours").cast("int") > 0, joinType)
+
+      // An inner join pushes the conjunct into the stream side, which casts the hours of every
+      // shift, so both joins fail on employee 99.
+      Seq(lookup, dual).foreach { right =>
+        val error = intercept[StreamingQueryException](runStream(joinShifts(right, "inner")))
+        val conditions = Iterator.iterate[Throwable](error)(_.getCause).takeWhile(_ != null)
+          .collect { case throwable: SparkThrowable => throwable.getCondition }.toSeq
+        assert(conditions.contains("CAST_INVALID_INPUT"), conditions)
+      }
+      // A left outer join keeps it in the condition, which both evaluate only for the shifts of
+      // stored employees.
+      val lookupRun = runStream(joinShifts(lookup, "left_outer"))
+      assert(lookupRun.plan.exists(_.isInstanceOf[PreparedExternalLookupJoin]))
+      Seq(lookupRun.rows, runStream(joinShifts(dual, "left_outer")).rows).foreach { rows =>
+        QueryTest.sameRows(
+          Seq(Row(1, "8", 1, "engineering"), Row(1, "8", 1, "research"),
+            Row(99, "bad", null, null)),
+          rows).foreach(fail(_))
+      }
+    }
+  }
+
+  test("a comparison with a constant leaves a lookup join's requests batched and cached") {
+    // The source selects every offered comparison on `id`. A selected range would send one
+    // parameter row per request and turn off the cache, but `id >= 2` goes onto the lookup side as
+    // a filter, because the join keeps `id = ?` as its key, so it is not offered.
+    val lookup = spark.read
+      .format(classOf[SimpleExternalLookupDataSource].getName)
+      .option("maxBatchSize", "2")
+      .load()
+    val left = streamOf(Seq(2, 3, 2, 3).toDF("id"))
+    val key = left("id") === lookup("id")
+    Seq(
+      left.join(lookup, key && lookup("id") >= 2),
+      left.join(lookup, key).where(lookup("id") >= 2)).foreach { joined =>
+      SimpleExternalLookupDataSource.resetCounters()
+      val run = runStream(joined)
+      QueryTest.sameRows(Seq(Row(2, 2, "sales"), Row(2, 2, "sales")), run.rows).foreach(fail(_))
+      assert(SimpleExternalLookupDataSource.lookupCandidates.get() ===
+        Seq(("=", "id", IntegerType)))
+      // The first batch of two keys is one request, and the second batch is served from the cache.
+      assert(SimpleExternalLookupDataSource.requestSizes.asScala.toSeq === Seq(2))
+      assert(run.lookupJoin.metrics("numCacheHits").value === 2)
     }
   }
 

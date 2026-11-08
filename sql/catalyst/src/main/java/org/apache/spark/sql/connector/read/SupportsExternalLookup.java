@@ -41,16 +41,19 @@ public interface SupportsExternalLookup extends ScanBuilder {
    * lookup-side {@link NamedReference} with a {@link LookupParameter}; the array is never empty. In
    * every offered comparison the reference is {@code children()[0]} and the parameter is
    * {@code children()[1]}: when the query writes the lookup column on the right, Spark flips the
-   * operator, so {@code s.ts < t.event_time} is offered as {@code event_time > ?}. Spark offers
-   * {@code =} and {@code <=>} only on a lookup column of an integral type, BOOLEAN, DECIMAL, DATE,
-   * TIMESTAMP, TIMESTAMP_NTZ, BINARY, or a STRING or VARCHAR whose collation compares bytes, such
-   * as UTF8_BINARY. It offers {@code <}, {@code <=}, {@code >} and {@code >=} only on a lookup
-   * column of an integral type, DECIMAL, DATE, TIMESTAMP or TIMESTAMP_NTZ, and only when the
-   * parameter cannot fail to evaluate. When a selected predicate is a range comparison whose
-   * parameter reads a stream column, each request holds exactly one parameter row. It offers no
-   * comparison on VARCHAR under {@code spark.sql.charVarchar.standardSemantics.enabled}, and never
-   * one on FLOAT, DOUBLE, CHAR, a string with another collation, a complex type or any other type.
-   * For example:
+   * operator, so {@code s.ts < t.event_time} is offered as {@code event_time > ?}. When the join
+   * condition also has a comparison with a stream-side value that Spark can offer, Spark usually
+   * moves a comparison of a lookup column with a constant, such as {@code t.tier >= 2}, onto the
+   * lookup side, as for an ordinary join. This source then receives it as a pushed filter before
+   * this method is called. Otherwise, it can be offered here. Spark offers {@code =} and
+   * {@code <=>} only on a lookup column of an integral type, BOOLEAN, DECIMAL, DATE, TIMESTAMP,
+   * TIMESTAMP_NTZ, BINARY, or a STRING or VARCHAR whose collation compares bytes, such as
+   * UTF8_BINARY. It offers {@code <}, {@code <=}, {@code >} and {@code >=} only on a lookup column
+   * of an integral type, DECIMAL, DATE, TIMESTAMP or TIMESTAMP_NTZ, and only when the parameter
+   * cannot fail to evaluate. When a selected predicate is a range comparison whose parameter reads
+   * a stream column, each request holds exactly one parameter row. It offers no comparison on
+   * VARCHAR under {@code spark.sql.charVarchar.standardSemantics.enabled}, and never one on FLOAT,
+   * DOUBLE, CHAR, a string with another collation, a complex type or any other type. For example:
    * <pre>{@code
    *   candidates: [tenant = ?, event_time >= ?, event_time < ?, region = ?]
    *   returned:   [event_time >= ?, tenant = ?]
