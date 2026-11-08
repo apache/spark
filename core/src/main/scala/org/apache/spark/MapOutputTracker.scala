@@ -933,6 +933,12 @@ private[spark] class MapOutputTrackerMaster(
             case NonFatal(e) =>
               logError(log"${MDC(ERROR, e.getMessage)}", e)
               replyFailure(data, e)
+            case t: Throwable =>
+              // Answer the request before rethrowing, as the RPC Inbox does, so the caller sees
+              // the error instead of an RPC timeout. The rethrow ends this MessageLoop as before.
+              logError(log"${MDC(ERROR, t.getMessage)}", t)
+              replyFailure(data, t)
+              throw t
           }
         }
       } catch {

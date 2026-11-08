@@ -208,9 +208,10 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     rpcEnv.shutdown()
   }
 
-  // SPARK-60950: tests post directly to the master's MessageLoop, bypassing the endpoint, so
-  // that the exception is thrown on the dispatcher thread rather than inside the RPC Inbox (which
-  // already replies with a failure on its own).
+  // SPARK-60950: for the queued request kinds the endpoint only posts the request, so on both
+  // routes the handler runs, and throws, on a map-output-dispatcher MessageLoop thread. These
+  // tests post directly so they can drive the MessageLoop with mocked call contexts, including
+  // ones whose reply or sendFailure throws, without setting up an RpcEnv and endpoint.
 
   /** Creates a master tracker that has shuffle 10 with a single registered map output. */
   private def newTrackerMasterWithOneMapOutput(sparkConf: SparkConf): MapOutputTrackerMaster = {
@@ -221,8 +222,9 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     tracker
   }
 
-  private def newCallContext(): RpcCallContext = {
-    val context = mock(classOf[RpcCallContext])
+  /** Creates a mock call context; `name` shows up in Mockito verification failures. */
+  private def newCallContext(name: String): RpcCallContext = {
+    val context = mock(classOf[RpcCallContext], withSettings().name(name))
     when(context.senderAddress).thenReturn(RpcAddress("localhost", 12345))
     context
   }
@@ -231,17 +233,14 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     val masterTracker = newTrackerMaster()
     try {
       // Shuffle 10 is not registered, so looking up its status throws NoSuchElementException.
-      val requests: Seq[RpcCallContext => MapOutputTrackerMasterMessage] = Seq(
-        GetMapOutputMessage(10, _),
-        GetMapAndMergeOutputMessage(10, _))
-      requests.foreach { request =>
-        val context = newCallContext()
-        val message = request(context)
-        masterTracker.post(message)
-        withClue(s"${message.getClass.getSimpleName}: ") {
-          verify(context, timeout(30000)).sendFailure(isA(classOf[NoSuchElementException]))
-          verify(context, never()).reply(any())
-        }
+      val requests: Seq[(String, RpcCallContext => MapOutputTrackerMasterMessage)] = Seq(
+        ("GetMapOutputMessage", GetMapOutputMessage(10, _)),
+        ("GetMapAndMergeOutputMessage", GetMapAndMergeOutputMessage(10, _)))
+      requests.foreach { case (name, request) =>
+        val context = newCallContext(name)
+        masterTracker.post(request(context))
+        verify(context, timeout(30000)).sendFailure(isA(classOf[NoSuchElementException]))
+        verify(context, never()).reply(any())
       }
     } finally {
       masterTracker.stop()
@@ -253,18 +252,30 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     try {
       // Models a reply that cannot be delivered, e.g. one that fails to serialize.
       val replyError = new IllegalStateException("injected reply failure")
-      val requests: Seq[RpcCallContext => MapOutputTrackerMasterMessage] = Seq(
-        GetMapOutputMessage(10, _),
-        GetShufflePushMergersMessage(10, _))
-      requests.foreach { request =>
-        val context = newCallContext()
+      val requests: Seq[(String, RpcCallContext => MapOutputTrackerMasterMessage)] = Seq(
+        ("GetMapOutputMessage", GetMapOutputMessage(10, _)),
+        ("GetShufflePushMergersMessage", GetShufflePushMergersMessage(10, _)))
+      requests.foreach { case (name, request) =>
+        val context = newCallContext(name)
         doThrow(replyError).when(context).reply(any())
-        val message = request(context)
-        masterTracker.post(message)
-        withClue(s"${message.getClass.getSimpleName}: ") {
-          verify(context, timeout(30000)).sendFailure(replyError)
-        }
+        masterTracker.post(request(context))
+        verify(context, timeout(30000)).sendFailure(replyError)
       }
+    } finally {
+      masterTracker.stop()
+    }
+  }
+
+  test("SPARK-60950: master replies with a failure when the handler throws a fatal error") {
+    val masterTracker = newTrackerMasterWithOneMapOutput(conf)
+    try {
+      // A fatal error is rethrown after the reply and ends the MessageLoop that handled it, so
+      // this test does not rely on that loop serving any later request.
+      val fatalError = new LinkageError("injected fatal reply failure")
+      val context = newCallContext("GetMapOutputMessage")
+      doThrow(fatalError).when(context).reply(any())
+      masterTracker.post(GetMapOutputMessage(10, context))
+      verify(context, timeout(30000)).sendFailure(fatalError)
     } finally {
       masterTracker.stop()
     }
@@ -276,14 +287,14 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     val masterTracker = newTrackerMasterWithOneMapOutput(
       new SparkConf().set(SHUFFLE_MAPOUTPUT_DISPATCHER_NUM_THREADS, 1))
     try {
-      val failingContext = newCallContext()
+      val failingContext = newCallContext("failingContext")
       doThrow(new IllegalStateException("injected sendFailure failure"))
         .when(failingContext).sendFailure(any())
       // Shuffle 11 is not registered, so the handler throws and the loop calls sendFailure.
       masterTracker.post(GetMapOutputMessage(11, failingContext))
       verify(failingContext, timeout(30000)).sendFailure(any())
 
-      val context = newCallContext()
+      val context = newCallContext("context")
       masterTracker.post(GetMapOutputMessage(10, context))
       verify(context, timeout(30000)).reply(any())
       verify(context, never()).sendFailure(any())
