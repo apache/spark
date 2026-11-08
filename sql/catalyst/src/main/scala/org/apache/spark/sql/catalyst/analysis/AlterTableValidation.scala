@@ -26,10 +26,10 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 
 /** Validates ALTER TABLE commands after their tables and columns have been resolved. */
-private[sql] object AlterTableValidation extends QueryErrorsBase {
+private[sql] object AlterTableValidation {
   def validate(
       alter: AlterTableCommand,
-      errors: QueryErrorsBase = AlterTableValidation): Unit = {
+      errors: QueryErrorsBase): Unit = {
     def checkColumnNotExists(op: String, fieldNames: Seq[String], struct: StructType): Unit = {
       if (struct.findNestedField(
           fieldNames, includeCollections = true, alter.conf.resolver).isDefined) {

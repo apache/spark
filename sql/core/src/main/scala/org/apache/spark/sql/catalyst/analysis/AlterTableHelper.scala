@@ -129,10 +129,8 @@ private[sql] object AlterTableHelper {
       a: AlterColumns,
       tableName: => String,
       identifier: => TableIdentifier): AlterTableChangeColumnCommentsCommand = {
-    // This rule rewrites AlterColumns into a command during resolution, before CheckAnalysis
-    // gets to validate it, so re-run the "same column changed twice" check here (the same one
-    // CheckAnalysis applies to the AlterColumns node on the V2 path). Use `a.failAnalysis` so the
-    // error carries the same query context as the V2 path.
+    // ResolveSessionCatalog rewrites AlterColumns into a command before CheckAnalysis runs,
+    // so repeat its duplicate-column check here. Use a.failAnalysis to preserve query context.
     AlterColumns.findRepeatedColumn(a.specs).foreach { name =>
       a.failAnalysis(
         errorClass = "NOT_SUPPORTED_CHANGE_SAME_COLUMN",

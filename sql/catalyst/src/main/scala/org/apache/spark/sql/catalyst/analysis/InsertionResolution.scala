@@ -32,15 +32,10 @@ import org.apache.spark.util.ArrayImplicits._
 
 /** Resolves the query projection and write mode of INSERT statements. */
 private[sql] object InsertionResolution extends SQLConfHelper {
-  private def resolver: Resolver = conf.resolver
-
   /**
    * Lowers an INSERT into a V2 table whose input query has been resolved.
    * The caller rejects REPLACE ON/USING; generated partition expressions still need resolution.
    */
-  def resolveInsertInto(i: InsertIntoStatement): V2WriteCommand =
-    resolveInsertInto(i, createProjectForByNameQuery)
-
   def resolveInsertInto(
       i: InsertIntoStatement,
       createProject: (String, InsertIntoStatement) => LogicalPlan): V2WriteCommand = {
@@ -123,11 +118,6 @@ private[sql] object InsertionResolution extends SQLConfHelper {
   }
 
   /** Add a project to use the table column names for INSERT INTO BY NAME */
-  def createProjectForByNameQuery(
-      tblName: String,
-      i: InsertIntoStatement): LogicalPlan =
-    createProjectForByNameQuery(tblName, i, resolver)
-
   def createProjectForByNameQuery(
       tblName: String,
       i: InsertIntoStatement,

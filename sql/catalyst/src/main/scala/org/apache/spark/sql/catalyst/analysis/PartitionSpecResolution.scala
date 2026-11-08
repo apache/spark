@@ -30,7 +30,7 @@ import org.apache.spark.sql.util.PartitioningUtils.{castPartitionSpec, normalize
 import org.apache.spark.util.ArrayImplicits._
 
 /** Resolves and validates partition specifications for table commands. */
-private[sql] object PartitionSpecResolution extends QueryErrorsBase {
+private[sql] object PartitionSpecResolution {
   def resolvePartitionSpec(
       tableName: String,
       partSpec: UnresolvedPartitionSpec,
@@ -73,7 +73,7 @@ private[sql] object PartitionSpecResolution extends QueryErrorsBase {
   /** Validates that the target supports partition management with a nonempty schema. */
   def validate(
       command: V2PartitionCommand,
-      errors: QueryErrorsBase = PartitionSpecResolution): Unit = {
+      errors: QueryErrorsBase): Unit = {
     command.table match {
       case r @ ResolvedTable(_, _, table, _) => table match {
         case t: SupportsPartitionManagement =>
