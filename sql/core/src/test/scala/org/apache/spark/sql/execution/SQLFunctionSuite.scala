@@ -583,15 +583,25 @@ class SQLFunctionSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-60805: a permanent function cannot reference a session-qualified temp function") {
-    withUserDefinedFunction("temp_fn" -> true, "temp_caller" -> true) {
+  test("SPARK-60805: a permanent function cannot reference a temp function or temp TVF") {
+    withUserDefinedFunction("temp_fn" -> true, "temp_caller" -> true, "temp_tbl" -> true,
+        "temp_tbl_caller" -> true) {
       sql("CREATE TEMPORARY FUNCTION temp_fn() RETURNS INT RETURN 1")
+      sql("CREATE TEMPORARY FUNCTION temp_tbl() RETURNS TABLE (a INT) RETURN SELECT 1")
       // A temp function may.
       sql("CREATE TEMPORARY FUNCTION temp_caller() RETURNS INT RETURN system.session.temp_fn()")
       checkAnswer(sql("SELECT temp_caller()"), Row(1))
+      sql("CREATE TEMPORARY FUNCTION temp_tbl_caller() RETURNS TABLE (a INT) " +
+        "RETURN SELECT * FROM system.session.temp_tbl()")
+      checkAnswer(sql("SELECT * FROM temp_tbl_caller()"), Row(1))
       Seq(
         "CREATE FUNCTION perm_fn() RETURNS INT RETURN session.temp_fn()",
-        "CREATE FUNCTION perm_fn() RETURNS INT RETURN system.session.temp_fn()"
+        "CREATE FUNCTION perm_fn() RETURNS INT RETURN system.session.temp_fn()",
+        "CREATE FUNCTION perm_fn() RETURNS TABLE (a INT) RETURN SELECT * FROM temp_tbl()",
+        "CREATE FUNCTION perm_fn() RETURNS TABLE (a INT) RETURN SELECT * FROM session.temp_tbl()",
+        "CREATE FUNCTION perm_fn() RETURNS TABLE (a INT) " +
+          "RETURN SELECT * FROM system.session.temp_tbl()",
+        "CREATE FUNCTION perm_fn() RETURNS INT RETURN (SELECT a FROM session.temp_tbl())"
       ).foreach { ddl =>
         val e = intercept[AnalysisException](sql(ddl))
         assert(e.getCondition == "INVALID_TEMP_OBJ_REFERENCE", s"$ddl: ${e.getMessage}")
