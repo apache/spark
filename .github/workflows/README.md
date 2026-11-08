@@ -11,37 +11,45 @@ The Apache Software Foundation (ASF) imposes [resource usage limits][limit] on G
 [limit]: https://infra.apache.org/github-actions-policy.html
 [usage]: https://github.com/apache/spark/actions/metrics/usage
 
-### Spread scheduled workloads across three-day phases
+### Reduce and stagger scheduled workloads
 
-Scheduled build variants use hourly UTC slots across three day-of-month phases:
+Move two-day workloads to a three-day cadence, but preserve existing four- and
+six-day cadences. Do not shorten a workload's original interval when assigning
+a new slot. The base-image cache moves from daily to three days.
 
-| Phase | Dates | Cron day-of-month field |
-| --- | --- | --- |
-| 1 | 1, 4, 7, ... | `1-31/3` |
-| 2 | 2, 5, 8, ... | `2-31/3` |
-| 3 | 3, 6, 9, ... | `3-31/3` |
+Reserve these UTC hours for workloads outside the three-day cadence:
 
-Use minute 17 for these staggered starts to avoid GitHub Actions' busy
+| UTC hour | Workloads |
+| --- | --- |
+| 00 | Daily stale-PR cleanup at 00:30 |
+| 04, 08, 20 | Four- and six-day variants at minute 17 |
+| 11 | Unchanged branch-3.5 scheduler at 11:00 |
+| 12 | Daily Pages at 12:30 |
+
+Three-day workloads use the remaining 18 hours, with dates offset across three
+phases: `1-31/3`, `2-31/3`, and `3-31/3`. Longer cadences also use offsets, such
+as `2-31/4` or `3-31/6`, to spread starts across their reserved hours.
+
+Use minute 17 for rescheduled builds to avoid GitHub Actions' busy
 [start-of-hour scheduling period][schedule-event]. The minute is an arbitrary
-off-hour choice; the hour and date phase distribute the workloads, and minute
-17 does not guarantee timely execution.
+off-hour choice; hour and date assignments distribute load without ranking
+jobs by importance. An individual interval can be shortened later if faster
+feedback is justified.
 
-Pages retains its daily 12:30 UTC schedule, so the 12:00 hour is reserved for
-Pages in every phase. Stale-PR cleanup keeps its daily frequency at 00:30 UTC.
-The branch-3.5 scheduler retains its original four-day cadence and dispatches
-both variants at 11:00 UTC. The other 66 workloads use the three-day cadence.
-The build-status updater keeps its separate schedule. Other event triggers are
-unaffected.
+Pages and stale-PR cleanup keep their daily frequencies. The branch-3.5
+scheduler keeps its original shared four-day trigger. The build-status updater
+keeps its separate schedule, and other event triggers are unaffected.
 
-The phases restart each month, so intervals are approximately three days rather
-than exactly 72 hours. Scheduled starts can be delayed, and running workflows
-can overlap.
+Day-of-month offsets restart each month, so these are calendar cadences rather
+than strict rolling intervals. Some four- and six-day cycles intersect within
+the reserved hours. Scheduled starts can be delayed, and running workflows can
+overlap.
 
 Maintenance-branch schedulers run on the default branch and dispatch workflows
 to their target branches. When changing a branch schedule, update both its
 `on.schedule` cron and the matching `github.event.schedule` condition. Preserve
-the skip-if-unchanged check. When assigning a new slot, check the schedules in
-all workflows to avoid starting another workload in the same phase and hour.
+the skip-if-unchanged check. Check existing schedules when assigning slots, and
+keep three-day workloads out of the reserved hours.
 
 [schedule-event]: https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule
 

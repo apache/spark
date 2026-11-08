@@ -21,14 +21,14 @@ name: "Branch-4.3 CI Scheduler"
 
 on:
   schedule:
-    - cron: '17 11 1-31/3 * *'
-    - cron: '17 15 1-31/3 * *'
-    - cron: '17 17 1-31/3 * *'
-    - cron: '17 21 1-31/3 * *'
     - cron: '17 1 2-31/3 * *'
     - cron: '17 9 3-31/3 * *'
+    - cron: '17 15 1-31/3 * *'
+    - cron: '17 17 1-31/3 * *'
     - cron: '17 18 3-31/3 * *'
-    - cron: '17 20 3-31/3 * *'
+    - cron: '17 19 1-31/3 * *'
+    - cron: '17 19 3-31/3 * *'
+    - cron: '17 21 1-31/3 * *'
   workflow_dispatch:
     inputs:
       target:
@@ -84,7 +84,7 @@ jobs:
           ./dev/dispatch-if-changed.sh build_java17.yml branch-4.3
       - name: Java 21 Build
         if: >-
-          github.event.schedule == '17 11 1-31/3 * *' ||
+          github.event.schedule == '17 19 1-31/3 * *' ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'java21' || inputs.target == 'all'))
         run: |
@@ -112,7 +112,7 @@ jobs:
           ./dev/dispatch-if-changed.sh build_python_3.11.yml branch-4.3
       - name: Python 3.14 Build
         if: >-
-          github.event.schedule == '17 20 3-31/3 * *' ||
+          github.event.schedule == '17 19 3-31/3 * *' ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'python_3.14' || inputs.target == 'all'))
         run: |
