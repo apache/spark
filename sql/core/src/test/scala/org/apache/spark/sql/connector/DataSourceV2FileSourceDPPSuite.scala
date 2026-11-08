@@ -23,19 +23,26 @@ import org.apache.logging.log4j.Level
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, DynamicPruningExpression, DynamicPruningSubquery, EqualTo, Expression, GreaterThanOrEqual, In, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
-import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog
-import org.apache.spark.sql.connector.read.InputPartition
+import org.apache.spark.sql.catalyst.ProjectingInternalRow
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, DynamicPruningExpression, DynamicPruningSubquery, EqualTo, Expression, GreaterThanOrEqual, In, Literal, Not}
+import org.apache.spark.sql.catalyst.planning.GroupBasedRowLevelOperation
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, ReplaceData}
+import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.ReplaceDataProjections
+import org.apache.spark.sql.connector.catalog.{Column, InMemoryTableCatalog, SupportsRowLevelOperations, Table, TableCapability}
+import org.apache.spark.sql.connector.read.{InputPartition, ScanBuilder}
+import org.apache.spark.sql.connector.write.{LogicalWriteInfo, RowLevelOperation, RowLevelOperationBuilder, RowLevelOperationInfo, RowLevelOperationTable, WriteBuilder}
 import org.apache.spark.sql.execution.{FilterExec, ScalarSubquery}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.datasources.{FilePartition, InMemoryFileIndex, PartitionDirectory}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, FileScan, PushDownUtils, RuntimePartitionPruningFileScan}
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.execution.datasources.v2.text.TextScan
+import org.apache.spark.sql.execution.dynamicpruning.RowLevelOperationRuntimeGroupFiltering
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, LongType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * Tests for SPARK-30628: subquery partition pruning and DPP for V2 file sources.
@@ -816,6 +823,37 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
     }
   }
 
+  test("no group filter for a group-based row-level operation over a built-in file scan") {
+    // A built-in file scan does not record which groups its runtime-filtered read returned, which
+    // a group-based write needs in order to replace only those groups.
+    withDppV2Conf {
+      withTempDir { dir =>
+        writeFactAndDim(dir)
+        val read = sql("SELECT * FROM fact").queryExecution.optimizedPlan.collectFirst {
+          case r: DataSourceV2ScanRelation => r
+        }.getOrElse(fail("expected a DataSourceV2ScanRelation"))
+        val rowLevelTable = RowLevelOperationTable(
+          new RowLevelOperationOnlyTable(read.relation.table), new DeleteOnlyOperation)
+        val rowLevelRead = read.copy(relation = read.relation.copy(table = rowLevelTable))
+        assert(rowLevelRead.runtimeFilterAttrs.nonEmpty)
+        val idAttr = rowLevelRead.output.find(_.name == "id").getOrElse(fail("expected id"))
+        val cond = EqualTo(idAttr, Literal(5L))
+        val replaceData = ReplaceData(rowLevelRead.relation, cond, Filter(Not(cond), rowLevelRead),
+          read.relation, ReplaceDataProjections(
+            ProjectingInternalRow(read.schema, read.output.indices), None),
+          groupFilterCondition = Some(cond))
+        // The rule's pattern matches this plan, so only the guard for a built-in file scan keeps
+        // it from injecting a group filter.
+        assert(GroupBasedRowLevelOperation.unapply(replaceData).exists(_._4 eq rowLevelRead))
+        val noOptimization = new Rule[LogicalPlan] {
+          override def apply(plan: LogicalPlan): LogicalPlan = plan
+        }
+        val filtered = new RowLevelOperationRuntimeGroupFiltering(noOptimization)(replaceData)
+        assert(filtered === replaceData, s"expected no group filter, got:\n$filtered")
+      }
+    }
+  }
+
   Seq("parquet", "orc", "json", "csv").foreach { format =>
     test(s"DPP prunes input partitions at runtime for v2 $format") {
       withDppV2Conf {
@@ -834,6 +872,26 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
       }
     }
   }
+}
+
+// Wraps a built-in file table as the `SupportsRowLevelOperations` table that
+// `RowLevelOperationTable` requires; nothing reads or writes through it.
+private class RowLevelOperationOnlyTable(table: Table)
+  extends Table with SupportsRowLevelOperations {
+  override def name(): String = table.name()
+  override def columns(): Array[Column] = table.columns()
+  override def capabilities(): java.util.Set[TableCapability] = table.capabilities()
+  override def newRowLevelOperationBuilder(
+      info: RowLevelOperationInfo): RowLevelOperationBuilder =
+    throw new UnsupportedOperationException("not built in this test")
+}
+
+private class DeleteOnlyOperation extends RowLevelOperation {
+  override def command(): RowLevelOperation.Command = RowLevelOperation.Command.DELETE
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
+    throw new UnsupportedOperationException("not read in this test")
+  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder =
+    throw new UnsupportedOperationException("not written in this test")
 }
 
 class DataSourceV2FileSourceDPPSuiteAEOff extends DataSourceV2FileSourceDPPSuiteBase
