@@ -697,8 +697,16 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(TimeFromSeconds(Literal(Decimal("52200.123456789"))), 52200123456000L)
     checkEvaluation(TimeFromSeconds(Literal(0.0000001)), 0L)
     checkEvaluation(TimeFromSeconds(Literal(52200.1234567)), 52200123456000L)
+    // More than 9 fractional digits used to fail with an overflow error.
+    checkEvaluation(TimeFromSeconds(Literal(Decimal("1.0000000001"))), 1000000000L)
 
-    // Negative values are rejected before truncation.
+    // No microsecond is lost to floating-point error.
+    checkEvaluation(TimeFromSeconds(Literal(8.2)), 8200000000L)
+    checkEvaluation(TimeFromSeconds(Literal(1.000001)), 1000001000L)
+    checkEvaluation(TimeFromSeconds(Literal(3.0E-6)), 3000L)
+    checkEvaluation(TimeFromSeconds(Literal(86399.99999999999)), 86399999999000L)
+
+    // A negative input below one microsecond is still rejected.
     checkExceptionInExpression[SparkDateTimeException](
       TimeFromSeconds(Literal(Decimal("-0.0000001"))),
       "Invalid TIME value")
