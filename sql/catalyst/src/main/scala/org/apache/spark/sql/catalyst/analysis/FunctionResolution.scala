@@ -420,14 +420,6 @@ class FunctionResolution(
     unqualifiedFunctionOwnerKind(functionName).contains(SessionCatalog.Builtin)
 
   /**
-   * Whether a temp function owns an unqualified name: it comes first in the effective SQL PATH,
-   * before `system.builtin` and any persistent function. Same precondition as
-   * [[unqualifiedFunctionResolvesToBuiltinBeforeAnyShadow]].
-   */
-  def unqualifiedFunctionResolvesToTemp(functionName: String): Boolean =
-    unqualifiedFunctionOwnerKind(functionName).contains(SessionCatalog.Temp)
-
-  /**
    * The kind of the first PATH entry that owns an unqualified name: `Builtin`, `Temp`, or None for
    * a persistent function (or no owner).
    */

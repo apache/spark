@@ -463,10 +463,6 @@ class Analyzer(
 
   def getRelationResolution: RelationResolution = relationResolution
 
-  /** Whether a temporary function owns the unqualified built-in `name` under the SQL path. */
-  private[sql] def unqualifiedFunctionResolvesToTemp(name: String): Boolean =
-    functionResolution.unqualifiedFunctionResolvesToTemp(name)
-
   /** Resolves only the dynamic identifier of an INSERT so transaction detection can inspect it. */
   private[sql] def resolveUnresolvedInsert(insert: UnresolvedInsert): LogicalPlan = {
     runWithSessionConf {

@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.analysis.{withPosition, AnalysisContext, Analyzer, SQLFunctionExpression, SQLFunctionNode, SQLScalarFunction, SQLTableFunction, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedTableValuedFunction}
+import org.apache.spark.sql.catalyst.analysis.{withPosition, Analyzer, SQLFunctionExpression, SQLFunctionNode, SQLScalarFunction, SQLTableFunction, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedTableValuedFunction}
 import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, SQLFunction, UserDefinedFunction, UserDefinedFunctionErrors}
 import org.apache.spark.sql.catalyst.catalog.UserDefinedFunction._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Expression, Generator, LateralSubquery, Literal, ScalarSubquery, SubqueryExpression, UnresolvedJsonConstructor, WindowExpression}
@@ -267,12 +267,12 @@ case class CreateSQLFunctionCommand(
       val identifierVarsToReject =
         if (conf.getConf(SQLConf.VARIABLES_UNDER_IDENTIFIER_IN_VIEW)) Nil else identVars
       verifyTemporaryObjectsNotExists(
-        catalog, analyzer, isTemp, name, unresolvedPlan, analyzedPlan, tempFuncs,
-        identifierVarsToReject)
+        catalog, isTemp, name, unresolvedPlan, analyzedPlan, tempFuncs, identifierVarsToReject)
 
       // Generate function properties.
       val properties =
-        generateFunctionProperties(sparkSession, unresolvedPlan, analyzedPlan, identVars)
+        generateFunctionProperties(
+          sparkSession, unresolvedPlan, analyzedPlan, tempFuncs, identVars)
 
       // Derive determinism of the SQL function.
       val deterministic = analyzedPlan.deterministic
@@ -335,58 +335,25 @@ case class CreateSQLFunctionCommand(
   }
 
   /**
-   * Collect all temporary views and functions and return the identifiers separately
-   * This func traverses the unresolved plan `child`. Below are the reasons:
-   * 1) Analyzer replaces unresolved temporary views by a SubqueryAlias with the corresponding
-   * logical plan. After replacement, it is impossible to detect whether the SubqueryAlias is
-   * added/generated from a temporary view.
-   * 2) The temp functions are represented by multiple classes. Most are inaccessible from this
-   * package (e.g., HiveGenericUDF).
-   * 3) Temporary SQL functions, once resolved, cannot be identified as temp functions.
+   * Collect the temporary views referenced by the unresolved plan `child`. The unresolved plan is
+   * used because the analyzer replaces a temporary view with a SubqueryAlias of its plan, after
+   * which the view can no longer be identified. Temporary functions are instead recorded during
+   * analysis, see `Analyzer.executeWithReferredTempObjects`.
    */
-  private def collectTemporaryObjectsInUnresolvedPlan(
+  private def collectTemporaryViewsInUnresolvedPlan(
       catalog: SessionCatalog,
-      analyzer: Analyzer,
-      child: LogicalPlan): (Seq[Seq[String]], Seq[String]) = {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-    def collectTempViews(child: LogicalPlan): Seq[Seq[String]] = {
-      child.flatMap {
-        case UnresolvedRelation(nameParts, _, _) if catalog.isTempView(nameParts) =>
-          Seq(nameParts)
-        case w: UnresolvedWith if !w.resolved => w.innerChildren.flatMap(collectTempViews)
-        case plan if !plan.resolved => plan.expressions.flatMap(_.flatMap {
-          case e: SubqueryExpression => collectTempViews(e.plan)
-          case _ => Seq.empty
-        })
+      child: LogicalPlan): Seq[Seq[String]] = {
+    child.flatMap {
+      case UnresolvedRelation(nameParts, _, _) if catalog.isTempView(nameParts) =>
+        Seq(nameParts)
+      case w: UnresolvedWith if !w.resolved =>
+        w.innerChildren.flatMap(collectTemporaryViewsInUnresolvedPlan(catalog, _))
+      case plan if !plan.resolved => plan.expressions.flatMap(_.flatMap {
+        case e: SubqueryExpression => collectTemporaryViewsInUnresolvedPlan(catalog, e.plan)
         case _ => Seq.empty
-      }.distinct
-    }
-
-    def collectTempFunctions(child: LogicalPlan): Seq[String] = {
-      child.flatMap {
-        case w: UnresolvedWith if !w.resolved => w.innerChildren.flatMap(collectTempFunctions)
-        case plan if !plan.resolved =>
-          plan.expressions.flatMap(_.flatMap {
-            case e: SubqueryExpression => collectTempFunctions(e.plan)
-            case e: UnresolvedFunction
-              if catalog.isTemporaryFunction(e.nameParts.asFunctionIdentifier) =>
-              Seq(e.nameParts.asFunctionIdentifier.funcName)
-            // A routed JSON constructor is a temporary-function reference only when the
-            // temporary function owns it, not the built-in or a persistent function before it.
-            case j: UnresolvedJsonConstructor
-              if j.routeThroughResolution &&
-                catalog.isTemporaryFunction(FunctionIdentifier(j.prettyName)) &&
-                analyzer.unqualifiedFunctionResolvesToTemp(j.prettyName) =>
-              Seq(j.prettyName)
-            case _ => Seq.empty
-          })
-        case _ => Seq.empty
-      }.distinct
-    }
-    // Read the SQL path the body was analyzed under: a CREATE FUNCTION that a procedure issues
-    // runs inside the CALL's analysis pass, whose cached path may predate a SET PATH.
-    val tempFunctions = AnalysisContext.withNewAnalysisContext(collectTempFunctions(child))
-    (collectTempViews(child), tempFunctions)
+      })
+      case _ => Seq.empty
+    }.distinct
   }
 
   /**
@@ -402,7 +369,6 @@ case class CreateSQLFunctionCommand(
    */
   private def verifyTemporaryObjectsNotExists(
       catalog: SessionCatalog,
-      analyzer: Analyzer,
       isTemporary: Boolean,
       name: FunctionIdentifier,
       child: LogicalPlan,
@@ -411,8 +377,7 @@ case class CreateSQLFunctionCommand(
       referredTempVarsUnderIdentifier: Seq[Seq[String]]): Unit = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     if (!isTemporary) {
-      // Temp functions come from analysis; the name scan is kept for temp-function metadata only.
-      val (tempViews, _) = collectTemporaryObjectsInUnresolvedPlan(catalog, analyzer, child)
+      val tempViews = collectTemporaryViewsInUnresolvedPlan(catalog, child)
       tempViews.foreach { nameParts =>
         throw UserDefinedFunctionErrors.invalidTempViewReference(
           routineName = name.asMultipart, tempViewName = nameParts)
@@ -553,6 +518,8 @@ case class CreateSQLFunctionCommand(
    *    context during nested function resolution.
    * 3. referred temporary object names if the function is a temp function.
    *
+   * @param referredTempFunctions temporary functions the body's analysis bound, see
+   *                              `verifyTemporaryObjectsNotExists`.
    * @param referredTempVarsUnderIdentifier temporary variables the body reads only inside
    *                                        IDENTIFIER clauses, see
    *                                        `verifyTemporaryObjectsNotExists`.
@@ -561,6 +528,7 @@ case class CreateSQLFunctionCommand(
       session: SparkSession,
       plan: LogicalPlan,
       analyzed: LogicalPlan,
+      referredTempFunctions: Seq[String],
       referredTempVarsUnderIdentifier: Seq[Seq[String]]): Map[String, String] = {
     val catalog = session.sessionState.catalog
     val conf = session.sessionState.conf
@@ -570,11 +538,10 @@ case class CreateSQLFunctionCommand(
     // function has already rejected them, or discarded them under the legacy flag; as with
     // persisted views, it stores none.
     val (tempViews, tempFunctions, tempVars) = if (isTemp) {
-      val (views, functions) =
-        collectTemporaryObjectsInUnresolvedPlan(catalog, session.sessionState.analyzer, plan)
+      val views = collectTemporaryViewsInUnresolvedPlan(catalog, plan)
       val vars =
         (ViewHelper.collectTemporaryVariables(analyzed) ++ referredTempVarsUnderIdentifier).distinct
-      (views, functions, vars)
+      (views, referredTempFunctions.sorted, vars)
     } else {
       (Nil, Nil, Nil)
     }

@@ -612,4 +612,30 @@ class SQLFunctionSuite extends SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-60806: a temporary function stores the temp functions its body binds") {
+    withUserDefinedFunction("temp_fn" -> true, "temp_tvf" -> true, "meta_fn" -> true) {
+      sql("CREATE TEMPORARY FUNCTION abs(x INT) RETURNS INT RETURN 42")
+      try {
+        sql("CREATE TEMPORARY FUNCTION temp_fn() RETURNS INT RETURN 1")
+        sql("CREATE TEMPORARY FUNCTION temp_tvf() RETURNS TABLE (a INT) RETURN SELECT 1")
+        // The built-in owns `abs`, so the temporary `abs` is not stored.
+        sql("CREATE TEMPORARY FUNCTION meta_fn() RETURNS INT " +
+          "RETURN abs(-1) + IDENTIFIER('temp_fn')() + (SELECT a FROM temp_tvf())")
+        val metaFn = spark.sessionState.functionRegistry
+          .lookupFunctionBuilder(FunctionIdentifier(
+            "meta_fn",
+            Some(CatalogManager.SESSION_NAMESPACE),
+            Some(CatalogManager.SYSTEM_CATALOG_NAME))).get
+          .apply(Nil) match {
+            case f: SQLFunctionExpression => f.function
+            case other => fail(s"unexpected builder result: $other")
+          }
+        assert(metaFn.properties("referredTempFunctionsNames") === """["temp_fn","temp_tvf"]""")
+        checkAnswer(sql("SELECT meta_fn()"), Row(3))
+      } finally {
+        sql("DROP TEMPORARY FUNCTION abs")
+      }
+    }
+  }
 }
