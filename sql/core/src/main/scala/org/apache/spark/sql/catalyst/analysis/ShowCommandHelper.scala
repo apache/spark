@@ -24,12 +24,21 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.{ShowFunctionsCommand, ShowTablesCommand, ShowViewsCommand}
 import org.apache.spark.sql.internal.SQLConf
 
-/** Lowers session-catalog SHOW commands, e.g. `SHOW VIEWS IN db` to [[ShowViewsCommand]]. */
+/**
+ * Lowers session-catalog SHOW TABLES, SHOW TABLE EXTENDED (without PARTITION), SHOW VIEWS and
+ * SHOW FUNCTIONS, e.g. `SHOW VIEWS IN db` to [[ShowViewsCommand]]. Other plans pass through.
+ */
 private[sql] object ShowCommandHelper extends SQLConfHelper {
 
   /**
-   * Preserves V1 namespace validation and configuration guards. V2 and unresolved targets pass
-   * through unchanged, except SHOW VIEWS on catalogs without view support, which is rejected.
+   * Lowers SHOW TABLES, SHOW TABLE EXTENDED, SHOW VIEWS and SHOW FUNCTIONS, preserving V1 namespace
+   * validation and configuration guards. Other plans and V2/unresolved targets pass through
+   * unchanged, except SHOW VIEWS on non-session catalogs without view support, which is rejected.
+   *
+   * Direct SHOW TABLES callers must first apply [[KeepLegacyOutputs.keepLegacyShowTablesOutput]];
+   * its prepared output passes through unchanged. SHOW TABLE EXTENDED applies its legacy schema
+   * here. Callers supply the command's origin through `CurrentOrigin.withOrigin` and propagate
+   * its tags to any replacement plan. This helper does not traverse the plan.
    */
   def rewrite(command: LogicalPlan): LogicalPlan = command match {
     case ShowTables(ResolvedV1Database(db), pattern, output) if conf.useV1Command =>
