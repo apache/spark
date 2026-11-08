@@ -21,8 +21,8 @@ import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.analysis.FormExternalLookupJoin
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, PythonUDF, Rand,
-  ScalarSubquery}
+import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, DropField, Expression,
+  Literal, PythonUDF, Rand, ScalarSubquery, UpdateFields, WithField}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftAnti, LeftOuter, LeftSemi,
   PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupJoin, Join, JoinHint,
@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupJoin, Join, Jo
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.connector.catalog.{Table, TableCapability}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.types.{BooleanType, StructType}
+import org.apache.spark.sql.types.{BooleanType, DoubleType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class PushPredicateThroughExternalLookupJoinSuite extends PlanTest {
@@ -48,7 +48,7 @@ class PushPredicateThroughExternalLookupJoinSuite extends PlanTest {
   private val lookup = DataSourceV2Relation.create(
     LookupOnlyTable, None, None, CaseInsensitiveStringMap.empty)
   private val streamKey = stream.output.head
-  private val Seq(lookupKey, lookupValue, lookupScore, lookupName) = lookup.output
+  private val Seq(lookupKey, lookupValue, lookupScore, lookupName, lookupInfo) = lookup.output
   private val keysEqual = streamKey === lookupKey
   // A conjunct over both sides, which only the join condition can evaluate.
   private val bothSidesConjunct = streamKey + lookupValue > 0
@@ -106,7 +106,8 @@ class PushPredicateThroughExternalLookupJoinSuite extends PlanTest {
       expectedJoin(join, stream.where(streamKey > 1), lookup.where(lookupNonCandidate),
         Seq(keysEqual, bothSidesConjunct))
     // A stream-side conjunct of a left outer or left anti join decides which stream rows find a
-    // match, so it stays in the condition. The join checks it there before the lookup.
+    // match, so it stays in the condition. The join checks one that cannot fail, such as
+    // `streamKey > 1`, on each stream row before the lookup, and any other one on the joined rows.
     val intoLookupSide: ExternalLookupJoin => LogicalPlan = join =>
       expectedJoin(join, lookupSide = lookup.where(lookupNonCandidate),
         conjuncts = Seq(keysEqual, streamKey > 1, bothSidesConjunct))
@@ -135,33 +136,75 @@ class PushPredicateThroughExternalLookupJoinSuite extends PlanTest {
     assert(Optimize.execute(filtered) eq filtered)
   }
 
-  test("keep a lookup candidate in the join condition") {
-    // The connector can select these, so they must stay where it is offered them, as for a join
-    // without this rule. Spark evaluates the ones it declines.
-    val candidates = Seq[Expression](
+  test("move a comparison with a constant onto the lookup side when the join keeps a key") {
+    // As for a join, a lookup-side conjunct goes onto the lookup side, where the connector receives
+    // it as a pushed filter. The join condition keeps `keysEqual` as the key.
+    val constantComparisons = Seq[Expression](
       lookupValue === 5, lookupValue <=> 5, lookupValue < 5, lookupValue <= 5, lookupValue > 5,
       lookupValue >= 5, Literal(5) === lookupValue, Literal(5) <=> lookupValue,
       Literal(5) < lookupValue, Literal(5) >= lookupValue)
-    for (joinType <- lookupJoinTypes; candidate <- candidates) {
-      val join = lookupJoin(joinType, keysEqual, candidate)
-      assert(Optimize.execute(join) eq join)
+    for (joinType <- lookupJoinTypes; comparison <- constantComparisons) {
+      val join = lookupJoin(joinType, keysEqual, comparison)
+      comparePlans(Optimize.execute(join),
+        expectedJoin(join, lookupSide = lookup.where(comparison), conjuncts = Seq(keysEqual)))
     }
-    // A filter above an inner join moves into the condition and is offered there as well; under
-    // a left outer join it stays above.
+    // A filter above an inner join moves there too. Under a left outer join it stays above.
     val inner = lookupJoin(Inner, keysEqual)
-    comparePlans(
-      Optimize.execute(inner.where(lookupValue === 5)),
-      expectedJoin(inner, conjuncts = Seq(keysEqual, lookupValue === 5)))
+    for (comparison <- Seq(lookupValue === 5, lookupValue >= 5)) {
+      comparePlans(Optimize.execute(inner.where(comparison)),
+        expectedJoin(inner, lookupSide = lookup.where(comparison), conjuncts = Seq(keysEqual)))
+    }
     val outer = lookupJoin(LeftOuter, keysEqual).where(lookupValue === 5)
     assert(Optimize.execute(outer) eq outer)
+    // A comparison with a stream-side value in a filter above an inner join moves into the join
+    // condition, as for a join.
+    comparePlans(Optimize.execute(inner.where(streamKey < lookupValue)),
+      expectedJoin(inner, conjuncts = Seq(keysEqual, streamKey < lookupValue)))
     // The shape is exact: only a bare column compared with a stream-side value or a constant is
-    // a candidate.
+    // a lookup candidate.
     val notCandidates = Seq[Expression](
       lookupValue =!= 5, lookupValue + 1 > 5, lookupValue.in(1, 2), lookupValue.isNull)
     for (conjunct <- notCandidates) {
       val join = lookupJoin(Inner, keysEqual, conjunct)
       comparePlans(Optimize.execute(join), expectedJoin(join, lookupSide = lookup.where(conjunct),
         conjuncts = Seq(keysEqual)))
+    }
+  }
+
+  test("keep a comparison with a constant in the join condition when it is the only key") {
+    // A lookup join cannot run without a key, so a comparison with a constant stays a lookup
+    // candidate when no comparison with a stream-side value can be one.
+    for (joinType <- lookupJoinTypes; comparison <- Seq(lookupValue === 5, lookupValue >= 5)) {
+      val join = lookupJoin(joinType, comparison)
+      assert(Optimize.execute(join) eq join)
+    }
+    // An equality on a DOUBLE is never offered, so it is no key and the constant one stays.
+    val neverOffered = lookupScore === streamKey.cast(DoubleType)
+    val withoutKey = lookupJoin(Inner, neverOffered, lookupValue === 5)
+    assert(Optimize.execute(withoutKey) eq withoutKey)
+    // A filter above an inner join adds its comparison with a constant to the join condition.
+    val inner = lookupJoin(Inner, lookupValue === 5)
+    comparePlans(Optimize.execute(inner.where(lookupName === "x")),
+      expectedJoin(inner, conjuncts = Seq(lookupValue === 5, lookupName === "x")))
+  }
+
+  test("move a conjunct over withField or dropFields values like any lookup-side conjunct") {
+    // PrepareExternalLookupJoin lowers UpdateFields in the lookup-side stages that it builds, so
+    // such a conjunct can run on the lookup side.
+    val updateFieldsConjuncts = Seq[Expression](
+      UpdateFields(lookupInfo, Seq(DropField("seats"))) ===
+        CreateNamedStruct(Seq(Literal("plan"), Literal("pro"))),
+      UpdateFields(lookupInfo, Seq(WithField("seats", Literal(0)))) ===
+        CreateNamedStruct(Seq(Literal("plan"), Literal("pro"), Literal("seats"), Literal(0))))
+    for (joinType <- lookupJoinTypes; conjunct <- updateFieldsConjuncts) {
+      val join = lookupJoin(joinType, keysEqual, conjunct)
+      comparePlans(Optimize.execute(join),
+        expectedJoin(join, lookupSide = lookup.where(conjunct), conjuncts = Seq(keysEqual)))
+    }
+    val inner = lookupJoin(Inner, keysEqual)
+    for (conjunct <- updateFieldsConjuncts) {
+      comparePlans(Optimize.execute(inner.where(conjunct)),
+        expectedJoin(inner, lookupSide = lookup.where(conjunct), conjuncts = Seq(keysEqual)))
     }
   }
 
@@ -238,7 +281,8 @@ class PushPredicateThroughExternalLookupJoinSuite extends PlanTest {
 private case object LookupOnlyTable extends Table {
   override def name(): String = "LookupOnlyTable"
   override def schema(): StructType =
-    StructType.fromDDL("lookupKey INT, lookupValue INT, lookupScore DOUBLE, lookupName STRING")
+    StructType.fromDDL("lookupKey INT, lookupValue INT, lookupScore DOUBLE, lookupName STRING, " +
+      "lookupInfo STRUCT<plan: STRING, seats: INT>")
   override def capabilities(): java.util.Set[TableCapability] =
     java.util.EnumSet.of(TableCapability.EXTERNAL_LOOKUP)
 }
