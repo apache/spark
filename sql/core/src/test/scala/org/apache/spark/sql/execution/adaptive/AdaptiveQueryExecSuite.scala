@@ -1447,8 +1447,12 @@ class AdaptiveQueryExecSuite
   }
 
   test("Scalar subquery in later stages") {
+    // `(value + a) = (SELECT ...)` adds a string to a number, which can fail in ANSI mode, so its
+    // copy on the other side of the join, which makes it small enough to broadcast, is only
+    // inferred with the legacy configuration.
     withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.LEGACY_INFER_FAILABLE_FILTERS_FROM_CONSTRAINTS.key -> "true",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         "SELECT * FROM testData join testData2 ON key = a " +

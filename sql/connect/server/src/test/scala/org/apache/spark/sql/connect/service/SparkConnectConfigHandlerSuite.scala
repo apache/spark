@@ -29,6 +29,7 @@ import org.apache.spark.{SparkEnv, SparkException, SparkNoSuchElementException}
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.config.{ConfigEntry, SECRET_REDACTION_PATTERN}
 import org.apache.spark.sql.connect.SparkConnectTestUtils
+import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.execution.python.PythonWorkerEnvironment
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -127,6 +128,13 @@ class SparkConnectConfigHandlerSuite extends SharedSparkSession {
       assert(returned(secretKey) === None)
       assert(returned(plainKey) === Some(plainValue))
     }
+  }
+
+  test("GetOption returns the registered default for server-side Maven resolution") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    val key = Connect.CONNECT_SERVER_SIDE_MAVEN_RESOLUTION_ENABLED.key
+    val returned = pairs(sendConfigRequest(sessionHolder, _.getGetOptionBuilder.addKeys(key)))
+    assert(returned(key) === Some("false"))
   }
 
   test("GetWithDefault returns the caller's default for a redacted key") {

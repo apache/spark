@@ -1075,11 +1075,10 @@ object JdkCodeCompiler extends CodeCompiler with Logging {
    * nesting (`Map$Entry`), Scala modules (`Foo$`, `Model$Load$Leaf`), package objects
    * (`pkg$Inner`), specialized (`Function1$mcII$sp`) and operator-named (`$colon$colon`)
    * classes. Runtime-synthesized classes need not carry it at all: a lambda is
-   * `Outer$$Lambda$14/0x...` on JDK 17 but `Outer$$Lambda/0x...` on 21 and later, and a
-   * hidden class is `Host$Named/0x...`. Neither routes on its own name: the tokenizer stops
-   * at `/`, and the truncated remainder either resolves to nothing (a lambda) or to the
-   * ordinary class the hidden class was defined from, whose own verdict is then the one that
-   * answers. On JDK 17 the lambda shape does pass the gate, at the cost of one failed load.
+   * `Outer$$Lambda/0x...`, and a hidden class is `Host$Named/0x...`. Neither routes on its
+   * own name: the tokenizer stops at `/`, and the truncated remainder either resolves to
+   * nothing (a lambda) or to the ordinary class the hidden class was defined from, whose own
+   * verdict is then the one that answers.
    *
    * The scan adds one linear pass over the body ahead of the compile-cache lookup, behind
    * the intrinsified `$`-digit gate that ordinary generated code fails immediately.

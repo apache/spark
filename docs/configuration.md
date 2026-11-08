@@ -876,9 +876,11 @@ Apart from these, the following properties are also available, and may be useful
     <code>PYTHON_UDF_BATCH_SIZE</code>, a session may still set it and Spark's value wins.
     <code>PYTHONPATH</code> is the one name that is neither reserved nor simply overridden: Spark
     merges the session's value into the path it computes for the worker, so a session adds to the
-    worker's import path. The relative order is not guaranteed -- Spark contributes no entries of
-    its own when <code>SPARK_HOME</code> is unset and its classes did not come from a jar, which can
-    leave the session's path first -- so do not rely on a session entry being shadowed by Spark's.
+    worker's import path. The relative order is not guaranteed -- Spark puts no entries of its own
+    ahead of the session's when <code>SPARK_HOME</code> is unset where the worker runs, as on YARN
+    executors, which receive Spark's <code>pyspark.zip</code> through the inherited
+    <code>PYTHONPATH</code> after the session's entries -- so do not rely on a session entry being
+    shadowed by Spark's.
     <br /><br />
     Each variable is a separate configuration, so setting several is not atomic: a client that sets
     a batch may have some applied and then one rejected, leaving the earlier ones in place. Read the
@@ -1105,10 +1107,10 @@ Apart from these, the following properties are also available, and may be useful
     For <code>spark.jars.packages</code>, additional repositories from
     <code>spark.jars.repositories</code> will also be included.
     The <code>spark-submit --repositories</code> option applies to submission-time resolution.
-    In Spark Connect, Ivy URIs with a <code>repos</code> query parameter or sent to a server without
-    server-side Maven resolution are resolved by the client and do not use this setting. Other Ivy
-    URIs are resolved by the server, so Maven and Ivy repositories local to the client, such as
-    <code>~/.m2/repository</code> and <code>~/.ivy2.5.2/local</code>, are not searched.
+    Spark Connect JVM clients use the server session's value only if Config RPC exposes it and
+    the file is readable locally; otherwise, they use the built-in defaults.
+    Enable <code>spark.connect.session.serverSideMavenResolution.enabled</code> to resolve Ivy URIs
+    without <code>repos</code> on a supporting server.
     Useful for allowing Spark to resolve artifacts from behind a firewall e.g. via an in-house
     artifact server like Artifactory. Details on the settings file format can be
     found at <a href="http://ant.apache.org/ivy/history/latest-milestone/settings.html">Settings Files</a>.
@@ -3895,6 +3897,14 @@ Command types in proto.</td>
   </td>
   <td>The interval at which the progress of a query is reported to the client. If the value is set to a negative value the progress reports will be disabled.</td>
   <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.connect.session.serverSideMavenResolution.enabled</code></td>
+  <td>
+    false
+  </td>
+  <td>When true, the Spark Connect JVM client resolves eligible Maven dependencies on the server when it advertises support. Dependencies that specify repositories are always resolved on the client. When false, the JVM client resolves all Maven dependencies locally. This is a client routing preference, not a server-side enforcement setting.</td>
+  <td>4.4.0</td>
 </tr>
 </table>
 
