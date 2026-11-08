@@ -25,6 +25,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeMap,
   AttributeSet, Coalesce, EqualNullSafe, EqualTo, Expression, ExprUtils,
   ExternalUserDefinedFunction, Literal, NamedExpression, PredicateHelper, PythonUDF}
+import org.apache.spark.sql.catalyst.optimizer.ReplaceUpdateFieldsExpression
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti, LeftOuter, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupFilter, ExternalLookupJoin,
@@ -95,10 +96,14 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
         !node.expressions.forall(ExternalLookupJoinShapes.canEvaluateInLookupStage)
       case _ => false
     }
-    val lookupPlan =
-      (if (hasUnevaluableStage) None else extractLookupPlan(join.right)).getOrElse {
-        throw QueryCompilationErrors.unsupportedExternalLookupJoinError("LOOKUP_PLAN")
-      }
+    // The lookup-side stages are built here, and no later rule reaches them. withField and
+    // dropFields values cannot be evaluated until ReplaceUpdateFieldsExpression, in the
+    // optimizer's last batch, lowers them, so the same rule lowers them now.
+    val lookupPlan = (if (hasUnevaluableStage) None else {
+      extractLookupPlan(ReplaceUpdateFieldsExpression(join.right))
+    }).getOrElse {
+      throw QueryCompilationErrors.unsupportedExternalLookupJoinError("LOOKUP_PLAN")
+    }
     val relation = lookupPlan.relation
     val tableName = relation.table.name()
     val supportsRead = relation.table match {

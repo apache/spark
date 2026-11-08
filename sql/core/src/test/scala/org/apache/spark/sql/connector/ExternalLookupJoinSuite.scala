@@ -70,7 +70,7 @@ import org.apache.spark.sql.execution.streaming.runtime.{IncrementalExecution, M
 import org.apache.spark.sql.execution.streaming.sources.LowLatencyMemoryStream
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.functions.{broadcast, coalesce, col, concat, date_from_unix_date, expr,
-  length, lit, max, raise_error, rand, to_json, udf, upper, when}
+  length, lit, max, raise_error, rand, struct, to_json, udf, upper, when}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, InsertableRelation,
   RelationProvider, SchemaRelationProvider}
@@ -2379,6 +2379,18 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
           assert(SimpleExternalLookupDataSource.requestCount.get() === 0)
       }
     }
+  }
+
+  test("lookup-side stages evaluate withField and dropFields values of a struct column") {
+    val lookup = readSchemaLookup("struct")
+    val left = streamOf(Seq(1, 2).toDF("id"))
+    // Whole-struct values, which the optimizer lowers only after the lookup-side stages are built.
+    val upgraded = lookup
+      .where($"info".dropFields("seats") === struct(lit("pro").as("plan")))
+      .select($"id", $"info".withField("seats", $"info.seats" + 1).as("info"))
+    val run = runStream(left.join(upgraded, left("id") === upgraded("id")))
+    QueryTest.sameRows(Seq(Row(1, 1, Row("pro", 11))), run.rows).foreach(fail(_))
+    assert(run.lookupJoin.lookupTransforms.nonEmpty)
   }
 
   test("external lookup pads CHAR columns as a batch read does") {
@@ -4716,6 +4728,7 @@ case class ReadSchemaExternalLookupTable(kind: String) extends Table with Suppor
       .add("id", IntegerType)
       .add("s", new StructType().add("a", IntegerType, nullable = false))
     case "wrongType" | "reordered" => StructType.fromDDL("id INT, name STRING")
+    case "struct" => StructType.fromDDL("id INT, info STRUCT<plan: STRING, seats: INT>")
     case "nullArrayElement" => new StructType()
       .add("id", IntegerType)
       .add("tags", ArrayType(IntegerType, containsNull = false))
@@ -4773,6 +4786,8 @@ case class ReadSchemaExternalLookupReaderFactory(kind: String)
         ordinal -> (kind match {
           case "nested" => InternalRow(id, InternalRow(if (id == 2) null else id * 10))
           case "reordered" => InternalRow(name, id)
+          case "struct" => InternalRow(
+            id, InternalRow(UTF8String.fromString(if (id == 1) "pro" else "basic"), id * 10))
           case "nullArrayElement" => InternalRow(id, new GenericArrayData(Array[Any](id, null)))
           case "nullMapValue" => InternalRow(id, new ArrayBasedMapData(
             new GenericArrayData(Array[Any](UTF8String.fromString("math"))),
