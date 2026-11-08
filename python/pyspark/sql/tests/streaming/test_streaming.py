@@ -336,7 +336,7 @@ class StreamingTestsMixin:
             try:
                 q.awaitTermination("hello")
                 self.fail("Expected a value exception")
-            except (ValueError, TypeError):
+            except TypeError:
                 pass
             now = time.time()
             # test should take at least 2 seconds
@@ -423,7 +423,7 @@ class StreamingTestsMixin:
             try:
                 self.spark.streams.awaitAnyTermination("hello")
                 self.fail("Expected a value exception")
-            except (ValueError, TypeError):
+            except TypeError:
                 pass
             now = time.time()
             # test should take at least 2 seconds
