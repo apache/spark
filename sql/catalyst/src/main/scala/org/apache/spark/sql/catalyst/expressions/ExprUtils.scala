@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CharVarcharUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.{AbstractMapType, StringTypeWithCollation}
-import org.apache.spark.sql.types.{BooleanType, DataType, DateType, DecimalType, DoubleType, FileType, FloatType, FractionalType, MapType, NumericType, StringHelper, StringType, StructType, TimestampNTZType, TimestampType, VariantType}
+import org.apache.spark.sql.types.{BooleanType, DataType, DateType, DecimalType, DoubleType, FileType, FloatType, FractionalType, MapType, NumericType, StringHelper, StringType, StructType, TimestampNTZType, TimestampType, UserDefinedType, VariantType}
 import org.apache.spark.unsafe.types.UTF8String
 
 object ExprUtils extends EvalHelper with QueryErrorsBase {
@@ -290,11 +290,13 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
    * VARIANT in it is left out, although such a cast to a STRING or a VARIANT can not fail: it
    * tells -0.0 from 0.0, which are equal, and `InferFiltersFromConstraints` and
    * `ConstantPropagation` replace an attribute with a value equal to it under the operators this
-   * check accepts (`isTotalOperator`). Outside TRY mode, and in TRY mode from a string, the
-   * casts from or to a decimal of a negative scale (`spark.sql.legacy.allowNegativeScaleOfDecimal`)
-   * are left out, as `Decimal.toLong` raises for one, and in every mode so is the binary
-   * arithmetic over one, as `Decimal.%` raises for a very negative one. UnaryMinus and Abs only
-   * negate one and are kept.
+   * check accepts (`isTotalOperator`). For the same reason, so is every cast from or to a type
+   * with a UDT in it, which renders its value with its own `stringifyValue`, or a Python UDT as
+   * its `sqlType`. Outside TRY mode, and in TRY mode from a string, the casts from or to a decimal
+   * of a negative scale (`spark.sql.legacy.allowNegativeScaleOfDecimal`) other than the widenings
+   * between decimals and the casts to a FLOAT or DOUBLE are left out, as `Decimal.toLong` raises
+   * for one, and in every mode so is the binary arithmetic over one, as `Decimal.%` raises for a
+   * very negative one. UnaryMinus and Abs only negate one and are kept.
    * Anything else (other arithmetic, other casts, other functions, UDFs, nested IF/CASE
    * WHEN, ...) conservatively returns false. On top of the allowlist, the expression must be
    * deterministic and must not contain subqueries.
@@ -321,12 +323,20 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
     // Left out whether or not it can fail, as it may tell -0.0 from 0.0: see
     // `canEvaluateUnconditionally`.
     case (from, to) if tellsSignedZeros(from, to) => false
+    // A UDT renders its value with its own `stringifyValue`, or a Python UDT as its `sqlType`,
+    // which can tell apart values that are equal, and the checks here do not look inside it. The
+    // target is checked too, defensively, although only a UDT or a NULL can be cast to one.
+    case (from, to) if hasUserDefinedType(from) || hasUserDefinedType(to) => false
+    // A numeric up-cast can not fail. It goes before the negative scales, as a widening between
+    // decimals never calls `Decimal.toLong`, also from or to a negative scale; a change to a
+    // negative scale only checks that `spark.sql.legacy.allowNegativeScaleOfDecimal` is on.
+    case (from, to) if isNumericUpCast(from, to) => true
+    // `Decimal.toDouble` and `Decimal.toFloat` round through a `BigDecimal`, also for a negative
+    // scale, and do not check the range in ANSI mode.
+    case (_: DecimalType, FloatType | DoubleType) => true
     // TRY mode catches the errors of the cast, but not from a string, which runs the LEGACY cast.
     case (from, to) if hasNegativeScale(from) || hasNegativeScale(to) =>
       c.evalMode == EvalMode.TRY && !from.isInstanceOf[StringType]
-    case (from, to) if isNumericUpCast(from, to) => true
-    // `Decimal.toDouble` and `Decimal.toFloat` round, and do not check the range in ANSI mode.
-    case (_: DecimalType, FloatType | DoubleType) => true
     case (TimestampType | TimestampNTZType, DateType) => true
     // A CHAR or VARCHAR target checks the length of the string. A string to a STRING of another
     // collation, as `CollationTypeCoercion` adds for an explicit `COLLATE`, keeps the value.
@@ -348,6 +358,10 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
   private def tellsSignedZeros(from: DataType, to: DataType): Boolean =
     from.existsRecursively(t => t == FloatType || t == DoubleType) &&
       to.existsRecursively(t => t.isInstanceOf[StringType] || t == VariantType)
+
+  // `existsRecursively` does not look inside a UDT, so neither does this.
+  private def hasUserDefinedType(dt: DataType): Boolean =
+    dt.existsRecursively(_.isInstanceOf[UserDefinedType[_]])
 
   private def hasNegativeScale(dt: DataType): Boolean = dt.existsRecursively {
     case d: DecimalType => d.scale < 0
@@ -400,8 +414,8 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
    * their current types. See [[canEvaluateUnconditionally]] for the allowlist.
    * `ConstantPropagation` replaces a child with a value equal to it under such an expression, so
    * it must also give equal results for equal children, e.g. a cast of a DOUBLE to a STRING is
-   * left out, as it tells -0.0 from 0.0. Strings of a non-binary collation are guarded by the
-   * callers instead.
+   * left out, as it tells -0.0 from 0.0, and so is a cast of a UDT. Strings of a non-binary
+   * collation are guarded by the callers instead.
    */
   def isTotalOperator(e: Expression): Boolean = e match {
     case _: GetStructField | _: GetArrayStructFields | _: GetMapValue | _: NoThrow | _: Collate =>

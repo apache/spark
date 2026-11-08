@@ -409,11 +409,31 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     // with `x` = 'a' and `y` = 'a ', `x = y` holds, but their lengths differ.
     val trimmed = LocalRelation(AttributeReference("x", StringType("UTF8_BINARY_RTRIM"))(),
       AttributeReference("y", StringType("UTF8_BINARY_RTRIM"))())
+    // Nor a `try_cast` of a UDT to a string: on a row with vectors (0.0) and (-0.0), `x = y`
+    // holds, but their strings differ.
+    val udt = new TestUDT.MyDenseVectorUDT()
+    val vectors = LocalRelation(AttributeReference("x", udt)(), AttributeReference("y", udt)())
     Seq[(LocalRelation, Expression => Expression)](
         (strings, Upper(_) === "A"), (ints, Add(_, Literal(1), ansi) > 5),
-        (doubles, Cast(_, StringType) === "-0.0"), (trimmed, Length(_) === 2)).foreach {
+        (doubles, Cast(_, StringType) === "-0.0"), (trimmed, Length(_) === 2),
+        (vectors, Cast(_, StringType, evalMode = EvalMode.TRY) === "(-0.0)")).foreach {
       case (relation, condition) =>
         comparePlans(infer(relation, condition), notNullAnd(relation, condition).analyze)
+    }
+  }
+
+  test("SPARK-60882: a constraint through a widening of a decimal of a negative scale is " +
+    "inferred") {
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      val relation = LocalRelation(AttributeReference("x", DecimalType(3, -2))(),
+        AttributeReference("y", DecimalType(10, 0))())
+      val query = relation.where($"x" === $"y" && $"y" > 5).analyze
+      val Filter(condition, _) = InferFiltersFromConstraints(query)
+      // Type coercion widens `x` to DECIMAL(10, 0), and `CAST(x AS DECIMAL(10, 0)) > 5` follows.
+      assert(splitConjunctivePredicates(condition).exists {
+        case GreaterThan(Cast(a: AttributeReference, _: DecimalType, _, _), _) => a.name == "x"
+        case _ => false
+      }, condition)
     }
   }
 

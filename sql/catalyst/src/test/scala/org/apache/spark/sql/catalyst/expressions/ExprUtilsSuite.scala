@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CharType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, ShortType, StringType, StructField, StructType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType, VarcharType, VariantType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CharType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, ShortType, StringType, StructField, StructType, TestUDT, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType, VarcharType, VariantType, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.UTF8String
 
 class ExprUtilsSuite extends SparkFunSuite with SQLHelper {
@@ -383,6 +383,19 @@ class ExprUtilsSuite extends SparkFunSuite with SQLHelper {
         assert(ExprUtils.canEvaluateUnconditionally(cast(e, to, EvalMode.TRY)), to)
       }
       assert(!ExprUtils.canEvaluateUnconditionally(cast(s, negativeScale, EvalMode.TRY)))
+      // But a widening between decimals, which never calls `Decimal.toLong`, also to a negative
+      // scale or through a `BigDecimal`, and a cast to a FLOAT or DOUBLE, in every mode.
+      for (mode <- Seq(EvalMode.ANSI, EvalMode.LEGACY, EvalMode.TRY);
+          (from, to, unscaled) <- Seq[(DecimalType, DataType, Long)](
+            (negativeScale, DecimalType(10, 0), 999L),
+            (DecimalType(3, -3), DecimalType(5, -2), 999L),
+            (DecimalType(1, -36), DecimalType(38, 0), 9L),
+            (negativeScale, DoubleType, 999L), (negativeScale, FloatType, 999L))) {
+        assert(ExprUtils.canEvaluateUnconditionally(
+          cast(AttributeReference("n", from)(), to, mode)), (from, to, mode))
+        evalEach(from, Seq(-unscaled, unscaled).map(Decimal.createUnsafe(_, from.precision,
+          from.scale)))(cast(_, to, mode))
+      }
       intercept[ArrayIndexOutOfBoundsException](cast(BoundReference(0, negativeScale, true),
         LongType, EvalMode.LEGACY).eval(InternalRow(Decimal.createUnsafe(123L, 3, -2))))
       // The accepted TRY casts do not raise.
@@ -405,6 +418,17 @@ class ExprUtilsSuite extends SparkFunSuite with SQLHelper {
         (AttributeReference("md", MapType(IntegerType, DoubleType))(),
           MapType(IntegerType, StringType)),
         (AttributeReference("x", DoubleType)(), VariantType)).foreach { case (e, to) =>
+      Seq(EvalMode.ANSI, EvalMode.LEGACY, EvalMode.TRY).foreach { mode =>
+        assert(!ExprUtils.canEvaluateUnconditionally(cast(e, to, mode)), (e, to, mode))
+      }
+    }
+    // Nor from or to a UDT, also inside an array or a struct, in any mode: it renders its value
+    // with its own `stringifyValue`, e.g. this vector of -0.0 as '(-0.0)'.
+    val udt = new TestUDT.MyDenseVectorUDT()
+    Seq[(Expression, DataType)]((AttributeReference("v", udt)(), StringType),
+        (AttributeReference("vs", ArrayType(udt))(), StringType),
+        (AttributeReference("sv", StructType(Seq(StructField("v", udt))))(), StringType),
+        (AttributeReference("v", udt)(), udt)).foreach { case (e, to) =>
       Seq(EvalMode.ANSI, EvalMode.LEGACY, EvalMode.TRY).foreach { mode =>
         assert(!ExprUtils.canEvaluateUnconditionally(cast(e, to, mode)), (e, to, mode))
       }
