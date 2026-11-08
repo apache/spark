@@ -212,7 +212,8 @@ class GeometryDataFrameSuite extends SharedSparkSession {
   }
 
   test("SPARK-61081: GROUP BY, DISTINCT and hashing on a Geometry column") {
-    // Four input partitions, so every query below hash-partitions on `g` in a shuffle.
+    // Four input partitions, so the GROUP BY, DISTINCT and DISTRIBUTE BY queries below
+    // hash-partition on `g` in a shuffle.
     val rdd = sparkContext.parallelize(
       Seq.tabulate(20)(i => Row(Geometry.fromWKB(if (i % 4 == 0) point2 else point1, 4326))), 4)
     val schema = StructType(Seq(StructField("g", GeometryType(4326), nullable = false)))
