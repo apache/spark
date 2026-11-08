@@ -25,73 +25,10 @@ on:
     - '**'
 
 jobs:
-  check-commit-count:
-    name: Check commit count
-    runs-on: ubuntu-slim
-    permissions:
-      contents: read
-    outputs:
-      should-run: ${{ steps.count.outputs.should-run }}
-    steps:
-      - name: Check whether this is every tenth commit
-        id: count
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          count=$(gh api graphql \
-            -f owner="$GITHUB_REPOSITORY_OWNER" \
-            -f name="${GITHUB_REPOSITORY#*/}" \
-            -f sha="$GITHUB_SHA" \
-            -f query='
-              query($owner: String!, $name: String!, $sha: GitObjectID!) {
-                repository(owner: $owner, name: $name) {
-                  object(oid: $sha) {
-                    ... on Commit { history { totalCount } }
-                  }
-                }
-              }' \
-            --jq '.data.repository.object.history.totalCount')
-          if [[ ! "$count" =~ ^[1-9][0-9]*$ ]]; then
-            echo "::error::Expected a positive commit count, got: $count"
-            exit 1
-          fi
-          remainder=$((count % 10))
-
-          if ((remainder == 0)); then
-            should_run=true
-            icon=":white_check_mark:"
-            title="Commit count matched"
-            details="Commit count $count is divisible by 10."
-          else
-            should_run=false
-            icon=":pause_button:"
-            title="Commit count not matched"
-            details="Commit count $count is not divisible by 10."
-          fi
-
-          echo "should-run=$should_run" >> "$GITHUB_OUTPUT"
-          echo "Branch: $GITHUB_REF_NAME"
-          echo "Commit: $GITHUB_SHA"
-          echo "Commit count: $count"
-          echo "Remainder: $remainder"
-          echo "Should run: $should_run"
-          echo "Details: $details"
-          echo "::notice title=$title::$details"
-          echo "### $icon Commit count check" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Branch: $GITHUB_REF_NAME" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Commit: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Commit count: $count" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Remainder: $remainder" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Should run: $should_run" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Details: $details" >> "$GITHUB_STEP_SUMMARY"
-
   call-build-and-test:
     permissions:
       packages: write
     name: Run
-    needs: check-commit-count
-    if: >-
-      github.repository != 'apache/spark'
-      || needs.check-commit-count.outputs.should-run == 'true'
+    # Post-merge sampling on apache/spark branch-4.x is applied by
+    # dev/merge_spark_pr.py through GitHub's workflow-skip commit trailer.
     uses: ./.github/workflows/build_and_test.yml
