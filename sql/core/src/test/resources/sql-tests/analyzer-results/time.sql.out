@@ -2066,6 +2066,13 @@ Project [time_from_seconds(cast(1E-7 as double)) AS time_from_seconds(CAST(1E-7 
 
 
 -- !query
+SELECT time_from_seconds(CAST(8.2 AS DOUBLE))
+-- !query analysis
+Project [time_from_seconds(cast(8.2 as double)) AS time_from_seconds(CAST(8.2 AS DOUBLE))#x]
++- OneRowRelation
+
+
+-- !query
 SELECT time_from_seconds(0.0000001) = TIME'00:00:00'
 -- !query analysis
 Project [(time_from_seconds(1E-7) = 00:00:00) AS (time_from_seconds(1E-7) = TIME '00:00:00')#x]

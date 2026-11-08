@@ -1173,12 +1173,8 @@ object DateTimeUtils extends SparkDateTimeUtils {
    * @param seconds Seconds (0 to 86399.999999)
    * @return Nanoseconds since midnight, truncated to microsecond precision
    */
-  def timeFromSeconds(seconds: Decimal): Long = {
-    val nanos = withTimeConversionErrorHandling {
-      val operand = new java.math.BigDecimal(NANOS_PER_SECOND)
-      seconds.toJavaBigDecimal.multiply(operand).longValueExact()
-    }
-    truncateTimeToPrecision(nanos, TimeType.MICROS_PRECISION)
+  def timeFromSeconds(seconds: Decimal): Long = withTimeConversionErrorHandling {
+    secondsToMicrosPrecisionNanos(seconds.toJavaBigDecimal)
   }
 
   /**
@@ -1186,14 +1182,18 @@ object DateTimeUtils extends SparkDateTimeUtils {
    * @param seconds Seconds (0 to 86399.999999)
    * @return Nanoseconds since midnight, truncated to microsecond precision
    */
-  def timeFromSeconds(seconds: Double): Long = {
-    val nanos = withTimeConversionErrorHandling {
-      if (seconds.isNaN || seconds.isInfinite) {
-        throw new DateTimeException("Cannot convert NaN or Infinite value to TIME")
-      }
-      (seconds * NANOS_PER_SECOND).toLong
+  def timeFromSeconds(seconds: Double): Long = withTimeConversionErrorHandling {
+    if (seconds.isNaN || seconds.isInfinite) {
+      throw new DateTimeException("Cannot convert NaN or Infinite value to TIME")
     }
-    truncateTimeToPrecision(nanos, TimeType.MICROS_PRECISION)
+    // Use the shortest decimal form, as CAST(double AS DECIMAL) does, to avoid floating-point error.
+    secondsToMicrosPrecisionNanos(java.math.BigDecimal.valueOf(seconds))
+  }
+
+  // Floor, not truncate toward zero, so negative inputs stay out of range.
+  private def secondsToMicrosPrecisionNanos(seconds: java.math.BigDecimal): Long = {
+    val micros = seconds.setScale(TimeType.MICROS_PRECISION, java.math.RoundingMode.FLOOR)
+    Math.multiplyExact(micros.unscaledValue().longValueExact(), NANOS_PER_MICROS)
   }
 
   /**

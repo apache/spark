@@ -327,6 +327,7 @@ SELECT time_from_seconds(NULL);
 -- SPARK-61087: time_from_seconds truncates the result to TIME(6).
 SELECT time_from_seconds(52200.123456789);
 SELECT time_from_seconds(CAST(0.0000001 AS DOUBLE));
+SELECT time_from_seconds(CAST(8.2 AS DOUBLE));
 SELECT time_from_seconds(0.0000001) = TIME'00:00:00';
 SELECT time_from_seconds(-0.0000001);   -- invalid: negative -> exception
 
