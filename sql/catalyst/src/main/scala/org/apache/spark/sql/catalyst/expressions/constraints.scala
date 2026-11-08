@@ -183,14 +183,14 @@ case class CheckConstraint(
       !CheckConstraint.resolvesDifferentlyOnWrite(child) &&
       CheckConstraint.readsCurrentContext(child))
 
-  // ALTER TABLE builds the constraint from the optimized plan, where the current time, date,
-  // catalog, user and the like are replaced by their values at the time of the ALTER TABLE. A
-  // condition that `withPredicateDecision` finds reading one is stored without a predicate, so
-  // that writes check `predicateSql`.
-  // The predicate is not built from the analyzed condition, as the default value of a column is,
-  // because `V2ExpressionBuilder` folds `CAST('today' AS DATE)` there as an ordinary cast. Only
-  // `AddCheckConstraint` decides, so CREATE and REPLACE TABLE always store the predicate if there
-  // is one.
+  // ALTER TABLE calls this on the optimized plan, where the current time, date, catalog, user and
+  // the like are replaced by their values at the time of the ALTER TABLE. A condition that
+  // `withPredicateDecision` finds reading one is stored without a predicate, so that writes check
+  // `predicateSql`. ALTER TABLE does not build the predicate from the analyzed condition instead,
+  // because `V2ExpressionBuilder` folds `CAST('today' AS DATE)` there as an ordinary cast.
+  // CREATE and REPLACE TABLE call this on the analyzed condition (`ResolveTableSpec`), where that
+  // folding still happens (SPARK-60451). Only `AddCheckConstraint` decides, so they always store
+  // the predicate if there is one.
   def toV2Constraint: Constraint = {
     val predicate = if (omitPredicate) {
       null
