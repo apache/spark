@@ -19,10 +19,11 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.FormExternalLookupJoin
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression,
-  Literal}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet,
+  Expression, Literal}
 import org.apache.spark.sql.catalyst.optimizer.ColumnPruning
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, JoinType, LeftOuter, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupJoin, Join, JoinHint,
@@ -31,13 +32,14 @@ import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapabil
 import org.apache.spark.sql.connector.catalog.TableCapability.EXTERNAL_LOOKUP
 import org.apache.spark.sql.connector.expressions.FieldReference
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{ExternalLookup, ExternalLookupReaderFactory, Scan,
-  ScanBuilder, SupportsExternalLookup}
+import org.apache.spark.sql.connector.read.{ExternalLookup, ExternalLookupReader,
+  ExternalLookupReaderFactory, Scan, ScanBuilder, SupportsExternalLookup}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation,
   ExternalLookupRelation, PrepareExternalLookupJoin}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, LongType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.unsafe.types.UTF8String
 
 class PrepareExternalLookupJoinSuite extends PlanTest {
   private val stream =
@@ -126,6 +128,19 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
     val prepared = prepare(lookupJoin(lookup, conjuncts.reduce(_ && _)))
     assert(prepared.residualCondition ===
       Some(streamLabel === lookupLabel && lookupValue > "a" && mayFail))
+
+    // Equalities between the sides go first even when they can fail, as a hash join's keys: `=`
+    // and `<=>`, each comparing a lookup column with a cast of a stream column, written after a
+    // conjunct that can fail.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val codes = lookupRelation(PlanningExternalLookupTable("id INT, code INT, alt INT"))
+      val Seq(codeId, code, alt) = codes.output
+      val codeEqual = code === streamLabel.cast(IntegerType)
+      val altEqual = alt <=> streamLabel.cast(IntegerType)
+      val keyed = prepare(
+        lookupJoin(codes, Seq(codeId === streamId, mayFail, codeEqual, altEqual).reduce(_ && _)))
+      assert(keyed.residualCondition === Some(codeEqual && altEqual && mayFail))
+    }
   }
 
   test("selected predicates bind in the connector's order, and the residual in written order") {
@@ -249,6 +264,84 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
     }
   }
 
+  test("a left outer join makes NOT NULL lookup columns nullable") {
+    val lookup =
+      lookupRelation(PlanningExternalLookupTable("id INT NOT NULL, value STRING NOT NULL"))
+    assert(lookup.output.forall(_.nullable === false))
+    val join = lookupJoin(lookup, stream.output.head === lookup.output.head, LeftOuter)
+    val prepared = prepare(join)
+    assert(prepared.output === join.output)
+    assert(prepared.output.drop(stream.output.length).forall(_.nullable))
+    assert(prepared.copy(joinType = Inner).output.drop(stream.output.length)
+      .forall(_.nullable === false))
+  }
+
+  test("a prepared lookup join reads its parameters and the residual's stream columns") {
+    val lookup = lookupRelation(PlanningExternalLookupTable())
+    val Seq(streamId, streamLabel) = stream.output
+    val Seq(id, value) = lookup.output
+    // The connector selects only `id = ?`, so the residual reads `streamLabel` and `value`.
+    val prepared = prepare(lookupJoin(lookup, streamId === id && streamLabel === value))
+    assert(prepared.residualCondition === Some(streamLabel === value))
+    // It produces `value` itself, so it reads only stream columns.
+    assert(prepared.references === AttributeSet(Seq(streamId, streamLabel)))
+    assert(prepared.missingInput.isEmpty)
+  }
+
+  test("a prepared lookup join keeps its scan and reader factory out of its plan string") {
+    val prepared = prepare(lookupJoinOnId(lookupRelation(PlanningExternalLookupTable())))
+    assert(prepared.scan.toString.contains("secret-scan"))
+    assert(prepared.readerFactory.toString.contains("secret-factory"))
+    Seq(prepared.toString, prepared.simpleString(100), prepared.verboseString(100)).foreach {
+      rendered => assert(rendered.contains("secret") === false, rendered)
+    }
+  }
+
+  test("a connector that reorders the offered array in place selects the predicate it returns") {
+    val Seq(streamId, streamLabel) = stream.output
+    // The connector swaps the two candidates in the array it receives, and returns the one now
+    // first, `value = ?`. Spark keeps its own copy, so it binds that predicate to `streamLabel`.
+    val lookup = lookupRelation(PlanningExternalLookupTable(select = { candidates =>
+      val first = candidates(0)
+      candidates(0) = candidates(1)
+      candidates(1) = first
+      Array(candidates(0))
+    }))
+    val Seq(id, value) = lookup.output
+    val prepared = prepare(lookupJoin(lookup, streamId === id && streamLabel === value))
+    assert(prepared.lookupParameters === Seq(streamLabel))
+    assert(prepared.residualCondition === Some(streamId === id))
+  }
+
+  test("a connector method that returns null fails with a named error") {
+    Seq(
+      "build" -> "NULL_SCAN",
+      "readSchema" -> "NULL_READ_SCHEMA",
+      "toExternalLookup" -> "NULL_EXTERNAL_LOOKUP",
+      "createReaderFactory" -> "NULL_READER_FACTORY").foreach { case (method, subClass) =>
+      val lookup = lookupRelation(PlanningExternalLookupTable(nullFrom = method))
+      checkError(
+        exception = prepareError(lookupJoinOnId(lookup)),
+        condition = s"DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.$subClass",
+        parameters = Map("table" -> QUOTED_TABLE_NAME))
+    }
+  }
+
+  test("a prepared lookup join keeps the size estimate of the join it replaces") {
+    // Two stream rows, and a lookup side of Spark's default size.
+    withSQLConf(SQLConf.DEFAULT_SIZE_IN_BYTES.key -> "1000") {
+      val rows = Seq(1, 2).map(id => InternalRow(id, UTF8String.fromString("a")))
+      val sizedStream = LocalRelation(stream.output, rows, isStreaming = true)
+      val lookup = lookupRelation(PlanningExternalLookupTable())
+      val join = lookupJoin(lookup, sizedStream.output.head === lookup.output.head,
+        left = sizedStream)
+      val prepared = prepare(join)
+      assert(sizedStream.stats.sizeInBytes > 0)
+      assert(prepared.stats.sizeInBytes === sizedStream.stats.sizeInBytes * 1000)
+      assert(prepared.stats.sizeInBytes === join.stats.sizeInBytes)
+    }
+  }
+
   test("column pruning never projects the lookup relation under a lookup join") {
     val lookup = lookupRelation(PlanningExternalLookupTable())
     val pruned = ColumnPruning(Project(Seq(stream.output.head), lookupJoinOnId(lookup)))
@@ -267,7 +360,8 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
 case class PlanningExternalLookupTable(
     schemaDDL: String = "id INT, value STRING NOT NULL",
     readSchemaDDL: Option[String] = None,
-    select: Array[Predicate] => Array[Predicate] = PlanningExternalLookupTable.selectIdEqualities)
+    select: Array[Predicate] => Array[Predicate] = PlanningExternalLookupTable.selectIdEqualities,
+    nullFrom: String = "")
   extends Table with SupportsRead {
   override def name(): String = "PlanningExternalLookupTable"
   override def schema(): StructType = StructType.fromDDL(schemaDDL)
@@ -278,14 +372,22 @@ case class PlanningExternalLookupTable(
     new SupportsExternalLookup {
       override def selectLookupPredicates(candidates: Array[Predicate]): Array[Predicate] =
         select(candidates)
-      override def build(): Scan = new Scan {
-        override def readSchema(): StructType =
+      override def build(): Scan = if (nullFrom == "build") null else new Scan {
+        override def readSchema(): StructType = if (nullFrom == "readSchema") null else {
           readSchemaDDL.map(StructType.fromDDL).getOrElse(schema())
-        override def toExternalLookup(): ExternalLookup = new ExternalLookup {
-          override def maxParameterRowsPerRequest(): Int = 1
-          override def createReaderFactory(): ExternalLookupReaderFactory =
-            () => throw new UnsupportedOperationException("not read")
         }
+        override def toExternalLookup(): ExternalLookup =
+          if (nullFrom == "toExternalLookup") null else new ExternalLookup {
+            override def maxParameterRowsPerRequest(): Int = 1
+            override def createReaderFactory(): ExternalLookupReaderFactory =
+              if (nullFrom == "createReaderFactory") null else new ExternalLookupReaderFactory {
+                override def createReader(): ExternalLookupReader =
+                  throw new UnsupportedOperationException("not read")
+                // A connector description may hold a secret.
+                override def toString: String = "PlanningReaderFactory(token=secret-factory)"
+              }
+          }
+        override def toString: String = "PlanningScan(token=secret-scan)"
       }
     }
 }

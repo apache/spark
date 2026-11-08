@@ -107,12 +107,16 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
     }
     val residual = residualFirst ++ residualRest
 
-    val scan = scanBuilder.build()
+    def nonNull[T](value: T, subClass: String): T = Option(value).getOrElse {
+      throw QueryCompilationErrors.invalidDataSourceExternalLookupError(tableName, subClass)
+    }
+    val scan = nonNull(scanBuilder.build(), "NULL_SCAN")
     // Fields bind to table columns by exact name, as in `PushDownUtils.toOutputAttrs`. CHAR and
     // VARCHAR are read as STRING, and nullability, including nested nullability, does not count
     // for the match. The value-row attributes take the read schema's type and nullability, so they
     // describe every value the connector may return.
-    val readSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(scan.readSchema())
+    val readSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(
+      nonNull(scan.readSchema(), "NULL_READ_SCHEMA"))
     val lookupInput = readSchema.fields.map { field =>
       relation.output.find { attr =>
         attr.name == field.name && DataType.equalsIgnoreNullability(attr.dataType, field.dataType)
@@ -136,7 +140,7 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
       throw QueryCompilationErrors.invalidDataSourceExternalLookupError(
         tableName, "MISSING_SCAN_FIELD", Map("field" -> toSQLId(Seq(attr.name))))
     }
-    val externalLookup = scan.toExternalLookup()
+    val externalLookup = nonNull(scan.toExternalLookup(), "NULL_EXTERNAL_LOOKUP")
     val maxParameterRowsPerRequest = externalLookup.maxParameterRowsPerRequest()
     if (maxParameterRowsPerRequest <= 0) {
       throw QueryCompilationErrors.invalidDataSourceExternalLookupError(
@@ -144,7 +148,7 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
         "NON_POSITIVE_MAX_PARAMETER_ROWS",
         Map("value" -> maxParameterRowsPerRequest.toString))
     }
-    val readerFactory = externalLookup.createReaderFactory()
+    val readerFactory = nonNull(externalLookup.createReaderFactory(), "NULL_READER_FACTORY")
 
     PreparedExternalLookupJoin(
       join.left,
