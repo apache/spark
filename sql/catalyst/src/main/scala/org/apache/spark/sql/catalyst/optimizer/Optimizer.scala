@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, TreeNodeTag}
+import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
@@ -2260,23 +2260,6 @@ object InferFiltersFromGenerate extends Rule[LogicalPlan] {
 object InferFiltersFromConstraints extends Rule[LogicalPlan]
   with PredicateHelper with ConstraintHelper {
 
-  /**
-   * Marks a predicate that this rule infers, as opposed to one written in the query. An inferred
-   * `IsNotNull` check is implied by the conjunct it was inferred from, so the whole-stage codegen
-   * of a filter keeps generating it lazily, before the first conjunct that references its column,
-   * where it generates a check written in the query at its position: before an earlier conjunct
-   * that can raise an error, when the check cannot raise one itself, see
-   * `GeneratePredicateHelper.precedingNotNullChecks`.
-   */
-  val INFERRED = TreeNodeTag[Unit]("inferred")
-
-  private def markInferred(predicates: Iterable[Expression]): Seq[Expression] = {
-    predicates.toSeq.map { p =>
-      p.setTagValue(INFERRED, ())
-      p
-    }
-  }
-
   def apply(plan: LogicalPlan): LogicalPlan = {
     if (conf.constraintPropagationEnabled) {
       inferFilters(plan)
@@ -2291,7 +2274,7 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
       val newFilters = (filter.constraints --
         (child.constraints ++ splitConjunctivePredicates(condition))).toSeq.filter(canBeFilter)
       if (newFilters.nonEmpty) {
-        Filter(And(markInferred(newFilters).reduce(And), condition), child)
+        Filter(withInferredPredicates(newFilters, condition), child)
       } else {
         filter
       }
@@ -2322,6 +2305,29 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
       }
   }
 
+  /**
+   * Adds the predicates inferred from the conjuncts of `condition` to it: at the front, or, with
+   * `spark.sql.optimizer.evaluateNotNullChecksInOrder`, each just before the first conjunct that
+   * references one of its columns, from which it is inferred, so that evaluating the condition
+   * in its order does not evaluate it before the conjuncts that precede that one, whose errors
+   * it would hide, e.g. `isnotnull(x)` from `x > 0` in `y + 1 > 0 AND x > 0`.
+   */
+  private def withInferredPredicates(
+      inferred: Seq[Expression],
+      condition: Expression): Expression = {
+    if (conf.evaluateNotNullChecksInOrder) {
+      val conjuncts = splitConjunctivePredicates(condition)
+      val byPosition = inferred.groupBy { p =>
+        conjuncts.indexWhere(c => c.references.intersect(p.references).nonEmpty)
+      }
+      (byPosition.getOrElse(-1, Nil) ++ conjuncts.zipWithIndex.flatMap { case (c, k) =>
+        byPosition.getOrElse(k, Nil) :+ c
+      }).reduce(And)
+    } else {
+      And(inferred.reduce(And), condition)
+    }
+  }
+
   private def getAllConstraints(
       left: LogicalPlan,
       right: LogicalPlan,
@@ -2342,7 +2348,7 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
     if (newPredicates.isEmpty) {
       plan
     } else {
-      Filter(markInferred(newPredicates).reduce(And), plan)
+      Filter(newPredicates.reduce(And), plan)
     }
   }
 

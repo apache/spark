@@ -1833,16 +1833,23 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val LEGACY_FILTER_LAZY_NOT_NULL_CHECK_PLACEMENT =
-    buildConf("spark.sql.legacy.filterLazyNotNullCheckPlacement")
+  val EVALUATE_NOT_NULL_CHECKS_IN_ORDER =
+    buildConf("spark.sql.optimizer.evaluateNotNullChecksInOrder")
       .internal()
-      .doc("When true, whole stage codegen of a filter condition, including the FILTER clause " +
-        "of an aggregate function, evaluates an IS NOT NULL check just before the first " +
-        "top-level conjunct that references its column, or after all conjuncts, even when a " +
-        "conjunct before that position can raise an error, so the error is raised on a row " +
-        "that the check rejects. When false, a check written in the query that cannot raise " +
-        "an error is evaluated at its position before such a conjunct, as the interpreted " +
-        "evaluation does, so the row is dropped before the error.")
+      .doc("When true, an IS NOT NULL check in a filter condition, including the FILTER clause " +
+        "of an aggregate function, is evaluated in the order of the condition, as the " +
+        "interpreted evaluation does, so that it drops a row before an error that a later " +
+        "conjunct raises on the row. With whole-stage codegen, a check that cannot raise an " +
+        "error is evaluated at its position before a conjunct that can raise one, is " +
+        "nondeterministic or calls a user-defined function, instead of just before the first " +
+        "conjunct that references its column; a check whose column the same stage has not " +
+        "computed yet, by an expression that can raise, keeps the latter placement. A check " +
+        "that the optimizer infers from a conjunct is placed just before the first conjunct " +
+        "that references its columns, instead of at the front of the condition. When false, " +
+        "with whole-stage codegen, a check is evaluated just before the first conjunct that " +
+        "references its column, or after all conjuncts, except after a conjunct that can be " +
+        s"NULL (see ${LEGACY_FILTER_SHORT_CIRCUIT_ON_NULL_CONJUNCT.key}), so a conjunct " +
+        "before that position can raise an error on a row that the check rejects.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
@@ -9936,8 +9943,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyFilterShortCircuitOnNullConjunct: Boolean =
     getConf(LEGACY_FILTER_SHORT_CIRCUIT_ON_NULL_CONJUNCT)
 
-  def legacyFilterLazyNotNullCheckPlacement: Boolean =
-    getConf(LEGACY_FILTER_LAZY_NOT_NULL_CHECK_PLACEMENT)
+  def evaluateNotNullChecksInOrder: Boolean = getConf(EVALUATE_NOT_NULL_CHECKS_IN_ORDER)
 
   def autoBroadcastJoinThreshold: Long = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 

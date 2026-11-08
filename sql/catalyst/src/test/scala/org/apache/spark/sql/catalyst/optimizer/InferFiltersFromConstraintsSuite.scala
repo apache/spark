@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
-class InferFiltersFromConstraintsSuite extends PlanTest {
+class InferFiltersFromConstraintsSuite extends PlanTest with PredicateHelper {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
@@ -61,6 +61,31 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       $"a" === $"b" && $"a" === 1 && $"b" === 1).analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-60329: evaluateNotNullChecksInOrder places an inferred predicate just before the " +
+      "first conjunct that references its columns") {
+    val originalQuery = testRelation.where($"b" + 1 > 0 && $"a" > 0 && $"c" === $"a").analyze
+    def conjuncts(conf: Boolean): Seq[Expression] = {
+      withSQLConf(SQLConf.EVALUATE_NOT_NULL_CHECKS_IN_ORDER.key -> conf.toString) {
+        val Filter(condition, _) = Optimize.execute(originalQuery)
+        splitConjunctivePredicates(condition)
+      }
+    }
+    val Seq(a, b, c) = originalQuery.output
+    def positions(conf: Boolean, exprs: Expression*): Seq[Int] = {
+      val canonicalized = conjuncts(conf).map(_.canonicalized)
+      exprs.map(e => canonicalized.indexOf(e.canonicalized))
+    }
+    // Each inferred check is just before the first conjunct on its column, after the conjuncts
+    // before that one: `isnotnull(c)` before `c = a`, after `a > 0`.
+    val Seq(notNullB, written1, notNullA, written2, notNullC, written3) = positions(conf = true,
+      IsNotNull(b), b + 1 > 0, IsNotNull(a), a > 0, IsNotNull(c), c === a)
+    assert(notNullB == 0 && written1 == 1 && written1 < notNullA && notNullA < written2 &&
+      written2 < notNullC && notNullC < written3, conjuncts(conf = true))
+    // Otherwise the inferred predicates are at the front of the condition.
+    assert(conjuncts(conf = false).takeRight(3).map(_.canonicalized) ===
+      Seq(b + 1 > 0, a > 0, c === a).map(_.canonicalized))
   }
 
   test("single inner join: filter out values on either side on equi-join keys") {
