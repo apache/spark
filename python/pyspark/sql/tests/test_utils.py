@@ -1703,6 +1703,26 @@ class UtilsTestsMixin:
 
         assertDataFrameEqual(df1, df2, ignoreColumnOrder=True)
 
+    def test_dataframe_ignore_column_order_special_names(self):
+        for name in ["a.b", "a`b", "*"]:
+            with self.subTest(name=name):
+                actual = self.spark.createDataFrame([(1, 2), (3, 4)], [name, "z"])
+                expected = self.spark.createDataFrame([(2, 1), (4, 3)], ["z", name])
+                assertDataFrameEqual(actual, expected, ignoreColumnOrder=True)
+
+                different = self.spark.createDataFrame([(2, 9), (4, 3)], ["z", name])
+                with self.assertRaises(PySparkAssertionError):
+                    assertDataFrameEqual(actual, different, ignoreColumnOrder=True)
+
+    def test_dataframe_ignore_column_order_dotted_name_and_struct(self):
+        actual = self.spark.createDataFrame([(Row(b=1), 2)], ["a", "a.b"])
+        expected = self.spark.createDataFrame([(2, Row(b=1))], ["a.b", "a"])
+        different = self.spark.createDataFrame([(3, Row(b=1))], ["a.b", "a"])
+        assertDataFrameEqual(actual, expected, ignoreColumnOrder=True)
+
+        with self.assertRaises(PySparkAssertionError):
+            assertDataFrameEqual(actual, different, ignoreColumnOrder=True)
+
     def test_dataframe_ignore_column_name(self):
         df1 = self.spark.createDataFrame([(1, 2), (3, 4)], ["A", "B"])
         df2 = self.spark.createDataFrame([(1, 2), (3, 4)], ["X", "Y"])

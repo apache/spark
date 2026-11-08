@@ -1104,8 +1104,8 @@ def assertDataFrameEqual(
         )
 
     if ignoreColumnOrder:
-        actual = actual.select(*sorted(actual.columns))
-        expected = expected.select(*sorted(expected.columns))
+        actual = actual.select(*[f"`{c.replace('`', '``')}`" for c in sorted(actual.columns)])
+        expected = expected.select(*[f"`{c.replace('`', '``')}`" for c in sorted(expected.columns)])
 
     def rename_dataframe_columns(df: DataFrame) -> DataFrame:
         """Rename DataFrame columns to sequential numbers for comparison"""
