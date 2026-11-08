@@ -1851,6 +1851,21 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val LEGACY_INFER_FAILABLE_FILTERS_FROM_CONSTRAINTS =
+    buildConf("spark.sql.legacy.inferFailableFiltersFromConstraints")
+      .internal()
+      .doc("When true, the query optimizer also infers a filter from data constraints when " +
+        "evaluating it can fail or is otherwise observable, such as `10 / x > 0` from " +
+        "`x = y AND 10 / y > 0`, or a UDF. Such a filter runs on rows that the query does not " +
+        "evaluate the expression on, so the query can raise an error that it does not raise " +
+        "without the filter. When false, only a filter that `ExprUtils." +
+        "canEvaluateUnconditionally` accepts is inferred, which also leaves out some " +
+        "expressions that cannot fail, such as `LIKE 'a%'`.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val PROPAGATE_DISTINCT_KEYS_ENABLED =
     buildConf("spark.sql.optimizer.propagateDistinctKeys.enabled")
       .internal()
@@ -6204,9 +6219,9 @@ object SQLConf {
 
   val PARSE_SQL_ENABLED =
     buildConf("spark.sql.function.parseSql.enabled")
-      .doc("When true, enables the parse_sql SQL function. This feature is under active " +
-        "development; the JSON contract may change across releases while the flag remains " +
-        "off by default.")
+      .doc("When true, enables the parse_sql SQL function (PARSE and ANALYZE). " +
+        "This feature is under active development; the JSON contract may change across " +
+        "releases while the flag remains off by default.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
@@ -6290,6 +6305,21 @@ object SQLConf {
       .version("2.4.0")
       .stringConf
       .createWithDefault("")
+
+  val STREAMING_V2_COLUMN_PRUNING_ENABLED =
+    buildConf("spark.sql.streaming.v2ColumnPruning.enabled")
+      .doc("When true, the scan of a Data Source V2 streaming source whose table has the " +
+        "capability STREAMING_COLUMN_PRUNING only reads the top-level columns that the streaming " +
+        "query reads from it, which Spark takes from the plan of the query optimized when the " +
+        "query starts, as it does for batch scans: Spark optimizes the query once more when it " +
+        "starts, as it optimizes each micro-batch. A query that reads other columns of the " +
+        "source later, for example, after the configuration of the optimizer changes in its " +
+        "session, fails with STREAMING_SCAN_MISSING_COLUMNS. When false, the scan reads all the " +
+        "columns of the source.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
 
   val DISABLE_MAP_KEY_NORMALIZATION =
     buildConf("spark.sql.legacy.disableMapKeyNormalization")
@@ -9773,6 +9803,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
 
+  def legacyInferFailableFiltersFromConstraints: Boolean =
+    getConf(LEGACY_INFER_FAILABLE_FILTERS_FROM_CONSTRAINTS)
+
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
 
   def parserDfaCacheFlushRatio: Double = getConf(PARSER_DFA_CACHE_FLUSH_RATIO)
@@ -10304,6 +10337,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def disabledV2StreamingMicroBatchReaders: String =
     getConf(DISABLED_V2_STREAMING_MICROBATCH_READERS)
+
+  def streamingV2ColumnPruningEnabled: Boolean = getConf(STREAMING_V2_COLUMN_PRUNING_ENABLED)
 
   def fastFailFileFormatOutput: Boolean = getConf(FASTFAIL_ON_FILEFORMAT_OUTPUT)
 
