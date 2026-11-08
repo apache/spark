@@ -32,6 +32,9 @@ struct StreamState<'task> {
     // The schema of the stream: that of the first batch, which every batch must have, or
     // the schema to read of a reader without batches. Unknown until either is read.
     schema: Option<SchemaRef>,
+    // The schema of the last batch that the reader returned, with the indices of the columns
+    // to read in it, or None when it has exactly those columns.
+    projection: Option<(SchemaRef, Option<Vec<usize>>)>,
     // The first batch, when get_schema read it to learn the schema.
     pending: Option<ArrayData>,
     last_error: Option<CString>,
@@ -47,7 +50,7 @@ impl StreamState<'_> {
             self.schema.get_or_insert_with(|| self.expected.clone());
             return Ok(None);
         };
-        let batch = project(batch?, &self.expected)?;
+        let batch = self.project(batch?)?;
         match &self.schema {
             Some(schema) if batch.schema() != *schema => {
                 return Err(schema_change(schema, &batch.schema()).into());
@@ -69,6 +72,19 @@ impl StreamState<'_> {
         }
         Ok(Some(data))
     }
+
+    /// Keeps the columns of the schema to read, in its order, from a batch that may have more,
+    /// such as all the columns of the source. Resolves the columns once for each schema.
+    fn project(&mut self, batch: RecordBatch) -> Result<RecordBatch> {
+        let schema = batch.schema();
+        if !matches!(&self.projection, Some((last, _)) if *last == schema) {
+            self.projection = Some((schema.clone(), projection(&schema, &self.expected)?));
+        }
+        match &self.projection {
+            Some((_, Some(indices))) => Ok(batch.project(indices)?),
+            _ => Ok(batch),
+        }
+    }
 }
 
 /// Describes how the schema of a batch differs from that of the stream. Both have the
@@ -85,15 +101,14 @@ fn schema_change(stream: &Schema, batch: &Schema) -> String {
     }
 }
 
-/// Keeps the columns of the schema to read, in its order, from a batch that may have more,
-/// such as all the columns of the source.
-fn project(batch: RecordBatch, expected: &Schema) -> Result<RecordBatch> {
-    let schema = batch.schema();
+/// The indices of the columns of the schema to read, in its order, in the schema of a batch
+/// that may have more, or None when the batch has exactly those columns.
+fn projection(schema: &Schema, expected: &Schema) -> Result<Option<Vec<usize>>> {
     let names = |fields: &Fields| fields.iter().map(|field| field.name().clone()).collect();
     let actual: Vec<String> = names(schema.fields());
     let wanted: Vec<String> = names(expected.fields());
     if actual == wanted {
-        return Ok(batch);
+        return Ok(None);
     }
     let indices =
         wanted
@@ -104,7 +119,7 @@ fn project(batch: RecordBatch, expected: &Schema) -> Result<RecordBatch> {
             })
             })
             .collect::<std::result::Result<Vec<_>, _>>()?;
-    Ok(batch.project(&indices)?)
+    Ok(Some(indices))
 }
 
 impl Drop for StreamState<'_> {
@@ -130,6 +145,7 @@ pub(super) unsafe fn export<'task>(
         reader: Some(reader),
         expected: expected_schema.clone(),
         schema: None,
+        projection: None,
         pending: None,
         last_error: None,
         finished: false,
@@ -284,6 +300,9 @@ fn check_nulls(
         )
         .into());
     }
+    if !has_required(field.data_type()) {
+        return Ok(());
+    }
     let valid = |index: usize| data.is_valid(index) && is_referenced(index);
     match field.data_type() {
         DataType::Struct(fields) => {
@@ -314,6 +333,18 @@ fn check_nulls(
         _ => {}
     }
     Ok(())
+}
+
+/// Whether a type nests a field, an element, or a map value that is not nullable, or a map,
+/// whose keys are never null. Only such a type needs the check of the values under it.
+fn has_required(data_type: &DataType) -> bool {
+    let required = |field: &Field| !field.is_nullable() || has_required(field.data_type());
+    match data_type {
+        DataType::Struct(fields) => fields.iter().any(|field| required(field.as_ref())),
+        DataType::List(element) => required(element.as_ref()),
+        DataType::Map(..) => true,
+        _ => false,
+    }
 }
 
 /// Whether each element of a list or map belongs to a value that `valid` accepts.

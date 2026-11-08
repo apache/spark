@@ -68,8 +68,10 @@ impl DataSource for JsonSink {
             Some("true") => true,
             _ => return Err("The readonly option must be true or false".into()),
         };
-        // Spark passes the checkpoint of a streaming query among the options of its sink.
+        // Spark passes the checkpoint and the name of a streaming query among the options of
+        // its sink.
         options.remove("checkpointlocation");
+        options.remove("queryname");
         if !options.is_empty() {
             return Err(
                 format!("Unknown options: {:?}", options.keys().collect::<Vec<_>>()).into(),
@@ -882,10 +884,15 @@ mod tests {
     }
 
     #[test]
-    fn streaming_queries_pass_their_checkpoint_among_the_options() {
+    fn streaming_queries_pass_their_checkpoint_and_name_among_the_options() {
         let directory = TempDirectory::new();
         let path = directory.0.to_str().unwrap();
-        assert!(JsonSink::new(info(&[("path", path), ("checkpointlocation", "/tmp/c")])).is_ok());
+        assert!(JsonSink::new(info(&[
+            ("path", path),
+            ("checkpointlocation", "/tmp/c"),
+            ("queryname", "events"),
+        ]))
+        .is_ok());
         assert!(JsonSink::new(info(&[("path", path), ("unknown", "1")])).is_err());
     }
 

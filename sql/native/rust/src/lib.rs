@@ -27,8 +27,10 @@
 //! Methods receive their inputs in `#[non_exhaustive]` structs, so that new ABI fields
 //! can reach connectors without breaking them: `*Info` structs on the driver
 //! ([`CreateInfo`], [`ScanInfo`], [`MicroBatchStreamInfo`], [`LatestOffsetInfo`],
-//! [`WriteInfo`], [`StreamingWriteInfo`], and [`HostInfo`]), and `*Context` structs, which
-//! carry the live [`TaskContext`], on the executors ([`ReaderContext`] and [`WriterContext`]).
+//! [`WriteInfo`], and [`StreamingWriteInfo`]), `*Context` structs, which carry the live
+//! [`TaskContext`], on the executors ([`ReaderContext`] and [`WriterContext`]), and
+//! [`HostInfo`], which [`DataSource::init`] receives in every JVM that loads the library,
+//! executors included.
 
 use std::collections::BTreeMap;
 
@@ -262,8 +264,9 @@ impl ScanInfo {
 /// Spark calls [`push_limit`](Self::push_limit) and [`prune_columns`](Self::prune_columns),
 /// each at most once and in this order, then [`plan`](Self::plan), and drops the builder.
 /// After a call fails, it makes no other call. It drops a builder without planning it when it
-/// does not read the scan, for example to only explain a query. Only the serialized factory
-/// and partitions reach the executors.
+/// does not read the scan, for example to only explain a query, once the scan is no longer
+/// referenced, which may be late and on another thread. Only the serialized factory and
+/// partitions reach the executors.
 pub trait ScanBuilder: Send + Sized + 'static {
     type Factory: PartitionReaderFactory;
 
@@ -271,8 +274,9 @@ pub trait ScanBuilder: Send + Sized + 'static {
     #[doc(hidden)]
     const SUPPORTED: bool = true;
 
-    /// Count rows. Spark pushes a limit only when the query does not filter the rows, since
-    /// it filters them after reading.
+    /// Pushes a LIMIT of `limit` rows down to the scan. Return [`LimitSupport::Global`] only
+    /// if the whole scan then returns at most `limit` rows. Spark pushes a limit only when the
+    /// query does not filter the rows, since it filters them after reading.
     fn push_limit(&mut self, _limit: usize) -> Result<LimitSupport> {
         Ok(LimitSupport::Unsupported)
     }
@@ -549,7 +553,7 @@ impl WriteInfo {
     }
 }
 
-/// How a batch write changes the destination.
+/// How a write, or the write of a micro-batch, changes the destination.
 ///
 /// New modes may be added. The SDK passes a mode only when the source instance
 /// has the matching capability, so a source never receives a mode it did not
@@ -582,7 +586,9 @@ pub enum WriteMode {
 ///   without calling it when a task message cannot be decoded.
 /// - `abort` runs at most once, never after a successful `commit`. It follows a failed
 ///   `commit`, or a failed task, also when computing the data to write failed.
-/// - Drop runs exactly once, possibly without `commit` or `abort`.
+/// - Drop runs exactly once: right after a successful `commit` or after `abort`, on the
+///   thread of that call, or, for a write that Spark neither commits nor aborts, when Spark
+///   closes the writer, which may be late and on another thread.
 /// - A panic in any method is reported as that method's failure.
 ///
 /// Message `i` of `commit` and `abort` belongs to input partition `i`.
@@ -734,7 +740,8 @@ impl StreamingWriteInfo {
 ///
 /// Spark creates a write for each micro-batch, with the lifecycle of a [`BatchWrite`], and
 /// passes the epoch ID of the micro-batch to `commit` and `abort`, and to the task writers
-/// in [`WriterContext::epoch_id`].
+/// in [`WriterContext::epoch_id`]. A write that is committed or aborted is therefore dropped
+/// before Spark creates the write of the next micro-batch.
 ///
 /// # Exactly-once output
 ///

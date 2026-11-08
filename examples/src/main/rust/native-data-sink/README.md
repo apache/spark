@@ -41,9 +41,9 @@ file-format dependency in this small example.
 | `path` | Required | Absolute directory shared by the driver and every executor |
 | `readonly` | `false` | Remove all the capabilities, which are those of writes, when `true` |
 
-Unknown options are rejected, except `checkpointLocation`, which Spark passes to the sink of
-a streaming query. Source creation and capability discovery do not create files. The default
-instance advertises only native `BATCH_WRITE`, `STREAMING_WRITE`, `BATCH_TRUNCATE`, and
+Unknown options are rejected, except `checkpointLocation` and `queryName`, which Spark passes
+to the sink of a streaming query. Source creation and capability discovery do not create
+files. The default instance advertises only native `BATCH_WRITE`, `STREAMING_WRITE`, `BATCH_TRUNCATE`, and
 `STREAMING_TRUNCATE`; it does not advertise reads. Spark performs its native capability check
 again with the operation's effective options.
 
@@ -75,6 +75,19 @@ That one manifest replacement is the commit point:
 To inspect output, read only the files listed in `manifest.json`. Recursively reading
 the destination directory would also pick up data from previous truncate operations.
 
+For example, after a successful write:
+
+```python
+import json
+from pathlib import Path
+
+root = Path("/absolute/shared/path/native-sink")
+manifest = json.loads((root / "manifest.json").read_text())
+files = [str(root / entry["path"]) for entry in manifest["files"]]
+if files:
+    spark.read.schema("id LONG, label STRING").json(files).show()
+```
+
 ## Streaming writes
 
 A streaming query writes each micro-batch, or epoch, with the protocol above: Spark creates a
@@ -88,18 +101,6 @@ epoch again after a restart, so a micro-batch whose epoch the manifest already r
 query publishes nothing: it removes what it staged and leaves the manifest unchanged. Each epoch
 of a query is therefore published once, and the queries that write to the same destination keep
 their epochs apart.
-For example, after a successful write:
-
-```python
-import json
-from pathlib import Path
-
-root = Path("/absolute/shared/path/native-sink")
-manifest = json.loads((root / "manifest.json").read_text())
-files = [str(root / entry["path"]) for entry in manifest["files"]]
-if files:
-    spark.read.schema("id LONG, label STRING").json(files).show()
-```
 
 ## Build, package, and run
 

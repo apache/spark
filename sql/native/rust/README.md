@@ -84,9 +84,11 @@ write lifecycle is described below.
 
 The inputs of these methods are `#[non_exhaustive]` structs, so that new ABI fields can
 reach connectors without breaking them: `*Info` structs on the driver (`CreateInfo`,
-`ScanInfo`, `MicroBatchStreamInfo`, `LatestOffsetInfo`, `WriteInfo`, `StreamingWriteInfo`,
-and `HostInfo`), and `*Context` structs, which carry the live `TaskContext`, on the executors
-(`ReaderContext` and `WriterContext`). `ScanPlan` has a constructor for the same reason.
+`ScanInfo`, `MicroBatchStreamInfo`, `LatestOffsetInfo`, `WriteInfo`, and
+`StreamingWriteInfo`), `*Context` structs, which carry the live `TaskContext`, on the
+executors (`ReaderContext` and `WriterContext`), and `HostInfo`, which `DataSource::init`
+receives in every JVM that loads the library, executors included. `ScanPlan` has a
+constructor for the same reason.
 
 The factory and partition types implement `Serialize` and `Deserialize`.
 Connections, pointers, and open readers remain in their creating process.
@@ -269,7 +271,10 @@ follow a `commit` that returned a message. Spark calls each method at most once,
 writes after a failure or a commit, and never aborts a successful commit, as the header
 documents, so connectors do not need to track their own phase; the `# Lifecycle`
 sections of `BatchWrite` and `DataWriter` list the exact call-order guarantees. Drop only
-releases resources.
+releases resources. The SDK drops a driver coordinator right after a successful `commit` or
+after `abort`, so the write of a micro-batch is dropped before Spark creates that of the next
+one. A write that Spark neither commits nor aborts, and a `ScanBuilder` that Spark never
+plans, are dropped when Spark closes their handles, which may be late and on another thread.
 
 Stage data per task attempt and publish it only at driver commit. In particular,
 `WriteMode::Truncate` must leave existing data intact until that commit. Retries
@@ -445,7 +450,7 @@ streaming epochs that are published once.
 
 See the [Range example guide][range] for packaging and `spark-submit` commands.
 Its `package.py` creates a single-platform `.sparkpkg`; `smoke.py` checks reading,
-filtered reads, projection, unfiltered limit pushdown, streaming reads with and without a
+filtered reads, projection, unfiltered limits, streaming reads with and without a
 limit on their micro-batches, and analysis-time rejection of unsupported batch writes. The
 write checks use failing input behind a shuffle to verify Spark rejects the operation
 before computing its data. No full Spark integration is implied by the standalone Rust/C

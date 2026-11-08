@@ -615,7 +615,7 @@ fn serialized_factory_and_messages_roundtrip_without_driver_source_or_input_buff
         Some(second_message.as_slice()),
     ];
     success(library, driver_finish(&driver, false, &messages));
-    drop(driver);
+    // The coordinator is dropped as soon as its commit succeeds, before Spark closes the writer.
     assert_eq!(
         events(),
         vec![
@@ -646,6 +646,7 @@ fn serialized_factory_and_messages_roundtrip_without_driver_source_or_input_buff
             Event::DriverDropped,
         ]
     );
+    drop(driver);
 }
 
 #[test]
@@ -728,9 +729,12 @@ fn driver_failures_preserve_messages_and_missing_task_positions_for_abort() {
         let committed = [Some(message.as_slice())];
         assert_ne!(driver_finish(&driver, false, &committed), 0);
         assert!(error(library).contains("driver commit"));
-        // Spark aborts a write whose commit failed.
+        // Spark aborts a write whose commit failed, so the coordinator is kept for the abort,
+        // after which it is dropped, before Spark closes the writer.
+        assert!(!events().contains(&Event::DriverDropped));
         let aborted = [None, Some(message.as_slice()), None];
         success(library, driver_finish(&driver, true, &aborted));
+        assert_eq!(events().last(), Some(&Event::DriverDropped));
         let expected = Message {
             partition: 1,
             attempt: 101,
@@ -790,7 +794,9 @@ fn the_epoch_of_a_data_writer_selects_its_write() {
         vec![
             Event::WriteCreated(false),
             Event::FactoryCreated,
-            Event::DriverAbort(vec![])
+            Event::DriverAbort(vec![]),
+            // Dropped right after the abort, before Spark closes the writer.
+            Event::DriverDropped,
         ],
     );
 }

@@ -52,6 +52,7 @@ enum Event {
     WriteCreated { query_id: String, truncate: bool },
     EpochCommitted(i64, Vec<Message>),
     EpochAborted(i64, Vec<Option<Message>>),
+    WriteDropped,
 }
 
 fn record(event: Event) {
@@ -270,6 +271,12 @@ impl StreamingWrite for Write {
     fn abort(&mut self, epoch_id: i64, messages: Vec<Option<Message>>) -> Result<()> {
         record(Event::EpochAborted(epoch_id, messages));
         Ok(())
+    }
+}
+
+impl Drop for Write {
+    fn drop(&mut self) {
+        record(Event::WriteDropped);
     }
 }
 
@@ -834,14 +841,17 @@ fn streaming_writes_pass_the_query_and_the_epoch_to_the_write_and_its_tasks() {
         library,
         finish(library, writer, false, 7, &[Some(&message)], false),
     );
-    unsafe { library.close_writer.unwrap()(writer) };
-
+    // Spark closes the writer of a micro-batch only after the next micro-batch created its
+    // own, but the SDK drops a write as soon as it is committed or aborted.
+    let previous = writer;
     let (writer, _) = create_writer(library, &[], 0, c"query-1".as_ptr()).unwrap();
+    unsafe { library.close_writer.unwrap()(previous) };
     success(library, finish(library, writer, true, 8, &[None], false));
-    unsafe { library.close_writer.unwrap()(writer) };
 
-    // A rejected writer is dropped without its abort, as when its creation fails.
+    // A rejected writer is dropped without its abort at close, as when its creation fails.
+    let previous = writer;
     let (writer, _) = create_writer(library, &[], 0, c"query-1".as_ptr()).unwrap();
+    unsafe { library.close_writer.unwrap()(previous) };
     success(library, finish(library, writer, true, -1, &[], true));
     unsafe { library.close_writer.unwrap()(writer) };
 
@@ -868,9 +878,12 @@ fn streaming_writes_pass_the_query_and_the_epoch_to_the_write_and_its_tasks() {
         vec![
             created(true),
             Event::EpochCommitted(7, vec![committed]),
+            Event::WriteDropped,
             created(false),
             Event::EpochAborted(8, vec![None]),
+            Event::WriteDropped,
             created(false),
+            Event::WriteDropped,
         ]
     );
 }
