@@ -481,7 +481,49 @@ case class AesEncrypt(
     BinaryType,
     "aesEncrypt",
     Seq(input, key, mode, padding, iv, aad),
-    inputTypes)
+    inputTypes,
+    isDeterministic = !drawsRandomIv)
+
+  // Empty CBC and GCM IVs draw inside aesEncrypt. A null IV does not:
+  // StaticInvoke propagateNull returns null first. The flag has to live on
+  // the StaticInvoke too: ReplaceExpressions substitutes it before later rules.
+  override lazy val deterministic: Boolean =
+    !drawsRandomIv && children.forall(_.deterministic)
+
+  private def drawsRandomIv: Boolean = modeMayDrawIv(mode) && ivMayBeMissing(iv)
+
+  // A non-literal mode might be CBC or GCM. ECB and any other literal do not draw.
+  private def modeMayDrawIv(expr: Expression): Boolean = underlyingLiteral(expr) match {
+    case Some(lit) => lit.value match {
+      case s: UTF8String =>
+        val modeName = s.toString
+        modeName.equalsIgnoreCase("CBC") || modeName.equalsIgnoreCase("GCM")
+      case _ => false
+    }
+    case None => true
+  }
+
+  // A null IV never reaches aesEncrypt. A non-literal IV may be empty on some
+  // rows. Only a non-empty string or binary literal is present.
+  private def ivMayBeMissing(expr: Expression): Boolean = underlyingLiteral(expr) match {
+    case Some(lit) => lit.value match {
+      case null => false
+      case s: UTF8String => s.numBytes() == 0
+      case bytes: Array[Byte] => bytes.length == 0
+      case _ => true
+    }
+    case None => true
+  }
+
+  // CheckAnalysis reads this flag before ConstantFolding. Fold the child so
+  // the cipher sees its value: CAST(X'47434D' AS STRING) is the string GCM.
+  private def underlyingLiteral(expr: Expression): Option[Literal] = {
+    if (expr.foldable && expr.deterministic) {
+      Some(Literal.create(expr.eval(EmptyRow), expr.dataType))
+    } else {
+      None
+    }
+  }
 
   def this(input: Expression, key: Expression, mode: Expression, padding: Expression, iv: Expression) =
     this(input, key, mode, padding, iv, Literal(""))
