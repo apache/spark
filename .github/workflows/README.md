@@ -13,11 +13,7 @@ The Apache Software Foundation (ASF) imposes [resource usage limits][limit] on G
 
 ### Reduce and stagger scheduled workloads
 
-Use daily, three-day, or weekly cadences for scheduled workloads. Move most
-two-day workloads to three days and four- or six-day workloads to weekly.
-Also run Python 3.12 macOS26, minimum-dependency Python, and SparkR Windows
-weekly. Keep Pages, stale-PR cleanup, and the base-image cache daily. The
-build-status updater keeps its separate schedule.
+Use daily, three-day, or weekly cadences for scheduled workloads.
 
 Reserve these UTC hours for daily and weekly workloads:
 
