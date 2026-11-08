@@ -674,20 +674,26 @@ abstract class OrcSourceSuite extends OrcSuite with SharedSparkSession {
        """.stripMargin)
   }
 
-  for (vectorized <- Seq("true", "false")) {
-    test(s"SPARK-60123: read collated ORC strings, vectorized=$vectorized") {
+  for {
+    collation <- Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE_CI")
+    vectorized <- Seq("true", "false")
+  } {
+    test(s"SPARK-60123: read $collation ORC strings, vectorized=$vectorized") {
       withSQLConf(
         SQLConf.ORC_IMPLEMENTATION.key -> "native",
-        SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized) {
+        SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized,
+        SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
         withTable("t_orc_collated") {
           sql(
-            """
+            s"""
               |CREATE TABLE t_orc_collated (
-              |  k STRING COLLATE UTF8_LCASE
+              |  k STRING COLLATE $collation
               |) USING ORC
               |""".stripMargin)
 
-          sql("INSERT INTO t_orc_collated VALUES ('a'), ('A'), ('b')")
+          sql("INSERT INTO t_orc_collated VALUES ('a'), ('b')")
+          // A separate file makes incorrect binary predicate pushdown observable.
+          sql("INSERT INTO t_orc_collated VALUES ('A')")
 
           val table = spark.table("t_orc_collated")
           val readBack = spark.read.schema(table.schema).orc(table.inputFiles.toSeq: _*)
@@ -705,9 +711,12 @@ abstract class OrcSourceSuite extends OrcSuite with SharedSparkSession {
               df.select("k"),
               Seq(Row("a"), Row("A"), Row("b")))
 
-            checkAnswer(
-              df.filter("k = 'a'").select("k"),
-              Seq(Row("a"), Row("A")))
+            val expected = if (collation == "UTF8_BINARY") {
+              Seq(Row("a"))
+            } else {
+              Seq(Row("a"), Row("A"))
+            }
+            checkAnswer(df.filter("k = 'a'").select("k"), expected)
           }
         }
       }
