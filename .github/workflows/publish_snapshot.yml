@@ -21,7 +21,7 @@ name: Publish snapshot
 
 on:
   schedule:
-  - cron: '17 15 3-31/3 * *'
+  - cron: '0 15 3-31/3 * *'
   workflow_dispatch:
     inputs:
       branch:

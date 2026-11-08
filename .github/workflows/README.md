@@ -21,9 +21,12 @@ Scheduled workloads use hourly UTC slots across three day-of-month phases:
 | 2 | 2, 5, 8, ... | `2-31/3` |
 | 3 | 3, 6, 9, ... | `3-31/3` |
 
-Each occupied slot starts at minute 17, with one scheduled workload per hour.
-Phase 2 at 06:17 and phase 3 at 18:17 are idle. The build-status updater keeps
-its separate schedule. Other event triggers are unaffected.
+Stagger build workloads by UTC clock hour, keeping their original cron minutes.
+Pages retains its daily 12:30 UTC schedule, so the 12:00 hour is reserved for
+Pages in every phase. Stale-PR cleanup also keeps its daily frequency, but runs
+at 00:30 UTC instead of 00:00 UTC. The other 68 workloads use the three-day
+cadence. The build-status updater keeps its separate schedule. Other event
+triggers are unaffected.
 
 The phases restart each month, so intervals are approximately three days rather
 than exactly 72 hours. Scheduled starts can be delayed, and running workflows
