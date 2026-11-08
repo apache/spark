@@ -25,72 +25,37 @@ on:
     - '**'
 
 jobs:
-  check-commit-count:
-    name: Check commit count
-    if: github.repository == 'apache/spark' && github.ref == 'refs/heads/master'
-    runs-on: ubuntu-slim
-    permissions:
-      contents: read
-    outputs:
-      should-run: ${{ steps.count.outputs.should-run }}
-    steps:
-      - name: Check out the full branch history
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-      - name: Check whether this is every tenth commit
-        id: count
-        run: |
-          count=$(git rev-list --count HEAD)
-          remainder=$((count % 10))
-
-          if ((remainder == 0)); then
-            should_run=true
-            icon=":white_check_mark:"
-            title="Commit count matched"
-            details="Commit count $count is divisible by 10."
-          else
-            should_run=false
-            icon=":pause_button:"
-            title="Commit count not matched"
-            details="Commit count $count is not divisible by 10."
-          fi
-
-          echo "should-run=$should_run" >> "$GITHUB_OUTPUT"
-          echo "Branch: $GITHUB_REF_NAME"
-          echo "Commit: $GITHUB_SHA"
-          echo "Commit count: $count"
-          echo "Remainder: $remainder"
-          echo "Should run: $should_run"
-          echo "Details: $details"
-          echo "::notice title=$title::$details"
-          echo "### $icon Commit count check" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Branch: $GITHUB_REF_NAME" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Commit: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Commit count: $count" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Remainder: $remainder" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Should run: $should_run" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Details: $details" >> "$GITHUB_STEP_SUMMARY"
-
   call-build-and-test:
     permissions:
       packages: write
     name: Run
-    needs: check-commit-count
     # Skip pushes to `master` on forks: the "Sync fork" button mirrors
     # apache/spark and would otherwise re-run the full build on every sync.
-    # The sampling check is skipped outside apache/spark master. GitHub otherwise
-    # applies an implicit success() requirement to dependencies, so !cancelled()
-    # allows those builds to run when the sampling job is skipped.
-    if: >-
-      (!cancelled())
-      && (github.repository == 'apache/spark' || github.ref != 'refs/heads/master')
-      && (
-        needs.check-commit-count.result == 'skipped'
-        || (
-          needs.check-commit-count.result == 'success'
-          && needs.check-commit-count.outputs.should-run == 'true'
-        )
-      )
+    # Post-merge sampling on apache/spark master and branch-4.x is applied by
+    # dev/merge_spark_pr.py through GitHub's workflow-skip commit trailer.
+    if: github.repository == 'apache/spark' || github.ref != 'refs/heads/master'
     uses: ./.github/workflows/build_and_test.yml
+    with:
+      # Sampled upstream pushes run the full job matrix.
+      # Fork pushes keep the reusable workflow's change-based selection.
+      jobs: >-
+        ${{ github.repository == 'apache/spark' && '{
+          "build": "true",
+          "build-core-utils": "true",
+          "pyspark": "true",
+          "pyspark-pandas": "true",
+          "pyspark-periodic": "true",
+          "pyspark-connect-old-client": "true",
+          "sparkr": "true",
+          "tpcds-1g": "true",
+          "docker-integration-tests": "true",
+          "lint": "true",
+          "java25": "true",
+          "docs": "true",
+          "yarn": "true",
+          "k8s-integration-tests": "true",
+          "oidc-e2e": "true",
+          "buf": "true",
+          "ui": "true",
+          "transpile": "true"
+        }' || '' }}
