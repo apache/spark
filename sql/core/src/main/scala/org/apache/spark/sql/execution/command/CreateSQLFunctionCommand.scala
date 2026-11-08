@@ -403,8 +403,9 @@ case class CreateSQLFunctionCommand(
       nameParts: Seq[String]): Option[(FunctionIdentifier, Boolean)] = {
     lazy val persistentIdent = nameParts match {
       case Seq(_) | Seq(_, _) => Some(nameParts.asFunctionIdentifier)
-      case Seq(c, db, f) if conf.resolver(c, CatalogManager.SESSION_CATALOG_NAME) =>
-        Some(FunctionIdentifier(f, Some(db), Some(c)))
+      // Catalog names are case-insensitive regardless of spark.sql.caseSensitive.
+      case Seq(c, db, f) if c.equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME) =>
+        Some(FunctionIdentifier(f, Some(db), Some(CatalogManager.SESSION_CATALOG_NAME)))
       case _ => None
     }
     def systemFunctionExists(ident: FunctionIdentifier): Boolean =
