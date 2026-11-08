@@ -85,34 +85,6 @@ public abstract class ColumnVector implements AutoCloseable {
   }
 
   /**
-   * Returns whether a consumer may keep this column vector after it asks the producer of its batch
-   * for the next batch, until the consumer releases it with {@link #closeIfFreeable()}. By default,
-   * a column vector may be reused or released by its producer once the next batch is requested, so
-   * a consumer has to copy what it needs past that point.
-   * <p>
-   * A producer that returns new vectors for every batch can override this to return true, which
-   * promises that:
-   * <ul>
-   *   <li>the producer neither overwrites nor frees this vector when the next batch is requested,
-   *   or when the producer is closed, e.g. a {@code PartitionReader} once it is exhausted;</li>
-   *   <li>{@link #closeIfFreeable()} frees this vector, and may be called from another thread
-   *   than the one that requested its batch, concurrently with the producer returning the next
-   *   batches or being closed;</li>
-   *   <li>the producer frees the vectors that the consumer has not released when the task
-   *   completes, e.g. when the consumer stops early.</li>
-   * </ul>
-   * A consumer may keep such vectors without accounting for their memory or spilling them.
-   * <p>
-   * This applies to the top-level columns of a batch: the children of a struct, array or map
-   * column share the lifetime of that column.
-   *
-   * @since 4.4.0
-   */
-  public boolean isRetainable() {
-    return false;
-  }
-
-  /**
    * Returns true if this column vector contains any null values.
    */
   public abstract boolean hasNull();

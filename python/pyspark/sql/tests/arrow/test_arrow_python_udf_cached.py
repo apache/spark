@@ -135,9 +135,7 @@ class ArrowPythonUDFCachedInputTests(ReusedSQLTestCase):
 
     def test_udf_on_cached_input_with_output_batch_slicing(self):
         # The 10-row result of the single cached batch is sliced under the configs below, and
-        # must still line up with its rows. The vectors of the cache are not retainable, so it
-        # takes the row queue path, which pairs the results by row; ArrowColumnarPythonUDFSuite
-        # covers the Arrow columnar path, which pairs each result batch with one input batch.
+        # must still line up with its rows, which are paired with the results by row.
         df = self.spark.range(0, 10, 1, 1).cache()
         try:
             for conf in [

@@ -143,6 +143,7 @@ case class ArrowEvalPythonExec(
       output,
       output.toStructType,
       conf.arrowMaxRecordsPerBatch,
+      conf.arrowMaxBytesPerBatch,
       evalType,
       conf.sessionLocalTimeZone,
       conf.arrowUseLargeVarTypes,

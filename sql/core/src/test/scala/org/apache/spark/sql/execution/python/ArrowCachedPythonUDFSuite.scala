@@ -20,9 +20,8 @@ package org.apache.spark.sql.execution.python
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.IntegratedUDFTestUtils
 import org.apache.spark.sql.execution.columnar.{ArrowCachedBatchSerializer, InMemoryRelation}
-import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.{ExamplePoint, SharedSparkSession}
 import org.apache.spark.sql.types.StringType
 
 /**
@@ -55,8 +54,8 @@ class ArrowCachedPythonUDFSuite extends SharedSparkSession {
     // The scan of the Arrow cache also returns rows, so no ColumnarToRowExec is added below
     // ArrowEvalPythonExec, whose child still supports columnar: it must still read rows when
     // columnar input is disabled, as it is by default. With columnar input, the cache closes the
-    // root of a batch when it returns the next one, so its vectors are not retainable, and its
-    // 200 batches take the row queue path.
+    // root of a batch when it returns the next one, so the pass-through columns of its 200
+    // batches must be copied before then.
     withSQLConf(SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> "1000") {
       val pandasUDF = TestScalarPandasUDF(
         name = "cached_str_udf", returnType = Some(StringType))
@@ -75,14 +74,6 @@ class ArrowCachedPythonUDFSuite extends SharedSparkSession {
             }
             assert(arrowExec.nonEmpty && arrowExec.head.child.supportsColumnar &&
               arrowExec.head.supportsColumnar == columnarInput)
-            if (columnarInput) {
-              // The row queue path outputs on-heap vectors, while the Arrow columnar path
-              // outputs the result vectors of Python as they are.
-              val resultClasses = arrowExec.head.executeColumnar().mapPartitionsInternal {
-                batches => batches.map(batch => batch.column(2).getClass.getName)
-              }.collect().toSet
-              assert(resultClasses == Set(classOf[OnHeapColumnVector].getName))
-            }
 
             val rows = result.collect()
             assert(rows.map(_.getLong(0)).toSeq == (0L until 200000L))
@@ -92,6 +83,41 @@ class ArrowCachedPythonUDFSuite extends SharedSparkSession {
               assert(row.getString(2) == id.toString, s"UDF result mismatch for id $id")
             }
           }
+        }
+      } finally {
+        cached.unpersist()
+      }
+    }
+  }
+
+  test("SPARK-60325: Columnar input passes through null type and user-defined type columns") {
+    assume(shouldTestPandasUDFs)
+    withSQLConf(SQLConf.ARROW_PYSPARK_UDF_COLUMNAR_INPUT_ENABLED.key -> "true") {
+      val pandasUDF = TestScalarPandasUDF(
+        name = "cached_types_udf", returnType = Some(StringType))
+      registerTestUDF(pandasUDF, spark)
+
+      val session = spark
+      import session.implicits._
+      val numRows = 1000
+      val points = (0 until numRows).map(i => (i.toString, new ExamplePoint(i, i + 1.0)))
+      val cached = spark.sparkContext.parallelize(points, 4).toDF("s", "p")
+        .selectExpr("s", "p", "NULL AS n")
+        .cache()
+      try {
+        val result = cached.selectExpr("s", "p", "n", "cached_types_udf(s) AS u")
+        val arrowExec = result.queryExecution.executedPlan.collect {
+          case exec: ArrowEvalPythonExec => exec
+        }
+        assert(arrowExec.nonEmpty && arrowExec.head.supportsColumnar)
+
+        val rows = result.collect()
+        assert(rows.map(_.getString(0).toInt).toSet == (0 until numRows).toSet)
+        rows.foreach { row =>
+          val id = row.getString(0).toInt
+          assert(row.getAs[ExamplePoint](1) == new ExamplePoint(id, id + 1.0))
+          assert(row.isNullAt(2))
+          assert(row.getString(3) == id.toString)
         }
       } finally {
         cached.unpersist()
