@@ -576,6 +576,7 @@ class SQLFunctionSuite extends SharedSparkSession {
         "() RETURNS TABLE (a INT) RETURN SELECT temp_fn()" -> "temp_fn",
         "() RETURNS INT RETURN temp_scala(1)" -> "temp_scala",
         "(x INT DEFAULT temp_fn()) RETURNS INT RETURN x" -> "temp_fn",
+        "(x INT DEFAULT temp_fn()) RETURNS TABLE (a INT) RETURN SELECT x" -> "temp_fn",
         "() RETURNS ARRAY<INT> RETURN transform(array(1), x -> x + temp_fn())" -> "temp_fn",
         // The name scan used before missed these two.
         "() RETURNS TABLE (a INT) RETURN SELECT * FROM temp_tvf()" -> "temp_tvf",
