@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.{DefaultCatalogManager, Identifier}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DateType, IntegerType, StringType, TimestampNTZType, TimestampType, TimeType}
+import org.apache.spark.sql.types.{BinaryType, DateType, IntegerType, StringType, TimestampNTZType, TimestampType, TimeType}
 
 class RewriteWithExpressionSuite extends PlanTest {
 
@@ -127,18 +127,120 @@ class RewriteWithExpressionSuite extends PlanTest {
     assert(rewritten == (Literal(1) + Literal(1)) * (Literal(1) + Literal(1)))
   }
 
-  test("applyForExpression rejects an impure foldable definition referenced more than once") {
-    // aes_encrypt becomes a foldable StaticInvoke that draws a fresh random IV on every eval, so
-    // two inlined copies would encrypt to different values.
+  test("SPARK-60934: generated-IV aes_encrypt is not foldable") {
+    // A missing IV is drawn per evaluation. applyForExpression must reject a
+    // second reference, because two copies encrypt to different values.
     val aes = ReplaceExpressions.replace(
       new AesEncrypt(Literal("abc".getBytes), Literal("1234567890123456".getBytes)))
-    assert(aes.foldable, "the AES rewrite is only interesting while it stays foldable")
+    assert(!aes.deterministic)
+    assert(!aes.foldable)
     val expr = With(aes) { case Seq(ref) =>
       EqualTo(ref, ref)
     }
     intercept[SparkException] {
       RewriteWithExpression.applyForExpression(expr)
     }
+  }
+
+  test("SPARK-60934: explicit-IV aes_encrypt of literals is safe to duplicate") {
+    val iv = Literal(Array.fill(12)(0.toByte))
+    val aes = ReplaceExpressions.replace(new AesEncrypt(
+      Literal("abc".getBytes),
+      Literal("1234567890123456".getBytes),
+      Literal("GCM"),
+      Literal("NONE"),
+      iv))
+    assert(aes.deterministic)
+    assert(aes.foldable)
+    val expr = With(aes) { case Seq(ref) =>
+      EqualTo(ref, ref)
+    }
+    assert(RewriteWithExpression.applyForExpression(expr) == EqualTo(aes, aes))
+  }
+
+  test("SPARK-60934: ECB aes_encrypt does not draw an IV") {
+    val aes = ReplaceExpressions.replace(new AesEncrypt(
+      Literal("abc".getBytes),
+      Literal("1234567890123456".getBytes),
+      Literal("ECB")))
+    assert(aes.deterministic)
+    assert(aes.foldable)
+  }
+
+  test("SPARK-60934: null IV literal does not draw") {
+    // propagateNull returns null before aesEncrypt, so a null IV is not a draw.
+    // An empty IV still reaches aesEncrypt and is replaced with a generated IV.
+    val input = Literal("abc".getBytes)
+    val key = Literal("1234567890123456".getBytes)
+    val nullIv = Cast(Literal.create(null, BinaryType), BinaryType, None)
+    val nullAes = new AesEncrypt(input, key, Literal("GCM"), Literal("NONE"), nullIv)
+    assert(nullAes.deterministic)
+    assert(ReplaceExpressions.replace(nullAes).deterministic)
+    val emptyAes = new AesEncrypt(
+      input, key, Literal("GCM"), Literal("NONE"), Literal(Array.empty[Byte]))
+    assert(!emptyAes.deterministic)
+    assert(!ReplaceExpressions.replace(emptyAes).deterministic)
+    val columnAes = new AesEncrypt(
+      input, key, Literal("GCM"), Literal("NONE"), AttributeReference("token", BinaryType)())
+    assert(!columnAes.deterministic)
+  }
+
+  test("SPARK-60934: cast of a binary mode literal is the cipher mode") {
+    // CAST(X'47434D' AS STRING) is the string GCM. Classifying the binary
+    // child leaves that generated IV deterministic, and a CTE then copies it.
+    val input = Literal("abc".getBytes)
+    val key = Literal("1234567890123456".getBytes)
+    def castMode(bytes: Int*): Expression =
+      Cast(Literal(bytes.map(_.toByte).toArray), StringType, None)
+
+    val gcm = new AesEncrypt(input, key, castMode(0x47, 0x43, 0x4d))
+    assert(!gcm.deterministic)
+    assert(!ReplaceExpressions.replace(gcm).deterministic)
+    val cbc = new AesEncrypt(input, key, castMode(0x43, 0x42, 0x43))
+    assert(!cbc.deterministic)
+    assert(!ReplaceExpressions.replace(cbc).deterministic)
+    val ecb = new AesEncrypt(input, key, castMode(0x45, 0x43, 0x42))
+    assert(ecb.deterministic)
+    assert(ReplaceExpressions.replace(ecb).deterministic)
+  }
+
+  test("SPARK-60934: foldable unhex IV and upper ECB stay deterministic") {
+    // The flag is read before ConstantFolding. A foldable child, including a
+    // collation, counts as its value. A column IV or a column mode still draws.
+    val input = Literal("abc".getBytes)
+    val key = Literal("1234567890123456".getBytes)
+    val unhexAes = ReplaceExpressions.replace(new AesEncrypt(
+      input, key, Literal("GCM"), Literal("NONE"),
+      Unhex(Literal("000000000000000000000000")),
+      Literal(Array.empty[Byte])))
+    assert(unhexAes.deterministic)
+    val first = unhexAes.eval(EmptyRow).asInstanceOf[Array[Byte]]
+    val second = unhexAes.eval(EmptyRow).asInstanceOf[Array[Byte]]
+    assert(java.util.Arrays.equals(first, second))
+    val ecbAes = ReplaceExpressions.replace(
+      new AesEncrypt(input, key, Upper(Literal("ecb"))))
+    assert(ecbAes.deterministic)
+    val collatedEcb = ReplaceExpressions.replace(new AesEncrypt(
+      input, key, Collate(Literal("ecb"), ResolvedCollation("UTF8_BINARY"))))
+    assert(collatedEcb.deterministic)
+    val collatedGcm = ReplaceExpressions.replace(new AesEncrypt(
+      input, key, Collate(Literal("GCM"), ResolvedCollation("UTF8_BINARY"))))
+    assert(!collatedGcm.deterministic)
+    val columnIv = ReplaceExpressions.replace(new AesEncrypt(
+      input, key, Literal("GCM"), Literal("NONE"), AttributeReference("token", BinaryType)()))
+    assert(!columnIv.deterministic)
+    val columnMode = ReplaceExpressions.replace(
+      new AesEncrypt(input, key, AttributeReference("mode", StringType)()))
+    assert(!columnMode.deterministic)
+  }
+
+  test("SPARK-60934: CBC and lowercase GCM draw an IV") {
+    val input = Literal("abc".getBytes)
+    val key = Literal("1234567890123456".getBytes)
+    val cbc = ReplaceExpressions.replace(new AesEncrypt(input, key, Literal("CBC")))
+    assert(!cbc.deterministic)
+    val gcm = ReplaceExpressions.replace(new AesEncrypt(input, key, Literal("gcm")))
+    assert(!gcm.deterministic)
   }
 
   test("applyForExpression rejects canonicalized common expression ids") {
