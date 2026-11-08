@@ -493,6 +493,29 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(Rint, DoubleType)
   }
 
+  test("SPARK-61175: rint returns the canonical NaN") {
+    val expr = Rint(BoundReference(0, DoubleType, nullable = true))
+    val canonical = java.lang.Double.doubleToRawLongBits(Double.NaN)
+    // A NaN with a payload, a signalling one, and the two with the sign bit set. Every JIT tier
+    // keeps the payload of the first two, so they fail without the fix wherever the test runs.
+    // The sign is cleared by the interpreter and C1 but kept by C2, so the last two check the
+    // sign only when the code under test has been compiled by C2.
+    val nans = Seq(0x7ff8000000000001L, 0x7ff0000000000001L, 0xfff8000000000000L,
+      0xfff0000000000001L).map(java.lang.Double.longBitsToDouble)
+    for (nan <- nans) {
+      val row = InternalRow(nan)
+      // checkEvaluation compares the UnsafeRow bytes in both factory modes, which sees the bits.
+      checkEvaluation(expr, Double.NaN, row)
+      val interpreted = evaluateWithoutCodegen(expr, row).asInstanceOf[Double]
+      assert(java.lang.Double.doubleToRawLongBits(interpreted) === canonical)
+    }
+    // Every other result keeps its bits, the signed zeros and the infinities included.
+    for (d <- Seq(-0.0, 0.0, -0.4, 0.5, 1.5, -2.5, 1e300, Double.MinPositiveValue,
+        Double.PositiveInfinity, Double.NegativeInfinity)) {
+      checkEvaluation(expr, math.rint(d), InternalRow(d))
+    }
+  }
+
   test("exp") {
     testUnary(Exp, StrictMath.exp)
     checkConsistencyBetweenInterpretedAndCodegen(Exp, DoubleType)
