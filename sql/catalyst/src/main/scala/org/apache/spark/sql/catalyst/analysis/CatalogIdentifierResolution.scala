@@ -17,15 +17,18 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.plans.logical.ColumnDefinition
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
+import org.apache.spark.sql.catalyst.util.SparkCharVarcharUtils.replaceCharVarcharWithString
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, LookupCatalog}
 
 /**
  * Resolves command target names to a [[ResolvedIdentifier]] for [[ResolveCatalogs]].
  */
 class CatalogIdentifierResolution(override val catalogManager: CatalogManager)
-    extends LookupCatalog {
+    extends LookupCatalog with SQLConfHelper {
 
   /** Resolves a command target without column output, preserving its origin and tags. */
   def resolveUnresolvedIdentifier(
@@ -51,6 +54,18 @@ class CatalogIdentifierResolution(override val catalogManager: CatalogManager)
     } else {
       val CatalogAndIdentifier(catalog, identifier) = nameParts
       ResolvedIdentifier(catalog, identifier, columnOutput)
+    }
+  }
+
+  /** Converts column definitions to output attributes, honoring CHAR/VARCHAR configuration. */
+  def columnsToOutput(columns: Seq[ColumnDefinition]): Seq[AttributeReference] = {
+    columns.map { col =>
+      val dataType = if (conf.charVarcharFirstClassTypes) {
+        col.dataType
+      } else {
+        replaceCharVarcharWithString(col.dataType)
+      }
+      AttributeReference(col.name, dataType, col.nullable, col.metadata)()
     }
   }
 }

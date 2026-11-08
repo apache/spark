@@ -2271,8 +2271,8 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
   private def inferFilters(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsAnyPattern(FILTER, JOIN)) {
     case filter @ Filter(condition, child) =>
-      val newFilters = filter.constraints --
-        (child.constraints ++ splitConjunctivePredicates(condition))
+      val newFilters = (filter.constraints --
+        (child.constraints ++ splitConjunctivePredicates(condition))).toSeq.filter(canBeFilter)
       if (newFilters.nonEmpty) {
         Filter(And(newFilters.reduce(And), condition), child)
       } else {
@@ -2317,16 +2317,47 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
   }
 
   private def inferNewFilter(plan: LogicalPlan, constraints: ExpressionSet): LogicalPlan = {
-    val newPredicates = constraints
+    val newPredicates = (constraints
       .union(constructIsNotNullConstraints(constraints, plan.output))
       .filter { c =>
         c.references.nonEmpty && c.references.subsetOf(plan.outputSet) && c.deterministic
-      } -- plan.constraints
+      } -- plan.constraints).toSeq.filter(canBeFilter)
     if (newPredicates.isEmpty) {
       plan
     } else {
       Filter(newPredicates.reduce(And), plan)
     }
+  }
+
+  /**
+   * A constraint only says what holds on the rows an operator outputs. As a filter, it also runs
+   * on rows and values the query may never evaluate it on, e.g. `10 / x > 0` from `x = y AND
+   * 10 / y > 0` on a row where `x` is 0 and `y` is not, so only a constraint that cannot fail
+   * becomes a filter. Constant parts count as what they evaluate to, as they are folded right
+   * after this rule. An uncorrelated subquery counts as a constant, as it runs once whichever
+   * rows use it, and a correlated one by its values and its correlation condition. Callers pass
+   * the original expressions, because [[ExpressionSet.filter]] tests the canonicalized ones.
+   */
+  private def canBeFilter(constraint: Expression): Boolean = {
+    conf.legacyInferFailableFiltersFromConstraints || ExprUtils.canEvaluateUnconditionally(
+      stripCannotFail(ConstantFolding.constantFolding(constraint, isConditionalBranch = true)))
+  }
+
+  private def stripCannotFail(e: Expression): Expression = e match {
+    // An integral remainder by a non-zero constant, e.g. `x % 2 = 0`, never fails.
+    case r: Remainder if r.dataType.isInstanceOf[IntegralType] && isNonZeroIntegral(r.right) =>
+      stripCannotFail(r.left)
+    case i: InSubquery =>
+      (i.values.map(IsNotNull(_)) ++ i.query.joinCond).map(stripCannotFail).reduce[Expression](And)
+    case x: Exists =>
+      x.joinCond.map(stripCannotFail).foldLeft[Expression](Literal.TrueLiteral)(And)
+    case s: ScalarSubquery if !s.isCorrelated => Literal.create(null, s.dataType)
+    case other => other.mapChildren(stripCannotFail)
+  }
+
+  private def isNonZeroIntegral(e: Expression): Boolean = e match {
+    case Literal(v, _: IntegralType) => v != null && v != 0
+    case _ => false
   }
 }
 
@@ -2421,10 +2452,14 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
     // The query execution/optimization does not guarantee the expressions are evaluated in order.
     // We only can combine them if and only if both are deterministic and the outer condition is not
     // throwable (inner can be throwable as it was going to be evaluated first anyways).
+    // Combining a condition written after a non-deterministic or throwable one evaluates it ahead
+    // of that one, so it must also be unable to fail. `throwable` does not report e.g. a division
+    // by zero in ANSI mode, which the condition before it may have kept from being evaluated.
     case Filter(fc, nf @ Filter(nc, grandChild)) if nc.deterministic =>
-      val (combineCandidates, rest) =
-        splitConjunctivePredicates(fc).partition(p => p.deterministic && !p.throwable)
-      val mergedFilter = (ExpressionSet(combineCandidates) --
+      val (leading, following) =
+        splitConjunctivePredicates(fc).span(p => p.deterministic && !p.throwable)
+      val (cannotFail, rest) = following.partition(ExprUtils.canEvaluateUnconditionally)
+      val mergedFilter = (ExpressionSet(leading ++ cannotFail) --
         ExpressionSet(splitConjunctivePredicates(nc))).reduceOption(And) match {
         case Some(ac) =>
           Filter(And(nc, ac), grandChild)
@@ -3016,7 +3051,10 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     // Expensive sub-expressions behind each expensive alias, to spot when two aliases are the
     // same piece of work. Cheap aliases have none, so we skip the (possibly wide) cheap rest.
     // Two aliases share work exactly when they share a regex, so version 0 of the estimate
-    // collects the regex expressions and not their ancestors.
+    // collects the regex expressions and not their ancestors. A Python UDF counts here even with
+    // `avoidDoubleFilterEvalForPythonUDF` off, so two aliases sharing one stay in one layer and
+    // do not run it twice. The split only stacks layers above `baseChild`, so a restart from a
+    // checkpoint does not depend on it.
     val regexIsExpensive = conf.getConf(SQLConf.REGEX_PATTERN_COST_ESTIMATE_VERSION) == 0
     val expensivePartsOf = AttributeMap(expensiveAliases.toSeq.map { attr =>
       attr -> aliasMap(attr).child.collect {
@@ -3088,12 +3126,25 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
 
   /**
    * Whether `e` is expensive. Version 0 of the regex pattern cost estimate treats every LIKE and
-   * RLIKE as expensive. It is checked here rather than in `StringRegexExpression.expensive`,
-   * because `hasExpensiveChild` caches the answer of a parent expression.
+   * RLIKE as expensive, and with `avoidDoubleFilterEvalForPythonUDF` off a Python UDF is only as
+   * expensive as its arguments. Both are checked here rather than in `expensive`, because
+   * `hasExpensiveChild` caches the answer of a parent expression.
    */
-  private def isExpensive(e: Expression): Boolean = e.expensive ||
-    (conf.getConf(SQLConf.REGEX_PATTERN_COST_ESTIMATE_VERSION) == 0 &&
-      e.exists(_.isInstanceOf[StringRegexExpression]))
+  private def isExpensive(e: Expression): Boolean = {
+    // The stand-in below can only make `e` cheaper, so a cheap `e` needs no rewrite.
+    val classified =
+      if (!e.expensive || conf.getConf(SQLConf.AVOID_DOUBLE_FILTER_EVAL_FOR_PYTHON_UDF)) {
+        e
+      } else {
+        // The stand-in is not foldable either, so a LIKE/RLIKE pattern from a UDF stays expensive.
+        e.transformUp {
+          case p: PythonFuncExpression => PrettyPythonUDF(p.name, p.dataType, p.children)
+        }
+      }
+    classified.expensive ||
+      (conf.getConf(SQLConf.REGEX_PATTERN_COST_ESTIMATE_VERSION) == 0 &&
+        e.exists(_.isInstanceOf[StringRegexExpression]))
+  }
 
   /**
    * Check if we can safely push a filter through a projection, by making sure that predicate
