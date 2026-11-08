@@ -48,31 +48,31 @@ class TaskContext {
 
   TaskContext WithStageId(int32_t stage_id) const {
     TaskContext context = *this;
-    context.stage_id_ = stage_id;
+    context.task_.stage_id = stage_id;
     return context;
   }
 
   TaskContext WithStageAttemptNumber(int32_t stage_attempt_number) const {
     TaskContext context = *this;
-    context.stage_attempt_number_ = stage_attempt_number;
+    context.task_.stage_attempt_number = stage_attempt_number;
     return context;
   }
 
   TaskContext WithPartitionId(int32_t partition_id) const {
     TaskContext context = *this;
-    context.partition_id_ = partition_id;
+    context.task_.partition_id = partition_id;
     return context;
   }
 
   TaskContext WithAttemptNumber(int32_t attempt_number) const {
     TaskContext context = *this;
-    context.attempt_number_ = attempt_number;
+    context.task_.attempt_number = attempt_number;
     return context;
   }
 
   TaskContext WithTaskAttemptId(int64_t task_attempt_id) const {
     TaskContext context = *this;
-    context.task_attempt_id_ = task_attempt_id;
+    context.task_.task_attempt_id = task_attempt_id;
     return context;
   }
 
@@ -81,34 +81,34 @@ class TaskContext {
   TaskContext InterruptedBy(const std::atomic<bool>& flag) const {
     TaskContext context = *this;
     context.host_ = nullptr;
-    context.is_interrupted_ = nullptr;
+    context.task_.is_interrupted = nullptr;
     context.flag_ = &flag;
     return context;
   }
 
   /// The ID of the stage of the task.
-  int32_t stage_id() const { return stage_id_; }
+  int32_t stage_id() const { return task_.stage_id; }
 
   /// The attempt number of the stage of the task.
-  int32_t stage_attempt_number() const { return stage_attempt_number_; }
+  int32_t stage_attempt_number() const { return task_.stage_attempt_number; }
 
   /// For a reader, the index of its partition in the plan of its scan or micro-batch, which is not
   /// the partition of the task when a task reads several partitions, for example after a coalesce
   /// or a union. For a writer, the partition of the task.
-  int32_t partition_id() const { return partition_id_; }
+  int32_t partition_id() const { return task_.partition_id; }
 
   /// The attempt number of the task.
-  int32_t attempt_number() const { return attempt_number_; }
+  int32_t attempt_number() const { return task_.attempt_number; }
 
   /// The ID of the task attempt, unique within the Spark application but not across applications.
-  int64_t task_attempt_id() const { return task_attempt_id_; }
+  int64_t task_attempt_id() const { return task_.task_attempt_id; }
 
   /// Whether Spark killed this task, read from Spark each time. For a reader, also whether the task
   /// failed or completed: a native engine may read a stream after its task ended. Any thread can
   /// call it.
   bool IsInterrupted() const {
-    if (is_interrupted_ != nullptr) {
-      return is_interrupted_(host_);
+    if (task_.is_interrupted != nullptr) {
+      return task_.is_interrupted(host_);
     }
     return flag_ != nullptr && flag_->load();
   }
@@ -118,14 +118,11 @@ class TaskContext {
 
   TaskContext() = default;
 
-  int32_t stage_id_ = 0;
-  int32_t stage_attempt_number_ = 0;
-  int32_t partition_id_ = 0;
-  int32_t attempt_number_ = 0;
-  int64_t task_attempt_id_ = 0;
-  // Where the task learns that Spark killed it: the callback of the host, a flag, or neither.
+  // A copy of the context of the host, with its IDs and its callback, or zeros for testing.
+  SparkDsTaskContext task_{};
+  // Where the task learns that Spark killed it: the callback of the host, which gets the context
+  // of the host, a flag, or neither.
   const SparkDsTaskContext* host_ = nullptr;
-  bool (*is_interrupted_)(const SparkDsTaskContext* task) = nullptr;
   const std::atomic<bool>* flag_ = nullptr;
 };
 
@@ -146,18 +143,9 @@ inline arrow::Result<TaskContext> ImportTaskContext(const SparkDsTaskContext* ta
     return arrow::Status::Invalid("the task context has ", size,
                                   " bytes, fewer than in version 1 of the native ABI");
   }
-  SparkDsTaskContext copy{};
-  std::memcpy(&copy, task, std::min(static_cast<size_t>(size), sizeof(copy)));
   TaskContext context;
-  context.stage_id_ = copy.stage_id;
-  context.stage_attempt_number_ = copy.stage_attempt_number;
-  context.partition_id_ = copy.partition_id;
-  context.attempt_number_ = copy.attempt_number;
-  context.task_attempt_id_ = copy.task_attempt_id;
-  if (copy.is_interrupted != nullptr) {
-    context.host_ = task;
-    context.is_interrupted_ = copy.is_interrupted;
-  }
+  std::memcpy(&context.task_, task, std::min(static_cast<size_t>(size), sizeof(context.task_)));
+  context.host_ = task;
   return context;
 }
 
