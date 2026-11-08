@@ -15,14 +15,15 @@ The Apache Software Foundation (ASF) imposes [resource usage limits][limit] on G
 
 Move two-day workloads to a three-day cadence, but preserve existing four- and
 six-day cadences. Do not shorten a workload's original interval when assigning
-a new slot. The base-image cache moves from daily to three days.
+a new slot. Keep the base-image cache on its daily cadence.
 
 Reserve these UTC hours for workloads outside the three-day cadence:
 
 | UTC hour | Workloads |
 | --- | --- |
 | 00 | Daily stale-PR cleanup at 00:30 |
-| 04, 08, 20 | Four- and six-day variants at minute 17 |
+| 04 | Daily base-image cache at 04:17, alongside four-day variants |
+| 08, 20 | Four- and six-day variants at minute 17 |
 | 11 | Unchanged branch-3.5 scheduler at 11:00 |
 | 12 | Daily Pages at 12:30 |
 
@@ -36,7 +37,7 @@ off-hour choice; hour and date assignments distribute load without ranking
 jobs by importance. An individual interval can be shortened later if faster
 feedback is justified.
 
-Pages and stale-PR cleanup keep their daily frequencies. The branch-3.5
+Pages, stale-PR cleanup, and the base-image cache keep their daily frequencies. The branch-3.5
 scheduler keeps its original shared four-day trigger. The build-status updater
 keeps its separate schedule, and other event triggers are unaffected.
 
