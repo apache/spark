@@ -3316,6 +3316,19 @@ class WholeStageCodegenSuite extends SharedSparkSession
         })
         checkAnswer(df, Row(2))
       }
+      // After the NULL conjunct `NOT (m > 0 AND mw > 0)` on the first group, the check on `r`
+      // and `mz > 0` cannot raise by their own expressions, so the group is dropped at the NULL
+      // conjunct, with the config as without it, without evaluating `r`.
+      Seq("true", "false").foreach { inOrder =>
+        withSQLConf(SQLConf.EVALUATE_NOT_NULL_CHECKS_IN_ORDER.key -> inOrder) {
+          checkAnswer(
+            sql("SELECT k FROM (SELECT k, sum(a) / sum(b) AS r, max(n) AS m, max(w) AS mw, " +
+              "max(z) AS mz FROM VALUES (1, 1, 0, NULL, 1, 1), (2, 1, 1, 1, 1, 1) " +
+              "AS v(k, a, b, n, w, z) GROUP BY k) " +
+              "WHERE NOT (m > 0 AND mw > 0) AND r IS NOT NULL AND mz > 0"),
+            Seq.empty)
+        }
+      }
       withNullConjunctTable(-5) {
         // `c` is computed on demand by `cast(s AS INT)`, which raises on the first row, through a
         // sample, which forwards the variables of the projection: the check on `c` keeps the lazy
@@ -3324,6 +3337,12 @@ class WholeStageCodegenSuite extends SharedSparkSession
           .sample(1.0).where("c IS NOT NULL AND y + 1 > 0").select("a")
         assert(sampled.queryExecution.executedPlan.exists(_.isInstanceOf[SampleExec]))
         checkAnswer(sampled, Row(0))
+        // A conjunct on `c` evaluates the cast too, so the check on `x` before it, which drops
+        // the first row, is generated at its position.
+        checkAnswer(
+          spark.table("t").selectExpr("a", "cast(s AS INT) AS c", "x")
+            .sample(1.0).where("x IS NOT NULL AND c > 0").select("a"),
+          Row(0))
       }
       withNullConjunctTable(Int.MaxValue) {
         // A sample forwards the column `x` of the scan, which cannot raise, so the check on it
