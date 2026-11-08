@@ -151,10 +151,10 @@ case class CreateSQLFunctionCommand(
       }
 
       // Build the function body and check if the function body can be analyzed successfully.
-      // The last element is the temporary functions the body's analysis bound and the temporary
-      // variables it reads only inside IDENTIFIER clauses. Neither can be recovered from the
-      // analyzed plan, so both are captured during analysis.
-      val (unresolvedPlan, analyzedPlan, inferredReturnType, referredTemps) = if (!isTableFunc) {
+      // The last two elements are the temporary functions the body's analysis bound and the
+      // temporary variables it reads only inside IDENTIFIER clauses. Neither can be recovered from
+      // the analyzed plan, so both are captured during analysis.
+      val (unresolvedPlan, analyzedPlan, inferredType, tempFuncs, identVars) = if (!isTableFunc) {
         // Build SQL scalar function plan.
         val outputExpr = if (query.isDefined) ScalarSubquery(query.get) else expression.get
         val plan: LogicalPlan = returnType.map { t =>
@@ -191,7 +191,7 @@ case class CreateSQLFunctionCommand(
         // Check if the SQL function body can be analyzed.
         checkFunctionBodyAnalysis(analyzer, function, resolved)
 
-        (plan, resolved, resolvedReturnType, (referredTempFuncs, referredTempVarsUnderIdentifier))
+        (plan, resolved, resolvedReturnType, referredTempFuncs, referredTempVarsUnderIdentifier)
       } else {
         // Build SQL table function plan.
         if (query.isEmpty) {
@@ -256,9 +256,8 @@ case class CreateSQLFunctionCommand(
           )
         }
 
-        (plan, analyzed, Right(returnParam), (referredTempFuncs, referredTempVarsUnderIdentifier))
+        (plan, analyzed, Right(returnParam), referredTempFuncs, referredTempVarsUnderIdentifier)
       }
-      val (tempFuncs, identifierVars) = referredTemps
 
       // A permanent function is not allowed to reference temporary objects.
       // This should be called after `qe.assertAnalyzed()` (i.e., `plan` can be resolved).
@@ -266,14 +265,14 @@ case class CreateSQLFunctionCommand(
       // variables read only through IDENTIFIER clauses: with it set they are not rejected (and,
       // as for views, not persisted either).
       val identifierVarsToReject =
-        if (conf.getConf(SQLConf.VARIABLES_UNDER_IDENTIFIER_IN_VIEW)) Nil else identifierVars
+        if (conf.getConf(SQLConf.VARIABLES_UNDER_IDENTIFIER_IN_VIEW)) Nil else identVars
       verifyTemporaryObjectsNotExists(
         catalog, analyzer, isTemp, name, unresolvedPlan, analyzedPlan, tempFuncs,
         identifierVarsToReject)
 
       // Generate function properties.
       val properties =
-        generateFunctionProperties(sparkSession, unresolvedPlan, analyzedPlan, identifierVars)
+        generateFunctionProperties(sparkSession, unresolvedPlan, analyzedPlan, identVars)
 
       // Derive determinism of the SQL function.
       val deterministic = analyzedPlan.deterministic
@@ -283,7 +282,7 @@ case class CreateSQLFunctionCommand(
 
       function.copy(
         // Assign the return type, inferring from the function body if needed.
-        returnType = inferredReturnType,
+        returnType = inferredType,
         deterministic = Some(function.deterministic.getOrElse(deterministic)),
         containsSQL = Some(function.containsSQL.getOrElse(!readsSQLData)),
         properties = properties
