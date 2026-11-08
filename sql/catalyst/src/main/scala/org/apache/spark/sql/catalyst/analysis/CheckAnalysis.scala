@@ -417,6 +417,12 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
         // Here we perform additional checks for them.
         checkIfSelfReferenceIsPlacedCorrectly(unionLoop, unionLoop.id)
 
+      // The child `Filter` holds the same condition. Check it first so that an error of the
+      // subquery in the `Filter` does not hide that the constraint cannot have a subquery. A
+      // missing table is still reported first, by the bottom-up traversal.
+      case AddCheckConstraint(Filter(_, relation), check, _) if relation.resolved =>
+        check.failIfContainsSubquery()
+
       case _ =>
     }
 
@@ -778,8 +784,8 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 "joinCondition" -> toSQLExpr(condition),
                 "conditionType" -> toSQLType(condition.dataType)))
 
-          case j @ AsOfJoin(_, _, _, Some(condition), _, _, _, _, _, _, _, _, _, _, _)
-              if condition.dataType != BooleanType =>
+          case j: AsOfJoin if j.condition.exists(_.dataType != BooleanType) =>
+            val condition = j.condition.get
             j.failAnalysis(
               errorClass = "JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE",
               messageParameters = Map(
@@ -787,20 +793,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 "conditionType" -> toSQLType(condition.dataType)))
 
           case j: AsOfJoin =>
-            j.toleranceAssertion.foreach { toleranceAssertion =>
-              if (!toleranceAssertion.foldable) {
-                j.failAnalysis(
-                  errorClass = "AS_OF_JOIN.TOLERANCE_IS_UNFOLDABLE",
-                  messageParameters = Map.empty)
-              }
-              if (!toleranceAssertion.eval().asInstanceOf[Boolean]) {
-                j.failAnalysis(
-                  errorClass = "AS_OF_JOIN.TOLERANCE_IS_NON_NEGATIVE",
-                  messageParameters = Map.empty)
-              }
-            }
-
-            AsOfJoinValidation.validateKeyTypes(j)
+            AsOfJoinValidation.validateTolerance(j)
 
           // Reject streaming inputs early. The optimizer rewrite is built around an
           // unconditioned cross-product fed into a global `Aggregate` keyed by a per-row
@@ -994,55 +987,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             }
 
           case create: V2CreateTablePlan =>
-            val references = create.partitioning.flatMap(_.references).toSet
-            val badReferences = references.map(_.fieldNames).flatMap { column =>
-              create.tableSchema.findNestedField(column.toImmutableArraySeq) match {
-                case Some(_) =>
-                  None
-                case _ =>
-                  Some(column.quoted)
-              }
-            }
-
-            if (badReferences.nonEmpty) {
-              create.failAnalysis(
-                errorClass = "UNSUPPORTED_FEATURE.PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED",
-                messageParameters = Map(
-                  "cols" -> badReferences.map(r => toSQLId(r)).mkString(", ")))
-            }
-
-            create.tableSchema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
-            TypeUtils.failUnsupportedDataType(create.tableSchema, SQLConf.get)
-            SchemaUtils.checkIndeterminateCollationInSchema(create.tableSchema)
-
-            // Validate generated column expressions
-            create.columns.foreach { col =>
-              col.generationExpression.foreach { genExpr =>
-                def unsupportedExpressionError(reason: String): AnalysisException = {
-                  new AnalysisException(
-                    errorClass = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
-                    messageParameters = Map(
-                      "fieldName" -> col.name,
-                      "expressionStr" -> genExpr.originalSQL,
-                      "reason" -> reason
-                    )
-                  )
-                }
-                // Only built-in functions are allowed in generated columns. Functions that are
-                // not built-in already fail earlier in analysis: unknown functions with
-                // UNRESOLVED_ROUTINE and persistent SQL functions with UNSUPPORTED_SQL_UDF_USAGE.
-                // Here we only need to reject user-defined functions (Scala/Python/Java/Hive UDFs
-                // and v2 catalog functions, all of which are `UserDefinedExpression`), which
-                // resolve successfully.
-                genExpr.child.foreach {
-                  case udf: UserDefinedExpression =>
-                    throw unsupportedExpressionError(
-                      s"failed to resolve `${udf.name}` to a built-in function")
-                  case _ =>
-                }
-                genExpr.validate(col.name, col.dataType, create.columns)
-              }
-            }
+            CreateTableValidation.validateV2CreateTablePlan(create, SQLConf.get)
 
           case write: V2WriteCommand if write.resolved =>
             write.query.schema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
@@ -1052,6 +997,9 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               errorClass = "NON_DETERMINISTIC_CHECK_CONSTRAINT",
               messageParameters = Map("checkCondition" -> a.checkConstraint.condition)
             )
+
+          case a: AddCheckConstraint =>
+            a.checkConstraint.failIfCallsUserDefinedFunction()
 
           case alter: AlterTableCommand =>
             checkAlterTableCommand(alter)

@@ -2358,114 +2358,6 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
-SELECT percentile(c, 0.5)
-  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"c\"",
-    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
-    "paramIndex" : "first",
-    "requiredType" : "((\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\") or \"TIME\")",
-    "sqlExpr" : "\"percentile(c, 0.5, 1)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 25,
-    "fragment" : "percentile(c, 0.5)"
-  } ]
-}
-
-
--- !query
-SELECT median(c)
-  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"c\"",
-    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
-    "paramIndex" : "first",
-    "requiredType" : "((\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\") or \"TIME\")",
-    "sqlExpr" : "\"median(c)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 16,
-    "fragment" : "median(c)"
-  } ]
-}
-
-
--- !query
-SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY c)
-  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"c\"",
-    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
-    "paramIndex" : "first",
-    "requiredType" : "((\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\") or \"TIME\")",
-    "sqlExpr" : "\"percentile_cont(c, 0.5)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 53,
-    "fragment" : "percentile_cont(0.5) WITHIN GROUP (ORDER BY c)"
-  } ]
-}
-
-
--- !query
-SELECT percentile_disc(0.5) WITHIN GROUP (ORDER BY c)
-  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"c\"",
-    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
-    "paramIndex" : "first",
-    "requiredType" : "((\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\") or \"TIME\")",
-    "sqlExpr" : "\"percentile_disc(c, 0.5)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 53,
-    "fragment" : "percentile_disc(0.5) WITHIN GROUP (ORDER BY c)"
-  } ]
-}
-
-
--- !query
 SELECT time_trunc('HOUR', c)
   FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
 -- !query schema
@@ -2699,114 +2591,6 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
-SELECT percentile(c, 0.5)
-  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"c\"",
-    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
-    "paramIndex" : "first",
-    "requiredType" : "((\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\") or \"TIME\")",
-    "sqlExpr" : "\"percentile(c, 0.5, 1)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 25,
-    "fragment" : "percentile(c, 0.5)"
-  } ]
-}
-
-
--- !query
-SELECT median(c)
-  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"c\"",
-    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
-    "paramIndex" : "first",
-    "requiredType" : "((\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\") or \"TIME\")",
-    "sqlExpr" : "\"median(c)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 16,
-    "fragment" : "median(c)"
-  } ]
-}
-
-
--- !query
-SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY c)
-  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"c\"",
-    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
-    "paramIndex" : "first",
-    "requiredType" : "((\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\") or \"TIME\")",
-    "sqlExpr" : "\"percentile_cont(c, 0.5)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 53,
-    "fragment" : "percentile_cont(0.5) WITHIN GROUP (ORDER BY c)"
-  } ]
-}
-
-
--- !query
-SELECT percentile_disc(0.5) WITHIN GROUP (ORDER BY c)
-  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"c\"",
-    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
-    "paramIndex" : "first",
-    "requiredType" : "((\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\") or \"TIME\")",
-    "sqlExpr" : "\"percentile_disc(c, 0.5)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 53,
-    "fragment" : "percentile_disc(0.5) WITHIN GROUP (ORDER BY c)"
-  } ]
-}
-
-
--- !query
 SELECT time_trunc('HOUR', c)
   FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
 -- !query schema
@@ -2867,6 +2651,129 @@ SELECT last_day(c), next_day(c, 'MO'), datediff(c, '2019-12-31'), add_months(c, 
 struct<last_day(c):date,next_day(c, MO):date,datediff(c, 2019-12-31):int,add_months(c, 1):date>
 -- !query output
 2020-01-31	2020-01-06	1	2020-02-01
+
+
+-- !query
+SET spark.sql.ansi.enabled=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.ansi.enabled	true
+
+
+-- !query
+SELECT median(c), percentile(c, 0.25), percentile_cont(0.75) WITHIN GROUP (ORDER BY c),
+       percentile_cont(0.25) WITHIN GROUP (ORDER BY c DESC),
+       percentile_disc(0.5) WITHIN GROUP (ORDER BY c)
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.000000100'),
+              (TIMESTAMP_NTZ '2020-01-01 12:00:00.000000400'),
+              (TIMESTAMP_NTZ '2020-01-01 12:00:00.000001000'), (NULL) AS t(c)
+-- !query schema
+struct<median(c):timestamp_ntz(9),percentile(c, 0.25, 1):timestamp_ntz(9),percentile_cont(0.75) WITHIN GROUP (ORDER BY c):timestamp_ntz(9),percentile_cont(0.25) WITHIN GROUP (ORDER BY c DESC):timestamp_ntz(9),percentile_disc(0.5) WITHIN GROUP (ORDER BY c):timestamp_ntz(9)>
+-- !query output
+2020-01-01 12:00:00.0000004	2020-01-01 12:00:00.00000025	2020-01-01 12:00:00.0000007	2020-01-01 12:00:00.0000007	2020-01-01 12:00:00.0000004
+
+
+-- !query
+SELECT typeof(median(c)), typeof(percentile(c, array(0.25, 0.75))),
+       typeof(percentile_disc(0.5) WITHIN GROUP (ORDER BY c))
+  FROM VALUES (CAST('2020-01-01 12:00:00.0000001' AS timestamp_ntz(7))) AS t(c)
+-- !query schema
+struct<typeof(median(c)):string,typeof(percentile(c, array(0.25, 0.75), 1)):string,typeof(percentile_disc(0.5) WITHIN GROUP (ORDER BY c)):string>
+-- !query output
+timestamp_ntz(7)	array<timestamp_ntz(7)>	timestamp_ntz(7)
+
+
+-- !query
+SELECT median(c) FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789'),
+                             (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456791') AS t(c)
+-- !query schema
+struct<median(c):timestamp_ntz(9)>
+-- !query output
+2020-01-01 12:00:00.12345679
+
+
+-- !query
+SELECT median(c) FROM VALUES (TIMESTAMP_NTZ '1969-12-31 23:59:59.999999000'),
+                             (TIMESTAMP_NTZ '1970-01-01 00:00:00.000000001') AS t(c)
+-- !query schema
+struct<median(c):timestamp_ntz(9)>
+-- !query output
+1969-12-31 23:59:59.9999995
+
+
+-- !query
+SELECT percentile(c, 0.7), percentile_cont(0.3) WITHIN GROUP (ORDER BY c DESC)
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.000000100'),
+              (TIMESTAMP_NTZ '2020-01-01 12:00:00.000000200'),
+              (TIMESTAMP_NTZ '2020-01-01 12:00:00.000000300'),
+              (TIMESTAMP_NTZ '2020-01-01 12:00:00.000001300') AS t(c)
+-- !query schema
+struct<percentile(c, 0.7, 1):timestamp_ntz(9),percentile_cont(0.3) WITHIN GROUP (ORDER BY c DESC):timestamp_ntz(9)>
+-- !query output
+2020-01-01 12:00:00.0000004	2020-01-01 12:00:00.0000004
+
+
+-- !query
+SELECT median(c), percentile(c, array(0.0, 1.0))
+  FROM VALUES (CAST('2020-01-01 12:00:00.0000001' AS timestamp_ntz(7))),
+              (CAST('2020-01-01 12:00:00.0000004' AS timestamp_ntz(7))) AS t(c)
+-- !query schema
+struct<median(c):timestamp_ntz(7),percentile(c, array(0.0, 1.0), 1):array<timestamp_ntz(7)>>
+-- !query output
+2020-01-01 12:00:00.0000002	[2020-01-01 12:00:00.0000001,2020-01-01 12:00:00.0000004]
+
+
+-- !query
+SELECT k, median(c) OVER (PARTITION BY k)
+  FROM VALUES (1, TIMESTAMP_NTZ '2020-01-01 12:00:00.000000001'),
+              (1, TIMESTAMP_NTZ '2020-01-01 12:00:00.000000003'),
+              (2, TIMESTAMP_NTZ '2020-01-01 12:00:00.000000005') AS t(k, c)
+-- !query schema
+struct<k:int,median(c) OVER (PARTITION BY k ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):timestamp_ntz(9)>
+-- !query output
+1	2020-01-01 12:00:00.000000002
+1	2020-01-01 12:00:00.000000002
+2	2020-01-01 12:00:00.000000005
+
+
+-- !query
+SELECT percentile(c, 0.5, f)
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.000000001', 3),
+              (TIMESTAMP_NTZ '2020-01-01 12:00:00.000000009', 1) AS t(c, f)
+-- !query schema
+struct<percentile(c, 0.5, f):timestamp_ntz(9)>
+-- !query output
+2020-01-01 12:00:00.000000001
+
+
+-- !query
+SET spark.sql.ansi.enabled=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.ansi.enabled	false
+
+
+-- !query
+SELECT median(c), percentile(c, 0.25), percentile_cont(0.75) WITHIN GROUP (ORDER BY c),
+       percentile_disc(0.5) WITHIN GROUP (ORDER BY c)
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.000000100'),
+              (TIMESTAMP_NTZ '2020-01-01 12:00:00.000000400'),
+              (TIMESTAMP_NTZ '2020-01-01 12:00:00.000001000'), (NULL) AS t(c)
+-- !query schema
+struct<median(c):timestamp_ntz(9),percentile(c, 0.25, 1):timestamp_ntz(9),percentile_cont(0.75) WITHIN GROUP (ORDER BY c):timestamp_ntz(9),percentile_disc(0.5) WITHIN GROUP (ORDER BY c):timestamp_ntz(9)>
+-- !query output
+2020-01-01 12:00:00.0000004	2020-01-01 12:00:00.00000025	2020-01-01 12:00:00.0000007	2020-01-01 12:00:00.0000004
+
+
+-- !query
+SELECT typeof(median(c))
+  FROM VALUES (CAST('2020-01-01 12:00:00.0000001' AS timestamp_ntz(7))) AS t(c)
+-- !query schema
+struct<typeof(median(c)):string>
+-- !query output
+timestamp_ntz(7)
 
 
 -- !query

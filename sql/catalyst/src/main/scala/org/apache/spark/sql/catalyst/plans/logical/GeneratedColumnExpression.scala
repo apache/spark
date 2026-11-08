@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{AnalysisAwareExpression, AttributeReference, Cast, Expression, UnaryExpression, Unevaluable}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{ANALYSIS_AWARE_EXPRESSION, PLAN_EXPRESSION, TreePattern, VARIABLE_REFERENCE}
-import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
+import org.apache.spark.sql.catalyst.util.{StoredExpressionText, V2ExpressionBuilder}
 import org.apache.spark.sql.connector.catalog.GenerationExpression
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, TimeType}
@@ -56,9 +56,11 @@ case class GeneratedColumnExpression(
    * - The expression cannot reference other generated columns
    * - The expression must be deterministic
    * - The expression data type can be safely up-cast to the destination column data type
+   * - Struct field names match those of the column data type exactly, in order
    * - No subquery expressions
    * - No references to session (temporary) variables
    * - No non-UTF8 binary collation
+   * - The text reads the same as it does under the settings a write reads it with
    */
   def validate(
       fieldName: String,
@@ -120,9 +122,28 @@ case class GeneratedColumnExpression(
           s"is incompatible with column data type ${targetDataType.simpleString}")
     }
 
+    // Store assignment lines up the struct fields of an auto-filled value with the column type by
+    // name, while the check of a provided value lines them up by position, so the two must agree.
+    // The names are compared exactly, since store assignment uses the writer's resolver.
+    if (!DataType.equalsStructurallyByName(child.dataType, targetDataType, _ == _)) {
+      throw unsupportedExpressionError(
+        s"generation expression data type ${child.dataType.simpleString} names its struct " +
+          s"fields differently from column data type ${targetDataType.simpleString}")
+    }
+
     if (child.exists(e => SchemaUtils.hasNonUTF8BinaryCollation(e.dataType))) {
       throw unsupportedExpressionError(
         "generation expression cannot contain non utf8 binary collated string type")
+    }
+
+    // A write reads the stored text under fixed settings, so that a value does not depend on the
+    // session that writes it. The text has to read the same there. This also applies to a table
+    // that computes the values itself, so that the text means the same to any reader.
+    if (!StoredExpressionText.readsAsInSession(originalSQL)) {
+      throw unsupportedExpressionError(
+        "a write reads it with the default values of the parser configs, such as " +
+          "spark.sql.parser.escapedStringLiterals and spark.sql.ansi.enforceReservedKeywords, " +
+          "and this session reads it differently")
     }
   }
 

@@ -186,7 +186,7 @@ SELECT try_avg(col) FROM VALUES (9223372036854775807L), (1L) AS tab(col)
 -- !query schema
 struct<try_avg(col):double>
 -- !query output
-4.6116860184273879E18
+4.611686018427388E18
 
 
 -- !query
@@ -258,7 +258,7 @@ SELECT try_avg(col + 1L) FROM VALUES (9223372036854775807L), (1L) AS tab(col)
 -- !query schema
 struct<try_avg((col + 1)):double>
 -- !query output
--4.6116860184273879E18
+-4.611686018427388E18
 
 
 -- !query
