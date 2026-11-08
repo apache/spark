@@ -26,7 +26,8 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Attri
   AttributeSet, BindReferences, Cast, Coalesce, Expression, ExternalUserDefinedFunction, Literal,
   Predicate => CatalystPredicate}
 import org.apache.spark.sql.catalyst.optimizer.ColumnPruning
-import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftOuter, PlanTest}
+import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftAnti, LeftOuter, LeftSemi,
+  PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{ExecuteExternalUDF, ExternalLookupJoin,
   Filter, Join, JoinHint, LocalRelation, LogicalPlan, PreparedExternalLookupJoin, Project}
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
@@ -535,13 +536,19 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
     withSQLConf(SQLConf.DEFAULT_SIZE_IN_BYTES.key -> "1000") {
       val rows = Seq(1, 2).map(id => InternalRow(id, UTF8String.fromString("a")))
       val sizedStream = LocalRelation(stream.output, rows, isStreaming = true)
-      val lookup = lookupRelation(PlanningExternalLookupTable())
-      val join = lookupJoin(lookup, sizedStream.output.head === lookup.output.head,
-        left = sizedStream)
-      val prepared = prepare(join)
       assert(sizedStream.stats.sizeInBytes > 0)
-      assert(prepared.stats.sizeInBytes === sizedStream.stats.sizeInBytes * 1000)
-      assert(prepared.stats.sizeInBytes === join.stats.sizeInBytes)
+      // Inner and left outer joins get the product of both sides' sizes. Semi and anti joins, as
+      // ordinary ones, get the stream side's size.
+      Seq(Inner -> 1000, LeftOuter -> 1000, LeftSemi -> 1, LeftAnti -> 1).foreach {
+        case (joinType, lookupFactor) =>
+          val lookup = lookupRelation(PlanningExternalLookupTable())
+          val join = lookupJoin(lookup, sizedStream.output.head === lookup.output.head, joinType,
+            left = sizedStream)
+          val prepared = prepare(join)
+          assert(prepared.stats.sizeInBytes === sizedStream.stats.sizeInBytes * lookupFactor,
+            joinType)
+          assert(prepared.stats.sizeInBytes === join.stats.sizeInBytes, joinType)
+      }
     }
   }
 

@@ -83,6 +83,13 @@ case class ExternalLookupJoin(
     case other => throw SparkException.internalError(s"Unexpected external lookup join type $other")
   }
 
+  // As an ordinary join's: a semi or anti join returns at most its stream rows, and the other join
+  // types get the product of both sides' sizes.
+  override def stats: Statistics = joinType match {
+    case LeftSemi | LeftAnti => left.stats
+    case _ => super.stats
+  }
+
   override def maxRows: Option[Long] = joinType match {
     case LeftSemi | LeftAnti => left.maxRows
     case _ => None
@@ -301,11 +308,15 @@ case class PreparedExternalLookupJoin(
   // The product of the stream side's size and spark.sql.defaultSizeInBytes, as the lookup side is
   // read by lookups rather than scanned. It can differ from the estimate before preparation, when
   // the scan of the lookup side reports statistics. The stream side's size alone would ignore the
-  // lookup columns and the rows that a stream row can match.
-  override def stats: Statistics = statsCache.getOrElse {
-    statsCache = Some(Statistics(sizeInBytes =
-      Seq(child.stats.sizeInBytes, BigInt(conf.defaultSizeInBytes)).filter(_ > 0L).product))
-    statsCache.get
+  // lookup columns and the rows that a stream row can match. A semi or anti join returns at most
+  // its stream rows.
+  override def stats: Statistics = joinType match {
+    case LeftSemi | LeftAnti => child.stats
+    case _ => statsCache.getOrElse {
+      statsCache = Some(Statistics(sizeInBytes =
+        Seq(child.stats.sizeInBytes, BigInt(conf.defaultSizeInBytes)).filter(_ > 0L).product))
+      statsCache.get
+    }
   }
 }
 
