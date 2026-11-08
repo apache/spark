@@ -13,7 +13,7 @@ The Apache Software Foundation (ASF) imposes [resource usage limits][limit] on G
 
 ### Spread scheduled workloads across three-day phases
 
-Scheduled workloads use hourly UTC slots across three day-of-month phases:
+Scheduled build variants use hourly UTC slots across three day-of-month phases:
 
 | Phase | Dates | Cron day-of-month field |
 | --- | --- | --- |
@@ -21,12 +21,17 @@ Scheduled workloads use hourly UTC slots across three day-of-month phases:
 | 2 | 2, 5, 8, ... | `2-31/3` |
 | 3 | 3, 6, 9, ... | `3-31/3` |
 
-Stagger build workloads by UTC clock hour, keeping their original cron minutes.
+Use minute 17 for these staggered starts to avoid GitHub Actions' busy
+[start-of-hour scheduling period][schedule-event]. The minute is an arbitrary
+off-hour choice; the hour and date phase distribute the workloads, and minute
+17 does not guarantee timely execution.
+
 Pages retains its daily 12:30 UTC schedule, so the 12:00 hour is reserved for
-Pages in every phase. Stale-PR cleanup also keeps its daily frequency, but runs
-at 00:30 UTC instead of 00:00 UTC. The other 68 workloads use the three-day
-cadence. The build-status updater keeps its separate schedule. Other event
-triggers are unaffected.
+Pages in every phase. Stale-PR cleanup keeps its daily frequency at 00:30 UTC.
+The branch-3.5 scheduler retains its original four-day cadence and dispatches
+both variants at 11:00 UTC. The other 66 workloads use the three-day cadence.
+The build-status updater keeps its separate schedule. Other event triggers are
+unaffected.
 
 The phases restart each month, so intervals are approximately three days rather
 than exactly 72 hours. Scheduled starts can be delayed, and running workflows
@@ -37,6 +42,8 @@ to their target branches. When changing a branch schedule, update both its
 `on.schedule` cron and the matching `github.event.schedule` condition. Preserve
 the skip-if-unchanged check. When assigning a new slot, check the schedules in
 all workflows to avoid starting another workload in the same phase and hour.
+
+[schedule-event]: https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule
 
 ### Push heavy workflows out to forks
 

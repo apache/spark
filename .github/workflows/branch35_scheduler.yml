@@ -21,8 +21,7 @@ name: "Branch-3.5 CI Scheduler"
 
 on:
   schedule:
-    - cron: '0 6 2-31/3 * *'
-    - cron: '0 17 3-31/3 * *'
+    - cron: '0 11 */4 * *'
   workflow_dispatch:
     inputs:
       target:
@@ -51,14 +50,14 @@ jobs:
           sparse-checkout: dev
       - name: Scala 2.13 Build
         if: >-
-          github.event.schedule == '0 6 2-31/3 * *' ||
+          github.event.schedule == '0 11 */4 * *' ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'scala213' || inputs.target == 'all'))
         run: |
           ./dev/dispatch-if-changed.sh build_scala213.yml branch-3.5
       - name: Python 3.9 Build
         if: >-
-          github.event.schedule == '0 17 3-31/3 * *' ||
+          github.event.schedule == '0 11 */4 * *' ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'python_3.9' || inputs.target == 'all'))
         run: |

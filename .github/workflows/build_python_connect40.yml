@@ -21,7 +21,7 @@ name: Build / Python-only, Connect-only (branch-4.0-client, Python 3.11)
 
 on:
   schedule:
-    - cron: '0 8 3-31/3 * *'
+    - cron: '17 8 3-31/3 * *'
   workflow_dispatch:
 
 jobs:
