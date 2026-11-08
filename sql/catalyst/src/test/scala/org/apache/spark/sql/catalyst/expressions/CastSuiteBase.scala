@@ -949,6 +949,15 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-60970: try-cast nullability follows up-cast admissibility from decimal to integral") {
+    def tryCast(from: DataType, to: DataType): Cast =
+      Cast(AttributeReference("c", from, nullable = false)(), to, evalMode = EvalMode.TRY)
+    // Every DECIMAL(18, 0) value fits in a long, so a non-null child stays non-null.
+    assert(!tryCast(DecimalType(18, 0), LongType).nullable)
+    // A DECIMAL(19, 0) value can overflow a long, so the try-cast is nullable.
+    assert(tryCast(DecimalType(19, 0), LongType).nullable)
+  }
+
   test("SPARK-40389: canUpCast: return false if casting decimal to integral types can cause" +
     " overflow") {
     Seq(ByteType, ShortType, IntegerType, LongType).foreach { integralType =>
