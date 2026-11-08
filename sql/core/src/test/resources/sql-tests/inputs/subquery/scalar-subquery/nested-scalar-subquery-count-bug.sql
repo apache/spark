@@ -28,6 +28,93 @@ select (
   on l.cnt = r.cnt
 ) a from t1 order by a desc;
 
+-- test for count bug in nested aggregates whose lower aggregate has no function with a default
+-- result, such as COUNT: the lower aggregate returns one row even when no row of t2 matches
+select a1, ( select count(*) from (select max(b2) m from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1;
+
+select a1, ( select count(*) from (select min(b2) m from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1;
+
+select a1, ( select count(*) from (select sum(b2) m from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1;
+
+select a1, ( select count(*) from (select avg(b2) m from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1;
+
+select a1, ( select sum(s) from (select coalesce(sum(b2), 10) s from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1;
+
+-- with a filter between the aggregates
+select a1, ( select count(*) from (select max(b2) m from t2 where t1.a1 = t2.b1)
+  where m is null ) a
+from t1 order by a1;
+
+-- with a literal next to the lower aggregate function
+select a1, ( select sum(s) from (select 10 s, max(b2) m from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1;
+
+-- with a non-equality correlated predicate
+select a1, ( select sum(s) from (select coalesce(sum(b2), 10) s from t2 where t2.b1 < t1.a1) ) a
+from t1 order by a1;
+
+-- with three levels of aggregates
+select a1, ( select count(*) from (select max(m) m2 from (select max(b2) m from t2
+  where t1.a1 = t2.b1)) ) a
+from t1 order by a1;
+
+-- with a grouped aggregate between the aggregates
+select a1, ( select count(*) from (select m from (select max(b2) m from t2
+  where t1.a1 = t2.b1) group by m) ) a
+from t1 order by a1;
+
+-- with a grouped top aggregate
+select a1, ( select count(*) from (select max(b2) m from t2 where t1.a1 = t2.b1) group by m ) a
+from t1 order by a1;
+
+-- with correlated predicates in both aggregates
+select a1, ( select sum(s) from (select coalesce(sum(b2), 10) s from t2 where t1.a1 = t2.b1)
+  where t1.a2 > 1 ) a
+from t1 order by a1;
+
+-- with an outer row whose correlated column is null
+select a1, ( select count(*) from (select max(b2) m from t2 where t.a1 = t2.b1) ) a
+from values (0), (1), (null) as t(a1) order by a1;
+
+-- with a join, a union, a limit or a window function over the lower aggregates
+select a1, ( select count(*) from (select max(b2) m from t2 where t1.a1 = t2.b1) l,
+  (select min(b2) n from t2 where t1.a1 = t2.b1) r ) a
+from t1 order by a1;
+
+select a1, ( select count(*) from (select max(b2) m from t2 where t1.a1 = t2.b1
+  union all select min(b2) from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1;
+
+select a1, ( select count(*) from (select max(b2) m from t2 where t1.a1 = t2.b1 limit 1) ) a
+from t1 order by a1;
+
+select a1, ( select count(*) from (select m, rank() over (order by m) r from
+  (select max(b2) m from t2 where t1.a1 = t2.b1)) ) a
+from t1 order by a1;
+
+-- with an uncorrelated lower aggregate and a correlated predicate above it
+select a1, ( select count(*) from (select max(b2) m from t2) where m > t1.a2 + 1 ) a
+from t1 order by a1;
+
+select a1, ( select count(*) from (select count(*) c from t2) where c > t1.a2 ) a
+from t1 order by a1;
+
+-- with the legacy behavior, which handles the count bug in decorrelation only if a lower
+-- aggregate without GROUP BY has a function with a default result, such as COUNT
+set spark.sql.legacy.scalarSubqueryNestedAggregateCountBugBehavior=true;
+
+select a1, ( select count(*) from (select max(b2) m from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1;
+
+select a1, ( select sum(cnt) from (select count(*) cnt from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1;
+
+reset spark.sql.legacy.scalarSubqueryNestedAggregateCountBugBehavior;
 reset spark.sql.optimizer.decorrelateInnerQuery.enabled;
 reset spark.sql.legacy.scalarSubqueryCountBugBehavior;
 DROP VIEW t1;

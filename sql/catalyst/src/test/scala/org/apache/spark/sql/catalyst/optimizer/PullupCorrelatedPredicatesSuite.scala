@@ -20,9 +20,10 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{Assignment, DeleteAction, DeleteFromTable, InsertAction, LateralJoin, LocalRelation, LogicalPlan, MergeIntoTable, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, PlanTest}
+import org.apache.spark.sql.catalyst.plans.logical.{Assignment, DeleteAction, DeleteFromTable, DomainJoin, InsertAction, LateralJoin, LocalRelation, LogicalPlan, MergeIntoTable, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.internal.SQLConf
 
 class PullupCorrelatedPredicatesSuite extends PlanTest {
 
@@ -109,6 +110,52 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     val optimized = Optimize.execute(lateralJoin)
     val doubleOptimized = Optimize.execute(optimized)
     comparePlans(optimized, doubleOptimized)
+  }
+
+  test("SPARK-60501: handle count bug in decorrelation for any correlated nested ungrouped " +
+      "aggregate") {
+    // Returns ScalarSubquery.mayHaveCountBug, and whether DecorrelateInnerQuery handled the count
+    // bug, which it does with a left outer domain join, for COUNT(*) over `lower`.
+    def countBugHandling(lower: LogicalPlan): (Option[Boolean], Boolean) = {
+      val subPlan = lower.groupBy()(count(Literal(1)).as("cnt"))
+      val plan = testRelation.select(ScalarSubquery(subPlan).as("sq")).analyze
+      val optimized = Optimize.execute(plan)
+      comparePlans(Optimize.execute(optimized), optimized, false)
+      val subqueries = optimized.expressions.flatMap(_.collect {
+        case s: ScalarSubquery => s
+      })
+      assert(subqueries.size == 1)
+      val countBugDomainJoin = subqueries.head.plan.exists {
+        case d: DomainJoin => d.joinType == LeftOuter
+        case _ => false
+      }
+      (subqueries.head.mayHaveCountBug, countBugDomainJoin)
+    }
+    def correlated(agg: Expression): LogicalPlan =
+      testRelation2.where($"a" === $"c").groupBy()(agg.as("s"))
+    def uncorrelated(agg: Expression): LogicalPlan =
+      testRelation2.groupBy()(agg.as("s")).where($"s" > $"b")
+
+    // The lower aggregate returns one row on empty input whatever its function is, so the count
+    // bug is handled in DecorrelateInnerQuery with a domain join, not in constructLeftJoins.
+    Seq(max($"d"), sum($"d"), coalesce(sum($"d"), Literal(10.0)), count($"d")).foreach { agg =>
+      assert(countBugHandling(correlated(agg)) == (Some(false), true), agg)
+    }
+    // Also when the correlated predicate is not right below the lower aggregate.
+    val deeper = testRelation2.where($"a" === $"c").select($"d").groupBy()(max($"d").as("s"))
+    assert(countBugHandling(deeper) == (Some(false), true))
+    // A grouped lower aggregate returns no row on empty input, and an uncorrelated one keeps its
+    // row, so constructLeftJoins handles the count bug of the top aggregate.
+    val grouped = testRelation2.where($"a" === $"c").groupBy($"c")(max($"d").as("s"))
+    assert(countBugHandling(grouped) == (Some(true), false))
+    Seq(max($"d"), count($"d")).foreach { agg =>
+      assert(countBugHandling(uncorrelated(agg)) == (Some(true), false), agg)
+    }
+    withSQLConf(SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR.key -> "true") {
+      assert(countBugHandling(correlated(max($"d"))) == (Some(true), false))
+      assert(countBugHandling(correlated(count($"d"))) == (Some(false), true))
+      assert(countBugHandling(uncorrelated(count($"d"))) == (Some(false), true))
+    }
   }
 
   test("PullupCorrelatedPredicates should handle deletes") {

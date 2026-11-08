@@ -86,6 +86,240 @@ struct<a:bigint>
 
 
 -- !query
+select a1, ( select count(*) from (select max(b2) m from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	1
+1	1
+
+
+-- !query
+select a1, ( select count(*) from (select min(b2) m from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	1
+1	1
+
+
+-- !query
+select a1, ( select count(*) from (select sum(b2) m from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	1
+1	1
+
+
+-- !query
+select a1, ( select count(*) from (select avg(b2) m from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	1
+1	1
+
+
+-- !query
+select a1, ( select sum(s) from (select coalesce(sum(b2), 10) s from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	5
+1	10
+
+
+-- !query
+select a1, ( select count(*) from (select max(b2) m from t2 where t1.a1 = t2.b1)
+  where m is null ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	0
+1	1
+
+
+-- !query
+select a1, ( select sum(s) from (select 10 s, max(b2) m from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	10
+1	10
+
+
+-- !query
+select a1, ( select sum(s) from (select coalesce(sum(b2), 10) s from t2 where t2.b1 < t1.a1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	10
+1	5
+
+
+-- !query
+select a1, ( select count(*) from (select max(m) m2 from (select max(b2) m from t2
+  where t1.a1 = t2.b1)) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	1
+1	1
+
+
+-- !query
+select a1, ( select count(*) from (select m from (select max(b2) m from t2
+  where t1.a1 = t2.b1) group by m) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	1
+1	1
+
+
+-- !query
+select a1, ( select count(*) from (select max(b2) m from t2 where t1.a1 = t2.b1) group by m ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	1
+1	1
+
+
+-- !query
+select a1, ( select sum(s) from (select coalesce(sum(b2), 10) s from t2 where t1.a1 = t2.b1)
+  where t1.a2 > 1 ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	NULL
+1	10
+
+
+-- !query
+select a1, ( select count(*) from (select max(b2) m from t2 where t.a1 = t2.b1) ) a
+from values (0), (1), (null) as t(a1) order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+NULL	1
+0	1
+1	1
+
+
+-- !query
+select a1, ( select count(*) from (select max(b2) m from t2 where t1.a1 = t2.b1) l,
+  (select min(b2) n from t2 where t1.a1 = t2.b1) r ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	1
+1	1
+
+
+-- !query
+select a1, ( select count(*) from (select max(b2) m from t2 where t1.a1 = t2.b1
+  union all select min(b2) from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	2
+1	2
+
+
+-- !query
+select a1, ( select count(*) from (select max(b2) m from t2 where t1.a1 = t2.b1 limit 1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	1
+1	1
+
+
+-- !query
+select a1, ( select count(*) from (select m, rank() over (order by m) r from
+  (select max(b2) m from t2 where t1.a1 = t2.b1)) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	1
+1	1
+
+
+-- !query
+select a1, ( select count(*) from (select max(b2) m from t2) where m > t1.a2 + 1 ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	1
+1	0
+
+
+-- !query
+select a1, ( select count(*) from (select count(*) c from t2) where c > t1.a2 ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	1
+1	0
+
+
+-- !query
+set spark.sql.legacy.scalarSubqueryNestedAggregateCountBugBehavior=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.scalarSubqueryNestedAggregateCountBugBehavior	true
+
+
+-- !query
+select a1, ( select count(*) from (select max(b2) m from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	1
+1	0
+
+
+-- !query
+select a1, ( select sum(cnt) from (select count(*) cnt from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1
+-- !query schema
+struct<a1:int,a:bigint>
+-- !query output
+0	2
+1	0
+
+
+-- !query
+reset spark.sql.legacy.scalarSubqueryNestedAggregateCountBugBehavior
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 reset spark.sql.optimizer.decorrelateInnerQuery.enabled
 -- !query schema
 struct<>

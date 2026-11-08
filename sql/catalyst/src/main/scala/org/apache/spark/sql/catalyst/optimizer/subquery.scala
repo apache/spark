@@ -596,10 +596,25 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
       mayHaveCountBugOld, needSingleJoinOld)
         if children.nonEmpty =>
 
+        // An Aggregate without grouping expressions returns one row even on empty input,
+        // whatever its aggregate functions are, and an Aggregate above it sees that row. If the
+        // Aggregate is correlated, decorrelation can lose that row (see below). An uncorrelated
+        // one keeps its row: [[DecorrelateInnerQuery]] leaves a subtree without outer references
+        // (SubExprUtils.hasOuterReferences) unchanged, at most inner joining it with the domain,
+        // and the non-legacy branch below uses the same check. With
+        // LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR, only such an Aggregate
+        // with an aggregate function that has a default result, such as COUNT, qualifies,
+        // whether it is correlated or not.
+        val legacyNestedAggregateCountBug =
+          conf.getConf(SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR)
         def mayHaveCountBugAgg(a: Aggregate): Boolean = {
-          a.groupingExpressions.isEmpty && a.aggregateExpressions.exists(_.exists {
-            case a: AggregateExpression => a.aggregateFunction.defaultResult.isDefined
-            case _ => false
+          a.groupingExpressions.isEmpty && (if (legacyNestedAggregateCountBug) {
+            a.aggregateExpressions.exists(_.exists {
+              case ae: AggregateExpression => ae.aggregateFunction.defaultResult.isDefined
+              case _ => false
+            })
+          } else {
+            SubExprUtils.hasOuterReferences(a)
           })
         }
 
@@ -611,13 +626,16 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         // not introduced.
         val handleCountBugInDecorrelate = SQLConf.get.decorrelateInnerQueryEnabled &&
           !conf.getConf(SQLConf.LEGACY_SCALAR_SUBQUERY_COUNT_BUG_HANDLING) && !(sub match {
-          // Handle count bug only if there exists lower level Aggs with count bugs. It does not
-          // matter if the top level agg is count bug vulnerable or not, because:
-          // 1. If the top level agg is count bug vulnerable, it can be handled in
-          // constructLeftJoins, unless there are lower aggs that are count bug vulnerable.
-          // E.g. COUNT(COUNT + COUNT)
-          // 2. If the top level agg is not count bug vulnerable, it can be count bug vulnerable if
-          // there are lower aggs that are count bug vulnerable. E.g. SUM(COUNT)
+          // If the top level node is an Agg, handle count bug in DecorrelateInnerQuery only if
+          // there exists a lower level Agg for which mayHaveCountBugAgg holds. Decorrelation
+          // groups a correlated lower level Agg by the outer (domain) columns, so it returns no
+          // row for an outer row without matching rows, instead of the one row it returns on
+          // empty input. constructLeftJoins only handles the count bug of the top level Agg and
+          // cannot bring back that row. It does not matter whether the top level Agg or the
+          // aggregate functions of the lower level Agg are count bug vulnerable, e.g.
+          // COUNT(COUNT + COUNT), SUM(COUNT), COUNT(MAX) and SUM(COALESCE(SUM, 0)) all need it.
+          // Some shapes do not, e.g. SUM(MAX), but handling it in DecorrelateInnerQuery is still
+          // correct.
           case agg: Aggregate => !agg.child.exists {
             case lowerAgg: Aggregate => mayHaveCountBugAgg(lowerAgg)
             case _ => false
