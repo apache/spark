@@ -347,7 +347,8 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
       s"SELECT dept + 1, COUNT(*) FROM $emp GROUP BY dept + 1 ORDER BY COUNT(*) ASC NULLS LAST " +
         "LIMIT 1" -> Seq(Row(7, 1L)),
       s"SELECT dept, COUNT(*) FROM $emp GROUP BY dept ORDER BY dept * 2 DESC NULLS FIRST LIMIT 2"
-        -> Seq(Row(6, 1L), Row(2, 2L)))
+        -> Seq(Row(6, 1L), Row(2, 2L)),
+      s"SELECT dept FROM $emp ORDER BY dept * 2 DESC NULLS FIRST LIMIT 2" -> Seq(Row(6), Row(2)))
 
     Seq(false, true).foreach { legacy =>
       // Arithmetic is pushed only in ANSI mode.
