@@ -44,6 +44,7 @@ import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partition
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryTable, Table, TableCapability}
+import org.apache.spark.sql.connector.expressions.{Expressions, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
@@ -103,6 +104,53 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       val projected = rule(insert).asInstanceOf[Project]
       assert(projected.projectList.map(_.name) == Seq("target"))
       assert(reads == 2)
+    }
+  }
+
+  gridTest("V2 insertion preserves the rule's overwrite mode and partition resolver")(
+      Seq("STATIC", "DYNAMIC")) { mode =>
+    val owner = new SQLConf
+    val otherMode = if (mode == "STATIC") "DYNAMIC" else "STATIC"
+    owner.setConfString(SQLConf.PARTITION_OVERWRITE_MODE.key, otherMode)
+    owner.setConfString(SQLConf.CASE_SENSITIVE.key, "true")
+    val analyzer = new Analyzer(SimpleAnalyzer.catalogManager) {
+      override def conf: SQLConf = owner
+    }
+    val table = new Table {
+      override def name(): String = "partitioned"
+      override def columns(): Array[Column] =
+        Array(Column.create("id", IntegerType), Column.create("p", IntegerType))
+      override def partitioning(): Array[Transform] = Array(Expressions.identity("p"))
+      override def capabilities(): JSet[TableCapability] = JSet.of[TableCapability]()
+    }
+    val target = DataSourceV2Relation.create(table, None, None)
+    val query = LocalRelation(AttributeReference("id", IntegerType)())
+    val insert = InsertIntoStatement(
+      target, Map("P" -> Some("1")), Nil, query,
+      overwrite = true, ifPartitionNotExists = false)
+    val resolved = withSQLConf(
+        SQLConf.PARTITION_OVERWRITE_MODE.key -> mode,
+        SQLConf.CASE_SENSITIVE.key -> "false") {
+      analyzer.ResolveInsertInto(insert).asInstanceOf[V2WriteCommand]
+    }
+    assert(resolved.query.output.map(_.name) == Seq("id", "p"))
+    if (mode == "DYNAMIC") {
+      assert(resolved.isInstanceOf[OverwritePartitionsDynamic])
+    } else {
+      val overwrite = resolved.asInstanceOf[OverwriteByExpression]
+      assert(overwrite.deleteExpr == EqualNullSafe(
+        UnresolvedAttribute.quoted("p"), Cast(Literal("1"), IntegerType)))
+    }
+
+    val supplied = new SQLConf
+    supplied.setConfString(SQLConf.PARTITION_OVERWRITE_MODE.key, mode)
+    supplied.setConfString(SQLConf.CASE_SENSITIVE.key, "false")
+    withSQLConf(
+        SQLConf.PARTITION_OVERWRITE_MODE.key -> otherMode,
+        SQLConf.CASE_SENSITIVE.key -> "true") {
+      val explicit = InsertionResolution.resolveInsertInto(
+        insert, (_, _) => fail("Unexpected by-name projection"), supplied)
+      comparePlans(explicit, resolved)
     }
   }
 

@@ -59,7 +59,7 @@ class V2ResolveOutputRelationSuite extends AnalysisTest {
     assert(resolvedTarget.getTagValue(tag).contains(()))
   }
 
-  test("write output preserves the owning analyzer's store-assignment policy") {
+  test("write output validation preserves the owning analyzer's store-assignment policy") {
     val owner = new SQLConf
     owner.setConfString(SQLConf.STORE_ASSIGNMENT_POLICY.key, "LEGACY")
     val analyzer = new Analyzer(SimpleAnalyzer.catalogManager) {
@@ -74,6 +74,47 @@ class V2ResolveOutputRelationSuite extends AnalysisTest {
         },
         condition = "_LEGACY_ERROR_TEMP_1000",
         parameters = Map("configKey" -> SQLConf.STORE_ASSIGNMENT_POLICY.key))
+    }
+  }
+
+  test("write output alignment preserves the rule's store-assignment policy") {
+    val owner = new SQLConf
+    owner.setConfString(SQLConf.STORE_ASSIGNMENT_POLICY.key, "STRICT")
+    val analyzer = new Analyzer(SimpleAnalyzer.catalogManager) {
+      override def conf: SQLConf = owner
+    }
+    val target = TestRelation(Seq(AttributeReference("target", IntegerType)()))
+    val query = LocalRelation(AttributeReference("input", LongType)())
+    withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key -> "ANSI") {
+      val resolved = analyzer.ResolveOutputRelation(
+        AppendData.byPosition(target, query)).asInstanceOf[AppendData]
+      assert(resolved.query.output.map(_.name) == Seq("target"))
+      assert(resolved.query.output.map(_.dataType) == Seq(IntegerType))
+      val casts = resolved.query.expressions.flatMap(_.collect { case cast: Cast => cast })
+      assert(casts.size == 1)
+      assert(casts.head.child == query.output.head)
+      assert(casts.head.dataType == IntegerType)
+      assert(casts.head.ansiEnabled)
+    }
+  }
+
+  test("write output alignment uses the supplied store-assignment policy") {
+    val supplied = new SQLConf
+    supplied.setConfString(SQLConf.STORE_ASSIGNMENT_POLICY.key, "STRICT")
+    val target = TestRelation(Seq(AttributeReference("target", IntegerType)()))
+    val query = LocalRelation(AttributeReference("input", LongType)())
+    withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key -> "ANSI") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          WriteOutputResolution.resolveOutputRelation(
+            AppendData.byPosition(target, query), plan => plan, supplied)
+        },
+        condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+        parameters = Map(
+          "tableName" -> "`table-name`",
+          "colName" -> "`target`",
+          "srcType" -> "\"BIGINT\"",
+          "targetType" -> "\"INT\""))
     }
   }
 

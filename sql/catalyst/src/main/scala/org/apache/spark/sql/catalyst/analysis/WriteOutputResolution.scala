@@ -17,25 +17,26 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.TableOutputResolver.DefaultValueFillMode._
 import org.apache.spark.sql.catalyst.expressions.{Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, V2WriteCommand}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, GeneratedColumn, StoredExpressionText}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.{SchemaAlignmentConfig, SupportsConfigurableSchemaAlignment}
 
 /** Aligns a resolved write query with its target columns and stored generation expressions. */
-private[sql] object WriteOutputResolution extends SQLConfHelper {
+private[sql] object WriteOutputResolution {
 
   /**
    * Resolves output columns after the table/query, schema changes and store policy are checked.
    * The callback analyzes newly constructed generated-column expressions under their stored
-   * settings.
+   * settings. Configuration is deferred to preserve the caller's receiver and read timing.
    */
   def resolveOutputRelation(
       v2Write: V2WriteCommand,
-      analyze: LogicalPlan => LogicalPlan): V2WriteCommand = {
+      analyze: LogicalPlan => LogicalPlan,
+      conf: => SQLConf): V2WriteCommand = {
     TableOutputResolver.suitableForByNameCheck(v2Write.isByName,
       expected = v2Write.table.output, queryOutput = v2Write.query.output)
     // With schema evolution + coercion flag, missing top-level columns AND missing nested

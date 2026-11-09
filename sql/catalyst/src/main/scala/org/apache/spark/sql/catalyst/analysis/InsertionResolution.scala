@@ -18,27 +18,29 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, Cast, EqualNullSafe, Expression, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertIntoStatement, InsertReplaceWhere, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, Project, V2WriteCommand}
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType}
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.ArrayImplicits._
 
 /** Resolves the query projection and write mode of INSERT statements. */
-private[sql] object InsertionResolution extends SQLConfHelper {
+private[sql] object InsertionResolution {
   /**
    * Lowers an INSERT into a V2 table whose input query has been resolved.
    * The caller rejects REPLACE ON/USING; generated partition expressions still need resolution.
+   * Configuration is deferred to preserve the caller's receiver and read timing.
    */
   def resolveInsertInto(
       i: InsertIntoStatement,
-      createProject: (String, InsertIntoStatement) => LogicalPlan): V2WriteCommand = {
+      createProject: (String, InsertIntoStatement) => LogicalPlan,
+      conf: => SQLConf): V2WriteCommand = {
     val r = i.table.asInstanceOf[DataSourceV2Relation]
     // ifPartitionNotExists is append with validation, but validation is not supported
     if (i.ifPartitionNotExists) {
@@ -54,11 +56,11 @@ private[sql] object InsertionResolution extends SQLConfHelper {
     val isByName = projectByName.nonEmpty || i.byName
 
     val partCols = partitionColumnNames(r.table)
-    validatePartitionSpec(partCols, i.partitionSpec)
+    validatePartitionSpec(partCols, i.partitionSpec, conf)
 
     val staticPartitions = i.partitionSpec.filter(_._2.isDefined).transform((_, v) => v.get)
     val query = addStaticPartitionColumns(r, projectByName.getOrElse(i.query), staticPartitions,
-      isByName)
+      isByName, conf)
 
     if (!i.overwrite) {
       if (isByName) {
@@ -99,7 +101,7 @@ private[sql] object InsertionResolution extends SQLConfHelper {
         case Some(other) => throw SparkException.internalError(
           s"Replace criteria ${other.getClass.getSimpleName} must not reach " +
             "ResolveInsertInto; REPLACE ON/USING are rejected earlier.")
-        case None => staticDeleteExpression(r, staticPartitions)
+        case None => staticDeleteExpression(r, staticPartitions, conf)
       }
       if (isByName) {
         OverwriteByExpression.byName(
@@ -203,7 +205,8 @@ private[sql] object InsertionResolution extends SQLConfHelper {
 
   private def validatePartitionSpec(
       partitionColumnNames: Seq[String],
-      partitionSpec: Map[String, Option[String]]): Unit = {
+      partitionSpec: Map[String, Option[String]],
+      conf: => SQLConf): Unit = {
     // check that each partition name is a partition column. otherwise, it is not valid
     partitionSpec.keySet.foreach { partitionName =>
       partitionColumnNames.find(name => conf.resolver(name, partitionName)) match {
@@ -218,7 +221,8 @@ private[sql] object InsertionResolution extends SQLConfHelper {
       relation: DataSourceV2Relation,
       query: LogicalPlan,
       staticPartitions: Map[String, String],
-      isByName: Boolean): LogicalPlan = {
+      isByName: Boolean,
+      conf: => SQLConf): LogicalPlan = {
 
     if (staticPartitions.isEmpty) {
       query
@@ -275,7 +279,8 @@ private[sql] object InsertionResolution extends SQLConfHelper {
 
   private def staticDeleteExpression(
       relation: DataSourceV2Relation,
-      staticPartitions: Map[String, String]): Expression = {
+      staticPartitions: Map[String, String],
+      conf: => SQLConf): Expression = {
     if (staticPartitions.isEmpty) {
       Literal(true)
     } else {

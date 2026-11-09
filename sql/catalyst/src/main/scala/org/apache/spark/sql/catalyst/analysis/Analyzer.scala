@@ -1561,7 +1561,7 @@ class Analyzer(
           if i.table.isInstanceOf[DataSourceV2Relation] &&
             i.query.resolved &&
             (i.replaceCriteriaOpt.isEmpty || i.replaceCriteriaOpt.exists(_.isReplaceWhere)) =>
-        InsertionResolution.resolveInsertInto(i, createProjectForByNameQuery)
+        InsertionResolution.resolveInsertInto(i, createProjectForByNameQuery, conf)
     }
   }
 
@@ -3963,7 +3963,7 @@ class Analyzer(
           if v2Write.table.resolved && v2Write.query.resolved && !v2Write.outputResolved &&
             v2Write.pendingSchemaChanges.isEmpty =>
         validateStoreAssignmentPolicy()
-        WriteOutputResolution.resolveOutputRelation(v2Write, execute)
+        WriteOutputResolution.resolveOutputRelation(v2Write, execute, conf)
     }
   }
 
