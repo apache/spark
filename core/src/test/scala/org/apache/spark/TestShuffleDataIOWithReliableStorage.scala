@@ -19,10 +19,7 @@ package org.apache.spark
 
 import org.mockito.Mockito.when
 
-/**
- * A [[TestShuffleDataIOWithMockedComponents]] whose driver reports reliable storage support,
- * so the shuffle manager is globally reliable. Per-shuffle registration can still override this.
- */
+/** A [[TestShuffleDataIOWithMockedComponents]] whose driver reports reliable storage. */
 class TestShuffleDataIOWithReliableStorage(conf: SparkConf)
   extends TestShuffleDataIOWithMockedComponents(conf) {
 

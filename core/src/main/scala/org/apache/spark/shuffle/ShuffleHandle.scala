@@ -29,20 +29,12 @@ import org.apache.spark.annotation.DeveloperApi
 @DeveloperApi
 abstract class ShuffleHandle(val shuffleId: Int) extends Serializable {
   /**
-   * Whether this shuffle's output is stored reliably, off the executor that produced it (e.g. a
-   * remote shuffle service or distributed filesystem). When true, losing the executor or its host
-   * does not lose the output, so its map outputs are not unregistered on executor/worker loss.
+   * Whether this shuffle's output survives losing the executor or host that wrote it (e.g. on a
+   * remote shuffle service). If so, executor or worker loss keeps its map output registered.
    *
-   * Applies only to materialized, map-output-tracked (blocking) shuffles. A pipelined shuffle is
-   * located through the streaming task-location registry, not map-status cleanup, so it cannot
-   * honor this flag; the scheduler rejects a non-`None` value on a pipelined dependency.
-   *
-   * Per-shuffle override of the app-global `ShuffleDriverComponents.supportsReliableStorage()`:
-   * a present value is authoritative for this shuffle. Empty (the default) means "no per-shuffle
-   * information", so the shuffle takes the global flag. A manager that sets neither keeps today's
-   * behavior. With the global flag on, an empty value marks the shuffle reliable, so worker removal
-   * keeps its map output (dropping only push-merge results), and a map-output FetchFailed clears
-   * only the failed shuffle rather than every shuffle on the executor or host.
+   * Overrides `ShuffleDriverComponents.supportsReliableStorage()` for this shuffle. Empty (the
+   * default) falls back to that flag, so with the flag on, worker removal and a map-output
+   * FetchFailed keep other shuffles' map output. A pipelined shuffle must leave it empty.
    */
   def reliablyStored: Optional[java.lang.Boolean] = Optional.empty()
 }
