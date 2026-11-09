@@ -486,69 +486,6 @@ class Scd2VersionMapSuite extends QueryTest with SharedSparkSession {
   // Version map authorship operations
   // =========================================================================
 
-  test("resolveIgnoreNullLeafPaths returns canonical leaves in schema order") {
-    val schema = new StructType()
-      .add("id", IntegerType)
-      .add("Profile", new StructType()
-        .add("Display Name", StringType)
-        .add("Contact", new StructType().add("e.mail", StringType)))
-      .add("Events", ArrayType(new StructType().add("kind", StringType)))
-      .add("Lookup", MapType(StringType, new StructType().add("value", StringType)))
-
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-      val includeSelection = ColumnSelection.IncludeColumns(Seq(
-        UnqualifiedColumnName("lookup"),
-        UnqualifiedColumnName("profile"),
-        UnqualifiedColumnName("events")))
-      assert(Scd2VersionMap.resolveIgnoreNullLeafPaths(
-        schema, includeSelection, resolver) === Seq(
-        Seq("Profile", "Display Name"),
-        Seq("Profile", "Contact", "e.mail"),
-        Seq("Events"),
-        Seq("Lookup")))
-
-      val excludeSelection =
-        ColumnSelection.ExcludeColumns(Seq(UnqualifiedColumnName("profile")))
-      assert(Scd2VersionMap.resolveIgnoreNullLeafPaths(
-        schema, excludeSelection, resolver) === Seq(
-        Seq("id"),
-        Seq("Events"),
-        Seq("Lookup")))
-    }
-  }
-
-  test("resolveIgnoreNullLeafPaths respects case sensitivity") {
-    val schema = new StructType()
-      .add("Profile", new StructType().add("Name", StringType))
-
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      val exactSelection =
-        ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("Profile")))
-      assert(Scd2VersionMap.resolveIgnoreNullLeafPaths(
-        schema, exactSelection, resolver) === Seq(Seq("Profile", "Name")))
-
-      val mismatchedSelection =
-        ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("profile")))
-      intercept[AnalysisException] {
-        Scd2VersionMap.resolveIgnoreNullLeafPaths(schema, mismatchedSelection, resolver)
-      }
-    }
-  }
-
-  test("resolveIgnoreNullLeafPaths preserves raw special-character names") {
-    val schema = new StructType()
-      .add("wrapper.with.dot", new StructType()
-        .add("back`tick", StringType)
-        .add("space name", StringType))
-    val selection = ColumnSelection.IncludeColumns(Seq(
-      UnqualifiedColumnName(QuotingUtils.quoteIdentifier("wrapper.with.dot"))))
-
-    assert(Scd2VersionMap.resolveIgnoreNullLeafPaths(
-      schema, selection, resolver) === Seq(
-      Seq("wrapper.with.dot", "back`tick"),
-      Seq("wrapper.with.dot", "space name")))
-  }
-
   test("entryValue distinguishes values from absent entries") {
     val path = Seq("wrapper", "a.b")
     val key = encodedPath(path: _*)

@@ -58,6 +58,29 @@ from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 class ClassificationTestsMixin:
+    def test_intermediate_storage_level(self):
+        dataset = self.spark.createDataFrame(
+            [(0.0, Vectors.dense(0.0, 1.0)), (1.0, Vectors.dense(1.0, 0.0))],
+            ["label", "features"],
+        )
+        classifiers = [
+            LogisticRegression(maxIter=2, intermediateStorageLevel="DISK_ONLY"),
+            LinearSVC(maxIter=2, intermediateStorageLevel="DISK_ONLY"),
+            FMClassifier(maxIter=2, seed=42, intermediateStorageLevel="DISK_ONLY"),
+        ]
+        for classifier in classifiers:
+            with self.subTest(classifier=type(classifier).__name__):
+                self.assertEqual(
+                    type(classifier)().getIntermediateStorageLevel(), "MEMORY_AND_DISK"
+                )
+                self.assertEqual(classifier.getIntermediateStorageLevel(), "DISK_ONLY")
+                classifier.setParams(intermediateStorageLevel="MEMORY_ONLY")
+                self.assertEqual(classifier.getIntermediateStorageLevel(), "MEMORY_ONLY")
+                classifier.setIntermediateStorageLevel("DISK_ONLY")
+                self.assertEqual(classifier.getIntermediateStorageLevel(), "DISK_ONLY")
+                model = classifier.fit(dataset)
+                self.assertEqual(model.getIntermediateStorageLevel(), "DISK_ONLY")
+
     def test_naive_bayes(self):
         spark = self.spark
         df = spark.createDataFrame(

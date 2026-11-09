@@ -171,7 +171,7 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
       logger.info(
         "Task {} on Thread {} spilling sort data of {} to disk ({} {} so far)",
         MDC.of(LogKeys.TASK_ATTEMPT_ID, taskContext.taskAttemptId()),
-        MDC.of(LogKeys.THREAD_ID, Thread.currentThread().getId()),
+        MDC.of(LogKeys.THREAD_ID, Thread.currentThread().threadId()),
         MDC.of(LogKeys.MEMORY_SIZE, Utils.bytesToString(getMemoryUsage())),
         MDC.of(LogKeys.NUM_SPILLS, spills.size()),
         MDC.of(LogKeys.SPILL_TIMES, spills.size() != 1 ? "times" : "time"));
