@@ -550,8 +550,8 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     (0L until 10L).map(k => Row(k, 2 * k - 1)) ++ (100L until 103L).map(k => Row(k, k))
 
   test("Sort-merge ASOF join child union correctness") {
-    // A generated ASOF join reads two RDDs, like SMJ, so the union must not fuse: each child of a
-    // fused union must give it one RDD, so the query would fail.
+    // A generated ASOF join reads two RDDs, so the union must not fuse: each child of a fused
+    // union must give it one RDD, so the query would fail.
     withSQLConf(
       SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> "true",
       SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",

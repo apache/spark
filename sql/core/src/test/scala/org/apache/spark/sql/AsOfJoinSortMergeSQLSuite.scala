@@ -1670,8 +1670,7 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
 
   test("a LIMIT in the join's codegen stage stops the join early") {
     // All 100 left rows match. The LIMIT is under an aggregate, so it runs in the join's codegen
-    // stage. The join must stop after 5 output rows, as the interpreted join does, instead of
-    // joining the rest of the partition.
+    // stage. The join must stop after 5 output rows instead of joining the rest of the partition.
     withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
       Seq(
         ("", true),

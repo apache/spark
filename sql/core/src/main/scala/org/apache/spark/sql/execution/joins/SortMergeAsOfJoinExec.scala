@@ -51,7 +51,7 @@ import org.apache.spark.unsafe.types.TimestampNanosVal
  *
  * Backward and forward joins support whole-stage codegen. The generated code runs the cursor
  * scan or the buffered scan and checks the conditions. The right-side buffer stays a Scala
- * object, as in the sort-merge join. Nearest joins keep the interpreted scan. `codegenEnabled`
+ * object, since it can spill to disk. Nearest joins keep the interpreted scan. `codegenEnabled`
  * is the codegen config as it was when the join was planned.
  *
  * Note: When there are no equi-keys, both sides are collected into a
@@ -280,8 +280,8 @@ case class SortMergeAsOfJoinExec(
          |  int comp = 0;
          |  $readLeftKeys
          |  ${onNewGroup(startGroup)}
-         |  // Like the buffered scan, a group with no right rows never evaluates the left as-of
-         |  // key, which can fail at runtime, for example on an invalid cast under ANSI.
+         |  // A group with no right rows never evaluates the left as-of key, which can fail at
+         |  // runtime, for example on an invalid cast under ANSI.
          |  if (!$groupHasRight) return null;
          |  ${leftAsOfKey.code}
          |  // A NULL left as-of key matches nothing. It must not move the cursor.
@@ -432,7 +432,7 @@ case class SortMergeAsOfJoinExec(
    * Generates the equi-key code of a scan, as three parts:
    *  - read the left keys, and return null for a NULL key, which matches nothing;
    *  - set `comp` to the order of the left keys against the keys of `rightPeek`, where a NULL
-   *    right key sorts before any value, as in the interpreted scan;
+   *    right key sorts before any value;
    *  - run the given code when the left keys start a new group.
    * With no equi-keys all three are empty, so `comp` stays 0 and there is one group.
    */
@@ -452,7 +452,7 @@ case class SortMergeAsOfJoinExec(
          |${leftKeyVars.map(_.code).mkString("\n")}
          |${anyNull(leftKeyVars).map(isNull => s"if ($isNull) return null;").getOrElse("")}
        """.stripMargin
-    // A NULL right key is compared, not skipped, so the scan stops where the interpreted one does.
+    // A NULL right key is compared, not skipped. It sorts before any value.
     val compareRightKeys =
       s"""
          |${rightKeyVars.map(_.code).mkString("\n")}
@@ -483,8 +483,8 @@ case class SortMergeAsOfJoinExec(
 
   /**
    * Generates code that sets `comp` to the order of the left keys against the right keys, key
-   * by key. The left keys are never NULL here. A NULL right key sorts before any value, as in
-   * the interpreted ordering, so it compares as smaller.
+   * by key. The left keys are never NULL here. A NULL right key sorts before any value, so it
+   * compares as smaller.
    */
   private def genRightKeyComparison(
       ctx: CodegenContext,
@@ -580,8 +580,7 @@ private[joins] class SortMergeAsOfJoinScanner(
   private lazy val boundResidualCond =
     residualCondition.map(ShortCircuitPredicate.create(_, joinedOutput))
 
-  // Treats every key as nullable, as the sort-merge join does: a right key can be NULL even when
-  // the left key is NOT NULL.
+  // A right key can be NULL even when the left key is NOT NULL, so every key is nullable here.
   private val equiKeyOrdering: Option[BaseOrdering] =
     if (leftKeys.nonEmpty) {
       Some(RowOrdering.createNaturalAscendingOrdering(leftKeys.map(_.dataType)))
