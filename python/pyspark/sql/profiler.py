@@ -92,6 +92,12 @@ class _ProfileResultsParam(AccumulatorParam[Optional["ProfileResults"]]):
 ProfileResultsParam = _ProfileResultsParam()
 
 
+# Guards the profile results map on the driver. The accumulator server thread merges worker
+# updates via _ProfileResultsParamV2.addInPlace while user threads read or clear the same dict
+# through AccumulatorProfilerCollector. It is module-level so the param stays picklable.
+_profile_results_lock = RLock()
+
+
 # _ProfileResultsParam uses (perf, memory) tuple which is very difficult
 # to extend. However, this is shared code between the server and the client
 # for spark connect. In order to gradually migrate to dict implementation,
@@ -109,26 +115,27 @@ class _ProfileResultsParamV2(AccumulatorParam["ProfileResultsV2"]):
 
     @staticmethod
     def addInPlace(value1: "ProfileResultsV2", value2: "ProfileResultsV2") -> "ProfileResultsV2":
-        for key, result in value2.items():
-            if key not in value1:
-                value1[key] = result
-            else:
-                perf = PStatsParam.addInPlace(
-                    value1[key].get("perf", None), result.get("perf", None)
-                )
-                if perf is not None:
-                    value1[key]["perf"] = perf
-                memory = MemUsageParam.addInPlace(
-                    value1[key].get("memory", None), result.get("memory", None)
-                )
-                if memory is not None:
-                    value1[key]["memory"] = memory
-                sampling = SamplingResultParam.addInPlace(
-                    value1[key].get("sampling", {}), result.get("sampling", {})
-                )
-                if sampling:
-                    value1[key]["sampling"] = sampling
-        return value1
+        with _profile_results_lock:
+            for key, result in value2.items():
+                if key not in value1:
+                    value1[key] = result
+                else:
+                    perf = PStatsParam.addInPlace(
+                        value1[key].get("perf", None), result.get("perf", None)
+                    )
+                    if perf is not None:
+                        value1[key]["perf"] = perf
+                    memory = MemUsageParam.addInPlace(
+                        value1[key].get("memory", None), result.get("memory", None)
+                    )
+                    if memory is not None:
+                        value1[key]["memory"] = memory
+                    sampling = SamplingResultParam.addInPlace(
+                        value1[key].get("sampling", {}), result.get("sampling", {})
+                    )
+                    if sampling:
+                        value1[key]["sampling"] = sampling
+            return value1
 
 
 ProfileResultsParamV2 = _ProfileResultsParamV2()
@@ -569,6 +576,8 @@ class ProfilerCollector(ABC):
 class AccumulatorProfilerCollector(ProfilerCollector):
     def __init__(self) -> None:
         super().__init__()
+        # Share the lock with the accumulator merge, which mutates the same dict.
+        self._lock = _profile_results_lock
 
         if SpecialAccumulatorIds.SQL_UDF_PROFIER_V2 in _accumulatorRegistry:
             self._accumulator = _accumulatorRegistry[SpecialAccumulatorIds.SQL_UDF_PROFIER_V2]

@@ -19,15 +19,17 @@ import inspect
 import os
 import sys
 import tempfile
+import threading
 import unittest
 import warnings
 from contextlib import contextmanager
 from io import StringIO
 from typing import Iterator
+from unittest import mock
 
 from pyspark import SparkConf
 from pyspark.errors import PySparkValueError
-from pyspark.profiler import UDFBasicProfiler
+from pyspark.profiler import SamplingResultParam, UDFBasicProfiler
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import arrow_udf, col, pandas_udf, udf
 from pyspark.sql.window import Window
@@ -828,6 +830,32 @@ class UDFProfiler2Tests(UDFProfiler2TestsMixin, ReusedSQLTestCase):
     def setUp(self) -> None:
         super().setUp()
         self.spark._profiler_collector._accumulator._value = {}
+
+    def test_clear_during_accumulator_merge(self):
+        # The accumulator server thread merges worker updates into the same dict that
+        # spark.profile.clear() pops from. Pause a merge midway and clear from another thread.
+        accumulator = self.spark._profiler_collector._accumulator
+        merging, cleared = threading.Event(), threading.Event()
+        add_in_place = SamplingResultParam.addInPlace
+
+        def paused_add_in_place(value1, value2):
+            merging.set()
+            # Without a shared lock, the clear runs while the merge is waiting here.
+            cleared.wait(timeout=0.1)
+            return add_in_place(value1, value2)
+
+        def clear():
+            merging.wait()
+            self.spark.profile.clear()
+            cleared.set()
+
+        accumulator += {"id": {"sampling": {"count": 1}}}
+        with mock.patch.object(SamplingResultParam, "addInPlace", paused_add_in_place):
+            thread = threading.Thread(target=clear)
+            thread.start()
+            accumulator += {"id": {"sampling": {"count": 1}}}
+            thread.join()
+        self.assertEqual({}, self.spark._profiler_collector._profile_results)
 
 
 if __name__ == "__main__":
