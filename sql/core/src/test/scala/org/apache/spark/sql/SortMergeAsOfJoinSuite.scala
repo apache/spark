@@ -135,13 +135,21 @@ class SortMergeAsOfJoinSuite extends QueryTest
   /**
    * Like checkAnswer, with the ASOF join codegen off and on. Also asserts that the plan has the
    * join, and that it ran generated exactly when the codegen is on and the join is not nearest.
+   * Single-pass analysis needs `checkToRDD = false`.
    */
-  private def checkAnswerCodegenOffAndOn(df: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
+  private def checkAnswerCodegenOffAndOn(
+      df: => DataFrame,
+      expectedAnswer: Seq[Row],
+      checkToRDD: Boolean = true): Unit = {
     Seq(false, true).foreach { codegen =>
       withClue(s"ASOF join codegen $codegen: ") {
         withSQLConf(SQLConf.ENABLE_SORT_MERGE_AS_OF_JOIN_CODEGEN.key -> codegen.toString) {
           val query = df
-          checkAnswer(query, expectedAnswer)
+          if (checkToRDD) {
+            checkAnswer(query, expectedAnswer)
+          } else {
+            QueryTest.checkAnswer(df = query, expectedAnswer = expectedAnswer, checkToRDD = false)
+          }
           val plan = query.queryExecution.executedPlan
           val op = collectFirst(plan) { case s: SortMergeAsOfJoinExec => s }
           assert(op.isDefined, s"Expected SortMergeAsOfJoinExec in plan:\n$plan")
@@ -850,15 +858,14 @@ class SortMergeAsOfJoinSuite extends QueryTest
           direction <- Seq("backward", "forward")
           exact <- Seq(false, true)
         } {
-          val joined = left.joinAsOf(
+          def joined: DataFrame = left.joinAsOf(
             other = right, leftAsOf = left.col("k"), rightAsOf = right.col("k"),
             usingColumns = Seq.empty, joinType = "inner",
             tolerance = functions.lit(Duration.ofMinutes(3)),
             allowExactMatches = exact, direction = direction
           ).select("tag")
           val expected = if (exact) "exact" else if (direction == "forward") "after" else "before"
-          QueryTest.checkAnswer(
-            df = joined, expectedAnswer = Seq(Row(expected)), checkToRDD = false)
+          checkAnswerCodegenOffAndOn(joined, Seq(Row(expected)), checkToRDD = false)
         }
       }
     }
@@ -994,7 +1001,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
 
   test("backward join - tolerance = 1") {
     val (df1, df2) = prepareForAsOfJoin()
-    checkAnswer(
+    checkAnswerCodegenOffAndOn(
       df1.joinAsOf(
         df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
         joinType = "inner",
@@ -1247,7 +1254,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
                |AS t(case_id, k, tag)
                |""".stripMargin
           )
-          val result = left.joinAsOf(
+          def result: DataFrame = left.joinAsOf(
             other = right, leftAsOf = left.col("k"), rightAsOf = right.col("k"),
             usingColumns = Seq("case_id"), joinType = "leftouter",
             tolerance = functions.lit(Duration.ofDays(2)),
@@ -1256,7 +1263,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
           val closest = if (direction == "forward") "after" else "before"
 
           withClue(s"legacyInterval=$legacyInterval, allowExactMatches=$allowExactMatches: ") {
-            checkAnswer(
+            checkAnswerCodegenOffAndOn(
               result,
               Seq(
                 Row("inside", closest),
@@ -1370,7 +1377,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
     val df2 = spark.createDataFrame(
       List(Row(2, "x"), Row(7, "y"), Row(15, "z")).asJava, schema2)
     // tolerance = 3: only match if right.ts <= left.ts + 3
-    checkAnswer(
+    checkAnswerCodegenOffAndOn(
       df1.joinAsOf(
         df2, df1.col("ts"), df2.col("ts"), usingColumns = Seq.empty,
         joinType = "inner",
@@ -1594,14 +1601,13 @@ class SortMergeAsOfJoinSuite extends QueryTest
               condition = "AS_OF_JOIN.UNSUPPORTED_TOLERANCE_KEY_TYPE",
               parameters = Map("dataType" -> s""""STRING$collation"""")
             )
-            val castKeys = left.joinAsOf(
+            def castKeys: DataFrame = left.joinAsOf(
               other = right, leftAsOf = left.col("lk").cast("int"),
               rightAsOf = right.col("rk").cast("int"), usingColumns = Seq.empty,
               joinType = "inner", tolerance = functions.lit(10),
               allowExactMatches = true, direction = direction
             ).select("rk")
-            QueryTest.checkAnswer(
-              df = castKeys, expectedAnswer = Seq(Row("50")), checkToRDD = false)
+            checkAnswerCodegenOffAndOn(castKeys, Seq(Row("50")), checkToRDD = false)
           }
         }
       }
@@ -1699,15 +1705,13 @@ class SortMergeAsOfJoinSuite extends QueryTest
             |(18, 'outside before'), (22, 'outside after') AS t(rk, tag)
             |""".stripMargin)
         for ((direction, expected) <- Seq("backward" -> "after", "forward" -> "before")) {
-          val reversed = left.joinAsOf(
+          def reversed: DataFrame = left.joinAsOf(
             other = right, leftAsOf = right.col("rk"), rightAsOf = left.col("lk"),
             usingColumns = Seq.empty, joinType = "leftouter", tolerance = functions.lit(1),
             allowExactMatches = true, direction = direction
           ).select("lk", "tag")
-          QueryTest.checkAnswer(
-            df = reversed, expectedAnswer = Seq(Row(10, expected), Row(20, null)),
-            checkToRDD = false
-          )
+          checkAnswerCodegenOffAndOn(
+            reversed, Seq(Row(10, expected), Row(20, null)), checkToRDD = false)
         }
       }
     }
@@ -2208,7 +2212,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
         StructField("threshold", IntegerType) :: Nil)
     val df1 = spark.createDataFrame(List(Row(4, 30), Row(5, 10)).asJava, schema1)
     val df2 = spark.createDataFrame(List(Row(6, 20), Row(9, 1)).asJava, schema2)
-    checkAnswer(
+    checkAnswerCodegenOffAndOn(
       df1.joinAsOf(
         df2, df1.col("ts"), df2.col("ts"),
         joinExprs = df1.col("amount") > df2.col("threshold"),

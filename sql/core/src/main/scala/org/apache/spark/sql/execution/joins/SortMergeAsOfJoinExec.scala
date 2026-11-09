@@ -777,6 +777,8 @@ private[joins] class SortMergeAsOfJoinScanner(
     rightDone = true
   }
 
+  // TODO(SPARK-61248): Close the group's iterator in these scans. An early return keeps the
+  // unread spill files of a spilled group open until the task ends.
   /** Finds the best right row in the current group for `leftRow`, or null if none passes. */
   private def findBestInGroup(leftRow: InternalRow): InternalRow = direction match {
     case Backward => findLastBackward(leftRow)

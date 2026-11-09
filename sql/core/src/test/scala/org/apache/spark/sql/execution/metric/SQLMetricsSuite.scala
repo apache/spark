@@ -447,14 +447,24 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   }
 
   test("SortMergeAsOfJoin metrics") {
-    // Only numOutputRows here; spillSize is covered in SortMergeAsOfJoinSuite.
-    def checkNumOutputRows(df: DataFrame, expected: Long): Unit = {
-      df.collect()
-      val op = df.queryExecution.executedPlan.collectFirst {
-        case s: SortMergeAsOfJoinExec => s
+    // Only numOutputRows here; spillSize is covered in SortMergeAsOfJoinSuite. Each check runs
+    // with the ASOF join codegen off and on, on a new DataFrame each time, since a DataFrame
+    // keeps the plan it got first.
+    def checkNumOutputRows(df: => DataFrame, expected: Long): Unit = {
+      Seq(false, true).foreach { codegen =>
+        withClue(s"ASOF join codegen $codegen: ") {
+          withSQLConf(SQLConf.ENABLE_SORT_MERGE_AS_OF_JOIN_CODEGEN.key -> codegen.toString) {
+            val query = df
+            query.collect()
+            val op = query.queryExecution.executedPlan.collectFirst {
+              case s: SortMergeAsOfJoinExec => s
+            }
+            assert(op.isDefined, "The query plan should have SortMergeAsOfJoin")
+            assert(op.get.supportCodegen == codegen, "The join was planned with the wrong codegen")
+            testMetricsInSparkPlanOperator(op.get, Map("numOutputRows" -> expected))
+          }
+        }
       }
-      assert(op.isDefined, "The query plan should have SortMergeAsOfJoin")
-      testMetricsInSparkPlanOperator(op.get, Map("numOutputRows" -> expected))
     }
 
     withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true") {

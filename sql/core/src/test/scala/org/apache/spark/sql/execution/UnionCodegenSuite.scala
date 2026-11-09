@@ -545,7 +545,7 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
       .union(rangeDF(100, 103).select(col("id").as("k"), col("id").as("ts")))
   }
 
-  /** The rows of `asOfJoinUnion` in any direction: each key has one right row, just before. */
+  /** The rows of `asOfJoinUnion`, backward or nearest: each key has one right row, just before. */
   private val asOfJoinUnionRows =
     (0L until 10L).map(k => Row(k, 2 * k - 1)) ++ (100L until 103L).map(k => Row(k, k))
 
