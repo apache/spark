@@ -193,8 +193,7 @@ private[joins] class SortMergeAsOfJoinScanner(
   private lazy val boundResidualCond =
     residualCondition.map(ShortCircuitPredicate.create(_, joinedOutput))
 
-  // Treats every key as nullable, as the sort-merge join does: a right key can be NULL even when
-  // the left key is NOT NULL.
+  // A right key can be NULL even when the left key is NOT NULL, so every key is nullable here.
   private val equiKeyOrdering: Option[BaseOrdering] =
     if (leftKeys.nonEmpty) {
       Some(RowOrdering.createNaturalAscendingOrdering(leftKeys.map(_.dataType)))
