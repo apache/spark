@@ -102,6 +102,21 @@ class OffsetSeqLogSuite extends SharedSparkSession {
     assert(metadata.conf.get(entry.key).contains("true"))
   }
 
+  test("SPARK-60730: old checkpoints push filters ahead of expensive conditions as before") {
+    val (_, offsetSeq) = readFromResource("offset-log-version-2.1.0")
+    val metadata = offsetSeq.metadataOpt.get
+    assert(!metadata.conf.contains(SQLConf.LEGACY_PUSH_FILTER_AHEAD_OF_EXPENSIVE_CONJUNCT.key))
+    assert(OffsetSeqMetadata.readValue(
+      metadata, SQLConf.LEGACY_PUSH_FILTER_AHEAD_OF_EXPENSIVE_CONJUNCT) == "true")
+  }
+
+  test("SPARK-60730: new checkpoints record the filter pushdown ahead of expensive conditions") {
+    val metadata = OffsetSeqMetadata(
+      batchWatermarkMs = 0, batchTimestampMs = 0, spark.conf)
+    assert(metadata.conf.get(SQLConf.LEGACY_PUSH_FILTER_AHEAD_OF_EXPENSIVE_CONJUNCT.key)
+      .contains("false"))
+  }
+
   test("SPARK-59919: v1 and v2 metadata persist rebound stateful shuffle partitions") {
     withSQLConf(
       SQLConf.SHUFFLE_PARTITIONS.key -> "10",

@@ -1060,6 +1060,475 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
 
+  test("SPARK-60730: a cheap condition that can fail is not pushed ahead of an expensive one") {
+    Seq(true, false).foreach { split =>
+      withSQLConf(SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> split.toString) {
+        val originalQuery = testStringRelation
+          .select($"a", expensiveRLike("magic") as "f", $"b")
+          .where($"f" && $"a" + 1 > 6 && $"b" > 1 && $"e".cast(IntegerType) > 0 &&
+            IsNotNull($"a"))
+          .analyze
+        val Seq(expensive, arithmetic, _, cast, _) = splitConjunctivePredicates(
+          originalQuery.collectFirst { case Filter(condition, _) => condition }.get)
+
+        val optimized = Optimize.execute(originalQuery)
+
+        // Only the conditions that can not fail move below the expensive one. The others stay
+        // above it in their written order, also with the split, which would otherwise put
+        // them lowest since they need no alias.
+        val correctAnswer = testStringRelation
+          .where($"b" > 1 && IsNotNull($"a"))
+          .select($"a", expensiveRLike("magic") as "f", $"b")
+          .where($"f" && $"a" + 1 > 6 && $"e".cast(IntegerType) > 0)
+          .analyze
+
+        comparePlans(optimized, correctAnswer)
+        assertTopFilterConjuncts(optimized, Seq(expensive, arithmetic, cast))
+
+        // Written ahead of every expensive condition, they are pushed as usual.
+        val failableFirst = testStringRelation
+          .select($"a", expensiveRLike("magic") as "f", $"b")
+          .where($"a" + 1 > 6 && $"f")
+          .analyze
+
+        val failableFirstAnswer = testStringRelation
+          .where($"a" + 1 > 6)
+          .select($"a", expensiveRLike("magic") as "f", $"b")
+          .where($"f")
+          .analyze
+
+        comparePlans(Optimize.execute(failableFirst), failableFirstAnswer)
+      }
+    }
+  }
+
+  test("SPARK-60730: a cheap condition over an alias that can fail is not pushed ahead of an " +
+    "expensive one") {
+    val originalQuery = testStringRelation
+      .select($"a", expensiveRLike("magic") as "f", $"a" + 1 as "x", $"b")
+      .where($"f" && $"x" > 6 && $"b" > 1)
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // `x > 6` reads no expensive alias, but reading `x` evaluates `a + 1`.
+    val correctAnswer = testStringRelation
+      .where($"b" > 1)
+      .select($"a", expensiveRLike("magic") as "f", $"a" + 1 as "x", $"b")
+      .where($"f" && $"x" > 6)
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-60730: an IS NOT NULL check written in front of the condition is pushed with " +
+    "the conditions after it in their written order") {
+    // `InferFiltersFromConstraints`, which this suite does not run, also puts the checks it
+    // infers there. Before the first expensive condition, everything is pushed as written, so
+    // `isnotnull(a + 1)` still comes before the division after it in the pushed filter.
+    def project: LogicalPlan = testStringRelation
+      .select($"a", expensiveRLike("magic") as "f", $"a" + 1 as "x", $"b")
+    Seq(true, false).foreach { split =>
+      withSQLConf(SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> split.toString) {
+        val originalQuery = project
+          .where(IsNotNull($"x") && Literal(10) / $"b" > 1 && $"f" && $"x" > 6)
+          .analyze
+        val optimized = Optimize.execute(originalQuery)
+        comparePlans(optimized, testStringRelation
+          .where(IsNotNull($"a" + 1) && Literal(10) / $"b" > 1)
+          .select($"a", expensiveRLike("magic") as "f", $"a" + 1 as "x", $"b")
+          .where($"f" && $"x" > 6)
+          .analyze)
+        val pushedConjuncts = optimized.collectFirst {
+          case Project(_, Filter(condition, _)) => splitConjunctivePredicates(condition)
+        }.get
+        assert(pushedConjuncts.head.isInstanceOf[IsNotNull], pushedConjuncts)
+      }
+    }
+  }
+
+  test("SPARK-60730: a cheap non-deterministic condition is not pushed ahead of an " +
+    "expensive one") {
+    val originalQuery = testStringRelation
+      .select($"a", expensiveRLike("magic") as "f", $"b")
+      .where($"f" && Rand(10) > 0.5 && $"b" > 1)
+      .analyze
+    val Seq(expensive, nonDeterministic, _) = splitConjunctivePredicates(
+      originalQuery.collectFirst { case Filter(condition, _) => condition }.get)
+
+    val optimized = Optimize.execute(originalQuery)
+
+    val correctAnswer = testStringRelation
+      .where($"b" > 1)
+      .select($"a", expensiveRLike("magic") as "f", $"b")
+      .where($"f" && Rand(10) > 0.5)
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+    assertTopFilterConjuncts(optimized, Seq(expensive, nonDeterministic))
+  }
+
+  test("SPARK-60730: the projection is not split when a condition after the first expensive " +
+    "one can fail") {
+    val raiseError = IsNull(RaiseError(Literal("boom")))
+    val expensiveInt = If(expensiveRLike("other"), $"a", $"b")
+    def project: LogicalPlan = testStringRelation
+      .select($"a", expensiveRLike("magic") as "f", expensiveRLike("third") as "h",
+        expensiveInt as "g", $"a" + 1 as "x", $"b")
+    // On cost alone, the split would put the division over g, the cheap condition that can fail
+    // and the throwable or non-deterministic one ahead of the conditions written before them,
+    // or let the later conditions be split off ahead of them. So the filter stays as written.
+    Seq[Expression](
+      $"f" =!= $"h" && Literal(10) / ($"g" - 3) > 0,
+      $"f" && $"g" + 1 > 6 && $"h",
+      $"f" && $"a" + 1 > 6 && $"g" > 1 && $"h",
+      $"f" && ($"b" > 1 || raiseError) && $"g" > 1 && $"h",
+      $"f" && Rand(10) > 0.5 && $"g" > 1 && $"h",
+      // Over a cheap alias that can fail.
+      $"f" && $"g" > $"x" && $"h"
+    ).foreach { condition =>
+      val originalQuery = project.where(condition).analyze
+      comparePlans(Optimize.execute(originalQuery), originalQuery)
+    }
+    // Nor when a condition kept above after one over a Python UDF comes before the first one
+    // held back.
+    val pythonUDF = PythonUDF("pythonUDF", null, IntegerType, Seq(attrA),
+      PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
+    def pythonProject: LogicalPlan = testStringRelation
+      .select($"a", pythonUDF.as("p"), expensiveRLike("magic") as "f",
+        expensiveRLike("third") as "h", $"b")
+    Seq[Expression](
+      $"p" > 1 && Rand(10) > 0.5 && $"f" && $"h",
+      $"p" > 1 && ($"b" > 1 || raiseError) && $"f" && $"h"
+    ).foreach { condition =>
+      val originalQuery = pythonProject.where(condition).analyze
+      comparePlans(Optimize.execute(originalQuery), originalQuery)
+    }
+    // Other conditions over the Python UDF before it do not keep it from being split.
+    val splitQuery = pythonProject.where($"p" > 1 && $"p" < 100 && $"f" && $"h").analyze
+    assert(Optimize.execute(splitQuery).collect { case p: Project => p }.size > 1)
+    // Nor when nothing is held back, with the expensive aliases all over Python UDFs: the split
+    // would evaluate the conditions over q below the non-deterministic one.
+    val otherPythonUDF = PythonUDF("otherPythonUDF", null, IntegerType, Seq(attrB),
+      PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
+    val twoPythonQuery = testStringRelation
+      .select($"a", pythonUDF.as("p"), otherPythonUDF.as("q"), $"b")
+      .where($"p" > 1 && Rand(10) > 0.5 && $"q" > 1 && $"q" < 5)
+      .analyze
+    comparePlans(Optimize.execute(twoPythonQuery), twoPythonQuery)
+    // Nor when a condition after the first one kept above, here one over a Python UDF, can
+    // fail: also when it is the first one held back, over an expensive expression over a
+    // Python UDF, and when the aliases are all Python UDFs.
+    val stringUDF = PythonUDF("stringUDF", null, StringType, Seq(attrB),
+      PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
+    val overPython = If(stringUDF.rlike(Concat(Seq($"e", Literal("magic")))), $"a", $"b")
+    def failableProject: LogicalPlan = testStringRelation
+      .select($"a", pythonUDF.as("p"), otherPythonUDF.as("q"), overPython as "s", $"b")
+    Seq[Expression](
+      $"p" > 1 && Literal(10) / ($"s" - 3) > 0 && $"s" < 100,
+      $"p" > 1 && Literal(10) / ($"q" - 3) > 0 && $"q" < 100
+    ).foreach { condition =>
+      val originalQuery = failableProject.where(condition).analyze
+      comparePlans(Optimize.execute(originalQuery), originalQuery)
+    }
+  }
+
+  test("SPARK-60730: the legacy config pushes a cheap condition that can fail ahead of an " +
+    "expensive one") {
+    withSQLConf(SQLConf.LEGACY_PUSH_FILTER_AHEAD_OF_EXPENSIVE_CONJUNCT.key -> "true") {
+      val raiseError = IsNull(RaiseError(Literal("boom")))
+      val originalQuery = testStringRelation
+        .select($"a", expensiveRLike("magic") as "f", $"b")
+        .where($"f" && $"a" + 1 > 6 && Rand(10) > 0.5 && ($"b" > 1 || raiseError))
+        .analyze
+      val Seq(expensive, _, _, throwable) = splitConjunctivePredicates(
+        originalQuery.collectFirst { case Filter(condition, _) => condition }.get)
+
+      val optimized = Optimize.execute(originalQuery)
+
+      // As before this change, only the throwable condition stays above.
+      val correctAnswer = testStringRelation
+        .where($"a" + 1 > 6 && Rand(10) > 0.5)
+        .select($"a", expensiveRLike("magic") as "f", $"b")
+        .where($"f" && ($"b" > 1 || raiseError))
+        .analyze
+
+      comparePlans(optimized, correctAnswer)
+      assertTopFilterConjuncts(optimized, Seq(expensive, throwable))
+    }
+  }
+
+  test("SPARK-60730: a dynamic pruning filter is still pushed after an expensive condition") {
+    val project = testStringRelation
+      .select($"a", expensiveRLike("magic") as "f", $"b")
+      .analyze
+    val Seq(a, f, _) = project.output
+    val dpp = DynamicPruningSubquery(a, testRelation1, Seq(testRelation1.output.head), Seq(0),
+      onlyInBroadcast = false)()
+    val optimized = Optimize.execute(Filter(And(f, dpp), project))
+
+    // The optimizer adds it, so there is no written order to keep, and it only drops rows.
+    val correctAnswer = Filter(f, Project(project.asInstanceOf[Project].projectList,
+      Filter(dpp, testStringRelation)))
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-60730: the filters the optimizer adds are still pushed after an expensive " +
+    "condition") {
+    val project = testStringRelation
+      .select($"a", expensiveRLike("magic") as "f", $"b")
+      .analyze
+    val Seq(a, f, _) = project.output
+    // A runtime bloom filter, as `InjectRuntimeFilter` adds it.
+    val bloomFilter = BloomFilterMightContain(
+      ScalarSubquery(LocalRelation($"bf".binary)), new XxHash64(Seq(a)))
+    comparePlans(
+      Optimize.execute(Filter(And(f, bloomFilter), project)),
+      Filter(f, Project(project.asInstanceOf[Project].projectList,
+        Filter(bloomFilter, testStringRelation))))
+    // Not over a key that can fail, though.
+    val failableKeyFilter = Filter(And(f, BloomFilterMightContain(
+      ScalarSubquery(LocalRelation($"bf".binary)), new XxHash64(Seq(a + 1)))), project)
+    comparePlans(Optimize.execute(failableKeyFilter), failableKeyFilter)
+
+    // The `size(...) > 0` that `InferFiltersFromGenerate` adds.
+    val aString = $"a".cast(StringType)
+    val arrayProject = testArrayStringRelation
+      .select($"a", aString.rlike(Concat(Seq(aString, Literal("magic")))) as "f", $"s_arr")
+      .analyze
+    val Seq(_, arrayF, array) = arrayProject.output
+    val nonEmpty = GreaterThan(new Size(array), Literal(0))
+    comparePlans(
+      Optimize.execute(Filter(And(arrayF, nonEmpty), arrayProject)),
+      Filter(arrayF, Project(arrayProject.asInstanceOf[Project].projectList,
+        Filter(nonEmpty, testArrayStringRelation))))
+    // Not over an array expression that is not plain, though.
+    val notPlainFilter = Filter(And(arrayF, GreaterThan(new Size(Reverse(array)), Literal(0))),
+      arrayProject)
+    comparePlans(Optimize.execute(notPlainFilter), notPlainFilter)
+  }
+
+  test("SPARK-60730: a condition after one over a Python UDF is pushed as before, unless an " +
+    "expensive expression is over the UDF") {
+    val pythonUDF = PythonUDF("pythonUDF", null, IntegerType, Seq(attrA),
+      PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
+    val originalQuery = testStringRelation
+      .select($"a", pythonUDF.as("p"), $"b")
+      .where($"p" > 1 && $"a" + 1 > 6)
+      .analyze
+
+    // `ExtractPythonUDFs` moves the UDF below the projection and pushes the conditions below it
+    // again, so holding `a + 1 > 6` back here would only cost the pushdown in between.
+    val correctAnswer = testStringRelation
+      .where($"a" + 1 > 6)
+      .select($"a", pythonUDF.as("p"), $"b")
+      .where($"p" > 1)
+      .analyze
+
+    comparePlans(Optimize.execute(originalQuery), correctAnswer)
+
+    // A non-deterministic condition after it stays above, so it only sees the rows the
+    // condition over the UDF keeps, as when `ExtractPythonUDFs` pushes the whole filter later.
+    val randQuery = testStringRelation
+      .select($"a", pythonUDF.as("p"), $"b")
+      .where($"p" > 1 && Rand(10) > 0.5 && $"a" + 1 > 6)
+      .analyze
+    val Seq(pythonCond, randCond, _) = splitConjunctivePredicates(
+      randQuery.collectFirst { case Filter(condition, _) => condition }.get)
+    val randOptimized = Optimize.execute(randQuery)
+    comparePlans(randOptimized, testStringRelation
+      .where($"a" + 1 > 6)
+      .select($"a", pythonUDF.as("p"), $"b")
+      .where($"p" > 1 && Rand(10) > 0.5)
+      .analyze)
+    assertTopFilterConjuncts(randOptimized, Seq(pythonCond, randCond))
+    // A condition over an expensive alias the projection evaluates holds the conditions after
+    // it back, also when it comes after the condition over the UDF, or before it.
+    val mixedProject = testStringRelation
+      .select($"a", pythonUDF.as("p"), expensiveRLike("magic") as "f", $"b")
+    Seq[Expression]($"p" > 1 && $"f" && $"a" + 1 > 6, $"f" && $"p" > 1 && $"a" + 1 > 6)
+      .foreach { condition =>
+        val mixedQuery = mixedProject.where(condition).analyze
+        comparePlans(Optimize.execute(mixedQuery), mixedQuery)
+      }
+    // So does a throwable one, as before this change (SPARK-60602).
+    val throwableQuery = testStringRelation
+      .select($"a", pythonUDF.as("p"), $"b")
+      .where($"p" > 1 && ($"b" > 1 || IsNull(RaiseError(Literal("boom")))) && $"a" + 1 > 6)
+      .analyze
+    comparePlans(Optimize.execute(throwableQuery), testStringRelation
+      .where($"a" + 1 > 6)
+      .select($"a", pythonUDF.as("p"), $"b")
+      .where($"p" > 1 && ($"b" > 1 || IsNull(RaiseError(Literal("boom")))))
+      .analyze)
+    // The legacy config pushes it, as before.
+    withSQLConf(SQLConf.LEGACY_PUSH_FILTER_AHEAD_OF_EXPENSIVE_CONJUNCT.key -> "true") {
+      comparePlans(Optimize.execute(randQuery), testStringRelation
+        .where(Rand(10) > 0.5 && $"a" + 1 > 6)
+        .select($"a", pythonUDF.as("p"), $"b")
+        .where($"p" > 1)
+        .analyze)
+    }
+
+    // A Python UDF over an expensive expression evaluates it below the projection too.
+    val pythonOverRegex = PythonUDF("pythonUDF", null, IntegerType, Seq(expensiveRLike("magic")),
+      PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
+    val overRegexQuery = testStringRelation
+      .select($"a", pythonOverRegex.as("p"), $"b")
+      .where($"p" > 1 && $"a" + 1 > 6)
+      .analyze
+    val overRegexAnswer = testStringRelation
+      .where($"a" + 1 > 6)
+      .select($"a", pythonOverRegex.as("p"), $"b")
+      .where($"p" > 1)
+      .analyze
+    comparePlans(Optimize.execute(overRegexQuery), overRegexAnswer)
+
+    // But an expensive expression over a Python UDF stays in the projection, so the condition
+    // after it is held back.
+    val stringUDF = PythonUDF("pythonUDF", null, StringType, Seq(attrA),
+      PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
+    val regexOverPythonQuery = testStringRelation
+      .select($"a", stringUDF.rlike(Concat(Seq($"e", Literal("magic")))).as("p"), $"b")
+      .where($"p" && $"a" + 1 > 6)
+      .analyze
+    comparePlans(Optimize.execute(regexOverPythonQuery), regexOverPythonQuery)
+    // So does a regex whose pattern is a Python UDF, which is compiled for every row.
+    val patternQuery = testStringRelation
+      .select($"a", $"e".rlike(stringUDF).as("p"), $"b")
+      .where($"p" && $"a" + 1 > 6)
+      .analyze
+    comparePlans(Optimize.execute(patternQuery), patternQuery)
+
+    // A regex with a cheap constant pattern over a Python UDF is only expensive through the UDF,
+    // unless version 0 of the regex pattern cost estimate makes every regex expensive.
+    val cheapRegexOverPython = testStringRelation
+      .select($"a", stringUDF.rlike("^1").as("p"), $"b")
+      .where($"p" && $"a" + 1 > 6)
+      .analyze
+    val cheapRegexOverPythonAnswer = testStringRelation
+      .where($"a" + 1 > 6)
+      .select($"a", stringUDF.rlike("^1").as("p"), $"b")
+      .where($"p")
+      .analyze
+    comparePlans(Optimize.execute(cheapRegexOverPython), cheapRegexOverPythonAnswer)
+    withSQLConf(SQLConf.REGEX_PATTERN_COST_ESTIMATE_VERSION.key -> "0") {
+      comparePlans(Optimize.execute(cheapRegexOverPython), cheapRegexOverPython)
+    }
+  }
+
+  test("SPARK-60730: a regex alias holds conditions back as the regex pattern cost estimate " +
+    "decides") {
+    val originalQuery = testStringRelation
+      .select($"a", $"e".rlike("^1") as "f", $"b")
+      .where($"f" && $"a" + 1 > 6)
+      .analyze
+    // A cheap pattern makes a cheap alias, so the whole filter is pushed.
+    val cheapAnswer = testStringRelation
+      .where($"e".rlike("^1") && $"a" + 1 > 6)
+      .select($"a", $"e".rlike("^1") as "f", $"b")
+      .analyze
+    comparePlans(Optimize.execute(originalQuery), cheapAnswer)
+    // With version 0, which a streaming query restarted from an older checkpoint keeps, every
+    // regex is expensive, so `a + 1 > 6` is held back behind it.
+    withSQLConf(SQLConf.REGEX_PATTERN_COST_ESTIMATE_VERSION.key -> "0") {
+      comparePlans(Optimize.execute(originalQuery), originalQuery)
+    }
+  }
+
+  test("SPARK-60730: a comparison with an implicit numeric cast is still pushed") {
+    val originalQuery = testStringRelation
+      .select($"a", expensiveRLike("magic") as "f", $"b")
+      .where($"f" && $"a".cast(LongType) > 6L)
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // Widening `a` to BIGINT can not fail, so the comparison is pushed below the expensive
+    // condition.
+    val correctAnswer = testStringRelation
+      .where($"a".cast(LongType) > 6L)
+      .select($"a", expensiveRLike("magic") as "f", $"b")
+      .where($"f")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-60730: the legacy config splits the projection as before") {
+    withSQLConf(SQLConf.LEGACY_PUSH_FILTER_AHEAD_OF_EXPENSIVE_CONJUNCT.key -> "true") {
+      val expensiveInt = If(expensiveRLike("other"), $"a", $"b")
+      val originalQuery = testStringRelation
+        .select($"a", expensiveRLike("magic") as "f", expensiveRLike("third") as "h",
+          expensiveInt as "g", $"b")
+        .where($"f" =!= $"h" && Literal(10) / ($"g" - 3) > 0)
+        .analyze
+
+      val optimized = Optimize.execute(originalQuery)
+
+      // The division over g needs one alias, so it goes lowest, ahead of (f != h).
+      val correctAnswer = testStringRelation
+        .select($"a", $"b", $"e", expensiveInt as "g")
+        .where(Literal(10) / ($"g" - 3) > 0)
+        .select($"a", expensiveRLike("magic") as "f", expensiveRLike("third") as "h", $"g", $"b")
+        .where($"f" =!= $"h")
+        .analyze
+
+      comparePlans(optimized, correctAnswer)
+
+      // A throwable condition does not keep the projection from being split either.
+      val raiseError = IsNull(RaiseError(Literal("boom")))
+      val withThrowable = testStringRelation
+        .select($"a", expensiveRLike("magic") as "f", expensiveRLike("third") as "h",
+          expensiveInt as "g", $"b")
+        .where($"f" && ($"b" > 1 || raiseError) && $"g" > 1 && $"h")
+        .analyze
+      // f and g are split off by cost as before; the throwable condition is kept out of the
+      // split and lands on g's layer, still behind f, and h stays on top.
+      val withThrowableAnswer = testStringRelation
+        .select($"a", $"b", $"e", expensiveRLike("magic") as "f")
+        .where($"f")
+        .select($"a", $"b", $"e", $"f", expensiveInt as "g")
+        .where($"g" > 1)
+        .where($"b" > 1 || raiseError)
+        .select($"a", $"f", expensiveRLike("third") as "h", $"g", $"b")
+        .where($"h")
+        .analyze
+      comparePlans(Optimize.execute(withThrowable), withThrowableAnswer)
+
+      // Nor does one kept above after a condition over a Python UDF.
+      def pythonUDF(name: String, input: Expression): PythonUDF = PythonUDF(name, null,
+        IntegerType, Seq(input), PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
+      val pythonQuery = testStringRelation
+        .select($"a", pythonUDF("p", attrA).as("p"), pythonUDF("q", attrB).as("q"), $"b")
+        .where($"p" > 1 && ($"b" > 1 || raiseError) && $"q" > 1 && $"q" < 5)
+        .analyze
+      assert(Optimize.execute(pythonQuery).collect { case p: Project => p }.size > 1)
+    }
+  }
+
+  test("SPARK-60730: the first expensive condition is split off even when it can fail") {
+    val expensiveInt = If(expensiveRLike("magic"), $"a", $"b")
+    val originalQuery = testStringRelation
+      .select($"a", expensiveInt as "f", expensiveRLike("other") as "g", $"b")
+      .where($"f" + 1 > 5 && $"g")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // Every condition written before `f + 1 > 5` is pushed, so splitting it off moves it ahead
+    // of nothing. Treating it as rejected would keep the whole filter unsplit.
+    val correctAnswer = testStringRelation
+      .select($"a", $"b", $"e", expensiveInt as "f")
+      .where($"f" + 1 > 5)
+      .select($"a", $"f", expensiveRLike("other") as "g", $"b")
+      .where($"g")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
   test("SPARK-55014: do not split the projection when configured") {
     withSQLConf(SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> "false") {
       val originalQuery = testStringRelation
