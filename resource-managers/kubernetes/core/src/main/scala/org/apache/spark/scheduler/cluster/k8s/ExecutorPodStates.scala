@@ -24,7 +24,17 @@ sealed trait ExecutorPodState {
 
 case class PodRunning(pod: Pod) extends ExecutorPodState
 
-case class PodPending(pod: Pod) extends ExecutorPodState
+/** A pod that has not started running yet. Counted as pending by the allocator. */
+sealed trait PendingPodState extends ExecutorPodState
+
+case class PodPending(pod: Pod) extends PendingPodState
+
+/**
+ * A pending pod the Kubernetes scheduler could not place (`PodScheduled=False` with reason
+ * `Unschedulable`). `message` is the scheduler's explanation, e.g. "0/3 nodes are available:
+ * 3 Insufficient cpu."
+ */
+case class PodUnschedulable(pod: Pod, message: String) extends PendingPodState
 
 sealed trait FinalPodState extends ExecutorPodState
 
