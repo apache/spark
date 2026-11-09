@@ -79,8 +79,10 @@ def _zip_archive_of(module_name: str) -> Optional[str]:
 # The zip archives this worker's pyspark and py4j were loaded from, such as
 # $SPARK_HOME/python/lib/pyspark.zip or the copy that Spark ships to YARN containers. They are
 # not replaced while an application runs, so _invalidate_import_caches keeps their cached
-# directory listings. Other archives, including user archives on PYTHONPATH, may be replaced and
-# are not kept.
+# directory listings. A user zip that supplies the worker's pyspark or py4j counts as one of
+# these archives and must not be replaced while the application runs either: the worker already
+# runs modules from it, so a replaced copy could not be used safely anyway. Other archives,
+# including user archives on PYTHONPATH, may be replaced and are not kept.
 _SPARK_ARCHIVES = frozenset(
     archive for archive in map(_zip_archive_of, ("pyspark", "py4j")) if archive is not None
 )
@@ -97,6 +99,9 @@ def _invalidate_import_caches() -> None:
     next lookup. All other archives, such as user archives on PYTHONPATH and the ones in
     python_includes, are still invalidated.
     """
+    if not _SPARK_ARCHIVES:
+        importlib.invalidate_caches()
+        return
     kept = {
         path: finder
         for path, finder in list(sys.path_importer_cache.items())
