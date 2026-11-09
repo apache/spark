@@ -1670,7 +1670,8 @@ object StateStore extends Logging {
       loadStore(firstProvider, firstShouldForceSnapshotUpload)
     } catch {
       case _: StateStoreProviderClosed =>
-        // Providers are removed from the cache before they are closed.
+        // The first provider was removed and closed. Check if another provider
+        // under the provider ID was published.
         val hasReplacement = loadedProviders.synchronized {
           loadedProviders.contains(storeProviderId)
         }
