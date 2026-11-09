@@ -32,8 +32,10 @@ import org.apache.spark.sql.catalyst.expressions.{
   DateAdd,
   DateSub,
   Elt,
+  EvalMode,
   ExpectsInputTypes,
   Expression,
+  GetMapValue,
   Greatest,
   If,
   ImplicitCastInputTypes,
@@ -757,6 +759,13 @@ abstract class TypeCoercionHelper {
         }
         t.withNewChildren(children)
 
+      // An integral key of a wider type than the integral key type of the map, such as an INT
+      // key of a MAP<TINYINT, ...>, is cast with TRY. A key out of the range of the map key type
+      // is not in the map, so it must look up NULL instead of overflowing to another key (or
+      // failing with ANSI mode on).
+      case g @ GetMapValue(map, key) if mayOverflowMapKey(map.dataType, key.dataType) =>
+        g.withNewChildren(Seq(map, Cast(key, g.keyType, evalMode = EvalMode.TRY)))
+
       case e: ImplicitCastInputTypes if e.inputTypes.nonEmpty =>
         val children: Seq[Expression] = e.children.zip(e.inputTypes).map {
           case (in, expected) =>
@@ -816,6 +825,18 @@ abstract class TypeCoercionHelper {
         udf.copy(children = children)
 
       case other => other
+    }
+
+    /**
+     * Whether a key of type `keyType` is integral and may overflow when it is cast to the integral
+     * key type of a map of type `mapType`.
+     */
+    private def mayOverflowMapKey(mapType: DataType, keyType: DataType): Boolean = {
+      (mapType, keyType) match {
+        case (MapType(mapKeyType: IntegralType, _, _), _: IntegralType) =>
+          !Cast.canUpCast(keyType, mapKeyType)
+        case _ => false
+      }
     }
 
     private def canHandleTypeCoercion(leftType: DataType, rightType: DataType): Boolean = {
