@@ -38,8 +38,8 @@ impl<W: BatchWrite> StreamingWrite for Batch<W> {
     type Factory = W::Factory;
     type Message = W::Message;
 
-    fn writer_factory(&self) -> Result<W::Factory> {
-        self.0.writer_factory()
+    fn new_writer_factory(&self) -> Result<W::Factory> {
+        self.0.new_writer_factory()
     }
 
     fn commit(&mut self, info: StreamingCommitInfo<W::Message>) -> Result<()> {
@@ -76,7 +76,7 @@ impl<C: StreamingWrite> DriverWriter<C> {
             coordinator: Some(coordinator),
         };
         // The factory's destructor is connector code too, so it runs in provider_call.
-        let state = provider_call(|| encode(&writer.coordinator().writer_factory()?))?;
+        let state = provider_call(|| encode(&writer.coordinator().new_writer_factory()?))?;
         Ok((Box::new(writer), state))
     }
 

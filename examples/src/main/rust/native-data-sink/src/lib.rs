@@ -359,7 +359,7 @@ impl BatchWrite for JsonWrite {
     // The sink also supports overwrites.
     const SUPPORTS_TRUNCATE: bool = true;
 
-    fn writer_factory(&self) -> Result<JsonWriterFactory> {
+    fn new_writer_factory(&self) -> Result<JsonWriterFactory> {
         Ok(JsonWriterFactory {
             staging: self.staging.clone(),
             operation: self.operation.clone(),
@@ -392,8 +392,8 @@ impl StreamingWrite for JsonStreamingWrite {
     // The output mode complete replaces the output of the previous micro-batches.
     const SUPPORTS_TRUNCATE: bool = true;
 
-    fn writer_factory(&self) -> Result<JsonWriterFactory> {
-        self.write.writer_factory()
+    fn new_writer_factory(&self) -> Result<JsonWriterFactory> {
+        self.write.new_writer_factory()
     }
 
     fn commit(&mut self, info: StreamingCommitInfo<CommitMessage>) -> Result<()> {
@@ -632,7 +632,7 @@ mod tests {
 
     fn new_write(source: &JsonSink, mode: WriteMode) -> Result<(JsonWrite, JsonWriterFactory)> {
         let write = source.new_write(WriteInfo::new(sink_schema(), mode))?;
-        let factory = write.writer_factory()?;
+        let factory = write.new_writer_factory()?;
         Ok((write, factory))
     }
 
@@ -695,7 +695,7 @@ mod tests {
     ) -> Result<(JsonStreamingWrite, JsonWriterFactory)> {
         let info = StreamingWriteInfo::new(sink_schema(), mode, query_id);
         let write = source.new_streaming_write(info)?;
-        let factory = write.writer_factory()?;
+        let factory = write.new_writer_factory()?;
         Ok((write, factory))
     }
 

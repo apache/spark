@@ -620,7 +620,7 @@ pub enum WriteMode {
 /// Spark calls the methods in this order, so implementations need not track their own
 /// phase or guard against repeated calls:
 ///
-/// - `writer_factory` runs once, right after [`DataSource::new_write`], before any task
+/// - `new_writer_factory` runs once, right after [`DataSource::new_write`], before any task
 ///   opens a writer. When it fails, the SDK cannot serialize its factory, or Spark cannot
 ///   copy the serialized factory, for example when it is too large, the write fails and
 ///   the coordinator is dropped without `abort`, so Drop must also release what only this
@@ -650,7 +650,7 @@ pub trait BatchWrite: Send + 'static {
 
     /// Returns the configuration of the task writers, which the SDK serializes for them.
     /// Include a unique operation ID when needed; Spark supplies no batch query ID.
-    fn writer_factory(&self) -> Result<Self::Factory>;
+    fn new_writer_factory(&self) -> Result<Self::Factory>;
 
     /// Publish only the winning attempt from each input partition, whose messages
     /// [`CommitInfo::messages`] has. Task retries and speculative attempts can stage other
@@ -696,7 +696,7 @@ impl<M> AbortInfo<M> {
 }
 
 /// Serializable configuration for independent task-attempt writers, which
-/// [`BatchWrite::writer_factory`] or [`StreamingWrite::writer_factory`] creates.
+/// [`BatchWrite::new_writer_factory`] or [`StreamingWrite::new_writer_factory`] creates.
 ///
 /// Open connections and files in open, not in the factory. A returned writer
 /// cannot borrow this temporary factory, but may retain the context until
@@ -842,7 +842,7 @@ pub trait StreamingWrite: Send + 'static {
     const SUPPORTED: bool = true;
 
     /// Returns the configuration of the task writers, which the SDK serializes for them.
-    fn writer_factory(&self) -> Result<Self::Factory>;
+    fn new_writer_factory(&self) -> Result<Self::Factory>;
 
     /// Publish the winning attempt of each input partition as the output of the epoch
     /// [`StreamingCommitInfo::epoch_id`], unless that epoch is already committed.

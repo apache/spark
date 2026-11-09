@@ -260,7 +260,7 @@ impl StreamingWrite for Write {
 
     const SUPPORTS_TRUNCATE: bool = true;
 
-    fn writer_factory(&self) -> Result<WriteFactory> {
+    fn new_writer_factory(&self) -> Result<WriteFactory> {
         Ok(WriteFactory)
     }
 

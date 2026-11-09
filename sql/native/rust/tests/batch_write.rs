@@ -121,7 +121,7 @@ impl BatchWrite for Driver {
 
     const SUPPORTS_TRUNCATE: bool = true;
 
-    fn writer_factory(&self) -> Result<Factory> {
+    fn new_writer_factory(&self) -> Result<Factory> {
         record(Event::FactoryCreated);
         if self.failure == "writer_factory_error" {
             return Err("creating the writer factory failed".into());

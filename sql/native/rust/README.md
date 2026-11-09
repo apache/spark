@@ -250,17 +250,17 @@ streaming read or write fails when its query starts or plans its first micro-bat
 ```text
 Driver:
   DataSource::new_write -> BatchWrite
-                             | writer_factory()  ^ commit(CommitInfo) / abort(AbortInfo)
-                    serialized factory           | typed messages
-                             |                   |
-Executor, per task attempt:  v                   |
+                             | new_writer_factory()  ^ commit(CommitInfo) / abort(AbortInfo)
+                    serialized factory               | typed messages
+                             |                       |
+Executor, per task attempt:  v                       |
                        DataWriterFactory::open(WriterContext)
                                 -> DataWriter::write(RecordBatch)*
                                 -> commit() / abort() -> Drop
 ```
 
 `DataSource::new_write(WriteInfo)` validates the input schema and returns an
-independent driver coordinator, a `BatchWrite`. Its `writer_factory` returns the
+independent driver coordinator, a `BatchWrite`. Its `new_writer_factory` returns the
 serializable executor configuration of its task writers, which the SDK encodes as the
 state of the writer that native `create_writer` returns. Restoring an executor writer
 uses only those bytes and the schema that Spark passes with them, without creating a
@@ -304,7 +304,7 @@ including after task commit, so connectors need a strategy for orphaned data.
 Spark provides no batch query ID: generate and serialize an operation identity
 when needed. Task-attempt IDs alone are not globally unique across applications.
 
-When `writer_factory` or the serialization of its factory fails, `create_writer` fails,
+When `new_writer_factory` or the serialization of its factory fails, `create_writer` fails,
 and when Spark cannot copy the serialized factory, for example when it is too large, Spark
 fails the write. Either way, the SDK drops the coordinator without commit or abort, so
 Drop must also release what only that write staged. Spark also creates writers late, after

@@ -73,7 +73,7 @@ impl BatchWrite for Unsupported {
 
     const SUPPORTED: bool = false;
 
-    fn writer_factory(&self) -> Result<Self> {
+    fn new_writer_factory(&self) -> Result<Self> {
         match *self {}
     }
 
@@ -100,7 +100,7 @@ impl StreamingWrite for Unsupported {
 
     const SUPPORTED: bool = false;
 
-    fn writer_factory(&self) -> Result<Self> {
+    fn new_writer_factory(&self) -> Result<Self> {
         match *self {}
     }
 
