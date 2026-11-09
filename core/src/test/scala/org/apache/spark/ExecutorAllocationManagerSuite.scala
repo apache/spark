@@ -25,6 +25,8 @@ import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.{any, anyBoolean, eq => mockitoEq}
 import org.mockito.Mockito._
 import org.scalatest.PrivateMethodTester
+import org.scalatest.concurrent.Eventually.{eventually, timeout}
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config
@@ -86,6 +88,45 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       assert(sc0.executorAllocationManager.isDefined)
     } finally {
       sc0.stop()
+    }
+  }
+
+  test("SparkContext dynamic allocation reads the current OOM reservation from its scheduler") {
+    // This backend uses a real scheduler and lets the test drive each offer.
+    val backend = classOf[DecommissionTestSchedulerBackend].getName
+    val conf = createConf(0, 2, 0)
+      .setMaster(s"coarseclustermanager[$backend]")
+      .setAppName(getClass.getName)
+      .set(config.EXECUTOR_CORES, 2)
+      .set(config.SCHEDULER_OOM_RETRY_ENABLED, true)
+    val profile = ResourceProfile.reInitDefaultProfile(conf)
+    val sc = new SparkContext(conf)
+    try {
+      val manager = sc.executorAllocationManager.get
+      val scheduler = sc.taskScheduler.asInstanceOf[TaskSchedulerImpl]
+      sc.listenerBus.post(SparkListenerStageSubmitted(createStageInfo(0, 1, rp = profile)))
+      sc.listenerBus.post(SparkListenerStageSubmitted(createStageInfo(1, 1, rp = profile)))
+      sc.listenerBus.waitUntilEmpty()
+      assert(manager.maxNumExecutorsNeededPerResourceProfile(profile.id) === 1)
+
+      scheduler.submitTasks(FakeTask.createTaskSet(1))
+      val offers = IndexedSeq(WorkerOffer("reserved", "localhost", 2))
+      def nextAttempt(): TaskDescription = eventually(timeout(10.seconds)) {
+        scheduler.resourceOffers(offers).flatten.head
+      }
+      val oom = new ExceptionFailure(new OutOfMemoryError("test OOM"), Nil)
+      (0 until 2).foreach { attempt =>
+        val task = nextAttempt()
+        assert(task.attemptNumber === attempt)
+        scheduler.statusUpdate(task.taskId, TaskState.FAILED,
+          sc.env.closureSerializer.newInstance().serialize(oom))
+      }
+      assert(nextAttempt().attemptNumber === 2)
+      assert(scheduler.oomRetryReservationInfo.exists(_.executorId == "reserved"))
+      // The retry now occupies the executor, leaving stage 1 needing another executor.
+      assert(manager.maxNumExecutorsNeededPerResourceProfile(profile.id) === 2)
+    } finally {
+      sc.stop()
     }
   }
 

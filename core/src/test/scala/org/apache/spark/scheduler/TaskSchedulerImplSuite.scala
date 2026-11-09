@@ -422,6 +422,28 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     assert(tasks.head.cpus === 2)
   }
 
+  test("a partial offer cannot reserve a busy executor ahead of an idle executor") {
+    val scheduler = setupOomRetryScheduler(new ManualClock(1))
+    val busy = WorkerOffer("busy", "host-busy", 1)
+    val idle = WorkerOffer("idle", "host-idle", 1)
+    scheduler.resourceOffers(IndexedSeq(idle))
+    scheduler.submitTasks(FakeTask.createTaskSet(1, stageId = 0, stageAttemptId = 0))
+    scheduler.resourceOffers(IndexedSeq(busy))
+    val manager = prepareOomRetries()
+    scheduler.submitTasks(FakeTask.createTaskSet(1, stageId = 2, stageAttemptId = 0))
+
+    // A task completion on the busy executor offers only its free slot.
+    val ordinary = scheduler.resourceOffers(IndexedSeq(busy), isAllFreeResources = false).flatten
+    assert(ordinary.size === 1)
+    assert(scheduler.taskIdToTaskSetManager.get(ordinary.head.taskId) ne manager)
+    assert(scheduler.oomRetryReservationInfo.isEmpty)
+
+    val retry = scheduler.resourceOffers(IndexedSeq(busy.copy(cores = 0), idle)).flatten
+    assert(retry.map(_.executorId) === Seq("idle"))
+    assert(scheduler.taskIdToTaskSetManager.get(retry.head.taskId) eq manager)
+    assert(scheduler.oomRetryReservationInfo === Some(oomReservationInfo(manager, "idle")))
+  }
+
   test("repeated OOM retries drain only one executor without killing existing tasks") {
     val scheduler = setupOomRetryScheduler(new ManualClock(1))
     val backend = spy(new FakeSchedulerBackend)
@@ -440,13 +462,13 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     assert(ordinary.forall(_.executorId == "b"))
     assert(scheduler.oomRetryReservationInfo === Some(oomReservationInfo(manager, "a")))
     assert(scheduler.resourceOffers(
-      IndexedSeq(WorkerOffer("a", "host-a", 3))).flatten.isEmpty)
+      IndexedSeq(WorkerOffer("a", "host-a", 3)), isAllFreeResources = false).flatten.isEmpty)
 
     finishOomTestTask(blocker)
     // Keep the retry identity stable while the executor drains.
     assert(scheduler.oomRetryReservationInfo === Some(oomReservationInfo(manager, "a")))
     val isolated = scheduler.resourceOffers(
-      IndexedSeq(WorkerOffer("a", "host-a", 4))).flatten
+      IndexedSeq(WorkerOffer("a", "host-a", 4)), isAllFreeResources = false).flatten
     assert(isolated.size === 1)
     assert(scheduler.taskIdToTaskSetManager.get(isolated.head.taskId) eq manager)
     assert(manager.copiesRunning.count(_ > 0) === 1)
@@ -505,6 +527,16 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
       IndexedSeq(WorkerOffer("a", "host-a", 2))).flatten.size === 2)
   }
 
+  test("late offers after stop do not re-arm an OOM isolation wakeup") {
+    val scheduler = setupOomRetryScheduler(new ManualClock(1))
+    prepareOomRetries()
+    val offers = IndexedSeq(WorkerOffer("a", "host-a", 0))
+    assert(scheduler.resourceOffers(offers).flatten.isEmpty)
+    scheduler.stop()
+    taskScheduler = null // Already stopped, so skip the extra stop in afterEach.
+    assert(scheduler.resourceOffers(offers).flatten.isEmpty)
+  }
+
   test("OOM isolation can expire while resource offers are being processed") {
     val clock = new ManualClock(1) {
       var tickOnRead = false
@@ -522,9 +554,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     val offers = IndexedSeq(WorkerOffer("a", "host-a", 1))
     assert(scheduler.resourceOffers(offers).flatten.isEmpty)
 
-    // Start three milliseconds before the deadline and cross it within one offer, rather
-    // than only advancing time between offers. The free core must not stay masked on expiry.
-    clock.advance(manager.oomRetryIsolationTimeRemaining(0) - 3)
+    // Cross the deadline after the first clock read in this offer. The free core must
+    // not stay masked when the reservation expires during the recovery pass.
+    clock.advance(manager.oomRetryIsolationTimeRemaining(0) - 1)
     clock.tickOnRead = true
     val tasks = try {
       scheduler.resourceOffers(offers).flatten
@@ -631,6 +663,34 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     assert(replacement.size === 1)
     assert(scheduler.taskIdToTaskSetManager.get(replacement.head.taskId) eq manager)
     assert(replacement.head.executorId === "c")
+  }
+
+  for (applicationWide <- Seq(false, true)) {
+    val scope = if (applicationWide) "application" else "task set"
+    test(s"pending OOM reservation moves after a new $scope exclusion") {
+      val scheduler = setupSchedulerWithMockTaskSetExcludelist(
+        config.SCHEDULER_OOM_RETRY_ENABLED.key -> "true")
+      val busy = WorkerOffer("busy", "host-busy", 1)
+      scheduler.submitTasks(FakeTask.createTaskSet(1, stageId = 0, stageAttemptId = 0))
+      scheduler.resourceOffers(IndexedSeq(busy))
+      val manager = prepareOomRetries()
+      assert(scheduler.resourceOffers(IndexedSeq(busy)).flatten.isEmpty)
+      assert(scheduler.oomRetryReservationInfo === Some(oomReservationInfo(manager, "busy")))
+
+      if (applicationWide) {
+        when(healthTracker.isExecutorExcluded("busy")).thenReturn(true)
+      } else {
+        when(stageToMockTaskSetExcludelist(1).isExecutorExcludedForTaskSet("busy"))
+          .thenReturn(true)
+      }
+      scheduler.submitTasks(FakeTask.createTaskSet(1, stageId = 2, stageAttemptId = 0))
+      val tasks = scheduler.resourceOffers(IndexedSeq(busy, WorkerOffer("b", "host-b", 2))).flatten
+      assert(scheduler.oomRetryReservationInfo === Some(oomReservationInfo(manager, "b")))
+      val retry = tasks.filter(_.executorId == "b")
+      assert(retry.size === 1)
+      assert(scheduler.taskIdToTaskSetManager.get(retry.head.taskId) eq manager)
+      assert(tasks.count(_.executorId == "busy") === (if (applicationWide) 0 else 1))
+    }
   }
 
   test("OOM retries preserve exclusions, resource profiles and custom resource requirements") {

@@ -933,7 +933,11 @@ private[yarn] class YarnAllocator(
         } else {
           logInfo(containerExitReason)
         }
-        ExecutorExited(exitStatus, exitCausedByApp, containerExitReason.message)
+        val reason = ExecutorExited(exitStatus, exitCausedByApp, containerExitReason.message)
+        if (exitCausedByApp && exitStatus == ContainerExitStatus.KILLED_EXCEEDED_PMEM) {
+          reason.isOutOfMemoryError = true
+        }
+        reason
       } else {
         // If we have already released this container, then it must mean
         // that the driver has explicitly requested it to be killed

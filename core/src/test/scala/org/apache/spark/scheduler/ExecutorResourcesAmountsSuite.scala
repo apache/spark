@@ -73,6 +73,27 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite with ExecutorResourceU
     assert(resources.availableTaskSlots(profile, 8) === 1)
   }
 
+  test("available task slots agree with repeated address assignment") {
+    val resources = toInternalResourceMap(Map(
+      GPU -> Map("0" -> 0.25, "1" -> 0.75, "2" -> 1.0, "3" -> 1.0, "4" -> 1.0)))
+    for {
+      name <- Seq(GPU, "missing")
+      amount <- Seq(2.0, 1.0, 0.5, 0.25, 1e-12, 1e-18)
+      limit <- Seq(0, 1, 10)
+    } {
+      val profile = new ResourceProfileBuilder()
+        .require(new TaskResourceRequests().resource(name, amount)).build()
+      val offer = new ExecutorResourcesAmounts(resources)
+      val slots = offer.availableTaskSlots(profile, limit)
+      val assigned = (0 until limit).takeWhile { _ =>
+        val next = offer.assignAddressesCustomResources(profile)
+        next.foreach(offer.acquire)
+        next.isDefined
+      }
+      assert(slots === assigned.size, s"name=$name, amount=$amount, limit=$limit")
+    }
+  }
+
   test("assign to rp without task resources requirement") {
     val executorsInfo = Map(
       "gpu" -> new ExecutorResourceInfo("gpu", Seq("2", "4", "6")),

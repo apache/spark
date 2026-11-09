@@ -1122,7 +1122,11 @@ private[spark] class ExecutorAllocationManager(
       }.sum
     }
 
-    /** Count only reserved tasks that also contribute to this listener's demand. */
+    /**
+     * Returns the number of tasks in this listener's demand covered by the reservation and
+     * whether any pending speculative copy for that resource profile lacks a running original
+     * attempt on the reserved executor.
+     */
     def oomRetryAllocation(reservation: OomRetryReservationInfo): (Int, Boolean) = {
       val attempts = resourceProfileIdToStageAttempt
         .getOrElse(reservation.resourceProfileId, mutable.Set.empty[StageAttempt])

@@ -3054,8 +3054,9 @@ Apart from these, the following properties are also available, and may be useful
   <td>false</td>
   <td>
     Prefer eligible idle executors when retrying a task after an out-of-memory failure.
-    After two OOM failures of the same task, temporarily reserve one executor for its retry:
-    existing tasks finish first, and no other tasks are placed there until the retry exits.
+    After the second and each subsequent OOM failure of the same task, Spark tries to reserve
+    one executor for its next attempt. It lets existing tasks finish, then runs the retry alone.
+    Spark releases the executor when the isolated attempt ends, including when it fails with OOM.
     At most one executor per application is reserved. Other repeated OOM retries wait up to
     <code>spark.scheduler.oomRetry.isolationTimeout</code> before falling back to ordinary placement.
     Normal tasks retain their ordinary placement policy. OOM retries may ignore preferred
@@ -3064,13 +3065,16 @@ Apart from these, the following properties are also available, and may be useful
     Dynamic allocation counts the reserved executor separately from the remaining work, within
     the configured executor limits, so its unused slots do not suppress requests for other tasks.
     Barrier and pipelined stages are excluded, and OOM-affected tasks are not speculated.
-    Recognized failures include JVM/Spark OOM exceptions (including wrapped exceptions), Spark
-    executor exit code 52, and Kubernetes executor-container <code>OOMKilled</code> termination.
+    Recognized failures include JVM/Spark OOM exceptions (including wrapped exceptions),
+    application-caused Spark executor exits with code 52, Kubernetes executor-container
+    <code>OOMKilled</code> termination, and YARN executor containers killed for exceeding their
+    physical memory limit. Each task lost with an OOM-killed executor counts that loss toward
+    its own isolation threshold, since the executor exit alone cannot identify the task responsible.
     Exit code 137 alone is not considered OOM. Native errors without a typed OOM signal
     are not recognized; fixed per-task native memory limits are not increased.
     An idle executor may retain cached or native memory, so recovery is not guaranteed.
   </td>
-  <td>5.0.0</td>
+  <td>4.4.0</td>
 </tr>
 <tr>
   <td><code>spark.scheduler.oomRetry.isolationTimeout</code></td>
@@ -3083,7 +3087,7 @@ Apart from these, the following properties are also available, and may be useful
     This timeout does not end isolation or kill a retry that has already started.
     Must be positive.
   </td>
-  <td>5.0.0</td>
+  <td>4.4.0</td>
 </tr>
 <tr>
   <td><code>spark.scheduler.revive.interval</code></td>

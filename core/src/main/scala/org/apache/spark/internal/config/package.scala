@@ -2702,7 +2702,7 @@ package object config {
         "finish before the retry starts. OOM retries may ignore preferred locations, but still " +
         "respect exclusions and resource requirements. Task CPUs and executor memory are " +
         "unchanged. Barrier and pipelined tasks are excluded and OOM retries are not speculated.")
-      .version("5.0.0")
+      .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
@@ -2713,7 +2713,7 @@ package object config {
         "spark.scheduler.oomRetry.enabled is true. After this time the pending retry falls " +
         "back to ordinary placement; another OOM failure starts a new wait. This does not " +
         "limit the running time of a retry that has already started in isolation.")
-      .version("5.0.0")
+      .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(_ > 0, "OOM retry isolation timeout must be positive")

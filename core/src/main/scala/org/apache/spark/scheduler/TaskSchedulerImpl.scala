@@ -134,6 +134,7 @@ private[spark] class TaskSchedulerImpl(
       taskId: Option[Long] = None)
 
   private var oomRetryReservation: Option[OomRetryReservation] = None
+  private var stopped = false
   private var oomRetryWakeup: Option[ScheduledFuture[_]] = None
 
   @volatile private var oomRetryReservationSnapshot: Option[OomRetryReservationInfo] = None
@@ -511,6 +512,7 @@ private[spark] class TaskSchedulerImpl(
   private def scheduleOomRetries(
       taskSets: ArrayBuffer[TaskSetManager],
       offers: IndexedSeq[WorkerOffer],
+      isAllFreeResources: Boolean,
       availableCpus: Array[BigDecimal],
       availableResources: Array[ExecutorResourcesAmounts],
       tasks: IndexedSeq[ArrayBuffer[TaskDescription]]): Set[TaskSetManager] = {
@@ -571,11 +573,15 @@ private[spark] class TaskSchedulerImpl(
       }
     }
 
-    if (oomRetryReservation.isEmpty) {
+    val pendingRetries = taskSets.flatMap { taskSet =>
+      taskSet.pendingOomRetries.map(index => (taskSet, index))
+    }
+    // A partial round may omit a better executor. Wait for a full round to choose a new
+    // reservation, but continue draining and launching an existing one on partial offers.
+    if (isAllFreeResources && oomRetryReservation.isEmpty) {
       for {
-        taskSet <- taskSets
-        index <- taskSet.pendingOomRetries
-        if oomRetryReservation.isEmpty && taskSet.oomRetryNeedsIsolation(index)
+        (taskSet, index) <- pendingRetries.iterator.takeWhile(_ => oomRetryReservation.isEmpty)
+        if taskSet.oomRetryNeedsIsolation(index)
       } {
         val candidates = offers.indices.filter { i =>
           eligible(taskSet, index, i) &&
@@ -604,21 +610,24 @@ private[spark] class TaskSchedulerImpl(
       }
     }
 
-    for {
-      taskSet <- taskSets
-      index <- taskSet.pendingOomRetries
-      if !taskSet.oomRetryNeedsIsolation(index)
-    } {
-      offers.indices.iterator.filter { i =>
+    if (pendingRetries.nonEmpty) {
+      val idleOffers = mutable.LinkedHashSet.from(offers.indices.iterator.filter { i =>
         !isExecutorBusy(offers(i).executorId) &&
           !oomRetryReservation.exists(_.executorId == offers(i).executorId)
-      }.exists(i => launch(taskSet, index, i).isDefined)
+      })
+      for {
+        (taskSet, index) <- pendingRetries.iterator.takeWhile(_ => idleOffers.nonEmpty)
+        if !taskSet.oomRetryNeedsIsolation(index)
+      } {
+        idleOffers.find(i => launch(taskSet, index, i).isDefined).foreach(idleOffers.remove)
+      }
     }
 
     // Capture deadlines before refreshing and masking: if one expires during this pass, either
     // its reservation is released below or the captured delay still guarantees another offer.
-    val nextDelay = taskSets.iterator.flatMap { taskSet =>
-      taskSet.pendingOomRetries.iterator.map(taskSet.oomRetryIsolationTimeRemaining)
+    val nextDelay = pendingRetries.iterator.collect {
+      case (taskSet, index) if taskSet.isPendingOomRetry(index) =>
+        taskSet.oomRetryIsolationTimeRemaining(index)
     }.filter(_ > 0).reduceOption(_ min _)
 
     // A failed launch may have aborted its task set. Missing partial offers must not release an
@@ -823,9 +832,9 @@ private[spark] class TaskSchedulerImpl(
     val availableCpus = shuffledOffers.map(o => o.cores).toArray
     val resourceProfileIds = shuffledOffers.map(o => o.resourceProfileId).toArray
     val sortedTaskSets = rootPool.getSortedTaskSetQueue
-    val oomRetryTaskSets = if (oomRetryEnabled) {
-      scheduleOomRetries(
-        sortedTaskSets, shuffledOffers, availableCpus, availableResources, tasks)
+    val oomRetryTaskSets = if (oomRetryEnabled && !stopped) {
+      scheduleOomRetries(sortedTaskSets, shuffledOffers, isAllFreeResources,
+        availableCpus, availableResources, tasks)
     } else {
       Set.empty[TaskSetManager]
     }
@@ -1279,6 +1288,7 @@ private[spark] class TaskSchedulerImpl(
       }
     }
     synchronized {
+      stopped = true
       oomRetryWakeup.foreach(_.cancel(false))
       oomRetryWakeup = None
       setOomRetryReservation(None)
