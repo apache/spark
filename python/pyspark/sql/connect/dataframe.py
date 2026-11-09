@@ -1787,13 +1787,22 @@ class DataFrame(ParentDataFrame):
         if isinstance(probabilities, tuple):
             probabilities = list(probabilities)
         for p in probabilities:
-            if not isinstance(p, (float, int)) or p < 0 or p > 1:
+            if not isinstance(p, (float, int)):
                 raise PySparkTypeError(
                     errorClass="NOT_EXPECTED_TYPE",
                     messageParameters={
                         "arg_name": "probabilities",
                         "expected_type": "list[float, int]",
                         "arg_type": type(p).__name__,
+                    },
+                )
+            if p < 0 or p > 1:
+                raise PySparkValueError(
+                    errorClass="VALUE_NOT_BETWEEN",
+                    messageParameters={
+                        "arg_name": "probabilities",
+                        "min": "0",
+                        "max": "1",
                     },
                 )
 
