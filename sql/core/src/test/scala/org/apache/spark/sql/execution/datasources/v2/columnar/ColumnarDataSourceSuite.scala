@@ -37,7 +37,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Contains, PredicateHelper, Rand, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.connector.catalog.{Table, TableCapability, TableProvider}
-import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, LiteralValue, Transform}
+import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.connector.read.streaming.{ReadLimit, SupportsAdmissionControl}
 import org.apache.spark.sql.connector.write.{DataWriter, PhysicalWriteInfoImpl, WriterCommitMessage}
@@ -51,7 +52,7 @@ import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, ReusedArro
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.sql.util.{ArrowUtils, CaseInsensitiveStringMap}
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 import org.apache.spark.unsafe.types.UTF8String
@@ -844,6 +845,30 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession
     assert(failing.prunes.get() == 1)
   }
 
+  test("push the predicates of a scan once, to a data source that takes domains") {
+    val predicate =
+      new Predicate(">", Array[V2Expression](FieldReference("id"), LiteralValue(1L, LongType)))
+    val dataSource = new TestRangeDataSource(options("end" -> "4"))
+    val builder = new ColumnarScanBuilder(format, dataSource.schema(), () => dataSource)
+    // Spark evaluates all the predicates after the scan.
+    assert(builder.pushPredicates(Array(predicate)).toSeq == Seq(predicate))
+    assert(builder.pushedPredicates().toSeq == Seq(predicate))
+    assert(dataSource.batchPlanners.get() == 1)
+    // The header promises that push_domains is called at most once for a reader.
+    val e = intercept[SparkException](builder.pushPredicates(Array(predicate)))
+    assert(e.getMessage.contains("pushed again"))
+    assert(builder.pushedPredicates().toSeq == Seq(predicate))
+
+    // A data source that takes no domain gets no planner for them.
+    val noDomains = new TestRangeDataSource(options("end" -> "4", "domains" -> "false"))
+    val noDomainsBuilder = new ColumnarScanBuilder(format, noDomains.schema(), () => noDomains)
+    assert(noDomainsBuilder.pushPredicates(Array(predicate)).toSeq == Seq(predicate))
+    assert(noDomainsBuilder.pushedPredicates().isEmpty)
+    assert(noDomains.batchPlanners.get() == 0)
+    assert(noDomainsBuilder.build().toBatch.planInputPartitions().length == 2)
+    assert(noDomains.batchPlanners.get() == 1)
+  }
+
   test("do not abort a write whose commit succeeded") {
     val dataSource = new TestRangeDataSource(options("table" -> "abort_after_commit"))
     val schema = dataSource.schema()
@@ -1078,6 +1103,9 @@ class TestRangeDataSource(options: CaseInsensitiveStringMap) extends ColumnarDat
   val prunes = new AtomicInteger()
 
   override def schema(): StructType = StructType.fromDDL("id BIGINT, name STRING")
+
+  // The planners take the domain of id, unless the option "domains" is false.
+  override def supportsDomainPushdown(): Boolean = options.getBoolean("domains", true)
 
   // The names of the capabilities, such as "BATCH_READ, BATCH_WRITE", or all of them by default.
   override def capabilities(): util.Set[TableCapability] = {

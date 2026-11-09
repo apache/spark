@@ -112,6 +112,9 @@ class ColumnarScanBuilder(
   // batch, and its data source may not support batch scans at all.
   private var planner: ColumnarBatchPlanner = _
 
+  // Whether the predicates were pushed, which the scan does at most once, as the header promises
+  // for push_domains.
+  private var predicatesPushed = false
   private var pushed: Array[Predicate] = Array.empty
   private var usedDomains: Seq[ColumnDomain] = Nil
   private var pushedLimit: Option[Int] = None
@@ -130,7 +133,15 @@ class ColumnarScanBuilder(
   }
 
   override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
-    if (SQLConf.get.nativeDataSourceFilterPushdownEnabled) {
+    // Spark pushes all the predicates at once, since the builder does not support iterative
+    // pushdown.
+    if (predicatesPushed) {
+      throw SparkException.internalError("The predicates of a scan were pushed again.")
+    }
+    predicatesPushed = true
+    // A data source that takes no domain gets no planner for them: Spark would create its reader
+    // while it optimizes the query, and derive domains only to drop them.
+    if (SQLConf.get.nativeDataSourceFilterPushdownEnabled && dataSource.supportsDomainPushdown()) {
       val derived = ColumnDomains.derive(predicates.toSeq, schema)
       if (derived.domains.nonEmpty) {
         val used = batchPlanner.pushDomains(derived.domains)
@@ -139,7 +150,7 @@ class ColumnarScanBuilder(
             s"Expected ${derived.domains.length} answers for the domains, but got ${used.length}.")
         }
         usedDomains = derived.domains.zip(used).collect { case (domain, true) => domain }
-        pushed = derived.pushedPredicates(predicates, used)
+        pushed = derived.pushedPredicates(used)
       }
     }
     // Spark evaluates all the predicates again after reading: a data source only skips data with

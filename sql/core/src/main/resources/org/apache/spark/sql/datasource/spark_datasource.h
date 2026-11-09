@@ -398,9 +398,12 @@ typedef struct SparkDsDomain {
   /* The size of this struct in the header that Spark was built with, as in SparkDsHost. */
   int64_t size;
   /*
-   * The column, by the path_length indices of its fields: the index of the column in the schema to
-   * read, the one that create_reader got, and then the index of the field in each struct, for a
-   * field of a struct. {2, 0} is the first field of the third column.
+   * The column, by the path_length indices of its fields: the index of the column in the schema
+   * that create_reader got, and then the index of the field in each struct, for a field of a
+   * struct. {2, 0} is the first field of the third column. Spark prunes the columns after it
+   * pushes the domains down, so the schema to read that read gets in SparkDsReadInfo may have
+   * fewer columns, at other indices: a library that applies a domain in read must map its column
+   * to that schema.
    */
   const int32_t* path;
   int64_t path_length;
@@ -420,8 +423,8 @@ typedef struct SparkDsDomain {
    * The ranges of the other values in the domain, or NULL if they are all in it. Otherwise, a
    * struct array with one row for each range, sorted, and with ranges that do not overlap, whose
    * fields are:
-   * - low and high: the bounds of the range, of the Arrow type of the column in the schema to
-   *   read. A null bound is unbounded: the range has no lower or no upper bound;
+   * - low and high: the bounds of the range, of the Arrow type of the column in the schema that
+   *   create_reader got. A null bound is unbounded: the range has no lower or no upper bound;
    * - low_inclusive and high_inclusive, booleans that are not nullable: whether the bound is in the
    *   range. They are false for a null bound.
    * A single value is a range whose bounds are equal and inclusive. An array without rows means

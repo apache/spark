@@ -106,6 +106,11 @@ class NativeDataSource(
     capabilities
   }
 
+  // A library built against a header without push_domains has a table that ends before it: Spark
+  // then neither derives the domains of a scan nor creates its reader to push them down.
+  override def supportsDomainPushdown(): Boolean =
+    NativeLibraries.get(location).hasFunction(NativeLibrary.Function.PUSH_DOMAINS)
+
   // The readers and the writers export the schemas with the time zone of the session on the
   // driver, also on the executors, where they pass the same schemas to the library again. A data
   // source is created for each scan and each write, so it is read once for each.
@@ -281,15 +286,11 @@ class NativeBatchPlanner(
 
   private var readSchema: StructType = schema
 
+  // Only called when the library has push_domains, see NativeDataSource.supportsDomainPushdown.
   override def pushDomains(domains: Seq[ColumnDomain]): Seq[Boolean] = {
-    // The table of a library built against a header without push_domains ends before it.
-    if (!library.hasFunction(NativeLibrary.Function.PUSH_DOMAINS)) {
-      domains.map(_ => false)
-    } else {
-      call(name, "plan a scan of") {
-        NativeArrow.exportDomains(domains, timeZoneId) { exported =>
-          library.pushDomains(handle.get, exported.toArray).toSeq
-        }
+    call(name, "plan a scan of") {
+      NativeArrow.exportDomains(domains, timeZoneId) { exported =>
+        library.pushDomains(handle.get, exported.toArray).toSeq
       }
     }
   }
@@ -1534,14 +1535,15 @@ object NativeArrow {
 
   /**
    * Exports the domains, with their ranges as struct arrays whose fields are low and high, of the
-   * Arrow type of the column in the exported schema to read, and low_inclusive and high_inclusive,
-   * and calls `f` with them.
+   * Arrow type of the column in the schema that the reader got from create_reader, and
+   * low_inclusive and high_inclusive, and calls `f` with them.
    *
    * @param timeZoneId the time zone of the timestamps of the schema that the reader got
    */
   def exportDomains[T](domains: Seq[ColumnDomain], timeZoneId: String)(
       f: Seq[NativeLibrary.Domain] => T): T = {
-    val exported = ArrayBuffer.empty[(VectorSchemaRoot, ArrowArray, ArrowSchema)]
+    // Frees what was allocated, in the reverse order, also when a later allocation fails.
+    val cleanups = ArrayBuffer.empty[() => Unit]
     try {
       val structs = domains.map { domain =>
         val (ranges, rangesSchema) = domain.ranges match {
@@ -1556,9 +1558,12 @@ object NativeArrow {
               ArrowUtils.toArrowSchema(
                 schema, timeZoneId, errorOnDuplicatedFieldNames = true, largeVarTypes = false),
               ArrowUtils.rootAllocator)
+            cleanups += (() => root.close())
+            // Releasing the ranges does nothing if the library moved them to take ownership.
             val array = ArrowArray.allocateNew(ArrowUtils.rootAllocator)
+            cleanups += { () => array.release(); array.close() }
             val arrowSchema = ArrowSchema.allocateNew(ArrowUtils.rootAllocator)
-            exported += ((root, array, arrowSchema))
+            cleanups += { () => arrowSchema.release(); arrowSchema.close() }
             val writer = ArrowWriter.create(root)
             values.foreach { range =>
               writer.write(InternalRow(range.low.orNull, range.high.orNull, range.lowInclusive,
@@ -1573,14 +1578,7 @@ object NativeArrow {
       }
       f(structs)
     } finally {
-      exported.foreach { case (root, array, arrowSchema) =>
-        // Releases the ranges unless the library moved them to take ownership.
-        array.release()
-        array.close()
-        arrowSchema.release()
-        arrowSchema.close()
-        root.close()
-      }
+      cleanups.reverseIterator.foreach(cleanup => cleanup())
     }
   }
 

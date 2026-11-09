@@ -203,8 +203,8 @@ class ColumnDomainsSuite extends QueryTest with SharedSparkSession with Predicat
     assert(domains("st.y IS NULL OR st.y = 'a'").isEmpty)
     assert(domains("st.y IS NULL AND st.y = 'a'") == Seq("st.y: NONE"))
     val nullable = predicates("st.y IS NULL", schema) ++ predicates("id > 1", schema)
-    assert(ColumnDomains.derive(nullable, schema).pushedPredicates(nullable.toArray, Seq(true))
-      .toSeq == nullable.drop(1))
+    assert(ColumnDomains.derive(nullable, schema).pushedPredicates(Seq(true)).toSeq ==
+      nullable.drop(1))
     // Arrays, maps and structs have other rules, such as nulls equal to each other inside them.
     assert(domains("arr IS NULL").isEmpty)
     assert(domains("st IS NOT NULL").isEmpty)
@@ -234,8 +234,29 @@ class ColumnDomainsSuite extends QueryTest with SharedSparkSession with Predicat
       predicates("id + 1 > 0", schema) ++ predicates("id < 9 OR i = 1", schema)
     val derived = ColumnDomains.derive(pushed, schema)
     assert(derived.domains.map(_.toString) == Seq("id: (5L, +inf)", "i: (-inf, 3)"))
-    assert(derived.pushedPredicates(pushed.toArray, Seq(true, false)).toSeq == pushed.take(1))
-    assert(derived.pushedPredicates(pushed.toArray, Seq(true, true)).toSeq == pushed.take(2))
+    assert(derived.pushedPredicates(Seq(true, false)).toSeq == pushed.take(1))
+    assert(derived.pushedPredicates(Seq(true, true)).toSeq == pushed.take(2))
+  }
+
+  test("an AND or an OR whose children are not two predicates constrains no column") {
+    // Spark never translates such a predicate, but the public API can build one, which then gets
+    // no domain, rather than a StackOverflowError.
+    val id = FieldReference("id")
+    val above = new Predicate(">", Array[V2Expression](id, LiteralValue(5L, LongType)))
+    Seq("AND", "OR").foreach { name =>
+      val malformed = new Predicate(name, Array[V2Expression](id, FieldReference("i")))
+      val negated = new Predicate("NOT", Array[V2Expression](malformed))
+      val single = new Predicate(name, Array[V2Expression](above))
+      Seq(malformed, negated, single).foreach { predicate =>
+        assert(ColumnDomains.derive(Seq(predicate), schema).domains.isEmpty, predicate)
+      }
+      // The other predicates of a chain keep their domains.
+      val and = new Predicate("AND", Array[V2Expression](above, negated))
+      assert(ColumnDomains.derive(Seq(and), schema).domains.map(_.toString) ==
+        Seq("id: (5L, +inf)"))
+      val or = new Predicate("OR", Array[V2Expression](above, malformed))
+      assert(ColumnDomains.derive(Seq(or), schema).domains.isEmpty)
+    }
   }
 
   /**
@@ -404,6 +425,36 @@ class ColumnDomainsSuite extends QueryTest with SharedSparkSession with Predicat
     }
     failAfter(20.seconds) {
       assert(ColumnDomains.derive(in +: others, schema).domains.length == 6)
+    }
+  }
+
+  test("the domains of long chains of ANDs") {
+    // Data Source V2 pushes one predicate for each conjunct of x <> v, which the DataFrame API
+    // builds with reduce(_ && _), and one chain for those under an OR, or under NOT as a chain of
+    // ORs. Their gaps are intersected as a balanced tree: it takes a fraction of a second here,
+    // and far longer when each conjunct is intersected with the ranges of the ones before it.
+    val id = FieldReference("id")
+    val values = (0L until 50000L).map(LiteralValue(_, LongType))
+    val conjuncts = values.map(value => new Predicate("<>", Array[V2Expression](id, value)))
+    val chain = conjuncts.reduce[Predicate] { (left, right) =>
+      new Predicate("AND", Array[V2Expression](left, right))
+    }
+    val notOrs = new Predicate("NOT", Array[V2Expression](values.map { value =>
+      new Predicate("=", Array[V2Expression](id, value))
+    }.reduce[Predicate]((left, right) => new Predicate("OR", Array[V2Expression](left, right)))))
+    val notIn = new Predicate("NOT",
+      Array[V2Expression](new Predicate("IN", (id +: values).toArray[V2Expression])))
+    failAfter(20.seconds) {
+      val gaps = ColumnDomains.derive(Seq(notIn), schema).domains
+      assert(gaps.map(_.ranges.get.length) == Seq(50001))
+      assert(ColumnDomains.derive(conjuncts, schema).domains == gaps)
+      assert(ColumnDomains.derive(Seq(chain), schema).domains == gaps)
+      assert(ColumnDomains.derive(Seq(notOrs), schema).domains == gaps)
+      // A chain of ANDs under an OR is combined the same way.
+      val other = new Predicate("=", Array[V2Expression](id, LiteralValue(-1L, LongType)))
+      val or = new Predicate("OR", Array[V2Expression](chain, other))
+      assert(ColumnDomains.derive(Seq(or), schema).domains.map(_.ranges.get.length) ==
+        Seq(50001))
     }
   }
 

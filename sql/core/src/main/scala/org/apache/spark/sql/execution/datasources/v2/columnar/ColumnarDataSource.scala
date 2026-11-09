@@ -45,6 +45,14 @@ trait ColumnarDataSource {
   def capabilities(): util.Set[TableCapability] =
     util.EnumSet.of(BATCH_READ, BATCH_WRITE, MICRO_BATCH_READ, STREAMING_WRITE, TRUNCATE)
 
+  /**
+   * Returns whether the batch planners of this data source use the domains of the columns that
+   * the filters of a query constrain, see [[ColumnarBatchPlanner.pushDomains]]. Spark derives the
+   * domains, and creates the planner of a scan to push them down to, only when it is true: by
+   * default, a data source takes no domain.
+   */
+  def supportsDomainPushdown(): Boolean = false
+
   /** Returns the planner of a batch scan of the given schema. */
   def batchPlanner(schema: StructType): ColumnarBatchPlanner
 
@@ -90,7 +98,8 @@ trait ColumnarBatchPlanner {
   /**
    * Returns whether the reader uses each domain to skip data: the domains of the columns that the
    * filters of the query constrain, at least one. Spark evaluates the filters after reading
-   * anyway, and shows the filters of the used domains as pushed in the plan.
+   * anyway, and shows the filters of the used domains as pushed in the plan. Spark only calls it
+   * for a data source whose [[ColumnarDataSource.supportsDomainPushdown]] is true.
    */
   def pushDomains(domains: Seq[ColumnDomain]): Seq[Boolean] = domains.map(_ => false)
 

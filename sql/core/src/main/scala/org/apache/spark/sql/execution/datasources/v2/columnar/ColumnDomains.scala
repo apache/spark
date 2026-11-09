@@ -21,6 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.optimizer.NormalizeFloatingNumbers
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.catalyst.util.quoteIfNeeded
 import org.apache.spark.sql.connector.expressions.{Expression, LiteralValue, NamedReference}
@@ -35,8 +36,10 @@ import org.apache.spark.unsafe.types.UTF8String
  * show that it has no value in the domain of a column, but never a row whose values are in their
  * domains: Spark evaluates the filters after reading anyway.
  *
- * @param path the index of the column in the read schema, and then the index of the field in each
- *             struct, for a field of a struct
+ * @param path the index of the column in the schema that the batch planner got from
+ *             [[ColumnarDataSource.batchPlanner]], which has all the columns of the scan, rather
+ *             than in its read schema, which may only have some of them, and then the index of the
+ *             field in each struct, for a field of a struct
  * @param name the names of the column and of its fields
  * @param ranges sorted ranges, which neither overlap nor touch, of the values other than null and
  *               NaN, in the internal representation of Spark. None if the column can have any of
@@ -50,7 +53,7 @@ case class ColumnDomain(
     nanAllowed: Boolean,
     ranges: Option[Seq[ValueRange]]) {
 
-  private def ordering: Ordering[Any] = PhysicalDataType.ordering(dataType)
+  @transient private lazy val ordering: Ordering[Any] = PhysicalDataType.ordering(dataType)
 
   /** Whether the domain has the value, in the internal representation of Spark. */
   def contains(value: Any): Boolean = value match {
@@ -99,23 +102,25 @@ case class ValueRange(low: Option[Any], lowInclusive: Boolean, high: Option[Any]
 }
 
 /**
- * The domains that a query passes to a data source, and the predicates that each of them comes
- * from.
+ * The domains that a query passes to a data source, and the predicates that they come from.
  *
  * @param domains the domains, at most one for each column, sorted by path
- * @param columns the paths of the columns that each predicate constrains
+ * @param predicates the predicates that the domains were derived from, in their order, each with
+ *                   the paths of the columns that it constrains
  */
-case class ColumnDomains(domains: Seq[ColumnDomain], columns: Seq[Set[Seq[Int]]]) {
+case class ColumnDomains(
+    domains: Seq[ColumnDomain],
+    predicates: Seq[(Predicate, Set[Seq[Int]])]) {
 
   /**
    * Returns the predicates that constrain only the columns whose domains are used, given whether
    * the data source uses each domain.
    */
-  def pushedPredicates(predicates: Array[Predicate], used: Seq[Boolean]): Array[Predicate] = {
+  def pushedPredicates(used: Seq[Boolean]): Array[Predicate] = {
     val usedPaths = domains.zip(used).collect { case (domain, true) => domain.path }.toSet
-    predicates.zip(columns).collect {
+    predicates.collect {
       case (predicate, paths) if paths.nonEmpty && paths.subsetOf(usedPaths) => predicate
-    }
+    }.toArray
   }
 }
 
@@ -156,7 +161,7 @@ object ColumnDomains {
   def derive(predicates: Seq[Predicate], schema: StructType): ColumnDomains = {
     val constraints = predicates.map(constraint(_, negated = false, schema))
     val columns = constraints.map(_.map(_.keySet.map(_.path)).getOrElse(Set.empty[Seq[Int]]))
-    val domains = constraints.foldLeft(All)(and) match {
+    val domains = andAll(constraints) match {
       case Some(values) =>
         values.toSeq.collect {
           // A field of a struct is null in the rows where the struct, or a struct that contains it,
@@ -169,53 +174,59 @@ object ColumnDomains {
       // A predicate that is always false, which Spark usually removes before it scans the data.
       case None => Nil
     }
-    ColumnDomains(domains, columns)
+    ColumnDomains(domains, predicates.zip(columns))
   }
 
   // The rows for which the predicate is true, or false if negated: NOT moves to the leaves.
   private def constraint(predicate: Predicate, negated: Boolean, schema: StructType): Constraint = {
-    def child(i: Int): Option[Predicate] = predicate.children().lift(i).collect {
-      case p: Predicate => p
-    }
-    def both(combine: (Constraint, Constraint) => Constraint, negated: Boolean): Constraint = {
-      (child(0), child(1)) match {
-        case (Some(left), Some(right)) =>
-          combine(constraint(left, negated, schema), constraint(right, negated, schema))
+    predicate.name() match {
+      // An AND or an OR whose children are not two predicates, which Spark never translates but
+      // the public API can build, constrains no column.
+      case "AND" | "OR" if predicateChildren(predicate).length != 2 => All
+      // A conjunction, an AND or a negated OR, or a disjunction, an OR or a negated AND. The
+      // operands of a chain of them, such as one that the DataFrame API builds with reduce(_ && _)
+      // or reduce(_ || _), are combined at once rather than two at a time.
+      case "AND" | "OR" =>
+        val conjunction = (predicate.name() == "AND") != negated
+        val constraints = operands(predicate, negated, conjunction).map {
+          case (operand, operandNegated) => constraint(operand, operandNegated, schema)
+        }
+        if (conjunction) andAll(constraints) else orAll(constraints)
+      case "NOT" => predicateChildren(predicate) match {
+        case Seq(child) => constraint(child, !negated, schema)
         case _ => All
       }
-    }
-    predicate.name() match {
-      // The disjuncts of a chain of ORs, such as one that the DataFrame API builds with
-      // reduce(_ || _), are merged at once rather than two at a time.
-      case "AND" if negated => orAll(disjuncts(predicate, negated).map {
-        case (disjunct, disjunctNegated) => constraint(disjunct, disjunctNegated, schema)
-      })
-      case "OR" if !negated => orAll(disjuncts(predicate, negated).map {
-        case (disjunct, disjunctNegated) => constraint(disjunct, disjunctNegated, schema)
-      })
-      case "AND" => both(and, negated = false)
-      case "OR" => both(and, negated = true)
-      case "NOT" => child(0).map(constraint(_, !negated, schema)).getOrElse(All)
       case "ALWAYS_TRUE" => if (negated) NoRow else All
       case "ALWAYS_FALSE" => if (negated) All else NoRow
       case _ => leaf(predicate, negated, schema).getOrElse(All)
     }
   }
 
+  // The children of a predicate, if they are all predicates. Empty otherwise.
+  private def predicateChildren(predicate: Predicate): Seq[Predicate] = {
+    val children = predicate.children().toSeq
+    if (children.forall(_.isInstanceOf[Predicate])) children.map(_.asInstanceOf[Predicate])
+    else Nil
+  }
+
   /**
-   * Returns the disjuncts of a predicate that is a disjunction, an OR or a negated AND, with the
-   * disjunctions that it nests, under NOT too, as the predicates and whether they are negated, in
-   * their order. It walks the predicate with a stack of its own, since a chain of ORs can be deeper
-   * than the stack of the thread.
+   * Returns the operands of a conjunction, an AND or a negated OR, or of a disjunction, an OR or a
+   * negated AND, with those of the conjunctions or disjunctions that it nests, under NOT too, as
+   * the predicates and whether they are negated, in their order. It walks the predicate with a
+   * stack of its own, since a chain can be deeper than the stack of the thread.
    */
-  private def disjuncts(predicate: Predicate, negated: Boolean): Seq[(Predicate, Boolean)] = {
+  private def operands(
+      predicate: Predicate,
+      negated: Boolean,
+      conjunction: Boolean): Seq[(Predicate, Boolean)] = {
     val result = mutable.ArrayBuffer.empty[(Predicate, Boolean)]
     val pending = mutable.Stack(predicate -> negated)
     while (pending.nonEmpty) {
       val (next, isNegated) = pending.pop()
-      val children = next.children().toSeq.collect { case p: Predicate => p }
+      val children = predicateChildren(next)
       next.name() match {
-        case "OR" | "AND" if children.length == 2 && (next.name() == "OR") != isNegated =>
+        case "AND" | "OR"
+            if children.length == 2 && ((next.name() == "AND") != isNegated) == conjunction =>
           // The left child is visited first.
           pending.push(children(1) -> isNegated)
           pending.push(children(0) -> isNegated)
@@ -415,6 +426,24 @@ object ColumnDomains {
     case _ => NoRow
   }
 
+  /**
+   * Intersects the constraints as a balanced tree, so that the ranges of each constraint go
+   * through about log N intersections. Intersecting them one after the other would sweep the
+   * ranges accumulated so far for each constraint, which takes quadratic time for a chain of
+   * `x <> v`, whose ranges grow with each conjunct.
+   */
+  private def andAll(constraints: Seq[Constraint]): Constraint = {
+    val all = constraints.toIndexedSeq
+    def combine(from: Int, until: Int): Constraint = until - from match {
+      case 0 => All
+      case 1 => all(from)
+      case n =>
+        val middle = from + n / 2
+        and(combine(from, middle), combine(middle, until))
+    }
+    combine(0, all.length)
+  }
+
   // A column that only some of the disjuncts constrain can have any value in the rows of the
   // others, so only the columns that all of them constrain are constrained. A disjunct that matches
   // no row adds no row.
@@ -570,10 +599,10 @@ object ColumnDomains {
     case _ => false
   }
 
-  // -0.0 is equal to 0.0, and a data source may order it before 0.0.
+  // -0.0 is equal to 0.0, and a data source may order it before 0.0. NaN never gets here.
   private def normalize(value: Any): Any = value match {
-    case f: Float if f == 0.0f => 0.0f
-    case d: Double if d == 0.0d => 0.0d
+    case f: Float => NormalizeFloatingNumbers.FLOAT_NORMALIZER(f)
+    case d: Double => NormalizeFloatingNumbers.DOUBLE_NORMALIZER(d)
     case other => other
   }
 }

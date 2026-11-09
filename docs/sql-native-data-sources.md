@@ -244,10 +244,12 @@ Spark does not pass the filters of a query to a library as expressions, which a 
 to evaluate with the exact semantics of Spark SQL. It passes the *domains* of the columns that the
 filters constrain instead: for each column, the values that it can have in the rows that match,
 which a library compares with the statistics of its data to skip what cannot match, such as files,
-row groups or blocks. With `push_domains`, a reader gets a `SparkDsDomain` for each column, with:
+row groups or blocks. With `push_domains`, a reader gets a `SparkDsDomain` for each column that the
+filters constrain, with:
 
-- `path`: the index of the column in the schema to read, and then the index of the field in each
-  struct, for a field of a struct;
+- `path`: the index of the column in the schema that `create_reader` got, and then the index of
+  the field in each struct, for a field of a struct. Spark prunes the columns after it pushes the
+  domains down, so the schema to read that `read` gets may have fewer columns, at other indices;
 - `null_allowed` and `nan_allowed`: whether null and NaN are in the domain;
 - `ranges`: the ranges of the other values in the domain, as a struct array whose fields are
   `low` and `high`, of the Arrow type of the column, with a null bound for no bound, and

@@ -582,6 +582,13 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     // push_domains is set in the table of the library, but after its end.
     assert(!file.exists())
     assert(scan(df).getMetaData()("PushedFilters") == "[]")
+    // Nor does Spark create a reader to push them down while it optimizes the query: a reader
+    // that the library cannot create only fails the read.
+    val noReader = session.read.format("nd_native_range")
+      .options(Map("end" -> "20", "zero" -> "create_reader")).load().filter("id > 15")
+    noReader.queryExecution.optimizedPlan
+    val e = intercept[Exception](noReader.collect())
+    assert(Utils.exceptionString(e).contains("create_reader returned a NULL handle."))
   }
 
   nativeTest("read maps whose entry fields have other names") {
