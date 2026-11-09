@@ -81,7 +81,6 @@ ignored_file_patterns = (
     # GitHub housekeeping and repo automation.
     "/.github/workflows/build_infra_images_cache.yml",
     "/.github/workflows/images/",
-    "/.github/workflows/notify_test_workflow.yml",
     "/.github/workflows/stale.yml",
     "/.github/workflows/test_report.yml",
     "/.github/workflows/update_build_status.yml",
@@ -122,8 +121,6 @@ ignored_file_patterns = (
     "/dev/create_jira_and_branch.py",
     "/dev/create_spark_jira.py",
     "/dev/create-release/",
-    "/dev/free_disk_space_container",
-    "/dev/free_disk_space",
     "/dev/generate_srs_registry.py",
     "/dev/make-distribution.sh",
     "/dev/merge_spark_pr.py",
@@ -136,12 +133,8 @@ ignored_file_patterns = (
     "/dev/spark_merge_footer.py",
     "/dev/spark-test-image/connect-gen-protos/",
     "/sql/create-docs.sh",
-    # Cluster admin scripts, CLI wrappers, and other user executables.
-    # These scripts are currently not covered by any existing test suite
-    # invoked from here.
+    # CLI wrappers and other user executables.
     "/bin/beeline*",
-    "/bin/docker-image-tool.sh",
-    "/bin/run-example*",
     "/bin/spark-connect-shell",
     "/bin/spark-pipelines",
     "/bin/sparkR*",
