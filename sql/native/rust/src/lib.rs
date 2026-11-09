@@ -622,8 +622,7 @@ pub enum WriteMode {
 ///
 /// # Lifecycle
 ///
-/// Spark calls the methods in this order, so implementations need not track their own
-/// phase or guard against repeated calls:
+/// Spark guarantees the following callback order:
 ///
 /// - `new_writer_factory` runs once, right after [`DataSource::new_write`], before any task
 ///   opens a writer. When it fails, the SDK cannot serialize its factory, or Spark cannot
@@ -638,6 +637,13 @@ pub enum WriteMode {
 ///   thread of that call, or, for a write that Spark neither commits nor aborts, when Spark
 ///   closes the writer, which may be late and on another thread.
 /// - A panic in any method is reported as that method's failure.
+///
+/// These guarantees do not determine the outcome of a remote transaction. A destination
+/// may publish the write even when `commit` returns an error, for example if its
+/// acknowledgement is lost. Use a durable operation identity to check the destination's
+/// outcome and make commit and cleanup idempotent. `abort` and Drop must preserve published
+/// output, including output whose commit was not acknowledged. If the outcome cannot be
+/// resolved, leave potentially published data intact for later recovery.
 pub trait BatchWrite: Send + 'static {
     /// The configuration from which each task attempt opens its writer.
     type Factory: DataWriterFactory<Message = Self::Message>;
@@ -743,8 +749,7 @@ impl<'task> WriterContext<'task> {
 ///
 /// # Lifecycle
 ///
-/// Spark calls the methods in this order, so implementations need not track their own
-/// phase or guard against repeated calls:
+/// Spark guarantees the following callback order:
 ///
 /// - `write` runs zero or more times, before `commit` or `abort`, and never after a
 ///   call has failed.
@@ -831,6 +836,11 @@ impl StreamingWriteInfo {
 /// only remove what the task writers of its own write wrote. The ID of the query,
 /// [`StreamingWriteInfo::query_id`], and the epoch ID identify the output of a micro-batch,
 /// also when other queries write to the same destination.
+///
+/// The remote transaction contract of [`BatchWrite`] applies here too: `abort` and Drop
+/// must preserve an epoch published by the current write if its commit acknowledgement
+/// was lost. Record the query and epoch identity atomically with publication so a restarted
+/// query can determine whether that epoch is already committed.
 pub trait StreamingWrite: Send + 'static {
     /// The configuration from which each task attempt opens its writer.
     type Factory: DataWriterFactory<Message = Self::Message>;

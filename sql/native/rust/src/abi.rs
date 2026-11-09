@@ -315,8 +315,8 @@ pub struct SparkDsLibrary {
     >,
 }
 
-// The sizes and field offsets of the header on 64-bit targets, so that a binding that does
-// not match it fails to compile wherever the SDK builds, including in each library.
+// The known sizes and field offsets on 64-bit targets, checked wherever the SDK builds.
+// Tests also compare the actual Rust layouts with the current C header, using this field list.
 macro_rules! layout {
     ($($name:ident: $size:literal { $($field:ident: $offset:literal),* $(,)? })*) => {
         #[cfg(target_pointer_width = "64")]
@@ -326,6 +326,38 @@ macro_rules! layout {
                 $(assert!(offset_of!($name, $field) == $offset);)*
             )*
         };
+
+        #[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+        fn c_layout_assertions() -> String {
+            use std::fmt::Write;
+
+            let mut source =
+                String::from("#include <stddef.h>\n#include \"spark_datasource.h\"\n");
+            $(
+                writeln!(
+                    source,
+                    "_Static_assert(sizeof({0}) == {1}, \"{0}: size\");",
+                    stringify!($name),
+                    size_of::<$name>(),
+                ).unwrap();
+                writeln!(
+                    source,
+                    "_Static_assert(_Alignof({0}) == {1}, \"{0}: alignment\");",
+                    stringify!($name),
+                    std::mem::align_of::<$name>(),
+                ).unwrap();
+                $(
+                    writeln!(
+                        source,
+                        "_Static_assert(offsetof({0}, {1}) == {2}, \"{0}.{1}: offset\");",
+                        stringify!($name),
+                        stringify!($field),
+                        offset_of!($name, $field),
+                    ).unwrap();
+                )*
+            )*
+            source
+        }
     };
 }
 
@@ -668,6 +700,52 @@ pub unsafe fn export_schema(schema: &SchemaRef, output: *mut ArrowSchema) -> Res
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[test]
+    fn c_header_matches_rust_layout() -> Result<()> {
+        use std::fs;
+        use std::path::{Path, PathBuf};
+        use std::process::Command;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        struct TestDirectory(PathBuf);
+
+        impl Drop for TestDirectory {
+            fn drop(&mut self) {
+                let _ = fs::remove_dir_all(&self.0);
+            }
+        }
+
+        let unique = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
+        let directory = TestDirectory(std::env::temp_dir().join(format!(
+            "spark-native-layout-{}-{unique}",
+            std::process::id()
+        )));
+        fs::create_dir(&directory.0)?;
+        let source = directory.0.join("abi_layout.c");
+        fs::write(&source, c_layout_assertions())?;
+        let header = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../core/src/main/resources/org/apache/spark/sql/datasource");
+
+        // Match the C integration harness: CC can include a launcher or leading arguments.
+        let compiler = std::env::var("CC").unwrap_or_default();
+        let mut words = compiler.split_whitespace();
+        let compiled = Command::new(words.next().unwrap_or("cc"))
+            .args(words)
+            .args(["-std=c11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only"])
+            .arg("-I")
+            .arg(header)
+            .arg(source)
+            .output()?;
+        assert!(
+            compiled.status.success(),
+            "Rust ABI layouts do not match spark_datasource.h:\n{}\n{}",
+            String::from_utf8_lossy(&compiled.stdout),
+            String::from_utf8_lossy(&compiled.stderr),
+        );
+        Ok(())
+    }
 
     #[test]
     fn errors_and_panics_are_thread_local_c_strings() {

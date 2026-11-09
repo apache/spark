@@ -291,12 +291,24 @@ the same object available for abort.
 A task commit whose message cannot be serialized counts as failed, so `abort` can
 follow a `commit` that returned a message. Spark calls each method at most once, never
 writes after a failure or a commit, and never aborts a successful commit, as the header
-documents, so connectors do not need to track their own phase; the `# Lifecycle`
-sections of `BatchWrite` and `DataWriter` list the exact call-order guarantees. Drop only
-releases resources. The SDK drops a driver coordinator right after a successful `commit` or
-after `abort`, so the write of a micro-batch is dropped before Spark creates that of the next
-one. A write that Spark neither commits nor aborts, and a `ScanBuilder` that Spark never
-plans, are dropped when Spark closes their handles, which may be late and on another thread.
+documents; the `# Lifecycle` sections of `BatchWrite` and `DataWriter` list the exact
+call-order guarantees. Drop only releases resources. The SDK drops a driver coordinator right
+after a successful `commit` or after `abort`, so the write of a micro-batch is dropped before
+Spark creates that of the next one. A write that Spark neither commits nor aborts, and a
+`ScanBuilder` that Spark never plans, are dropped when Spark closes their handles, which may
+be late and on another thread.
+
+The callback order does not determine the outcome of a remote transaction. A destination
+can publish a write successfully but lose its acknowledgement, so `commit` returns an error
+and Spark calls `abort`. Connectors must track that outcome with a durable operation identity
+and make commit and cleanup idempotent. After an uncertain driver commit, `abort` and Drop
+must preserve data that the destination may have published. Use the operation identity to
+resolve the outcome before deleting that data; if it remains unknown, leave the data for
+later recovery. For streaming,
+record the query ID and epoch ID atomically with publication, so a restarted query can
+recognize a committed epoch even if the earlier write did not receive its acknowledgement.
+The file sink avoids this ambiguity during normal execution by doing no fallible work after
+its manifest rename; a remote sink needs its own outcome checks and recovery protocol.
 
 Stage data per task attempt and publish it only at driver commit. In particular,
 `WriteMode::Truncate` must leave existing data intact until that commit. Retries
@@ -452,6 +464,14 @@ cargo test --workspace --locked
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo fmt --all -- --check
 ```
+
+The SDK's layout test compiles C assertions against [Spark's header][header], comparing the
+size, alignment, and every field offset of all native ABI structs with the values computed
+by Rust, including write-side structs and the function table. It uses the same field list as
+the SDK's compile-time layout assertions, but compares actual layouts rather than copied
+numeric constants, so a header-only change can fail the test. The test runs on Linux and
+macOS, accepts `CC` with a launcher or leading arguments, and adds no build-time C dependency
+for connectors.
 
 The C harness loads the example dynamic library that `cargo test` builds. It compiles
 against [Spark's header][header], as a library that copies it would. It calls the actual
