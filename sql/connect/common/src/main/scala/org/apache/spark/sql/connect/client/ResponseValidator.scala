@@ -68,7 +68,8 @@ class ResponseValidator extends Logging {
       } catch {
         case e: StatusRuntimeException
             if e.getStatus.getCode == Status.Code.INTERNAL &&
-              e.getMessage.contains("[INVALID_HANDLE.SESSION_CHANGED]") =>
+              (e.getMessage.contains("[INVALID_HANDLE.SESSION_CHANGED]") ||
+                e.getMessage.contains("[INVALID_HANDLE.SESSION_CLOSED]")) =>
           isSessionActive.setRelease(false)
           throw e
       }

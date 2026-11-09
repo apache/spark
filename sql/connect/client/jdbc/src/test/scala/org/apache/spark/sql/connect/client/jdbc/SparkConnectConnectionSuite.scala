@@ -22,7 +22,9 @@ import java.sql.SQLException
 import org.apache.spark.sql.connect.client.jdbc.test.JdbcHelper
 import org.apache.spark.sql.connect.test.{ConnectFunSuite, RemoteSparkSession}
 
-class SparkConnectConnectionSuite extends ConnectFunSuite with RemoteSparkSession
+class SparkConnectConnectionSuite
+    extends ConnectFunSuite
+    with RemoteSparkSession
     with JdbcHelper {
 
   override def jdbcUrl: String = s"jdbc:sc://localhost:$serverPort"
@@ -43,6 +45,12 @@ class SparkConnectConnectionSuite extends ConnectFunSuite with RemoteSparkSessio
         assert(client.isSessionValid)
 
         assert(!connection.isValid(timeout))
+        assert(!client.isSessionValid)
+
+        val e = intercept[SQLException] {
+          connection.getSchema()
+        }
+        assert(e.getMessage == s"Spark Connect Session ${client.sessionId} is invalid.")
       }
     }
   }

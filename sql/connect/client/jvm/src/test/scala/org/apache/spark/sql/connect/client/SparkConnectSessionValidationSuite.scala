@@ -106,6 +106,11 @@ class SparkConnectSessionValidationSuite extends ConnectFunSuite with TimeLimits
         Status.INTERNAL.withDescription(
           "[INVALID_HANDLE.SESSION_CLOSED] Session was closed. SQLSTATE: 08003"))
       assert(!client.validateSession(5))
+      assert(!client.isSessionValid)
+
+      val callsAfterFailure = service.calls.get()
+      assert(!client.validateSession(5))
+      assert(service.calls.get() == callsAfterFailure)
     }
   }
 
