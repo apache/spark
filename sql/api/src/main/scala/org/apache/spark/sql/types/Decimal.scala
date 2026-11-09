@@ -398,8 +398,9 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     // First, update our lv if we can, or transfer over to using a BigDecimal
     if (dv.eq(null)) {
       if (scale < _scale) {
-        // Easier case: we just need to divide our scale down
-        val diff = _scale - scale
+        // Easier case: we just need to divide our scale down. The difference is computed in
+        // Long since it can exceed the Int range when negative scales are allowed.
+        val diff = _scale.toLong - scale
         // If diff is greater than max number of digits we store in Long, then
         // value becomes 0. Otherwise we calculate new value dividing by power of 10.
         // In both cases we apply rounding after that.
@@ -411,7 +412,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
             case _ => throw DataTypeErrors.unsupportedRoundingMode(roundMode)
           }
         } else {
-          val pow10diff = POW_10(diff)
+          val pow10diff = POW_10(diff.toInt)
           // % and / always round to 0
           val droppedDigits = lv % pow10diff
           lv /= pow10diff
@@ -442,11 +443,11 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       } else if (scale > _scale) {
         // We might be able to multiply lv by a power of 10 and not overflow, but if not,
         // switch to using a BigDecimal
-        val diff = scale - _scale
-        val p = POW_10(math.max(MAX_LONG_DIGITS - diff, 0))
+        val diff = scale.toLong - _scale
+        val p = POW_10(math.max(MAX_LONG_DIGITS - diff, 0L).toInt)
         if (diff <= MAX_LONG_DIGITS && lv > -p && lv < p) {
           // Multiplying lv by POW_10(diff) will still keep it below MAX_LONG_DIGITS
-          lv *= POW_10(diff)
+          lv *= POW_10(diff.toInt)
         } else {
           // Give up on using Longs; switch to BigDecimal, which we'll modify below
           dv = BigDecimal(lv, _scale)
@@ -458,6 +459,20 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     if (dv.ne(null)) {
       // We get here if either we started with a BigDecimal, or we switched to one because we would
       // have overflowed our Long; in either case we must rescale dv to the new scale.
+      if (math.abs(dv.scale.toLong - scale) > DecimalType.MAX_PRECISION) {
+        // setScale's cost grows with the scale change, and it throws once 10^change exceeds
+        // BigInteger's range (e.g. for 1e-2147483647) or the change exceeds the Int range.
+        // Skip it when the result is known.
+        val numIntegralDigits = dv.precision.toLong - dv.scale
+        if (dv.signum != 0 && numIntegralDigits > precision.toLong - scale) {
+          return false
+        }
+        if (numIntegralDigits < -scale.toLong - 1) {
+          // |dv| is below 0.01 ulp of the new scale, so the result depends only on the sign
+          // and the rounding mode. Round a value of the same sign and 0.01 ulp instead.
+          dv = BigDecimal(dv.signum, scale + 2)
+        }
+      }
       dv = dv.setScale(scale, roundMode)
       if (dv.precision > precision) {
         return false
@@ -543,17 +558,56 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def %(that: Decimal): Decimal =
     if (that.isZero) null
-    else Decimal(toJavaBigDecimal.remainder(that.toJavaBigDecimal, MATH_CONTEXT))
+    else {
+      val (a, b) = (toJavaBigDecimal, that.toJavaBigDecimal)
+      val r =
+        try a.remainder(b, MATH_CONTEXT)
+        catch {
+          case e: ArithmeticException =>
+            a.remainder(b, integralQuotientContext(a, b, e))
+        }
+      Decimal(r)
+    }
 
   def quot(that: Decimal): Decimal =
     if (that.isZero) null
-    else Decimal(toJavaBigDecimal.divideToIntegralValue(that.toJavaBigDecimal, MATH_CONTEXT))
+    else {
+      val (a, b) = (toJavaBigDecimal, that.toJavaBigDecimal)
+      val q =
+        try a.divideToIntegralValue(b, MATH_CONTEXT)
+        catch {
+          case e: ArithmeticException =>
+            a.divideToIntegralValue(b, integralQuotientContext(a, b, e))
+        }
+      Decimal(q)
+    }
 
   def remainder(that: Decimal): Decimal = this % that
 
+  // With `MATH_CONTEXT`, `BigDecimal.remainder` and `divideToIntegralValue` raise "Division
+  // impossible" when the integral part of the quotient has more than 39 digits, e.g. 41 digits
+  // for DECIMAL(38, 0) and DECIMAL(3, 3). `%` and `quot` then retry with the context returned
+  // here, which holds the integral part of `a / b`: |a| < 10^(a.precision - a.scale) and
+  // |b| >= 10^(b.precision - b.scale - 1). They try `MATH_CONTEXT` first, because a wider
+  // context computes more digits, which can be very many with negative scales. `e` is rethrown
+  // when the bound is within `MATH_CONTEXT` or beyond the Int range.
+  // This is a private method of the class, not of `object Decimal`: the class calling a private
+  // member of the object makes it public in `Decimal$` and changes the computed
+  // serialVersionUID of `Decimal$`, which `UdfSerialization.auditedTransitions` pins.
+  private def integralQuotientContext(
+      a: JavaBigDecimal,
+      b: JavaBigDecimal,
+      e: ArithmeticException): MathContext = {
+    val digits = (a.precision.toLong - a.scale) - (b.precision.toLong - b.scale) + 1
+    if (digits <= MATH_CONTEXT.getPrecision || digits > Int.MaxValue) throw e
+    new MathContext(digits.toInt, RoundingMode.DOWN)
+  }
+
   def unary_- : Decimal = {
     if (decimalVal.ne(null)) {
-      Decimal(-decimalVal, precision, scale)
+      // Negate the Java value: Scala 2.13's `BigDecimal.unary_-` rounds to its math context,
+      // 34 digits by default, which loses digits of a value of 35 to 38 digits (SPARK-45438).
+      Decimal(decimalVal.bigDecimal.negate(), precision, scale)
     } else {
       Decimal(-longVal, precision, scale)
     }
@@ -635,8 +689,9 @@ object Decimal {
     }
   }
 
-  private def numDigitsInIntegralPart(bigDecimal: JavaBigDecimal): Int =
-    bigDecimal.precision - bigDecimal.scale
+  // Computed in Long since `precision - scale` can overflow Int, e.g. for "1e2147483647".
+  private def numDigitsInIntegralPart(bigDecimal: JavaBigDecimal): Long =
+    bigDecimal.precision.toLong - bigDecimal.scale
 
   private def stringToJavaBigDecimal(str: UTF8String): JavaBigDecimal = {
     // According the benchmark test,  `s.toString.trim` is much faster than `s.trim.toString`.
@@ -644,17 +699,35 @@ object Decimal {
     new JavaBigDecimal(str.toString.trim)
   }
 
-  def fromString(str: UTF8String): Decimal = {
-    try {
-      val bigDecimal = stringToJavaBigDecimal(str)
-      // We fast fail because constructing a very large JavaBigDecimal to Decimal is very slow.
-      // For example: Decimal("6.0790316E+25569151")
-      if (numDigitsInIntegralPart(bigDecimal) > DecimalType.MAX_PRECISION &&
-        !SqlApiConf.get.allowNegativeScaleOfDecimalEnabled) {
-        null
+  /**
+   * Converts a `JavaBigDecimal` parsed from a string to `Decimal`, or returns null if its
+   * integral part has more than `DecimalType.MAX_PRECISION` digits and negative scales are not
+   * allowed. We fast fail because constructing a very large JavaBigDecimal to Decimal is very
+   * slow. For example: Decimal("6.0790316E+25569151")
+   *
+   * This runs for every row of a cast, so this helper reads the conf only for a zero with a
+   * negative scale and for a value with too many integral digits.
+   */
+  private def stringBigDecimalToDecimal(bigDecimal: JavaBigDecimal): Decimal = {
+    if (bigDecimal.signum == 0) {
+      // Zero fits any decimal type whatever its exponent, e.g. "0e39". Drop a negative scale so
+      // that the precision does not grow with a positive exponent.
+      if (bigDecimal.scale < 0 && !SqlApiConf.get.allowNegativeScaleOfDecimalEnabled) {
+        Decimal(bigDecimal.setScale(0))
       } else {
         Decimal(bigDecimal)
       }
+    } else if (numDigitsInIntegralPart(bigDecimal) > DecimalType.MAX_PRECISION &&
+      !SqlApiConf.get.allowNegativeScaleOfDecimalEnabled) {
+      null
+    } else {
+      Decimal(bigDecimal)
+    }
+  }
+
+  def fromString(str: UTF8String): Decimal = {
+    try {
+      stringBigDecimalToDecimal(stringToJavaBigDecimal(str))
     } catch {
       case _: NumberFormatException =>
         null
@@ -666,15 +739,11 @@ object Decimal {
       to: DecimalType = DecimalType.USER_DEFAULT,
       context: QueryContext = null): Decimal = {
     try {
-      val bigDecimal = stringToJavaBigDecimal(str)
-      // We fast fail because constructing a very large JavaBigDecimal to Decimal is very slow.
-      // For example: Decimal("6.0790316E+25569151")
-      if (numDigitsInIntegralPart(bigDecimal) > DecimalType.MAX_PRECISION &&
-        !SqlApiConf.get.allowNegativeScaleOfDecimalEnabled) {
+      val decimal = stringBigDecimalToDecimal(stringToJavaBigDecimal(str))
+      if (decimal == null) {
         throw DataTypeErrors.outOfDecimalTypeRangeError(str)
-      } else {
-        Decimal(bigDecimal)
       }
+      decimal
     } catch {
       case _: NumberFormatException =>
         throw DataTypeErrors.invalidInputInCastToNumberError(to, str, context)

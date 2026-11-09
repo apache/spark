@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import java.util.Locale
+import java.util.{Locale, Set => JSet}
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -25,10 +25,38 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, ArrayTransform, Attribu
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.connector.catalog.{Column, Table, TableCapability}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
+
+class V2ResolveOutputRelationSuite extends AnalysisTest {
+
+  test("ResolveOutputRelation preserves tags on a rebuilt DSv2 write target") {
+    val table = new Table {
+      override def name(): String = "table-name"
+      override def columns(): Array[Column] = Array(Column.create("id", LongType))
+      override def capabilities(): JSet[TableCapability] =
+        JSet.of(TableCapability.BATCH_WRITE)
+    }
+    val target =
+      DataSourceV2Relation.create(table, None, None, CaseInsensitiveStringMap.empty())
+    val tag = TreeNodeTag[Unit]("resolve-output-relation-test")
+    target.setTagValue(tag, ())
+    val query = LocalRelation(AttributeReference("id", IntegerType)())
+    val write = AppendData.byName(target, query)
+
+    val resolved = getAnalyzer.ResolveOutputRelation(write).asInstanceOf[AppendData]
+    val resolvedTarget = resolved.table.asInstanceOf[DataSourceV2Relation]
+
+    assert(resolvedTarget ne target)
+    assert(resolvedTarget.getTagValue(tag).contains(()))
+  }
+}
 
 class V2AppendDataANSIAnalysisSuite extends V2ANSIWriteAnalysisSuiteBase {
   override def byName(table: NamedRelation, query: LogicalPlan): LogicalPlan = {

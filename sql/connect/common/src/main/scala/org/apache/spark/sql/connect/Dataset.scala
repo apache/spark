@@ -675,6 +675,63 @@ class Dataset[T] private[sql] (
   }
 
   /** @inheritdoc */
+  def binBy(
+      rangeStart: Column,
+      rangeEnd: Column,
+      binWidth: Column,
+      distributeUniform: Array[Column]): DataFrame = {
+    binBy(
+      rangeStart = rangeStart,
+      rangeEnd = rangeEnd,
+      binWidth = binWidth,
+      distributeUniform = distributeUniform,
+      alignTo = null)
+  }
+
+  /** @inheritdoc */
+  def binBy(
+      rangeStart: Column,
+      rangeEnd: Column,
+      binWidth: Column,
+      distributeUniform: Array[Column],
+      alignTo: Column): DataFrame = {
+    binBy(
+      rangeStart = rangeStart,
+      rangeEnd = rangeEnd,
+      binWidth = binWidth,
+      distributeUniform = distributeUniform,
+      alignTo = alignTo,
+      binStartName = null,
+      binEndName = null,
+      binDistributeRatioName = null)
+  }
+
+  /** @inheritdoc */
+  def binBy(
+      rangeStart: Column,
+      rangeEnd: Column,
+      binWidth: Column,
+      distributeUniform: Array[Column],
+      alignTo: Column,
+      binStartName: String,
+      binEndName: String,
+      binDistributeRatioName: String): DataFrame = {
+    val columns = Seq(rangeStart, rangeEnd, binWidth) ++ distributeUniform ++ Option(alignTo)
+    sparkSession.newDataFrame(columns) { builder =>
+      val binBy = builder.getBinByBuilder
+        .setInput(plan.getRoot)
+        .setRangeStart(toExpr(rangeStart))
+        .setRangeEnd(toExpr(rangeEnd))
+        .setBinWidth(toExpr(binWidth))
+      Option(alignTo).foreach(origin => binBy.setAlignTo(toExpr(origin)))
+      distributeUniform.foreach(column => binBy.addDistributeUniform(toExpr(column)))
+      Option(binStartName).foreach(binBy.setBinStartName)
+      Option(binEndName).foreach(binBy.setBinEndName)
+      Option(binDistributeRatioName).foreach(binBy.setBinDistributeRatioName)
+    }
+  }
+
+  /** @inheritdoc */
   def unpivot(
       ids: Array[Column],
       values: Array[Column],

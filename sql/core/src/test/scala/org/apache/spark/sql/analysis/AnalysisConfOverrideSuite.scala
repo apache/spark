@@ -19,9 +19,12 @@ package org.apache.spark.sql.analysis
 
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkNoSuchElementException
-import org.apache.spark.sql.SparkSessionExtensions
+import org.apache.spark.internal.config.ConfigBindingPolicy
+import org.apache.spark.sql.{Row, SparkSessionExtensions}
+import org.apache.spark.sql.catalyst.analysis.Analyzer
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class AnalysisConfOverrideSuite extends SharedSparkSession {
@@ -49,6 +52,94 @@ class AnalysisConfOverrideSuite extends SharedSparkSession {
       val value = "true"
       withSQLConf(key -> value) {
         f(key, value)
+      }
+    }
+  }
+
+  test("resolution config retention follows binding policies") {
+    val sessionKey = SQLConf.ALLOW_CREATING_UDT_FROM_STRING.key
+    val notApplicableKey = SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key
+    val persistedKey = SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key
+    val catalogKey = "spark.sql.catalog.analysisConfOverrideSuite.option"
+    val unknownKey = "spark.sql.analysisConfOverrideSuite.unknown." +
+      java.util.UUID.randomUUID().toString.replace("-", "")
+
+    val existingConf = new SQLConf()
+    existingConf.setConfString(sessionKey, "false")
+    existingConf.setConfString(notApplicableKey, "false")
+    existingConf.setConfString(persistedKey, "false")
+    existingConf.setConfString(catalogKey, "session-catalog")
+    existingConf.setConfString(unknownKey, "session")
+
+    val newConf = new SQLConf()
+    newConf.setConfString(sessionKey, "true")
+    newConf.setConfString(notApplicableKey, "true")
+    newConf.setConfString(persistedKey, "true")
+    newConf.setConfString(catalogKey, "captured-catalog")
+    newConf.setConfString(unknownKey, "captured")
+
+    withSQLConf(SQLConf.ASSUME_ANSI_FALSE_IF_NOT_PERSISTED.key -> "true") {
+      Analyzer.retainResolutionConfigsForAnalysis(
+        newConf, existingConf, createSparkVersion = "4.0.0")
+    }
+
+    assert(newConf.getConfString(sessionKey) == "false")
+    assert(newConf.getConfString(notApplicableKey) == "false")
+    assert(newConf.getConfString(persistedKey) == "true")
+    assert(newConf.getConfString(catalogKey) == "session-catalog")
+    assert(newConf.getConfString(unknownKey) == "captured")
+    assert(newConf.getConfString(SQLConf.ANSI_ENABLED.key) == "true")
+
+    val dynamicEntry = SQLConf.buildConf(unknownKey)
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .stringConf
+      .createWithDefault("default")
+    try {
+      Analyzer.retainResolutionConfigsForAnalysis(newConf, existingConf)
+      assert(newConf.getConfString(unknownKey) == "session")
+
+      SQLConf.unregister(dynamicEntry)
+      newConf.setConfString(unknownKey, "captured after unregistration")
+      Analyzer.retainResolutionConfigsForAnalysis(newConf, existingConf)
+      assert(newConf.getConfString(unknownKey) == "captured after unregistration")
+    } finally {
+      SQLConf.unregister(dynamicEntry)
+    }
+  }
+
+  gridTest("view and SQL function bodies follow a SESSION-bound config changed between queries")(
+      Seq(true, false)) { memoize =>
+    val key = SQLConf.LOWER_EMPTY_GROUPING_SET_TO_GLOBAL_AGGREGATE.key
+    // Over empty input, this grand total returns one row when the config is on and none when off.
+    val grandTotal =
+      "SELECT count(*) AS c FROM VALUES (1) AS t(k) WHERE k > 1 GROUP BY GROUPING SETS (())"
+    def checkBodies(enabled: Boolean): Unit = {
+      val viewRows = if (enabled) Seq(Row(0L)) else Seq.empty
+      checkAnswer(spark.table("grand_total_temp_view"), viewRows)
+      checkAnswer(spark.table("grand_total_view"), viewRows)
+      // A scalar subquery that returns no rows evaluates to NULL.
+      checkAnswer(spark.sql("SELECT grand_total_func()"), Row(if (enabled) 0L else null))
+    }
+
+    withSQLConf(
+        key -> "true",
+        SQLConf.ANALYZER_MEMOIZE_RETAINED_RESOLUTION_CONFIGS.key -> memoize.toString) {
+      withTempView("grand_total_temp_view") {
+        withView("grand_total_view") {
+          withUserDefinedFunction("grand_total_func" -> true) {
+            spark.sql(s"CREATE TEMPORARY VIEW grand_total_temp_view AS $grandTotal")
+            spark.sql(s"CREATE VIEW grand_total_view AS $grandTotal")
+            spark.sql(
+              s"CREATE TEMPORARY FUNCTION grand_total_func() RETURNS BIGINT RETURN ($grandTotal)")
+            checkBodies(enabled = true)
+
+            spark.sql(s"SET $key=false")
+            checkBodies(enabled = false)
+
+            spark.sql(s"SET $key=true")
+            checkBodies(enabled = true)
+          }
+        }
       }
     }
   }

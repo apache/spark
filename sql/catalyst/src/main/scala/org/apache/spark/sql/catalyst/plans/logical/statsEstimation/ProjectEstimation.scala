@@ -17,25 +17,29 @@
 
 package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
-import org.apache.spark.sql.catalyst.expressions.AttributeMap
+import org.apache.spark.sql.catalyst.expressions.{AttributeMap, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{Project, Statistics}
 
 object ProjectEstimation {
   import EstimationUtils._
 
   def estimate(project: Project): Option[Statistics] = {
-    if (rowCountsExist(project.child)) {
-      val childStats = project.child.stats
+    estimate(project.projectList, project.child.stats)
+  }
+
+  def estimate(
+      projectList: Seq[NamedExpression],
+      childStats: Statistics): Option[Statistics] = {
+    childStats.rowCount.map { rowCount =>
+      val output = projectList.map(_.toAttribute)
       val aliasStats = EstimationUtils.getAliasStats(
-        project.expressions, childStats.attributeStats, childStats.rowCount.get)
+        projectList, childStats.attributeStats, rowCount)
 
       val outputAttrStats =
-        getOutputMap(AttributeMap(childStats.attributeStats.toSeq ++ aliasStats), project.output)
-      Some(childStats.copy(
-        sizeInBytes = getOutputSize(project.output, childStats.rowCount.get, outputAttrStats),
-        attributeStats = outputAttrStats))
-    } else {
-      None
+        getOutputMap(AttributeMap(childStats.attributeStats.toSeq ++ aliasStats), output)
+      childStats.copy(
+        sizeInBytes = getOutputSize(output, rowCount, outputAttrStats),
+        attributeStats = outputAttrStats)
     }
   }
 }
