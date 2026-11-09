@@ -161,7 +161,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
             curLine = reader.readLine()
             if (curLine == null) {
               checkFailureAndPropagate(writerThread, null, proc, stderrBuffer)
-              writerThread.markOutputReadToEnd()
+              writerThread.outputReadToEnd = true
               return false
             }
           }
@@ -312,17 +312,12 @@ abstract class BaseScriptTransformationWriterThread extends Thread with Logging 
 
   // Whether the task read the output of the process to its end. The process is then not stopped
   // when the task completes.
-  @volatile private var outputReadToEnd = false
+  @volatile private[sql] var outputReadToEnd = false
 
   // Whether the process was destroyed as a task that did not fail completed before the process
   // ended. The task then no longer reads the output of the process, so the failure of the thread
   // and the exit status of the process are expected, and not logged as errors.
   @volatile private var destroyedOnTaskCompletion = false
-
-  /** Marks that the task read the output of the process to its end. */
-  private[sql] def markOutputReadToEnd(): Unit = {
-    outputReadToEnd = true
-  }
 
   /**
    * Destroys the process if it is still alive, and interrupts this thread, once a task that did
