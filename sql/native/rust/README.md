@@ -406,7 +406,11 @@ so that the scan can plan to read only them. The readers get them as the schema 
 whether or not the scan implements it, and return exactly them, so a connector can add
 pruning to the planning of its scans incrementally.
 
-Version 1 of the ABI does not push filters down yet; Spark evaluates them after reading.
+SPARK-61200 added `push_domains` to version 1 of the ABI: the domains of the columns that the
+filters of a query constrain, with which a scan can skip data, such as a file whose statistics
+exclude every value of a domain. The SDK binds the function but does not expose it yet: it leaves
+it unset, so Spark pushes no filters down and evaluates them after reading. A later change will
+add it to `ScanBuilder`, with a default that uses no domain, so existing connectors keep building.
 
 ## Build and test without Spark
 

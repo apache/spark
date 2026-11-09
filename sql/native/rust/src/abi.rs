@@ -81,6 +81,20 @@ pub struct SparkDsPartitionsInfo {
     pub size: i64,
 }
 
+/// The domain of a column, which `push_domains` gets. The SDK binds it, so that the function
+/// table has the size of the header, but does not expose it yet.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct SparkDsDomain {
+    pub size: i64,
+    pub path: *const i32,
+    pub path_length: i64,
+    pub null_allowed: bool,
+    pub nan_allowed: bool,
+    pub ranges: *mut ArrowArray,
+    pub ranges_schema: *mut ArrowSchema,
+}
+
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct SparkDsStreamReaderInfo {
@@ -295,6 +309,10 @@ pub struct SparkDsLibrary {
     pub close_data_writer: Option<unsafe extern "C" fn(*mut c_void)>,
     pub default_read_limit:
         Option<unsafe extern "C" fn(*mut c_void, *mut SparkDsReadLimit) -> c_int>,
+    // Added to version 1 by SPARK-61200, after the other functions.
+    pub push_domains: Option<
+        unsafe extern "C" fn(*mut c_void, *const *const SparkDsDomain, i64, *mut bool) -> c_int,
+    >,
 }
 
 // The sizes and field offsets of the header on 64-bit targets, so that a binding that does
@@ -318,6 +336,10 @@ layout! {
     }
     SparkDsReaderInfo: 8 { size: 0 }
     SparkDsPartitionsInfo: 8 { size: 0 }
+    SparkDsDomain: 48 {
+        size: 0, path: 8, path_length: 16, null_allowed: 24, nan_allowed: 25, ranges: 32,
+        ranges_schema: 40,
+    }
     SparkDsStreamReaderInfo: 16 { size: 0, checkpoint_location: 8 }
     SparkDsInitialOffsetInfo: 8 { size: 0 }
     SparkDsReadLimit: 24 { size: 0, kind: 8, max_rows: 16 }
@@ -340,14 +362,14 @@ layout! {
         size: 0, epoch_id: 8, messages: 16, message_lengths: 24, num_messages: 32, rejected: 40,
     }
     SparkDsFinishDataWriterInfo: 8 { size: 0 }
-    SparkDsLibrary: 224 {
+    SparkDsLibrary: 232 {
         size: 0, abi_version: 8, last_error: 16, create: 24, schema: 32, create_reader: 40,
         create_stream_reader: 48, create_writer: 56, close: 64, push_limit: 72,
         prune_columns: 80, partitions: 88, close_reader: 96, initial_offset: 104,
         latest_offset: 112, stream_partitions: 120, commit_offset: 128,
         close_stream_reader: 136, read: 144, commit: 152, abort: 160, close_writer: 168,
         create_data_writer: 176, write: 184, commit_data_writer: 192, abort_data_writer: 200,
-        close_data_writer: 208, default_read_limit: 216,
+        close_data_writer: 208, default_read_limit: 216, push_domains: 224,
     }
 }
 

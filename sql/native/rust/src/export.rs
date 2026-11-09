@@ -140,6 +140,9 @@ pub const fn library<S: Exported>() -> SparkDsLibrary {
         abort_data_writer: when!(write, abort_data_writer),
         close_data_writer: when!(write, close_data_writer),
         default_read_limit: when!(micro_batch_read, default_read_limit::<S>),
+        // SPARK-61200 added push_domains to version 1. The SDK does not expose it yet: without
+        // it, Spark pushes no filters down, and evaluates them after reading.
+        push_domains: None,
     }
 }
 
