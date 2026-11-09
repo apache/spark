@@ -562,11 +562,8 @@ arrow::Result<JsonWrite> JsonSink::NewWrite(const spark::native::WriteInfo& info
 
 arrow::Result<JsonStreamingWrite> JsonSink::NewStreamingWrite(
     const spark::native::StreamingWriteInfo& info) const {
-  if (readonly_) {
-    return arrow::Status::Invalid("This sink is readonly");
-  }
-  ARROW_RETURN_NOT_OK(ValidateSchema(*info.schema));
-  ARROW_ASSIGN_OR_RAISE(JsonWrite write, JsonWrite::Begin(path_, info.mode));
+  ARROW_ASSIGN_OR_RAISE(JsonWrite write,
+                        NewWrite(spark::native::WriteInfo(info.schema, info.mode)));
   return JsonStreamingWrite(std::move(write), info.query_id);
 }
 
