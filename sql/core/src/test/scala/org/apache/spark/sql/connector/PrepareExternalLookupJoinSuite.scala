@@ -279,9 +279,10 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
     // not.
     val rangeTypes = Seq("TINYINT", "SMALLINT", "INT", "BIGINT", "DECIMAL(10, 2)", "DATE",
       "TIMESTAMP", "TIMESTAMP_NTZ")
-    val equalityOnlyTypes = Seq("BOOLEAN", "BINARY", "STRING", "STRING COLLATE UTF8_BINARY")
+    val equalityOnlyTypes =
+      Seq("BOOLEAN", "BINARY", "STRING", "STRING COLLATE UTF8_BINARY", "VARCHAR(3)")
     val neitherTypes =
-      Seq("FLOAT", "DOUBLE", "CHAR(3)", "VARCHAR(3)", "STRING COLLATE UTF8_LCASE", "STRUCT<a: INT>")
+      Seq("FLOAT", "DOUBLE", "CHAR(3)", "STRING COLLATE UTF8_LCASE", "STRUCT<a: INT>")
     def offeredFor(codeType: String): Seq[String] = {
       var offered = Seq.empty[String]
       val lookup = lookupRelation(PlanningExternalLookupTable(s"id INT, code $codeType", select = {
@@ -308,6 +309,10 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
     }
     neitherTypes.foreach { codeType =>
       assert(offeredFor(codeType) === Seq("id = ?"), codeType)
+    }
+    // Neither on VARCHAR under standard CHAR/VARCHAR semantics, as `=`.
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      assert(offeredFor("VARCHAR(3)") === Seq("id = ?"))
     }
 
     // A string or BINARY range alone leaves no candidate.
@@ -356,7 +361,15 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
     val prepared = prepare(lookupJoin(lookup, conjuncts.reduce(_ && _), left = left))
     assert(offered === Seq("id = ?", "value >= ?", "total >= ?"))
     assert(prepared.lookupParameters === Seq(labelNumber))
-    assert(prepared.residualCondition === Some(conjuncts.drop(1).reduce(_ && _)))
+    // The other conjuncts stay in the residual, those that go first under a NULL guard. Which ones
+    // go first depends on what ExprUtils.canEvaluateUnconditionally takes as unable to fail, which
+    // another test covers.
+    val residual = prepared.residualCondition.toSeq.flatMap(splitConjunctivePredicates).map {
+      case Coalesce(Seq(conjunct, Literal(false, BooleanType))) => conjunct
+      case conjunct => conjunct
+    }
+    assert(residual.length === conjuncts.length - 1)
+    assert(residual.toSet === conjuncts.drop(1).toSet)
   }
 
   test("the read schema binds to the analyzed lookup attributes by exact name") {

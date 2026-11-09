@@ -88,7 +88,7 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
 
   private val EXTERNAL_LOOKUP_CATALOG_NAME = "external_lookup_cat"
   // The supportedJoinTypes parameter of a JOIN_TYPE error.
-  private val SUPPORTED_JOIN_TYPES = "INNER, LEFT OUTER"
+  private val SUPPORTED_JOIN_TYPES = "INNER, LEFT OUTER, LEFT SEMI, LEFT ANTI"
 
   private val streamRunCount = new AtomicInteger()
 
@@ -663,7 +663,7 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "joinType" -> "RIGHT OUTER",
         "relation" -> "`DualCapabilityExternalLookupTable`",
-        "supportedJoinTypes" -> "INNER, LEFT OUTER, LEFT SEMI, LEFT ANTI"))
+        "supportedJoinTypes" -> SUPPORTED_JOIN_TYPES))
 
     // A cross join fails with its join type while it is analyzed, before its missing condition.
     checkError(
@@ -672,7 +672,7 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "joinType" -> "CROSS",
         "relation" -> "`DualCapabilityExternalLookupTable`",
-        "supportedJoinTypes" -> "INNER, LEFT OUTER, LEFT SEMI, LEFT ANTI"))
+        "supportedJoinTypes" -> SUPPORTED_JOIN_TYPES))
 
     // A strategy hint on the same join conflicts before the join type is checked.
     checkError(

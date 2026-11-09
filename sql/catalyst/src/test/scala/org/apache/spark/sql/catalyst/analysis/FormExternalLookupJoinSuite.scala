@@ -58,7 +58,7 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
 
   // The parameters of a JOIN_TYPE error, besides the relation.
   private def joinType(sql: String): Map[String, String] =
-    Map("joinType" -> sql, "supportedJoinTypes" -> "INNER, LEFT OUTER")
+    Map("joinType" -> sql, "supportedJoinTypes" -> "INNER, LEFT OUTER, LEFT SEMI, LEFT ANTI")
 
   // A definition of `plan` named `name`, and a reference to it under that name.
   private def cteOf(

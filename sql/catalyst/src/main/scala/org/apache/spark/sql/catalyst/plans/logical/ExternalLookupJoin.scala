@@ -126,9 +126,8 @@ object ExternalLookupJoinShapes {
    * comparison's parameter. It may read only stream columns, and it may read none, as a literal
    * does. A value that reads lookup columns, as in `t.a = t.b`, cannot be a parameter.
    *
-   * The lookup column must be of a type on which [[ExternalLookupKeyTypes]] lets Spark offer the
-   * comparison, and not a CHAR or VARCHAR column. A comparison on another column is an ordinary
-   * conjunct.
+   * The lookup column must be one on which [[ExternalLookupKeyTypes]] lets Spark offer the
+   * comparison. A comparison on another column is an ordinary conjunct.
    *
    * @param streamOutput The output of the join's left side, the stream side.
    * @param lookupOutput The output of the join's right side, the lookup side.
