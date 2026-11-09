@@ -171,31 +171,21 @@ struct SourceTraits {
       "a source with a StreamingWrite must define arrow::Result<StreamingWrite> "
       "NewStreamingWrite(const StreamingWriteInfo&) const");
 
-  // Whether each write supports truncation, which Unsupported does not.
-  static constexpr bool kBatchTruncate = [] {
-    if constexpr (kBatchWrite) {
-      return static_cast<bool>(BatchWrite::kSupportsTruncate);
-    } else {
-      return false;
-    }
-  }();
-  static constexpr bool kStreamingTruncate = [] {
-    if constexpr (kStreamingWrite) {
-      return static_cast<bool>(StreamingWrite::kSupportsTruncate);
-    } else {
-      return false;
-    }
-  }();
-
   /// The operations that the source implements.
   static constexpr Capabilities kCapabilities = [] {
     Capabilities capabilities = Capabilities::Empty();
     if (kBatchRead) capabilities = capabilities | Capabilities::kBatchRead;
     if (kMicroBatchRead) capabilities = capabilities | Capabilities::kMicroBatchRead;
-    if (kBatchWrite) capabilities = capabilities | Capabilities::kBatchWrite;
-    if (kStreamingWrite) capabilities = capabilities | Capabilities::kStreamingWrite;
-    if (kBatchTruncate) capabilities = capabilities | Capabilities::kBatchTruncate;
-    if (kStreamingTruncate) capabilities = capabilities | Capabilities::kStreamingTruncate;
+    if constexpr (kBatchWrite) {
+      capabilities = capabilities | Capabilities::kBatchWrite;
+      if (BatchWrite::kSupportsTruncate) capabilities = capabilities | Capabilities::kBatchTruncate;
+    }
+    if constexpr (kStreamingWrite) {
+      capabilities = capabilities | Capabilities::kStreamingWrite;
+      if (StreamingWrite::kSupportsTruncate) {
+        capabilities = capabilities | Capabilities::kStreamingTruncate;
+      }
+    }
     return capabilities;
   }();
 
