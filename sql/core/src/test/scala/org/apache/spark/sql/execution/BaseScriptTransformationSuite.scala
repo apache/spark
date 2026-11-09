@@ -22,6 +22,7 @@ import java.time.{Duration, Period}
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.logging.log4j.Level
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
@@ -449,13 +450,20 @@ abstract class BaseScriptTransformationSuite extends QueryTest {
       output = Seq(AttributeReference("id", StringType)()),
       child = spark.range(0, 1000000, 1, 1).queryExecution.sparkPlan,
       ioschema = defaultIOSchema)
-    assert(plan.execute().mapPartitions(rows => Iterator(rows.take(1).size)).collect() ===
-      Array(1))
-    eventually(timeout(60.seconds)) {
-      assert((writerThreads() -- before).isEmpty)
+    val logAppender = new LogAppender("the writer thread of a destroyed script")
+    logAppender.setThreshold(Level.ERROR)
+    withLogAppender(logAppender) {
+      assert(plan.execute().mapPartitions(rows => Iterator(rows.take(1).size)).collect() ===
+        Array(1))
+      eventually(timeout(60.seconds)) {
+        assert((writerThreads() -- before).isEmpty)
+      }
     }
-    // The writer thread is not interrupted, so that its wait for the script does not throw.
+    // The interrupt of the writer thread does not escape it, and its failure to write to the
+    // destroyed script is not logged as an error.
     assert(uncaughtExceptionHandler.exception.isEmpty)
+    val errors = logAppender.loggingEvents.filter(_.getThreadName.endsWith("WriterThread-Feed"))
+    assert(errors.isEmpty, errors.map(_.getMessage.getFormattedMessage).mkString("\n"))
   }
 
   def testBasicInputDataTypesWith(serde: ScriptTransformationIOSchema, testName: String): Unit = {
