@@ -100,6 +100,12 @@ type StreamingWriterFactory<S> = <<S as DataSource>::StreamingWrite as Streaming
 
 /// The function table of a source, with the callbacks of the operations that it implements.
 pub const fn library<S: Exported>() -> SparkDsLibrary {
+    // The callback when the source supports its operation, and null otherwise.
+    macro_rules! when {
+        ($supported:expr, $callback:expr) => {
+            if $supported { Some($callback) } else { None }
+        };
+    }
     let read = Bridge::<S>::READ;
     let micro_batch_read = Bridge::<S>::MICRO_BATCH_READ;
     // Batch and streaming writes share all the callbacks of writers.
@@ -109,79 +115,31 @@ pub const fn library<S: Exported>() -> SparkDsLibrary {
         abi_version: abi::ABI_VERSION,
         last_error: Some(abi::last_error),
         create: Some(create::<S>),
-        schema: if S::INFERS_SCHEMA {
-            Some(schema::<S>)
-        } else {
-            None
-        },
-        create_reader: if read { Some(create_reader::<S>) } else { None },
-        create_stream_reader: if micro_batch_read {
-            Some(create_stream_reader::<S>)
-        } else {
-            None
-        },
-        create_writer: if write {
-            Some(create_writer::<S>)
-        } else {
-            None
-        },
+        schema: when!(S::INFERS_SCHEMA, schema::<S>),
+        create_reader: when!(read, create_reader::<S>),
+        create_stream_reader: when!(micro_batch_read, create_stream_reader::<S>),
+        create_writer: when!(write, create_writer::<S>),
         close: Some(close::<S>),
-        push_limit: if read { Some(push_limit::<S>) } else { None },
-        prune_columns: if read { Some(prune_columns::<S>) } else { None },
-        partitions: if read { Some(partitions::<S>) } else { None },
-        close_reader: if read { Some(close_reader::<S>) } else { None },
-        initial_offset: if micro_batch_read {
-            Some(initial_offset::<S>)
-        } else {
-            None
-        },
-        latest_offset: if micro_batch_read {
-            Some(latest_offset::<S>)
-        } else {
-            None
-        },
-        stream_partitions: if micro_batch_read {
-            Some(stream_partitions::<S>)
-        } else {
-            None
-        },
-        commit_offset: if micro_batch_read {
-            Some(commit_offset::<S>)
-        } else {
-            None
-        },
-        close_stream_reader: if micro_batch_read {
-            Some(close_stream_reader::<S>)
-        } else {
-            None
-        },
+        push_limit: when!(read, push_limit::<S>),
+        prune_columns: when!(read, prune_columns::<S>),
+        partitions: when!(read, partitions::<S>),
+        close_reader: when!(read, close_reader::<S>),
+        initial_offset: when!(micro_batch_read, initial_offset::<S>),
+        latest_offset: when!(micro_batch_read, latest_offset::<S>),
+        stream_partitions: when!(micro_batch_read, stream_partitions::<S>),
+        commit_offset: when!(micro_batch_read, commit_offset::<S>),
+        close_stream_reader: when!(micro_batch_read, close_stream_reader::<S>),
         // Batch scans and micro-batches share the executor reader.
-        read: if read || micro_batch_read {
-            Some(read_partition::<S>)
-        } else {
-            None
-        },
-        commit: if write { Some(commit::<S>) } else { None },
-        abort: if write { Some(abort::<S>) } else { None },
-        close_writer: if write { Some(close_writer::<S>) } else { None },
-        create_data_writer: if write {
-            Some(create_data_writer::<S>)
-        } else {
-            None
-        },
-        write: if write { Some(write_batch) } else { None },
-        commit_data_writer: if write {
-            Some(commit_data_writer)
-        } else {
-            None
-        },
-        abort_data_writer: if write { Some(abort_data_writer) } else { None },
-        close_data_writer: if write { Some(close_data_writer) } else { None },
-        default_read_limit: if micro_batch_read {
-            Some(default_read_limit::<S>)
-        } else {
-            None
-        },
+        read: when!(read || micro_batch_read, read_partition::<S>),
+        commit: when!(write, commit::<S>),
+        abort: when!(write, abort::<S>),
+        close_writer: when!(write, close_writer::<S>),
+        create_data_writer: when!(write, create_data_writer::<S>),
+        write: when!(write, write_batch),
+        commit_data_writer: when!(write, commit_data_writer),
+        abort_data_writer: when!(write, abort_data_writer),
+        close_data_writer: when!(write, close_data_writer),
+        default_read_limit: when!(micro_batch_read, default_read_limit::<S>),
     }
 }
 
