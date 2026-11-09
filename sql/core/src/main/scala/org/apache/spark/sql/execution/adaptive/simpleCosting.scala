@@ -66,7 +66,7 @@ case class SimpleCost(numSkewJoins: Int, numShuffles: Int, numLocalSorts: Int) e
 case class SimpleCostEvaluator(
     forceOptimizeSkewedJoin: Boolean,
     countLocalSort: Boolean,
-    pushDownShuffleThroughUnion: Boolean)
+    pushDownShuffleThroughUnion: Boolean = false)
   extends CostEvaluator {
 
   override def evaluateCost(plan: SparkPlan): Cost = {

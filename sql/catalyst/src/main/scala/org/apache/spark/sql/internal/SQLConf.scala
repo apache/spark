@@ -8866,8 +8866,8 @@ object SQLConf {
         "are retained; other children are retargeted or receive a new exchange. The target " +
         "partition count must be at least the smaller of the replaced exchange's count and " +
         "the effective initial shuffle count, including " +
-        "spark.sql.adaptive.coalescePartitions.initialPartitionNum when set. Requires " +
-        "spark.sql.unionOutputPartitioning to be enabled. Removing the union's direct shuffle " +
+        s"${COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key} when set. Requires " +
+        s"${UNION_OUTPUT_PARTITIONING.key} to be enabled. Removing the union's direct shuffle " +
         "stage can reduce AQE skew handling and join conversion opportunities. Retaining a " +
         "shuffled join's layout can make skew optimization or local reads violate ancestor " +
         "requirements; AQE may reject the optimization or add a shuffle when skew optimization " +
@@ -8904,8 +8904,10 @@ object SQLConf {
       .doc("When set to true, fixed-count shuffles, bucketed or cached scans, and branches " +
         "containing exploding joins may offer push-down targets. This can prevent coalescing " +
         "of the consumer's compatible shuffle group or reduce its target partition size. " +
-        "Rebalance shuffles remain ineligible. This only affects target selection when " +
-        "spark.sql.adaptive.coalescePartitions.enabled is on. Requires " +
+        "Rebalance shuffles remain ineligible. This only restricts targets when " +
+        s"${COALESCE_PARTITIONS_ENABLED.key} is on and every consumer input path reaches an " +
+        "exchange boundary. A non-exchange input already prevents the compatible group from " +
+        "coalescing, so these targets remain eligible in that case. Requires " +
         s"${PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key} to be enabled.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
@@ -8945,9 +8947,9 @@ object SQLConf {
     )
       .internal()
       .doc("When true, shuffle push-down may use partition keys that are a subset of the " +
-        "consumer's clustering keys if spark.sql.requireAllClusterKeysForCoPartition is false " +
-        "and the consumer accepts that distribution. Such targets can concentrate rows in " +
-        "fewer partitions. When false, targets must match all clustering keys.")
+        s"consumer's clustering keys if ${REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key} " +
+        "is false and the consumer accepts that distribution. Such targets can concentrate " +
+        "rows in fewer partitions. When false, targets must match all clustering keys.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
@@ -8957,7 +8959,8 @@ object SQLConf {
     buildConf("spark.sql.adaptive.pushDownShuffleThroughUnion.allowWithSubqueries.enabled")
       .internal()
       .doc("When true, allows shuffle push-down in queries containing scalar, IN or dynamic " +
-        "pruning subqueries. Independent adaptive plans can make different rewrite decisions, " +
+        "pruning subqueries, including scalar builds injected by runtime Bloom filters even " +
+        "when the SQL has no explicit subquery. Independent adaptive plans can differ, " +
         "reducing exchange reuse or disabling broadcast-only dynamic partition pruning. Failed " +
         "broadcast reuse can remove the pruning filter and scan all fact partitions, which " +
         "can outweigh the build-side shuffle saving. When false, push-down is disabled for " +

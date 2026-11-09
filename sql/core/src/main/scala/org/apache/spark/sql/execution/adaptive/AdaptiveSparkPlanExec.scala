@@ -134,12 +134,17 @@ case class AdaptiveSparkPlanExec(
   // Exchange nodes) after running these rules.
   // Visible in the package so that a test can assert where the two union barriers below sit.
   @transient private[adaptive] val queryStagePreparationRules: Seq[Rule[SparkPlan]] = {
+    val pushDownShuffleThroughUnionEnabled = unionConf.outputPartitioning &&
+      conf.pushDownShuffleThroughUnionEnabled &&
+      (!context.queryContainsSubqueries || conf.getConf(
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_WITH_SUBQUERIES_ENABLED))
     // For cases like `df.repartition(a, b).select(c)`, there is no distribution requirement for
     // the final plan, but we do need to respect the user-specified repartition. Here we ask
     // `EnsureRequirements` to not optimize out the user-specified repartition-by-col to work
     // around this case.
     val ensureRequirements =
-      EnsureRequirements(requiredDistribution.isDefined, requiredDistribution)
+      EnsureRequirements(requiredDistribution.isDefined, requiredDistribution,
+        pushDownShuffleThroughUnionEnabled = pushDownShuffleThroughUnionEnabled)
     // CoalesceBucketsInJoin can help eliminate shuffles and must be run before
     // EnsureRequirements
     Seq(
@@ -154,8 +159,7 @@ case class AdaptiveSparkPlanExec(
       // `StampUnionDecisions`, which would freeze a rebuilt union's partitioning before the
       // rewrite can take it. It shares the instance above, which carries the root distribution
       // the rewrite must keep.
-      PushDownShuffleExchangeThroughUnion(
-        unionConf, ensureRequirements, context.queryContainsSubqueries),
+      PushDownShuffleExchangeThroughUnion(ensureRequirements),
       // Must run after `EnsureRequirements` and the shuffle push-down: it fixes each `UnionExec`'s
       // partitioning decision, so every rule below and the execution itself read the answer the
       // exchanges above it were planned against.

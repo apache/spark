@@ -29,8 +29,7 @@ import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Hash
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution.{
-  FilterExec, ProjectExec, SortExec, SparkPlan, UnaryExecNode, UnionConfSnapshot,
-  UnionExec}
+  FilterExec, ProjectExec, SortExec, SparkPlan, UnaryExecNode, UnionExec}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, EnsureRequirements, Exchange, PartitioningOrigin, REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeExec, ShuffleExchangeLike, ValidateRequirements}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, CartesianProductExec, ShuffledJoin}
@@ -84,6 +83,7 @@ import org.apache.spark.sql.internal.SQLConf
  * can prevent coalescing of the consumer's compatible shuffle group. Forced skew optimization
  * can restore a union exchange after moved branches have shuffled, shuffling them a second time.
  *
+ * The query-wide subquery gate includes optimizer-injected runtime Bloom filter builds.
  * Allowing subqueries can make pruning builds differ from main-query broadcast builds. With
  * broadcast-only dynamic pruning, failed broadcast reuse removes the pruning filter and can scan
  * all fact partitions; that cost can outweigh the saved build-side shuffle.
@@ -91,22 +91,18 @@ import org.apache.spark.sql.internal.SQLConf
  * The rule runs only in AQE preparation, after `EnsureRequirements` and before
  * `StampUnionDecisions`. It preserves the root distribution and all user repartition layouts
  * recorded when `EnsureRequirements` elides exchanges, including requirements below the root.
- * These origin checks apply only to this rule's proposals, not to other adaptive optimizations.
+ * Recording and push-down share the preparation's effective enablement on EnsureRequirements;
+ * classic and disabled preparations do not record these origins.
  * Cost compensation belongs to SimpleCostEvaluator. Custom evaluators should account for the
  * one-to-many exchange rewrite when this rule is enabled, or they may reject the entire re-plan.
  *
  * TODO: support push down of a keyed layout.
  */
 case class PushDownShuffleExchangeThroughUnion(
-    snapshot: UnionConfSnapshot,
-    ensureRequirements: EnsureRequirements,
-    queryContainsSubqueries: Boolean) extends Rule[SparkPlan] {
+    ensureRequirements: EnsureRequirements) extends Rule[SparkPlan] {
 
   override def apply(plan: SparkPlan): SparkPlan = {
-    if (!snapshot.outputPartitioning ||
-        !conf.pushDownShuffleThroughUnionEnabled ||
-        (queryContainsSubqueries &&
-          !conf.getConf(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_WITH_SUBQUERIES_ENABLED))) {
+    if (!ensureRequirements.pushDownShuffleThroughUnionEnabled) {
       return plan
     }
 
@@ -199,6 +195,36 @@ case class PushDownShuffleExchangeThroughUnion(
       keepJoinBranches: Boolean,
       allowSubsetTargets: Boolean)
 
+  /** Lazily discover and rank layouts once per site for both joint and fallback attempts. */
+  private class PreparedChild(val pushable: PushableChild, policy: LayoutPolicy) {
+    /**
+     * Eligible child layouts in child order, expressed in the union's output attributes.
+     * Collections offer their hash members; a child offering nothing takes a shuffle.
+     * Equality follows UnionExec's comparison after prepareOutputPartitioning rebinding.
+     */
+    lazy val layouts: Seq[Seq[Partitioning with Expression]] = {
+      val union = pushable.union
+      union.prepareOutputPartitioning().zip(union.children).map { case (partitioning, child) =>
+        if (keepableLayout(child, policy)) {
+          PartitioningCollection.flatten(partitioning).collect {
+            case hash: HashPartitioning => hash
+          }
+        } else {
+          Nil
+        }
+      }
+    }
+
+    lazy val targets: Seq[Partitioning with Expression] = {
+      val minPartitions = math.min(
+        pushable.shuffle.outputPartitioning.numPartitions, conf.numShufflePartitions)
+      candidateTargets(layouts, pushable.union.children, minPartitions)
+        .filter { target =>
+          layouts.count(child => !child.contains(target)) <= policy.maxMovedBranches
+        }
+    }
+  }
+
   /**
    * The shape this rule acts on below one of an operator's children: a pushable shuffle and the
    * union it is moved past, with the operators in between looked through to reach it. Only a hash
@@ -223,7 +249,7 @@ case class PushDownShuffleExchangeThroughUnion(
         findPushableShuffle(child, lookThrough, Some(shuffle))
       // AttributeMap keeps the last duplicate exprId, while runtime binding uses the first.
       // Positional rebinding is ambiguous for these unions, so retain their exchange.
-      case union: UnionExec if union.output.map(_.exprId).distinct.size != union.output.size => None
+      case union: UnionExec if union.hasDuplicateChildOutputs => None
       // Below it: the operators this rule can cross, down to the union the shuffle is moved past.
       case union: UnionExec =>
         found.map(PushableChild(_, union))
@@ -248,12 +274,15 @@ case class PushDownShuffleExchangeThroughUnion(
     val children = operator.children
     val requiredOrderings = operator.requiredChildOrdering
 
+    val prepared = pushable.map { case (site, _) => site.map { child =>
+      new PreparedChild(child, policy)
+    }}
     val newChildren = new ArrayBuffer[SparkPlan](children.length)
     def rebuildChildren(joint: Boolean): Boolean = {
       newChildren.clear()
       children.indices.forall { index =>
         val (pushableChild, required) = pushable(index)
-        val rebuilt = pushableChild.flatMap { child =>
+        val rebuilt = prepared(index).flatMap { child =>
           val fixed = children.indices.flatMap { position =>
             val (sibling, distribution) = pushable(position)
             Option.when(position != index && (!joint || position < index || sibling.isEmpty)) {
@@ -295,15 +324,13 @@ case class PushDownShuffleExchangeThroughUnion(
    * when a single-input consumer accepts a coarser distribution.
    */
   private def rebuildChild(
-      pushable: PushableChild,
+      prepared: PreparedChild,
       required: ClusteredDistribution,
       fixed: Seq[(SparkPlan, ClusteredDistribution)],
       sharedExchanges: Set[SparkPlan],
       policy: LayoutPolicy): Option[SparkPlan] = {
-    val layouts = childLayouts(pushable.union, policy)
-    // Do not reduce parallelism below both the replaced exchange and the configured default.
-    val minPartitions = math.min(
-      pushable.shuffle.outputPartitioning.numPartitions, conf.numShufflePartitions)
+    val pushable = prepared.pushable
+    val layouts = prepared.layouts
 
     // `findPushableShuffle` already checked this chain, including local sorts.
     def rebuild(plan: SparkPlan, target: Partitioning with Expression): Option[SparkPlan] =
@@ -319,8 +346,7 @@ case class PushDownShuffleExchangeThroughUnion(
             s"a shuffle push-down reached ${other.nodeName}, not the union it was found above")
       }
 
-    candidateTargets(layouts, pushable.union.children, minPartitions).view
-      .filter(target => layouts.count(child => !child.contains(target)) <= policy.maxMovedBranches)
+    prepared.targets.view
       .flatMap(target => rebuild(pushable.shuffle.child, target))
       .map(child => PartitioningOrigin.inherit(pushable.shuffle, child))
       .find { child =>
@@ -373,29 +399,6 @@ case class PushDownShuffleExchangeThroughUnion(
   }
 
   /**
-   * The layouts each child of `union` reports, in child order, each expressed in the union's
-   * output attributes. An eligible child reporting a [[PartitioningCollection]] offers its hash
-   * members. A child that offers nothing takes a shuffle whichever layout is picked.
-   *
-   * They are compared by equality below, which is what `UnionExec` itself compares its children
-   * with: `prepareOutputPartitioning` puts every child in the union's attributes. Where equality
-   * errs it errs towards shuffling a child it did not recognise.
-   */
-  private def childLayouts(
-      union: UnionExec,
-      policy: LayoutPolicy): Seq[Seq[Partitioning with Expression]] = {
-    union.prepareOutputPartitioning().zip(union.children).map { case (partitioning, child) =>
-      if (keepableLayout(child, policy)) {
-        PartitioningCollection.flatten(partitioning).collect {
-          case hash: HashPartitioning => hash
-        }
-      } else {
-        Nil
-      }
-    }
-  }
-
-  /**
    * Whether every input path reaches an exchange boundary. Stop at unstaged exchanges as well
    * as query stages: their input scans do not prevent coalescing. A non-exchange leaf already
    * prevents the consumer's compatible group from coalescing, independently of target selection.
@@ -412,9 +415,11 @@ case class PushDownShuffleExchangeThroughUnion(
    * shuffle boundaries: requirement and column repartitions are eligible. Fixed-count shuffles
    * and non-shuffle leaves require the non-coalescible allowance; other origins are rejected.
    * Shuffled joins require the join-branch opt-in; exploding joins require the non-coalescible
-   * allowance. Broadcast joins inspect only their streamed side. `fromBroadcastHashJoinExec`
-   * follows that probe through wrappers and stages so requirement shuffles also require the
-   * join-branch opt-in, preserving opportunities for adaptive skew splitting and local reads.
+   * allowance. Unions with duplicate child output identities cannot supply a kept layout, even
+   * through wrappers, because their positional mapping is ambiguous.
+   * Broadcast joins inspect only their streamed side. `fromBroadcastHashJoinExec` follows that
+   * probe through wrappers and stages so requirement shuffles also require the join-branch opt-in,
+   * preserving opportunities for adaptive skew splitting and local reads.
    */
   private def keepableLayout(
       plan: SparkPlan,
@@ -429,6 +434,7 @@ case class PushDownShuffleExchangeThroughUnion(
       }
     case stage: ShuffleQueryStageExec =>
       keepableLayout(stage.shuffle, policy, fromBroadcastHashJoinExec)
+    case union: UnionExec if union.hasDuplicateChildOutputs => false
     case _: ShuffledJoin if !policy.keepJoinBranches => false
     case _: BroadcastNestedLoopJoinExec | _: CartesianProductExec
         if !policy.allowNonCoalescible => false
