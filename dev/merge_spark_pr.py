@@ -117,6 +117,8 @@ MERGE_SCRIPT_REPO_PATH = "dev/merge_spark_pr.py"
 # See https://docs.github.com/en/actions/how-tos/manage-workflow-runs/skip-workflow-runs
 POST_MERGE_CI_INTERVALS = {"master": 10, "branch-4.x": 10}
 POST_MERGE_CI_SKIP_TRAILER = "skip-checks: true"
+# A PR carrying this GitHub label always runs post-merge CI, regardless of the interval.
+POST_MERGE_CI_FORCE_LABEL = "do-not-skip-ci"
 # Covers the trailer plus the cherry-pick attribution and committer sign-off added by -sx.
 POST_MERGE_CI_TRAILER_SEARCH_LENGTH = 256
 
@@ -538,6 +540,10 @@ def red(text):
     return "\033[91m%s\033[0m" % text
 
 
+def yellow(text):
+    return "\033[93m%s\033[0m" % text
+
+
 def bold(text):
     return "\033[1m%s\033[0m" % text
 
@@ -879,13 +885,21 @@ def clean_up():
             git.run("git branch -D %s" % branch)
 
 
-def should_skip_post_merge_ci(target_ref):
+def should_skip_post_merge_ci(target_ref, force_post_merge_ci=False):
     """Return whether the next commit on ``target_ref`` should skip post-merge CI.
 
     The branch history count matches the check formerly performed in ``build_main.yml``.
+    ``force_post_merge_ci`` is set when the PR carries ``POST_MERGE_CI_FORCE_LABEL``.
     """
     interval = POST_MERGE_CI_INTERVALS.get(target_ref)
     if interval is None:
+        return False
+
+    if force_post_merge_ci:
+        print(
+            "Post-merge CI will run on %s: the PR has the %r label."
+            % (target_ref, POST_MERGE_CI_FORCE_LABEL)
+        )
         return False
 
     commit_count = int(git.run(["git", "rev-list", "--count", "HEAD"]).strip()) + 1
@@ -896,10 +910,19 @@ def should_skip_post_merge_ci(target_ref):
         )
         return False
 
-    print_error(
-        "WARNING: Post-merge CI will be skipped on %s because commit count %s is not "
-        "divisible by %s. GitHub's %r trailer will be added."
-        % (target_ref, commit_count, interval, POST_MERGE_CI_SKIP_TRAILER)
+    print(
+        yellow(
+            "WARNING: Post-merge CI will be skipped on %s because commit count %s is not "
+            "divisible by %s. GitHub's %r trailer will be added. To force post-merge CI to "
+            "run, add the %r label to the PR and rerun this script."
+            % (
+                target_ref,
+                commit_count,
+                interval,
+                POST_MERGE_CI_SKIP_TRAILER,
+                POST_MERGE_CI_FORCE_LABEL,
+            )
+        )
     )
     return True
 
@@ -953,13 +976,22 @@ def amend_commit_message(message):
 
 
 # merge the requested PR and return the merge hash
-def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_authors):
+def merge_pr(
+    pr_num,
+    target_ref,
+    title,
+    body,
+    pr_repo_desc,
+    pr_author,
+    co_authors,
+    force_post_merge_ci=False,
+):
     pr_branch_name = "%s_MERGE_PR_%s" % (BRANCH_PREFIX, pr_num)
     target_branch_name = "%s_MERGE_PR_%s_%s" % (BRANCH_PREFIX, pr_num, target_ref.upper())
     git.run("git fetch %s pull/%s/head:%s" % (PR_REMOTE_NAME, pr_num, pr_branch_name))
     git.run("git fetch %s %s:%s" % (PUSH_REMOTE_NAME, target_ref, target_branch_name))
     git.run("git checkout %s" % target_branch_name)
-    skip_post_merge_ci = should_skip_post_merge_ci(target_ref)
+    skip_post_merge_ci = should_skip_post_merge_ci(target_ref, force_post_merge_ci)
 
     had_conflicts = False
     try:
@@ -1034,7 +1066,7 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
     return merge_hash
 
 
-def _do_cherry_pick(pr_num, merge_hash, pick_ref):
+def _do_cherry_pick(pr_num, merge_hash, pick_ref, force_post_merge_ci=False):
     """Cherry-pick `merge_hash` onto `pick_ref` and push.
 
     Returns the (pushed ref, pushed commit hash) pair. Raises `SkipCherryPick` if the
@@ -1046,7 +1078,7 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref):
     git.run("git fetch %s %s:%s" % (PUSH_REMOTE_NAME, pick_ref, pick_branch_name))
     git.run("git checkout %s" % pick_branch_name)
     pick_head = git.run("git rev-parse HEAD").strip()
-    skip_post_merge_ci = should_skip_post_merge_ci(pick_ref)
+    skip_post_merge_ci = should_skip_post_merge_ci(pick_ref, force_post_merge_ci)
 
     try:
         git.run(
@@ -1172,7 +1204,15 @@ def _upstream_first_sibling(target_ref, pick_ref, branch_names, already_picked):
     return None
 
 
-def cherry_pick(pr_num, merge_hash, default_branch, branch_names, target_ref, already_picked=()):
+def cherry_pick(
+    pr_num,
+    merge_hash,
+    default_branch,
+    branch_names,
+    target_ref,
+    already_picked=(),
+    force_post_merge_ci=False,
+):
     """Prompt for a target branch and cherry-pick `merge_hash` onto it.
 
     Enforces the Upstream-First policy (see header comment) via
@@ -1221,14 +1261,14 @@ def cherry_pick(pr_num, merge_hash, default_branch, branch_names, target_ref, al
             # reflect it.
             picked = []
             try:
-                picked.append(_do_cherry_pick(pr_num, merge_hash, sibling_x))
-                picked.append(_do_cherry_pick(pr_num, merge_hash, pick_ref))
+                picked.append(_do_cherry_pick(pr_num, merge_hash, sibling_x, force_post_merge_ci))
+                picked.append(_do_cherry_pick(pr_num, merge_hash, pick_ref, force_post_merge_ci))
             except SkipCherryPick:
                 pass
             return picked
         elif choice == "o":
             try:
-                return [_do_cherry_pick(pr_num, merge_hash, pick_ref)]
+                return [_do_cherry_pick(pr_num, merge_hash, pick_ref, force_post_merge_ci)]
             except SkipCherryPick:
                 return []
         elif choice == "a":
@@ -1237,7 +1277,7 @@ def cherry_pick(pr_num, merge_hash, default_branch, branch_names, target_ref, al
             fail("Unrecognized choice %r; aborting." % choice)
 
     try:
-        return [_do_cherry_pick(pr_num, merge_hash, pick_ref)]
+        return [_do_cherry_pick(pr_num, merge_hash, pick_ref, force_post_merge_ci)]
     except SkipCherryPick:
         return []
 
@@ -3203,6 +3243,9 @@ def main():
 
     url = pr["url"]
     title = pr["title"]
+    force_post_merge_ci = POST_MERGE_CI_FORCE_LABEL in [
+        label["name"] for label in pr.get("labels", [])
+    ]
 
     # Fail hard on draft, WIP, or DO-NOT-MERGE PRs to prevent accidental merges.
     if pr.get("draft", False) or "[WIP]" in title or "[DO-NOT-MERGE]" in title:
@@ -3308,6 +3351,7 @@ def main():
                     branch_names,
                     target_ref,
                     already_picked=tuple(picked_refs),
+                    force_post_merge_ci=force_post_merge_ci,
                 )
                 picked_refs = picked_refs + [ref for ref, _ in picked]
                 picked_commits = picked_commits + picked
@@ -3340,7 +3384,16 @@ def main():
 
     merged_refs = [target_ref]
 
-    merge_hash = merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_authors)
+    merge_hash = merge_pr(
+        pr_num,
+        target_ref,
+        title,
+        body,
+        pr_repo_desc,
+        pr_author,
+        co_authors,
+        force_post_merge_ci=force_post_merge_ci,
+    )
 
     # Ordered (branch, commit_hash) pairs for the merge comment: the merge sink first,
     # then each cherry-pick target as it is picked.
@@ -3367,6 +3420,7 @@ def main():
                 branch_names,
                 target_ref,
                 already_picked=tuple(merged_refs),
+                force_post_merge_ci=force_post_merge_ci,
             )
             merged_refs = merged_refs + [ref for ref, _ in picked]
             merged_commits = merged_commits + picked
