@@ -650,7 +650,10 @@ object Multiply {
 // Common base trait for Divide and Remainder, since these two classes are almost identical
 trait DivModLike extends BinaryArithmetic {
 
-  protected def decimalToDataTypeCodeGen(decimalResult: String): String = decimalResult
+  /** Java code assigning the checked decimal result to `value`. */
+  protected def decimalToDataTypeCodeGen(
+      decimalResult: String, value: String, errorContextCode: String): String =
+    s"$value = $decimalResult;"
 
   // Whether we should check overflow or not in ANSI mode.
   protected def checkDivideOverflow: Boolean = false
@@ -722,7 +725,7 @@ trait DivModLike extends BinaryArithmetic {
            |Decimal $decimalValue = ${eval1.value}.$decimalMethod(${eval2.value}).toPrecision(
            |  $precision, $scale, Decimal.ROUND_HALF_UP(), ${!failOnError}, $errorContextCode);
            |if ($decimalValue != null) {
-           |  ${ev.value} = ${decimalToDataTypeCodeGen(s"$decimalValue")};
+           |  ${decimalToDataTypeCodeGen(decimalValue, ev.value, errorContextCode)}
            |} else {
            |  ${ev.isNull} = true;
            |}
@@ -894,7 +897,26 @@ case class IntegralDivide(
 
   override def symbol: String = "/"
   override def decimalMethod: String = "quot"
-  override def decimalToDataTypeCodeGen(decimalResult: String): String = s"$decimalResult.toLong()"
+
+  // A decimal quotient that fits the decimal result type can still overflow a long when the
+  // type has more digits than a long can always hold.
+  private lazy val checkDecimalToLongOverflow: Boolean = failOnError && (super.dataType match {
+    case DecimalType.Fixed(precision, _) => precision > Decimal.MAX_LONG_DIGITS
+    case _ => false
+  })
+
+  override def decimalToDataTypeCodeGen(
+      decimalResult: String, value: String, errorContextCode: String): String = {
+    val checkLongOverflow = if (checkDecimalToLongOverflow) {
+      s"""
+         |if ($decimalResult.toJavaBigInteger().bitLength() > 63) {
+         |  throw QueryExecutionErrors.overflowInIntegralDivideError($errorContextCode);
+         |}""".stripMargin
+    } else {
+      ""
+    }
+    s"$checkLongOverflow\n$value = $decimalResult.toLong();"
+  }
 
   override def resultDecimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType = {
     // This follows division rule
@@ -927,6 +949,10 @@ case class IntegralDivide(
       if (res == null) {
         null
       } else {
+        if (checkDecimalToLongOverflow &&
+            res.asInstanceOf[Decimal].toJavaBigInteger.bitLength > 63) {
+          throw QueryExecutionErrors.overflowInIntegralDivideError(getContextOrNull())
+        }
         integral.toLong(res)
       }
     }
