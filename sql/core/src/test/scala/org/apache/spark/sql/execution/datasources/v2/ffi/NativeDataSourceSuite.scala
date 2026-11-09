@@ -931,7 +931,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     val schema = StructType.fromDDL("id BIGINT")
     // The test library records each call that the header rules out, which fails the test.
 
-    // A write or a micro-batch that committed is not aborted.
+    // A write or a micro-batch that committed is not aborted, and its writer is closed right away.
     val batchDir = Utils.createTempDir()
     val batchWrite = new ColumnarBatchWrite(
       () => dataSource("native_sink", "path" -> batchDir.getPath).writer(schema, false), schema)
@@ -939,6 +939,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     batchWrite.commit(Array.empty)
     batchWrite.abort(Array.empty)
     assert(new File(batchDir, "_SUCCESS").isFile && !new File(batchDir, "_ABORTED").exists())
+    assert(new File(batchDir, "_CLOSED").isFile)
     val streamDir = Utils.createTempDir()
     val streamWrite = new ColumnarStreamingWrite("native_sink",
       () => dataSource("native_sink", "path" -> streamDir.getPath)
@@ -948,6 +949,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     streamWrite.commit(0, Array.empty)
     streamWrite.abort(0, Array.empty)
     assert(new File(streamDir, "_EPOCH_0").isFile && !new File(streamDir, "_ABORTED_0").exists())
+    assert(new File(streamDir, "_CLOSED_0").isFile)
 
     // After a write fails, a data writer only aborts and closes the data writer of the library.
     val failingDir = Utils.createTempDir()
@@ -1015,9 +1017,11 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         "action" -> "write to",
         "name" -> "native_sink",
         "msg" -> "injected failure in write"))
-    // Spark aborted the first epoch, with a null message for its task, which did not commit.
+    // Spark aborted the first epoch, with a null message for its task, which did not commit, and
+    // closed its writer.
     assert(Files.readString(new File(dir, "_ABORTED_0").toPath) == "1,1,0")
     assert(!new File(dir, "_EPOCH_0").exists())
+    assert(new File(dir, "_CLOSED_0").isFile)
   }
 
   nativeTest("continuous processing fails with a native data source") {
@@ -1072,14 +1076,14 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.executedPlan
       assert(plan.collectFirst { case write: V2TableWriteExec => write.query }
         .exists(_.isInstanceOf[MicroBatchScanExec]), plan)
+      // Each micro-batch creates a new stream writer, which is closed once it committed, so the
+      // writer of the last micro-batch is closed too while the query still runs.
+      assert((0 to 2).forall(epoch => new File(dir, s"_CLOSED_$epoch").isFile))
     } finally {
       query.stop()
     }
     // Each micro-batch makes 5 more rows available after its start: [0, 5), [5, 10) and [10, 12).
     assert((0 to 2).forall(epoch => new File(dir, s"_EPOCH_$epoch").isFile))
-    // Each micro-batch creates a new stream writer, which closes the one of the previous
-    // micro-batch. The last one is closed once it is no longer referenced.
-    assert((0 to 1).forall(epoch => new File(dir, s"_CLOSED_$epoch").isFile))
     val written = dir.listFiles().filter(_.getName.startsWith("part-"))
       .flatMap(file => Files.readAllLines(file.toPath).asScala)
     assert(written.sorted.toSeq == (0 until 12).map(_.toString).sorted)
