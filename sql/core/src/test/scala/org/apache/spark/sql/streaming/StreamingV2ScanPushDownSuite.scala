@@ -31,7 +31,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{DataFrame, Encoder, Encoders, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow, StructFilters}
-import org.apache.spark.sql.catalyst.expressions.{Add, Alias, And, ArrayContains, Atan2, AttributeReference, AttributeSet, BoundReference, Cast, Divide, EqualTo, EvalMode, Expression, GetStructField, GreaterThan, IsNotNull, LeafExpression, LessThan, Literal, Or, Predicate => CatalystPredicate, Rand, RLike, ScalarSubquery}
+import org.apache.spark.sql.catalyst.expressions.{Add, Alias, And, ArrayContains, AttributeReference, AttributeSet, BoundReference, Cast, Divide, EqualTo, EvalMode, Expression, GetArrayItem, GetStructField, GreaterThan, IsNotNull, LeafExpression, LessThan, Literal, Or, Pow, Predicate => CatalystPredicate, Rand, RLike, ScalarSubquery, ScalaUDF, TypeOf}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.optimizer.{ColumnPruning, InferFiltersFromConstraints, InferFiltersFromGenerate, PruneFilters}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project, WithCTE}
@@ -1131,6 +1131,15 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
         assertPushedFilters("GreaterThan(k.a,0)"),
         assertNotOverSources("> 0"),
         CheckAnswer(Row("x")))
+      // Also when the fields of the struct of the static side have other names, as the join
+      // compares structs by their fields in order.
+      val other = spark.range(0, 1).selectExpr("named_struct('x', CAST(id AS INT) + 1) AS sk")
+        .where("sk = named_struct('x', 1)")
+      testStream(source.join(other, source("k") === other("sk")).select("v"))(
+        ProcessAllAvailable(),
+        assertPushedFilters("GreaterThan(k.a,0)"),
+        assertNotOverSources("> 0"),
+        CheckAnswer(Row("x")))
     }
     // A struct key with a double, and a double key, get their values in the micro-batches too, but
     // not in their check, as a double equal to 0.0 may be -0.0, so their filters are not pushed
@@ -1476,7 +1485,7 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
     withTable(tbl) {
       createTable(tbl,
         "id bigint, data string, d double, e int, t time, k struct<a: int>, xs array<int>, " +
-          "f struct<a: double>")
+          "f struct<a: double>, ks array<struct<a: int>>")
       // A relation of the source, whose pushed filters each case sets.
       var relation: StreamingDataSourceV2ScanRelation = null
       testStream(spark.readStream.table(tbl))(
@@ -1487,7 +1496,7 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
           }.get
           true
         })
-      val Seq(id, data, d, e, t, k, xs, f) = relation.output
+      val Seq(id, data, d, e, t, k, xs, f, ks) = relation.output
       // Checks the plan of a micro-batch that `plan` makes of the relation, once the scan of the
       // relation got `pushed`.
       def check(pushed: Expression)(plan: LogicalPlan => LogicalPlan): Unit = {
@@ -1546,6 +1555,30 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
       val array = Literal.create(ArrayData.toArrayData(Array(1, 2)),
         ArrayType(IntegerType, containsNull = false))
       assert(accepts(ArrayContains(xs, Literal(2)))(Filter(EqualTo(xs, array), _)))
+      // Or whose fields have other names, as an equality compares structs by their fields in
+      // order, also in arrays. The column gets the value with its own type, which `typeof` reads.
+      def structOf(name: String): Literal = Literal.create(InternalRow(1),
+        StructType(Seq(StructField(name, IntegerType, nullable = false))))
+      val aAbove0 = GreaterThan(GetStructField(k, 0, Some("a")), Literal(0))
+      assert(accepts(aAbove0)(Filter(EqualTo(k, structOf("x")), _)))
+      assert(accepts(aAbove0)(Filter(EqualTo(k, structOf("A")), _)))
+      def typeIs(name: String): Expression =
+        EqualTo(TypeOf(k), Literal(s"struct<$name:int>"))
+      assert(accepts(typeIs("a"))(Filter(EqualTo(k, structOf("x")), _)))
+      assert(!accepts(typeIs("x"))(Filter(EqualTo(k, structOf("x")), _)))
+      val structs = Literal.create(ArrayData.toArrayData(Array(InternalRow(1))),
+        ArrayType(StructType(Seq(StructField("x", IntegerType)))))
+      assert(accepts(GreaterThan(GetStructField(GetArrayItem(ks, Literal(0)), 0, Some("a")),
+        Literal(0)))(Filter(EqualTo(ks, structs), _)))
+      // The check does not evaluate a filter with the values when the result is not foldable, as
+      // with a UDF, which the optimizer does not evaluate either: it folds my_udf(id) > 0 OR
+      // id > 3 into true with id = 5.
+      val calls = new AtomicInteger()
+      val myUdf = ScalaUDF((i: Long) => { calls.incrementAndGet(); i }, LongType, Seq(id),
+        udfName = Some("my_udf"))
+      assert(accepts(Or(GreaterThan(myUdf, Literal(0L)), GreaterThan(id, Literal(3L))))(
+        Filter(EqualTo(id, Literal(5L)), _)))
+      assert(calls.get() === 0)
       // But not a double, as a double equal to 0.0 may be -0.0, nor a struct of a double: the
       // filters on such columns are not pushed down.
       assert(!accepts(GreaterThan(d, Literal(1.0)))(Filter(EqualTo(d, Literal(1.5)), _)))
@@ -1553,12 +1586,12 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
         StructType(Seq(StructField("a", DoubleType, nullable = false))))
       assert(!accepts(GreaterThan(GetStructField(f, 0, Some("a")), Literal(0.0)))(
         Filter(EqualTo(f, structOf1), _)))
-      // A filter that only differs in the sign of a zero is another filter, as atan2(0.0, x) and
-      // atan2(-0.0, x) differ for a negative x.
-      def atan(zero: Double): Expression =
-        GreaterThan(Atan2(Literal(zero), Cast(id, DoubleType)), Literal(0.0))
-      assert(accepts(atan(-0.0))(Filter(atan(-0.0), _)))
-      assert(!accepts(atan(-0.0))(Filter(atan(0.0), _)))
+      // A filter that only differs in the sign of a zero is another filter, as pow(0.0, x) and
+      // pow(-0.0, x) differ for x = -1.
+      def power(zero: Double): Expression =
+        GreaterThan(Pow(Literal(zero), Cast(id, DoubleType)), Literal(0.0))
+      assert(accepts(power(-0.0))(Filter(power(-0.0), _)))
+      assert(!accepts(power(-0.0))(Filter(power(0.0), _)))
       // And once the optimizer of the micro-batch rewrote it, as it rewrites the plan: the plans
       // below are those that the optimizer makes of the pushed filter with the conditions.
       def optimized(conditions: Expression*)(relation: LogicalPlan): LogicalPlan = {
@@ -1784,10 +1817,10 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
     withTable(tbl) {
       createTable(tbl, "x bigint")
       val source = spark.readStream.table(tbl)
-      // atan2(0.0, x) and atan2(-0.0, x) differ for a negative x, though `Literal.equals` finds
-      // their zeros equal, so the scan gets neither.
+      // pow(0.0, x) and pow(-0.0, x) differ for x = -1, though `Literal.equals` finds their zeros
+      // equal, so the scan gets neither.
       def above(zero: Double): DataFrame =
-        source.where(atan2(lit(zero), col("x").cast("double")) > 0)
+        source.where(pow(lit(zero), col("x").cast("double")) > 0)
       assert(pushed(above(0.0).union(above(-0.0))) === Nil)
       assert(pushed(above(-0.0).union(above(-0.0))) === Seq(Set("x")))
     }
@@ -1817,6 +1850,26 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
         insert("(3, 3.5, named_struct('a', 0.0D), 'c')"),
         ProcessAllAvailable(),
         CheckAnswer(Row(1L), Row(3L)))
+    }
+  }
+
+  test("push down the filters on columns of types that no equality compares") {
+    withTable(tbl) {
+      createTable(tbl,
+        "id bigint, p struct<id: int, attrs: map<string, string>>, m map<string, int>, v variant",
+        filtering)
+      sql(s"INSERT INTO $tbl VALUES " +
+        "(1, named_struct('id', 5, 'attrs', map('k', 'a')), map('k', 1), parse_json('1')), " +
+        "(2, named_struct('id', 6, 'attrs', map('k', 'b')), map('k', 2), parse_json('2'))")
+      val source = spark.readStream.table(tbl)
+      // No equality compares maps, variants, or structs with maps, so neither the micro-batches
+      // nor their check give a value to such a column, and its filters are pushed down.
+      assert(pushed(source.where("p.id = 5 AND m['k'] = 1 AND variant_get(v, '$', 'int') = 1"))
+        .toSet === Set(Set("p"), Set("m"), Set("v")))
+      testStream(source.where("p.id = 5").select("id"))(
+        ProcessAllAvailable(),
+        assertPushedFilters("EqualTo(p.id,5)"),
+        CheckAnswer(Row(1L)))
     }
   }
 

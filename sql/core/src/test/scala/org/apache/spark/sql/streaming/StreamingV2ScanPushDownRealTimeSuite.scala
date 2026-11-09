@@ -20,24 +20,26 @@ package org.apache.spark.sql.streaming
 import java.util
 import java.util.concurrent.atomic.AtomicInteger
 
-import org.apache.spark.SparkConf
-import org.apache.spark.sql.{Encoder, Encoders}
-import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow}
+import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.sql.{DataFrame, Encoder, Encoders}
+import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow, StructFilters}
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, Expression, Predicate => CatalystPredicate}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.classic.{Dataset, SparkSession}
+import org.apache.spark.sql.classic.{Dataset, ExpressionUtils, SparkSession}
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, PartitionOffset, SupportsRealTimeRead}
 import org.apache.spark.sql.connector.read.streaming.SupportsRealTimeRead.RecordStatus
 import org.apache.spark.sql.execution.datasources.v2.{RealTimeStreamScanExec, StreamingDataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemorySink, LowLatencyMemoryStream}
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-/** Tests the column pruning of the scans of the streaming sources of real-time queries. */
+/** Tests the pushdowns to the scans of the streaming sources of real-time queries. */
 class StreamingV2ScanPushDownRealTimeSuite extends StreamRealTimeModeSuiteBase {
 
   import testImplicits._
@@ -48,10 +50,7 @@ class StreamingV2ScanPushDownRealTimeSuite extends StreamRealTimeModeSuiteBase {
 
   test("read only the columns that a real-time query needs") {
     val input = new PruningLowLatencyStream(spark)
-    val table = new PruningRealTimeTable(input)
-    val df = Dataset.ofRows(spark, StreamingRelationV2(None, "pruning_real_time", table,
-      CaseInsensitiveStringMap.empty(), DataTypeUtils.toAttributes(table.schema()), None, None,
-      None)).toDF("id", "data", "extra").where("extra > 10").select("data")
+    val df = readTable(new PruningRealTimeTable(input)).where("extra > 10").select("data")
     testStream(df, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
       StartStream(),
       AddData(input, (1L, "a", 10), (2L, "b", 20), (3L, "c", 30)),
@@ -77,11 +76,10 @@ class StreamingV2ScanPushDownRealTimeSuite extends StreamRealTimeModeSuiteBase {
     withSQLConf(SQLConf.STREAMING_V2_FILTER_PUSHDOWN_ENABLED.key -> "true") {
       val input = new PruningLowLatencyStream(spark)
       val table = new PruningRealTimeTable(input, takesFilters = true)
-      val df = Dataset.ofRows(spark, StreamingRelationV2(None, "pruning_real_time", table,
-        CaseInsensitiveStringMap.empty(), DataTypeUtils.toAttributes(table.schema()), None, None,
-        None)).toDF("id", "data", "extra").where("extra > 10").select("data")
-      // The scan builder gets the filter, which each batch applies after the scan too, as its
-      // check finds.
+      PruningLowLatencyStream.dropped.set(0)
+      val df = readTable(table).where("extra > 10").select("data")
+      // The scan builder gets the filter, and its stream drops the rows that fail it, while each
+      // batch applies it after the scan too, as its check finds.
       testStream(df, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
         StartStream(),
         AddData(input, (1L, "a", 10), (2L, "b", 20), (3L, "c", 30)),
@@ -95,9 +93,36 @@ class StreamingV2ScanPushDownRealTimeSuite extends StreamRealTimeModeSuiteBase {
           true
         },
         AddData(input, (4L, "d", 5), (5L, "e", 50)),
-        CheckAnswer("b", "c", "e"))
+        CheckAnswer("b", "c", "e"),
+        AssertOnQuery(_ => PruningLowLatencyStream.dropped.get() == 2))
     }
   }
+
+  test("fail a real-time batch whose query no longer applies the filters that its scan got") {
+    withSQLConf(SQLConf.STREAMING_V2_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      // The filter has a value that changes each time that it is evaluated, which the optimization
+      // at the start folds, as it would fold a function of the time that it does not replace.
+      ChangingValue.values.set(0)
+      val input = new PruningLowLatencyStream(spark)
+      val table = new PruningRealTimeTable(input, takesFilters = true)
+      val df = readTable(table)
+        .where(col("extra") < ExpressionUtils.column(ChangingValue())).select("data")
+      // The stream drops the rows that fail extra < 1, while the plan of the batch has a larger
+      // value, so it would keep some of them: the batch fails before it reads them.
+      testStream(df, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
+        StartStream(),
+        ExpectFailure[SparkException] { e =>
+          assert(e.asInstanceOf[SparkException].getCondition === "STREAMING_SCAN_FILTERS_CHANGED")
+        })
+      assert(table.pushed === Seq("LessThan(_3,1)"))
+    }
+  }
+
+  // The real-time query of the columns (id, data, extra) of `table`.
+  private def readTable(table: PruningRealTimeTable): DataFrame =
+    Dataset.ofRows(spark, StreamingRelationV2(None, "pruning_real_time", table,
+      CaseInsensitiveStringMap.empty(), DataTypeUtils.toAttributes(table.schema()), None, None,
+      None)).toDF("id", "data", "extra")
 }
 
 /**
@@ -111,10 +136,12 @@ private class PruningLowLatencyStream(sparkSession: SparkSession)
 
   // The ordinals of the columns that the readers return, and their schema.
   @volatile var columns: Option[(Array[Int], StructType)] = None
+  // The readers drop the rows that fail these filters, bound to all the columns of the stream.
+  @volatile var filters: Seq[Expression] = Nil
 
   override def createReaderFactory(): PartitionReaderFactory = columns match {
     case Some((ordinals, schema)) =>
-      new PruningRealTimeReaderFactory(super.createReaderFactory(), ordinals, schema)
+      new PruningRealTimeReaderFactory(super.createReaderFactory(), ordinals, schema, filters)
     case None => super.createReaderFactory()
   }
 }
@@ -124,12 +151,14 @@ private object PruningLowLatencyStream {
   val ids = new AtomicInteger(1 << 20)
   val encoder: Encoder[(Long, String, Int)] =
     Encoders.tuple(Encoders.scalaLong, Encoders.STRING, Encoders.scalaInt)
+  // The number of rows that the readers dropped, as they failed the filters.
+  val dropped = new AtomicInteger()
 }
 
 /**
  * A table over a [[PruningLowLatencyStream]], whose scans only read the columns they are asked.
  * With `takesFilters`, it declares STREAMING_FILTER_PUSHDOWN, and its scan builder takes all the
- * filters, which it records, while its streams return all the rows.
+ * filters, which it records, and its streams drop the rows that fail them.
  */
 private class PruningRealTimeTable(input: PruningLowLatencyStream, takesFilters: Boolean = false)
   extends Table with SupportsRead {
@@ -172,6 +201,8 @@ private class PruningRealTimeTable(input: PruningLowLatencyStream, takesFilters:
 
         override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
           input.columns = Some(columns.fieldNames.map(schema().fieldIndex) -> columns)
+          input.filters = filters.toSeq.flatMap(StructFilters.filterToExpression(_, name =>
+            schema().getFieldIndex(name).map(i => BoundReference(i, schema()(i).dataType, true))))
           input
         }
       }
@@ -179,21 +210,44 @@ private class PruningRealTimeTable(input: PruningLowLatencyStream, takesFilters:
   }
 }
 
+/**
+ * The readers of a [[PruningLowLatencyStream]], which return the columns of `ordinals`, with the
+ * schema `columns`, of the rows that pass `filters`, and drop the others.
+ */
 private class PruningRealTimeReaderFactory(
     input: PartitionReaderFactory,
     ordinals: Array[Int],
-    columns: StructType) extends PartitionReaderFactory {
+    columns: StructType,
+    filters: Seq[Expression]) extends PartitionReaderFactory {
 
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val reader = input.createReader(partition).asInstanceOf[SupportsRealTimeRead[InternalRow]]
     new SupportsRealTimeRead[InternalRow] {
       private val projection = ProjectingInternalRow(columns, ordinals.toSeq)
+      private val predicates = filters.map(CatalystPredicate.createInterpreted)
+
+      // Whether the row of the reader passes the filters, or else counts it as dropped.
+      private def keeps(): Boolean = predicates.forall(_.eval(reader.get())) || {
+        PruningLowLatencyStream.dropped.incrementAndGet()
+        false
+      }
 
       override def nextWithTimeout(
           startTimeMs: java.lang.Long,
-          timeoutMs: java.lang.Long): RecordStatus = reader.nextWithTimeout(startTimeMs, timeoutMs)
+          timeoutMs: java.lang.Long): RecordStatus = {
+        var status = reader.nextWithTimeout(startTimeMs, timeoutMs)
+        while (status.hasRecord && !keeps()) {
+          status = reader.nextWithTimeout(startTimeMs, timeoutMs)
+        }
+        status
+      }
 
-      override def next(): Boolean = reader.next()
+      override def next(): Boolean = {
+        while (reader.next()) {
+          if (keeps()) return true
+        }
+        false
+      }
 
       override def get(): InternalRow = {
         projection.project(reader.get())

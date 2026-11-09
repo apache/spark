@@ -202,20 +202,20 @@ public enum TableCapability {
    * to the first nondeterministic one, so the filters after a nondeterministic filter or
    * projection, or above another operator, such as a filter on the event-time column above its
    * watermark, are not pushed. Nor are the filters on columns of floating types, of strings of a
-   * collation that is not binary, or of structs or arrays with such values: each micro-batch checks
-   * that its plan applies the pushed filters, also once its optimizer rewrote them with the values
-   * that the plan gives to their columns, which Spark only can for the other columns. The filters
-   * of a {@code SupportsPushDownFilters} builder compare columns with values, which cannot fail, so
-   * it gets such filters whatever their order among the filters over the relation. A builder whose
-   * filters may fail on some rows, as a cast does with ANSI, gets the filters that the query
-   * applies before any other filter, in their order, and then those that cannot fail, such as
-   * comparisons of columns with values, wherever they are. The streams of its scans must not
-   * evaluate a filter on a row that a filter before it drops, so that a filter does not see a row
-   * that the query drops with a filter written before it. Spark may still evaluate other conditions
-   * before these filters in a micro-batch, such as those that it infers from them, e.g.
-   * {@code a > 5} from {@code a = b AND b > 5}, or an equality with a literal that it moves first,
-   * so such a condition may drop a row in Spark on which a pushed filter that may fail, such as a
-   * division with ANSI, fails in the stream.
+   * collation that is not binary, or of structs, arrays or user-defined types with such values:
+   * each micro-batch checks that its plan applies the pushed filters, also once its optimizer
+   * rewrote them with the values that the plan gives to their columns, which Spark only can for the
+   * other columns. The filters of a {@code SupportsPushDownFilters} builder compare columns with
+   * values, which cannot fail, so it gets such filters whatever their order among the filters over
+   * the relation. A builder whose filters may fail on some rows, as a cast does with ANSI, gets the
+   * filters that the query applies before any other filter, in their order, and then those that
+   * cannot fail, such as comparisons of columns with values, wherever they are. The streams of its
+   * scans must not evaluate a filter on a row that a filter before it drops, so that a filter does
+   * not see a row that the query drops with a filter written before it. Spark may still evaluate
+   * other conditions before these filters in a micro-batch, such as those that it infers from them,
+   * e.g. {@code a > 5} from {@code a = b AND b > 5}, or an equality with a literal that it moves
+   * first, so such a condition may drop a row in Spark on which a pushed filter that may fail, such
+   * as a division with ANSI, fails in the stream.
    * <p>
    * Spark builds the scan of a streaming read once, when the query starts, from the plan of the
    * query optimized then, and creates the micro-batch or continuous stream of the read from that

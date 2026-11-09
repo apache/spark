@@ -6332,13 +6332,13 @@ object SQLConf {
         "with ANSI, gets the filters that the query applies before any other filter, in their " +
         "order, and then those that cannot fail that it applies wherever they are. The filters " +
         "on columns of floating types, of strings of a collation that is not binary, or of " +
-        "structs or arrays with such values are not pushed down. The query still applies the " +
-        "filters after the scan, and each micro-batch checks that its plan applies them to all " +
-        "the rows that it reads from the source before it reads them. Otherwise, as when the " +
-        "optimizer of a micro-batch rewrites a pushed filter in a way that Spark cannot follow, " +
-        "the micro-batch fails with STREAMING_SCAN_FILTERS_CHANGED, and so do the next ones: " +
-        "restart the query with this configuration set to false to read the source with no " +
-        "filter. When false, the scan gets no filter.")
+        "structs, arrays or user-defined types with such values are not pushed down. The query " +
+        "still applies the filters after the scan, and each micro-batch checks that its plan " +
+        "applies them to all the rows that it reads from the source before it reads them. " +
+        "Otherwise, as when the optimizer of a micro-batch rewrites a pushed filter in a way " +
+        "that Spark cannot follow, the micro-batch fails with STREAMING_SCAN_FILTERS_CHANGED, " +
+        "and so do the next ones: restart the query with this configuration set to false to " +
+        "read the source with no filter. When false, the scan gets no filter.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf

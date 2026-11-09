@@ -27,7 +27,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.expressions.{AliasHelper, And, Attribute, AttributeMap, AttributeReference, AttributeSet, Cast, EqualNullSafe, EqualTo, Expression, ExpressionSet, ExprUtils, Generator, LeafExpression, Literal, NamedExpression, Or, OuterReference, PredicateHelper, SubqueryExpression, Unevaluable}
+import org.apache.spark.sql.catalyst.expressions.{AliasHelper, And, Attribute, AttributeMap, AttributeReference, AttributeSet, Cast, EqualNullSafe, EqualTo, Expression, ExpressionSet, ExprUtils, Generator, LeafExpression, Literal, NamedExpression, Or, OrderUtils, OuterReference, PredicateHelper, SubqueryExpression, Unevaluable}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.optimizer.{CollapseProject, InferFiltersFromConstraints, InferFiltersFromGenerate, ReplaceExpressions}
@@ -47,7 +47,7 @@ import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.datasources.v2.{PushDownUtils, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetSeqMetadata, OffsetSeqMetadataBase}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{AnyTimestampNanoType, AnyTimeType, ArrayType, BinaryType, BooleanType, DataType, DatetimeType, DateType, DayTimeIntervalType, DecimalType, DoubleType, FloatType, IntegralType, MapType, StringType, StructType, TimestampNTZType, TimestampType, TimeType, VariantType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{AnyTimestampNanoType, AnyTimeType, ArrayType, BinaryType, BooleanType, DataType, DatetimeType, DateType, DayTimeIntervalType, DecimalType, DoubleType, FloatType, IntegralType, MapType, NullType, StringType, StructType, TimestampNTZType, TimestampType, TimeType, UserDefinedType, VariantType, YearMonthIntervalType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
@@ -120,12 +120,13 @@ private[sql] object StreamingV2ScanPushDown
   /**
    * Returns whether the scan of a relation may get `filter`, a deterministic filter over the
    * relation: if it has no subquery and no placeholder, whose value each micro-batch gets on its
-   * own (see `forStartup`), and if all its columns are of types whose equal values are the same
-   * (see `hasExactEquality`), not floating types or strings of a collation that is not binary.
-   * The optimizer of a micro-batch may rewrite a filter with the values that its plan gives to
-   * the columns of the filter, which the check of the micro-batches then gives to them too (see
-   * `impliedBy`), and it only can for such columns: a micro-batch that has a pushed filter on
-   * other columns rewritten fails, and so do the next ones, which have the same plan.
+   * own (see `forStartup`), and if each of its columns has the value of any literal that it is
+   * equal to, in any expression (see `hasExactEquality`): not a column of a floating type or of
+   * strings of a collation that is not binary, or of a struct, an array or a user-defined type
+   * with such values. The optimizer of a micro-batch may rewrite a filter with the values that its
+   * plan gives to the columns of the filter, which the check of the micro-batches then gives to
+   * them too (see `impliedBy`), and it only can for such columns: a micro-batch that has a pushed
+   * filter on other columns rewritten fails, and so do the next ones, which have the same plan.
    */
   private def isPushable(filter: Expression): Boolean = {
     !SubqueryExpression.hasSubquery(filter) && !filter.exists(_.isInstanceOf[StartupValue]) &&
@@ -133,11 +134,30 @@ private[sql] object StreamingV2ScanPushDown
   }
 
   /**
+   * Returns whether a column of `dataType` that is equal to a value has this value in any
+   * expression, so that the optimizer of a micro-batch, and the check of its plan, may put the
+   * value in place of the column: the types whose equal values are the same, the types that no
+   * equality compares, as they are not orderable, such as maps and variants, whose columns are
+   * never equal to a value, and the structs, arrays and user-defined types of these. Not the
+   * floating types, as 0.0 is equal to -0.0, nor the strings that a collation finds equal.
+   */
+  private def hasExactEquality(dataType: DataType): Boolean = dataType match {
+    case _: IntegralType | _: DecimalType | BooleanType | DateType | TimestampType |
+         TimestampNTZType | _: AnyTimestampNanoType | _: TimeType | _: DayTimeIntervalType |
+         _: YearMonthIntervalType | BinaryType | NullType => true
+    case string: StringType => string.supportsBinaryEquality
+    case struct: StructType => struct.fields.forall(field => hasExactEquality(field.dataType))
+    case array: ArrayType => hasExactEquality(array.elementType)
+    case udt: UserDefinedType[_] => hasExactEquality(udt.sqlType)
+    case other => !OrderUtils.isOrderable(other)
+  }
+
+  /**
    * Returns `expression` for the comparisons of filters, with its literals of floating values,
    * also in structs, arrays and maps, replaced by placeholders of their bits: `Literal.equals`
    * finds 0.0 and -0.0 equal, while filters that only differ in the sign of a zero may keep
-   * different rows, as `atan2(0.0, x) > 0` and `atan2(-0.0, x) > 0` do for a negative `x`. The
-   * NaN values have the same bits, as Spark evaluates them alike.
+   * different rows, as `pow(0.0, x) > 0` and `pow(-0.0, x) > 0` do for `x = -1`. The NaN values
+   * have the same bits, as Spark evaluates them alike.
    */
   private def exact(expression: Expression): Expression = expression.transformUp {
     case literal: Literal if hasFloating(literal.dataType) =>
@@ -146,6 +166,42 @@ private[sql] object StreamingV2ScanPushDown
 
   // The set of `filters` that `exact` compares.
   private def exactSet(filters: Seq[Expression]): ExpressionSet = ExpressionSet(filters.map(exact))
+
+  private def hasFloating(dataType: DataType): Boolean = dataType.existsRecursively {
+    case FloatType | DoubleType => true
+    case _ => false
+  }
+
+  // The value of a literal of `dataType` with its floating values as their bits, and its structs,
+  // arrays and maps as sequences, which compare by their values, see `exact`.
+  private def exactValue(value: Any, dataType: DataType): Any = (value, dataType) match {
+    case (null, _) => null
+    case (double: Double, DoubleType) => java.lang.Double.doubleToLongBits(double)
+    case (float: Float, FloatType) => java.lang.Float.floatToIntBits(float)
+    case (row: InternalRow, struct: StructType) =>
+      struct.fields.indices.map { i =>
+        val fieldType = struct(i).dataType
+        if (row.isNullAt(i)) null else exactValue(row.get(i, fieldType), fieldType)
+      }
+    case (array: ArrayData, ArrayType(elementType, _)) =>
+      (0 until array.numElements()).map { i =>
+        if (array.isNullAt(i)) null else exactValue(array.get(i, elementType), elementType)
+      }
+    case (map: MapData, MapType(keyType, valueType, _)) =>
+      exactValue(map.keyArray(), ArrayType(keyType)) ->
+        exactValue(map.valueArray(), ArrayType(valueType))
+    case (bytes: Array[Byte], _) => bytes.toSeq
+    case (other, _) => other
+  }
+
+  /**
+   * Stands for a literal with floating values in the comparisons of filters (see `exact`), which
+   * are never evaluated: `value` has the bits of the floating values.
+   */
+  private case class ExactLiteral(value: Any, dataType: DataType)
+    extends LeafExpression with Unevaluable {
+    override def nullable: Boolean = value == null
+  }
 
   /**
    * The scan of a streaming source, and its stream.
@@ -735,18 +791,21 @@ private[sql] object StreamingV2ScanPushDown
           case _ => None
         }
       }
-      conditionsOverRelations(plan, Nil).foreach { case (relation, conditions) =>
-        val implied = impliedBy(conditions, optimized(relation))
-        val results = relation.pushedFilters.map(filter => filter -> Try(implied(filter)))
-        val unapplied = results.collect {
-          case (filter, result) if !result.getOrElse(false) => filter
-        }
-        if (unapplied.nonEmpty) {
-          throw QueryExecutionErrors.streamingScanFiltersChangedError(
-            sourceName(relation.relation.table, relation.catalog, relation.identifier),
-            unapplied,
-            results.collectFirst { case (_, Failure(e)) => e }.orNull)
-        }
+      // The occurrences of relations whose scans got no filter have nothing to check.
+      conditionsOverRelations(plan, Nil).foreach {
+        case (relation, conditions) if relation.pushedFilters.nonEmpty =>
+          val implied = impliedBy(conditions, optimized(relation))
+          val results = relation.pushedFilters.map(filter => filter -> Try(implied(filter)))
+          val unapplied = results.collect {
+            case (filter, result) if !result.getOrElse(false) => filter
+          }
+          if (unapplied.nonEmpty) {
+            throw QueryExecutionErrors.streamingScanFiltersChangedError(
+              sourceName(relation.relation.table, relation.catalog, relation.identifier),
+              unapplied,
+              results.collectFirst { case (_, Failure(e)) => e }.orNull)
+          }
+        case _ =>
       }
     }
   }
@@ -822,19 +881,21 @@ private[sql] object StreamingV2ScanPushDown
    * implies any filter. Otherwise, the facts imply a filter if they have it, or its conjuncts, or
    * one of its disjuncts, also given the values that the facts give to its columns, equal to
    * literals: the filter holds if it evaluates to true with these values when all its columns
-   * have one, and otherwise if `optimize`, the optimizer of the micro-batch, rewrites the filter
-   * with the equalities of these values into conditions that hold, or evaluate to true with the
-   * values. The optimizer of a micro-batch puts these values in place of the columns in its
-   * filters (see `ConstantPropagation`), wherever no expression that may fail keeps them, e.g.
+   * have one, and it is then foldable, as the optimizer only evaluates such expressions, not a UDF
+   * for instance, and otherwise if `optimize`, the optimizer of the micro-batch, rewrites the
+   * filter with the equalities of these values into conditions that hold, or evaluate to true
+   * with the values. The optimizer of a micro-batch puts these values in place of the columns in
+   * its filters (see `ConstantPropagation`), wherever no expression that may fail keeps them, e.g.
    * with an equality that it infers through a join, and rewrites the filters with the other rules
    * of the same batch, so that `id > 1` becomes true with `id = 5`, and `(a + b > 3 AND b > 0) OR
-   * a > 9` becomes `a + b > 3 OR a > 9` with `b = 1`. Only the columns of the types whose equal
-   * values are the same get values (see `hasExactEquality`), not those of floating types, as a
-   * column equal to 0.0 may be -0.0, or strings of a collation that is not binary, nor the
-   * structs and arrays that have such values, whose filters are not pushed down (see
-   * `isPushable`). The facts and the filters are compared with `exact`. This may miss that the
-   * facts imply a filter, which fails the micro-batch, but never finds that they imply a filter
-   * that they do not imply, as long as the rules of the optimizer keep what the filters mean.
+   * a > 9` becomes `a + b > 3 OR a > 9` with `b = 1`. Only the columns that have the value of any
+   * literal that they are equal to get values (see `hasExactEquality`), as their filters are the
+   * only ones pushed down (see `isPushable`). A value has the type of its column, with the names
+   * of its fields, which an expression such as `typeof` reads, as an equality compares structs by
+   * their fields in order, whatever their names. The facts and the filters are compared with
+   * `exact`. This may miss that the facts imply a filter, which fails the micro-batch, but never
+   * finds that they imply a filter that they do not imply, as long as the rules of the optimizer
+   * keep what the filters mean.
    */
   private def impliedBy(
       facts: Seq[Expression],
@@ -844,28 +905,33 @@ private[sql] object StreamingV2ScanPushDown
       case _ => false
     }
     val known = exactSet(facts)
-    def holds(condition: Expression): Boolean = {
-      known.contains(exact(condition)) || (condition match {
+    // Whether `condition`, compared with `exact`, is a fact, or true, or its conjuncts all hold, or
+    // one of its disjuncts does.
+    def holdsExactly(condition: Expression): Boolean = known.contains(condition) ||
+      (condition match {
         case TrueLiteral => true
-        case And(left, right) => holds(left) && holds(right)
-        case Or(left, right) => holds(left) || holds(right)
+        case And(left, right) => holdsExactly(left) && holdsExactly(right)
+        case Or(left, right) => holdsExactly(left) || holdsExactly(right)
         case _ => false
       })
-    }
+    def holds(condition: Expression): Boolean = holdsExactly(exact(condition))
     val values = AttributeMap(facts.collect {
       case EqualTo(column: Attribute, value: Literal) => column -> value
       case EqualTo(value: Literal, column: Attribute) => column -> value
       case EqualNullSafe(column: Attribute, value: Literal) => column -> value
       case EqualNullSafe(value: Literal, column: Attribute) => column -> value
-    }.filter { case (column, value) =>
-      DataType.equalsIgnoreNullability(column.dataType, value.dataType) &&
-        hasExactEquality(column.dataType)
+    }.collect {
+      case (column, value) if hasExactEquality(column.dataType) &&
+          DataType.equalsStructurally(column.dataType, value.dataType, ignoreNullability = true) =>
+        column -> Literal(value.value, column.dataType)
     })
-    // Whether `condition` evaluates to true with the values, which all its columns have.
+    // Whether `condition` evaluates to true with the values, which all its columns have, when it
+    // is then foldable.
     def isTrue(condition: Expression): Boolean =
-      condition.references.forall(values.contains) && Try {
-        condition.transform { case column: Attribute => values(column) }.eval()
-      }.toOption.contains(true)
+      condition.references.forall(values.contains) && {
+        val withValues = condition.transform { case column: Attribute => values(column) }
+        withValues.foldable && Try(withValues.eval()).toOption.contains(true)
+      }
     filter => noRow || holds(filter) || {
       val columns = filter.references.toSeq.filter(values.contains)
       columns.nonEmpty && (isTrue(filter) || {
@@ -877,56 +943,6 @@ private[sql] object StreamingV2ScanPushDown
           .exists(_.forall(condition => holds(condition) || isTrue(condition)))
       })
     }
-  }
-
-  // Whether the values of `dataType` that are equal are the same, so that a column that is equal
-  // to a value has this value in any expression: not those of the floating types, as 0.0 is
-  // equal to -0.0, nor the strings that a collation finds equal, nor the structs and arrays that
-  // have such values.
-  private def hasExactEquality(dataType: DataType): Boolean = dataType match {
-    case _: IntegralType | _: DecimalType | BooleanType | DateType | TimestampType |
-         TimestampNTZType | _: AnyTimestampNanoType | _: TimeType | _: DayTimeIntervalType |
-         _: YearMonthIntervalType | BinaryType => true
-    case string: StringType => string.supportsBinaryEquality
-    case struct: StructType => struct.fields.forall(field => hasExactEquality(field.dataType))
-    case array: ArrayType => hasExactEquality(array.elementType)
-    case _ => false
-  }
-
-  private def hasFloating(dataType: DataType): Boolean = dataType.existsRecursively {
-    case FloatType | DoubleType => true
-    case _ => false
-  }
-
-  // The value of a literal of `dataType` with its floating values as their bits, and its structs,
-  // arrays and maps as sequences, which compare by their values, see `exact`.
-  private def exactValue(value: Any, dataType: DataType): Any = (value, dataType) match {
-    case (null, _) => null
-    case (double: Double, DoubleType) => java.lang.Double.doubleToLongBits(double)
-    case (float: Float, FloatType) => java.lang.Float.floatToIntBits(float)
-    case (row: InternalRow, struct: StructType) =>
-      struct.fields.indices.map { i =>
-        val fieldType = struct(i).dataType
-        if (row.isNullAt(i)) null else exactValue(row.get(i, fieldType), fieldType)
-      }
-    case (array: ArrayData, ArrayType(elementType, _)) =>
-      (0 until array.numElements()).map { i =>
-        if (array.isNullAt(i)) null else exactValue(array.get(i, elementType), elementType)
-      }
-    case (map: MapData, MapType(keyType, valueType, _)) =>
-      exactValue(map.keyArray(), ArrayType(keyType)) ->
-        exactValue(map.valueArray(), ArrayType(valueType))
-    case (bytes: Array[Byte], _) => bytes.toSeq
-    case (other, _) => other
-  }
-
-  /**
-   * Stands for a literal with floating values in the comparisons of filters (see `exact`), which
-   * are never evaluated: `value` has the bits of the floating values.
-   */
-  private case class ExactLiteral(value: Any, dataType: DataType)
-    extends LeafExpression with Unevaluable {
-    override def nullable: Boolean = value == null
   }
 
   /**
