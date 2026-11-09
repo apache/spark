@@ -256,35 +256,13 @@ class TaskWriter {
 
   /// Imports the array that Spark passes, which has the schema of the writer, moving it, and
   /// passes it to the writer.
-  arrow::Status Write(struct ArrowArray* array) {
-    return Guard([&]() -> arrow::Status {
-      ARROW_RETURN_NOT_OK(RequireOutput(array));
-      ARROW_ASSIGN_OR_RAISE(std::shared_ptr<arrow::RecordBatch> batch,
-                            arrow::ImportRecordBatch(array, schema_));
-      return WriteBatch(std::move(batch));
-    });
-  }
+  virtual arrow::Status Write(struct ArrowArray* array) = 0;
 
   /// Commits the task, and returns its serialized message.
-  arrow::Result<std::string> Commit() {
-    return Guard([&] { return CommitWriter(); });
-  }
+  virtual arrow::Result<std::string> Commit() = 0;
 
   /// Aborts the task, also after a failed write or commit.
-  arrow::Status Abort() {
-    return Guard([&] { return AbortWriter(); });
-  }
-
- protected:
-  explicit TaskWriter(std::shared_ptr<arrow::Schema> schema) : schema_(std::move(schema)) {}
-
-  virtual arrow::Status WriteBatch(std::shared_ptr<arrow::RecordBatch> batch) = 0;
-  virtual arrow::Result<std::string> CommitWriter() = 0;
-  virtual arrow::Status AbortWriter() = 0;
-
- private:
-  // The schema that create_data_writer got, which every array that write gets has.
-  std::shared_ptr<arrow::Schema> schema_;
+  virtual arrow::Status Abort() = 0;
 };
 
 template <typename Message>
@@ -292,21 +270,31 @@ class TypedTaskWriter final : public TaskWriter {
  public:
   TypedTaskWriter(std::shared_ptr<arrow::Schema> schema,
                   std::unique_ptr<DataWriter<Message>> writer)
-      : TaskWriter(std::move(schema)), writer_(std::move(writer)) {}
+      : schema_(std::move(schema)), writer_(std::move(writer)) {}
 
- protected:
-  arrow::Status WriteBatch(std::shared_ptr<arrow::RecordBatch> batch) override {
-    return writer_->Write(std::move(batch));
+  arrow::Status Write(struct ArrowArray* array) override {
+    return Guard([&]() -> arrow::Status {
+      ARROW_RETURN_NOT_OK(RequireOutput(array));
+      ARROW_ASSIGN_OR_RAISE(std::shared_ptr<arrow::RecordBatch> batch,
+                            arrow::ImportRecordBatch(array, schema_));
+      return writer_->Write(std::move(batch));
+    });
   }
 
-  arrow::Result<std::string> CommitWriter() override {
-    ARROW_ASSIGN_OR_RAISE(Message message, writer_->Commit());
-    return Encode(message);
+  arrow::Result<std::string> Commit() override {
+    return Guard([&]() -> arrow::Result<std::string> {
+      ARROW_ASSIGN_OR_RAISE(Message message, writer_->Commit());
+      return Encode(message);
+    });
   }
 
-  arrow::Status AbortWriter() override { return writer_->Abort(); }
+  arrow::Status Abort() override {
+    return Guard([&] { return writer_->Abort(); });
+  }
 
  private:
+  // The schema that create_data_writer got, which every array that write gets has.
+  std::shared_ptr<arrow::Schema> schema_;
   std::unique_ptr<DataWriter<Message>> writer_;
 };
 
