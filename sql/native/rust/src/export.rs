@@ -103,7 +103,11 @@ pub const fn library<S: Exported>() -> SparkDsLibrary {
     // The callback when the source supports its operation, and null otherwise.
     macro_rules! when {
         ($supported:expr, $callback:expr) => {
-            if $supported { Some($callback) } else { None }
+            if $supported {
+                Some($callback)
+            } else {
+                None
+            }
         };
     }
     let read = Bridge::<S>::READ;
