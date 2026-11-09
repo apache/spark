@@ -90,7 +90,12 @@ executors (`ReaderContext` and `WriterContext`), and `HostInfo`, which `DataSour
 receives in every JVM that loads the library, executors included. `ScanPlan` has a
 constructor for the same reason.
 
-The factory and partition types implement `Serialize` and `Deserialize`.
+The factory and partition types implement `Serialize` and `Deserialize`, as the commit
+messages of writes do. The SDK encodes them with serde in MessagePack, a self-describing binary
+format in which structs are maps with the names of their fields, so the serde attributes that
+need them, such as `untagged`, `flatten` and `default`, work; byte vectors are compact, and
+floats, including NaN and the infinities, round-trip as they are. Offsets are JSON instead,
+since Spark stores them as text: see [Streaming reads and writes](#streaming-reads-and-writes).
 Connections, pointers, and open readers remain in their creating process.
 Include a snapshot identifier in the factory or partitions when retrying a task
 must read the same snapshot. Multiple task attempts open independent readers.
@@ -476,8 +481,9 @@ is not reserved through Spark's memory manager.
 
 This prototype does not include continuous processing, filter pushdown, nested
 projection, custom metrics, memory accounting, or C++ bindings, and does not extend the
-ABI. The versioned JSON envelope of the serialized state is an SDK implementation detail;
-use the same plugin build on the driver and executors.
+ABI. The versioned MessagePack envelope of the serialized state, partitions and messages is an
+SDK implementation detail: Spark loads the same build of the library on the driver and the
+executors, which it checks with its checksum.
 
 [header]: ../../core/src/main/resources/org/apache/spark/sql/datasource/spark_datasource.h
 [guide]: ../../../docs/sql-native-data-sources.md

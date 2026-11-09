@@ -38,7 +38,7 @@ use crate::{
 #[path = "stream.rs"]
 pub(crate) mod stream;
 
-const STATE_VERSION: u32 = 3;
+const STATE_VERSION: u32 = 4;
 
 type HandleMap<T> = Mutex<HashMap<i64, Arc<Mutex<T>>>>;
 
@@ -393,6 +393,12 @@ fn decode_offset<T: DeserializeOwned>(json: &str) -> Result<T> {
         .map_err(|error| format!("cannot decode the offset {json}: {error}").into())
 }
 
+/// The state of a reader or a writer, the partitions and the commit messages are MessagePack
+/// in a versioned envelope. MessagePack is self-describing, and the SDK writes structs as maps
+/// with the names of their fields, so the serde attributes that need them, such as `untagged`,
+/// `flatten` and `default`, work; byte vectors are compact, and floats, including NaN and the
+/// infinities, round-trip as they are. These values never outlive the application, and the same
+/// build of the library reads them, so the format is an implementation detail; see the README.
 #[derive(Serialize, Deserialize)]
 struct Envelope<T> {
     version: u32,
@@ -400,14 +406,20 @@ struct Envelope<T> {
 }
 
 pub(crate) fn encode<T: Serialize>(value: &T) -> Result<Vec<u8>> {
-    Ok(serde_json::to_vec(&Envelope {
-        version: STATE_VERSION,
-        value,
-    })?)
+    encode_envelope(STATE_VERSION, value)
+}
+
+fn encode_envelope<T: Serialize>(version: u32, value: &T) -> Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    let mut serializer = rmp_serde::Serializer::new(&mut bytes)
+        .with_struct_map()
+        .with_bytes(rmp_serde::config::BytesMode::ForceAll);
+    Envelope { version, value }.serialize(&mut serializer)?;
+    Ok(bytes)
 }
 
 pub(crate) fn decode<T: DeserializeOwned>(bytes: &[u8]) -> Result<T> {
-    let envelope: Envelope<T> = serde_json::from_slice(bytes)?;
+    let envelope: Envelope<T> = rmp_serde::from_slice(bytes)?;
     if envelope.version != STATE_VERSION {
         return Err(format!("unsupported native state version: {}", envelope.version).into());
     }
@@ -867,10 +879,57 @@ mod tests {
 
     #[test]
     fn rejects_a_different_wire_version() {
-        let other = format!(r#"{{"version":{},"value":42}}"#, STATE_VERSION + 1);
-        let error = decode::<u64>(other.as_bytes()).unwrap_err();
+        let other = encode_envelope(STATE_VERSION + 1, &42_u64).unwrap();
+        let error = decode::<u64>(&other).unwrap_err();
         assert!(error
             .to_string()
             .contains("unsupported native state version"));
+        assert_eq!(decode::<u64>(&encode(&42_u64).unwrap()).unwrap(), 42);
+    }
+
+    #[test]
+    fn state_keeps_floats_and_bytes_and_supports_self_describing_serde_attributes() {
+        #[derive(Serialize, Deserialize, Debug, PartialEq)]
+        #[serde(untagged)]
+        enum Split {
+            Rows { first: i64 },
+            Files { paths: Vec<String> },
+        }
+
+        #[derive(Serialize, Deserialize, Debug, PartialEq)]
+        struct Statistics {
+            min: f64,
+            #[serde(default, skip_serializing_if = "Option::is_none")]
+            max: Option<f64>,
+        }
+
+        #[derive(Serialize, Deserialize, Debug, PartialEq)]
+        struct Partition {
+            footer: Vec<u8>,
+            split: Split,
+            #[serde(flatten)]
+            statistics: Statistics,
+        }
+
+        let partition = Partition {
+            footer: (0..=255).collect(),
+            split: Split::Files {
+                paths: vec!["a".into()],
+            },
+            statistics: Statistics {
+                min: f64::NEG_INFINITY,
+                max: Some(f64::NAN),
+            },
+        };
+        let bytes = encode(&partition).unwrap();
+        // The 256 bytes are a bin16 value of 256 bytes, not a sequence of 256 integers, half
+        // of which would take two bytes each.
+        assert!(bytes.windows(3).any(|marker| marker == [0xc5, 0x01, 0x00]));
+        assert!(bytes.len() < 256 + 128, "{}", bytes.len());
+        let decoded: Partition = decode(&bytes).unwrap();
+        assert_eq!(decoded.footer, partition.footer);
+        assert_eq!(decoded.split, partition.split);
+        assert_eq!(decoded.statistics.min, f64::NEG_INFINITY);
+        assert!(decoded.statistics.max.unwrap().is_nan());
     }
 }
