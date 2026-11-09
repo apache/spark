@@ -91,7 +91,7 @@ class FileScanRDD(
   private val ignoreMissingFiles = options.ignoreMissingFiles
 
   /** Whether this reader fails instead of silently skipping missing or corrupt input files. */
-  private[sql] def hasStrictFileReads: Boolean = !ignoreCorruptFiles && !ignoreMissingFiles
+  private[sql] val hasStrictFileReads: Boolean = options.hasStrictFileReads
 
   // Evaluated on the driver (sparkSession is @transient) and serialized to executors so the
   // `compute` iterator below can pass it through to ColumnVectorUtils.populate.

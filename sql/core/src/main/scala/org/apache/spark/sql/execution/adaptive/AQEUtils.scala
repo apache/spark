@@ -45,7 +45,7 @@ object AQEUtils {
     case p: ProjectExec =>
       getRequiredDistribution(p.child).flatMap {
         case h: ClusteredDistribution =>
-          if (h.clustering.forall(e => p.projectList.exists(_.semanticEquals(e)))) {
+          if (h.allClusterKeysAmong(p.projectList)) {
             Some(h)
           } else {
             // It's possible that the user-specified repartition is effective but the output

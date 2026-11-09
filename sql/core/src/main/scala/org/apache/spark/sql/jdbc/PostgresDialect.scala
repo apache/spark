@@ -29,6 +29,7 @@ import org.apache.spark.SparkThrowable
 import org.apache.spark.internal.LogKeys.COLUMN_NAME
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NonEmptyNamespaceException, NoSuchIndexException}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.{Expression, NamedReference}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -47,7 +48,8 @@ private case class PostgresDialect()
   private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
     "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP", "COVAR_POP", "COVAR_SAMP", "CORR",
     "REGR_INTERCEPT", "REGR_R2", "REGR_SLOPE", "REGR_SXY")
-  private val supportedStringFunctions = Set("RPAD", "LPAD")
+  private val supportedStringFunctions =
+    Set("RPAD", "LPAD", CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING)
   private val supportedFunctions = supportedAggregateFunctions ++ supportedStringFunctions
 
   override def isSupportedFunction(funcName: String): Boolean =
@@ -78,6 +80,9 @@ private case class PostgresDialect()
         // timetz represents time with time zone, currently it maps to Types.TIME.
         // We need to change to Types.TIME_WITH_TIMEZONE if the upstream changes.
         Some(TimestampType)
+      case Types.CHAR if "char".equalsIgnoreCase(typeName) =>
+        // PostgreSQL internal "char" (single byte) compares exactly, not PAD SPACE.
+        Some(StringType)
       case Types.CHAR if "bpchar".equalsIgnoreCase(typeName) && size == Int.MaxValue =>
         // bpchar with unspecified length same as text in postgres with blank-trimmed
         Some(StringType)
@@ -116,7 +121,8 @@ private case class PostgresDialect()
     case "float8" => Some(DoubleType)
     case "varchar" => Some(VarcharType(precision))
     case "bpchar" if precision == Int.MaxValue => Some(StringType)
-    case "char" | "bpchar" => Some(CharType(precision))
+    case "char" => Some(StringType)
+    case "bpchar" => Some(CharType(precision))
     case "text" | "cidr" | "inet" | "json" | "jsonb" | "uuid" |
          "xml" | "tsvector" | "tsquery" | "macaddr" | "macaddr8" | "txid_snapshot" | "point" |
          "line" | "lseg" | "box" | "path" | "polygon" | "circle" | "pg_lsn" | "varbit" |
@@ -260,7 +266,9 @@ private case class PostgresDialect()
 
   // See https://www.postgresql.org/docs/current/errcodes-appendix.html
   override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
-    Option(exception.getSQLState).exists(_.startsWith("42"))
+    // SQLSTATE 42000 covers both syntax errors and access-rule violations, so preserve the
+    // original exception for that ambiguous state.
+    exception.getSQLState == "42601"
   }
 
   // SHOW INDEX syntax
@@ -388,7 +396,8 @@ private case class PostgresDialect()
     if (!oldTable.namespace().sameElements(newTable.namespace())) {
       throw QueryCompilationErrors.cannotRenameTableAcrossSchemaError()
     }
-    s"ALTER TABLE ${getFullyQualifiedQuotedTableName(oldTable)} RENAME TO ${newTable.name()}"
+    s"ALTER TABLE ${getFullyQualifiedQuotedTableName(oldTable)} RENAME TO " +
+      s"${quoteIdentifier(newTable.name())}"
   }
 
   /**
@@ -436,7 +445,8 @@ private case class PostgresDialect()
              |FROM pg_attribute
              |  JOIN pg_class ON pg_attribute.attrelid = pg_class.oid
              |  JOIN pg_namespace ON pg_class.relnamespace = pg_namespace.oid
-             |WHERE pg_class.relname = '$tableName' and pg_attribute.attname = '$columnName'
+             |WHERE pg_class.relname = '${escapeSql(tableName)}'
+             |  and pg_attribute.attname = '${escapeSql(columnName)}'
              |""".stripMargin
         try {
           Using.resource(conn.createStatement()) { stmt =>

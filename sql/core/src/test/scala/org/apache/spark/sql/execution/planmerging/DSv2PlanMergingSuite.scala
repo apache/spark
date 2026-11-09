@@ -23,7 +23,7 @@ import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
 import org.apache.spark.sql.connector.FakeV2ProviderWithCustomSchema
 import org.apache.spark.sql.connector.catalog.{InMemoryScanMergingPartitionFilterCatalog, InMemoryScanMergingReportingCatalog}
-import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, DataSourceV2ScanRelation}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -37,7 +37,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  * mis-classify it as non-strict and decline the merge (leaving two scans).
  */
 class DSv2PlanMergingSuite extends QueryTest with SharedSparkSession
-  with BeforeAndAfter {
+  with BeforeAndAfter with V2ScanMergingTestHelper {
 
   private val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
   private val tbl = "scanmerge.t"
@@ -55,11 +55,6 @@ class DSv2PlanMergingSuite extends QueryTest with SharedSparkSession
     spark.conf.unset("spark.sql.catalog.scanmerge")
     spark.conf.unset("spark.sql.catalog.scanmergereport")
   }
-
-  private def v2Scans(df: DataFrame): Seq[DataSourceV2ScanRelation] =
-    df.queryExecution.optimizedPlan.collectWithSubqueries {
-      case s: DataSourceV2ScanRelation => s
-    }
 
   // A successful DSv2 merge builds the scan and leaves NO bare DataSourceV2Relation in the plan.
   // A leaked deferred scan (e.g. if a future recursion arm forwarded `deferredScan` without
@@ -201,9 +196,9 @@ class DSv2PlanMergingSuite extends QueryTest with SharedSparkSession
   test("SPARK-58549: a scan merge preserves the sources' reported key-grouped partitioning") {
     val t = "scanmergereport.t2"
     withTable(t) {
-      // V2_BUCKETING_ENABLED is what makes the preserved report reach the physical plan (only
-      // DataSourceV2ScanExecBase.outputPartitioning reads it), which the last assertion checks; AQE
-      // is off so that `executedPlan` is the plan those assertions can walk.
+      // V2_BUCKETING_ENABLED is what makes the preserved report reach the physical plan, which the
+      // last assertion checks. DataSourceV2Strategy hands the scan its key-grouped partitioning
+      // only when it is on. AQE is off so that `executedPlan` is the plan the assertions can walk.
       withSQLConf(
           SQLConf.V2_BUCKETING_ENABLED.key -> "true",
           SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {

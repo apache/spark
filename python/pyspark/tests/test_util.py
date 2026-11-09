@@ -144,16 +144,25 @@ class UtilTests(PySparkTestCase):
         v4 = LooseVersion("1.2.4")
         self.assertTrue(v1 <= v4)
 
-    def test_parse_memory(self):
-        self.assertEqual(_parse_memory("1g"), 1024)
-        with self.assertRaisesRegex(ValueError, "invalid format"):
-            _parse_memory("2gs")
-
     def test_disable_gc(self):
-        self.assertTrue(gc.isenabled())
-        with disable_gc():
-            self.assertFalse(gc.isenabled())
-        self.assertTrue(gc.isenabled())
+        # Restore the caller's GC state even if an assertion fails.
+        self.addCleanup(gc.enable if gc.isenabled() else gc.disable)
+        for enabled, set_gc in ((True, gc.enable), (False, gc.disable)):
+            with self.subTest(enabled=enabled):
+                set_gc()
+                # Exiting the inner context must not re-enable GC inside the outer context.
+                with disable_gc():
+                    with disable_gc():
+                        self.assertFalse(gc.isenabled())
+                    self.assertFalse(gc.isenabled())
+                self.assertEqual(gc.isenabled(), enabled)
+
+                # Exceptions must also restore the original state, including already-disabled GC.
+                with self.assertRaisesRegex(ValueError, "test error"):
+                    with disable_gc():
+                        self.assertFalse(gc.isenabled())
+                        raise ValueError("test error")
+                self.assertEqual(gc.isenabled(), enabled)
 
     @eventually(timeout=180, catch_timeout=True)
     @timeout(timeout=1)
@@ -165,6 +174,30 @@ class UtilTests(PySparkTestCase):
             time.sleep(3600)  # Simulate a long-running operation
         else:
             print("succeeding immediately")
+
+
+class ParseMemoryTests(unittest.TestCase):
+    def test_parse_memory(self):
+        for memory, expected in (
+            ("1g", 1024),
+            ("1G", 1024),
+            ("200m", 200),
+            ("200M", 200),
+            ("2t", 2 << 20),
+            ("2T", 2 << 20),
+            ("1024k", 1),
+            ("1024K", 1),
+            ("1.5g", 1536),
+            ("512k", 0),
+        ):
+            with self.subTest(memory=memory):
+                self.assertEqual(_parse_memory(memory), expected)
+
+    def test_invalid_memory(self):
+        for memory in ("", "2gs"):
+            with self.subTest(memory=memory):
+                with self.assertRaisesRegex(ValueError, "^invalid format: " + memory + "$"):
+                    _parse_memory(memory)
 
 
 class HandleWorkerExceptionTests(unittest.TestCase):

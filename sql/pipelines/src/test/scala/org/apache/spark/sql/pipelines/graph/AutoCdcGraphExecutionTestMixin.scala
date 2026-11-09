@@ -151,7 +151,8 @@ trait AutoCdcGraphExecutionTestMixin extends BeforeAndAfterEach {
     val col = AutoCdcReservedNames.cdcMetadataColName
     val del = Scd1BatchProcessor.cdcDeleteSequenceFieldName
     val ups = Scd1BatchProcessor.cdcUpsertSequenceFieldName
-    s"$col STRUCT<$del:BIGINT,$ups:BIGINT> NOT NULL"
+    val versionMap = Scd1BatchProcessor.versionMapFieldName
+    s"$col STRUCT<$del:BIGINT,$ups:BIGINT,$versionMap:MAP<STRING,BIGINT>> NOT NULL"
   }
 
   /**
@@ -168,7 +169,9 @@ trait AutoCdcGraphExecutionTestMixin extends BeforeAndAfterEach {
     val startAt = Scd2BatchProcessor.startAtColName
     val endAt = Scd2BatchProcessor.endAtColName
     val recordStartAt = Scd2BatchProcessor.recordStartAtFieldName
-    s"$startAt BIGINT, $endAt BIGINT, $col STRUCT<$recordStartAt:BIGINT> NOT NULL"
+    val versionMap = Scd2BatchProcessor.versionMapFieldName
+    s"$startAt BIGINT, $endAt BIGINT, " +
+      s"$col STRUCT<$recordStartAt:BIGINT,$versionMap:MAP<STRING,BOOLEAN>> NOT NULL"
   }
 
   /**
@@ -184,9 +187,11 @@ trait AutoCdcGraphExecutionTestMixin extends BeforeAndAfterEach {
   protected def insertPreloadedRow(table: String, colValues: String, sequence: Long): Unit = {
     val del = Scd1BatchProcessor.cdcDeleteSequenceFieldName
     val ups = Scd1BatchProcessor.cdcUpsertSequenceFieldName
+    val versionMap = Scd1BatchProcessor.versionMapFieldName
     spark.sql(
       s"INSERT INTO $table SELECT $colValues, " +
-      s"named_struct('$del', CAST(NULL AS BIGINT), '$ups', CAST($sequence AS BIGINT))"
+      s"named_struct('$del', CAST(NULL AS BIGINT), '$ups', CAST($sequence AS BIGINT), " +
+      s"'$versionMap', CAST(NULL AS MAP<STRING, BIGINT>))"
     )
   }
 
@@ -262,5 +267,5 @@ trait AutoCdcGraphExecutionTestMixin extends BeforeAndAfterEach {
 
   /** Build a target row's `_cdc_metadata` struct value. */
   protected def cdcMeta(deleteSeq: Option[Long], upsertSeq: Option[Long]): Row =
-    Row(deleteSeq.orNull, upsertSeq.orNull)
+    Row(deleteSeq.orNull, upsertSeq.orNull, null)
 }

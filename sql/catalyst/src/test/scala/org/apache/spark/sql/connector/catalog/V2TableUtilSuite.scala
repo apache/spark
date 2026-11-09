@@ -22,16 +22,18 @@ import java.util
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, MetadataAttribute}
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.connector.catalog.TableCapability.BATCH_READ
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.ColumnImpl
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.sql.util.SchemaValidationMode.{ALLOW_NEW_TOP_LEVEL_FIELDS, PROHIBIT_CHANGES}
+import org.apache.spark.sql.util.SchemaValidationMode.{ALLOW_NEW_FIELDS, ALLOW_NEW_TOP_LEVEL_FIELDS, PROHIBIT_CHANGES}
 import org.apache.spark.sql.util.SchemaValidationMode
 import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 
-class V2TableUtilSuite extends SparkFunSuite {
+class V2TableUtilSuite extends SparkFunSuite with SQLHelper {
 
   test("validateCapturedColumns - no changes") {
     val cols = Array(
@@ -447,6 +449,178 @@ class V2TableUtilSuite extends SparkFunSuite {
     assert(errors.isEmpty)
   }
 
+  test("validateCapturedMetadataColumns - renamed captured metadata column type changed") {
+    val dataCols = Array(col("index", LongType, nullable = true))
+    val originMetaCols = Array(metaCol("index", IntegerType, nullable = false))
+    val originTable = TestTableWithRenamableMetadata("test", dataCols, originMetaCols)
+    val dataAttrs = dataCols.map(c => AttributeReference(c.name, c.dataType, c.nullable)())
+    val relation = DataSourceV2Relation(
+      originTable,
+      dataAttrs.toImmutableArraySeq,
+      None,
+      None,
+      CaseInsensitiveStringMap.empty()).withMetadataColumns()
+    assert(relation.output.map(_.name) == Seq("index", "_index"))
+    val currentTable = TestTableWithRenamableMetadata(
+      "test",
+      dataCols,
+      Array(metaCol("index", StringType, nullable = false)))
+
+    val errors = V2TableUtil.validateCapturedMetadataColumns(
+      currentTable,
+      relation,
+      mode = PROHIBIT_CHANGES,
+      checkIds = true)
+    assert(errors == Seq("`index` type has changed from INT to STRING"))
+  }
+
+  test("validateCapturedMetadataColumns - unchanged renamed captured metadata column") {
+    val dataCols = Array(col("index", LongType, nullable = true))
+    val originMetaCols = Array(metaCol("index", IntegerType, nullable = false))
+    val originTable = TestTableWithRenamableMetadata("test", dataCols, originMetaCols)
+    val attrs = Seq(
+      AttributeReference("index", LongType, nullable = true)(),
+      MetadataAttribute("index", IntegerType, nullable = false).withName("_index"))
+    val relation = DataSourceV2Relation(
+      originTable,
+      attrs,
+      None,
+      None,
+      CaseInsensitiveStringMap.empty())
+    val currentTable = TestTableWithRenamableMetadata("test", dataCols, originMetaCols)
+
+    val errors = V2TableUtil.validateCapturedMetadataColumns(
+      currentTable,
+      relation,
+      mode = PROHIBIT_CHANGES,
+      checkIds = true)
+    assert(errors.isEmpty, "renaming a captured metadata column must remain valid")
+  }
+
+  test("validateCapturedMetadataColumns - metadata column hidden by a data column is rejected") {
+    val originMetaCols = Seq(metaCol("index", IntegerType, nullable = false))
+    // The connector still reports the `index` metadata column, but a data column has taken its
+    // name. Because the connector suppresses rather than renames the conflict, the metadata column
+    // is no longer reachable, so a captured reference to it is broken.
+    val currentDataCols = Array(col("index", IntegerType, nullable = true))
+    val currentMetaCols = Array(metaCol("index", IntegerType, nullable = false))
+    val table = TestTableWithMetadataSupport("test", currentDataCols, currentMetaCols)
+
+    val errors = V2TableUtil.validateCapturedMetadataColumns(
+      table,
+      originMetaCols,
+      mode = ALLOW_NEW_FIELDS,
+      checkIds = false)
+    assert(errors.size == 1)
+    assert(errors.head == "`index` metadata column is hidden by a data column with the same name")
+  }
+
+  test("validateCapturedMetadataColumns - metadata column hidden by a data column is rejected " +
+      "under PROHIBIT_CHANGES") {
+    // The check is independent of the validation mode: it fires whenever a data column hides a
+    // still-reported metadata column, regardless of whether new fields are otherwise allowed.
+    val originMetaCols = Seq(metaCol("index", IntegerType, nullable = false))
+    val currentDataCols = Array(col("index", IntegerType, nullable = true))
+    val currentMetaCols = Array(metaCol("index", IntegerType, nullable = false))
+    val table = TestTableWithMetadataSupport("test", currentDataCols, currentMetaCols)
+
+    val errors = V2TableUtil.validateCapturedMetadataColumns(
+      table,
+      originMetaCols,
+      mode = PROHIBIT_CHANGES,
+      checkIds = true)
+    assert(errors.size == 1)
+    assert(errors.head == "`index` metadata column is hidden by a data column with the same name")
+  }
+
+  test("validateCapturedMetadataColumns - hidden metadata column detection is case insensitive") {
+    val originMetaCols = Seq(metaCol("index", IntegerType, nullable = false))
+    // The data column differs only in case from the metadata column, which still conflicts.
+    val currentDataCols = Array(col("INDEX", IntegerType, nullable = true))
+    val currentMetaCols = Array(metaCol("index", IntegerType, nullable = false))
+    val table = TestTableWithMetadataSupport("test", currentDataCols, currentMetaCols)
+
+    val errors = V2TableUtil.validateCapturedMetadataColumns(
+      table,
+      originMetaCols,
+      mode = ALLOW_NEW_FIELDS,
+      checkIds = false)
+    assert(errors.size == 1)
+    assert(errors.head == "`index` metadata column is hidden by a data column with the same name")
+  }
+
+  test("validateCapturedMetadataColumns - hidden metadata column detection uses SQL resolver " +
+      "for Unicode identifiers") {
+    val originMetaCols = Seq(metaCol("index", IntegerType, nullable = false))
+    // These names are equal under the case-insensitive SQL resolver, but differ after root-locale
+    // lowercasing because the capital I with dot expands to an i followed by a combining dot.
+    val unicodeName = new String(Character.toChars(0x130)) + "ndex"
+    val currentDataCols = Array(col(unicodeName, IntegerType, nullable = true))
+    val currentMetaCols = Array(metaCol("index", IntegerType, nullable = false))
+    val table = TestTableWithMetadataSupport("test", currentDataCols, currentMetaCols)
+
+    val errors = V2TableUtil.validateCapturedMetadataColumns(
+      table,
+      originMetaCols,
+      mode = ALLOW_NEW_FIELDS,
+      checkIds = false)
+    assert(errors.size == 1)
+    assert(errors.head == "`index` metadata column is hidden by a data column with the same name")
+  }
+
+  test("validateCapturedMetadataColumns - hidden metadata column detection is case sensitive " +
+      "under case-sensitive analysis") {
+    val originMetaCols = Seq(metaCol("index", IntegerType, nullable = false))
+    // Under case-sensitive analysis the data column does not take the metadata column's name, so
+    // the metadata column is still reachable and must not be reported as hidden. This has to match
+    // `metadataOutputWithOutConflicts`, which resolves the same names through `conf.resolver`.
+    val currentDataCols = Array(col("INDEX", IntegerType, nullable = true))
+    val currentMetaCols = Array(metaCol("index", IntegerType, nullable = false))
+    val table = TestTableWithMetadataSupport("test", currentDataCols, currentMetaCols)
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val errors = V2TableUtil.validateCapturedMetadataColumns(
+        table,
+        originMetaCols,
+        mode = ALLOW_NEW_FIELDS,
+        checkIds = false)
+      assert(errors.isEmpty, "a differently cased data column does not hide the metadata column")
+    }
+  }
+
+  test("validateCapturedMetadataColumns - data column matching a renamable metadata column is ok") {
+    val originMetaCols = Seq(metaCol("index", IntegerType, nullable = false))
+    val currentDataCols = Array(col("index", IntegerType, nullable = true))
+    val currentMetaCols = Array(metaCol("index", IntegerType, nullable = false))
+    // The connector renames a conflicting metadata column, so it stays reachable (as `_index`) and
+    // the data column does not hide it. This must keep working.
+    val table = TestTableWithRenamableMetadata("test", currentDataCols, currentMetaCols)
+
+    val errors = V2TableUtil.validateCapturedMetadataColumns(
+      table,
+      originMetaCols,
+      mode = ALLOW_NEW_FIELDS,
+      checkIds = false)
+    assert(errors.isEmpty, "a renamable metadata column is not hidden by a same-named data column")
+  }
+
+  test("validateCapturedMetadataColumns - dropped metadata column is reported as removed, " +
+      "not hidden") {
+    val originMetaCols = Seq(metaCol("index", IntegerType, nullable = false))
+    // The connector no longer reports the metadata column and a data column now carries its name.
+    // The removal, not the shadowing, is the accurate diagnosis, so only one error is expected.
+    val currentDataCols = Array(col("index", IntegerType, nullable = true))
+    val table = TestTableWithMetadataSupport("test", currentDataCols, Array.empty)
+
+    val errors = V2TableUtil.validateCapturedMetadataColumns(
+      table,
+      originMetaCols,
+      mode = PROHIBIT_CHANGES,
+      checkIds = true)
+    assert(errors.size == 1)
+    assert(errors.head == "`index` INT NOT NULL has been removed")
+  }
+
   test("extractMetadataColumns - doesn't access table metadata unless needed") {
     val dataCols = Array(
       col("id", LongType, nullable = true),
@@ -846,6 +1020,16 @@ class V2TableUtilSuite extends SparkFunSuite {
       override val metadataColumns: Array[MetadataColumn] = Array.empty)
       extends Table with SupportsMetadataColumns {
     override def capabilities: util.Set[TableCapability] = util.Set.of(BATCH_READ)
+  }
+
+  // table that renames metadata columns conflicting with data columns instead of suppressing them
+  private case class TestTableWithRenamableMetadata(
+      override val name: String,
+      override val columns: Array[Column],
+      override val metadataColumns: Array[MetadataColumn] = Array.empty)
+      extends Table with SupportsMetadataColumns {
+    override def capabilities: util.Set[TableCapability] = util.Set.of(BATCH_READ)
+    override def canRenameConflictingMetadataColumns: Boolean = true
   }
 
   // table that throws when metadataColumns is accessed

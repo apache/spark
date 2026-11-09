@@ -189,6 +189,17 @@ private[jdbc] object JDBCValueGetter {
     }
   }
 
+  case object TimestampNTZWallClockGetter extends JDBCValueGetter {
+    def apply(rs: ResultSet, row: InternalRow, pos: Int): Unit = {
+      val localDateTime = rs.getObject(pos + 1, classOf[java.time.LocalDateTime])
+      if (localDateTime != null) {
+        row.setLong(pos, localDateTimeToMicros(localDateTime))
+      } else {
+        row.update(pos, null)
+      }
+    }
+  }
+
   // Reads a driver TIMESTAMP into a nanosecond-precision local date-time. Uses
   // `getObject(LocalDateTime)` to fetch the stored wall-clock directly (mirroring `TimeGetter`),
   // which preserves the full sub-microsecond fraction and, being time-zone independent, avoids the
@@ -285,7 +296,7 @@ private[jdbc] object JDBCValueGetter {
           (t: Timestamp) => localDateTimeToMicros(dialect.convertJavaTimestampToTimestampNTZ(t))
         }
 
-      case StringType =>
+      case _: StringType =>
         arrayConverter[Object]((obj: Object) => UTF8String.fromString(obj.toString))
 
       case DateType => arrayConverter[Date] {

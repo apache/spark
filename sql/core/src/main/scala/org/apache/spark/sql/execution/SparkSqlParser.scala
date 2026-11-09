@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.parser.SqlBaseParser
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
-import org.apache.spark.sql.catalyst.util.DateTimeConstants
+import org.apache.spark.sql.catalyst.util.{DateTimeConstants, WriteDistributionAndOrdering}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors}
 import org.apache.spark.sql.execution.command._
@@ -123,6 +123,13 @@ class SparkSqlParser extends AbstractSqlParser {
   override def splitStatements(sqlText: String): SqlStatementSplitResult =
     SqlStatementSplitter.split(sqlText, SparkSqlParser.substituteVariablesForValidation)
 
+  /** Split statements while retaining their positions in the original SQL text. */
+  private[sql] def splitStatementsWithPositions(
+      sqlText: String): PositionedSqlStatementSplitResult =
+    SqlStatementSplitter.splitWithPositions(
+      sqlText,
+      SparkSqlParser.substituteVariablesForValidation)
+
   /**
    * Internal parse method that handles both parameter substitution and regular parsing.
    *
@@ -173,7 +180,7 @@ class SparkSqlParser extends AbstractSqlParser {
       currentOrigin.copy(
         sqlText = Some(paramSubstituted),
         startIndex = Some(0),
-        stopIndex = Some(paramSubstituted.length - 1),
+        stopIndex = Some(paramSubstituted.codePointCount(0, paramSubstituted.length) - 1),
         positionMapper = Some(positionMapper)
       )
     } else {
@@ -577,6 +584,10 @@ class SparkSqlAstBuilder extends AstBuilder {
     }
   }
 
+  private def hasWriteClauses(ctx: CreateTableClausesContext): Boolean = {
+    !ctx.writeDistributionSpec.isEmpty || !ctx.writeOrderingSpec.isEmpty
+  }
+
   /**
    * Create a table, returning a [[CreateTable]] logical plan.
    *
@@ -599,6 +610,11 @@ class SparkSqlAstBuilder extends AstBuilder {
         // Unlike CREATE TEMPORARY VIEW USING, CREATE TEMPORARY TABLE USING does not support
         // IF NOT EXISTS. Users are not allowed to replace the existing temp table.
         invalidStatement("CREATE TEMPORARY TABLE IF NOT EXISTS", ctx)
+      }
+
+      if (hasWriteClauses(ctx.createTableClauses())) {
+        // A temp view cannot record a write distribution or ordering.
+        invalidStatement(s"CREATE TEMPORARY TABLE ... ${WriteDistributionAndOrdering.CLAUSES}", ctx)
       }
 
       val (_, _, _, _, options, location, _, _, _, _) =
@@ -1654,8 +1670,8 @@ class SparkSqlAstBuilder extends AstBuilder {
         clusterBySpec.map(_.asTransform)
 
     // Because the createTableClauses grammar is reused for pipeline datasets but pipeline
-    // datasets don't support bucketing, options, storage location, or Hive SerDe, validate they
-    // are not set.
+    // datasets don't support bucketing, options, storage location, Hive SerDe, or a write
+    // distribution and ordering, validate they are not set.
     if (bucketSpec.isDefined) {
       throw operationNotAllowed(s"Bucketing is not supported for CREATE $syntaxTypeErrorStr " +
         "statements. Please remove any bucket spec specified in the statement.", ctx)
@@ -1676,6 +1692,10 @@ class SparkSqlAstBuilder extends AstBuilder {
       throw operationNotAllowed(s"Specifying location is not supported for CREATE " +
         s"$syntaxTypeErrorStr statements. The storage location for a pipeline dataset is " +
         "managed by the pipeline itself.", ctx)
+    }
+    if (hasWriteClauses(ctx.createTableClauses())) {
+      invalidStatement(
+        s"CREATE $syntaxTypeErrorStr ... ${WriteDistributionAndOrdering.CLAUSES}", ctx)
     }
 
     val spec = TableSpec(
@@ -1730,7 +1750,10 @@ class SparkSqlAstBuilder extends AstBuilder {
           excludeColumns = params.excludeColumns,
           storedAsScdType = params.storedAsScdType,
           trackHistoryColumns = params.trackHistoryColumns,
-          trackHistoryExceptColumns = params.trackHistoryExceptColumns
+          trackHistoryExceptColumns = params.trackHistoryExceptColumns,
+          ignoreNullUpdates = params.ignoreNullUpdates,
+          ignoreNullUpdatesColumns = params.ignoreNullUpdatesColumns,
+          ignoreNullUpdatesExceptColumns = params.ignoreNullUpdatesExceptColumns
         )
       } else {
         Option(ctx.query) match {

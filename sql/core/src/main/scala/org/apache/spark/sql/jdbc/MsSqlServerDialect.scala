@@ -24,13 +24,14 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.{Expression, NullOrdering, SortDirection}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.jdbc.MsSqlServerDialect.{GEOGRAPHY, GEOMETRY}
+import org.apache.spark.sql.jdbc.MsSqlServerDialect.{GEOGRAPHY, GEOMETRY, JSON}
 import org.apache.spark.sql.types._
 
 
@@ -58,7 +59,8 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
   // scalastyle:on line.size.limit
   private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
     "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP")
-  private val supportedStringFunctions = Set("RPAD", "LPAD")
+  private val supportedStringFunctions =
+    Set("RPAD", "LPAD", CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING)
   private val supportedFunctions = supportedAggregateFunctions ++ supportedStringFunctions
 
   override def isSupportedFunction(funcName: String): Boolean =
@@ -166,6 +168,7 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
       case java.sql.Types.REAL if !SQLConf.get.legacyMsSqlServerNumericMappingEnabled =>
         Some(FloatType)
       case GEOMETRY | GEOGRAPHY => Some(BinaryType)
+      case JSON => Some(StringType)
       case _ => None
     }
   }
@@ -210,8 +213,13 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
       columnName: String,
       newName: String,
       dbMajorVersion: Int): String = {
-    s"EXEC sp_rename '$tableName.${quoteIdentifier(columnName)}'," +
-      s" ${quoteIdentifier(newName)}, 'COLUMN'"
+    // sp_rename takes @objname as a string value rather than at identifier position, so the
+    // qualified "table.column" name needs both layers: quoteIdentifier for the identifier that
+    // sp_rename itself parses out of the string, and escapeSql for the string literal carrying
+    // it. escapeSql only doubles the single quote, so the generated text is unchanged for any
+    // name that does not contain one.
+    val objName = escapeSql(s"$tableName.${quoteIdentifier(columnName)}")
+    s"EXEC sp_rename '$objName', ${quoteIdentifier(newName)}, 'COLUMN'"
   }
 
   // scalastyle:off line.size.limit
@@ -299,7 +307,8 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
 
 private object MsSqlServerDialect {
   // Special JDBC types in Microsoft SQL Server.
-  // https://github.com/microsoft/mssql-jdbc/blob/v9.4.1/src/main/java/microsoft/sql/Types.java
+  // https://github.com/microsoft/mssql-jdbc/blob/v13.2.1/src/main/java/microsoft/sql/Types.java
   final val GEOMETRY = -157
   final val GEOGRAPHY = -158
+  final val JSON = -159
 }

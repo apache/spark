@@ -333,7 +333,7 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
   }
 
   override def dropIndex(indexName: String, tableIdent: Identifier): String = {
-    s"DROP INDEX ${quoteIdentifier(indexName)} ON ${tableIdent.name()}"
+    s"DROP INDEX ${quoteIdentifier(indexName)} ON ${quoteIdentifier(tableIdent.name())}"
   }
 
   // SHOW INDEX syntax
@@ -342,7 +342,7 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
       conn: Connection,
       tableIdent: Identifier,
       options: JDBCOptions): Array[TableIndex] = {
-    val sql = s"SHOW INDEXES FROM ${tableIdent.name()}"
+    val sql = s"SHOW INDEXES FROM ${quoteIdentifier(tableIdent.name())}"
     var indexMap: Map[String, TableIndex] = Map()
     try {
       JdbcUtils.executeQuery(conn, options, sql) { rs =>

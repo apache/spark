@@ -28,7 +28,8 @@ import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.UpdateFieldsBenchmark._
-import org.apache.spark.sql.catalyst.expressions.{InSet, Literal, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{GetStructField, InSet, Literal, NamedExpression,
+  UpdateFields, With, WithField}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{outstandingTimezonesIds, outstandingZoneIds}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
@@ -428,6 +429,738 @@ class ColumnExpressionSuite extends SharedSparkSession {
       filter(r => r.getInt(0) >= r.getInt(1) && r.getInt(0) <= r.getInt(2))
 
     checkAnswer(testData.filter($"a".between($"b", $"c")), expectAnswer)
+  }
+
+  // Runs `f` on each of the three evaluation paths, since a `With` left in a conditional branch is
+  // evaluated by all three and the memoization is implemented separately for interpretation and for
+  // codegen.
+  private def onEachEvalPath(f: => Unit): Unit = {
+    withSQLConf(
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+      SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN")(f)
+    withSQLConf(
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+      SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY")(f)
+    withSQLConf(
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+      SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY")(f)
+  }
+
+  test("withField should evaluate a nondeterministic struct expression once") {
+    onEachEvalPath {
+      val counter = new java.util.concurrent.atomic.AtomicLong()
+      val nextStruct = udf(() => {
+        val value = counter.getAndIncrement()
+        (value, value)
+      }).asNondeterministic()
+      val structExpr = nextStruct()
+      val df = spark.range(0, 10, 1, 1)
+      df.select(structExpr.withField("copy", structExpr)).collect().foreach { row =>
+        val result = row.getStruct(0)
+        val copy = result.getStruct(2)
+        assert(result.getLong(0) == result.getLong(1))
+        assert(copy.getLong(0) == copy.getLong(1))
+        assert(result.getLong(0) != copy.getLong(0))
+      }
+    }
+  }
+
+  test("withField should evaluate a reused nondeterministic value separately") {
+    onEachEvalPath {
+      val counter = new java.util.concurrent.atomic.AtomicLong()
+      val nextStruct = udf(() => {
+        val value = counter.getAndIncrement()
+        (value, value)
+      }).asNondeterministic()
+      val structExpr = nextStruct().expr
+      val updated = Column(UpdateFields(structExpr,
+        Seq(WithField("copy", GetStructField(structExpr, 0)))))
+      val df = spark.range(0, 10, 1, 1)
+      df.select(updated).collect().foreach { row =>
+        val result = row.getStruct(0)
+        assert(result.getLong(0) == result.getLong(1))
+        assert(result.getLong(0) != result.getLong(2))
+      }
+    }
+  }
+
+  test("withField should evaluate a reused nested update separately") {
+    onEachEvalPath {
+      val counter = new java.util.concurrent.atomic.AtomicLong()
+      val nextStruct = udf(() => {
+        val value = counter.getAndIncrement()
+        (value, value)
+      }).asNondeterministic()
+      val structExpr = nextStruct().expr
+      val nestedUpdate = UpdateFields(structExpr, Seq(WithField("extra", Literal(1))))
+      val updated = Column(UpdateFields(structExpr,
+        Seq(WithField("copy", GetStructField(nestedUpdate, 0)))))
+      val df = spark.range(0, 10, 1, 1)
+      df.select(updated).collect().foreach { row =>
+        val result = row.getStruct(0)
+        assert(result.getLong(0) == result.getLong(1))
+        assert(result.getLong(0) != result.getLong(2))
+      }
+    }
+  }
+
+  test("nested field updates should share their struct input with other columns") {
+    onEachEvalPath {
+      withSQLConf(SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true") {
+        Seq(false, true).foreach { drop =>
+          val calls = spark.sparkContext.longAccumulator
+          val source = udf((id: Long) => {
+            calls.add(1)
+            ((id, id), id)
+          }).asNonNullable()($"id")
+          val updated = if (drop) source.dropFields("_1._2")
+            else source.withField("_1.extra", lit(9L))
+          val rows = spark.range(0, 10, 1, 1)
+            .select(updated, source.getField("_2")).collect()
+          rows.zipWithIndex.foreach { case (row, index) =>
+            val value = index.toLong
+            val nested = if (drop) Row(value) else Row(value, value, 9L)
+            assert(row == Row(Row(nested, value), value))
+          }
+          assert(calls.value == 10, s"drop=$drop calls=${calls.value}")
+        }
+      }
+    }
+  }
+
+  test("nested field updates should share always-evaluated values from a With body") {
+    onEachEvalPath {
+      withSQLConf(SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true") {
+        val innerType = StructType(Seq(StructField("x", LongType, nullable = false)))
+        val structType = StructType(Seq(
+          StructField("a", innerType, nullable = false),
+          StructField("b", LongType, nullable = false)))
+        val schema = StructType(Seq(
+          StructField("s", structType, nullable = false),
+          StructField("id", LongType, nullable = false)))
+        val input = (0L until 10L).map(value => Row(Row(Row(value), value), value))
+        val df = spark.createDataFrame(sparkContext.parallelize(input, 1), schema)
+        val calls = spark.sparkContext.longAccumulator
+        val value = udf((id: Long) => {
+          calls.add(1)
+          id + 1
+        }).apply($"id")
+        val updated = col("s").withField("a.first", value).withField("a.second", value)
+        val rows = df.select(updated, value).collect()
+        rows.zipWithIndex.foreach { case (row, index) =>
+          val original = index.toLong
+          assert(row == Row(Row(Row(original, original + 1, original + 1), original),
+            original + 1))
+        }
+        assert(calls.value == 10)
+      }
+    }
+  }
+
+  test("field updates should preserve shared value subexpression elimination") {
+    withSQLConf(SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+      for {
+        nested <- Seq(false, true)
+        external <- Seq(false, true)
+        opaque <- Seq(false, true)
+      } {
+        val calls = spark.sparkContext.longAccumulator
+        val sourceCalls = spark.sparkContext.longAccumulator
+        val value = udf((id: Long) => {
+          calls.add(1)
+          id + 1
+        }).apply($"id")
+        val source = if (opaque) {
+          udf((id: Long) => {
+            sourceCalls.add(1)
+            ((id, id), id)
+          }).asNonNullable().asNondeterministic()($"id")
+        } else {
+          struct(struct($"id", $"id").as("_1"), $"id".as("_2"))
+        }
+        val prefix = if (nested) "_1." else ""
+        val updated = source.withField(s"${prefix}first", value)
+          .withField(s"${prefix}second", value)
+        val columns = if (external) Seq(updated, value) else Seq(updated)
+        val rows = spark.range(0, 10, 1, 1).select(columns: _*).collect()
+        rows.zipWithIndex.foreach { case (row, index) =>
+          val result = if (nested) row.getStruct(0).getStruct(0) else row.getStruct(0)
+          assert(result.getLong(2) == index + 1L)
+          assert(result.getLong(3) == index + 1L)
+          if (external) assert(row.getLong(1) == index + 1L)
+        }
+        val expectedCalls = if (nested && opaque) 10 * (if (external) 3 else 2) else 10
+        assert(calls.value == expectedCalls,
+          s"nested=$nested external=$external opaque=$opaque calls=${calls.value}")
+        if (opaque) assert(sourceCalls.value == 10)
+      }
+    }
+  }
+
+  test("field updates should not hoist guarded shared values") {
+    onEachEvalPath {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
+        SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true") {
+        val schema = StructType(Seq(StructField("a", IntegerType, nullable = false)))
+        val source = when($"id" === 0, lit(null).cast(schema))
+          .otherwise(struct(lit(1).as("a")))
+        val shared = lit(1L) / $"id"
+        checkAnswer(
+          spark.range(0, 2, 1, 1).select(
+            source.withField("b", shared).withField("c", shared)),
+          Seq(Row(null), Row(Row(1, 1.0, 1.0))))
+        val throwingSource = udf((id: Long) => {
+          if (id >= 0) throw new IllegalStateException(s"evaluated for $id") else (id, id)
+        }).asNonNullable()
+        checkAnswer(
+          spark.range(1).select(
+            throwingSource($"id").withField("_1", lit(1L)).withField("_2", lit(2L))),
+          Row(Row(1L, 2L)))
+      }
+    }
+  }
+
+  test("nested field updates on unresolved columns should remain linear") {
+    val df = Seq((((1, 2), 3), 0)).toDF("s", "z")
+    Seq(4, 8, 12).foreach { count =>
+      val updated = (0 until count).foldLeft(col("s")) { (column, index) =>
+        column.withField(s"_1.x$index", lit(index))
+      }
+      val query = df.select(updated).queryExecution
+      Seq(query.analyzed, query.optimizedPlan).foreach { plan =>
+        val nodes = plan.flatMap(_.expressions).map(_.collect { case _ => 1 }.size).sum
+        assert(nodes < 30 * count, s"$count updates produced $nodes expression nodes")
+      }
+      checkAnswer(df.select(updated.dropFields((0 until count).map(i => s"_1.x$i"): _*)),
+        Row(Row(Row(1, 2), 3)))
+    }
+  }
+
+  test("nested field updates should prune dropped and overwritten values") {
+    onEachEvalPath {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        val df = Seq((((1, 2), 3), 0)).toDF("s", "z")
+        val updated = col("s").withField("_1.d", lit(1) / col("z"))
+        checkAnswer(df.select(updated.dropFields("_1")), Row(Row(3)))
+        checkAnswer(df.select(updated.withField("_1.d", lit(4))),
+          Row(Row(Row(1, 2, 4), 3)))
+        checkAnswer(df.select(updated.getField("_2")), Row(3))
+        val projected = df.select(
+          col("s").withField("x", lit(1) / col("z")).as("t"))
+        checkAnswer(projected.select(col("t").withField("y", lit(2)).getField("_2")), Row(3))
+      }
+    }
+  }
+
+  test("struct field updates should prune discarded aggregate expressions") {
+    onEachEvalPath {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        val df = Seq((1L, 0L)).toDF("x", "z")
+        val source = struct(sum($"x").as("a"), sum($"x" / $"z").as("b"))
+        checkAnswer(df.agg(source.dropFields("b")), Row(Row(1L)))
+        checkAnswer(df.agg(source.withField("b", lit(2))), Row(Row(1L, 2)))
+        checkAnswer(df.agg(source.as("s")).select(col("s").dropFields("b")),
+          Row(Row(1L)))
+        val nested = struct(source.as("inner"), sum($"x").as("c"))
+        checkAnswer(df.agg(nested.withField("inner.d", lit(2)).dropFields("inner.b")),
+          Row(Row(Row(1L, 2), 1L)))
+      }
+    }
+  }
+
+  test("extracting a re-updated nested struct should prune unrelated updates") {
+    onEachEvalPath {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        val nestedType = StructType(Seq(StructField("x", IntegerType)))
+        val structType = StructType(Seq(StructField("a", nestedType)))
+        Seq(false, true).foreach { nullable =>
+          val schema = StructType(Seq(
+            StructField("s", structType, nullable),
+            StructField("z", IntegerType, nullable = false)))
+          val rows = Seq(Row(Row(Row(1)), 0), Row(Row(null), 0)) ++
+            (if (nullable) Seq(Row(null, 0)) else Nil)
+          val df = spark.createDataFrame(sparkContext.parallelize(rows), schema)
+          val input = if (nullable) {
+            col("s").getField("a").withField("x", lit(1) / col("z"))
+          } else {
+            col("s").withField("a.x", lit(1) / col("z")).getField("a")
+          }
+          val updated = input.withField("y", lit(2)).getField("y")
+          checkAnswer(df.select(updated), Seq(Row(2), Row(null)) ++
+            (if (nullable) Seq(Row(null)) else Nil))
+          val projected = df.select(input.as("t"))
+          checkAnswer(projected.select(col("t").withField("y", lit(2)).getField("y")),
+            Seq(Row(2), Row(null)) ++ (if (nullable) Seq(Row(null)) else Nil))
+        }
+      }
+    }
+  }
+
+  test("nested field updates should retain resolved parents when case sensitivity changes") {
+    val childType = StructType(Seq(
+      StructField("x", IntegerType), StructField("y", IntegerType)))
+    Seq(false, true).foreach { caseSensitive =>
+      val parents = if (caseSensitive) Seq("a", "A") else Seq("a")
+      val schema = StructType(Seq(StructField("s",
+        StructType(parents.map(StructField(_, childType))))))
+      val row = Row(Row.fromSeq(parents.indices.map(index => Row(index + 1, index + 2))))
+      val source = spark.createDataFrame(sparkContext.parallelize(Seq(row)), schema)
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        Seq(false, true).foreach { drop =>
+          val column = if (drop) col("s").dropFields("A.x")
+            else col("s").withField("A.x", lit(9))
+          val updated = source.select(column.as("s"))
+          val analyzedSchema = updated.schema
+          val changedIndex = if (caseSensitive) 1 else 0
+          val expected = Row(Row.fromSeq(parents.indices.map { index =>
+            if (index != changedIndex) Row(index + 1, index + 2)
+            else if (drop) Row(index + 2) else Row(9, index + 2)
+          }))
+          withTempView("nested_update_resolution") {
+            updated.createOrReplaceTempView("nested_update_resolution")
+            withSQLConf(SQLConf.CASE_SENSITIVE.key -> (!caseSensitive).toString) {
+              checkAnswer(updated, expected)
+              assert(updated.queryExecution.optimizedPlan.schema == analyzedSchema)
+              val view = spark.table("nested_update_resolution")
+              checkAnswer(view, expected)
+              assert(view.schema == analyzedSchema)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("three-part nested updates should evaluate their input once on every evaluation path") {
+    onEachEvalPath {
+      withSQLConf(SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1") {
+        val counter = new java.util.concurrent.atomic.AtomicLong()
+        val nextStruct = udf((id: Long) => {
+          val value = counter.getAndIncrement()
+          if (id == 0) null else (((value, value), value), value)
+        }).asNondeterministic()
+        val updated = nextStruct($"id").withField("_1._1.extra", lit(9L))
+          .dropFields("_1._1._2")
+        checkAnswer(spark.range(0, 10, 1, 1).select(updated),
+          Row(null) +: (1L until 10L).map(value => Row(Row(Row(Row(value, 9L), value), value))))
+      }
+    }
+  }
+
+  test("chained nested field updates should use compact generated column names") {
+    val df = Seq((((1, 2, 3), (4, 5, 6)), 0)).toDF("s", "z")
+    val updated = df.select(
+      col("s").withField("_1.x", lit(1)).withField("_1.y", lit(2)),
+      col("s").withField("_1.x", lit(1)).withField("_2.y", lit(2)),
+      col("s").withField("extra", lit(1)).withField("_1.x", lit(2)),
+      col("s").withField("_1.x", lit(1)).withField("_1.x", lit(2)),
+      col("s").dropFields("_1._1", "_1._2"))
+    assert(updated.columns.toSeq == Seq(
+      "update_fields(s, WithField(update_fields(s._1, WithField(1), WithField(2))))",
+      "update_fields(s, WithField(update_fields(s._1, WithField(1))), " +
+        "WithField(update_fields(s._2, WithField(2))))",
+      "update_fields(s, WithField(1), WithField(update_fields(s._1, WithField(2))))",
+      "update_fields(s, WithField(update_fields(s._1, WithField(2))))",
+      "update_fields(s, WithField(update_fields(s._1, dropfield(), dropfield())))"))
+  }
+
+  test("nested field updates should preserve generated column names") {
+    val df = Seq((((1, 2), (3, 4)), 0)).toDF("s", "z")
+    val added = df.select(
+      col("s").withField("_1.x", lit(1)),
+      col("s").withField("_2.x", lit(1)))
+    assert(added.columns.toSeq == Seq(
+      "update_fields(s, WithField(update_fields(s._1, WithField(1))))",
+      "update_fields(s, WithField(update_fields(s._2, WithField(1))))"))
+    val dropped = df.select(col("s").dropFields("_1._2"), col("s").dropFields("_2._2"))
+    assert(dropped.columns.toSeq == Seq(
+      "update_fields(s, WithField(update_fields(s._1, dropfield())))",
+      "update_fields(s, WithField(update_fields(s._2, dropfield())))"))
+  }
+
+  test("nested field updates should share an unresolved nondeterministic input") {
+    onEachEvalPath {
+      val counter = new java.util.concurrent.atomic.AtomicLong()
+      val nextStruct = udf((id: Long) => {
+        val value = counter.getAndIncrement() + id
+        ((value, value), value)
+      }).asNondeterministic()
+      val updated = nextStruct(col("id")).withField("_1.copy", lit(1))
+        .withField("_1.extra", lit(2)).withField("extra", lit(3))
+      spark.range(10).select(updated).collect().foreach { row =>
+        val result = row.getStruct(0)
+        val nested = result.getStruct(0)
+        assert(nested.getLong(0) == nested.getLong(1))
+        assert(nested.getLong(0) == result.getLong(1))
+      }
+    }
+  }
+
+  test("nested field updates should discard paths overwritten before resolution") {
+    val df = Seq((1, 2)).toDF("a", "b").select(struct(col("a"), col("b")).as("s"))
+    checkAnswer(df.select(col("s").withField("a.x", lit(3)).withField("a", lit(4))),
+      Row(Row(4, 2)))
+    checkAnswer(df.select(col("s").withField("missing.x", lit(3))
+      .withField("missing", lit(4))), Row(Row(1, 2, 4)))
+  }
+
+  test("withField should copy TIME fields from vectorized Parquet structs") {
+    withSQLConf(
+      SQLConf.TIME_TYPE_ENABLED.key -> "true",
+      SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
+      SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+      withTempPath { path =>
+        spark.sql("SELECT named_struct('t', TIME '12:34:56', 'a', 1) AS s")
+          .write.parquet(path.getCanonicalPath)
+        val df = spark.read.parquet(path.getCanonicalPath)
+        checkAnswer(df.select(col("s").withField("b", lit(2))),
+          spark.sql("SELECT named_struct('t', TIME '12:34:56', 'a', 1, 'b', 2)"))
+      }
+    }
+  }
+
+  test("withField should copy geospatial fields from vectorized Parquet structs") {
+    val point = "010100000000000000000031400000000000001C40"
+      .grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
+    Seq(
+      GeometryType(4326) -> Geometry.fromWKB(point, 4326),
+      GeographyType(4326) -> Geography.fromWKB(point, 4326)).foreach { case (dataType, value) =>
+      withSQLConf(
+        SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
+        SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+        withTempPath { path =>
+          val schema = StructType(Seq(StructField("s", StructType(Seq(
+            StructField("g", dataType), StructField("a", IntegerType))))))
+          spark.createDataFrame(
+            sparkContext.parallelize(Seq(Row(Row(value, 1)))), schema)
+            .write.parquet(path.getCanonicalPath)
+          val df = spark.read.parquet(path.getCanonicalPath)
+          checkAnswer(df.select(col("s").withField("b", lit(2))), Row(Row(value, 1, 2)))
+        }
+      }
+    }
+  }
+
+  test("withField should reuse an updated struct for a nested path") {
+    onEachEvalPath {
+      val counter = new java.util.concurrent.atomic.AtomicLong()
+      val nextStruct = udf(() => {
+        val value = counter.getAndIncrement()
+        ((value, value), value)
+      }).asNondeterministic()
+      val structExpr = nextStruct().expr
+      val baseUpdate = UpdateFields(structExpr, Seq(WithField("extra", Literal(1))))
+      val updated = Column(UpdateFields(baseUpdate, "_1.copy", Literal(1)))
+      val df = spark.range(0, 10, 1, 1)
+      df.select(updated).collect().foreach { row =>
+        val result = row.getStruct(0)
+        val nested = result.getStruct(0)
+        assert(nested.getLong(0) == nested.getLong(1))
+        assert(nested.getLong(0) == result.getLong(1))
+      }
+    }
+  }
+
+  test("withField should preserve a nested path through a later update") {
+    onEachEvalPath {
+      val counter = new java.util.concurrent.atomic.AtomicLong()
+      val nextStruct = udf(() => {
+        val value = counter.getAndIncrement()
+        ((value, value), value)
+      }).asNondeterministic()
+      val structExpr = nextStruct().expr
+      val nestedUpdate = UpdateFields(structExpr, "_1.copy", Literal(1))
+      val updated = Column(UpdateFields(nestedUpdate, Seq(WithField("extra", Literal(1)))))
+      val df = spark.range(0, 10, 1, 1)
+      df.select(updated).collect().foreach { row =>
+        val result = row.getStruct(0)
+        val nested = result.getStruct(0)
+        assert(nested.getLong(0) == nested.getLong(1))
+        assert(nested.getLong(0) == result.getLong(1))
+      }
+    }
+  }
+
+  test("withField should not evaluate a value expression for null structs") {
+    onEachEvalPath {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        val structType = StructType(Seq(StructField("a", IntegerType, nullable = false)))
+        val df = spark.range(0, 3, 1, 1).select(
+          $"id",
+          when($"id" < 2, lit(null).cast(structType))
+            .otherwise(struct(lit(1)).cast(structType)).as("s"))
+        checkAnswer(
+          df.select($"s".withField("b", lit(1.0) / ($"id" - 1))),
+          Seq(Row(null), Row(null), Row(Row(1, 1.0))))
+      }
+    }
+  }
+
+  test("withField should remain inside a short-circuited branch") {
+    onEachEvalPath {
+      val throwingStruct = udf((id: Long) => {
+        if (id >= 0) throw new IllegalStateException(s"evaluated for $id") else ((id, id), id)
+      })
+      val updated = throwingStruct($"id").withField("_1.extra", lit(1))
+      checkAnswer(
+        Seq((false, 0L), (false, 1L)).toDF("keep", "id")
+          .filter($"keep" && updated.isNotNull).select($"id"),
+        Seq.empty)
+    }
+  }
+
+  test("dropFields should not evaluate omitted CreateNamedStruct fields") {
+    onEachEvalPath {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        val source = struct((lit(1) / $"id").as("dropped"), lit(1).as("kept"))
+        checkAnswer(spark.range(1).select(source.dropFields("dropped")), Row(Row(1)))
+      }
+    }
+  }
+
+  test("withField should discard unused aggregate inputs behind casts") {
+    onEachEvalPath {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        val df = Seq((1, 0)).toDF("x", "z")
+        val source = struct(sum($"x" / $"z").as("a")).cast("struct<a:string>")
+        checkAnswer(df.agg(source.withField("a", lit(1))), Row(Row(1)))
+        val nested = struct(source.as("nested")).cast("struct<nested:struct<a:string>>")
+        checkAnswer(df.agg(nested.withField("nested.a", lit(1))), Row(Row(Row(1))))
+      }
+    }
+  }
+
+  test("SPARK-58902: BETWEEN on a nondeterministic input inside a conditional branch") {
+    onEachEvalPath {
+      // `BETWEEN` reads its input twice. Inlining the common expression into a branch gave each
+      // read its own value, so the two comparisons saw two different ids and 6 of the 10 rows came
+      // back true where 3 is correct. A single partition makes the id sequence 0, 1, 2, ... `id` is
+      // selected alongside because `checkAnswer` compares rows as a bag: without it the assertion
+      // would only count trues, and an off-by-one in the sequence would still pass.
+      val df = spark.range(0, 10, 1, 1)
+      checkAnswer(
+        df.selectExpr(
+          "id",
+          "CASE WHEN id < 0 THEN false " +
+            "ELSE monotonically_increasing_id() BETWEEN 3 AND 5 END"),
+        (0 until 10).map(i => Row(i.toLong, i >= 3 && i <= 5)))
+    }
+  }
+
+  test("SPARK-58902: a definition in a branch is evaluated only on the rows that reach it") {
+    onEachEvalPath {
+      // Rows 0 to 4 take the first branch, so the five rows that reach the ELSE see ids 0 to 4 --
+      // the same values they would see if the branch were the whole expression. `id` is selected
+      // alongside for the reason given in the case above.
+      val df = spark.range(0, 10, 1, 1)
+      checkAnswer(
+        df.selectExpr(
+          "id",
+          "CASE WHEN id < 5 THEN NULL " +
+            "ELSE monotonically_increasing_id() BETWEEN 1 AND 2 END"),
+        (0 until 10).map { i =>
+          if (i < 5) Row(i.toLong, null) else Row(i.toLong, i - 5 >= 1 && i - 5 <= 2)
+        })
+    }
+  }
+
+  test("SPARK-58902: a branch condition that can raise is not evaluated on other rows") {
+    onEachEvalPath {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        // Nothing is relocated, so a condition is evaluated only where it always was. `a` runs
+        // -2, -1, 0, 1, 2, 3: the first two take the third branch, 0 the first, 1 and 2 the second,
+        // and 3 falls through. `rand` is in [0, 1), so a row reaching a BETWEEN is true whatever it
+        // draws -- the answers here do not depend on memoization. What this rules out is the
+        // alternative that was measured and rejected: hoisting the definition into a `Project` and
+        // guarding that column with the branch condition, which puts `6 / a` outside conditional
+        // evaluation and raises on the `a = 0` row under ANSI.
+        val df = spark.range(0, 6, 1, 1).selectExpr("cast(id as int) - 2 as a")
+        checkAnswer(
+          df.selectExpr(
+            "a",
+            "CASE WHEN a = 0 THEN false " +
+              "WHEN 6 / a > 2 THEN rand(1) BETWEEN 0 AND 1 " +
+              "WHEN 6 / a < -2 THEN rand(2) BETWEEN 0 AND 1 " +
+              "ELSE false END"),
+          Seq(Row(-2, true), Row(-1, true), Row(0, false),
+            Row(1, true), Row(2, true), Row(3, false)))
+      }
+    }
+  }
+
+  test("SPARK-58902: a nondeterministic input a branch cannot pre-evaluate is still read once") {
+    onEachEvalPath {
+      // 20 rows so the two copies an inlining implementation makes fall out of step: each owns an
+      // identically seeded generator, and they diverge once a failed first comparison skips the
+      // second. Both bounds therefore have to be failable, which the assertion below pins: with an
+      // upper bound no 3-character draw can miss, the answer is the first comparison's alone and
+      // inlining is invisible. The value is a string, so this also covers a non-primitive slot, and
+      // `id` is selected alongside because `checkAnswer` compares as a bag.
+      val df = spark.range(0, 20, 1, 1)
+      val inBranch = df.selectExpr(
+        "id", "CASE WHEN id < 0 THEN false ELSE randstr(3, 0) BETWEEN 'a' AND 'm' END")
+      val draws = df.selectExpr("randstr(3, 0) as s").collect().map(_.getString(0))
+      assert(draws.exists(_ < "a") && draws.exists(_ > "m"),
+        s"a bound is not failable over these rows: ${draws.mkString(", ")}")
+      val branchFreeStr = df.selectExpr("id", "randstr(3, 0) BETWEEN 'a' AND 'm'").collect()
+      checkAnswer(inBranch, branchFreeStr.toSeq)
+
+      // The same for a nondeterministic input wrapped in arithmetic, with the same requirement on
+      // the window: `BETWEEN 0 AND 1` over `rand` is satisfied by every draw, which would keep the
+      // two copies in lockstep.
+      val branchFree = df.selectExpr("id", "(rand(7) / 1.0) BETWEEN 0.3 AND 0.6").collect()
+      assert(branchFree.exists(!_.getBoolean(1)) && branchFree.exists(_.getBoolean(1)),
+        s"the window is not selective over these rows: ${branchFree.mkString(", ")}")
+      val inBranchRand = df.selectExpr(
+        "id", "CASE WHEN id < 0 THEN false ELSE (rand(7) / 1.0) BETWEEN 0.3 AND 0.6 END")
+      checkAnswer(inBranchRand, branchFree.toSeq)
+    }
+  }
+
+  test("SPARK-58902: a nested With agrees across the evaluation paths") {
+    // The outer `nullif`'s definition is the inner `nullif`, itself a `With`, and neither is cheap
+    // or read once, so both survive inside the branch. This is about the two evaluation paths
+    // agreeing on nested scopes, not about code size -- see `CommonExprSlots.fill` for that. `a` is
+    // selected alongside so `checkAnswer`, which compares as a bag, compares per row.
+    val query = "SELECT a, CASE WHEN a < 0 THEN NULL ELSE nullif(nullif(a + b, b), c) END AS r " +
+      "FROM VALUES (0, 5, 3), (2, 5, 7), (4, 5, 6), (-1, 1, 1) AS t(a, b, c)"
+    // The shape assertion keeps a rewrite change from leaving this with no `With` at all and still
+    // passing on the answers. It survives `ConvertToLocalRelation` only because
+    // `CommonExpressionDef` is `Unevaluable`; otherwise the whole `VALUES` projection would fold.
+    // The conf block pins the default `NullIf` builds under, so a suite-level override cannot turn
+    // this into a test of the inlining path.
+    withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "false") {
+      val withs = spark.sql(query).queryExecution.optimizedPlan.collect {
+        case p => p.expressions.flatMap(_.collect { case w: With => w })
+      }.flatten
+      assert(withs.size == 2, s"expected two surviving With nodes, got ${withs.size}")
+      onEachEvalPath {
+        // a = 0 makes `a + b` equal b, a = 2 makes it equal c, so both are null; a = 4 differs from
+        // both and gives 9; a = -1 takes the first branch.
+        checkAnswer(
+          spark.sql(query),
+          Seq(Row(0, null), Row(2, null), Row(4, 9), Row(-1, null)))
+      }
+    }
+  }
+
+  test("SPARK-58902: a surviving With in a Filter predicate reads its definition once per row") {
+    // Every other end-to-end case goes through a Project. A `With` survives in a Filter predicate
+    // the same way, and `FilterExec`'s whole-stage `doConsume` generates common state lazily, at
+    // the first predicate that reads it, so the lazy fill and the in-place clearing land next to
+    // machinery with its own ordering contract.
+    withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "false") {
+      onEachEvalPath {
+        val df = spark.range(0, 10, 1, 1).toDF()
+        // One id per row, so the ids are the row numbers and rows 3 to 5 pass. Inlining would let
+        // the second comparison draw again and a different set of rows would come through.
+        checkAnswer(
+          df.filter("CASE WHEN id < 0 THEN false " +
+            "ELSE monotonically_increasing_id() BETWEEN 3 AND 5 END"),
+          Seq(Row(3L), Row(4L), Row(5L)))
+      }
+    }
+  }
+
+  test("SPARK-58902: a surviving With in a Sort key is generated once per comparison side") {
+    // `GenerateOrdering` generates the key once per comparison side, each in its own scope with its
+    // own slots. A slot shared between the sides would read the wrong row, and here, where
+    // `Expression.reduceCodeSize` has hoisted each side's key into a method taking one row, would
+    // not compile. What this does not cover is a comparison the ordering performs: the keys are
+    // distinct, so `UnsafeInMemorySorter` settles them on their prefixes.
+    withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "false") {
+      onEachEvalPath {
+        // The DataFrame is built inside, not outside: `QueryExecution.executedPlan` is a lazy val,
+        // so one built ahead of these blocks would be planned under the first block's confs and the
+        // whole-stage block would re-run that same physical plan.
+        val df = spark.range(0, 5, 1, 1).toDF()
+        val sorted = df.orderBy(expr("CASE WHEN id < 0 THEN 0 ELSE nullif(id * 2, -1) END").desc)
+        val withs = sorted.queryExecution.optimizedPlan.collect {
+          case p => p.expressions.flatMap(_.collect { case w: With => w })
+        }.flatten
+        assert(withs.size == 1, s"expected one surviving With node, got ${withs.size}")
+        // `checkAnswer` compares in order when the plan holds a `Sort`.
+        checkAnswer(sorted, Seq(Row(4L), Row(3L), Row(2L), Row(1L), Row(0L)))
+      }
+    }
+  }
+
+  test("SPARK-58902: a definition that has to fall back to eval works on every path") {
+    // The only case whose definition is a real `CodegenFallback`, which covers it being generated
+    // inside `fill`, its `Nondeterministic` state being initialized, and `INPUT_ROW` reaching it. A
+    // regression there is a compile failure or an uninitialized-state error, not a wrong value.
+    // These are two paths, not three: `CollapseCodegenStages` rejects an operator holding a
+    // non-leaf `CodegenFallback`, which is what guarantees `With.doGenCode` an `INPUT_ROW`.
+    withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "false") {
+      val query = "SELECT CASE WHEN id < 0 THEN 'skipped' " +
+        "ELSE nullif(reflect('java.util.UUID', 'randomUUID'), 'never') END AS r " +
+        "FROM range(0, 3, 1, 1)"
+      val withs = spark.sql(query).queryExecution.optimizedPlan.collect {
+        case p => p.expressions.flatMap(_.collect { case w: With => w })
+      }.flatten
+      assert(withs.size == 1, s"expected one surviving With node, got ${withs.size}")
+      onEachEvalPath {
+        val got = spark.sql(query).collect().map(_.getString(0))
+        assert(got.length == 3, s"expected three rows, got ${got.mkString(", ")}")
+        assert(got.forall(_.length == 36), s"expected UUIDs, got ${got.mkString(", ")}")
+        assert(got.distinct.length == 3, s"expected a UUID per row, got ${got.mkString(", ")}")
+      }
+    }
+  }
+
+  test("SPARK-58902: a surviving With inside a window expression is evaluated once per row") {
+    // `ExtractWindowExpressions` moves the window function's argument into a `_w0` alias in the
+    // `Project` it synthesizes below the `Window`, so the host is `ProjectExec` as above and what
+    // this adds is that analyzer relocation. The definition is deterministic, so the values pin
+    // per-row clearing rather than memoization; the shape assertion is what keeps the test from
+    // passing on a plan that dropped the `With`.
+    withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "false") {
+      val query = "SELECT id, sum(CASE WHEN id < 0 THEN 0 ELSE nullif(id * 2, -1) END) " +
+        "OVER (ORDER BY id) AS s FROM range(0, 4, 1, 1)"
+      val withs = spark.sql(query).queryExecution.optimizedPlan.collect {
+        case p => p.expressions.flatMap(_.collect { case w: With => w })
+      }.flatten
+      assert(withs.size == 1, s"expected one surviving With node, got ${withs.size}")
+      onEachEvalPath {
+        // Keys are 0, 2, 4, 6, so the running sums are 0, 2, 6, 12.
+        checkAnswer(
+          spark.sql(query),
+          Seq(Row(0L, 0L), Row(1L, 2L), Row(2L, 6L), Row(3L, 12L)))
+      }
+    }
+  }
+
+  test("SPARK-59954: a With in a DECLARE VARIABLE default is evaluated once") {
+    // `CreateVariableExec` evaluates the default on the driver, so the accumulator needs no job to
+    // read. `plus_one_counted` is deterministic but not cheap, so its definition is worth
+    // memoizing, and the NULLIF and BETWEEN defaults below each read it twice. The conf block pins
+    // the `With` form of `NullIf` and `Between`, so a suite-level override cannot switch this test
+    // to the inlined form.
+    val calls = sparkContext.longAccumulator("calls")
+    withUserDefinedFunction("plus_one_counted" -> true) {
+      spark.udf.register("plus_one_counted", (i: Int) => { calls.add(1); i + 1 })
+      withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "false") {
+        withSessionVariable("v1", "v2", "v3") {
+          sql("DECLARE OR REPLACE VARIABLE v1 INT DEFAULT nullif(plus_one_counted(1), 3)")
+          assert(calls.value == 1, s"the NULLIF default called the UDF ${calls.value} times")
+          checkAnswer(sql("SELECT v1"), Row(2))
+
+          calls.reset()
+          sql("DECLARE OR REPLACE VARIABLE v2 BOOLEAN DEFAULT plus_one_counted(1) BETWEEN 1 AND 3")
+          assert(calls.value == 1, s"the BETWEEN default called the UDF ${calls.value} times")
+          checkAnswer(sql("SELECT v2"), Row(true))
+
+          // A seeded form of the SPARK-59954 repro. This checks that the command is planned and the
+          // `Rand` inside the definition is initialized, not the value: every copy of `rand(5)`
+          // would draw the same first number.
+          sql("DECLARE OR REPLACE VARIABLE v3 DOUBLE DEFAULT nullif(rand(5), 0.5)")
+          checkAnswer(sql("SELECT v3 IS NULL OR (v3 >= 0 AND v3 < 1)"), Row(true))
+        }
+      }
+    }
   }
 
   test("in") {
@@ -1052,6 +1785,37 @@ class ColumnExpressionSuite extends SharedSparkSession {
           StructField("a", structType, nullable = false))),
           nullable = false))),
         nullable = false))))
+
+  test("nested updates should report type errors through non-struct inputs") {
+    val cases = Seq(
+      (testData, "key", "a.b", "key", "a"),
+      (structLevel1, "a", "b.x.y", "a.b", "x"))
+    cases.foreach { case (df, column, path, input, parent) =>
+      Seq("withField", "dropFields").foreach { operation =>
+        val value = if (operation == "withField") "WithField(2)" else "dropfield()"
+        checkError(
+          exception = intercept[AnalysisException] {
+            val updated = if (operation == "withField") {
+              col(column).withField(path, lit(2))
+            } else {
+              col(column).dropFields(path)
+            }
+            df.select(updated)
+          },
+          condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+          parameters = Map(
+            "sqlExpr" ->
+              s""""update_fields($input, WithField(update_fields($input.$parent, $value)))"""",
+            "paramIndex" -> "first",
+            "inputSql" -> s""""$input"""",
+            "inputType" -> "\"INT\"",
+            "requiredType" -> "\"STRUCT\""),
+          context = ExpectedContext(
+            fragment = operation,
+            callSitePattern = getCurrentClassCallSitePattern))
+      }
+    }
+  }
 
   test("withField should throw an exception if called on a non-StructType column") {
     checkError(

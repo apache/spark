@@ -93,7 +93,11 @@ class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("params") {
-    ParamsSuite.checkParams(new LinearSVC)
+    val classifier = new LinearSVC
+    ParamsSuite.checkParams(classifier)
+    assert(classifier.getIntermediateStorageLevel === "MEMORY_AND_DISK")
+    classifier.setIntermediateStorageLevel("DISK_ONLY")
+    assert(classifier.getIntermediateStorageLevel === "DISK_ONLY")
     val model = new LinearSVCModel("linearSVC", Vectors.dense(0.0), 0.0)
     ParamsSuite.checkParams(model)
   }

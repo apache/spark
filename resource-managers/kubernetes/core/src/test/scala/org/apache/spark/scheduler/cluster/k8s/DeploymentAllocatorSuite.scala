@@ -88,7 +88,6 @@ class DeploymentAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     when(driverPodResource.waitUntilReady(any(), any())).thenReturn(driverPod)
     when(executorBuilder.buildFromFeatures(
       any(classOf[KubernetesExecutorConf]),
-      meq(secMgr),
       meq(kubernetesClient),
       any(classOf[ResourceProfile])))
       .thenAnswer { invocation =>
@@ -167,7 +166,6 @@ class DeploymentAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     val pvc = persistentVolumeClaim("spark-pvc", "standard", "1Gi")
     when(executorBuilder.buildFromFeatures(
       any(classOf[KubernetesExecutorConf]),
-      meq(secMgr),
       meq(kubernetesClient),
       any(classOf[ResourceProfile])))
       .thenReturn(KubernetesExecutorSpec(
@@ -184,7 +182,6 @@ class DeploymentAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
   test("throws when executor template includes static PVC references") {
     when(executorBuilder.buildFromFeatures(
       any(classOf[KubernetesExecutorConf]),
-      meq(secMgr),
       meq(kubernetesClient),
       any(classOf[ResourceProfile])))
       .thenReturn(KubernetesExecutorSpec(

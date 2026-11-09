@@ -71,6 +71,9 @@ private[spark] class StandaloneAppClient(
     private val alreadyDead = new AtomicBoolean(false)
     private val registerMasterFutures = new AtomicReference[Array[JFuture[_]]]
     private val registrationRetryTimer = new AtomicReference[JScheduledFuture[_]]
+    // The hold status last reported to the Master, re-sent on failover since a new Master
+    // starts without it. None until the driver has reported one.
+    private var holdStatus: Option[(Boolean, Boolean)] = None
 
     // A thread pool for registering with masters. Because registering with a master is a blocking
     // action, this thread pool must be able to create "masterRpcAddresses.size" threads at the same
@@ -169,6 +172,7 @@ private[spark] class StandaloneAppClient(
         registered.set(true)
         master = Some(masterRef)
         listener.connected(appId.get)
+        sendHoldStatus()
 
       case ApplicationRemoved(message) =>
         markDead("Master removed our application: %s".format(message))
@@ -204,6 +208,18 @@ private[spark] class StandaloneAppClient(
         master = Some(masterRef)
         alreadyDisconnected = false
         masterRef.send(MasterChangeAcknowledged(appId.get))
+        // The new Master recovered the application without its hold status, so report it again.
+        sendHoldStatus()
+
+      case ReportApplicationHold(supported, held) =>
+        holdStatus = Some((supported, held))
+        sendHoldStatus()
+    }
+
+    /** Report the last known hold status, if any, to the current Master. */
+    private def sendHoldStatus(): Unit = holdStatus.foreach { case (supported, held) =>
+      // Dropped while no Master is known; re-sent from `RegisteredApplication`/`MasterChanged`.
+      sendToMaster(ApplicationHoldUpdated(appId.get, supported, held))
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -228,6 +244,15 @@ private[spark] class StandaloneAppClient(
             logWarning("Attempted to kill executors before registering with Master.")
             context.reply(false)
         }
+
+      case SetApplicationHold(hold) =>
+        // Holding drains the executors and talks to the cluster manager, so the listener does
+        // the work off this thread and the reply follows the future it returns.
+        listener.holdApplication(hold).andThen {
+          case Success(acknowledged) => context.reply(acknowledged)
+          case Failure(_: InterruptedException) => // Cancelled
+          case Failure(NonFatal(t)) => context.sendFailure(t)
+        }(ThreadUtils.sameThread)
     }
 
     private def askAndReplyAsync[T](
@@ -327,6 +352,19 @@ private[spark] class StandaloneAppClient(
     } else {
       logWarning("Attempted to request executors before driver fully initialized.")
       Future.successful(false)
+    }
+  }
+
+  /**
+   * Report to the Master whether this application can be held and whether it currently is, so
+   * that the Master UI can show the hold status of the application. The status is cached and
+   * re-sent on failover, so a report made before the registration completes is not lost.
+   */
+  def reportHoldStatus(supported: Boolean, held: Boolean): Unit = {
+    if (endpoint.get != null) {
+      endpoint.get.send(ReportApplicationHold(supported, held))
+    } else {
+      logWarning("Attempted to report the hold status before driver fully initialized.")
     }
   }
 

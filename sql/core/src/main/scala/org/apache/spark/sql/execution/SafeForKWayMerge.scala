@@ -23,5 +23,8 @@ package org.apache.spark.sql.execution
  * mutable state in shared plan-node instance fields; all per-partition state must be
  * captured inside the partition's iterator closure (e.g. via the
  * PartitionEvaluatorFactory pattern).
+ *
+ * A `GroupPartitionsExec` planned with a k-way merge fails at execution if a node below it does
+ * not mix this in, e.g. one that a rule put there after `EnsureRequirements`.
  */
 trait SafeForKWayMerge

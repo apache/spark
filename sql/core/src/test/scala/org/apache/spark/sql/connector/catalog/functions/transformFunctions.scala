@@ -252,6 +252,32 @@ object StringSelfFunction extends ScalarFunction[UTF8String] {
   }
 }
 
+object UnboundSignedZerosFunction extends UnboundFunction {
+  override def bind(inputType: StructType): BoundFunction = {
+    if (inputType.size == 1 && inputType.head.dataType == LongType) SignedZerosFunction
+    else throw new UnsupportedOperationException("'signed_zeros' only takes a long as input type")
+  }
+  override def description(): String = name()
+  override def name(): String = "signed_zeros"
+}
+
+// A transform whose result type (DoubleType) differs from its input type (LongType), mapping
+// 1 to -0.0 and 2 to 0.0 so that two distinct inputs produce partition keys that are equal
+// under SQL semantics but distinct bitwise. The result should be consistent with the
+// "signed_zeros" NamedTransform defined at InMemoryBaseTable.scala.
+object SignedZerosFunction extends ScalarFunction[Double] {
+  override def inputTypes(): Array[DataType] = Array(LongType)
+  override def resultType(): DataType = DoubleType
+  override def name(): String = "signed_zeros"
+  override def canonicalName(): String = name()
+  override def toString: String = name()
+  override def produceResult(input: InternalRow): Double = input.getLong(0) match {
+    case 1L => -0.0d
+    case 2L => 0.0d
+    case v => v.toDouble
+  }
+}
+
 object UnboundTruncateFunction extends UnboundFunction {
   override def bind(inputType: StructType): BoundFunction = TruncateFunction
   override def description(): String = name()

@@ -459,6 +459,15 @@ class LevelDBTypeInfo {
 
       if (value instanceof String str) {
         byte[] bytes = str.getBytes(UTF_8);
+        for (byte b : bytes) {
+          if (b == KEY_SEPARATOR) {
+            // String bytes are copied verbatim into the key, so an embedded key
+            // separator would corrupt the index key structure and mix entries across
+            // range scans and deletes. Reject such values outright.
+            throw new IllegalArgumentException(
+              "Index string values cannot contain the key separator (0x00) byte.");
+          }
+        }
         result = new byte[bytes.length + 1];
         result[0] = prefix;
         System.arraycopy(bytes, 0, result, 1, bytes.length);

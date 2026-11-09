@@ -22,11 +22,13 @@ import java.lang.reflect.{Method, Modifier}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{FUNCTION_NAME, FUNCTION_PARAM}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchFunctionException, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.encoders.EncoderUtils
+import org.apache.spark.sql.catalyst.expressions.aggregate.V2Aggregator
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, SampleMethod}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.fromAttributes
 import org.apache.spark.sql.connector.catalog.{FunctionCatalog, Identifier}
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction.MAGIC_METHOD_NAME
@@ -45,15 +47,22 @@ import org.apache.spark.util.ArrayImplicits._
 object V2ExpressionUtils extends SQLConfHelper with Logging {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 
+  /**
+   * Variant of `resolveRef` that returns `None` if no attribute matches the reference. It still
+   * throws for a nested-field extraction error, such as a missing nested field, or an ambiguous
+   * reference.
+   */
+  private[sql] def resolveRefOpt(
+      ref: NamedReference, plan: LogicalPlan): Option[NamedExpression] = {
+    plan.resolve(ref.fieldNames.toImmutableArraySeq, conf.resolver)
+  }
+
   def resolveRef[T <: NamedExpression](ref: NamedReference, plan: LogicalPlan): T = {
-    plan.resolve(ref.fieldNames.toImmutableArraySeq, conf.resolver) match {
-      case Some(namedExpr) =>
-        namedExpr.asInstanceOf[T]
-      case None =>
-        val name = ref.fieldNames.toImmutableArraySeq.quoted
-        val outputString = plan.output.map(_.name).mkString(",")
-        throw QueryCompilationErrors.cannotResolveAttributeError(name, outputString)
-    }
+    resolveRefOpt(ref, plan).getOrElse {
+      val name = ref.fieldNames.toImmutableArraySeq.quoted
+      val outputString = plan.output.map(_.name).mkString(",")
+      throw QueryCompilationErrors.cannotResolveAttributeError(name, outputString)
+    }.asInstanceOf[T]
   }
 
   def resolveRefs[T <: NamedExpression](refs: Seq[NamedReference], plan: LogicalPlan): Seq[T] = {
@@ -67,7 +76,35 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       refs: Array[NamedReference],
       output: Seq[Attribute]): AttributeSet = {
     val plan = LocalRelation(output)
-    AttributeSet(resolveRefs[Attribute](refs.toImmutableArraySeq, plan))
+    AttributeSet(resolveRefs[NamedExpression](refs.toImmutableArraySeq, plan))
+  }
+
+  /**
+   * Resolves data source runtime-filter attributes and wraps resolution failures with connector
+   * context.
+   */
+  private[sql] def resolveDataSourceRuntimeFilterRefs(
+      refs: Array[NamedReference],
+      output: Seq[Attribute],
+      method: String,
+      scanClass: String): AttributeSet = {
+    if (refs.isEmpty) return AttributeSet.empty
+
+    val plan = LocalRelation(output)
+    val resolvedAttrs = refs.map { ref =>
+      try {
+        resolveRef[NamedExpression](ref, plan)
+      } catch {
+        case e: AnalysisException =>
+          throw QueryCompilationErrors.cannotResolveDataSourceRuntimeFilterAttributeError(
+            attribute = ref.fieldNames,
+            method = method,
+            scanClass = scanClass,
+            relationOutput = fromAttributes(output),
+            cause = e)
+      }
+    }
+    AttributeSet(resolvedAttrs)
   }
 
   /**
@@ -174,9 +211,54 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
     case V2SampleMethod.SYSTEM => SampleMethod.System
   }
 
+  /**
+   * Binds a V2 [[UnboundFunction]] to the given arguments and turns the resulting
+   * [[BoundFunction]] into a Catalyst expression. The optional display name preserves identifier
+   * parts in diagnostics.
+   *
+   * An aggregate function is returned as a bare [[V2Aggregator]] so that callers can wrap it into
+   * an `AggregateExpression` carrying DISTINCT / FILTER, which is not known here.
+   */
+  def bindFunction(
+      unbound: UnboundFunction,
+      arguments: Seq[Expression],
+      displayName: Option[FunctionIdentifier] = None): Expression = {
+    val inputType = StructType(arguments.zipWithIndex.map {
+      case (exp, pos) => StructField(s"_$pos", exp.dataType, exp.nullable)
+    })
+    val bound = try {
+      unbound.bind(inputType)
+    } catch {
+      case unsupported: UnsupportedOperationException =>
+        throw QueryCompilationErrors.functionCannotProcessInputError(
+          displayName.map(_.unquotedString).getOrElse(unbound.name()), arguments, unsupported)
+    }
+
+    val inputTypesLength = bound.inputTypes().length
+    if (inputTypesLength != arguments.length) {
+      throw QueryCompilationErrors.v2FunctionInvalidInputTypeLengthError(
+        displayName.map(_.unquotedString).getOrElse(bound.name()),
+        arguments.length,
+        inputTypesLength)
+    }
+
+    bound match {
+      case scalarFunc: ScalarFunction[_] =>
+        resolveScalarFunction(scalarFunc, arguments, displayName)
+      case aggFunc: AggregateFunction[_, _] =>
+        V2Aggregator(aggFunc, arguments)
+      case _ =>
+        throw new AnalysisException(
+          errorClass = "INVALID_UDF_IMPLEMENTATION",
+          messageParameters = Map(
+            "funcName" -> displayName.map(_.quotedString).getOrElse(toSQLId(bound.name()))))
+    }
+  }
+
   def resolveScalarFunction(
       scalarFunc: ScalarFunction[_],
-      arguments: Seq[Expression]): Expression = {
+      arguments: Seq[Expression],
+      displayName: Option[FunctionIdentifier] = None): Expression = {
     val declaredInputTypes = scalarFunc.inputTypes().toImmutableArraySeq
     val argClasses = declaredInputTypes.map(EncoderUtils.dataTypeJavaClass)
     findMethod(scalarFunc, MAGIC_METHOD_NAME, argClasses) match {
@@ -202,7 +284,9 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
           case _ =>
             throw new AnalysisException(
               errorClass = "SCALAR_FUNCTION_NOT_FULLY_IMPLEMENTED",
-              messageParameters = Map("scalarFunc" -> toSQLId(scalarFunc.name())))
+              messageParameters = Map(
+                "scalarFunc" -> displayName.map(_.quotedString).getOrElse(
+                  toSQLId(scalarFunc.name()))))
         }
     }
   }

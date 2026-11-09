@@ -19,6 +19,9 @@ package org.apache.spark.network.server;
 
 import java.nio.ByteBuffer;
 
+import io.netty.channel.Channel;
+
+import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.StreamCallbackWithID;
 import org.apache.spark.network.client.TransportClient;
@@ -83,7 +86,7 @@ public abstract class AbstractAuthRpcHandler extends RpcHandler {
 
   @Override
   public StreamManager getStreamManager() {
-    return delegate.getStreamManager();
+    return new AuthCheckingStreamManager(delegate.getStreamManager());
   }
 
   @Override
@@ -107,6 +110,92 @@ public abstract class AbstractAuthRpcHandler extends RpcHandler {
 
   @Override
   public MergedBlockMetaReqHandler getMergedBlockMetaReqHandler() {
-    return delegate.getMergedBlockMetaReqHandler();
+    return (client, mergedBlockMetaRequest, callback) -> {
+      // Match the pattern in receive
+      if (isAuthenticated) {
+        delegate.getMergedBlockMetaReqHandler()
+          .receiveMergeBlockMetaReq(client, mergedBlockMetaRequest, callback);
+      } else {
+        throw new SecurityException("Unauthenticated call to receiveMergeBlockMetaReq().");
+      }
+    };
+  }
+
+  /**
+   * Wraps the delegate's StreamManager so that no chunk or stream is served on a channel that
+   * has not completed authentication. Historically only receive() and receiveStream() were
+   * gated on authentication, which left StreamRequest and ChunkFetchRequest served pre-auth by
+   * StreamManagers whose checkAuthorization is a no-op (e.g. the NettyRpcEnv file server that
+   * distributes jars, files and REPL classes), so enabling spark.authenticate did not protect
+   * the file-distribution channel. This wrapper makes every StreamManager behind an
+   * authentication bootstrap fail closed instead. Lifecycle and accounting callbacks are
+   * always delegated so per-channel state is cleaned up regardless of authentication state.
+   */
+  private class AuthCheckingStreamManager extends StreamManager {
+    private final StreamManager delegate;
+
+    AuthCheckingStreamManager(StreamManager delegate) {
+      this.delegate = delegate;
+    }
+
+    private void checkAuthenticated() {
+      if (!isAuthenticated) {
+        throw new SecurityException("Unauthenticated call to stream manager.");
+      }
+    }
+
+    @Override
+    public ManagedBuffer getChunk(long streamId, int chunkIndex) {
+      checkAuthenticated();
+      return delegate.getChunk(streamId, chunkIndex);
+    }
+
+    @Override
+    public ManagedBuffer openStream(String streamId) {
+      checkAuthenticated();
+      return delegate.openStream(streamId);
+    }
+
+    @Override
+    public void checkAuthorization(TransportClient client, long streamId) {
+      checkAuthenticated();
+      delegate.checkAuthorization(client, streamId);
+    }
+
+    @Override
+    public void checkAuthorization(TransportClient client, String streamId) {
+      checkAuthenticated();
+      delegate.checkAuthorization(client, streamId);
+    }
+
+    @Override
+    public void connectionTerminated(Channel channel) {
+      delegate.connectionTerminated(channel);
+    }
+
+    @Override
+    public long chunksBeingTransferred() {
+      return delegate.chunksBeingTransferred();
+    }
+
+    @Override
+    public void chunkBeingSent(long streamId) {
+      delegate.chunkBeingSent(streamId);
+    }
+
+    @Override
+    public void streamBeingSent(String streamId) {
+      delegate.streamBeingSent(streamId);
+    }
+
+    @Override
+    public void chunkSent(long streamId) {
+      delegate.chunkSent(streamId);
+    }
+
+    @Override
+    public void streamSent(String streamId) {
+      delegate.streamSent(streamId);
+    }
   }
 }

@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.TranspiledPythonUDF
+import org.apache.spark.sql.catalyst.expressions.{TranspiledPythonUDF, TranspiledUDFParameter}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.TRANSPILED_PYTHON_UDF
-import org.apache.spark.sql.types.{BinaryType, BooleanType, DataType, DecimalType, NumericType, StringType}
+import org.apache.spark.sql.types.{
+  BinaryType, BooleanType, DataType, DecimalType, FractionalType,
+  IntegralType, NumericType, StringType}
 
 /**
  * Prunes the per-input-type options carried by a [[TranspiledPythonUDF]] down to those whose
@@ -51,30 +53,47 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
           // Bottom-up so a nested TranspiledPythonUDF (a transpiled UDF feeding another) is pruned
           // -- and thus resolved -- before its parent's input types are inspected.
           op.transformExpressionsUpWithPruning(_.containsPattern(TRANSPILED_PYTHON_UDF)) {
-            case t: TranspiledPythonUDF
-                if t.optionInputCategories.nonEmpty && t.pythonUDFExpr.childrenResolved =>
-              val argTypes = t.pythonUDFExpr.children.map(_.dataType)
-              val kept = t.transpiledOptions.zip(t.optionInputCategories).collect {
-                case (option, categories) if optionMatchesTypes(categories, argTypes) => option
+            // The second half of the guard stops this firing every later iteration: categories
+            // cleared and options resolved means there's nothing to do. It would still converge
+            // without it, but it would re-walk every option each time round.
+            case t: TranspiledPythonUDF if t.arguments.forall(_.resolved) &&
+                (t.optionInputCategories.nonEmpty || !t.transpiledOptions.forall(_.resolved)) =>
+              val args = t.arguments
+              val pruned = if (t.optionInputCategories.isEmpty) {
+                t
+              } else {
+                val argTypes = args.map(_.dataType)
+                val kept = t.transpiledOptions.zip(t.optionInputCategories).collect {
+                  case (option, categories) if optionMatchesTypes(categories, argTypes) => option
+                }
+                t.copy(transpiledOptions = kept, optionInputCategories = Nil)
               }
-              t.copy(transpiledOptions = kept, optionInputCategories = Nil)
+              // Type each `_udf_param_N` reference from the argument it stands for. The options are
+              // unresolved until this runs, so the analyzer comes back after and coerces their
+              // bodies like anything else.
+              pruned.copy(transpiledOptions =
+                pruned.transpiledOptions.map(TranspiledUDFParameter.resolveTypes(_, args)))
           }
       }
     }
   }
 
-  // True when each declared category matches the corresponding argument type:
-  // "numeric" -> NumericType, "string" -> StringType, "bool" -> BooleanType,
-  // "binary" -> BinaryType. "string" matches only StringType (not BinaryType): a
-  // bytes/BinaryType column is tagged "binary" instead, so the string lowerings
-  // (e.g. `repeat`) never see it. Empty categories means "no restriction", so the
-  // option is kept.
+  // True when each declared category matches the corresponding argument type.
+  // Empty categories means "no restriction" and the option is kept.
+  //
+  // Category -> Spark type mapping:
+  //   "integer" -> IntegralType (byte/short/int/long; NaN impossible)
+  //   "float"   -> FractionalType minus DecimalType (float/double; NaN possible)
+  //   "numeric" -> any NumericType minus DecimalType (legacy catch-all)
+  //   "string"  -> StringType with UTF8_BINARY collation only
+  //   "bool"    -> BooleanType
+  //   "binary"  -> BinaryType
   //
   // Two deliberate exclusions keep the transpiled semantics faithful to Python:
-  // - DecimalType is NOT "numeric": Python receives decimal.Decimal objects,
-  //   which raise TypeError when mixed with float literals and carry different
-  //   precision semantics than Spark's decimal arithmetic, so decimal columns
-  //   fall back to interpreted Python.
+  // - DecimalType is NOT matched by any numeric category: Python receives
+  //   decimal.Decimal objects, which raise TypeError when mixed with float
+  //   literals and carry different precision semantics than Spark's decimal
+  //   arithmetic, so decimal columns fall back to interpreted Python.
   // - "string" requires the default UTF8_BINARY collation: under a non-binary
   //   collation (e.g. UTF8_LCASE) Spark's `=`/`<`/`concat` follow collation
   //   rules while Python compares codepoints, so `'abc' == 'ABC'` would return
@@ -86,6 +105,9 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
       false
     } else {
       categories.zip(argTypes).forall {
+        case ("integer", dt) => dt.isInstanceOf[IntegralType]
+        case ("float", dt) =>
+          dt.isInstanceOf[FractionalType] && !dt.isInstanceOf[DecimalType]
         case ("numeric", dt) => dt.isInstanceOf[NumericType] && !dt.isInstanceOf[DecimalType]
         case ("string", st: StringType) => st.isUTF8BinaryCollation
         case ("bool", dt) => dt.isInstanceOf[BooleanType]

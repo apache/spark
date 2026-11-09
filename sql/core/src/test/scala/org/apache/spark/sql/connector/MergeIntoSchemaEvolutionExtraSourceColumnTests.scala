@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -120,6 +121,41 @@ trait MergeIntoSchemaEvolutionExtraSourceColumnTests extends MergeIntoSchemaEvol
       "`active` cannot be resolved"
   )
 
+  test("schema evolution - evolved target column takes precedence over a SQL variable") {
+    withTable(tableNameAsString) {
+      withTempView("source") {
+        createAndInitTable(
+          "pk INT NOT NULL, salary INT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }
+            |{ "pk": 2, "salary": 200, "dep": "software" }
+            |{ "pk": 3, "salary": 300, "dep": "hr" }""".stripMargin)
+        Seq((1, 150, "hr", true)).toDF("pk", "salary", "dep", "active")
+          .createOrReplaceTempView("source")
+
+        withSessionVariable("active", "action_enabled") {
+          sql("DECLARE VARIABLE active BOOLEAN DEFAULT false")
+          sql("DECLARE VARIABLE action_enabled BOOLEAN DEFAULT true")
+          executeMerge(
+            withSchemaEvolution = true,
+            targetTableName = tableNameAsString,
+            sourceViewName = "source",
+            cond = "t.pk = s.pk",
+            clauses = Seq(
+              update(set = "salary = s.salary, active = s.active"),
+              updateNotMatched(
+                set = "salary = salary + 1",
+                condition = "active IS NULL AND action_enabled AND salary = 200"),
+              deleteNotMatched(
+                condition = "active IS NULL AND action_enabled AND salary = 300")))
+
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString"),
+            Row(1, 150, "hr", true) :: Row(2, 201, "software", null) :: Nil)
+        }
+      }
+    }
+  }
+
   testEvolution("source has extra column with set all columns")(
     targetData = Seq(
       (1, 100, "hr"),
@@ -152,6 +188,83 @@ trait MergeIntoSchemaEvolutionExtraSourceColumnTests extends MergeIntoSchemaEvol
       (4, 150, "finance"),
       (5, 250, "finance"),
       (6, 350, "finance")).toDF("pk", "salary", "dep")
+  )
+
+  testEvolution("SPARK-60709: source has extra column with set all columns" +
+    " and target metadata column in update condition")(
+    targetData = Seq(
+      (1, 100, "hr"),
+      (2, 200, "software"),
+      (3, 300, "hr")
+    ).toDF("pk", "salary", "dep"),
+    sourceData = Seq(
+      (1, 150, "hr", true),
+      (2, 250, "software", true),
+      (4, 450, "hr", false)
+    ).toDF("pk", "salary", "dep", "active"),
+    clauses = Seq(
+      updateAll(condition = "t._partition = 'hr'")
+    ),
+    expected = Seq[(Int, Int, String, java.lang.Boolean)](
+      (1, 150, "hr", true),
+      (2, 200, "software", null),
+      (3, 300, "hr", null)).toDF("pk", "salary", "dep", "active"),
+    expectedWithoutEvolution = Seq(
+      (1, 150, "hr"),
+      (2, 200, "software"),
+      (3, 300, "hr")).toDF("pk", "salary", "dep")
+  )
+
+  testEvolution("SPARK-60709: source has extra column with set all columns, insert all" +
+    " and target metadata column in update condition")(
+    targetData = Seq(
+      (1, 100, "hr"),
+      (2, 200, "software"),
+      (3, 300, "hr")
+    ).toDF("pk", "salary", "dep"),
+    sourceData = Seq(
+      (1, 150, "hr", true),
+      (2, 250, "software", true),
+      (4, 450, "hr", false)
+    ).toDF("pk", "salary", "dep", "active"),
+    clauses = Seq(
+      updateAll(condition = "t._partition = 'hr'"),
+      insertAll()
+    ),
+    expected = Seq[(Int, Int, String, java.lang.Boolean)](
+      (1, 150, "hr", true),
+      (2, 200, "software", null),
+      (3, 300, "hr", null),
+      (4, 450, "hr", false)).toDF("pk", "salary", "dep", "active"),
+    expectedWithoutEvolution = Seq(
+      (1, 150, "hr"),
+      (2, 200, "software"),
+      (3, 300, "hr"),
+      (4, 450, "hr")).toDF("pk", "salary", "dep")
+  )
+
+  testEvolution("SPARK-60709: source has extra column with set explicit column" +
+    " and target metadata column in merge and not matched by source conditions")(
+    targetData = Seq(
+      (1, 100, "hr"),
+      (2, 200, "software"),
+      (3, 300, "hr")
+    ).toDF("pk", "salary", "dep"),
+    sourceData = Seq(
+      (1, 150, "hr", true),
+      (2, 250, "software", true),
+      (4, 450, "hr", false)
+    ).toDF("pk", "salary", "dep", "active"),
+    cond = "t.pk = s.pk AND t._partition = 'hr'",
+    clauses = Seq(
+      update(set = "active = s.active"),
+      deleteNotMatched(condition = "t._partition = 'software'")
+    ),
+    expected = Seq[(Int, Int, String, java.lang.Boolean)](
+      (1, 100, "hr", true),
+      (3, 300, "hr", null)).toDF("pk", "salary", "dep", "active"),
+    expectErrorWithoutEvolutionContains = "A column, variable, or function parameter with name " +
+      "`active` cannot be resolved"
   )
 
   testEvolution("source has extra column - empty table and insert")(
@@ -363,6 +476,65 @@ trait MergeIntoSchemaEvolutionExtraSourceColumnTests extends MergeIntoSchemaEvol
       ))
     )
   }
+
+  // The target exposes metadata columns `index` and `_partition`
+  testEvolution("SPARK-60721: source has extra column named like a target metadata column" +
+    " with set all columns")(
+    targetData = Seq(
+      (1, 100, "hr"),
+      (2, 200, "software")
+    ).toDF("pk", "salary", "dep"),
+    sourceData = Seq(
+      (1, 150, "hr", 10),
+      (3, 350, "hr", 30)
+    ).toDF("pk", "salary", "dep", "index"),
+    clauses = Seq(updateAll(), insertAll()),
+    expectErrorContains = "Cannot assign to metadata column 'index'",
+    expectedWithoutEvolution = Seq(
+      (1, 150, "hr"),
+      (2, 200, "software"),
+      (3, 350, "hr")).toDF("pk", "salary", "dep")
+  )
+
+  testEvolution("SPARK-60721: source has extra column named like a target metadata column" +
+    " with insert all")(
+    targetData = Seq(
+      (1, 100, "hr"),
+      (2, 200, "software")
+    ).toDF("pk", "salary", "dep"),
+    sourceData = Seq(
+      (1, 150, "hr", "p1"),
+      (3, 350, "hr", "p3")
+    ).toDF("pk", "salary", "dep", "_partition"),
+    clauses = Seq(insertAll()),
+    expectErrorContains = "Cannot assign to metadata column '_partition'",
+    expectedWithoutEvolution = Seq(
+      (1, 100, "hr"),
+      (2, 200, "software"),
+      (3, 350, "hr")).toDF("pk", "salary", "dep")
+  )
+
+  testEvolution("SPARK-60721: source has extra column named like a target metadata column" +
+    " with set all columns in legacy mode")(
+    targetData = Seq(
+      (1, 100, "hr"),
+      (2, 200, "software")
+    ).toDF("pk", "salary", "dep"),
+    sourceData = Seq(
+      (1, 150, "hr", 10),
+      (3, 350, "hr", 30)
+    ).toDF("pk", "salary", "dep", "index"),
+    clauses = Seq(updateAll(), insertAll()),
+    expected = Seq(
+      (1, 150, "hr"),
+      (2, 200, "software"),
+      (3, 350, "hr")).toDF("pk", "salary", "dep"),
+    expectedWithoutEvolution = Seq(
+      (1, 150, "hr"),
+      (2, 200, "software"),
+      (3, 350, "hr")).toDF("pk", "salary", "dep"),
+    confs = Seq(SQLConf.LEGACY_IGNORE_METADATA_COLUMN_ASSIGNMENTS.key -> "true")
+  )
 
   // When assigning s.bonus to existing t.salary, bonus column should NOT be added to schema
   testEvolution("source has extra column -" +

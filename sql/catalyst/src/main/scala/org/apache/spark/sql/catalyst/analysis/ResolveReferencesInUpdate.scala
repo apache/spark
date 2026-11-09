@@ -25,13 +25,16 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
  * A virtual rule to resolve [[UnresolvedAttribute]] in [[UpdateTable]]. It's only used by the real
- * rule `ResolveReferences`. The column resolution order for [[UpdateTable]] is:
+ * rule `ResolveReferences`. Assignments and the condition share the first two steps below, then
+ * diverge: step 3 applies to assignments only, and steps 4 and 5 to the condition only.
  * 1. Resolves the column to `AttributeReference` with the output of the child plan. This
  *    includes metadata columns as well.
  * 2. Resolves the column to a literal function which is allowed to be invoked without braces, e.g.
  *    `SELECT col, current_date FROM t`.
  * 3. Resolves the column to the default value expression, if the column is the assignment value
  *    and the corresponding assignment key is a top-level column.
+ * 4. Resolves the column to an outer reference.
+ * 5. Resolves the column to a SQL variable, which is always tried after outer references.
  */
 class ResolveReferencesInUpdate(val catalogManager: CatalogManager)
   extends SQLConfHelper with ColumnResolutionHelper {
@@ -67,7 +70,8 @@ class ResolveReferencesInUpdate(val catalogManager: CatalogManager)
 
     val newUpdate = u.copy(
       assignments = newAssignments,
-      condition = u.condition.map(resolveExpressionByPlanChildren(_, u)))
+      condition = u.condition.map(
+        resolveExpressionByPlanChildren(_, u, includeLastResort = true)))
     newUpdate.copyTagsFrom(u)
     newUpdate
   }

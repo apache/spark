@@ -29,9 +29,14 @@ import org.apache.spark.sql.catalyst.trees.MultiTransform
  */
 trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
   with AliasAwareOutputExpression {
-  final override def outputPartitioning: Partitioning = {
+  // A `lazy val` because the planner asks a node for its partitioning many times, and this body
+  // projects every partitioning expression through the output aliases, and for a
+  // `KeyedPartitioning` child also builds an `ExpressionSet` per key position and cross-products
+  // the per-position alternatives. Read no live config here, or memoizing would freeze it.
+  @transient final override lazy val outputPartitioning: Partitioning = {
+    val childPartitioning = child.outputPartitioning
     val (keyedPartitionings, otherPartitionings) =
-      PartitioningCollection.flatten(child.outputPartitioning)
+      PartitioningCollection.flatten(childPartitioning)
         .partition(_.isInstanceOf[KeyedPartitioning])
 
     val projectedKPs =
@@ -44,7 +49,7 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
     // deep projection chain that nesting overflows the stack when the partitioning is later
     // serialized or deeply traversed.
     (projectedKPs ++ projectedOthers).take(aliasCandidateLimit).toList match {
-      case Seq() => UnknownPartitioning(child.outputPartitioning.numPartitions)
+      case Seq() => UnknownPartitioning(childPartitioning.numPartitions)
       case Seq(p) => p
       case ps => PartitioningCollection.fromPartitionings(ps)
     }
@@ -93,15 +98,15 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
    * achievable granularity. Positions that cannot be expressed in the output are dropped.
    *
    * The resulting [[KeyedPartitioning]]s are the cross-product of the per-position alternatives
-   * restricted to the projectable positions. All share the same `partitionKeys` object (projected
-   * to the same subset of positions), preserving the invariant required by
+   * restricted to the projectable positions. All share the same `KeyLayout` object (projected to
+   * the same subset of positions), preserving the invariant required by
    * [[PartitioningCollection]].
    */
   private def projectKeyedPartitionings(
       kps: Seq[KeyedPartitioning]): LazyList[KeyedPartitioning] = {
     if (kps.isEmpty) return LazyList.empty
-    // All input KPs share the same `partitionKeys` reference and matching arity by the
-    // [[PartitioningCollection]] invariant (the only producer of multi-KP inputs here).
+    // All input KPs have matching arity by the [[PartitioningCollection]] invariant (the only
+    // producer of multi-KP inputs here).
     val numPositions = kps.head.expressions.length
 
     val alternativesPerPosition: IndexedSeq[LazyList[Expression]] =
@@ -131,18 +136,17 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
 
     if (projectablePositions.isEmpty) return LazyList.empty
 
-    // All input KPs share the same partitionKeys by invariant; use the first as the key source.
-    val keySource = kps.head
-    val sharedKeys =
-      if (projectablePositions.length == numPositions) keySource.partitionKeys
-      else keySource.projectKeys(projectablePositions)._2
+    // Dropping a key position coarsens the declared set, which an unknown-keyed claim cannot
+    // survive. The members share one layout, so the head answers for the marker.
+    if (projectablePositions.length < numPositions && kps.head.mayContainUnknownPartitionKeys) {
+      return LazyList.empty
+    }
 
-    val isGrouped = sharedKeys.distinct.size == sharedKeys.size
-    // A KP is narrowed if this node drops positions, or if the input KPs were already narrowed
-    // (i.e. came from a finer-grained partitioning). The flag must be sticky: a subsequent
-    // PartitioningPreservingUnaryExecNode that passes all positions through would otherwise
-    // recompute isNarrowed=false, silently dropping the protection.
-    val isNarrowed = projectablePositions.length < numPositions || keySource.isNarrowed
+    // All input KPs share one layout by invariant, so the first one projects it for every
+    // combination below. Only the expressions differ, and the marker rides the copies unchanged:
+    // the guard above turned away the one shape that could not, a narrowing projection of a marked
+    // collection.
+    val projected = kps.head.project(projectablePositions)
 
     // Cross-product the per-position alternatives to produce all concrete KPs.
     // Note: generateCartesianProduct expects thunks () => Seq[T], but wrapping LazyLists in thunks
@@ -151,8 +155,7 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
     // so all cross-product combinations are distinct by construction.
     MultiTransform.generateCartesianProduct(
       projectablePositions.map(i => () => alternativesPerPosition(i)))
-      .map(projectedExprs =>
-        new KeyedPartitioning(projectedExprs, sharedKeys, isGrouped, isNarrowed))
+      .map(projectedExprs => projected.copy(expressions = projectedExprs))
   }
 }
 

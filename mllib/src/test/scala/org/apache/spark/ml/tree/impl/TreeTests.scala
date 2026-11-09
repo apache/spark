@@ -141,10 +141,27 @@ private[ml] object TreeTests extends SparkFunSuite {
         assert(aye.split === bee.split)
         checkEqual(aye.leftChild, bee.leftChild)
         checkEqual(aye.rightChild, bee.rightChild)
-      case (aye: LeafNode, bee: LeafNode) => // do nothing
+      case (aye: LeafNode, bee: LeafNode) =>
+        assert(aye.leafIndex === bee.leafIndex)
       case _ =>
         fail("Found mismatched nodes")
     }
+  }
+
+  /** Check that leaf indices are consecutive and assigned from left to right. */
+  def checkLeafIndices(root: Node): Unit = {
+    var expectedLeafIndex = 0
+
+    def traverse(node: Node): Unit = node match {
+      case internal: InternalNode =>
+        traverse(internal.leftChild)
+        traverse(internal.rightChild)
+      case leaf: LeafNode =>
+        assert(leaf.leafIndex === expectedLeafIndex)
+        expectedLeafIndex += 1
+    }
+
+    traverse(root)
   }
 
   /**
@@ -261,14 +278,13 @@ private[ml] object TreeTests extends SparkFunSuite {
      *             /       \
      *          leaf0      leaf1
      */
-    val leaf0 = new LeafNode(0.0, Double.NaN, null)
-    val leaf1 = new LeafNode(1.0, Double.NaN, null)
-    val leaf2 = new LeafNode(0.0, Double.NaN, null)
+    val leaf0 = new LeafNode(0.0, Double.NaN, null, 0)
+    val leaf1 = new LeafNode(1.0, Double.NaN, null, 1)
+    val leaf2 = new LeafNode(0.0, Double.NaN, null, 2)
     val node1 = new InternalNode(0.0, Double.NaN, Double.NaN, leaf0, leaf1,
       new ContinuousSplit(0, 0.0), null)
-    Node.withLeafIndices(
-      new InternalNode(0.0, Double.NaN, Double.NaN, node1, leaf2,
-        new CategoricalSplit(1, Array(0.0, 2.0), 3), null))
+    new InternalNode(0.0, Double.NaN, Double.NaN, node1, leaf2,
+      new CategoricalSplit(1, Array(0.0, 2.0), 3), null)
   }
 
   /**
@@ -290,14 +306,13 @@ private[ml] object TreeTests extends SparkFunSuite {
      *                             /       \
      *                         leaf1     leaf2
      */
-    val leaf0 = new LeafNode(0.0, Double.NaN, null)
-    val leaf1 = new LeafNode(1.0, Double.NaN, null)
-    val leaf2 = new LeafNode(0.0, Double.NaN, null)
+    val leaf0 = new LeafNode(0.0, Double.NaN, null, 0)
+    val leaf1 = new LeafNode(1.0, Double.NaN, null, 1)
+    val leaf2 = new LeafNode(0.0, Double.NaN, null, 2)
     val node1 = new InternalNode(0.0, Double.NaN, Double.NaN, leaf1, leaf2,
       new CategoricalSplit(1, Array(0.0, 1.0), 3), null)
-    Node.withLeafIndices(
-      new InternalNode(0.0, Double.NaN, Double.NaN, leaf0, node1,
-        new ContinuousSplit(2, 1.0), null))
+    new InternalNode(0.0, Double.NaN, Double.NaN, leaf0, node1,
+      new ContinuousSplit(2, 1.0), null)
   }
 
   /**

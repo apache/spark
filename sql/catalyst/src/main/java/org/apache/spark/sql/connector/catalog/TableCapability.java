@@ -139,6 +139,12 @@ public enum TableCapability {
    * obtaining a fresh {@link org.apache.spark.sql.connector.read.ScanBuilder} with the same options
    * and re-applying the same pushed filters and pruned columns yields an equivalent scan.
    * <p>
+   * Determinism alone is not enough: widening the set of pruned columns, with the options and
+   * pushed filters held constant, must not change which rows the scan returns nor the values it
+   * returns for the columns already asked for. It may at most surface a read error. A source whose
+   * parser decides what counts as a malformed record from the set of columns it was asked for does
+   * not meet this, and neither does one that resolves a column by its position in the projection.
+   * <p>
    * Given that contract, Spark builds the merged scan itself: it prunes a fresh ScanBuilder to the
    * union of both read schemas, re-pushes the (possibly OR-widened) filters, and builds. The merged
    * scan reads the union of the two scans' columns and a superset of their rows; each original
@@ -154,5 +160,35 @@ public enum TableCapability {
    *
    * @since 4.3.0
    */
-  SCAN_MERGING
+  SCAN_MERGING,
+
+  /**
+   * Signals that the table has at least one parameterized lookup access path. The table must
+   * implement {@link SupportsRead}, its scan builder must implement
+   * {@link org.apache.spark.sql.connector.read.SupportsExternalLookup}, and the built scan must
+   * implement {@link org.apache.spark.sql.connector.read.Scan#toExternalLookup()}.
+   *
+   * @since 4.4.0
+   */
+  EXTERNAL_LOOKUP,
+
+  /**
+   * Signals that the scans of the streaming reads of the table may only read the columns that the
+   * streaming query reads, which Spark asks a scan builder that implements
+   * {@link org.apache.spark.sql.connector.read.SupportsPushDownRequiredColumns} for, as it does
+   * for the scans of batch reads.
+   * <p>
+   * Spark builds the scan of a streaming read once, when the query starts, from the plan of the
+   * query optimized then, and creates the micro-batch or continuous stream of the read from that
+   * scan. By returning this capability, a table declares that the partition readers of such a
+   * stream return the columns of {@link org.apache.spark.sql.connector.read.Scan#readSchema()},
+   * in its order, as those of the batches of the scan do. Spark asks the scan for its read schema
+   * before it creates the stream, whether the scan reads all the columns or not. Spark only prunes
+   * the columns of these scans when {@code spark.sql.streaming.v2ColumnPruning.enabled} is true,
+   * which it is not by default. Without this capability, the scans of streaming reads read all the
+   * columns of the table, in its order.
+   *
+   * @since 4.4.0
+   */
+  STREAMING_COLUMN_PRUNING
 }
