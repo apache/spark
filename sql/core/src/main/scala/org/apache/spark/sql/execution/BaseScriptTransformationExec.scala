@@ -182,6 +182,10 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
         }
         val prevLine = curLine
         curLine = reader.readLine()
+        if (curLine == null) {
+          // The task may not call `hasNext` again, as under a LIMIT, so record the end here too.
+          writerThread.outputReadToEnd = true
+        }
         processRowWithoutSerde(prevLine)
       }
     }
@@ -327,7 +331,12 @@ abstract class BaseScriptTransformationWriterThread extends Thread with Logging 
     if (!outputReadToEnd) {
       if (proc.isAlive) {
         destroyedOnTaskCompletion = !taskFailed
-        proc.destroy()
+        // `Process.destroy()` would close the input of the process, which waits for a write of
+        // this thread blocked on a full pipe, and so would block the task on a process that
+        // ignores the signal. Only signal the process instead, and close its output, which the
+        // completed task no longer reads, to stop a process blocked on writing it.
+        proc.toHandle.destroy()
+        Utils.tryLogNonFatalError(proc.getInputStream.close())
       }
       interrupt()
     }
