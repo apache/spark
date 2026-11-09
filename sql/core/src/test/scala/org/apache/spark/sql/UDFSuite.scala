@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, OuterScopes}
 import org.apache.spark.sql.catalyst.expressions.{Literal, ScalaUDF}
 import org.apache.spark.sql.catalyst.expressions.Cast._
-import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.catalyst.plans.logical.{Project, UnionLoopRef}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.{QueryExecution, SimpleMode, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, ScalaUDAF}
@@ -532,6 +532,74 @@ class UDFSuite extends SharedSparkSession {
           |FROM (SELECT lvl, arr[0] AS x, f(IF(lvl = 0, CAST(NULL AS BIGINT), arr[0])) AS y FROM t)
           |WHERE lvl < 2""".stripMargin),
       Seq(Row(0, 0L), Row(1, 0L), Row(2, 200L)))
+  }
+
+  test("SPARK-60875: NULLs from a primitive Scala UDF in a CTE that a recursive CTE reads") {
+    spark.udf.register("f", (x: Long) => x + 1)
+    val v = "f(IF(id % 2 = 0, CAST(NULL AS BIGINT), id))"
+    val x = s"SELECT id, $v AS v, ARRAY($v) AS a FROM range(200)"
+    val anchor = "SELECT 0, v, a, false FROM x"
+    // Counts the rows that read both NULLs back.
+    val recursion = "SELECT lvl + 1, v, a, v IS NULL AND a[0] IS NULL FROM t WHERE lvl < 1"
+    val result = "SELECT lvl, count_if(was_null) FROM t GROUP BY lvl ORDER BY lvl"
+    val expected = Seq(Row(0, 0L), Row(1, 100L))
+
+    // A sibling of the recursive CTE.
+    checkAnswer(
+      sql(s"""WITH RECURSIVE x AS ($x), t(lvl, v, a, was_null) AS ($anchor UNION ALL $recursion)
+             |$result""".stripMargin),
+      expected)
+    // The recursive CTE's inner WITH.
+    checkAnswer(
+      sql(s"""WITH RECURSIVE t(lvl, v, a, was_null) AS (
+             |  WITH x AS ($x) $anchor UNION ALL $recursion
+             |) $result""".stripMargin),
+      expected)
+    // A WITH that encloses the recursive CTE.
+    checkAnswer(
+      sql(s"""WITH x AS ($x)
+             |SELECT * FROM (
+             |  WITH RECURSIVE t(lvl, v, a, was_null) AS ($anchor UNION ALL $recursion) $result
+             |)""".stripMargin),
+      expected)
+    // The recursion reads the CTE.
+    checkAnswer(
+      sql(s"""WITH RECURSIVE x AS ($x), t(lvl, id, v, a, was_null) AS (
+             |  SELECT 0, id, id, ARRAY(id), false FROM range(200)
+             |  UNION ALL
+             |  SELECT t.lvl + 1, t.id, IF(t.lvl = 0, x.v, t.v), IF(t.lvl = 0, x.a, t.a),
+             |    t.v IS NULL AND t.a[0] IS NULL
+             |  FROM t JOIN x ON t.id = x.id WHERE t.lvl < 2
+             |) $result""".stripMargin),
+      Seq(Row(0, 0L), Row(1, 0L), Row(2, 100L)))
+  }
+
+  test("SPARK-60875: recursive CTEs that cast values built by a primitive Scala UDF analyze") {
+    spark.udf.register("g", (x: Int) => x + 1)
+    // Analysis only: as for a plain UNION ALL, the optimizer later folds the UDF into the cast,
+    // which plan validation then rejects.
+    def selfReferenceTypes(query: String): Seq[DataType] =
+      sql(query).queryExecution.analyzed.collectFirst {
+        case r: UnionLoopRef => r.output.map(_.dataType)
+      }.get
+
+    // The recursion's ARRAY<INT> is cast to the anchor's ARRAY<BIGINT>.
+    assert(selfReferenceTypes(
+      """WITH RECURSIVE t(lvl, arr) AS (
+        |  SELECT 0, ARRAY(CAST(1 AS BIGINT))
+        |  UNION ALL
+        |  SELECT lvl + 1, ARRAY(g(IF(lvl < 0, NULL, lvl))) FROM t WHERE lvl < 2
+        |) SELECT * FROM t""".stripMargin) ===
+      Seq(IntegerType, ArrayType(LongType, containsNull = true)))
+    // The anchor casts a struct built in a subquery to a struct with a NOT NULL field.
+    assert(selfReferenceTypes(
+      """WITH RECURSIVE t(lvl, s) AS (
+        |  SELECT 0, CAST(s AS STRUCT<a: INT NOT NULL>)
+        |  FROM (SELECT named_struct('a', g(IF(id < 0, NULL, CAST(id AS INT)))) AS s FROM range(2))
+        |  UNION ALL
+        |  SELECT lvl + 1, s FROM t WHERE lvl < 1
+        |) SELECT * FROM t""".stripMargin) ===
+      Seq(IntegerType, new StructType().add("a", IntegerType, nullable = true)))
   }
 
   test("SPARK-25044 Verify null input handling for primitive types - with udf()") {

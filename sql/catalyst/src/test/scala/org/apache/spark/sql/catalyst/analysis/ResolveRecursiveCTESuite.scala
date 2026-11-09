@@ -203,6 +203,23 @@ class ResolveRecursiveCTESuite extends AnalysisTest {
     assert(selfReferenceAndOutputTypes(anchor, recursion) === (types, types))
   }
 
+  // Motivated by:
+  // WITH RECURSIVE t AS (SELECT array(1) AS a1, ..., array(1) AS a150 UNION ALL
+  // SELECT array(CAST(NULL AS INT)), a1, ..., a149 FROM t) SELECT * FROM t;
+  test("ResolveWithCTE widens a long chain of copies within the analyzer's iteration limit") {
+    // More links than Resolution iterations, so the loop must not be rebuilt once per link.
+    val columns = (1 to 150).map(i => s"a$i")
+    val anchor = Project(
+      columns.map(c => Alias(CreateArray(Seq(Literal(1))), c)()), OneRowRelation())
+    // Each column only becomes nullable after the one it copies is widened.
+    val recursion = (t: LogicalPlan) => t.select(
+      CreateArray(Seq(Literal(null, IntegerType))).as("a1") +:
+        columns.zip(columns.tail).map { case (from, to) => UnresolvedAttribute(from).as(to) }: _*)
+
+    val types = columns.map(_ => nullableIntArray -> false)
+    assert(selfReferenceAndOutputTypes(anchor, recursion) === (types, types))
+  }
+
   test("ResolveWithCTE fails if a self-reference needs wider types but the loop has no origin") {
     val cteId = 0
     val anchor = Project(Seq(Alias(CreateArray(Seq(Literal(1))), "a")()), OneRowRelation())
