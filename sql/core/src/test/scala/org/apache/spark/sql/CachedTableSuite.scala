@@ -1444,6 +1444,32 @@ class CachedTableSuite extends SharedSparkSession
     }
   }
 
+  test("REFRESH TABLE rebuilds a cached query that reads a V1 table only in a subquery") {
+    withTable("t") {
+      withTempDir { dir =>
+        sql(s"CREATE TABLE t (id BIGINT) USING parquet LOCATION '${dir.toURI}'")
+        sql("INSERT INTO t VALUES (1)")
+        val query = "SELECT id FROM range(5) WHERE id IN (SELECT id FROM t)"
+        sql(query).cache()
+        checkAnswer(sql(query), Row(1L))
+
+        // Add a data file outside Spark, so that only REFRESH TABLE can pick it up.
+        withTempPath { newData =>
+          Seq(3L).toDF("id").write.parquet(newData.getCanonicalPath)
+          newData.listFiles().filter(_.getName.endsWith(".parquet")).foreach { f =>
+            Files.move(f.toPath, Paths.get(dir.getAbsolutePath, f.getName))
+          }
+        }
+        sql("REFRESH TABLE t")
+
+        val cachedData = cacheManager.lookupCachedData(sql(query))
+        assert(cachedData.isDefined)
+        assert(!cachedData.get.cachedRepresentation.cacheBuilder.isCachedColumnBuffersLoaded)
+        checkAnswer(sql(query), Seq(Row(1L), Row(3L)))
+      }
+    }
+  }
+
   test("SPARK-33647: cache table support for permanent view") {
     withView("v1") {
       spark.catalog.clearCache()
@@ -1973,6 +1999,22 @@ class CachedTableSuite extends SharedSparkSession
 
       // verify view is not cached anymore
       assertNotCached(sql("SELECT * FROM v"))
+    }
+  }
+
+  test("cascading uncacheTableOrView removes a cached query reading the table in a subquery") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+      val query = s"SELECT id FROM range(5) WHERE id IN (SELECT id FROM $t)"
+      sql(query).cache()
+      assertCached(sql(query))
+      checkAnswer(sql(query), Seq(Row(1L), Row(2L)))
+
+      cacheManager.uncacheTableOrView(spark, Seq("testcat", "tbl"), cascade = true)
+
+      assertNotCached(sql(query))
     }
   }
 

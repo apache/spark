@@ -314,7 +314,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       blocking: Boolean): Unit = {
     val shouldRemove: LogicalPlan => Boolean =
       if (cascade) {
-        _.exists(isMatchedPlan)
+        plan => existsWithSubqueries(plan)(isMatchedPlan)
       } else {
         isMatchedPlan
       }
@@ -365,7 +365,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    */
   def recacheByPlan(spark: SparkSession, plan: LogicalPlan): Unit = {
     val normalized = QueryExecution.normalize(spark, plan)
-    recacheByCondition(spark, _.plan.exists(_.sameResult(normalized)))
+    recacheByCondition(spark, cd => existsWithSubqueries(cd.plan)(_.sameResult(normalized)))
   }
 
   /**
@@ -383,12 +383,18 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   }
 
   /**
-   * Returns whether `f` holds for any node of `plan`, including nodes inside subquery expressions.
-   * Write-driven invalidation skips time-travel relations, so an entry that reads a table at a
-   * pinned version and live only inside a subquery must still match through the subquery.
+   * Returns whether `f` holds for any node of `plan`, including nodes inside subquery expressions,
+   * so that an entry reading the target only inside a subquery is selected like one reading it in
+   * the main plan. For example, write-driven invalidation skips time-travel relations, so an entry
+   * that reads a table at a pinned version and live only inside a subquery must still match
+   * through the subquery.
    */
   private def existsWithSubqueries(plan: LogicalPlan)(f: LogicalPlan => Boolean): Boolean =
-    plan.collectFirstWithSubqueries { case p if f(p) => () }.isDefined
+    plan.exists(f) || subqueryPlans(plan).exists(_.exists(f))
+
+  /** All subquery plans of `plan`, including nested ones, or none if it has no subquery. */
+  private def subqueryPlans(plan: LogicalPlan): Seq[LogicalPlan] =
+    if (plan.containsPattern(PLAN_EXPRESSION)) plan.subqueriesAll else Nil
 
   /**
    *  Re-caches all the cache entries that satisfies the given `condition`.
@@ -644,58 +650,59 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     val qualifiedPath = fs.makeQualified(resourcePath)
     recacheByCondition(
       spark,
-      entry => existsWithSubqueries(entry.plan) {
-        lookupAndRefresh(_, fs, qualifiedPath, includeTimeTravel)
-      })
+      entry => lookupAndRefresh(entry.plan, fs, qualifiedPath, includeTimeTravel))
   }
 
   /**
-   * Traverses a given `plan` and searches for the occurrences of `qualifiedPath` in the
-   * [[org.apache.spark.sql.execution.datasources.FileIndex]] of any [[HadoopFsRelation]] nodes
-   * in the plan. If found, we refresh the metadata and return true. Otherwise, this method returns
-   * false.
+   * Searches `plan`, including its subqueries, for the
+   * [[org.apache.spark.sql.execution.datasources.FileIndex]] of file-backed relations under
+   * `qualifiedPath`, refreshes each distinct matching index once, and returns whether any was
+   * found. Every match is refreshed because the rebuilt cache entry reuses these indexes.
    */
   private def lookupAndRefresh(
       plan: LogicalPlan,
       fs: FileSystem,
       qualifiedPath: Path,
       includeTimeTravel: Boolean): Boolean = {
-    plan match {
-      case lr: LogicalRelation => lr.relation match {
-        case hr: HadoopFsRelation =>
-          refreshFileIndexIfNecessary(hr.location, fs, qualifiedPath, includeTimeTravel)
-        case _ => false
+    def fileIndexToRefresh(node: LogicalPlan): Option[FileIndex] = {
+      val fileIndex: Option[FileIndex] = node match {
+        case lr: LogicalRelation => lr.relation match {
+          case hr: HadoopFsRelation => Some(hr.location)
+          case _ => None
+        }
+
+        case relation @ ExtractV2Table(fileTable: FileTable)
+            if includeTimeTravel || relation.timeTravelSpec.isEmpty =>
+          Some(fileTable.fileIndex)
+
+        case _ => None
       }
-
-      case relation @ ExtractV2Table(fileTable: FileTable)
-          if includeTimeTravel || relation.timeTravelSpec.isEmpty =>
-        refreshFileIndexIfNecessary(
-          fileTable.fileIndex,
-          fs,
-          qualifiedPath,
-          includeTimeTravel)
-
-      case _ => false
+      fileIndex.filter(needToRefresh(_, fs, qualifiedPath, includeTimeTravel))
     }
+
+    // Deduplicate by reference: InMemoryFileIndex equality compares root paths only.
+    val fileIndexes = (plan +: subqueryPlans(plan)).flatMap(_.flatMap(fileIndexToRefresh))
+      .foldLeft(Vector.empty[FileIndex]) { (distinct, fileIndex) =>
+        if (distinct.exists(_ eq fileIndex)) distinct else distinct :+ fileIndex
+      }
+    fileIndexes.foreach(_.refresh())
+    fileIndexes.nonEmpty
   }
 
   /**
-   * Refresh the given [[FileIndex]] if one of its root paths is a subdirectory of
-   * `qualifiedPath` and either `includeTimeTravel` is true or the index is not an immutable
-   * time-travel snapshot.
-   * @return whether the [[FileIndex]] was refreshed.
+   * Returns whether the given [[FileIndex]] must be refreshed: one of its root paths is a
+   * subdirectory of `qualifiedPath`, and either `includeTimeTravel` is true or the index is not
+   * an immutable time-travel snapshot.
    */
-  private def refreshFileIndexIfNecessary(
+  private def needToRefresh(
       fileIndex: FileIndex,
       fs: FileSystem,
       qualifiedPath: Path,
       includeTimeTravel: Boolean): Boolean = {
-    val needToRefresh = (includeTimeTravel || !fileIndex.isTimeTravel) &&
+    (includeTimeTravel || !fileIndex.isTimeTravel) &&
       fileIndex.rootPaths
         .map(_.makeQualified(fs.getUri, fs.getWorkingDirectory))
         .exists(isSubDir(qualifiedPath, _))
-    if (needToRefresh) fileIndex.refresh()
-    needToRefresh
   }
 
   /**
