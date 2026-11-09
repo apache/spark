@@ -99,6 +99,15 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
   }
 
   /**
+   * Like `QueryTest.checkAnswer` with `checkToRDD = false`, which single-pass analysis needs, with
+   * the ASOF join codegen off and on.
+   */
+  private def checkAnswerWithoutRDD(query: => DataFrame, expected: Seq[Row]): Unit =
+    checkWithAsOfJoinCodegenOffAndOn(query) { df =>
+      QueryTest.checkAnswer(df = df, expectedAnswer = expected, checkToRDD = false)
+    }
+
+  /**
    * Asserts which ASOF joins of `df`, read after `df` ran, are in a codegen stage: with the
    * codegen on, all but the nearest ones, and with it off, none. Spark builds no codegen stage
    * when whole-stage codegen is off or the codegen factory mode is NO_CODEGEN.
@@ -117,7 +126,9 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
       .flatMap(stage => stageJoins(stage.child))
     val joins = collect(plan) { case j: SortMergeAsOfJoinExec => j }
     val expected = if (codegen && stagesOn) joins.filter(_.direction != Nearest) else Nil
-    assert(generated.toSet == expected.toSet, s"Unexpected ASOF join codegen in plan:\n$plan")
+    // The sizes too: two equal joins make one set element, so one of them could hide.
+    assert(generated.size == expected.size && generated.toSet == expected.toSet,
+      s"Unexpected ASOF join codegen in plan:\n$plan")
   }
 
   private def setupTradeQuoteViews(): Unit = {
@@ -276,7 +287,7 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
       assert(join.leftSortExprs == Seq(join.left.output.head))
       assert(join.rightSortExprs == Seq(join.right.output.head))
       // Single-pass analysis does not support the deserializer used by checkToRDD.
-      QueryTest.checkAnswer(df = query, expectedAnswer = Seq(Row(2)), checkToRDD = false)
+      checkAnswerWithoutRDD(query, Seq(Row(2)))
     }
   }
 
@@ -331,7 +342,7 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
             case (false, false) => Seq(Row(1, 2), Row(2, 1), Row(3, 2))
           }
           assertUsesSortMergeAsOfJoin(query)
-          QueryTest.checkAnswer(df = query, expectedAnswer = expected, checkToRDD = false)
+          checkAnswerWithoutRDD(query, expected)
         }
       }
 
@@ -352,11 +363,7 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
                |""".stripMargin
           )
           assertUsesSortMergeAsOfJoin(query)
-          QueryTest.checkAnswer(
-            df = query,
-            expectedAnswer = Seq(Row(if (op == ">=") 2 else 3)),
-            checkToRDD = false
-          )
+          checkAnswerWithoutRDD(query, Seq(Row(if (op == ">=") 2 else 3)))
         }
 
         val structKey = "named_struct('ts', ts, 'n', n)"
@@ -383,11 +390,7 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
           val join = query.queryExecution.analyzed.collectFirst { case j: AsOfJoin => j }.get
           val casts = join.asOfCondition.collect { case c: Cast => c }
           assert(casts.size == 1, join.asOfCondition.treeString)
-          QueryTest.checkAnswer(
-            df = query,
-            expectedAnswer = Seq(Row(if (op == ">=") 2 else 3)),
-            checkToRDD = false
-          )
+          checkAnswerWithoutRDD(query, Seq(Row(if (op == ">=") 2 else 3)))
         }
       }
 
@@ -413,11 +416,7 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
                |""".stripMargin
           )
           assertUsesSortMergeAsOfJoin(query)
-          QueryTest.checkAnswer(
-            df = query,
-            expectedAnswer = Seq(Row(1, null), Row(2, 2)),
-            checkToRDD = false
-          )
+          checkAnswerWithoutRDD(query, Seq(Row(1, null), Row(2, 2)))
         }
       }
     }
@@ -1641,6 +1640,63 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
       Row(1, "x") :: Row(2, "y") :: Nil)
   }
 
+  test("cursor scan: a NOT NULL left ON key never matches a NULL right ON key") {
+    // The left keys are NOT NULL and the right keys nullable. The NULL right key sorts first, so
+    // it must compare below every left key. Read as 0, it would match key 0 and end the group of
+    // key -1 before its row. As a STRING key, it would be a null string to compare.
+    checkCursorScan(
+      sql(
+        """
+          |SELECT t.k, q.tag
+          |FROM VALUES (-1, 10), (0, 10) AS t(k, ts)
+          |LEFT ASOF JOIN VALUES (CAST(NULL AS INT), 1, 'null key'), (-1, 2, 'minus one')
+          |  AS q(k, ts, tag)
+          |  MATCH_CONDITION (t.ts >= q.ts)
+          |  ON t.k = q.k
+          |""".stripMargin),
+      Row(-1, "minus one") :: Row(0, null) :: Nil)
+    checkCursorScan(
+      sql(
+        """
+          |SELECT t.k, q.tag
+          |FROM VALUES ('a', 10), ('b', 10) AS t(k, ts)
+          |LEFT ASOF JOIN VALUES (CAST(NULL AS STRING), 1, 'null key'), ('a', 2, 'a key')
+          |  AS q(k, ts, tag)
+          |  MATCH_CONDITION (t.ts >= q.ts)
+          |  ON t.k = q.k
+          |""".stripMargin),
+      Row("a", "a key") :: Row("b", null) :: Nil)
+  }
+
+  test("a LIMIT in the join's codegen stage stops the join early") {
+    // All 100 left rows match. The LIMIT is under an aggregate, so it runs in the join's codegen
+    // stage. The join must stop after 5 output rows, as the interpreted join does, instead of
+    // joining the rest of the partition.
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      Seq(
+        ("", true),
+        // A residual ON condition keeps the buffered scan.
+        (" AND t.id + 1 > q.id", false)
+      ).foreach { case (residual, cursorScan) =>
+        withClue(s"cursor scan $cursorScan: ") {
+          checkWithAsOfJoinCodegenOffAndOn(sql(
+            s"""
+               |SELECT count(*) FROM (
+               |  SELECT t.id FROM range(100) t
+               |  ASOF JOIN range(100) q
+               |    MATCH_CONDITION (t.id >= q.id)
+               |    ON t.id % 2 = q.id % 2$residual
+               |  LIMIT 5)
+               |""".stripMargin)) { df =>
+            checkAnswer(df, Row(5) :: Nil)
+            assert(asOfJoinMetric(df, "numOutputRows") == 5)
+            assert((asOfJoinMetric(df, "numAsOfCursorTasks") > 0) == cursorScan)
+          }
+        }
+      }
+    }
+  }
+
   test("cursor scan: a MATCH_CONDITION with the right side first still uses the cursor scan") {
     // The analyzer puts the left side first, so q.ts <= t.ts runs as t.ts >= q.ts.
     Seq(
@@ -1864,10 +1920,12 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
         for {
           op <- Seq(">=", "<=")
           cursorScan <- Seq(false, true)
+          codegen <- Seq(false, true)
         } {
-          withClue(s"$leftSide $op q.v, cursor scan $cursorScan: ") {
+          withClue(s"$leftSide $op q.v, cursor scan $cursorScan, codegen $codegen: ") {
             withSQLConf(
-                SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> cursorScan.toString) {
+                SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> cursorScan.toString,
+                SQLConf.ENABLE_SORT_MERGE_AS_OF_JOIN_CODEGEN.key -> codegen.toString) {
               val e = intercept[RuntimeException] {
                 sql(
                   s"""
@@ -1893,21 +1951,27 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
       .add("ts", IntegerType)
     val rightSchema = new StructType().add("k", IntegerType).add("ts", IntegerType)
       .add("tag", StringType)
+    // Seed 1 marks the left ON key NOT NULL and gives it no NULLs, against the right side's NULL
+    // ON key, so a key compare that drops the NULL check for a NOT NULL left key shows up.
+    val leftSchemaNotNullKey = new StructType().add("id", IntegerType)
+      .add("k", IntegerType, nullable = false).add("ts", IntegerType)
     (1 to 3).foreach { seed =>
       val random = new Random(seed)
+      val leftKeyNotNull = seed == 1
       def orNull(value: Int): Any = if (random.nextInt(10) == 0) null else value
       def tag(): String =
         if (random.nextInt(8) == 0) null else random.alphanumeric.take(random.nextInt(40)).mkString
       // Left ON keys are 0 to 7 and right ON keys 2 to 9, so keys 0, 1, 8 and 9 have one side.
       val leftRows = (0 until 200).map { id =>
-        Row(id, orNull(random.nextInt(8)), orNull(random.nextInt(100)))
+        val k = random.nextInt(8)
+        Row(id, if (leftKeyNotNull) k else orNull(k), orNull(random.nextInt(100)))
       }
       val rightRows = (2 until 10).flatMap { k =>
         random.shuffle((0 until 100).toList).take(30).map(ts => Row(k, ts, tag()))
       } ++ Seq(Row(null, 5, "NULL ON key"), Row(3, null, "NULL as-of key"))
       withTempView("t", "q") {
-        spark.createDataFrame(spark.sparkContext.parallelize(leftRows), leftSchema)
-          .createOrReplaceTempView("t")
+        spark.createDataFrame(spark.sparkContext.parallelize(leftRows),
+          if (leftKeyNotNull) leftSchemaNotNullKey else leftSchema).createOrReplaceTempView("t")
         spark.createDataFrame(spark.sparkContext.parallelize(rightRows), rightSchema)
           .createOrReplaceTempView("q")
         for {
@@ -1930,14 +1994,15 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
               withSQLConf(
                   SQLConf.SHUFFLE_PARTITIONS.key -> "1",
                   SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> cursorScan.toString) {
-                val df = sql(
+                checkWithAsOfJoinCodegenOffAndOn(sql(
                   s"""
                      |SELECT t.id, q.ts, q.tag
                      |FROM t $joinType ASOF JOIN q
                      |  MATCH_CONDITION (t.ts $op q.ts) ON t.k = q.k
-                     |""".stripMargin)
-                checkAnswer(df, expected)
-                assert((asOfJoinMetric(df, "numAsOfCursorTasks") > 0) == cursorScan)
+                     |""".stripMargin)) { df =>
+                  checkAnswer(df, expected)
+                  assert((asOfJoinMetric(df, "numAsOfCursorTasks") > 0) == cursorScan)
+                }
               }
             }
           }

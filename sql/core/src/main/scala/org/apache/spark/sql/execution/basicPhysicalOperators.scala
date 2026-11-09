@@ -1695,7 +1695,7 @@ object UnionExec {
   def isKnownMultiInputRDDCodegen(p: SparkPlan): Boolean = p match {
     case _: SortMergeJoinExec => true
     case _: ShuffledHashJoinExec => true
-    case _: SortMergeAsOfJoinExec => true
+    case j: SortMergeAsOfJoinExec => j.supportCodegen
     case _ => false
   }
 

@@ -25,14 +25,13 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReference
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode,
-  FalseLiteral, GenerateOrdering, GeneratePredicate}
+  FalseLiteral, GeneratePredicate}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.AsOfJoin
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{AnyTimestampNanoType, BinaryType, BooleanType, DataType,
   DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, IntegralType,
   NullType, NumericType, StringType, TimestampNTZType, TimestampType, YearMonthIntervalType}
@@ -52,7 +51,8 @@ import org.apache.spark.unsafe.types.TimestampNanosVal
  *
  * Backward and forward joins support whole-stage codegen. The generated code runs the cursor
  * scan or the buffered scan and checks the conditions. The right-side buffer stays a Scala
- * object, as in the sort-merge join. Nearest joins keep the interpreted scan.
+ * object, as in the sort-merge join. Nearest joins keep the interpreted scan. `codegenEnabled`
+ * is the codegen config as it was when the join was planned.
  *
  * Note: When there are no equi-keys, both sides are collected into a
  * single partition (AllTuples) and, without a cursor scan, the entire
@@ -69,6 +69,7 @@ case class SortMergeAsOfJoinExec(
     condition: Option[Expression],
     left: SparkPlan,
     right: SparkPlan,
+    codegenEnabled: Boolean = false,
     isSkewJoin: Boolean = false) extends ShuffledJoin {
 
   // The sides may have different key counts: each side is sorted on its own, and only the
@@ -133,15 +134,21 @@ case class SortMergeAsOfJoinExec(
     SortMergeAsOfJoinScanner.supportsCursorScan(
       direction, asOfCondition, condition, leftSortExprs, rightSortExprs)
 
-  // Nearest joins keep the interpreted scan, as its distance compare is harder to generate.
-  override def supportCodegen: Boolean =
-    direction != Nearest && conf.getConf(SQLConf.ENABLE_SORT_MERGE_AS_OF_JOIN_CODEGEN)
+  // Nearest joins keep the interpreted scan, as its distance compare is harder to generate. The
+  // config is read once, when the join is planned.
+  override def supportCodegen: Boolean = direction != Nearest && codegenEnabled
+
+  // Hides `codegenEnabled` in the plan string.
+  override def stringArgs: Iterator[Any] = super.stringArgs.toSeq.dropRight(1).iterator
 
   override def inputRDDs(): Seq[RDD[InternalRow]] =
     left.execute() :: right.execute() :: Nil
 
   // A left row makes at most one output row, so the output row needs no copy.
   override def needCopyResult: Boolean = false
+
+  // The join loop reads the stage's input, so it stops at a LIMIT fused above it.
+  override protected def canCheckLimitNotReached: Boolean = true
 
   /**
    * Generates the join loop. For each left row, a generated function finds the best right row,
@@ -188,7 +195,7 @@ case class SortMergeAsOfJoinExec(
        |  $rightPeek = $nextRight();
        |  $initScan
        |}
-       |while ($leftInput.hasNext()) {
+       |while ($limitNotReachedCond $leftInput.hasNext()) {
        |  InternalRow $leftRow = (InternalRow) $leftInput.next();
        |  UnsafeRow $matched = $findMatch($leftRow);
        |  $skipUnmatched
@@ -386,27 +393,34 @@ case class SortMergeAsOfJoinExec(
     val asOfSeen = ctx.freshName("asOfSeen")
 
     val funcName = ctx.freshName("findInGroup")
+    // The scan often stops early, so it closes the iterator to close the spill files it reads.
     val func = ctx.addNewFunction(funcName,
       s"""
-         |private UnsafeRow $funcName(InternalRow $leftRow) {
+         |private UnsafeRow $funcName(InternalRow $leftRow) throws java.io.IOException {
          |  int comp = 0;
          |  $fillGroup
          |  scala.collection.Iterator<UnsafeRow> $iter = $group.generateIterator();
-         |  boolean $needsCopy = $group.isSpillBacked();
-         |  boolean $asOfSeen = false;
-         |  UnsafeRow $best = null;
-         |  while ($iter.hasNext()) {
-         |    UnsafeRow $rightRow = (UnsafeRow) $iter.next();
-         |    if ($asOfHolds($leftRow, $rightRow)) {
-         |      $asOfSeen = true;
-         |      if ($residualHolds) {
-         |        $onMatch
+         |  try {
+         |    boolean $needsCopy = $group.isSpillBacked();
+         |    boolean $asOfSeen = false;
+         |    UnsafeRow $best = null;
+         |    while ($iter.hasNext()) {
+         |      UnsafeRow $rightRow = (UnsafeRow) $iter.next();
+         |      if ($asOfHolds($leftRow, $rightRow)) {
+         |        $asOfSeen = true;
+         |        if ($residualHolds) {
+         |          $onMatch
+         |        }
+         |      } else if ($asOfSeen) {
+         |        $onPastMatches
          |      }
-         |    } else if ($asOfSeen) {
-         |      $onPastMatches
+         |    }
+         |    $noMoreRows
+         |  } finally {
+         |    if ($iter instanceof java.io.Closeable) {
+         |      ((java.io.Closeable) $iter).close();
          |    }
          |  }
-         |  $noMoreRows
          |}
        """.stripMargin, inlineToOuterClass = true)
     val spillHook = s"${classOf[JoinHelper].getName}.recordSpillSizeOnTaskCompletion(" +
@@ -566,13 +580,11 @@ private[joins] class SortMergeAsOfJoinScanner(
   private lazy val boundResidualCond =
     residualCondition.map(ShortCircuitPredicate.create(_, joinedOutput))
 
+  // Treats every key as nullable, as the sort-merge join does: a right key can be NULL even when
+  // the left key is NOT NULL.
   private val equiKeyOrdering: Option[BaseOrdering] =
     if (leftKeys.nonEmpty) {
-      val keyAttributes = leftKeys.zipWithIndex.map { case (key, i) =>
-        AttributeReference(s"key_$i", key.dataType, key.nullable)()
-      }
-      Some(GenerateOrdering.generate(
-        keyAttributes.map(SortOrder(_, Ascending)), keyAttributes))
+      Some(RowOrdering.createNaturalAscendingOrdering(leftKeys.map(_.dataType)))
     } else {
       None
     }

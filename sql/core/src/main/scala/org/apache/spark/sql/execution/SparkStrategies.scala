@@ -401,7 +401,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           joinType = j.joinType,
           condition = residual,
           left = planLater(j.left),
-          right = planLater(j.right)
+          right = planLater(j.right),
+          codegenEnabled = conf.getConf(SQLConf.ENABLE_SORT_MERGE_AS_OF_JOIN_CODEGEN)
         ) :: Nil
       case _ => Nil
     }

@@ -534,25 +534,30 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     }
   }
 
+  /** A union of an ASOF join in `direction` and a range. */
+  private def asOfJoinUnion(direction: String): DataFrame = {
+    // `joinAsOf` is on the classic Dataset, so build the inputs from `spark.range`.
+    val left = spark.range(10).select(col("id").as("k"), (col("id") * 2).as("ts"))
+    val right = spark.range(10).select(col("id").as("k"), (col("id") * 2 - 1).as("ts"))
+    left.joinAsOf(right, left("ts"), right("ts"), usingColumns = Seq("k"),
+        joinType = "inner", tolerance = null, allowExactMatches = true, direction = direction)
+      .select(left("k"), right("ts"))
+      .union(rangeDF(100, 103).select(col("id").as("k"), col("id").as("ts")))
+  }
+
+  /** The rows of `asOfJoinUnion` in any direction: each key has one right row, just before. */
+  private val asOfJoinUnionRows =
+    (0L until 10L).map(k => Row(k, 2 * k - 1)) ++ (100L until 103L).map(k => Row(k, k))
+
   test("Sort-merge ASOF join child union correctness") {
-    // A generated ASOF join reads two RDDs, like SMJ, so UnionExec has to fall back for that
-    // child. A fused union would fail the query, since each child must give it one RDD.
+    // A generated ASOF join reads two RDDs, like SMJ, so the union must not fuse: each child of a
+    // fused union must give it one RDD, so the query would fail.
     withSQLConf(
       SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> "true",
       SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-      val (fused, _) = assertFlagParity { () =>
-        // `joinAsOf` is on the classic Dataset, so build the inputs from `spark.range`.
-        val left = spark.range(10).select(col("id").as("k"), (col("id") * 2).as("ts"))
-        val right = spark.range(10).select(col("id").as("k"), (col("id") * 2 - 1).as("ts"))
-        left.joinAsOf(right, left("ts"), right("ts"), usingColumns = Seq("k"),
-            joinType = "inner", tolerance = null, allowExactMatches = true,
-            direction = "backward")
-          .select(left("k"), right("ts"))
-          .union(rangeDF(100, 103).select(col("id").as("k"), col("id").as("ts")))
-      }
-      checkAnswer(fused,
-        (0L until 10L).map(k => Row(k, 2 * k - 1)) ++ (100L until 103L).map(k => Row(k, k)))
+      val (fused, _) = assertFlagParity(() => asOfJoinUnion("backward"))
+      checkAnswer(fused, asOfJoinUnionRows)
       // The ASOF join has to run in a codegen stage, or this test does not reach the denylist.
       def inStage(plan: SparkPlan): Boolean = plan match {
         case _: SortMergeAsOfJoinExec => true
@@ -564,6 +569,51 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
       }.nonEmpty, s"expected the ASOF join in a codegen stage:\n${fused.queryExecution}")
       assert(codegenUnions(fused).isEmpty,
         s"the denylist has to keep this union out of codegen:\n${fused.queryExecution}")
+    }
+  }
+
+  test("Union over a sort-merge ASOF join that does not generate code still fuses") {
+    // A nearest join, or any ASOF join with its codegen off, sits behind an InputAdapter and
+    // gives the union one RDD, so the union keeps its codegen.
+    Seq(("nearest", "true"), ("backward", "false")).foreach { case (direction, asOfCodegen) =>
+      withClue(s"$direction, ASOF join codegen $asOfCodegen: ") {
+        withSQLConf(
+          SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> "true",
+          SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+          SQLConf.ENABLE_SORT_MERGE_AS_OF_JOIN_CODEGEN.key -> asOfCodegen) {
+          val (fused, _) = assertFlagParity(() => asOfJoinUnion(direction))
+          checkAnswer(fused, asOfJoinUnionRows)
+          assert(codegenUnions(fused).nonEmpty,
+            s"the union has to take part in codegen:\n${fused.queryExecution}")
+        }
+      }
+    }
+  }
+
+  test("Union over a sort-merge ASOF join keeps its plan when the ASOF codegen conf changes") {
+    // The join records the conf when it is planned, and both the codegen stages and the union's
+    // codegen check read that record. If the check read the live conf instead, turning it on
+    // after a union fused over a join planned without codegen would leave the union without its
+    // numOutputRows metric, and the query would fail.
+    Seq(("false", "true"), ("true", "false")).foreach { case (planned, atRun) =>
+      withClue(s"ASOF join codegen $planned when planned, $atRun when run: ") {
+        withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> "true",
+          SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+          SQLConf.ENABLE_SORT_MERGE_AS_OF_JOIN_CODEGEN.key -> planned) {
+          val df = asOfJoinUnion("backward")
+          df.queryExecution.executedPlan
+          withSQLConf(SQLConf.ENABLE_SORT_MERGE_AS_OF_JOIN_CODEGEN.key -> atRun) {
+            checkAnswer(df, asOfJoinUnionRows)
+          }
+          // The union fuses only over a join that was planned without codegen.
+          assert(codegenUnions(df).nonEmpty == (planned == "false"),
+            s"unexpected union codegen:\n${df.queryExecution}")
+        }
+      }
     }
   }
 
