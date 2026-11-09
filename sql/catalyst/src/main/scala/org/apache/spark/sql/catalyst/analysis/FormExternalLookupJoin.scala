@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupJoin, Join, JoinStrategyHint,
   LogicalPlan, ResolvedHint}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.streaming.WriteToStream
 import org.apache.spark.sql.catalyst.trees.TreePattern.JOIN
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
@@ -119,16 +120,21 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
  * working. A join that is not resolved, for example one whose condition is not boolean, is left to
  * the analyzer's own join checks.
  *
- * A missing join condition is not reported here, because the classic Dataset API analyzes a USING
- * join first as a join without a condition.
+ * A missing join condition is reported only for the query of a streaming write, which is analyzed
+ * in full when the query starts, so that `start()` throws it. Other plans can still get their
+ * condition: the classic Dataset API analyzes a USING join first as a join without a condition.
  */
 object CheckExternalLookupJoin extends (LogicalPlan => Unit) {
   override def apply(plan: LogicalPlan): Unit = {
     if (plan.containsPattern(JOIN)) {
+      val complete = plan.isInstanceOf[WriteToStream]
       plan.foreachUp {
         case join: Join if join.resolved =>
           ExternalLookupJoinEligibility(join) match {
             case ExternalLookupJoinEligibility.Ineligible(error) => throw error
+            case ExternalLookupJoinEligibility.MissingCondition if complete =>
+              throw QueryCompilationErrors.unsupportedExternalLookupJoinError(
+                "MISSING_JOIN_CONDITION")
             case _ =>
           }
         case _ =>
@@ -149,7 +155,7 @@ object FormExternalLookupJoin extends Rule[LogicalPlan] {
   import ExternalLookupJoinEligibility._
 
   override def apply(plan: LogicalPlan): LogicalPlan =
-    plan.transformUpWithPruning(_.containsPattern(JOIN), ruleId) {
+    plan.transformUpWithPruning(_.containsPattern(JOIN)) {
       case join: Join =>
         ExternalLookupJoinEligibility(join) match {
           case Eligible =>

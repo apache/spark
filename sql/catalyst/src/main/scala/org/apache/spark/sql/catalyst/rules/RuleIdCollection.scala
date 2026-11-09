@@ -85,7 +85,6 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.DeduplicateRelations" ::
       "org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases" ::
       "org.apache.spark.sql.catalyst.analysis.EliminateUnions" ::
-      "org.apache.spark.sql.catalyst.analysis.FormExternalLookupJoin" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveCollationName" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveDefaultColumns" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveEventTimeWatermark" ::

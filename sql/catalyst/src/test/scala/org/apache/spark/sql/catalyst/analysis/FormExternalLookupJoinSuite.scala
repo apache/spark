@@ -27,10 +27,12 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupJoin, Join, JoinHint,
   LocalRelation, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.streaming.WriteToStream
 import org.apache.spark.sql.connector.catalog.{Table, TableCapability}
 import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, EXTERNAL_LOOKUP}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation,
   ExternalLookupRelation}
+import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -48,6 +50,10 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
   // An inner join of the stream with `right`, on the id column of each.
   private def innerJoinOnId(right: LogicalPlan): Join =
     Join(stream, right, Inner, Some(stream.output(1) === right.output(1)), JoinHint.NONE)
+
+  // The parameters of a JOIN_TYPE error, besides the relation.
+  private def joinType(sql: String): Map[String, String] =
+    Map("joinType" -> sql, "supportedJoinTypes" -> "INNER, LEFT OUTER")
 
   // Hints become ResolvedHint nodes, which only Finish Analysis moves into the join.
   private def analyze(plan: LogicalPlan): LogicalPlan =
@@ -93,10 +99,10 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
       (lookupOnly.join(stream, Inner, Some(idsEqual)), "LOOKUP_TABLE_ON_LEFT",
         Map.empty[String, String]),
       (stream.join(lookupOnly, RightOuter, Some(idsEqual)), "JOIN_TYPE",
-        Map("joinType" -> "RIGHT OUTER")),
+        joinType("RIGHT OUTER")),
       // A cross join fails with its join type, with or without a later filter.
-      (stream.join(lookupOnly, Cross), "JOIN_TYPE", Map("joinType" -> "CROSS")),
-      (stream.join(lookupOnly, Cross).where(idsEqual), "JOIN_TYPE", Map("joinType" -> "CROSS")),
+      (stream.join(lookupOnly, Cross), "JOIN_TYPE", joinType("CROSS")),
+      (stream.join(lookupOnly, Cross).where(idsEqual), "JOIN_TYPE", joinType("CROSS")),
       // No join strategy hint applies to an external lookup join; sort merge is named MERGE.
       (stream.hint("broadcast").join(lookupOnly, Inner, Some(idsEqual)),
         "CONFLICTING_JOIN_STRATEGY", Map("strategy" -> "BROADCAST")),
@@ -121,8 +127,7 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
           rule =>
             val error = intercept[AnalysisException] { rule(analyzed) }
             assert(error.getCondition == s"EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.$subClass")
-            // The list of supported join types grows in a later change.
-            assert(error.getMessageParameters.asScala.toMap - "supportedJoinTypes" ==
+            assert(error.getMessageParameters.asScala.toMap ==
               parameters + ("relation" -> "`LookupCapabilityTable`"))
         }
     }
@@ -151,6 +156,23 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
         condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.MISSING_JOIN_CONDITION",
         parameters = Map.empty)
     }
+  }
+
+  test("validation of a streaming write rejects a join without a condition") {
+    def write(query: LogicalPlan): WriteToStream = WriteToStream("query", None, "/checkpoint",
+      LookupCapabilityTable(Set.empty), OutputMode.Append(), deleteCheckpointOnStop = false,
+      query, None, None)
+    Seq(
+      stream.join(lookupOnly),
+      stream.join(lookupOnly).where(idsEqual)).foreach { plan =>
+      val analyzed = analyze(plan)
+      // The query of a streaming write is analyzed in full, so the condition cannot come later.
+      checkError(
+        exception = intercept[AnalysisException] { CheckExternalLookupJoin(write(analyzed)) },
+        condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.MISSING_JOIN_CONDITION",
+        parameters = Map.empty)
+    }
+    CheckExternalLookupJoin(write(analyze(innerJoinOnId(lookupOnly))))
   }
 
   test("validation leaves a join that is not resolved to the analyzer's join checks") {

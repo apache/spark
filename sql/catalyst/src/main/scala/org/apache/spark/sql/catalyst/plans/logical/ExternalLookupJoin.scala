@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftOuter}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXTERNAL_LOOKUP_JOIN, TreePattern}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.read.{ExternalLookupReaderFactory, Scan}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BinaryType, BooleanType, ByteType, CharType, DataType,
   DateType, DecimalType, IntegerType, LongType, ShortType, StringType, TimestampNTZType,
   TimestampType, VarcharType}
@@ -81,8 +82,10 @@ case class PreparedExternalLookupJoin(
   override protected def withNewChildInternal(newChild: LogicalPlan): PreparedExternalLookupJoin =
     copy(child = newChild)
 
-  // Connector descriptions may contain secrets. The physical node renders a redacted description.
-  override protected def stringArgs: Iterator[Any] = Iterator(child)
+  // Connector descriptions may contain secrets, so the scan and the reader factory are not shown.
+  // The physical node renders a redacted description of them.
+  override protected def stringArgs: Iterator[Any] =
+    Iterator(joinType, lookupParameters, residualCondition, child)
 
   // The join keeps the size estimate it had before preparation, as an ordinary join's: the product
   // of the stream side's size and the lookup side's, Spark's default size for a table it cannot
@@ -103,24 +106,27 @@ case class PreparedExternalLookupJoin(
  */
 object ExternalLookupKeyTypes {
   /**
-   * Whether Spark offers `=` on a lookup column of this type: integral types, BOOLEAN, DECIMAL,
-   * DATE, TIMESTAMP, TIMESTAMP_NTZ, BINARY, and strings whose collation compares bytes, such as
-   * UTF8_BINARY. FLOAT and DOUBLE are not offered, because stores treat NaN and -0.0 in different
-   * ways, nor CHAR and VARCHAR, whose padding and length rules a store may apply differently, nor
-   * strings with another collation, nor complex types, nor any other type.
+   * Whether Spark offers `=` on the lookup column `column`, by its declared type: integral types,
+   * BOOLEAN, DECIMAL, DATE, TIMESTAMP, TIMESTAMP_NTZ, BINARY, and STRING and VARCHAR whose
+   * collation compares bytes, such as UTF8_BINARY. FLOAT and DOUBLE are not offered, because
+   * stores treat NaN and -0.0 in different ways, nor CHAR, which Spark pads on read, nor strings
+   * with another collation, nor complex types, nor any other type. VARCHAR is not offered under
+   * `spark.sql.charVarchar.standardSemantics.enabled` either, because Spark then trims trailing
+   * blanks on read, so a store that compares the stored value could miss a row.
+   *
+   * Analysis reads a CHAR or VARCHAR column as a STRING and keeps its declared type in the
+   * metadata, so the column's data type alone does not tell.
    */
-  def supportsEquality(dataType: DataType): Boolean = dataType match {
+  def supportsEquality(column: Attribute): Boolean =
+    supportsEquality(CharVarcharUtils.getRawType(column.metadata).getOrElse(column.dataType))
+
+  private def supportsEquality(dataType: DataType): Boolean = dataType match {
     case ByteType | ShortType | IntegerType | LongType | BooleanType | DateType | TimestampType |
         TimestampNTZType | BinaryType | _: DecimalType => true
-    case _: CharType | _: VarcharType => false
+    case _: CharType => false
+    case varchar: VarcharType =>
+      !SQLConf.get.charVarcharStandardSemantics && varchar.supportsBinaryEquality
     case stringType: StringType => stringType.supportsBinaryEquality
     case _ => false
   }
-
-  /**
-   * Whether `column` is a CHAR or VARCHAR column. Analysis reads one as a STRING and keeps its
-   * declared type in the metadata, so its data type alone does not tell.
-   */
-  def isCharOrVarchar(column: Attribute): Boolean =
-    CharVarcharUtils.getRawType(column.metadata).isDefined
 }

@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.{Collections, IdentityHashMap}
 
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, EqualNullSafe,
-  EqualTo, Expression, ExprUtils, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, Coalesce,
+  EqualNullSafe, EqualTo, Expression, ExprUtils, Literal, PredicateHelper}
 import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupJoin, ExternalLookupKeyTypes,
   LogicalPlan, PreparedExternalLookupJoin}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -105,21 +105,30 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
     }.partition { conjunct =>
       isJoinKeyEquality(join, conjunct) || ExprUtils.canEvaluateUnconditionally(conjunct)
     }
-    val residual = residualFirst ++ residualRest
-
-    def nonNull[T](value: T, subClass: String): T = Option(value).getOrElse {
-      throw QueryCompilationErrors.invalidDataSourceExternalLookupError(tableName, subClass)
+    // A conjunction evaluates its next conjunct after a NULL, so a NULL in the first group reads
+    // as false: a hash join never matches a NULL key either. A row matches only when the whole
+    // condition is true, so this changes no result.
+    val residual = if (residualRest.isEmpty) residualFirst else {
+      residualFirst.map { conjunct =>
+        if (conjunct.nullable) Coalesce(Seq(conjunct, Literal.FalseLiteral)) else conjunct
+      } ++ residualRest
     }
-    val scan = nonNull(scanBuilder.build(), "NULL_SCAN")
+
+    def nonNull[T](value: T, method: String): T = Option(value).getOrElse {
+      throw QueryCompilationErrors.invalidDataSourceExternalLookupError(
+        tableName, "NULL_RESULT", Map("method" -> method))
+    }
+    val scan = nonNull(scanBuilder.build(), "ScanBuilder.build()")
     // Fields bind to table columns by exact name, as in `PushDownUtils.toOutputAttrs`. CHAR and
     // VARCHAR are read as STRING, and nullability, including nested nullability, does not count
     // for the match. The value-row attributes take the read schema's type and nullability, so they
     // describe every value the connector may return.
     val readSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(
-      nonNull(scan.readSchema(), "NULL_READ_SCHEMA"))
+      nonNull(scan.readSchema(), "Scan.readSchema()"))
+    val columnsByName = relation.output.groupBy(_.name)
     val lookupInput = readSchema.fields.map { field =>
-      relation.output.find { attr =>
-        attr.name == field.name && DataType.equalsIgnoreNullability(attr.dataType, field.dataType)
+      columnsByName.getOrElse(field.name, Nil).find { attr =>
+        DataType.equalsIgnoreNullability(attr.dataType, field.dataType)
       }.map(_.withDataType(field.dataType).withNullability(field.nullable)).getOrElse {
         throw QueryCompilationErrors.invalidDataSourceExternalLookupError(
           tableName, "UNKNOWN_SCAN_FIELD", Map("field" -> toSQLId(Seq(field.name))))
@@ -140,7 +149,7 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
       throw QueryCompilationErrors.invalidDataSourceExternalLookupError(
         tableName, "MISSING_SCAN_FIELD", Map("field" -> toSQLId(Seq(attr.name))))
     }
-    val externalLookup = nonNull(scan.toExternalLookup(), "NULL_EXTERNAL_LOOKUP")
+    val externalLookup = nonNull(scan.toExternalLookup(), "Scan.toExternalLookup()")
     val maxParameterRowsPerRequest = externalLookup.maxParameterRowsPerRequest()
     if (maxParameterRowsPerRequest <= 0) {
       throw QueryCompilationErrors.invalidDataSourceExternalLookupError(
@@ -148,7 +157,8 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
         "NON_POSITIVE_MAX_PARAMETER_ROWS",
         Map("value" -> maxParameterRowsPerRequest.toString))
     }
-    val readerFactory = nonNull(externalLookup.createReaderFactory(), "NULL_READER_FACTORY")
+    val readerFactory =
+      nonNull(externalLookup.createReaderFactory(), "ExternalLookup.createReaderFactory()")
 
     PreparedExternalLookupJoin(
       join.left,
@@ -172,8 +182,7 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
       leftExpr: Expression,
       rightAttr: Attribute): Boolean =
     leftExpr.references.subsetOf(join.left.outputSet) && join.right.outputSet.contains(rightAttr) &&
-      ExternalLookupKeyTypes.supportsEquality(rightAttr.dataType) &&
-      !ExternalLookupKeyTypes.isCharOrVarchar(rightAttr)
+      ExternalLookupKeyTypes.supportsEquality(rightAttr)
 
   /**
    * An equality between an expression over the stream side and one over the lookup side, each
@@ -203,9 +212,9 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
       offered: Array[V2Predicate],
       candidates: Seq[OfferedLookupPredicate],
       selected: Array[V2Predicate]): Seq[OfferedLookupPredicate] = {
-    if (selected == null || selected.contains(null)) {
-      throw QueryCompilationErrors.invalidDataSourceExternalLookupError(
-        tableName, "NULL_PREDICATE_SELECTION")
+    if (selected == null) {
+      throw QueryCompilationErrors.invalidDataSourceExternalLookupError(tableName, "NULL_RESULT",
+        Map("method" -> "SupportsExternalLookup.selectLookupPredicates()"))
     }
     if (selected.isEmpty) {
       throw QueryCompilationErrors.unsupportedExternalLookupJoinError(
@@ -217,10 +226,12 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
     }
     val seen = Collections.newSetFromMap(new IdentityHashMap[V2Predicate, java.lang.Boolean]())
     selected.toSeq.map { predicate =>
-      val candidate = candidateByPredicate.get(predicate)
+      // A null element is not an offered instance either.
+      val candidate = Option(predicate).map(candidateByPredicate.get).orNull
       if (candidate == null) {
         throw QueryCompilationErrors.invalidDataSourceExternalLookupError(
-          tableName, "UNOFFERED_SELECTED_PREDICATE", Map("predicate" -> predicate.describe()))
+          tableName, "UNOFFERED_SELECTED_PREDICATE",
+          Map("predicate" -> Option(predicate).map(_.describe()).getOrElse("null")))
       }
       if (!seen.add(predicate)) {
         throw QueryCompilationErrors.invalidDataSourceExternalLookupError(

@@ -37,9 +37,10 @@ public interface SupportsExternalLookup extends ScanBuilder {
    * {@code children()[1]}: when the query writes the lookup column on the right, Spark flips the
    * operator, so {@code s.ts < t.event_time} is offered as {@code event_time > ?}. Spark offers
    * {@code =} and {@code <=>} only on a lookup column of an integral type, BOOLEAN, DECIMAL, DATE,
-   * TIMESTAMP, TIMESTAMP_NTZ, BINARY, or a STRING whose collation compares bytes, such as
-   * UTF8_BINARY. It never offers a comparison on FLOAT, DOUBLE, CHAR, VARCHAR, a string with
-   * another collation, a complex type or any other type. For example:
+   * TIMESTAMP, TIMESTAMP_NTZ, BINARY, or a STRING or VARCHAR whose collation compares bytes, such
+   * as UTF8_BINARY. It offers no comparison on VARCHAR under
+   * {@code spark.sql.charVarchar.standardSemantics.enabled}, and never one on FLOAT, DOUBLE, CHAR,
+   * a string with another collation, a complex type or any other type. For example:
    * <pre>{@code
    *   candidates: [tenant = ?, event_time >= ?, event_time < ?, region = ?]
    *   returned:   [event_time >= ?, tenant = ?]

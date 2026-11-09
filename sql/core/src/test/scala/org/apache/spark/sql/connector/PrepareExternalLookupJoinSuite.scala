@@ -17,15 +17,15 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.SparkException
+import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.FormExternalLookupJoin
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet,
-  Expression, Literal}
+  BindReferences, Coalesce, Expression, Literal, Predicate => CatalystPredicate}
 import org.apache.spark.sql.catalyst.optimizer.ColumnPruning
-import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, JoinType, LeftOuter, PlanTest}
+import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftOuter, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupJoin, Join, JoinHint,
   LocalRelation, LogicalPlan, PreparedExternalLookupJoin, Project}
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
@@ -69,6 +69,35 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
   private def prepareError(plan: LogicalPlan): AnalysisException =
     intercept[AnalysisException] { PrepareExternalLookupJoin(plan) }
 
+  // A conjunct of the residual's first group, read as false when it is NULL.
+  private def orFalse(conjunct: Expression): Expression =
+    Coalesce(Seq(conjunct, Literal.FalseLiteral))
+
+  /**
+   * Whether Spark offers `code = ?` on a lookup column `code` of the given type. The connector
+   * selects only `id = ?`, so Spark evaluates the code equality either way.
+   */
+  private def offeredCodeCandidate(codeType: String): Boolean = {
+    var offeredCandidates = Seq.empty[String]
+    val lookup = lookupRelation(PlanningExternalLookupTable(s"id INT, code $codeType", select = {
+      candidates =>
+        offeredCandidates = candidates.map(_.toString).toSeq
+        candidates.take(1)
+    }))
+    val Seq(lookupId, lookupCode) = lookup.output
+    val streamId = stream.output.head
+    val streamCode = AttributeReference("streamCode", lookupCode.dataType)()
+    val codesEqual = streamCode === lookupCode
+    val prepared = prepare(lookupJoin(lookup, streamId === lookupId && codesEqual,
+      left = LocalRelation(Seq(streamId, streamCode), isStreaming = true)))
+    assert(prepared.residualCondition === Some(codesEqual), codeType)
+    offeredCandidates match {
+      case Seq("id = ?") => false
+      case Seq("id = ?", "code = ?") => true
+      case other => fail(s"Unexpected candidates for $codeType: $other")
+    }
+  }
+
   test("a lookup-only relation that no lookup join reads is rejected") {
     val lookup = lookupRelation(PlanningExternalLookupTable())
     prepare(lookupJoinOnId(lookup))
@@ -80,31 +109,23 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
 
   test("an equality is a lookup candidate only on a type that stores compare as Spark does") {
     val offeredTypes = Seq("TINYINT", "SMALLINT", "INT", "BIGINT", "BOOLEAN", "DECIMAL(10, 2)",
-      "DATE", "TIMESTAMP", "TIMESTAMP_NTZ", "BINARY", "STRING", "STRING COLLATE UTF8_BINARY")
-    val notOfferedTypes = Seq("FLOAT", "DOUBLE", "CHAR(3)", "VARCHAR(3)",
+      "DATE", "TIMESTAMP", "TIMESTAMP_NTZ", "BINARY", "STRING", "STRING COLLATE UTF8_BINARY",
+      "VARCHAR(3)")
+    val notOfferedTypes = Seq("FLOAT", "DOUBLE", "CHAR(3)",
       "STRING COLLATE UTF8_LCASE", "STRING COLLATE UNICODE", "STRING COLLATE UTF8_BINARY_RTRIM",
       "STRUCT<a: INT>", "ARRAY<INT>", "INTERVAL DAY TO SECOND")
     for ((codeType, offered) <- offeredTypes.map(_ -> true) ++ notOfferedTypes.map(_ -> false)) {
-      var offeredCandidates = Seq.empty[String]
-      val lookup = lookupRelation(PlanningExternalLookupTable(s"id INT, code $codeType", select = {
-        candidates =>
-          offeredCandidates = candidates.map(_.toString).toSeq
-          candidates.take(1)
-      }))
-      val Seq(lookupId, lookupCode) = lookup.output
-      val streamId = stream.output.head
-      val streamCode = AttributeReference("streamCode", lookupCode.dataType)()
-      val codesEqual = streamCode === lookupCode
-      val prepared = prepare(lookupJoin(lookup, streamId === lookupId && codesEqual,
-        left = LocalRelation(Seq(streamId, streamCode), isStreaming = true)))
-      val expected = if (offered) Seq("id = ?", "code = ?") else Seq("id = ?")
-      assert(offeredCandidates === expected, codeType)
-      // The connector selects only `id = ?`, so Spark evaluates the code equality either way.
-      assert(prepared.residualCondition === Some(codesEqual), codeType)
+      assert(offeredCodeCandidate(codeType) === offered, codeType)
+    }
+    // Standard CHAR/VARCHAR semantics trims trailing blanks from a VARCHAR value on read, so a
+    // store that compares the stored value could miss a row.
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      assert(offeredCodeCandidate("VARCHAR(3)") === false)
+      assert(offeredCodeCandidate("STRING"))
     }
 
     // Without another candidate, the join cannot run.
-    Seq("DOUBLE", "STRING COLLATE UTF8_LCASE").foreach { codeType =>
+    Seq("DOUBLE", "STRING COLLATE UTF8_LCASE", "CHAR(3)").foreach { codeType =>
       val lookup = lookupRelation(PlanningExternalLookupTable(s"id INT, code $codeType"))
       val lookupCode = lookup.output(1)
       val streamCode = AttributeReference("streamCode", lookupCode.dataType)()
@@ -116,30 +137,87 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
     }
   }
 
-  test("the residual evaluates key equalities and conjuncts that cannot fail first") {
-    val lookup = lookupRelation(PlanningExternalLookupTable("id INT, label STRING, value STRING"))
-    val Seq(lookupId, lookupLabel, lookupValue) = lookup.output
+  test("an equality within one side of the join is never a lookup candidate") {
+    var offered = Seq.empty[String]
+    val lookup = lookupRelation(PlanningExternalLookupTable("id INT, value STRING, alt STRING",
+      select = { candidates =>
+        offered = candidates.map(_.toString).toSeq
+        candidates.take(1)
+      }))
+    val Seq(id, value, alt) = lookup.output
+    val streamCode = AttributeReference("streamCode", value.dataType)()
+    val left = LocalRelation(stream.output :+ streamCode, isStreaming = true)
     val Seq(streamId, streamLabel) = stream.output
-    // A cast can fail, so it runs after the equality and the comparison written after it, which
-    // keep their written order. The connector selects only `id = ?`.
-    val mayFail = streamLabel.cast(IntegerType) > 0
-    val conjuncts =
-      Seq(lookupId === streamId, mayFail, streamLabel === lookupLabel, lookupValue > "a")
-    val prepared = prepare(lookupJoin(lookup, conjuncts.reduce(_ && _)))
-    assert(prepared.residualCondition ===
-      Some(streamLabel === lookupLabel && lookupValue > "a" && mayFail))
+    // `t.value = t.alt` would offer a parameter over a lookup column, and `s.label = s.code` a
+    // candidate on a column that the lookup side does not have.
+    val withinSides = Seq(value === alt, alt === value, streamLabel === streamCode)
+    val prepared = prepare(
+      lookupJoin(lookup, ((streamId === id) +: withinSides).reduce(_ && _), left = left))
+    assert(offered === Seq("id = ?"))
+    assert(prepared.lookupParameters === Seq(streamId))
+    assert(prepared.residualCondition === Some(withinSides.reduce(_ && _)))
+  }
 
-    // Equalities between the sides go first even when they can fail, as a hash join's keys: `=`
-    // and `<=>`, each comparing a lookup column with a cast of a stream column, written after a
-    // conjunct that can fail.
+  test("the residual evaluates key equalities and conjuncts that cannot fail first") {
+    // With ANSI mode on, a cast of a string to INT fails on a string that is not a number. Without
+    // it, ExprUtils.canEvaluateUnconditionally may take the cast as unable to fail.
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val lookup = lookupRelation(PlanningExternalLookupTable("id INT, label STRING, value STRING"))
+      val Seq(lookupId, lookupLabel, lookupValue) = lookup.output
+      val Seq(streamId, streamLabel) = stream.output
+      // The cast can fail, so it runs after the equality and the comparison written after it,
+      // which keep their written order. The connector selects only `id = ?`.
+      val mayFail = streamLabel.cast(IntegerType) > 0
+      val conjuncts =
+        Seq(lookupId === streamId, mayFail, streamLabel === lookupLabel, lookupValue > "a")
+      val prepared = prepare(lookupJoin(lookup, conjuncts.reduce(_ && _)))
+      assert(prepared.residualCondition ===
+        Some(orFalse(streamLabel === lookupLabel) && orFalse(lookupValue > "a") && mayFail))
+
+      // Equalities between the sides go first even when they can fail, as a hash join's keys: `=`
+      // and `<=>`, each comparing a lookup column with a cast of a stream column, written after a
+      // conjunct that can fail. A `<=>` is never NULL.
       val codes = lookupRelation(PlanningExternalLookupTable("id INT, code INT, alt INT"))
       val Seq(codeId, code, alt) = codes.output
       val codeEqual = code === streamLabel.cast(IntegerType)
       val altEqual = alt <=> streamLabel.cast(IntegerType)
       val keyed = prepare(
         lookupJoin(codes, Seq(codeId === streamId, mayFail, codeEqual, altEqual).reduce(_ && _)))
-      assert(keyed.residualCondition === Some(codeEqual && altEqual && mayFail))
+      assert(keyed.residualCondition === Some(orFalse(codeEqual) && altEqual && mayFail))
+    }
+  }
+
+  test("a NULL key equality in the residual stops the conjuncts that can fail") {
+    val lookup = lookupRelation(PlanningExternalLookupTable("id INT, label STRING"))
+    val Seq(lookupId, lookupLabel) = lookup.output
+    val Seq(streamId, streamLabel) = stream.output
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      // Under ANSI mode, the cast fails on a label that is not a number.
+      val mayFail = streamLabel.cast(IntegerType) > 0
+      val keyEqual = streamLabel === lookupLabel
+      val prepared = prepare(lookupJoin(lookup, lookupId === streamId && keyEqual && mayFail))
+      val joinedOutput = stream.output ++ lookup.output
+      val residual = prepared.residualCondition.get
+      val conjunction = keyEqual && mayFail
+      def row(label: String, lookupLabelValue: String): InternalRow = InternalRow(
+        1, UTF8String.fromString(label), 1, UTF8String.fromString(lookupLabelValue))
+      def matches(condition: Expression, input: InternalRow): Boolean = {
+        val interpreted = BindReferences.bindReference(condition, joinedOutput).eval(input)
+        val generated = CatalystPredicate.create(condition, joinedOutput).eval(input)
+        assert(generated === (interpreted == true))
+        generated
+      }
+
+      // A hash join never matches a NULL key, so it does not reach the cast. Neither does the
+      // residual.
+      assert(matches(residual, row("x", null)) === false)
+      val error = intercept[Exception](matches(conjunction, row("x", null)))
+      // The catalyst DSL turns a String operand of `===` into an expression.
+      assert(error.asInstanceOf[SparkThrowable].getCondition == "CAST_INVALID_INPUT")
+      // Otherwise the residual matches the rows that the conjunction matches.
+      Seq(row("2", "2"), row("-2", "-2"), row("2", "3")).foreach { input =>
+        assert(matches(residual, input) === matches(conjunction, input))
+      }
     }
   }
 
@@ -164,10 +242,6 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
     assert(reversed.residualCondition === Some(conjuncts(2) && conjuncts(3)))
     assert(reversed.output === joinOutput)
     assert(PrepareExternalLookupJoin(reversed) === reversed)
-    checkError(
-      exception = intercept[SparkException] { reversed.copy(joinType = FullOuter).output },
-      condition = "INTERNAL_ERROR",
-      parameters = Map("message" -> "Unexpected external lookup join type FullOuter"))
 
     // An unselected equality stays ahead of the conjuncts written after it.
     val (idOnly, _, idOnlyConjuncts) = prepared(candidates => Array(candidates(0)))
@@ -251,16 +325,19 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
       condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_CANDIDATE",
       parameters = Map("table" -> QUOTED_TABLE_NAME))
 
-    Seq[(Array[Predicate] => Array[Predicate], String)](
-      (_ => Array.empty, "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_PREDICATE"),
-      (_ => null, "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.NULL_PREDICATE_SELECTION"),
-      (_ :+ null, "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.NULL_PREDICATE_SELECTION")).foreach {
-      case (select, condition) =>
+    Seq[(Array[Predicate] => Array[Predicate], String, Map[String, String])](
+      (_ => Array.empty, "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_PREDICATE", Map.empty),
+      (_ => null, "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.NULL_RESULT",
+        Map("method" -> "SupportsExternalLookup.selectLookupPredicates()")),
+      // A null element is not one of the offered instances.
+      (_ :+ null, "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.UNOFFERED_SELECTED_PREDICATE",
+        Map("predicate" -> "null"))).foreach {
+      case (select, condition, parameters) =>
         checkError(
           exception = prepareError(lookupJoinOnId(
             lookupRelation(PlanningExternalLookupTable(select = select)))),
           condition = condition,
-          parameters = Map("table" -> QUOTED_TABLE_NAME))
+          parameters = Map("table" -> QUOTED_TABLE_NAME) ++ parameters)
     }
   }
 
@@ -297,6 +374,19 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
     }
   }
 
+  test("a prepared lookup join shows its join type, parameters and residual in its plan string") {
+    val lookup = lookupRelation(PlanningExternalLookupTable())
+    val Seq(streamId, streamLabel) = stream.output
+    val Seq(id, value) = lookup.output
+    val residual = streamLabel === value
+    val prepared = prepare(lookupJoin(lookup, streamId === id && residual, LeftOuter))
+    Seq(prepared.toString, prepared.simpleString(100)).foreach { rendered =>
+      Seq(LeftOuter.toString, streamId.toString, residual.toString).foreach { arg =>
+        assert(rendered.contains(arg), rendered)
+      }
+    }
+  }
+
   test("a connector that reorders the offered array in place selects the predicate it returns") {
     val Seq(streamId, streamLabel) = stream.output
     // The connector swaps the two candidates in the array it receives, and returns the one now
@@ -315,15 +405,16 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
 
   test("a connector method that returns null fails with a named error") {
     Seq(
-      "build" -> "NULL_SCAN",
-      "readSchema" -> "NULL_READ_SCHEMA",
-      "toExternalLookup" -> "NULL_EXTERNAL_LOOKUP",
-      "createReaderFactory" -> "NULL_READER_FACTORY").foreach { case (method, subClass) =>
-      val lookup = lookupRelation(PlanningExternalLookupTable(nullFrom = method))
-      checkError(
-        exception = prepareError(lookupJoinOnId(lookup)),
-        condition = s"DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.$subClass",
-        parameters = Map("table" -> QUOTED_TABLE_NAME))
+      "build" -> "ScanBuilder.build()",
+      "readSchema" -> "Scan.readSchema()",
+      "toExternalLookup" -> "Scan.toExternalLookup()",
+      "createReaderFactory" -> "ExternalLookup.createReaderFactory()").foreach {
+      case (nullFrom, method) =>
+        val lookup = lookupRelation(PlanningExternalLookupTable(nullFrom = nullFrom))
+        checkError(
+          exception = prepareError(lookupJoinOnId(lookup)),
+          condition = "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.NULL_RESULT",
+          parameters = Map("table" -> QUOTED_TABLE_NAME, "method" -> method))
     }
   }
 
