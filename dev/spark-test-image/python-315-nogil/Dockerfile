@@ -68,7 +68,7 @@ COPY --from=root pyproject.toml ./pyproject.toml
 
 RUN python3.15t -m pip install -U pip
 
-# pandas<3 does not have Python 3.15 wheels yet. Start with dependencies that can be installed.
+# pandas<3 does not have Python 3.15 wheels yet. Install PyArrow without pandas.
 RUN python3.15t -m pip install --group ml_torch --index-url https://download.pytorch.org/whl/cpu && \
-    python3.15t -m pip install py4j psutil six unittest-xml-reporting && \
+    python3.15t -m pip install -U pyarrow py4j psutil six unittest-xml-reporting && \
     python3.15t -m pip cache purge
