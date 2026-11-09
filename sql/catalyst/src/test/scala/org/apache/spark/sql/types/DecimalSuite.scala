@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.types
 
-import java.math.{MathContext, RoundingMode}
-
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkFunSuite, SparkNumberFormatException}
@@ -344,37 +342,27 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     }
   }
 
-  test("decimal remainder bounds exact retries by divisor scale") {
+  test("decimal remainder retries beyond SQL precision bounds") {
     val left = Decimal(1L)
     val right = Decimal("3E-100")
-    // The divisor alone puts the quotient beyond the retry bound. Without its scale term,
-    // exact division would succeed here and allow enormous quotients for smaller divisors.
-    val original = intercept[ArithmeticException] {
-      left.toJavaBigDecimal.remainder(right.toJavaBigDecimal,
-        new MathContext(39, RoundingMode.DOWN))
+    val expected = Decimal("1E-100")
+    // Direct Decimal values can have scale gaps beyond SQL's maximum decimal precision.
+    for (leftSign <- Seq(1, -1); rightSign <- Seq(1, -1)) {
+      val signedLeft = if (leftSign < 0) -left else left
+      val signedRight = if (rightSign < 0) -right else right
+      val remainder = if (leftSign < 0) -expected else expected
+      assert((signedLeft % signedRight).toJavaBigDecimal == remainder.toJavaBigDecimal)
     }
-    val error = intercept[ArithmeticException] {
-      left % right
-    }
-    assert(error.getMessage == original.getMessage)
   }
 
-  test("decimal remainder bounds exact retries for legacy negative scales") {
+  test("decimal remainder retries legacy negative scales") {
     withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
-      val divisor = Decimal(3L)
-      // This upper bound is twice the maximum SQL decimal precision.
-      val withinBound = Decimal(1L, 1, -(2 * DecimalType.MAX_PRECISION - 1))
-      assert(withinBound % divisor == Decimal(1L))
-      for (scale <- Seq(-2 * DecimalType.MAX_PRECISION, -1000000000, Int.MinValue)) {
+      for (scale <- Seq(-75, -76, -100)) {
         val dividend = Decimal(1L, 1, scale)
-        val original = intercept[ArithmeticException] {
-          dividend.toJavaBigDecimal.remainder(
-            divisor.toJavaBigDecimal, new MathContext(39, RoundingMode.DOWN))
-        }
-        val error = intercept[ArithmeticException] {
-          dividend % divisor
-        }
-        assert(error.getMessage == original.getMessage)
+        assert(dividend % Decimal(3L) == Decimal(1L))
+        assert(-dividend % Decimal(3L) == Decimal(-1L))
+        assert(dividend % Decimal(-3L) == Decimal(1L))
+        assert(-dividend % Decimal(-3L) == Decimal(-1L))
       }
     }
   }
@@ -391,6 +379,19 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     assert(Decimal(100).quot(Decimal(33)) === Decimal(BigDecimal("3")))
     assert(Decimal(100).quot(Decimal(-100)) === Decimal(BigDecimal("-1")))
     assert(Decimal(100).quot(Decimal(-33)) === Decimal(BigDecimal("-3")))
+  }
+
+  test("SPARK-61050: % and quot with negative scales") {
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      // `MATH_CONTEXT` holds this exact quotient, so no context of 10^9 digits is used.
+      val big = Decimal(BigDecimal("1E+999999999"))
+      assert(big % Decimal(1) === Decimal(0))
+      assert(big.quot(Decimal(1)) === big)
+      // The integral part of the quotient would need more digits than an Int can count.
+      intercept[ArithmeticException] {
+        Decimal(BigDecimal("1E+2147483636")) % Decimal(BigDecimal("3E-38"))
+      }
+    }
   }
 
   test("SPARK-57937: div with target scale") {
@@ -425,6 +426,25 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     assert(-Decimal(-100) === Decimal(BigDecimal("100")))
     assert(Decimal(100).abs === Decimal(BigDecimal("100")))
     assert(Decimal(-100).abs === Decimal(BigDecimal("100")))
+  }
+
+  test("SPARK-45438: negate and abs keep every digit of a 38-digit value") {
+    Seq(
+      "12345678901234567890123456789012345.67",
+      "-12345678901234567890123456789012345.67",
+      "99999999999999999999999999999999999999",
+      "-99999999999999999999999999999999999999",
+      "-89999999999999999999999999999999999999",
+      "1234567890123456789012345678901234567.8").foreach { s =>
+      // A java.math.BigDecimal, not Decimal(String): the latter carries a 38-digit context,
+      // which would hide the rounding of the default 34-digit one.
+      val value = new java.math.BigDecimal(s)
+      val d = Decimal(value, 38, value.scale)
+      val negated = -d
+      assert(negated.toJavaBigDecimal === value.negate(), s)
+      assert(d.abs.toJavaBigDecimal === value.abs(), s)
+      assert(negated.precision === 38 && negated.scale === value.scale, s)
+    }
   }
 
   test("floor & ceil") {

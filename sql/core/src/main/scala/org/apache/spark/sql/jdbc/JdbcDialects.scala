@@ -220,8 +220,8 @@ abstract class JdbcDialect extends Serializable with Logging {
   }
 
   /**
-   * Whether TimestampNTZType values are read and written as zoneless `LocalDateTime` rather than
-   * through `java.sql.Timestamp`. Snapshotted into `JDBCOptions` when the options are built.
+   * Default of the `timestampNTZAsWallClock` and `zonelessTimestampAsNTZ` JDBC options.
+   * Snapshotted into `JDBCOptions` when the options are built.
    */
   @Since("4.4.0")
   def timestampNTZAsWallClock: Boolean = false

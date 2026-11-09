@@ -18,9 +18,9 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference}
-import org.apache.spark.sql.catalyst.expressions.{Ascending, CurrentRow, RowFrame, RowNumber}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Cast, CurrentRow, RowFrame, RowNumber}
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Expression, GreaterThan}
-import org.apache.spark.sql.catalyst.expressions.{IsNotNull, Literal}
+import org.apache.spark.sql.catalyst.expressions.{IsNotNull, KnownFloatingPointNormalized, Literal, PythonUDAF}
 import org.apache.spark.sql.catalyst.expressions.{SortOrder, SpecifiedWindowFrame, UnboundedPreceding}
 import org.apache.spark.sql.catalyst.expressions.{WindowExpression, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, CTERelationDef, C
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, JoinHint, LocalRelation}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Union, Window, WithCTE}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{DoubleType, IntegerType, StringType}
 
 /**
  * Regression test for a staleness defect in
@@ -215,6 +215,62 @@ class PushdownPredicatesForCTEDefStalenessSuite extends PlanTest {
 
     assertSingleEnrichedTopFilter(consumed,
       "previous push-down was not removed below the aggregate")
+  }
+
+  test("SPARK-60150: rebuild removes a push-down normalized below a float/double aggregate") {
+    val a = AttributeReference("a", DoubleType, nullable = true)()
+    val b = AttributeReference("b", IntegerType, nullable = true)()
+    val pa = Alias(a, "pa")()
+    val aggregate = Aggregate(Seq(pa), Seq(pa), LocalRelation(a, b))
+
+    val cteId = 0L
+    val cteDef = CTERelationDef(aggregate, cteId)
+    // The first predicate can tell -0.0 from 0.0, so it is pushed with the normalized key.
+    val plan = withTwoRefs(cteDef)(
+      out => EqualTo(Cast(out(0), StringType), Literal("-0.0")),
+      out => EqualTo(out(0), Literal(7.0)))
+
+    val afterPass1 = PushdownPredicatesAndPruneColumnsForCTEDef.apply(plan)
+
+    val consumed = addIsNotNullToRef(PushPredicateThroughNonJoin.apply(afterPass1),
+      cteId, Literal(7.0))
+    assert(theOnlyDef(consumed).child match {
+      case Aggregate(_, _, f: Filter, _) =>
+        f.condition.exists(_.isInstanceOf[KnownFloatingPointNormalized])
+      case _ => false
+    }, "test setup failed: push-down did not move a normalized filter below the aggregate")
+
+    assertSingleEnrichedTopFilter(consumed,
+      "previous normalized push-down was not removed below the aggregate")
+  }
+
+  test("SPARK-60150: rebuild removes a push-down kept above a pandas UDF aggregate") {
+    val a = AttributeReference("a", DoubleType, nullable = true)()
+    val b = AttributeReference("b", IntegerType, nullable = true)()
+    val pa = Alias(a, "pa")()
+    val pandas = Alias(PythonUDAF("pandasAgg", null, IntegerType, Seq(b), udfDeterministic = true)
+      .toAggregateExpression(), "p")()
+    val aggregate = Aggregate(Seq(pa), Seq(pa, pandas), LocalRelation(a, b))
+
+    val cteId = 0L
+    val cteDef = CTERelationDef(aggregate, cteId)
+    // The first predicate can tell -0.0 from 0.0, so the combined predicate stays above the
+    // aggregate, which has a grouped-agg pandas UDF.
+    val plan = withTwoRefs(cteDef)(
+      out => EqualTo(Cast(out(0), StringType), Literal("-0.0")),
+      out => EqualTo(out(0), Literal(7.0)))
+
+    val afterPass1 = PushdownPredicatesAndPruneColumnsForCTEDef.apply(plan)
+
+    val consumed = addIsNotNullToRef(PushPredicateThroughNonJoin.apply(afterPass1),
+      cteId, Literal(7.0))
+    assert(theOnlyDef(consumed).child match {
+      case Filter(_, _: Aggregate) => true
+      case _ => false
+    }, "test setup failed: the filter was not kept above the aggregate")
+
+    assertSingleEnrichedTopFilter(consumed,
+      "previous push-down kept above the aggregate was not removed")
   }
 
   test("rebuild removes the previous push-down pushed below a window") {

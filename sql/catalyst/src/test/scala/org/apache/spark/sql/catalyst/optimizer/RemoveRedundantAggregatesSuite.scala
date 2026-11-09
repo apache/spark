@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{Distinct, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{IntegerType, StringType}
 
 class RemoveRedundantAggregatesSuite extends PlanTest {
 
@@ -119,13 +119,15 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
   }
 
   test("Remove redundant aggregate with non-deterministic lower") {
+    // An integer key: the lower aggregate normalizes a float/double key, so it would be kept.
+    val nondeterministic = (rand(0) * 10).cast(IntegerType)
     val query = relation
-      .groupBy($"a", $"c")($"a", rand(0) as "c")
+      .groupBy($"a", $"c")($"a", nondeterministic as "c")
       .groupBy($"a", $"c")($"a", $"c")
       .analyze
     val expected = relation
       .select($"a", $"b", rand(0) as "_nondeterministic")
-      .select($"a", $"_nondeterministic" as "c")
+      .select($"a", ($"_nondeterministic" * 10).cast(IntegerType) as "c")
       .groupBy($"a", $"c")($"a", $"c")
       .analyze
     val optimized = Optimize.execute(query)
@@ -176,15 +178,26 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
   }
 
   test("Remove non-redundant aggregate - upper references non-deterministic non-grouping") {
+    // An integer c: an upper aggregate on a float/double key c would be kept.
+    val c = (($"a" + rand(0)) * 10).cast(IntegerType)
+    val query = relation
+      .groupBy($"a")($"a", c as "c")
+      .groupBy($"a", $"c")($"a", $"c")
+      .analyze
+    val expected = relation
+      .groupBy($"a")($"a", c as "c")
+      .analyze
+    val optimized = Optimize.execute(query)
+    comparePlans(optimized, expected)
+  }
+
+  test("SPARK-60150: Keep upper aggregate on a non-deterministic double key") {
+    // The upper aggregate normalizes the double key c, which a project would not.
     val query = relation
       .groupBy($"a")($"a", ($"a" + rand(0)) as "c")
       .groupBy($"a", $"c")($"a", $"c")
       .analyze
-    val expected = relation
-      .groupBy($"a")($"a", ($"a" + rand(0)) as "c")
-      .analyze
-    val optimized = Optimize.execute(query)
-    comparePlans(optimized, expected)
+    comparePlans(Optimize.execute(query), query)
   }
 
   test("SPARK-36194: Remove aggregation from left semi/anti join if aggregation the same") {
@@ -254,6 +267,56 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
       .analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-60150: Lower aggregate on a float key is kept only if the upper one reads it raw") {
+    val d = $"d".double
+    val a = $"a".int
+    val doubles = LocalRelation(d, a)
+    val lower = doubles.groupBy(d, a)(d, a)
+    // Grouped by directly, the key is normalized by the upper aggregate itself.
+    comparePlans(
+      Optimize.execute(lower.groupBy(d)(d, max(a).as("m")).analyze),
+      doubles.groupBy(d)(d, max(a).as("m")).analyze)
+    // Inside an aggregate function or a computed grouping expression, the upper aggregate would
+    // read the raw key without the lower one.
+    val inFunction = lower.groupBy(a)(a, max(d).as("m")).analyze
+    comparePlans(Optimize.execute(inFunction), inFunction)
+    val inGrouping = lower.groupBy(d.cast(StringType))(d.cast(StringType).as("s")).analyze
+    comparePlans(Optimize.execute(inGrouping), inGrouping)
+    // So would an output of the lower aggregate computed from the key.
+    val computed = doubles.groupBy(d)(d.cast(StringType).as("s"))
+    val readsComputed = computed.groupBy($"s")($"s").analyze
+    comparePlans(Optimize.execute(readsComputed), readsComputed)
+    // Removed when the upper aggregate does not read the float key.
+    comparePlans(
+      Optimize.execute(lower.groupBy(a)(a).analyze),
+      doubles.select(a).groupBy(a)(a).analyze)
+  }
+
+  test("SPARK-60150: Streaming aggregates on a float key are removed as before") {
+    val d = $"d".double
+    val a = $"a".int
+    val streaming = LocalRelation(Seq(d, a), isStreaming = true)
+    // Keeping them would add stateful operators, which existing checkpoints cannot restore.
+    comparePlans(
+      Optimize.execute(streaming.groupBy(d, a)(d, a).groupBy(a)(a, max(d).as("m")).analyze),
+      streaming.groupBy(a)(a, max(d).as("m")).analyze)
+    val lower = streaming.groupBy(d)(d, count(a).as("cnt"))
+    val cnt = lower.analyze.output(1)
+    comparePlans(Optimize.execute(lower.groupBy(d, cnt)(d, cnt).analyze), lower.analyze)
+  }
+
+  test("SPARK-60150: Keep group only aggregate that normalizes a float key") {
+    val d = $"d".double
+    val lower = LocalRelation(d, $"b".int).groupBy(d)(d, count($"b").as("cnt"))
+    val cnt = lower.analyze.output(1)
+    // The rule only sees that the upper aggregate outputs the float key normalized. It does not
+    // check whether the child already does, so it keeps the upper aggregate.
+    val originalQuery = lower.groupBy(d, cnt)(d, cnt).analyze
+    comparePlans(Optimize.execute(originalQuery), originalQuery)
+    // Removed when the float key is not output.
+    comparePlans(Optimize.execute(lower.groupBy(d, cnt)(cnt).analyze), lower.select(cnt).analyze)
   }
 
   test("SPARK-36194: Child distinct keys are subsets and aggregateExpressions are foldable") {

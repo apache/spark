@@ -303,6 +303,23 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     checkDeleteMetrics(numDeletedRows = 2, numCopiedRows = 0)
   }
 
+  test("SPARK-60978: delete keeps columns whose names differ only by case") {
+    // such a table can only be created and read in a case-sensitive session
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      createAndInitTable("pk INT NOT NULL, salary INT, SALARY INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "SALARY": 200, "dep": "hr" }
+          |{ "pk": 2, "salary": 300, "SALARY": 400, "dep": "hr" }
+          |""".stripMargin)
+    }
+
+    // the statement does not name the colliding columns so it is not ambiguous
+    sql(s"DELETE FROM $tableNameAsString WHERE pk <= 1")
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(2, 300, 400, "hr") :: Nil)
+    }
+  }
+
   test("delete with IN predicates") {
     createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }
@@ -357,6 +374,27 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     sql(s"DELETE FROM $tableNameAsString t WHERE t.complex.c1 = id")
 
     checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Nil)
+    checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 0)
+  }
+
+  test("SPARK-60673: delete with metadata columns in the condition") {
+    // the metadata columns must be read even if the operation does not require them
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "hr" }
+        |{ "pk": 3, "id": 1, "dep": "software" }
+        |""".stripMargin)
+
+    sql(s"DELETE FROM $tableNameAsString WHERE _partition = 'hr' AND id < 2")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(2, 2, "hr") :: Row(3, 1, "software") :: Nil)
+    checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 1)
+
+    sql(s"DELETE FROM $tableNameAsString t WHERE t.index = 0 AND t.id > 1")
+
+    checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(3, 1, "software") :: Nil)
     checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 0)
   }
 

@@ -31,7 +31,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{AliasIdentifier, QueryPlanningTracker, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog, VariableDefinition}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -43,7 +43,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.connector.catalog.InMemoryTable
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
@@ -52,6 +52,62 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class AnalysisSuite extends AnalysisTest with Matchers {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
+
+  test("resolve a table specification without changing option evaluation or other fields") {
+    val specification = UnresolvedTableSpec(
+      properties = Map("property" -> "value"),
+      provider = Some("parquet"),
+      optionExpression = OptionList(Seq(
+        "answer" -> Literal(1),
+        "answer" -> Add(Literal(40), Literal(2)),
+        "nullable" -> Literal(null))),
+      location = Some("/table"),
+      comment = Some("table comment"),
+      collation = Some("UTF8_BINARY"),
+      serde = None,
+      external = true,
+      constraints = Nil)
+
+    val expected = TableSpec(
+      properties = specification.properties,
+      provider = specification.provider,
+      options = Map("answer" -> "42", "nullable" -> null),
+      location = specification.location,
+      comment = specification.comment,
+      collation = specification.collation,
+      serde = specification.serde,
+      external = specification.external,
+      constraints = Nil)
+    assert(ResolveTableSpec.resolveTableSpec(specification) == expected)
+    assert(ResolveTableSpec.resolveTableSpec(expected) eq expected)
+    val unresolved = specification.copy(
+      optionExpression = OptionList(Seq("answer" -> UnresolvedAttribute("missing"))))
+    assert(ResolveTableSpec.resolveTableSpec(unresolved) eq unresolved)
+  }
+
+  gridTest("table specification rejects root subquery options before evaluation")(
+      Seq(false, true)) { resolved =>
+    val subqueryPlan = if (resolved) OneRowRelation() else UnresolvedRelation(Seq("missing"))
+    val specification = UnresolvedTableSpec(
+      properties = Map.empty,
+      provider = Some("parquet"),
+      optionExpression = OptionList(Seq("answer" -> ScalarSubquery(subqueryPlan))),
+      location = None,
+      comment = None,
+      collation = None,
+      serde = None,
+      external = false,
+      constraints = Nil)
+
+    val error = intercept[AnalysisException] {
+      ResolveTableSpec.resolveTableSpec(specification)
+    }
+    checkError(
+      exception = error,
+      condition = "INVALID_SQL_SYNTAX.OPTION_IS_INVALID",
+      parameters = Map("key" -> "answer", "supported" -> "constant expressions"))
+    assert(error.getCause == null)
+  }
 
   test("fail for unresolved plan") {
     intercept[AnalysisException] {
@@ -600,7 +656,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     if (!bean.isThreadAllocatedMemoryEnabled) {
       bean.setThreadAllocatedMemoryEnabled(true)
     }
-    val threadId = Thread.currentThread().getId
+    val threadId = Thread.currentThread().threadId
     val sharedOutput = (0 until 26).map(i => AttributeReference(s"c$i", IntegerType)())
 
     def allocatedBytes(branchCount: Int): Long = {
@@ -640,7 +696,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     if (!bean.isThreadAllocatedMemoryEnabled) {
       bean.setThreadAllocatedMemoryEnabled(true)
     }
-    val threadId = Thread.currentThread().getId
+    val threadId = Thread.currentThread().threadId
 
     def allocatedBytes(width: Int, useDirectPath: Boolean): Long = {
       val plan = wideProject(width)
@@ -1920,6 +1976,37 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         .where($"x" === 1)
       plan.join(plan).analyze
     }
+  }
+
+  test("collect temporary variables from expression roots, subqueries and plan children") {
+    def variable(name: String): VariableReference = {
+      val identifier = Identifier.of(Array("session"), name)
+      VariableReference(
+        originalNameParts = Seq("session", name),
+        catalog = FakeSystemCatalog,
+        identifier = identifier,
+        varDef = VariableDefinition(identifier, "1", Literal(1)))
+    }
+
+    val first = variable("first")
+    val second = variable("second")
+    val third = variable("third")
+    val subqueryPlan = Project(Seq(Alias(Add(second, first), "value")()), OneRowRelation())
+    val subquery = ScalarSubquery(subqueryPlan)
+    val expression = Add(first, subquery)
+    val childPlan = Project(Seq(Alias(third, "child_value")()), OneRowRelation())
+    val plan = Project(Seq(Alias(expression, "value")()), childPlan)
+    val expected = Seq(first.originalNameParts, second.originalNameParts)
+
+    assert(IdentifierResolution.collectTemporaryVariablesInExpressionTree(first) ==
+      Seq(first.originalNameParts))
+    assert(IdentifierResolution.collectTemporaryVariablesInExpressionTree(subquery) ==
+      Seq(second.originalNameParts, first.originalNameParts))
+    assert(IdentifierResolution.collectTemporaryVariablesInExpressionTree(expression) == expected)
+    assert(IdentifierResolution.collectTemporaryVariablesInLogicalPlan(plan) ==
+      Seq(first.originalNameParts, second.originalNameParts, third.originalNameParts))
+    assert(IdentifierResolution.collectTemporaryVariablesInExpressionTree(Literal(1)).isEmpty)
+    assert(IdentifierResolution.collectTemporaryVariablesInLogicalPlan(OneRowRelation()).isEmpty)
   }
 
   test("IDENTIFIER with alias and RuntimeReplaceable") {

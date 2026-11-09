@@ -308,10 +308,11 @@ class InProcessUDFTests(ReusedSQLTestCase):
 
         jvm = self.spark.sparkContext._jvm
         java_home = jvm.java.lang.System.getProperty("java.home")
+        # Spark bundles arrow-c-data too, so drop its JAR as well as the configured one.
         classpath = os.pathsep.join(
             p
             for p in jvm.java.lang.System.getProperty("java.class.path").split(os.pathsep)
-            if p != self.cdi_jar
+            if p != self.cdi_jar and not Path(p).name.startswith("arrow-c-data")
         )
         source = """
 import java.lang.reflect.Proxy;

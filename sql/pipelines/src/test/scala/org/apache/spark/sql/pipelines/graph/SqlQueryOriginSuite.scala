@@ -129,6 +129,29 @@ class SqlQueryOriginSuite extends PipelineTest with SharedSparkSession {
     ))
   }
 
+  test("Preceding comment with a supplementary character is omitted from sql text") {
+    val emoji = new String(Character.toChars(0x1F600))
+    val sqlQueryOrigins = SqlGraphRegistrationContext.splitSqlFileIntoQueries(
+      spark,
+      sqlFilePath = "file.sql",
+      sqlFileText =
+        s"""
+           |-- $emoji
+           |CREATE MATERIALIZED VIEW mv AS SELECT 1;
+           |""".stripMargin
+    ).map(_.queryOrigin)
+    assert(sqlQueryOrigins == Seq(
+      QueryOrigin(
+        sqlText = Option("CREATE MATERIALIZED VIEW mv AS SELECT 1"),
+        filePath = Option("file.sql"),
+        language = Option(Language.Sql()),
+        // 1 newline, "-- " (3), emoji (2 UTF-16 units), 1 newline
+        startPosition = Option(7),
+        line = Option(3)
+      )
+    ))
+  }
+
   test("Preceeding comment is ommitted from sql text") {
     val sqlQueryOrigins = SqlGraphRegistrationContext.splitSqlFileIntoQueries(
       spark,

@@ -38,6 +38,10 @@ object MimaExcludes {
 
   // Exclude rules for 4.4.x from 4.3.0 (add 4.4-specific filters below as needed).
   lazy val v44excludes: Seq[Problem => Boolean] = v43excludes ++ Seq(
+    // [SPARK-60217][SQL] Remove the unused createZstdInputStream overload that built a default
+    // Hadoop conf; callers pass the read's conf to the remaining overload.
+    ProblemFilters.exclude[DirectMissingMethodProblem](
+      "org.apache.spark.io.HadoopCodecStreams.createZstdInputStream"),
     // [SPARK-58896] Decision tree leaf counts moved behind NodeStats. The old package-private
     // numLeave accessors are removed from concrete models.
     ProblemFilters.exclude[DirectMissingMethodProblem](
@@ -48,7 +52,12 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem](
       "org.apache.spark.ml.regression.DecisionTreeRegressionModel.predictVariance"),
     // BIN BY DataFrame API.
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.Dataset.binBy")
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.Dataset.binBy"),
+    // [SPARK-58645][SQL] Add recursive mode to variant explode table-valued functions
+    ProblemFilters.exclude[ReversedMissingMethodProblem](
+      "org.apache.spark.sql.TableValuedFunction.variant_explode"),
+    ProblemFilters.exclude[ReversedMissingMethodProblem](
+      "org.apache.spark.sql.TableValuedFunction.variant_explode_outer")
   )
 
   // Exclude rules for 4.3.x from 4.2.0 (add 4.3-specific filters below as needed).

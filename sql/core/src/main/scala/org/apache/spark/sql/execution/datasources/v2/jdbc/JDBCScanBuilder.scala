@@ -29,7 +29,7 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.join.JoinType
 import org.apache.spark.sql.connector.read.{SampleMethod, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownJoin, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRDD, JDBCRelation}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCDatabaseMetadata, JDBCOptions, JDBCPartition, JDBCRDD, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.jdbc.{JdbcDialects, JdbcSQLQueryBuilder, JoinPushdownAliasGenerator}
@@ -39,7 +39,8 @@ case class JDBCScanBuilder(
     session: SparkSession,
     schema: StructType,
     var jdbcOptions: JDBCOptions,
-    additionalMetrics: Map[String, SQLMetric] = Map())
+    additionalMetrics: Map[String, SQLMetric] = Map(),
+    databaseMetadata: Option[JDBCDatabaseMetadata] = None)
   extends ScanBuilder
     with SupportsPushDownV2Filters
     with SupportsPushDownRequiredColumns
@@ -375,7 +376,7 @@ case class JDBCScanBuilder(
     // "DEPT","NAME",MAX("SALARY"),MIN("BONUS"), instead of getting column names from
     // prunedSchema and quote them (will become "MAX(SALARY)", "MIN(BONUS)" and can't
     // be used in sql string.
-    JDBCScan(JDBCRelation(schema, parts, jdbcOptions, additionalMetrics)(session),
+    JDBCScan(JDBCRelation(schema, parts, jdbcOptions, additionalMetrics)(session, databaseMetadata),
       finalSchema, pushedPredicate, pushedAggregateList, pushedGroupBys,
       tableSampleClause, pushedLimit, sortOrders, pushedOffset)
   }

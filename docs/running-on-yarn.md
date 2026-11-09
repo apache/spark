@@ -33,7 +33,7 @@ Please see [Spark Security](security.html) and the specific security sections in
 
 # Launching Spark on YARN
 
-Apache Hadoop supports Java 17 since 3.5.0, while Apache Spark requires at least Java 17 since 4.0.0. When running on a YARN cluster whose Hadoop version is older than 3.5.0, a different JDK should be configured for Spark applications.
+Apache Spark requires at least Java 21 since 5.0.0. When running on a YARN cluster with a Java version older than 21, a different JDK should be configured for Spark applications.
 Please refer to [Configuring different JDKs for Spark Applications](#configuring-different-jdks-for-spark-applications) for details.
 
 Ensure that `HADOOP_CONF_DIR` or `YARN_CONF_DIR` points to the directory which contains the (client side) configuration files for the Hadoop cluster.
@@ -874,6 +874,11 @@ will include a list of all tokens obtained, and their expiry details
 
 # Configuring the External Shuffle Service
 
+The Spark Shuffle Service runs inside the `NodeManager` JVM, so all `NodeManager`s in your cluster
+must run on a [supported version of Java](index.html#downloading). Unlike Spark applications, the
+shuffle service cannot use a different JDK from the `NodeManager` (see
+[Configuring different JDKs for Spark Applications](#configuring-different-jdks-for-spark-applications)).
+
 To start the Spark Shuffle Service on each `NodeManager` in your YARN cluster, follow these
 instructions:
 
@@ -1069,13 +1074,13 @@ process.
 Note that, Spark assumes that all JVM processes runs in one application use the same version of JDK, otherwise,
 you may encounter JDK serialization issues.
 
-To configure a Spark application to use a JDK which has been pre-installed on all nodes at `/opt/openjdk-17`:
+To configure a Spark application to use a JDK which has been pre-installed on all nodes at `/opt/openjdk-21`:
 
-    $ export JAVA_HOME=/opt/openjdk-17
+    $ export JAVA_HOME=/opt/openjdk-21
     $ ./bin/spark-submit --class path.to.your.Class \
         --master yarn \
-        --conf spark.yarn.appMasterEnv.JAVA_HOME=/opt/openjdk-17 \
-        --conf spark.executorEnv.JAVA_HOME=/opt/openjdk-17 \
+        --conf spark.yarn.appMasterEnv.JAVA_HOME=/opt/openjdk-21 \
+        --conf spark.executorEnv.JAVA_HOME=/opt/openjdk-21 \
         <app jar> [app options]
 
 Optionally, the user may want to avoid installing a different JDK on the YARN cluster nodes, in such a case,

@@ -20,6 +20,7 @@ package org.apache.spark.sql.jdbc
 import java.sql.{Connection, DriverManager}
 import java.util.{HexFormat, Properties}
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
@@ -3348,6 +3349,38 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     )
 
     assertResult(expectedMetadata) { jdbcRdd.getDatabaseMetadata }
+  }
+
+  test("SPARK-60507: JDBC read opens one driver connection") {
+    val driverConnections = new AtomicInteger()
+    val countingDialect = new H2Dialect() {
+      override def createConnectionFactory(options: JDBCOptions): Int => Connection = {
+        val factory = super.createConnectionFactory(options)
+        partitionId => {
+          if (partitionId == -1) driverConnections.incrementAndGet()
+          factory(partitionId)
+        }
+      }
+    }
+    JdbcDialects.unregisterDialect(h2Dialect)
+    try {
+      JdbcDialects.registerDialect(countingDialect)
+      val reads = Seq[(String, () => Unit)](
+        "v1" -> { () =>
+          val df = spark.read.jdbc(url, "\"test\".\"people\"", new Properties())
+          df.count()
+          df.collect()
+        },
+        "v2" -> (() => sql("SELECT * FROM h2.test.people").collect()))
+      reads.foreach { case (name, read) =>
+        driverConnections.set(0)
+        read()
+        assert(driverConnections.get() == 1, s"$name read opened ${driverConnections.get()}")
+      }
+    } finally {
+      JdbcDialects.unregisterDialect(countingDialect)
+      JdbcDialects.registerDialect(h2Dialect)
+    }
   }
 
   test("SPARK-58782: null literal in aggregate should render as NULL not 'null'") {

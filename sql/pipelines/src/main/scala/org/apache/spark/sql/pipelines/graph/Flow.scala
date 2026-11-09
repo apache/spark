@@ -391,6 +391,7 @@ class AutoCdcMergeFlow(
         val emptyCdcMetadataCol: Column = Scd1BatchProcessor.constructCdcMetadataCol(
           deleteSequence = F.lit(null),
           upsertSequence = F.lit(null),
+          versionMap = F.lit(null),
           sequencingType = sequencingType
         ).as(AutoCdcReservedNames.cdcMetadataColName)
 
