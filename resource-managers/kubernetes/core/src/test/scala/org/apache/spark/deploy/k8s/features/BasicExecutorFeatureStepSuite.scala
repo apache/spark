@@ -300,6 +300,21 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(executor.pod.getSpec.getRestartPolicy === "Always")
   }
 
+  gridTest("SPARK-58322: driver instance ID reaches executor environment")(
+      Seq("client", "cluster")) { deployMode =>
+    baseConf.set("spark.submit.deployMode", deployMode)
+      .set("spark.driver.instanceId", "58322000-0000-4000-8000-000000000001")
+    val driverPod = if (deployMode == "cluster") Some(DRIVER_POD) else None
+    if (driverPod.isEmpty) baseConf.remove(KUBERNETES_DRIVER_POD_NAME)
+    val executorConf = KubernetesTestConf.createExecutorConf(baseConf, driverPod = driverPod)
+    val step = new BasicExecutorFeatureStep(executorConf, defaultProfile)
+    val executor = step.configurePod(SparkPod.initialPod())
+    assert(executor.container.getEnv.asScala.exists { env =>
+      env.getName.startsWith("SPARK_JAVA_OPT_") &&
+        env.getValue == "-Dspark.driver.instanceId=58322000-0000-4000-8000-000000000001"
+    })
+  }
+
   test("classpath and extra java options get translated into environment variables") {
     baseConf.set(config.EXECUTOR_JAVA_OPTIONS, "foo=bar")
     baseConf.set(config.EXECUTOR_CLASS_PATH, "bar=baz")
