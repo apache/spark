@@ -88,6 +88,7 @@ private[hive] case class HiveScriptTransformationExec(
             if (scriptOutputReader != null) {
               if (scriptOutputReader.next(scriptOutputWritable) <= 0) {
                 checkFailureAndPropagate(writerThread, null, proc, stderrBuffer)
+                writerThread.outputReadToEnd = true
                 completed = true
                 return false
               }
