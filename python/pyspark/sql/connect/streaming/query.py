@@ -89,10 +89,10 @@ class StreamingQuery:
                     errorClass="VALUE_NOT_POSITIVE",
                     messageParameters={"arg_name": "timeout", "arg_value": type(timeout).__name__},
                 )
-            if math.isnan(timeout) or math.isinf(timeout):
+            if not math.isfinite(timeout):
                 raise PySparkValueError(
-                    errorClass="VALUE_NOT_POSITIVE",
-                    messageParameters={"arg_name": "timeout", "arg_value": type(timeout).__name__},
+                    errorClass="VALUE_NOT_FINITE",
+                    messageParameters={"arg_name": "timeout", "arg_value": str(timeout)},
                 )
             cmd.await_termination.timeout_ms = math.ceil(timeout * 1000)
             terminated = self._execute_streaming_query_cmd(cmd).await_termination.terminated
@@ -229,10 +229,10 @@ class StreamingQueryManager:
                     errorClass="VALUE_NOT_POSITIVE",
                     messageParameters={"arg_name": "timeout", "arg_value": type(timeout).__name__},
                 )
-            if math.isnan(timeout) or math.isinf(timeout):
+            if not math.isfinite(timeout):
                 raise PySparkValueError(
-                    errorClass="VALUE_NOT_POSITIVE",
-                    messageParameters={"arg_name": "timeout", "arg_value": type(timeout).__name__},
+                    errorClass="VALUE_NOT_FINITE",
+                    messageParameters={"arg_name": "timeout", "arg_value": str(timeout)},
                 )
             cmd.await_any_termination.timeout_ms = math.ceil(timeout * 1000)
             terminated = self._execute_streaming_query_manager_cmd(

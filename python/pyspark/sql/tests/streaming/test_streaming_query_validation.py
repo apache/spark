@@ -49,8 +49,8 @@ class StreamingQueryTimeoutValidationTests(unittest.TestCase, PySparkErrorTestUt
                 query.awaitTermination(value)
             self.check_error(
                 pe.exception,
-                errorClass="VALUE_NOT_POSITIVE",
-                messageParameters={"arg_name": "timeout", "arg_value": "float"},
+                errorClass="VALUE_NOT_FINITE",
+                messageParameters={"arg_name": "timeout", "arg_value": str(value)},
             )
 
     def test_classic_await_any_termination_rejects_nan_and_inf(self):
@@ -60,8 +60,8 @@ class StreamingQueryTimeoutValidationTests(unittest.TestCase, PySparkErrorTestUt
                 manager.awaitAnyTermination(value)
             self.check_error(
                 pe.exception,
-                errorClass="VALUE_NOT_POSITIVE",
-                messageParameters={"arg_name": "timeout", "arg_value": "float"},
+                errorClass="VALUE_NOT_FINITE",
+                messageParameters={"arg_name": "timeout", "arg_value": str(value)},
             )
 
     @unittest.skipIf(not should_test_connect, connect_requirement_message)
@@ -72,8 +72,8 @@ class StreamingQueryTimeoutValidationTests(unittest.TestCase, PySparkErrorTestUt
                 query.awaitTermination(value)
             self.check_error(
                 pe.exception,
-                errorClass="VALUE_NOT_POSITIVE",
-                messageParameters={"arg_name": "timeout", "arg_value": "float"},
+                errorClass="VALUE_NOT_FINITE",
+                messageParameters={"arg_name": "timeout", "arg_value": str(value)},
             )
 
     @unittest.skipIf(not should_test_connect, connect_requirement_message)
@@ -84,8 +84,8 @@ class StreamingQueryTimeoutValidationTests(unittest.TestCase, PySparkErrorTestUt
                 manager.awaitAnyTermination(value)
             self.check_error(
                 pe.exception,
-                errorClass="VALUE_NOT_POSITIVE",
-                messageParameters={"arg_name": "timeout", "arg_value": "float"},
+                errorClass="VALUE_NOT_FINITE",
+                messageParameters={"arg_name": "timeout", "arg_value": str(value)},
             )
 
     def test_classic_await_termination_small_timeout_does_not_round_down_to_zero(self):
