@@ -75,7 +75,7 @@ import org.apache.spark.sql.execution.streaming.runtime.{IncrementalExecution, M
   StreamingQueryWrapper}
 import org.apache.spark.sql.execution.streaming.sources.LowLatencyMemoryStream
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
-import org.apache.spark.sql.functions.{broadcast, coalesce, col, concat, current_date,
+import org.apache.spark.sql.functions.{broadcast, coalesce, col, concat, count, current_date,
   current_timestamp, date_from_unix_date, expr, length, lit, max, raise_error, rand, struct,
   to_json, udf, upper, when}
 import org.apache.spark.sql.internal.SQLConf
@@ -154,6 +154,10 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       .executeCollect().toSeq
   }
 
+  // Excludes the optimizer rules that push predicates through joins.
+  private val withoutPredicatePushdown =
+    Seq(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> PushDownPredicates.ruleName)
+
   private def checkStream(df: DataFrame, expected: Seq[Row]): Unit =
     QueryTest.sameRows(expected, runStream(df).rows).foreach(fail(_))
 
@@ -184,13 +188,14 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
           swipes.join(lookup, swipes("employee") === lookup("id"))
             .select(swipes("door"), lookup("department")),
           Seq(Row("lobby", "engineering"), Row("lobby", "research")))
-        // An aggregate that reads only stream columns and ignores duplicates does not need a left
-        // outer join, so the optimizer removes an ordinary one. A lookup join stays.
+        // An aggregate over a left outer lookup join that also counts lookup values, so the join
+        // runs, and the pruned scan still reads the stream column that the aggregate reads.
         val latestByDoor = swipes.join(lookup, swipes("employee") === lookup("id"), "left_outer")
-          .groupBy(swipes("door")).agg(max(swipes("minute")))
+          .groupBy(swipes("door")).agg(max(swipes("minute")), count(lookup("department")))
+        val run = runStream(latestByDoor, "complete")
+        assert(run.plan.exists(_.isInstanceOf[PreparedExternalLookupJoin]))
         QueryTest.sameRows(
-          Seq(Row("lobby", 10), Row("garage", 20)),
-          runStream(latestByDoor, "complete").rows).foreach(fail(_))
+          Seq(Row("lobby", 10, 2L), Row("garage", 20, 0L)), run.rows).foreach(fail(_))
       }
     }
   }
@@ -1353,10 +1358,11 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       Seq(Row(1, "one", 1, "engineering"), Row(1, "one", 1, "research"),
         Row(2, "two", 2, "sales"), Row(3, "three", null, null)))
 
-    // Only comparisons of a lookup field with a stream-side value are offered here. The connector
-    // selects `id = ?`, and Spark evaluates the other conjuncts: the stream-side one on each stream
-    // row before the lookup, and the two others on the lookup side. The join keeps `id = ?` as its
-    // key, so the comparison with a constant goes there too, as a pushed filter.
+    // The connector is offered `id = ?` from the condition, and the comparisons with constants of
+    // the lookup side, where predicate pushdown moves the lookup-side conjuncts: `department = ?`,
+    // and `id < ?`, which constant propagation derives from the last conjunct. Spark evaluates the
+    // stream-side conjunct on each stream row before the lookup, and the lookup-side ones on the
+    // returned rows.
     SimpleExternalLookupDataSource.resetCounters()
     val flagged = streamOf(Seq((1, true), (2, true), (1, false)).toDF("id", "flag"))
     checkStream(
@@ -1366,7 +1372,8 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
           lookup("department") === "engineering" && length(lookup("department")) > lookup("id"),
         "left_outer"),
       Seq(Row(1, true, 1, "engineering"), Row(2, true, null, null), Row(1, false, null, null)))
-    assert(SimpleExternalLookupDataSource.lookupCandidates.get() === Seq(("=", "id", IntegerType)))
+    assert(SimpleExternalLookupDataSource.lookupCandidates.get() === Seq(
+      ("=", "id", IntegerType), ("=", "department", StringType), ("<", "id", IntegerType)))
   }
 
   test("a stream row that fails a stream-side conjunct of the condition is not looked up") {
@@ -1437,13 +1444,7 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "tableName" -> "`SimpleExternalLookupTable`",
         "operation" -> "batch scan"))
-    // A join that reads it but cannot be a lookup join fails with the reason. The condition must
-    // be written in the join, not in a later filter.
-    checkError(
-      exception = streamFailure[AnalysisException](
-        left.join(lookup).where(left("id") === lookup("id"))),
-      condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.MISSING_JOIN_CONDITION",
-      parameters = Map.empty)
+    // A join that reads it but cannot be a lookup join fails with the reason.
     // An unsupported join type fails when the DataFrame is built, with or without a condition.
     Seq[(() => DataFrame, String)](
       (() => left.join(lookup, left("id") === lookup("id"), "full_outer"), "FULL OUTER"),
@@ -3295,15 +3296,23 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       check(left.join(lookup, key, joinType).where(left("flag")), expected, Seq(1, 3))
     }
     // So does a stream-side conjunct of the join condition, except under a left outer or left
-    // anti join, where it decides which stream rows find a match and stays in the condition. Key 2
-    // is not requested there either: the join checks the conjunct on each stream row before the
-    // lookup, and a row that fails it cannot match.
-    Seq(
-      "inner" -> matched,
-      "left_semi" -> Set(Row(1, true)),
-      "left_outer" -> (matched + Row(2, false, null, null) + Row(3, true, null, null)),
-      "left_anti" -> Set(Row(2, false), Row(3, true))).foreach { case (joinType, expected) =>
-      check(left.join(lookup, key && left("flag"), joinType), expected, Seq(1, 3))
+    // anti join, where it decides which stream rows find a match and stays in the condition. The
+    // conjunct is a cast that can fail under ANSI, which the join checks only on the joined rows,
+    // so key 2 is requested only where the conjunct stays.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val levels = streamOf(Seq((1, "1"), (2, "0"), (3, "1")).toDF("id", "level"))
+      val levelKey = levels("id") === lookup("id")
+      val positive = levels("level").cast("int") > 0
+      val matchedLevel = Set(Row(1, "1", 1, "engineering"), Row(1, "1", 1, "research"))
+      Seq(
+        ("inner", matchedLevel, Seq(1, 3)),
+        ("left_semi", Set(Row(1, "1")), Seq(1, 3)),
+        ("left_outer", matchedLevel + Row(2, "0", null, null) + Row(3, "1", null, null),
+          Seq(1, 2, 3)),
+        ("left_anti", Set(Row(2, "0"), Row(3, "1")), Seq(1, 2, 3))).foreach {
+        case (joinType, expected, requestedKeys) =>
+          check(levels.join(lookup, levelKey && positive, joinType), expected, requestedKeys)
+      }
     }
     // A lookup-side conjunct of the join condition goes onto the lookup side, and so to the
     // connector, which applies it.
@@ -3403,9 +3412,9 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
   }
 
   test("a comparison with a constant leaves a lookup join's requests batched and cached") {
-    // The source selects every offered comparison on `id`. A selected range would send one
-    // parameter row per request and turn off the cache, but `id >= 2` goes onto the lookup side as
-    // a filter, because the join keeps `id = ?` as its key, so it is not offered.
+    // The source selects every offered comparison on `id`. `id >= 2` goes onto the lookup side as a
+    // filter, as for an ordinary join, and is offered from there. Its parameter reads no stream
+    // column, so the selected range keeps requests batched and the cache on.
     val lookup = spark.read
       .format(classOf[SimpleExternalLookupDataSource].getName)
       .option("maxBatchSize", "2")
@@ -3419,10 +3428,86 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       val run = runStream(joined)
       QueryTest.sameRows(Seq(Row(2, 2, "sales"), Row(2, 2, "sales")), run.rows).foreach(fail(_))
       assert(SimpleExternalLookupDataSource.lookupCandidates.get() ===
-        Seq(("=", "id", IntegerType)))
+        Seq(("=", "id", IntegerType), (">=", "id", IntegerType)))
       // The first batch of two keys is one request, and the second batch is served from the cache.
       assert(SimpleExternalLookupDataSource.requestSizes.asScala.toSeq === Seq(2))
       assert(run.lookupJoin.metrics("numCacheHits").value === 2)
+      // The same rows without predicate pushdown.
+      withSQLConf(withoutPredicatePushdown: _*) {
+        checkStream(joined, Seq(Row(2, 2, "sales"), Row(2, 2, "sales")))
+      }
+    }
+  }
+
+  test("a comparison on a computed lookup column leaves the one with a constant as the key") {
+    // `nameLength` is computed, so lookup planning never offers it. Predicate pushdown moves
+    // `id = 1` onto the lookup side, as for an ordinary join, and lookup planning offers it from
+    // there as the key, as it offers it from the condition without predicate pushdown.
+    val directory = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+      .select($"id", length($"department").as("nameLength"), $"department")
+    val badges = streamOf(Seq(11, 8, 5).toDF("printedLength"))
+    val joined = badges.join(directory,
+      badges("printedLength") === directory("nameLength") && directory("id") === 1)
+      .select(badges("printedLength"), directory("department"))
+    Seq(Nil, withoutPredicatePushdown).foreach { conf =>
+      withSQLConf(conf: _*) {
+        SimpleExternalLookupDataSource.resetCounters()
+        checkStream(joined, Seq(Row(11, "engineering"), Row(8, "research")))
+        assert(SimpleExternalLookupDataSource.lookupCandidates.get() ===
+          Seq(("=", "id", IntegerType)))
+      }
+    }
+  }
+
+  test("a comparison with a constant is offered as a key to a source that needs it") {
+    // The composite source selects a tenant equality only together with a predicate on `id`, and
+    // takes no pushed filter. Predicate pushdown moves the comparison with a constant onto the
+    // lookup side, as for an ordinary join, and lookup planning still offers it, so each query
+    // plans, with the same rows as without predicate pushdown.
+    val directory = spark.read.format(classOf[CompositeExternalLookupDataSource].getName).load()
+    val people = streamOf(Seq((1, 1), (1, 2), (2, 3)).toDF("tenant", "id"))
+    Seq(
+      // A constant tenant with a stream-side id.
+      (directory("tenant") === 1 && directory("id") === people("id"),
+        Seq(Row(1, 1, 1, 1, "one-one"), Row(2, 3, 1, 3, "one-three")),
+        Set(("=", "tenant"), ("=", "id"))),
+      // A stream-side tenant with a range on `id` with a constant bound.
+      (directory("tenant") === people("tenant") && directory("id") >= 2,
+        Seq(Row(1, 1, 1, 3, "one-three"), Row(1, 2, 1, 3, "one-three")),
+        Set(("=", "tenant"), (">=", "id")))).foreach { case (condition, expected, selected) =>
+      Seq(Nil, withoutPredicatePushdown).foreach { conf =>
+        withSQLConf(conf: _*) {
+          CompositeExternalLookupDataSource.selectedLookupPredicates.set(Seq.empty)
+          checkStream(people.join(directory, condition), expected)
+          assert(
+            CompositeExternalLookupDataSource.selectedLookupPredicates.get().toSet === selected)
+        }
+      }
+    }
+  }
+
+  test("a lookup key written only in WHERE plans as for an ordinary join") {
+    val directory = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    withTempView("badge_swipes", "employee_directory") {
+      streamOf(Seq((1, "lobby"), (3, "garage")).toDF("employee", "door"))
+        .createOrReplaceTempView("badge_swipes")
+      directory.createOrReplaceTempView("employee_directory")
+      // Predicate pushdown moves the key from WHERE into the join, in a comma join as in a join
+      // with a condition that holds no key.
+      Seq(
+        "FROM badge_swipes s, employee_directory d WHERE s.employee = d.id",
+        "FROM badge_swipes s JOIN employee_directory d ON TRUE WHERE s.employee = d.id")
+        .foreach { from =>
+          val query = sql(s"SELECT s.door, d.department $from")
+          assert(runStream(query).plan.exists(_.isInstanceOf[PreparedExternalLookupJoin]), from)
+          checkStream(query, Seq(Row("lobby", "engineering"), Row("lobby", "research")))
+        }
+      // A join that gets no key from its condition or from WHERE fails when it starts.
+      checkError(
+        exception = streamFailure[AnalysisException](
+          sql("SELECT s.door, d.department FROM badge_swipes s, employee_directory d")),
+        condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.MISSING_JOIN_CONDITION",
+        parameters = Map.empty)
     }
   }
 

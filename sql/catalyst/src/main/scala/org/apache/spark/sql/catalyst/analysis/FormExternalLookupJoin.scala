@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, CTERelationDef, CT
   LogicalPlan, NearestByJoin, Project, ResolvedHint, SetOperation, SubqueryAlias, UnaryNode, Union,
   View, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.streaming.WriteToStream
 import org.apache.spark.sql.catalyst.trees.TreePattern.{AS_OF_JOIN, CTE, EXTERNAL_LOOKUP_HINT, JOIN,
   LATERAL_JOIN, LOOKUP_ONLY_RELATION, NEAREST_BY_JOIN, TreePattern}
 import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
@@ -408,9 +407,9 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
  * resolved, for example one whose condition is not boolean, is left to the analyzer's own join
  * checks.
  *
- * A missing join condition is reported only for the query of a streaming write, which is analyzed
- * in full when the query starts, so that `start()` throws it. Other plans can still get their
- * condition: the classic Dataset API analyzes a USING join first as a join without a condition.
+ * A missing join condition is not reported here: as for an ordinary join, predicate pushdown can
+ * move a key from a later filter into the condition. Lookup planning reports a join that still
+ * has no key, and the planning of a streaming query at its start reports it from `start()`.
  *
  * The hint on an input of an ASOF, NEAREST BY or lateral join fails here too, because none of
  * them can run as an external lookup join: see [[ExternalLookupJoinEligibility.HintableJoin]].
@@ -420,16 +419,12 @@ object CheckExternalLookupJoin extends (LogicalPlan => Unit) {
 
   override def apply(plan: LogicalPlan): Unit = {
     if (ExternalLookupJoinEligibility.mayHaveHintOrLookupJoin(plan)) {
-      val complete = plan.isInstanceOf[WriteToStream]
       // CheckAnalysis inlines every CTE but those that InlineCTE keeps even then.
       val cteDefs = ExternalLookupJoinEligibility.cteDefinitions(plan)
       plan.foreachUp {
         case join: Join if join.resolved =>
           ExternalLookupJoinEligibility.classify(join, cteDefs)._2 match {
             case ExternalLookupJoinEligibility.Ineligible(error) => throw error
-            case ExternalLookupJoinEligibility.MissingCondition if complete =>
-              throw QueryCompilationErrors.unsupportedExternalLookupJoinError(
-                "MISSING_JOIN_CONDITION")
             case _ =>
           }
         case join @ HintableJoin() if join.resolved =>
@@ -506,7 +501,9 @@ object FormExternalLookupJoin extends Rule[LogicalPlan] {
       case join: Join =>
         val (inlined, eligibility) = classify(join, cteDefs)
         eligibility match {
-          case Eligible =>
+          // As for an ordinary join, predicate pushdown can still move a key from a later filter
+          // into a join without a condition.
+          case Eligible | MissingCondition =>
             val lookupPlan = lookupSide(inlined)
             ExternalLookupJoin(
               join.left,
@@ -515,11 +512,6 @@ object FormExternalLookupJoin extends Rule[LogicalPlan] {
               join.condition,
               cacheOptions(inlined),
               lookupPlan.output)
-          // Operator optimization could push a filter's predicate into the join later, but the
-          // condition must be written in the join.
-          case MissingCondition =>
-            throw QueryCompilationErrors.unsupportedExternalLookupJoinError(
-              "MISSING_JOIN_CONDITION")
           case Ineligible(error) => throw error
           case NotLookupJoin => join
         }

@@ -148,16 +148,18 @@ class ExternalLookupJoinStartupCheckSuite extends QueryTest with SharedSparkSess
   test("MISSING_JOIN_CONDITION fails start()") {
     val stream = MemoryStream[Int].toDF().toDF("id")
     val lookup = lookupOnly
-    Seq(
-      stream.join(lookup).where(stream("id") === lookup("id")),
-      stream.join(lookup, Seq.empty[String], "left_outer")).foreach { joined =>
-      checkError(
-        exception = startFailure(joined),
-        condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.MISSING_JOIN_CONDITION",
-        parameters = Map.empty)
+    // The planning at the start reports a join that has no key after predicate pushdown.
+    Seq(stream.join(lookup), stream.join(lookup, Seq.empty[String], "left_outer")).foreach {
+      joined =>
+        checkError(
+          exception = startFailure(joined),
+          condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.MISSING_JOIN_CONDITION",
+          parameters = Map.empty)
     }
-    // A USING join gets its condition after its first analysis, so it starts.
+    // A USING join gets its condition after its first analysis, and predicate pushdown moves a key
+    // from a later filter into a join without a condition, as for an ordinary join, so both start.
     start(stream.join(lookup, Seq("id"))).stop()
+    start(stream.join(lookup).where(stream("id") === lookup("id"))).stop()
   }
 
   test("MISSING_JOIN_CONDITION fails start() for a hinted join") {

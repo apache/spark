@@ -345,23 +345,9 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
     assert(FormExternalLookupJoin(analyzed).isInstanceOf[ExternalLookupJoin])
   }
 
-  test("a join without a condition passes analysis and fails when optimization starts") {
-    // Even when a later filter holds the condition, which operator optimization would push
-    // into the join.
-    Seq(
-      stream.join(lookupOnly),
-      stream.join(lookupOnly).where(idsEqual)).foreach { plan =>
-      val analyzed = analyze(plan)
-      // The classic Dataset API analyzes a USING join first as a join without a condition.
-      CheckExternalLookupJoin(analyzed)
-      checkError(
-        exception = intercept[AnalysisException] { FormExternalLookupJoin(analyzed) },
-        condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.MISSING_JOIN_CONDITION",
-        parameters = Map.empty)
-    }
-  }
-
-  test("validation of a streaming write rejects a join without a condition") {
+  test("a join without a condition passes analysis and is formed without one") {
+    // As for an ordinary join, operator optimization can push a key from a later filter into the
+    // join. Lookup planning reports a join that has none then.
     def write(query: LogicalPlan): WriteToStream = WriteToStream("query", None, "/checkpoint",
       LookupCapabilityTable(Set.empty), OutputMode.Append(), deleteCheckpointOnStop = false,
       query, None, None)
@@ -369,13 +355,13 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
       stream.join(lookupOnly),
       stream.join(lookupOnly).where(idsEqual)).foreach { plan =>
       val analyzed = analyze(plan)
-      // The query of a streaming write is analyzed in full, so the condition cannot come later.
-      checkError(
-        exception = intercept[AnalysisException] { CheckExternalLookupJoin(write(analyzed)) },
-        condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.MISSING_JOIN_CONDITION",
-        parameters = Map.empty)
+      CheckExternalLookupJoin(analyzed)
+      CheckExternalLookupJoin(write(analyzed))
+      val formed = FormExternalLookupJoin(analyzed).collectFirst {
+        case join: ExternalLookupJoin => join
+      }
+      assert(formed.map(_.condition) === Some(None))
     }
-    CheckExternalLookupJoin(write(analyze(innerJoinOnId(lookupOnly))))
   }
 
   test("validation leaves a join that is not resolved to the analyzer's join checks") {
