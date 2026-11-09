@@ -617,7 +617,8 @@ class TimestampNTZNanosType(AnyTimestampNanoType):
     :meth:`SparkSession.createDataFrame` from a pandas ``DataFrame`` with Arrow enabled
     (``spark.sql.execution.arrow.pyspark.enabled``), including the Spark Connect data path --
     carries the value as an Arrow ``timestamp[ns]`` and preserves full nanosecond precision
-    (pandas ``datetime64[ns]``). Because that Arrow encoding counts nanoseconds since the epoch in
+    (pandas ``datetime64[ns]``); input with more digits than the declared precision is floored to
+    it. Because that Arrow encoding counts nanoseconds since the epoch in
     a 64-bit integer, values outside the ``datetime64[ns]`` range (roughly the years 1677 to 2262)
     cannot be carried on this path. With Arrow disabled, :meth:`DataFrame.toPandas` falls back to
     :meth:`DataFrame.collect` and, like it, truncates to microseconds.
@@ -3229,6 +3230,19 @@ def _has_type(dt: DataType, dts: Union[type, Tuple[type, ...]]) -> bool:
         return _has_type(dt.sqlType(), dts)
     else:
         return False
+
+
+def _check_no_char_varchar(dt: DataType, feature: str) -> None:
+    """Reject CHAR/VARCHAR at Python/Arrow host boundaries.
+
+    CHAR/VARCHAR are SQL types. Host APIs must declare STRING instead.
+    Nested struct/array/map and UDT storage types are included.
+    """
+    if _has_type(dt, (CharType, VarcharType)):
+        raise PySparkNotImplementedError(
+            errorClass="CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON",
+            messageParameters={"feature": feature, "data_type": dt.simpleString()},
+        )
 
 
 def _first_timestamp_nanos_map_key_type(dt: DataType) -> Optional["DataType"]:

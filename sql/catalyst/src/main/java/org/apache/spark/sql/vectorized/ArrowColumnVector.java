@@ -30,6 +30,7 @@ import org.apache.arrow.vector.holders.NullableVarCharHolder;
 import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.DeveloperApi;
 import org.apache.spark.sql.catalyst.util.DateTimeConstants;
+import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.catalyst.util.STUtils;
 import org.apache.spark.sql.util.ArrowUtils;
 import org.apache.spark.sql.types.*;
@@ -232,9 +233,9 @@ public class ArrowColumnVector extends ColumnVector {
     } else if (vector instanceof TimeNanoVector timeNanoVector) {
       accessor = new TimeNanoAccessor(timeNanoVector);
     } else if (vector instanceof TimeStampNanoTZVector timeStampNanoTZVector) {
-      accessor = new TimestampLTZNanosAccessor(timeStampNanoTZVector);
+      accessor = new TimestampLTZNanosAccessor(timeStampNanoTZVector, nanosPrecision(type));
     } else if (vector instanceof TimeStampNanoVector timeStampNanoVector) {
-      accessor = new TimestampNTZNanosAccessor(timeStampNanoVector);
+      accessor = new TimestampNTZNanosAccessor(timeStampNanoVector, nanosPrecision(type));
     } else if (vector instanceof MapVector mapVector) {
       accessor = new MapAccessor(mapVector);
     } else if (vector instanceof ListVector listVector) {
@@ -662,9 +663,20 @@ public class ArrowColumnVector extends ColumnVector {
     }
   }
 
+  // The vector class and its field's time zone can disagree, so accept either nanos type.
+  private static int nanosPrecision(DataType type) {
+    if (type instanceof TimestampNTZNanosType t) return t.precision();
+    if (type instanceof TimestampLTZNanosType t) return t.precision();
+    return TimestampNTZNanosType.MAX_PRECISION();
+  }
+
   // Decodes a single int64 of epoch-nanoseconds back into the (epochMicros, nanosWithinMicro)
   // pair. floorDiv/floorMod keep nanosWithinMicro in [0, 999] for pre-epoch (negative) values too.
-  private static TimestampNanosVal decodeEpochNanos(long nanos) {
+  // Below p = 9 it floors to the column precision, as foreign producers may send extra digits.
+  private static TimestampNanosVal decodeEpochNanos(long nanos, int precision) {
+    if (precision < TimestampNTZNanosType.MAX_PRECISION()) {
+      return DateTimeUtils.epochNanosToTimestampNanos(nanos, precision);
+    }
     return TimestampNanosVal.fromTrustedRowBytes(
       Math.floorDiv(nanos, DateTimeConstants.NANOS_PER_MICROS),
       (short) Math.floorMod(nanos, DateTimeConstants.NANOS_PER_MICROS));
@@ -673,30 +685,34 @@ public class ArrowColumnVector extends ColumnVector {
   static class TimestampNTZNanosAccessor extends ArrowVectorAccessor {
 
     private final TimeStampNanoVector accessor;
+    private final int precision;
 
-    TimestampNTZNanosAccessor(TimeStampNanoVector vector) {
+    TimestampNTZNanosAccessor(TimeStampNanoVector vector, int precision) {
       super(vector);
       this.accessor = vector;
+      this.precision = precision;
     }
 
     @Override
     final TimestampNanosVal getTimestampNanos(int rowId) {
-      return decodeEpochNanos(accessor.get(rowId));
+      return decodeEpochNanos(accessor.get(rowId), precision);
     }
   }
 
   static class TimestampLTZNanosAccessor extends ArrowVectorAccessor {
 
     private final TimeStampNanoTZVector accessor;
+    private final int precision;
 
-    TimestampLTZNanosAccessor(TimeStampNanoTZVector vector) {
+    TimestampLTZNanosAccessor(TimeStampNanoTZVector vector, int precision) {
       super(vector);
       this.accessor = vector;
+      this.precision = precision;
     }
 
     @Override
     final TimestampNanosVal getTimestampNanos(int rowId) {
-      return decodeEpochNanos(accessor.get(rowId));
+      return decodeEpochNanos(accessor.get(rowId), precision);
     }
   }
 

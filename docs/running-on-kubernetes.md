@@ -594,7 +594,7 @@ request are increased by `spark.kubernetes.executor.resizeFactor`, up to
 the container is not restarted.
 
 ```
---conf spark.plugins=org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin
+--conf spark.plugins=ExecutorResizePlugin
 --conf spark.kubernetes.executor.resizeInterval=1m
 ```
 
@@ -625,7 +625,7 @@ the filesystem usage of its local directories and reports the highest usage rati
 up to `spark.kubernetes.executor.pvc.resizeMaxStorage`.
 
 ```
---conf spark.plugins=org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin
+--conf spark.plugins=ExecutorPVCResizePlugin
 --conf spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.options.claimName=OnDemand
 --conf spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.options.storageClass=gp3
 --conf spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.options.sizeLimit=100Gi
@@ -684,7 +684,7 @@ the replacement executors behave rather than the resources of the existing ones.
 registered together:
 
 ```
---conf spark.plugins=org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin,org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin
+--conf spark.plugins=ExecutorResizePlugin,ExecutorPVCResizePlugin
 ```
 
 All of these features operate at the level of the driver, not of an individual job or session. In a
@@ -2100,7 +2100,9 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>OUTLIER</code></td>
   <td>
     Executor roll policy: Valid values are ID, ADD_TIME, TOTAL_GC_TIME,
-    TOTAL_DURATION, FAILED_TASKS, and OUTLIER (default).
+    TOTAL_DURATION, AVERAGE_DURATION, FAILED_TASKS, PEAK_JVM_ONHEAP_MEMORY,
+    PEAK_JVM_OFFHEAP_MEMORY, TOTAL_SHUFFLE_WRITE, DISK_USED, ACTIVE_TASKS,
+    OUTLIER (default), and OUTLIER_NO_FALLBACK.
     When executor roll happens, Spark uses this policy to choose
     an executor and decommission it. The built-in policies are based on executor summary
     and newly started executors are protected by spark.kubernetes.executor.minTasksPerExecutorBeforeRolling.
@@ -2110,14 +2112,24 @@ See the [configuration page](configuration.html) for information on Spark config
     TOTAL_DURATION policy chooses an executor with the biggest total task time.
     AVERAGE_DURATION policy chooses an executor with the biggest average task time.
     FAILED_TASKS policy chooses an executor with the most number of failed tasks.
+    PEAK_JVM_ONHEAP_MEMORY policy chooses an executor with the biggest peak JVM on-heap memory.
+    PEAK_JVM_OFFHEAP_MEMORY policy chooses an executor with the biggest peak JVM off-heap memory.
+    TOTAL_SHUFFLE_WRITE policy chooses an executor with the biggest total shuffle write.
+    DISK_USED policy chooses an executor with the biggest disk size used by its
+    stored blocks (e.g., disk-persisted RDD blocks).
     ACTIVE_TASKS policy chooses an executor with the smallest number of active tasks.
     If there is a tie, it chooses an executor with the smallest add-time.
     It is recommended to use it with spark.kubernetes.executor.minTasksPerExecutorBeforeRolling
     because newly started executors usually have no active tasks.
     OUTLIER policy chooses an executor with outstanding statistics which is bigger than
     at least two standard deviation from the mean in average task time,
-    total task time, total task GC time, and the number of failed tasks if exists.
+    total task time, total task GC time, the number of failed tasks,
+    peak JVM on-heap memory, peak JVM off-heap memory, total shuffle write,
+    and disk used if exists.
+    The dimensions are checked in this order and the first outlier found is chosen.
     If there is no outlier, it works like TOTAL_DURATION policy.
+    OUTLIER_NO_FALLBACK policy picks an outlier using the OUTLIER policy above.
+    If there is no outlier then no executor will be rolled.
   </td>
   <td>3.3.0</td>
 </tr>
@@ -2126,7 +2138,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>1min</code></td>
   <td>
     Interval between executor resize operations. To disable, set 0.
-    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin</code>
+    Takes effect only when <code>ExecutorResizePlugin</code>
     is registered via <code>spark.plugins</code>.
   </td>
   <td>4.2.0</td>
@@ -2136,7 +2148,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>0.9</code></td>
   <td>
     The threshold to resize. It should be in (0, 1).
-    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin</code>
+    Takes effect only when <code>ExecutorResizePlugin</code>
     is registered via <code>spark.plugins</code>.
   </td>
   <td>4.2.0</td>
@@ -2146,7 +2158,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>0.1</code></td>
   <td>
     The factor to resize. It should be in (0, 1].
-    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin</code>
+    Takes effect only when <code>ExecutorResizePlugin</code>
     is registered via <code>spark.plugins</code>.
   </td>
   <td>4.2.0</td>
@@ -2157,7 +2169,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     The upper bound of the executor container memory limit that the resize plugin can grow to.
     By default, it is <code>Long.MaxValue</code>, which means no upper bound.
-    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin</code>
+    Takes effect only when <code>ExecutorResizePlugin</code>
     is registered via <code>spark.plugins</code>.
   </td>
   <td>4.4.0</td>
@@ -2168,7 +2180,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     Interval between executor PVC resize operations, in minutes. Defaults to 5 minutes.
     Set to 0 to disable. Must be 0 or a positive multiple of 5 minutes.
-    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin</code>
+    Takes effect only when <code>ExecutorPVCResizePlugin</code>
     is registered via <code>spark.plugins</code>.
   </td>
   <td>4.2.0</td>
@@ -2178,7 +2190,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>0.5</code></td>
   <td>
     The PVC usage ratio (used / capacity) above which the driver triggers a resize.
-    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin</code>
+    Takes effect only when <code>ExecutorPVCResizePlugin</code>
     is registered via <code>spark.plugins</code>.
   </td>
   <td>4.2.0</td>
@@ -2188,7 +2200,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>1.0</code></td>
   <td>
     The factor to grow PVC storage by, relative to the current request.
-    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin</code>
+    Takes effect only when <code>ExecutorPVCResizePlugin</code>
     is registered via <code>spark.plugins</code>.
   </td>
   <td>4.2.0</td>
@@ -2199,7 +2211,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     The upper bound of the PVC storage request that the resize plugin can grow to.
     By default, it is <code>Long.MaxValue</code>, which means no upper bound.
-    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin</code>
+    Takes effect only when <code>ExecutorPVCResizePlugin</code>
     is registered via <code>spark.plugins</code>.
   </td>
   <td>4.4.0</td>

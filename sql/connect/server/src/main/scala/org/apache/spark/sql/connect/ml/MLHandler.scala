@@ -19,6 +19,7 @@ package org.apache.spark.sql.connect.ml
 
 import java.io.{PrintWriter, StringWriter}
 import java.lang.ThreadLocal
+import java.nio.file.Files
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable
@@ -33,7 +34,8 @@ import org.apache.spark.ml.param.{ParamMap, Params}
 import org.apache.spark.ml.tree.TreeConfig
 import org.apache.spark.ml.util.{HasTrainingSummary, MLWritable, Summary}
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
+import org.apache.spark.sql.connect.common.{LiteralValueProtoConverter, ProtoUtils}
+import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.ml.Serializer.deserializeMethodArguments
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.util.Utils
@@ -58,9 +60,9 @@ private class AttributeHelper(
     obj
   }
   // Get the attribute by reflection
-  def getAttribute: Any = {
+  def getAttribute(instance: Object): Any = {
     assert(methods.length >= 1)
-    methods.foldLeft(instance()) { (obj, m) =>
+    methods.foldLeft(instance) { (obj, m) =>
       if (m.argValues.isEmpty) {
         MLUtils.invokeMethodAllowed(obj, m.name)
       } else {
@@ -131,7 +133,14 @@ private[connect] object MLHandler extends Logging {
     val transformerClasses = MLUtils.loadOperators(classOf[Transformer])
     val estimatorClasses = MLUtils.loadOperators(classOf[Estimator[_]])
     val evaluatorClasses = MLUtils.loadOperators(classOf[Evaluator])
-    transformerClasses ++ estimatorClasses ++ evaluatorClasses ++ Map(
+    // RFormulaModel saves these internal stages, which lack the no-argument constructors
+    // required by ServiceLoader.
+    val internalTransformerClasses = Seq(
+      "org.apache.spark.ml.feature.ColumnPruner",
+      "org.apache.spark.ml.feature.VectorAttributeRewriter")
+      .map(name => name -> Utils.classForName(name))
+      .toMap
+    transformerClasses ++ estimatorClasses ++ evaluatorClasses ++ internalTransformerClasses ++ Map(
       "org.apache.spark.ml.clustering.PowerIterationClustering" ->
         classOf[org.apache.spark.ml.clustering.PowerIterationClustering])
   }
@@ -176,7 +185,7 @@ private[connect] object MLHandler extends Logging {
             val execTime = System.currentTimeMillis() - startTime
             if (execTime > handlerInterruptionTimeoutMillis) {
               for (t <- Thread.getAllStackTraces().keySet().asScala) {
-                if (t.getId() == threadId) {
+                if (t.threadId() == threadId) {
                   t.interrupt()
                 }
               }
@@ -251,16 +260,7 @@ private[connect] object MLHandler extends Logging {
           .build()
 
       case proto.MlCommand.CommandCase.FETCH =>
-        val objRefId = mlCommand.getFetch.getObjRef.getId
-        val methods = mlCommand.getFetch.getMethodsList.asScala.toArray
-        val obj = sessionHolder.mlCache.get(objRefId)
-        if (obj != null && obj.isInstanceOf[HasTrainingSummary[_]]
-          && methods(0).getMethod == "summary"
-          && !obj.asInstanceOf[HasTrainingSummary[_]].hasSummary) {
-          throw MLModelSummaryLostException(objRefId)
-        }
-        val helper = AttributeHelper(sessionHolder, objRefId, methods)
-        val attrResult = helper.getAttribute
+        val attrResult = fetchAttribute(sessionHolder, mlCommand.getFetch)
         attrResult match {
           case s: Summary =>
             val id = mlCache.register(s)
@@ -450,7 +450,7 @@ private[connect] object MLHandler extends Logging {
   def wrapHandler(
       originHandler: () => Any,
       reqProto: com.google.protobuf.GeneratedMessage): Any = {
-    val threadId = Thread.currentThread().getId
+    val threadId = Thread.currentThread().threadId
     val startTime = System.currentTimeMillis()
     handlerExecutionStartTimeMap.put(threadId, startTime)
     try {
@@ -480,6 +480,42 @@ private[connect] object MLHandler extends Logging {
       .asInstanceOf[proto.MlCommandResult]
   }
 
+  private def fetchAttribute(
+      sessionHolder: SessionHolder,
+      fetch: proto.Fetch,
+      summaryDataset: Option[proto.Relation] = None): Any = {
+    val objRefId = fetch.getObjRef.getId
+    val methods = fetch.getMethodsList.asScala.toArray
+    val obj = sessionHolder.mlCache.get(objRefId)
+    if (obj == null) {
+      throw MLCacheInvalidException(objRefId, sessionHolder.mlCache.getOffloadingTimeoutMinute)
+    }
+    sessionHolder.mlCache.synchronized {
+      if (obj.isInstanceOf[HasTrainingSummary[_]] && methods(0).getMethod == "summary"
+        && !obj.asInstanceOf[HasTrainingSummary[_]].hasSummary) {
+        val modelPath = sessionHolder.mlCache.getModelOffloadingPath(objRefId)
+        val dataset = summaryDataset.getOrElse {
+          val datasetPath = modelPath.resolve("summary_dataset")
+          if (!Files.exists(datasetPath)) {
+            throw MLModelSummaryLostException(objRefId)
+          }
+          ProtoUtils.parseWithRecursionLimit(
+            Files.readAllBytes(datasetPath),
+            proto.Relation.parser(),
+            sessionHolder.session.sparkContext.conf
+              .get(Connect.CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT))
+        }
+        obj
+          .asInstanceOf[HasTrainingSummary[_]]
+          .loadSummary(
+            modelPath.resolve("summary").toString,
+            MLUtils.parseRelationProto(dataset, sessionHolder))
+      }
+    }
+    // Use the same model even if its cache entry is evicted while restoring the summary.
+    AttributeHelper(sessionHolder, objRefId, methods).getAttribute(obj)
+  }
+
   private def createModelSummary(
       sessionHolder: SessionHolder,
       createSummaryCmd: proto.MlCommand.CreateSummary): proto.MlCommandResult =
@@ -494,6 +530,13 @@ private[connect] object MLHandler extends Logging {
         true
       } else {
         false
+      }
+      if (sessionHolder.mlCache.getMemoryControlEnabled) {
+        // Keep the dataset plan on disk so recovery survives subsequent model evictions.
+        val datasetPath = sessionHolder.mlCache
+          .getModelOffloadingPath(refId)
+          .resolve("summary_dataset")
+        Files.write(datasetPath, createSummaryCmd.getDataset.toByteArray)
       }
       proto.MlCommandResult
         .newBuilder()
@@ -532,29 +575,12 @@ private[connect] object MLHandler extends Logging {
 
       // Get the attribute from a cached object which could be a model or summary
       case proto.MlRelation.MlTypeCase.FETCH =>
-        val objRefId = relation.getFetch.getObjRef.getId
-        val methods = relation.getFetch.getMethodsList.asScala.toArray
-        val obj = sessionHolder.mlCache.get(objRefId)
-        sessionHolder.mlCache.synchronized {
-          if (obj != null && obj.isInstanceOf[HasTrainingSummary[_]]
-            && methods(0).getMethod == "summary"
-            && !obj.asInstanceOf[HasTrainingSummary[_]].hasSummary) {
-
-            if (relation.hasModelSummaryDataset) {
-              val dataset =
-                MLUtils.parseRelationProto(relation.getModelSummaryDataset, sessionHolder)
-              val modelPath = sessionHolder.mlCache.getModelOffloadingPath(objRefId)
-              val summaryPath = modelPath.resolve("summary").toString
-              obj.asInstanceOf[HasTrainingSummary[_]].loadSummary(summaryPath, dataset)
-            } else {
-              // For old Spark client backward compatibility.
-              throw MLModelSummaryLostException(objRefId)
-            }
-          }
+        val summaryDataset = if (relation.hasModelSummaryDataset) {
+          Some(relation.getModelSummaryDataset)
+        } else {
+          None
         }
-
-        val helper = AttributeHelper(sessionHolder, objRefId, methods)
-        helper.getAttribute.asInstanceOf[DataFrame]
+        fetchAttribute(sessionHolder, relation.getFetch, summaryDataset).asInstanceOf[DataFrame]
 
       case other => throw MlUnsupportedException(s"$other not supported")
     }

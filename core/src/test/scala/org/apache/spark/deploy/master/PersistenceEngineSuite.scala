@@ -18,6 +18,7 @@
 
 package org.apache.spark.deploy.master
 
+import java.io.{File, FileOutputStream, FilterOutputStream, InputStream, IOException, OutputStream}
 import java.net.ServerSocket
 import java.nio.file.{Files, Paths}
 import java.util.Date
@@ -64,6 +65,8 @@ class PersistenceEngineSuite extends SparkFunSuite {
         engine.persist("test_1", "test_1_value")
       }.getMessage
       assert(m.contains("File already exists"))
+      // The failed persist does not delete the existing file.
+      assert(engine.read[String]("test_1") === Seq("test_1_value"))
     }
   }
 
@@ -115,6 +118,42 @@ class PersistenceEngineSuite extends SparkFunSuite {
           new FileSystemPersistenceEngine(dir.getAbsolutePath, serializer, Some(codec))
         )
       }
+    }
+  }
+
+  test("SPARK-60467: FileSystemPersistenceEngine closes and deletes the file when persist fails") {
+    Seq(false, true).foreach { failOnCreate =>
+      withTempDir { dir =>
+        val codec = new FailingCompressionCodec(failOnCreate)
+        val engine = new FileSystemPersistenceEngine(
+          dir.getAbsolutePath, new JavaSerializer(new SparkConf()), Some(codec))
+        intercept[IOException] {
+          engine.persist("test_1", "test_1_value")
+        }
+        // The codec stream is closed if it was created, and the file stream is closed although
+        // the codec stream does not close it.
+        assert(codec.closeCalled === !failOnCreate)
+        assert(!codec.fileOut.getFD.valid())
+        // No partially written file is left behind.
+        assert(dir.list().isEmpty)
+      }
+    }
+  }
+
+  test("SPARK-60467: FileSystemPersistenceEngine skips and renames unreadable files") {
+    withTempDir { dir =>
+      val engine = new FileSystemPersistenceEngine(
+        dir.getAbsolutePath, new JavaSerializer(new SparkConf()))
+      engine.persist("test_1", "test_1_value")
+      // An empty file and a truncated file, as a crash in the middle of a persist can leave.
+      val bytes = Files.readAllBytes(new File(dir, "test_1").toPath)
+      Files.write(new File(dir, "test_2").toPath, Array.emptyByteArray)
+      Files.write(new File(dir, "test_3").toPath, bytes.take(bytes.length / 2))
+      assert(engine.read[String]("test_") === Seq("test_1_value"))
+      assert(dir.list().toSet === Set("test_1", "corrupted_test_2", "corrupted_test_3"))
+      // The renamed files neither block reads nor persisting the same names again.
+      engine.persist("test_2", "test_2_value")
+      assert(engine.read[String]("test_").toSet === Set("test_1_value", "test_2_value"))
     }
   }
 
@@ -271,5 +310,30 @@ class PersistenceEngineSuite extends SparkFunSuite {
       socket.close()
       (null, trialPort)
     }, conf)._2
+  }
+
+  /**
+   * A codec that fails to create its output stream, or whose output stream fails to flush and
+   * close, as on a full disk, without closing the file stream it wraps.
+   */
+  private class FailingCompressionCodec(failOnCreate: Boolean) extends CompressionCodec {
+    var fileOut: FileOutputStream = _
+    var closeCalled = false
+
+    override def compressedOutputStream(s: OutputStream): OutputStream = {
+      fileOut = s.asInstanceOf[FileOutputStream]
+      if (failOnCreate) {
+        throw new IOException("Cannot create the compressed stream")
+      }
+      new FilterOutputStream(s) {
+        override def flush(): Unit = throw new IOException("No space left on device")
+        override def close(): Unit = {
+          closeCalled = true
+          throw new IOException("No space left on device")
+        }
+      }
+    }
+
+    override def compressedInputStream(s: InputStream): InputStream = s
   }
 }

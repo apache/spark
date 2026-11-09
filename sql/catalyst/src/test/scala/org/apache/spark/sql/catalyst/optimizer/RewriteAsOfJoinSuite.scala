@@ -277,39 +277,43 @@ class RewriteAsOfJoinSuite extends PlanTest {
     comparePlans(rewritten, correctAnswer, checkAnalysis = false)
   }
 
-  test("no rewrite when the node requires the sort-merge as-of join operator") {
-    // A node flagged `requiresSortMergeAsOfJoin = true` (e.g. from a SQL MATCH_CONDITION) is
-    // left untouched so the sort-merge physical operator handles it instead.
-    val query = AsOfJoin(left, right, left.output(0), right.output(0), None, Inner,
-      tolerance = None, allowExactMatches = true, direction = AsOfJoinDirection("backward"))
-      .copy(requiresSortMergeAsOfJoin = true)
-    val analyzed = query.analyze
-
-    // The flag must survive analysis, so it, not a dropped flag, is what makes this a no-op.
-    assert(analyzed.collectFirst { case a: AsOfJoin => a }.exists(_.requiresSortMergeAsOfJoin),
-      "expected the analyzed plan to still carry requiresSortMergeAsOfJoin = true")
-
-    val rewritten = RewriteAsOfJoin(analyzed)
-
-    comparePlans(rewritten, analyzed)
-  }
-
   test("no rewrite when the sort-merge as-of join operator is enabled by config") {
-    // With the config on, the sort-merge operator is enabled globally, so even a plain node
-    // (flag off) is left intact rather than rewritten to a subquery.
+    // Analysis records the strategy, so later config changes do not affect the rewrite.
     withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true") {
       val query = AsOfJoin(left, right, left.output(0), right.output(0), None, Inner,
         tolerance = None, allowExactMatches = true, direction = AsOfJoinDirection("backward"))
       val analyzed = query.analyze
 
-      comparePlans(RewriteAsOfJoin(analyzed), analyzed)
+      withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "false") {
+        comparePlans(RewriteAsOfJoin(analyzed), analyzed)
+      }
+    }
+  }
+
+  test("sort-merge analysis preserves the tolerance condition for reversed keys") {
+    withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true") {
+      val analyzed = AsOfJoin(
+        left = left,
+        right = right,
+        leftAsOf = right.output(0),
+        rightAsOf = left.output(0),
+        condition = None,
+        joinType = Inner,
+        tolerance = Some(Literal(1)),
+        allowExactMatches = true,
+        direction = AsOfJoinDirection("backward")
+      ).analyze.asInstanceOf[AsOfJoin]
+
+      val expectedCondition = right.output(0) >= left.output(0) &&
+        left.output(0) >= right.output(0) - 1
+      assert(analyzed.asOfCondition == expectedCondition)
+      assert(analyzed.leftSortExprs == Seq(left.output(0)))
+      assert(analyzed.rightSortExprs == Seq(right.output(0)))
+      assert(analyzed.direction == AsOfJoinDirection("forward"))
     }
   }
 
   test("no rewrite for a SQL MATCH_CONDITION join built by fromMatchCondition") {
-    // fromMatchCondition sets requiresSortMergeAsOfJoin = true (the SQL path). The analyzer must
-    // keep it so RewriteAsOfJoin leaves the join for the sort-merge operator. Other tests set the
-    // flag with .copy on a plain node; building via the factory catches it being dropped on SQL.
     val query = AsOfJoin.fromMatchCondition(
       left, right, left.output(0), GreaterThanOrEqualOp, right.output(0), None, Inner)
     val analyzed = query.analyze

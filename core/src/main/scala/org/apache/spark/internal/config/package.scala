@@ -1251,7 +1251,7 @@ package object config {
   private[spark] val DRIVER_TIMEOUT = ConfigBuilder("spark.driver.timeout")
     .doc("A timeout for Spark driver in minutes. 0 means infinite. For the positive time value, " +
       "terminate the driver with the exit code 124 if it runs after timeout duration. To use, " +
-      "it's required to set `spark.plugins=org.apache.spark.deploy.DriverTimeoutPlugin`.")
+      "it's required to set `spark.plugins=DriverTimeoutPlugin`.")
     .version("4.0.0")
     .timeConf(TimeUnit.MINUTES)
     .checkValue(v => v >= 0, "The value should be a non-negative time value.")
@@ -1313,6 +1313,8 @@ package object config {
       "Invalid value for 'spark.log.level'. Valid values are " +
       SparkContext.VALID_LOG_LEVELS.mkString(","))
     .createOptional
+
+  private[spark] val SPARK_LOG_LEVEL_PREFIX = "spark.log.level."
 
   private[spark] val FILES_MAX_PARTITION_BYTES = ConfigBuilder("spark.files.maxPartitionBytes")
     .doc("The maximum number of bytes to pack into a single partition when reading files.")
@@ -1468,12 +1470,20 @@ package object config {
     ConfigBuilder("spark.shuffle.accurateBlockSkewedFactor")
       .doc("A shuffle block is considered as skewed and will be accurately recorded in " +
         "HighlyCompressedMapStatus if its size is larger than this factor multiplying " +
-        "the median shuffle block size or SHUFFLE_ACCURATE_BLOCK_THRESHOLD. It is " +
-        "recommended to set this parameter to be the same as SKEW_JOIN_SKEWED_PARTITION_FACTOR." +
-        "Set to -1.0 to disable this feature by default.")
+        "the median shuffle block size or SHUFFLE_ACCURATE_BLOCK_THRESHOLD. Otherwise every " +
+        "block below SHUFFLE_ACCURATE_BLOCK_THRESHOLD is reported as the average block size, " +
+        "which hides skew from adaptive query execution once a shuffle has more than " +
+        "SHUFFLE_MIN_NUM_PARTS_TO_HIGHLY_COMPRESS partitions. At most " +
+        "SHUFFLE_MAX_ACCURATE_SKEWED_BLOCK_NUMBER block sizes are recorded accurately per map " +
+        "task, plus the blocks tied at the cutoff of that selection, whose reduce ids are held " +
+        "in a bitmap. The tied blocks are not capped, so in the worst case, where they are " +
+        "scattered across the reduce id space, that bitmap costs a bit per reduce partition per " +
+        "map task on the driver, about 8 KiB per map task at 50000 reduce partitions. " +
+        "The default matches SKEW_JOIN_SKEWED_PARTITION_FACTOR. Set to -1.0 to disable " +
+        "this feature.")
       .version("3.3.0")
       .doubleConf
-      .createWithDefault(-1.0)
+      .createWithDefault(5.0)
 
   private[spark] val SHUFFLE_MAX_ACCURATE_SKEWED_BLOCK_NUMBER =
     ConfigBuilder("spark.shuffle.maxAccurateSkewedBlockNumber")
@@ -1746,6 +1756,17 @@ package object config {
       .checkValue(_ > 0, "The minimum renewal interval must be a positive time value.")
       .createWithDefaultString("30s")
 
+  private[spark] val SECURITY_OIDC_REQUIRE_RPC_ENCRYPTION =
+    ConfigBuilder("spark.security.oidc.requireRpcEncryption")
+      .doc("When OIDC credential propagation is enabled, whether to require RPC channel " +
+        "encryption. When true, Spark refuses to start if RPC encryption is not configured, " +
+        "instead of only logging a warning. Defaults to false to preserve the warn-by-default " +
+        "behavior described in the SPIP.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val DIRECT_CREDENTIAL_PROVIDERS_ENABLED =
     ConfigBuilder("spark.security.directCredentialProviders.enabled")
       .doc(
@@ -1970,7 +1991,7 @@ package object config {
     ConfigBuilder("spark.shuffle.streaming.writerConnectionTimeout")
       .doc("Maximum time a streaming shuffle writer waits for each reader to connect. " +
         "Set to -1 to wait indefinitely.")
-      .version("4.4.0")
+      .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(
@@ -2407,6 +2428,9 @@ package object config {
         "cost because of excessive JNI call overhead")
       .version("2.3.0")
       .bytesConf(ByteUnit.BYTE)
+      .checkValue(v => v > 0 && v <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH,
+        s"The buffer size must be positive and less than or equal to" +
+          s" ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
       .createWithDefaultString("32k")
 
   private[spark] val IO_COMPRESSION_ZSTD_BUFFERPOOL_ENABLED =
@@ -3063,7 +3087,8 @@ package object config {
         "of the built-in defaults, such as maven central. " +
         "For spark.jars.packages, additional repositories from spark.jars.repositories will " +
         "also be included. " +
-        "Client-resolved Spark Connect Ivy URIs do not use this setting. " +
+        "Client-resolved Spark Connect Ivy URIs use this setting only when the settings file is " +
+        "readable on the client. " +
         "The spark-submit --repositories option applies to submission-time resolution. " +
         "Useful for allowing Spark to resolve artifacts from behind a firewall " +
         "e.g. via an in-house artifact server like Artifactory. " +
@@ -3325,7 +3350,7 @@ package object config {
     ConfigBuilder("spark.driver.log.redirectConsoleOutputs")
       .doc("Comma-separated list of the console output kind for driver that needs to redirect " +
         "to logging system. Supported values are `stdout`, `stderr`. It only takes affect when " +
-        s"`${PLUGINS.key}` is configured with `org.apache.spark.deploy.RedirectConsolePlugin`.")
+        s"`${PLUGINS.key}` is configured with `RedirectConsolePlugin`.")
       .version("4.1.0")
       .stringConf
       .transform(_.toLowerCase(Locale.ROOT))
@@ -3338,7 +3363,7 @@ package object config {
     ConfigBuilder("spark.executor.logs.redirectConsoleOutputs")
       .doc("Comma-separated list of the console output kind for executor that needs to redirect " +
         "to logging system. Supported values are `stdout`, `stderr`. It only takes affect when " +
-        s"`${PLUGINS.key}` is configured with `org.apache.spark.deploy.RedirectConsolePlugin`.")
+        s"`${PLUGINS.key}` is configured with `RedirectConsolePlugin`.")
       .version("4.1.0")
       .stringConf
       .transform(_.toLowerCase(Locale.ROOT))

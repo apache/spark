@@ -48,8 +48,8 @@ case class SingleStatement(parsedPlan: LogicalPlan)
    *   SQL query text.
    */
   def getText: String = {
-    assert(origin.sqlText.isDefined && origin.startIndex.isDefined && origin.stopIndex.isDefined)
-    origin.sqlText.get.substring(origin.startIndex.get, origin.stopIndex.get + 1)
+    assert(origin.sqlTextSlice.isDefined)
+    origin.sqlTextSlice.get
   }
 
   override def output: Seq[Attribute] = parsedPlan.output
