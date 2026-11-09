@@ -42,6 +42,7 @@ import org.apache.spark.SparkConf;
 import org.apache.spark.SparkException;
 import org.apache.spark.TaskContext;
 import org.apache.spark.TaskContext$;
+import org.apache.spark.api.java.Optional;
 import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
@@ -1594,6 +1595,22 @@ public class JavaAPISuite implements Serializable {
     SparkException ex8 = assertThrows(SparkException.class,
       () -> fromJava.subtractByKey(fromJava));
     assertEquals("UNSUPPORTED_ARRAY_KEY.HASH_PARTITIONER", ex8.getCondition());
+
+    Comparator<byte[]> comp = (a, b) -> Byte.compare(a[0], b[0]);
+    SparkException ex9 = assertThrows(SparkException.class,
+      () -> pairRDD.repartitionAndSortWithinPartitions(new HashPartitioner(2), comp));
+    assertEquals("UNSUPPORTED_ARRAY_KEY.HASH_PARTITIONER", ex9.getCondition());
+
+    List<Tuple2<byte[], Integer>> collectedFromJava = fromJava.collect();
+    assertEquals(2, collectedFromJava.size());
+    assertArrayEquals(new byte[]{1}, collectedFromJava.get(0)._1);
+    assertEquals(Integer.valueOf(1), collectedFromJava.get(0)._2);
+    assertArrayEquals(new byte[]{1}, fromJava.keys().collect().get(0));
+    assertEquals(Integer.valueOf(1), fromJava.values().collect().get(0));
+
+    SparkException subEx = assertThrows(SparkException.class,
+      () -> pairRDD.keys().subtract(pairRDD.keys()));
+    assertEquals("UNSUPPORTED_ARRAY_KEY.HASH_PARTITIONER", subEx.getCondition());
   }
 
   @Test
@@ -1646,6 +1663,84 @@ public class JavaAPISuite implements Serializable {
     assertEquals(2, mixedArrayKeys.size());
     assertArrayEquals(new byte[]{2}, (byte[]) mixedArrayKeys.get(0));
     assertArrayEquals(new int[]{1}, (int[]) mixedArrayKeys.get(1));
+
+    JavaPairRDD<Object, Integer> a = sc.parallelizePairs(
+      Arrays.asList(new Tuple2<Object, Integer>(new byte[]{1}, 1)));
+    JavaPairRDD<Object, Integer> b = sc.parallelizePairs(
+      Arrays.asList(new Tuple2<Object, Integer>("x", 2)));
+
+    // union
+    JavaPairRDD<Object, Integer> union1 = a.union(b);
+    List<Object> union1Keys = union1.keys().collect();
+    assertEquals(2, union1Keys.size());
+    assertArrayEquals(new byte[]{1}, (byte[]) union1Keys.get(0));
+    assertEquals("x", union1Keys.get(1));
+
+    // JavaSparkContext.union
+    JavaPairRDD<Object, Integer> scUnion = sc.union(a, b);
+    List<Object> scUnionKeys = scUnion.keys().collect();
+    assertEquals(2, scUnionKeys.size());
+    assertArrayEquals(new byte[]{1}, (byte[]) scUnionKeys.get(0));
+    assertEquals("x", scUnionKeys.get(1));
+
+    // JavaRDD.union on keys()
+    JavaRDD<Object> rddUnion = a.keys().union(b.keys());
+    List<Object> rddUnionKeys = rddUnion.collect();
+    assertEquals(2, rddUnionKeys.size());
+    assertArrayEquals(new byte[]{1}, (byte[]) rddUnionKeys.get(0));
+    assertEquals("x", rddUnionKeys.get(1));
+
+    // JavaSparkContext.union on JavaRDD
+    JavaRDD<Object> scRddUnion = sc.union(a.keys(), b.keys());
+    List<Object> scRddUnionKeys = scRddUnion.collect();
+    assertEquals(2, scRddUnionKeys.size());
+    assertArrayEquals(new byte[]{1}, (byte[]) scRddUnionKeys.get(0));
+    assertEquals("x", scRddUnionKeys.get(1));
+
+    // union after filter on byte[] side
+    JavaPairRDD<Object, Integer> filteredUnion = a.filter(t -> true).union(b);
+    assertEquals(2, filteredUnion.keys().collect().size());
+
+    // count() after keys().cache()
+    JavaPairRDD<Object, Integer> cachedUnion = a.union(b);
+    cachedUnion.keys().cache();
+    assertEquals(2, cachedUnion.keys().count());
+
+    // cogroup, fullOuterJoin, rightOuterJoin under a non-hash partitioner
+    Partitioner customPartitioner = new Partitioner() {
+      @Override public int numPartitions() { return 1; }
+      @Override public int getPartition(Object key) { return 0; }
+    };
+    JavaPairRDD<Object, Tuple2<Iterable<Integer>, Iterable<Integer>>> cogrouped =
+      a.cogroup(b, customPartitioner);
+    assertEquals(2, cogrouped.keys().collect().size());
+
+    JavaPairRDD<Object, Tuple2<Optional<Integer>, Integer>> rightJoined =
+      a.rightOuterJoin(b, customPartitioner);
+    assertEquals(1, rightJoined.keys().collect().size());
+
+    JavaPairRDD<Object, Tuple2<Optional<Integer>, Optional<Integer>>> fullJoined =
+      a.fullOuterJoin(b, customPartitioner);
+    assertEquals(2, fullJoined.keys().collect().size());
+
+    // union of two homogeneous byte[] pair RDDs still preserves array-key check
+    JavaPairRDD<byte[], Integer> aBytes = sc.parallelizePairs(
+      Arrays.asList(new Tuple2<>(new byte[]{1}, 1)));
+    JavaPairRDD<byte[], Integer> bBytes = sc.parallelizePairs(
+      Arrays.asList(new Tuple2<>(new byte[]{2}, 2)));
+    JavaPairRDD<byte[], Integer> bytesUnion = aBytes.union(bBytes);
+    SparkException unionEx = assertThrows(SparkException.class,
+      () -> bytesUnion.partitionBy(new HashPartitioner(2)));
+    assertEquals("UNSUPPORTED_ARRAY_KEY.HASH_PARTITIONER", unionEx.getCondition());
+
+    // explicitly tagged array RDD unioned as receiver with Object-tagged RDD keeps array tag
+    JavaPairRDD<Object, Integer> explicitArray = JavaPairRDD.fromJavaRDD(
+      sc.parallelize(Arrays.asList(new Tuple2<Object, Integer>(new byte[]{1}, 1))),
+      (Class) byte[].class);
+    JavaPairRDD<Object, Integer> explicitUnion = explicitArray.union(b);
+    SparkException explicitEx = assertThrows(SparkException.class,
+      () -> explicitUnion.partitionBy(new HashPartitioner(2)));
+    assertEquals("UNSUPPORTED_ARRAY_KEY.HASH_PARTITIONER", explicitEx.getCondition());
   }
 
 }

@@ -173,7 +173,8 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
     }
     implicit val ctagK: ClassTag[K] =
       if (isHomogeneousArray && !hasConflict) {
-        ClassTag(firstArrayClass).asInstanceOf[ClassTag[K]]
+        new JavaSparkContext.InferredArrayClassTag[K](
+          ClassTag(firstArrayClass).asInstanceOf[ClassTag[K]])
       } else {
         fakeClassTag[K]
       }
@@ -543,18 +544,20 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
   @varargs
   def union[T](rdds: JavaRDD[T]*): JavaRDD[T] = {
     require(rdds.nonEmpty, "Union called on no RDDs")
-    implicit val ctag: ClassTag[T] = rdds.head.classTag
-    sc.union(rdds.map(_.rdd))
+    val ctag: ClassTag[T] =
+      JavaSparkContext.mergeKeyClassTags(rdds.head.classTag, rdds.tail.map(_.classTag): _*)
+    new JavaRDD[T](sc.union(rdds.map(_.rdd))(ctag))(ctag)
   }
 
   /** Build the union of JavaPairRDDs. */
   @varargs
   def union[K, V](rdds: JavaPairRDD[K, V]*): JavaPairRDD[K, V] = {
     require(rdds.nonEmpty, "Union called on no RDDs")
-    implicit val ctag: ClassTag[(K, V)] = rdds.head.classTag
-    implicit val ctagK: ClassTag[K] = rdds.head.kClassTag
-    implicit val ctagV: ClassTag[V] = rdds.head.vClassTag
-    new JavaPairRDD(sc.union(rdds.map(_.rdd)))
+    val ctag: ClassTag[(K, V)] = rdds.head.classTag
+    val ctagK: ClassTag[K] =
+      JavaSparkContext.mergeKeyClassTags(rdds.head.kClassTag, rdds.tail.map(_.kClassTag): _*)
+    val ctagV: ClassTag[V] = rdds.head.vClassTag
+    new JavaPairRDD(sc.union(rdds.map(_.rdd))(ctag))(ctagK, ctagV)
   }
 
   /** Build the union of JavaDoubleRDDs. */
@@ -895,4 +898,30 @@ object JavaSparkContext {
    */
   private[spark]
   def fakeClassTag[T]: ClassTag[T] = ClassTag.AnyRef.asInstanceOf[ClassTag[T]]
+
+  private[spark] class InferredArrayClassTag[T](val underlying: ClassTag[T])
+    extends ClassTag[T] with Serializable {
+    override def runtimeClass: Class[_] = underlying.runtimeClass
+    override def newArray(len: Int): Array[T] = underlying.newArray(len)
+    override def wrap: ClassTag[Array[T]] = underlying.wrap
+    override def unapply(x: Any): Option[T] = underlying.unapply(x)
+    override def canEqual(x: Any): Boolean = x match {
+      case _: ClassTag[_] => true
+      case _ => false
+    }
+    override def equals(x: Any): Boolean = x match {
+      case other: ClassTag[_] => runtimeClass == other.runtimeClass
+      case _ => false
+    }
+    override def hashCode(): Int = runtimeClass.hashCode()
+    override def toString: String = underlying.toString
+  }
+
+  private[spark] def mergeKeyClassTags[T](tag1: ClassTag[T], others: ClassTag[T]*): ClassTag[T] = {
+    if (tag1.isInstanceOf[InferredArrayClassTag[_]] && others.exists(_ != tag1)) {
+      fakeClassTag[T]
+    } else {
+      tag1
+    }
+  }
 }

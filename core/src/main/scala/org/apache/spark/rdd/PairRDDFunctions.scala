@@ -1103,9 +1103,18 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
   private[spark] def keyOrdering: Option[Ordering[K]] = Option(ord)
 
-  private def failOnHashPartitionerWithArrayKey(partitioner: Partitioner): Unit = {
+  private[spark] def failOnHashPartitionerWithArrayKey(partitioner: Partitioner): Unit = {
+    PairRDDFunctions.failOnHashPartitionerWithArrayKey(partitioner, keyClass)
+  }
+}
+
+private[spark] object PairRDDFunctions {
+  def failOnHashPartitionerWithArrayKey(
+      partitioner: Partitioner,
+      keyClass: Class[_]): Unit = {
     if (partitioner.isInstanceOf[HashPartitioner] && keyClass.isArray) {
       throw SparkCoreErrors.hashPartitionerCannotPartitionArrayKeyError()
     }
   }
 }
+

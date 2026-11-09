@@ -74,6 +74,9 @@ class OrderedRDDFunctions[K : Ordering : ClassTag,
    * because it can push the sorting down into the shuffle machinery.
    */
   def repartitionAndSortWithinPartitions(partitioner: Partitioner): RDD[(K, V)] = self.withScope {
+    PairRDDFunctions.failOnHashPartitionerWithArrayKey(
+      partitioner,
+      implicitly[ClassTag[K]].runtimeClass)
     if (self.partitioner == Some(partitioner)) {
       self.mapPartitions(iter => {
         val context = TaskContext.get()
