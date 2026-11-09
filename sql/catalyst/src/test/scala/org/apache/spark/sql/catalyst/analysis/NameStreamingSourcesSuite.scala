@@ -329,19 +329,59 @@ class NameStreamingSourcesSuite extends AnalysisTest {
     }
   }
 
-  test("config disabled - throws error for UserProvided name") {
+  test("config disabled - UserProvided name enables source naming") {
     withSQLConf(
       SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "false"
     ) {
       val streamingV2 = createStreamingRelationV2()
       val wrapped = NamedStreamingRelation(streamingV2, UserProvided("my_source"))
 
+      NameStreamingSources.apply(wrapped) match {
+        case s: StreamingRelationV2 =>
+          assert(s.sourceIdentifyingName == UserProvided("my_source"))
+        case other =>
+          fail(s"Expected StreamingRelationV2 but got ${other.getClass.getSimpleName}")
+      }
+    }
+  }
+
+  test("config disabled - UserProvided name requires every source to be named") {
+    withSQLConf(
+      SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "false"
+    ) {
+      val namedSource = NamedStreamingRelation(createStreamingRelation(), UserProvided("named"))
+      val unnamedSource = NamedStreamingRelation(createStreamingRelation(), Unassigned)
+      val streamingPlan = Union(Seq(namedSource, unnamedSource))
+
       checkError(
         exception = intercept[AnalysisException] {
-          NameStreamingSources.apply(wrapped)
+          NameStreamingSources.apply(streamingPlan)
         },
-        condition = "STREAMING_QUERY_EVOLUTION_ERROR.SOURCE_NAMING_NOT_SUPPORTED",
-        parameters = Map("name" -> "my_source"))
+        condition =
+          "STREAMING_QUERY_EVOLUTION_ERROR.UNNAMED_STREAMING_SOURCES_WITH_ENFORCEMENT",
+        parameters = Map("sourceInfo" -> "Leaf position 1 - LocalRelation")
+      )
+    }
+  }
+
+  test("config disabled - already named source requires every source to be named") {
+    withSQLConf(
+      SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "false"
+    ) {
+      // The named source was analyzed on its own, so it carries its name without a wrapper.
+      val namedSource = createStreamingRelationV2(UserProvided("named"))
+      val unnamedSource = NamedStreamingRelation(createStreamingRelation(), Unassigned)
+      val streamingPlan = Union(Seq(namedSource, unnamedSource))
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          NameStreamingSources.apply(streamingPlan)
+        },
+        condition =
+          "STREAMING_QUERY_EVOLUTION_ERROR.UNNAMED_STREAMING_SOURCES_WITH_ENFORCEMENT",
+        parameters = Map("sourceInfo" -> "(?s).*Leaf position 0.*"),
+        matchPVals = true
+      )
     }
   }
 

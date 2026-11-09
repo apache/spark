@@ -219,10 +219,13 @@ class MicroBatchExecution(
 
   /**
    * Whether this run tracks sources by name (source evolution), decided once per run: the
-   * checkpoint's recorded tracking wins, and a new query takes the session config.
+   * checkpoint's recorded tracking wins, and a new query tracks by name when the session config is
+   * on or any source has a user-provided name.
    */
   private lazy val enforceNamed: Boolean = enforceNamedInCheckpoint.getOrElse(
-    sparkSessionForStream.sessionState.conf.enableStreamingSourceEvolution)
+    sparkSessionForStream.sessionState.conf.enableStreamingSourceEvolution ||
+      StreamingSourceIdentifyingName.collectSources(analyzedPlan)
+        .exists(_._2.toUserProvided.isDefined))
 
   override lazy val logicalPlan: LogicalPlan = {
     assert(queryExecutionThread eq Thread.currentThread,
@@ -487,15 +490,8 @@ class MicroBatchExecution(
     def unnamedSourcesError: Throwable =
       QueryCompilationErrors.unnamedStreamingSourcesWithEnforcementError(
         unnamedSources.mkString("\n"))
-    val checkpointVersion = initialLatestOffsetSeq.map(_._2.version)
-    // Offset log VERSION_1 cannot track sources by name, so the config alone is rejected there.
-    checkpointVersion.filter(_ < OffsetSeqLog.VERSION_2).foreach { version =>
-      if (sparkSessionForStream.sessionState.conf.enableStreamingSourceEvolution) {
-        throw QueryCompilationErrors.cannotEnableSourceEvolutionOnExistingCheckpointError(version)
-      }
-    }
-    (enforceNamedInCheckpoint, checkpointVersion) match {
-      case (Some(false), Some(version)) if namedSources.nonEmpty =>
+    enforceNamedInCheckpoint match {
+      case Some(false) if namedSources.nonEmpty =>
         // A positional checkpoint cannot start tracking sources by name. Spark 4.2 ran the named
         // sources of catalog tables by position, with their metadata in sources/<name>, and a
         // checkpoint written that way keeps running as before.
@@ -506,11 +502,11 @@ class MicroBatchExecution(
             StreamingUtils.getMetadataPath(name, new AtomicLong(0L), resolvedCheckpointRoot)))
         }
         if (!writtenUnderNames) {
-          throw QueryCompilationErrors.cannotEnableSourceEvolutionOnExistingCheckpointError(version)
+          throw QueryCompilationErrors.cannotEnableSourceEvolutionOnExistingCheckpointError()
         }
       case _ if namedSources.nonEmpty && unnamedSources.nonEmpty =>
         throw unnamedSourcesError
-      case (Some(true), _) if unnamedSources.nonEmpty =>
+      case Some(true) if unnamedSources.nonEmpty =>
         throw QueryCompilationErrors.cannotDisableSourceEvolutionOnExistingCheckpointError()
       case _ if enforceNamed && unnamedSources.nonEmpty =>
         throw unnamedSourcesError

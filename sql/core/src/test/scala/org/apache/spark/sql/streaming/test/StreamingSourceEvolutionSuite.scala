@@ -27,7 +27,9 @@ import org.mockito.Mockito._
 import org.scalatest.Tag
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, OffsetSeqLog}
+import org.apache.spark.sql.catalyst.streaming.UserProvided
+import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, OffsetSeq, OffsetSeqLog}
+import org.apache.spark.sql.execution.streaming.runtime.{StreamingQueryWrapper, StreamingRelation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{StreamingQuery, StreamingQueryException, StreamTest}
 import org.apache.spark.sql.streaming.Trigger._
@@ -198,17 +200,17 @@ class StreamingSourceEvolutionSuite extends StreamTest {
     assert(union.isStreaming, "Union should be streaming")
   }
 
-  test("without enforcement - naming sources throws error") {
+  test("without enforcement - naming a source keeps its name") {
     withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "false") {
-      checkError(
-        exception = intercept[AnalysisException] {
-          spark.readStream
-            .format("org.apache.spark.sql.streaming.test")
-            .name("mySource")
-            .load()
-        },
-        condition = "STREAMING_QUERY_EVOLUTION_ERROR.SOURCE_NAMING_NOT_SUPPORTED",
-        parameters = Map("name" -> "mySource"))
+      val df = spark.readStream
+        .format("org.apache.spark.sql.streaming.test")
+        .name("mySource")
+        .load()
+
+      val sourceNames = df.queryExecution.analyzed.collect {
+        case r: StreamingRelation => r.sourceIdentifyingName
+      }
+      assert(sourceNames === Seq(UserProvided("mySource")))
     }
   }
 
@@ -581,7 +583,7 @@ class StreamingSourceEvolutionSuite extends StreamTest {
         checkError(
           exception = startExpectingFailure(testSource(Some("source1")), checkpointLocation),
           condition = "STREAMING_QUERY_EVOLUTION_ERROR.CANNOT_ENABLE_ON_EXISTING_CHECKPOINT",
-          parameters = Map("existingVersion" -> version.toString))
+          parameters = Map.empty)
       }
       verifyNoSourceCreated()
     }
@@ -606,32 +608,27 @@ class StreamingSourceEvolutionSuite extends StreamTest {
         }
       }
 
-      // Naming a source needs the config, which a v1 checkpoint rejects.
-      withSQLConf(SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key -> "2") {
-        runSqlQuery("SELECT * FROM STREAM legacy_named_source")
-      }
+      runSqlQuery("SELECT * FROM STREAM legacy_named_source")
       // Spark 4.2 ran a catalog table named by IDENTIFIED BY by position, with the source
       // metadata in sources/<name>.
       assert(new File(checkpointDir, "sources/0").renameTo(new File(checkpointDir, "sources/src")))
       sql("INSERT INTO legacy_named_source VALUES (2)")
 
-      withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
-        val e = intercept[StreamingQueryException] {
-          runSqlQuery("SELECT * FROM STREAM legacy_named_source IDENTIFIED BY other")
-        }
-        checkError(
-          exception = e.cause.asInstanceOf[AnalysisException],
-          condition = "STREAMING_QUERY_EVOLUTION_ERROR.CANNOT_ENABLE_ON_EXISTING_CHECKPOINT",
-          parameters = Map("existingVersion" -> "2"))
-        assert(!new File(checkpointDir, "sources/other").exists())
-
-        runSqlQuery("SELECT * FROM STREAM legacy_named_source IDENTIFIED BY src")
+      val e = intercept[StreamingQueryException] {
+        runSqlQuery("SELECT * FROM STREAM legacy_named_source IDENTIFIED BY other")
       }
+      checkError(
+        exception = e.cause.asInstanceOf[AnalysisException],
+        condition = "STREAMING_QUERY_EVOLUTION_ERROR.CANNOT_ENABLE_ON_EXISTING_CHECKPOINT",
+        parameters = Map.empty)
+      assert(!new File(checkpointDir, "sources/other").exists())
+
+      runSqlQuery("SELECT * FROM STREAM legacy_named_source IDENTIFIED BY src")
       checkAnswer(spark.read.parquet(outputDir.getCanonicalPath), Seq(Row(1), Row(2)))
       val offsetLog = new OffsetSeqLog(spark, s"${checkpointDir.getCanonicalPath}/offsets")
       val (latestBatchId, latestOffsets) = offsetLog.getLatest().get
       assert(latestBatchId === 1)
-      assert(latestOffsets.asInstanceOf[OffsetMap].offsetsMap.keySet === Set("0"))
+      assert(latestOffsets.version === 1)
     }
   }
 
@@ -648,6 +645,101 @@ class StreamingSourceEvolutionSuite extends StreamTest {
         parameters = Map("sourceInfo" -> "Leaf position 1 - dummySource"))
     }
     verifyNoSourceCreated()
+  }
+
+  // ==================================
+  // Source Naming Without Config Tests
+  // ==================================
+
+  test("named source without the config - new query uses source evolution") {
+    LastOptions.clear()
+    val checkpointLocation = new Path(newMetadataDir)
+    runQuery(testSource(Some("source1")), checkpointLocation)
+
+    verifySourcePath(checkpointLocation, "source1")
+    val offsetSeq = offsetLogAt(checkpointLocation).get(0).get
+    assert(offsetSeq.version === 2)
+    assert(offsetSeq.asInstanceOf[OffsetMap].offsetsMap.keySet === Set("source1"))
+    assert(offsetSeq.metadataOpt.get.conf(
+      SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key) === "true")
+    assert(!spark.sessionState.conf.enableStreamingSourceEvolution)
+  }
+
+  test("named source without the config - restart keeps source evolution") {
+    val checkpointLocation = new Path(newMetadataDir)
+    runQuery(testSource(Some("source1")), checkpointLocation)
+
+    LastOptions.clear()
+    val q = startQuery(testSource(Some("source1")), checkpointLocation)
+    try {
+      q.processAllAvailable()
+      val querySession = q.asInstanceOf[StreamingQueryWrapper].streamingQuery.sparkSessionForStream
+      assert(querySession.sessionState.conf.enableStreamingSourceEvolution)
+    } finally {
+      q.stop()
+    }
+    verifySourcePath(checkpointLocation, "source1")
+
+    LastOptions.clear()
+    checkError(
+      exception = startExpectingFailure(testSource(None), checkpointLocation),
+      condition = "STREAMING_QUERY_EVOLUTION_ERROR.CANNOT_DISABLE_ON_EXISTING_CHECKPOINT",
+      parameters = Map.empty)
+    verifyNoSourceCreated()
+  }
+
+  test("named source without the config - unnamed query in the same session is unaffected") {
+    runQuery(testSource(Some("source1")), new Path(newMetadataDir))
+
+    LastOptions.clear()
+    val checkpointLocation = new Path(newMetadataDir)
+    runQuery(testSource(None), checkpointLocation)
+
+    verifySourcePath(checkpointLocation, "0")
+    val offsetSeq = offsetLogAt(checkpointLocation).get(0).get
+    assert(offsetSeq.isInstanceOf[OffsetSeq])
+    assert(offsetSeq.metadataOpt.get.conf(
+      SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key) === "false")
+  }
+
+  test("named source without the config - unnamed source in the same query is rejected") {
+    LastOptions.clear()
+    checkError(
+      exception = startExpectingFailure(
+        testSource(Some("source1")).union(testSource(None)), new Path(newMetadataDir)),
+      condition = "STREAMING_QUERY_EVOLUTION_ERROR.UNNAMED_STREAMING_SOURCES_WITH_ENFORCEMENT",
+      parameters = Map("sourceInfo" -> "Leaf position 1 - dummySource"))
+    verifyNoSourceCreated()
+  }
+
+  test("SQL IDENTIFIED BY without the config - new query uses source evolution") {
+    withTable("named_sql_source") {
+      sql("CREATE TABLE named_sql_source (id INT) USING parquet")
+      sql("INSERT INTO named_sql_source VALUES (1)")
+      val checkpointLocation = new Path(newMetadataDir)
+      runQuery(
+        sql("SELECT * FROM STREAM named_sql_source IDENTIFIED BY src"), checkpointLocation)
+
+      val offsetSeq = offsetLogAt(checkpointLocation).get(0).get
+      assert(offsetSeq.asInstanceOf[OffsetMap].offsetsMap.keySet === Set("src"))
+      assert(offsetSeq.metadataOpt.get.conf(
+        SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key) === "true")
+    }
+  }
+
+  test("SQL IDENTIFIED BY without the config - unnamed source in the same query is rejected") {
+    withTable("named_sql_source", "unnamed_sql_source") {
+      sql("CREATE TABLE named_sql_source (id INT) USING parquet")
+      sql("CREATE TABLE unnamed_sql_source (id INT) USING parquet")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT * FROM STREAM named_sql_source IDENTIFIED BY src " +
+            "UNION ALL SELECT * FROM STREAM unnamed_sql_source")
+        },
+        condition = "STREAMING_QUERY_EVOLUTION_ERROR.UNNAMED_STREAMING_SOURCES_WITH_ENFORCEMENT",
+        parameters = Map(
+          "sourceInfo" -> "Leaf position 1 - spark_catalog.default.unnamed_sql_source"))
+    }
   }
 
   // ==============
@@ -692,6 +784,10 @@ class StreamingSourceEvolutionSuite extends StreamTest {
       startQuery(df, checkpointLocation).processAllAvailable()
     }
     e.cause.asInstanceOf[AnalysisException]
+  }
+
+  private def offsetLogAt(checkpointLocation: Path): OffsetSeqLog = {
+    new OffsetSeqLog(spark, makeQualifiedPath(checkpointLocation.toString).toString + "/offsets")
   }
 
   private def verifyNoSourceCreated(): Unit = {

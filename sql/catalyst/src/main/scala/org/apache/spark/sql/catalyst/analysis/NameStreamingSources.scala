@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.streaming.{FlowAssigned, HasStreamingSourceIdentifyingName, Unassigned, UserProvided}
+import org.apache.spark.sql.catalyst.streaming.{FlowAssigned, HasStreamingSourceIdentifyingName, StreamingSourceIdentifyingName, Unassigned, UserProvided}
 import org.apache.spark.sql.catalyst.trees.TreePattern.NAMED_STREAMING_RELATION
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
@@ -41,8 +41,9 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  * - Flow-assigned names (from DLT context) are preserved
  * - Unassigned sources remain unassigned and will be auto-numbered later in MicroBatchExecution
  *
- * When `spark.sql.streaming.queryEvolution.enableSourceEvolution` is enabled,
- * all sources must be explicitly named (throws error if any Unassigned sources found).
+ * When any source has a user-provided name, or
+ * `spark.sql.streaming.queryEvolution.enableSourceEvolution` is enabled, all sources must be
+ * explicitly named (throws error if any Unassigned sources found).
  */
 object NameStreamingSources extends Rule[LogicalPlan] {
 
@@ -117,23 +118,25 @@ object NameStreamingSources extends Rule[LogicalPlan] {
     }
   }
 
+  private def hasUserProvidedName(plan: LogicalPlan): Boolean = {
+    StreamingSourceIdentifyingName.collectSources(plan).exists(_._2.toUserProvided.isDefined)
+  }
+
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (!plan.isStreaming) {
       plan
-    } else if (conf.enableStreamingSourceEvolution) {
+    } else if (conf.enableStreamingSourceEvolution || hasUserProvidedName(plan)) {
       // Feature enabled - propagate names to streaming sources.
       checkSourceNamingEnforcement(plan)
       propagateSourceNames(plan)
     } else {
       // Feature disabled - unwrap NamedStreamingRelation nodes without propagating names.
-      // Error if any source has an explicitly assigned name since the feature is disabled.
+      // Error if any source has a flow-assigned name since the feature is disabled.
       // Only unwrap when child is resolved - this allows FindDataSourceTable to resolve
       // UnresolvedCatalogRelation to StreamingRelation before we unwrap.
       plan.resolveOperatorsWithPruning(_.containsPattern(NAMED_STREAMING_RELATION)) {
         case NamedStreamingRelation(child, Unassigned) if child.resolved =>
           child
-        case NamedStreamingRelation(_, UserProvided(name)) =>
-          throw QueryCompilationErrors.streamingSourceNamingNotSupportedError(name)
         case NamedStreamingRelation(_, FlowAssigned(name)) =>
           throw QueryCompilationErrors.streamingSourceNamingNotSupportedError(name)
       }

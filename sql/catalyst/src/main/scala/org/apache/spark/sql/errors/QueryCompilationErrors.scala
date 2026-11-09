@@ -2759,10 +2759,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("names" -> duplicateNames.mkString(", ")))
   }
 
-  def cannotEnableSourceEvolutionOnExistingCheckpointError(existingVersion: Int): Throwable = {
+  def cannotEnableSourceEvolutionOnExistingCheckpointError(): Throwable = {
     new AnalysisException(
       errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.CANNOT_ENABLE_ON_EXISTING_CHECKPOINT",
-      messageParameters = Map("existingVersion" -> existingVersion.toString))
+      messageParameters = Map.empty)
   }
 
   def cannotDisableSourceEvolutionOnExistingCheckpointError(): Throwable = {

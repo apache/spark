@@ -8223,7 +8223,7 @@
       },
       "CANNOT_ENABLE_ON_EXISTING_CHECKPOINT" : {
         "message" : [
-          "Cannot enable streaming source evolution on a checkpoint that was created without it. The existing checkpoint uses offset log format version <existingVersion>, which does not support the named source tracking required by streaming source evolution. To use source evolution, start the query with a fresh checkpoint."
+          "Cannot enable streaming source evolution on a checkpoint that was created without it. The query names its streaming sources, but the checkpoint tracks them by position. To use source evolution, start the query with a fresh checkpoint."
         ]
       },
       "CONTINUOUS_PROCESSING_NOT_SUPPORTED" : {
@@ -8248,7 +8248,7 @@
       },
       "SOURCE_NAMING_NOT_SUPPORTED" : {
         "message" : [
-          "Streaming source naming is not supported. Source name '<name>' was provided but the feature is disabled. Please enable the feature by setting spark.sql.streaming.queryEvolution.enableSourceEvolution to true."
+          "Streaming source naming is not supported for the flow-assigned source name '<name>', because streaming source evolution is not enabled for the query. Flow-assigned names take effect only when spark.sql.streaming.queryEvolution.enableSourceEvolution is true."
         ]
       },
       "UNNAMED_STREAMING_SINKS_WITH_ENFORCEMENT" : {
@@ -8258,7 +8258,7 @@
       },
       "UNNAMED_STREAMING_SOURCES_WITH_ENFORCEMENT" : {
         "message" : [
-          "All streaming sources must be named when spark.sql.streaming.queryEvolution.enableSourceEvolution is enabled. Unnamed sources found: <sourceInfo>. Use the name() method to assign names to all streaming sources."
+          "All streaming sources must be named when any source in the query is named, or when spark.sql.streaming.queryEvolution.enableSourceEvolution is enabled. Unnamed sources found: <sourceInfo>. Name every streaming source with the name() method or IDENTIFIED BY."
         ]
       }
     },
