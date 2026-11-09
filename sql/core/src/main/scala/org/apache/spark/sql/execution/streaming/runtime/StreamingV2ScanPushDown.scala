@@ -25,9 +25,9 @@ import com.google.common.cache.{Cache, CacheBuilder}
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, LogKeys}
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.expressions.{AliasHelper, And, Attribute, AttributeMap, AttributeReference, AttributeSet, Cast, EqualNullSafe, EqualTo, Expression, ExpressionSet, ExprUtils, Generator, Literal, Or, OuterReference, PredicateHelper, SubqueryExpression, Unevaluable}
+import org.apache.spark.sql.catalyst.expressions.{AliasHelper, And, Attribute, AttributeMap, AttributeReference, AttributeSet, Cast, EqualNullSafe, EqualTo, Expression, ExpressionSet, ExprUtils, Generator, LeafExpression, Literal, NamedExpression, Or, OuterReference, PredicateHelper, SubqueryExpression, Unevaluable}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.optimizer.{CollapseProject, InferFiltersFromConstraints, InferFiltersFromGenerate, ReplaceExpressions}
@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, CTERelationDef, Fi
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, RUNTIME_REPLACEABLE}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{truncatedString, ArrayData, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.{truncatedString, ArrayData, CharVarcharUtils, MapData}
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
@@ -44,10 +44,10 @@ import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
-import org.apache.spark.sql.execution.datasources.v2.{PushDownUtils, StreamingDataSourceV2ScanRelation}
+import org.apache.spark.sql.execution.datasources.v2.{PushDownUtils, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetSeqMetadata, OffsetSeqMetadataBase}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{AnyTimestampNanoType, AnyTimeType, ArrayType, BinaryType, BooleanType, DataType, DatetimeType, DateType, DayTimeIntervalType, DecimalType, DoubleType, FloatType, IntegralType, StringType, StructType, TimestampNTZType, TimestampType, TimeType, VariantType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{AnyTimestampNanoType, AnyTimeType, ArrayType, BinaryType, BooleanType, DataType, DatetimeType, DateType, DayTimeIntervalType, DecimalType, DoubleType, FloatType, IntegralType, MapType, StringType, StructType, TimestampNTZType, TimestampType, TimeType, VariantType, YearMonthIntervalType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
@@ -98,8 +98,7 @@ private[sql] object StreamingV2ScanPushDown
      */
     def filters: Seq[Expression] = {
       occurrenceFilters.map(_.takeWhile(isPushable)).reduceOption { (left, right) =>
-        // As `ExpressionSet` compares them, which tells 0.0 from -0.0, unlike `semanticEquals`.
-        left.zip(right).takeWhile { case (l, r) => ExpressionSet(Seq(l)).contains(r) }.map(_._1)
+        left.zip(right).takeWhile { case (l, r) => exact(l).semanticEquals(exact(r)) }.map(_._1)
       }.getOrElse(Nil)
     }
 
@@ -112,8 +111,8 @@ private[sql] object StreamingV2ScanPushDown
       occurrenceFilters.map(_.filter(isPushable)) match {
         case Seq() => Nil
         case first +: others =>
-          val sets = others.map(ExpressionSet(_))
-          first.filter(filter => sets.forall(_.contains(filter)))
+          val sets = others.map(exactSet)
+          first.filter(filter => sets.forall(_.contains(exact(filter))))
       }
     }
   }
@@ -121,11 +120,32 @@ private[sql] object StreamingV2ScanPushDown
   /**
    * Returns whether the scan of a relation may get `filter`, a deterministic filter over the
    * relation: if it has no subquery and no placeholder, whose value each micro-batch gets on its
-   * own (see `forStartup`).
+   * own (see `forStartup`), and if all its columns are of types whose equal values are the same
+   * (see `hasExactEquality`), not floating types or strings of a collation that is not binary.
+   * The optimizer of a micro-batch may rewrite a filter with the values that its plan gives to
+   * the columns of the filter, which the check of the micro-batches then gives to them too (see
+   * `impliedBy`), and it only can for such columns: a micro-batch that has a pushed filter on
+   * other columns rewritten fails, and so do the next ones, which have the same plan.
    */
   private def isPushable(filter: Expression): Boolean = {
-    !SubqueryExpression.hasSubquery(filter) && !filter.exists(_.isInstanceOf[StartupValue])
+    !SubqueryExpression.hasSubquery(filter) && !filter.exists(_.isInstanceOf[StartupValue]) &&
+      filter.references.forall(column => hasExactEquality(column.dataType))
   }
+
+  /**
+   * Returns `expression` for the comparisons of filters, with its literals of floating values,
+   * also in structs, arrays and maps, replaced by placeholders of their bits: `Literal.equals`
+   * finds 0.0 and -0.0 equal, while filters that only differ in the sign of a zero may keep
+   * different rows, as `atan2(0.0, x) > 0` and `atan2(-0.0, x) > 0` do for a negative `x`. The
+   * NaN values have the same bits, as Spark evaluates them alike.
+   */
+  private def exact(expression: Expression): Expression = expression.transformUp {
+    case literal: Literal if hasFloating(literal.dataType) =>
+      ExactLiteral(exactValue(literal.value, literal.dataType), literal.dataType)
+  }
+
+  // The set of `filters` that `exact` compares.
+  private def exactSet(filters: Seq[Expression]): ExpressionSet = ExpressionSet(filters.map(exact))
 
   /**
    * The scan of a streaming source, and its stream.
@@ -140,7 +160,16 @@ private[sql] object StreamingV2ScanPushDown
       scan: Scan,
       stream: SparkDataStream,
       scanOutput: Option[Seq[AttributeReference]],
-      pushedFilters: Seq[Expression])
+      pushedFilters: Seq[Expression]) {
+
+    /** The relation of the scan in the plan of the query, for `relation` with `output`. */
+    def toRelation(
+        relation: StreamingDataSourceV2Relation,
+        output: Seq[AttributeReference]): StreamingDataSourceV2ScanRelation = {
+      StreamingDataSourceV2ScanRelation(relation, scan, output, stream, scanOutput = scanOutput,
+        pushedFilters = pushedFilters)
+    }
+  }
 
   /**
    * Returns the name of a streaming source in the errors of its scan: the parts of its identifier,
@@ -158,12 +187,13 @@ private[sql] object StreamingV2ScanPushDown
   /**
    * Returns the columns that each streaming relation of Data Source V2 needs to read, and the
    * filters that its scan may get, from `plan` optimized as the micro-batches are (see
-   * `forStartup`), without the filters that the optimizer infers from the constraints of the plan
-   * or from generators, so that a scan only gets the filters that the query applies to its own
-   * source. A relation without an entry reads all its columns with no filter, as all do if the
-   * optimization fails, unless `spark.sql.streaming.v2ScanPushDown.failOnOptimizationError` makes
-   * the failure fail the query, as in the tests. The plan is not optimized when no source prunes
-   * its columns and the plan has no condition, since nothing could be pushed down.
+   * `forStartup`), and, when a source may get filters, without the filters that the optimizer
+   * infers from the constraints of the plan or from generators, so that a scan only gets the
+   * filters that the query applies to its own source (see `startupConf`). A relation without an
+   * entry reads all its columns with no filter, as all do if the optimization fails, unless
+   * `spark.sql.streaming.v2ScanPushDown.failOnOptimizationError` makes the failure fail the query,
+   * as in the tests. The plan is not optimized when nothing could be pushed down: when no source
+   * prunes its columns, and no source gets filters or the plan has no condition.
    *
    * @param session the session of the stream
    * @param offsetLogMetadata the metadata of the last entry of the offset log of the query, if any
@@ -189,18 +219,7 @@ private[sql] object StreamingV2ScanPushDown
       session: SparkSession,
       plan: LogicalPlan,
       offsetLogMetadata: Option[OffsetSeqMetadataBase]): Map[StreamingRelationV2, Reads] = {
-    val conf = session.sessionState.conf.clone()
-    offsetLogMetadata.foreach(OffsetSeqMetadata.setConfWithoutLogging(_, conf))
-    conf.setConf(SQLConf.CBO_ENABLED, false)
-    withoutInferredFilters(conf)
-    val prunesColumns = conf.streamingV2ColumnPruningEnabled && plan.exists {
-      case relation: StreamingRelationV2 =>
-        relation.table.capabilities().contains(TableCapability.STREAMING_COLUMN_PRUNING)
-      case _ => false
-    }
-    if (!prunesColumns && !mayHaveConditions(plan)) {
-      return Map.empty
-    }
+    val conf = startupConf(session, plan, offsetLogMetadata).getOrElse(return Map.empty)
     session.withActive {
       SQLConf.withExistingConf(conf) {
         // The plan of a micro-batch is normalized before it is optimized, see `QueryExecution`.
@@ -209,10 +228,10 @@ private[sql] object StreamingV2ScanPushDown
         val planned = forPlanning(optimized)
         val occurrences = mutable.ArrayBuffer.empty[(StreamingRelationV2, Reads)]
         // Visits the nodes as the planner plans them: the projections and the filters over a
-        // relation are planned with its scan, and the other nodes on their own. This must match
-        // the nodes that `DataSourceV2Strategy` plans the scans of streaming relations with.
+        // relation are planned with its scan, and the other nodes on their own, with the same
+        // match as `DataSourceV2Strategy` (see `ScanOfStream`).
         def visit(node: LogicalPlan): Unit = node match {
-          case PhysicalOperation(project, filters, relation: StreamingRelationV2) =>
+          case ScanOfStream(project, filters, relation: StreamingRelationV2) =>
             occurrences += relation -> Reads(
               AttributeSet((project ++ filters).flatMap(_.references)),
               Seq(filters.takeWhile(_.deterministic)))
@@ -242,6 +261,41 @@ private[sql] object StreamingV2ScanPushDown
     }
   }
 
+  /**
+   * Returns the configuration that `plan` is optimized with when the query starts: the
+   * configuration of the micro-batches, with the configurations of the offset log of the query
+   * pinned, without the cost-based optimization, and without the rules that infer filters when a
+   * source may get filters. The micro-batches infer filters from the constraints of their plans,
+   * such as a filter on a source from the filters of another one through a join, which may vanish
+   * in a micro-batch where the other source has no data. None when nothing could be pushed down.
+   * Visible for tests.
+   */
+  private[sql] def startupConf(
+      session: SparkSession,
+      plan: LogicalPlan,
+      offsetLogMetadata: Option[OffsetSeqMetadataBase]): Option[SQLConf] = {
+    val conf = session.sessionState.conf.clone()
+    offsetLogMetadata.foreach(OffsetSeqMetadata.setConfWithoutLogging(_, conf))
+    conf.setConf(SQLConf.CBO_ENABLED, false)
+    def hasSourceWith(capability: TableCapability): Boolean = plan.exists {
+      case relation: StreamingRelationV2 => relation.table.capabilities().contains(capability)
+      case _ => false
+    }
+    val prunesColumns = conf.streamingV2ColumnPruningEnabled &&
+      hasSourceWith(TableCapability.STREAMING_COLUMN_PRUNING)
+    val pushesFilters = conf.streamingV2FilterPushdownEnabled &&
+      hasSourceWith(TableCapability.STREAMING_FILTER_PUSHDOWN)
+    if (!prunesColumns && !(pushesFilters && mayHaveConditions(plan))) {
+      None
+    } else if (pushesFilters) {
+      // Also for a plan without conditions, to which the optimizer may add filters that it infers,
+      // such as from a generator.
+      Some(withoutInferredFilters(conf))
+    } else {
+      Some(conf)
+    }
+  }
+
   // `conf` without the rules of the optimizer that infer filters from the constraints of a plan or
   // from its generators.
   private def withoutInferredFilters(conf: SQLConf): SQLConf = {
@@ -249,6 +303,16 @@ private[sql] object StreamingV2ScanPushDown
       (conf.optimizerExcludedRules.toSeq ++
         Seq(InferFiltersFromConstraints.ruleName, InferFiltersFromGenerate.ruleName)).mkString(","))
     conf
+  }
+
+  /**
+   * Matches the projections and the filters over a relation that the planner plans with the scan
+   * of the relation, as `DataSourceV2Strategy` does for the scans of streaming sources with this
+   * extractor, so that what a scan gets when the query starts is what its micro-batches plan.
+   */
+  private[sql] object ScanOfStream {
+    def unapply(plan: LogicalPlan): Option[(Seq[NamedExpression], Seq[Expression], LogicalPlan)] =
+      PhysicalOperation.unapply(plan)
   }
 
   /**
@@ -457,10 +521,10 @@ private[sql] object StreamingV2ScanPushDown
             DataSourceStrategy.normalizeExprs(r.filtersInAnyOrder, output).filter(gets)
           case _ =>
             val leading = DataSourceStrategy.normalizeExprs(r.filters, output).takeWhile(gets)
-            val pushed = ExpressionSet(leading)
+            val pushed = exactSet(leading)
             leading ++ DataSourceStrategy.normalizeExprs(r.filtersInAnyOrder, output).filter {
-              filter => !pushed.contains(filter) && ExprUtils.canEvaluateUnconditionally(filter) &&
-                gets(filter)
+              filter => !pushed.contains(exact(filter)) &&
+                ExprUtils.canEvaluateUnconditionally(filter) && gets(filter)
             }
         }
       }
@@ -488,8 +552,8 @@ private[sql] object StreamingV2ScanPushDown
       }
       builder.build()
     }
-    // The columns that the scan node of `scan`, a scan of all the columns, outputs.
-    def outputOfAllColumns(scan: Scan): Seq[AttributeReference] = {
+    // The columns that the scan node of a scan of all the columns outputs, given its read schema.
+    def outputOfAllColumns(readSchema: Try[StructType]): Seq[AttributeReference] = {
       if (returnsReadSchema) {
         // The readers of the stream return the columns of the read schema, so a read schema that
         // does not follow the relation fails the query when it starts: the scan node cannot
@@ -504,7 +568,7 @@ private[sql] object StreamingV2ScanPushDown
             log"node outputs the columns of the relation, as the column pruning is disabled.")
           output
         }
-        Try(readOutput(scan.readSchema(), output, output)) match {
+        readSchema.map(readOutput(_, output, output)) match {
           case Success(Right(columns)) => columns
           case Success(Left(reason)) => invalid(reason, null)
           case Failure(e) => invalid(s"could not be read: $e", e)
@@ -517,21 +581,25 @@ private[sql] object StreamingV2ScanPushDown
     // its scan node outputs.
     def scanOfAllColumns(builder: ScanBuilder): (Scan, Seq[AttributeReference]) = {
       val scan = build(builder, output, Nil)
-      scan -> outputOfAllColumns(scan)
+      scan -> outputOfAllColumns(Try(scan.readSchema()))
     }
-    // The scan of `columns` with `filters` and the columns that its scan node outputs, or why its
-    // read schema does not follow `SupportsPushDownRequiredColumns`. A scan of all the columns
-    // with filters is checked as one with no filter, outside of the fallback (see `firstScan`), as
-    // its read schema fails the query in the same way: the columns of such a scan are None.
+    // The scan of `columns` with `filters`, and the columns that its scan node outputs, or why its
+    // read schema does not follow `SupportsPushDownRequiredColumns`. The read schema of a scan of
+    // all the columns with filters is read here, in the fallback, as the filters may make it fail,
+    // but it is checked outside of the fallback (see `firstScan`), as one with no filter is, since
+    // a read schema that does not follow the relation fails the query in the same way.
     def scanWith(
         builder: ScanBuilder,
         columns: Seq[AttributeReference],
-        filters: Seq[Expression]): Either[String, (Scan, Option[Seq[AttributeReference]])] = {
+        filters: Seq[Expression]): Either[String, (Scan, () => Seq[AttributeReference])] = {
       val scan = build(builder, columns, filters)
-      if (columns.length == output.length) {
-        Right(scan -> None)
+      if (columns.length < output.length) {
+        readOutput(scan.readSchema(), output, columns).map(read => scan -> (() => read))
+      } else if (returnsReadSchema) {
+        val readSchema = scan.readSchema()
+        Right(scan -> (() => outputOfAllColumns(Success(readSchema))))
       } else {
-        readOutput(scan.readSchema(), output, columns).map(columns => scan -> Some(columns))
+        Right(scan -> (() => output))
       }
     }
     // The columns and the filters of a scan, in the warnings.
@@ -550,7 +618,7 @@ private[sql] object StreamingV2ScanPushDown
         case (columns, filters) +: rest =>
           val (reason, cause, next) = Try(scanWith(builder, columns, filters)) match {
             case Success(Right((scan, scanOutput))) =>
-              return (scan -> scanOutput.getOrElse(outputOfAllColumns(scan))) -> filters
+              return (scan -> scanOutput()) -> filters
             // The read schema of the next scans of these columns would not follow them either.
             case Success(Left(reason)) =>
               (s"its read schema $reason", None, rest.filterNot(_._1 == columns))
@@ -559,9 +627,9 @@ private[sql] object StreamingV2ScanPushDown
           val (nextColumns, nextFilters) = next.headOption.getOrElse(output -> Nil)
           val message = log"The scan of the streaming table " +
             log"${MDC(LogKeys.STREAMING_TABLE, table)} could not be built with " +
-            log"${MDC(LogKeys.OLD_VALUE, pushdowns(columns, filters))}: " +
+            log"${MDC(LogKeys.FAILED_PUSHDOWNS, pushdowns(columns, filters))}: " +
             log"${MDC(LogKeys.REASON, reason)}. Trying " +
-            log"${MDC(LogKeys.NEW_VALUE, pushdowns(nextColumns, nextFilters))} next."
+            log"${MDC(LogKeys.NEXT_PUSHDOWNS, pushdowns(nextColumns, nextFilters))} next."
           cause match {
             case Some(e) => logWarning(message, e)
             case None => logWarning(message)
@@ -649,16 +717,17 @@ private[sql] object StreamingV2ScanPushDown
       case _ => false
     }
     if (hasPushedFilters) {
-      // The configuration of the micro-batch, without the rules that infer filters, which would
-      // add conditions to those that `impliedBy` gets from the optimizer.
-      lazy val optimizerConf = withoutInferredFilters(session.sessionState.conf.clone())
       // The conjuncts of `condition` once the optimizer of the micro-batch optimizes a filter of
-      // `relation` with it, none if it folds into true, which the next micro-batches reuse.
+      // `relation` with it, none if it folds into true, which the next micro-batches reuse. It
+      // runs with a tracker of its own, so that its rules do not count as those of the
+      // optimization of the micro-batch.
       def optimized(relation: StreamingDataSourceV2ScanRelation)(
           condition: Expression): Option[Seq[Expression]] = rewrites(condition) {
-        SQLConf.withExistingConf(optimizerConf) {
-          session.sessionState.optimizer.execute(
-            Filter(condition, relation.copy(pushedFilters = Nil)))
+        QueryPlanningTracker.withTracker(new QueryPlanningTracker) {
+          SQLConf.withExistingConf(rewrites.optimizerConf(session)) {
+            session.sessionState.optimizer.execute(
+              Filter(condition, relation.copy(pushedFilters = Nil)))
+          }
         } match {
           case Filter(optimizedCondition, _: StreamingDataSourceV2ScanRelation) =>
             Some(splitConjunctivePredicates(optimizedCondition))
@@ -684,17 +753,28 @@ private[sql] object StreamingV2ScanPushDown
 
   /**
    * The conditions that the optimizer of a micro-batch rewrote for `checkPushedFilters`, by the
-   * condition canonicalized, which a streaming query keeps for its micro-batches: they check the
-   * same filters with the same values, which its optimizer rewrites in the same way. A query that
-   * restarts gets a new one, with the configuration that it restarts with.
+   * condition canonicalized (see `exact`), which a streaming query keeps for its micro-batches:
+   * they check the same filters with the same values, which its optimizer rewrites in the same
+   * way, with the configuration that the first check takes from the session of the query. A query
+   * that restarts gets a new one, with the configuration that it restarts with.
    */
   class PushedFilterRewrites {
     private val rewrites: Cache[Expression, Option[Seq[Expression]]] =
       CacheBuilder.newBuilder().maximumSize(100).build[Expression, Option[Seq[Expression]]]()
+    @volatile private var conf: SQLConf = _
+
+    // The configuration of the micro-batches without the rules that infer filters, which would
+    // add conditions to those that `impliedBy` gets from the optimizer.
+    private[runtime] def optimizerConf(session: SparkSession): SQLConf = {
+      if (conf == null) {
+        conf = withoutInferredFilters(session.sessionState.conf.clone())
+      }
+      conf
+    }
 
     def apply(condition: Expression)(
         rewrite: => Option[Seq[Expression]]): Option[Seq[Expression]] = {
-      val key = condition.canonicalized
+      val key = exact(condition).canonicalized
       Option(rewrites.getIfPresent(key)).getOrElse {
         val rewritten = rewrite
         rewrites.put(key, rewritten)
@@ -749,14 +829,12 @@ private[sql] object StreamingV2ScanPushDown
    * with an equality that it infers through a join, and rewrites the filters with the other rules
    * of the same batch, so that `id > 1` becomes true with `id = 5`, and `(a + b > 3 AND b > 0) OR
    * a > 9` becomes `a + b > 3 OR a > 9` with `b = 1`. Only the columns of the types whose equal
-   * values are the same get values (see `hasExactEquality`): for the floating types, a column
-   * equal to zero is 0.0 or -0.0, so the filter must hold with each, as `floor(d) >= 0` does,
-   * unlike `CAST(d AS STRING) = '0.0'`, and a struct or an array with floating fields or elements
-   * only gets its value if it has no 0.0 or -0.0 in them. A string of a collation that is not
-   * binary gets no value, also where `ConstantPropagation` puts it in a comparison of two columns
-   * of this collation. This may miss that the facts imply a filter, which fails the micro-batch,
-   * but never finds that they imply a filter that they do not imply, as long as the rules of the
-   * optimizer keep what the filters mean.
+   * values are the same get values (see `hasExactEquality`), not those of floating types, as a
+   * column equal to 0.0 may be -0.0, or strings of a collation that is not binary, nor the
+   * structs and arrays that have such values, whose filters are not pushed down (see
+   * `isPushable`). The facts and the filters are compared with `exact`. This may miss that the
+   * facts imply a filter, which fails the micro-batch, but never finds that they imply a filter
+   * that they do not imply, as long as the rules of the optimizer keep what the filters mean.
    */
   private def impliedBy(
       facts: Seq[Expression],
@@ -765,13 +843,15 @@ private[sql] object StreamingV2ScanPushDown
       case Literal(false, BooleanType) | Literal(null, _) => true
       case _ => false
     }
-    val known = ExpressionSet(facts)
-    def holds(condition: Expression): Boolean = known.contains(condition) || (condition match {
-      case TrueLiteral => true
-      case And(left, right) => holds(left) && holds(right)
-      case Or(left, right) => holds(left) || holds(right)
-      case _ => false
-    })
+    val known = exactSet(facts)
+    def holds(condition: Expression): Boolean = {
+      known.contains(exact(condition)) || (condition match {
+        case TrueLiteral => true
+        case And(left, right) => holds(left) && holds(right)
+        case Or(left, right) => holds(left) || holds(right)
+        case _ => false
+      })
+    }
     val values = AttributeMap(facts.collect {
       case EqualTo(column: Attribute, value: Literal) => column -> value
       case EqualTo(value: Literal, column: Attribute) => column -> value
@@ -779,84 +859,74 @@ private[sql] object StreamingV2ScanPushDown
       case EqualNullSafe(value: Literal, column: Attribute) => column -> value
     }.filter { case (column, value) =>
       DataType.equalsIgnoreNullability(column.dataType, value.dataType) &&
-        hasExactEquality(column.dataType) &&
-        (isFloating(column.dataType) || hasNoFloatingZero(value.value, value.dataType))
+        hasExactEquality(column.dataType)
     })
+    // Whether `condition` evaluates to true with the values, which all its columns have.
+    def isTrue(condition: Expression): Boolean =
+      condition.references.forall(values.contains) && Try {
+        condition.transform { case column: Attribute => values(column) }.eval()
+      }.toOption.contains(true)
     filter => noRow || holds(filter) || {
       val columns = filter.references.toSeq.filter(values.contains)
-      // The columns of the filter that are equal to zero, which is 0.0 or -0.0 in each row.
-      val zeros = columns.filter(column => isFloatingZero(values(column))).toSet
-      val zeroColumns = AttributeSet(zeros)
-      columns.nonEmpty && zeros.size <= 3 && zeros.subsets().forall { negative =>
-        val negativeZeros = AttributeSet(negative)
-        val valuesOfCase = AttributeMap(columns.map { column =>
-          column -> (if (zeroColumns.contains(column)) {
-            floatingZero(column.dataType, negativeZeros.contains(column))
-          } else {
-            values(column)
-          })
-        })
-        // Whether `condition` evaluates to true with these values, which all its columns have.
-        def isTrue(condition: Expression): Boolean =
-          condition.references.forall(valuesOfCase.contains) && Try {
-            condition.transform { case column: Attribute => valuesOfCase(column) }.eval()
-          }.toOption.contains(true)
-        isTrue(filter) || {
-          val equalities = columns.map { column =>
-            val value = valuesOfCase(column)
-            if (value.value == null) EqualNullSafe(column, value) else EqualTo(column, value)
-          }
-          optimize((equalities :+ filter).reduce(And))
-            .exists(_.forall(condition => holds(condition) || isTrue(condition)))
+      columns.nonEmpty && (isTrue(filter) || {
+        val equalities = columns.map { column =>
+          val value = values(column)
+          if (value.value == null) EqualNullSafe(column, value) else EqualTo(column, value)
         }
-      }
+        optimize((equalities :+ filter).reduce(And))
+          .exists(_.forall(condition => holds(condition) || isTrue(condition)))
+      })
     }
   }
 
   // Whether the values of `dataType` that are equal are the same, so that a column that is equal
-  // to a value has this value in any expression: not the strings that a collation finds equal,
-  // nor the structs and arrays that have such values. The floating types count as such, as
-  // their equal values are the same apart from 0.0 and -0.0, which `impliedBy` tries both ways,
-  // or a struct or an array has none of (see `hasNoFloatingZero`), and NaN values, which Spark
-  // evaluates alike.
+  // to a value has this value in any expression: not those of the floating types, as 0.0 is
+  // equal to -0.0, nor the strings that a collation finds equal, nor the structs and arrays that
+  // have such values.
   private def hasExactEquality(dataType: DataType): Boolean = dataType match {
     case _: IntegralType | _: DecimalType | BooleanType | DateType | TimestampType |
          TimestampNTZType | _: AnyTimestampNanoType | _: TimeType | _: DayTimeIntervalType |
-         _: YearMonthIntervalType | BinaryType | FloatType | DoubleType => true
+         _: YearMonthIntervalType | BinaryType => true
     case string: StringType => string.supportsBinaryEquality
     case struct: StructType => struct.fields.forall(field => hasExactEquality(field.dataType))
     case array: ArrayType => hasExactEquality(array.elementType)
     case _ => false
   }
 
-  // Whether `value`, of `dataType`, has no 0.0 or -0.0 in its fields and elements.
-  private def hasNoFloatingZero(value: Any, dataType: DataType): Boolean = (value, dataType) match {
-    case (double: Double, DoubleType) => double != 0.0
-    case (float: Float, FloatType) => float != 0.0f
-    case (row: InternalRow, struct: StructType) =>
-      struct.fields.indices.forall { i =>
-        row.isNullAt(i) || hasNoFloatingZero(row.get(i, struct(i).dataType), struct(i).dataType)
-      }
-    case (array: ArrayData, ArrayType(elementType, _)) =>
-      (0 until array.numElements()).forall { i =>
-        array.isNullAt(i) || hasNoFloatingZero(array.get(i, elementType), elementType)
-      }
-    case _ => true
-  }
-
-  private def isFloating(dataType: DataType): Boolean =
-    dataType == FloatType || dataType == DoubleType
-
-  private def isFloatingZero(value: Literal): Boolean = value.value match {
-    case double: Double => double == 0.0
-    case float: Float => float == 0.0f
+  private def hasFloating(dataType: DataType): Boolean = dataType.existsRecursively {
+    case FloatType | DoubleType => true
     case _ => false
   }
 
-  // 0.0 or -0.0, of a floating type.
-  private def floatingZero(dataType: DataType, negative: Boolean): Literal = dataType match {
-    case FloatType => Literal(if (negative) -0.0f else 0.0f)
-    case _ => Literal(if (negative) -0.0 else 0.0)
+  // The value of a literal of `dataType` with its floating values as their bits, and its structs,
+  // arrays and maps as sequences, which compare by their values, see `exact`.
+  private def exactValue(value: Any, dataType: DataType): Any = (value, dataType) match {
+    case (null, _) => null
+    case (double: Double, DoubleType) => java.lang.Double.doubleToLongBits(double)
+    case (float: Float, FloatType) => java.lang.Float.floatToIntBits(float)
+    case (row: InternalRow, struct: StructType) =>
+      struct.fields.indices.map { i =>
+        val fieldType = struct(i).dataType
+        if (row.isNullAt(i)) null else exactValue(row.get(i, fieldType), fieldType)
+      }
+    case (array: ArrayData, ArrayType(elementType, _)) =>
+      (0 until array.numElements()).map { i =>
+        if (array.isNullAt(i)) null else exactValue(array.get(i, elementType), elementType)
+      }
+    case (map: MapData, MapType(keyType, valueType, _)) =>
+      exactValue(map.keyArray(), ArrayType(keyType)) ->
+        exactValue(map.valueArray(), ArrayType(valueType))
+    case (bytes: Array[Byte], _) => bytes.toSeq
+    case (other, _) => other
+  }
+
+  /**
+   * Stands for a literal with floating values in the comparisons of filters (see `exact`), which
+   * are never evaluated: `value` has the bits of the floating values.
+   */
+  private case class ExactLiteral(value: Any, dataType: DataType)
+    extends LeafExpression with Unevaluable {
+    override def nullable: Boolean = value == null
   }
 
   /**

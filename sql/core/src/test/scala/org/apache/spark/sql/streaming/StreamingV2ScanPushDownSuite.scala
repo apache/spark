@@ -23,14 +23,15 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 
 import scala.jdk.CollectionConverters._
+import scala.util.{Failure, Success, Try}
 
 import org.apache.logging.log4j.Level
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{DataFrame, Encoder, Encoders, Row}
-import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow}
-import org.apache.spark.sql.catalyst.expressions.{Add, Alias, And, ArrayContains, AttributeSet, Cast, Divide, EqualTo, EvalMode, Expression, Floor, GetStructField, GreaterThan, GreaterThanOrEqual, IsNotNull, LeafExpression, LessThan, Literal, Or, Rand, RLike, ScalarSubquery}
+import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow, StructFilters}
+import org.apache.spark.sql.catalyst.expressions.{Add, Alias, And, ArrayContains, Atan2, AttributeReference, AttributeSet, BoundReference, Cast, Divide, EqualTo, EvalMode, Expression, GetStructField, GreaterThan, IsNotNull, LeafExpression, LessThan, Literal, Or, Predicate => CatalystPredicate, Rand, RLike, ScalarSubquery}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.optimizer.{ColumnPruning, InferFiltersFromConstraints, InferFiltersFromGenerate, PruneFilters}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project, WithCTE}
@@ -48,7 +49,7 @@ import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, MemoryStr
 import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
+import org.apache.spark.sql.internal.connector.{PredicateUtils, SupportsPushDownCatalystFilters}
 import org.apache.spark.sql.sources.{Filter => SourceFilter}
 import org.apache.spark.sql.types.{ArrayType, BooleanType, CharType, DataType, DoubleType, IntegerType, LongType, StringType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -1131,7 +1132,9 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
         assertNotOverSources("> 0"),
         CheckAnswer(Row("x")))
     }
-    // And on a struct key with a double, whose value has no 0.0 or -0.0.
+    // A struct key with a double, and a double key, get their values in the micro-batches too, but
+    // not in their check, as a double equal to 0.0 may be -0.0, so their filters are not pushed
+    // down: the micro-batches fold them in Spark.
     withTable(tbl) {
       createTable(tbl, "k struct<a: double>, v string", filtering)
       sql(s"INSERT INTO $tbl VALUES (named_struct('a', 1.0D), 'x'), " +
@@ -1142,12 +1145,10 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
         .where("sk = named_struct('a', 1.0D)")
       testStream(source.join(static, source("k") === static("sk")).select("v"))(
         ProcessAllAvailable(),
-        assertPushedFilters("GreaterThan(k.a,0.0)"),
+        assertPushedFilters(),
         assertNotOverSources("> 0"),
         CheckAnswer(Row("x")))
     }
-    // Also on a double key, whose value the micro-batch puts where the column is compared: -0.0
-    // compares as 0.0 does.
     withTable(tbl) {
       createTable(tbl, "d double, v string", filtering)
       sql(s"INSERT INTO $tbl VALUES (0.0, 'a'), (CAST('-0.0' AS DOUBLE), 'b'), (1.0, 'c')")
@@ -1155,14 +1156,14 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
       val static = spark.range(0, 1).selectExpr("CAST(id AS DOUBLE) AS x").where("x = 0.0")
       testStream(source.join(static, source("d") === static("x")).select("v"))(
         ProcessAllAvailable(),
-        assertPushedFilters("GreaterThan(d,-1.0)"),
+        assertPushedFilters(),
         assertNotOverSources("> -1.0"),
         CheckAnswer(Row("a"), Row("b")))
     }
   }
 
   test("plan the micro-batches whose optimizer rewrites a pushed filter with an inferred value") {
-    val input = MemoryStream[(Long, String)]
+    val input = new FilteringMemoryStream(spark)
     val table = new FilterStreamTable(input, catalyst = true)
     val source = Dataset.ofRows(spark, StreamingRelationV2(None, table.name(), table,
       CaseInsensitiveStringMap.empty(), DataTypeUtils.toAttributes(table.schema()), None, None,
@@ -1277,7 +1278,10 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
     "pruneColumns" -> (Seq("_1", "_2", "_3") -> Seq("GreaterThan(_3,10)")),
     // Neither works when any pushdown fails the build, so the scan reads all the columns with no
     // filter, as without the pushdowns.
-    "build" -> (Seq("_1", "_2", "_3") -> Nil)
+    "build" -> (Seq("_1", "_2", "_3") -> Nil),
+    // Nor when the read schema cannot be read with any pushdown, also that of the scan of all the
+    // columns with the filters, which the filters may make fail.
+    "readSchema" -> (Seq("_1", "_2", "_3") -> Nil)
   ).foreach { case (failingStep, (columns, filters)) =>
     test(s"read with fewer pushdowns when the scan fails with the pushdowns: $failingStep") {
       val input = new ProjectingMemoryStream(spark)
@@ -1311,7 +1315,7 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
       assert(failed("(columns: _2, _3, filters: none)", s"(columns: all, $filter)") ===
         (failingStep != "pushFilters"), warnings)
       assert(failed(s"(columns: all, $filter)", "(columns: all, filters: none)") ===
-        (failingStep == "build"), warnings)
+        Set("build", "readSchema").contains(failingStep), warnings)
     }
   }
 
@@ -1446,6 +1450,28 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
+  Seq(false, true).foreach { catalyst =>
+    val kind = if (catalyst) "Catalyst" else "V2"
+    test(s"fail a micro-batch whose query no longer applies the filters of a $kind builder") {
+      ChangingValue.values.set(0)
+      val input = new FilteringMemoryStream(spark)
+      val table = new FilterStreamTable(input, catalyst)
+      val df = Dataset.ofRows(spark, StreamingRelationV2(None, table.name(), table,
+        CaseInsensitiveStringMap.empty(), DataTypeUtils.toAttributes(table.schema()), None, None,
+        None)).toDF("id", "payload")
+        .where(col("id") < ExpressionUtils.column(ChangingValue())).select("payload")
+      // The stream drops the rows that fail id < 1, while the plan of the micro-batch would keep
+      // those of id < 2.
+      testStream(df)(
+        StartStream(),
+        AddData(input, (1L, "a")),
+        ExpectFailure[SparkException] { e =>
+          assert(e.asInstanceOf[SparkException].getCondition === "STREAMING_SCAN_FILTERS_CHANGED")
+        })
+      assert(table.pushed.length === 1, table.pushed)
+    }
+  }
+
   test("check that the plan of each micro-batch implies the filters that its scans got") {
     withTable(tbl) {
       createTable(tbl,
@@ -1520,13 +1546,19 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
       val array = Literal.create(ArrayData.toArrayData(Array(1, 2)),
         ArrayType(IntegerType, containsNull = false))
       assert(accepts(ArrayContains(xs, Literal(2)))(Filter(EqualTo(xs, array), _)))
-      // A struct of a double gets its value if it is not 0.0 or -0.0.
-      def structOf(value: Double): Literal = Literal.create(InternalRow(value),
+      // But not a double, as a double equal to 0.0 may be -0.0, nor a struct of a double: the
+      // filters on such columns are not pushed down.
+      assert(!accepts(GreaterThan(d, Literal(1.0)))(Filter(EqualTo(d, Literal(1.5)), _)))
+      val structOf1 = Literal.create(InternalRow(1.0),
         StructType(Seq(StructField("a", DoubleType, nullable = false))))
-      val kd = GetStructField(f, 0, Some("a"))
-      assert(accepts(GreaterThan(kd, Literal(0.0)))(Filter(EqualTo(f, structOf(1.0)), _)))
-      assert(!accepts(EqualTo(Cast(kd, StringType), Literal("0.0")))(
-        Filter(EqualTo(f, structOf(0.0)), _)))
+      assert(!accepts(GreaterThan(GetStructField(f, 0, Some("a")), Literal(0.0)))(
+        Filter(EqualTo(f, structOf1), _)))
+      // A filter that only differs in the sign of a zero is another filter, as atan2(0.0, x) and
+      // atan2(-0.0, x) differ for a negative x.
+      def atan(zero: Double): Expression =
+        GreaterThan(Atan2(Literal(zero), Cast(id, DoubleType)), Literal(0.0))
+      assert(accepts(atan(-0.0))(Filter(atan(-0.0), _)))
+      assert(!accepts(atan(-0.0))(Filter(atan(0.0), _)))
       // And once the optimizer of the micro-batch rewrote it, as it rewrites the plan: the plans
       // below are those that the optimizer makes of the pushed filter with the conditions.
       def optimized(conditions: Expression*)(relation: LogicalPlan): LogicalPlan = {
@@ -1549,15 +1581,6 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
           LessThan(id, Literal(1L)))
         assert(accepts(division)(optimized(EqualTo(id, Literal(0L)), division)))
       }
-      // A double equal to 0.0 is 0.0 or -0.0, so the filter must hold with both, as when the
-      // double is compared, or in its floor, but not in its cast to a string, which is "-0.0" on
-      // some rows. A double equal to another value has this value.
-      val dIsZero = Filter(EqualTo(d, Literal(0.0)), _: LogicalPlan)
-      assert(accepts(GreaterThan(d, Literal(-1.0)))(dIsZero))
-      assert(accepts(GreaterThanOrEqual(Floor(d), Literal(0L)))(dIsZero))
-      assert(!accepts(EqualTo(Cast(d, StringType), Literal("0.0")))(dIsZero))
-      assert(accepts(EqualTo(Cast(d, StringType), Literal("1.5")))(
-        Filter(EqualTo(d, Literal(1.5)), _)))
       // A failure of the optimizer is the cause of the error. The filter stays over the relation
       // once optimized, unlike 7 > 2.
       spark.experimental.extraOptimizations = Seq(new Rule[LogicalPlan] {
@@ -1584,7 +1607,7 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
     val kind = if (catalyst) "Catalyst" else "V2"
     test(s"evaluate the filters of the micro-batches in their order with a $kind filter builder") {
       withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-        val input = MemoryStream[(Long, String)]
+        val input = new FilteringMemoryStream(spark)
         val table = new FilterStreamTable(input, catalyst)
         // The cast fails on a payload that is not a number with ANSI, which the RLIKE written
         // before it drops.
@@ -1759,14 +1782,58 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
 
   test("push down no filter that the reads of a source apply with another zero") {
     withTable(tbl) {
-      createTable(tbl, "x double")
+      createTable(tbl, "x bigint")
       val source = spark.readStream.table(tbl)
-      // x IN (0.0, 1.0) and x IN (-0.0, 1.0) are semantically equal, but the check of the
-      // micro-batches tells them apart, so the scan gets neither.
-      val df = source.where(col("x").isin(0.0, 1.0)).union(source.where(col("x").isin(-0.0, 1.0)))
-      assert(pushed(df) === Nil)
-      assert(pushed(source.where(col("x").isin(0.0, 1.0))
-        .union(source.where(col("x").isin(0.0, 1.0)))) === Seq(Set("x")))
+      // atan2(0.0, x) and atan2(-0.0, x) differ for a negative x, though `Literal.equals` finds
+      // their zeros equal, so the scan gets neither.
+      def above(zero: Double): DataFrame =
+        source.where(atan2(lit(zero), col("x").cast("double")) > 0)
+      assert(pushed(above(0.0).union(above(-0.0))) === Nil)
+      assert(pushed(above(-0.0).union(above(-0.0))) === Seq(Set("x")))
+    }
+  }
+
+  test("push down no filter on columns that the check of the micro-batches cannot give values") {
+    withTable(tbl) {
+      createTable(tbl, "id bigint, d double, s struct<a: double>, c string collate UTF8_LCASE",
+        filtering)
+      sql(s"INSERT INTO $tbl VALUES (1, 1.5, named_struct('a', 0.0D), 'a'), " +
+        "(2, 2.5, named_struct('a', 1.0D), 'B')")
+      val source = spark.readStream.table(tbl)
+      // A micro-batch may rewrite a pushed filter with the values that its plan gives to the
+      // columns of the filter, which the check cannot give to a double, as a double equal to 0.0
+      // may be -0.0, to a struct of a double, or to a string of UTF8_LCASE, which 'A' equals too,
+      // so the filters on these columns stay in Spark.
+      testStream(source.where("d > 1.0 AND s.a > -1.0 AND c = 'a' AND id > 0").select("id"))(
+        ProcessAllAvailable(),
+        assertPushedFilters("GreaterThan(id,0)"),
+        CheckAnswer(Row(1L)))
+      // As where a join gives the struct its value in the micro-batches, which fold the filter.
+      val static = spark.range(1).selectExpr("named_struct('a', 0.0D) AS k")
+        .where("k = named_struct('a', 0.0D)")
+      testStream(source.where("s.a > -1.0").join(static, col("s") === col("k")).select("id"))(
+        ProcessAllAvailable(),
+        CheckAnswer(Row(1L)),
+        insert("(3, 3.5, named_struct('a', 0.0D), 'c')"),
+        ProcessAllAvailable(),
+        CheckAnswer(Row(1L), Row(3L)))
+    }
+  }
+
+  test("exclude the rules that infer filters when the query starts only for the filter pushdown") {
+    withTable(tbl) {
+      createTable(tbl, "id bigint, data string")
+      val plan = spark.readStream.table(tbl).where("id > 1").queryExecution.analyzed
+      def inferFilters(conf: SQLConf): Boolean = !conf.optimizerExcludedRules.toSeq
+        .flatMap(_.split(",")).contains(InferFiltersFromConstraints.ruleName)
+      assert(!inferFilters(StreamingV2ScanPushDown.startupConf(spark, plan, None).get))
+      // The column pruning alone optimizes the plan as the micro-batches do.
+      withSQLConf(filterPushdownEnabled(false).toSeq: _*) {
+        assert(inferFilters(StreamingV2ScanPushDown.startupConf(spark, plan, None).get))
+      }
+      withSQLConf((filterPushdownEnabled(false) ++ pruningEnabled(false)).toSeq: _*) {
+        assert(StreamingV2ScanPushDown.startupConf(spark, plan, None).isEmpty)
+      }
     }
   }
 
@@ -2131,7 +2198,7 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
   }
 
   test("push down only the leading predicates that a V2 filter builder gets, or that cannot fail") {
-    val table = new FilterStreamTable(MemoryStream[(Long, String)], catalyst = false)
+    val table = new FilterStreamTable(new FilteringMemoryStream(spark), catalyst = false)
     val output = DataTypeUtils.toAttributes(table.schema())
     val payload = output(1)
     // RLIKE cannot be translated to a predicate of the source, while the cast can, and fails on
@@ -2480,7 +2547,10 @@ private class FailingPushDownTable(input: ProjectingMemoryStream, failingStep: S
         failIf("build", pushedDown)
         val (readColumns, readFilters, readPushedDown) = (columns, filters, pushedDown)
         new Scan {
-          override def readSchema(): StructType = readColumns
+          override def readSchema(): StructType = {
+            failIf("readSchema", readPushedDown)
+            readColumns
+          }
 
           override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
             streamAttempts.incrementAndGet()
@@ -2535,9 +2605,10 @@ private object ProjectingMemoryStream {
 
 /**
  * A table over a memory stream of (id, payload), whose scan builder takes V2 predicates, or
- * Catalyst filters, which it records, and whose stream returns all the rows.
+ * Catalyst filters, which it records, and whose stream drops the rows that fail them, see
+ * [[FilteringMemoryStream]].
  */
-private class FilterStreamTable(input: MemoryStream[_], catalyst: Boolean)
+private class FilterStreamTable(input: FilteringMemoryStream, catalyst: Boolean)
   extends Table with SupportsRead {
   @volatile var pushed: Seq[String] = Nil
 
@@ -2548,22 +2619,34 @@ private class FilterStreamTable(input: MemoryStream[_], catalyst: Boolean)
   override def capabilities(): util.Set[TableCapability] = util.EnumSet.of(
     TableCapability.MICRO_BATCH_READ, TableCapability.STREAMING_FILTER_PUSHDOWN)
 
-  private def scan(): Scan = new Scan {
+  // The scan, whose stream drops the rows that fail `filters`, bound to the columns of the stream.
+  private def scan(filters: Seq[Expression]): Scan = new Scan {
     override def readSchema(): StructType = schema()
 
-    override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = input
+    override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
+      input.filters = filters
+      input
+    }
   }
+
+  private def reference(name: String): Option[BoundReference] = schema().getFieldIndex(name)
+    .map(i => BoundReference(i, schema()(i).dataType, nullable = true))
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = if (catalyst) {
     new ScanBuilder with SupportsPushDownCatalystFilters {
+      private var filters = Seq.empty[Expression]
+
       override def pushFilters(filters: Seq[Expression]): Seq[Expression] = {
+        this.filters = filters
         pushed = filters.map(_.sql)
         filters
       }
 
       override def pushedFilters: Array[Predicate] = Array.empty
 
-      override def build(): Scan = scan()
+      override def build(): Scan = scan(filters.map(_.transform {
+        case column: AttributeReference => reference(column.name).get
+      }))
     }
   } else {
     new ScanBuilder with SupportsPushDownV2Filters {
@@ -2577,9 +2660,59 @@ private class FilterStreamTable(input: MemoryStream[_], catalyst: Boolean)
 
       override def pushedPredicates(): Array[Predicate] = predicates
 
-      override def build(): Scan = scan()
+      // The predicates that the stream can evaluate as data source filters, the others keeping
+      // all the rows.
+      override def build(): Scan = scan(predicates.toSeq.flatMap(PredicateUtils.toV1)
+        .flatMap(StructFilters.filterToExpression(_, reference)))
     }
   }
+}
+
+/**
+ * A memory stream of (id, payload), whose readers drop the rows that fail the filters that its
+ * table set, as the streams of a table with STREAMING_FILTER_PUSHDOWN may: they evaluate the
+ * filters in their order, and keep a row from the first filter that cannot be evaluated on it,
+ * as one that may fail would not be evaluated on the rows that a filter before it drops.
+ */
+private class FilteringMemoryStream(sparkSession: SparkSession)
+  extends MemoryStreamBaseClass[(Long, String)](
+    FilteringMemoryStream.ids.getAndIncrement(), sparkSession)(FilteringMemoryStream.encoder) {
+
+  // The filters, bound to the columns of the stream.
+  @volatile var filters: Seq[Expression] = Nil
+
+  override def createReaderFactory(): PartitionReaderFactory = {
+    val input = super.createReaderFactory()
+    val filters = this.filters
+    (partition: InputPartition) => new PartitionReader[InternalRow] {
+      private val reader = input.createReader(partition)
+      private val predicates = filters.map(CatalystPredicate.createInterpreted)
+
+      private def keeps(row: InternalRow): Boolean = predicates.iterator
+        .map(predicate => Try(predicate.eval(row)))
+        .collectFirst {
+          case Success(false) => false
+          case Failure(_) => true
+        }.getOrElse(true)
+
+      override def next(): Boolean = {
+        while (reader.next()) {
+          if (keeps(reader.get())) return true
+        }
+        false
+      }
+
+      override def get(): InternalRow = reader.get()
+
+      override def close(): Unit = reader.close()
+    }
+  }
+}
+
+private object FilteringMemoryStream {
+  // Far from the ids of the other memory streams of the JVM.
+  val ids = new AtomicInteger(1 << 22)
+  val encoder: Encoder[(Long, String)] = Encoders.tuple(Encoders.scalaLong, Encoders.STRING)
 }
 
 /** A foldable value that changes each time that it is evaluated, as a function of time would. */

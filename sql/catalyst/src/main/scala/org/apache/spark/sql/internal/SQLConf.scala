@@ -6327,12 +6327,18 @@ object SQLConf {
         "capability STREAMING_FILTER_PUSHDOWN gets the filters that the streaming query applies " +
         "to all the rows that it reads from the source, which Spark takes from the plan of the " +
         "query optimized when the query starts, as it does for batch scans: Spark optimizes the " +
-        "query once more when it starts, as it optimizes each micro-batch. A scan builder " +
-        "whose filters may fail on some rows, as a cast does with ANSI, only gets those that the " +
-        "query applies before any other filter. The query still applies the filters after the " +
-        "scan, and each micro-batch checks that its plan applies them to all the rows that it " +
-        "reads from the source before it reads them, and fails with " +
-        "STREAMING_SCAN_FILTERS_CHANGED otherwise. When false, the scan gets no filter.")
+        "query once more when it starts, as it optimizes each micro-batch, but without the rules " +
+        "that infer filters. A scan builder whose filters may fail on some rows, as a cast does " +
+        "with ANSI, gets the filters that the query applies before any other filter, in their " +
+        "order, and then those that cannot fail that it applies wherever they are. The filters " +
+        "on columns of floating types, of strings of a collation that is not binary, or of " +
+        "structs or arrays with such values are not pushed down. The query still applies the " +
+        "filters after the scan, and each micro-batch checks that its plan applies them to all " +
+        "the rows that it reads from the source before it reads them. Otherwise, as when the " +
+        "optimizer of a micro-batch rewrites a pushed filter in a way that Spark cannot follow, " +
+        "the micro-batch fails with STREAMING_SCAN_FILTERS_CHANGED, and so do the next ones: " +
+        "restart the query with this configuration set to false to read the source with no " +
+        "filter. When false, the scan gets no filter.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf

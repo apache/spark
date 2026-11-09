@@ -313,9 +313,7 @@ class MicroBatchExecution(
                 },
                 sourceIdentifyingName
               )
-            StreamingDataSourceV2ScanRelation(relation, streamingScan.scan, output,
-              streamingScan.stream, scanOutput = streamingScan.scanOutput,
-              pushedFilters = streamingScan.pushedFilters)
+            streamingScan.toRelation(relation, output)
           })
         } else if (v1.isEmpty) {
           throw QueryExecutionErrors.microBatchUnsupportedByDataSourceError(
