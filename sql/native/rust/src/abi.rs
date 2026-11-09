@@ -82,7 +82,7 @@ pub struct SparkDsPartitionsInfo {
 }
 
 /// The domain of a column, which `push_domains` gets. The SDK binds it, so that the function
-/// table has the size of the header, but does not expose it yet.
+/// table has the size of the header, but does not expose it yet (SPARK-61306).
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct SparkDsDomain {

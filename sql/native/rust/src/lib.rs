@@ -270,8 +270,9 @@ impl ScanInfo {
 /// each at most once and in this order, then [`plan`](Self::plan), and drops the builder.
 /// After a call fails, it makes no other call. It drops a builder without planning it when it
 /// does not read the scan, for example to only explain a query, once the scan is no longer
-/// referenced, which may be late and on another thread. Only the serialized factory and
-/// partitions reach the executors.
+/// referenced, which may be late and on another thread, so a builder must not hold a resource
+/// that other operations need exclusively, such as a lock, until Drop. Only the serialized
+/// factory and partitions reach the executors.
 pub trait ScanBuilder: Send + Sized + 'static {
     type Factory: PartitionReaderFactory;
 
@@ -348,6 +349,8 @@ pub trait PartitionReaderFactory: Serialize + DeserializeOwned + Send + 'static 
     ///   for blocking I/O.
     /// - Batches must own their buffers, because Spark may release the stream before
     ///   its batches.
+    /// - Spark may open the same partition at the same time in several attempts of its
+    ///   task, so a reader must not take a resource that another attempt needs exclusively.
     ///
     /// The SDK checks Spark-compatible Arrow types, the schema to read and its
     /// nullability, the precision of decimal values, and zero array offsets recursively. It
@@ -433,7 +436,9 @@ impl MicroBatchStreamInfo {
 ///
 /// Spark stores offsets in the checkpoint of the query, as the JSON of
 /// [`Offset`](Self::Offset), and compares them by that JSON, so serialize a position to the
-/// same JSON each time: for example, use structs and `BTreeMap` rather than `HashMap`. A
+/// same JSON each time: for example, use structs and `BTreeMap` rather than `HashMap`. The
+/// SDK stores exactly that JSON, and later versions will not wrap or re-encode it: the format
+/// of an offset is that of the connector's type, which outlives any build of the library. A
 /// restarted query passes the offsets of its checkpoint, which an earlier version of the
 /// library may have written, to `latest_offset`, `plan`, and `commit`. When that version had a
 /// different `Offset` type, the same position may encode to different JSON, so Spark runs one

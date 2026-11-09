@@ -111,7 +111,9 @@ floats, including NaN and the infinities, round-trip as they are. Offsets are JS
 since Spark stores them as text: see [Streaming reads and writes](#streaming-reads-and-writes).
 Connections, pointers, and open readers remain in their creating process.
 Include a snapshot identifier in the factory or partitions when retrying a task
-must read the same snapshot. Multiple task attempts open independent readers.
+must read the same snapshot. Several attempts of a task may open readers of the same
+partition at the same time, so a reader must not take a resource that another attempt needs
+exclusively, and a `ScanBuilder`, which Spark may drop late, must not hold one until Drop.
 
 ```text
 Driver:
@@ -351,7 +353,9 @@ without a limit for the progress of the query, so a stream does not count the ca
 
 The SDK serializes `MicroBatchStream::Offset` with serde as compact JSON on a single line,
 which Spark stores in the checkpoint as it is, without the SDK's versioned envelope, and
-decodes the offsets that Spark passes back. Spark compares offsets by their JSON to decide
+decodes the offsets that Spark passes back. Later versions of the SDK will not wrap or
+re-encode offsets: the format of an offset is that of the connector's `Offset` type, which
+outlives any build of the library. Spark compares offsets by their JSON to decide
 whether a micro-batch has new data, so a position must always serialize to the same JSON:
 use structs and `BTreeMap`, not `HashMap`. A restarted query may plan its last range again,
 with offsets from its checkpoint that an earlier version of the library may have written.
@@ -434,8 +438,8 @@ pruning to the planning of its scans incrementally.
 SPARK-61200 added `push_domains` to version 1 of the ABI: the domains of the columns that the
 filters of a query constrain, with which a scan can skip data, such as a file whose statistics
 exclude every value of a domain. The SDK binds the function but does not expose it yet: it leaves
-it unset, so Spark pushes no filters down and evaluates them after reading. A later change will
-add it to `ScanBuilder`, with a default that uses no domain, so existing connectors keep building.
+it unset, so Spark pushes no filters down and evaluates them after reading. SPARK-61306 will add
+it to `ScanBuilder`, with a default that uses no domain, so existing connectors keep building.
 
 ## Build and test without Spark
 
