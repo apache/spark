@@ -13,60 +13,20 @@ The Apache Software Foundation (ASF) imposes [resource usage limits][limit] on G
 
 ### Reduce and stagger scheduled workloads
 
-Use daily, three-day, or weekly cadences for scheduled workloads.
+Reduce runner consumption with daily, three-day, or weekly schedules, and stagger
+starts to spread demand. Reserve 00 and 01 UTC for daily workloads and 03, 09, 15,
+and 21 UTC for weekly workloads; use the remaining hours for three-day workloads.
+Spread three-day starts across date phases `1-31/3`, `2-31/3`, and `3-31/3`, and
+weekly starts across weekdays. Use minute 17 for rescheduled builds to avoid
+GitHub Actions' busy [start-of-hour scheduling period][schedule-event]; the
+specific minute is arbitrary.
 
-Reserve these UTC hours for daily and weekly workloads:
+Assignments distribute load without ranking jobs by importance; shorten an
+individual interval if faster feedback is needed. Three-day phases restart each
+month, and scheduling delays and long runs can still cause overlap.
 
-| UTC hour | Workloads |
-| --- | --- |
-| 00 | Daily base-image cache at 00:17 and stale-PR cleanup at 00:30 |
-| 01 | Daily Pages at 01:30 |
-| 03, 09, 15, 21 | Weekly variants at minute 17 |
-
-Three-day workloads use the remaining 18 hours, with dates offset across three
-phases: `1-31/3`, `2-31/3`, and `3-31/3`. These day-of-month phases restart each
-month, so their gaps can be shorter at month boundaries. Weekly workloads use
-weekday crons, such as `17 3 * * SUN`, to keep seven-day intervals across months.
-Their configured starts are:
-
-| Weekday | UTC | Workload | Branch |
-| --- | --- | --- | --- |
-| Monday | 03:17 | [Maven macOS](build_maven_java21_macos26.yml) | master |
-| Monday | 09:17 | [SparkR Windows](build_sparkr_window.yml) | master |
-| Monday | 15:17 | [Python no-GIL](build_python_3.14_nogil.yml) | master |
-| Tuesday | 03:17 | [Unix domain socket](build_uds.yml) | master |
-| Tuesday | 21:17 | [Python 3.11](build_python_3.11.yml) | branch-4.0 |
-| Wednesday | 09:17 | [Java 21](build_java21.yml) | branch-4.0 |
-| Wednesday | 15:17 | [Python classic](build_python_3.12_classic_only.yml) | master |
-| Thursday | 03:17 | [Non-ANSI](build_non_ansi.yml) | branch-4.0 |
-| Thursday | 09:17 | [Python min deps](build_python_minimum.yml) | master |
-| Thursday | 21:17 | [Maven Java 21](build_maven_java21.yml) | branch-4.0 |
-| Friday | 03:17 | [Python ARM](build_python_3.12_arm.yml) | master |
-| Friday | 15:17 | [Maven ARM](build_maven_java21_arm.yml) | master |
-| Friday | 21:17 | [Python macOS](build_python_3.12_macos26.yml) | master |
-| Saturday | 09:17 | [Maven](build_maven.yml) | branch-4.0 |
-| Saturday | 15:17 | [Java 17](build_java17.yml) | branch-4.0 |
-| Saturday | 21:17 | [PyPy 3.10](build_python_pypy3.10.yml) | branch-4.0 |
-| Sunday | 03:17 | [Python 3.9](build_python_3.9.yml) | branch-3.5 |
-| Sunday | 03:17 | [Java 8 / Scala 2.13](build_scala213.yml) | branch-3.5 |
-
-The branch-3.5 scheduler dispatches both variants from one shared weekly trigger
-on Sunday at 03:17 UTC. Use minute 17 for rescheduled builds to avoid GitHub
-Actions' busy [start-of-hour scheduling period][schedule-event]. The minute is
-an arbitrary off-hour choice. Weekday, hour, and phase assignments distribute
-load without ranking jobs by importance. An individual interval can be
-shortened later if faster feedback is justified.
-
-The daily cache at 00:17 precedes Pages at 01:30. Stale-PR cleanup shares the
-cache's hour at 00:30. Some overlap is allowed. Scheduled starts can be delayed,
-and running workflows can overlap even when their configured starts differ.
-
-Maintenance-branch schedulers run on the default branch and dispatch workflows
-to their target branches. When changing a branch schedule, update both its
-`on.schedule` cron and the matching `github.event.schedule` condition. Preserve
-the skip-if-unchanged check. Check existing schedules when assigning slots, and
-keep three-day workloads out of the reserved hours. Other event triggers are
-unaffected.
+Maintenance-branch schedulers run on the default branch; keep their cron triggers
+and dispatch conditions consistent, and preserve the skip-if-unchanged check.
 
 [schedule-event]: https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule
 
