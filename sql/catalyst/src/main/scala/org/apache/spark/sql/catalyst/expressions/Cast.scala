@@ -816,10 +816,6 @@ case class Cast(
   } else {
     (child.dataType, dataType) match {
       case (_: StringType, BinaryType) => child.nullable
-      // TODO: Implement a more accurate method for checking whether a decimal value can be cast
-      //       as integral types without overflow. Currently, the cast can overflow even if
-      //       "Cast.canUpCast" method returns true.
-      case (_: DecimalType, _: IntegralType) => true
       case _ => child.nullable || !Cast.canUpCast(child.dataType, dataType)
     }
   }

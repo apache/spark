@@ -684,6 +684,18 @@ object SQLConf {
     .checkValue(_ >= 0, "The version of the regex pattern cost estimate must be nonnegative.")
     .createWithDefault(1)
 
+  val AVOID_DOUBLE_FILTER_EVAL_FOR_PYTHON_UDF =
+    buildConf("spark.sql.optimizer.avoidDoubleFilterEvalForPythonUDF")
+    .internal()
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .doc(s"When true, ${AVOID_DOUBLE_FILTER_EVAL.key} treats a Python UDF as expensive. When " +
+      "false, a Python UDF is only as expensive as its arguments, as before 4.4.0. A streaming " +
+      "query keeps the value recorded in its checkpoint, and one restarted from a checkpoint " +
+      "without it uses false.")
+    .version("4.4.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS =
     buildConf("spark.sql.experimental.optimizer.transpilePyUDFs")
     .withBindingPolicy(ConfigBindingPolicy.SESSION)
@@ -1199,6 +1211,19 @@ object SQLConf {
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
+
+  val SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED =
+    buildConf("spark.sql.join.sortMergeAsOfJoin.cursorScan.enabled")
+      .internal()
+      .doc("When true, the sort-merge AS-OF join reads the right side once with a cursor if " +
+        "the join is backward or forward, has no residual join condition, and its as-of " +
+        "condition compares the two sort keys, left one first and of the same type. Other " +
+        "joins, and joins on STRUCT, ARRAY, TIME, nanosecond timestamp or user-defined type " +
+        "keys, buffer each right-side group and scan the buffer again for every left row.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
 
   val REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION =
     buildConf("spark.sql.requireAllClusterKeysForCoPartition")
@@ -1825,6 +1850,21 @@ object SQLConf {
     .version("2.2.0")
     .booleanConf
     .createWithDefault(true)
+
+  val LEGACY_INFER_FAILABLE_FILTERS_FROM_CONSTRAINTS =
+    buildConf("spark.sql.legacy.inferFailableFiltersFromConstraints")
+      .internal()
+      .doc("When true, the query optimizer also infers a filter from data constraints when " +
+        "evaluating it can fail or is otherwise observable, such as `10 / x > 0` from " +
+        "`x = y AND 10 / y > 0` in ANSI mode, or a UDF. Such a filter runs on rows that the " +
+        "query does not evaluate the expression on, so the query can raise an error that it " +
+        "does not raise without the filter. When false, only a filter that `ExprUtils." +
+        "canEvaluateUnconditionally` accepts is inferred, which also leaves out some " +
+        "expressions that cannot fail, such as `upper(s) = 'A'`.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
 
   val PROPAGATE_DISTINCT_KEYS_ENABLED =
     buildConf("spark.sql.optimizer.propagateDistinctKeys.enabled")
@@ -3504,8 +3544,8 @@ object SQLConf {
         "(including user-written FILTER on a plain column), so the first " +
         "aggregate's output cardinality stays bounded by the un-rewritten " +
         "plan. A child that is not safe to evaluate unconditionally (for example " +
-        "a division, which can throw) keeps the raw Expand key. When false, both " +
-        "the IF/CASE rewrite and the union-of-filters guard are disabled. The " +
+        "a division in ANSI mode, which can throw) keeps the raw Expand key. " +
+        "When false, both the IF/CASE rewrite and the union-of-filters guard are disabled. The " +
         "IF/CASE rewrite is only applied to base expressions that are safe to " +
         "evaluate unconditionally (e.g. plain columns), so the short-circuit " +
         "semantics of IF/CASE WHEN are preserved. A condition that contains a " +
@@ -5514,13 +5554,24 @@ object SQLConf {
   val PYTHON_UDF_PROFILER =
     buildConf("spark.sql.pyspark.udf.profiler")
       .doc("Configure the Python/Pandas UDF profiler by enabling or disabling it " +
-        "with the option to choose between \"perf\" and \"memory\" types, " +
+        "with the option to choose between \"perf\", \"memory\" and \"sampling\" types, " +
         "or unsetting the config disables the profiler. This is disabled by default.")
       .version("4.0.0")
       .stringConf
       .transform(_.toLowerCase(Locale.ROOT))
-      .checkValues(Set("perf", "memory"))
+      .checkValues(Set("perf", "memory", "sampling"))
       .createOptional
+
+  val PYTHON_UDF_PROFILER_SAMPLING_INTERVAL =
+    buildConf("spark.sql.pyspark.udf.profiler.samplingInterval")
+      .doc("The interval in milliseconds at which the sampling profiler samples the call " +
+        "stack. This takes effect only when spark.sql.pyspark.udf.profiler is set to " +
+        "\"sampling\".")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(v => v > 0L, "The sampling interval must be at least 1 millisecond.")
+      .createWithDefault(100)
 
   val PYTHON_UDF_WORKER_FAULTHANLDER_ENABLED =
     buildConf("spark.sql.execution.pyspark.udf.faulthandler.enabled")
@@ -6168,9 +6219,9 @@ object SQLConf {
 
   val PARSE_SQL_ENABLED =
     buildConf("spark.sql.function.parseSql.enabled")
-      .doc("When true, enables the parse_sql SQL function. This feature is under active " +
-        "development; the JSON contract may change across releases while the flag remains " +
-        "off by default.")
+      .doc("When true, enables the parse_sql SQL function (PARSE and ANALYZE). " +
+        "This feature is under active development; the JSON contract may change across " +
+        "releases while the flag remains off by default.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
@@ -6254,6 +6305,21 @@ object SQLConf {
       .version("2.4.0")
       .stringConf
       .createWithDefault("")
+
+  val STREAMING_V2_COLUMN_PRUNING_ENABLED =
+    buildConf("spark.sql.streaming.v2ColumnPruning.enabled")
+      .doc("When true, the scan of a Data Source V2 streaming source whose table has the " +
+        "capability STREAMING_COLUMN_PRUNING only reads the top-level columns that the streaming " +
+        "query reads from it, which Spark takes from the plan of the query optimized when the " +
+        "query starts, as it does for batch scans: Spark optimizes the query once more when it " +
+        "starts, as it optimizes each micro-batch. A query that reads other columns of the " +
+        "source later, for example, after the configuration of the optimizer changes in its " +
+        "session, fails with STREAMING_SCAN_MISSING_COLUMNS. When false, the scan reads all the " +
+        "columns of the source.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
 
   val DISABLE_MAP_KEY_NORMALIZATION =
     buildConf("spark.sql.legacy.disableMapKeyNormalization")
@@ -7505,6 +7571,18 @@ object SQLConf {
     .stringConf
     .toSequence
     .createWithDefault(Nil)
+
+  val NATIVE_DATA_SOURCE_FILTER_PUSHDOWN_ENABLED =
+    buildConf("spark.sql.dataSource.native.filterPushdown.enabled")
+      .doc("When true, Spark passes to native data sources the domains of the columns that the " +
+        "filters of a batch scan constrain, the values that these columns can have in the rows " +
+        "that match, so that a data source can skip data. Spark evaluates the filters after " +
+        "reading anyway, so turning it off only makes a data source read more data, for example " +
+        "to check whether a data source skips data that it must read.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
 
   val CSV_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.csv.filterPushdown.enabled")
     .doc("When true, enable filter pushdown to CSV datasource.")
@@ -8871,8 +8949,8 @@ object SQLConf {
     buildConf("spark.sql.legacy.allowSessionVariableInPersistedView")
       .internal()
       .doc(
-        "When set to true, variables can be found under identifiers in a view query. Throw " +
-        "otherwise."
+        "When set to true, a persisted view or SQL function may read session variables " +
+        "through IDENTIFIER clauses in its body. Throw otherwise."
       )
       .version("4.1.0")
       .booleanConf
@@ -9737,6 +9815,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
 
+  def legacyInferFailableFiltersFromConstraints: Boolean =
+    getConf(LEGACY_INFER_FAILABLE_FILTERS_FROM_CONSTRAINTS)
+
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
 
   def parserDfaCacheFlushRatio: Double = getConf(PARSER_DFA_CACHE_FLUSH_RATIO)
@@ -9868,6 +9949,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def sortMergeAsOfJoinEnabled: Boolean = getConf(SORT_MERGE_AS_OF_JOIN_ENABLED)
 
   def sqlAsOfJoinEnabled: Boolean = getConf(SQL_ASOF_JOIN_ENABLED)
+
+  def sortMergeAsOfJoinCursorScanEnabled: Boolean =
+    getConf(SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED)
 
   def enableRadixSort: Boolean = getConf(RADIX_SORT_ENABLED)
 
@@ -10157,6 +10241,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def pythonUDFProfiler: Option[String] = getConf(PYTHON_UDF_PROFILER)
 
+  def pythonUDFProfilerSamplingInterval: Long = getConf(PYTHON_UDF_PROFILER_SAMPLING_INTERVAL)
+
   def pythonDataSourceProfiler: Option[String] = getConf(PYTHON_DATA_SOURCE_PROFILER)
 
   def pythonUDFWorkerFaulthandlerEnabled: Boolean = getConf(PYTHON_UDF_WORKER_FAULTHANLDER_ENABLED)
@@ -10263,6 +10349,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def disabledV2StreamingMicroBatchReaders: String =
     getConf(DISABLED_V2_STREAMING_MICROBATCH_READERS)
+
+  def streamingV2ColumnPruningEnabled: Boolean = getConf(STREAMING_V2_COLUMN_PRUNING_ENABLED)
 
   def fastFailFileFormatOutput: Boolean = getConf(FASTFAIL_ON_FILEFORMAT_OUTPUT)
 
@@ -10382,6 +10470,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def pythonFilterPushDown: Boolean = getConf(PYTHON_FILTER_PUSHDOWN_ENABLED)
 
   def pythonLimitPushDown: Boolean = getConf(PYTHON_LIMIT_PUSHDOWN_ENABLED)
+
+  def nativeDataSourceFilterPushdownEnabled: Boolean =
+    getConf(NATIVE_DATA_SOURCE_FILTER_PUSHDOWN_ENABLED)
 
   def csvFilterPushDown: Boolean = getConf(CSV_FILTER_PUSHDOWN_ENABLED)
 
