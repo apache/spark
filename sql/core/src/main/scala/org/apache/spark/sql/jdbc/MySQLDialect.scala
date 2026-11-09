@@ -457,20 +457,23 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
       aggregation: Option[Aggregation]): Boolean = {
     conf.legacyMySqlTopNOverGroupByExprEnabled || aggregation.forall { agg =>
       val groupBys = agg.groupByExpressions.toSeq
+      // Compare compiled SQL: some V2 expressions, such as Extract, have no value equality.
+      val groupBySqls = groupBys.flatMap(compileExpression).toSet
       orders.forall { order =>
-        equalsGroupByTerm(order, groupBys) ||
+        equalsGroupByTerm(order, groupBySqls) ||
           columnsOutsideAggregates(order.expression).forall(groupBys.contains)
       }
     }
   }
 
   // Other null orders compile to `CASE WHEN key IS NULL ...`, which differs from the GROUP BY term.
-  private def equalsGroupByTerm(order: SortOrder, groupBys: Seq[Expression]): Boolean =
-    groupBys.contains(order.expression) && ((order.direction, order.nullOrdering) match {
-      case (SortDirection.ASCENDING, NullOrdering.NULLS_FIRST) |
-           (SortDirection.DESCENDING, NullOrdering.NULLS_LAST) => true
-      case _ => false
-    })
+  private def equalsGroupByTerm(order: SortOrder, groupBySqls: Set[String]): Boolean =
+    compileExpression(order.expression).exists(groupBySqls.contains) &&
+      ((order.direction, order.nullOrdering) match {
+        case (SortDirection.ASCENDING, NullOrdering.NULLS_FIRST) |
+             (SortDirection.DESCENDING, NullOrdering.NULLS_LAST) => true
+        case _ => false
+      })
 
   private def columnsOutsideAggregates(e: Expression): Seq[Expression] = e match {
     case _: AggregateFunc => Nil

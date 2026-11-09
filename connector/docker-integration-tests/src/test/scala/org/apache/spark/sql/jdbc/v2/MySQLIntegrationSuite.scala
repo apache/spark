@@ -344,6 +344,10 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
     val accepted = Seq(
       s"SELECT dept + 1, COUNT(*) FROM $emp GROUP BY dept + 1 ORDER BY dept + 1 LIMIT 2"
         -> Seq(Row(2, 2L), Row(3, 2L)),
+      s"SELECT dept + 1, COUNT(*) FROM $emp GROUP BY dept + 1 ORDER BY dept + 1 DESC LIMIT 2"
+        -> Seq(Row(7, 1L), Row(3, 2L)),
+      s"SELECT month(date1), COUNT(*) FROM $catalogName.datetime GROUP BY month(date1) " +
+        "ORDER BY month(date1) LIMIT 1" -> Seq(Row(1, 1L)),
       s"SELECT dept + 1, COUNT(*) FROM $emp GROUP BY dept + 1 ORDER BY COUNT(*) ASC NULLS LAST " +
         "LIMIT 1" -> Seq(Row(7, 1L)),
       s"SELECT dept, COUNT(*) FROM $emp GROUP BY dept ORDER BY dept * 2 DESC NULLS FIRST LIMIT 2"
