@@ -563,7 +563,7 @@ class CollationTypePrecedenceSuite extends SharedSparkSession {
         }
 
         // Under a default collation, an explicit UTF8_BINARY target keeps UTF8_BINARY, and plain
-        // targets, whose type the default collation rewrites, keep default strength.
+        // targets keep default strength, through the recolored path or the rewritten cast type.
         withView(viewName) {
           sql(
             s"""
@@ -577,6 +577,64 @@ class CollationTypePrecedenceSuite extends SharedSparkSession {
                |""".stripMargin)
           checkAnswer(sql(s"SELECT * FROM $viewName"), Row(true, false, true, true, true))
         }
+      }
+    }
+  }
+
+  testFixedPointAndSinglePass("collated JSON RETURNING types have implicit strength") {
+    val tableName = "json_returning_tbl"
+    val viewName = "json_returning_view"
+    def jsonFns(json: String, value: String, returning: String): Seq[String] = Seq(
+      s"JSON_VALUE($json, '$$.s' RETURNING $returning)",
+      s"JSON_QUERY($json, '$$.o' RETURNING $returning)",
+      s"JSON_ARRAY($value RETURNING $returning)",
+      s"JSON_OBJECT('k' VALUE $value RETURNING $returning)")
+    val jsonLit = """'{"s": "Open", "o": {"k": "Open"}}'"""
+    val lcase = "STRING COLLATE UTF8_LCASE"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (id INT, c STRING COLLATE UNICODE_CI, p STRING, j STRING) " +
+        s"USING $dataSource")
+      sql(
+        s"""
+           |INSERT INTO $tableName SELECT id, 'OPEN', 'OPEN', j FROM VALUES
+           |  (1, '{"s": "Open", "o": {"k": "Open"}}'),
+           |  (2, '{"s": "open", "o": {"k": "open"}}'),
+           |  (3, '{"s": "closed", "o": {"k": "closed"}}') AS t(id, j)
+           |""".stripMargin)
+
+      jsonFns("j", "get_json_object(j, '$.s')", lcase).foreach { fn =>
+        checkAnswer(
+          sql(s"SELECT DISTINCT COLLATION($fn || 'a') FROM $tableName"),
+          Row(UTF8_LCASE_COLLATION_NAME))
+        checkAnswer(
+          sql(s"SELECT id FROM $tableName WHERE contains($fn, 'OPEN')"), Seq(Row(1), Row(2)))
+        Seq(s"$fn = c", s"$fn = p").foreach { cond =>
+          assertIndeterminateCollation(sql(s"SELECT id FROM $tableName WHERE $cond"))
+        }
+      }
+      jsonFns(jsonLit, "'Open'", lcase).foreach { fn =>
+        checkAnswer(sql(s"SELECT contains($fn, 'OPEN')"), Row(true))
+      }
+      jsonFns("j", "get_json_object(j, '$.s')", "STRING COLLATE UTF8_BINARY").foreach { fn =>
+        assertIndeterminateCollation(sql(s"SELECT id FROM $tableName WHERE $fn = c"))
+      }
+
+      // A plain RETURNING type keeps default strength, so the column collation wins.
+      jsonFns(jsonLit, "'Open'", "STRING").foreach { fn =>
+        checkAnswer(sql(s"SELECT DISTINCT contains($fn, c) FROM $tableName"), Row(true))
+      }
+
+      // Under a default collation, an explicit UTF8_BINARY RETURNING type keeps UTF8_BINARY.
+      withView(viewName) {
+        val columns = Seq("STRING", "STRING COLLATE UTF8_BINARY")
+          .flatMap(jsonFns(jsonLit, "'Open'", _))
+          .zipWithIndex
+          .map { case (fn, i) => s"contains($fn, 'OPEN') AS c$i" }
+        sql(s"CREATE VIEW $viewName DEFAULT COLLATION UTF8_LCASE AS SELECT " +
+          columns.mkString(", "))
+        checkAnswer(
+          sql(s"SELECT * FROM $viewName"),
+          Row(Seq.fill(4)(true) ++ Seq.fill(4)(false): _*))
       }
     }
   }

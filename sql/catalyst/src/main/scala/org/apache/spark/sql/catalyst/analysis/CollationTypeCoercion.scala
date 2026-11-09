@@ -401,10 +401,11 @@ object CollationTypeCoercion extends SQLConfHelper {
 
       Some(addContextToStringType(cast.dataType, castStrength))
 
-    // An explicitly collated target type (even UTF8_BINARY), not the path, decides the
-    // collation, like a column of that type.
-    case v: VariantGet if DataTypeUtils.hasNonDefaultStringCharOrVarcharType(v.dataType) =>
-      Some(addContextToStringType(v.dataType, Implicit))
+    // An explicitly collated target or RETURNING type (even UTF8_BINARY), not the arguments,
+    // decides the collation, like a column of that type.
+    case e @ (_: VariantGet | _: JsonValue | _: JsonQuery | _: JsonArray | _: JsonObjectExpr)
+        if DataTypeUtils.hasNonDefaultStringCharOrVarcharType(e.dataType) =>
+      Some(addContextToStringType(e.dataType, Implicit))
 
     case expr @ (_: NamedExpression | _: SubqueryExpression | _: VariableReference) =>
       Some(addContextToStringType(expr.dataType, Implicit))
