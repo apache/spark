@@ -11,25 +11,6 @@ The Apache Software Foundation (ASF) imposes [resource usage limits][limit] on G
 [limit]: https://infra.apache.org/github-actions-policy.html
 [usage]: https://github.com/apache/spark/actions/metrics/usage
 
-### Reduce and stagger scheduled workloads
-
-Reduce runner consumption with daily, three-day, or weekly schedules, and stagger
-starts to spread demand. Reserve 00 and 01 UTC for daily workloads and 03, 09, 15,
-and 21 UTC for weekly workloads; use the remaining hours for three-day workloads.
-Spread three-day starts across date phases `1-31/3`, `2-31/3`, and `3-31/3`, and
-weekly starts across weekdays. Use minute 17 for rescheduled builds to avoid
-GitHub Actions' busy [start-of-hour scheduling period][schedule-event]; the
-specific minute is arbitrary.
-
-Assignments distribute load without ranking jobs by importance; shorten an
-individual interval if faster feedback is needed. Three-day phases restart each
-month, and scheduling delays and long runs can still cause overlap.
-
-Maintenance-branch schedulers run on the default branch; keep their cron triggers
-and dispatch conditions consistent, and preserve the skip-if-unchanged check.
-
-[schedule-event]: https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule
-
 ### Push heavy workflows out to forks
 
 Workflows triggered by `on: pull_request` [count against the base repo's (i.e. this repo's) activity limits][base]. For this reason it's [important] to use `on: push` for heavy workflows. `on: push` workflows count against the fork's limits and not ours, enabling more jobs to run concurrently.
