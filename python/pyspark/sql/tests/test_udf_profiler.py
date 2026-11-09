@@ -828,34 +828,36 @@ class UDFProfiler2TestsMixin:
         self.assertEqual(0, len(self.spark._profiler_collector._profile_results))
 
     def test_sampling_profiler_aggregation(self):
-        import time
-
-        @udf("long")
-        def busy_add1(x):
-            time.sleep(0.05)
-            return x + 1
-
-        df = self.spark.range(10, numPartitions=2).select(busy_add1("id"))
-
-        # Two tasks in one stage of one query.
-        for level, num_results in [("task", 2), ("stage", 1), ("query", 1)]:
-            with self.subTest(level=level):
-                with self.sql_conf(
-                    {
-                        "spark.sql.pyspark.udf.profiler": "sampling",
-                        "spark.sql.pyspark.udf.profiler.samplingInterval": "10",
-                        "spark.sql.pyspark.udf.profiler.samplingAggregation": level,
-                    }
-                ):
+        for use_arrow in [True, False]:
+            add1 = udf(lambda x: x + 1, "long", useArrow=use_arrow)
+            # One query with two stages, split by the shuffle, of two tasks each.
+            df = (
+                self.spark.range(10, numPartitions=2)
+                .select(add1("id").alias("id"))
+                .repartition(2, "id")
+                .select(add1("id"))
+            )
+            for level, num_results, key_pattern in [
+                ("task", 4, r"^sampling_task_\d+_[01]$"),
+                ("stage", 2, r"^sampling_stage_\d+$"),
+                ("query", 1, r"^sampling_query_\d+$"),
+                (None, 2, r"^sampling_stage_\d+$"),  # The default level is "stage".
+            ]:
+                conf = {
+                    "spark.sql.pyspark.udf.profiler": "sampling",
+                    # Disable AQE so that the shuffle is not coalesced into one partition.
+                    "spark.sql.adaptive.enabled": "false",
+                }
+                if level is not None:
+                    conf["spark.sql.pyspark.udf.profiler.samplingAggregation"] = level
+                with self.subTest(use_arrow=use_arrow, level=level), self.sql_conf(conf):
                     df.collect()
 
-                results = self.sampling_profile_results
-                self.spark.profile.clear()
-                self.assertEqual(num_results, len(results), str(list(results)))
-                for key, result in results.items():
-                    self.assertTrue(key.startswith(f"sampling_{level}_"), key)
-                    # Call trees are keyed by thread name, so main threads of tasks merge.
-                    self.assertIn("MainThread", result["callstack"])
+                    keys = list(self.sampling_profile_results)
+                    self.spark.profile.clear()
+                    self.assertEqual(num_results, len(keys), keys)
+                    for key in keys:
+                        self.assertRegex(key, key_pattern)
 
     def test_sampling_profiler_merge_threads_by_name(self):
         import threading
@@ -959,6 +961,48 @@ class UDFProfiler2Tests(UDFProfiler2TestsMixin, ReusedSQLTestCase):
             self.spark.range(10, numPartitions=2).select(add1("id")).rdd.collect()
 
         self.assertEqual(["sampling_query_unknown"], list(self.sampling_profile_results))
+
+    def test_sampling_profiler_aggregation_streaming_query(self):
+        @udf("long")
+        def add1(x):
+            return x + 1
+
+        with tempfile.TemporaryDirectory() as d:
+            for i in range(3):
+                self.spark.range(i, i + 1, numPartitions=1).write.mode("append").parquet(d)
+
+            with self.sql_conf(
+                {
+                    "spark.sql.pyspark.udf.profiler": "sampling",
+                    "spark.sql.pyspark.udf.profiler.samplingAggregation": "query",
+                }
+            ):
+                # One file per micro-batch, so the query runs in three micro-batches.
+                q = (
+                    self.spark.readStream.schema("id long")
+                    .option("maxFilesPerTrigger", 1)
+                    .parquet(d)
+                    .select(add1("id"))
+                    .writeStream.format("noop")
+                    .trigger(availableNow=True)
+                    .start()
+                )
+                q.awaitTermination()
+
+        self.assertEqual(3, len(q.recentProgress))
+        # All micro-batches are merged under the streaming query id.
+        self.assertEqual([f"sampling_query_{q.id}"], list(self.sampling_profile_results))
+
+    def test_sampling_result_param_merge(self):
+        from pyspark.profiler import SamplingResultParam
+
+        tree1 = {"MainThread": {"f": {"count": 2, "g": {"count": 1}}}}
+        tree2 = {"MainThread": {"f": {"count": 3, "h": {"count": 3}}}}
+        # Call trees with the same key are summed node by node.
+        self.assertEqual(
+            {"MainThread": {"f": {"count": 5, "g": {"count": 1}, "h": {"count": 3}}}},
+            SamplingResultParam.addInPlace(tree1, tree2),
+        )
 
 
 if __name__ == "__main__":

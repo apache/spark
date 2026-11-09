@@ -219,10 +219,13 @@ class WorkerSamplingProfiler:
         # which are UDF result ids (int) or worker module names.
         tc = self._task_context
         if self._aggregation == "query":
-            # The root id groups all micro-batches of a streaming query together. It is not
-            # set when the UDF does not run in a SQL query, e.g. under `df.rdd`.
-            root_id = tc.getLocalProperty("spark.sql.execution.root.id")
-            return f"sampling_query_{root_id if root_id is not None else 'unknown'}"
+            # Each micro-batch of a streaming query is its own SQL execution, so prefer the
+            # streaming query id to group all of them together. Neither id is set when the
+            # UDF does not run in a SQL query, e.g. under `df.rdd`.
+            query_id = tc.getLocalProperty("sql.streaming.queryId") or tc.getLocalProperty(
+                "spark.sql.execution.root.id"
+            )
+            return f"sampling_query_{query_id if query_id is not None else 'unknown'}"
         elif self._aggregation == "stage":
             return f"sampling_stage_{tc.stageId()}"
         else:

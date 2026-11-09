@@ -5597,8 +5597,9 @@ object SQLConf {
   val PYTHON_UDF_PROFILER_SAMPLING_AGGREGATION =
     buildConf("spark.sql.pyspark.udf.profiler.samplingAggregation")
       .doc("The level at which the sampling profiler aggregates the sampled call stacks: " +
-        "\"query\" merges samples from the same SQL query (samples outside a SQL query are " +
-        "merged under \"unknown\"), \"stage\" merges samples from the same stage, and " +
+        "\"query\" merges samples from the same SQL query, or from all micro-batches of the " +
+        "same streaming query (samples outside a SQL query are merged under \"unknown\"), " +
+        "\"stage\" merges samples from the same stage, and " +
         "\"task\" keeps one result per task, merging its attempts. A finer level uses more " +
         "driver memory. This takes effect only when spark.sql.pyspark.udf.profiler is set " +
         "to \"sampling\".")
