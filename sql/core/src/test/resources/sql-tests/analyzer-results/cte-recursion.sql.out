@@ -1783,6 +1783,35 @@ WithCTE
 
 
 -- !query
+WITH RECURSIVE r(k, lvl) AS (
+    SELECT id, 0 FROM range(5)
+    UNION ALL
+    SELECT * FROM (SELECT k, lvl + 1 AS lvl FROM r LIMIT 100) t WHERE t.lvl < 3
+)
+SELECT count(*), max(lvl) FROM r
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias r
+:     +- Project [id#xL AS k#xL, 0#x AS lvl#x]
+:        +- UnionLoop xxxx
+:           :- Project [id#xL, 0 AS 0#x]
+:           :  +- Range (0, 5, step=1)
+:           +- Project [k#xL, lvl#x]
+:              +- Filter (lvl#x < 3)
+:                 +- SubqueryAlias t
+:                    +- GlobalLimit 100
+:                       +- LocalLimit 100
+:                          +- Project [k#xL, (lvl#x + 1) AS lvl#x]
+:                             +- SubqueryAlias r
+:                                +- Project [id#xL AS k#xL, 0#x AS lvl#x]
+:                                   +- UnionLoopRef xxxx, [id#xL, 0#x], false
++- Aggregate [count(1) AS count(1)#xL, max(lvl#x) AS max(lvl)#x]
+   +- SubqueryAlias r
+      +- CTERelationRef xxxx, true, [k#xL, lvl#x], false, false
+
+
+-- !query
 SET spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation=100
 -- !query analysis
 SetCommand (spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation,Some(100))

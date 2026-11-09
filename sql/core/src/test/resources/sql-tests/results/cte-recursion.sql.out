@@ -1827,6 +1827,19 @@ struct<x:int,y:int>
 
 
 -- !query
+WITH RECURSIVE r(k, lvl) AS (
+    SELECT id, 0 FROM range(5)
+    UNION ALL
+    SELECT * FROM (SELECT k, lvl + 1 AS lvl FROM r LIMIT 100) t WHERE t.lvl < 3
+)
+SELECT count(*), max(lvl) FROM r
+-- !query schema
+struct<count(1):bigint,max(lvl):int>
+-- !query output
+15	2
+
+
+-- !query
 SET spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation=100
 -- !query schema
 struct<key:string,value:string>
