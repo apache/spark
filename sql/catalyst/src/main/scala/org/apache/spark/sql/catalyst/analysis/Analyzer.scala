@@ -990,6 +990,18 @@ class Analyzer(
       }
     }
 
+    /** Resolves lateral column aliases until the rewrite reaches a fixed point. */
+    @scala.annotation.tailrec
+    private def resolveLateralColumnAliases(plan: LogicalPlan): LogicalPlan = {
+      val resolved = ResolveLateralColumnAliasReference(plan)
+      if (resolved.fastEquals(plan) ||
+          !resolved.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
+        resolved
+      } else {
+        resolveLateralColumnAliases(resolved)
+      }
+    }
+
     private def tryResolveHavingCondition(
         h: UnresolvedHaving,
         aggregate: Aggregate,
@@ -1039,12 +1051,26 @@ class Analyzer(
         aggregate.aggregateExpressions.zip(newChild.output).collect {
           case (expr, output) if expr.containsPattern(WINDOW_EXPRESSION) => output
         })
-      val withHaving = if (
+      val filter = Filter(newCond, newChild)
+      val canDeferHaving =
         !conf.getConf(SQLConf.LEGACY_EVALUATE_HAVING_AFTER_INNER_WINDOW) &&
-          windowOutputSet.nonEmpty && newCond.references.intersect(windowOutputSet).isEmpty) {
-        UnresolvedHaving(newCond, newChild)
+          windowOutputSet.nonEmpty && newCond.references.intersect(windowOutputSet).isEmpty
+      val withHaving = if (!canDeferHaving) {
+        filter
+      } else if (hasGroupingFunction(newCond)) {
+        // TODO: Defer grouping functions after they can be rewritten outside the main batch.
+        filter
       } else {
-        Filter(newCond, newChild)
+        val liftedChild = resolveLateralColumnAliases(newChild)
+        if (!liftedChild.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
+          val liftedAttrMap = AttributeMap(newChild.output.zip(liftedChild.output))
+          val remappedCondition = newCond.transform {
+            case a: AttributeReference => liftedAttrMap.getOrElse(a, a)
+          }
+          DeferredHaving(remappedCondition, liftedChild)
+        } else {
+          filter
+        }
       }
 
       if (extraAggExprs.isEmpty) {
@@ -5074,9 +5100,24 @@ object RemoveTempResolvedColumn extends Rule[LogicalPlan] {
 }
 
 /**
- * Rule that's used to handle `UnresolvedHaving` nodes with resolved `condition` and `child`.
- * It's placed outside the main batch to avoid conflicts with other rules that resolve
- * `UnresolvedHaving` in the main batch.
+ * Holds a resolved HAVING condition until window extraction finishes while preserving its child's
+ * output for parent resolution.
+ */
+private[analysis] case class DeferredHaving(
+    condition: Expression,
+    child: LogicalPlan) extends OrderPreservingUnaryNode {
+  /** Preserves the child output while HAVING placement is deferred. */
+  override def output: Seq[Attribute] = child.output
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_HAVING)
+
+  /** Rebuilds the marker after its child is transformed. */
+  override protected def withNewChildInternal(newChild: LogicalPlan): DeferredHaving =
+    copy(child = newChild)
+}
+
+/**
+ * Rule that handles resolved `UnresolvedHaving` and `DeferredHaving` nodes. It's placed outside the
+ * main batch to avoid conflicts with other rules that resolve `UnresolvedHaving` in that batch.
  */
 object ResolveUnresolvedHaving extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
@@ -5085,12 +5126,19 @@ object ResolveUnresolvedHaving extends Rule[LogicalPlan] {
         if havingCondition.resolved && child.resolved =>
         val filter = Filter(condition = havingCondition, child = child)
         insertFilterBeforeWindow(filter).getOrElse(filter)
+      case d @ DeferredHaving(condition, child) if d.resolved =>
+        val filter = Filter(condition = condition, child = child)
+        insertFilterBeforeWindow(filter).getOrElse(filter)
     }
   }
 
   /**
-   * Searches through Project and Generate nodes for a Window chain and places HAVING below every
-   * Window in that chain. This restores SQL clause order for plans produced by queries such as:
+   * Searches through Project and Generate nodes for a SELECT-list Window chain. By default, HAVING
+   * is placed below every Window in the chain, or left above all of them when that placement is not
+   * possible. If LEGACY_EVALUATE_HAVING_AFTER_INNER_WINDOW is enabled, HAVING is placed below only
+   * the first contiguous Window run and may remain between nested Window layers.
+   *
+   * This restores SQL clause order for plans produced by queries such as:
    *
    * {{{
    * SELECT explode(array(a)), count(*) OVER ()
@@ -5099,7 +5147,7 @@ object ResolveUnresolvedHaving extends Rule[LogicalPlan] {
    * HAVING a IS NOT NULL
    * }}}
    *
-   * Returns None unless the condition can be evaluated below every Window in the chain.
+   * Returns None unless the placement selected by the configuration is possible.
    */
   private def insertFilterBeforeWindow(filter: Filter): Option[LogicalPlan] = {
     if (SQLConf.get.getConf(SQLConf.LEGACY_EVALUATE_HAVING_AFTER_INNER_WINDOW)) {
@@ -5109,6 +5157,15 @@ object ResolveUnresolvedHaving extends Rule[LogicalPlan] {
     }
   }
 
+  /** Returns whether a Window is reachable through the SELECT-list window-chain spine. */
+  private def hasWindowInWindowChain(plan: LogicalPlan): Boolean = plan match {
+    case _: Window => true
+    case project: Project => hasWindowInWindowChain(project.child)
+    case generate: Generate => hasWindowInWindowChain(generate.child)
+    case _ => false
+  }
+
+  /** Places HAVING below the complete SELECT-list window chain, or leaves it above the chain. */
   private def insertFilterBeforeAllWindows(
       filter: Filter,
       foundWindow: Boolean): Option[LogicalPlan] = filter.child match {
@@ -5121,13 +5178,14 @@ object ResolveUnresolvedHaving extends Rule[LogicalPlan] {
     case window: Window if filter.condition.references.subsetOf(window.child.outputSet) =>
       insertFilterBeforeAllWindows(filter.copy(child = window.child), foundWindow = true)
         .map(child => window.withNewChildren(Seq(child)))
-    case _ if foundWindow && !filter.child.containsPattern(WINDOW) &&
+    case _ if foundWindow && !hasWindowInWindowChain(filter.child) &&
         filter.condition.references.subsetOf(filter.child.outputSet) =>
       Some(filter)
     case _ =>
       None
   }
 
+  /** Places HAVING below the first contiguous Window run for legacy behavior. */
   private def insertFilterBeforeOuterWindow(filter: Filter): Option[LogicalPlan] = {
     filter.child match {
       case project: Project =>
@@ -5143,6 +5201,7 @@ object ResolveUnresolvedHaving extends Rule[LogicalPlan] {
     }
   }
 
+  /** Places HAVING below a contiguous Window run when its condition remains evaluable. */
   private def insertFilterBeforeWindowChain(
       filter: Filter,
       window: Window): Option[LogicalPlan] = {

@@ -168,22 +168,44 @@ GROUP BY GROUPING SETS ((k), ())
 HAVING k = 'keep'
 ORDER BY k;
 
+-- Lateral aliases must be resolved before grouping analytics HAVING is deferred.
+SELECT
+  k,
+  SUM(v) AS s,
+  s * 2 AS s2,
+  SUM(SUM(v)) OVER (PARTITION BY k) AS partition_sum
+FROM VALUES ('a', 1), ('b', 2) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k IS NOT NULL
+ORDER BY k;
+
+-- Lateral aliases do not prevent HAVING from preceding the window.
+SELECT
+  k,
+  SUM(v) AS s,
+  s * 2 AS s2,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k = 'keep'
+ORDER BY k;
+
 -- Grouping analytics HAVING on a window alias keeps its existing analysis behavior.
 SELECT
   k,
   COUNT(*) OVER () AS group_count
 FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
 GROUP BY GROUPING SETS ((k), ())
-HAVING group_count = 3
+HAVING group_count = 3L
 ORDER BY k;
 
--- Grouping functions must still be rewritten when HAVING is moved before the window.
+-- Grouping functions keep their existing placement and must still be rewritten.
 SELECT
   k,
   COUNT(*) OVER () AS group_count
 FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
 GROUP BY GROUPING SETS ((k), ())
-HAVING GROUPING_ID() = 1
+HAVING GROUPING_ID() = 1L
 ORDER BY k;
 
 -- Aggregates used only by HAVING must remain available until the filter is evaluated.
@@ -192,7 +214,18 @@ SELECT
   COUNT(*) OVER () AS group_count
 FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
 GROUP BY ROLLUP(k)
-HAVING SUM(v) = 1
+HAVING SUM(v) = 1L
+ORDER BY k;
+
+-- Grouping functions keep the existing lateral-alias resolution path.
+SELECT
+  k,
+  SUM(v) AS s,
+  s * 2 AS s2,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING GROUPING_ID() = 0L
 ORDER BY k;
 
 -- Subqueries in grouping analytics HAVING must remain resolved after the filter is moved.
@@ -206,6 +239,26 @@ ORDER BY k;
 
 -- The legacy configuration preserves evaluation after the inner window.
 SET spark.sql.legacy.evaluateHavingAfterInnerWindow=true;
+
+SELECT
+  k,
+  SUM(v) AS s,
+  s * 2 AS s2,
+  SUM(SUM(v)) OVER (PARTITION BY k) AS partition_sum
+FROM VALUES ('a', 1), ('b', 2) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k IS NOT NULL
+ORDER BY k;
+
+SELECT
+  k,
+  SUM(v) AS s,
+  s * 2 AS s2,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k = 'keep'
+ORDER BY k;
 
 SELECT
   k,
@@ -236,7 +289,33 @@ SELECT
   COUNT(*) OVER () AS group_count
 FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
 GROUP BY GROUPING SETS ((k), ())
-HAVING group_count = 3
+HAVING group_count = 3L
+ORDER BY k;
+
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY GROUPING SETS ((k), ())
+HAVING GROUPING_ID() = 1L
+ORDER BY k;
+
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING SUM(v) = 1L
+ORDER BY k;
+
+SELECT
+  k,
+  SUM(v) AS s,
+  s * 2 AS s2,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING GROUPING_ID() = 0L
 ORDER BY k;
 
 RESET spark.sql.legacy.evaluateHavingAfterInnerWindow;

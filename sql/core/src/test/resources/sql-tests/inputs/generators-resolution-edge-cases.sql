@@ -230,6 +230,39 @@ FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
 GROUP BY k
 HAVING k = 'keep';
 
+-- A window in the aggregate input is not part of the SELECT-list window chain.
+SELECT explode(array(k)) AS generated_k, COUNT(*) OVER () AS group_count, k
+FROM (
+  SELECT k, v, ROW_NUMBER() OVER (ORDER BY v) AS row_number
+  FROM VALUES ('drop', 2), ('keep', 1) AS t(k, v)
+) input
+GROUP BY k
+HAVING k = 'keep';
+
+-- A window in a WHERE subquery is not part of the SELECT-list window chain.
+SELECT explode(array(k)) AS generated_k, COUNT(*) OVER () AS group_count, k
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+WHERE v >= (
+  SELECT MIN(row_number)
+  FROM (
+    SELECT ROW_NUMBER() OVER (ORDER BY x) AS row_number
+    FROM VALUES (1) AS q(x)
+  ) windowed
+)
+GROUP BY k
+HAVING k = 'keep';
+
+-- HAVING must precede every SELECT-list window over a windowed aggregate input.
+SELECT explode(array(k)) AS generated_k,
+       SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum,
+       k
+FROM (
+  SELECT k, v, ROW_NUMBER() OVER (ORDER BY v) AS row_number
+  FROM VALUES ('drop', 2), ('keep', 1) AS t(k, v)
+) input
+GROUP BY k
+HAVING k = 'keep';
+
 -- HAVING on a window alias must stay above every window with a generator.
 SELECT explode(array(k)) AS generated_k,
        RANK() OVER (ORDER BY k) AS rank,
@@ -248,6 +281,36 @@ HAVING rank = 1;
 
 -- The legacy configuration preserves evaluation after the inner window with a generator.
 SET spark.sql.legacy.evaluateHavingAfterInnerWindow=true;
+
+SELECT explode(array(k)) AS generated_k, COUNT(*) OVER () AS group_count, k
+FROM (
+  SELECT k, v, ROW_NUMBER() OVER (ORDER BY v) AS row_number
+  FROM VALUES ('drop', 2), ('keep', 1) AS t(k, v)
+) input
+GROUP BY k
+HAVING k = 'keep';
+
+SELECT explode(array(k)) AS generated_k, COUNT(*) OVER () AS group_count, k
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+WHERE v >= (
+  SELECT MIN(row_number)
+  FROM (
+    SELECT ROW_NUMBER() OVER (ORDER BY x) AS row_number
+    FROM VALUES (1) AS q(x)
+  ) windowed
+)
+GROUP BY k
+HAVING k = 'keep';
+
+SELECT explode(array(k)) AS generated_k,
+       SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum,
+       k
+FROM (
+  SELECT k, v, ROW_NUMBER() OVER (ORDER BY v) AS row_number
+  FROM VALUES ('drop', 2), ('keep', 1) AS t(k, v)
+) input
+GROUP BY k
+HAVING k = 'keep';
 
 SELECT explode(array(k)) AS generated_k,
        SUM(RANK() OVER (ORDER BY SUM(v) DESC)) OVER () AS rank_sum,

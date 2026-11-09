@@ -344,31 +344,34 @@ keep	1
 -- !query
 SELECT
   k,
-  COUNT(*) OVER () AS group_count
-FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
-GROUP BY GROUPING SETS ((k), ())
-HAVING group_count = 3
+  SUM(v) AS s,
+  s * 2 AS s2,
+  SUM(SUM(v)) OVER (PARTITION BY k) AS partition_sum
+FROM VALUES ('a', 1), ('b', 2) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k IS NOT NULL
 ORDER BY k
 -- !query schema
-struct<>
+struct<k:string,s:bigint,s2:bigint,partition_sum:bigint>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
-  "sqlState" : "XX000",
-  "messageParameters" : {
-    "input" : "\"k\"",
-    "missingAttributes" : "\"group_count\"",
-    "operator" : "!Filter (group_count#xL = cast(3 as bigint))"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 153,
-    "fragment" : "SELECT\n  k,\n  COUNT(*) OVER () AS group_count\nFROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)\nGROUP BY GROUPING SETS ((k), ())\nHAVING group_count = 3"
-  } ]
-}
+a	1	2	1
+b	2	4	2
+
+
+-- !query
+SELECT
+  k,
+  SUM(v) AS s,
+  s * 2 AS s2,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k = 'keep'
+ORDER BY k
+-- !query schema
+struct<k:string,s:bigint,s2:bigint,group_count:bigint>
+-- !query output
+keep	1	2	1
 
 
 -- !query
@@ -377,12 +380,28 @@ SELECT
   COUNT(*) OVER () AS group_count
 FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
 GROUP BY GROUPING SETS ((k), ())
-HAVING GROUPING_ID() = 1
+HAVING group_count = 3L
 ORDER BY k
 -- !query schema
 struct<k:string,group_count:bigint>
 -- !query output
-NULL	1
+NULL	3
+drop	3
+keep	3
+
+
+-- !query
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY GROUPING SETS ((k), ())
+HAVING GROUPING_ID() = 1L
+ORDER BY k
+-- !query schema
+struct<k:string,group_count:bigint>
+-- !query output
+NULL	3
 
 
 -- !query
@@ -391,12 +410,29 @@ SELECT
   COUNT(*) OVER () AS group_count
 FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
 GROUP BY ROLLUP(k)
-HAVING SUM(v) = 1
+HAVING SUM(v) = 1L
 ORDER BY k
 -- !query schema
 struct<k:string,group_count:bigint>
 -- !query output
 keep	1
+
+
+-- !query
+SELECT
+  k,
+  SUM(v) AS s,
+  s * 2 AS s2,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING GROUPING_ID() = 0L
+ORDER BY k
+-- !query schema
+struct<k:string,s:bigint,s2:bigint,group_count:bigint>
+-- !query output
+drop	2	4	3
+keep	1	2	3
 
 
 -- !query
@@ -419,6 +455,39 @@ SET spark.sql.legacy.evaluateHavingAfterInnerWindow=true
 struct<key:string,value:string>
 -- !query output
 spark.sql.legacy.evaluateHavingAfterInnerWindow	true
+
+
+-- !query
+SELECT
+  k,
+  SUM(v) AS s,
+  s * 2 AS s2,
+  SUM(SUM(v)) OVER (PARTITION BY k) AS partition_sum
+FROM VALUES ('a', 1), ('b', 2) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k IS NOT NULL
+ORDER BY k
+-- !query schema
+struct<k:string,s:bigint,s2:bigint,partition_sum:bigint>
+-- !query output
+a	1	2	1
+b	2	4	2
+
+
+-- !query
+SELECT
+  k,
+  SUM(v) AS s,
+  s * 2 AS s2,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING k = 'keep'
+ORDER BY k
+-- !query schema
+struct<k:string,s:bigint,s2:bigint,group_count:bigint>
+-- !query output
+keep	1	2	3
 
 
 -- !query
@@ -469,28 +538,59 @@ SELECT
   COUNT(*) OVER () AS group_count
 FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
 GROUP BY GROUPING SETS ((k), ())
-HAVING group_count = 3
+HAVING group_count = 3L
 ORDER BY k
 -- !query schema
-struct<>
+struct<k:string,group_count:bigint>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
-  "sqlState" : "XX000",
-  "messageParameters" : {
-    "input" : "\"k\"",
-    "missingAttributes" : "\"group_count\"",
-    "operator" : "!Filter (group_count#xL = cast(3 as bigint))"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 153,
-    "fragment" : "SELECT\n  k,\n  COUNT(*) OVER () AS group_count\nFROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)\nGROUP BY GROUPING SETS ((k), ())\nHAVING group_count = 3"
-  } ]
-}
+NULL	3
+drop	3
+keep	3
+
+
+-- !query
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY GROUPING SETS ((k), ())
+HAVING GROUPING_ID() = 1L
+ORDER BY k
+-- !query schema
+struct<k:string,group_count:bigint>
+-- !query output
+NULL	3
+
+
+-- !query
+SELECT
+  k,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING SUM(v) = 1L
+ORDER BY k
+-- !query schema
+struct<k:string,group_count:bigint>
+-- !query output
+keep	1
+
+
+-- !query
+SELECT
+  k,
+  SUM(v) AS s,
+  s * 2 AS s2,
+  COUNT(*) OVER () AS group_count
+FROM VALUES ('drop', 2), ('keep', 1) AS input(k, v)
+GROUP BY ROLLUP(k)
+HAVING GROUPING_ID() = 0L
+ORDER BY k
+-- !query schema
+struct<k:string,s:bigint,s2:bigint,group_count:bigint>
+-- !query output
+drop	2	4	3
+keep	1	2	3
 
 
 -- !query
