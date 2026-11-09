@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { readFile } from 'fs/promises';
+import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { glob } from 'glob';
@@ -33,15 +33,22 @@ test('CSS files with data URI images do not violate CSP img-src policy', async f
   });
 
   const dataUriPattern = /url\(['"]?data:image\//;
-  const contents = await Promise.all(
-    cssFiles.map((file) => readFile(join(__dirname, '../..', file), 'utf8'))
-  );
-  const hasDataUri = contents.some((content) => dataUriPattern.test(content));
+  let hasDataUri = false;
+
+  for (const file of cssFiles) {
+    const filePath = join(__dirname, '../..', file);
+    const content = readFileSync(filePath, 'utf8');
+
+    if (dataUriPattern.test(content)) {
+      hasDataUri = true;
+      break;
+    }
+  }
 
   // If any CSS uses data URIs, verify our CSP policy allows them
   if (hasDataUri) {
     const httpSecurityFilterPath = join(__dirname, '../../core/src/main/scala/org/apache/spark/ui/HttpSecurityFilter.scala');
-    const httpSecurityFilter = await readFile(httpSecurityFilterPath, 'utf8');
+    const httpSecurityFilter = readFileSync(httpSecurityFilterPath, 'utf8');
 
     // Verify that CSP includes img-src with data: support
     expect(httpSecurityFilter).toMatch(/img-src\s+[^;]*data:/);
@@ -56,8 +63,9 @@ test('All inline scripts use CSP nonce', async function () {
 
   const violations = [];
 
-  await Promise.all(scalaFiles.map(async (file) => {
-    const content = await readFile(join(__dirname, '../..', file), 'utf8');
+  for (const file of scalaFiles) {
+    const filePath = join(__dirname, '../..', file);
+    const content = readFileSync(filePath, 'utf8');
 
     // Find inline script tags: <script ...>...</script> or <script .../>
     const scriptTagPattern = /<script\s+([^>]*)>/g;
@@ -65,7 +73,7 @@ test('All inline scripts use CSP nonce', async function () {
 
     while ((match = scriptTagPattern.exec(content)) !== null) {
       const attributes = match[1];
-      
+
       // Skip external scripts (those with src attribute)
       if (/src\s*=/.test(attributes)) {
         continue;
@@ -80,7 +88,7 @@ test('All inline scripts use CSP nonce', async function () {
         });
       }
     }
-  }));
+  }
 
   if (violations.length > 0) {
     const message = violations.map(v => 
