@@ -125,6 +125,8 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
   }
 
   override def compileValue(value: Any): Any = value match {
+    // '\\' is one backslash in the default sql_mode but two under NO_BACKSLASH_ESCAPES,
+    // so LEFT('\\', 1) yields exactly one backslash in either mode.
     case stringValue: String if stringValue.contains('\\') =>
       val escaped = escapeSql(stringValue.replace("\\", "\\\\"))
       raw"""REPLACE('$escaped', '\\', LEFT('\\', 1))"""
