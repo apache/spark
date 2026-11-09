@@ -53,7 +53,9 @@ case class LogicalRelation(
     output = output.map(QueryPlan.normalizeExpressions(_, output)),
     catalogTable = None)
 
-  override def isOutputRepeatable: Boolean = !isStreaming
+  // Only a file-based relation is known to return the same rows on every read; a JDBC query or a
+  // Kafka batch read up to the latest offsets, for example, can return other rows.
+  override def isOutputRepeatable: Boolean = !isStreaming && relation.isInstanceOf[HadoopFsRelation]
 
   override def computeStats(): Statistics = {
     catalogTable

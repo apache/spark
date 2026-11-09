@@ -179,7 +179,9 @@ filter from, to prune the other side. Spark decides on its own whether a runtime
 building, based on statistics; the hint overrides that decision, but not the requirements that make
 the filter correct, so Spark is not guaranteed to follow it and issues a warning when it cannot.
 Spark may also decline the hint because of configured limits on runtime filters; the warning names
-the reason. When Spark declines the hint, it does not build a filter in the other direction instead.
+the reason. When the hinted side cannot be the source of a runtime filter, Spark plans the join as
+without the hint; when Spark declines the hint for another reason, it does not build a filter in the
+other direction instead.
 
 #### Runtime Filter Hints Types
 
@@ -190,15 +192,17 @@ the reason. When Spark declines the hint, it does not build a filter in the othe
     side but Spark does not choose a runtime filter on its own, e.g. because table statistics are
     missing or misleading. The hinted side must produce the same set of rows, with the same join key
     values, whenever it is evaluated; its other columns may differ, and it cannot be a stream, though
-    the static side of a stream-static join can be hinted to prune the stream. `RUNTIME_FILTER` can
-    be combined with a join strategy hint.
+    the static side of a stream-static join can be hinted to prune a stream without a stateful
+    operator, such as an aggregation, below the join. `RUNTIME_FILTER` can be combined with a join
+    strategy hint.
 
     For a Bloom filter, the hint overrides
     `spark.sql.optimizer.runtime.bloomFilter.creationSideThreshold`,
     `spark.sql.optimizer.runtime.bloomFilter.applicationSideScanSizeThreshold`, and the requirements
     that the hinted side have a selective predicate and that the join involve a shuffle. It still
     obeys `spark.sql.optimizer.runtime.bloomFilter.enabled` and
-    `spark.sql.optimizer.runtimeFilter.number.threshold`, requires simple join keys, and the filter
+    `spark.sql.optimizer.runtimeFilter.number.threshold`, requires simple join keys that compare by
+    their bytes, unlike a string with a case- or accent-insensitive collation, and the filter
     stays capped by `spark.sql.optimizer.runtime.bloomFilter.maxNumItems` and
     `spark.sql.optimizer.runtime.bloomFilter.maxNumBits`. For dynamic partition pruning, the hint
     overrides the pruning benefit estimate and
@@ -208,7 +212,8 @@ the reason. When Spark declines the hint, it does not build a filter in the othe
 
     Like a join strategy hint, `RUNTIME_FILTER` fixes the join order around the hinted relation:
     Spark does not reorder a join that carries it. Place the hinted relation where it joins the
-    side to prune on the join key.
+    side to prune on the join key: placed elsewhere, it can leave a cartesian product that Spark
+    would otherwise reorder into an equi-join.
 
     The hinted side is evaluated again to build the filter, so its cost is paid twice. A Bloom
     filter is merged in a single task from one partial filter per task that reads the hinted side,

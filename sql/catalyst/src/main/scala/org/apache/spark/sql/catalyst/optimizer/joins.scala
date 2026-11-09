@@ -23,6 +23,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{HASH_JOIN_KEYS, JOIN_CONDITION}
+import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractFiltersAndInnerJoins, ExtractSingleColumnNullAwareAntiJoin}
@@ -634,27 +635,29 @@ trait JoinSelectionHelper extends Logging {
   }
 
   /**
-   * Why `plan` cannot serve as the source of a runtime filter on its join key `key`, or None when
-   * it can, see [[RuntimeFilterSourceAnalysis]].
+   * Whether `plan` is a stream with a stateful operator, which a runtime filter must not prune:
+   * the filter is built again in each micro-batch, so the rows it drops in one never reach the
+   * state, though the filter's source can gain their keys in a later one.
    */
-  def runtimeFilterSourceRejection(plan: LogicalPlan, key: Expression): Option[String] = {
-    RuntimeFilterSourceAnalysis.rejection(plan, key)
+  def isStatefulStream(plan: LogicalPlan): Boolean =
+    plan.isStreaming && plan.exists(UnsupportedOperationChecker.isStatefulOperation)
+
+  /**
+   * The definitions of the CTEs that `plan` and its subqueries define, which a hinted side may
+   * read, see [[runtimeFilterHintCheck]].
+   */
+  def cteDefinitions(plan: LogicalPlan): Map[Long, CTERelationDef] = {
+    plan.collectWithSubqueries { case w: WithCTE => w.cteDefs }.flatten.map(d => d.id -> d).toMap
   }
 
   /**
-   * Why a hinted runtime filter built from `creationSide` on `creationKey` cannot prune on
-   * `applicationKey`, or None when it can. The filter evaluates the creation side and both keys
-   * separately from the join, so all of them have to be repeatable.
+   * A check of `creationSide` as the source of hinted runtime filters, which analyzes the side
+   * once, on first use. `cteDefs` are the definitions of the CTEs the side may read.
    */
-  def runtimeFilterHintRejection(
-      applicationKey: Expression,
+  def runtimeFilterHintCheck(
       creationSide: LogicalPlan,
-      creationKey: Expression): Option[String] = {
-    if (!RuntimeFilterSourceAnalysis.isRepeatableExpression(applicationKey)) {
-      Some("the join key may take different values when evaluated again")
-    } else {
-      runtimeFilterSourceRejection(creationSide, creationKey)
-    }
+      cteDefs: Map[Long, CTERelationDef]): RuntimeFilterHintCheck = {
+    new RuntimeFilterSourceAnalysis(creationSide, cteDefs)
   }
 
   /**
@@ -717,6 +720,24 @@ trait JoinSelectionHelper extends Logging {
 }
 
 /**
+ * Checks a join side as the source of hinted runtime filters, see [[RuntimeFilterSourceAnalysis]].
+ */
+private[sql] trait RuntimeFilterHintCheck {
+
+  /**
+   * Why a runtime filter built from the side on `creationKey` cannot prune on `applicationKey`, or
+   * None when it can. The filter evaluates the side and both keys separately from the join, so all
+   * of them have to be repeatable. With `checkFunctions`, the side may call no function the
+   * filter's subquery cannot evaluate, wherever it calls it: a DPP filter's subquery runs the side
+   * as it is, while a Bloom filter's is column-pruned first and checked again.
+   */
+  def rejection(
+      applicationKey: Expression,
+      creationKey: Expression,
+      checkFunctions: Boolean = true): Option[String]
+}
+
+/**
  * Decides whether a plan can serve as the source of a runtime filter on a join key. A runtime
  * filter evaluates its source separately from the join, so the rows the source produces and the
  * key values they carry must be the same in both evaluations, or the filter could prune rows the
@@ -730,8 +751,8 @@ trait JoinSelectionHelper extends Logging {
  *      analysis, or an expression over such an attribute;
  *   2. whether the row multiplicity is unstable, i.e. every row is still present but may be
  *      repeated a different number of times, which an outer generate with an unstable generator,
- *      or an aggregate over an unstable value, causes and which makes every aggregate over the
- *      rows unstable.
+ *      or an aggregate grouping on an unstable value, causes and which makes every aggregate over
+ *      the rows unstable.
  *
  * The plan is rejected outright when its row set is unstable (a filter or join condition consumes
  * an unstable attribute, an inner generate uses an unstable generator, any limit, offset or
@@ -739,44 +760,37 @@ trait JoinSelectionHelper extends Logging {
  * calls a function the filter subquery cannot evaluate, when an operator would duplicate an
  * observation or is not analyzed. The source qualifies when the key references
  * no unstable attribute. Values that are unstable but only carried to the output (a `first(name)`
- * next to a `GROUP BY id`, a row number next to the key) do not disqualify it.
+ * next to a `GROUP BY id`, a row number next to the key) do not disqualify it. A CTE that is not
+ * inlined is evaluated from its definition wherever it is read, unless exchange reuse shares one
+ * evaluation, so it is analyzed through its definition in `cteDefs`.
  */
-private[optimizer] object RuntimeFilterSourceAnalysis {
+private[optimizer] class RuntimeFilterSourceAnalysis(
+    side: LogicalPlan,
+    cteDefs: Map[Long, CTERelationDef]) extends RuntimeFilterHintCheck {
+  import RuntimeFilterSourceAnalysis._
 
-  /**
-   * @param unstable output attributes whose values depend on evaluation order or on chance.
-   * @param unstableMultiplicity whether rows may be repeated a different number of times per
-   *                             evaluation, while each row stays present.
-   */
-  private case class Taint(unstable: AttributeSet, unstableMultiplicity: Boolean = false)
+  private lazy val sideCallsExtractedFunction = containsExtractedFunction(side)
 
-  private val NotRepeatable =
-    "the hinted side may produce different rows or join keys when evaluated again"
+  private lazy val sideTaint = analyze(side)
 
-  /** Why `plan` is not a repeatable source of `key`, or None when it is. */
-  def rejection(plan: LogicalPlan, key: Expression): Option[String] = {
-    if (plan.isStreaming) {
+  override def rejection(
+      applicationKey: Expression,
+      creationKey: Expression,
+      checkFunctions: Boolean): Option[String] = {
+    if (!isStable(applicationKey, AttributeSet.empty)) {
+      Some("the join key may take different values when evaluated again")
+    } else if (side.isStreaming) {
       Some("the hinted side is a stream")
-    } else if (containsExtractedFunction(plan) ||
+    } else if ((checkFunctions && sideCallsExtractedFunction) ||
         // A DPP filter evaluates the key in its own subquery, which no UDF extraction rewrites.
-        key.containsAnyPattern(PYTHON_UDF, EXTERNAL_UDF)) {
-      Some("the hinted side contains a Python UDF, Python UDTF or external UDF, which a runtime " +
-        "filter cannot evaluate")
+        creationKey.containsAnyPattern(PYTHON_UDF, EXTERNAL_UDF)) {
+      Some(ExtractedFunction)
     } else {
-      analyze(plan) match {
+      sideTaint match {
         case Left(reason) => Some(reason)
-        case Right(t) if !isStable(key, t.unstable) => Some(NotRepeatable)
+        case Right(t) if !isStable(creationKey, t.unstable) => Some(NotRepeatable)
         case _ => None
       }
-    }
-  }
-
-  def isRepeatableExpression(e: Expression): Boolean = isStable(e, AttributeSet.empty)
-
-  def containsExtractedFunction(plan: LogicalPlan): Boolean = {
-    plan.containsAnyPattern(PYTHON_UDF, EXTERNAL_UDF) || plan.exists {
-      case g: Generate => g.generator.isInstanceOf[PythonUDTF]
-      case _ => false
     }
   }
 
@@ -821,6 +835,18 @@ private[optimizer] object RuntimeFilterSourceAnalysis {
     case s: DataSourceV2ScanRelation if !s.isOutputRepeatable =>
       Left(s"the hinted side reads ${s.name} with an aggregate, limit, offset, top-N or sample " +
         "pushed into the source, which may return different rows when evaluated again")
+
+    case r: CTERelationRef => cteDefs.get(r.cteId).filterNot(_ => r.recursive) match {
+      case Some(cteDef) => analyze(cteDef.child).map { t =>
+        val unstable = r.output.zip(cteDef.child.output).collect {
+          case (attr, defAttr) if t.unstable.contains(defAttr) => attr
+        }
+        Taint(AttributeSet(unstable), t.unstableMultiplicity)
+      }
+      case None =>
+        Left("the hinted side reads a recursive CTE or one defined outside the plan being " +
+          "optimized, which cannot be checked for repeatability")
+    }
 
     case l: LeafNode =>
       if (l.isOutputRepeatable) {
@@ -882,14 +908,18 @@ private[optimizer] object RuntimeFilterSourceAnalysis {
     case u: Union =>
       val taints = u.children.map(analyze)
       taints.collectFirst { case Left(reason) => Left(reason) }.getOrElse {
-        val unstable = u.output.zipWithIndex.collect {
-          case (attr, i) if u.children.zip(taints).exists {
-            case (child, Right(taint)) => taint.unstable.contains(child.output(i))
-            case _ => false
-          } => attr
+        val childTaints = taints.collect { case Right(t) => t }
+        val unstable = if (childTaints.forall(_.unstable.isEmpty)) {
+          Nil
+        } else {
+          val childOutputs = u.children.map(_.output.toIndexedSeq)
+          u.output.zipWithIndex.collect {
+            case (attr, i) if childOutputs.zip(childTaints).exists { case (output, t) =>
+              t.unstable.contains(output(i))
+            } => attr
+          }
         }
-        Right(Taint(AttributeSet(unstable),
-          taints.exists(_.exists(_.unstableMultiplicity))))
+        Right(Taint(AttributeSet(unstable), childTaints.exists(_.unstableMultiplicity)))
       }
 
     // An inner generate drops the rows for which the generator yields nothing, so an unstable
@@ -996,5 +1026,28 @@ private[optimizer] object RuntimeFilterSourceAnalysis {
       }
       wholePartition && isOrderIrrelevant(e)
     case _ => false
+  }
+}
+
+private[optimizer] object RuntimeFilterSourceAnalysis {
+
+  /**
+   * @param unstable output attributes whose values depend on evaluation order or on chance.
+   * @param unstableMultiplicity whether rows may be repeated a different number of times per
+   *                             evaluation, while each row stays present.
+   */
+  private case class Taint(unstable: AttributeSet, unstableMultiplicity: Boolean = false)
+
+  private val NotRepeatable =
+    "the hinted side may produce different rows or join keys when evaluated again"
+
+  val ExtractedFunction: String = "the hinted side contains a Python UDF, Python UDTF or " +
+    "external UDF, which a runtime filter cannot evaluate"
+
+  def containsExtractedFunction(plan: LogicalPlan): Boolean = {
+    plan.containsAnyPattern(PYTHON_UDF, EXTERNAL_UDF) || plan.exists {
+      case g: Generate => g.generator.isInstanceOf[PythonUDTF]
+      case _ => false
+    }
   }
 }

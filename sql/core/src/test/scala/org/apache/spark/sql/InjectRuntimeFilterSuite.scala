@@ -18,11 +18,13 @@
 package org.apache.spark.sql
 
 import java.io.File
+import java.sql.DriverManager
+import java.util.Properties
 
 import org.apache.logging.log4j.Level
 
 import org.apache.spark.sql.catalyst.analysis.HintErrorLogger
-import org.apache.spark.sql.catalyst.expressions.{Alias, BloomFilterMightContain, DynamicPruningExpression, DynamicPruningSubquery, Expression, Literal, NamedExpression, ScalarSubquery, XxHash64}
+import org.apache.spark.sql.catalyst.expressions.{Alias, BloomFilterMightContain, DynamicPruning, DynamicPruningExpression, DynamicPruningSubquery, Expression, Literal, NamedExpression, ScalarSubquery, XxHash64}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, BloomFilterAggregate}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan, SHUFFLE_MERGE}
 import org.apache.spark.sql.columnar.CachedBatch
@@ -33,12 +35,13 @@ import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEProp
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.{LogicalRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.planmerging.MergeSubplans
-import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.functions.{count, lit, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.Utils
 
 class InjectRuntimeFilterSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
@@ -640,10 +643,8 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
               assert(relation.statsAvailable == (storageLevel.useDisk && materialize))
               assert(relation.isOutputRepeatable == materialize)
 
-              // Not an equality to a literal, which would be inferred for `bf1.c1` too and leave
-              // the filter nothing to prune.
               val query = s"SELECT * FROM bf1 JOIN " +
-                s"(SELECT * FROM $cacheName WHERE c2 IN (8, 9)) filtered_keys " +
+                s"(SELECT * FROM $cacheName WHERE c2 = 8) filtered_keys " +
                 "ON bf1.c1 = filtered_keys.c2"
               val actual = sql(query)
               assert(getNumBloomFilters(actual.queryExecution.optimizedPlan) == 1)
@@ -1935,14 +1936,14 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     }
   }
 
-  test("Runtime bloom filter join: do not add bloom filter on a key fixed by a literal") {
+  test("Runtime bloom filter join: add bloom filter on a key fixed by a literal") {
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "1",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       // A static partition filter fixes the partition key, so its DPP filter is dropped as
-      // redundant. A Bloom filter on that key, or on the other side's key, which the literal is
-      // inferred for, would prune next to nothing.
+      // redundant. A Bloom filter on that key keeps every row or none, which still prunes the
+      // whole side when the other side lacks the literal.
       val query = "select * from bf5part f join bf2 on f.f5 = bf2.f2 where f.f5 = 20"
-      assertDidNotRewriteWithBloomFilter(query)
+      assertRewroteWithBloomFilter(query)
       assert(!hasDynamicPruning(query))
     }
   }
@@ -2565,20 +2566,28 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     }
   }
 
-  test("RUNTIME_FILTER hint that cannot be applied does not fall back to the other direction") {
+  test("RUNTIME_FILTER hint on a side that cannot be a source leaves the join as without it") {
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       // Left to itself the rule builds a filter from the selective `bf2` and applies it to `t`.
       val join = "FROM (SELECT c4 FROM bf4 ORDER BY c4 LIMIT 5) t JOIN bf2 ON t.c4 = bf2.c2 " +
         "WHERE bf2.a2 = 62"
       assertRewroteWithBloomFilter(s"SELECT * $join")
-      // Hinting `t` as the source designates the opposite direction. `t` is not a repeatable
-      // source, so the hint fails, and the filter the heuristics would have built is not built
-      // either: the hint decides the direction rather than adding to the heuristics.
+      // `t` is not a repeatable source, so the hint is reported and the heuristics build the
+      // filter they build without it.
       val hinted = s"SELECT /*+ RUNTIME_FILTER(t) */ * $join"
-      assertDidNotRewriteWithBloomFilter(hinted)
+      assertRewroteWithBloomFilter(hinted)
+      assert(bloomFilterApplicationSideKeys(hinted) == Set("c4"))
       assertHintNotApplied(hinted,
         "the hinted side may produce different rows or join keys when evaluated again")
+      // `t` can be a source, but a left outer join cannot prune its left side. The hint is
+      // reported, and the filter the heuristics would build from `bf2` into `t` is not built.
+      val outerJoin = "FROM bf2 LEFT JOIN (SELECT c4 FROM bf4) t ON bf2.c2 = t.c4 " +
+        "WHERE bf2.a2 = 62"
+      assertRewroteWithBloomFilter(s"SELECT * $outerJoin")
+      val outerHinted = s"SELECT /*+ RUNTIME_FILTER(t) */ * $outerJoin"
+      assertDidNotRewriteWithBloomFilter(outerHinted)
+      assertHintNotApplied(outerHinted, "the left side of a left outer join cannot be pruned")
     }
   }
 
@@ -2880,6 +2889,11 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
         "on bf4.c4 = bf2.c2 and bf4.b4 = bf2.b2"
       assertHintedRewrite(twoKeys, 2)
       assert(bloomFilterApplicationSideKeys(twoKeys) == Set("c4", "b4"))
+      // Two key pairs on the same key of `bf4` build one filter on it, not one per pair.
+      val sameKey = "select /*+ RUNTIME_FILTER(bf2) */ * from bf4 join bf2 " +
+        "on bf4.c4 = bf2.c2 and bf4.c4 = bf2.b2"
+      assert(getNumBloomFilters(sql(sameKey).queryExecution.optimizedPlan) == 1)
+      assert(!hintWarnings(sameKey).exists(_.contains("is not supported")))
       // A key the filter cannot use does not block the others, and the hint counts as applied.
       spark.udf.register("bf_identity", (s: Int) => s)
       val oneBlocked = "select /*+ RUNTIME_FILTER(bf2) */ * from bf4 join bf2 " +
@@ -3109,6 +3123,179 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       assert(subqueryIds.size == 1, "Missing or unexpected SubqueryExec in the plan")
       assert(reusedSubqueryIds.size == 1,
         "Missing or unexpected reused ReusedSubqueryExec in the plan")
+    }
+  }
+
+  test("Runtime filters do not prune a stream with a stateful operator") {
+    import testImplicits._
+    // A filter is built again in each micro-batch, so the rows it drops in one would be missing
+    // from the aggregate state once the static side gains their key.
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "0",
+        "spark.sql.catalog.testcat" -> classOf[InMemoryTableCatalog].getName) {
+      Seq(true, false).foreach { hinted =>
+        withTable("testcat.ns.stream_dim") {
+          sql("CREATE TABLE testcat.ns.stream_dim (k INT, v STRING)")
+          sql("INSERT INTO testcat.ns.stream_dim VALUES (1, 'a')")
+          val input = MemoryStream[Int]
+          val counts = input.toDF().groupBy($"value".as("k")).count()
+          val dim = spark.table("testcat.ns.stream_dim").where($"k" < 100)
+          val name = s"stateful_stream_$hinted"
+          val query = counts.join(if (hinted) dim.hint("runtime_filter") else dim, "k")
+            .writeStream.format("memory").queryName(name).outputMode("update").start()
+          try {
+            input.addData(1, 2)
+            query.processAllAvailable()
+            sql("INSERT INTO testcat.ns.stream_dim VALUES (2, 'b')")
+            input.addData(2)
+            query.processAllAvailable()
+            checkAnswer(spark.table(name), Seq(Row(1, 1L, "a"), Row(2, 2L, "b")))
+          } finally {
+            query.stop()
+          }
+        }
+      }
+    }
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(100).selectExpr("id v", "CAST(id % 10 AS INT) p").write.partitionBy("p")
+        .mode("overwrite").parquet(path)
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+          SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false") {
+        Seq(true, false).foreach { hinted =>
+          val counts = spark.readStream.schema("v BIGINT, p INT").parquet(path)
+            .groupBy($"p").count()
+          val dim = spark.table("bf2").where($"a2" === 62)
+          val query = counts.join(if (hinted) dim.hint("runtime_filter") else dim,
+              $"p" === $"c2")
+            .writeStream.format("memory").queryName(s"stateful_file_stream_$hinted")
+            .outputMode("update").start()
+          try {
+            query.processAllAvailable()
+            val plan = query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution
+              .optimizedPlan
+            assert(!plan.exists(_.expressions.exists(_.exists(_.isInstanceOf[DynamicPruning]))),
+              plan.treeString)
+          } finally {
+            query.stop()
+          }
+        }
+      }
+    }
+  }
+
+  test("RUNTIME_FILTER hint refuses a collated key that is not a plain column") {
+    withTable("bf_collated_fact", "bf_collated_dim") {
+      sql("CREATE TABLE bf_collated_fact (k STRING COLLATE UTF8_LCASE) USING parquet")
+      sql("CREATE TABLE bf_collated_dim (k STRING COLLATE UTF8_LCASE, c INT) USING parquet")
+      sql("INSERT INTO bf_collated_fact SELECT 'abcdef' FROM range(100)")
+      sql("INSERT INTO bf_collated_dim VALUES ('ABC', 1), ('ABCDEF', 2)")
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        // The Bloom filter hashes the bytes of a key, while the join compares it under its
+        // collation (SPARK-58486).
+        val expression = "SELECT /*+ RUNTIME_FILTER(d) */ * FROM bf_collated_fact f " +
+          "JOIN bf_collated_dim d ON substr(f.k, 1, 3) = d.k WHERE d.c = 1"
+        assertNoBloomFilters(expression)
+        assert(sql(expression).count() == 100)
+        assertHintNotApplied(expression,
+          "the join key has a collation the Bloom filter hash does not follow")
+        // A plain column is joined on its collation key, which compares by its bytes.
+        assertHintedRewrite("SELECT /*+ RUNTIME_FILTER(d) */ * FROM bf_collated_fact f " +
+          "JOIN bf_collated_dim d ON f.k = d.k WHERE d.c = 2")
+      }
+    }
+  }
+
+  test("RUNTIME_FILTER hint rejects a V1 source that is not file-based") {
+    // A JDBC query, for example, can return other rows when read again.
+    Utils.classForName("org.h2.Driver")
+    val url = "jdbc:h2:mem:bf_hint_v1;DB_CLOSE_DELAY=-1"
+    val conn = DriverManager.getConnection(url)
+    try {
+      conn.prepareStatement("CREATE TABLE dim (k INT)").executeUpdate()
+      conn.prepareStatement("INSERT INTO dim VALUES (45), (0)").executeUpdate()
+      withTempView("jdbc_side") {
+        spark.read.jdbc(url, "dim", new Properties()).createOrReplaceTempView("jdbc_side")
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+          val query = "SELECT /*+ RUNTIME_FILTER(t) */ * FROM bf4 JOIN jdbc_side t ON bf4.c4 = t.k"
+          assertNoBloomFilters(query)
+          assertReturnsRows(query)
+          assertHintNotApplied(query,
+            "the hinted side reads LogicalRelation, which may return different rows")
+        }
+      }
+    } finally {
+      conn.prepareStatement("DROP TABLE dim").executeUpdate()
+      conn.close()
+    }
+  }
+
+  test("RUNTIME_FILTER hint takes a side with a Python UDF its Bloom filter does not read") {
+    import IntegratedUDFTestUtils._
+    assume(shouldTestPythonUDFs)
+    val pythonUDF = TestPythonUDF("bf_python_udf")
+    registerTestUDF(pythonUDF, spark)
+    try {
+      withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        // The Bloom filter's subquery reads only what its key needs of the hinted side.
+        assertHintedRewrite("SELECT /*+ RUNTIME_FILTER(t) */ * FROM bf4 JOIN " +
+          "(SELECT c2, bf_python_udf(a2) AS x FROM bf2) t ON bf4.c4 = t.c2")
+        // A filter of the hinted side is part of it.
+        val filtered = "SELECT /*+ RUNTIME_FILTER(t) */ * FROM bf4 JOIN " +
+          "(SELECT c2 FROM bf2 WHERE bf_python_udf(a2) IS NOT NULL) t ON bf4.c4 = t.c2"
+        assertNoBloomFilters(filtered)
+        assertHintNotApplied(filtered,
+          "the hinted side contains a Python UDF, Python UDTF or external UDF")
+      }
+    } finally {
+      spark.sessionState.catalog.dropTempFunction(pythonUDF.name, ignoreIfNotExists = true)
+    }
+  }
+
+  test("RUNTIME_FILTER hint takes a materialized CTE whose definition is repeatable") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      // A CTE that is not inlined is evaluated from its definition wherever it is read.
+      assertHintedRewrite("WITH d AS MATERIALIZED (SELECT c2 FROM bf2 WHERE a2 < 60) " +
+        "SELECT /*+ RUNTIME_FILTER(d) */ * FROM bf4 JOIN d ON bf4.c4 = d.c2")
+      val unstable = "WITH d AS MATERIALIZED (SELECT c2 FROM bf2 WHERE rand() < 0.5) " +
+        "SELECT /*+ RUNTIME_FILTER(d) */ * FROM bf4 JOIN d ON bf4.c4 = d.c2"
+      assertNoBloomFilters(unstable)
+      assertHintNotApplied(unstable,
+        "the hinted side may produce different rows or join keys when evaluated again")
+      val pruned = "WITH d AS MATERIALIZED (SELECT c2 FROM bf2 WHERE a2 < 60) " +
+        "SELECT /*+ RUNTIME_FILTER(d) */ * FROM bf5part p JOIN d ON p.f5 = d.c2"
+      assert(hasDynamicPruning(pruned))
+      assert(!hintWarnings(pruned).exists(_.contains("is not supported")))
+      checkAnswer(sql(pruned), sql(pruned.replace("/*+ RUNTIME_FILTER(d) */ ", "")))
+    }
+  }
+
+  test("RUNTIME_FILTER hint takes local data, a range, literal rows and a command result") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      def query(source: String): String =
+        s"SELECT /*+ RUNTIME_FILTER(t) */ * FROM bf4 JOIN ($source) t ON bf4.c4 = t.k"
+      assertHintedRewrite(query("SELECT * FROM VALUES (45), (0) AS v(k)"))
+      assertHintedRewrite(query("SELECT CAST(id AS INT) AS k FROM range(50)"))
+      // A single row would be folded into a filter on `bf4`, leaving no join key.
+      assertHintedRewrite(query("SELECT 45 AS k UNION ALL SELECT 0 AS k"))
+      withTempView("command_side") {
+        sql("SHOW TABLES").createOrReplaceTempView("command_side")
+        assertRewroteWithBloomFilter(
+          query("SELECT CAST(length(tableName) AS INT) AS k FROM command_side"))
+      }
+    }
+  }
+
+  test("DPP cleanup leaves the shared true literal untagged") {
+    // Cleanup replaces a DPP filter it drops, here for the static partition filter, with a
+    // literal, onto which the transform copies the filter's tags.
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      sql("SELECT /*+ RUNTIME_FILTER(bf2) */ * FROM bf5part p JOIN bf2 ON p.f5 = bf2.c2 " +
+        "WHERE p.f5 = 20").queryExecution.optimizedPlan
+      assert(Literal.TrueLiteral.getTagValue(DynamicPruning.HONORS_RUNTIME_FILTER_HINT).isEmpty)
     }
   }
 }

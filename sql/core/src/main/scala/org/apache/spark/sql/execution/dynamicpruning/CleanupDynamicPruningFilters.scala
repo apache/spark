@@ -18,8 +18,7 @@
 package org.apache.spark.sql.execution.dynamicpruning
 
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
-import org.apache.spark.sql.catalyst.expressions.{DynamicPruning, DynamicPruningSubquery, EqualNullSafe, EqualTo, Expression, ExpressionSet, PredicateHelper}
-import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
+import org.apache.spark.sql.catalyst.expressions.{DynamicPruning, DynamicPruningSubquery, EqualNullSafe, EqualTo, Expression, ExpressionSet, Literal, PredicateHelper}
 import org.apache.spark.sql.catalyst.planning.NodeWithOnlyDeterministicProjectAndFilter
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -57,7 +56,8 @@ object CleanupDynamicPruningFilters extends Rule[LogicalPlan] with PredicateHelp
           case dynamicPruning: DynamicPruningSubquery
               if dynamicPruning.pruningKey.references.isEmpty ||
                 unnecessaryPruningKeys.contains(dynamicPruning.pruningKey) =>
-            TrueLiteral
+            // Not the shared `TrueLiteral`: the transform copies the filter's tags onto it.
+            Literal(true)
         }
         f.copy(condition = newCondition)
     }
@@ -86,7 +86,8 @@ object CleanupDynamicPruningFilters extends Rule[LogicalPlan] with PredicateHelp
       case f @ Filter(condition, _) =>
         val newCondition = condition.transformWithPruning(
           _.containsAnyPattern(DYNAMIC_PRUNING_EXPRESSION, DYNAMIC_PRUNING_SUBQUERY)) {
-          case _: DynamicPruning => TrueLiteral
+          // Not the shared `TrueLiteral`: the transform copies the filter's tags onto it.
+          case _: DynamicPruning => Literal(true)
         }
         f.copy(condition = newCondition)
     }
