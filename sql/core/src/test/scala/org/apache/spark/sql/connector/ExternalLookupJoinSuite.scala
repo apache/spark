@@ -942,8 +942,8 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       (Seq("cache_enabled=true", "cache_enabled=false"), "cache_enabled", "DUPLICATE", Map()),
       (Seq("cache_enabled=unknown"), "cache_enabled", "INVALID_VALUE",
         Map("expected" -> "true or false")),
-      (Seq("cache_enabled"), "cache_enabled", "INVALID_FORMAT", Map()),
       (Seq("cache_enabled="), "cache_enabled=", "INVALID_FORMAT", Map()),
+      (Seq("=true"), "=true", "INVALID_FORMAT", Map()),
       (Seq("cache_mode=enabled"), "cache_mode", "UNSUPPORTED", supportedOptions),
       (Seq("cache_max_entries=0"), "cache_max_entries", "INVALID_VALUE", positiveInteger),
       (Seq("cache_max_entries=abc"), "cache_max_entries", "INVALID_VALUE", positiveInteger),
@@ -966,6 +966,73 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       },
       condition = "INVALID_EXTERNAL_LOOKUP_HINT.UNSUPPORTED_PARAMETER",
       parameters = Map("parameter" -> "\"1\""))
+    // A string without `=` is a relation name. When it names no relation, as an option without a
+    // value does, the error says how to write an option.
+    val noValue = intercept[AnalysisException] {
+      lookup.hint("external_lookup", "cache_enabled").queryExecution.analyzed
+    }
+    checkError(
+      exception = noValue,
+      condition = "INVALID_EXTERNAL_LOOKUP_HINT.RELATION_NOT_FOUND",
+      parameters = Map("relations" -> "`cache_enabled`"))
+    assert(noValue.getMessage.contains("Cannot find the relation(s) `cache_enabled` named by the " +
+      "hint. A string parameter that does not contain `=` is a relation name. Write a cache " +
+      "option as key=value, such as 'cache_enabled=false'."))
+  }
+
+  test("a hint can mix relation names and cache options given as strings") {
+    withSQLConf(
+        s"spark.sql.catalog.$EXTERNAL_LOOKUP_CATALOG_NAME" ->
+          classOf[ExternalLookupTestCatalog].getName) {
+      val catalogTable = s"$EXTERNAL_LOOKUP_CATALOG_NAME.ns.dual"
+      val swipes = streamOf(Seq((1, "lobby"), (3, "garage")).toDF("employee", "door"))
+      val expected = Seq(Row(1, "lobby", "engineering"), Row(1, "lobby", "research"))
+      def checkCacheOptions(df: DataFrame, check: ExternalLookupCacheOptions => Boolean): Unit = {
+        val run = runStream(df)
+        QueryTest.sameRows(expected, run.rows).foreach(fail(_))
+        val prepared = run.plan.collectFirst { case join: PreparedExternalLookupJoin => join }
+        assert(prepared.exists(join => check(join.cacheOptions)), prepared)
+      }
+
+      val directory = spark.table(catalogTable).as("r")
+      checkCacheOptions(
+        swipes.join(directory, swipes("employee") === $"r.id")
+          .hint("external_lookup", "r", "cache_enabled=false")
+          .select("employee", "door", "department"),
+        _.enabled === false)
+      withTempView("badge_swipes") {
+        swipes.createOrReplaceTempView("badge_swipes")
+        checkCacheOptions(
+          sql(
+            s"""
+              |SELECT /*+ EXTERNAL_LOOKUP('cache_ttl=2s', 'r') */ s.employee, s.door, r.department
+              |FROM badge_swipes s JOIN $catalogTable r ON s.employee = r.id
+              |""".stripMargin),
+          _.ttlMillis === 2000L)
+      }
+    }
+  }
+
+  test("the cache options of a hint in a WITH clause apply to its lookup join") {
+    withSQLConf(
+        s"spark.sql.catalog.$EXTERNAL_LOOKUP_CATALOG_NAME" ->
+          classOf[ExternalLookupTestCatalog].getName) {
+      withTempView("badge_swipes") {
+        streamOf(Seq((1, "lobby"), (3, "garage")).toDF("employee", "door"))
+          .createOrReplaceTempView("badge_swipes")
+        val run = runStream(sql(
+          s"""
+            |WITH lk AS (
+            |  SELECT /*+ EXTERNAL_LOOKUP('cache_enabled=false') */ *
+            |  FROM $EXTERNAL_LOOKUP_CATALOG_NAME.ns.dual)
+            |SELECT s.door, lk.department FROM badge_swipes s JOIN lk ON s.employee = lk.id
+            |""".stripMargin))
+        QueryTest.sameRows(
+          Seq(Row("lobby", "engineering"), Row("lobby", "research")), run.rows).foreach(fail(_))
+        val prepared = run.plan.collectFirst { case join: PreparedExternalLookupJoin => join }
+        assert(prepared.map(_.cacheOptions.enabled) === Some(false))
+      }
+    }
   }
 
   test("external lookup hint rejects invalid placement and relation targets") {

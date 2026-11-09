@@ -316,7 +316,10 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
       case marker: ExternalLookupHint => marker.child
     }
 
-  /** The cache options of an eligible join: its hint's, or the session defaults. */
+  /**
+   * The cache options of an eligible join, with its CTEs inlined by [[inlineCTEs]]: its hint's, or
+   * the session defaults.
+   */
   def cacheOptions(join: Join): ExternalLookupCacheOptions =
     lookupHints(join.right).headOption.map(_.cacheOptions)
       .getOrElse(ResolveExternalLookupHint.defaultCacheOptions)
@@ -506,7 +509,7 @@ object FormExternalLookupJoin extends Rule[LogicalPlan] {
               lookupPlan,
               join.joinType,
               join.condition,
-              cacheOptions(join),
+              cacheOptions(inlined),
               lookupPlan.output)
           // Operator optimization could push a filter's predicate into the join later, but the
           // condition must be written in the join.

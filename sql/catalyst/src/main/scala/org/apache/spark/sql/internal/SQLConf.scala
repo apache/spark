@@ -2568,7 +2568,9 @@ object SQLConf {
         "several input partitions, e.g. after coalesce, has one cache per partition). A cached " +
         "result is reused as it was read. At present, a join whose source serves a range " +
         "comparison (<, <=, >, >=) caches nothing. It can be overridden per join with the " +
-        "EXTERNAL_LOOKUP hint option 'cache_enabled'.")
+        "EXTERNAL_LOOKUP hint option 'cache_enabled', a string parameter of the form key=value " +
+        "such as 'cache_enabled=false'. A string parameter of the hint that does not contain " +
+        "'=' names a relation.")
       .version("4.4.0")
       .booleanConf
       .createWithDefault(true)

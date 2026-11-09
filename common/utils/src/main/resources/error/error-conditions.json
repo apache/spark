@@ -4504,7 +4504,7 @@
       },
       "RELATION_NOT_FOUND" : {
         "message" : [
-          "Cannot find the relation(s) <relations> named by the hint."
+          "Cannot find the relation(s) <relations> named by the hint. A string parameter that does not contain `=` is a relation name. Write a cache option as key=value, such as 'cache_enabled=false'."
         ]
       },
       "UNSUPPORTED_PARAMETER" : {

@@ -32,9 +32,13 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
 /**
- * Resolves the `EXTERNAL_LOOKUP` hint to [[ExternalLookupHint]] markers. As with join strategy
- * hints, a hint without parameters marks the plan it is attached to, and a hint with relation
- * names, given as identifiers or strings, marks each named relation.
+ * Resolves the `EXTERNAL_LOOKUP` hint to [[ExternalLookupHint]] markers. Its parameters are
+ * relation names and cache options:
+ *  - A relation name is an identifier, or a string that does not contain `=`. As with join
+ *    strategy hints, a hint without relation names marks the plan it is attached to, and a hint
+ *    with relation names marks each named relation.
+ *  - A cache option is a string of the form `key=value`, such as `'cache_ttl=5s'`. It overrides a
+ *    `spark.sql.join.externalLookup.cache.*` configuration for the joins that the hint marks.
  */
 object ResolveExternalLookupHint extends Rule[LogicalPlan] with QueryErrorsBase {
   private val HINT_NAME = "EXTERNAL_LOOKUP"
@@ -60,11 +64,17 @@ object ResolveExternalLookupHint extends Rule[LogicalPlan] with QueryErrorsBase 
     val relationNames = mutable.ArrayBuffer.empty[Seq[String]]
     var cacheOptions = defaultCacheOptions
     val seenOptions = mutable.HashSet.empty[String]
+    // The Dataset API, PySpark and Spark Connect pass a relation name as a string, as they do for
+    // join strategy hints. A relation whose name contains `=` is named with an identifier.
+    def addString(value: String): Unit =
+      if (value.contains('=')) {
+        cacheOptions = parseOption(value, cacheOptions, seenOptions)
+      } else {
+        relationNames += UnresolvedAttribute.parseAttributeName(value)
+      }
     parameters.foreach {
-      case StringLiteral(value) =>
-        cacheOptions = parseOption(value, cacheOptions, seenOptions)
-      case Literal(value: String, _) =>
-        cacheOptions = parseOption(value, cacheOptions, seenOptions)
+      case StringLiteral(value) => addString(value)
+      case Literal(value: String, _) => addString(value)
       case attr: UnresolvedAttribute =>
         relationNames += attr.nameParts
       case other =>
