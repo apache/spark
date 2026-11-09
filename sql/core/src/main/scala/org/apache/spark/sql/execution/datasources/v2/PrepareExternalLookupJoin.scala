@@ -127,17 +127,38 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
           throw QueryCompilationErrors.usePythonUDFInJoinConditionUnsupportedError(join.joinType)
       }
     }
-    val offeredCandidates = conjuncts.zipWithIndex.flatMap { case (conjunct, index) =>
+    val conditionCandidates = conjuncts.zipWithIndex.flatMap { case (conjunct, index) =>
       ExternalLookupJoinShapes.lookupComparison(
         conjunct, join.left.outputSet, join.right.outputSet).flatMap { comparison =>
         tableColumn(comparison.lookupField, lookupPlan).map { column =>
-          OfferedLookupPredicate(comparison.parameter, column, index, comparison.comparison)
+          OfferedLookupPredicate(comparison.parameter, column, Some(index), comparison.comparison)
         }
       }
     }
+    // Predicate pushdown moves a comparison of a lookup column with a constant onto the lookup
+    // side, as for an ordinary join, so the source receives it as a pushed filter. A source may
+    // need it in its access path, as the constant tenant of a composite key, so it is offered as
+    // well. The filter stays, and Spark evaluates it on the returned rows either way.
+    val lookupSideOutput = AttributeSet(lookupPlan.relation.output ++
+      lookupPlan.fields.map(_.toAttribute) ++ lookupPlan.upperStages.flatMap(_.output))
+    val filterCandidates = lookupFilterConjuncts(lookupPlan).flatMap { conjunct =>
+      ExternalLookupJoinShapes.lookupComparison(conjunct, AttributeSet.empty, lookupSideOutput)
+        .filter(_.parameter.isInstanceOf[Literal])
+        .flatMap { comparison =>
+          tableColumn(comparison.lookupField, lookupPlan).map { column =>
+            OfferedLookupPredicate(comparison.parameter, column, None, comparison.comparison)
+          }
+        }
+    }
+    val offeredCandidates = (conditionCandidates ++ filterCandidates).distinctBy { candidate =>
+      (candidate.projectedField.exprId, candidate.comparison, candidate.parameter)
+    }
     if (offeredCandidates.isEmpty) {
+      // Without a condition, the join has no key at all: none was written in it, and predicate
+      // pushdown moved none into it from a filter above.
       throw QueryCompilationErrors.unsupportedExternalLookupJoinError(
-        "NO_LOOKUP_CANDIDATE", Map("table" -> toSQLFreeFormId(tableName)))
+        if (conjuncts.isEmpty) "MISSING_JOIN_CONDITION" else "NO_LOOKUP_CANDIDATE",
+        if (conjuncts.isEmpty) Map.empty else Map("table" -> toSQLFreeFormId(tableName)))
     }
 
     val scanBuilder = supportsRead.newScanBuilder(relation.options)
@@ -168,7 +189,7 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
     }.toArray
     val selectedPredicates = selectedCandidates(tableName, offeredPredicates, offeredCandidates,
       lookupBuilder.selectLookupPredicates(offeredPredicates))
-    val selectedConjuncts = selectedPredicates.map(_.conjunctIndex).toSet
+    val selectedConjuncts = selectedPredicates.flatMap(_.conjunctIndex).toSet
     // As a hash join matches its keys before it evaluates its other conditions, the residual
     // evaluates the equalities between the two sides first, together with the conjuncts that
     // cannot fail. A conjunct that can fail then runs only for rows that pass them. Each group
@@ -392,7 +413,7 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
   private case class OfferedLookupPredicate(
       parameter: Expression,
       projectedField: Attribute,
-      conjunctIndex: Int,
+      conjunctIndex: Option[Int],
       comparison: LookupKeyComparison)
 
   /**
@@ -431,6 +452,14 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
       case _ => None
     }
   }
+
+  /** The conjuncts of the deterministic filters of a lookup side, in evaluation order. */
+  private def lookupFilterConjuncts(lookupPlan: LookupPlan): Seq[Expression] =
+    lookupPlan.filtersPushDown.flatMap(splitConjunctivePredicates) ++
+      lookupPlan.upperStages.flatMap {
+        case ExternalLookupFilter(condition, _) => splitConjunctivePredicates(condition)
+        case _: ExternalLookupProject => Nil
+      }
 
   /**
    * The table column that a lookup-side attribute passes through unchanged, if any: substituting
