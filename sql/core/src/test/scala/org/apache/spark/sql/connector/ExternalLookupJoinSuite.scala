@@ -1064,16 +1064,18 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       val left = streamOf(Seq(1).toDF("id"))
       val crossJoin = intercept[AnalysisException](left.crossJoin(spark.read.table(table)))
       assert(crossJoin.getCondition === "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.JOIN_TYPE")
-      assert(crossJoin.getMessageParameters.asScala.toMap - "supportedJoinTypes" ===
-        Map("joinType" -> "CROSS", "relation" -> "`SimpleExternalLookupTable`"))
+      assert(crossJoin.getMessageParameters.asScala.toMap === Map("joinType" -> "CROSS",
+        "relation" -> "`SimpleExternalLookupTable`", "supportedJoinTypes" -> SUPPORTED_JOIN_TYPES))
       withTempView("external_lookup_left") {
         left.createOrReplaceTempView("external_lookup_left")
         val fullOuter = intercept[AnalysisException] {
           sql(s"SELECT * FROM external_lookup_left l FULL OUTER JOIN $table r ON l.id = r.id")
         }
         assert(fullOuter.getCondition === "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.JOIN_TYPE")
-        assert(fullOuter.getMessageParameters.asScala.toMap - "supportedJoinTypes" ===
-          Map("joinType" -> "FULL OUTER", "relation" -> "`SimpleExternalLookupTable`"))
+        assert(fullOuter.getMessageParameters.asScala.toMap === Map(
+          "joinType" -> "FULL OUTER",
+          "relation" -> "`SimpleExternalLookupTable`",
+          "supportedJoinTypes" -> SUPPORTED_JOIN_TYPES))
       }
     }
   }
@@ -1227,8 +1229,10 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
         val fullOuter =
           intercept[AnalysisException](query("lookup", joinType = "FULL OUTER JOIN"))
         assert(fullOuter.getCondition === "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.JOIN_TYPE")
-        assert(fullOuter.getMessageParameters.asScala.toMap - "supportedJoinTypes" ===
-          Map("joinType" -> "FULL OUTER", "relation" -> "`SimpleExternalLookupTable`"))
+        assert(fullOuter.getMessageParameters.asScala.toMap === Map(
+          "joinType" -> "FULL OUTER",
+          "relation" -> "`SimpleExternalLookupTable`",
+          "supportedJoinTypes" -> SUPPORTED_JOIN_TYPES))
       }
     }
   }

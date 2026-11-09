@@ -22,8 +22,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.SparkThrowable
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis.ExternalLookupJoinEligibility
-import org.apache.spark.sql.catalyst.analysis.ExternalLookupJoinEligibility.NotLookupJoin
-import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetSeqMetadata,
@@ -70,7 +69,7 @@ private[sql] object ExternalLookupJoinStartupCheck extends Logging {
       offsetLogMetadata: Option[OffsetSeqMetadataBase],
       startTimeMs: Long): Unit = {
     if (!session.sessionState.conf.getConf(SQLConf.JOIN_EXTERNAL_LOOKUP_STARTUP_CHECK_ENABLED) ||
-        lookupSidePlans(plan).isEmpty) {
+        ExternalLookupJoinEligibility.lookupSidePlans(plan).isEmpty) {
       return
     }
     session.withActive {
@@ -114,11 +113,6 @@ private[sql] object ExternalLookupJoinStartupCheck extends Logging {
     offsetLogMetadata.foreach(OffsetSeqMetadata.setConfWithoutLogging(_, conf))
     conf.setConf(SQLConf.CBO_ENABLED, false)
     conf
-  }
-
-  // The lookup sides of the joins in `plan` that must run as external lookup joins.
-  private[sql] def lookupSidePlans(plan: LogicalPlan): Seq[LogicalPlan] = plan.collect {
-    case join: Join if ExternalLookupJoinEligibility(join) != NotLookupJoin => join.right
   }
 
   /** Whether `plan` passes the analysis checks; logs why not otherwise. */
