@@ -17,7 +17,7 @@ use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::mem::size_of;
 use std::ptr;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError};
 
 use arrow_array::ffi::FFI_ArrowArray;
 use arrow_array::ffi_stream::{ArrowArrayStreamReader, FFI_ArrowArrayStream};
@@ -530,7 +530,7 @@ fn read(library: &SparkDsLibrary, kind: i32, state: &[u8], partition: &[u8]) -> 
 
 #[test]
 fn streaming_operations_declare_their_capabilities_and_callbacks() {
-    let _guard = TEST_LOCK.lock().unwrap();
+    let _guard = TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
     let library = library();
     assert!(library.create_reader.is_some() && library.create_stream_reader.is_some());
     assert!(library.initial_offset.is_some() && library.latest_offset.is_some());
@@ -556,7 +556,7 @@ fn streaming_operations_declare_their_capabilities_and_callbacks() {
 
 #[test]
 fn streams_plan_micro_batches_between_json_offsets() {
-    let _guard = TEST_LOCK.lock().unwrap();
+    let _guard = TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
     EVENTS.lock().unwrap().clear();
     let library = library();
     let reader = stream_reader(library, &[]);
@@ -679,7 +679,7 @@ fn streams_plan_micro_batches_between_json_offsets() {
 
 #[test]
 fn streams_limit_their_micro_batches_and_runs_with_admission_control() {
-    let _guard = TEST_LOCK.lock().unwrap();
+    let _guard = TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
     EVENTS.lock().unwrap().clear();
     let library = library();
     let reader = stream_reader(library, &[("maxrows", "2")]);
@@ -715,7 +715,7 @@ fn streams_limit_their_micro_batches_and_runs_with_admission_control() {
 
 #[test]
 fn a_panic_is_the_failure_of_its_call() {
-    let _guard = TEST_LOCK.lock().unwrap();
+    let _guard = TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
     let library = library();
     let reader = stream_reader(library, &[("failure", "latest_panic")]);
     let start = CString::new(serde_json::to_string(&Offset::at(0)).unwrap()).unwrap();
@@ -800,7 +800,7 @@ fn finish(
 
 #[test]
 fn streaming_writes_pass_the_query_and_the_epoch_to_the_write_and_its_tasks() {
-    let _guard = TEST_LOCK.lock().unwrap();
+    let _guard = TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
     EVENTS.lock().unwrap().clear();
     let library = library();
     let (writer, state) = create_writer(library, &[], 1, c"query-1".as_ptr()).unwrap();

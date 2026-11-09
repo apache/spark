@@ -37,7 +37,7 @@ publish = false
 
 [workspace.dependencies]
 arrow-array = { version = "58", features = ["ffi"] }
-arrow-schema = { version = "58", features = ["ffi", "serde"] }
+arrow-schema = { version = "58", features = ["ffi"] }
 arrow-data = "58"
 log = "0.4"
 serde = { version = "1", features = ["derive"] }

@@ -17,7 +17,7 @@ use std::ffi::{c_int, c_void, CStr, CString};
 use std::mem::size_of;
 use std::ptr;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError};
 
 use arrow_array::ffi::FFI_ArrowArray;
 use arrow_array::{Array, Int64Array, RecordBatch, StructArray};
@@ -528,7 +528,7 @@ fn driver_finish(driver: &Handle, abort: bool, messages: &[Option<&[u8]>]) -> c_
 
 #[test]
 fn write_types_and_options_control_capabilities() {
-    let _guard = TEST_LOCK.lock().unwrap();
+    let _guard = TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
     EVENTS.lock().unwrap().clear();
     let library = library();
     assert!(
@@ -583,7 +583,7 @@ fn write_types_and_options_control_capabilities() {
 
 #[test]
 fn serialized_factory_and_messages_roundtrip_without_driver_source_or_input_buffers() {
-    let _guard = TEST_LOCK.lock().unwrap();
+    let _guard = TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
     EVENTS.lock().unwrap().clear();
     let library = library();
     let (source, _) = source(library, "", "");
@@ -651,7 +651,7 @@ fn serialized_factory_and_messages_roundtrip_without_driver_source_or_input_buff
 
 #[test]
 fn task_writers_see_live_task_cancellation() {
-    let _guard = TEST_LOCK.lock().unwrap();
+    let _guard = TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
     let library = library();
     for cancelled in [false, true] {
         EVENTS.lock().unwrap().clear();
@@ -676,7 +676,7 @@ fn task_writers_see_live_task_cancellation() {
 
 #[test]
 fn task_failures_and_message_serialization_failures_remain_abortable() {
-    let _guard = TEST_LOCK.lock().unwrap();
+    let _guard = TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
     let library = library();
     for failure in [
         "write_error",
@@ -716,7 +716,7 @@ fn task_failures_and_message_serialization_failures_remain_abortable() {
 
 #[test]
 fn driver_failures_preserve_messages_and_missing_task_positions_for_abort() {
-    let _guard = TEST_LOCK.lock().unwrap();
+    let _guard = TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
     let library = library();
     for failure in ["driver_commit_error", "driver_commit_panic"] {
         EVENTS.lock().unwrap().clear();
@@ -749,7 +749,7 @@ fn driver_failures_preserve_messages_and_missing_task_positions_for_abort() {
 
 #[test]
 fn writer_factory_failures_fail_the_creation_of_the_writer() {
-    let _guard = TEST_LOCK.lock().unwrap();
+    let _guard = TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
     let library = library();
     for (failure, expected) in [
         ("writer_factory_error", "creating the writer factory failed"),
@@ -775,7 +775,7 @@ fn writer_factory_failures_fail_the_creation_of_the_writer() {
 
 #[test]
 fn the_epoch_of_a_data_writer_selects_its_write() {
-    let _guard = TEST_LOCK.lock().unwrap();
+    let _guard = TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
     EVENTS.lock().unwrap().clear();
     let library = library();
     let (source, _) = source(library, "", "");
@@ -803,7 +803,7 @@ fn the_epoch_of_a_data_writer_selects_its_write() {
 
 #[test]
 fn undecodable_messages_fail_commit_but_abort_still_cleans_up() {
-    let _guard = TEST_LOCK.lock().unwrap();
+    let _guard = TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
     EVENTS.lock().unwrap().clear();
     let library = library();
     let (source, _) = source(library, "", "");
