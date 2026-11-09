@@ -342,6 +342,22 @@ class ExternalLookupJoinStartupCheckSuite extends QueryTest with SharedSparkSess
     }.isEmpty))
   }
 
+  test("a lookup predicate that predicate pushdown moves into the join does not fail start()") {
+    val input = MemoryStream[Int]
+    val stream = input.toDF().toDF("id")
+    val lookup = lookupOnly
+    val joined = stream.join(lookup, lookup("department") =!= "x")
+      .where(stream("id") === lookup("id"))
+    val query = start(joined.select("department"))
+    try {
+      input.addData(1, 3)
+      query.processAllAvailable()
+      checkAnswer(spark.table(query.name), Seq(Row("engineering"), Row("research")))
+    } finally {
+      query.stop()
+    }
+  }
+
   test("the start plans only the lookup sides") {
     val input = MemoryStream[Int]
     val stream = input.toDF().toDF("id")
