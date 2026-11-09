@@ -2129,7 +2129,8 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
         )
       )
     )
-    // A boundary that is not integral is still cast to the order type.
+    // A frame with a boundary that is not integral is coerced as before: both boundaries are
+    // cast to the order type.
     ruleTest(WindowFrameCoercion,
       windowSpec(
         Seq(UnresolvedAttribute("a")),

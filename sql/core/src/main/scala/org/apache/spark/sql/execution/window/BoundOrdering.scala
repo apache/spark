@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.window
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Projection
-import org.apache.spark.sql.types.{ByteType, DataType, IntegerType, LongType, ShortType}
 
 
 /**
@@ -68,26 +67,17 @@ private[window] final case class RangeBoundOrdering(
  * greater or smaller than every value of the type, and the offset does not need to fit in the
  * type. NULL values compare as in [[RangeBoundOrdering]], where the bound of a NULL value is NULL.
  *
- * @param current projection that returns the value of the order expression.
- * @param dataType the integral type of the order expression.
+ * @param current projection that returns the value of the order expression as a LONG.
  * @param offset the offset of the bound.
  * @param ascending whether the order expression is sorted in ascending order.
  * @param nullsFirst whether NULL values of the order expression are sorted first.
  */
 private[window] final case class IntegralRangeBoundOrdering(
     current: Projection,
-    dataType: DataType,
     offset: Long,
     ascending: Boolean,
     nullsFirst: Boolean)
   extends BoundOrdering {
-
-  private[this] val getValue: InternalRow => Long = dataType match {
-    case ByteType => _.getByte(0).toLong
-    case ShortType => _.getShort(0).toLong
-    case IntegerType => _.getInt(0).toLong
-    case LongType => _.getLong(0)
-  }
 
   override def compare(
       inputRow: InternalRow,
@@ -97,7 +87,7 @@ private[window] final case class IntegralRangeBoundOrdering(
     // `current` reuses its result row, so read the input value before projecting the output row.
     val input = current(inputRow)
     val inputIsNull = input.isNullAt(0)
-    val inputValue = if (inputIsNull) 0L else getValue(input)
+    val inputValue = if (inputIsNull) 0L else input.getLong(0)
     val output = current(outputRow)
     val outputIsNull = output.isNullAt(0)
     if (inputIsNull && outputIsNull) {
@@ -107,11 +97,11 @@ private[window] final case class IntegralRangeBoundOrdering(
     } else if (outputIsNull) {
       if (nullsFirst) 1 else -1
     } else if (ascending) {
-      IntegralRangeBoundOrdering.compareToSum(inputValue, getValue(output), offset)
+      IntegralRangeBoundOrdering.compareToSum(inputValue, output.getLong(0), offset)
     } else {
       // In descending order the bound is the value minus the offset, and greater values come
       // first.
-      -IntegralRangeBoundOrdering.compareToDifference(inputValue, getValue(output), offset)
+      -IntegralRangeBoundOrdering.compareToDifference(inputValue, output.getLong(0), offset)
     }
   }
 }

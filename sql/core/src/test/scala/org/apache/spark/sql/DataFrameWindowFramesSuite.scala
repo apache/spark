@@ -747,6 +747,89 @@ class DataFrameWindowFramesSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-61009: range frames with a NULL integral offset of a wider type than the order") {
+    val frames = Seq(
+      "{null} PRECEDING AND CURRENT ROW",
+      "CURRENT ROW AND {null} FOLLOWING",
+      "{null} PRECEDING AND {one} FOLLOWING",
+      "{one} PRECEDING AND {null} FOLLOWING")
+    val orders = Seq("ASC NULLS FIRST", "ASC NULLS LAST", "DESC NULLS FIRST", "DESC NULLS LAST")
+    Seq[(String, Int => Any)](
+        ("tinyint", _.toByte),
+        ("smallint", _.toShort),
+        ("int", identity)).foreach { case (typeName, toType) =>
+      withTempView("t") {
+        Seq(Some(1), Some(2), Some(5), None).toDF("v")
+          .select($"v".cast(typeName).as("v"))
+          .createOrReplaceTempView("t")
+        // The bounds are NULL, so a bounded side of a frame ends at the NULL values.
+        checkAnswer(
+          sql("SELECT v, " + Seq(
+            "ASC NULLS FIRST RANGE BETWEEN CAST(NULL AS BIGINT) PRECEDING AND CURRENT ROW",
+            "ASC NULLS LAST RANGE BETWEEN CAST(NULL AS BIGINT) PRECEDING AND CURRENT ROW",
+            "DESC NULLS FIRST RANGE BETWEEN CURRENT ROW AND CAST(NULL AS BIGINT) FOLLOWING",
+            "DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND CAST(NULL AS BIGINT) FOLLOWING"
+          ).map(w => s"count(*) OVER (ORDER BY v $w)").mkString(", ") + " FROM t"),
+          Seq(Row(null, 1L, 1L, 1L, 1L), Row(toType(1), 2L, 0L, 0L, 2L),
+            Row(toType(2), 3L, 0L, 0L, 3L), Row(toType(5), 4L, 0L, 0L, 4L)))
+        def query(nullOffset: String, oneOffset: String): DataFrame = {
+          val windows = for (order <- orders; frame <- frames) yield {
+            val bounds = frame.replace("{null}", nullOffset).replace("{one}", oneOffset)
+            s"(ORDER BY v $order RANGE BETWEEN $bounds)"
+          }
+          sql("SELECT v, " + windows.flatMap { w =>
+            Seq(s"count(*) OVER $w", s"min(v) OVER $w", s"max(v) OVER $w")
+          }.mkString(", ") + " FROM t")
+        }
+        // A NULL offset makes the bounds NULL, whatever its type. The frames are checked against
+        // the same frames with offsets of the order type.
+        val expected = query(s"CAST(NULL AS $typeName)", s"CAST(1 AS $typeName)").collect()
+        Seq(true, false).foreach { ansiEnabled =>
+          withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+            checkAnswer(query("CAST(NULL AS BIGINT)", "1"), expected.toSeq)
+          }
+        }
+        withSQLConf(
+            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+            SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
+            SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key -> "1",
+            SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "true") {
+          checkAnswer(query("CAST(NULL AS BIGINT)", "1"), expected.toSeq)
+        }
+      }
+    }
+  }
+
+  test("SPARK-61009: equal range frames with integral offsets of different types share a frame") {
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
+        SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key -> "1") {
+      Seq[(String, Int => Any)](
+          ("tinyint", _.toByte),
+          ("smallint", _.toShort),
+          ("int", identity)).foreach { case (typeName, toType) =>
+        val df = Seq(1, 2, 3, 4).toDF("v").select($"v".cast(typeName).as("v"))
+        // The offsets of the frames have the order type, INT, BIGINT and BIGINT.
+        val result = df.select(
+          $"v",
+          expr(s"count(*) OVER (ORDER BY v RANGE BETWEEN CAST(1 AS $typeName) PRECEDING AND " +
+            "CURRENT ROW)"),
+          expr("sum(v) OVER (ORDER BY v RANGE BETWEEN 1 PRECEDING AND CURRENT ROW)"),
+          expr("min(v) OVER (ORDER BY v RANGE BETWEEN CAST(1 AS BIGINT) PRECEDING AND " +
+            "CURRENT ROW)"),
+          max($"v").over(Window.orderBy($"v").rangeBetween(-1, Window.currentRow)))
+        // The frame of v holds the values in [v - 1, v].
+        checkAnswer(result, (1 to 4).map { v =>
+          Row(toType(v), if (v == 1) 1L else 2L, (2 * v - 1).toLong, toType(1.max(v - 1)),
+            toType(v))
+        })
+        val window = result.queryExecution.executedPlan.collectFirst { case w: WindowExec => w }
+        assert(window.get.metrics("numSegmentTreeFrames").value == 1)
+      }
+    }
+  }
+
   test("SPARK-45352: Eliminate foldable window partitions") {
     val df = Seq((1, 1), (1, 2), (1, 3), (2, 1), (2, 2)).toDF("a", "b")
 
