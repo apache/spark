@@ -487,29 +487,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       cfg.logLevel.foreach(logLevel => Utils.setLogLevelIfNeeded(logLevel))
       Utils.setLoggerLevels(driverConf)
 
-      // Set executor memory related config here according to resource profile
-      if (cfg.resourceProfile.id != ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) {
-        cfg.resourceProfile
-          .executorResources
-          .foreach {
-            case (ResourceProfile.OFFHEAP_MEM, request) =>
-              driverConf.set(MEMORY_OFFHEAP_SIZE.key, request.amount.toString + "m")
-              logInfo(log"Set executor off-heap memory to " +
-                log"${MDC(LogKeys.EXECUTOR_MEMORY_OFFHEAP, request)}")
-            case (ResourceProfile.MEMORY, request) =>
-              driverConf.set(EXECUTOR_MEMORY.key, request.amount.toString + "m")
-              logInfo(log"Set executor memory to ${MDC(LogKeys.EXECUTOR_MEMORY_SIZE, request)}")
-            case (ResourceProfile.OVERHEAD_MEM, request) =>
-              // Maybe don't need to set this since it's nearly used by tasks.
-              driverConf.set(EXECUTOR_MEMORY_OVERHEAD.key, request.amount.toString + "m")
-              logInfo(log"Set executor memory_overhead to " +
-                log"${MDC(LogKeys.EXECUTOR_MEMORY_OVERHEAD_SIZE, request)}")
-            case (ResourceProfile.CORES, request) =>
-              driverConf.set(EXECUTOR_CORES.key, request.amount.toString)
-              logInfo(log"Set executor cores to ${MDC(LogKeys.NUM_EXECUTOR_CORES, request)}")
-            case _ =>
-          }
-      }
+      setResourceProfileConfs(driverConf, cfg.resourceProfile)
       val env = SparkEnv.createExecutorEnv(driverConf, arguments.executorId, arguments.bindAddress,
         arguments.hostname, arguments.cores, cfg.ioEncryptionKey, isLocal = false)
 
@@ -536,6 +514,39 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
           new WorkerWatcher(env.rpcEnv, url, isChildProcessStopping = backend.stopping))
       }
       env.rpcEnv.awaitTermination()
+    }
+  }
+
+  /**
+   * Sets the executor memory and cores confs from a non-default resource profile so that
+   * executor-side readers (e.g. off-heap sizing in `MemoryManager`, Python worker memory in
+   * `PythonRunner`) see the profile's values rather than the application-level ones. The
+   * default profile already matches the application-level confs and is left untouched.
+   */
+  private[spark] def setResourceProfileConfs(
+      conf: SparkConf,
+      resourceProfile: ResourceProfile): Unit = {
+    if (resourceProfile.id != ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) {
+      resourceProfile
+        .executorResources
+        .foreach {
+          case (ResourceProfile.OFFHEAP_MEM, request) =>
+            conf.set(MEMORY_OFFHEAP_SIZE.key, request.amount.toString + "m")
+            logInfo(log"Set executor off-heap memory to " +
+              log"${MDC(LogKeys.EXECUTOR_MEMORY_OFFHEAP, request)}")
+          case (ResourceProfile.MEMORY, request) =>
+            conf.set(EXECUTOR_MEMORY.key, request.amount.toString + "m")
+            logInfo(log"Set executor memory to ${MDC(LogKeys.EXECUTOR_MEMORY_SIZE, request)}")
+          case (ResourceProfile.OVERHEAD_MEM, request) =>
+            // Maybe don't need to set this since it's nearly used by tasks.
+            conf.set(EXECUTOR_MEMORY_OVERHEAD.key, request.amount.toString + "m")
+            logInfo(log"Set executor memory_overhead to " +
+              log"${MDC(LogKeys.EXECUTOR_MEMORY_OVERHEAD_SIZE, request)}")
+          case (ResourceProfile.CORES, request) =>
+            conf.set(EXECUTOR_CORES.key, request.amount.toString)
+            logInfo(log"Set executor cores to ${MDC(LogKeys.NUM_EXECUTOR_CORES, request)}")
+          case _ =>
+        }
     }
   }
 
