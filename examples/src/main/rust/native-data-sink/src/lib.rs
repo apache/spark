@@ -102,12 +102,8 @@ impl DataSource for JsonSink {
     }
 
     fn new_streaming_write(&self, info: StreamingWriteInfo) -> Result<JsonStreamingWrite> {
-        if self.readonly {
-            return Err("This sink is readonly".into());
-        }
-        validate_schema(&info.schema)?;
         Ok(JsonStreamingWrite {
-            write: JsonWrite::new(self.path.clone(), info.mode)?,
+            write: self.new_write(WriteInfo::new(info.schema, info.mode))?,
             query_id: info.query_id,
         })
     }
