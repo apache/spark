@@ -263,19 +263,15 @@ class SparkConnectStatTests(SparkConnectSQLTestCase):
                 "arg_type": "float",
             },
         )
-        with self.assertRaises(PySparkTypeError) as pe:
+        with self.assertRaises(PySparkValueError) as pe:
             self.connect.read.table(self.tbl_name2).stat.approxQuantile(
                 ["col1", "col3"], [-0.1], 0.1
             )
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_EXPECTED_TYPE",
-            messageParameters={
-                "expected_type": "list[float, int]",
-                "arg_name": "probabilities",
-                "arg_type": "float",
-            },
+            errorClass="VALUE_NOT_BETWEEN",
+            messageParameters={"arg_name": "probabilities", "min": "0", "max": "1"},
         )
         with self.assertRaises(PySparkTypeError) as pe:
             self.connect.read.table(self.tbl_name2).stat.approxQuantile(
