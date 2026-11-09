@@ -57,6 +57,16 @@ class InProcessUDFTests(ReusedSQLTestCase):
     shutdown must use the same dedicated interpreter thread.
     """
 
+    @staticmethod
+    def _java_command(jvm, java_home):
+        """
+        The start of a command line for a fresh probe JVM: this test's java and the module
+        options Spark's own launcher passes (JavaModuleOptions), so a probe starts the way
+        Spark's JVMs do on every Java version, e.g. with Unsafe allowed for Netty on Java 25+.
+        """
+        options = jvm.org.apache.spark.launcher.JavaModuleOptions.defaultModuleOptionArray()
+        return [str(Path(java_home) / "bin" / "java")] + list(options)
+
     @classmethod
     def master(cls):
         return "local[2]"
@@ -341,7 +351,7 @@ class MissingCdiProbe {
             source_file = Path(directory) / "MissingCdiProbe.java"
             source_file.write_text(source)
             result = subprocess.run(
-                [str(Path(java_home) / "bin" / "java"), "-cp", classpath, str(source_file)],
+                self._java_command(jvm, java_home) + ["-cp", classpath, str(source_file)],
                 capture_output=True,
                 text=True,
                 timeout=90,
@@ -393,11 +403,8 @@ class MissingJepProbe {
             source_file = Path(directory) / "MissingJepProbe.java"
             source_file.write_text(source)
             result = subprocess.run(
-                [
-                    str(Path(java_home) / "bin" / "java"),
-                    "--add-opens=java.base/java.nio=ALL-UNNAMED",
-                    "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
-                    "-Dio.netty.tryReflectionSetAccessible=true",
+                self._java_command(jvm, java_home)
+                + [
                     "-cp",
                     classpath,
                     str(source_file),
@@ -522,11 +529,8 @@ class BootstrapProbe {
             import sys
 
             result = subprocess.run(
-                [
-                    str(Path(java_home) / "bin" / "java"),
-                    "--add-opens=java.base/java.nio=ALL-UNNAMED",
-                    "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
-                    "-Dio.netty.tryReflectionSetAccessible=true",
+                self._java_command(jvm, java_home)
+                + [
                     f"-Djava.library.path={self.jep_dir}",
                     "--class-path",
                     classpath,
@@ -602,8 +606,8 @@ class BootstrapFailureProbe {
                 [str(self.python_source), str(Path(py4j.__file__).parents[1])]
             )
             result = subprocess.run(
-                [
-                    str(Path(java_home) / "bin" / "java"),
+                self._java_command(jvm, java_home)
+                + [
                     f"-Djava.library.path={self.jep_dir}",
                     "--class-path",
                     classpath,
