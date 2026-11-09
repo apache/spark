@@ -546,6 +546,26 @@ class CatalogTestsMixin:
             self.assertIn("py_catalog_api_k", info["Properties"])
             self.assertIn("py_catalog_api_v", info["Properties"])
 
+    def test_catalog_create_database_with_non_string_properties(self):
+        spark = self.spark
+        db = "py_catalog_api_non_str_props_db"
+        with self.database(db):
+            spark.catalog.createDatabase(
+                db,
+                properties={
+                    "py_catalog_api_int": 1,
+                    "py_catalog_api_bool": True,
+                },
+            )
+            self.assertTrue(spark.catalog.databaseExists(db))
+            self.assertIn(db, [d.name for d in spark.catalog.listDatabases()])
+            info = {
+                r.info_name: r.info_value
+                for r in spark.sql(f"DESCRIBE NAMESPACE EXTENDED {db}").collect()
+            }
+            self.assertIn("(py_catalog_api_int,1)", info["Properties"])
+            self.assertIn("(py_catalog_api_bool,true)", info["Properties"])
+
     def test_catalog_list_partitions(self):
         spark = self.spark
         t = "py_catalog_api_part_t"
