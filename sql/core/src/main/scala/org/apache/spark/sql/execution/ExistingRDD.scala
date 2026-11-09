@@ -229,7 +229,9 @@ object LogicalRDD extends Logging {
     }.toMap
 
     if (rewrite.size == source.size) {
-      Some(rewrite)
+      // Keyed by exprId, because the attributes in the stats and the constraints can differ from
+      // `source` in qualifier or nullability.
+      Some(AttributeMap(rewrite))
     } else {
       None
     }
@@ -250,7 +252,8 @@ object LogicalRDD extends Logging {
     }.toMap
 
     if (rewrite.size == source.size) {
-      Some(rewrite)
+      // Keyed by exprId, for the same reason as in `buildOutputAssocForRewrite`.
+      Some(AttributeMap(rewrite))
     } else {
       None
     }
