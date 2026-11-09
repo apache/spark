@@ -132,6 +132,10 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
       stream.join(other.hint("external_lookup"), Inner, Some(stream.output(1) === other.output(0)))
         -> "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.LOOKUP_PLAN",
       stream.hint("external_lookup").join(other, Inner, Some(stream.output(1) === other.output(0)))
+        -> "INVALID_EXTERNAL_LOOKUP_HINT.NOT_ON_LOOKUP_SIDE",
+      // A hint over the join, through any unary operator, is on the lookup side of no join.
+      stream.join(other, Inner, Some(stream.output(1) === other.output(0)))
+        .select(other.output(1)).hint("external_lookup")
         -> "INVALID_EXTERNAL_LOOKUP_HINT.NOT_ON_LOOKUP_SIDE").foreach { case (join, condition) =>
       val analyzed = analyze(join)
       checkError(

@@ -102,6 +102,7 @@ object ValidateSubqueryExpression
       case s: SQLFunctionNode => cleanQueryInScalarSubquery(s.child)
       case p: Project => cleanQueryInScalarSubquery(p.child)
       case h: ResolvedHint => cleanQueryInScalarSubquery(h.child)
+      case h: ExternalLookupHint => cleanQueryInScalarSubquery(h.child)
       case child => child
     }
 
@@ -403,8 +404,9 @@ object ValidateSubqueryExpression
       // up to the operator producing the correlated values.
       plan match {
         // Category 1:
-        // ResolvedHint, LeafNode, Repartition, and SubqueryAlias
-        case p @ (_: ResolvedHint | _: LeafNode | _: Repartition | _: SubqueryAlias) =>
+        // ResolvedHint, ExternalLookupHint, LeafNode, Repartition, and SubqueryAlias
+        case p @ (_: ResolvedHint | _: ExternalLookupHint | _: LeafNode | _: Repartition |
+            _: SubqueryAlias) =>
           p.children.foreach(child => checkPlan(child, aggregated, canContainOuter))
 
         case p @ (_ : Union | _: SetOperation) =>

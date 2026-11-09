@@ -56,11 +56,6 @@ object ResolveExternalLookupHint extends Rule[LogicalPlan] with QueryErrorsBase 
         throw QueryCompilationErrors.invalidExternalLookupHintError(
           "UNSUPPORTED_PARAMETER", Map("parameter" -> toSQLExpr(other)))
     }
-    relationNames.diff(relationNames.distinct).headOption.foreach { duplicate =>
-      throw QueryCompilationErrors.invalidExternalLookupHintError(
-        "DUPLICATE_RELATION", Map("relation" -> toSQLId(duplicate)))
-    }
-
     if (relationNames.isEmpty) {
       ExternalLookupHint(child)
     } else {
@@ -87,7 +82,8 @@ object ResolveExternalLookupHint extends Rule[LogicalPlan] with QueryErrorsBase 
         case _ => plan.mapChildren(applyHint)
       }
       val rewritten = applyHint(child)
-      val missing = relationNames.filterNot(matched.contains)
+      // As with join strategy hints, a name may be repeated.
+      val missing = relationNames.distinct.filterNot(matched.contains)
       if (missing.nonEmpty) {
         throw QueryCompilationErrors.invalidExternalLookupHintError(
           "RELATION_NOT_FOUND", Map("relations" -> missing.map(toSQLId).mkString(", ")))

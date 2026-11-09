@@ -82,9 +82,6 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
     // A lookup-only table can be read only by a lookup join, and the hint opts a join in. Either
     // way the join must run as an external lookup join, and the checks below apply.
     if (!lookupOnly && markers.isEmpty) return NotLookupJoin
-    if (markers.length > 1) {
-      return Ineligible(QueryCompilationErrors.invalidExternalLookupHintError("MULTIPLE_HINTS"))
-    }
     if (join.right.isStreaming) {
       return Ineligible(QueryCompilationErrors.unsupportedExternalLookupJoinError(
         "STREAMING_LOOKUP_SIDE"))
@@ -107,17 +104,12 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
     if (tableRelation.output.exists(_.isMetadataCol)) return ineligible("METADATA_COLUMN", relation)
     if (!join.left.isStreaming) return ineligible("STATIC_LEFT_SIDE", relation)
     // A join hint the user wrote is never silently dropped: an external lookup join cannot run a
-    // physical join strategy, and a lookup-only table has no batch scan for one. On a table that
-    // also supports batch reads, the strategy hint conflicts with the `EXTERNAL_LOOKUP` hint.
+    // physical join strategy, and a lookup-only table has no batch scan for one.
     joinStrategyHint(join) match {
       // The user asked for a physical join, which an external lookup join cannot run.
-      case Some(strategy) if lookupOnly =>
+      case Some(strategy) =>
         ineligible("CONFLICTING_JOIN_STRATEGY", relation,
           Map("strategy" -> toSQLStmt(strategy.displayName)))
-      case Some(strategy) =>
-        Ineligible(QueryCompilationErrors.invalidExternalLookupHintError(
-          "CONFLICTING_JOIN_STRATEGY",
-          Map("strategy" -> toSQLStmt(strategy.displayName), "relation" -> relation)))
       // No physical join was asked for: the join runs as an external lookup join unless a check
       // below fails.
       // Checked before the condition, so that a cross join fails while it is analyzed.
@@ -133,6 +125,17 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
       case None => Eligible
     }
   }
+
+  /**
+   * Whether `plan` can have a join that must run as an external lookup join: one over a lookup-only
+   * table, which is a DSv2 relation, or under the hint. Classifying the joins of a plan inlines its
+   * CTE references, so a plan without either is left alone, and an ordinary query does not pay
+   * for lookup joins.
+   */
+  def mayHaveLookupJoin(plan: LogicalPlan): Boolean =
+    plan.containsPattern(JOIN) && (plan.containsPattern(EXTERNAL_LOOKUP_HINT) ||
+      plan.containsPattern(DATA_SOURCE_V2_RELATION) &&
+        plan.exists(ExternalLookupRelations.lookupOnlyTable(_).isDefined))
 
   /** The CTE definitions in `plan` by id, which [[inlineCTEs]] inlines. */
   def cteDefinitions(plan: LogicalPlan): Map[Long, CTERelationDef] =
@@ -175,9 +178,7 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
    * directly or through other CTE definitions. Subqueries are not searched.
    */
   def lookupSidePlans(plan: LogicalPlan): Seq[LogicalPlan] =
-    // As in CheckExternalLookupJoin, other plans have no join that must run as a lookup join.
-    if (!plan.containsPattern(JOIN) ||
-        !plan.containsAnyPattern(DATA_SOURCE_V2_RELATION, EXTERNAL_LOOKUP_HINT)) {
+    if (!mayHaveLookupJoin(plan)) {
       Nil
     } else {
       val cteDefs = cteDefinitions(plan)
@@ -270,10 +271,7 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
  */
 object CheckExternalLookupJoin extends (LogicalPlan => Unit) {
   override def apply(plan: LogicalPlan): Unit = {
-    // A join must run as a lookup join only over a lookup-only table, which is a DSv2 relation, or
-    // under the hint, so other plans need no walk.
-    if (plan.containsPattern(JOIN) &&
-        plan.containsAnyPattern(DATA_SOURCE_V2_RELATION, EXTERNAL_LOOKUP_HINT)) {
+    if (ExternalLookupJoinEligibility.mayHaveLookupJoin(plan)) {
       val complete = plan.isInstanceOf[WriteToStream]
       plan.foreachUp {
         case join: Join if join.resolved =>
@@ -286,7 +284,24 @@ object CheckExternalLookupJoin extends (LogicalPlan => Unit) {
           }
         case _ =>
       }
+      // An `EXTERNAL_LOOKUP` hint over a join is on the lookup side of no join, so no join could
+      // read it. It fails, as a hint that the user wrote is never silently dropped. A hint without
+      // a join below it, such as one over a single table, is ignored.
+      if (plan.containsPattern(EXTERNAL_LOOKUP_HINT)) {
+        plan.foreach {
+          case marker: ExternalLookupHint if readsJoin(marker.child) =>
+            throw QueryCompilationErrors.invalidExternalLookupHintError("NOT_ON_LOOKUP_SIDE")
+          case _ =>
+        }
+      }
     }
+  }
+
+  @tailrec
+  private def readsJoin(plan: LogicalPlan): Boolean = plan match {
+    case _: Join => true
+    case unary: UnaryNode => readsJoin(unary.child)
+    case _ => false
   }
 }
 
@@ -304,11 +319,8 @@ object CheckExternalLookupJoin extends (LogicalPlan => Unit) {
 object FormExternalLookupJoin extends Rule[LogicalPlan] {
   import ExternalLookupJoinEligibility._
 
-  // As in CheckExternalLookupJoin, a join runs as a lookup join only over a lookup-only table,
-  // which is a DSv2 relation, or under the hint, so other plans have no join to convert.
   override def apply(plan: LogicalPlan): LogicalPlan =
-    if (!plan.containsAnyPattern(DATA_SOURCE_V2_RELATION, EXTERNAL_LOOKUP_HINT)) plan
-    else formLookupJoins(plan)
+    if (mayHaveLookupJoin(plan)) formLookupJoins(plan) else stripHints(plan)
 
   private def formLookupJoins(plan: LogicalPlan): LogicalPlan = {
     val cteDefs = cteDefinitions(plan)
@@ -333,12 +345,15 @@ object FormExternalLookupJoin extends Rule[LogicalPlan] {
           case NotLookupJoin => join
         }
     }
-    // A join with the hint on its lookup side has been converted or has failed, so a hint that is
-    // left is not on the lookup side of any join.
-    formed.transformUpWithPruning(_.containsPattern(EXTERNAL_LOOKUP_HINT)) {
+    stripHints(formed)
+  }
+
+  // A join with the hint on its lookup side has been converted or has failed, so a hint that is
+  // left is not on the lookup side of any join.
+  private def stripHints(plan: LogicalPlan): LogicalPlan =
+    plan.transformUpWithPruning(_.containsPattern(EXTERNAL_LOOKUP_HINT)) {
       case hint: ExternalLookupHint =>
         logWarning("An EXTERNAL_LOOKUP hint is not on the lookup side of a join and is ignored.")
         hint.child
     }
-  }
 }

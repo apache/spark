@@ -34,8 +34,8 @@ import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Encoders, Row
 import org.apache.spark.sql.IntegratedUDFTestUtils.{shouldTestPythonUDFs, TestPythonUDF}
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{CheckExternalLookupJoin, FormExternalLookupJoin,
-  NoSuchTableException}
+import org.apache.spark.sql.catalyst.analysis.{CheckExternalLookupJoin,
+  ExternalLookupJoinEligibility, FormExternalLookupJoin, NoSuchTableException}
 import org.apache.spark.sql.catalyst.expressions.{Add, Attribute, AttributeMap, AttributeReference,
   Cast, EqualTo, Expression, GenericInternalRow, LessThan, Literal, Rand, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.{Inner, QueryPlan}
@@ -285,24 +285,18 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
   test("a physical join strategy hint conflicts with the external lookup hint") {
     val dual = spark.read.format(classOf[DualCapabilityExternalLookupDataSource].getName).load()
     val left = streamOf(Seq(1).toDF("id"))
+    val lookupSide = dual.hint("external_lookup").hint("broadcast")
+    val streamSide = left.hint("broadcast")
+    val hinted = dual.hint("external_lookup")
     Seq(
-      "broadcast" -> "BROADCAST",
-      "merge" -> "MERGE",
-      "shuffle_hash" -> "SHUFFLE_HASH",
-      "shuffle_replicate_nl" -> "SHUFFLE_REPLICATE_NL").foreach { case (hint, strategy) =>
-      val lookupSide = dual.hint("external_lookup").hint(hint)
-      val streamSide = left.hint(hint)
-      val hinted = dual.hint("external_lookup")
-      Seq(
-        () => left.join(lookupSide, left("id") === lookupSide("id")),
-        () => streamSide.join(hinted, streamSide("id") === hinted("id"))).foreach { query =>
-        checkError(
-          exception = intercept[AnalysisException] { query().queryExecution.analyzed },
-          condition = "INVALID_EXTERNAL_LOOKUP_HINT.CONFLICTING_JOIN_STRATEGY",
-          parameters = Map(
-            "strategy" -> strategy,
-            "relation" -> "`DualCapabilityExternalLookupTable`"))
-      }
+      () => left.join(lookupSide, left("id") === lookupSide("id")),
+      () => streamSide.join(hinted, streamSide("id") === hinted("id"))).foreach { query =>
+      checkError(
+        exception = intercept[AnalysisException] { query().queryExecution.analyzed },
+        condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.CONFLICTING_JOIN_STRATEGY",
+        parameters = Map(
+          "strategy" -> "BROADCAST",
+          "relation" -> "`DualCapabilityExternalLookupTable`"))
     }
     // Both hints may name the same relation, in either order. A strategy hint is never merged
     // into the lookup hint, so the conflict is still reported.
@@ -315,7 +309,7 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
             sql(s"SELECT /*+ $hints */ * FROM external_lookup_left l " +
               "JOIN external_lookup_right r ON l.id = r.id")
           },
-          condition = "INVALID_EXTERNAL_LOOKUP_HINT.CONFLICTING_JOIN_STRATEGY",
+          condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.CONFLICTING_JOIN_STRATEGY",
           parameters = Map(
             "strategy" -> "MERGE",
             "relation" -> "`DualCapabilityExternalLookupTable`"))
@@ -411,6 +405,101 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
         sql("SELECT /*+ EXTERNAL_LOOKUP(r) */ id, count(*) FROM external_lookup_right r " +
           "GROUP BY id"),
         Seq(Row(1, 2), Row(2, 1)))
+    }
+  }
+
+  test("a query without a lookup-only table or the hint is not searched for lookup joins") {
+    // Classifying the joins of a plan inlines its CTE references, so a plan that can have no lookup
+    // join is left alone, such as this self-join of a CTE over a table that supports batch reads.
+    val dual = spark.read.format(classOf[DualCapabilityExternalLookupDataSource].getName).load()
+    val lookupOnly = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    withTempView("employee_directory", "lookup_directory", "badge_swipes") {
+      dual.createOrReplaceTempView("employee_directory")
+      lookupOnly.createOrReplaceTempView("lookup_directory")
+      streamOf(Seq((1, "lobby")).toDF("employee", "door")).createOrReplaceTempView("badge_swipes")
+      val ordinary = sql(
+        """
+          |WITH d AS (TABLE employee_directory)
+          |SELECT a.id, a.department, b.department FROM d a JOIN d b ON a.id = b.id
+          |""".stripMargin)
+      val analyzed = ordinary.queryExecution.analyzed
+      assert(ExternalLookupJoinEligibility.mayHaveLookupJoin(analyzed) === false)
+      assert(ExternalLookupJoinEligibility.lookupSidePlans(analyzed).isEmpty)
+      assert(FormExternalLookupJoin(analyzed) eq analyzed)
+      checkAnswer(ordinary, Seq(
+        Row(1, "engineering", "engineering"), Row(1, "engineering", "research"),
+        Row(1, "research", "engineering"), Row(1, "research", "research"),
+        Row(2, "sales", "sales")))
+      // The hint or a lookup-only table makes a lookup join possible, so the joins are classified.
+      Seq("/*+ EXTERNAL_LOOKUP(d) */" -> "employee_directory", "" -> "lookup_directory").foreach {
+        case (hint, table) =>
+          val query = sql(
+            s"""
+              |WITH d AS (TABLE $table)
+              |SELECT $hint s.door, d.department FROM badge_swipes s JOIN d ON s.employee = d.id
+              |""".stripMargin)
+          assert(ExternalLookupJoinEligibility.mayHaveLookupJoin(query.queryExecution.analyzed))
+          checkStream(query, Seq(Row("lobby", "engineering"), Row("lobby", "research")))
+      }
+    }
+  }
+
+  test("a lookup side may be hinted more than once") {
+    val dual = spark.read.format(classOf[DualCapabilityExternalLookupDataSource].getName).load()
+    val swipes = streamOf(Seq((1, "door-a")).toDF("employee", "door"))
+    val expected = Seq(Row(1, "door-a", "engineering"), Row(1, "door-a", "research"))
+    def lookupJoinCount(df: DataFrame): Int =
+      runStream(df).plan.collect { case j: PreparedExternalLookupJoin => j }.size
+
+    val twice = dual.hint("external_lookup").hint("external_lookup")
+    val joined = swipes.join(twice, swipes("employee") === twice("id"))
+      .select(swipes("employee"), swipes("door"), twice("department"))
+    assert(lookupJoinCount(joined) === 1)
+    checkStream(joined, expected)
+    withTempView("badge_swipes", "hinted_directory", "employee_directory") {
+      swipes.createOrReplaceTempView("badge_swipes")
+      dual.hint("external_lookup").createOrReplaceTempView("hinted_directory")
+      dual.createOrReplaceTempView("employee_directory")
+      // A view over a hinted table that the hint names too, and a name given twice in any case.
+      Seq(
+        "EXTERNAL_LOOKUP(d)" -> "hinted_directory",
+        "EXTERNAL_LOOKUP(d, d)" -> "employee_directory",
+        "EXTERNAL_LOOKUP(d, D)" -> "employee_directory").foreach { case (hint, directory) =>
+        val df = sql(
+          s"""
+            |SELECT /*+ $hint */ s.employee, s.door, d.department
+            |FROM badge_swipes s JOIN $directory d ON s.employee = d.id
+            |""".stripMargin)
+        assert(lookupJoinCount(df) === 1, hint)
+        checkStream(df, expected)
+      }
+    }
+  }
+
+  test("an external lookup hint in a subquery without a join is ignored like a strategy hint") {
+    val dual = spark.read.format(classOf[DualCapabilityExternalLookupDataSource].getName).load()
+    withTempView("badge_swipes", "employee_directory") {
+      Seq((1, "door-a"), (3, "door-b")).toDF("employee", "door")
+        .createOrReplaceTempView("badge_swipes")
+      dual.createOrReplaceTempView("employee_directory")
+      Seq("BROADCAST", "EXTERNAL_LOOKUP").foreach { hint =>
+        checkAnswer(
+          sql(
+            s"""
+              |SELECT door FROM badge_swipes s WHERE EXISTS (
+              |  SELECT /*+ $hint */ * FROM employee_directory d WHERE d.id = s.employee)
+              |""".stripMargin),
+          Seq(Row("door-a")))
+        checkAnswer(
+          sql(
+            s"""
+              |SELECT door, (
+              |  SELECT /*+ $hint */ max(d.department) FROM employee_directory d
+              |  WHERE d.id = s.employee)
+              |FROM badge_swipes s
+              |""".stripMargin),
+          Seq(Row("door-a", "research"), Row("door-b", null)))
+      }
     }
   }
 
@@ -709,13 +798,6 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       },
       condition = "INVALID_EXTERNAL_LOOKUP_HINT.NOT_ON_LOOKUP_SIDE",
       parameters = Map.empty)
-    checkError(
-      exception = intercept[AnalysisException] {
-        val hinted = lookup.hint("external_lookup").hint("external_lookup")
-        left.join(hinted, left("id") === hinted("id")).queryExecution.analyzed
-      },
-      condition = "INVALID_EXTERNAL_LOOKUP_HINT.MULTIPLE_HINTS",
-      parameters = Map.empty)
 
     withTempView("external_lookup_left", "external_lookup_right") {
       left.createOrReplaceTempView("external_lookup_left")
@@ -731,12 +813,13 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
         },
         condition = "INVALID_EXTERNAL_LOOKUP_HINT.RELATION_NOT_FOUND",
         parameters = Map("relations" -> "`missing`"))
+      // A name that is repeated is reported once.
       checkError(
         exception = intercept[AnalysisException] {
-          query("EXTERNAL_LOOKUP(r, r)").queryExecution.analyzed
+          query("EXTERNAL_LOOKUP(missing, missing)").queryExecution.analyzed
         },
-        condition = "INVALID_EXTERNAL_LOOKUP_HINT.DUPLICATE_RELATION",
-        parameters = Map("relation" -> "`r`"))
+        condition = "INVALID_EXTERNAL_LOOKUP_HINT.RELATION_NOT_FOUND",
+        parameters = Map("relations" -> "`missing`"))
     }
 
     val stream = MemoryStream[Int].toDF().toDF("id")
@@ -1650,33 +1733,35 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("an external lookup hint without relation names marks the whole query") {
+  test("an external lookup hint without relation names over a join fails") {
     val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
     val dual = spark.read.format(classOf[DualCapabilityExternalLookupDataSource].getName).load()
     val left = streamOf(Seq(1).toDF("id"))
-    val expected = Seq(Row(1, "engineering"), Row(1, "research"))
 
     // As with a join strategy hint, the hint applies to the plan it annotates, here the join
-    // itself rather than its lookup side, so it is ignored. A lookup-only table still needs no
-    // hint.
+    // itself rather than its lookup side, so no join could read it.
     withTempView("external_lookup_left", "external_lookup_right", "external_lookup_dual") {
       left.createOrReplaceTempView("external_lookup_left")
       lookup.createOrReplaceTempView("external_lookup_right")
       dual.createOrReplaceTempView("external_lookup_dual")
-      Seq("external_lookup_right" -> true, "external_lookup_dual" -> false).foreach {
-        case (right, usesLookup) =>
-          val df = sql(s"""
-            |SELECT /*+ EXTERNAL_LOOKUP */ l.id, r.department
-            |FROM external_lookup_left l JOIN $right r ON l.id = r.id
-            |""".stripMargin)
-          assert(runStream(df).plan.exists(_.isInstanceOf[PreparedExternalLookupJoin]) ===
-            usesLookup, right)
-          checkStream(df, expected)
+      Seq("external_lookup_right", "external_lookup_dual").foreach { right =>
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"""
+              |SELECT /*+ EXTERNAL_LOOKUP */ l.id, r.department
+              |FROM external_lookup_left l JOIN $right r ON l.id = r.id
+              |""".stripMargin)
+          },
+          condition = "INVALID_EXTERNAL_LOOKUP_HINT.NOT_ON_LOOKUP_SIDE",
+          parameters = Map.empty)
       }
     }
-    val dataFrameJoin = left.join(dual, left("id") === dual("id")).hint("external_lookup")
-    assert(
-      runStream(dataFrameJoin).plan.exists(_.isInstanceOf[PreparedExternalLookupJoin]) === false)
+    checkError(
+      exception = intercept[AnalysisException] {
+        left.join(dual, left("id") === dual("id")).hint("external_lookup").queryExecution.analyzed
+      },
+      condition = "INVALID_EXTERNAL_LOOKUP_HINT.NOT_ON_LOOKUP_SIDE",
+      parameters = Map.empty)
   }
 
   test("external lookup join handles null, missing, duplicate, and partial batches") {
@@ -2789,31 +2874,6 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     assert(SimpleExternalLookupDataSource.readerCount.get() === 1)
     eventually(timeout(10.seconds)) {
       assert(SimpleExternalLookupDataSource.closeCount.get() === 1)
-    }
-  }
-
-  test("micro-batch stream-static joins follow the same lookup selection") {
-    val dual = spark.read.format(classOf[DualCapabilityExternalLookupDataSource].getName).load()
-    Seq(false, true).foreach { hinted =>
-      SimpleExternalLookupDataSource.resetCounters()
-      val input = MemoryStream[Int]
-      val left = input.toDF().toDF("id")
-      val lookup = if (hinted) dual.hint("external_lookup") else dual
-      val queryName = s"external_lookup_dual_mbm_$hinted"
-      val query = left.join(lookup, left("id") === lookup("id"))
-        .writeStream.format("memory").queryName(queryName).start()
-      try {
-        input.addData(2)
-        query.processAllAvailable()
-        checkAnswer(spark.table(queryName), Seq(Row(2, 2, "sales")))
-        val usesLookup = query.asInstanceOf[StreamingQueryWrapper].streamingQuery
-          .lastExecution.executedPlan.exists(_.isInstanceOf[ExternalLookupJoinExec])
-        assert(usesLookup === hinted)
-        assert((SimpleExternalLookupDataSource.requestCount.get() > 0) === hinted)
-      } finally {
-        query.stop()
-        spark.catalog.dropTempView(queryName)
-      }
     }
   }
 

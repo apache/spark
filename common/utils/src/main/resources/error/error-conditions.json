@@ -4445,21 +4445,6 @@
       "The `EXTERNAL_LOOKUP` hint is invalid:"
     ],
     "subClass" : {
-      "CONFLICTING_JOIN_STRATEGY" : {
-        "message" : [
-          "The join over <relation> also has the join strategy hint <strategy>, which asks for a different join. Remove one of the two hints."
-        ]
-      },
-      "DUPLICATE_RELATION" : {
-        "message" : [
-          "The relation <relation> is specified more than once."
-        ]
-      },
-      "MULTIPLE_HINTS" : {
-        "message" : [
-          "The lookup side of a join can have at most one `EXTERNAL_LOOKUP` hint."
-        ]
-      },
       "NOT_ON_LOOKUP_SIDE" : {
         "message" : [
           "The hint must be placed on the right lookup side of the join."
