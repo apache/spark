@@ -65,6 +65,45 @@ class NumModTestsMixin:
                 else:
                     self.assertRaises(TypeError, lambda: psser % psdf[n_col])
 
+    def test_mod_sign_of_divisor(self):
+        # SPARK-60655: the result takes the sign of the divisor, as in NumPy, including for an
+        # infinite divisor.
+        pdf = pd.DataFrame(
+            {
+                "x": [1.0, -1.0, 0.0, 2.5, -2.5, np.inf],
+                "y": [np.inf, np.inf, -np.inf, -np.inf, 2.0, 2.0],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        pser, psser = pdf["x"], psdf["x"]
+
+        for divisor in [np.inf, -np.inf, 2.0, -2.0]:
+            with self.subTest(divisor=divisor):
+                self.assert_eq(pser % divisor, psser % divisor)
+                self.assert_eq(np.mod(pser, divisor), np.mod(psser, divisor))
+                self.assert_eq(divisor % pser, divisor % psser)
+        self.assert_eq(pdf["x"] % pdf["y"], psdf["x"] % psdf["y"])
+        self.assert_eq(1.0 % pdf["y"], 1.0 % psdf["y"])
+
+        # A zero result takes the sign of the divisor.
+        for divisor in [2.0, -2.0]:
+            with self.subTest(divisor=divisor):
+                self.assert_eq(
+                    np.signbit((pser % divisor).to_numpy()),
+                    np.signbit((psser % divisor).to_pandas().to_numpy()),
+                )
+
+        # A small remainder is kept next to a large divisor.
+        pser = pd.Series([1e-20, -1e-20])
+        self.assert_eq(pser % 1e20, ps.from_pandas(pser) % 1e20)
+
+        # Integral operands near the bounds do not overflow.
+        pser = pd.Series([1, -1, 0], dtype="int64")
+        psser = ps.from_pandas(pser)
+        for divisor in [np.iinfo(np.int64).max, np.iinfo(np.int64).min]:
+            with self.subTest(divisor=divisor):
+                self.assert_eq(pser % divisor, psser % divisor)
+
 
 class NumModTests(
     NumModTestsMixin,

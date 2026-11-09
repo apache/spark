@@ -100,6 +100,27 @@ def _cast_back_float(
     return expr
 
 
+def _python_mod(left: Any, right: Any) -> PySparkColumn:
+    """
+    Python and NumPy style modulo, whose result takes the sign of the divisor, as in NumPy.
+
+    Spark's remainder takes the sign of the dividend, so add the divisor only when the two
+    signs differ. ``((left % right) + right) % right`` returns NaN for an infinite divisor,
+    loses a small remainder next to a large divisor and can overflow for integers.
+    """
+    remainder = F.lit(left) % right
+    right_is_negative = F.lit(right) < 0
+    return (
+        # NumPy returns a zero with the sign of the divisor.
+        F.when(
+            remainder == 0,
+            F.when(right_is_negative, -F.abs(remainder)).otherwise(F.abs(remainder)),
+        )
+        .when((remainder < 0) != right_is_negative, remainder + right)
+        .otherwise(remainder)
+    )
+
+
 def _is_decimal_float_mixed(left: IndexOpsLike, right: Any) -> bool:
     left_is_decimal = isinstance(left.spark.data_type, DecimalType)
     left_is_float = is_float_dtype(left.dtype)
@@ -153,10 +174,10 @@ class NumericOps(DataTypeOps):
         def mod(left_op: PySparkColumn, right_op: Any) -> PySparkColumn:
             if is_ansi_mode_enabled(spark_session):
                 expr = F.when(F.lit(right_op == 0), F.lit(None)).otherwise(
-                    ((left_op % right_op) + right_op) % right_op
+                    _python_mod(left_op, right_op)
                 )
             else:
-                expr = ((left_op % right_op) + right_op) % right_op
+                expr = _python_mod(left_op, right_op)
             return _cast_back_float(expr, left.dtype, right)
 
         new_right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
@@ -233,11 +254,9 @@ class NumericOps(DataTypeOps):
         def safe_rmod(left_op: PySparkColumn, right_op: Any) -> PySparkColumn:
             if is_ansi_mode_enabled(spark_session):
                 # Java-style modulo -> Python-style modulo
-                result = F.when(
-                    left_op != 0, ((F.lit(right_op) % left_op) + left_op) % left_op
-                ).otherwise(F.lit(None))
+                result = F.when(left_op != 0, _python_mod(right_op, left_op)).otherwise(F.lit(None))
             else:
-                result = ((right_op % left_op) + left_op) % left_op
+                result = _python_mod(right_op, left_op)
             return _cast_back_float(result, left.dtype, right)
 
         return column_op(safe_rmod)(left, new_right)
