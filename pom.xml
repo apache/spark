@@ -121,10 +121,10 @@
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-    <java.version>17</java.version>
-    <java.minimum.version>17.0.11</java.minimum.version>
+    <java.version>21</java.version>
+    <java.minimum.version>21</java.minimum.version>
     <maven.compiler.release>${java.version}</maven.compiler.release>
-    <maven.version>3.9.16</maven.version>
+    <maven.version>3.10.0</maven.version>
     <exec-maven-plugin.version>3.6.1</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
     <asm.version>9.10.1</asm.version>
@@ -143,8 +143,7 @@
     <hive.version>2.3.10</hive.version>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
     <kafka.version>3.9.2</kafka.version>
-    <!-- After 10.17.1.0, the minimum required version is JDK19 -->
-    <derby.version>10.16.1.1</derby.version>
+    <derby.version>10.17.1.0</derby.version>
     <parquet.version>1.18.1</parquet.version>
     <orc.version>2.3.1</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
@@ -185,7 +184,7 @@
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
     <scalafmt.changedOnly>true</scalafmt.changedOnly>
     <!-- Should be consistent with SparkBuild.scala and docs -->
-    <fasterxml.jackson.version>2.22.3</fasterxml.jackson.version>
+    <fasterxml.jackson.version>2.22.4</fasterxml.jackson.version>
     <ws.xmlschema.version>2.3.1</ws.xmlschema.version>
     <snappy.version>1.1.10.12</snappy.version>
     <netlib.ludovic.dev.version>3.2.0</netlib.ludovic.dev.version>
@@ -222,8 +221,8 @@
             SPARK-53327 workaround should be reverted.
      -->
     <datasketches.version>6.2.0</datasketches.version>
-    <netty.version>4.2.19.Final</netty.version>
-    <netty-tcnative.version>2.0.84.Final</netty-tcnative.version>
+    <netty.version>4.2.20.Final</netty.version>
+    <netty-tcnative.version>2.0.85.Final</netty-tcnative.version>
     <icu4j.version>78.3</icu4j.version>
     <junit.version>6.0.3</junit.version>
     <jline.version>2.14.6</jline.version>
@@ -347,14 +346,14 @@
       --enable-native-access=ALL-UNNAMED
       -XX:+EnableDynamicAgentLoading
     </extraJavaTestArgs>
-    <mariadb.java.client.version>3.5.10</mariadb.java.client.version>
-    <mysql.connector.version>9.6.0</mysql.connector.version>
-    <postgresql.version>42.7.13</postgresql.version>
+    <mariadb.java.client.version>3.5.11</mariadb.java.client.version>
+    <mysql.connector.version>26.10.0</mysql.connector.version>
+    <postgresql.version>42.7.14</postgresql.version>
     <db2.jcc.version>12.1.4.0</db2.jcc.version>
     <mssql.jdbc.version>13.2.1.jre11</mssql.jdbc.version>
     <ojdbc17.version>23.26.1.0.0</ojdbc17.version>
     <databricks.jdbc.version>3.3.1</databricks.jdbc.version>
-    <snowflake.jdbc.version>4.1.0</snowflake.jdbc.version>
+    <snowflake.jdbc.version>4.4.1</snowflake.jdbc.version>
     <terajdbc.version>20.00.00.39</terajdbc.version>
     <!-- Used for SBT build to retrieve the Spark version -->
     <spark.version>${project.version}</spark.version>
@@ -2836,7 +2835,7 @@
               <arg>-feature</arg>
               <arg>-explaintypes</arg>
               <arg>-release</arg>
-              <arg>17</arg>
+              <arg>21</arg>
               <arg>-Wconf:any:e</arg>
               <arg>-Wconf:cat=deprecation:wv</arg>
               <arg>-Wunused:imports</arg>

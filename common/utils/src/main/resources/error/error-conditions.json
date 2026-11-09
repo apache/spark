@@ -11,6 +11,12 @@
     ],
     "sqlState" : "42845"
   },
+  "AGGREGATE_OR_WINDOW_FUNCTION_IN_CHECK_CONSTRAINT" : {
+    "message" : [
+      "The check constraint `<checkCondition>` calls an aggregate or window function. Check constraints apply to each row and cannot call these functions."
+    ],
+    "sqlState" : "42621"
+  },
   "AGGREGATE_OUT_OF_MEMORY" : {
     "message" : [
       "No enough memory for aggregation"
@@ -634,6 +640,12 @@
       "The provided URL cannot be decoded: <url>. Please ensure that the URL is properly formatted and try again."
     ],
     "sqlState" : "22546"
+  },
+  "CANNOT_INSTANTIATE_FUNCTION_CLASS" : {
+    "message" : [
+      "Cannot instantiate class <className> when registering the function <functionName>: <msg>. Please make sure the class has a public no-arg constructor that succeeds."
+    ],
+    "sqlState" : "46103"
   },
   "CANNOT_INSTANTIATE_HIVE_FUNCTION" : {
     "message" : [
@@ -2370,6 +2382,12 @@
     ],
     "sqlState" : "KD010"
   },
+  "DATA_SOURCE_EXTERNAL_LOOKUP_NOT_SUPPORTED" : {
+    "message" : [
+      "<description>: External lookup is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
   "DATA_SOURCE_INVALID_RUNTIME_FILTER_ATTRIBUTE" : {
     "message" : [
       "The runtime filter attribute <attribute> reported by `<method>` in data source scan <scanClass> is invalid for the scan relation output <relationOutput>."
@@ -3090,6 +3108,12 @@
       "A column cannot have both a default value and a generation expression but column <colName> has default value: (<defaultValue>) and generation expression: (<genExpr>)."
     ],
     "sqlState" : "42623"
+  },
+  "GENERATOR_IN_CHECK_CONSTRAINT" : {
+    "message" : [
+      "The check constraint `<checkCondition>` calls a generator function. Check constraints compute one value for each row and cannot call functions that return multiple rows."
+    ],
+    "sqlState" : "42621"
   },
   "GEO_ENCODER_SRID_MISMATCH_ERROR" : {
     "message" : [
@@ -4867,7 +4891,7 @@
       },
       "UNSUPPORTED_ABI_VERSION" : {
         "message" : [
-          "It requires version <version> of the native data source interface, but Spark supports version <supported>."
+          "It implements version <version> of the native data source interface, but Spark supports version <supported>."
         ]
       }
     },
@@ -4890,7 +4914,7 @@
       },
       "UNSUPPORTED_ABI_VERSION" : {
         "message" : [
-          "It requires version <version> of the native data source interface, but Spark supports version <supported>."
+          "It implements version <version> of the native data source interface, but Spark supports version <supported>."
         ]
       },
       "UNSUPPORTED_PLATFORM" : {
@@ -5088,6 +5112,11 @@
       "OCCURRENCE" : {
         "message" : [
           "expects a positive integer, but got <actual>."
+        ]
+      },
+      "PARSE_SQL_MODE" : {
+        "message" : [
+          "expects one of 'PARSE', 'ANALYZE', but got <invalidValue>."
         ]
       },
       "PATTERN" : {
@@ -6922,6 +6951,18 @@
     ],
     "sqlState" : "42601"
   },
+  "PARSE_SQL_ANALYZE_REQUIRES_SESSION" : {
+    "message" : [
+      "<functionName> ANALYZE needs an active Spark session with catalog access. ANALYZE is evaluated on the driver; a missing session usually means the call ran in a task."
+    ],
+    "sqlState" : "0A000"
+  },
+  "PARSE_SQL_ANALYZE_UNSUPPORTED_SCRIPT" : {
+    "message" : [
+      "<functionName> ANALYZE does not analyze SQL scripts. Use PARSE for BEGIN ... END, or analyze each statement separately."
+    ],
+    "sqlState" : "0A000"
+  },
   "PARSE_SYNTAX_ERROR" : {
     "message" : [
       "Syntax error at or near <error><hint>."
@@ -8272,6 +8313,18 @@
     },
     "sqlState" : "0A000"
   },
+  "STREAMING_SCAN_INVALID_READ_SCHEMA" : {
+    "message" : [
+      "The read schema of the scan of all the columns of the streaming source <source> <reason>. The table of the source has the capability STREAMING_COLUMN_PRUNING, so the readers of its streams return the columns of the read schema of the scan, which must be columns of the relation, each once and with its type. Set <config> to \"false\" so that the scans of streaming sources read all their columns, which their scan nodes output in the order of the relation."
+    ],
+    "sqlState" : "KD000"
+  },
+  "STREAMING_SCAN_MISSING_COLUMNS" : {
+    "message" : [
+      "The streaming query reads the columns <columns> of the source <source>, which the scan of the source does not read. Spark builds the scan of a streaming source when the query starts, to read only the columns that the query reads from the source then, so the query cannot read other columns of the source later, for example, after the configuration of the optimizer changes in the session of the query. Set that configuration before the query starts, or set <config> to \"false\" so that the scans of streaming sources read all their columns."
+    ],
+    "sqlState" : "55019"
+  },
   "STREAMING_SHUFFLE_CHECKSUM_VERIFICATION_FAILED" : {
     "message" : [
       "Checksum verification failed for buffer from writer <writerId>. Expected: <expectedChecksum>, Calculated: <calculatedChecksum>, Data length: <dataLength>."
@@ -8382,6 +8435,12 @@
       "Invalid or unsupported SRID (spatial reference identifier) value: <srid>."
     ],
     "sqlState" : "22023"
+  },
+  "SUBQUERY_IN_CHECK_CONSTRAINT" : {
+    "message" : [
+      "The check constraint `<checkCondition>` contains a subquery. Check constraints cannot contain subqueries."
+    ],
+    "sqlState" : "42621"
   },
   "SUM_OF_LIMIT_AND_OFFSET_EXCEEDS_MAX_INT" : {
     "message" : [
@@ -9282,6 +9341,16 @@
           "Direct execution of a CREATE ... <pipelineDatasetType> query. To create a pipeline dataset, create and execute a pipeline with a SQL file containing your query attached in the pipeline definition."
         ]
       },
+      "DECOMPRESSION_CODEC_FOR_ARCHIVE" : {
+        "message" : [
+          "The <option> option for the archive file <path>. Archives are always decompressed based on their file name extension. Remove the option, or read the archive files separately from the other files."
+        ]
+      },
+      "DECOMPRESSION_CODEC_WITH_LEGACY_LINE_READER" : {
+        "message" : [
+          "The <option> option when <config> is false, because Hadoop's line reader infers the codec from the file name extension. Set <config> to true, or remove the option."
+        ]
+      },
       "DESC_TABLE_COLUMN_JSON" : {
         "message" : [
           "DESC TABLE COLUMN AS JSON not supported for individual columns."
@@ -9770,12 +9839,6 @@
         ]
       }
     },
-    "sqlState" : "0A000"
-  },
-  "UNSUPPORTED_HIVE_METASTORE_VERSION_FOR_JAVA" : {
-    "message" : [
-      "Hive metastore version <version> requires Java <requiredJavaVersion> or later, but the current JVM is Java <currentJavaVersion>. Please upgrade your Java version or use an earlier Hive metastore version."
-    ],
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_HIVE_TYPE" : {
@@ -10274,7 +10337,7 @@
   },
   "VARIANT_CONSTRUCTOR_SIZE_LIMIT" : {
     "message" : [
-      "Cannot construct a Variant larger than 16 MiB. The maximum allowed size of a Variant value is 16 MiB."
+      "Cannot construct a Variant larger than <sizeLimit>. The maximum allowed size of a Variant value is <sizeLimit>."
     ],
     "sqlState" : "22023"
   },

@@ -78,6 +78,27 @@ class SortMergeAsOfJoinSuite extends QueryTest
     assert(op.get.metrics("spillSize").value > 0,
       s"Expected the right-side buffer to spill (spillSize > 0), " +
         s"got ${op.get.metrics("spillSize").value}")
+    assert(op.get.metrics("numAsOfCursorTasks").value == 0,
+      "Expected the buffered scan, but a task used the cursor scan")
+  }
+
+  /**
+   * Like checkAnswer, but also asserts that the join used the cursor scan. A right group spills
+   * from its second row, so a cursor scan that buffered rows would show a spill.
+   */
+  private def checkCursorScan(df: classic.DataFrame, expectedAnswer: Seq[Row]): Unit = {
+    withSQLConf(
+        SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
+        SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
+      checkAnswer(df, expectedAnswer)
+    }
+    val op = collectFirst(df.queryExecution.executedPlan) {
+      case s: SortMergeAsOfJoinExec => s
+    }
+    assert(op.isDefined,
+      s"Expected SortMergeAsOfJoinExec in plan:\n${df.queryExecution.executedPlan}")
+    assert(op.get.metrics("numAsOfCursorTasks").value > 0, "Expected the cursor scan")
+    assert(op.get.metrics("spillSize").value == 0, "The cursor scan buffered right rows")
   }
 
   /**
@@ -150,7 +171,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
 
   test("backward join - simple") {
     val (df1, df2) = prepareForAsOfJoin()
-    checkAnswer(
+    checkCursorScan(
       df1.joinAsOf(
         df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
         joinType = "inner", tolerance = null,
@@ -193,7 +214,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
 
   test("forward join") {
     val (df1, df2) = prepareForAsOfJoin()
-    checkAnswer(
+    checkCursorScan(
       df1.joinAsOf(
         df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
         joinType = "inner", tolerance = null,
@@ -1634,6 +1655,31 @@ class SortMergeAsOfJoinSuite extends QueryTest
     }
   }
 
+  test("reversed join keys keep the buffered scan, which skips a failing left key") {
+    // The reversed condition reads the right key first and stops at its NULL, so v * 1000 never
+    // overflows. The cursor reads the left key first, so it would fail the query under ANSI.
+    withSQLConf(
+        SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+        SQLConf.ANSI_ENABLED.key -> "true") {
+      val left = spark.sql("SELECT * FROM VALUES ('B', 9223372036854775807L) AS t(k, v)")
+      val right = spark.sql("SELECT * FROM VALUES ('B', CAST(NULL AS BIGINT)) AS t(k, v)")
+      for (direction <- Seq("backward", "forward")) {
+        withClue(s"$direction: ") {
+          val reversed = left.joinAsOf(
+            other = right, leftAsOf = right.col("v"), rightAsOf = left.col("v") * 1000,
+            usingColumns = Seq("k"), joinType = "left", tolerance = null,
+            allowExactMatches = true, direction = direction)
+          checkAnswer(reversed, Row("B", Long.MaxValue, null, null) :: Nil)
+          val op = collectFirst(reversed.queryExecution.executedPlan) {
+            case s: SortMergeAsOfJoinExec => s
+          }
+          assert(op.exists(_.metrics("numAsOfCursorTasks").value == 0),
+            s"Expected the buffered scan:\n${reversed.queryExecution.executedPlan}")
+        }
+      }
+    }
+  }
+
   gridTest("join keys can reference hidden USING columns")(Seq(false, true)) { singlePass =>
     withAsOfJoinAnalyzer(singlePass) {
       withSQLConf(
@@ -2149,7 +2195,9 @@ class SortMergeAsOfJoinSuite extends QueryTest
     // produces the same results as the in-memory path.
     withSQLConf(
       SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
-      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
+      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1",
+      // The cursor scan never buffers, so turn it off to test the spill.
+      SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> "false") {
       val (df1, df2) = prepareForAsOfJoin()
       // No equi-key (bufferAllRight path)
       checkAnswerAndSpill(
@@ -2179,7 +2227,9 @@ class SortMergeAsOfJoinSuite extends QueryTest
   test("forward join - spill to disk") {
     withSQLConf(
       SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
-      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
+      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1",
+      // The cursor scan never buffers, so turn it off to test the spill.
+      SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> "false") {
       val (df1, df2) = prepareForAsOfJoin()
       // No equi-key (bufferAllRight path)
       checkAnswerAndSpill(
@@ -2263,7 +2313,9 @@ class SortMergeAsOfJoinSuite extends QueryTest
   test("left outer join - spill to disk") {
     withSQLConf(
       SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
-      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
+      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1",
+      // The cursor scan never buffers, so turn it off to test the spill.
+      SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> "false") {
       val (df1, df2) = prepareForAsOfJoin()
       checkAnswerAndSpill(
         df1.joinAsOf(
@@ -2288,7 +2340,9 @@ class SortMergeAsOfJoinSuite extends QueryTest
     // match that was not copied out would be clobbered before it is emitted.
     withSQLConf(
       SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
-      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
+      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1",
+      // The cursor scan never buffers, so turn it off to test the spill.
+      SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> "false") {
       val leftSchema = StructType(
         StructField("grp", StringType) ::
           StructField("ts", IntegerType) :: Nil)

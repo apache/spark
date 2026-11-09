@@ -22,11 +22,9 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SqlScriptingContextManager}
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
-import org.apache.spark.sql.catalyst.util.SparkCharVarcharUtils.replaceCharVarcharWithString
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -144,8 +142,8 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       rejectTimeTravelOptionsForWrite(resolvedIdentifier, writeOptions)
       r.copy(name = resolvedIdentifier)
 
-    case UnresolvedIdentifier(nameParts, allowTemp) =>
-      resolveIdentifier(nameParts, allowTemp, Nil)
+    case unresolvedIdentifier: UnresolvedIdentifier =>
+      catalogIdentifierResolution.resolveUnresolvedIdentifier(unresolvedIdentifier)
 
     case CurrentNamespace =>
       ResolvedNamespace(currentCatalog, catalogManager.currentNamespace.toImmutableArraySeq)
@@ -159,14 +157,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       nameParts: Seq[String],
       allowTemp: Boolean,
       columns: Seq[ColumnDefinition]): ResolvedIdentifier = {
-    val columnOutput = columns.map { col =>
-      val dataType = if (conf.charVarcharFirstClassTypes) {
-        col.dataType
-      } else {
-        replaceCharVarcharWithString(col.dataType)
-      }
-      AttributeReference(col.name, dataType, col.nullable, col.metadata)()
-    }
+    val columnOutput = catalogIdentifierResolution.columnsToOutput(columns)
     catalogIdentifierResolution.resolveIdentifier(nameParts, allowTemp, columnOutput)
   }
 

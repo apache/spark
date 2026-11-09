@@ -628,12 +628,32 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
     assert(optOutDf.schema("D").dataType === TimestampType)
     assert(optOutDf.schema("T").dataType === TimestampType)
 
+    withTable("datetime_ltz") {
+      sql(s"CREATE TABLE datetime_ltz USING jdbc OPTIONS (url '$jdbcUrl', " +
+        "dbtable 'datetime', zonelessTimestampAsNTZ 'false', timestampNTZAsWallClock 'false')")
+      val tableDf = sql("SELECT D, T FROM datetime_ltz")
+      assert(tableDf.schema("D").dataType === TimestampType)
+      assert(tableDf.schema("T").dataType === TimestampType)
+      checkAnswer(tableDf, Row(
+        Timestamp.valueOf("1991-11-09 00:00:00"), Timestamp.valueOf("1996-01-01 01:23:45")))
+    }
+
     // Conversion off keeps the NTZ mapping but reads through a JVM-zone java.sql.Timestamp;
     // LA is UTC-08:00 on this date, so 01:23:45 reads back as 09:23:45.
     withDefaultTimeZone(LA) {
       val noWallClockDf = readDatetime(Map("timestampNTZAsWallClock" -> "false"))
       assert(noWallClockDf.schema("T").dataType === TimestampNTZType)
       checkAnswer(noWallClockDf.select("T"), Row(LocalDateTime.of(1996, 1, 1, 9, 23, 45)))
+
+      withTable("datetime_no_wall_clock") {
+        sql(s"CREATE TABLE datetime_no_wall_clock USING jdbc OPTIONS (url '$jdbcUrl', " +
+          "dbtable 'datetime', zonelessTimestampAsNTZ 'true', timestampNTZAsWallClock 'false')")
+        val tableDf = sql("SELECT D, T FROM datetime_no_wall_clock")
+        assert(tableDf.schema("D").dataType === TimestampNTZType)
+        assert(tableDf.schema("T").dataType === TimestampNTZType)
+        checkAnswer(tableDf, Row(
+          LocalDateTime.of(1991, 11, 9, 8, 0, 0), LocalDateTime.of(1996, 1, 1, 9, 23, 45)))
+      }
     }
 
     // Legacy flag on: both fall back to TimestampType.

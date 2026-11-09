@@ -165,8 +165,8 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     tracker.removeOutputsOnExecutor("a", respectReliablyStored = true)
     assert(tracker.getEpoch === epochBeforeNoOp)
 
-    // Fetch failure (skip = false): even the reliably-stored shuffle's output is removed, and
-    // because something was removed the epoch bumps.
+    // Unconditional cleanup (respectReliablyStored = false): even the reliably-stored shuffle's
+    // output is removed, and because something was removed the epoch bumps.
     val epochBeforeRemoval = tracker.getEpoch
     tracker.removeOutputsOnExecutor("a", respectReliablyStored = false)
     assert(tracker.getNumAvailableOutputs(1) === 0)
@@ -219,9 +219,11 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     assert(tracker.getNumAvailableOutputs(0) === 1)
     assert(tracker.getNumAvailableMergeResults(0) === 1)
 
+    val epochBefore = tracker.getEpoch
     tracker.removeOutputsOnHost("hostA", respectReliablyStored = true)
     assert(tracker.getNumAvailableOutputs(0) === 1, "reliable map output must survive host loss")
     assert(tracker.getNumAvailableMergeResults(0) === 0, "host-local merge result must be dropped")
+    assert(tracker.getEpoch > epochBefore, "dropping a merge result changes metadata")
 
     tracker.stop()
     rpcEnv.shutdown()
@@ -284,7 +286,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
       new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
 
     val size = MapStatus.compressSize(1000L)
-    // Reliable shuffle 0 (the failed one) and local shuffle 1, both with a map on hostA-exec.
+    // Reliable shuffle 0 (the failed one) and local shuffle 1, both with a map on executor "a".
     tracker.registerShuffle(0, 1, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES,
       isReliablyStored = true)
     tracker.registerShuffle(1, 1, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)

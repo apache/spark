@@ -48,8 +48,9 @@ import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStrea
 
 /**
  * Aggregate result of an executor/host cleanup on the `MapOutputTrackerMaster`.
- * `metadataChanged`: any status removed (drives the epoch bump). `preservedReliable`: a
- * reliably-stored shuffle was skipped, so the cleanup was selective rather than complete.
+ * `metadataChanged`: any status removed (drives the epoch bump). `preservedReliable`: reliable
+ * map output on the cleanup target was kept, so the cleanup was selective rather than complete.
+ * A reliable shuffle with no output on the target doesn't set it.
  */
 private[spark] case class CleanupOutcome(metadataChanged: Boolean, preservedReliable: Boolean) {
   // Skip the epoch bump only on a no-op that merely preserved reliable output; a non-reliable
