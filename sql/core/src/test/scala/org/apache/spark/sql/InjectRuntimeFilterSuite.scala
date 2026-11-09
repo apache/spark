@@ -1913,14 +1913,55 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
 
   test("Runtime bloom filter join: add bloom filter if the dpp filter cannot reach the scan") {
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false") {
       spark.udf.register("bf_nondeterministic_true", udf((_: Int) => true).asNondeterministic())
       // The non-deterministic filter keeps the DPP filter from being pushed to the scan, so it is
-      // dropped before this rule runs, and the key is left to a Bloom filter.
+      // dropped before this rule runs, and the key is left to a Bloom filter. With
+      // `reuseBroadcastOnly` off, the DPP filter runs as its own subquery, so it would keep the
+      // Bloom filter off the key if this rule ran before the cleanup.
       val query = "select * from (select * from bf5part where bf_nondeterministic_true(f5)) f " +
         "join bf2 on f.f5 = bf2.c2 where bf2.a2 = 62"
       assertRewroteWithBloomFilter(query)
       assert(!hasDynamicPruning(query))
+    }
+  }
+
+  test("Runtime bloom filter join: a dpp filter pushed down from a join above does not block the " +
+    "bloom filter of a join below") {
+    // The DPP filter on `f5` is pushed into `bf5part`, the creation side of the join below. The
+    // `LIKE` in its build plan would stop the search for that creation side, but the filter is
+    // `onlyInBroadcast`, so it is `true` in the bloom filter's subquery and left out of it.
+    val query = "select * from bf1 join bf5part on bf1.c1 = bf5part.c5 " +
+      "join bf2 on bf5part.f5 = bf2.c2 " +
+      "where bf5part.a5 = 5 and bf2.a2 = 62 and cast(bf2.b2 as string) like '%1%2%'"
+    withDppTestConf() {
+      assert(hasDynamicPruning(query))
+      assertRewroteWithBloomFilter(query, 2)
+      assert(bloomFilterKeyNames(query).toSet == Set("c1", "c2"))
+    }
+  }
+
+  test("Runtime bloom filter join: do not add bloom filter if the dpp filter reuses a broadcast " +
+    "that dpp prunes on two keys") {
+    // The build plan of the DPP filter on `t.f5` is the broadcast `b`, whose DPP filters on `p1`
+    // and `p2` it keeps stacked, as `PartitionPruning` built them. Pushdown combines them in `b`.
+    withTable("bf_dpp2_part", "bf_dpp2_dim") {
+      sql("create table bf_dpp2_part (k int, v int, p1 int, p2 int) using parquet " +
+        "partitioned by (p1, p2)")
+      sql("insert into bf_dpp2_part select cast(id as int), cast(id % 10 as int), " +
+        "cast(id % 2 as int), cast(id % 3 as int) from range(100)")
+      sql("create table bf_dpp2_dim (x int, y int, z int) using parquet")
+      sql("insert into bf_dpp2_dim values (0, 0, 1), (1, 2, 0)")
+      val query = "select /*+ broadcast(b) */ * from " +
+        "(select f5, sum(a5) from bf5part group by f5) t join " +
+        "(select dp.k from bf_dpp2_part dp join bf_dpp2_dim d on dp.p1 = d.x and dp.p2 = d.y " +
+        "where d.z = 1 and dp.v = 3) b on t.f5 = b.k"
+      withDppTestConf() {
+        assert(hasDynamicPruning(query))
+        assert(bloomFilterKeys(query).isEmpty)
+        assertBloomFilterWithoutDpp(query)
+      }
     }
   }
 
@@ -2520,6 +2561,25 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     }
   }
 
+  test("RUNTIME_FILTER hint keeps an outer generate whose rows the hinted side counts") {
+    withTable("bf_gen_dim", "bf_gen_fact") {
+      sql("CREATE TABLE bf_gen_dim (k INT, arr ARRAY<INT>) USING parquet")
+      sql("INSERT INTO bf_gen_dim VALUES (1, array(1, 2)), (2, array(1))")
+      sql("CREATE TABLE bf_gen_fact (k INT, v INT) USING parquet")
+      sql("INSERT INTO bf_gen_fact VALUES (1, 10), (2, 20)")
+      // Nothing reads the generated column, but `count(*)` counts the rows the generate repeats.
+      val query = "SELECT /*+ RUNTIME_FILTER(d) */ f.k, f.v FROM bf_gen_fact f JOIN " +
+        "(SELECT k FROM (SELECT k, count(*) c FROM bf_gen_dim " +
+        "LATERAL VIEW OUTER explode(arr) e AS x GROUP BY k) WHERE c > 1) d ON f.k = d.k"
+      Seq("true", "false").foreach { adaptive =>
+        withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> adaptive) {
+          assertRewroteWithBloomFilter(query)
+          checkAnswer(sql(query), Row(1, 10))
+        }
+      }
+    }
+  }
+
   test("RUNTIME_FILTER hint keeps correctness requirements") {
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
@@ -2765,6 +2825,17 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
         assertHintNotApplied(query("observed_side"),
           "the hinted side contains CollectMetrics, whose observation the runtime filter would " +
             "evaluate twice")
+      }
+      // A file metadata column such as `_metadata.file_block_start` depends on how the scan splits
+      // its files, which the filter's own scan can do differently. The threshold keeps the
+      // heuristics, which then decide the join, from building a filter.
+      withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "1GB") {
+        val metadata = "SELECT /*+ RUNTIME_FILTER(t) */ * FROM bf4 JOIN " +
+          "(SELECT c2 FROM bf2 WHERE a2 = 62 AND _metadata.file_block_start = 0) t " +
+          "ON bf4.c4 = t.c2"
+        assertNoBloomFilters(metadata)
+        assertHintNotApplied(metadata,
+          "the hinted side may produce different rows or join keys when evaluated again")
       }
     }
   }
@@ -3206,8 +3277,9 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     }
   }
 
-  test("RUNTIME_FILTER hint rejects a V1 source that is not file-based") {
-    // A JDBC query, for example, can return other rows when read again.
+  test("RUNTIME_FILTER hint takes a V1 JDBC source as it takes a DSv2 one") {
+    // A batch read is taken to return the same rows every time. A source that picks its own rows
+    // on each read, such as a JDBC query with a `LIMIT`, is for the user not to hint.
     Utils.classForName("org.h2.Driver")
     val url = "jdbc:h2:mem:bf_hint_v1;DB_CLOSE_DELAY=-1"
     val conn = DriverManager.getConnection(url)
@@ -3217,11 +3289,8 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       withTempView("jdbc_side") {
         spark.read.jdbc(url, "dim", new Properties()).createOrReplaceTempView("jdbc_side")
         withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-          val query = "SELECT /*+ RUNTIME_FILTER(t) */ * FROM bf4 JOIN jdbc_side t ON bf4.c4 = t.k"
-          assertNoBloomFilters(query)
-          assertReturnsRows(query)
-          assertHintNotApplied(query,
-            "the hinted side reads LogicalRelation, which may return different rows")
+          assertHintedRewrite(
+            "SELECT /*+ RUNTIME_FILTER(t) */ * FROM bf4 JOIN jdbc_side t ON bf4.c4 = t.k")
         }
       }
     } finally {
@@ -3247,6 +3316,32 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
         assertNoBloomFilters(filtered)
         assertHintNotApplied(filtered,
           "the hinted side contains a Python UDF, Python UDTF or external UDF")
+      }
+    } finally {
+      spark.sessionState.catalog.dropTempFunction(pythonUDF.name, ignoreIfNotExists = true)
+    }
+  }
+
+  test("RUNTIME_FILTER hint adds no Bloom filter that can fail in place of a dropped DPP filter") {
+    import IntegratedUDFTestUtils._
+    assume(shouldTestPythonUDFs)
+    val pythonUDF = TestPythonUDF("bf_python_udf")
+    registerTestUDF(pythonUDF, spark)
+    try {
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+          SQLConf.ANSI_ENABLED.key -> "true") {
+        // DPP declines the hint for the Python UDF of the hinted side and adds an `onlyInBroadcast`
+        // filter of its own, which physical planning drops without a broadcast to reuse.
+        def query(key: String): String = "SELECT /*+ RUNTIME_FILTER(t) */ * FROM bf5part p JOIN " +
+          s"(SELECT c2, bf_python_udf(a2) AS x FROM bf2 WHERE a2 = 62) t ON $key = t.c2"
+        assert(hasDynamicPruning(query("p.f5")))
+        assertRewroteWithBloomFilter(query("p.f5"))
+        // On the partition column, a Bloom filter would evaluate the narrowing cast on every
+        // partition, before the data filters (SPARK-60809).
+        val narrowed = query("CAST(p.f5 AS TINYINT)")
+        assert(hasDynamicPruning(narrowed))
+        assertNoBloomFilters(narrowed)
+        assertHintNotApplied(narrowed, "a Bloom filter pushed down on the join key could fail")
       }
     } finally {
       spark.sessionState.catalog.dropTempFunction(pythonUDF.name, ignoreIfNotExists = true)

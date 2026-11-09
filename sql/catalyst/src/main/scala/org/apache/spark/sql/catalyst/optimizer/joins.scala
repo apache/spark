@@ -748,7 +748,8 @@ private[sql] trait RuntimeFilterHintCheck {
  * The plan is walked bottom-up, tracking:
  *   1. output attributes whose values are unstable: they come from a non-deterministic expression,
  *      an order-dependent aggregate or window function, a subquery whose plan fails this same
- *      analysis, or an expression over such an attribute;
+ *      analysis, a file metadata column, some of whose fields depend on how a scan splits its
+ *      files, or an expression over such an attribute;
  *   2. whether the row multiplicity is unstable, i.e. every row is still present but may be
  *      repeated a different number of times, which an outer generate with an unstable generator,
  *      or an aggregate grouping on an unstable value, causes and which makes every aggregate over
@@ -850,7 +851,11 @@ private[optimizer] class RuntimeFilterSourceAnalysis(
 
     case l: LeafNode =>
       if (l.isOutputRepeatable) {
-        Right(Taint(AttributeSet.empty))
+        // A file metadata column has fields, such as `_metadata.file_block_start`, that depend on
+        // how the scan splits its files, which the filter's own scan of the side can do
+        // differently.
+        Right(Taint(AttributeSet(
+          l.output.filter(a => FileSourceMetadataAttribute.isValid(a.metadata)))))
       } else {
         Left(s"the hinted side reads ${l.nodeName}, which may return different rows when " +
           "evaluated again")

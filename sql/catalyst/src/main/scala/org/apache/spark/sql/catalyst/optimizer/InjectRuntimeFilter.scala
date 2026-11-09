@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import java.util.Locale
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
 import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractSingleColumnNullAwareAntiJoin}
@@ -158,16 +160,19 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     pruned
   }
 
-  // An outer generate keeps every row of its child and only repeats some, which a Bloom filter
-  // does not depend on. So one whose output nothing else in the subquery reads is dropped, together
-  // with its generator, which column pruning keeps and which need not be deterministic.
+  // An outer generate keeps every row of its child, repeated as many times as its generator yields
+  // values. Column pruning keeps it even when nothing reads its output, so a non-deterministic
+  // generator would leave the subquery non-deterministic. [[RuntimeFilterSourceAnalysis]] rejects a
+  // hinted side that filters or keys on a count of the rows such a generate repeats, so one whose
+  // output nothing else in the subquery reads is dropped. A deterministic generator stays, since an
+  // aggregate above it can count the rows it repeats.
   private def withoutUnreadOuterGenerates(plan: LogicalPlan): LogicalPlan = {
     def isRead(g: Generate): Boolean = {
       val generated = AttributeSet(g.generatorOutput)
       plan.exists(node => !(node eq g) && node.references.intersect(generated).nonEmpty)
     }
     plan transformDown {
-      case g: Generate if g.outer && !isRead(g) => g.child
+      case g: Generate if g.outer && !g.generator.deterministic && !isRead(g) => g.child
     }
   }
 
@@ -479,19 +484,22 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   }
 
   // `plan` without the DPP filters that `drop` picks, by default all of them. This rule runs after
-  // the DPP filters are pushed down, so they can be conjuncts of any filter in `plan`.
+  // the DPP filters are pushed down, so they can be conjuncts of any filter in `plan`. A DPP
+  // filter's build plan keeps them as `PartitionPruning` built them, a filter per key on top of
+  // another, so the transform goes bottom-up to strip the whole stack.
   private def withoutDppFilters(
       plan: LogicalPlan,
-      drop: DynamicPruningSubquery => Boolean = _ => true): LogicalPlan = plan transform {
-    case f @ Filter(condition, child) =>
-      val conjuncts = splitConjunctivePredicates(condition)
-      val kept = conjuncts.filterNot {
-        case dpp: DynamicPruningSubquery => drop(dpp)
-        case _ => false
-      }
-      if (kept.length == conjuncts.length) f
-      else kept.reduceOption(And).map(Filter(_, child)).getOrElse(child)
-  }
+      drop: DynamicPruningSubquery => Boolean = _ => true): LogicalPlan =
+    plan.transformUpWithPruning(_.containsPattern(DYNAMIC_PRUNING_SUBQUERY)) {
+      case f @ Filter(condition, child) =>
+        val conjuncts = splitConjunctivePredicates(condition)
+        val kept = conjuncts.filterNot {
+          case dpp: DynamicPruningSubquery => drop(dpp)
+          case _ => false
+        }
+        if (kept.length == conjuncts.length) f
+        else kept.reduceOption(And).map(Filter(_, child)).getOrElse(child)
+    }
 
   // Whether evaluating `e` cannot fail, also on rows that the join does not read. It asks
   // `ExprUtils.canEvaluateUnconditionally`, after it replaces, bottom-up, a wrapper that cannot
@@ -580,6 +588,10 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   private def tryInjectRuntimeFilter(plan: LogicalPlan): LogicalPlan = {
     var filterCounter = 0
     val numFilterThreshold = conf.getConf(SQLConf.RUNTIME_FILTER_NUMBER_THRESHOLD)
+    // The plans whose broadcast each DPP filter may reuse, built once per DPP filter.
+    val reusablePlansByDpp = mutable.HashMap.empty[ExprId, Seq[LogicalPlan]]
+    def reusablePlansOf(dpp: DynamicPruningSubquery): Seq[LogicalPlan] =
+      reusablePlansByDpp.getOrElseUpdate(dpp.exprId, reusablePlans(dpp))
     // A key with a DPP filter gets no bloom filter, unless physical planning drops that filter. It
     // drops an `onlyInBroadcast` DPP filter when no broadcast join broadcasts a plan that the
     // filter could reuse. So for a key with a DPP filter, this rule:
@@ -610,7 +622,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
         case Filter(condition, _) =>
           splitConjunctivePredicates(condition).collect { case dpp: DynamicPruningSubquery => dpp }
         case _ => Nil
-      }.flatMap(reusablePlans)
+      }.flatMap(reusablePlansOf)
       broadcastablePlans(plan).filter(b => dppPlans.exists(_.sameResult(b)))
     } else {
       Nil
@@ -618,7 +630,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     val inSubquery = plan.isInstanceOf[Subquery]
     def isKept(dpp: DynamicPruningSubquery): Boolean =
       !dpp.onlyInBroadcast || inSubquery ||
-        reusablePlans(dpp).exists(p => reused.exists(_.sameResult(p)))
+        reusablePlansOf(dpp).exists(p => reused.exists(_.sameResult(p)))
     // Pushdown rewrites the key of the bloom filter through the aliases on its way down. Where the
     // key cannot be followed, pushdown can still move a copy of the bloom filter, so the check
     // fails there.
@@ -720,25 +732,24 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             currentApplicationSide
           } else if (isHintedDirection) {
             injectHintedFilter(applicationSide, currentApplicationSide, applicationSideKey,
-              creationSide, creationSideKey)
+              creationSide, creationSideKey, keyDpps)
           } else if (isHintedSource || !(hasShuffle || probablyHasShuffle(applicationSide)) ||
               hasBloomFilter(currentApplicationSide, applicationSideKey)) {
             currentApplicationSide
           } else {
             // The creation side leaves out the key's own DPP filters, which physical planning
-            // drops. An expression such as a UDF or a `LIKE` in their build plan would also stop
-            // the search for the creation side, since `isSimpleExpression` sees the plan of a
-            // subquery too. If the key has DPP filters, they are all dropped, so step 3 above
-            // applies. The bloom filter evaluates its creation side again, apart from the join. Its
-            // subquery can also read more of that side than the join does, since filters on other
-            // keys, DPP filters or bloom filters, can narrow only the join's side. And the bloom
-            // filter hashes the bytes of the key, so its type must compare by its bytes, which a
-            // collated string does not.
-            val creationPlan = if (keyDpps.isEmpty) {
-              creationSide
-            } else {
-              withoutDppFilters(creationSide, keyDpps.contains)
-            }
+            // drops, and every `onlyInBroadcast` DPP filter, e.g. one a join above pushed into it:
+            // it finds no broadcast in the bloom filter's subquery and is `true` there. An
+            // expression such as a UDF or a `LIKE` in their build plan would also stop the search
+            // for the creation side, since `isSimpleExpression` sees the plan of a subquery too.
+            // If the key has DPP filters, they are all dropped, so step 3 above applies. The
+            // bloom filter evaluates its creation side again, apart from the join. Its subquery
+            // can also read more of that side than the join does, since filters on other keys, DPP
+            // filters or bloom filters, can narrow only the join's side. And the bloom filter
+            // hashes the bytes of the key, so its type must compare by its bytes, which a collated
+            // string does not.
+            val creationPlan =
+              withoutDppFilters(creationSide, dpp => dpp.onlyInBroadcast || keyDpps.contains(dpp))
             extractBeneficialFilterCreatePlan(
               applicationSide, creationPlan, applicationSideKey, creationSideKey)
               .filter(c => keyDpps.isEmpty ||
@@ -754,7 +765,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             currentApplicationSide: LogicalPlan,
             applicationSideKey: Expression,
             creationSide: LogicalPlan,
-            creationSideKey: Expression): LogicalPlan = {
+            creationSideKey: Expression,
+            keyDpps: Seq[DynamicPruningSubquery]): LogicalPlan = {
           lazy val creation = FilterCreationSide(
             creationSideKey, creationSide, useMaterializedThreshold = false, hinted = true)
           if (!UnsafeRowUtils.isBinaryStable(applicationSideKey.dataType) ||
@@ -767,6 +779,12 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
               !hasBloomFilter(applicationSide, applicationSideKey)) {
             // Unlike the heuristics, a hinted side adds its own filter even on a key that already
             // has one, but only one: this key got it on another key pair of this join.
+            currentApplicationSide
+          } else if (keyDpps.nonEmpty && !canPushDown(applicationSideKey, applicationSide)) {
+            // The key's DPP filters, which [[PartitionPruning]] added without the hint, are all
+            // dropped, so step 3 above applies to the Bloom filter as without the hint.
+            hintBlocked("a Bloom filter pushed down on the join key could fail or change a " +
+              "broadcast that a DPP filter reuses")
             currentApplicationSide
           } else {
             hintCheck.flatMap(_.rejection(applicationSideKey, creationSideKey,

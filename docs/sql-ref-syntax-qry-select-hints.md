@@ -193,17 +193,20 @@ other direction instead.
     missing or misleading. The hinted side must produce the same set of rows, with the same join key
     values, whenever it is evaluated; its other columns may differ, and it cannot be a stream, though
     the static side of a stream-static join can be hinted to prune a stream without a stateful
-    operator, such as an aggregation, below the join. `RUNTIME_FILTER` can be combined with a join
-    strategy hint.
+    operator, such as an aggregation, below the join. Spark checks this where it can, but it cannot
+    see whether a source picks its own rows on each read, such as a JDBC query with a `LIMIT` or a
+    Kafka batch read up to the latest offsets; a filter built from such a side can drop rows the
+    join would match. `RUNTIME_FILTER` can be combined with a join strategy hint.
 
     For a Bloom filter, the hint overrides
     `spark.sql.optimizer.runtime.bloomFilter.creationSideThreshold`,
     `spark.sql.optimizer.runtime.bloomFilter.applicationSideScanSizeThreshold`, and the requirements
     that the hinted side have a selective predicate and that the join involve a shuffle. It still
     obeys `spark.sql.optimizer.runtime.bloomFilter.enabled` and
-    `spark.sql.optimizer.runtimeFilter.number.threshold`, requires simple join keys that compare by
-    their bytes, unlike a string with a case- or accent-insensitive collation, and the filter
-    stays capped by `spark.sql.optimizer.runtime.bloomFilter.maxNumItems` and
+    `spark.sql.optimizer.runtimeFilter.number.threshold`, and requires simple join keys that compare
+    by their bytes: a join of two collated string columns qualifies, but a key computed from a
+    collated string, such as `substr(k, 1, 3)`, does not. The filter stays capped by
+    `spark.sql.optimizer.runtime.bloomFilter.maxNumItems` and
     `spark.sql.optimizer.runtime.bloomFilter.maxNumBits`. For dynamic partition pruning, the hint
     overrides the pruning benefit estimate and
     `spark.sql.optimizer.dynamicPartitionPruning.reuseBroadcastOnly`; it still obeys
