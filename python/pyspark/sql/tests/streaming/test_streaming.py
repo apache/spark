@@ -335,7 +335,7 @@ class StreamingTestsMixin:
             self.assertTrue(q.isActive)
             try:
                 q.awaitTermination("hello")
-                self.fail("Expected a value exception")
+                self.fail("Expected a type exception")
             except TypeError:
                 pass
             now = time.time()
@@ -422,7 +422,7 @@ class StreamingTestsMixin:
             self.assertTrue(q.isActive)
             try:
                 self.spark.streams.awaitAnyTermination("hello")
-                self.fail("Expected a value exception")
+                self.fail("Expected a type exception")
             except TypeError:
                 pass
             now = time.time()
