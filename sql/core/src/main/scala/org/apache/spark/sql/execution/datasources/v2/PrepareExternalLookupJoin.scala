@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti, LeftOuter, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupFilter, ExternalLookupJoin,
   ExternalLookupJoinShapes, ExternalLookupProject, ExternalLookupTransform, Filter, LogicalPlan,
-  PreparedExternalLookupJoin, Project}
+  LookupKeyComparison, PreparedExternalLookupJoin, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXTERNAL_LOOKUP_JOIN, LOOKUP_ONLY_RELATION}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -98,9 +98,11 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
     }
     // The lookup-side stages are built here, and no later rule reaches them. withField and
     // dropFields values cannot be evaluated until ReplaceUpdateFieldsExpression, in the
-    // optimizer's last batch, lowers them, so the same rule lowers them now.
+    // optimizer's last batch, lowers them, so the same rule lowers them now, and the current time
+    // of a micro-batch takes its value now too.
     val lookupPlan = (if (hasUnevaluableStage) None else {
-      extractLookupPlan(ReplaceUpdateFieldsExpression(join.right))
+      extractLookupPlan(ReplaceUpdateFieldsExpression(
+        ExternalLookupJoinShapes.withBatchTimestampValues(join.right)))
     }).getOrElse {
       throw QueryCompilationErrors.unsupportedExternalLookupJoinError("LOOKUP_PLAN")
     }
@@ -129,8 +131,7 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
       ExternalLookupJoinShapes.lookupComparison(
         conjunct, join.left.outputSet, join.right.outputSet).flatMap { comparison =>
         tableColumn(comparison.lookupField, lookupPlan).map { column =>
-          OfferedLookupPredicate(
-            comparison.parameter, column, index, comparison.predicateName, comparison.nullSafe)
+          OfferedLookupPredicate(comparison.parameter, column, index, comparison.comparison)
         }
       }
     }
@@ -160,7 +161,7 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
       DataSourceStrategy.normalizeExprs(lookupPlan.filtersPushDown, relation.output),
       partitionFields = None)
     val offeredPredicates = offeredCandidates.map { candidate =>
-      new V2Predicate(candidate.predicateName, Array[V2Expression](
+      new V2Predicate(candidate.comparison.predicateName, Array[V2Expression](
         FieldReference.column(columnNames(candidate.projectedField)),
         new LookupParameter(candidate.parameter.dataType)))
     }.toArray
@@ -273,12 +274,8 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
     }
     val readerFactory =
       nonNull(externalLookup.createReaderFactory(), "ExternalLookup.createReaderFactory()")
-    // With a range selected, one stored row can match several parameter rows of one request, and
-    // the source would have to return it once for each of them, with each ordinal. Spark cannot
-    // detect a missing one, so it sends one parameter row per request then.
-    val selectsRange = selectedPredicates.exists { predicate =>
-      Set("<", "<=", ">", ">=").contains(predicate.predicateName)
-    }
+    val selectsRange = ExternalLookupJoinShapes.oneParameterRowPerRequest(
+      selectedPredicates.map(_.parameter), selectedPredicates.map(_.comparison))
     val parameterRowsPerRequest = if (selectsRange) 1 else maxParameterRowsPerRequest
 
     val prepared = PreparedExternalLookupJoin(
@@ -291,9 +288,8 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
       lookupOutput,
       rebindLookupTransforms(segmentStages ++ prunedUpperStages, lookupInput),
       selectedPredicates.map(_.parameter),
-      selectedPredicates.map(_.nullSafe),
       selectedPredicates.map(_.projectedField),
-      selectedPredicates.map(_.predicateName),
+      selectedPredicates.map(_.comparison),
       join.joinType,
       residual.reduceOption(And))
     joinFilter.reduceOption(And).map(Filter(_, prepared)).getOrElse(prepared)
@@ -392,8 +388,7 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
       parameter: Expression,
       projectedField: Attribute,
       conjunctIndex: Int,
-      predicateName: String,
-      nullSafe: Boolean)
+      comparison: LookupKeyComparison)
 
   /**
    * A lookup side, split the way V2ScanRelationPushDown.pruneColumns splits a scan. The segment

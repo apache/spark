@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.execution.joins
 
-import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, AttributeSeq,
-  AttributeSet, BoundReference, EqualNullSafe, EqualTo, Expression, ExprUtils, GreaterThan,
-  GreaterThanOrEqual, LessThan, LessThanOrEqual, PredicateHelper}
+  AttributeSet, BoundReference, Expression, ExprUtils, PredicateHelper}
 import org.apache.spark.sql.catalyst.plans.{JoinType, LeftAnti, LeftOuter, LeftSemi, QueryPlan}
-import org.apache.spark.sql.catalyst.plans.logical.ExternalLookupTransform
+import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupFilter, ExternalLookupJoinShapes,
+  ExternalLookupProject, ExternalLookupTransform, LookupKeyComparison}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.metric.CustomTaskMetric
@@ -45,9 +44,8 @@ case class ExternalLookupJoinExec(
     lookupInput: Seq[Attribute],
     lookupOutput: Seq[Attribute],
     lookupTransforms: Seq[ExternalLookupTransform],
-    nullSafeParameters: Seq[Boolean],
     lookupKeys: Seq[Attribute],
-    lookupKeyPredicates: Seq[String],
+    lookupKeyComparisons: Seq[LookupKeyComparison],
     joinType: JoinType,
     residualCondition: Option[Expression],
     @transient scan: Scan,
@@ -120,15 +118,7 @@ case class ExternalLookupJoinExec(
     val keyOrdinal = lookupInput.indexWhere(_.exprId == lookupKeys(index).exprId)
     val key = lookupInput(keyOrdinal)
     val keyValue = BoundReference(lookupParameters.length + keyOrdinal, key.dataType, key.nullable)
-    lookupKeyPredicates(index) match {
-      case "=" => EqualTo(keyValue, parameterValue)
-      case "<=>" => EqualNullSafe(keyValue, parameterValue)
-      case "<" => LessThan(keyValue, parameterValue)
-      case "<=" => LessThanOrEqual(keyValue, parameterValue)
-      case ">" => GreaterThan(keyValue, parameterValue)
-      case ">=" => GreaterThanOrEqual(keyValue, parameterValue)
-      case other => throw SparkException.internalError(s"Unexpected lookup predicate $other")
-    }
+    lookupKeyComparisons(index)(keyValue, parameterValue)
   }.reduceOption(And)
 
   override def references: AttributeSet =
@@ -164,7 +154,7 @@ case class ExternalLookupJoinExec(
     val evaluatorFactory = new ExternalLookupJoinEvaluatorFactory(
       tableName,
       lookupParameters,
-      nullSafeParameters,
+      lookupKeyComparisons.map(_.nullSafe),
       lookupKeyCheck,
       child.output,
       lookupInput,
@@ -178,6 +168,7 @@ case class ExternalLookupJoinExec(
       }),
       readerFactory,
       math.min(ExternalLookupJoinExec.MAX_PARAMETER_ROWS_PER_REQUEST, maxParameterRowsPerRequest),
+      ExternalLookupJoinShapes.oneParameterRowPerRequest(lookupParameters, lookupKeyComparisons),
       conf.getConf(SQLConf.JOIN_EXTERNAL_LOOKUP_MAX_BATCH_BYTES),
       ExternalLookupJoinMetrics(
         outputRows = longMetric("numOutputRows"),
@@ -199,13 +190,25 @@ case class ExternalLookupJoinExec(
   override protected def withNewChildInternal(newChild: SparkPlan): ExternalLookupJoinExec =
     copy(child = newChild)
 
-  // As for other joins, the join type, the lookup parameters and the residual condition, then the
+  // As for other joins, the join type, the selected lookup predicates, each a lookup column
+  // compared with its parameter, the lookup-side stages and the residual condition, then the
   // connector's description, which may hold a secret and is redacted.
   override def simpleString(maxFields: Int): String = {
-    val parameters = truncatedString(lookupParameters, "[", ", ", "]", maxFields)
+    val selectedPredicates = lookupParameters.indices.map { index =>
+      lookupKeyComparisons(index)(lookupKeys(index), lookupParameters(index))
+    }
+    val predicates = truncatedString(selectedPredicates, "[", ", ", "]", maxFields)
+    val stages = if (lookupTransforms.isEmpty) "" else {
+      val described = lookupTransforms.map {
+        case ExternalLookupProject(projectList, _) =>
+          s"Project ${truncatedString(projectList, "[", ", ", "]", maxFields)}"
+        case ExternalLookupFilter(condition, _) => s"Filter $condition"
+      }
+      s", ${truncatedString(described, "[", ", ", "]", maxFields)}"
+    }
     val residual = residualCondition.map(condition => s", $condition").getOrElse("")
     Utils.redact(conf.stringRedactionPattern,
-      s"$nodeName $joinType, $parameters$residual, ${scan.description()}")
+      s"$nodeName $joinType, $predicates$stages$residual, ${scan.description()}")
   }
 
   override protected def stringArgs: Iterator[Any] =

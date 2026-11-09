@@ -19,13 +19,13 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSeq, AttributeSet,
-  BinaryComparison, Cast, EqualNullSafe, EqualTo, Expression, ExprUtils,
-  ExternalUserDefinedFunction, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual,
+  BinaryComparison, Cast, CurrentBatchTimestamp, EqualNullSafe, EqualTo, Expression, ExprUtils,
+  ExternalUserDefinedFunction, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Literal,
   NamedExpression, PythonUDF, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftAnti, LeftOuter, LeftSemi,
   QueryPlan}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{EXTERNAL_LOOKUP_HINT, EXTERNAL_LOOKUP_JOIN,
-  TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, EXTERNAL_LOOKUP_HINT,
+  EXTERNAL_LOOKUP_JOIN, TreePattern}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.read.{ExternalLookupReaderFactory, Scan}
 import org.apache.spark.sql.internal.SQLConf
@@ -107,14 +107,12 @@ case class ExternalLookupJoin(
 object ExternalLookupJoinShapes {
   /**
    * A lookup candidate: a comparison of a lookup column with a value, written with the lookup
-   * column on the left. `predicateName` is the name of the DSv2 `Predicate` that is offered to the
-   * connector for it: the SQL operator of the comparison, as `V2ExpressionBuilder` names it.
+   * column on the left.
    */
   case class LookupComparison(
       lookupField: Attribute,
       parameter: Expression,
-      predicateName: String,
-      nullSafe: Boolean)
+      comparison: LookupKeyComparison)
 
   /**
    * `conjunct` of the condition of a lookup join as a lookup candidate: `=`, `<=>`, `<`, `<=`, `>`
@@ -139,22 +137,19 @@ object ExternalLookupJoinShapes {
     def isLookupComparison(lookupField: Attribute, parameter: Expression): Boolean =
       lookupOutput.contains(lookupField) && parameter.references.subsetOf(streamOutput)
     conjunct match {
-      case comparison: BinaryComparison if isLookupOperator(comparison) =>
-        val nullSafe = comparison.isInstanceOf[EqualNullSafe]
-        Seq(comparison, withOperandsSwapped(comparison)).collectFirst {
-          case candidate @ BinaryComparison(lookupField: Attribute, parameter)
-              if isLookupComparison(lookupField, parameter) &&
-                isOfferedOn(comparison, lookupField, parameter) =>
-            LookupComparison(lookupField, parameter, candidate.sqlOperator, nullSafe)
+      case written: BinaryComparison =>
+        LookupKeyComparison.of(written).flatMap { comparison =>
+          Seq(
+            (written.left, written.right, comparison),
+            (written.right, written.left, comparison.swapped)).collectFirst {
+            case (lookupField: Attribute, parameter, comparison)
+                if isLookupComparison(lookupField, parameter) &&
+                  isOfferedOn(comparison, lookupField, parameter) =>
+              LookupComparison(lookupField, parameter, comparison)
+          }
         }
       case _ => None
     }
-  }
-
-  private def isLookupOperator(comparison: BinaryComparison): Boolean = comparison match {
-    case _: EqualTo | _: EqualNullSafe | _: LessThan | _: LessThanOrEqual | _: GreaterThan |
-        _: GreaterThanOrEqual => true
-    case _ => false
   }
 
   /**
@@ -166,13 +161,14 @@ object ExternalLookupJoinShapes {
    * one that cannot fail, as `cannotFail` decides.
    */
   private def isOfferedOn(
-      comparison: BinaryComparison,
+      comparison: LookupKeyComparison,
       lookupField: Attribute,
-      parameter: Expression): Boolean = comparison match {
-    case _: EqualTo | _: EqualNullSafe => ExternalLookupKeyTypes.supportsEquality(lookupField)
-    case _ =>
+      parameter: Expression): Boolean =
+    if (comparison.isRange) {
       ExternalLookupKeyTypes.supportsRange(lookupField.dataType) && cannotFail(parameter)
-  }
+    } else {
+      ExternalLookupKeyTypes.supportsEquality(lookupField)
+    }
 
   /**
    * Whether a range parameter cannot fail: ExprUtils.canEvaluateUnconditionally accepts it, or it
@@ -199,29 +195,119 @@ object ExternalLookupJoinShapes {
     case _ => false
   }
 
-  /** The same comparison with its operands swapped, so that `a < b` becomes `b > a`. */
-  private def withOperandsSwapped(comparison: BinaryComparison): BinaryComparison =
-    comparison match {
-      case EqualTo(left, right) => EqualTo(right, left)
-      case EqualNullSafe(left, right) => EqualNullSafe(right, left)
-      case LessThan(left, right) => GreaterThan(right, left)
-      case LessThanOrEqual(left, right) => GreaterThanOrEqual(right, left)
-      case GreaterThan(left, right) => LessThan(right, left)
-      case GreaterThanOrEqual(left, right) => LessThanOrEqual(right, left)
-    }
-
   /**
    * Whether a lookup-side projection or filter can evaluate `expression` on the lookup results,
    * inside the join. Python and external UDFs and subqueries are planned as separate operators,
    * which a lookup-side stage cannot contain. A non-deterministic expression is not allowed
    * either: the join evaluates a stage on each returned row, so one stored row could get
-   * different values for different stream rows, which a read of the table never does.
+   * different values for different stream rows, which a read of the table never does. The current
+   * time of a micro-batch is allowed, as on a static side: MicroBatchExecution writes
+   * `current_timestamp()` and `current_date()` as a `CurrentBatchTimestamp`, which is constant
+   * within the batch, and [[withBatchTimestampValues]] replaces it with its value.
    */
   def canEvaluateInLookupStage(expression: Expression): Boolean =
-    expression.deterministic && !expression.exists {
+    expression.transform {
+      case batchTimestamp: CurrentBatchTimestamp => Literal(null, batchTimestamp.dataType)
+    }.deterministic && !expression.exists {
       case _: PythonUDF | _: ExternalUserDefinedFunction | _: SubqueryExpression => true
       case _ => false
     }
+
+  /**
+   * Whether a request holds one parameter row: one of the selected comparisons is a range whose
+   * parameter reads a stream column. One stored row can then match several parameter rows of a
+   * request, and the source would have to return it once for each of them, with each ordinal.
+   * Spark cannot detect a missing one. A range whose parameter reads no stream column has the
+   * same value in every parameter row, so a stored row that satisfies it matches only the
+   * parameter rows that the other comparisons select.
+   */
+  def oneParameterRowPerRequest(
+      parameters: Seq[Expression],
+      comparisons: Seq[LookupKeyComparison]): Boolean =
+    parameters.zip(comparisons).exists { case (parameter, comparison) =>
+      comparison.isRange && parameter.references.nonEmpty
+    }
+
+  /**
+   * `plan` with the current time of the micro-batch replaced by its value. IncrementalExecution
+   * replaces it after optimization, which does not reach the lookup-side stages of a prepared
+   * lookup join.
+   */
+  def withBatchTimestampValues(plan: LogicalPlan): LogicalPlan =
+    plan.transformAllExpressionsWithPruning(_.containsPattern(CURRENT_LIKE)) {
+      case batchTimestamp: CurrentBatchTimestamp => batchTimestamp.toLiteral
+    }
+}
+
+/**
+ * The comparison that a lookup predicate makes between a lookup column, on the left, and its
+ * parameter. `predicateName` is the name of the DSv2 `Predicate` that is offered for it: the SQL
+ * operator, as `V2ExpressionBuilder` names it.
+ */
+sealed abstract class LookupKeyComparison(val predicateName: String) extends Serializable {
+  /** The comparison of `key` with `parameter`, as Spark evaluates it. */
+  def apply(key: Expression, parameter: Expression): Expression
+
+  /** The same comparison with the operands swapped, so that `<` becomes `>`. */
+  def swapped: LookupKeyComparison
+
+  /** Whether one lookup column value can satisfy the comparison with several parameter values. */
+  def isRange: Boolean = true
+
+  /** Whether a NULL parameter can match, as with `<=>`. */
+  def nullSafe: Boolean = false
+}
+
+object LookupKeyComparison {
+  case object Equal extends LookupKeyComparison("=") {
+    override def apply(key: Expression, parameter: Expression): Expression =
+      EqualTo(key, parameter)
+    override def swapped: LookupKeyComparison = this
+    override def isRange: Boolean = false
+  }
+
+  case object NullSafeEqual extends LookupKeyComparison("<=>") {
+    override def apply(key: Expression, parameter: Expression): Expression =
+      EqualNullSafe(key, parameter)
+    override def swapped: LookupKeyComparison = this
+    override def isRange: Boolean = false
+    override def nullSafe: Boolean = true
+  }
+
+  case object Less extends LookupKeyComparison("<") {
+    override def apply(key: Expression, parameter: Expression): Expression =
+      LessThan(key, parameter)
+    override def swapped: LookupKeyComparison = Greater
+  }
+
+  case object LessOrEqual extends LookupKeyComparison("<=") {
+    override def apply(key: Expression, parameter: Expression): Expression =
+      LessThanOrEqual(key, parameter)
+    override def swapped: LookupKeyComparison = GreaterOrEqual
+  }
+
+  case object Greater extends LookupKeyComparison(">") {
+    override def apply(key: Expression, parameter: Expression): Expression =
+      GreaterThan(key, parameter)
+    override def swapped: LookupKeyComparison = Less
+  }
+
+  case object GreaterOrEqual extends LookupKeyComparison(">=") {
+    override def apply(key: Expression, parameter: Expression): Expression =
+      GreaterThanOrEqual(key, parameter)
+    override def swapped: LookupKeyComparison = LessOrEqual
+  }
+
+  /** The comparison that `comparison` makes, if it is one that Spark can offer. */
+  def of(comparison: BinaryComparison): Option[LookupKeyComparison] = comparison match {
+    case _: EqualTo => Some(Equal)
+    case _: EqualNullSafe => Some(NullSafeEqual)
+    case _: LessThan => Some(Less)
+    case _: LessThanOrEqual => Some(LessOrEqual)
+    case _: GreaterThan => Some(Greater)
+    case _: GreaterThanOrEqual => Some(GreaterOrEqual)
+    case _ => None
+  }
 }
 
 /** One optimized lookup-side operation, retained in evaluation order. */
@@ -248,8 +334,8 @@ case class ExternalLookupFilter(
  * @param lookupKeys The table column that each selected lookup predicate compares with the
  *   parameter at the same position. Spark checks each row that the connector returns against
  *   them, so the read schema must hold these columns.
- * @param lookupKeyPredicates The name of each selected lookup predicate, such as `=` or `<`,
- *   with the lookup column on the left. It tells how Spark checks the key.
+ * @param lookupKeyComparisons The comparison that each selected lookup predicate makes, such as
+ *   `=` or `<`, with the lookup column on the left. It tells how Spark checks the key.
  */
 case class PreparedExternalLookupJoin(
     child: LogicalPlan,
@@ -261,9 +347,8 @@ case class PreparedExternalLookupJoin(
     lookupOutput: Seq[Attribute],
     lookupTransforms: Seq[ExternalLookupTransform],
     lookupParameters: Seq[Expression],
-    nullSafeParameters: Seq[Boolean],
     lookupKeys: Seq[Attribute],
-    lookupKeyPredicates: Seq[String],
+    lookupKeyComparisons: Seq[LookupKeyComparison],
     joinType: JoinType,
     residualCondition: Option[Expression]) extends UnaryNode {
 

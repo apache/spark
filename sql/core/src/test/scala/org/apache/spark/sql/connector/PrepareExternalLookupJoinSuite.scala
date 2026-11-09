@@ -29,7 +29,8 @@ import org.apache.spark.sql.catalyst.optimizer.ColumnPruning
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftAnti, LeftOuter, LeftSemi,
   PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{ExecuteExternalUDF, ExternalLookupJoin,
-  Filter, Join, JoinHint, LocalRelation, LogicalPlan, PreparedExternalLookupJoin, Project}
+  Filter, Join, JoinHint, LocalRelation, LogicalPlan, LookupKeyComparison,
+  PreparedExternalLookupJoin, Project}
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.catalog.TableCapability.EXTERNAL_LOOKUP
 import org.apache.spark.sql.connector.expressions.FieldReference
@@ -244,7 +245,8 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
     val (reversed, joinOutput, conjuncts) =
       prepared(candidates => Array(candidates(1), candidates(0)))
     assert(reversed.lookupParameters === Seq(streamLabel, streamId))
-    assert(reversed.nullSafeParameters === Seq(false, false))
+    assert(reversed.lookupKeyComparisons ===
+      Seq(LookupKeyComparison.Equal, LookupKeyComparison.Equal))
     assert(reversed.lookupKeys.map(_.name) === Seq("label", "id"))
     assert(reversed.residualCondition === Some(conjuncts(2) && conjuncts(3)))
     assert(reversed.output === joinOutput)
@@ -626,7 +628,7 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
       parameters = Map("joinType" -> "LEFT OUTER"))
   }
 
-  test("column pruning never projects the lookup relation under a lookup join") {
+  test("column pruning narrows the lookup columns of a lookup join before projecting them") {
     val lookup = lookupRelation(PlanningExternalLookupTable())
     val pruned = ColumnPruning(Project(Seq(stream.output.head), lookupJoinOnId(lookup)))
     val (lookupLeft, lookupRight) =

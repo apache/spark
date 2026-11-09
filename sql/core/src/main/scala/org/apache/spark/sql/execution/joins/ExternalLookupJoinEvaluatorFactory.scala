@@ -45,9 +45,10 @@ import org.apache.spark.util.Utils
  * tasks, so it holds only what they need; the plan node and its scan stay on the driver.
  *
  * An evaluator joins its partition one batch of up to `maxParameterRowsPerRequest` stream rows at
- * a time. For each batch it sends one request with the distinct parameters that can match, and
- * streams the connector's result rows into output rows. Parameters are deduplicated per request,
- * that is within one batch: a key repeated in a later batch is requested again.
+ * a time, or with `oneKeyPerBatch`, of the stream rows of one key. For each batch it sends one
+ * request with the distinct parameters that can match, and streams the connector's result rows
+ * into output rows. Parameters are deduplicated per request, that is within one batch: a key
+ * repeated in a later batch is requested again.
  *
  * Spark does not trust the connector with the selected lookup predicates: it evaluates
  * `lookupKeyCheck` on every row that the connector returns, against the request row that the row
@@ -74,6 +75,7 @@ class ExternalLookupJoinEvaluatorFactory(
     residualCondition: Option[Expression],
     readerFactory: ExternalLookupReaderFactory,
     maxParameterRowsPerRequest: Int,
+    oneKeyPerBatch: Boolean,
     maxBatchBytes: Long,
     metrics: ExternalLookupJoinMetrics,
     readerMetrics: ExternalLookupReaderMetrics)
@@ -128,7 +130,7 @@ class ExternalLookupJoinEvaluatorFactory(
           batch = new BatchJoinIterator(
             next, parameters, resultRows, transforms, joinOutput, reader)
         }
-        inputExhausted = !input.hasNext
+        inputExhausted = !hasInput
       }
       if (inputExhausted && !batch.hasNext) reader.close()
     }
@@ -140,6 +142,40 @@ class ExternalLookupJoinEvaluatorFactory(
     // such a row out before it joins. So the row takes no place in a batch and is not copied: it
     // counts only as an input row. A left outer join emits it, so a batch keeps it.
     private val keepsRowsThatCannotMatch = joinType != Inner
+
+    // When a request holds one parameter row because of a selected range, a batch takes the stream
+    // rows of one key rather than one stream row. It ends before the first row with another key,
+    // which starts the next batch. A row that cannot match has no key, and any batch that keeps it
+    // takes it.
+    private var heldRow: UnsafeRow = null
+    private var heldRequestRow: UnsafeRow = null
+
+    // The request row of the row that nextKeptRow returned last, or null when that row cannot
+    // match. It is a reused row that the next request row overwrites, unless the row was held.
+    private var keptRequestRow: UnsafeRow = null
+
+    private def hasInput: Boolean = heldRow != null || input.hasNext
+
+    /** The next row that a batch keeps, copied, or null after a row that it leaves out. */
+    private def nextKeptRow(): UnsafeRow = if (heldRow != null) {
+      val row = heldRow
+      keptRequestRow = heldRequestRow
+      heldRow = null
+      heldRequestRow = null
+      row
+    } else {
+      val next = input.next()
+      keptRequestRow = requestRowOf(next)
+      if (keepsRowsThatCannotMatch || keptRequestRow != null) {
+        next match {
+          case unsafe: UnsafeRow => unsafe.copy()
+          case other => toUnsafe(other).copy()
+        }
+      } else {
+        metrics.inputRows += 1
+        null
+      }
+    }
 
     /**
      * The request row of a stream row that can match, in a reused row, or null. The stream
@@ -155,36 +191,40 @@ class ExternalLookupJoinEvaluatorFactory(
     // An array, because a batch's rows are read by position for every key, match and output row.
     // The batch holds its rows until its request is read, so it stops once their copies reach
     // maxBatchBytes, keeping the row that reaches it, as well as at maxParameterRowsPerRequest
-    // rows. It always keeps one row, when one remains. It decides once for each row whether the
-    // row can match, and groups the rows that can by their request row, which it copies once.
+    // rows, or at another key with one key per batch. It always keeps one row, when one remains.
+    // It decides once for each row whether the row can match, and groups the rows that can by
+    // their request row, a copy of which each group keeps.
     private def readBatch(): StreamBatch = {
       val rows = mutable.ArrayBuffer.empty[InternalRow]
       val keyEntries = mutable.LinkedHashMap.empty[UnsafeRow, KeyEntry]
       val rowsThatCannotMatch = mutable.ArrayBuffer.empty[Int]
       var bytes = 0L
-      while (rows.length < maxParameterRowsPerRequest && bytes < maxBatchBytes && input.hasNext) {
-        val next = input.next()
-        val requestRow = requestRowOf(next)
-        if (keepsRowsThatCannotMatch || requestRow != null) {
-          val row = next match {
-            case unsafe: UnsafeRow => unsafe.copy()
-            case other => toUnsafe(other).copy()
-          }
-          val index = rows.length
-          if (requestRow == null) {
-            rowsThatCannotMatch += index
+      var keyChanged = false
+      while (!keyChanged && (oneKeyPerBatch || rows.length < maxParameterRowsPerRequest) &&
+          bytes < maxBatchBytes && hasInput) {
+        val row = nextKeptRow()
+        if (row != null) {
+          val requestRow = keptRequestRow
+          if (oneKeyPerBatch && requestRow != null && keyEntries.nonEmpty &&
+              !keyEntries.contains(requestRow)) {
+            heldRow = row
+            heldRequestRow = requestRow.copy()
+            keyChanged = true
           } else {
-            keyEntries.get(requestRow) match {
-              case Some(entry) => entry.rowIndexes += index
-              case None =>
-                val retained = requestRow.copy()
-                keyEntries.put(retained, KeyEntry(retained, mutable.ArrayBuffer(index)))
+            val index = rows.length
+            if (requestRow == null) {
+              rowsThatCannotMatch += index
+            } else {
+              keyEntries.get(requestRow) match {
+                case Some(entry) => entry.rowIndexes += index
+                case None =>
+                  val retained = requestRow.copy()
+                  keyEntries.put(retained, KeyEntry(retained, mutable.ArrayBuffer(index)))
+              }
             }
+            bytes += row.getSizeInBytes
+            rows += row
           }
-          bytes += row.getSizeInBytes
-          rows += row
-        } else {
-          metrics.inputRows += 1
         }
       }
       StreamBatch(rows.toArray, keyEntries.values.toArray, rowsThatCannotMatch.toArray)
@@ -272,10 +312,8 @@ class ExternalLookupJoinEvaluatorFactory(
           reader.ensureOpen()
           val resultRow = resultRows.validatedCopy(connectorRow)
           if (parameters.selectedPredicatesHold(entry.requestRow, resultRow)) {
-            // The lookup-side stages reuse their output row, and several stream rows can join it.
             transforms(resultRow).foreach { lookupRow =>
-              val retained = lookupRow.copy()
-              entry.rowIndexes.foreach(joinMatch(_, retained))
+              entry.rowIndexes.foreach(joinMatch(_, lookupRow))
             }
           }
         }
@@ -506,7 +544,9 @@ class ExternalLookupJoinEvaluatorFactory(
 
   /**
    * Applies the optimized lookup-side projections and filters to a result row, in evaluation
-   * order. A row that a filter rejects joins no stream row. The result is a reused row.
+   * order. A row that a filter rejects joins no stream row. Several stream rows can join the
+   * result, so it is retained: a projection reuses its output row, which is copied, and a result
+   * row that no projection changed is already a copy.
    */
   private class LookupTransforms(partitionIndex: Int) {
     private val stages = lookupTransforms.map {
@@ -520,12 +560,14 @@ class ExternalLookupJoinEvaluatorFactory(
       case Right(predicate) => predicate.initialize(partitionIndex)
     }
 
+    private val projects = stages.exists(_.isLeft)
+
     def apply(resultRow: InternalRow): Option[InternalRow] =
       stages.foldLeft(Option(resultRow)) {
         case (Some(row), Left(projection)) => Some(projection(row))
         case (Some(row), Right(predicate)) if predicate.eval(row) => Some(row)
         case _ => None
-      }
+      }.map(row => if (projects) row.copy() else row)
   }
 
   /**
