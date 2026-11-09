@@ -503,23 +503,31 @@ class ExternalLookupJoinEvaluatorFactory(
   /**
    * The connector reader of one partition and its active cursor. The reader is opened by the
    * first request, and closed once, after the last batch or when the task completes. A thread
-   * other than the task's may still drive the join then. The close then owns every close: it
-   * closes the active cursor, keeps the reader's final metrics, waits for a copy of a value row
-   * in progress, and closes the reader. Once the join has seen the close, it makes no further
-   * connector call, not even to close its cursor. Closing may overlap the one connector call in
-   * progress, which it does not wait for, and it reads the metrics of the task's readers while that
-   * call runs. Requests, cursor calls and copies take no lock. Metrics reads do: closing keeps the
-   * reader's final metrics under the lock of the task's `TaskLookupReaders`, so it can wait for a
-   * metrics read in progress, which calls `currentMetricsValues()` on the task's readers.
+   * other than the task's may still drive the join then. The close takes the cursor slot, closes
+   * the cursor that a request returned before it, keeps the reader's final metrics, waits for a
+   * copy of a value row in progress, and closes the reader. Once the join has seen the close, it
+   * makes only these connector calls, on its own thread:
+   *  - It closes the cursor that a request in progress at the close returns, once the close has
+   *    ended, so after the reader.
+   *  - It reads the final metrics of a reader that a `createReader()` call in progress returns,
+   *    and closes it.
+   * Closing may overlap the one connector call in progress, which it does not wait for, and it
+   * reads the metrics of the task's readers while that call runs. Requests, cursor calls and copies
+   * take no lock. Metrics reads do: closing keeps the reader's final metrics under the lock of the
+   * task's `TaskLookupReaders`, so it can wait for a metrics read in progress, which calls
+   * `currentMetricsValues()` on the task's readers.
    */
   private class LookupReader {
     private val taskReaders = readerMetrics.forCurrentTask()
     private val closed = new AtomicBoolean(false)
     // Set while Spark copies a value row that the cursor returned.
     private val copying = new AtomicBoolean(false)
-    // Each is taken by exactly one of the join and close(), so it is closed once.
+    // Each is taken by exactly one of the join and close(), so it is closed once. close() leaves
+    // EmptyLookupCursor in the cursor slot, so a cursor that comes later is known to be late.
     private val openReader = new AtomicReference[ExternalLookupReader]()
     private val activeCursor = new AtomicReference[ExternalLookupResultCursor]()
+    // Set once close() has ended, after it closed the reader.
+    private val closeEnded = new AtomicBoolean(false)
     private var resultRowsSinceMetricsUpdate = 0
     Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => close()))
 
@@ -539,12 +547,14 @@ class ExternalLookupJoinEvaluatorFactory(
           throw QueryExecutionErrors.invalidDataSourceExternalLookupError(
             tableName, "NULL_RESULT_CURSOR")
         }
-      activeCursor.set(cursor)
-      // A close() while the request ran did not find this cursor, so it is closed here.
-      if (closed.get()) {
-        closeCursor()
-        ensureOpen()
+      if (!activeCursor.compareAndSet(null, cursor)) {
+        // A close() started while the request ran, so it did not find this cursor. It closes the
+        // reader first, so the join waits for it to end, and then closes the cursor.
+        while (!closeEnded.get()) LockSupport.parkNanos(10000L)
+        cursor.close()
       }
+      // A cursor that the close found is the close's to close.
+      ensureOpen()
       cursor
     }
 
@@ -600,16 +610,22 @@ class ExternalLookupJoinEvaluatorFactory(
     def closeCursor(): Unit = Option(activeCursor.getAndSet(null)).foreach(_.close())
 
     def close(): Unit = if (closed.compareAndSet(false, true)) {
-      val reader = openReader.getAndSet(null)
-      ExternalLookupJoinExec.closeResources(
-        closeCursor(),
-        if (reader != null) taskReaders.closing(reader),
-        if (reader != null) {
-          // A copy that started before the close saw it is still reading the row. The flags are
-          // volatile, so either the copy sees the close and does not start, or this sees the copy.
-          while (copying.get()) LockSupport.parkNanos(10000L)
-          reader.close()
-        })
+      try {
+        val cursor = activeCursor.getAndSet(EmptyLookupCursor)
+        val reader = openReader.getAndSet(null)
+        ExternalLookupJoinExec.closeResources(
+          Option(cursor).foreach(_.close()),
+          if (reader != null) taskReaders.closing(reader),
+          if (reader != null) {
+            // A copy that started before the close saw it is still reading the row. The flags
+            // are volatile, so either the copy sees the close and does not start, or this sees
+            // the copy.
+            while (copying.get()) LockSupport.parkNanos(10000L)
+            reader.close()
+          })
+      } finally {
+        closeEnded.set(true)
+      }
     }
   }
 }

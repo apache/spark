@@ -160,8 +160,10 @@ object CheckExternalLookupJoin extends (LogicalPlan => Unit) {
 object FormExternalLookupJoin extends Rule[LogicalPlan] {
   import ExternalLookupJoinEligibility._
 
+  // Only a DSv2 relation can be a lookup-only table, so a plan without one has no join to convert.
   override def apply(plan: LogicalPlan): LogicalPlan =
-    plan.transformUpWithPruning(_.containsPattern(JOIN)) {
+    if (!plan.containsPattern(DATA_SOURCE_V2_RELATION)) plan
+    else plan.transformUpWithPruning(_.containsPattern(JOIN)) {
       case join: Join =>
         ExternalLookupJoinEligibility(join) match {
           case Eligible =>

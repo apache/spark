@@ -28,7 +28,8 @@ import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkRuntimeException,
   SparkUnsupportedOperationException, TaskContext}
-import org.apache.spark.sql.{AnalysisException, DataFrame, Encoders, Row, SaveMode, SQLContext}
+import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Encoders, Row, SaveMode,
+  SQLContext}
 import org.apache.spark.sql.IntegratedUDFTestUtils.{shouldTestPythonUDFs, TestPythonUDF}
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.InternalRow
@@ -51,10 +52,10 @@ import org.apache.spark.sql.connector.read.{Batch, ExternalLookup, ExternalLooku
   PartitionReader, PartitionReaderFactory, Scan, ScanBuilder, SupportsExternalLookup,
   SupportsPushDownRequiredColumns, SupportsPushDownV2Filters}
 import org.apache.spark.sql.execution.{CoalesceExec, LocalTableScanExec}
-import org.apache.spark.sql.execution.datasources.SaveIntoDataSourceCommand
+import org.apache.spark.sql.execution.datasources.{FileFormat, SaveIntoDataSourceCommand}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExternalLookupRelation,
-  TableCapabilityCheck}
+  FileDataSourceV2, TableCapabilityCheck}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.ExternalLookupJoinExec
 import org.apache.spark.sql.execution.streaming.operators.stateful.StreamingDeduplicateExec
@@ -660,6 +661,51 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("view definitions over a lookup-only table, in either view catalog, are not reads") {
+    withSQLConf(
+        s"spark.sql.catalog.$EXTERNAL_LOOKUP_CATALOG_NAME" ->
+          classOf[ExternalLookupTestCatalog].getName,
+        "spark.sql.catalog.view_only" -> classOf[TestingViewOnlyCatalog].getName) {
+      val lookupTable = s"$EXTERNAL_LOOKUP_CATALOG_NAME.ns.lookup"
+      // ALTER VIEW of a session view, and CREATE VIEW and ALTER VIEW in a V2 view catalog.
+      withTempView("departments") {
+        sql("CREATE TEMPORARY VIEW departments AS SELECT 1 AS id, 'none' AS department")
+        sql(s"ALTER VIEW departments AS SELECT * FROM $lookupTable")
+        assert(spark.table("departments").queryExecution.analyzed.exists {
+          case relation: DataSourceV2Relation => relation.table eq SimpleExternalLookupTable
+          case _ => false
+        })
+      }
+      val catalog = spark.sessionState.catalogManager.catalog("view_only")
+        .asInstanceOf[TestingViewOnlyCatalog]
+      sql(s"CREATE VIEW view_only.default.departments AS SELECT * FROM $lookupTable")
+      sql(s"ALTER VIEW view_only.default.pure_v AS SELECT * FROM $lookupTable")
+      Seq("departments", "pure_v").foreach { name =>
+        assert(catalog.loadView(Identifier.of(Array("default"), name)).queryText() ===
+          s"SELECT * FROM $lookupTable")
+      }
+    }
+  }
+
+  test("a stream-only Python UDF in a lookup join's residual or lookup parameter") {
+    assume(shouldTestPythonUDFs)
+    // The UDF returns its input, so each join has the same rows as the one with the column itself.
+    val pythonUDF = TestPythonUDF("stream_key")
+    val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    val left = streamOf(Seq((1, 1), (2, -1), (3, 1)).toDF("id", "shift"))
+    Seq[(Column => Column, String)](
+      (key => left("id") === lookup("id") && key > 0, "residual"),
+      (key => lookup("id") === key + left("id") - left("shift"), "parameter")).foreach {
+      case (condition, place) =>
+        Seq("inner", "left_outer").foreach { joinType =>
+          val withUDF = runStream(left.join(lookup, condition(pythonUDF(left("shift"))), joinType))
+          assert(withUDF.plan.exists(_.isInstanceOf[PreparedExternalLookupJoin]), place)
+          val builtIn = runStream(left.join(lookup, condition(left("shift")), joinType))
+          QueryTest.sameRows(builtIn.rows, withUDF.rows).foreach(error => fail(s"$place: $error"))
+        }
+    }
+  }
+
   test("a table that also supports batch read is read as a batch scan outside a lookup join") {
     withSQLConf(
         s"spark.sql.catalog.$EXTERNAL_LOOKUP_CATALOG_NAME" ->
@@ -679,7 +725,8 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     Seq(
       classOf[RelationProviderExternalLookupDataSource],
       classOf[SchemaRelationProviderExternalLookupDataSource],
-      classOf[FileFormatExternalLookupDataSource]).foreach { provider =>
+      classOf[FileFormatExternalLookupDataSource],
+      classOf[FileDataSourceV2ExternalLookupDataSource]).foreach { provider =>
       val parameters = Map("table" -> "`SimpleExternalLookupTable`", "provider" -> provider.getName)
       checkError(
         exception = intercept[AnalysisException](spark.read.format(provider.getName).load()),
@@ -1209,16 +1256,19 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
         }
       })
       consumer.start()
+      val completion = new Thread(() => context.markTaskCompleted(None))
       try {
         assert(reached.await(10, TimeUnit.SECONDS))
-        val completion = new Thread(() => context.markTaskCompleted(None))
         completion.start()
         whileBlocked(completion)
       } finally {
         release.countDown()
         consumer.join(TimeUnit.SECONDS.toMillis(10))
+        completion.join(TimeUnit.SECONDS.toMillis(10))
       }
+      // Both threads have ended, so every close the task makes has happened.
       assert(consumer.isAlive === false)
+      assert(completion.isAlive === false)
       failure.get()
     } finally {
       TaskContext.unset()
@@ -1253,6 +1303,66 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       assert(SimpleExternalLookupDataSource.metricSamples.get() === metricSamples, call)
       assert(SimpleExternalLookupDataSource.resultRowsRead.get() === resultRowsRead, call)
       assert(SimpleExternalLookupDataSource.rowReadsAfterClose.get() === 0, call)
+    }
+  }
+
+  test("the cursor of a request in progress at the task-end close is closed after the reader") {
+    val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    val left = streamOf(Seq(1).toDF("id"))
+    val lookupJoin = runStream(left.join(lookup, left("id") === lookup("id"))).lookupJoin
+    val rdd = lookupJoin
+      .copy(child = LocalTableScanExec(lookupJoin.child.output, Seq(InternalRow(1)), None))
+      .execute()
+    SimpleExternalLookupDataSource.resetCounters()
+    // The request waits until the close has started, and the close waits in its read of the
+    // reader's final metrics, between its cursor and reader steps, until the request has returned.
+    val requestRelease = new CountDownLatch(1)
+    val closeInWindow = new CountDownLatch(1)
+    val closeRelease = new CountDownLatch(1)
+    SimpleExternalLookupDataSource.beforeLookupReturns.set { () =>
+      assert(requestRelease.await(30, TimeUnit.SECONDS))
+    }
+    SimpleExternalLookupDataSource.beforeMetricsReturn.set { () =>
+      if (Thread.currentThread().getName == "task-end") {
+        closeInWindow.countDown()
+        assert(closeRelease.await(30, TimeUnit.SECONDS))
+      }
+    }
+    val context = TaskContext.empty()
+    TaskContext.setTaskContext(context)
+    try {
+      val rows = rdd.iterator(rdd.partitions.head, context)
+      val failure = new AtomicReference[Throwable]()
+      val consumer = new Thread(() => {
+        try rows.hasNext catch { case error: Throwable => failure.set(error) }
+      })
+      val completion = new Thread(() => context.markTaskCompleted(None), "task-end")
+      consumer.start()
+      try {
+        assert(SimpleExternalLookupDataSource.requestStarted.get().await(10, TimeUnit.SECONDS))
+        completion.start()
+        assert(closeInWindow.await(10, TimeUnit.SECONDS))
+        requestRelease.countDown()
+        // The request has returned its cursor, which the close did not find. The join waits for
+        // the close to end before it closes the cursor.
+        consumer.join(500)
+        assert(consumer.isAlive)
+        assert(SimpleExternalLookupDataSource.closeEvents.asScala.toSeq === Seq.empty)
+      } finally {
+        requestRelease.countDown()
+        closeRelease.countDown()
+        consumer.join(TimeUnit.SECONDS.toMillis(10))
+        completion.join(TimeUnit.SECONDS.toMillis(10))
+      }
+      assert(consumer.isAlive === false)
+      assert(completion.isAlive === false)
+      assert(SimpleExternalLookupDataSource.closeEvents.asScala.toSeq === Seq("reader", "cursor"))
+      checkError(
+        exception = failure.get().asInstanceOf[SparkException],
+        condition = "INTERNAL_ERROR",
+        parameters = Map("message" -> "External lookup reader used after it was closed"))
+    } finally {
+      TaskContext.unset()
     }
   }
 
@@ -1651,6 +1761,17 @@ class FileFormatExternalLookupDataSource extends ParquetFileFormat with TablePro
       properties: java.util.Map[String, String]): Table = SimpleExternalLookupTable
 }
 
+/** Serves a lookup-only table, and has a V1 file read path through its fallback format. */
+class FileDataSourceV2ExternalLookupDataSource extends FileDataSourceV2 {
+  override def fallbackFileFormat: Class[_ <: FileFormat] = classOf[ParquetFileFormat]
+  // Not a name in the list of sources that are always read through V1.
+  override def shortName(): String = "file_v2_external_lookup"
+  override protected def getTable(options: CaseInsensitiveStringMap): Table =
+    SimpleExternalLookupTable
+  override protected def getTable(options: CaseInsensitiveStringMap, schema: StructType): Table =
+    SimpleExternalLookupTable
+}
+
 /** A V1 source that records the writes that it receives. */
 class RecordingV1WriteSource extends SchemaRelationProvider with CreatableRelationProvider {
   override def createRelation(
@@ -1716,6 +1837,8 @@ object SimpleExternalLookupDataSource {
   val rowReadsAfterClose = new AtomicInteger(0)
   // Called when Spark reads a string value of a returned row, as it does when it copies the row.
   val beforeValueRead = new AtomicReference[() => Unit](() => ())
+  // Called when Spark reads the reader's metrics, before they are returned.
+  val beforeMetricsReturn = new AtomicReference[() => Unit](() => ())
   val lookupCandidates =
     new AtomicReference(Seq.empty[(String, String, DataType)])
   val lookupCandidateDescriptions = new AtomicReference(Seq.empty[String])
@@ -1749,6 +1872,7 @@ object SimpleExternalLookupDataSource {
     beforeGetReturns.set(() => ())
     rowReadsAfterClose.set(0)
     beforeValueRead.set(() => ())
+    beforeMetricsReturn.set(() => ())
     lookupCandidates.set(Seq.empty)
     lookupCandidateDescriptions.set(Seq.empty)
     departmentsById.set(INITIAL_DEPARTMENTS_BY_ID)
@@ -1988,6 +2112,7 @@ case class SimpleExternalLookupReaderFactory(
     override def currentMetricsValues():
         Array[org.apache.spark.sql.connector.metric.CustomTaskMetric] = {
       SimpleExternalLookupDataSource.metricSamples.incrementAndGet()
+      SimpleExternalLookupDataSource.beforeMetricsReturn.get()()
       Array.empty
     }
 

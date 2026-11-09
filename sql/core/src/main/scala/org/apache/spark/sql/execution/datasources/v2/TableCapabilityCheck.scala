@@ -21,7 +21,8 @@ import org.apache.spark.sql.catalyst.analysis.ExternalLookupJoinEligibility
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical.{AlterViewAs, AppendData, Command, CreateView, InsertOnlyMerge, Join, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
-import org.apache.spark.sql.catalyst.trees.TreePattern.{DATA_SOURCE_V2_RELATION, PLAN_EXPRESSION}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMAND, DATA_SOURCE_V2_RELATION,
+  PLAN_EXPRESSION}
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -88,10 +89,13 @@ object TableCapabilityCheck extends (LogicalPlan => Unit) {
     // PrepareExternalLookupJoin would reject a lookup-only table that no lookup join reads. So a
     // command whose query reads one outside a lookup join fails here, during analysis. A view
     // definition stores its query without reading it, for a lookup join that reads the view.
-    plan.foreach {
-      case _: CreateViewCommand | _: AlterViewAsCommand | _: CreateView | _: AlterViewAs =>
-      case command: Command => rejectLookupOnlyReads(command)
-      case _ =>
+    // Other plans, such as a query, hold no command, so they need no walk.
+    if (plan.containsPattern(COMMAND)) {
+      plan.foreach {
+        case _: CreateViewCommand | _: AlterViewAsCommand | _: CreateView | _: AlterViewAs =>
+        case command: Command => rejectLookupOnlyReads(command)
+        case _ =>
+      }
     }
 
     // The streaming sources in a query should all support micro-batch scan, or all support
