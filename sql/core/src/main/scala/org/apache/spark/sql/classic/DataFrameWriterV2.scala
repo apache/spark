@@ -267,7 +267,8 @@ private object PartitionTransform {
     private val NAMES = Seq(name)
 
     def unapply(e: Expression): Option[Seq[Expression]] = e match {
-      case UnresolvedFunction(NAMES, children, false, None, None, Nil, true, _) => Option(children)
+      case UnresolvedFunction(NAMES, children, false, None, None, Nil, true, _, _) =>
+        Option(children)
       case _ => None
     }
   }

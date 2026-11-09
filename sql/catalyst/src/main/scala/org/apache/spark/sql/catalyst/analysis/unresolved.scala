@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.json4s.JsonAST.JField
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
@@ -422,7 +424,8 @@ case class UnresolvedFunction(
     ignoreNulls: Option[Boolean] = None,
     orderingWithinGroup: Seq[SortOrder] = Seq.empty,
     isInternal: Boolean = false,
-    boundOwner: Option[Seq[String]] = None)
+    boundOwner: Option[Seq[String]] = None,
+    sortResolutionState: UnresolvedFunction.SortResolutionState = UnresolvedFunction.Ordinary)
   extends Expression with Unevaluable {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
@@ -434,6 +437,18 @@ case class UnresolvedFunction(
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_FUNCTION)
 
   override def prettyName: String = nameParts.quoted
+  // Printing the live invocation must not recursively expand its shared lexical snapshots.
+  override def stringArgs: Iterator[Any] =
+    super.stringArgs.filterNot(_.isInstanceOf[UnresolvedFunction.SortResolutionState])
+  override protected def jsonFields: List[JField] = {
+    if (sortResolutionState == UnresolvedFunction.Ordinary) {
+      super.jsonFields.filterNot(_._1 == "sortResolutionState")
+    } else {
+      // Avoid visiting saved invocations before filtering the internal field from JSON output.
+      copy(sortResolutionState = UnresolvedFunction.Ordinary).jsonFields
+    }
+  }
+
   override def toString: String = {
     val distinct = if (isDistinct) "distinct " else ""
     s"'${nameParts.quoted}($distinct${children.mkString(", ")})"
@@ -464,6 +479,24 @@ case class UnresolvedFunction(
 
 object UnresolvedFunction {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
+  /**
+   * Grouped ORDER BY resolution preserves a lexical invocation until function construction can
+   * identify an aggregate. This immutable state participates in case-class copy and equality, so
+   * child preprocessing cannot lose it and a replay-phase transition advances the fixed point.
+   */
+  sealed trait SortResolutionState
+
+  case object Ordinary extends SortResolutionState
+
+  /**
+   * The detached invocation and all its descendants have Ordinary state. It is deliberately
+   * outside [[UnresolvedFunction.children]]: nested snapshots share its saved subtrees, and live
+   * child transformations and cloning must not traverse or rewrite the lexical invocation.
+   */
+  case class WithOriginalFunction(original: UnresolvedFunction) extends SortResolutionState
+
+  case object AggregateInput extends SortResolutionState
 
   def apply(
       name: FunctionIdentifier,
