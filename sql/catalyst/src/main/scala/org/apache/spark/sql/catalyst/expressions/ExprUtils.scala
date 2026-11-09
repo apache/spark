@@ -128,7 +128,12 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
   def corruptRecordFieldIndex(
       schema: StructType,
       columnNameOfCorruptRecord: String): Option[Int] = {
-    if (SQLConf.get.caseSensitiveAnalysis) {
+    // The name can be null: `from_csv` and `from_json` hold it in a transient field, so it reads
+    // back as null after the expression is serialized. A null never names a field, and the
+    // case-insensitive lookup goes through a CaseInsensitiveMap, which would throw on it.
+    if (columnNameOfCorruptRecord == null) {
+      None
+    } else if (SQLConf.get.caseSensitiveAnalysis) {
       schema.getFieldIndex(columnNameOfCorruptRecord)
     } else {
       schema.getFieldIndexCaseInsensitive(columnNameOfCorruptRecord)
