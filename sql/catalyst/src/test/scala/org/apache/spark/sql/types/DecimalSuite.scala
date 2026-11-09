@@ -259,6 +259,19 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     assert(Decimal(100).quot(Decimal(-33)) === Decimal(BigDecimal("-3")))
   }
 
+  test("SPARK-61050: % and quot with negative scales") {
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      // `MATH_CONTEXT` holds this exact quotient, so no context of 10^9 digits is used.
+      val big = Decimal(BigDecimal("1E+999999999"))
+      assert(big % Decimal(1) === Decimal(0))
+      assert(big.quot(Decimal(1)) === big)
+      // The integral part of the quotient would need more digits than an Int can count.
+      intercept[ArithmeticException] {
+        Decimal(BigDecimal("1E+2147483636")) % Decimal(BigDecimal("3E-38"))
+      }
+    }
+  }
+
   test("SPARK-57937: div with target scale") {
     // `div(that, scale)` must return the same result as `/` (which divides at
     // `DecimalType.MAX_SCALE + 1` with ROUND_DOWN) followed by rounding to the same scale.

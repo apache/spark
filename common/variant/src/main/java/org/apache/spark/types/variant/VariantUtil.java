@@ -520,8 +520,7 @@ public class VariantUtil {
       }
       checkIndex(start + length - 1, value.length);
       // The string content is UTF-8 encoded (it is written by `VariantBuilder.appendString`).
-      // Decode with UTF-8 explicitly rather than relying on the JVM default charset, which is
-      // platform-dependent on Java 17.
+      // Decode with UTF-8 explicitly rather than relying on the JVM default charset.
       return new String(value, start, length, StandardCharsets.UTF_8);
     }
     throw unexpectedType(Type.STRING);
