@@ -588,22 +588,29 @@ object DateTimeUtils extends SparkDateTimeUtils {
   /**
    * Returns the trunc date from original date and trunc level.
    * Trunc level should be generated using `parseTruncLevel()`, should be between 6 and 9.
+   * @throws org.apache.spark.SparkArithmeticException if the result is earlier than the minimum
+   *                                                   DATE.
    */
   def truncDate(days: Int, level: Int): Int = {
     level match {
-      // `days - 7L` so the subtraction does not wrap. Near the minimum DATE, trunc still wraps
-      // (this `.toInt`, and the Int arithmetic of the other levels); that is a trunc follow-up.
-      case TRUNC_TO_WEEK => nextDateForDayOfWeek(days - 7L, MONDAY).toInt
-      case TRUNC_TO_MONTH => days - getDayOfMonth(days) + 1
+      case TRUNC_TO_WEEK => checkTruncDate(days, nextDateForDayOfWeek(days - 7L, MONDAY), "WEEK")
+      case TRUNC_TO_MONTH => checkTruncDate(days, days - getDayOfMonth(days).toLong + 1, "MONTH")
       case TRUNC_TO_QUARTER =>
         val ld = daysToLocalDate(days)
         val firstMonthOfQuarter = ((ld.getMonthValue - 1) / 3) * 3 + 1
-        localDateToDays(ld.withMonth(firstMonthOfQuarter).withDayOfMonth(1))
-      case TRUNC_TO_YEAR => days - getDayInYear(days) + 1
+        val result = ld.withMonth(firstMonthOfQuarter).withDayOfMonth(1).toEpochDay
+        checkTruncDate(days, result, "QUARTER")
+      case TRUNC_TO_YEAR => checkTruncDate(days, days - getDayInYear(days).toLong + 1, "YEAR")
       case _ =>
         // caller make sure that this should never be reached
         throw QueryExecutionErrors.unreachableError(s": Invalid trunc level: $level")
     }
+  }
+
+  // Truncation never moves a date later, so only the minimum DATE can be crossed.
+  private def checkTruncDate(days: Int, result: Long, unit: String): Int = {
+    if (result < Int.MinValue) throw QueryExecutionErrors.truncDateOverflowError(days, unit)
+    result.toInt
   }
 
   private def truncToUnit(micros: Long, zoneId: ZoneId, unit: ChronoUnit): Long = {

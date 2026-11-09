@@ -16,3 +16,9 @@ select next_day(date'+5881580-07-04', 'FR');
 select next_day(date'+5881580-07-11', 'MO');
 select last_day(date'-5877641-06-23'), last_day(date'+5881580-06-30');
 select last_day(date'+5881580-07-11');
+-- trunc fails instead of wrapping around when the result is earlier than the minimum DATE.
+select trunc(date'-5877641-06-29', 'WEEK'), trunc(date'-5877641-07-01', 'WEEK'), trunc(date'-5877641-07-01', 'MM'), trunc(date'-5877641-07-01', 'QUARTER'), trunc(date'-5877640-06-23', 'YEAR');
+select trunc(date'-5877641-06-28', 'WEEK');
+select trunc(date'-5877641-06-30', 'MONTH');
+select trunc(date'-5877641-06-23', 'QUARTER');
+select trunc(date'-5877641-12-31', 'YEAR');

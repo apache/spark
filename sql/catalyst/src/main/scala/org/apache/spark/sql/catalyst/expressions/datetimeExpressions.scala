@@ -3598,6 +3598,7 @@ trait TruncInstant extends BinaryExpression with ImplicitCastInputTypes {
 @ExpressionDescription(
   usage = """
     _FUNC_(date, fmt) - Returns `date` with the time portion of the day truncated to the unit specified by the format model `fmt`.
+      If the result is earlier than the minimum DATE `-5877641-06-23`, the function fails with `DATETIME_OVERFLOW` regardless of `spark.sql.ansi.enabled`.
   """,
   arguments = """
     Arguments:

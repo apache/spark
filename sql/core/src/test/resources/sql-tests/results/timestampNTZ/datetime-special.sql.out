@@ -83,3 +83,71 @@ org.apache.spark.SparkArithmeticException
     "operation" : "find the last day of the month of DATE '+5881580-07-11'"
   }
 }
+
+
+-- !query
+select trunc(date'-5877641-06-29', 'WEEK'), trunc(date'-5877641-07-01', 'WEEK'), trunc(date'-5877641-07-01', 'MM'), trunc(date'-5877641-07-01', 'QUARTER'), trunc(date'-5877640-06-23', 'YEAR')
+-- !query schema
+struct<trunc(DATE '-5877641-06-29', WEEK):date,trunc(DATE '-5877641-07-01', WEEK):date,trunc(DATE '-5877641-07-01', MM):date,trunc(DATE '-5877641-07-01', QUARTER):date,trunc(DATE '-5877640-06-23', YEAR):date>
+-- !query output
+-5877641-06-29	-5877641-06-29	-5877641-07-01	-5877641-07-01	-5877640-01-01
+
+
+-- !query
+select trunc(date'-5877641-06-28', 'WEEK')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "DATETIME_OVERFLOW",
+  "sqlState" : "22008",
+  "messageParameters" : {
+    "operation" : "truncate DATE '-5877641-06-28' to WEEK"
+  }
+}
+
+
+-- !query
+select trunc(date'-5877641-06-30', 'MONTH')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "DATETIME_OVERFLOW",
+  "sqlState" : "22008",
+  "messageParameters" : {
+    "operation" : "truncate DATE '-5877641-06-30' to MONTH"
+  }
+}
+
+
+-- !query
+select trunc(date'-5877641-06-23', 'QUARTER')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "DATETIME_OVERFLOW",
+  "sqlState" : "22008",
+  "messageParameters" : {
+    "operation" : "truncate DATE '-5877641-06-23' to QUARTER"
+  }
+}
+
+
+-- !query
+select trunc(date'-5877641-12-31', 'YEAR')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "DATETIME_OVERFLOW",
+  "sqlState" : "22008",
+  "messageParameters" : {
+    "operation" : "truncate DATE '-5877641-12-31' to YEAR"
+  }
+}

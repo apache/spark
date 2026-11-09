@@ -1167,10 +1167,31 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
   }
 
-  test("SPARK-60929: trunc to WEEK in the first week of the DATE range") {
-    // Int.MinValue + 6 (-5877641-06-29) is the first Monday of the DATE range.
-    assert(truncDate(Int.MinValue + 6, TRUNC_TO_WEEK) === Int.MinValue + 6)
-    assert(truncDate(Int.MinValue + 10, TRUNC_TO_WEEK) === Int.MinValue + 6)
+  test("SPARK-60929: truncDate near the minimum DATE") {
+    val min = Int.MinValue // -5877641-06-23, a Tuesday
+    def assertOverflow(days: Int, level: Int, unit: String): Unit = {
+      checkError(
+        exception = intercept[SparkArithmeticException](truncDate(days, level)),
+        condition = "DATETIME_OVERFLOW",
+        parameters = Map("operation" -> s"truncate DATE '${daysToLocalDate(days)}' to $unit"))
+    }
+    // WEEK: min + 6 (-5877641-06-29) is the first Monday of the DATE range.
+    (min to min + 5).foreach(assertOverflow(_, TRUNC_TO_WEEK, "WEEK"))
+    (min + 6 to min + 12).foreach(d => assert(truncDate(d, TRUNC_TO_WEEK) === min + 6))
+    // MONTH and QUARTER: min + 8 is -5877641-07-01.
+    (min to min + 7).foreach { d =>
+      assertOverflow(d, TRUNC_TO_MONTH, "MONTH")
+      assertOverflow(d, TRUNC_TO_QUARTER, "QUARTER")
+    }
+    (min + 8 to min + 38).foreach(d => assert(truncDate(d, TRUNC_TO_MONTH) === min + 8))
+    (min + 8 to min + 99).foreach(d => assert(truncDate(d, TRUNC_TO_QUARTER) === min + 8))
+    // YEAR: every date of year -5877641.
+    val nextYear = LocalDate.of(-5877640, 1, 1)
+    val nextYearDays = localDateToDays(nextYear)
+    (min until nextYearDays).foreach(assertOverflow(_, TRUNC_TO_YEAR, "YEAR"))
+    (nextYearDays until nextYearDays + nextYear.lengthOfYear).foreach { d =>
+      assert(truncDate(d, TRUNC_TO_YEAR) === nextYearDays)
+    }
   }
 
   test("SPARK-34761: timestamp add day-time interval") {

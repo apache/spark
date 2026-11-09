@@ -880,6 +880,31 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-60929: trunc near the minimum DATE") {
+    val min = Int.MinValue // -5877641-06-23
+    val lastDayOfMinYear = DateTimeUtils.localDateToDays(LocalDate.of(-5877641, 12, 31))
+    // Codegen has a path for a foldable format.
+    Seq[String => Expression](s => Literal(s), s => NonFoldableLiteral(s)).foreach { format =>
+      def trunc(days: Int, fmt: String): TruncDate = TruncDate(Literal(days, DateType), format(fmt))
+      checkEvaluation(trunc(min + 6, "WEEK"), min + 6)
+      checkEvaluation(trunc(min + 8, "WEEK"), min + 6)
+      checkEvaluation(trunc(min + 8, "MM"), min + 8)
+      checkEvaluation(trunc(min + 8, "QUARTER"), min + 8)
+      checkEvaluation(trunc(lastDayOfMinYear + 1, "YEAR"), lastDayOfMinYear + 1)
+      Seq(
+        (min + 5, "WEEK", "DATE '-5877641-06-28' to WEEK"),
+        (min + 7, "MM", "DATE '-5877641-06-30' to MONTH"),
+        (min, "QUARTER", "DATE '-5877641-06-23' to QUARTER"),
+        (lastDayOfMinYear, "YEAR", "DATE '-5877641-12-31' to YEAR")).foreach {
+        case (days, fmt, operation) =>
+          checkErrorInExpression[SparkArithmeticException](
+            trunc(days, fmt),
+            condition = "DATETIME_OVERFLOW",
+            parameters = Map("operation" -> s"truncate $operation"))
+      }
+    }
+  }
+
   private def testTruncDate(input: Date, fmt: String, expected: Date): Unit = {
     checkEvaluation(TruncDate(Literal.create(input, DateType), Literal.create(fmt, StringType)),
       expected)
