@@ -21,11 +21,11 @@ use std::sync::{Arc, Mutex};
 
 use arrow_schema::{Schema, SchemaRef};
 use serde::{Deserialize, Serialize};
-use spark_native_source::__private::abi::{
+use spark_datasource::__private::abi::{
     ArrowSchema, SparkDsCreateInfo, SparkDsHost, SparkDsLibrary, SparkDsReaderInfo, ABI_VERSION,
 };
-use spark_native_source::log;
-use spark_native_source::{
+use spark_datasource::log;
+use spark_datasource::{
     Capabilities, CreateInfo, DataSource, HostInfo, PartitionReader, PartitionReaderFactory,
     ReaderContext, Result, ScanBuilder, ScanInfo, ScanPlan, Unsupported,
 };
@@ -118,7 +118,7 @@ impl PartitionReaderFactory for Factory {
     }
 }
 
-spark_native_source::export_data_source!(Source);
+spark_datasource::export_data_source!(Source);
 
 extern "C" {
     fn spark_ds_init(host: *const SparkDsHost, library: *mut *const SparkDsLibrary) -> c_int;

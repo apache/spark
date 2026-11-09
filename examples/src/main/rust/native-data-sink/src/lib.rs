@@ -30,14 +30,14 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use arrow_array::{Array, Int64Array, RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use serde::{Deserialize, Serialize};
-use spark_native_source::{
+use spark_datasource::{
     AbortInfo, BatchWrite, Capabilities, CommitInfo, CreateInfo, DataSource, DataWriter,
     DataWriterFactory, PartitionWriter, Result, StreamingAbortInfo, StreamingCommitInfo,
     StreamingWrite, StreamingWriteInfo, TaskContext, Unsupported, WriteInfo, WriteMode,
     WriterContext,
 };
 
-spark_native_source::export_data_source!(JsonSink);
+spark_datasource::export_data_source!(JsonSink);
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(0);
 

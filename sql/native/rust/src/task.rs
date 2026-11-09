@@ -26,7 +26,7 @@ use crate::Result;
 /// Blocking I/O still needs its own timeouts.
 ///
 /// ```compile_fail
-/// use spark_native_source::TaskContext;
+/// use spark_datasource::TaskContext;
 ///
 /// fn retain_forever(task: TaskContext<'_>) -> TaskContext<'static> {
 ///     task

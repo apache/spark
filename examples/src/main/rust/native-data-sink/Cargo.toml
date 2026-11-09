@@ -28,7 +28,7 @@ path = "src/lib.rs"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-spark-native-source = { path = "../../../../../sql/native/rust" }
+spark-datasource = { path = "../../../../../sql/native/rust" }
 arrow-array.workspace = true
 arrow-schema.workspace = true
 serde.workspace = true

@@ -24,14 +24,14 @@ use arrow_array::ffi_stream::{ArrowArrayStreamReader, FFI_ArrowArrayStream};
 use arrow_array::{Array, Int64Array, RecordBatch, StructArray};
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use serde::{Deserialize, Serialize};
-use spark_native_source::__private::abi::{
+use spark_datasource::__private::abi::{
     self, ArrowSchema, SparkDsCommitOffsetInfo, SparkDsCreateInfo, SparkDsDataWriterInfo,
     SparkDsFinishDataWriterInfo, SparkDsFinishWriteInfo, SparkDsHost, SparkDsInitialOffsetInfo,
     SparkDsLatestOffsetInfo, SparkDsLibrary, SparkDsPartitionsInfo, SparkDsReadInfo,
     SparkDsReadLimit, SparkDsReaderInfo, SparkDsStreamPartitionsInfo, SparkDsStreamReaderInfo,
     SparkDsTaskContext, SparkDsWriteInfo, ABI_VERSION,
 };
-use spark_native_source::{
+use spark_datasource::{
     Capabilities, CommitOffsetInfo, CreateInfo, DataSource, DataWriter, DataWriterFactory,
     LatestOffsetInfo, MicroBatchInfo, MicroBatchStream, MicroBatchStreamInfo, PartitionReader,
     PartitionReaderFactory, PartitionWriter, ReadLimit, ReaderContext, Result, ScanBuilder,
@@ -133,7 +133,7 @@ impl DataSource for Source {
     fn new_streaming_write(&self, info: StreamingWriteInfo) -> Result<Write> {
         record(Event::WriteCreated {
             query_id: info.query_id,
-            truncate: info.mode == spark_native_source::WriteMode::Truncate,
+            truncate: info.mode == spark_datasource::WriteMode::Truncate,
         });
         Ok(Write)
     }
@@ -326,7 +326,7 @@ impl DataWriter for Writer {
     }
 }
 
-spark_native_source::export_data_source!(Source);
+spark_datasource::export_data_source!(Source);
 
 extern "C" {
     fn spark_ds_init(host: *const SparkDsHost, library: *mut *const SparkDsLibrary) -> c_int;

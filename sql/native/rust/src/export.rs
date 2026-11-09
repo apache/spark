@@ -56,7 +56,7 @@ macro_rules! export_data_source {
     ($source:ty $(,)?) => {
         #[cfg(panic = "abort")]
         compile_error!(
-            "spark_native_source requires panic = \"unwind\": with panic = \"abort\", a panic \
+            "spark_datasource requires panic = \"unwind\": with panic = \"abort\", a panic \
              in the data source aborts the JVM of Spark instead of failing the operation"
         );
 

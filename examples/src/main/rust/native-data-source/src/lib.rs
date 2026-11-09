@@ -23,7 +23,7 @@ use arrow_array::StringArray;
 use arrow_array::{ArrayRef, Int64Array, RecordBatch, RecordBatchOptions};
 use arrow_schema::{ArrowError, DataType, Field, Schema, SchemaRef};
 use serde::{Deserialize, Serialize};
-use spark_native_source::{
+use spark_datasource::{
     CreateInfo, DataSource, LatestOffsetInfo, LimitSupport, MicroBatchInfo, MicroBatchStream,
     MicroBatchStreamInfo, Options, PartitionReader, PartitionReaderFactory, ReadLimit,
     ReaderContext, Result, ScanBuilder, ScanInfo, ScanPlan, Unsupported,
@@ -359,12 +359,12 @@ fn output_schema(columns: &[String]) -> Result<SchemaRef> {
     Ok(Arc::new(Schema::new(fields?)))
 }
 
-spark_native_source::export_data_source!(RangeSource);
+spark_datasource::export_data_source!(RangeSource);
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use spark_native_source::TaskContext;
+    use spark_datasource::TaskContext;
 
     fn info(values: &[(&str, &str)]) -> CreateInfo {
         let options: Options = values

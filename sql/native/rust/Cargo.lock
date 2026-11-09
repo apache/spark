@@ -465,6 +465,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 
 [[package]]
+name = "spark-datasource"
+version = "0.1.0"
+dependencies = [
+ "arrow-array",
+ "arrow-data",
+ "arrow-schema",
+ "log",
+ "rmp-serde",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "spark-native-range-demo"
 version = "0.1.0"
 dependencies = [
@@ -472,7 +485,7 @@ dependencies = [
  "arrow-schema",
  "serde",
  "serde_json",
- "spark-native-source",
+ "spark-datasource",
 ]
 
 [[package]]
@@ -483,20 +496,7 @@ dependencies = [
  "arrow-schema",
  "serde",
  "serde_json",
- "spark-native-source",
-]
-
-[[package]]
-name = "spark-native-source"
-version = "0.1.0"
-dependencies = [
- "arrow-array",
- "arrow-data",
- "arrow-schema",
- "log",
- "rmp-serde",
- "serde",
- "serde_json",
+ "spark-datasource",
 ]
 
 [[package]]

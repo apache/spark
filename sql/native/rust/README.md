@@ -26,11 +26,20 @@ ABI.
 
 The Rust and C tests run independently of Spark and Java. The workspace is not
 part of Maven/SBT and introduces no Rust requirement for building Spark. This is
-an API prototype, not a published crate or a compatibility commitment.
+an API prototype, not a compatibility commitment.
+
+The crate, `spark-datasource`, after `spark_datasource.h`, is not published yet: depend on it
+with a path dependency on a Spark source tree, as the examples do, until SPARK-61307 publishes
+it to crates.io. It is versioned on its own, from 0.x, and may need a breaking release in any
+release of Spark: for a new major version of Arrow, whose types it exposes, or for a new kind
+of operation, which adds an associated type to `DataSource` that every connector must name.
+Growth within an operation, such as a method with a default implementation or a field of an
+info struct, does not break connectors. The crate supports version 1 of the ABI, which Spark
+supports from 4.4.0 in all the releases of Spark 4.
 
 The API uses the types of Arrow 58, such as `RecordBatch`, `SchemaRef`, and `ArrowError`, so
 a connector must use the same major version of Arrow: the SDK re-exports the crates as
-`spark_native_source::arrow_array` and `spark_native_source::arrow_schema`. Upgrading the
+`spark_datasource::arrow_array` and `spark_datasource::arrow_schema`. Upgrading the
 major version of Arrow is a breaking change of the SDK.
 
 The [Range connector][range] is a separate workspace member under
@@ -149,7 +158,7 @@ tests outside Spark.
 Export the source from the connector's `cdylib` crate:
 
 ```rust
-spark_native_source::export_data_source!(RangeSource);
+spark_datasource::export_data_source!(RangeSource);
 ```
 
 The macro exports only `spark_ds_init` and returns Spark's versioned function
@@ -159,7 +168,7 @@ never cross the binary boundary between libraries.
 `DataSource::init` runs once in each JVM when Spark loads the library, with the
 Spark version in `HostInfo`; a failure prevents Spark from using the library and is
 logged. The macros of the `log` crate, which the SDK re-exports as
-`spark_native_source::log`, write to the driver or executor log through Spark from any
+`spark_datasource::log`, write to the driver or executor log through Spark from any
 thread, including in the library's dependencies, and drop messages outside Spark, such
 as in unit tests. The SDK sets the level of the `log` crate to that of the log of Spark,
 which it asks with `SparkDsHost.is_log_enabled` when Spark loads the library and when an

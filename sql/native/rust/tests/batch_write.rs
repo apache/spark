@@ -23,12 +23,12 @@ use arrow_array::ffi::FFI_ArrowArray;
 use arrow_array::{Array, Int64Array, RecordBatch, StructArray};
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use serde::{Deserialize, Serialize, Serializer};
-use spark_native_source::__private::abi::{
+use spark_datasource::__private::abi::{
     ArrowSchema, SparkDsCreateInfo, SparkDsDataWriterInfo, SparkDsFinishDataWriterInfo,
     SparkDsFinishWriteInfo, SparkDsHost, SparkDsLibrary, SparkDsTaskContext, SparkDsWriteInfo,
     ABI_VERSION,
 };
-use spark_native_source::{
+use spark_datasource::{
     AbortInfo, BatchWrite, Capabilities, CommitInfo, CreateInfo, DataSource, DataWriter,
     DataWriterFactory, PartitionWriter, Result, TaskContext, Unsupported, WriteInfo, WriteMode,
     WriterContext,
@@ -272,7 +272,7 @@ impl Drop for Writer<'_> {
     }
 }
 
-spark_native_source::export_data_source!(Source);
+spark_datasource::export_data_source!(Source);
 
 extern "C" {
     fn spark_ds_init(host: *const SparkDsHost, library: *mut *const SparkDsLibrary) -> c_int;
