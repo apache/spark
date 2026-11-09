@@ -11,6 +11,21 @@ The Apache Software Foundation (ASF) imposes [resource usage limits][limit] on G
 [limit]: https://infra.apache.org/github-actions-policy.html
 [usage]: https://github.com/apache/spark/actions/metrics/usage
 
+### Scheduled workflow cadence
+
+Use daily maintenance schedules and three-day or weekly build schedules to limit
+runner consumption while retaining regular coverage. Reserve 00 and 01 UTC for
+daily workflows and 03, 09, 15, and 21 UTC for weekly workflows; distribute
+three-day workflows across the remaining hours and three day-of-month phases.
+Spread weekly workflows across weekdays and use minute 17 for rescheduled builds
+to avoid GitHub Actions' busy [start-of-hour scheduling period][schedule-event];
+the specific minute is arbitrary. These assignments spread runner demand without
+ranking jobs by importance, and individual intervals can be shortened when
+faster feedback is needed. Day-of-month phases restart monthly, and delayed
+starts or long runs can still overlap.
+
+[schedule-event]: https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule
+
 ### Push heavy workflows out to forks
 
 Workflows triggered by `on: pull_request` [count against the base repo's (i.e. this repo's) activity limits][base]. For this reason it's [important] to use `on: push` for heavy workflows. `on: push` workflows count against the fork's limits and not ours, enabling more jobs to run concurrently.
