@@ -350,8 +350,10 @@ pub trait PartitionReaderFactory: Serialize + DeserializeOwned + Send + 'static 
     ///   its batches.
     ///
     /// The SDK checks Spark-compatible Arrow types, the schema to read and its
-    /// nullability, and zero array offsets recursively. It reports incompatible layouts
-    /// instead of copying buffers. A batch may have more columns than the schema to read,
+    /// nullability, the precision of decimal values, and zero array offsets recursively. It
+    /// reports incompatible layouts instead of copying buffers. After a batch fails these
+    /// checks, or the reader returns an error, the stream fails every later call with the
+    /// same error. A batch may have more columns than the schema to read,
     /// such as all the columns of the source: the SDK keeps those of the schema, by name.
     /// Batches may use any supported Arrow encoding of a Spark type, such as `LargeUtf8`
     /// for a string, but the first batch determines the Arrow schema of the stream, which

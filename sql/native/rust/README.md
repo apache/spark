@@ -388,7 +388,11 @@ drift, and nonzero array offsets with explicit errors. It does not silently copy
 arrays, cast types, or expand dictionary encoding. Batches must also respect the
 nullability of the schema to read: as Spark does, the SDK rejects a null in a column,
 field, element, or map value that the schema declares not nullable, unless its parent
-value is null.
+value is null. The values of a decimal column must fit in the precision of its type: Spark
+checks them when it converts them to rows, which a native scan written to a native sink
+skips, so the SDK checks them on read, except under a null parent. After a callback of the
+stream fails, every later call fails with the same error, so an engine that reads a stream
+after an error cannot take a failed partition as complete.
 
 The supported types are those of version 1 of the ABI: signed integers,
 float32/64, boolean, strings and binary (including Large and View variants), decimal128

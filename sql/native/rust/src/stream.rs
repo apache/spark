@@ -18,6 +18,7 @@ use std::sync::Arc;
 
 use arrow_array::ffi::FFI_ArrowArray;
 use arrow_array::ffi_stream::FFI_ArrowArrayStream;
+use arrow_array::types::{Decimal128Type, DecimalType};
 use arrow_array::{Array, RecordBatch, StructArray};
 use arrow_data::ArrayData;
 use arrow_schema::{ffi::FFI_ArrowSchema, DataType, Field, Fields, Schema, SchemaRef, TimeUnit};
@@ -68,7 +69,7 @@ impl StreamState<'_> {
         let data = StructArray::from(batch).to_data();
         validate_layout(&data)?;
         for (column, field) in data.child_data().iter().zip(self.expected.fields()) {
-            check_nulls(column, field, field.name(), None)?;
+            check_values(column, field, field.name(), None)?;
         }
         Ok(Some(data))
     }
@@ -163,6 +164,11 @@ fn callback(
     state: &mut StreamState<'_>,
     action: impl FnOnce(&mut StreamState<'_>) -> Result<()>,
 ) -> c_int {
+    // A failed stream stays failed, with its error: an engine that calls it again must not
+    // read a failed partition as complete.
+    if state.last_error.is_some() {
+        return 5;
+    }
     let Err(message) = provider_call(|| action(state)) else {
         return 0;
     };
@@ -281,10 +287,11 @@ fn canonical_type(data_type: &DataType) -> Result<DataType> {
     })
 }
 
-/// Rejects a null where the schema to read declares a column, a field, an element,
-/// or a map value not nullable, unless its parent is null, as Spark does after reading.
-/// `referenced` tells which values belong to a parent value that is not null.
-fn check_nulls(
+/// Rejects a null where the schema to read declares a column, a field, an element, or a map
+/// value not nullable, unless its parent is null, as Spark does after reading, and a decimal
+/// value that does not fit in the precision of its type, as Spark does when it converts the
+/// value to a row. `referenced` tells which values belong to a parent value that is not null.
+fn check_values(
     data: &ArrayData,
     field: &Field,
     column: &str,
@@ -300,22 +307,40 @@ fn check_nulls(
         )
         .into());
     }
-    if !has_required(field.data_type()) {
+    if !needs_check(field.data_type()) {
         return Ok(());
     }
     let valid = |index: usize| data.is_valid(index) && is_referenced(index);
     match field.data_type() {
+        DataType::Decimal128(precision, scale) => {
+            let values = data.buffer::<i128>(0);
+            for index in (0..data.len()).filter(|index| valid(*index)) {
+                let value = values[index];
+                if Decimal128Type::validate_decimal_precision(value, *precision, *scale).is_err() {
+                    return Err(format!(
+                        "The column {column} has the value {}, which does not fit in the \
+                         precision {precision} of its decimal type in the schema to read",
+                        Decimal128Type::format_decimal(
+                            value,
+                            Decimal128Type::MAX_PRECISION,
+                            *scale
+                        )
+                    )
+                    .into());
+                }
+            }
+        }
         DataType::Struct(fields) => {
             let mask: Vec<bool> = (0..data.len()).map(valid).collect();
             for (child, field) in data.child_data().iter().zip(fields) {
                 let name = format!("{column}.{}", field.name());
-                check_nulls(child, field, &name, Some(&mask))?;
+                check_values(child, field, &name, Some(&mask))?;
             }
         }
         DataType::List(element) => {
             let mask = elements(data, valid)?;
             let name = format!("{column}.element");
-            check_nulls(&data.child_data()[0], element, &name, Some(&mask))?;
+            check_values(&data.child_data()[0], element, &name, Some(&mask))?;
         }
         DataType::Map(entries, _) => {
             let DataType::Struct(fields) = entries.data_type() else {
@@ -326,20 +351,21 @@ fn check_nulls(
             // Spark does not allow null keys.
             let key = fields[0].as_ref().clone().with_nullable(false);
             let name = format!("{column}.key");
-            check_nulls(&entries.child_data()[0], &key, &name, Some(&mask))?;
+            check_values(&entries.child_data()[0], &key, &name, Some(&mask))?;
             let name = format!("{column}.value");
-            check_nulls(&entries.child_data()[1], &fields[1], &name, Some(&mask))?;
+            check_values(&entries.child_data()[1], &fields[1], &name, Some(&mask))?;
         }
         _ => {}
     }
     Ok(())
 }
 
-/// Whether a type nests a field, an element, or a map value that is not nullable, or a map,
-/// whose keys are never null. Only such a type needs the check of the values under it.
-fn has_required(data_type: &DataType) -> bool {
-    let required = |field: &Field| !field.is_nullable() || has_required(field.data_type());
+/// Whether a type has values to check under it: a decimal, a field, an element, or a map value
+/// that is not nullable, or a map, whose keys are never null.
+fn needs_check(data_type: &DataType) -> bool {
+    let required = |field: &Field| !field.is_nullable() || needs_check(field.data_type());
     match data_type {
+        DataType::Decimal128(..) => true,
         DataType::Struct(fields) => fields.iter().any(|field| required(field.as_ref())),
         DataType::List(element) => required(element.as_ref()),
         DataType::Map(..) => true,
@@ -384,11 +410,13 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use arrow_array::builder::{
-        BooleanBuilder, Int32Builder, ListBuilder, MapBuilder, StringBuilder, StructBuilder,
+        BooleanBuilder, Decimal128Builder, Int32Builder, ListBuilder, MapBuilder, StringBuilder,
+        StructBuilder,
     };
     use arrow_array::ffi_stream::ArrowArrayStreamReader;
     use arrow_array::{
-        BooleanArray, Int32Array, Int64Array, LargeStringArray, RecordBatch, RecordBatchReader,
+        ArrayRef, BooleanArray, Decimal128Array, Int32Array, Int64Array, LargeStringArray,
+        RecordBatch, RecordBatchReader,
     };
     use arrow_schema::{ArrowError, DataType, Field, Schema};
 
@@ -467,6 +495,20 @@ mod tests {
         let mut array = FFI_ArrowArray::empty();
         let status = unsafe { stream.get_next.unwrap()(stream, &mut array) };
         status == 0 && array.is_released()
+    }
+
+    /// Checks that a failed stream fails again, with the same error, instead of reporting the
+    /// end of its batches.
+    fn stays_failed(stream: &mut FFI_ArrowArrayStream, error: &str) {
+        let mut array = FFI_ArrowArray::empty();
+        assert_ne!(unsafe { stream.get_next.unwrap()(stream, &mut array) }, 0);
+        let mut schema = FFI_ArrowSchema::empty();
+        assert_ne!(
+            unsafe { stream.get_schema.unwrap()(stream, &mut schema) },
+            0
+        );
+        let again = unsafe { CStr::from_ptr(stream.get_last_error.unwrap()(stream)) };
+        assert_eq!(again.to_str().unwrap(), error);
     }
 
     #[test]
@@ -596,7 +638,8 @@ mod tests {
         assert_eq!(stream.next().unwrap().unwrap().num_rows(), 2);
         let error = stream.next().unwrap().unwrap_err().to_string();
         assert!(error.contains("late failure"), "{error}");
-        assert!(stream.next().is_none());
+        // The stream stays failed, with the same error.
+        assert_eq!(stream.next().unwrap().unwrap_err().to_string(), error);
     }
 
     #[test]
@@ -627,7 +670,7 @@ mod tests {
             error.contains("does not match the schema to read"),
             "{error}"
         );
-        assert!(at_end(&mut stream), "a failed stream has no more batches");
+        stays_failed(&mut stream, &error);
         drop(stream);
         assert_eq!(drops.load(Ordering::SeqCst), 1);
     }
@@ -732,7 +775,7 @@ mod tests {
         let error = first_batch_error(&mut stream).unwrap();
         assert!(error.contains("zero Arrow array offsets"), "{error}");
         assert!(error.contains("offset 1"), "{error}");
-        assert!(at_end(&mut stream));
+        stays_failed(&mut stream, &error);
         drop(stream);
         assert_eq!(drops.load(Ordering::SeqCst), 1);
     }
@@ -851,6 +894,56 @@ mod tests {
     }
 
     #[test]
+    fn decimal_values_must_fit_the_precision_of_the_schema_to_read() {
+        let schema = Arc::new(Schema::new(vec![Field::new(
+            "amount",
+            DataType::Decimal128(5, 2),
+            true,
+        )]));
+        let amounts = |values: Vec<Option<i128>>| -> ArrayRef {
+            let array = Decimal128Array::from(values);
+            Arc::new(array.with_precision_and_scale(5, 2).unwrap())
+        };
+        let fitting = amounts(vec![Some(12345), None, Some(-99999)]);
+        let batch = RecordBatch::try_new(schema.clone(), vec![fitting]).unwrap();
+        assert_eq!(batch_error(batch, &schema), None);
+        let overflowing = amounts(vec![Some(12345), Some(123456)]);
+        let batch = RecordBatch::try_new(schema.clone(), vec![overflowing]).unwrap();
+        let error = batch_error(batch, &schema).unwrap();
+        assert!(
+            error.contains("The column amount has the value 1234.56"),
+            "{error}"
+        );
+        assert!(error.contains("precision 5"), "{error}");
+    }
+
+    #[test]
+    fn decimal_values_under_a_null_parent_are_not_checked() {
+        let fields = Fields::from(vec![Field::new("amount", DataType::Decimal128(5, 2), true)]);
+        let schema = Arc::new(Schema::new(vec![Field::new(
+            "nested",
+            DataType::Struct(fields.clone()),
+            true,
+        )]));
+        for (parent_is_valid, rejected) in [(false, false), (true, true)] {
+            let amounts = Decimal128Builder::new().with_data_type(DataType::Decimal128(5, 2));
+            let mut builder = StructBuilder::new(fields.clone(), vec![Box::new(amounts)]);
+            builder
+                .field_builder::<Decimal128Builder>(0)
+                .unwrap()
+                .append_value(123456);
+            builder.append(parent_is_valid);
+            let batch =
+                RecordBatch::try_new(schema.clone(), vec![Arc::new(builder.finish())]).unwrap();
+            let error = batch_error(batch, &schema);
+            assert_eq!(error.is_some(), rejected, "{error:?}");
+            if let Some(error) = error {
+                assert!(error.contains("nested.amount"), "{error}");
+            }
+        }
+    }
+
+    #[test]
     fn a_batch_cannot_change_the_schema_of_the_stream() {
         let mut reader = reader();
         let first = reader.batches.next().unwrap();
@@ -862,13 +955,9 @@ mod tests {
         let drops = reader.drops.clone();
         let mut stream = ArrowArrayStreamReader::try_new(export(reader)).unwrap();
         assert_eq!(stream.next().unwrap().unwrap().num_rows(), 2);
-        assert!(stream
-            .next()
-            .unwrap()
-            .unwrap_err()
-            .to_string()
-            .contains("different schema"));
-        assert!(stream.next().is_none());
+        let error = stream.next().unwrap().unwrap_err().to_string();
+        assert!(error.contains("different schema"), "{error}");
+        assert_eq!(stream.next().unwrap().unwrap_err().to_string(), error);
         drop(stream);
         assert_eq!(drops.load(Ordering::SeqCst), 1);
     }
