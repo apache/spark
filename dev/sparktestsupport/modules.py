@@ -138,8 +138,8 @@ ignored_file_patterns = (
     "/bin/spark-connect-shell",
     "/bin/spark-pipelines",
     "/bin/sparkR*",
-    # Default config templates. Suites write temp conf dirs rather than
-    # executing these files.
+    # Default config templates. Some CI jobs copy log4j2.properties.template
+    # only to reduce log noise; they do not test these templates.
     "/conf/",
     # Binder infra. CI does not test this.
     "/binder/",
