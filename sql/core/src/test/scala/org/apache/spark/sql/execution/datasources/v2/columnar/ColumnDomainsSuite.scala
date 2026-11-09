@@ -86,6 +86,12 @@ class ColumnDomainsSuite extends QueryTest with SharedSparkSession with Predicat
     assert(domains("id <=> NULL") == Seq("id: NULL"))
     assert(domains("NOT (id <=> NULL)") == Seq("id: ANY"))
     assert(domains("id IS NULL") == Seq("id: NULL"))
+    // Data Source V2 translates TRUE and FALSE to AlwaysTrue and AlwaysFalse, which a nullable
+    // flag keeps in IS TRUE and IS FALSE, as flag <=> TRUE and flag <=> FALSE.
+    assert(domains("flag IS TRUE") == Seq("flag: true"))
+    assert(domains("flag IS FALSE") == Seq("flag: false"))
+    assert(domains("flag = TRUE") == Seq("flag: true"))
+    assert(domains("flag IN (FALSE)") == Seq("flag: false"))
     assert(domains("id IS NOT NULL") == Seq("id: ANY"))
     assert(domains("id IN (3, 1, 2, 3)") == Seq("id: 1L, 2L, 3L"))
     assert(domains("id NOT IN (1, 3)") == Seq("id: (-inf, 1L), (1L, 3L), (3L, +inf)"))

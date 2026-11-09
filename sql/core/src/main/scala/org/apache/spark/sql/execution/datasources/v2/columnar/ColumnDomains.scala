@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.optimizer.NormalizeFloatingNumbers
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.catalyst.util.quoteIfNeeded
-import org.apache.spark.sql.connector.expressions.{Expression, LiteralValue, NamedReference}
+import org.apache.spark.sql.connector.expressions.{Expression, Literal => V2Literal, NamedReference}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -583,13 +583,18 @@ object ColumnDomains {
   /**
    * The value of a literal of the type of the column, or null, as Some. None for another
    * expression, a literal of another type, or a string that is not valid UTF-8, which an Arrow
-   * array of strings cannot hold.
+   * array of strings cannot hold. A literal is a `LiteralValue`, or another implementation of the
+   * interface, such as `AlwaysTrue` and `AlwaysFalse`, which Data Source V2 translates TRUE and
+   * FALSE to, as in `flag <=> TRUE`, the `flag IS TRUE` of a nullable `flag`.
    */
   private def literal(expression: Expression, column: Column): Option[Any] = expression match {
-    case LiteralValue(null, _) => Some(null)
-    case LiteralValue(value: UTF8String, dataType) if dataType == column.dataType =>
-      if (value.isValid) Some(value) else None
-    case LiteralValue(value, dataType) if dataType == column.dataType => Some(value)
+    case literal: V2Literal[_] => (literal.value(), literal.dataType()) match {
+      case (null, _) => Some(null)
+      case (value: UTF8String, dataType) if dataType == column.dataType =>
+        if (value.isValid) Some(value) else None
+      case (value, dataType) if dataType == column.dataType => Some(value)
+      case _ => None
+    }
     case _ => None
   }
 
