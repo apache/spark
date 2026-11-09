@@ -513,6 +513,26 @@ class RecoverySuite extends MasterSuiteBase {
     }
   }
 
+  gridTest("SPARK-60430: Recovery with explicit none codec")(Seq("none", "NONE")) { codecName =>
+    val conf = new SparkConf(loadDefaults = false)
+    conf.set(RECOVERY_MODE, "FILESYSTEM")
+    conf.set(RECOVERY_DIRECTORY, System.getProperty("java.io.tmpdir"))
+    conf.set(RECOVERY_COMPRESSION_CODEC, codecName)
+
+    var master: Master = null
+    try {
+      master = makeAliveMaster(conf)
+      val e = master.persistenceEngine.asInstanceOf[FileSystemPersistenceEngine]
+      assert(e.codec.isEmpty)
+    } finally {
+      if (master != null) {
+        master.rpcEnv.shutdown()
+        master.rpcEnv.awaitTermination()
+        master = null
+      }
+    }
+  }
+
   test("SPARK-46258: Recovery with RocksDB") {
     val conf = new SparkConf(loadDefaults = false)
     conf.set(RECOVERY_MODE, "ROCKSDB")

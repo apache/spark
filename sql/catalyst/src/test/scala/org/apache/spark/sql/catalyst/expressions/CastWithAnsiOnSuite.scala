@@ -486,6 +486,45 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
       castErrMsg("abcd", DecimalType(38, 1)))
   }
 
+  test("SPARK-60119: cast string with a huge exponent to decimal with negative scale allowed") {
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      Seq("1e2147483647", "-1e2147483646", "12e2147483647", "1e100000000").foreach { str =>
+        checkExceptionInExpression[ArithmeticException](
+          cast(str, DecimalType(10, 2)),
+          "cannot be represented as Decimal(10, 2)")
+      }
+      checkEvaluation(cast("0e2147483647", DecimalType(10, 2)), Decimal("0.00"))
+
+      // The value is shown in plain notation unless its scale is hugely negative.
+      Seq("1e2147483647" -> "1E+2147483647", "1e40" -> ("1" + "0" * 40)).foreach {
+        case (str, value) =>
+          def expr: Expression = cast(str, DecimalType(10, 2))
+          if (!isTryCast) {
+            def checkOutOfRange(eval: => Any): Unit = {
+              checkError(
+                exception = intercept[SparkArithmeticException](eval),
+                condition = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+                parameters = Map(
+                  "value" -> value,
+                  "precision" -> "10",
+                  "scale" -> "2",
+                  "config" -> """"spark.sql.ansi.enabled""""),
+                queryContext = Array(ExpectedContext(fragment = "", start = -1, stop = -1)))
+            }
+            // Interpreted, and both codegen paths without falling back to interpreted.
+            checkOutOfRange(evaluateWithoutCodegen(expr))
+            withSQLConf(
+              SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.CODEGEN_ONLY.toString) {
+              checkOutOfRange(evaluateWithMutableProjection(expr))
+              checkOutOfRange(evaluateWithUnsafeProjection(expr))
+            }
+          } else {
+            checkEvaluation(expr, null)
+          }
+      }
+    }
+  }
+
   protected def checkCastToBooleanError(l: Literal, to: DataType, tryCastResult: Any): Unit = {
     checkExceptionInExpression[SparkRuntimeException](
       cast(l, to), """cannot be cast to "BOOLEAN"""")
@@ -820,6 +859,19 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
             castErrMsg(str, TimestampNTZNanosType(precision)))
         }
       }
+    }
+  }
+
+  test("SPARK-57838: ANSI mode cast string beyond the epoch-microsecond range to nanos") {
+    // Same error as the micro types: the value does not fit the Long epoch-microseconds.
+    Seq("+294247-01-10 04:00:54.775808", "-290308-12-21 19:59:05.224191999").foreach { str =>
+      checkExceptionInExpression[DateTimeException](
+        cast(Literal(str), TimestampNTZType), castErrMsg(str, TimestampNTZType))
+      checkExceptionInExpression[DateTimeException](
+        cast(Literal(str), TimestampNTZNanosType(9)), castErrMsg(str, TimestampNTZNanosType(9)))
+      checkExceptionInExpression[DateTimeException](
+        cast(Literal(s"${str}Z"), TimestampLTZNanosType(9), DateTimeTestUtils.UTC_OPT),
+        castErrMsg(s"${str}Z", TimestampLTZNanosType(9)))
     }
   }
 

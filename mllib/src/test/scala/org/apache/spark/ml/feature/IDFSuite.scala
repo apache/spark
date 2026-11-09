@@ -139,4 +139,18 @@ class IDFSuite extends MLTest with DefaultReadWriteTest {
       assert(newInstance.numDocs === instance.numDocs)
     }
   }
+
+  test("Load IDFModel saved by Spark 4.0.0") {
+    val modelPath = testFile("ml-models/idf-4.0.0")
+
+    val loadedModel = IDFModel.load(modelPath)
+    assert(loadedModel.idf === Vectors.dense(
+      0.0, 0.6931471805599453, 0.28768207245178085, 0.28768207245178085))
+    assert(loadedModel.docFreq === Array(0L, 1L, 2L, 2L))
+    assert(loadedModel.numDocs === 3L)
+
+    val metadata = spark.read.json(s"$modelPath/metadata")
+    val sparkVersionStr = metadata.select("sparkVersion").first().getString(0)
+    assert(sparkVersionStr === "4.0.0")
+  }
 }

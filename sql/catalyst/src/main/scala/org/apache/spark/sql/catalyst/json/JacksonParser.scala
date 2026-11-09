@@ -594,6 +594,7 @@ class JacksonParser(
       fieldConverters: Array[ValueConverter],
       structFilters: StructFilters = new NoopFilters(),
       isRoot: Boolean = false): Option[InternalRow] = {
+    val containerDepth = parser.getParsingContext.getNestingDepth
     val row = new GenericInternalRow(schema.length)
     var badRecordException: Option[Throwable] = None
     var skipRow = false
@@ -618,6 +619,9 @@ class JacksonParser(
             case NonFatal(e) if isRoot || enablePartialResults =>
               badRecordException = badRecordException.orElse(Some(e))
               parser.skipChildren()
+            case NonFatal(e) =>
+              // Nested non-partial: drain before rethrow so parent fields stay aligned.
+              skipRestAndRethrow(parser, JsonToken.END_OBJECT, containerDepth, e)
           }
         case None =>
           parser.skipChildren()
@@ -653,6 +657,7 @@ class JacksonParser(
       parser: JsonParser,
       fieldConverter: ValueConverter,
       keyChecker: Option[UTF8String => Option[Throwable]]): MapData = {
+    val containerDepth = parser.getParsingContext.getNestingDepth
     val keys = ArrayBuffer.empty[UTF8String]
     val values = ArrayBuffer.empty[Any]
     var badRecordException: Option[Throwable] = None
@@ -661,9 +666,9 @@ class JacksonParser(
       val key = UTF8String.fromString(parser.currentName)
       keys += key
       // Avoid allocating a closure per entry on the common no-checker path. Only run the check
-      // while the parser is on a FIELD_NAME: if a nested value failed and escaped non-partially
-      // (an array value only contains PartialValueException), the loop can resume mid-value on a
-      // non-field token whose `currentName` is null, which would otherwise NPE in the check.
+      // while the parser is on a FIELD_NAME: if a nested value failed and escaped non-partially,
+      // the loop can resume mid-value on a non-field token whose `currentName` is null, which
+      // would otherwise NPE in the check.
       val keyRejection = keyChecker match {
         case Some(check) if parser.currentToken == JsonToken.FIELD_NAME => check(key)
         case _ => None
@@ -683,6 +688,9 @@ class JacksonParser(
             case NonFatal(e) if enablePartialResults =>
               badRecordException = badRecordException.orElse(Some(e))
               parser.skipChildren()
+            case NonFatal(e) =>
+              // Nested non-partial: drain before rethrow so parent fields stay aligned.
+              skipRestAndRethrow(parser, JsonToken.END_OBJECT, containerDepth, e)
           }
       }
     }
@@ -753,6 +761,7 @@ class JacksonParser(
       fieldConverter: ValueConverter,
       isRoot: Boolean = false,
       arrayAsStructs: Boolean = false): ArrayData = {
+    val containerDepth = parser.getParsingContext.getNestingDepth
     val values = ArrayBuffer.empty[Any]
     var badRecordException: Option[Throwable] = None
 
@@ -765,6 +774,9 @@ class JacksonParser(
         case err: PartialValueException if enablePartialResults =>
           badRecordException = badRecordException.orElse(Some(err.cause))
           values += err.partialResult
+        case NonFatal(e) if !isRoot && !enablePartialResults =>
+          // Nested non-partial: drain before rethrow so parent fields stay aligned.
+          skipRestAndRethrow(parser, JsonToken.END_ARRAY, containerDepth, e)
       }
     }
 
@@ -778,6 +790,47 @@ class JacksonParser(
     } else {
       throw PartialArrayDataResultException(arrayData, badRecordException.get)
     }
+  }
+
+  /**
+   * Drain this object or array through its own END token and rethrow `cause`. A child can fail
+   * below this container (VARIANT_DUPLICATE_KEY at an inner END_OBJECT), so stopping at the
+   * first matching END would leave remaining siblings unconsumed. Unwind to `containerDepth`
+   * captured at this container's START, then skip remaining siblings. Compare nesting depth,
+   * not context identity: Jackson recycles child context objects. Skip failures are suppressed
+   * on `cause` so the original error is preserved.
+   */
+  private def skipRestAndRethrow(
+      parser: JsonParser,
+      stopOn: JsonToken,
+      containerDepth: Int,
+      cause: Throwable): Nothing = {
+    try {
+      var eof = false
+      while (!eof && {
+        val ctx = parser.getParsingContext
+        ctx != null && ctx.getNestingDepth > containerDepth
+      }) {
+        parser.skipChildren()
+        eof = parser.nextToken() == null
+      }
+      // An inner END token pops to this container, so the current token can already be
+      // END_OBJECT/END_ARRAY of a child. Only skip remaining siblings when we are still
+      // inside this container; our own END pops to the parent (depth < containerDepth).
+      if (!eof) {
+        val ctx = parser.getParsingContext
+        if (ctx != null && ctx.getNestingDepth == containerDepth) {
+          parser.skipChildren()
+          while (nextUntil(parser, stopOn)) {
+            parser.skipChildren()
+          }
+        }
+      }
+    } catch {
+      case NonFatal(skipErr) =>
+        cause.addSuppressed(skipErr)
+    }
+    throw cause
   }
 
   /**
@@ -884,16 +937,18 @@ class JacksonParser(
       }
       throw badRecord(error, () => recordLiteral(record))
     }
-    // Resuming is only safe where the parser cannot have moved past the element that failed. A
-    // scalar element leaves it on that scalar's own token, and `convertObject` consumes through
-    // END_OBJECT before raising `PartialResultException`; any other container failure can have
-    // stopped anywhere inside the element.
-    def resumableAfter(error: Throwable, elementStart: Option[JsonToken]): Boolean =
-      options.parseMode != FailFastMode && (elementStart match {
-        case Some(START_OBJECT) | Some(START_ARRAY) => error.isInstanceOf[PartialResultException]
-        case Some(_) => error.isInstanceOf[RuntimeException]
-        case None => false
-      })
+    // Resuming is only safe where the failed element left the parser back in the top-level array.
+    // A syntax error inside a nested object ends `convertObject` at that object's END_OBJECT, not
+    // the element's, so a `PartialResultException` alone does not prove the element was consumed.
+    def resumableAfter(error: Throwable, elementStart: Option[JsonToken]): Boolean = {
+      val context = jsonParser.getParsingContext
+      options.parseMode != FailFastMode && context.inArray && context.getParent.inRoot &&
+        (elementStart match {
+          case Some(START_OBJECT) | Some(START_ARRAY) => error.isInstanceOf[PartialResultException]
+          case Some(_) => error.isInstanceOf[RuntimeException]
+          case None => false
+        })
+    }
     def handleFailure[R](elementStart: Option[JsonToken])(operation: => R): R = {
       try operation catch {
         case e: SparkUpgradeException => fail(e)

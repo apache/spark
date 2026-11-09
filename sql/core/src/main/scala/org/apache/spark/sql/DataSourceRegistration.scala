@@ -65,7 +65,9 @@ private[sql] class DataSourceRegistration private[sql] (dataSourceManager: DataS
     if (dataSourceManager.dataSourceExists(name)) return
 
     try {
-      DataSource.lookupDataSource(name, SQLConf.get)
+      // A Python data source takes precedence over a native data source with the same name, so
+      // registering it does not depend on the native libraries that happen to be installed.
+      DataSource.lookupDataSource(name, SQLConf.get, includeNativeDataSources = false)
       throw QueryCompilationErrors.dataSourceAlreadyExists(name)
     } catch {
       case e: SparkClassNotFoundException if e.getCondition == "DATA_SOURCE_NOT_FOUND" => // OK

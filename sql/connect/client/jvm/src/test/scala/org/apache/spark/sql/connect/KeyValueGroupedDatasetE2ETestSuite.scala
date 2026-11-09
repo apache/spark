@@ -19,6 +19,9 @@ package org.apache.spark.sql.connect
 import java.sql.Timestamp
 import java.util.Arrays
 
+import scala.jdk.CollectionConverters._
+
+import org.apache.spark.connect.proto
 import org.apache.spark.sql.{AnalysisException, Encoder, Encoders, Row}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Append
 import org.apache.spark.sql.connect.test.{QueryTest, RemoteSparkSession}
@@ -49,6 +52,54 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with RemoteSparkSessi
       .mapGroups((_, it) => it.toSeq.size)
       .collectAsList()
     assert(values == Arrays.asList[Int](5, 5))
+  }
+
+  test("SPARK-60247: typed groupByKey origin points to the user call site") {
+    // The Connect client encodes `groupByKey`'s grouping key as a Scala UDF applied to
+    // `col("*")`, built inside `KeyValueGroupedDatasetImpl`, while `count()` builds its
+    // aggregate column (`count(1)`) inside the abstract `KeyValueGroupedDataset.count`. The
+    // DataFrame query context captured for both columns must skip those internal frames (and
+    // `UserDefinedFunction.apply` for the grouping UDF) so the call site lands on the user code
+    // that called `groupByKey(...).count()` (this suite), not on the helpers. Assert on the
+    // serialized origin of each expression to guard the frame filter in `CurrentOrigin`:
+    // `getGroupingExpressions(0)` exercises `KeyValueGroupedDatasetImpl` and
+    // `UserDefinedFunction`, while `getAggregateExpressions(0)` exercises the plain
+    // `KeyValueGroupedDataset` frame.
+    val ds = spark
+      .range(10)
+      .groupByKey(v => v % 2)
+      .count()
+
+    val aggregate = ds.plan.getRoot.getAggregate
+    // Assert the call site of an expression skips the given internal helper frames and lands on
+    // the user code in this suite. The leading frame is the Spark API; the rest is the call site.
+    def assertUserCallSite(expr: proto.Expression, internalFrames: String*): Unit = {
+      val stackTrace = expr.getCommon.getOrigin.getJvmOrigin.getStackTraceList.asScala
+      assert(stackTrace.nonEmpty, "expected a captured stack trace on the expression")
+      val callSite = stackTrace.tail.map(_.getDeclaringClass)
+      assert(callSite.nonEmpty, s"expected a user call site, but got: $callSite")
+      assert(
+        callSite.head.contains("KeyValueGroupedDatasetE2ETestSuite"),
+        s"call site should point at the test, but was: $callSite")
+      internalFrames.foreach { frame =>
+        assert(
+          !callSite.head.contains(frame),
+          s"call site should skip the internal helper $frame, but was: $callSite")
+      }
+    }
+
+    // The grouping UDF: Column -> UserDefinedFunction.apply -> KeyValueGroupedDatasetImpl.apply.
+    // Fully-qualified names avoid matching this suite, whose name shares the
+    // KeyValueGroupedDataset prefix.
+    assertUserCallSite(
+      aggregate.getGroupingExpressions(0),
+      "org.apache.spark.sql.connect.KeyValueGroupedDatasetImpl",
+      "org.apache.spark.sql.expressions.UserDefinedFunction")
+    // The count aggregate: Column -> functions.count -> KeyValueGroupedDataset.count. Guards the
+    // plain `KeyValueGroupedDataset` token, which the grouping-UDF chain never passes through.
+    assertUserCallSite(
+      aggregate.getAggregateExpressions(0),
+      "org.apache.spark.sql.KeyValueGroupedDataset")
   }
 
   test("flatGroupMap") {

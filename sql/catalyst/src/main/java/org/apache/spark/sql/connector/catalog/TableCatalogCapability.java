@@ -92,5 +92,62 @@ public enum TableCatalogCapability {
    * {@link TableCatalog#createTable}.
    * See {@link Column#identityColumnSpec()}.
    */
-  SUPPORTS_CREATE_TABLE_WITH_IDENTITY_COLUMNS
+  SUPPORTS_CREATE_TABLE_WITH_IDENTITY_COLUMNS,
+
+  /**
+   * Signals that the TableCatalog supports a write distribution and ordering requested upon table
+   * creation in SQL, with {@code DISTRIBUTED BY PARTITION} and {@code [LOCALLY] ORDERED BY ...} /
+   * {@code UNORDERED}. The request reaches the catalog only through the {@link TableInfo}
+   * overloads:
+   * <ul>
+   *   <li>{@link TableCatalog#createTable(Identifier, TableInfo)}</li>
+   *   <li>{@link StagingTableCatalog#stageCreate(Identifier, TableInfo)}</li>
+   *   <li>{@link StagingTableCatalog#stageReplace(Identifier, TableInfo)}</li>
+   *   <li>{@link StagingTableCatalog#stageCreateOrReplace(Identifier, TableInfo)}</li>
+   * </ul>
+   * Their default implementations reject a request with an unchecked
+   * {@code UNSUPPORTED_FEATURE.TABLE_OPERATION} error, because the {@code Column[]} overloads they
+   * forward to cannot carry it, so a catalog that reports this capability must override each one it
+   * can be reached through. A {@link StagingTableCatalog} needs all four, because a
+   * {@code CREATE TABLE} without {@code AS SELECT} is not staged and arrives at
+   * {@code createTable}. For a {@link TransactionalCatalogPlugin}, a
+   * {@code CREATE TABLE ... AS SELECT} or {@code REPLACE TABLE ... AS SELECT} that Spark runs in a
+   * transaction is checked against and created through
+   * {@link org.apache.spark.sql.connector.catalog.transactions.Transaction#catalog()}, and is
+   * staged only if that catalog is a {@link StagingTableCatalog}. Spark does not run every such
+   * statement in a transaction, for example one that names its table with a non-literal
+   * {@code IDENTIFIER} or one run by {@code EXECUTE IMMEDIATE}; the plugin itself is then checked
+   * and called. The plugin and the catalog of its transaction should therefore report this
+   * capability alike, and each override the overloads above that it can be reached through,
+   * including {@code stageCreate} for a staging plugin.
+   * <p>
+   * A catalog may reject a request it cannot honor from these overloads, and the defaults do. A
+   * catalog that is not a {@link StagingTableCatalog} sees a {@code REPLACE TABLE} or
+   * {@code CREATE OR REPLACE TABLE} in {@code createTable} only after Spark has dropped the
+   * existing table, so a catalog that has to reject a replacement without losing the table should
+   * implement {@link StagingTableCatalog}.
+   * <p>
+   * The built-in session catalog does not support this capability, so a direct caller of its
+   * {@code TableInfo} overloads gets the rejection of the default above.
+   * {@link DelegatingCatalogExtension} does not forward the capability from its delegate. The
+   * {@code Column[]} overloads of the built-in session catalog, which
+   * {@link DelegatingCatalogExtension} calls, cannot carry the request and drop it without an
+   * error, so a {@link CatalogExtension} that reports this capability has to reject the request
+   * itself for a table that it passes to the built-in session catalog through them.
+   * <p>
+   * Without this capability, Spark rejects such a statement before anything is created or dropped,
+   * normally with {@code UNSUPPORTED_FEATURE.TABLE_OPERATION}. An analysis error about the
+   * statement itself, such as a missing schema to order by or an unknown column, can come first.
+   * <p>
+   * {@code ORDERED BY}, {@code LOCALLY ORDERED BY} and {@code UNORDERED} may be combined with
+   * {@code CLUSTER BY}; Spark passes the clustering columns and the requested distribution and
+   * ordering to the catalog without reconciling them, so the catalog interprets the combination or
+   * rejects it. {@code DISTRIBUTED BY PARTITION} may not be combined with {@code CLUSTER BY}, so a
+   * {@link WriteDistributionMode#HASH} request always comes with a partition transform that is
+   * not {@code cluster_by}.
+   * <p>
+   * A {@link DelegatingTable} reports the declared distribution and ordering, but Spark reads and
+   * writes it through the v1 path, which does not apply them.
+   */
+  SUPPORTS_CREATE_TABLE_WITH_WRITE_DISTRIBUTION_AND_ORDERING
 }

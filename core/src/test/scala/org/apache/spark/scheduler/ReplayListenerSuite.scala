@@ -101,13 +101,14 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
 
     val logData = fileSystem.open(logFilePath)
     val eventMonster = new EventBufferingListener
+    val replayer = new ReplayListenerBus(maxLineLength = maxLineLength)
     try {
-      val replayer = new ReplayListenerBus(maxLineLength = maxLineLength)
       replayer.addListener(eventMonster)
       assert(replayer.replay(logData, logFilePath.toString))
     } finally {
       logData.close()
     }
+    assert(replayer.numSkippedLines === 1)
     assert(eventMonster.loggedEvents.size === 2)
     assert(eventMonster.loggedEvents(0) === JsonProtocol.sparkEventToJsonString(applicationStart))
     assert(eventMonster.loggedEvents(1) === JsonProtocol.sparkEventToJsonString(applicationEnd))

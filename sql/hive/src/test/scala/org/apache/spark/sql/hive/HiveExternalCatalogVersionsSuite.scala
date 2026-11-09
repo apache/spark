@@ -39,8 +39,8 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.tags.{ExtendedHiveTest, SlowHiveTest}
+import org.apache.spark.util.{Utils, VersionUtils}
 import org.apache.spark.util.ArrayImplicits._
-import org.apache.spark.util.Utils
 
 /**
  * Test HiveExternalCatalog backward compatibility.
@@ -198,10 +198,11 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
 
     if (PROCESS_TABLES.testingVersions.isEmpty) {
       if (PROCESS_TABLES.isPythonVersionAvailable) {
-        if (Utils.isJavaVersionAtMost17) {
+        if (PROCESS_TABLES.minimumTestingVersion.isDefined) {
           logError("Fail to get the latest Spark versions to test.")
         } else {
-          logInfo("Skip tests because old Spark versions don't support Java 21.")
+          logInfo("Skip tests because old Spark versions don't support " +
+            s"Java ${PROCESS_TABLES.javaVersion}.")
         }
       } else {
         logError(s"Python version <  ${TestUtils.minimumPythonSupportedVersion}, " +
@@ -261,18 +262,28 @@ object PROCESS_TABLES extends QueryTest {
   val isPythonVersionAvailable = TestUtils.isPythonVersionAvailable
   val releaseMirror = sys.env.getOrElse("SPARK_RELEASE_MIRROR",
     "https://dist.apache.org/repos/dist/release")
-  // Tests the latest version of every release line if Java version is at most 17.
+  val javaVersion = Runtime.version().feature()
+  // Spark 3.3, 4.0, and 4.2 are the first release lines that support Java 17, 21, and 25,
+  // respectively. No release line supports the other Java versions, e.g., Java 26. Add an entry
+  // here when a Spark release adds a Java version to its `docs/index.md`.
+  val minimumTestingVersion: Option[String] =
+    Map(17 -> "3.3.0", 21 -> "4.0.0", 25 -> "4.2.0").get(javaVersion)
+  // Tests the latest version of every release line that supports the running Java version.
   val testingVersions: Seq[String] = if (isPythonVersionAvailable &&
-      Utils.isJavaVersionAtMost17) {
+      minimumTestingVersion.isDefined) {
     import scala.io.Source
-    val sparkVersionPattern = """<a href="spark-(\d.\d.\d)/">""".r
+    import scala.math.Ordering.Implicits._
+    val sparkVersionPattern = """<a href="spark-(\d+\.\d+\.\d+)/">""".r
+    // Compare versions numerically, e.g., 3.5.9 < 3.5.10, instead of as strings.
+    def parseVersion(version: String) = VersionUtils.majorMinorPatchVersion(version).get
     try Utils.tryWithResource(
       Source.fromURL(s"$releaseMirror/spark")) { source =>
       source.mkString
         .split("\n")
         .filter(sparkVersionPattern.unanchored.matches(_))
         .map(sparkVersionPattern.findFirstMatchIn(_).get.group(1))
-        .filter(_ < org.apache.spark.SPARK_VERSION)
+        .filter(v => parseVersion(v) < parseVersion(org.apache.spark.SPARK_VERSION))
+        .filter(v => minimumTestingVersion.exists(m => parseVersion(m) <= parseVersion(v)))
         .filterNot(skipReleaseVersions.contains).toImmutableArraySeq
     } catch {
       // Do not throw exception during object initialization.

@@ -2477,6 +2477,11 @@ class CollectionExpressionsSuite
         assert(ElementAt(array, Literal(-1)).nullable)
         assert(!ElementAt(array, Subtract(Literal(2), Literal(1))).nullable)
         assert(ElementAt(array, AttributeReference("ordinal", IntegerType)()).nullable)
+        // A null ordinal returns null even when neither the array nor its elements can be null.
+        val nonNullArray = CreateArray(a :: Nil)
+        assert(ElementAt(nonNullArray, AttributeReference("ordinal", IntegerType)()).nullable)
+        assert(ElementAt(nonNullArray,
+          AttributeReference("ordinal", IntegerType, nullable = false)()).nullable == !ansiEnabled)
 
         // CreateArray case invalid indices
         assert(!ElementAt(array, Literal(0)).nullable)
@@ -2519,6 +2524,36 @@ class CollectionExpressionsSuite
         assert(ElementAt(stArray4, Literal(0)).nullable)
         assert(ElementAt(stArray4, Literal(4)).nullable)
         assert(ElementAt(stArray4, Literal(-4)).nullable)
+      }
+    }
+  }
+
+  test("SPARK-60755: ElementAt on CreateArray generates code when the result is not nullable") {
+    val a = BoundReference(0, StringType, nullable = false)
+    val b = BoundReference(1, StringType, nullable = true)
+    val input = create_row("x", null)
+    val field = StructField("f", StringType, nullable = false)
+    val c = BoundReference(0, StructType(Seq(field)), nullable = false)
+    val d = BoundReference(1, StructType(Seq(field)), nullable = true)
+    val inputWithStruct = create_row(create_row("x"), null)
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        // The array can contain NULL, but the selected element cannot.
+        checkEvaluation(ElementAt(CreateArray(Seq(a, b)), Literal(1)), "x", input)
+        checkEvaluation(ElementAt(CreateArray(Seq(a, b)), Literal(-2)), "x", input)
+        val fields = GetArrayStructFields(CreateArray(Seq(c, d)), field, 0, 1, containsNull = true)
+        checkEvaluation(ElementAt(fields, Literal(1)), "x", inputWithStruct)
+        // No element can be NULL.
+        checkEvaluation(ElementAt(CreateArray(Seq(a)), Literal(1)), "x", input)
+        // The index is invalid in every row.
+        checkExceptionInExpression[Exception](
+          ElementAt(CreateArray(Seq(b)), Literal(0)), input, "The index 0 is invalid")
+        if (ansiEnabled) {
+          checkExceptionInExpression[Exception](
+            ElementAt(CreateArray(Seq(b)), Literal(5)), input, "out of bounds")
+        } else {
+          checkEvaluation(ElementAt(CreateArray(Seq(b)), Literal(5)), null, input)
+        }
       }
     }
   }
