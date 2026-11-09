@@ -156,6 +156,20 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     }
   }
 
+  test("SPARK-45438: UnaryMinus and Abs keep every digit of a 38-digit decimal") {
+    Seq("12345678901234567890123456789012345.67", "-99999999999999999999999999999999999999")
+      .foreach { s =>
+        val value = new java.math.BigDecimal(s)
+        val input = Literal(Decimal(value, 38, value.scale), DecimalType(38, value.scale))
+        Seq("true", "false").foreach { ansi =>
+          withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+            checkEvaluation(UnaryMinus(input), Decimal(value.negate(), 38, value.scale))
+            checkEvaluation(Abs(input), Decimal(value.abs(), 38, value.scale))
+          }
+        }
+      }
+  }
+
   test("- (Minus)") {
     testNumericDataTypes { convert =>
       val left = Literal(convert(1))
