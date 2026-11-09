@@ -236,6 +236,60 @@ class GeometryDataFrameSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-61081: writes to a table bucketed by a Geometry column fail") {
+    // POINT(1 2) as little-endian and as big-endian WKB. Parquet stores both as little-endian
+    // WKB, so a bucket id computed from the big-endian bytes would not match the stored bytes.
+    val littleEndian = "X'0101000000000000000000F03F0000000000000040'"
+    val bigEndian = "X'00000000013FF00000000000004000000000000000'"
+    val values = s"SELECT ST_GeomFromWKB($littleEndian, 4326) AS g " +
+      s"UNION ALL SELECT ST_GeomFromWKB($bigEndian, 4326) AS g"
+    def checkBucketedWriteFails(write: => Any, dataType: String = "\"GEOMETRY(4326)\""): Unit = {
+      checkError(
+        exception = intercept[AnalysisException](write),
+        condition = "INVALID_BUCKET_COLUMN_DATA_TYPE",
+        parameters = Map("type" -> dataType))
+    }
+
+    withTable("t", "t_ctas", "t_df", "t_struct", "t_array", "t_other") {
+      // Creating the table still succeeds. Only writes to it fail.
+      sql("CREATE TABLE t (g GEOMETRY(4326)) USING parquet CLUSTERED BY (g) INTO 8 BUCKETS")
+      Seq("true", "false").foreach { plannedWrite =>
+        withSQLConf(SQLConf.PLANNED_WRITE_ENABLED.key -> plannedWrite) {
+          checkBucketedWriteFails(sql(s"INSERT INTO t $values"))
+          // The check is on the column type, so a write of only NULL values fails too.
+          checkBucketedWriteFails(
+            sql("INSERT INTO t SELECT ST_GeomFromWKB(CAST(NULL AS BINARY), 4326)"))
+        }
+      }
+      checkAnswer(spark.table("t"), Seq.empty)
+
+      checkBucketedWriteFails(
+        sql(s"CREATE TABLE t_ctas USING parquet CLUSTERED BY (g) INTO 8 BUCKETS AS $values"))
+      checkBucketedWriteFails(sql("CREATE TABLE t_ctas USING parquet CLUSTERED BY (g) " +
+        s"INTO 8 BUCKETS AS SELECT * FROM ($values) WHERE false"))
+      assert(!spark.catalog.tableExists("t_ctas"))
+      checkBucketedWriteFails(sql(values).write.bucketBy(8, "g").saveAsTable("t_df"))
+      checkBucketedWriteFails(sql(values).limit(0).write.bucketBy(8, "g").saveAsTable("t_df"))
+      assert(!spark.catalog.tableExists("t_df"))
+
+      sql("CREATE TABLE t_struct (s STRUCT<g: GEOMETRY(4326)>) USING parquet " +
+        "CLUSTERED BY (s) INTO 8 BUCKETS")
+      checkBucketedWriteFails(
+        sql(s"INSERT INTO t_struct SELECT named_struct('g', g) FROM ($values)"),
+        "\"STRUCT<g: GEOMETRY(4326) NOT NULL>\"")
+      sql("CREATE TABLE t_array (a ARRAY<GEOMETRY(4326)>) USING parquet " +
+        "CLUSTERED BY (a) INTO 8 BUCKETS")
+      checkBucketedWriteFails(
+        sql(s"INSERT INTO t_array SELECT array(g) FROM ($values)"), "\"ARRAY<GEOMETRY(4326)>\"")
+
+      // Only bucket columns are checked.
+      sql("CREATE TABLE t_other (id INT, g GEOMETRY(4326)) USING parquet " +
+        "CLUSTERED BY (id) INTO 8 BUCKETS")
+      sql(s"INSERT INTO t_other SELECT 1, g FROM ($values)")
+      checkAnswer(spark.sql("SELECT COUNT(*) FROM t_other"), Row(2L))
+    }
+  }
+
   test("geospatial feature disabled") {
     withSQLConf(SQLConf.GEOSPATIAL_ENABLED.key -> "false") {
       val geometry = Geometry.fromWKB(point1, 4326)

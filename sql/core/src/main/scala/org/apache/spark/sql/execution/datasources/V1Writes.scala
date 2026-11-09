@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.optimizer.{EliminateSorts, FoldablePropagat
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Sort}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.DataWritingCommand
 import org.apache.spark.sql.internal.SQLConf
@@ -121,6 +122,9 @@ object V1WritesUtils {
       options: Map[String, String]): Option[WriterBucketSpec] = {
     bucketSpec.map { spec =>
       val bucketColumns = spec.bucketColumnNames.map(c => dataColumns.find(_.name == c).get)
+      bucketColumns.find(c => !BucketingUtils.canWriteBucketsOn(c.dataType)).foreach { c =>
+        throw QueryCompilationErrors.invalidBucketColumnDataTypeError(c.dataType)
+      }
 
       if (options.getOrElse(BucketingUtils.optionForHiveCompatibleBucketWrite, "false") ==
         "true") {

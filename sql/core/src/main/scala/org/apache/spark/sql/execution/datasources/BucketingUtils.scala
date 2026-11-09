@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SpecificInternalRow, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.st.STExpressionUtils.isGeoSpatialType
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.sql.util.SchemaUtils
@@ -55,6 +56,11 @@ object BucketingUtils {
   }
 
   def canBucketOn(dataType: DataType): Boolean = !SchemaUtils.hasNonUTF8BinaryCollation(dataType)
+
+  // The bucket id of a GEOMETRY or GEOGRAPHY value hashes the WKB it was created from, but
+  // Parquet stores the value as re-encoded little-endian WKB. The value read back can then
+  // hash to a different bucket than the file it is in.
+  def canWriteBucketsOn(dataType: DataType): Boolean = !dataType.existsRecursively(isGeoSpatialType)
 
   def bucketIdToString(id: Int): String = f"_$id%05d"
 }
