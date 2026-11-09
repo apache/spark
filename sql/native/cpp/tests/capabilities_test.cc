@@ -85,7 +85,7 @@ template <bool kTruncate>
 struct Write : spark::native::StreamingWrite<WriterFactory> {
   static constexpr bool kSupportsTruncate = kTruncate;
 
-  arrow::Result<WriterFactory> CreateWriterFactory() const override { return WriterFactory(); }
+  arrow::Result<WriterFactory> NewWriterFactory() const override { return WriterFactory(); }
   arrow::Status Commit(int64_t, std::vector<Message>) override { return arrow::Status::OK(); }
   arrow::Status Abort(int64_t, std::vector<std::optional<Message>>) override {
     return arrow::Status::OK();

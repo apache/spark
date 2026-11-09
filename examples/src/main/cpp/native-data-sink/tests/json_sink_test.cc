@@ -79,7 +79,7 @@ T RoundTrip(const T& value) {
 
 std::pair<JsonWrite, JsonWriterFactory> NewWrite(const JsonSink& sink, WriteMode mode) {
   ASSIGN_OR_FAIL(JsonWrite write, sink.NewWrite(sn::WriteInfo(SinkSchema(), mode)));
-  ASSIGN_OR_FAIL(JsonWriterFactory factory, write.CreateWriterFactory());
+  ASSIGN_OR_FAIL(JsonWriterFactory factory, write.NewWriterFactory());
   return {std::move(write), factory};
 }
 
@@ -88,7 +88,7 @@ std::pair<JsonStreamingWrite, JsonWriterFactory> NewStreamingWrite(const JsonSin
                                                                    WriteMode mode) {
   ASSIGN_OR_FAIL(JsonStreamingWrite write,
                  sink.NewStreamingWrite(sn::StreamingWriteInfo(SinkSchema(), mode, query_id)));
-  ASSIGN_OR_FAIL(JsonWriterFactory factory, write.CreateWriterFactory());
+  ASSIGN_OR_FAIL(JsonWriterFactory factory, write.NewWriterFactory());
   return {std::move(write), factory};
 }
 

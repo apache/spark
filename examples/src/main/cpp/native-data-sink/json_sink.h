@@ -133,7 +133,7 @@ class JsonWrite : public spark::native::BatchWrite<JsonWriterFactory> {
   static arrow::Result<JsonWrite> Begin(const std::filesystem::path& root,
                                         spark::native::WriteMode mode);
 
-  arrow::Result<JsonWriterFactory> CreateWriterFactory() const override;
+  arrow::Result<JsonWriterFactory> NewWriterFactory() const override;
   arrow::Status Commit(std::vector<CommitMessage> messages) override;
   arrow::Status Abort(std::vector<std::optional<CommitMessage>> messages) override;
 
@@ -155,7 +155,7 @@ class JsonStreamingWrite : public spark::native::StreamingWrite<JsonWriterFactor
   JsonStreamingWrite(JsonWrite write, std::string query_id)
       : write_(std::move(write)), query_id_(std::move(query_id)) {}
 
-  arrow::Result<JsonWriterFactory> CreateWriterFactory() const override;
+  arrow::Result<JsonWriterFactory> NewWriterFactory() const override;
   arrow::Status Commit(int64_t epoch_id, std::vector<CommitMessage> messages) override;
   arrow::Status Abort(int64_t epoch_id,
                       std::vector<std::optional<CommitMessage>> messages) override;

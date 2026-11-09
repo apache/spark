@@ -186,7 +186,7 @@ class Driver : public sn::BatchWrite<Factory> {
     }
   }
 
-  arrow::Result<Factory> CreateWriterFactory() const override {
+  arrow::Result<Factory> NewWriterFactory() const override {
     Record("FactoryCreated");
     if (failure_ == "writer_factory_error") {
       return arrow::Status::Invalid("creating the writer factory failed");

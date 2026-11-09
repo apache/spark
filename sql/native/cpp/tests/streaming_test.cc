@@ -215,7 +215,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WriteFactory, unused)
 struct Write : sn::StreamingWrite<WriteFactory> {
   static constexpr bool kSupportsTruncate = true;
 
-  arrow::Result<WriteFactory> CreateWriterFactory() const override { return WriteFactory(); }
+  arrow::Result<WriteFactory> NewWriterFactory() const override { return WriteFactory(); }
 
   arrow::Status Commit(int64_t epoch_id, std::vector<Message> messages) override {
     Record("EpochCommitted(" + std::to_string(epoch_id) + ", " +

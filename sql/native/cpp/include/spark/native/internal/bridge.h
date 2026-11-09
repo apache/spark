@@ -186,8 +186,7 @@ class DriverWriter final : public WriterHandle {
   static arrow::Result<CreatedWriter> Make(W write) {
     auto writer = std::unique_ptr<DriverWriter>(new DriverWriter(std::move(write)));
     ARROW_ASSIGN_OR_RAISE(std::string state, Guard([&]() -> arrow::Result<std::string> {
-                            ARROW_ASSIGN_OR_RAISE(auto factory,
-                                                  writer->write_.CreateWriterFactory());
+                            ARROW_ASSIGN_OR_RAISE(auto factory, writer->write_.NewWriterFactory());
                             return Encode(factory);
                           }));
     return CreatedWriter{std::move(writer), std::move(state)};

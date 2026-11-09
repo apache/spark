@@ -527,7 +527,7 @@ class DataWriter {
 };
 
 /// Serializable configuration for independent task-attempt writers, which
-/// BatchWrite::CreateWriterFactory or StreamingWrite::CreateWriterFactory creates.
+/// BatchWrite::NewWriterFactory or StreamingWrite::NewWriterFactory creates.
 ///
 /// Open connections and files in Open, not in the factory. A returned writer must not refer to
 /// this temporary factory, but may keep the context until it is destroyed. Calls on a writer can
@@ -563,7 +563,7 @@ class DataWriterFactory {
 /// Lifecycle: Spark calls the methods in this order, so implementations need not track their own
 /// phase or guard against repeated calls.
 ///
-/// - CreateWriterFactory runs once, right after the NewWrite method of the source, before any task
+/// - NewWriterFactory runs once, right after the NewWrite method of the source, before any task
 ///   opens a writer. When it fails, or the SDK cannot serialize its factory, the write fails and
 ///   the coordinator is destroyed without Abort, so the destructor must also release what only
 ///   this write staged.
@@ -592,7 +592,7 @@ class BatchWrite {
 
   /// Returns the configuration of the task writers, which the SDK serializes for them. Include a
   /// unique operation ID when needed; Spark supplies no batch query ID.
-  virtual arrow::Result<Factory> CreateWriterFactory() const = 0;
+  virtual arrow::Result<Factory> NewWriterFactory() const = 0;
 
   /// Publishes only the winning attempt from each input partition. Task retries and speculative
   /// attempts can stage other data that must not be published.
@@ -663,7 +663,7 @@ class StreamingWrite {
   virtual ~StreamingWrite() = default;
 
   /// Returns the configuration of the task writers, which the SDK serializes for them.
-  virtual arrow::Result<Factory> CreateWriterFactory() const = 0;
+  virtual arrow::Result<Factory> NewWriterFactory() const = 0;
 
   /// Publishes the winning attempt of each input partition as the output of epoch `epoch_id`,
   /// unless that epoch is already committed.

@@ -223,17 +223,17 @@ implementation detail: use the same build of a library on the driver and the exe
 ```text
 Driver:
   DataSource::NewWrite -> BatchWrite
-                            | CreateWriterFactory()  ^ Commit(messages) / Abort(messages)
-                    serialized factory               | typed messages
-                            |                        |
-Executor, per task attempt: v                        |
+                            | NewWriterFactory()  ^ Commit(messages) / Abort(messages)
+                    serialized factory            | typed messages
+                            |                     |
+Executor, per task attempt: v                     |
                       DataWriterFactory::Open(WriterContext)
                                -> DataWriter::Write(RecordBatch)*
                                -> Commit() / Abort() -> destructor
 ```
 
 `DataSource::NewWrite(WriteInfo)` validates the input schema and returns an independent driver
-coordinator, a `BatchWrite`. Its `CreateWriterFactory` returns the serializable executor
+coordinator, a `BatchWrite`. Its `NewWriterFactory` returns the serializable executor
 configuration of its task writers, which the SDK encodes as the state of the writer that native
 `create_writer` returns. Restoring an executor writer uses only those bytes and the schema that
 Spark passes with them.
@@ -264,7 +264,7 @@ messages Spark passes to commit. Executor loss can prevent cleanup, including af
 so connectors need a strategy for orphaned data. Spark provides no batch query ID: generate and
 serialize an operation identity when needed.
 
-When `CreateWriterFactory` or the serialization of its factory fails, `create_writer` fails and
+When `NewWriterFactory` or the serialization of its factory fails, `create_writer` fails and
 the SDK destroys the coordinator without commit or abort, so the destructor must also release
 what only that write staged. Spark also creates writers late, after prerequisite AQE shuffle
 stages, but input computation can still fail during write tasks, so constructors must avoid

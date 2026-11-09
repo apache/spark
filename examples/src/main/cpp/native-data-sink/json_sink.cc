@@ -438,7 +438,7 @@ arrow::Result<JsonWrite> JsonWrite::Begin(const fs::path& root, WriteMode mode) 
   return JsonWrite(std::move(operation));
 }
 
-arrow::Result<JsonWriterFactory> JsonWrite::CreateWriterFactory() const {
+arrow::Result<JsonWriterFactory> JsonWrite::NewWriterFactory() const {
   JsonWriterFactory factory;
   factory.staging = operation_->staging.string();
   factory.operation = operation_->id;
@@ -458,8 +458,8 @@ arrow::Status JsonWrite::Abort(std::vector<std::optional<CommitMessage>> message
 
 // JsonStreamingWrite
 
-arrow::Result<JsonWriterFactory> JsonStreamingWrite::CreateWriterFactory() const {
-  return write_.CreateWriterFactory();
+arrow::Result<JsonWriterFactory> JsonStreamingWrite::NewWriterFactory() const {
+  return write_.NewWriterFactory();
 }
 
 arrow::Status JsonStreamingWrite::Commit(int64_t epoch_id, std::vector<CommitMessage> messages) {
