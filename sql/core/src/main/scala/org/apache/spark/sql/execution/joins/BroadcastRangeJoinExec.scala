@@ -105,8 +105,9 @@ case class BroadcastRangeJoinExec(
     }
   }
 
-  // The point-index scan used to probe this join's build side. See `PointScan.forJoin`.
-  private lazy val pointScan: PointScan = PointScan.forJoin(rangeJoinKind, buildSide)
+  // The point-index scan direction and strictness used to probe this join's build
+  // side. See `PointScan.forJoin`.
+  private lazy val pointScan: (PointScan, Boolean) = PointScan.forJoin(rangeJoinKind, buildSide)
 
   private def perPartition(
       relation: Broadcast[RangeRelation])(
@@ -330,7 +331,8 @@ case class BroadcastRangeJoinExec(
     val call = RangeIndexKind(rangeJoinKind) match {
       case PointIndexKind =>
         val points = (if (usesLongKeys) classOf[LongPointIndex] else classOf[PointIndex]).getName
-        s"(($points) $relationTerm).${pointScan.methodName}(${keyVars.head})"
+        val (scan, strict) = pointScan
+        s"(($points) $relationTerm).${scan.methodName}(${keyVars.head}, $strict)"
       case IntervalIndexKind =>
         val intervals =
           (if (usesLongKeys) classOf[LongIntervalIndex] else classOf[IntervalIndex]).getName
@@ -516,7 +518,7 @@ object BroadcastRangeJoinExec {
   private def makeCandidateFn(
       relation: RangeRelation,
       boundStreamKeys: Seq[Expression],
-      pointScan: => PointScan): InternalRow => Iterator[InternalRow] = {
+      pointScan: => (PointScan, Boolean)): InternalRow => Iterator[InternalRow] = {
     val isOneKey = boundStreamKeys.length == 1
     val lowExpr = boundStreamKeys.head
     val highExpr = if (isOneKey) null else boundStreamKeys(1)
@@ -535,11 +537,10 @@ object BroadcastRangeJoinExec {
           }
         }
       case points: LongPointIndex =>
-        val scan: Long => Iterator[InternalRow] = pointScan match {
-          case PointScan.UpTo => points.upTo
-          case PointScan.UpToExclusive => points.upToExclusive
-          case PointScan.From => points.from
-          case PointScan.FromExclusive => points.fromExclusive
+        val (direction, strict) = pointScan
+        val scan: Long => Iterator[InternalRow] = direction match {
+          case PointScan.UpTo => points.upTo(_, strict)
+          case PointScan.From => points.from(_, strict)
         }
         row =>
           val low = lowExpr.eval(row)
@@ -553,11 +554,10 @@ object BroadcastRangeJoinExec {
           intervals.overlapping(low, high)
         }
       case points: PointIndex =>
-        val scan: Any => Iterator[InternalRow] = pointScan match {
-          case PointScan.UpTo => points.upTo
-          case PointScan.UpToExclusive => points.upToExclusive
-          case PointScan.From => points.from
-          case PointScan.FromExclusive => points.fromExclusive
+        val (direction, strict) = pointScan
+        val scan: Any => Iterator[InternalRow] = direction match {
+          case PointScan.UpTo => points.upTo(_, strict)
+          case PointScan.From => points.from(_, strict)
         }
         row =>
           val low = lowExpr.eval(row)

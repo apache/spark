@@ -436,12 +436,12 @@ object RangeJoinBenchmark extends SqlBasedBenchmark {
   private def partialLessCases(): Unit = {
     val n = s"probe=$probeRows, bounds=$buildRows"
     // Build holds the upper bound; the strict `<` makes the point index scan with
-    // fromExclusive(), skipping build keys equal to the probe value.
+    // from(strict = true), skipping build keys equal to the probe value.
     compare(s"partial < inner, build upper ($n)", probeRows, "LessPartialRangeJoin") {
       highProbes.join(broadcast(bounds), col("a") < col("b"), "inner")
     }
     // Build holds the lower bound; the strict `<` makes the point index scan with
-    // upToExclusive(), skipping build keys equal to the probe value.
+    // upTo(strict = true), skipping build keys equal to the probe value.
     compare(s"partial < inner, build lower ($n)", buildRows, "LessPartialRangeJoin") {
       broadcast(highProbes).join(bounds, col("a") < col("b"), "inner")
     }
@@ -473,12 +473,12 @@ object RangeJoinBenchmark extends SqlBasedBenchmark {
   private def partialGreaterCases(): Unit = {
     val n = s"probe=$probeRows, bounds=$buildRows"
     // Build holds the lower bound; the strict `>` makes the point index scan with
-    // upToExclusive(), skipping build keys equal to the probe value.
+    // upTo(strict = true), skipping build keys equal to the probe value.
     compare(s"partial > inner, build lower ($n)", probeRows, "GreaterPartialRangeJoin") {
       lowProbes.join(broadcast(bounds), col("a") > col("b"), "inner")
     }
     // Build holds the upper bound; the strict `>` makes the point index scan with
-    // fromExclusive(), skipping build keys equal to the probe value.
+    // from(strict = true), skipping build keys equal to the probe value.
     compare(s"partial > inner, build upper ($n)", buildRows, "GreaterPartialRangeJoin") {
       broadcast(lowProbes).join(bounds, col("a") > col("b"), "inner")
     }

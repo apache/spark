@@ -263,10 +263,11 @@ class RangeJoinSuite extends QueryTest with SharedSparkSession {
       (left, right) => GreaterThan(left.output.head, right.output(1)),
       Seq((0, 1, -2, -1), (0, 2, -2, -1), (1, 5, -2, -1)).map(Row.fromTuple),
       buildSide = BuildLeft)
-    // Non-strict counterparts of the two cases above: PointScan.UpTo and PointScan.From,
-    // the inclusive scan arms the strict cases never reach. Each adds exactly the one row
-    // the strict comparison drops (low1 == high2 at -1), pinning that the inclusive scan
-    // (not just the final condition re-check) actually surfaces an equal boundary key.
+    // Non-strict counterparts of the two cases above: the same two scan directions
+    // with strict = false, a value the strict cases never evaluate. Each adds exactly
+    // the one row the strict comparison drops (low1 == high2 at -1), pinning that the
+    // inclusive scan (not just the final condition re-check) actually surfaces an
+    // equal boundary key.
     check(
       LessPartialRangeJoin(strict = false),
       (left, right) => LessThanOrEqual(left.output.head, right.output(1)),

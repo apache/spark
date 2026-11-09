@@ -426,8 +426,8 @@ class RangeRelationSuite extends SparkFunSuite {
     val negLong = RangeIndex.requiredLongKey(DoubleType).value(-0.0)
     val posLong = RangeIndex.requiredLongKey(DoubleType).value(0.0)
     assert(negLong == posLong)
-    assert(longPoints.upTo(negLong).map(_.getInt(1)).toSet == Set(0, 1))
-    assert(longPoints.from(posLong).map(_.getInt(1)).toSet == Set(0, 1))
+    assert(longPoints.upTo(negLong, strict = false).map(_.getInt(1)).toSet == Set(0, 1))
+    assert(longPoints.from(posLong, strict = false).map(_.getInt(1)).toSet == Set(0, 1))
 
     val longIntervals = RangeRelationBroadcastMode(
       Seq(BoundReference(0, DoubleType, nullable = true),
@@ -467,8 +467,8 @@ class RangeRelationSuite extends SparkFunSuite {
       .transform(Array(InternalRow(Float.NaN, 0), InternalRow(1.0f, 1)))
       .asInstanceOf[LongPointIndex]
     val nanLong = RangeIndex.requiredLongKey(FloatType).value(Float.NaN)
-    assert(floatIdx.upTo(nanLong).map(_.getInt(1)).toSet == Set(0, 1))
-    assert(floatIdx.fromExclusive(nanLong).map(_.getInt(1)).isEmpty)
+    assert(floatIdx.upTo(nanLong, strict = false).map(_.getInt(1)).toSet == Set(0, 1))
+    assert(floatIdx.from(nanLong, strict = true).map(_.getInt(1)).isEmpty)
   }
 
   test("a nested probe does not drop rows from the outer iterator") {
@@ -524,20 +524,20 @@ class RangeRelationSuite extends SparkFunSuite {
       (3, row(3)),
       (null, row(-1)))
     val index = buildPoints(IntegerType, keyed.toSeq)
-    assert(ids(index.upTo(5)) == List(1, 3, 5, 50))
-    assert(ids(index.upTo(4)) == List(1, 3))
-    assert(ids(index.upTo(0)).isEmpty)
-    assert(ids(index.upTo(8)) == List(1, 3, 5, 50, 8))
-    assert(ids(index.from(5)) == List(5, 50, 8))
-    assert(ids(index.from(6)) == List(8))
-    assert(ids(index.from(9)).isEmpty)
-    assert(ids(index.from(1)) == List(1, 3, 5, 50, 8))
-    assert(index.upTo(null).isEmpty)
-    assert(index.from(null).isEmpty)
+    assert(ids(index.upTo(5, strict = false)) == List(1, 3, 5, 50))
+    assert(ids(index.upTo(4, strict = false)) == List(1, 3))
+    assert(ids(index.upTo(0, strict = false)).isEmpty)
+    assert(ids(index.upTo(8, strict = false)) == List(1, 3, 5, 50, 8))
+    assert(ids(index.from(5, strict = false)) == List(5, 50, 8))
+    assert(ids(index.from(6, strict = false)) == List(8))
+    assert(ids(index.from(9, strict = false)).isEmpty)
+    assert(ids(index.from(1, strict = false)) == List(1, 3, 5, 50, 8))
+    assert(index.upTo(null, strict = false).isEmpty)
+    assert(index.from(null, strict = false).isEmpty)
 
     val empty = buildPoints(IntegerType, Seq.empty)
-    assert(empty.upTo(1).isEmpty)
-    assert(empty.from(1).isEmpty)
+    assert(empty.upTo(1, strict = false).isEmpty)
+    assert(empty.from(1, strict = false).isEmpty)
     // SizeEstimator charges the two empty arrays' shells, and the five kept
     // points on top of them.
     assert(empty.estimatedSize > 0)
@@ -555,17 +555,17 @@ class RangeRelationSuite extends SparkFunSuite {
       .transform(keyed.map(t => InternalRow(t._2.getInt(0), t._1)).toArray)
       .asInstanceOf[LongPointIndex]
 
-    assert(ids(boxed.upTo(3)).size == 300)
-    assert(ids(boxed.upToExclusive(3)).size == 200)
-    assert(ids(boxed.from(3)).size == 300)
-    assert(ids(boxed.fromExclusive(3)).size == 200)
-    assert(ids(boxed.upToExclusive(1)).isEmpty)
-    assert(ids(boxed.fromExclusive(5)).isEmpty)
+    assert(ids(boxed.upTo(3, strict = false)).size == 300)
+    assert(ids(boxed.upTo(3, strict = true)).size == 200)
+    assert(ids(boxed.from(3, strict = false)).size == 300)
+    assert(ids(boxed.from(3, strict = true)).size == 200)
+    assert(ids(boxed.upTo(1, strict = true)).isEmpty)
+    assert(ids(boxed.from(5, strict = true)).isEmpty)
 
-    assert(ids(longPoints.upTo(3L)).size == 300)
-    assert(ids(longPoints.upToExclusive(3L)).size == 200)
-    assert(ids(longPoints.from(3L)).size == 300)
-    assert(ids(longPoints.fromExclusive(3L)).size == 200)
+    assert(ids(longPoints.upTo(3L, strict = false)).size == 300)
+    assert(ids(longPoints.upTo(3L, strict = true)).size == 200)
+    assert(ids(longPoints.from(3L, strict = false)).size == 300)
+    assert(ids(longPoints.from(3L, strict = true)).size == 200)
   }
 
   test("PointIndex.apply defends against a build-side iterator reusing its row buffer") {
@@ -580,7 +580,7 @@ class RangeRelationSuite extends SparkFunSuite {
     shared.update(1, -1)
 
     (0 until n).foreach { i =>
-      val payload = index.from(i).next().getInt(1)
+      val payload = index.from(i, strict = false).next().getInt(1)
       assert(payload == i, s"point $i was corrupted by later reuse of the row buffer")
     }
   }
@@ -595,7 +595,7 @@ class RangeRelationSuite extends SparkFunSuite {
 
     (0 until n).foreach { i =>
       val key = UTF8String.fromString(f"$i%04d")
-      val matching = index.from(key).take(1).toList
+      val matching = index.from(key, strict = false).take(1).toList
       assert(matching.nonEmpty && matching.head.getInt(1) == i,
         s"point $i was corrupted by shared buffer reuse")
     }
@@ -611,14 +611,14 @@ class RangeRelationSuite extends SparkFunSuite {
       (-1.0, row(-1)),
       (0.0, row(0)))
     val index = buildPoints(DoubleType, keyed.toSeq)
-    assert(ids(index.upTo(0.0)) == List(-80, -1, 0))
-    assert(ids(index.from(1.0)) == List(1, 80, 90))
+    assert(ids(index.upTo(0.0, strict = false)) == List(-80, -1, 0))
+    assert(ids(index.from(1.0, strict = false)) == List(1, 80, 90))
     // NaN is the unique maximum: only a NaN key is at or above it.
-    assert(ids(index.from(Double.NaN)) == List(90))
-    assert(ids(index.upTo(Double.NaN)) == List(-80, -1, 0, 1, 80, 90))
+    assert(ids(index.from(Double.NaN, strict = false)) == List(90))
+    assert(ids(index.upTo(Double.NaN, strict = false)) == List(-80, -1, 0, 1, 80, 90))
     // +Infinity is below NaN but above every finite value.
-    assert(ids(index.upTo(Double.PositiveInfinity)) == List(-80, -1, 0, 1, 80))
-    assert(ids(index.from(Double.NegativeInfinity)) == List(-80, -1, 0, 1, 80, 90))
+    assert(ids(index.upTo(Double.PositiveInfinity, strict = false)) == List(-80, -1, 0, 1, 80))
+    assert(ids(index.from(Double.NegativeInfinity, strict = false)) == List(-80, -1, 0, 1, 80, 90))
   }
 
   test("upTo/from matches a brute-force reference across randomized point sets") {
@@ -637,9 +637,9 @@ class RangeRelationSuite extends SparkFunSuite {
         val probe = rand.nextInt(bound)
         val expectedUpTo = raw.collect { case (k, i) if k <= probe => i }.toSet
         val expectedFrom = raw.collect { case (k, i) if k >= probe => i }.toSet
-        assert(ids(index.upTo(probe)).toSet == expectedUpTo,
+        assert(ids(index.upTo(probe, strict = false)).toSet == expectedUpTo,
           s"n=$n probe=$probe expected=$expectedUpTo")
-        assert(ids(index.from(probe)).toSet == expectedFrom,
+        assert(ids(index.from(probe, strict = false)).toSet == expectedFrom,
           s"n=$n probe=$probe expected=$expectedFrom")
       }
     }
@@ -692,8 +692,8 @@ class RangeRelationSuite extends SparkFunSuite {
     def answer(rel: RangeRelation, low: Any, high: Any): List[Int] = rel match {
       case r: LongIntervalIndex => ids(r.overlapping(r.toLong(low), r.toLong(high)))
       case r: IntervalIndex => ids(r.overlapping(low, high))
-      case r: LongPointIndex => ids(r.from(r.toLong(low)))
-      case r: PointIndex => ids(r.from(low))
+      case r: LongPointIndex => ids(r.from(r.toLong(low), strict = false))
+      case r: PointIndex => ids(r.from(low, strict = false))
     }
 
     cases.foreach { case (dt, lo, hi, probe) =>
@@ -837,7 +837,7 @@ class RangeRelationSuite extends SparkFunSuite {
       (UTF8String.fromString("M"), row(4)),
       (UTF8String.fromString("m"), row(5)),
       (UTF8String.fromString("z"), row(9))))
-    // (probe, upTo, upToExclusive, from, fromExclusive)
+    // (probe, upTo, upTo strict, from, from strict)
     val boxedBounds: Seq[(UTF8String, List[Int], List[Int], List[Int], List[Int])] = Seq(
       (UTF8String.fromString("m"), List(1, 3, 4, 5), List(1), List(3, 4, 5, 9), List(9)),
       (UTF8String.fromString("M"), List(1, 3, 4, 5), List(1), List(3, 4, 5, 9), List(9)),
@@ -856,36 +856,42 @@ class RangeRelationSuite extends SparkFunSuite {
       (6L, List(1, 3, 4, 5), List(1, 3, 4, 5), List(9), List(9)))
 
     boxedBounds.foreach { case (probe, upTo, upToEx, from, fromEx) =>
-      assert(ids(boxed.upTo(probe)) == upTo, s"fresh boxed upTo($probe)")
-      assert(ids(boxed.upToExclusive(probe)) == upToEx, s"fresh boxed upToExclusive($probe)")
-      assert(ids(boxed.from(probe)) == from, s"fresh boxed from($probe)")
-      assert(ids(boxed.fromExclusive(probe)) == fromEx, s"fresh boxed fromExclusive($probe)")
+      assert(ids(boxed.upTo(probe, strict = false)) == upTo, s"fresh boxed upTo($probe)")
+      assert(ids(boxed.upTo(probe, strict = true)) == upToEx, s"fresh boxed strict upTo($probe)")
+      assert(ids(boxed.from(probe, strict = false)) == from, s"fresh boxed from($probe)")
+      assert(ids(boxed.from(probe, strict = true)) == fromEx, s"fresh boxed strict from($probe)")
     }
     longBounds.foreach { case (probe, upTo, upToEx, from, fromEx) =>
-      assert(ids(longPoints.upTo(probe)) == upTo, s"fresh long upTo($probe)")
-      assert(ids(longPoints.upToExclusive(probe)) == upToEx, s"fresh long upToExclusive($probe)")
-      assert(ids(longPoints.from(probe)) == from, s"fresh long from($probe)")
-      assert(ids(longPoints.fromExclusive(probe)) == fromEx, s"fresh long fromExclusive($probe)")
+      assert(ids(longPoints.upTo(probe, strict = false)) == upTo, s"fresh long upTo($probe)")
+      assert(ids(longPoints.upTo(probe, strict = true)) == upToEx,
+        s"fresh long strict upTo($probe)")
+      assert(ids(longPoints.from(probe, strict = false)) == from, s"fresh long from($probe)")
+      assert(ids(longPoints.from(probe, strict = true)) == fromEx,
+        s"fresh long strict from($probe)")
     }
 
     serializers.foreach { case (name, ser) =>
       val restoredBoxed = roundTrip(ser, boxed)
       val restoredLong = roundTrip(ser, longPoints)
       boxedBounds.foreach { case (probe, upTo, upToEx, from, fromEx) =>
-        assert(ids(restoredBoxed.upTo(probe)) == upTo, s"boxed upTo($probe) via $name")
-        assert(ids(restoredBoxed.upToExclusive(probe)) == upToEx,
-          s"boxed upToExclusive($probe) via $name")
-        assert(ids(restoredBoxed.from(probe)) == from, s"boxed from($probe) via $name")
-        assert(ids(restoredBoxed.fromExclusive(probe)) == fromEx,
-          s"boxed fromExclusive($probe) via $name")
+        assert(ids(restoredBoxed.upTo(probe, strict = false)) == upTo,
+          s"boxed upTo($probe) via $name")
+        assert(ids(restoredBoxed.upTo(probe, strict = true)) == upToEx,
+          s"boxed strict upTo($probe) via $name")
+        assert(ids(restoredBoxed.from(probe, strict = false)) == from,
+          s"boxed from($probe) via $name")
+        assert(ids(restoredBoxed.from(probe, strict = true)) == fromEx,
+          s"boxed strict from($probe) via $name")
       }
       longBounds.foreach { case (probe, upTo, upToEx, from, fromEx) =>
-        assert(ids(restoredLong.upTo(probe)) == upTo, s"long upTo($probe) via $name")
-        assert(ids(restoredLong.upToExclusive(probe)) == upToEx,
-          s"long upToExclusive($probe) via $name")
-        assert(ids(restoredLong.from(probe)) == from, s"long from($probe) via $name")
-        assert(ids(restoredLong.fromExclusive(probe)) == fromEx,
-          s"long fromExclusive($probe) via $name")
+        assert(ids(restoredLong.upTo(probe, strict = false)) == upTo,
+          s"long upTo($probe) via $name")
+        assert(ids(restoredLong.upTo(probe, strict = true)) == upToEx,
+          s"long strict upTo($probe) via $name")
+        assert(ids(restoredLong.from(probe, strict = false)) == from,
+          s"long from($probe) via $name")
+        assert(ids(restoredLong.from(probe, strict = true)) == fromEx,
+          s"long strict from($probe) via $name")
       }
     }
   }
@@ -1230,10 +1236,10 @@ class RangeRelationSuite extends SparkFunSuite {
         .transform(keyed.map(t => InternalRow(t._1, t._2.getInt(0))).toArray)
         .asInstanceOf[LongPointIndex]
     def assertSameBounds(generic: PointIndex, longIdx: LongPointIndex, v: Int): Unit = {
-      val upTo = longIdx.upTo(v.toLong).map(_.getInt(1)).toList.sorted
-      assert(upTo == ids(generic.upTo(v)).sorted, s"upTo($v)")
-      val from = longIdx.from(v.toLong).map(_.getInt(1)).toList.sorted
-      assert(from == ids(generic.from(v)).sorted, s"from($v)")
+      val upTo = longIdx.upTo(v.toLong, strict = false).map(_.getInt(1)).toList.sorted
+      assert(upTo == ids(generic.upTo(v, strict = false)).sorted, s"upTo($v)")
+      val from = longIdx.from(v.toLong, strict = false).map(_.getInt(1)).toList.sorted
+      assert(from == ids(generic.from(v, strict = false)).sorted, s"from($v)")
     }
 
     // Unsorted, with two rows on key 5, and a null key that both paths drop.

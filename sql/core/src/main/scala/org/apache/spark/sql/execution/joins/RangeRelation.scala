@@ -603,26 +603,18 @@ private[joins] class PointIndex private (
 
   override def estimatedSize: Long = SizeEstimator.estimate(Array[AnyRef](keys, rows))
 
-  /** Points whose key is less than or equal to `value`. */
-  def upTo(value: Any): Iterator[InternalRow] =
-    if (value == null) Iterator.empty else slice(0, searchBound(value, skipEquals = true))
-
-  /** Points whose key is greater than or equal to `value`. */
-  def from(value: Any): Iterator[InternalRow] =
-    if (value == null) Iterator.empty else slice(searchBound(value, skipEquals = false), length)
-
   /**
-   * Points whose key is strictly less than `value`. For a strict partial-range
-   * predicate the original condition rejects keys equal to the probe value,
-   * so the scan can skip them: a build heavy in duplicated keys would only
-   * hand the join rows that all fail.
+   * Points whose key is below `value`, or at it when `strict` is false. For a
+   * strict partial-range predicate the original condition rejects keys equal
+   * to the probe value, so the scan can skip them: a build heavy in
+   * duplicated keys would only hand the join rows that all fail.
    */
-  def upToExclusive(value: Any): Iterator[InternalRow] =
-    if (value == null) Iterator.empty else slice(0, searchBound(value, skipEquals = false))
+  def upTo(value: Any, strict: Boolean): Iterator[InternalRow] =
+    if (value == null) Iterator.empty else slice(0, searchBound(value, skipEquals = !strict))
 
-  /** Points whose key is strictly greater than `value`. */
-  def fromExclusive(value: Any): Iterator[InternalRow] =
-    if (value == null) Iterator.empty else slice(searchBound(value, skipEquals = true), length)
+  /** Points whose key is above `value`, or at it when `strict` is false. */
+  def from(value: Any, strict: Boolean): Iterator[InternalRow] =
+    if (value == null) Iterator.empty else slice(searchBound(value, skipEquals = strict), length)
 
   private def searchBound(value: Any, skipEquals: Boolean): Int = {
     val ord = ordering
@@ -1075,25 +1067,17 @@ private[joins] class LongPointIndex private (
 
   override def estimatedSize: Long = SizeEstimator.estimate(Array[AnyRef](keys, rows))
 
-  /** Points whose key is less than or equal to `value`. */
-  def upTo(value: Long): Iterator[InternalRow] =
-    new RowSlice(rows, 0, searchBound(value, skipEquals = true))
-
-  /** Points whose key is greater than or equal to `value`. */
-  def from(value: Long): Iterator[InternalRow] =
-    new RowSlice(rows, searchBound(value, skipEquals = false), length)
-
   /**
-   * Points whose key is strictly less than `value`. For a strict partial-range
-   * predicate the original condition rejects keys equal to the probe value,
-   * so the scan can skip them; see [[PointIndex.upToExclusive]].
+   * Points whose key is below `value`, or at it when `strict` is false. For a
+   * strict partial-range predicate the original condition rejects keys equal
+   * to the probe value, so the scan can skip them; see [[PointIndex.upTo]].
    */
-  def upToExclusive(value: Long): Iterator[InternalRow] =
-    new RowSlice(rows, 0, searchBound(value, skipEquals = false))
+  def upTo(value: Long, strict: Boolean): Iterator[InternalRow] =
+    new RowSlice(rows, 0, searchBound(value, skipEquals = !strict))
 
-  /** Points whose key is strictly greater than `value`. */
-  def fromExclusive(value: Long): Iterator[InternalRow] =
-    new RowSlice(rows, searchBound(value, skipEquals = true), length)
+  /** Points whose key is above `value`, or at it when `strict` is false. */
+  def from(value: Long, strict: Boolean): Iterator[InternalRow] =
+    new RowSlice(rows, searchBound(value, skipEquals = strict), length)
 
   // java.util.Arrays.binarySearch returns an arbitrary hit; a bound scan needs
   // the first or last position, so lower and upper bounds are hand-rolled.
@@ -1205,49 +1189,43 @@ private[joins] object LongPointIndex {
 }
 
 /**
- * Which side of a single-inequality range join's bound the build side holds, and
- * whether the comparison is strict - the four spellings a [[PointIndex]] /
- * [[LongPointIndex]] expose as scan methods. The compiler's exhaustiveness check on
- * this sealed hierarchy covers only the interpreted matches in
- * [[BroadcastRangeJoinExec]]'s `makeCandidateFn`: it is the compiler, not a
- * developer re-reading four string literals, that notices when a fifth case is
- * added there. Generated probe code never matches on the hierarchy. It still has
- * to splice `methodName` into the Java source it emits, since codegen has no way
- * to reference a Scala method value directly; that string has to be kept in sync
- * with the method it names by hand. The generated path never notices a new case
- * or a stale name at compile time; a mismatch surfaces only as a Janino compile
- * failure at query-run time. RangeJoinSuite's codegen point-scan tests cover
- * the long point-index methods (int keys); RangeJoinSQLSuite's double and
- * string partial-range queries are what catch a stale boxed `PointIndex`
- * methodName.
+ * Which side of a single-inequality range join's bound the build side holds - the
+ * two scan directions a [[PointIndex]] / [[LongPointIndex]] expose, with the
+ * predicate's strictness traveling beside it as the scan methods' `strict`
+ * argument. The compiler's exhaustiveness check on this sealed hierarchy covers
+ * only the interpreted matches in [[BroadcastRangeJoinExec]]'s
+ * `makeCandidateFn`: it is the compiler, not a developer re-reading string
+ * literals, that notices when a new case is added there. Generated probe code
+ * never matches on the hierarchy. It still has to splice `methodName` into the
+ * Java source it emits, since codegen has no way to reference a Scala method
+ * value directly; that string has to be kept in sync with the method it names
+ * by hand. The generated path never notices a new case or a stale name at
+ * compile time; a mismatch surfaces only as a Janino compile failure at
+ * query-run time. RangeJoinSuite's codegen point-scan tests cover the long
+ * point-index methods (int keys); RangeJoinSQLSuite's double and string
+ * partial-range queries are what catch a stale boxed `PointIndex` methodName.
  */
 private[joins] sealed abstract class PointScan(val methodName: String)
 
 private[joins] object PointScan {
   case object UpTo extends PointScan("upTo")
-  case object UpToExclusive extends PointScan("upToExclusive")
   case object From extends PointScan("from")
-  case object FromExclusive extends PointScan("fromExclusive")
 
   /**
-   * The scan a partial-range join's build side probes with. Lower bound build side
-   * uses `UpTo` (points <= probe), upper bound uses `From` (points >= probe); strict
-   * inequality selects the Exclusive variant. Throws for any other range-join shape;
-   * callers only touch this for a [[PointIndexKind]] build.
+   * The scan direction a partial-range join's build side probes with, and the
+   * predicate's strictness. Lower bound build side uses `UpTo`, upper bound
+   * uses `From`. Throws for any other range-join shape; callers only touch
+   * this for a [[PointIndexKind]] build.
    */
-  def forJoin(rangeJoinKind: RangeJoinKind, buildSide: BuildSide): PointScan = rangeJoinKind match {
-    case partial: PartialRangeJoin =>
-      val isLower = partial.leftIsLower == (buildSide == BuildLeft)
-      (isLower, partial.strict) match {
-        case (true, true) => UpToExclusive
-        case (true, false) => UpTo
-        case (false, true) => FromExclusive
-        case (false, false) => From
-      }
-    case other =>
-      throw SparkException.internalError(
-        s"Point index is only built for a partial range, got $other.")
-  }
+  def forJoin(rangeJoinKind: RangeJoinKind, buildSide: BuildSide): (PointScan, Boolean) =
+    rangeJoinKind match {
+      case partial: PartialRangeJoin =>
+        val isLower = partial.leftIsLower == (buildSide == BuildLeft)
+        (if (isLower) UpTo else From, partial.strict)
+      case other =>
+        throw SparkException.internalError(
+          s"Point index is only built for a partial range, got $other.")
+    }
 }
 
 /**
