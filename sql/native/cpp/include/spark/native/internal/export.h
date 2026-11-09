@@ -514,36 +514,33 @@ class Exports {
                                                 WriteRequest request) {
     Capabilities capabilities = handle.capabilities;
     bool truncate = request.mode == WriteMode::kTruncate;
+    // The capabilities contain a write only if the source implements it.
     if (!request.query_id) {
-      if (!capabilities.Contains(Capabilities::kBatchWrite)) {
-        return arrow::Status::Invalid("source does not support batch writes");
-      }
-      if (truncate && !capabilities.Contains(Capabilities::kBatchTruncate)) {
-        return arrow::Status::Invalid("source does not support the save mode overwrite");
-      }
       if constexpr (Traits::kBatchWrite) {
-        ARROW_ASSIGN_OR_RAISE(auto write,
-                              handle.source.NewWrite(WriteInfo(std::move(schema), request.mode)));
-        return DriverWriter<typename Traits::BatchWrite, /*kStreaming=*/false>::Make(
-            std::move(write));
-      } else {
-        return arrow::Status::Invalid("source does not support batch writes");
+        if (capabilities.Contains(Capabilities::kBatchWrite)) {
+          if (truncate && !capabilities.Contains(Capabilities::kBatchTruncate)) {
+            return arrow::Status::Invalid("source does not support the save mode overwrite");
+          }
+          ARROW_ASSIGN_OR_RAISE(
+              auto write, handle.source.NewWrite(WriteInfo(std::move(schema), request.mode)));
+          return DriverWriter<typename Traits::BatchWrite, /*kStreaming=*/false>::Make(
+              std::move(write));
+        }
       }
-    }
-    if (!capabilities.Contains(Capabilities::kStreamingWrite)) {
-      return arrow::Status::Invalid("source does not support streaming writes");
-    }
-    if (truncate && !capabilities.Contains(Capabilities::kStreamingTruncate)) {
-      return arrow::Status::Invalid("source does not support the output mode complete");
+      return arrow::Status::Invalid("source does not support batch writes");
     }
     if constexpr (Traits::kStreamingWrite) {
-      StreamingWriteInfo streaming_info(std::move(schema), request.mode, *request.query_id);
-      ARROW_ASSIGN_OR_RAISE(auto write, handle.source.NewStreamingWrite(streaming_info));
-      return DriverWriter<typename Traits::StreamingWrite, /*kStreaming=*/true>::Make(
-          std::move(write));
-    } else {
-      return arrow::Status::Invalid("source does not support streaming writes");
+      if (capabilities.Contains(Capabilities::kStreamingWrite)) {
+        if (truncate && !capabilities.Contains(Capabilities::kStreamingTruncate)) {
+          return arrow::Status::Invalid("source does not support the output mode complete");
+        }
+        StreamingWriteInfo streaming_info(std::move(schema), request.mode, *request.query_id);
+        ARROW_ASSIGN_OR_RAISE(auto write, handle.source.NewStreamingWrite(streaming_info));
+        return DriverWriter<typename Traits::StreamingWrite, /*kStreaming=*/true>::Make(
+            std::move(write));
+      }
     }
+    return arrow::Status::Invalid("source does not support streaming writes");
   }
 
   static int Commit(void* writer, const SparkDsFinishWriteInfo* info) noexcept {
