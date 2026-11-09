@@ -17,22 +17,28 @@
 
 import unittest
 
-from pyspark.sql.streaming.query import StreamingQuery, StreamingQueryManager
+from pyspark.sql.streaming.query import StreamingQuery
 from pyspark.testing.utils import connect_requirement_message, should_test_connect
 
 if should_test_connect:
     from pyspark.sql.connect.streaming.query import StreamingQuery as ConnectStreamingQuery
-    from pyspark.sql.connect.streaming.query import (
-        StreamingQueryManager as ConnectStreamingQueryManager,
-    )
 
 
 class StreamingQueryTimeoutRoundingTests(unittest.TestCase):
-    """A tiny but positive timeout like 0.0001 seconds used to silently round down to 0ms
-    (int() truncates), which some backends then reject outright as "has to be positive".
-    Using math.ceil() instead rounds it up to 1ms. Exercised directly, without a running
-    query, by substituting a fake JVM/Connect handle and capturing the millisecond value
-    it receives."""
+    """awaitTermination's timeout in seconds is converted to milliseconds. int() truncates,
+    so a tiny but positive timeout like 0.0001 seconds used to round down to 0ms, which the
+    engine then rejects outright as "has to be positive". Clamping only sub-1ms positive
+    values up to 1ms (rather than e.g. math.ceil() on everything) fixes that without
+    introducing floating-point overshoot for ordinary values: 2.007 * 1000 is
+    2007.0000000000002, so ceil() would turn 2.007s into 2008ms instead of 2007ms.
+
+    awaitAnyTermination does not need this: unlike awaitTermination, it already treats a
+    sub-1ms/0ms timeout as "check once and return immediately" on both classic and Connect
+    (Connect's handler there just delegates to the classic implementation), so rounding up
+    would only make it block for a full 10ms polling interval it doesn't block for today.
+
+    Exercised directly, without a running query, by substituting a fake JVM/Connect handle
+    and capturing the millisecond value it receives."""
 
     def test_classic_await_termination_small_timeout_does_not_round_down_to_zero(self):
         calls = []
@@ -45,16 +51,17 @@ class StreamingQueryTimeoutRoundingTests(unittest.TestCase):
         StreamingQuery(jsq=FakeJsq()).awaitTermination(0.0001)
         self.assertEqual(calls, [1])
 
-    def test_classic_await_any_termination_small_timeout_does_not_round_down_to_zero(self):
+    def test_classic_await_termination_does_not_overshoot_on_floating_point_noise(self):
         calls = []
 
-        class FakeJsqm:
-            def awaitAnyTermination(self, timeout_ms):
+        class FakeJsq:
+            def awaitTermination(self, timeout_ms):
                 calls.append(timeout_ms)
                 return True
 
-        StreamingQueryManager(jsqm=FakeJsqm()).awaitAnyTermination(0.0001)
-        self.assertEqual(calls, [1])
+        # 2.007 * 1000 == 2007.0000000000002 in floating point.
+        StreamingQuery(jsq=FakeJsq()).awaitTermination(2.007)
+        self.assertEqual(calls, [2007])
 
     @unittest.skipIf(not should_test_connect, connect_requirement_message)
     def test_connect_await_termination_small_timeout_does_not_round_down_to_zero(self):
@@ -74,21 +81,21 @@ class StreamingQueryTimeoutRoundingTests(unittest.TestCase):
         self.assertEqual(captured, [1])
 
     @unittest.skipIf(not should_test_connect, connect_requirement_message)
-    def test_connect_await_any_termination_small_timeout_does_not_round_down_to_zero(self):
+    def test_connect_await_termination_does_not_overshoot_on_floating_point_noise(self):
         import pyspark.sql.connect.proto as pb2
 
-        manager = ConnectStreamingQueryManager(session=None)
+        query = ConnectStreamingQuery(session=None, queryId="q", runId="r")
         captured = []
 
         def fake_execute(cmd):
-            captured.append(cmd.await_any_termination.timeout_ms)
-            result = pb2.StreamingQueryManagerCommandResult()
-            result.await_any_termination.terminated = True
+            captured.append(cmd.await_termination.timeout_ms)
+            result = pb2.StreamingQueryCommandResult()
+            result.await_termination.terminated = True
             return result
 
-        manager._execute_streaming_query_manager_cmd = fake_execute
-        manager.awaitAnyTermination(0.0001)
-        self.assertEqual(captured, [1])
+        query._execute_streaming_query_cmd = fake_execute
+        query.awaitTermination(2.007)
+        self.assertEqual(captured, [2007])
 
 
 if __name__ == "__main__":
