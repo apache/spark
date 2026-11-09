@@ -1851,6 +1851,21 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val LEGACY_INFER_FAILABLE_FILTERS_FROM_CONSTRAINTS =
+    buildConf("spark.sql.legacy.inferFailableFiltersFromConstraints")
+      .internal()
+      .doc("When true, the query optimizer also infers a filter from data constraints when " +
+        "evaluating it can fail or is otherwise observable, such as `10 / x > 0` from " +
+        "`x = y AND 10 / y > 0` in ANSI mode, or a UDF. Such a filter runs on rows that the " +
+        "query does not evaluate the expression on, so the query can raise an error that it " +
+        "does not raise without the filter. When false, only a filter that `ExprUtils." +
+        "canEvaluateUnconditionally` accepts is inferred, which also leaves out some " +
+        "expressions that cannot fail, such as `upper(s) = 'A'`.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val PROPAGATE_DISTINCT_KEYS_ENABLED =
     buildConf("spark.sql.optimizer.propagateDistinctKeys.enabled")
       .internal()
@@ -3529,8 +3544,8 @@ object SQLConf {
         "(including user-written FILTER on a plain column), so the first " +
         "aggregate's output cardinality stays bounded by the un-rewritten " +
         "plan. A child that is not safe to evaluate unconditionally (for example " +
-        "a division, which can throw) keeps the raw Expand key. When false, both " +
-        "the IF/CASE rewrite and the union-of-filters guard are disabled. The " +
+        "a division in ANSI mode, which can throw) keeps the raw Expand key. " +
+        "When false, both the IF/CASE rewrite and the union-of-filters guard are disabled. The " +
         "IF/CASE rewrite is only applied to base expressions that are safe to " +
         "evaluate unconditionally (e.g. plain columns), so the short-circuit " +
         "semantics of IF/CASE WHEN are preserved. A condition that contains a " +
@@ -6204,9 +6219,9 @@ object SQLConf {
 
   val PARSE_SQL_ENABLED =
     buildConf("spark.sql.function.parseSql.enabled")
-      .doc("When true, enables the parse_sql SQL function. This feature is under active " +
-        "development; the JSON contract may change across releases while the flag remains " +
-        "off by default.")
+      .doc("When true, enables the parse_sql SQL function (PARSE and ANALYZE). " +
+        "This feature is under active development; the JSON contract may change across " +
+        "releases while the flag remains off by default.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
@@ -6290,6 +6305,21 @@ object SQLConf {
       .version("2.4.0")
       .stringConf
       .createWithDefault("")
+
+  val STREAMING_V2_COLUMN_PRUNING_ENABLED =
+    buildConf("spark.sql.streaming.v2ColumnPruning.enabled")
+      .doc("When true, the scan of a Data Source V2 streaming source whose table has the " +
+        "capability STREAMING_COLUMN_PRUNING only reads the top-level columns that the streaming " +
+        "query reads from it, which Spark takes from the plan of the query optimized when the " +
+        "query starts, as it does for batch scans: Spark optimizes the query once more when it " +
+        "starts, as it optimizes each micro-batch. A query that reads other columns of the " +
+        "source later, for example, after the configuration of the optimizer changes in its " +
+        "session, fails with STREAMING_SCAN_MISSING_COLUMNS. When false, the scan reads all the " +
+        "columns of the source.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
 
   val DISABLE_MAP_KEY_NORMALIZATION =
     buildConf("spark.sql.legacy.disableMapKeyNormalization")
@@ -7541,6 +7571,18 @@ object SQLConf {
     .stringConf
     .toSequence
     .createWithDefault(Nil)
+
+  val NATIVE_DATA_SOURCE_FILTER_PUSHDOWN_ENABLED =
+    buildConf("spark.sql.dataSource.native.filterPushdown.enabled")
+      .doc("When true, Spark passes to native data sources the domains of the columns that the " +
+        "filters of a batch scan constrain, the values that these columns can have in the rows " +
+        "that match, so that a data source can skip data. Spark evaluates the filters after " +
+        "reading anyway, so turning it off only makes a data source read more data, for example " +
+        "to check whether a data source skips data that it must read.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
 
   val CSV_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.csv.filterPushdown.enabled")
     .doc("When true, enable filter pushdown to CSV datasource.")
@@ -9773,6 +9815,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
 
+  def legacyInferFailableFiltersFromConstraints: Boolean =
+    getConf(LEGACY_INFER_FAILABLE_FILTERS_FROM_CONSTRAINTS)
+
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
 
   def parserDfaCacheFlushRatio: Double = getConf(PARSER_DFA_CACHE_FLUSH_RATIO)
@@ -10305,6 +10350,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def disabledV2StreamingMicroBatchReaders: String =
     getConf(DISABLED_V2_STREAMING_MICROBATCH_READERS)
 
+  def streamingV2ColumnPruningEnabled: Boolean = getConf(STREAMING_V2_COLUMN_PRUNING_ENABLED)
+
   def fastFailFileFormatOutput: Boolean = getConf(FASTFAIL_ON_FILEFORMAT_OUTPUT)
 
   def concatBinaryAsString: Boolean = getConf(CONCAT_BINARY_AS_STRING)
@@ -10423,6 +10470,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def pythonFilterPushDown: Boolean = getConf(PYTHON_FILTER_PUSHDOWN_ENABLED)
 
   def pythonLimitPushDown: Boolean = getConf(PYTHON_LIMIT_PUSHDOWN_ENABLED)
+
+  def nativeDataSourceFilterPushdownEnabled: Boolean =
+    getConf(NATIVE_DATA_SOURCE_FILTER_PUSHDOWN_ENABLED)
 
   def csvFilterPushDown: Boolean = getConf(CSV_FILTER_PUSHDOWN_ENABLED)
 

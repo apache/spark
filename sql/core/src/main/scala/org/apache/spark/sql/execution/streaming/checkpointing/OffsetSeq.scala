@@ -345,6 +345,22 @@ object OffsetSeqMetadata extends Logging {
     metadata.copy(conf = conf)
   }
 
+  /**
+   * Sets the values of the metadata in `conf`, as `setSessionConf` does, without logging them: for
+   * a copy of the configuration of a query, which `setSessionConf` sets with them later.
+   */
+  def setConfWithoutLogging(metadata: OffsetSeqMetadataBase, conf: SQLConf): Unit = {
+    val keys = relevantSQLConfs.map(entry => entry.key -> entry.key) ++
+      rebindSQLConfsOffsetLogToSession.map { case (inOffsetLog, inSession) =>
+        inOffsetLog.key -> inSession.key
+      }
+    keys.foreach { case (keyInOffsetLog, keyInSession) =>
+      metadata.conf.get(keyInOffsetLog)
+        .orElse(defaultValueForMissingConf(metadata, keyInOffsetLog))
+        .foreach(conf.setConfString(keyInSession, _))
+    }
+  }
+
   /** Set the SparkSession configuration with the values in the metadata */
   def setSessionConf(metadata: OffsetSeqMetadataBase, sessionConf: SQLConf): Unit = {
     def setOneSessionConf(confKeyInOffsetLog: String, confKeyInSession: String): Unit = {
