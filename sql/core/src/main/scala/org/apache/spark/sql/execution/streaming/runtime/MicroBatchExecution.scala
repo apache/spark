@@ -39,7 +39,6 @@ import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, TableCapability, TransactionalCatalogPlugin}
-import org.apache.spark.sql.connector.read.SupportsPushDownRequiredColumns
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset => OffsetV2, ReadLimit, SparkDataStream, SupportsAdmissionControl, SupportsRealTimeMode, SupportsTriggerAvailableNow}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
@@ -261,6 +260,8 @@ class MicroBatchExecution(
     }
 
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
+    lazy val requiredColumnsOfSources = StreamingV2ScanPushDown.requiredColumnsOfSources(
+      sparkSessionForStream, planWithDedupKeys, initialLatestOffsetSeq.flatMap(_._2.metadataOpt))
     val _logicalPlan = planWithDedupKeys.transform {
       case streamingRelation @ StreamingRelation(
           dataSourceV1, sourceName, output, sourceIdentifyingName) =>
@@ -288,17 +289,14 @@ class MicroBatchExecution(
             logInfo(log"Reading table [${MDC(LogKeys.STREAMING_TABLE, table)}] " +
               log"from DataSourceV2 named '${MDC(LogKeys.STREAMING_DATA_SOURCE_NAME, srcName)}' " +
               log"${MDC(LogKeys.STREAMING_DATA_SOURCE_DESCRIPTION, dsStr)}")
-            // TODO: operator pushdown.
-            // Passes the full output schema (not a pruned subset) so that connectors
-            // implementing SupportsMetadataColumns can include metadata columns in readSchema().
-            val scanBuilder = table.newScanBuilder(options)
-            scanBuilder match {
-              case r: SupportsPushDownRequiredColumns =>
-                r.pruneColumns(output.toStructType)
-              case _ =>
-            }
-            val scan = scanBuilder.build()
-            val stream = scan.toMicroBatchStream(metadataPath)
+            // The scan reads the columns that the query reads from the source, see
+            // StreamingV2ScanPushDown. The output includes the metadata columns that the query
+            // reads, so that connectors implementing SupportsMetadataColumns include them in
+            // readSchema().
+            val streamingScan = StreamingV2ScanPushDown.buildScan(
+              table, options, output, streamConf, requiredColumnsOfSources.get(s),
+              StreamingV2ScanPushDown.sourceName(table, catalog, identifier))(
+              _.toMicroBatchStream(metadataPath))
             val relation = StreamingDataSourceV2Relation(
                 table,
                 output,
@@ -312,7 +310,8 @@ class MicroBatchExecution(
                 },
                 sourceIdentifyingName
               )
-            StreamingDataSourceV2ScanRelation(relation, scan, output, stream)
+            StreamingDataSourceV2ScanRelation(relation, streamingScan.scan, output,
+              streamingScan.stream, scanOutput = streamingScan.scanOutput)
           })
         } else if (v1.isEmpty) {
           throw QueryExecutionErrors.microBatchUnsupportedByDataSourceError(

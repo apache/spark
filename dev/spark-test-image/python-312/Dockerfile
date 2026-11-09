@@ -53,7 +53,7 @@ RUN apt-get update && apt-get install -y \
     liblapack-dev \
     libopenblas-dev \
     libssl-dev \
-    openjdk-17-jdk-headless \
+    openjdk-21-jdk-headless \
     python3.12 \
     python3.12-dev \
     python3.12-venv \

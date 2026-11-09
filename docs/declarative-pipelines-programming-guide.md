@@ -521,7 +521,7 @@ SELECT * FROM STREAM(customers_us_east);
 
 Many source systems emit a stream of *change events* rather than a snapshot of the current data: each record describes an insert, update, or delete to a row, identified by a key. Applying these events correctly to a target table by hand is tricky. Matching events to existing rows, applying them in the right order, and handling out-of-order and duplicate events without corrupting the table is the hard part.
 
-**Auto CDC** does this automatically. Given a source of change events and a rule for identifying and ordering them, SDP maintains a target streaming table that always reflects the latest state for each key.
+**Auto CDC** does this automatically. Given a source of change events and a rule for identifying and ordering them, SDP maintains a target streaming table that holds either the latest state of each key (SCD Type 1) or every version of each key (SCD Type 2). See [SCD Type 2: Keeping History](#scd-type-2-keeping-history).
 
 ### Keys and Sequencing
 
@@ -540,7 +540,7 @@ Given a stream of change events, Auto CDC keeps the target table in sync with th
 - **Deletes** - Events that match a supplied delete condition remove the corresponding row from the target.
 - **Out-of-order and duplicate events** - Events don't have to arrive in order, and the source does not need to be de-duplicated. An event whose sequence value is older than the state already applied for its key is discarded, and a re-delivered event converges to the same result.
 
-This section covers **Slowly Changing Dimensions (SCD) Type 1**, where the target keeps only the current version of each row, with no history of prior values. SCD Type 2 is also supported; [SPARK-58570](https://issues.apache.org/jira/browse/SPARK-58570) tracks documenting it.
+These rules describe **Slowly Changing Dimensions (SCD) Type 1**, where the target keeps only the current version of each row, with no history of prior values. Type 1 is the default. **SCD Type 2** keeps every version of a row instead; see [SCD Type 2: Keeping History](#scd-type-2-keeping-history).
 
 For example, take these change events. They are **not** in `version` order - the last event for `id 1` is a stale re-delivery of version 1, arriving after version 2:
 
@@ -617,16 +617,18 @@ dp.create_auto_cdc_flow(
 | `source` | Yes | Name of the CDC source dataset to stream change events from. |
 | `keys` | Yes | The column or columns that uniquely identify a row. A list of column names (strings) or `Column` objects, given as unqualified identifiers: for example `"id"` or `col("id")`, but not `"source.id"`. |
 | `sequence_by` | Yes | An expression used to order change events for each key. The highest value wins. A SQL expression string or a `Column`. |
-| `apply_as_deletes` | No | A boolean expression identifying events that represent deletes. Matching rows are removed from the target. A SQL expression string or a `Column`. |
+| `apply_as_deletes` | No | A boolean expression identifying events that represent deletes. With SCD Type 1, a matching event removes the key's row from the target; with SCD Type 2, it closes the key's current version. A SQL expression string or a `Column`. |
 | `column_list` | No | The columns to include in the target. Mutually exclusive with `except_column_list`. |
 | `except_column_list` | No | The columns to exclude from the target; all other columns are included. Mutually exclusive with `column_list`. Commonly used to drop operation/metadata columns such as `op`. |
-| `stored_as_scd_type` | No | The SCD type of the target. Pass `1` (or `"1"`) for the Type 1 behavior described here. Type 2 is also accepted; see [SPARK-58570](https://issues.apache.org/jira/browse/SPARK-58570). |
+| `stored_as_scd_type` | No | The SCD type of the target: `1` or `2` (or `"1"` or `"2"`). Defaults to Type 1. See [SCD Type 2: Keeping History](#scd-type-2-keeping-history). |
 | `name` | No | The name of the flow. Defaults to the target table name. |
-| `spark_conf` | No | Spark configuration to apply while the flow runs. Overrides configuration set on the destination, the pipeline, or the cluster. |
+| `track_history_column_list` | No | SCD Type 2 only. The columns whose changes open a new version. Keyword-only. Mutually exclusive with `track_history_except_column_list`. |
+| `track_history_except_column_list` | No | SCD Type 2 only. The columns whose changes do not open a new version; changes to any other non-key column in the target do. Keyword-only. Mutually exclusive with `track_history_column_list`. |
+| `spark_conf` | No | Spark configuration to apply while the flow runs. Keyword-only. Overrides configuration set on the destination, the pipeline, or the cluster. |
 
 With neither `column_list` nor `except_column_list`, every source column is written to the target - including the operation column and any other change-feed bookkeeping. That is rarely right for a CDC feed, so the examples here drop `op` with `except_column_list=["op"]`. See [Selecting Which Columns Land in the Target](#selecting-which-columns-land-in-the-target).
 
-`keys`, `column_list`, and `except_column_list` must be given as unqualified column identifiers: `"id"` or `col("id")`, but not `"cdc_events.id"` or `col("cdc_events.id")`. (`sequence_by` is not restricted this way; it may be any expression over the source columns.)
+`keys`, `column_list`, `except_column_list`, and the `track_history_*` lists must be given as unqualified column identifiers: `"id"` or `col("id")`, but not `"cdc_events.id"` or `col("cdc_events.id")`. (`sequence_by` is not restricted this way; it may be any expression over the source columns.)
 
 ### Defining an Auto CDC Flow in SQL
 
@@ -662,7 +664,8 @@ COLUMNS * EXCEPT (op);
 - `SEQUENCE BY expr` - the expression that orders events per key. **Required.**
 - `APPLY AS DELETE WHEN condition` - marks events that represent deletes. Optional.
 - `COLUMNS (col, ...)` or `COLUMNS * EXCEPT (col, ...)` - selects or excludes columns. Optional; if omitted, all source columns are written.
-- `STORED AS SCD TYPE 1` - selects the SCD type. Optional; defaults to Type 1 when omitted, which is the behavior described here.
+- `STORED AS SCD TYPE 1` or `STORED AS SCD TYPE 2` - selects the SCD type. Optional; defaults to Type 1 when omitted.
+- `TRACK HISTORY ON (col, ...)` or `TRACK HISTORY ON * EXCEPT (col, ...)` - selects the columns whose changes open a new version. Optional; requires `STORED AS SCD TYPE 2`.
 
 `CREATE FLOW ... AS AUTO CDC INTO` also accepts an optional `COMMENT`, and `CREATE STREAMING TABLE ... FLOW AUTO CDC` accepts `IF NOT EXISTS`.
 
@@ -807,6 +810,200 @@ spark-pipelines run
 
 The table is unchanged. This time the stale event is alone in its batch, so there is no newer event to supersede it within the batch; instead Auto CDC compares its version against the state already recorded for `id 1` and discards it, because version 1 is below the committed version 2. Applied in arrival order, this event would have wrongly reverted `id 1` to `alice`.
 
+### SCD Type 2: Keeping History
+
+With SCD Type 2, the target keeps every version of a row instead of overwriting it. Auto CDC adds two columns to the target that record when each version was current:
+
+- `__START_AT` - the sequence value at which the version became current.
+- `__END_AT` - the sequence value at which the version stopped being current, or `NULL` for the current version.
+
+Both columns have the type of the sequencing expression. Auto CDC adds them to the target schema; the source does not supply them. Type 2 has the same [Requirements](#requirements) as Type 1.
+
+The current version of each key is the row whose `__END_AT` is `NULL`:
+
+```sql
+SELECT * FROM customers WHERE __END_AT IS NULL;
+```
+
+The version that was current at a given sequence value is the row whose interval contains that value. For `version` 1:
+
+```sql
+SELECT * FROM customers
+WHERE __START_AT <= 1 AND (__END_AT > 1 OR __END_AT IS NULL);
+```
+
+#### How Type 2 Applies Each Event
+
+- **Inserts and updates** - The first event for a key opens its first version. A later event that changes a tracked column closes the key's current version at the event's sequence value and opens a new version. See [Choosing Which Columns Open a New Version](#choosing-which-columns-open-a-new-version).
+- **Deletes** - A delete closes the key's current version at the delete's sequence value and opens no new one, so the key has no row with a `NULL` `__END_AT`. The key's earlier versions stay in the target. A later insert for the key opens a new version.
+- **Out-of-order events** - A late event is placed in the history at the position its sequence value gives it, producing the same history as if the events had arrived in order. A late insert or update that changes a tracked column adds an earlier version if it precedes all of the key's history, or closes the version it falls inside at its sequence value and opens a new one; a late delete closes the version it falls inside at the delete's sequence value. A delete that arrives before the inserts or updates it applies to is kept, and closes the version they open once they arrive.
+- **Duplicate events** - A re-delivered event adds no version.
+
+For example, a first run receives two events for `id 1`:
+
+| id | name   | version | op     |
+|----|--------|---------|--------|
+| 1  | alice  | 10      | UPSERT |
+| 1  | alicia | 30      | UPSERT |
+
+The target holds two versions. The tables here omit the `__spark_autocdc_metadata` column (see [Auto CDC Considerations](#auto-cdc-considerations)):
+
+| id | name   | version | `__START_AT` | `__END_AT` |
+|----|--------|---------|--------------|------------|
+| 1  | alice  | 10      | 10           | 30         |
+| 1  | alicia | 30      | 30           | NULL       |
+
+A later run receives two late events, one inside the history and one before it:
+
+| id | name   | version | op     |
+|----|--------|---------|--------|
+| 1  | alyssa | 20      | UPSERT |
+| 1  | ally   | 5       | UPSERT |
+
+`alyssa` splits the `alice` version at 20, and `ally` adds a version before `alice`:
+
+| id | name   | version | `__START_AT` | `__END_AT` |
+|----|--------|---------|--------------|------------|
+| 1  | ally   | 5       | 5            | 10         |
+| 1  | alice  | 10      | 10           | 20         |
+| 1  | alyssa | 20      | 20           | 30         |
+| 1  | alicia | 30      | 30           | NULL       |
+
+#### Defining a Type 2 Flow
+
+In Python, pass `stored_as_scd_type=2` to `create_auto_cdc_flow`:
+
+```python
+from pyspark import pipelines as dp
+from pyspark.sql import DataFrame
+
+@dp.table
+def cdc_events() -> DataFrame:
+    return spark.readStream.table("cdc_source")
+
+dp.create_streaming_table("customers")
+
+dp.create_auto_cdc_flow(
+    target="customers",
+    source="cdc_events",
+    keys=["id"],
+    sequence_by="version",
+    apply_as_deletes="op = 'DELETE'",
+    except_column_list=["op"],
+    stored_as_scd_type=2,
+)
+```
+
+In SQL, add `STORED AS SCD TYPE 2`:
+
+```sql
+CREATE STREAMING TABLE customers
+FLOW AUTO CDC
+FROM STREAM(cdc_events)
+KEYS (id)
+APPLY AS DELETE WHEN op = 'DELETE'
+SEQUENCE BY version
+COLUMNS * EXCEPT (op)
+STORED AS SCD TYPE 2;
+```
+
+#### Choosing Which Columns Open a New Version
+
+By default, every column written to the target except the keys is tracked. When the sequencing column is written to the target, it is tracked too, and because every event for a key has its own sequence value, each insert or update then opens a new version. When it is excluded from the target, events that leave every tracked column unchanged are coalesced.
+
+Consecutive inserts and updates for a key that have equal values in every tracked column are coalesced into one version. That version keeps the `__START_AT` of the earliest event, and its untracked columns hold the values of the event with the highest sequence value.
+
+To choose the tracked columns, name them with `track_history_column_list` (Python) or `TRACK HISTORY ON (...)` (SQL), or exclude columns with `track_history_except_column_list` or `TRACK HISTORY ON * EXCEPT (...)`. The two forms are mutually exclusive, and both require SCD Type 2. Tracked columns must be columns written to the target and must not be keys; any other column fails with `AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA`.
+
+For example, to open a new version only when `name` changes:
+
+```python
+dp.create_auto_cdc_flow(
+    target="customers",
+    source="cdc_events",
+    keys=["id"],
+    sequence_by="version",
+    apply_as_deletes="op = 'DELETE'",
+    except_column_list=["op"],
+    stored_as_scd_type=2,
+    track_history_column_list=["name"],
+)
+```
+
+```sql
+CREATE STREAMING TABLE customers
+FLOW AUTO CDC
+FROM STREAM(cdc_events)
+KEYS (id)
+APPLY AS DELETE WHEN op = 'DELETE'
+SEQUENCE BY version
+COLUMNS * EXCEPT (op)
+STORED AS SCD TYPE 2
+TRACK HISTORY ON (name);
+```
+
+Given these events:
+
+| id | name   | status   | version | op     |
+|----|--------|----------|---------|--------|
+| 1  | alice  | active   | 5       | UPSERT |
+| 1  | alice  | inactive | 10      | UPSERT |
+| 1  | alicia | inactive | 15      | UPSERT |
+
+the first two events have the same `name` and are coalesced; the third changes `name` and opens a new version:
+
+| id | name   | status   | version | `__START_AT` | `__END_AT` |
+|----|--------|----------|---------|--------------|------------|
+| 1  | alice  | inactive | 10      | 5            | 15         |
+| 1  | alicia | inactive | 15      | 15           | NULL       |
+
+With the default tracking, the same events produce three versions.
+
+#### Changing the SCD Type or Tracked Columns
+
+Like the key set (see [Changing the Key Set](#changing-the-key-set)), the SCD type and the set of tracked columns are part of the flow's persisted state. Changing the SCD type across incremental runs fails with `AUTOCDC_INVALID_STATE.SCD_TYPE_DRIFT`, and changing the tracked columns fails with `AUTOCDC_INVALID_STATE.TRACK_HISTORY_DRIFT`. With the default tracking or `track_history_except_column_list`, the tracked columns follow the columns written to the target, so adding or removing a column there also changes them. To make either change, fully refresh the target table:
+
+```bash
+spark-pipelines run --full-refresh customers
+```
+
+When columns were added to the target under the default tracking or `track_history_except_column_list`, the target keeps its history without a full refresh. The `AUTOCDC_INVALID_STATE.TRACK_HISTORY_DRIFT` error lists the recorded tracked columns; passing exactly those columns in `track_history_column_list` (or `TRACK HISTORY ON (...)`) matches the recorded state, and the added columns are not tracked.
+
+#### Trying Type 2 End to End
+
+To compare Type 2 with Type 1, add a second target to the [End-to-End Example](#end-to-end-example). Add this to `transformations/customers_cdc.py`, after the Type 1 flow:
+
+```python
+dp.create_streaming_table("customers_history")
+
+dp.create_auto_cdc_flow(
+    target="customers_history",
+    source="cdc_events",
+    keys=["id"],
+    sequence_by="version",
+    apply_as_deletes="op = 'DELETE'",
+    except_column_list=["op"],
+    stored_as_scd_type=2,
+)
+```
+
+Both flows read the same `cdc_events` source. After the three runs, `customers_history` holds the full history where `customers` holds only the current state:
+
+| id | name   | version | `__START_AT` | `__END_AT` |
+|----|--------|---------|--------------|------------|
+| 1  | alice  | 1       | 1            | 2          |
+| 1  | alicia | 2       | 2            | NULL       |
+| 2  | bob    | 1       | 1            | 2          |
+| 3  | carol  | 1       | 1            | NULL       |
+
+Compared with the Type 1 result:
+
+- `id 1` has two versions: `alice` from version 1 to 2, and `alicia` current from 2. Type 1 kept only `alicia`.
+- `id 2` keeps its one version, closed at the delete's sequence value of 2. Type 1 removed the row. No version of `id 2` is current, so a `WHERE __END_AT IS NULL` query returns no row for it.
+- `id 3` has one current version, as in Type 1.
+
+The stale `alice` events at version 1 in the second and third batches add no version.
+
 ### How-Tos
 
 #### Handling Deletes
@@ -823,7 +1020,7 @@ dp.create_auto_cdc_flow(
 )
 ```
 
-When an event matches the delete condition, the row for its key is removed from the target. If no delete condition is supplied, every event is treated as an insert or update.
+When an event matches the delete condition, SCD Type 1 removes the row for its key from the target, and SCD Type 2 closes the key's current version (see [How Type 2 Applies Each Event](#how-type-2-applies-each-event)). If no delete condition is supplied, every event is treated as an insert or update.
 
 #### Selecting Which Columns Land in the Target
 
@@ -878,8 +1075,8 @@ spark-pipelines run --full-refresh customers
 
 Beyond the [Requirements](#requirements) above, two engine details are worth knowing:
 
-- **Reserved column names** - Auto CDC owns the `__spark_autocdc_` column-name prefix; it projects an internal `__spark_autocdc_metadata` column onto the target, and SCD Type 2 adds more. The source cannot contain any column whose name begins with `__spark_autocdc_`; a collision fails when the flow is constructed. Treat these as engine details rather than columns to query.
-- **Declaring a schema explicitly** - When the target is declared separately - `create_streaming_table(schema=...)` in Python, or a standalone `CREATE STREAMING TABLE` in SQL - the declared schema must currently include the reserved metadata column, because it has to match the flow's output schema exactly. The combined `CREATE STREAMING TABLE ... FLOW AUTO CDC` form takes no column list at all; it infers the schema from the flow. Either way, letting Auto CDC derive the schema avoids the issue. [SPARK-58118](https://issues.apache.org/jira/browse/SPARK-58118) tracks relaxing it.
+- **Reserved column names** - Auto CDC owns the `__spark_autocdc_` column-name prefix; it projects an internal `__spark_autocdc_metadata` column onto the target. The source cannot contain any column whose name begins with `__spark_autocdc_`; a collision fails when the flow is constructed. Treat these as engine details rather than columns to query. SCD Type 2 also reserves `__START_AT` and `__END_AT`; a Type 2 source with either column fails with `AUTOCDC_RESERVED_COLUMN_NAME_CONFLICT`.
+- **Declaring a schema explicitly** - When the target is declared separately - `create_streaming_table(schema=...)` in Python, or a standalone `CREATE STREAMING TABLE` in SQL - the declared schema must currently include the reserved columns (for SCD Type 2, `__START_AT` and `__END_AT` as well as the metadata column), because it has to match the flow's output schema exactly. The combined `CREATE STREAMING TABLE ... FLOW AUTO CDC` form takes no column list at all; it infers the schema from the flow. Either way, letting Auto CDC derive the schema avoids the issue. [SPARK-58118](https://issues.apache.org/jira/browse/SPARK-58118) tracks relaxing it.
 
 ## Writing Data to External Targets with Sinks
 

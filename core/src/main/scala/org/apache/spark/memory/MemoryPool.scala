@@ -50,7 +50,7 @@ private[memory] abstract class MemoryPool(lock: Object) {
    * Expands the pool by `delta` bytes.
    */
   final def incrementPoolSize(delta: Long): Unit = lock.synchronized {
-    require(delta >= 0)
+    require(delta >= 0, s"cannot increment the pool size by a negative amount: $delta")
     _poolSize += delta
   }
 
@@ -58,9 +58,12 @@ private[memory] abstract class MemoryPool(lock: Object) {
    * Shrinks the pool by `delta` bytes.
    */
   final def decrementPoolSize(delta: Long): Unit = lock.synchronized {
-    require(delta >= 0)
-    require(delta <= _poolSize)
-    require(_poolSize - delta >= memoryUsed)
+    require(delta >= 0, s"cannot decrement the pool size by a negative amount: $delta")
+    require(delta <= _poolSize,
+      s"cannot decrement the pool size ${_poolSize} by a larger amount: $delta")
+    require(_poolSize - delta >= memoryUsed,
+      s"cannot decrement the pool size ${_poolSize} by $delta because the used memory " +
+        s"$memoryUsed would exceed the remaining pool size")
     _poolSize -= delta
   }
 

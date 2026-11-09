@@ -6,6 +6,12 @@ ShowCatalogsCommand
 
 
 -- !query
+SHOW CATALOGS 'non_existing_catalog_pattern'
+-- !query analysis
+ShowCatalogsCommand non_existing_catalog_pattern
+
+
+-- !query
 SHOW CURRENT NAMESPACE
 -- !query analysis
 ShowCurrentNamespaceCommand
@@ -32,67 +38,16 @@ ShowCurrentNamespaceCommand
 
 
 -- !query
-SET CATALOG 'testcat'
--- !query analysis
-SetCatalogCommand testcat
-
-
--- !query
-SHOW CURRENT NAMESPACE
--- !query analysis
-ShowCurrentNamespaceCommand
-
-
--- !query
-SHOW CATALOGS
--- !query analysis
-ShowCatalogsCommand
-
-
--- !query
-SHOW CATALOGS LIKE 'TEST*'
--- !query analysis
-ShowCatalogsCommand TEST*
-
-
--- !query
-SHOW CATALOGS 'non_existing_catalog_pattern'
--- !query analysis
-ShowCatalogsCommand non_existing_catalog_pattern
-
-
--- !query
-CREATE NAMESPACE testcat.show_commands_ns.`inner.ns`
--- !query analysis
-CreateNamespace false
-+- ResolvedNamespace org.apache.spark.sql.connector.catalog.InMemoryCatalog@xxxxxxxx, [show_commands_ns, inner.ns]
-
-
--- !query
-USE testcat.show_commands_ns.`inner.ns`
--- !query analysis
-SetCatalogAndNamespace
-+- ResolvedNamespace org.apache.spark.sql.connector.catalog.InMemoryCatalog@xxxxxxxx, [show_commands_ns, inner.ns]
-
-
--- !query
 SHOW CURRENT SCHEMA
 -- !query analysis
 ShowCurrentNamespaceCommand
 
 
 -- !query
-USE spark_catalog.default
+USE default
 -- !query analysis
 SetCatalogAndNamespace
 +- ResolvedNamespace V2SessionCatalog(spark_catalog), [default]
-
-
--- !query
-DROP NAMESPACE testcat.show_commands_ns.`inner.ns`
--- !query analysis
-DropNamespace false, false
-+- ResolvedNamespace org.apache.spark.sql.connector.catalog.InMemoryCatalog@xxxxxxxx, [show_commands_ns, inner.ns]
 
 
 -- !query

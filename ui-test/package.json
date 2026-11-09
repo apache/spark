@@ -6,13 +6,14 @@
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
   },
   "devDependencies": {
-    "glob": "^13.0.3",
+    "glob": "^14.0.3",
     "jest": "^30.0.0",
     "jest-environment-jsdom": "^30.0.0",
     "jquery": "^3.7.1"
   },
   "overrides": {
-    "js-yaml": "^4.2.0"
+    "js-yaml": "^4.2.0",
+    "glob@>=10 <14": "$glob"
   },
   "jest": {
     "testEnvironment": "jsdom",
