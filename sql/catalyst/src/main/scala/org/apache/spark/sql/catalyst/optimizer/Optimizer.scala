@@ -1524,9 +1524,10 @@ object ColumnPruning extends Rule[LogicalPlan] {
         child = a.copy(aggregateExpressions = a.aggregateExpressions.filter(p.references.contains)))
     case a @ Project(_, e @ Expand(_, _, grandChild)) if !e.outputSet.subsetOf(a.references) =>
       val newOutput = e.output.filter(a.references.contains(_))
+      val newOutputSet = AttributeSet(newOutput)
       val newProjects = e.projections.map { proj =>
         proj.zip(e.output).filter { case (_, a) =>
-          newOutput.contains(a)
+          newOutputSet.contains(a)
         }.map(_._1)
       }
       a.copy(child = Expand(newProjects, newOutput, grandChild))
