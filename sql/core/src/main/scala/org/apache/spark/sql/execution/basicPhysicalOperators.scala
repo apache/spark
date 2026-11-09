@@ -1377,22 +1377,6 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     if (isPlainUnion(raw)) super.outputPartitioning else raw
   }
 
-  // Per-child projection from the child's output to the union's output. The wrapped
-  // child is always the source `Attribute` (deterministic by construction); the Alias
-  // only remaps the exprId/name/metadata. `WidenSetOperationTypes` aligns top-level
-  // dataTypes, but nested nullability differences bypass it; those cases are caught
-  // by the `type-mismatch` gate below, which is the single source of truth for the
-  // `src.dataType == tgt.dataType` invariant `doConsume` relies on.
-  @transient private lazy val perChildProjections: IndexedSeq[Seq[NamedExpression]] =
-    children.toIndexedSeq.map { child =>
-      child.output.zip(output).map { case (src, tgt) =>
-        Alias(src, tgt.name)(
-          exprId = tgt.exprId,
-          qualifier = tgt.qualifier,
-          explicitMetadata = Some(tgt.metadata))
-      }
-    }
-
   // The confs the gate reads, taken from the record rather than live for the reason the plain-union
   // decision is stamped: `conf` is live, so the gate, `metrics` and the copy `insertInputAdapter`
   // puts inside the codegen shell would otherwise be free to read different values. When a child is
@@ -1596,12 +1580,17 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
       ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     val i = currentEmittingChild.get
     require(i >= 0, "UnionExec.doConsume invoked outside doProduce emission window")
-    // Route BoundReference reads through `currentVars` (the incoming row is
-    // delivered as variables under WSCG, not via ctx.INPUT_ROW).
-    val bound = BindReferences.bindReferences(perChildProjections(i), children(i).output)
+    // Read the incoming row (delivered as `currentVars` under WSCG) by position. Binding by
+    // `ExprId` would resolve a child output that repeats an `ExprId` (e.g. `SELECT a, a`) to
+    // the first occurrence, so the second union output column would take the first column's
+    // value and its declaration would be emitted twice. `doExecute` is positional too, since
+    // it concatenates child rows as they are.
     ctx.currentVars = input
     ctx.INPUT_ROW = null
-    val projectedExprCodes = bound.map(_.genCode(ctx))
+    val childOutput = children(i).output
+    val projectedExprCodes = childOutput.zipWithIndex.map { case (attr, pos) =>
+      BoundReference(pos, attr.dataType, attr.nullable).genCode(ctx)
+    }
 
     s"""
        |${numOutputRowsTerm.get}.add(1L);

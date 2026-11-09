@@ -60,9 +60,9 @@ object UnionBenchmark extends SqlBasedBenchmark {
     dfs.reduce((a, b) => a.union(b)).filter(col("id") > 0)
   }
 
-  // Type widening: alternate int and long children so UnionExec needs to
-  // insert `Cast` nodes in `perChildProjections`, adding per-row work in
-  // each helper method.
+  // Type widening: alternate int and long children, so `WidenSetOperationTypes` puts a
+  // `Project(Cast)` above each child and the union projects widened columns, adding
+  // per-row work in each helper method.
   private def buildWideningQuery(n: Int): DataFrame = {
     val dfs = (0 until n).map { i =>
       val df = spark.range(i * 10000L, i * 10000L + 10000L).toDF("id")
