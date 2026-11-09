@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.execution.joins
 
-import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.{Column, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{Coalesce, Literal}
 import org.apache.spark.sql.catalyst.plans.FullOuter
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEShuffleReadExec}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.functions.{coalesce, col}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.LongType
@@ -112,41 +113,46 @@ class FullOuterJoinPartitioningSuite
     joins.head
   }
 
-  private def sortedRows(df: DataFrame): Seq[String] = df.collect().toSeq.map(_.toString).sorted
+  private def fullOuterJoinOf(query: String, confs: (String, String)*): ShuffledJoin =
+    withSQLConf(baseConfs ++ confs: _*) { firstFullOuterJoin(sql(query)) }
 
-  /**
-   * Runs `query` under `confs`, asserts the answer equals the one from a single shuffle partition,
-   * where no placement can go wrong, and returns the number of shuffles.
-   */
-  private def compare(query: String, confs: (String, String)*): Int = {
-    val expected = withSQLConf(baseConfs ++ confs ++ Seq(
+  /** The partition a BIGINT `v`, or NULL, hashes to. */
+  private def partitionOf(v: Any): Int =
+    HashPartitioning(Seq(Literal.create(v, LongType)), numShufflePartitions)
+      .partitionIdExpression.eval().asInstanceOf[Int]
+
+  /** The answer of `query` on a single shuffle partition, where no placement can go wrong. */
+  private def singlePartitionAnswer(query: String, confs: (String, String)*): Seq[Row] =
+    withSQLConf(baseConfs ++ confs ++ Seq(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
         SQLConf.SHUFFLE_PARTITIONS.key -> "1"): _*) {
-      sortedRows(sql(query))
+      sql(query).collect().toSeq
     }
+
+  /**
+   * Runs `query` under `confs`, checks the answer against `singlePartitionAnswer`, and returns the
+   * number of shuffles.
+   */
+  private def compare(query: String, confs: (String, String)*): Int = {
+    val expected = singlePartitionAnswer(query, confs: _*)
     withSQLConf(baseConfs ++ confs: _*) {
       val df = sql(query)
-      assert(sortedRows(df) == expected, query)
+      checkAnswer(df, expected)
       numShuffles(df.queryExecution.executedPlan)
     }
   }
 
   test("USING join followed by GROUP BY on the merged key does not shuffle again") {
     val query = usingGroupBy
+    // A split NULL group would give the answer two NULL-keyed rows.
     assert(compare(query) == 2)
 
-    withSQLConf(baseConfs: _*) {
-      val ps = members(firstFullOuterJoin(sql(query)).outputPartitioning)
-      assert(ps.size == 2)
-      assert(ps.forall {
-        case HashPartitioning(Seq(_), `numShufflePartitions`) => true
-        case _ => false
-      })
-      // A single NULL group: the NULL-keyed rows of both sides are co-located.
-      checkAnswer(
-        sql(s"SELECT count(*) FROM ($query) WHERE k IS NULL"),
-        Row(1))
-    }
+    val ps = members(fullOuterJoinOf(query).outputPartitioning)
+    assert(ps.size == 2)
+    assert(ps.forall {
+      case HashPartitioning(Seq(_), `numShufflePartitions`) => true
+      case _ => false
+    })
   }
 
   test("GROUP BY an explicit COALESCE of the join keys does not shuffle again") {
@@ -158,7 +164,7 @@ class FullOuterJoinPartitioningSuite
     assert(compare(query("coalesce(b.k, a.k)")) == 2)
   }
 
-  test("a downstream join on the reversed order does not shuffle the join output again") {
+  test("a downstream join on either COALESCE order does not shuffle the join output again") {
     def query(merged: String): String =
       s"""SELECT * FROM (
          |  SELECT $merged AS m, va, vb FROM a FULL OUTER JOIN b ON a.k = b.k
@@ -180,10 +186,7 @@ class FullOuterJoinPartitioningSuite
     Seq(query(lk, rk2), query(rk, lk2)).foreach { q =>
       assert(compare(q) == 3, q)
     }
-    withSQLConf(baseConfs: _*) {
-      assert(members(firstFullOuterJoin(sql(s"SELECT * FROM $join")).outputPartitioning)
-        .size == 2)
-    }
+    assert(members(fullOuterJoinOf(s"SELECT * FROM $join").outputPartitioning).size == 2)
   }
 
   test("a chain of FULL OUTER joins on explicit merged keys keeps the claim") {
@@ -230,9 +233,8 @@ class FullOuterJoinPartitioningSuite
       """SELECT /*+ SHUFFLE_HASH(b) */ k, count(*)
         |FROM a FULL OUTER JOIN b USING (k) GROUP BY k""".stripMargin
     assert(compare(query, SQLConf.PREFER_SORTMERGEJOIN.key -> "false") == 2)
-    withSQLConf(baseConfs :+ (SQLConf.PREFER_SORTMERGEJOIN.key -> "false"): _*) {
-      assert(firstFullOuterJoin(sql(query)).isInstanceOf[ShuffledHashJoinExec])
-    }
+    assert(fullOuterJoinOf(query, SQLConf.PREFER_SORTMERGEJOIN.key -> "false")
+      .isInstanceOf[ShuffledHashJoinExec])
   }
 
   test("AQE coalesced partitions keep the claim") {
@@ -252,16 +254,14 @@ class FullOuterJoinPartitioningSuite
       val join = s"a JOIN b ON a.k = b.k FULL OUTER JOIN c ON $innerKey = c.k"
       val query = s"SELECT coalesce($innerKey, c.k) AS g, count(*) FROM $join GROUP BY 1"
       assert(compare(query) == 3, innerKey)
-      withSQLConf(baseConfs: _*) {
-        val fullOuter = firstFullOuterJoin(sql(s"SELECT * FROM $join"))
-        val keys = members(fullOuter.outputPartitioning).map {
-          case h: HashPartitioningLike => h.expressions.head.children.toSet
-        }
-        assert(keys.distinct.size == 1)
-        assert(keys.head.size == 2)
-        assert(keys.head.exists(_.semanticEquals(fullOuter.leftKeys.head)))
-        assert(keys.head.exists(_.semanticEquals(fullOuter.rightKeys.head)))
+      val fullOuter = fullOuterJoinOf(s"SELECT * FROM $join")
+      val keys = members(fullOuter.outputPartitioning).map {
+        case h: HashPartitioningLike => h.expressions.head.children.toSet
       }
+      assert(keys.distinct.size == 1)
+      assert(keys.head.size == 2)
+      assert(keys.head.exists(_.semanticEquals(fullOuter.leftKeys.head)))
+      assert(keys.head.exists(_.semanticEquals(fullOuter.rightKeys.head)))
     }
   }
 
@@ -277,10 +277,8 @@ class FullOuterJoinPartitioningSuite
       val query = s"SELECT $merged AS g, count(*) FROM ($base) GROUP BY $merged"
       assert(compare(query, coPartition) == 3, merged)
     }
-    withSQLConf(baseConfs :+ coPartition: _*) {
-      // Two sound pairs, each in its two uniform orders.
-      assert(members(firstFullOuterJoin(sql(base)).outputPartitioning).size == 4)
-    }
+    // Two sound pairs, each in its two uniform orders.
+    assert(members(fullOuterJoinOf(base, coPartition).outputPartitioning).size == 4)
   }
 
   test("GROUP BY one side's key still shuffles") {
@@ -291,17 +289,15 @@ class FullOuterJoinPartitioningSuite
   test("null-aware children give a null-aware output") {
     val spread = SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "true"
     // Spread NULL-keyed rows rule out a strict clustering, so the aggregate shuffles again ...
+    // A split NULL group would give the answer two NULL-keyed rows.
     val grouped = usingGroupBy
     assert(compare(grouped, spread) == 3)
     // ... while a chained FULL OUTER join, which tolerates spread NULL keys, does not.
     val chained = "SELECT * FROM a FULL OUTER JOIN b USING (k) FULL OUTER JOIN c USING (k)"
     assert(compare(chained, spread) == 3)
 
-    withSQLConf(baseConfs :+ spread: _*) {
-      assert(members(firstFullOuterJoin(sql(grouped)).outputPartitioning)
-        .forall(_.isInstanceOf[NullAwareHashPartitioning]))
-      checkAnswer(sql(s"SELECT count(*) FROM ($grouped) WHERE k IS NULL"), Row(1))
-    }
+    assert(members(fullOuterJoinOf(grouped, spread).outputPartitioning)
+      .forall(_.isInstanceOf[NullAwareHashPartitioning]))
   }
 
   test("a strict hash side next to a null-aware side gives a null-aware output") {
@@ -309,14 +305,12 @@ class FullOuterJoinPartitioningSuite
     mixedJoins.foreach { case (join, merged) =>
       // A chained FULL OUTER join tolerates spread NULL keys, so it reuses the null-aware output.
       assert(compare(s"SELECT * FROM $join FULL OUTER JOIN c ON $merged = c.k", spread) == 3)
-      withSQLConf(baseConfs :+ spread: _*) {
-        val fullOuter = firstFullOuterJoin(sql(s"SELECT * FROM $join"))
-        val sides = Seq(fullOuter.left, fullOuter.right).map(_.outputPartitioning)
-        assert(sides.count(_.isInstanceOf[NullAwareHashPartitioning]) == 1, join)
-        assert(sides.count(_.isInstanceOf[HashPartitioning]) == 1, join)
-        assert(members(fullOuter.outputPartitioning)
-          .forall(_.isInstanceOf[NullAwareHashPartitioning]), join)
-      }
+      val fullOuter = fullOuterJoinOf(s"SELECT * FROM $join", spread)
+      val sides = Seq(fullOuter.left, fullOuter.right).map(_.outputPartitioning)
+      assert(sides.count(_.isInstanceOf[NullAwareHashPartitioning]) == 1, join)
+      assert(sides.count(_.isInstanceOf[HashPartitioning]) == 1, join)
+      assert(members(fullOuter.outputPartitioning)
+        .forall(_.isInstanceOf[NullAwareHashPartitioning]), join)
     }
   }
 
@@ -325,9 +319,6 @@ class FullOuterJoinPartitioningSuite
     // COALESCE below as written. The unmatched `y` row with key 5 sits on hash(5) but its
     // coalesced key is f(NULL) = 0, the key of the matched rows on hash(0). Claiming the
     // coalesced key would split group 0 across two partitions.
-    def partitionOf(v: Long): Int =
-      HashPartitioning(Seq(Literal(v)), numShufflePartitions).partitionIdExpression
-        .eval().asInstanceOf[Int]
     assert(partitionOf(0L) != partitionOf(5L))
 
     def f(k: String): String = s"CASE WHEN $k IS NULL THEN 0 WHEN $k = 99 THEN NULL ELSE $k END"
@@ -354,9 +345,6 @@ class FullOuterJoinPartitioningSuite
     // `coalesce(k, 0)` is 0 on a NULL-padded row. With the other side's key first, the merged key
     // below is 0 on an unmatched row of that side whose own key is NULL, which sits on
     // hash(NULL) rather than hash(0).
-    def partitionOf(v: Any): Int =
-      HashPartitioning(Seq(Literal.create(v, LongType)), numShufflePartitions)
-        .partitionIdExpression.eval().asInstanceOf[Int]
     assert(partitionOf(0L) != partitionOf(null))
 
     withTempView("x", "y") {
@@ -371,10 +359,8 @@ class FullOuterJoinPartitioningSuite
           val join = s"x FULL OUTER JOIN y ON $condition"
           assert(compare(s"SELECT $merged AS g, count(*) FROM $join GROUP BY 1") == 3,
             condition)
-          withSQLConf(baseConfs: _*) {
-            assert(firstFullOuterJoin(sql(s"SELECT * FROM $join")).outputPartitioning
-              .isInstanceOf[UnknownPartitioning], condition)
-          }
+          assert(fullOuterJoinOf(s"SELECT * FROM $join").outputPartitioning
+            .isInstanceOf[UnknownPartitioning], condition)
       }
     }
   }
@@ -385,10 +371,8 @@ class FullOuterJoinPartitioningSuite
       s"""SELECT coalesce(a.k, b.k) AS g, coalesce(a.k2, coalesce(b.k2, 0)) AS g2, count(*)
          |FROM $join GROUP BY 1, 2""".stripMargin
     assert(compare(query) == 3)
-    withSQLConf(baseConfs: _*) {
-      assert(firstFullOuterJoin(sql(s"SELECT * FROM $join")).outputPartitioning
-        .isInstanceOf[UnknownPartitioning])
-    }
+    assert(fullOuterJoinOf(s"SELECT * FROM $join").outputPartitioning
+      .isInstanceOf[UnknownPartitioning])
   }
 
   test("changing spreadNullJoinKeys after the plan is prepared keeps its answer") {
@@ -402,16 +386,43 @@ class FullOuterJoinPartitioningSuite
       s"""SELECT u.k, u.cnt, c.vc FROM ($leg UNION ALL $leg) u
          |FULL OUTER JOIN c ON u.k = c.k""".stripMargin
     assert(compare(query, spread -> "true") == 3)
+    val expected = singlePartitionAnswer(query, spread -> "true")
     Seq(Nil, aqeCoalescing, Seq(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true")).foreach {
       confs =>
         withSQLConf(baseConfs ++ confs :+ (spread -> "true"): _*) {
-          val expected = sortedRows(sql(query))
+          checkAnswer(sql(query), expected)
           val df = sql(query)
           df.queryExecution.executedPlan
           withSQLConf(spread -> "false") {
-            assert(sortedRows(df) == expected, confs)
+            checkAnswer(df, expected)
           }
         }
+    }
+  }
+
+  test("a checkpointed join output keeps the claim on nullable keys") {
+    // `ak` and `bk` are not nullable below the join. The claim's keys are nullable, as in the
+    // join's output, so the optimizer does not simplify the recorded `coalesce(ak, bk)` to `ak`,
+    // which is NULL on the rows that pad the left side and was not placed by it. A key over an
+    // attribute, such as `ak + 1`, takes its nullability from that attribute, so every attribute
+    // in the key has to be nullable.
+    withSQLConf(baseConfs: _*) {
+      val left = spark.range(0, 100).selectExpr("id AS ak")
+      val right = spark.range(50, 150).selectExpr("id AS bk")
+      Seq(0, 1).foreach { offset =>
+        def key(c: String): Column = if (offset == 0) col(c) else col(c) + offset
+        val checkpointed =
+          left.join(right, key("ak") === key("bk"), "full_outer").localCheckpoint()
+
+        val byKey = checkpointed.groupBy(key("ak")).count()
+        checkAnswer(byKey,
+          (0L until 100L).map(v => Row(v + offset, 1L)) :+ Row(null, 50L))
+        assert(numShuffles(byKey.queryExecution.executedPlan) == 1, offset)
+
+        val byMergedKey = checkpointed.groupBy(coalesce(key("ak"), key("bk"))).count()
+        checkAnswer(byMergedKey, (0L until 150L).map(v => Row(v + offset, 1L)))
+        assert(numShuffles(byMergedKey.queryExecution.executedPlan) == 0, offset)
+      }
     }
   }
 
@@ -421,9 +432,7 @@ class FullOuterJoinPartitioningSuite
     val query =
       "SELECT coalesce(a.k, b.k), count(*) FROM a FULL OUTER JOIN b ON a.k <=> b.k GROUP BY 1"
     assert(compare(query) == 3)
-    withSQLConf(baseConfs: _*) {
-      assert(firstFullOuterJoin(sql(query)).outputPartitioning.isInstanceOf[UnknownPartitioning])
-    }
+    assert(fullOuterJoinOf(query).outputPartitioning.isInstanceOf[UnknownPartitioning])
   }
 
   test("a normalized floating-point key keeps the output partitioning unknown") {
@@ -436,9 +445,7 @@ class FullOuterJoinPartitioningSuite
         .createOrReplaceTempView("fb")
       val query = "SELECT d, count(*) FROM fa FULL OUTER JOIN fb USING (d) GROUP BY d"
       assert(compare(query) == 3)
-      withSQLConf(baseConfs: _*) {
-        assert(firstFullOuterJoin(sql(query)).outputPartitioning.isInstanceOf[UnknownPartitioning])
-      }
+      assert(fullOuterJoinOf(query).outputPartitioning.isInstanceOf[UnknownPartitioning])
     }
   }
 
@@ -475,10 +482,8 @@ class FullOuterJoinPartitioningSuite
              |FROM sa FULL OUTER JOIN sb ON sa.$key = sb.$key
              |GROUP BY $merged""".stripMargin
         assert(compare(query) == 2, key)
-        withSQLConf(baseConfs: _*) {
-          assert(members(firstFullOuterJoin(sql(query)).outputPartitioning)
-            .forall(_.isInstanceOf[HashPartitioning]), key)
-        }
+        assert(members(fullOuterJoinOf(query).outputPartitioning)
+          .forall(_.isInstanceOf[HashPartitioning]), key)
       }
     }
   }

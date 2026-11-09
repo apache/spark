@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Coalesce, Expression}
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, FullOuter, InnerLike, JoinType, LeftAnti, LeftExistence, LeftOuter, LeftSingle, RightOuter}
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, CoalescedNullAwareHashPartitioning, Distribution, HashPartitioningLike, KeyedPartitioning, NullAwareHashPartitioning, Partitioning, PartitioningCollection, UnknownPartitioning, UnspecifiedDistribution}
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, CoalescedHashPartitioning, CoalescedNullAwareHashPartitioning, Distribution, HashPartitioning, HashPartitioningLike, KeyedPartitioning, NullAwareHashPartitioning, Partitioning, PartitioningCollection, UnknownPartitioning, UnspecifiedDistribution}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -141,11 +141,11 @@ trait ShuffledJoin extends JoinCodegenSupport {
    *    the two sides of one join key pair and hash into the same partition space;
    *  - every key evaluates to NULL on a NULL-padded row (see `isNullOnNullPadding`);
    *  - every key is deterministic, which holds as a join condition cannot be non-deterministic.
-   * A null-aware side may have spread its NULL-keyed rows, and those are exactly the rows whose
-   * coalesced key contains a NULL, so the output is null-aware whenever either side is.
+   * A null-aware side may have spread its NULL-keyed rows, and each of those has a NULL in its
+   * coalesced key, so the output is null-aware whenever either side is.
    *
    * Every sound pair of the children's members is reported, each in the two argument orders of
-   * `coalescedKeys`, in a `PartitioningCollection` when there is more than one.
+   * `coalescedKeys`, in a `PartitioningCollection`.
    */
   private lazy val fullOuterOutputPartitioning: Partitioning = {
     val leftPartitioning = left.outputPartitioning
@@ -155,20 +155,29 @@ trait ShuffledJoin extends JoinCodegenSupport {
     // shape, which is sound either way.
     val leftDist = ClusteredDistribution(leftKeys, allowNullKeySpreading = true)
     val rightDist = ClusteredDistribution(rightKeys, allowNullKeySpreading = true)
+    lazy val rightHashes = hashPartitionings(right.outputPartitioning, right.outputSet)
     val coalesced = for {
-      l <- hashPartitionings(leftPartitioning)
-      r <- hashPartitionings(right.outputPartitioning)
+      l <- hashPartitionings(leftPartitioning, left.outputSet)
+      r <- rightHashes
       p <- coalescedPartitionings(l, leftDist, r, rightDist)
     } yield p
-    coalesced match {
-      case Seq() => UnknownPartitioning(leftPartitioning.numPartitions)
-      case Seq(single) => single
-      case multiple => PartitioningCollection.fromPartitionings(multiple)
+    if (coalesced.isEmpty) {
+      UnknownPartitioning(leftPartitioning.numPartitions)
+    } else {
+      PartitioningCollection.fromPartitionings(coalesced)
     }
   }
 
-  private def hashPartitionings(partitioning: Partitioning): Seq[HashPartitioningLike] =
-    PartitioningCollection.flatten(partitioning).collect { case h: HashPartitioningLike => h }
+  /**
+   * The hash members of `partitioning` whose every expression is NULL on the rows that pad
+   * `side` (see `isNullOnNullPadding`).
+   */
+  private def hashPartitionings(
+      partitioning: Partitioning,
+      side: AttributeSet): Seq[HashPartitioningLike] =
+    PartitioningCollection.flatten(partitioning).collect {
+      case h: HashPartitioningLike if h.expressions.forall(isNullOnNullPadding(_, side)) => h
+    }
 
   private def coalescedPartitionings(
       leftPartitioning: HashPartitioningLike,
@@ -181,16 +190,14 @@ trait ShuffledJoin extends JoinCodegenSupport {
       .isCompatibleWith(rightPartitioning.createShuffleSpec(rightDist))
     if (!compatible) return Nil
 
-    val keyPairs = leftPartitioning.expressions.zip(rightPartitioning.expressions)
-    val allowCoalesced = keyPairs.forall { case (l, r) => canCoalesce(l, r) }
-    if (!allowCoalesced) return Nil
-
     // A compatible pair has the same number of partitions and, if coalesced, the same boundaries,
-    // so either side fits, and a null-aware side is the one to keep.
+    // so either side fits, and a null-aware side is the one to keep. An unknown kind gives none.
     val candidatePartitioning = rightPartitioning match {
       case _: NullAwareHashPartitioning | _: CoalescedNullAwareHashPartitioning => rightPartitioning
-      case _ => leftPartitioning
+      case _: HashPartitioning | _: CoalescedHashPartitioning => leftPartitioning
+      case _ => return Nil
     }
+    val keyPairs = leftPartitioning.expressions.zip(rightPartitioning.expressions)
     coalescedKeys(keyPairs).map { keys =>
       candidatePartitioning.withNewChildren(keys).asInstanceOf[Partitioning]
     }
@@ -198,23 +205,25 @@ trait ShuffledJoin extends JoinCodegenSupport {
 
   /**
    * The coalesced keys of `keyPairs` with every key left first, and with every key right first.
-   * For key pairs that pass `canCoalesce`, `Coalesce(l, r)` and `Coalesce(r, l)` agree on every
+   * For keys that pass `isNullOnNullPadding`, `Coalesce(l, r)` and `Coalesce(r, l)` agree on every
    * output row: a matched row has equal keys, and an unmatched row has a NULL on the other side.
    * `USING` gives the left-first order, and a query usually writes all of its keys in one order,
    * so the mixed orders are not reported.
+   *
+   * The attributes are nullable, as in `output`. A child's non-nullable attribute would let the
+   * optimizer simplify `coalesce(k, ...)` to `k` once the claim is recorded in a plan, such as a
+   * checkpointed `LogicalRDD`, though `k` is NULL on the rows padding its side.
    */
   private def coalescedKeys(keyPairs: Seq[(Expression, Expression)]): Seq[Seq[Expression]] = {
-    val leftFirst = keyPairs.map { case (l, r) => Coalesce(Seq(l, r)) }
-    val rightFirst = keyPairs.map { case (l, r) => Coalesce(Seq(r, l)) }
+    def nullable(e: Expression): Expression = e.transform {
+      case a: Attribute => a.withNullability(true)
+    }
+    val (leftFirst, rightFirst) = keyPairs.map { case (l, r) =>
+      val (nl, nr) = (nullable(l), nullable(r))
+      (Coalesce(Seq(nl, nr)), Coalesce(Seq(nr, nl)))
+    }.unzip
     Seq(leftFirst, rightFirst)
   }
-
-  /**
-   * Whether `Coalesce(leftKey, rightKey)` places every output row where its side placed it: both
-   * keys are NULL on the rows that pad their side.
-   */
-  private def canCoalesce(leftKey: Expression, rightKey: Expression): Boolean =
-    isNullOnNullPadding(leftKey, left.outputSet) && isNullOnNullPadding(rightKey, right.outputSet)
 
   /**
    * Whether `e` is NULL whenever every attribute of `side` is NULL, as on the rows FULL OUTER
