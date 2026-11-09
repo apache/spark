@@ -207,7 +207,8 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    */
   def union(other: JavaPairRDD[K, V]): JavaPairRDD[K, V] = {
     val kTag = JavaSparkContext.mergeKeyClassTags(kClassTag, other.kClassTag)
-    new JavaPairRDD[K, V](rdd.union(other.rdd))(kTag, vClassTag)
+    val vTag = JavaSparkContext.mergeKeyClassTags(vClassTag, other.vClassTag)
+    new JavaPairRDD[K, V](rdd.union(other.rdd))(kTag, vTag)
   }
 
   /**
@@ -1132,13 +1133,16 @@ object JavaPairRDD {
    *                 ("UNSUPPORTED_ARRAY_KEY.HASH_PARTITIONER"), and map-side combine
    *                 operations will fail fast with
    *                 ("UNSUPPORTED_ARRAY_KEY.MAP_SIDE_COMBINE"). It also determines the
-   *                 runtime type of arrays returned by actions on [[keys()]]. Must be the
-   *                 runtime reference class (e.g. `Integer.class`, not `int.class`).
+   *                 runtime type of arrays returned by actions on [[keys()]]. Must be a
+   *                 reference class (e.g. `Integer.class`, not `int.class`).
    *                 The value class remains erased.
    * @since 4.4.0
    */
   @Since("4.4.0")
   def fromJavaRDD[K, V](rdd: JavaRDD[(K, V)], keyClass: Class[K]): JavaPairRDD[K, V] = {
+    require(keyClass != null, "keyClass cannot be null")
+    require(!keyClass.isPrimitive,
+      s"Primitive class $keyClass is not supported; use boxed class (e.g. java.lang.Integer.class)")
     implicit val ctagK: ClassTag[K] = ClassTag(keyClass)
     implicit val ctagV: ClassTag[V] = fakeClassTag
     new JavaPairRDD[K, V](rdd.rdd)

@@ -67,7 +67,6 @@ import org.apache.spark.api.java.JavaFutureAction;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.api.java.Optional;
 import org.apache.spark.api.java.function.*;
 import org.apache.spark.input.PortableDataStream;
 import org.apache.spark.network.util.JavaUtils;
@@ -1701,10 +1700,17 @@ public class JavaAPISuite implements Serializable {
     JavaPairRDD<Object, Integer> filteredUnion = a.filter(t -> true).union(b);
     assertEquals(2, filteredUnion.keys().collect().size());
 
-    // count() after keys().cache()
+    // cache() on keys() and collect
     JavaPairRDD<Object, Integer> cachedUnion = a.union(b);
-    cachedUnion.keys().cache();
-    assertEquals(2, cachedUnion.keys().count());
+    JavaRDD<Object> cachedKeys = cachedUnion.keys().cache();
+    assertEquals(2, cachedKeys.collect().size());
+
+    // value-position union test: array tag in value position does not break collect()
+    JavaPairRDD<Integer, Object> kb = a.keys().keyBy(k -> 1);
+    JavaPairRDD<Integer, Object> o = sc.parallelizePairs(
+      Arrays.asList(new Tuple2<Integer, Object>(2, "s")));
+    assertEquals(2, kb.union(o).values().collect().size());
+    assertEquals(2, sc.union(kb, o).values().collect().size());
 
     // cogroup, fullOuterJoin, rightOuterJoin under a non-hash partitioner
     Partitioner customPartitioner = new Partitioner() {
@@ -1733,6 +1739,15 @@ public class JavaAPISuite implements Serializable {
       () -> bytesUnion.partitionBy(new HashPartitioner(2)));
     assertEquals("UNSUPPORTED_ARRAY_KEY.HASH_PARTITIONER", unionEx.getCondition());
 
+    // array-key guards on MAP_SIDE_COMBINE and REDUCE_BY_KEY_LOCALLY
+    SparkException mapSideEx = assertThrows(SparkException.class,
+      () -> aBytes.reduceByKey((v1, v2) -> v1 + v2));
+    assertEquals("UNSUPPORTED_ARRAY_KEY.MAP_SIDE_COMBINE", mapSideEx.getCondition());
+
+    SparkException reduceLocEx = assertThrows(SparkException.class,
+      () -> aBytes.reduceByKeyLocally((v1, v2) -> v1 + v2));
+    assertEquals("UNSUPPORTED_ARRAY_KEY.REDUCE_BY_KEY_LOCALLY", reduceLocEx.getCondition());
+
     // explicitly tagged array RDD unioned as receiver with Object-tagged RDD keeps array tag
     JavaPairRDD<Object, Integer> explicitArray = JavaPairRDD.fromJavaRDD(
       sc.parallelize(Arrays.asList(new Tuple2<Object, Integer>(new byte[]{1}, 1))),
@@ -1741,6 +1756,19 @@ public class JavaAPISuite implements Serializable {
     SparkException explicitEx = assertThrows(SparkException.class,
       () -> explicitUnion.partitionBy(new HashPartitioner(2)));
     assertEquals("UNSUPPORTED_ARRAY_KEY.HASH_PARTITIONER", explicitEx.getCondition());
+
+    // fromJavaRDD rejects primitive classes
+    IllegalArgumentException primEx = assertThrows(IllegalArgumentException.class,
+      () -> JavaPairRDD.fromJavaRDD(
+        sc.parallelize(Arrays.asList(new Tuple2<>(1, 1))), (Class) int.class));
+    assertTrue(primEx.getMessage().contains("Primitive class"));
+
+    // empty and null-key lists
+    JavaPairRDD<Object, Object> emptyPairs = sc.parallelizePairs(Collections.emptyList());
+    assertEquals(0, emptyPairs.keys().collect().size());
+    JavaPairRDD<Object, Object> nullKeyPairs = sc.parallelizePairs(
+      Collections.singletonList(new Tuple2<>(null, 1)));
+    assertEquals(1, nullKeyPairs.keys().collect().size());
   }
 
 }

@@ -556,7 +556,8 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
     val ctag: ClassTag[(K, V)] = rdds.head.classTag
     val ctagK: ClassTag[K] =
       JavaSparkContext.mergeKeyClassTags(rdds.head.kClassTag, rdds.tail.map(_.kClassTag): _*)
-    val ctagV: ClassTag[V] = rdds.head.vClassTag
+    val ctagV: ClassTag[V] =
+      JavaSparkContext.mergeKeyClassTags(rdds.head.vClassTag, rdds.tail.map(_.vClassTag): _*)
     new JavaPairRDD(sc.union(rdds.map(_.rdd))(ctag))(ctagK, ctagV)
   }
 
@@ -918,7 +919,8 @@ object JavaSparkContext {
   }
 
   private[spark] def mergeKeyClassTags[T](tag1: ClassTag[T], others: ClassTag[T]*): ClassTag[T] = {
-    if (tag1.isInstanceOf[InferredArrayClassTag[_]] && others.exists(_ != tag1)) {
+    val allTags = tag1 +: others
+    if (allTags.exists(_.isInstanceOf[InferredArrayClassTag[_]]) && allTags.exists(_ != tag1)) {
       fakeClassTag[T]
     } else {
       tag1
