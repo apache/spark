@@ -1053,8 +1053,8 @@ object StateStoreProvider extends Logging {
   /**
    * Return a instance of the required provider, initialized with the given configurations.
    *
-   * @param withCleanup whether to clean up failed initialization using the StateStore lifecycle.
-   *                    Only callers using that lifecycle should opt in.
+   * @param withCleanup whether to clean up failed initialization using the StateStore maintenance
+   *                    lifecycle. Only callers using that lifecycle should opt in.
    */
   def createAndInit(
       providerId: StateStoreProviderId,
@@ -1685,9 +1685,12 @@ object StateStore extends Logging {
           log"unpublished provider for ${MDC(LogKeys.STATE_STORE_PROVIDER_ID, storeProviderId)}")
         // An unpublished provider cannot be closed by maintenance before store acquisition.
         val replacementProvider = createProvider
+        // With unloadOnCommit, this is set only if another provider wins publication;
+        // published replacements use the normal cache lifecycle. Listeners run in reverse
+        // registration order, so register before loading to release the store's stamp before
+        // closing the provider, including for read-only stores.
         var closeOnTaskCompletion = false
         if (storeConf.unloadOnCommit) {
-          // Register before loading so the store's completion listener releases its stamp first.
           Option(TaskContext.get()).foreach { ctxt =>
             ctxt.addTaskCompletionListener[Unit] { _ =>
               if (closeOnTaskCompletion) {
