@@ -141,15 +141,16 @@ pub trait DataSource: Send + Sized + 'static {
 
     // Schema discovery.
 
-    /// Whether [`schema`](Self::schema) infers the schema of the data. When false, the
-    /// SDK leaves the native function unset: Spark then requires a user-specified
-    /// schema, reports its standard error without one, and never calls `schema`.
+    /// Whether [`infer_schema`](Self::infer_schema) infers the schema of the data. When
+    /// false, the SDK leaves the native `schema` function unset: Spark then requires a
+    /// user-specified schema, reports its standard error without one, and never calls
+    /// `infer_schema`.
     const INFERS_SCHEMA: bool = true;
 
     /// Returns the schema of the data, when the user does not specify one.
-    fn schema(&self) -> Result<SchemaRef> {
+    fn infer_schema(&self) -> Result<SchemaRef> {
         Err(
-            "DataSource::schema is not implemented: implement it, or set \
+            "DataSource::infer_schema is not implemented: implement it, or set \
              DataSource::INFERS_SCHEMA to false to require a user-specified schema"
                 .into(),
         )

@@ -218,7 +218,7 @@ Spark also calls `create` and `close` during query analysis to discover table
 capabilities. A probe uses the table's options, while an operation may override
 them with query options and checks capabilities again on a new source instance.
 Keep `DataSource::new` and `capabilities` lightweight and safe to drop
-immediately; do not assume that `schema` or `new_scan` will follow. Executor
+immediately; do not assume that `infer_schema` or `new_scan` will follow. Executor
 resources belong in `PartitionReaderFactory::open`.
 
 Spark propagates the native `BATCH_WRITE` and `BATCH_TRUNCATE` flags to

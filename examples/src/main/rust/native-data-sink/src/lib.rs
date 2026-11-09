@@ -80,7 +80,7 @@ impl DataSource for JsonSink {
         Ok(Self { path, readonly })
     }
 
-    fn schema(&self) -> Result<SchemaRef> {
+    fn infer_schema(&self) -> Result<SchemaRef> {
         Ok(sink_schema())
     }
 

@@ -128,7 +128,7 @@ impl DataSource for RangeSource {
         })
     }
 
-    fn schema(&self) -> Result<SchemaRef> {
+    fn infer_schema(&self) -> Result<SchemaRef> {
         output_schema(&["id".into(), "label".into()])
     }
 
@@ -383,12 +383,12 @@ mod tests {
 
     fn scan(source: &RangeSource) -> RangeScan {
         source
-            .new_scan(ScanInfo::new(source.schema().unwrap()))
+            .new_scan(ScanInfo::new(source.infer_schema().unwrap()))
             .unwrap()
     }
 
     fn stream(source: &RangeSource) -> RangeStream {
-        let info = MicroBatchStreamInfo::new(source.schema().unwrap(), "file:/tmp/checkpoint");
+        let info = MicroBatchStreamInfo::new(source.infer_schema().unwrap(), "file:/tmp/checkpoint");
         source.new_micro_batch_stream(info).unwrap()
     }
 
@@ -609,7 +609,7 @@ mod tests {
             ("batchsize", "2"),
         ]);
         let plan = scan(&source).plan().unwrap();
-        let context = ReaderContext::new(source.schema().unwrap(), TaskContext::for_testing());
+        let context = ReaderContext::new(source.infer_schema().unwrap(), TaskContext::for_testing());
         let mut reader = plan
             .factory
             .open(plan.partitions[0].clone(), context)

@@ -102,7 +102,7 @@ impl DataSource for Source {
         })
     }
 
-    fn schema(&self) -> Result<SchemaRef> {
+    fn infer_schema(&self) -> Result<SchemaRef> {
         Ok(schema())
     }
 

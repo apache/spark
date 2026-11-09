@@ -149,7 +149,7 @@ impl<S: DataSource> Bridge<S> {
 
     pub fn schema(&self, handle: i64) -> Result<SchemaRef> {
         let source = get(&self.sources, handle)?;
-        let schema = lock(&source).source.schema()?;
+        let schema = lock(&source).source.infer_schema()?;
         stream::validate_schema(&schema)?;
         Ok(schema)
     }
@@ -551,7 +551,7 @@ mod tests {
             })
         }
 
-        fn schema(&self) -> Result<SchemaRef> {
+        fn infer_schema(&self) -> Result<SchemaRef> {
             Ok(id_schema())
         }
 

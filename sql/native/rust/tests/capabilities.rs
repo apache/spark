@@ -80,7 +80,7 @@ impl DataSource for Source {
         }
     }
 
-    fn schema(&self) -> Result<SchemaRef> {
+    fn infer_schema(&self) -> Result<SchemaRef> {
         SCHEMAS.fetch_add(1, Ordering::SeqCst);
         Ok(Arc::new(Schema::empty()))
     }
