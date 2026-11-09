@@ -418,53 +418,78 @@ class RocksDBStateStoreLockHardeningSuite extends SparkFunSuite
     }
   }
 
-  Seq(false, true).foreach { readOnly =>
-    test(s"SPARK-59877: losing replacement remains usable until release (readOnly=$readOnly)") {
-      withProviderRetryTest { (id, getStore, cachedProvider) =>
-        val loadStarted = new CountDownLatch(1)
-        val continueLoad = new CountDownLatch(1)
-        var replacement: BlockingReplacementRocksDBStateStoreProvider = null
-        BlockingReplacementProvider.onInit = provider => {
-          replacement = provider
-          provider.beforeLoad = () => {
-            loadStarted.countDown()
-            assert(continueLoad.await(10, TimeUnit.SECONDS))
+  for {
+    readOnly <- Seq(false, true)
+    unloadOnCommit <- Seq(false, true)
+  } {
+    test(s"SPARK-59877: losing replacement remains usable until release " +
+        s"(readOnly=$readOnly, unloadOnCommit=$unloadOnCommit)") {
+      withSQLConf(SQLConf.STATE_STORE_UNLOAD_ON_COMMIT.key -> unloadOnCommit.toString) {
+        withProviderRetryTest { (id, getStore, cachedProvider) =>
+          val loadStarted = new CountDownLatch(1)
+          val continueLoad = new CountDownLatch(1)
+          val taskContext = TaskContext.empty()
+          var replacement: BlockingReplacementRocksDBStateStoreProvider = null
+          BlockingReplacementProvider.onInit = provider => {
+            replacement = provider
+            provider.beforeLoad = () => {
+              loadStarted.countDown()
+              assert(continueLoad.await(10, TimeUnit.SECONDS))
+            }
           }
-        }
-        val storeConf = new StateStoreConf(SQLConf.get)
-        val result = closeDuringLoad(id, cachedProvider) {
-          if (readOnly) {
-            StateStore.getReadOnly(
-              id, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
-              version = 1, stateStoreCkptId = None, stateSchemaBroadcast = None,
-              useColumnFamilies = false, storeConf = storeConf, hadoopConf = new Configuration())
-          } else {
-            getStore(1)
+          val storeConf = new StateStoreConf(SQLConf.get)
+          val result = closeDuringLoad(id, cachedProvider) {
+            TaskContext.setTaskContext(taskContext)
+            try {
+              if (readOnly) {
+                StateStore.getReadOnly(
+                  id, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
+                  version = 1, stateStoreCkptId = None, stateSchemaBroadcast = None,
+                  useColumnFamilies = false, storeConf = storeConf,
+                  hadoopConf = new Configuration())
+              } else {
+                getStore(1)
+              }
+            } finally {
+              TaskContext.unset()
+            }
           }
-        }
-        var concurrentStore: StateStore = null
-        try {
-          assert(loadStarted.await(10, TimeUnit.SECONDS))
-          BlockingReplacementProvider.onInit = _ => ()
-          concurrentStore = getStore(1)
-          continueLoad.countDown()
-          // The retry must complete without acquiring the published provider's held stamp.
-          val store = awaitResult(result, timeout)
-          assert(get(store, "key", 0).contains(1))
-          assert(replacement.closed.getCount === 1)
-          assert(replacement.rocksDB.localRootDir.exists())
-          val published = loadedProviders.synchronized { loadedProviders(id) }
-          assert(published ne replacement)
-        } finally {
-          continueLoad.countDown()
-          if (concurrentStore != null) concurrentStore.abort()
-          Try(awaitResult(result, timeout)).foreach { store =>
-            if (readOnly) store.release() else store.abort()
+          var concurrentStore: StateStore = null
+          try {
+            assert(loadStarted.await(10, TimeUnit.SECONDS))
+            BlockingReplacementProvider.onInit = _ => ()
+            concurrentStore = getStore(1)
+            continueLoad.countDown()
+            // The retry must complete without acquiring the published provider's held stamp.
+            val store = awaitResult(result, timeout)
+            assert(get(store, "key", 0).contains(1))
+            assert(replacement.closed.getCount === 1)
+            assert(replacement.rocksDB.localRootDir.exists())
+            val published = loadedProviders.synchronized { loadedProviders(id) }
+            assert(published ne replacement)
+            if (unloadOnCommit) {
+              // Completion must release the losing store before closing its exact provider.
+              taskContext.markTaskCompleted(None)
+              assert(replacement.closed.getCount === 0)
+              assert(replacement.closeThreadName === Thread.currentThread().getName)
+              assert(!StateStore.isMaintenanceRunning)
+              assert(loadedProviders.synchronized { loadedProviders(id) eq published })
+              assert(get(concurrentStore, "key", 0).contains(1))
+            }
+          } finally {
+            continueLoad.countDown()
+            if (concurrentStore != null) concurrentStore.abort()
+            Try(awaitResult(result, timeout)).foreach { store =>
+              if (readOnly) store.release() else store.abort()
+            }
+            taskContext.markTaskCompleted(None)
           }
+          assert(replacement.closed.await(10, TimeUnit.SECONDS))
+          if (!unloadOnCommit) {
+            assert(replacement.closeThreadName.startsWith("state-store-maintenance-"))
+          }
+          assert(!replacement.rocksDB.localRootDir.exists())
         }
-        assert(replacement.closed.await(10, TimeUnit.SECONDS))
-        assert(replacement.closeThreadName.startsWith("state-store-maintenance-"))
-        assert(!replacement.rocksDB.localRootDir.exists())
       }
     }
   }
@@ -496,36 +521,57 @@ class RocksDBStateStoreLockHardeningSuite extends SparkFunSuite
     }
   }
 
-  test("SPARK-59877: a second close race during cached retry propagates") {
-    withProviderRetryTest { (id, getStore, cachedProvider) =>
-      val retryStarted = new CountDownLatch(1)
-      val continueRetry = new CountDownLatch(1)
-      val created = new AtomicInteger()
-      var replacement: BlockingReplacementRocksDBStateStoreProvider = null
-      BlockingReplacementProvider.onInit = _ => created.incrementAndGet()
-      val result = closeDuringLoad(id, cachedProvider, afterClose = () => {
-        getStore(1).abort()
-        replacement = loadedProviders.synchronized {
-          loadedProviders(id).asInstanceOf[BlockingReplacementRocksDBStateStoreProvider]
+  Seq(false, true).foreach { failFinalLoad =>
+    test(s"SPARK-59877: final retry after a second close race (failFinalLoad=$failFinalLoad)") {
+      withProviderRetryTest { (id, getStore, cachedProvider) =>
+        val retryStarted = new CountDownLatch(1)
+        val continueRetry = new CountDownLatch(1)
+        val created = new AtomicInteger()
+        var replacement: BlockingReplacementRocksDBStateStoreProvider = null
+        BlockingReplacementProvider.onInit = provider => {
+          if (created.incrementAndGet() == 3) {
+            provider.beforeLoad = () => {
+              assert(loadedProviders.synchronized { loadedProviders(id) ne provider })
+              if (failFinalLoad) provider.close()
+            }
+          }
         }
-        replacement.beforeLoad = () => {
-          retryStarted.countDown()
-          assert(continueRetry.await(10, TimeUnit.SECONDS))
+        val result = closeDuringLoad(id, cachedProvider, afterClose = () => {
+          getStore(1).abort()
+          replacement = loadedProviders.synchronized {
+            loadedProviders(id).asInstanceOf[BlockingReplacementRocksDBStateStoreProvider]
+          }
+          replacement.beforeLoad = () => {
+            retryStarted.countDown()
+            assert(continueRetry.await(10, TimeUnit.SECONDS))
+          }
+        }) { getStore(1) }
+        try {
+          assert(retryStarted.await(10, TimeUnit.SECONDS))
+          loadedProviders.synchronized {
+            assert(loadedProviders.remove(id).contains(replacement))
+          }
+          StateStore.closeProvider(id, replacement)
+          // A newer cached provider must not extend the retry chain.
+          getStore(1).abort()
+          val newerCachedProvider = loadedProviders.synchronized {
+            loadedProviders(id).asInstanceOf[BlockingReplacementRocksDBStateStoreProvider]
+          }
+          newerCachedProvider.beforeLoad = () => fail("must not retry another cached provider")
+          continueRetry.countDown()
+          if (failFinalLoad) {
+            val error = intercept[SparkException] { awaitResult(result, timeout) }
+            assert(error.getCause.isInstanceOf[StateStoreProviderClosed])
+          } else {
+            val store = awaitResult(result, timeout)
+            assert(get(store, "key", 0).contains(1))
+          }
+          assert(created.get() === 3)
+          assert(loadedProviders.synchronized { loadedProviders(id) eq newerCachedProvider })
+        } finally {
+          continueRetry.countDown()
+          Try(awaitResult(result, timeout)).foreach(_.abort())
         }
-      }) { getStore(1) }
-      try {
-        assert(retryStarted.await(10, TimeUnit.SECONDS))
-        loadedProviders.synchronized {
-          assert(loadedProviders.remove(id).contains(replacement))
-        }
-        StateStore.closeProvider(id, replacement)
-        continueRetry.countDown()
-        val error = intercept[SparkException] { awaitResult(result, timeout) }
-        assert(error.getCause.isInstanceOf[StateStoreProviderClosed])
-        assert(created.get() === 1)
-      } finally {
-        continueRetry.countDown()
-        Try(awaitResult(result, timeout)).foreach(_.abort())
       }
     }
   }
@@ -551,8 +597,8 @@ class RocksDBStateStoreLockHardeningSuite extends SparkFunSuite
     }
   }
 
-  test("SPARK-59877: publication report failure releases and queues the replacement") {
-    withProviderRetryTest { (id, _, cachedProvider) =>
+  test("SPARK-59877: publication report failure releases and retains the replacement") {
+    withProviderRetryTest { (id, getStore, cachedProvider) =>
       val failure = new IllegalStateException("active report failed")
       val storeConf = new StateStoreConf(SQLConf.get)
       var replacement: BlockingReplacementRocksDBStateStoreProvider = null
@@ -567,18 +613,23 @@ class RocksDBStateStoreLockHardeningSuite extends SparkFunSuite
       val createProvider = () => StateStoreProvider.createAndInit(
         id, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
         useColumnFamilies = false, storeConf, new Configuration(),
-        useMultipleValuesPerKey = false, stateSchemaProvider = None)
+        useMultipleValuesPerKey = false, stateSchemaProvider = None, withCleanup = true)
       val loadStore = (provider: StateStoreProvider, forceSnapshot: Boolean) =>
         provider.getStore(1, None, forceSnapshot)
       val result = closeDuringLoad(id, cachedProvider) {
-        StateStore invokePrivate retry(id, storeConf, getProvider, createProvider, loadStore)
+        StateStore invokePrivate retry(id, storeConf, true, getProvider, createProvider, loadStore)
       }
       val error = intercept[SparkException] { awaitResult(result, timeout) }
       assert(error.getCause eq failure)
-      assert(!StateStore.isLoaded(id))
-      assert(replacement.closed.await(10, TimeUnit.SECONDS))
-      assert(replacement.closeThreadName.startsWith("state-store-maintenance-"))
-      assert(!replacement.rocksDB.localRootDir.exists())
+      assert(loadedProviders.synchronized { loadedProviders(id) eq replacement })
+      assert(replacement.closed.getCount === 1L)
+      val store = getStore(1)
+      try {
+        assert(get(store, "key", 0).contains(1))
+        assert(loadedProviders.synchronized { loadedProviders(id) eq replacement })
+      } finally {
+        store.abort()
+      }
     }
   }
 
@@ -597,6 +648,36 @@ class RocksDBStateStoreLockHardeningSuite extends SparkFunSuite
     }
   }
 
+  test("SPARK-59877: provider initialization cleanup is disabled by default") {
+    val failure = new IllegalStateException("provider initialization failed")
+    var provider: BlockingReplacementRocksDBStateStoreProvider = null
+    BlockingReplacementProvider.onInit = initialized => {
+      provider = initialized
+      throw failure
+    }
+    try {
+      withSQLConf(
+        SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+          classOf[BlockingReplacementRocksDBStateStoreProvider].getName,
+        SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "1") {
+        val id = StateStoreProviderId(
+          StateStoreId(newDir(), Random.nextInt(), 0), UUID.randomUUID())
+        val error = intercept[IllegalStateException] {
+          StateStoreProvider.createAndInit(
+            id, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
+            useColumnFamilies = false, new StateStoreConf(SQLConf.get), new Configuration(),
+            useMultipleValuesPerKey = false, stateSchemaProvider = None)
+        }
+        assert(error eq failure)
+        assert(!StateStore.isMaintenanceRunning)
+        assert(provider.closed.getCount === 1L)
+      }
+    } finally {
+      BlockingReplacementProvider.onInit = _ => ()
+      if (provider != null) provider.close()
+    }
+  }
+
   Seq(false, true).foreach { unloadOnCommit =>
     test(s"SPARK-59877: initialization failure cleanup (unloadOnCommit=$unloadOnCommit)") {
       withSQLConf(SQLConf.STATE_STORE_UNLOAD_ON_COMMIT.key -> unloadOnCommit.toString) {
@@ -610,7 +691,12 @@ class RocksDBStateStoreLockHardeningSuite extends SparkFunSuite
           val error = intercept[SparkException] { awaitResult(result, timeout) }
           assert(error.getCause.getMessage === "replacement initialization failed")
           assert(replacement.closed.await(10, TimeUnit.SECONDS))
-          assert(replacement.closeThreadName.startsWith("state-store-maintenance-"))
+          if (unloadOnCommit) {
+            assert(replacement.closeThreadName.startsWith("lock-hardening-test-pool"))
+            assert(!StateStore.isMaintenanceRunning)
+          } else {
+            assert(replacement.closeThreadName.startsWith("state-store-maintenance-"))
+          }
           assert(!replacement.rocksDB.localRootDir.exists())
           assert(!StateStore.isLoaded(id))
         }
@@ -618,25 +704,35 @@ class RocksDBStateStoreLockHardeningSuite extends SparkFunSuite
     }
   }
 
-  test("SPARK-59877: retry closes a replacement that fails inside RocksDB load") {
-    withProviderRetryTest { (id, getStore, cachedProvider) =>
-      var replacement: BlockingReplacementRocksDBStateStoreProvider = null
-      BlockingReplacementProvider.onInit = provider => {
-        replacement = provider
-        provider.beforeLoad = () => {
-          // The normal provider acquires its stamp before discovering this missing checkpoint.
-          val checkpoint = id.storeId.storeCheckpointLocation()
-          checkpoint.getFileSystem(new Configuration()).delete(checkpoint, true)
+  Seq(false, true).foreach { unloadOnCommit =>
+    test(s"SPARK-59877: retry closes a replacement that fails inside RocksDB load " +
+        s"(unloadOnCommit=$unloadOnCommit)") {
+      withSQLConf(SQLConf.STATE_STORE_UNLOAD_ON_COMMIT.key -> unloadOnCommit.toString) {
+        withProviderRetryTest { (id, getStore, cachedProvider) =>
+          var replacement: BlockingReplacementRocksDBStateStoreProvider = null
+          BlockingReplacementProvider.onInit = provider => {
+            replacement = provider
+            provider.beforeLoad = () => {
+              // The normal provider acquires its stamp before finding this missing checkpoint.
+              val checkpoint = id.storeId.storeCheckpointLocation()
+              checkpoint.getFileSystem(new Configuration()).delete(checkpoint, true)
+            }
+          }
+          val result = closeDuringLoad(id, cachedProvider) { getStore(1) }
+          val error = intercept[SparkException] { awaitResult(result, timeout) }
+          assert(error.getCause.asInstanceOf[SparkException].getCondition
+            .startsWith("CANNOT_LOAD_STATE_STORE"))
+          assert(replacement.closed.await(10, TimeUnit.SECONDS))
+          if (unloadOnCommit) {
+            assert(replacement.closeThreadName.startsWith("lock-hardening-test-pool"))
+            assert(!StateStore.isMaintenanceRunning)
+          } else {
+            assert(replacement.closeThreadName.startsWith("state-store-maintenance-"))
+          }
+          assert(!replacement.rocksDB.localRootDir.exists())
+          assert(!StateStore.isLoaded(id))
         }
       }
-      val result = closeDuringLoad(id, cachedProvider) { getStore(1) }
-      val error = intercept[SparkException] { awaitResult(result, timeout) }
-      assert(error.getCause.asInstanceOf[SparkException].getCondition
-        .startsWith("CANNOT_LOAD_STATE_STORE"))
-      assert(replacement.closed.await(10, TimeUnit.SECONDS))
-      assert(replacement.closeThreadName.startsWith("state-store-maintenance-"))
-      assert(!replacement.rocksDB.localRootDir.exists())
-      assert(!StateStore.isLoaded(id))
     }
   }
 

@@ -1052,6 +1052,9 @@ object StateStoreProvider extends Logging {
 
   /**
    * Return a instance of the required provider, initialized with the given configurations.
+   *
+   * @param withCleanup whether to clean up failed initialization using the StateStore lifecycle.
+   *                    Only callers using that lifecycle should opt in.
    */
   def createAndInit(
       providerId: StateStoreProviderId,
@@ -1062,7 +1065,8 @@ object StateStoreProvider extends Logging {
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean,
-      stateSchemaProvider: Option[StateSchemaProvider]): StateStoreProvider = {
+      stateSchemaProvider: Option[StateSchemaProvider],
+      withCleanup: Boolean = false): StateStoreProvider = {
     hadoopConf.set(StreamExecution.RUN_ID_KEY, providerId.queryRunId.toString)
     val provider = create(storeConf.providerClass)
     try {
@@ -1070,9 +1074,9 @@ object StateStoreProvider extends Logging {
         useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey, stateSchemaProvider)
       provider
     } catch {
-      case NonFatal(initError) =>
+      case NonFatal(initError) if withCleanup =>
         Utils.tryLogNonFatalError {
-          StateStore.queueProviderForClose(providerId, provider, storeConf)
+          StateStore.closeOrQueueProvider(providerId, provider, storeConf)
         }
         throw initError
     }
@@ -1566,7 +1570,7 @@ object StateStore extends Logging {
     } {
       StateStoreProvider.createAndInit(storeProviderId, keySchema, valueSchema,
         keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey,
-        stateSchemaBroadcast)
+        stateSchemaBroadcast, withCleanup = true)
     } { (storeProvider, _) =>
       storeProvider.getReadStore(version, stateStoreCkptId)
     }
@@ -1647,7 +1651,7 @@ object StateStore extends Logging {
     } {
       StateStoreProvider.createAndInit(storeProviderId, keySchema, valueSchema,
         keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey,
-        stateSchemaBroadcast)
+        stateSchemaBroadcast, withCleanup = true)
     } { (storeProvider, shouldForceSnapshotUpload) =>
       storeProvider.getStore(version, stateStoreCkptId, shouldForceSnapshotUpload)
     }
@@ -1656,7 +1660,8 @@ object StateStore extends Logging {
 
   private def withClosedProviderRetry[T <: ReadStateStore](
       storeProviderId: StateStoreProviderId,
-      storeConf: StateStoreConf)(
+      storeConf: StateStoreConf,
+      useCachedReplacement: Boolean = true)(
       getProvider: => (StateStoreProvider, Boolean))(
       createProvider: => StateStoreProvider)(
       loadStore: (StateStoreProvider, Boolean) => T): T = {
@@ -1665,24 +1670,39 @@ object StateStore extends Logging {
       loadStore(firstProvider, firstShouldForceSnapshotUpload)
     } catch {
       case _: StateStoreProviderClosed =>
+        // Providers are removed from the cache before they are closed.
         val hasReplacement = loadedProviders.synchronized {
-          if (loadedProviders.get(storeProviderId).exists(_ eq firstProvider)) {
-            loadedProviders.remove(storeProviderId)
-          }
           loadedProviders.contains(storeProviderId)
         }
-        if (hasReplacement) {
-          // Retry only once. A second close race propagates to the task's normal retry handling.
-          val (provider, shouldForceSnapshotUpload) = getProvider
-          return loadStore(provider, shouldForceSnapshotUpload)
+        if (hasReplacement && useCachedReplacement) {
+          logInfo(log"State store provider closed during acquisition; retrying with a cached " +
+            log"replacement for ${MDC(LogKeys.STATE_STORE_PROVIDER_ID, storeProviderId)}")
+          // A second close race must use an unpublished provider instead of extending the retry.
+          return withClosedProviderRetry(storeProviderId, storeConf,
+            useCachedReplacement = false)(getProvider)(createProvider)(loadStore)
         }
+        logInfo(log"State store provider closed during acquisition; retrying with a new " +
+          log"unpublished provider for ${MDC(LogKeys.STATE_STORE_PROVIDER_ID, storeProviderId)}")
         // An unpublished provider cannot be closed by maintenance before store acquisition.
         val replacementProvider = createProvider
+        var closeOnTaskCompletion = false
+        if (storeConf.unloadOnCommit) {
+          // Register before loading so the store's completion listener releases its stamp first.
+          Option(TaskContext.get()).foreach { ctxt =>
+            ctxt.addTaskCompletionListener[Unit] { _ =>
+              if (closeOnTaskCompletion) {
+                closeOrQueueProvider(storeProviderId, replacementProvider, storeConf)
+              }
+            }
+          }
+        }
         val store = try {
           loadStore(replacementProvider, firstShouldForceSnapshotUpload)
         } catch {
           case NonFatal(loadError) =>
-            queueProviderForClose(storeProviderId, replacementProvider, storeConf)
+            Utils.tryLogNonFatalError {
+              closeOrQueueProvider(storeProviderId, replacementProvider, storeConf)
+            }
             throw loadError
         }
         val published = try {
@@ -1699,22 +1719,25 @@ object StateStore extends Logging {
         } catch {
           case NonFatal(reportError) =>
             Utils.tryLogNonFatalError { store.abort() }
-            val removed = loadedProviders.synchronized {
-              if (loadedProviders.get(storeProviderId).exists(_ eq replacementProvider)) {
-                loadedProviders.remove(storeProviderId)
-              } else {
-                None
-              }
-            }
-            removed.foreach(queueProviderForClose(storeProviderId, _, storeConf))
+            // The published provider remains managed by the normal cache lifecycle.
             throw reportError
         }
         if (!published) {
+          logInfo(log"Another provider was published for " +
+            log"${MDC(LogKeys.STATE_STORE_PROVIDER_ID, storeProviderId)}; " +
+            log"continuing with the acquired unpublished replacement")
           // Return the acquired store; switching to the published provider reopens the close race.
           // Ownership-move unloading already queues providers held by tasks. If close times out,
           // closeProvider marks the provider unloaded without reaching rocksDB.close(), so it
           // skips later close attempts. This pre-existing risk belongs to the shared lifecycle.
-          queueProviderForClose(storeProviderId, replacementProvider, storeConf)
+          if (storeConf.unloadOnCommit) {
+            closeOnTaskCompletion = true
+          } else {
+            closeOrQueueProvider(storeProviderId, replacementProvider, storeConf)
+          }
+        } else {
+          logInfo(log"Published replacement provider for " +
+            log"${MDC(LogKeys.STATE_STORE_PROVIDER_ID, storeProviderId)}")
         }
         store
     }
@@ -1773,7 +1796,7 @@ object StateStore extends Logging {
             logInfo(log"Queuing provider from task thread for maintenance and close " +
               log"provider=${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}." + taskContextIdLogLine +
               log"Removed provider from loadedProviders")
-            unloadedProvidersToClose.add((id, provider, MaintenanceOpRequest.All))
+            closeOrQueueProvider(id, provider, storeConf, triggerMaintenance = false)
           })
         })
 
@@ -1796,15 +1819,24 @@ object StateStore extends Logging {
     }
   }
 
-  private[state] def queueProviderForClose(
+  private[state] def closeOrQueueProvider(
       storeProviderId: StateStoreProviderId,
       provider: StateStoreProvider,
-      storeConf: StateStoreConf): Unit = loadedProviders.synchronized {
-    // Task threads must queue providers, including failed unpublished ones, never close them.
-    // Maintenance serializes closure with other maintenance work through maintenanceLock.
-    unloadedProvidersToClose.add((storeProviderId, provider, MaintenanceOpRequest.All))
-    startMaintenanceIfNeeded(storeConf)
-    if (maintenanceTask != null) maintenanceTask.triggerNow()
+      storeConf: StateStoreConf,
+      triggerMaintenance: Boolean = true): Unit = {
+    if (storeConf.unloadOnCommit) {
+      provider.close()
+    } else {
+      loadedProviders.synchronized {
+        // Task threads queue providers; maintenance serializes close with other maintenance work.
+        unloadedProvidersToClose.add((storeProviderId, provider, MaintenanceOpRequest.All))
+        // Coordinator-driven unloading triggers once after queuing the entire batch.
+        if (triggerMaintenance) {
+          startMaintenanceIfNeeded(storeConf)
+          if (maintenanceTask != null) maintenanceTask.triggerNow()
+        }
+      }
+    }
   }
 
   /** Runs maintenance and then unload a state store provider */
@@ -1939,13 +1971,10 @@ object StateStore extends Logging {
     val maintenanceShutdownTimeout = storeConf.stateStoreMaintenanceShutdownTimeout
     val maintenanceForceShutdownTimeout = storeConf.stateStoreMaintenanceForceShutdownTimeout
     loadedProviders.synchronized {
-      if (SparkEnv.get != null && !isMaintenanceRunning &&
-          (!storeConf.unloadOnCommit || !unloadedProvidersToClose.isEmpty)) {
+      if (SparkEnv.get != null && !isMaintenanceRunning && !storeConf.unloadOnCommit) {
         maintenanceTask = new MaintenanceTask(
           storeConf.maintenanceInterval,
-          task = { processUnloadedOnly =>
-            doMaintenance(storeConf, processUnloadedOnly || storeConf.unloadOnCommit)
-          }
+          task = { processUnloadedOnly => doMaintenance(storeConf, processUnloadedOnly) }
         )
         // Separate pools for snapshot and cleanup to prevent one operation type
         // from starving the other when pool threads are saturated.
