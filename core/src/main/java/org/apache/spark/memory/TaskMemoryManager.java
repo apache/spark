@@ -29,6 +29,7 @@ import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.memory.MemoryAllocator;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.util.Utils;
@@ -616,6 +617,23 @@ public class TaskMemoryManager {
    */
   public long pageSizeBytes() {
     return memoryManager.pageSizeBytes();
+  }
+
+  /**
+   * Returns the bytes that pages growing up to {@code pageSizeBytes} leave for the header of the
+   * {@code long[]} that backs an on-heap page: {@link Platform#LONG_ARRAY_OFFSET} if
+   * {@code pageSizeBytes} is that much less than a power of two, and 0 otherwise.
+   * <p>
+   * Under G1, ZGC and Shenandoah, the default on-heap page size leaves room for this header, so
+   * that a page fills whole heap regions (SPARK-37593). A page of a power of two bytes takes one
+   * more region instead, or a whole region if it is half a region. Growing pages that leave the
+   * same room fill whole regions as well. Any other page size, e.g. an off-heap page size or a
+   * power of two set by {@code spark.buffer.pageSize}, gives 0, so the growing pages stay powers
+   * of two like the pages of that size.
+   */
+  public static long growingPageHeaderBytes(long pageSizeBytes) {
+    final long heapBytes = pageSizeBytes + Platform.LONG_ARRAY_OFFSET;
+    return (heapBytes & (heapBytes - 1)) == 0 ? Platform.LONG_ARRAY_OFFSET : 0;
   }
 
   /**

@@ -853,6 +853,32 @@ public abstract class AbstractBytesToBytesMapSuite {
     }
   }
 
+  @Test
+  public void growingDataPagesLeaveRoomForArrayHeader() {
+    // SPARK-61257: Like the default on-heap page size under G1 (SPARK-37593), this page size
+    // leaves room for the header of a long[], and so does each growing page. With the header, the
+    // pages double from 1 KiB, and the last growing page is cut to the 1 KiB left.
+    final long header = Platform.LONG_ARRAY_OFFSET;
+    final BytesToBytesMap map = new BytesToBytesMap(taskMemoryManager, 1, 8192 - header, 1024);
+    try {
+      assertEquals(1024 - header, appendUntilNewDataPage(map, 1));
+      assertEquals(2048 - header, appendUntilNewDataPage(map, 1));
+      assertEquals(4096 - header, appendUntilNewDataPage(map, 1));
+      assertEquals(1024 - header, appendUntilNewDataPage(map, 1));
+      assertEquals(8192 - header, appendUntilNewDataPage(map, 1));
+    } finally {
+      map.free();
+    }
+
+    // A map whose pages do not grow keeps pages of the page size.
+    final BytesToBytesMap fullPageMap = new BytesToBytesMap(taskMemoryManager, 1, 8192 - header);
+    try {
+      assertEquals(8192 - header, appendUntilNewDataPage(fullPageMap, 1));
+    } finally {
+      fullPageMap.free();
+    }
+  }
+
   /**
    * Appends records with a value of `valueWords` longs until the map allocates a new data page, and
    * returns the size of that page. All records share one key, so the pointer array does not grow

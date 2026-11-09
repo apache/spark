@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
@@ -421,6 +422,28 @@ abstract class HashedRelationSuite extends SharedSparkSession {
     assert(map.getValue(0L, resultRow).getUTF8String(0) === bigStr)
     map.free()
     assert(largeUmm.executionMemoryUsed === 0)
+  }
+
+  test("SPARK-61257: LongToUnsafeRowMap leaves room for the array header when the page size does") {
+    // Like the default on-heap page size under G1 (SPARK-37593), this page size leaves room for the
+    // header of a long[], and so does the growing page.
+    val header = Platform.LONG_ARRAY_OFFSET
+    val alignedUmm = newMemoryManager(ByteUnit.MiB.toBytes(64) - header, ByteUnit.GiB.toBytes(1))
+    val map = new LongToUnsafeRowMap(new TaskMemoryManager(alignedUmm, 0), 16)
+    // Capacity 16 gives an array of 32 longs, which does not grow for a single key.
+    val arrayBytes = 32 * 8L
+    assert(map.getUsed === arrayBytes + LongToUnsafeRowMap.INITIAL_PAGE_SIZE_BYTES - header)
+
+    // A value larger than the initial page doubles the page together with its header.
+    val unsafeProj = UnsafeProjection.create(Array[DataType](StringType))
+    val bigStr = UTF8String.fromString("x".repeat(3 << 19))
+    map.append(0L, unsafeProj(InternalRow(bigStr)))
+    assert(map.getUsed === arrayBytes + 2 * LongToUnsafeRowMap.INITIAL_PAGE_SIZE_BYTES - header)
+
+    val resultRow = new UnsafeRow(1)
+    assert(map.getValue(0L, resultRow).getUTF8String(0) === bigStr)
+    map.free()
+    assert(alignedUmm.executionMemoryUsed === 0)
   }
 
   test("SPARK-60998: many LongToUnsafeRowMaps fit in one task when each holds little data") {
