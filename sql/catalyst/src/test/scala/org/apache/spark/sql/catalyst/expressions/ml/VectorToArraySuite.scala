@@ -84,6 +84,27 @@ class VectorToArraySuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("vector to array checks input SQL type nullability") {
+    val fieldNullabilityMismatches = vectorSqlType.fields.indices.map { index =>
+      val field = vectorSqlType.fields(index)
+      StructType(vectorSqlType.fields.updated(index, field.copy(nullable = !field.nullable)))
+    }
+    val elementNullabilityMismatches = Seq(2, 3).map { index =>
+      val field = vectorSqlType.fields(index)
+      val elementType = field.dataType.asInstanceOf[ArrayType].elementType
+      StructType(vectorSqlType.fields.updated(
+        index, field.copy(dataType = ArrayType(elementType, containsNull = true))))
+    }
+    for (invalidSqlType <- fieldNullabilityMismatches ++ elementNullabilityMismatches;
+        inputType <- Seq(invalidSqlType, new VectorToArrayTestUDT {
+          override def sqlType: DataType = invalidSqlType
+        });
+        elementType <- Seq(DoubleType, FloatType)) {
+      val expression = VectorToArray(BoundReference(0, inputType, nullable = true), elementType)
+      assert(expression.checkInputDataTypes().isFailure)
+    }
+  }
+
   test("vector to array rejects null inputs") {
     for (elementType <- Seq(DoubleType, FloatType)) {
       checkExceptionInExpression[IllegalArgumentException](

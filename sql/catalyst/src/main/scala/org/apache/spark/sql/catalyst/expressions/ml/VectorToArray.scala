@@ -24,13 +24,13 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, ExprUtils, UnaryEx
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, FalseLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.types._
 
 /**
  * Converts an MLlib vector to an array of doubles or floats. This expression is dedicated only
  * for Spark ML and accepts either a vector's SQL struct representation or a UDT with the same
- * underlying SQL type. Null inputs are rejected, matching the vector_to_array API.
+ * underlying SQL type, including field and array element nullability. Null inputs are
+ * rejected, matching the vector_to_array API.
  */
 case class VectorToArray(child: Expression, elementType: DataType) extends UnaryExpression {
   require(elementType == DoubleType || elementType == FloatType,
@@ -51,7 +51,7 @@ case class VectorToArray(child: Expression, elementType: DataType) extends Unary
       case udt: UserDefinedType[_] => udt.sqlType
       case other => other
     }
-    if (DataTypeUtils.sameType(inputType, VectorScaleShift.vectorSqlType)) {
+    if (inputType == VectorScaleShift.vectorSqlType) {
       TypeCheckResult.TypeCheckSuccess
     } else {
       DataTypeMismatch(
