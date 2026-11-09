@@ -84,11 +84,15 @@ write lifecycle is described below.
 
 The inputs of these methods are `#[non_exhaustive]` structs, so that new ABI fields can
 reach connectors without breaking them: `*Info` structs on the driver (`CreateInfo`,
-`ScanInfo`, `MicroBatchStreamInfo`, `LatestOffsetInfo`, `WriteInfo`, and
-`StreamingWriteInfo`), `*Context` structs, which carry the live `TaskContext`, on the
+`ScanInfo`, `MicroBatchStreamInfo`, `LatestOffsetInfo`, `MicroBatchInfo`, `CommitOffsetInfo`,
+`WriteInfo`, `CommitInfo`, `AbortInfo`, `StreamingWriteInfo`, `StreamingCommitInfo`, and
+`StreamingAbortInfo`), `*Context` structs, which carry the live `TaskContext`, on the
 executors (`ReaderContext` and `WriterContext`), and `HostInfo`, which `DataSource::init`
 receives in every JVM that loads the library, executors included. `ScanPlan` has a
-constructor for the same reason.
+constructor for the same reason. The methods whose function of the header passes nothing but
+the size of its info struct yet take no struct: `ScanBuilder::plan`,
+`MicroBatchStream::initial_offset`, and the `commit` and `abort` of `DataWriter`. A field
+added there would be a breaking change of the SDK, which its 0.x version allows.
 
 The factory and partition types implement `Serialize` and `Deserialize`, as the commit
 messages of writes do. The SDK encodes them with serde in MessagePack, a self-describing binary
@@ -235,7 +239,7 @@ streaming read or write fails when its query starts or plans its first micro-bat
 ```text
 Driver:
   DataSource::new_write -> BatchWrite
-                             | writer_factory()  ^ commit(messages) / abort(messages)
+                             | writer_factory()  ^ commit(CommitInfo) / abort(AbortInfo)
                     serialized factory           | typed messages
                              |                   |
 Executor, per task attempt:  v                   |
@@ -266,11 +270,10 @@ values as the scan returned them, without the checks of a conversion, such as th
 precision of a decimal. Check cancellation during lengthy writes and use I/O timeouts.
 
 Task `commit()` returns a typed, serde-serializable message, the `Message` of the
-`BatchWrite`. Driver `commit`
-receives one winning message per partition, at the position of its partition;
-driver `abort` receives `Vec<Option<Message>>`, with `None` for a partition whose
-message did not arrive or cannot be decoded, so a corrupted message cannot prevent
-cleanup. A failed task or driver commit leaves the same object available for abort.
+`BatchWrite`. Driver `commit` receives a `CommitInfo` with one winning message per partition,
+at the position of its partition; driver `abort` receives an `AbortInfo` whose messages are
+`Option<Message>`, with `None` for a partition whose message did not arrive or cannot be
+decoded, so a corrupted message cannot prevent cleanup. A failed task or driver commit leaves the same object available for abort.
 A task commit whose message cannot be serialized counts as failed, so `abort` can
 follow a `commit` that returned a message. Spark calls each method at most once, never
 writes after a failure or a commit, and never aborts a successful commit, as the header
@@ -311,8 +314,8 @@ Driver, for each run of a query:
   DataSource::new_micro_batch_stream -> MicroBatchStream
       initial_offset(), default_read_limit()
       latest_offset(LatestOffsetInfo) -> Offset, stored as JSON in the checkpoint
-      plan(start, end) -> ScanPlan { factory, partitions }, for each micro-batch
-      commit(end)
+      plan(MicroBatchInfo) -> ScanPlan { factory, partitions }, for each micro-batch
+      commit(CommitOffsetInfo)
 Executor, per task:
   restored factory + partition + ReaderContext -> Arrow reader -> Arrow C Stream
 ```
@@ -348,8 +351,8 @@ not decode, stops the query: Spark makes no other call on the stream before it c
 Streaming writes reuse the task writers of batch writes. Spark creates a `StreamingWrite`
 for each micro-batch, from a `StreamingWriteInfo` with the ID of the query, which stays the
 same across restarts. It follows the lifecycle of a `BatchWrite`; the SDK passes the epoch ID
-of the micro-batch to `commit` and `abort`, and gives it to the task writers in
-`WriterContext::epoch_id`. Spark may commit an epoch again after a restart, with a new
+of the micro-batch to `commit` and `abort` in `StreamingCommitInfo` and `StreamingAbortInfo`,
+and gives it to the task writers in `WriterContext::epoch_id`. Spark may commit an epoch again after a restart, with a new
 write, so a write must skip an epoch that is already committed: the query ID and the epoch
 ID identify the output of a micro-batch. A restarted query may also abort an epoch that an
 earlier run committed, so an abort removes only what its own task writers wrote. The

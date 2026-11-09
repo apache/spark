@@ -31,9 +31,10 @@ use arrow_array::{Array, Int64Array, RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use serde::{Deserialize, Serialize};
 use spark_native_source::{
-    BatchWrite, Capabilities, CreateInfo, DataSource, DataWriter, DataWriterFactory,
-    PartitionWriter, Result, StreamingWrite, StreamingWriteInfo, TaskContext, Unsupported,
-    WriteInfo, WriteMode, WriterContext,
+    AbortInfo, BatchWrite, Capabilities, CommitInfo, CreateInfo, DataSource, DataWriter,
+    DataWriterFactory, PartitionWriter, Result, StreamingAbortInfo, StreamingCommitInfo,
+    StreamingWrite, StreamingWriteInfo, TaskContext, Unsupported, WriteInfo, WriteMode,
+    WriterContext,
 };
 
 spark_native_source::export_data_source!(JsonSink);
@@ -365,11 +366,11 @@ impl BatchWrite for JsonWrite {
         })
     }
 
-    fn commit(&mut self, messages: Vec<CommitMessage>) -> Result<()> {
-        self.publish(messages, None)
+    fn commit(&mut self, info: CommitInfo<CommitMessage>) -> Result<()> {
+        self.publish(info.messages, None)
     }
 
-    fn abort(&mut self, _messages: Vec<Option<CommitMessage>>) -> Result<()> {
+    fn abort(&mut self, _info: AbortInfo<CommitMessage>) -> Result<()> {
         let result = self.cleanup();
         self.lock.take();
         result
@@ -395,18 +396,18 @@ impl StreamingWrite for JsonStreamingWrite {
         self.write.writer_factory()
     }
 
-    fn commit(&mut self, epoch_id: i64, messages: Vec<CommitMessage>) -> Result<()> {
+    fn commit(&mut self, info: StreamingCommitInfo<CommitMessage>) -> Result<()> {
         // The write holds the lock, so the manifest that it read is still the latest one.
         let committed = self.write.previous.epochs.get(&self.query_id);
-        if committed.is_some_and(|last| *last >= epoch_id) {
+        if committed.is_some_and(|last| *last >= info.epoch_id) {
             return self.write.skip();
         }
         self.write
-            .publish(messages, Some((self.query_id.clone(), epoch_id)))
+            .publish(info.messages, Some((self.query_id.clone(), info.epoch_id)))
     }
 
-    fn abort(&mut self, _epoch_id: i64, messages: Vec<Option<CommitMessage>>) -> Result<()> {
-        self.write.abort(messages)
+    fn abort(&mut self, info: StreamingAbortInfo<CommitMessage>) -> Result<()> {
+        self.write.abort(AbortInfo::new(info.messages))
     }
 }
 
@@ -707,13 +708,15 @@ mod tests {
     ) {
         let (mut write, factory) = new_streaming_write(source, query_id, mode).unwrap();
         let message = stage(&factory, 0, ids);
-        write.commit(epoch_id, vec![message]).unwrap();
+        write
+            .commit(StreamingCommitInfo::new(epoch_id, vec![message]))
+            .unwrap();
     }
 
     fn commit_ids(source: &JsonSink, mode: WriteMode, ids: Vec<Option<i64>>) {
         let (mut write, factory) = new_write(source, mode).unwrap();
         let message = stage(&factory, 0, ids);
-        write.commit(vec![message]).unwrap();
+        write.commit(CommitInfo::new(vec![message])).unwrap();
     }
 
     #[test]
@@ -758,7 +761,7 @@ mod tests {
         let _losing = stage(&factory, 0, vec![Some(2)]);
         let _missing_message = stage(&factory, 1, vec![Some(3)]);
         assert_eq!(fs::read_dir(&write.staging).unwrap().count(), 3);
-        write.commit(vec![winning]).unwrap();
+        write.commit(CommitInfo::new(vec![winning])).unwrap();
         assert!(!write.staging.exists());
         assert_eq!(fs::read_dir(&write.objects).unwrap().count(), 1);
         assert_eq!(
@@ -776,7 +779,7 @@ mod tests {
         let directory = TempDirectory::new();
         let (mut write, factory) = new_write(&directory.source(), WriteMode::Append).unwrap();
         let message = stage(&factory, 1, vec![Some(1)]);
-        assert!(write.commit(vec![message]).is_err());
+        assert!(write.commit(CommitInfo::new(vec![message])).is_err());
         assert!(!directory.0.join("manifest.json").exists());
     }
 
@@ -791,7 +794,9 @@ mod tests {
         let _missing = stage(&factory, 1, vec![Some(3)]);
         let mut incomplete = open(&factory, 2);
         incomplete.write(batch(vec![Some(4)])).unwrap();
-        write.abort(vec![Some(message), None]).unwrap();
+        write
+            .abort(AbortInfo::new(vec![Some(message), None]))
+            .unwrap();
         assert!(!write.staging.exists());
         assert!(!write.objects.exists());
         assert!(!directory.0.join(".write-lock").exists());
@@ -813,10 +818,10 @@ mod tests {
         let message = stage(&factory, 0, vec![Some(2)]);
         // Force create_new to fail after the operation directory has been sealed.
         fs::write(&write.temporary_manifest, b"publication failure").unwrap();
-        assert!(write.commit(vec![message]).is_err());
+        assert!(write.commit(CommitInfo::new(vec![message])).is_err());
         assert!(write.objects.exists());
         assert_eq!(fs::read(directory.0.join("manifest.json")).unwrap(), before);
-        write.abort(vec![None]).unwrap();
+        write.abort(AbortInfo::new(vec![None])).unwrap();
         assert!(!write.objects.exists());
         assert!(!write.temporary_manifest.exists());
         assert_eq!(committed_rows(&directory.0).len(), 1);
@@ -848,7 +853,9 @@ mod tests {
             new_streaming_write(&source, "query", WriteMode::Append).unwrap();
         let message = stage(&factory, 0, vec![Some(3)]);
         let staging = write.write.staging.clone();
-        write.commit(1, vec![message]).unwrap();
+        write
+            .commit(StreamingCommitInfo::new(1, vec![message]))
+            .unwrap();
         assert!(!staging.exists());
         assert!(!directory.0.join(".write-lock").exists());
         let rows = |ids: &[i64]| {
@@ -870,7 +877,9 @@ mod tests {
         let (mut write, factory) =
             new_streaming_write(&source, "query", WriteMode::Append).unwrap();
         let message = stage(&factory, 0, vec![Some(5)]);
-        write.abort(2, vec![Some(message)]).unwrap();
+        write
+            .abort(StreamingAbortInfo::new(2, vec![Some(message)]))
+            .unwrap();
         assert_eq!(committed_rows(&directory.0), rows(&[1, 2, 4]));
 
         // The output mode complete replaces the output of the previous micro-batches.

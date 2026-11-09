@@ -26,8 +26,8 @@ use crate::abi::{self, ArrowArray, SparkDsTaskContext};
 use crate::bridge::stream::validate_schema;
 use crate::bridge::{decode, describe, drop_provider, encode, provider_call};
 use crate::{
-    BatchWrite, DataWriter, DataWriterFactory, PartitionWriter, Result, StreamingWrite,
-    TaskContext, WriterContext,
+    AbortInfo, BatchWrite, CommitInfo, DataWriter, DataWriterFactory, PartitionWriter, Result,
+    StreamingAbortInfo, StreamingCommitInfo, StreamingWrite, TaskContext, WriterContext,
 };
 
 /// A batch write, which a driver writer drives as a streaming write whose epoch ID is always
@@ -42,12 +42,12 @@ impl<W: BatchWrite> StreamingWrite for Batch<W> {
         self.0.writer_factory()
     }
 
-    fn commit(&mut self, _: i64, messages: Vec<W::Message>) -> Result<()> {
-        self.0.commit(messages)
+    fn commit(&mut self, info: StreamingCommitInfo<W::Message>) -> Result<()> {
+        self.0.commit(CommitInfo::new(info.messages))
     }
 
-    fn abort(&mut self, _: i64, messages: Vec<Option<W::Message>>) -> Result<()> {
-        self.0.abort(messages)
+    fn abort(&mut self, info: StreamingAbortInfo<W::Message>) -> Result<()> {
+        self.0.abort(AbortInfo::new(info.messages))
     }
 }
 
@@ -105,7 +105,8 @@ impl<C: StreamingWrite> DriverWrite for DriverWriter<C> {
             .iter()
             .map(|message| decode(message.ok_or("missing committed task message")?))
             .collect::<Result<Vec<_>>>()?;
-        self.coordinator_mut()?.commit(epoch_id, messages)?;
+        self.coordinator_mut()?
+            .commit(StreamingCommitInfo::new(epoch_id, messages))?;
         self.release();
         Ok(())
     }
@@ -128,7 +129,9 @@ impl<C: StreamingWrite> DriverWrite for DriverWriter<C> {
                 }
             })
             .collect();
-        let result = self.coordinator_mut()?.abort(epoch_id, messages);
+        let result = self
+            .coordinator_mut()?
+            .abort(StreamingAbortInfo::new(epoch_id, messages));
         self.release();
         result
     }

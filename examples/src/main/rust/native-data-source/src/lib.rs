@@ -24,9 +24,9 @@ use arrow_array::{ArrayRef, Int64Array, RecordBatch, RecordBatchOptions};
 use arrow_schema::{ArrowError, DataType, Field, Schema, SchemaRef};
 use serde::{Deserialize, Serialize};
 use spark_native_source::{
-    CreateInfo, DataSource, LatestOffsetInfo, LimitSupport, MicroBatchStream, MicroBatchStreamInfo,
-    Options, PartitionReader, PartitionReaderFactory, ReadLimit, ReaderContext, Result,
-    ScanBuilder, ScanInfo, ScanPlan, Unsupported,
+    CreateInfo, DataSource, LatestOffsetInfo, LimitSupport, MicroBatchInfo, MicroBatchStream,
+    MicroBatchStreamInfo, Options, PartitionReader, PartitionReaderFactory, ReadLimit,
+    ReaderContext, Result, ScanBuilder, ScanInfo, ScanPlan, Unsupported,
 };
 
 // The largest values of numPartitions and batchSize.
@@ -271,11 +271,8 @@ impl MicroBatchStream for RangeStream {
         Ok(RangeOffset { next })
     }
 
-    fn plan(
-        &mut self,
-        start: RangeOffset,
-        end: RangeOffset,
-    ) -> Result<ScanPlan<RangeReaderFactory>> {
+    fn plan(&mut self, info: MicroBatchInfo<RangeOffset>) -> Result<ScanPlan<RangeReaderFactory>> {
+        let (start, end) = (info.start, info.end);
         // The offsets of a checkpoint may come from a query with other options.
         if start.next < self.start || end.next > self.end || start.next > end.next {
             return Err(format!(
@@ -388,7 +385,8 @@ mod tests {
     }
 
     fn stream(source: &RangeSource) -> RangeStream {
-        let info = MicroBatchStreamInfo::new(source.infer_schema().unwrap(), "file:/tmp/checkpoint");
+        let info =
+            MicroBatchStreamInfo::new(source.infer_schema().unwrap(), "file:/tmp/checkpoint");
         source.new_micro_batch_stream(info).unwrap()
     }
 
@@ -552,15 +550,19 @@ mod tests {
         assert_eq!(serde_json::to_string(&latest).unwrap(), r#"{"next":25}"#);
         // As if an earlier query had planned a micro-batch up to an offset of its checkpoint.
         let middle: RangeOffset = serde_json::from_str(r#"{"next":13}"#).unwrap();
-        let first = stream.plan(initial, middle).unwrap();
+        let first = stream.plan(MicroBatchInfo::new(initial, middle)).unwrap();
         assert_eq!(first.partitions.len(), 2);
         assert_eq!(ids(&read(first, ALL)), (10..13).collect::<Vec<_>>());
-        let second = stream.plan(middle, latest).unwrap();
+        let second = stream.plan(MicroBatchInfo::new(middle, latest)).unwrap();
         assert_eq!(ids(&read(second, ALL)), (13..25).collect::<Vec<_>>());
-        assert!(stream.plan(latest, latest).unwrap().partitions.is_empty());
+        assert!(stream
+            .plan(MicroBatchInfo::new(latest, latest))
+            .unwrap()
+            .partitions
+            .is_empty());
         let outside: RangeOffset = serde_json::from_str(r#"{"next":30}"#).unwrap();
-        assert!(stream.plan(initial, outside).is_err());
-        assert!(stream.plan(latest, initial).is_err());
+        assert!(stream.plan(MicroBatchInfo::new(initial, outside)).is_err());
+        assert!(stream.plan(MicroBatchInfo::new(latest, initial)).is_err());
         assert!(stream
             .latest_offset(LatestOffsetInfo::new(outside))
             .is_err());
@@ -609,7 +611,8 @@ mod tests {
             ("batchsize", "2"),
         ]);
         let plan = scan(&source).plan().unwrap();
-        let context = ReaderContext::new(source.infer_schema().unwrap(), TaskContext::for_testing());
+        let context =
+            ReaderContext::new(source.infer_schema().unwrap(), TaskContext::for_testing());
         let mut reader = plan
             .factory
             .open(plan.partitions[0].clone(), context)

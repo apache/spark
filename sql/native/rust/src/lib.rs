@@ -27,10 +27,14 @@
 //! Methods receive their inputs in `#[non_exhaustive]` structs, so that new ABI fields
 //! can reach connectors without breaking them: `*Info` structs on the driver
 //! ([`CreateInfo`], [`ScanInfo`], [`MicroBatchStreamInfo`], [`LatestOffsetInfo`],
-//! [`WriteInfo`], and [`StreamingWriteInfo`]), `*Context` structs, which carry the live
-//! [`TaskContext`], on the executors ([`ReaderContext`] and [`WriterContext`]), and
-//! [`HostInfo`], which [`DataSource::init`] receives in every JVM that loads the library,
-//! executors included.
+//! [`MicroBatchInfo`], [`CommitOffsetInfo`], [`WriteInfo`], [`CommitInfo`], [`AbortInfo`],
+//! [`StreamingWriteInfo`], [`StreamingCommitInfo`], and [`StreamingAbortInfo`]), `*Context`
+//! structs, which carry the live [`TaskContext`], on the executors ([`ReaderContext`] and
+//! [`WriterContext`]), and [`HostInfo`], which [`DataSource::init`] receives in every JVM
+//! that loads the library, executors included. The methods whose function of the header
+//! passes nothing but the size of its info struct yet, [`ScanBuilder::plan`],
+//! [`MicroBatchStream::initial_offset`], and the `commit` and `abort` of [`DataWriter`], take
+//! no struct: a field added there would be a breaking change of the SDK.
 
 use std::collections::BTreeMap;
 
@@ -484,12 +488,13 @@ pub trait MicroBatchStream: Send + 'static {
     /// them.
     fn latest_offset(&mut self, info: LatestOffsetInfo<Self::Offset>) -> Result<Self::Offset>;
 
-    /// Plans the micro-batch that reads the data after `start`, up to and including `end`.
-    fn plan(&mut self, start: Self::Offset, end: Self::Offset) -> Result<ScanPlan<Self::Factory>>;
+    /// Plans the micro-batch that reads the data after [`MicroBatchInfo::start`], up to and
+    /// including [`MicroBatchInfo::end`].
+    fn plan(&mut self, info: MicroBatchInfo<Self::Offset>) -> Result<ScanPlan<Self::Factory>>;
 
-    /// Tells the stream that Spark has processed the data up to and including `end` and
-    /// will not read it again, so that the stream can release it.
-    fn commit(&mut self, _end: Self::Offset) -> Result<()> {
+    /// Tells the stream that Spark has processed the data up to and including
+    /// [`CommitOffsetInfo::end`] and will not read it again, so that the stream can release it.
+    fn commit(&mut self, _info: CommitOffsetInfo<Self::Offset>) -> Result<()> {
         Ok(())
     }
 }
@@ -531,6 +536,41 @@ impl<O> LatestOffsetInfo<O> {
             limit: ReadLimit::AllAvailable,
             run_end: None,
         }
+    }
+}
+
+/// What Spark passes to plan a micro-batch: the offsets that delimit its data.
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub struct MicroBatchInfo<O> {
+    /// The micro-batch reads the data after this offset: the end of the previous
+    /// micro-batch, or the initial offset.
+    pub start: O,
+    /// The micro-batch reads the data up to and including this offset, which
+    /// [`MicroBatchStream::latest_offset`] returned.
+    pub end: O,
+}
+
+impl<O> MicroBatchInfo<O> {
+    /// The information of a micro-batch planned outside Spark, for example in a test.
+    pub fn new(start: O, end: O) -> Self {
+        Self { start, end }
+    }
+}
+
+/// What Spark passes to commit the data of a stream.
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub struct CommitOffsetInfo<O> {
+    /// Spark has processed the data up to and including this offset, and will not read it
+    /// again.
+    pub end: O,
+}
+
+impl<O> CommitOffsetInfo<O> {
+    /// The information of a commit made outside Spark, for example in a test.
+    pub fn new(end: O) -> Self {
+        Self { end }
     }
 }
 
@@ -591,8 +631,6 @@ pub enum WriteMode {
 ///   thread of that call, or, for a write that Spark neither commits nor aborts, when Spark
 ///   closes the writer, which may be late and on another thread.
 /// - A panic in any method is reported as that method's failure.
-///
-/// Message `i` of `commit` and `abort` belongs to input partition `i`.
 pub trait BatchWrite: Send + 'static {
     /// The configuration from which each task attempt opens its writer.
     type Factory: DataWriterFactory<Message = Self::Message>;
@@ -612,14 +650,47 @@ pub trait BatchWrite: Send + 'static {
     /// Include a unique operation ID when needed; Spark supplies no batch query ID.
     fn writer_factory(&self) -> Result<Self::Factory>;
 
-    /// Publish only the winning attempt from each input partition. Task retries
-    /// and speculative attempts can stage other data that must not be published.
-    fn commit(&mut self, messages: Vec<Self::Message>) -> Result<()>;
+    /// Publish only the winning attempt from each input partition, whose messages
+    /// [`CommitInfo::messages`] has. Task retries and speculative attempts can stage other
+    /// data that must not be published.
+    fn commit(&mut self, info: CommitInfo<Self::Message>) -> Result<()>;
 
-    /// Abort after input, task, or driver commit failure. None stands for a partition
-    /// whose commit message did not reach the driver, or cannot be decoded.
-    /// Executor loss can leave orphaned staged data; plan for its cleanup.
-    fn abort(&mut self, messages: Vec<Option<Self::Message>>) -> Result<()>;
+    /// Abort after input, task, or driver commit failure, with the messages that reached the
+    /// driver in [`AbortInfo::messages`]. Executor loss can leave orphaned staged data; plan
+    /// for its cleanup.
+    fn abort(&mut self, info: AbortInfo<Self::Message>) -> Result<()>;
+}
+
+/// What Spark passes to commit a batch write.
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub struct CommitInfo<M> {
+    /// The message of the winning task attempt of each input partition, at the position of
+    /// its partition.
+    pub messages: Vec<M>,
+}
+
+impl<M> CommitInfo<M> {
+    /// The information of a commit made outside Spark, for example in a test.
+    pub fn new(messages: Vec<M>) -> Self {
+        Self { messages }
+    }
+}
+
+/// What Spark passes to abort a batch write.
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub struct AbortInfo<M> {
+    /// The message of each input partition, at the position of its partition, or `None` for a
+    /// partition whose commit message did not reach the driver, or cannot be decoded.
+    pub messages: Vec<Option<M>>,
+}
+
+impl<M> AbortInfo<M> {
+    /// The information of an abort made outside Spark, for example in a test.
+    pub fn new(messages: Vec<Option<M>>) -> Self {
+        Self { messages }
+    }
 }
 
 /// Serializable configuration for independent task-attempt writers, which
@@ -740,9 +811,10 @@ impl StreamingWriteInfo {
 /// which also creates the serializable configuration of its task writers.
 ///
 /// Spark creates a write for each micro-batch, with the lifecycle of a [`BatchWrite`], and
-/// passes the epoch ID of the micro-batch to `commit` and `abort`, and to the task writers
-/// in [`WriterContext::epoch_id`]. A write that is committed or aborted is therefore dropped
-/// before Spark creates the write of the next micro-batch.
+/// passes the epoch ID of the micro-batch to `commit` and `abort`, in [`StreamingCommitInfo`]
+/// and [`StreamingAbortInfo`], and to the task writers in [`WriterContext::epoch_id`]. A write
+/// that is committed or aborted is therefore dropped before Spark creates the write of the next
+/// micro-batch.
 ///
 /// # Exactly-once output
 ///
@@ -770,11 +842,48 @@ pub trait StreamingWrite: Send + 'static {
     /// Returns the configuration of the task writers, which the SDK serializes for them.
     fn writer_factory(&self) -> Result<Self::Factory>;
 
-    /// Publish the winning attempt of each input partition as the output of epoch
-    /// `epoch_id`, unless that epoch is already committed.
-    fn commit(&mut self, epoch_id: i64, messages: Vec<Self::Message>) -> Result<()>;
+    /// Publish the winning attempt of each input partition as the output of the epoch
+    /// [`StreamingCommitInfo::epoch_id`], unless that epoch is already committed.
+    fn commit(&mut self, info: StreamingCommitInfo<Self::Message>) -> Result<()>;
 
-    /// Abort the micro-batch after input, task, or driver commit failure. None stands for
-    /// a partition whose commit message did not reach the driver, or cannot be decoded.
-    fn abort(&mut self, epoch_id: i64, messages: Vec<Option<Self::Message>>) -> Result<()>;
+    /// Abort the micro-batch after input, task, or driver commit failure, with the messages
+    /// that reached the driver in [`StreamingAbortInfo::messages`].
+    fn abort(&mut self, info: StreamingAbortInfo<Self::Message>) -> Result<()>;
+}
+
+/// What Spark passes to commit the write of a micro-batch.
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub struct StreamingCommitInfo<M> {
+    /// The epoch of the micro-batch, which with [`StreamingWriteInfo::query_id`] identifies
+    /// its output.
+    pub epoch_id: i64,
+    /// The message of the winning task attempt of each input partition, at the position of
+    /// its partition.
+    pub messages: Vec<M>,
+}
+
+impl<M> StreamingCommitInfo<M> {
+    /// The information of a commit made outside Spark, for example in a test.
+    pub fn new(epoch_id: i64, messages: Vec<M>) -> Self {
+        Self { epoch_id, messages }
+    }
+}
+
+/// What Spark passes to abort the write of a micro-batch.
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub struct StreamingAbortInfo<M> {
+    /// The epoch of the micro-batch.
+    pub epoch_id: i64,
+    /// The message of each input partition, at the position of its partition, or `None` for a
+    /// partition whose commit message did not reach the driver, or cannot be decoded.
+    pub messages: Vec<Option<M>>,
+}
+
+impl<M> StreamingAbortInfo<M> {
+    /// The information of an abort made outside Spark, for example in a test.
+    pub fn new(epoch_id: i64, messages: Vec<Option<M>>) -> Self {
+        Self { epoch_id, messages }
+    }
 }

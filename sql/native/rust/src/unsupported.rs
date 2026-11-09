@@ -18,9 +18,10 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    BatchWrite, DataWriterFactory, LatestOffsetInfo, MicroBatchStream, PartitionReader,
-    PartitionReaderFactory, PartitionWriter, ReaderContext, Result, ScanBuilder, ScanPlan,
-    StreamingWrite, WriterContext,
+    AbortInfo, BatchWrite, CommitInfo, DataWriterFactory, LatestOffsetInfo, MicroBatchInfo,
+    MicroBatchStream, PartitionReader, PartitionReaderFactory, PartitionWriter, ReaderContext,
+    Result, ScanBuilder, ScanPlan, StreamingAbortInfo, StreamingCommitInfo, StreamingWrite,
+    WriterContext,
 };
 
 /// The type of an operation that a source does not implement, as in
@@ -61,7 +62,7 @@ impl MicroBatchStream for Unsupported {
         match *self {}
     }
 
-    fn plan(&mut self, _: Self, _: Self) -> Result<ScanPlan<Self>> {
+    fn plan(&mut self, _: MicroBatchInfo<Self>) -> Result<ScanPlan<Self>> {
         match *self {}
     }
 }
@@ -76,11 +77,11 @@ impl BatchWrite for Unsupported {
         match *self {}
     }
 
-    fn commit(&mut self, _: Vec<Self>) -> Result<()> {
+    fn commit(&mut self, _: CommitInfo<Self>) -> Result<()> {
         match *self {}
     }
 
-    fn abort(&mut self, _: Vec<Option<Self>>) -> Result<()> {
+    fn abort(&mut self, _: AbortInfo<Self>) -> Result<()> {
         match *self {}
     }
 }
@@ -103,11 +104,11 @@ impl StreamingWrite for Unsupported {
         match *self {}
     }
 
-    fn commit(&mut self, _: i64, _: Vec<Self>) -> Result<()> {
+    fn commit(&mut self, _: StreamingCommitInfo<Self>) -> Result<()> {
         match *self {}
     }
 
-    fn abort(&mut self, _: i64, _: Vec<Option<Self>>) -> Result<()> {
+    fn abort(&mut self, _: StreamingAbortInfo<Self>) -> Result<()> {
         match *self {}
     }
 }

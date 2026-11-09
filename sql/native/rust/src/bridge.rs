@@ -29,10 +29,10 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use crate::write::{Batch, DriverWrite, DriverWriter};
 use crate::{
-    abi, BatchWrite, Capabilities, CreateInfo, DataSource, LatestOffsetInfo, LimitSupport,
-    MicroBatchStream, MicroBatchStreamInfo, PartitionReaderFactory, ReadLimit, ReaderContext,
-    Result, ScanBuilder, ScanInfo, ScanPlan, StreamingWrite, StreamingWriteInfo, TaskContext,
-    WriteInfo, WriteMode,
+    abi, BatchWrite, Capabilities, CommitOffsetInfo, CreateInfo, DataSource, LatestOffsetInfo,
+    LimitSupport, MicroBatchInfo, MicroBatchStream, MicroBatchStreamInfo, PartitionReaderFactory,
+    ReadLimit, ReaderContext, Result, ScanBuilder, ScanInfo, ScanPlan, StreamingWrite,
+    StreamingWriteInfo, TaskContext, WriteInfo, WriteMode,
 };
 
 #[path = "stream.rs"]
@@ -232,14 +232,15 @@ impl<S: DataSource> Bridge<S> {
 
     pub fn stream_partitions(&self, handle: i64, start: &str, end: &str) -> Result<EncodedPlan> {
         let stream = get(&self.streams, handle)?;
-        let plan = lock(&stream).plan(decode_offset(start)?, decode_offset(end)?)?;
+        let info = MicroBatchInfo::new(decode_offset(start)?, decode_offset(end)?);
+        let plan = lock(&stream).plan(info)?;
         encode_plan(plan)
     }
 
     pub fn commit_offset(&self, handle: i64, end: &str) -> Result<()> {
         let stream = get(&self.streams, handle)?;
-        let end = decode_offset(end)?;
-        let result = lock(&stream).commit(end);
+        let info = CommitOffsetInfo::new(decode_offset(end)?);
+        let result = lock(&stream).commit(info);
         result
     }
 

@@ -32,10 +32,11 @@ use spark_native_source::__private::abi::{
     SparkDsTaskContext, SparkDsWriteInfo, ABI_VERSION,
 };
 use spark_native_source::{
-    Capabilities, CreateInfo, DataSource, DataWriter, DataWriterFactory, LatestOffsetInfo,
-    MicroBatchStream, MicroBatchStreamInfo, PartitionReader, PartitionReaderFactory,
-    PartitionWriter, ReadLimit, ReaderContext, Result, ScanBuilder, ScanInfo, ScanPlan,
-    StreamingWrite, StreamingWriteInfo, Unsupported, WriterContext,
+    Capabilities, CommitOffsetInfo, CreateInfo, DataSource, DataWriter, DataWriterFactory,
+    LatestOffsetInfo, MicroBatchInfo, MicroBatchStream, MicroBatchStreamInfo, PartitionReader,
+    PartitionReaderFactory, PartitionWriter, ReadLimit, ReaderContext, Result, ScanBuilder,
+    ScanInfo, ScanPlan, StreamingAbortInfo, StreamingCommitInfo, StreamingWrite,
+    StreamingWriteInfo, Unsupported, WriterContext,
 };
 
 // Each test exercises the actual exported table; this lock isolates fixture observations.
@@ -215,13 +216,13 @@ impl MicroBatchStream for Stream {
         Ok(Offset::at(run_end.map_or(end, |run_end| end.min(run_end))))
     }
 
-    fn plan(&mut self, start: Offset, end: Offset) -> Result<ScanPlan<StreamFactory>> {
-        let positions = (start.position..end.position).collect();
+    fn plan(&mut self, info: MicroBatchInfo<Offset>) -> Result<ScanPlan<StreamFactory>> {
+        let positions = (info.start.position..info.end.position).collect();
         Ok(ScanPlan::new(StreamFactory { scale: 10 }, positions))
     }
 
-    fn commit(&mut self, end: Offset) -> Result<()> {
-        record(Event::OffsetCommitted(end.position));
+    fn commit(&mut self, info: CommitOffsetInfo<Offset>) -> Result<()> {
+        record(Event::OffsetCommitted(info.end.position));
         Ok(())
     }
 }
@@ -263,13 +264,13 @@ impl StreamingWrite for Write {
         Ok(WriteFactory)
     }
 
-    fn commit(&mut self, epoch_id: i64, messages: Vec<Message>) -> Result<()> {
-        record(Event::EpochCommitted(epoch_id, messages));
+    fn commit(&mut self, info: StreamingCommitInfo<Message>) -> Result<()> {
+        record(Event::EpochCommitted(info.epoch_id, info.messages));
         Ok(())
     }
 
-    fn abort(&mut self, epoch_id: i64, messages: Vec<Option<Message>>) -> Result<()> {
-        record(Event::EpochAborted(epoch_id, messages));
+    fn abort(&mut self, info: StreamingAbortInfo<Message>) -> Result<()> {
+        record(Event::EpochAborted(info.epoch_id, info.messages));
         Ok(())
     }
 }

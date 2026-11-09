@@ -29,8 +29,9 @@ use spark_native_source::__private::abi::{
     ABI_VERSION,
 };
 use spark_native_source::{
-    BatchWrite, Capabilities, CreateInfo, DataSource, DataWriter, DataWriterFactory,
-    PartitionWriter, Result, TaskContext, Unsupported, WriteInfo, WriteMode, WriterContext,
+    AbortInfo, BatchWrite, Capabilities, CommitInfo, CreateInfo, DataSource, DataWriter,
+    DataWriterFactory, PartitionWriter, Result, TaskContext, Unsupported, WriteInfo, WriteMode,
+    WriterContext,
 };
 
 // Each test exercises the actual exported table; this lock isolates fixture observations.
@@ -130,8 +131,8 @@ impl BatchWrite for Driver {
         })
     }
 
-    fn commit(&mut self, messages: Vec<Message>) -> Result<()> {
-        record(Event::DriverCommit(messages));
+    fn commit(&mut self, info: CommitInfo<Message>) -> Result<()> {
+        record(Event::DriverCommit(info.messages));
         match self.failure.as_str() {
             "driver_commit_error" => Err("driver commit failed".into()),
             "driver_commit_panic" => panic!("driver commit panicked"),
@@ -139,8 +140,8 @@ impl BatchWrite for Driver {
         }
     }
 
-    fn abort(&mut self, messages: Vec<Option<Message>>) -> Result<()> {
-        record(Event::DriverAbort(messages));
+    fn abort(&mut self, info: AbortInfo<Message>) -> Result<()> {
+        record(Event::DriverAbort(info.messages));
         Ok(())
     }
 }
