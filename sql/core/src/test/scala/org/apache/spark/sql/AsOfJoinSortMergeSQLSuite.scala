@@ -1554,6 +1554,61 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
       Row(1, "q11") :: Row(2, "q12") :: Row(3, null) :: Row(4, null) :: Row(5, null) :: Nil)
   }
 
+  // Queries with NOT NULL left ON keys against nullable right ON keys that hold a NULL. The NULL
+  // right key sorts first, so it must compare below every left key. Read as its empty value, it
+  // would match left key 0 and end the group of key -1 before its row, or fail to compare.
+  private val notNullLeftKeyQueries: Map[String, (String, Seq[Row])] = Map(
+    "INT" -> (
+      """
+        |SELECT t.k, q.tag
+        |FROM VALUES (-1, 10), (0, 10) AS t(k, ts)
+        |LEFT ASOF JOIN VALUES (CAST(NULL AS INT), 1, 'null key'), (-1, 2, 'minus one')
+        |  AS q(k, ts, tag)
+        |  MATCH_CONDITION (t.ts >= q.ts)
+        |  ON t.k = q.k
+        |""".stripMargin,
+      Row(-1, "minus one") :: Row(0, null) :: Nil),
+    "STRING" -> (
+      """
+        |SELECT t.k, q.tag
+        |FROM VALUES ('a', 10), ('b', 10) AS t(k, ts)
+        |LEFT ASOF JOIN VALUES (CAST(NULL AS STRING), 1, 'null key'), ('a', 2, 'a key')
+        |  AS q(k, ts, tag)
+        |  MATCH_CONDITION (t.ts >= q.ts)
+        |  ON t.k = q.k
+        |""".stripMargin,
+      Row("a", "a key") :: Row("b", null) :: Nil),
+    // Literals, not CASTs: a CAST can return NULL, so it would not make the left key NOT NULL.
+    "DECIMAL" -> (
+      """
+        |SELECT CAST(t.k AS INT), q.tag
+        |FROM VALUES (-1.00BD, 10), (0.00BD, 10) AS t(k, ts)
+        |LEFT ASOF JOIN VALUES
+        |  (CAST(NULL AS DECIMAL(3, 2)), 1, 'null key'), (-1.00BD, 2, 'minus one')
+        |  AS q(k, ts, tag)
+        |  MATCH_CONDITION (t.ts >= q.ts)
+        |  ON t.k = q.k
+        |""".stripMargin,
+      Row(-1, "minus one") :: Row(0, null) :: Nil),
+    // Only the second ON key is NULL on the right. Read as 0, the row 'null b' would join the
+    // group of (1, 0), and a forward join would pick it first.
+    "second of two ON keys" -> (
+      """
+        |SELECT t.a, q.tag
+        |FROM VALUES (1, 0, 0) AS t(a, b, ts)
+        |ASOF JOIN VALUES (1, CAST(NULL AS INT), 1, 'null b'), (1, 0, 2, 'b zero')
+        |  AS q(a, b, ts, tag)
+        |  MATCH_CONDITION (t.ts <= q.ts)
+        |  ON t.a = q.a AND t.b = q.b
+        |""".stripMargin,
+      Row(1, "b zero") :: Nil))
+
+  gridTest("cursor scan: a NOT NULL left ON key never matches a NULL right ON key")(
+    notNullLeftKeyQueries.keys.toSeq.sorted) { keyShape =>
+    val (query, expected) = notNullLeftKeyQueries(keyShape)
+    checkCursorScan(sql(query), expected)
+  }
+
   test("cursor scan: a MATCH_CONDITION with the right side first still uses the cursor scan") {
     // The analyzer puts the left side first, so q.ts <= t.ts runs as t.ts >= q.ts.
     Seq(
@@ -1806,21 +1861,27 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
       .add("ts", IntegerType)
     val rightSchema = new StructType().add("k", IntegerType).add("ts", IntegerType)
       .add("tag", StringType)
-    (1 to 3).foreach { seed =>
+    // Seed 4 marks the left ON key NOT NULL and gives it no NULLs, against the right side's NULL
+    // ON key, so a key compare that drops the NULL check for a NOT NULL left key shows up.
+    val leftSchemaNotNullKey = new StructType().add("id", IntegerType)
+      .add("k", IntegerType, nullable = false).add("ts", IntegerType)
+    (1 to 4).foreach { seed =>
       val random = new Random(seed)
+      val leftKeyNotNull = seed == 4
       def orNull(value: Int): Any = if (random.nextInt(10) == 0) null else value
       def tag(): String =
         if (random.nextInt(8) == 0) null else random.alphanumeric.take(random.nextInt(40)).mkString
       // Left ON keys are 0 to 7 and right ON keys 2 to 9, so keys 0, 1, 8 and 9 have one side.
       val leftRows = (0 until 200).map { id =>
-        Row(id, orNull(random.nextInt(8)), orNull(random.nextInt(100)))
+        val k = random.nextInt(8)
+        Row(id, if (leftKeyNotNull) k else orNull(k), orNull(random.nextInt(100)))
       }
       val rightRows = (2 until 10).flatMap { k =>
         random.shuffle((0 until 100).toList).take(30).map(ts => Row(k, ts, tag()))
       } ++ Seq(Row(null, 5, "NULL ON key"), Row(3, null, "NULL as-of key"))
       withTempView("t", "q") {
-        spark.createDataFrame(spark.sparkContext.parallelize(leftRows), leftSchema)
-          .createOrReplaceTempView("t")
+        spark.createDataFrame(spark.sparkContext.parallelize(leftRows),
+          if (leftKeyNotNull) leftSchemaNotNullKey else leftSchema).createOrReplaceTempView("t")
         spark.createDataFrame(spark.sparkContext.parallelize(rightRows), rightSchema)
           .createOrReplaceTempView("q")
         for {
