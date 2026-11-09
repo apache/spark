@@ -1652,6 +1652,29 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("a WITH-clause lookup side that two lookup joins read") {
+    // The second reference to the CTE gets new attributes, so it is inlined under a projection to
+    // them, which a lookup side may have.
+    withSQLConf(
+        s"spark.sql.catalog.$EXTERNAL_LOOKUP_CATALOG_NAME" ->
+          classOf[ExternalLookupTestCatalog].getName) {
+      withTempView("badge_swipes") {
+        streamOf(Seq((1, 2), (3, 1)).toDF("employee", "escort"))
+          .createOrReplaceTempView("badge_swipes")
+        val run = runStream(sql(
+          s"""
+            |WITH lk AS (TABLE $EXTERNAL_LOOKUP_CATALOG_NAME.ns.lookup)
+            |SELECT s.employee, e.department, x.department
+            |FROM badge_swipes s JOIN lk e ON s.employee = e.id JOIN lk x ON s.escort = x.id
+            |""".stripMargin))
+        assert(run.plan.collect { case join: PreparedExternalLookupJoin => join }.size === 2)
+        QueryTest.sameRows(
+          Seq(Row(1, "engineering", "sales"), Row(1, "research", "sales")),
+          run.rows).foreach(fail(_))
+      }
+    }
+  }
+
   test("cached data does not replace the lookup side of an external lookup join") {
     withSQLConf(
         s"spark.sql.catalog.$EXTERNAL_LOOKUP_CATALOG_NAME" ->
