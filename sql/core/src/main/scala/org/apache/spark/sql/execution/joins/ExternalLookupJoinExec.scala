@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, 
   BoundReference, EqualNullSafe, EqualTo, Expression, ExprUtils, PredicateHelper}
 import org.apache.spark.sql.catalyst.plans.{JoinType, LeftOuter}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
+import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.metric.CustomTaskMetric
 import org.apache.spark.sql.connector.read.{ExternalLookupReaderFactory, Scan}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
@@ -163,8 +164,13 @@ case class ExternalLookupJoinExec(
   override protected def withNewChildInternal(newChild: SparkPlan): ExternalLookupJoinExec =
     copy(child = newChild)
 
+  // As for other joins, the join type, the lookup parameters and the residual condition, then the
+  // connector's description, which may hold a secret and is redacted.
   override def simpleString(maxFields: Int): String = {
-    Utils.redact(conf.stringRedactionPattern, s"$nodeName ${scan.description()}")
+    val parameters = truncatedString(lookupParameters, "[", ", ", "]", maxFields)
+    val residual = residualCondition.map(condition => s", $condition").getOrElse("")
+    Utils.redact(conf.stringRedactionPattern,
+      s"$nodeName $joinType, $parameters$residual, ${scan.description()}")
   }
 
   override protected def stringArgs: Iterator[Any] =

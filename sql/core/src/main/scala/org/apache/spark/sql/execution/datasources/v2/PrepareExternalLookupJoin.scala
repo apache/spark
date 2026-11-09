@@ -130,9 +130,8 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
         FieldReference.column(columnNames(candidate.projectedField)),
         new LookupParameter(candidate.parameter.dataType)))
     }.toArray
-    // A copy, so a connector that reorders the array in place cannot break the identity mapping.
     val selectedPredicates = selectedCandidates(tableName, offeredPredicates, offeredCandidates,
-      lookupBuilder.selectLookupPredicates(offeredPredicates.clone()))
+      lookupBuilder.selectLookupPredicates(offeredPredicates))
     val selectedConjuncts = selectedPredicates.map(_.conjunctIndex).toSet
     // As a hash join matches its keys before it evaluates its other conditions, the residual
     // evaluates the equalities between the two sides first, together with the conjuncts that

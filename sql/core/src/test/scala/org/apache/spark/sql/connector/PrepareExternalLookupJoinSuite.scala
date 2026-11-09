@@ -412,22 +412,6 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
     }
   }
 
-  test("a connector that reorders the offered array in place selects the predicate it returns") {
-    val Seq(streamId, streamLabel) = stream.output
-    // The connector swaps the two candidates in the array it receives, and returns the one now
-    // first, `value = ?`. Spark keeps its own copy, so it binds that predicate to `streamLabel`.
-    val lookup = lookupRelation(PlanningExternalLookupTable(select = { candidates =>
-      val first = candidates(0)
-      candidates(0) = candidates(1)
-      candidates(1) = first
-      Array(candidates(0))
-    }))
-    val Seq(id, value) = lookup.output
-    val prepared = prepare(lookupJoin(lookup, streamId === id && streamLabel === value))
-    assert(prepared.lookupParameters === Seq(streamLabel))
-    assert(prepared.residualCondition === Some(streamId === id))
-  }
-
   test("a connector method that returns null fails with a named error") {
     Seq(
       "build" -> "ScanBuilder.build()",

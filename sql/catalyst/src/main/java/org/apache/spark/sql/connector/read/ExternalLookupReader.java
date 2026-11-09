@@ -28,27 +28,13 @@ import org.apache.spark.sql.connector.metric.CustomTaskMetric;
  * A task-local client that executes lookup requests.
  * <ul>
  *   <li>Calls to a reader and its cursors are sequential, but may come from different threads.
- *   The one exception is the end of the task, when another thread may still be consuming the
- *   join. Spark then calls {@code close()} on the open cursor and then {@link #close()} on this
- *   reader, from the thread that ends the task. Exactly these may overlap or follow that close:
- *   <ul>
- *     <li>One call from the consuming thread that was in progress, or that Spark checked just
- *     before the close. Implementations must tolerate the close during or before such a call,
- *     for example by cancelling or failing it. Spark does not wait for it.</li>
- *     <li>Spark's read of the value row that the cursor returned, and of its buffers, which may
- *     overlap the cursor's {@code close()}. Spark waits for this read to end before it closes
- *     this reader, so this reader may release the memory behind its rows in
- *     {@code close()}.</li>
- *     <li>{@link #currentMetricsValues()}, on this reader and on the task's other readers, while
- *     a call is in progress on the consuming thread. That method must be safe to call
- *     concurrently and must not wait for the call in progress.</li>
- *     <li>The close of the cursor that a request in progress returns, which comes after this
- *     reader's close, as {@link #lookupBatch} describes.</li>
- *     <li>For a reader that a {@link ExternalLookupReaderFactory#createReader()} call in progress
- *     returns, a read of its metrics and its close, with no other call on it.</li>
- *   </ul>
- *   Apart from the closes listed above, once the consuming thread has seen the close, Spark makes
- *   no further call on this reader or its cursors. Spark closes each of them exactly once.</li>
+ *   The one exception is the end of the task: if another thread is still consuming the join,
+ *   Spark may call {@link #close()} on the reader, and {@code close()} on its open cursor, while
+ *   one call from that thread is in progress. Spark reads {@link #currentMetricsValues()} before
+ *   it closes the reader, which may overlap that call too. Implementations must tolerate
+ *   {@code close()} during an in-progress call, for example by cancelling or failing that call.
+ *   Spark makes no further call once that thread has seen the close, and closes each reader and
+ *   cursor at most once.</li>
  *   <li>Requests are not snapshot boundaries: results may mix source versions.</li>
  *   <li>Retried or speculative tasks may send the same request again, so a source must
  *   tolerate repeated requests. Within one request, matches are returned as
@@ -88,10 +74,9 @@ public interface ExternalLookupReader extends Closeable {
    * predicates on every returned row, but cannot find a missing one. The input is read-only and
    * must not be kept after the cursor closes.
    * <p>
-   * If the task ends while this method is in progress, Spark closes this reader first, and then
-   * closes the cursor that the call returns. Closing that cursor must work after the reader is
-   * closed. Otherwise, Spark closes every cursor it obtains, including one it has read to the
-   * end, before the next call and before closing this reader.
+   * Spark closes every cursor it obtains, including one it has read to the end, before the next
+   * call and before closing this reader. A cursor that this method returns after the task-end
+   * close has started is not closed, so closing this reader must release it.
    */
   ExternalLookupResultCursor lookupBatch(InternalRow[] uniqueParameters) throws IOException;
 

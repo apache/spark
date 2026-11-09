@@ -76,17 +76,10 @@ class TableCapabilityCheckSuite extends AnalysisTest with SharedSparkSession {
     assert(e.message.contains("does not support batch scan"))
   }
 
-  test("external lookup relation: check external lookup capability") {
-    val lookupRelation = ExternalLookupRelation(DataSourceV2Relation.create(
-      CapabilityTable(EXTERNAL_LOOKUP), None, None, emptyMap))
-    TableCapabilityCheck.apply(lookupRelation)
-
-    val invalidLookupRelation = ExternalLookupRelation(DataSourceV2Relation.create(
-      CapabilityTable(BATCH_READ), None, None, emptyMap))
-    val e = intercept[AnalysisException] {
-      TableCapabilityCheck.apply(invalidLookupRelation)
-    }
-    assert(e.message.contains("does not support batch scan"))
+  test("external lookup relation: a lookup-only table passes the check") {
+    // Spark creates an external lookup relation only for a table that supports external lookup.
+    TableCapabilityCheck.apply(ExternalLookupRelation(DataSourceV2Relation.create(
+      CapabilityTable(EXTERNAL_LOOKUP), None, None, emptyMap)))
   }
 
   test("external lookup join: the lookup side still requires a read capability") {

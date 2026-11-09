@@ -19,16 +19,14 @@ package org.apache.spark.sql.execution.joins
 
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
-import java.util.concurrent.locks.LockSupport
 
 import scala.collection.mutable
 
 import org.apache.spark.{PartitionEvaluator, PartitionEvaluatorFactory, SparkException,
   SparkIllegalStateException, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, CollationKey, Expression,
-  GenericInternalRow, JoinedRow, Predicate, SpecializedGetters, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.catalyst.optimizer.NormalizeFloatingNumbers
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, GenericInternalRow,
+  JoinedRow, Predicate, SpecializedGetters, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftOuter}
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.connector.metric.CustomTaskMetric
@@ -176,31 +174,32 @@ class ExternalLookupJoinEvaluatorFactory(
     // Output rows not yet returned: a stream row index and the lookup row it is joined with.
     private val pending = mutable.Queue.empty[(Int, InternalRow)]
 
-    // One entry for each distinct key that can match, in the order of first occurrence. A row
-    // that can never match, because it fails the stream condition or has a null parameter, is
-    // finished right away, and its key is not requested. The stream condition is checked before
-    // the key is computed, so that it can guard the parameter expressions.
-    private val keyEntries = mutable.LinkedHashMap.empty[UnsafeRow, KeyEntry]
-    rows.indices.foreach { index =>
-      lazy val key = parameters.key(rows(index))
-      if (!joinOutput.canMatch(rows(index)) || parameters.matchesNothing(key)) {
-        finish(index)
-      } else {
-        keyEntries.get(key) match {
-          case Some(entry) => entry.rowIndexes += index
-          case None => keyEntries.put(
-            key.copy(),
-            KeyEntry(parameters.requestRow(rows(index)), mutable.ArrayBuffer(index)))
+    // One entry for each distinct request row that can match, in the order of first occurrence.
+    // A row that can never match, because it fails the stream condition or has a null parameter,
+    // is finished right away, and its parameters are not requested. The stream condition is
+    // checked before the parameters are evaluated, so that it can guard their expressions.
+    private val keyEntries = {
+      val entries = mutable.LinkedHashMap.empty[UnsafeRow, KeyEntry]
+      rows.indices.foreach { index =>
+        lazy val requestRow = parameters.requestRow(rows(index))
+        if (!joinOutput.canMatch(rows(index)) || parameters.matchesNothing(requestRow)) {
+          finish(index)
+        } else {
+          entries.get(requestRow) match {
+            case Some(entry) => entry.rowIndexes += index
+            case None =>
+              val retained = requestRow.copy()
+              entries.put(retained, KeyEntry(retained, mutable.ArrayBuffer(index)))
+          }
         }
       }
+      entries.values.toArray
     }
-    private val requestedKeys = keyEntries.keys.toArray
 
-    // No connector request, and no reader, when no key can match. The connector gets copies of
-    // the request rows, so that the ones that Spark checks the results against stay its own.
+    // No connector request, and no reader, when no key can match.
     private var cursor: ExternalLookupResultCursor =
       if (keyEntries.isEmpty) EmptyLookupCursor
-      else connectorCall(reader.lookup(keyEntries.values.map(_.requestRow.copy()).toArray))
+      else connectorCall(reader.lookup(keyEntries.map(_.requestRow)))
 
     override def hasNext: Boolean = {
       tryFillPending()
@@ -219,8 +218,10 @@ class ExternalLookupJoinEvaluatorFactory(
       try {
         while (pending.isEmpty && advanceCursor()) {
           reader.resultRowRead()
-          // A close() during either call fails the read before Spark copies or joins the row.
+          // The join checks for a close() before each connector call, so it makes none after it
+          // has seen one.
           val start = System.nanoTime()
+          reader.ensureOpen()
           val ordinal = cursor.inputOrdinal()
           reader.ensureOpen()
           val connectorRow = cursor.get()
@@ -229,10 +230,11 @@ class ExternalLookupJoinEvaluatorFactory(
             throw QueryExecutionErrors.invalidDataSourceExternalLookupError(
               tableName, "NULL_RESULT", Map("method" -> "ExternalLookupResultCursor.get()"))
           }
-          val key = requestedKey(ordinal)
-          val resultRow = reader.copyRow(resultRows.validatedCopy(connectorRow))
-          if (parameters.selectedPredicatesHold(keyEntries(key).requestRow, resultRow)) {
-            joinResultRow(key, resultRow)
+          val entry = requestedEntry(ordinal)
+          reader.ensureOpen()
+          val resultRow = resultRows.validatedCopy(connectorRow)
+          if (parameters.selectedPredicatesHold(entry.requestRow, resultRow)) {
+            entry.rowIndexes.foreach(joinMatch(_, resultRow))
           }
         }
         if (pending.isEmpty) finishCursor(completed = true)
@@ -265,18 +267,15 @@ class ExternalLookupJoinEvaluatorFactory(
       try call finally metrics.lookupTime += System.nanoTime() - start
     }
 
-    private def requestedKey(ordinal: Int): UnsafeRow = {
-      if (ordinal < 0 || ordinal >= requestedKeys.length) {
+    private def requestedEntry(ordinal: Int): KeyEntry = {
+      if (ordinal < 0 || ordinal >= keyEntries.length) {
         throw QueryExecutionErrors.invalidDataSourceExternalLookupError(
           tableName,
           "INVALID_INPUT_ORDINAL",
-          Map("ordinal" -> ordinal.toString, "numParameterRows" -> requestedKeys.length.toString))
+          Map("ordinal" -> ordinal.toString, "numParameterRows" -> keyEntries.length.toString))
       }
-      requestedKeys(ordinal)
+      keyEntries(ordinal)
     }
-
-    private def joinResultRow(key: UnsafeRow, lookupRow: InternalRow): Unit =
-      keyEntries(key).rowIndexes.foreach(joinMatch(_, lookupRow))
 
     private def joinMatch(index: Int, lookupRow: InternalRow): Unit = {
       if (joinOutput.matches(rows(index), lookupRow)) {
@@ -301,7 +300,7 @@ class ExternalLookupJoinEvaluatorFactory(
           reader.updateMetrics()
         }
       }
-      if (completed) keyEntries.values.foreach(_.rowIndexes.foreach(finish))
+      if (completed) keyEntries.foreach(_.rowIndexes.foreach(finish))
     }
 
     private def finish(index: Int): Unit = if (!finished.contains(index)) {
@@ -424,38 +423,30 @@ class ExternalLookupJoinEvaluatorFactory(
   }
 
   /**
-   * Evaluates the lookup parameters of stream rows: the request row that is sent to the
-   * connector, and the key that identifies equal parameters under Spark equality, which
-   * normalizes floating-point values and collations. Also checks the rows that the connector
-   * returns against the selected lookup predicates.
+   * Evaluates the lookup parameters of stream rows into the request rows that are sent to the
+   * connector. Spark offers lookup keys only on types whose values are equal under Spark equality
+   * exactly when their binary forms are (see ExternalLookupKeyTypes), so equal request rows have
+   * equal bytes. Also checks the rows that the connector returns against the selected lookup
+   * predicates.
    */
   private class LookupParameters(partitionIndex: Int) {
     private val requestProjection = UnsafeProjection.create(lookupParameters, streamOutput)
-    private val keyProjection = UnsafeProjection.create(lookupParameters.map { parameter =>
-      NormalizeFloatingNumbers.normalize(CollationKey.injectCollationKey(parameter))
-    }, streamOutput)
     private val keyCheck = lookupKeyCheck.map(Predicate.create(_))
     private val requestAndResult = new JoinedRow()
     requestProjection.initialize(partitionIndex)
-    keyProjection.initialize(partitionIndex)
     keyCheck.foreach(_.initialize(partitionIndex))
 
-    def requestRow(streamRow: InternalRow): UnsafeRow = requestProjection(streamRow).copy()
-
-    /** The key of a stream row, in a reused row: copy it to retain it. */
-    def key(streamRow: InternalRow): UnsafeRow = keyProjection(streamRow)
+    /** The request row of a stream row, in a reused row: copy it to retain it. */
+    def requestRow(streamRow: InternalRow): UnsafeRow = requestProjection(streamRow)
 
     /** Whether a row that the connector returns satisfies the selected lookup predicates. */
     def selectedPredicatesHold(requestRow: UnsafeRow, resultRow: InternalRow): Boolean =
       keyCheck.forall(_.eval(requestAndResult(requestRow, resultRow)))
 
-    /**
-     * A null parameter that is not null-safe matches no lookup row, so it is not requested.
-     * The key has the request row's nulls.
-     */
-    def matchesNothing(key: InternalRow): Boolean =
+    /** A null parameter that is not null-safe matches no lookup row, so it is not requested. */
+    def matchesNothing(requestRow: InternalRow): Boolean =
       nullSafeParameters.indices.exists { index =>
-        !nullSafeParameters(index) && key.isNullAt(index)
+        !nullSafeParameters(index) && requestRow.isNullAt(index)
       }
   }
 
@@ -502,32 +493,19 @@ class ExternalLookupJoinEvaluatorFactory(
 
   /**
    * The connector reader of one partition and its active cursor. The reader is opened by the
-   * first request, and closed once, after the last batch or when the task completes. A thread
-   * other than the task's may still drive the join then. The close takes the cursor slot, closes
-   * the cursor that a request returned before it, keeps the reader's final metrics, waits for a
-   * copy of a value row in progress, and closes the reader. Once the join has seen the close, it
-   * makes only these connector calls, on its own thread:
-   *  - It closes the cursor that a request in progress at the close returns, once the close has
-   *    ended, so after the reader.
-   *  - It reads the final metrics of a reader that a `createReader()` call in progress returns,
-   *    and closes it.
-   * Closing may overlap the one connector call in progress, which it does not wait for, and it
-   * reads the metrics of the task's readers while that call runs. Requests, cursor calls and copies
-   * take no lock. Metrics reads do: closing keeps the reader's final metrics under the lock of the
-   * task's `TaskLookupReaders`, so it can wait for a metrics read in progress, which calls
-   * `currentMetricsValues()` on the task's readers.
+   * first request, and closed once, after the last batch or when the task completes, as
+   * `DataSourceRDD` closes its readers. A thread other than the task's may still drive the join
+   * then, and the close may overlap the one connector call that it is making, which the close does
+   * not wait for. That thread checks for the close before each connector call, so it makes no
+   * further one. A cursor that a request returns after the close is not closed: closing the
+   * reader releases it.
    */
   private class LookupReader {
     private val taskReaders = readerMetrics.forCurrentTask()
     private val closed = new AtomicBoolean(false)
-    // Set while Spark copies a value row that the cursor returned.
-    private val copying = new AtomicBoolean(false)
-    // Each is taken by exactly one of the join and close(), so it is closed once. close() leaves
-    // EmptyLookupCursor in the cursor slot, so a cursor that comes later is known to be late.
+    // Each is taken by exactly one of the join and close(), so it is closed once.
     private val openReader = new AtomicReference[ExternalLookupReader]()
     private val activeCursor = new AtomicReference[ExternalLookupResultCursor]()
-    // Set once close() has ended, after it closed the reader.
-    private val closeEnded = new AtomicBoolean(false)
     private var resultRowsSinceMetricsUpdate = 0
     Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => close()))
 
@@ -536,24 +514,14 @@ class ExternalLookupJoinEvaluatorFactory(
       ensureOpen()
       metrics.requests += 1
       metrics.parameterRows += requestRows.length
-      val reader = Option(openReader.get()).getOrElse {
-        // A close() since the check above took the reader. It marks the reader closed first, so
-        // this check sees it, and no second reader is created.
-        ensureOpen()
-        createReader()
-      }
+      val reader = Option(openReader.get()).getOrElse(createReader())
+      ensureOpen()
       val cursor = Option(reader.lookupBatch(requestRows.asInstanceOf[Array[InternalRow]]))
         .getOrElse {
           throw QueryExecutionErrors.invalidDataSourceExternalLookupError(
             tableName, "NULL_RESULT", Map("method" -> "ExternalLookupReader.lookupBatch()"))
         }
-      if (!activeCursor.compareAndSet(null, cursor)) {
-        // A close() started while the request ran, so it did not find this cursor. It closes the
-        // reader first, so the join waits for it to end, and then closes the cursor.
-        while (!closeEnded.get()) LockSupport.parkNanos(10000L)
-        cursor.close()
-      }
-      // A cursor that the close found is the close's to close.
+      activeCursor.set(cursor)
       ensureOpen()
       cursor
     }
@@ -569,7 +537,6 @@ class ExternalLookupJoinEvaluatorFactory(
       if (closed.get() && openReader.compareAndSet(reader, null)) {
         ExternalLookupJoinExec.closeResources((), taskReaders.closing(reader), reader.close())
       }
-      ensureOpen()
       reader
     }
 
@@ -580,52 +547,27 @@ class ExternalLookupJoinEvaluatorFactory(
 
     def isClosed: Boolean = closed.get()
 
-    /**
-     * Runs Spark's copy of a value row that the cursor returned. A close() that comes first fails
-     * the read before the copy. One that comes during the copy waits for it to end before it
-     * closes the reader, which may own the memory behind the row. The close waits only for this
-     * copy, never for a connector request, cursor advance or row fetch.
-     */
-    def copyRow[T](copy: => T): T = {
-      copying.set(true)
-      try {
-        ensureOpen()
-        copy
-      } finally {
-        copying.set(false)
-      }
-    }
-
     /** Samples the connector metrics every [[CustomMetrics.NUM_ROWS_PER_UPDATE]] result rows. */
     def resultRowRead(): Unit = {
       resultRowsSinceMetricsUpdate += 1
       if (resultRowsSinceMetricsUpdate >= CustomMetrics.NUM_ROWS_PER_UPDATE) updateMetrics()
     }
 
+    /** Samples the connector metrics, unless the reader is closed, whose close keeps them. */
     def updateMetrics(): Unit = {
-      if (openReader.get() != null) taskReaders.report()
+      if (!closed.get() && openReader.get() != null) taskReaders.report()
       resultRowsSinceMetricsUpdate = 0
     }
 
     def closeCursor(): Unit = Option(activeCursor.getAndSet(null)).foreach(_.close())
 
     def close(): Unit = if (closed.compareAndSet(false, true)) {
-      try {
-        val cursor = activeCursor.getAndSet(EmptyLookupCursor)
-        val reader = openReader.getAndSet(null)
-        ExternalLookupJoinExec.closeResources(
-          Option(cursor).foreach(_.close()),
-          if (reader != null) taskReaders.closing(reader),
-          if (reader != null) {
-            // A copy that started before the close saw it is still reading the row. The flags
-            // are volatile, so either the copy sees the close and does not start, or this sees
-            // the copy.
-            while (copying.get()) LockSupport.parkNanos(10000L)
-            reader.close()
-          })
-      } finally {
-        closeEnded.set(true)
-      }
+      val cursor = activeCursor.getAndSet(null)
+      val reader = openReader.getAndSet(null)
+      ExternalLookupJoinExec.closeResources(
+        Option(cursor).foreach(_.close()),
+        if (reader != null) taskReaders.closing(reader),
+        if (reader != null) reader.close())
     }
   }
 }
@@ -661,17 +603,26 @@ private class TaskLookupReaders(customMetrics: Map[String, SQLMetric]) {
   }
 
   /** Keeps a reader's final values, which it may no longer report once it is closed. */
-  def closing(reader: ExternalLookupReader): Unit = synchronized {
-    reader.currentMetricsValues().foreach { metric =>
-      closedMetrics.update(
-        metric.name(), closedMetrics.get(metric.name()).fold(metric)(_.mergeWith(metric)))
+  def closing(reader: ExternalLookupReader): Unit = {
+    val finalValues = reader.currentMetricsValues()
+    synchronized {
+      finalValues.foreach { metric =>
+        closedMetrics.update(
+          metric.name(), closedMetrics.get(metric.name()).fold(metric)(_.mergeWith(metric)))
+      }
+      openReaders -= reader
     }
-    openReaders -= reader
     report()
   }
 
-  def report(): Unit = synchronized {
-    (openReaders.flatMap(_.currentMetricsValues()) ++ closedMetrics.values)
+  /**
+   * Sets the connector metrics to the merged values of the task's readers. The readers are called
+   * outside the lock, so a close never waits for a metrics read in progress, as in
+   * `DataSourceRDD`.
+   */
+  def report(): Unit = {
+    val currentValues = synchronized(openReaders.toList).flatMap(_.currentMetricsValues())
+    synchronized(currentValues ++ closedMetrics.values)
       .groupMapReduce(_.name())(identity)(_.mergeWith(_))
       .values
       .foreach { metric =>

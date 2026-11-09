@@ -396,43 +396,45 @@ private[sql] object StreamingV2ScanPushDown
    *    session, such as the current time or the conversions to dates and timestamps (see
    *    `makesDateOrTimestamp`), become placeholders that are not deterministic for the optimizer,
    *    as the current time of a micro-batch, and keep their children, if `withStartupValues`.
-   * The lookup sides of external lookup joins stay whole, so that the plan forms the external
-   * lookup joins of the micro-batches.
+   * The lookup sides of external lookup joins stay whole, their expressions included, so that the
+   * plan forms the external lookup joins of the micro-batches.
    * Visible for tests.
    */
   private[sql] def forStartup(
       plan: LogicalPlan,
-      withStartupValues: Boolean = true): LogicalPlan = withOpaqueSubqueries(
-    plan.transformDownWithPruning(isNotLookupSideOf(plan)) {
+      withStartupValues: Boolean = true): LogicalPlan = {
+    val isNotLookupSide = isNotLookupSideOf(plan)
+    withOpaqueSubqueries(plan.transformDownWithPruning(isNotLookupSide) {
       case relation: BatchRelation => relation
       // `WithCTE` keeps the definitions of its common table expressions as they are.
       case definition: CTERelationDef if !definition.isStreaming =>
         definition.copy(child = BatchRelation(definition.child))
       case node if !node.isStreaming => BatchRelation(node)
     }).transformUpWithSubqueries {
-    case node if withStartupValues =>
-      // The expressions that ReplaceExpressions replaces with others when the optimization starts
-      // are replaced first, as the optimizer does, so that the conversions that they stand for,
-      // such as the cast of to_date('today'), are replaced below.
-      val replaced = if (node.containsPattern(RUNTIME_REPLACEABLE)) {
-        node.mapExpressions(ReplaceExpressions.replace)
-      } else {
-        node
-      }
-      replaced.transformExpressionsUp {
-        // The children of an expression are replaced before it, as are the subqueries, so an
-        // expression that still has the pattern CURRENT_LIKE has it itself: its value is the
-        // current time, or comes from the state of the session, as the current database does.
-        case e if e.containsPattern(CURRENT_LIKE) => StartupValue(e, e.children)
-        case e if makesDateOrTimestamp(e) => StartupValue(e, e.children)
-      }
+      case node if withStartupValues && isNotLookupSide(node) =>
+        // The expressions that ReplaceExpressions replaces with others when the optimization starts
+        // are replaced first, as the optimizer does, so that the conversions that they stand for,
+        // such as the cast of to_date('today'), are replaced below.
+        val replaced = if (node.containsPattern(RUNTIME_REPLACEABLE)) {
+          node.mapExpressions(ReplaceExpressions.replace)
+        } else {
+          node
+        }
+        replaced.transformExpressionsUp {
+          // The children of an expression are replaced before it, as are the subqueries, so an
+          // expression that still has the pattern CURRENT_LIKE has it itself: its value is the
+          // current time, or comes from the state of the session, as the current database does.
+          case e if e.containsPattern(CURRENT_LIKE) => StartupValue(e, e.children)
+          case e if makesDateOrTimestamp(e) => StartupValue(e, e.children)
+        }
+    }
   }
 
-  // A predicate that is false for the lookup sides of the external lookup joins of `plan`, which
-  // `forStartup` keeps.
+  // A predicate that is false for the nodes of the lookup sides of the external lookup joins of
+  // `plan`, which `forStartup` keeps whole.
   private def isNotLookupSideOf(plan: LogicalPlan): TreePatternBits => Boolean = {
     val lookupSides = Collections.newSetFromMap(new IdentityHashMap[LogicalPlan, java.lang.Boolean])
-    ExternalLookupJoinStartupCheck.lookupSidePlans(plan).foreach(lookupSides.add)
+    ExternalLookupJoinStartupCheck.lookupSidePlans(plan).foreach(_.foreach(lookupSides.add))
     node => !lookupSides.contains(node)
   }
 
