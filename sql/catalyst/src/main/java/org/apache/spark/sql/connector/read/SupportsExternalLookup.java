@@ -24,6 +24,9 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate;
 /**
  * A mix-in for a {@link ScanBuilder} that can serve parameterized lookups. The builder may also
  * implement the column-pruning and filter-pushdown mix-ins.
+ * <p>
+ * Spark may also plan a lookup when a streaming query starts, up to
+ * {@link ExternalLookup#createReaderFactory()}, and discard the result.
  *
  * @since 4.4.0
  */

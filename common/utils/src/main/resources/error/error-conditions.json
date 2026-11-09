@@ -2433,24 +2433,9 @@
           "The lookup result cursor returned NULL in the field <field>, which the table or the read schema declares NOT NULL."
         ]
       },
-      "NULL_LOOKUP_READER" : {
-        "message" : [
-          "`createReader()` returned null."
-        ]
-      },
       "NULL_RESULT" : {
         "message" : [
           "`<method>` returned null."
-        ]
-      },
-      "NULL_RESULT_CURSOR" : {
-        "message" : [
-          "`lookupBatch()` returned null."
-        ]
-      },
-      "NULL_RESULT_ROW" : {
-        "message" : [
-          "The lookup result cursor returned null from `get()`."
         ]
       },
       "UNKNOWN_SCAN_FIELD" : {

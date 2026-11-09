@@ -227,7 +227,7 @@ class ExternalLookupJoinEvaluatorFactory(
           metrics.lookupTime += System.nanoTime() - start
           if (connectorRow == null) {
             throw QueryExecutionErrors.invalidDataSourceExternalLookupError(
-              tableName, "NULL_RESULT_ROW")
+              tableName, "NULL_RESULT", Map("method" -> "ExternalLookupResultCursor.get()"))
           }
           val key = requestedKey(ordinal)
           val resultRow = reader.copyRow(resultRows.validatedCopy(connectorRow))
@@ -545,7 +545,7 @@ class ExternalLookupJoinEvaluatorFactory(
       val cursor = Option(reader.lookupBatch(requestRows.asInstanceOf[Array[InternalRow]]))
         .getOrElse {
           throw QueryExecutionErrors.invalidDataSourceExternalLookupError(
-            tableName, "NULL_RESULT_CURSOR")
+            tableName, "NULL_RESULT", Map("method" -> "ExternalLookupReader.lookupBatch()"))
         }
       if (!activeCursor.compareAndSet(null, cursor)) {
         // A close() started while the request ran, so it did not find this cursor. It closes the
@@ -561,7 +561,7 @@ class ExternalLookupJoinEvaluatorFactory(
     private def createReader(): ExternalLookupReader = {
       val reader = Option(readerFactory.createReader()).getOrElse {
         throw QueryExecutionErrors.invalidDataSourceExternalLookupError(
-          tableName, "NULL_LOOKUP_READER")
+          tableName, "NULL_RESULT", Map("method" -> "ExternalLookupReaderFactory.createReader()"))
       }
       taskReaders.opened(reader)
       openReader.set(reader)

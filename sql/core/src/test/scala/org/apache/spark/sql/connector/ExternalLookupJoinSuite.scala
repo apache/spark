@@ -27,7 +27,7 @@ import scala.jdk.CollectionConverters._
 import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkRuntimeException,
-  SparkUnsupportedOperationException, TaskContext}
+  SparkThrowable, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Encoders, Row, SaveMode,
   SQLContext}
 import org.apache.spark.sql.IntegratedUDFTestUtils.{shouldTestPythonUDFs, TestPythonUDF}
@@ -41,8 +41,9 @@ import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, LeafNode, Logic
   PreparedExternalLookupJoin}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.classic.Dataset
-import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog, SupportsRead,
-  Table, TableCapability, TableCatalog, TableChange, TableProvider}
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryBaseTable,
+  InMemoryTableCatalog, SupportsRead, Table, TableCapability, TableCatalog, TableChange,
+  TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, EXTERNAL_LOOKUP}
 import org.apache.spark.sql.connector.expressions.{NamedReference, Transform}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
@@ -62,7 +63,7 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.StreamingDedu
 import org.apache.spark.sql.execution.streaming.runtime.{IncrementalExecution, MemoryStream,
   StreamingQueryWrapper}
 import org.apache.spark.sql.execution.streaming.sources.LowLatencyMemoryStream
-import org.apache.spark.sql.functions.{coalesce, col, concat, expr, length, lit, raise_error,
+import org.apache.spark.sql.functions.{coalesce, col, concat, expr, length, lit, max, raise_error,
   to_json, when}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, InsertableRelation,
@@ -79,6 +80,8 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   private val EXTERNAL_LOOKUP_CATALOG_NAME = "external_lookup_cat"
+  // The supportedJoinTypes parameter of a JOIN_TYPE error.
+  private val SUPPORTED_JOIN_TYPES = "INNER, LEFT OUTER"
 
   private val streamRunCount = new AtomicInteger()
 
@@ -121,11 +124,42 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
   private def checkStream(df: DataFrame, expected: Seq[Row]): Unit =
     QueryTest.sameRows(expected, runStream(df).rows).foreach(fail(_))
 
-  /** The error that the streaming `df` fails with. */
+  /** The error that the streaming `df` fails with, when it starts or in a micro-batch. */
   private def streamFailure[T <: Throwable : ClassTag](df: DataFrame): T = {
-    val cause = intercept[StreamingQueryException](runStream(df)).getCause
+    val cause = try {
+      runStream(df)
+      fail("The streaming query did not fail")
+    } catch {
+      case e: StreamingQueryException => e.getCause
+      case e: Throwable with SparkThrowable => e
+    }
     assert(classTag[T].runtimeClass.isInstance(cause), cause)
     cause.asInstanceOf[T]
+  }
+
+  test("a stream whose scan is pruned at the start reads the columns of its lookup joins") {
+    withSQLConf(
+        "spark.sql.catalog.stream_cat" -> classOf[InMemoryTableCatalog].getName,
+        SQLConf.STREAMING_V2_COLUMN_PRUNING_ENABLED.key -> "true") {
+      withTable("stream_cat.ns.badge_swipes") {
+        sql("CREATE TABLE stream_cat.ns.badge_swipes (employee INT, door STRING, minute INT) " +
+          s"TBLPROPERTIES ('${InMemoryBaseTable.STREAMING_COLUMN_PRUNING}' = 'true')")
+        sql("INSERT INTO stream_cat.ns.badge_swipes VALUES (1, 'lobby', 10), (3, 'garage', 20)")
+        val swipes = spark.readStream.table("stream_cat.ns.badge_swipes")
+        val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+        checkStream(
+          swipes.join(lookup, swipes("employee") === lookup("id"))
+            .select(swipes("door"), lookup("department")),
+          Seq(Row("lobby", "engineering"), Row("lobby", "research")))
+        // An aggregate that reads only stream columns and ignores duplicates does not need a left
+        // outer join, so the optimizer removes an ordinary one. A lookup join stays.
+        val latestByDoor = swipes.join(lookup, swipes("employee") === lookup("id"), "left_outer")
+          .groupBy(swipes("door")).agg(max(swipes("minute")))
+        QueryTest.sameRows(
+          Seq(Row("lobby", 10), Row("garage", 20)),
+          runStream(latestByDoor, "complete").rows).foreach(fail(_))
+      }
+    }
   }
 
   test("external lookup capability produces a unary external lookup join") {
@@ -161,8 +195,9 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
   test("external lookup validates connector planning and request contracts") {
     val left = streamOf(Seq(1).toDF("id"))
     Seq(
-      ("nullKeySelection", "true", "NULL_PREDICATE_SELECTION", Map.empty[String, String]),
-      ("selectionMode", "nullElement", "NULL_PREDICATE_SELECTION", Map.empty[String, String]),
+      ("nullKeySelection", "true", "NULL_RESULT",
+        Map("method" -> "SupportsExternalLookup.selectLookupPredicates()")),
+      ("selectionMode", "nullElement", "UNOFFERED_SELECTED_PREDICATE", Map("predicate" -> "null")),
       ("selectionMode", "duplicate", "DUPLICATE_SELECTED_PREDICATE", Map("predicate" -> "id = ?")),
       ("selectionMode", "copy", "UNOFFERED_SELECTED_PREDICATE", Map("predicate" -> "id = ?")),
       ("maxBatchSize", "0", "NON_POSITIVE_MAX_PARAMETER_ROWS", Map("value" -> "0"))).foreach {
@@ -208,8 +243,10 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       .option("nullCursor", "true")
       .load()
     Seq(
-      (nullCursor, "NULL_RESULT_CURSOR", Map("table" -> "`SimpleExternalLookupTable`")),
-      (misconfigured("nullReader"), "NULL_LOOKUP_READER", table),
+      (nullCursor, "NULL_RESULT", Map("table" -> "`SimpleExternalLookupTable`",
+        "method" -> "ExternalLookupReader.lookupBatch()")),
+      (misconfigured("nullReader"), "NULL_RESULT",
+        table ++ Map("method" -> "ExternalLookupReaderFactory.createReader()")),
       (misconfigured("invalidOrdinal"), "INVALID_INPUT_ORDINAL",
         table ++ Map("ordinal" -> "5", "numParameterRows" -> "1")),
       // The ordinals just outside the request's parameter rows.
@@ -217,7 +254,8 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
         table ++ Map("ordinal" -> "-1", "numParameterRows" -> "1")),
       (misconfigured("ordinalAtCount"), "INVALID_INPUT_ORDINAL",
         table ++ Map("ordinal" -> "1", "numParameterRows" -> "1")),
-      (misconfigured("nullRow"), "NULL_RESULT_ROW", table),
+      (misconfigured("nullRow"), "NULL_RESULT",
+        table ++ Map("method" -> "ExternalLookupResultCursor.get()")),
       // A value that breaks its column's type, which Spark relied on while it optimized.
       (misconfigured("nullValue"), "NULL_IN_NOT_NULL_FIELD",
         table ++ Map("field" -> "`department`")),
@@ -431,8 +469,10 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
       case (joined, joinType) =>
         val error = intercept[AnalysisException](joined())
         assert(error.getCondition === "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.JOIN_TYPE")
-        assert(error.getMessageParameters.asScala.toMap - "supportedJoinTypes" ===
-          Map("joinType" -> joinType, "relation" -> "`SimpleExternalLookupTable`"))
+        assert(error.getMessageParameters.asScala.toMap === Map(
+          "joinType" -> joinType,
+          "relation" -> "`SimpleExternalLookupTable`",
+          "supportedJoinTypes" -> SUPPORTED_JOIN_TYPES))
     }
   }
 
@@ -1419,7 +1459,9 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
         "TIMESTAMP'2026-01-01 10:00:00.000002'"), "TIMESTAMP'2026-01-01 10:00:00.000003'"),
       ("TIMESTAMP_NTZ", Seq("TIMESTAMP_NTZ'2026-01-01 10:00:00.000001'",
         "TIMESTAMP_NTZ'2026-01-01 10:00:00.000002'"), "TIMESTAMP_NTZ'2026-01-01 10:00:00.000003'"),
-      ("BINARY", Seq("X'0102'", "X'010203'"), "X'01'")).foreach {
+      ("BINARY", Seq("X'0102'", "X'010203'"), "X'01'"),
+      // VARCHAR compares as STRING unless standard CHAR/VARCHAR semantics is on.
+      ("VARCHAR(8)", Seq("'ab'", "'abc'"), "'abd'")).foreach {
       case (keyType, stored, missing) =>
         val dataType = DataType.fromDDL(keyType)
         def internalValue(literal: String): Any =

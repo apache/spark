@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming.runtime
 
+import java.util.{Collections, IdentityHashMap}
+
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
@@ -35,6 +37,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, CTERelationDef, Filter, Join, LateralJoin, LeafNode, LogicalPlan, Project, SetOperation, Statistics}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, RUNTIME_REPLACEABLE}
+import org.apache.spark.sql.catalyst.trees.TreePatternBits
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{truncatedString, ArrayData, CharVarcharUtils, MapData}
 import org.apache.spark.sql.classic.SparkSession
@@ -392,18 +395,22 @@ private[sql] object StreamingV2ScanPushDown
    *  - The expressions whose values may depend on when they are evaluated or on the state of the
    *    session, such as the current time or the conversions to dates and timestamps (see
    *    `makesDateOrTimestamp`), become placeholders that are not deterministic for the optimizer,
-   *    as the current time of a micro-batch, and keep their children.
+   *    as the current time of a micro-batch, and keep their children, if `withStartupValues`.
+   * The lookup sides of external lookup joins stay whole, so that the plan forms the external
+   * lookup joins of the micro-batches.
    * Visible for tests.
    */
-  private[sql] def forStartup(plan: LogicalPlan): LogicalPlan = withOpaqueSubqueries(
-    plan.transformDown {
+  private[sql] def forStartup(
+      plan: LogicalPlan,
+      withStartupValues: Boolean = true): LogicalPlan = withOpaqueSubqueries(
+    plan.transformDownWithPruning(isNotLookupSideOf(plan)) {
       case relation: BatchRelation => relation
       // `WithCTE` keeps the definitions of its common table expressions as they are.
       case definition: CTERelationDef if !definition.isStreaming =>
         definition.copy(child = BatchRelation(definition.child))
       case node if !node.isStreaming => BatchRelation(node)
     }).transformUpWithSubqueries {
-    case node =>
+    case node if withStartupValues =>
       // The expressions that ReplaceExpressions replaces with others when the optimization starts
       // are replaced first, as the optimizer does, so that the conversions that they stand for,
       // such as the cast of to_date('today'), are replaced below.
@@ -419,6 +426,14 @@ private[sql] object StreamingV2ScanPushDown
         case e if e.containsPattern(CURRENT_LIKE) => StartupValue(e, e.children)
         case e if makesDateOrTimestamp(e) => StartupValue(e, e.children)
       }
+  }
+
+  // A predicate that is false for the lookup sides of the external lookup joins of `plan`, which
+  // `forStartup` keeps.
+  private def isNotLookupSideOf(plan: LogicalPlan): TreePatternBits => Boolean = {
+    val lookupSides = Collections.newSetFromMap(new IdentityHashMap[LogicalPlan, java.lang.Boolean])
+    ExternalLookupJoinStartupCheck.lookupSidePlans(plan).foreach(lookupSides.add)
+    node => !lookupSides.contains(node)
   }
 
   /**

@@ -2542,6 +2542,18 @@ object SQLConf {
       .checkValue(_ > 0, "External lookup join max batch bytes must be positive")
       .createWithDefaultString("64m")
 
+  val JOIN_EXTERNAL_LOOKUP_STARTUP_CHECK_ENABLED =
+    buildConf("spark.sql.join.externalLookup.startupCheck.enabled")
+      .internal()
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .doc("When true, starting a streaming query plans its external lookup joins once, " +
+        "including the planning calls to their connectors, so that a join that cannot be " +
+        "planned fails the start instead of the first micro-batch. When false, such a join " +
+        "fails the first micro-batch that runs.")
+      .version("4.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val INTERRUPT_ON_CANCEL = buildConf("spark.sql.execution.interruptOnCancel")
     .doc("When true, all running tasks will be interrupted if one cancels a query.")
     .version("4.0.0")
