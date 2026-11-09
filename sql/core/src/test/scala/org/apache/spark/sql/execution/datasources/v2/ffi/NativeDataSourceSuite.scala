@@ -1024,6 +1024,33 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(new File(dir, "_CLOSED_0").isFile)
   }
 
+  nativeTest("abort a micro-batch whose commit failed") {
+    val session = newSession(defaultPackage)
+    val dir = Utils.createTempDir()
+    val e = intercept[Exception] {
+      val query = session.readStream.format("native_counter").option("max_offset", "4").load()
+        .writeStream
+        .format("native_sink")
+        .option("path", dir.getPath)
+        .option("fail", "commit")
+        .option("checkpointLocation", Utils.createTempDir().getPath)
+        .start()
+      try query.processAllAvailable() finally query.stop()
+    }
+    checkError(
+      exception = findError(e, "NATIVE_DATA_SOURCE_ERROR"),
+      condition = "NATIVE_DATA_SOURCE_ERROR",
+      parameters = Map(
+        "action" -> "commit a write to",
+        "name" -> "native_sink",
+        "msg" -> "injected failure in commit"))
+    // The failed commit left the stream writer open, so Spark aborted the first epoch with it, with
+    // the message of its task, which committed, and closed it afterwards.
+    assert(Files.readString(new File(dir, "_ABORTED_0").toPath) == "0,1,0")
+    assert(!new File(dir, "_EPOCH_0").exists())
+    assert(new File(dir, "_CLOSED_0").isFile)
+  }
+
   nativeTest("continuous processing fails with a native data source") {
     val session = newSession(defaultPackage)
     val dir = Utils.createTempDir()
