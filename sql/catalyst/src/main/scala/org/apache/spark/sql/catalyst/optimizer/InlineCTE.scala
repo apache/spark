@@ -286,19 +286,7 @@ case class InlineCTE(
             refInfo.cteDef.child
           }
           if (refInfo.shouldInline) {
-            if (ref.outputSet == refInfo.cteDef.outputSet) {
-              cteBody
-            } else {
-              val ctePlan = DeduplicateRelations.deduplicateRight(cteBody, cteBody)
-              val projectList = ref.output.zip(ctePlan.output).map { case (tgtAttr, srcAttr) =>
-                if (srcAttr.semanticEquals(tgtAttr)) {
-                  tgtAttr
-                } else {
-                  Alias(srcAttr, tgtAttr.name)(exprId = tgtAttr.exprId)
-                }
-              }
-              Project(projectList, ctePlan)
-            }
+            InlineCTE.inlineReference(ref, refInfo.cteDef, cteBody)
           } else {
             ref
           }
@@ -325,6 +313,32 @@ case class InlineCTE(
         ul.copy(limit = Some(-1))
       case other =>
         other.withNewChildren(plan.children.map(child => setUnlimitedRecursion(child, id)))
+    }
+  }
+}
+
+object InlineCTE {
+  /**
+   * The plan that replaces `ref` when its CTE definition, whose plan is `cteBody`, is inlined.
+   * When attribute de-duplication gave the reference other attributes than the definition, the
+   * plan is a copy of `cteBody` under a projection to the reference's attributes.
+   */
+  private[sql] def inlineReference(
+      ref: CTERelationRef,
+      cteDef: CTERelationDef,
+      cteBody: LogicalPlan): LogicalPlan = {
+    if (ref.outputSet == cteDef.outputSet) {
+      cteBody
+    } else {
+      val ctePlan = DeduplicateRelations.deduplicateRight(cteBody, cteBody)
+      val projectList = ref.output.zip(ctePlan.output).map { case (tgtAttr, srcAttr) =>
+        if (srcAttr.semanticEquals(tgtAttr)) {
+          tgtAttr
+        } else {
+          Alias(srcAttr, tgtAttr.name)(exprId = tgtAttr.exprId)
+        }
+      }
+      Project(projectList, ctePlan)
     }
   }
 }

@@ -18,16 +18,19 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import scala.annotation.tailrec
+import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
+import org.apache.spark.sql.catalyst.optimizer.{EliminateResolvedHint, InlineCTE}
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter}
-import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupHint, ExternalLookupJoin, Join,
-  JoinStrategyHint, LogicalPlan, ResolvedHint, SubqueryAlias, UnaryNode, View}
+import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef,
+  ExternalLookupHint, ExternalLookupJoin, Join, JoinStrategyHint, LogicalPlan, ResolvedHint,
+  SubqueryAlias, UnaryNode, View, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.WriteToStream
-import org.apache.spark.sql.catalyst.trees.TreePattern.{DATA_SOURCE_V2_RELATION,
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, DATA_SOURCE_V2_RELATION,
   EXTERNAL_LOOKUP_HINT, JOIN}
+import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
 import org.apache.spark.sql.connector.catalog.TableCapability
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.execution.datasources.v2.ExternalLookupRelations
@@ -88,7 +91,8 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
     }
     // The DSv2 table that the lookup side reads through hints, aliases and views only. There is
     // none when another operator stands in between or the side reads no DSv2 table.
-    val table = ExternalLookupRelations.table(lookupRelation(join.right)) match {
+    val tableRelation = lookupRelation(join.right)
+    val table = ExternalLookupRelations.table(tableRelation) match {
       case Some(table) => table
       case None =>
         return Ineligible(QueryCompilationErrors.unsupportedExternalLookupJoinError("LOOKUP_PLAN"))
@@ -98,6 +102,9 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
       return Ineligible(QueryCompilationErrors.unsupportedExternalLookupJoinError(
         "TABLE", Map("table" -> relation)))
     }
+    // A lookup returns the data columns of the table only. The relation outputs a metadata column
+    // only when the query reads one.
+    if (tableRelation.output.exists(_.isMetadataCol)) return ineligible("METADATA_COLUMN", relation)
     if (!join.left.isStreaming) return ineligible("STATIC_LEFT_SIDE", relation)
     // A join hint the user wrote is never silently dropped: an external lookup join cannot run a
     // physical join strategy, and a lookup-only table has no batch scan for one. On a table that
@@ -126,6 +133,69 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
       case None => Eligible
     }
   }
+
+  /** The CTE definitions in `plan` by id, which [[inlineCTEs]] inlines. */
+  def cteDefinitions(plan: LogicalPlan): Map[Long, CTERelationDef] =
+    if (plan.containsPattern(CTE)) {
+      plan.collect { case cteDef: CTERelationDef => cteDef.id -> cteDef }.toMap
+    } else {
+      Map.empty
+    }
+
+  /**
+   * `join` with the CTE references on the paths of unary operators of its inputs inlined, as
+   * InlineCTE inlines them for the analysis check. Only these paths decide how the join is
+   * classified, and the lookup side of an eligible join is its path alone, so it has no other CTE
+   * reference left.
+   */
+  def inlineCTEs(join: Join, cteDefs: Map[Long, CTERelationDef]): Join =
+    if (cteDefs.isEmpty) {
+      join
+    } else {
+      join.copy(
+        left = inlinePathCTEs(join.left, cteDefs),
+        right = inlinePathCTEs(join.right, cteDefs))
+    }
+
+  private def inlinePathCTEs(
+      plan: LogicalPlan,
+      cteDefs: Map[Long, CTERelationDef]): LogicalPlan = plan match {
+    case _ if !plan.containsPattern(CTE) => plan
+    case ref: CTERelationRef if cteDefs.contains(ref.cteId) =>
+      val cteDef = cteDefs(ref.cteId)
+      InlineCTE.inlineReference(ref, cteDef, inlinePathCTEs(cteDef.child, cteDefs))
+    case WithCTE(child, _) => inlinePathCTEs(child, cteDefs)
+    case unary: UnaryNode => unary.withNewChildren(Seq(inlinePathCTEs(unary.child, cteDefs)))
+    case other => other
+  }
+
+  /**
+   * The plans that external lookup joins in `plan` read by lookups: the lookup side of each join
+   * that must run as an external lookup join, and the CTE definitions that the side reads,
+   * directly or through other CTE definitions. Subqueries are not searched.
+   */
+  def lookupSidePlans(plan: LogicalPlan): Seq[LogicalPlan] =
+    // As in CheckExternalLookupJoin, other plans have no join that must run as a lookup join.
+    if (!plan.containsPattern(JOIN) ||
+        !plan.containsAnyPattern(DATA_SOURCE_V2_RELATION, EXTERNAL_LOOKUP_HINT)) {
+      Nil
+    } else {
+      val cteDefs = cteDefinitions(plan)
+      val lookupSides = plan.collect {
+        case join: Join if apply(inlineCTEs(join, cteDefs)) != NotLookupJoin => join.right
+      }
+      val readCTEs = mutable.LinkedHashMap.empty[Long, CTERelationDef]
+      def addReadCTEs(plan: LogicalPlan): Unit = plan.foreach {
+        case ref: CTERelationRef if !readCTEs.contains(ref.cteId) =>
+          cteDefs.get(ref.cteId).foreach { cteDef =>
+            readCTEs(ref.cteId) = cteDef
+            addReadCTEs(cteDef)
+          }
+        case _ =>
+      }
+      lookupSides.foreach(addReadCTEs)
+      lookupSides ++ readCTEs.values
+    }
 
   /**
    * The lookup side of an eligible join, without its `EXTERNAL_LOOKUP` hint. The lookup side of an
@@ -227,17 +297,27 @@ object CheckExternalLookupJoin extends (LogicalPlan => Unit) {
  * It must run at the start of optimization, before Finish Analysis and operator optimization, so
  * that it sees the join and its lookup side as analysis left them: no hint or alias eliminated,
  * no predicate pushed into the join and no column pruned. These are the shapes that
- * [[CheckExternalLookupJoin]] validated.
+ * [[CheckExternalLookupJoin]] validated. It also runs before CTEs are inlined, so it classifies a
+ * join with the CTEs of its inputs inlined, as the analysis check does, and inlines the CTEs of
+ * the lookup side into the lookup join.
  */
 object FormExternalLookupJoin extends Rule[LogicalPlan] {
   import ExternalLookupJoinEligibility._
 
-  override def apply(plan: LogicalPlan): LogicalPlan = {
+  // As in CheckExternalLookupJoin, a join runs as a lookup join only over a lookup-only table,
+  // which is a DSv2 relation, or under the hint, so other plans have no join to convert.
+  override def apply(plan: LogicalPlan): LogicalPlan =
+    if (!plan.containsAnyPattern(DATA_SOURCE_V2_RELATION, EXTERNAL_LOOKUP_HINT)) plan
+    else formLookupJoins(plan)
+
+  private def formLookupJoins(plan: LogicalPlan): LogicalPlan = {
+    val cteDefs = cteDefinitions(plan)
     val formed = plan.transformUpWithPruning(_.containsPattern(JOIN)) {
       case join: Join =>
-        ExternalLookupJoinEligibility(join) match {
+        val inlined = inlineCTEs(join, cteDefs)
+        ExternalLookupJoinEligibility(inlined) match {
           case Eligible =>
-            val lookupPlan = lookupSide(join)
+            val lookupPlan = lookupSide(inlined)
             ExternalLookupJoin(
               join.left,
               lookupPlan,

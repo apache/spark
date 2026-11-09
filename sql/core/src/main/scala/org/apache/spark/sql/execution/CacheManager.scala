@@ -25,7 +25,8 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.sql.catalyst.analysis.{RelationCacheIneligible, Resolver}
+import org.apache.spark.sql.catalyst.analysis.{ExternalLookupJoinEligibility,
+  RelationCacheIneligible, Resolver}
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
@@ -551,7 +552,12 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   private[sql] def useCachedData(
       plan: LogicalPlan,
       canUse: CachedData => Boolean = _ => true): LogicalPlan = {
-    val newPlan = plan transformDown {
+    // An external lookup join reads its lookup side by lookups. If cached data replaced that side
+    // or a CTE definition that it reads, the join would silently read the cached data instead, or
+    // fail.
+    val lookupSidePlans =
+      if (cachedData.isEmpty) Nil else ExternalLookupJoinEligibility.lookupSidePlans(plan)
+    val newPlan = plan.transformDownWithPruning(node => !lookupSidePlans.exists(_ eq node)) {
       case command: Command => command
 
       case currentFragment =>

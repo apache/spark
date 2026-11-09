@@ -21,7 +21,7 @@ import java.util.Locale
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{Expression, StringLiteral}
 import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupHint, LogicalPlan,
   SubqueryAlias, UnresolvedHint, UnresolvedWith, View}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -31,7 +31,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 /**
  * Resolves the `EXTERNAL_LOOKUP` hint to [[ExternalLookupHint]] markers. As with join strategy
  * hints, a hint without parameters marks the plan it is attached to, and a hint with relation
- * names marks each named relation.
+ * names, given as identifiers or strings, marks each named relation.
  */
 object ResolveExternalLookupHint extends Rule[LogicalPlan] with QueryErrorsBase {
   private val HINT_NAME = "EXTERNAL_LOOKUP"
@@ -46,6 +46,10 @@ object ResolveExternalLookupHint extends Rule[LogicalPlan] with QueryErrorsBase 
   private def resolveHint(parameters: Seq[Expression], child: LogicalPlan): LogicalPlan = {
     val relationNames = mutable.ArrayBuffer.empty[Seq[String]]
     parameters.foreach {
+      // As in ResolveJoinStrategyHints: the Dataset API, PySpark and Spark Connect pass a relation
+      // name as a string, and SQL as an identifier.
+      case StringLiteral(name) =>
+        relationNames += UnresolvedAttribute.parseAttributeName(name)
       case attr: UnresolvedAttribute =>
         relationNames += attr.nameParts
       case other =>
