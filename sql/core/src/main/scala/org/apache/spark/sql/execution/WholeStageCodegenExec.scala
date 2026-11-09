@@ -629,9 +629,8 @@ object WholeStageCodegenExec {
    * method sizes, so the class is then dropped and compiled again. A hit happens where the class
    * is cached while the decision for its code is not: the decision was evicted, or the same body
    * was compiled earlier without being decided - with the split off, whose code is the recorded
-   * code without its marks, but for the compacted-slot rule, or under another limit. Should
-   * another thread load the class again in between, the second compile is a hit as well, and the
-   * sizes are unknown.
+   * code without its marks, or under another limit. Should another thread load the class again
+   * in between, the second compile is a hit as well, and the sizes are unknown.
    */
   private[execution] def trialCompile(
       code: CodeAndComment,
@@ -774,11 +773,7 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
    * one piece, with the code of each expression a split could take marked, and only where there
    * is one is that code compiled to choose which expressions to split ([[chooseCode]]). A stage
    * the JIT compiles whole keeps that code, which a split's calls would only slow down; the trial
-   * compile of the code kept is the one [[doExecute]] finds in the compile cache. That code
-   * differs from the code with the conf off in one place: a slot of a compacted mutable state
-   * array counts as the field it is when code moves into a method (`CodegenContext.collectInputs`).
-   * An operator's method that took it as a parameter, and failed to compile, now compiles; a
-   * `With` definition reading one, which stayed inline, gets its method.
+   * compile of the code kept is the one [[doExecute]] finds in the compile cache.
    *
    * @return the tuple of the codegen context and the actual generated source.
    */

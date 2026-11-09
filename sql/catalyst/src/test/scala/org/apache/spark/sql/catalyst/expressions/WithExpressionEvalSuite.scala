@@ -91,8 +91,15 @@ class WithExpressionEvalSuite extends SparkFunSuite with SQLHelper {
   }
 
   /** Generates `e` against [[localInputContext]]: the code it emitted, and the methods added. */
-  private def generateWithLocalInput(e: Expression, inputs: ExprCode*): (String, String) = {
+  private def generateWithLocalInput(e: Expression, inputs: ExprCode*): (String, String) =
+    generateWithLocalInput(e, checkParameterNames = true, inputs: _*)
+
+  private def generateWithLocalInput(
+      e: Expression,
+      checkParameterNames: Boolean,
+      inputs: ExprCode*): (String, String) = {
     val ctx = localInputContext(inputs: _*)
+    ctx.checkParameterNames = checkParameterNames
     (e.genCode(ctx).code.toString, ctx.declareAddedFunctions())
   }
 
@@ -305,18 +312,9 @@ class WithExpressionEvalSuite extends SparkFunSuite with SQLHelper {
           s"the innermost body was emitted $count times at depth $depth")
         assert(!methods.contains("computeCommonExpr"), methods)
       }
-      // A value whose name is not one a parameter can take: `ExpandExec` hands out a compacted
-      // mutable state array slot as if it were a local. The marker count says the fallback pasted
-      // the body at both references; that a method was attempted at all is the case above, which
-      // gets one from the same shape with a passable name.
-      val slot = ExprCode(EmptyBlock, FalseLiteral,
-        JavaCode.variable("mutableStateArray_0[3]", IntegerType))
-      val (slotBody, slotMethods) = generateWithLocalInput(nested(2), slot)
-      assert(!slotMethods.contains("computeCommonExpr"), slotMethods)
-      assert(markersIn(slotBody + slotMethods) == 4, slotBody + slotMethods)
       // A nullness that is an expression rather than a name, the shape `GenerateExec` hands out
       // for the position of `posexplode_outer`: whichever locals such an expression names, this
-      // has no way to pass them. A plain name in its place does get a method, in the case above.
+      // has no way to pass them. A plain name in its place does get a method, in the previous test.
       val position = ExprCode(EmptyBlock, JavaCode.isNullExpression("index_0 == -1"),
         JavaCode.variable("index_0", IntegerType))
       val (positionBody, positionMethods) =
@@ -334,6 +332,25 @@ class WithExpressionEvalSuite extends SparkFunSuite with SQLHelper {
       assert(!methods.contains("computeCommonExpr"), methods)
       val count = markersIn(body + methods)
       assert(count == 4, s"the innermost body was emitted $count times")
+    }
+  }
+
+  test("SPARK-59589: a slot handed out as a local fails the testing check where a definition's " +
+      "method is considered") {
+    // A value whose name is not one a parameter can take, such as a slot of a compacted mutable
+    // state array handed out as a local. Its producer has to hand it out as a field; "a method for
+    // the local variables the operator has already evaluated" gets a method from the same shape
+    // with a passable name.
+    withSQLConf(SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1024") {
+      val slot = ExprCode(EmptyBlock, FalseLiteral,
+        JavaCode.variable("mutableStateArray_0[3]", IntegerType))
+      val e = intercept[AssertionError](generateWithLocalInput(nested(2), slot))
+      assert(e.getMessage.contains("mutableStateArray_0[3] cannot name a parameter"),
+        e.getMessage)
+      // Without the check, as in production, the method is refused and the bodies stay inline.
+      val (body, methods) = generateWithLocalInput(nested(2), checkParameterNames = false, slot)
+      assert(!methods.contains("computeCommonExpr"), methods)
+      assert(markersIn(body + methods) == 4, body + methods)
     }
   }
 

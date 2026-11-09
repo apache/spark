@@ -89,6 +89,17 @@ object MathUtils {
 
   def floorMod(a: Long, b: Long): Long = withOverflow(Math.floorMod(a, b))
 
+  /**
+   * `Math.rint` with a canonical NaN result. The bits of a NaN that `Math.rint` returns depend on
+   * the JIT tier: the interpreter and C1 run `StrictMath.rint`, which clears the sign, while C2's
+   * intrinsic keeps it. Every NaN result becomes `Double.NaN`, which also drops a NaN payload;
+   * every other result is `Math.rint`'s, bit for bit.
+   */
+  def rint(a: Double): Double = {
+    val r = Math.rint(a)
+    if (java.lang.Double.isNaN(r)) Double.NaN else r
+  }
+
   // Positive modulo (`pmod`): for `n > 0` the result lies in `[0, n)` (for the float/double
   // overloads, when both inputs are finite); for integral `n < 0` it takes the sign of the
   // dividend `a` (unlike `floorMod`, which takes the sign of `n`). Matches the `pmod` SQL

@@ -395,6 +395,32 @@ SELECT * FROM t o WHERE EXISTS (
   SELECT * FROM v
 );
 
+-- Time travel on a CTE reference is rejected instead of reading the same-named table
+CREATE TABLE cte_time_travel(col1 INT) USING parquet;
+WITH cte_time_travel AS (SELECT 1 AS col1) SELECT * FROM cte_time_travel VERSION AS OF 0;
+WITH cte_time_travel AS (SELECT 1 AS col1),
+     cte AS (SELECT * FROM cte_time_travel VERSION AS OF 0)
+SELECT * FROM cte;
+-- Other temporal clause forms, a case-insensitive CTE name, and references from a join and from a
+-- subquery expression.
+WITH cte_time_travel AS (SELECT 1 AS col1)
+SELECT * FROM cte_time_travel TIMESTAMP AS OF '2020-01-01 00:00:00';
+WITH cte_time_travel AS (SELECT 1 AS col1) SELECT * FROM cte_time_travel FOR SYSTEM_VERSION AS OF 0;
+WITH cte_time_travel AS (SELECT 1 AS col1) SELECT * FROM CTE_TIME_TRAVEL VERSION AS OF 0;
+WITH cte_time_travel AS (SELECT 1 AS col1)
+SELECT * FROM VALUES (1) AS v(col1) JOIN cte_time_travel VERSION AS OF 0 USING (col1);
+WITH cte_time_travel AS (SELECT 1 AS col1)
+SELECT (SELECT col1 FROM cte_time_travel VERSION AS OF 0);
+-- A nested WITH reading the outer CTE with time travel.
+WITH cte_time_travel AS (SELECT 1 AS col1)
+SELECT * FROM (WITH cte AS (SELECT * FROM cte_time_travel VERSION AS OF 0) SELECT * FROM cte);
+-- A qualified name does not refer to the CTE, so time travel is checked against the table.
+WITH cte_time_travel AS (SELECT 1 AS col1)
+SELECT * FROM spark_catalog.default.cte_time_travel VERSION AS OF 0;
+-- Without a CTE, time travel is checked against the table.
+SELECT * FROM cte_time_travel VERSION AS OF 0;
+DROP TABLE cte_time_travel;
+
 -- Clean up
 DROP VIEW IF EXISTS t;
 DROP VIEW IF EXISTS t2;

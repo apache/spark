@@ -1924,6 +1924,37 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
+  test("SPARK-60978: merge keeps columns whose names differ only by case") {
+    withTempView("source") {
+      // such a table can only be created and read in a case-sensitive session
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        createAndInitTable("pk INT NOT NULL, salary INT, SALARY INT, dep STRING",
+          """{ "pk": 1, "salary": 100, "SALARY": 200, "dep": "hr" }
+            |{ "pk": 2, "salary": 300, "SALARY": 400, "dep": "hr" }
+            |""".stripMargin)
+      }
+
+      Seq(1).toDF("pk").createOrReplaceTempView("source")
+
+      // the statement does not name the colliding columns so it is not ambiguous
+      sql(
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.pk = s.pk
+           |WHEN MATCHED THEN
+           | UPDATE SET t.dep = 'support'
+           |""".stripMargin)
+
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        checkAnswer(
+          sql(s"SELECT * FROM $tableNameAsString"),
+          Seq(
+            Row(1, 100, 200, "support"), // update
+            Row(2, 300, 400, "hr"))) // unchanged
+      }
+    }
+  }
+
   test("merge refreshed relation cache") {
     withTempView("temp", "source") {
       withCache("temp") {
