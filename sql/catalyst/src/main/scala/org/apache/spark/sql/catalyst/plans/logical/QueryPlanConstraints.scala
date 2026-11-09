@@ -23,7 +23,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils.isBinaryStable
-import org.apache.spark.sql.types.UpCastRule
+import org.apache.spark.sql.types.{DataType, DateType, TimestampFamily, UpCastRule}
 
 
 trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
@@ -147,17 +147,32 @@ trait ConstraintHelper {
   }
 
   /**
-   * True when `e` cannot raise an error during evaluation: a non-null literal, or an upcast of
-   * one admitted by [[UpCastRule.canUpCast]]. Used by [[inferInequalityConstraints]] to decide
-   * which literals are safe to treat as chain anchors without risking an ANSI eval failure.
-   * Arbitrary expressions (such as a parsing cast `CAST('abc' AS INT)` or arithmetic that can
-   * fail under ANSI) are excluded.
+   * True when a value of type `from` can be cast to `to` without a conversion failure.
+   * [[UpCastRule.canUpCast]] certifies losslessness (no truncation, no precision loss), which is
+   * close to but not quite "cannot fail": a DATE operand cast to a timestamp-family type can
+   * still overflow in `SparkDateTimeUtils.daysToMicros`'s `Math.multiplyExact`, for a day count
+   * far outside DateType's documented 0001-01-01 to 9999-12-31 range, so that direction is
+   * excluded here on top of [[UpCastRule.canUpCast]]. A decimal-to-integral upcast has no
+   * equivalent gap to carve out: SPARK-60943 tightened `DecimalType.isTighterThan` so a
+   * DECIMAL(19, 0), whose values can exceed Long.MaxValue, is no longer admitted as an upcast to
+   * BIGINT by [[UpCastRule.canUpCast]] itself.
+   */
+  private def isSafeUpCast(from: DataType, to: DataType): Boolean =
+    UpCastRule.canUpCast(from, to) &&
+      !(from == DateType && TimestampFamily.fractionalPrecision(to).isDefined)
+
+  /**
+   * True when `e` cannot raise an error during evaluation: a non-null literal, or a safe upcast
+   * ([[isSafeUpCast]]) of one. Used by [[inferInequalityConstraints]] to decide which literals
+   * are safe to treat as chain anchors without risking an eval failure. Arbitrary expressions
+   * (such as a parsing cast `CAST('abc' AS INT)` or arithmetic that can fail under ANSI) are
+   * excluded.
    */
   @tailrec
   private def isSafeBoundLiteral(e: Expression): Boolean = e match {
     case l: Literal => l.value != null
     case Cast(child, toType, _, _) =>
-      UpCastRule.canUpCast(child.dataType, toType) && isSafeBoundLiteral(child)
+      isSafeUpCast(child.dataType, toType) && isSafeBoundLiteral(child)
     case _ => false
   }
 
@@ -169,16 +184,16 @@ trait ConstraintHelper {
   /**
    * True when `e` is safe to copy into a newly inferred, single-side filter produced by
    * [[inferInequalityConstraints]] without risking an error on rows that never evaluated it
-   * before: an attribute reference, or an upcast of one admitted by [[UpCastRule.canUpCast]].
-   * While some upcasts may lose precision (e.g. Long to Float/Double), relocation is sound
-   * because they cannot fail and reuse the existing Cast expression. Arbitrary expressions -- a
+   * before: an attribute reference, or a safe upcast ([[isSafeUpCast]]) of one. While some
+   * upcasts may lose precision (e.g. Long to Float/Double), relocation is sound because they
+   * cannot fail and reuse the existing Cast expression. Arbitrary expressions -- a
    * parsing/narrowing cast, arithmetic that can overflow under ANSI, etc. -- are excluded, since
    * the comparison they came from may have been a cross-side join condition that only ever ran
    * on matched rows.
    */
   private def isSafeToRelocate(e: Expression): Boolean = e match {
     case _: Attribute => true
-    case Cast(a: Attribute, toType, _, _) => UpCastRule.canUpCast(a.dataType, toType)
+    case Cast(a: Attribute, toType, _, _) => isSafeUpCast(a.dataType, toType)
     case _ => false
   }
 
@@ -229,7 +244,12 @@ trait ConstraintHelper {
    * both reaching `a` through `a < b`) converges to one inferred predicate instead of one per
    * literal; a relaxation only re-enters the worklist when it strictly tightens that site's bound,
    * which bounds the number of relaxations per site by the number of distinct literals that can
-   * reach it and guarantees termination.
+   * reach it and guarantees termination. One exception to "tightest wins": a site whose bound
+   * already holds verbatim in the input `constraints` keeps that exact bound even if chaining can
+   * also reach it with the same value made strict, so that two otherwise-identical join inputs
+   * sharing a pre-existing bound (e.g. a self-join or CTE reused on both sides of a strict
+   * cross-instance inequality) do not end up with an asymmetric filter on only one side; see
+   * `directKeys` below.
    */
   private def inferInequalityConstraints(constraints: ExpressionSet): ExpressionSet = {
     // Admits only comparisons between binary-stable types. This is a conservative guard, not a
@@ -298,16 +318,31 @@ trait ConstraintHelper {
     val inferredBounds = new mutable.LinkedHashMap[BoundKey, InequalityBound]
     val worklist = new mutable.Queue[InequalityBound]
 
+    // Keys whose bound already holds independently of this inference pass, i.e. it was seeded
+    // verbatim from the input `constraints` (`relax(_, viaEdge = false)` below) rather than
+    // discovered by chaining. A later, edge-derived bound of the same value is never allowed to
+    // win over one of these just by being stricter (see `isTighter`): the input bound already
+    // holds on that exact site on its own, so manufacturing a stricter copy of it would add a
+    // redundant, asymmetric filter wherever two sites happen to carry the same pre-existing bound
+    // -- e.g. a self-join or a twice-referenced CTE sharing a range filter joined by a strict
+    // cross-instance inequality -- without changing results, and the asymmetry defeats exchange
+    // and query-stage reuse between what would otherwise be identical join inputs.
+    val directKeys = new mutable.HashSet[BoundKey]
+
     // True when `candidate` improves on `current` for the same key: a smaller upper-bound literal
-    // (or larger lower-bound one), or an equal literal newly made strict. Compares with the same
-    // per-type ordering BinaryComparison.eval itself uses, so tightness agrees with the actual
-    // `<`/`<=` runtime semantics (decimal scale, etc.) instead of a parallel notion of "smaller".
-    def isTighter(upper: Boolean, candidate: InequalityBound, current: InequalityBound): Boolean = {
+    // (or larger lower-bound one), or -- unless `key` is in `directKeys` -- an equal literal newly
+    // made strict. Compares with the same per-type ordering BinaryComparison.eval itself uses, so
+    // tightness agrees with the actual `<`/`<=` runtime semantics (decimal scale, etc.) instead of
+    // a parallel notion of "smaller".
+    def isTighter(
+        key: BoundKey,
+        candidate: InequalityBound,
+        current: InequalityBound): Boolean = {
       val cmp = TypeUtils.getInterpretedOrdering(candidate.site.dataType)
         .compare(candidate.value, current.value)
       if (cmp == 0) {
-        candidate.strict && !current.strict
-      } else if (upper) {
+        candidate.strict && !current.strict && !directKeys.contains(key)
+      } else if (key._1) {
         cmp < 0
       } else {
         cmp > 0
@@ -316,10 +351,12 @@ trait ConstraintHelper {
 
     // Relaxes the best known bound for `b`'s (direction, site) key: only a genuine improvement
     // re-enters the worklist, which bounds the number of relaxations per key by the number of
-    // distinct literals that can ever reach it and guarantees termination.
+    // distinct literals that can ever reach it and guarantees termination. `viaEdge` is false only
+    // for the input-level bounds seeded below, before any chaining happens.
     def relax(b: InequalityBound, viaEdge: Boolean): Unit = {
       val key = (b.upper, b.site.canonicalized)
-      if (bestBound.get(key).forall(isTighter(b.upper, b, _))) {
+      if (!viaEdge) directKeys += key
+      if (bestBound.get(key).forall(isTighter(key, b, _))) {
         bestBound(key) = b
         worklist += b
         if (viaEdge) inferredBounds(key) = b

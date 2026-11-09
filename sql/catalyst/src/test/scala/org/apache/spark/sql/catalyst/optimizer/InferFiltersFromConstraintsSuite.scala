@@ -876,6 +876,21 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     assert(!constraints3.contains(LessThanOrEqual(a, Literal(5))))
   }
 
+  test("SPARK-30768: a self-join sharing a non-strict bound stays symmetric across a " +
+    "strict cross-instance inequality") {
+    // Both sides of the self-join (e.g. two references to the same filtered CTE) already carry
+    // the same non-strict bound on their own. The strict join condition could transitively
+    // derive a stricter copy of that bound on only one side (b.a > 5, from a.a >= 5 && a.a < b.a);
+    // it must not, or the two otherwise-identical sides would stop canonicalizing the same way
+    // and lose exchange/query-stage reuse, even though results would still be correct either way.
+    val left = testRelation.where($"a" >= 5).subquery("x")
+    val right = testRelation.where($"a" >= 5).subquery("y")
+    val optimizedLeft = testRelation.where(IsNotNull($"a") && $"a" >= 5).subquery("x")
+    val optimizedRight = testRelation.where(IsNotNull($"a") && $"a" >= 5).subquery("y")
+    testConstraintsAfterJoin(
+      left, right, optimizedLeft, optimizedRight, Inner, Some("x.a".attr < "y.a".attr))
+  }
+
   test("SPARK-30768: infers bounds across a long sparse inequality chain") {
     // Exercises correctness only. A regression to the O(n^3) fixed-point rescan this worklist
     // replaced would still pass this assertion (just slower); catching that regression requires
@@ -952,6 +967,34 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
         s.name == "s"
       case _ => false
     })
+
+    // 4. DECIMAL(19, 0) -> BIGINT is NOT safe to relocate: a 19-digit decimal can exceed
+    // Long.MaxValue. UpCastRule.canUpCast already rejects it (SPARK-60943 tightened
+    // DecimalType.isTighterThan for exactly this case); this pins that isSafeToRelocate stays
+    // consistent with it.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val x4 = LocalRelation($"d".decimal(19, 0)).subquery("x")
+      val y4 = LocalRelation($"b".long).where($"b" < 5L).subquery("y")
+      val opt4 = Optimize.execute(
+        x4.join(y4, Inner, Some("x.d".attr.cast(LongType) < "y.b".attr)).analyze)
+      assert(!hasPushedFilter(opt4) {
+        case LessThan(Cast(d: Attribute, LongType, _, _), Literal(5L, LongType)) =>
+          d.name == "d"
+        case _ => false
+      })
+    }
+
+    // 5. DATE -> TIMESTAMP is a lossless widening cast per UpCastRule.canUpCast, but is NOT
+    // safe to relocate: a day count far outside DateType's documented range can overflow
+    // SparkDateTimeUtils.daysToMicros's Math.multiplyExact, regardless of ANSI mode.
+    val x5 = LocalRelation($"d".date).subquery("x")
+    val y5 = LocalRelation($"b".timestamp).where($"b" < Literal(5L, TimestampType)).subquery("y")
+    val opt5 = Optimize.execute(
+      x5.join(y5, Inner, Some("x.d".attr.cast(TimestampType) < "y.b".attr)).analyze)
+    assert(!hasPushedFilter(opt5) {
+      case LessThan(Cast(d: Attribute, TimestampType, _, _), _) => d.name == "d"
+      case _ => false
+    })
   }
 
   test("SPARK-30768: an unsafe literal bound is excluded without blocking a coexisting " +
@@ -970,5 +1013,22 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       }
       assert(inferredA, s"Expected inferred a < 5; plan was:\n$optimized")
     }
+  }
+
+  test("SPARK-30768: a NULL literal bound is excluded without blocking a coexisting " +
+    "valid bound") {
+    // isSafeBoundLiteral rejects a NULL literal structurally, so it is never treated as a bound;
+    // if it were, isTighter's ordering compare would run against a null value during
+    // optimization instead of simply ignoring the comparison.
+    val query = testRelation.where(
+      $"b" < $"a" && $"a" < 5 && $"a" < Literal(null, IntegerType)).analyze
+    val optimized = Optimize.execute(query)
+    val inferredB = splitConjunctivePredicates(optimized.collectFirst {
+      case Filter(cond, _) => cond
+    }.get).exists {
+      case LessThan(b: Attribute, Literal(5, IntegerType)) => b.name == "b"
+      case _ => false
+    }
+    assert(inferredB, s"Expected inferred b < 5; plan was:\n$optimized")
   }
 }
