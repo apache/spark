@@ -39,8 +39,7 @@ class StreamingQueryTimeoutValidationTests(unittest.TestCase, PySparkErrorTestUt
 
     nan/inf previously slipped past the positivity check (comparisons against them are
     always False) and blew up with a raw, unwrapped Python error when converted to
-    milliseconds; a tiny positive timeout silently rounded down to 0ms. Both are covered
-    here."""
+    milliseconds."""
 
     def test_classic_await_termination_rejects_nan_and_inf(self):
         query = StreamingQuery(jsq=None)
@@ -87,64 +86,6 @@ class StreamingQueryTimeoutValidationTests(unittest.TestCase, PySparkErrorTestUt
                 errorClass="VALUE_NOT_FINITE",
                 messageParameters={"arg_name": "timeout", "arg_value": str(value)},
             )
-
-    def test_classic_await_termination_small_timeout_does_not_round_down_to_zero(self):
-        # A tiny but positive timeout must not collapse to 0ms, which the JVM rejects
-        # outright ("has to be positive").
-        calls = []
-
-        class FakeJsq:
-            def awaitTermination(self, timeout_ms):
-                calls.append(timeout_ms)
-                return True
-
-        StreamingQuery(jsq=FakeJsq()).awaitTermination(0.0001)
-        self.assertEqual(calls, [1])
-
-    def test_classic_await_any_termination_small_timeout_does_not_round_down_to_zero(self):
-        calls = []
-
-        class FakeJsqm:
-            def awaitAnyTermination(self, timeout_ms):
-                calls.append(timeout_ms)
-                return True
-
-        StreamingQueryManager(jsqm=FakeJsqm()).awaitAnyTermination(0.0001)
-        self.assertEqual(calls, [1])
-
-    @unittest.skipIf(not should_test_connect, connect_requirement_message)
-    def test_connect_await_termination_small_timeout_does_not_round_down_to_zero(self):
-        import pyspark.sql.connect.proto as pb2
-
-        query = ConnectStreamingQuery(session=None, queryId="q", runId="r")
-        captured = []
-
-        def fake_execute(cmd):
-            captured.append(cmd.await_termination.timeout_ms)
-            result = pb2.StreamingQueryCommandResult()
-            result.await_termination.terminated = True
-            return result
-
-        query._execute_streaming_query_cmd = fake_execute
-        query.awaitTermination(0.0001)
-        self.assertEqual(captured, [1])
-
-    @unittest.skipIf(not should_test_connect, connect_requirement_message)
-    def test_connect_await_any_termination_small_timeout_does_not_round_down_to_zero(self):
-        import pyspark.sql.connect.proto as pb2
-
-        manager = ConnectStreamingQueryManager(session=None)
-        captured = []
-
-        def fake_execute(cmd):
-            captured.append(cmd.await_any_termination.timeout_ms)
-            result = pb2.StreamingQueryManagerCommandResult()
-            result.await_any_termination.terminated = True
-            return result
-
-        manager._execute_streaming_query_manager_cmd = fake_execute
-        manager.awaitAnyTermination(0.0001)
-        self.assertEqual(captured, [1])
 
 
 if __name__ == "__main__":

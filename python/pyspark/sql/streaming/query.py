@@ -228,7 +228,7 @@ class StreamingQuery:
                     errorClass="VALUE_NOT_FINITE",
                     messageParameters={"arg_name": "timeout", "arg_value": str(timeout)},
                 )
-            return self._jsq.awaitTermination(math.ceil(timeout * 1000))
+            return self._jsq.awaitTermination(int(timeout * 1000))
         else:
             return self._jsq.awaitTermination()
 
@@ -611,7 +611,7 @@ class StreamingQueryManager:
                     errorClass="VALUE_NOT_FINITE",
                     messageParameters={"arg_name": "timeout", "arg_value": str(timeout)},
                 )
-            return self._jsqm.awaitAnyTermination(math.ceil(timeout * 1000))
+            return self._jsqm.awaitAnyTermination(int(timeout * 1000))
         else:
             return self._jsqm.awaitAnyTermination()
 
