@@ -17,16 +17,16 @@
 
 package org.apache.spark.ml
 
-import org.apache.spark.SparkException
 import org.apache.spark.ml.functions._
 import org.apache.spark.ml.linalg.{Matrices, MatrixUDT, Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.util.MLTest
 import org.apache.spark.mllib.linalg.{Matrices => OldMatrices, MatrixUDT => OldMatrixUDT,
   Vector => OldVector, Vectors => OldVectors, VectorUDT => OldVectorUDT}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
-import org.apache.spark.sql.catalyst.expressions.ml.{VectorPosExplode, VectorScaleShift}
+import org.apache.spark.sql.catalyst.expressions.UnwrapUDT
+import org.apache.spark.sql.catalyst.expressions.ml.{VectorPosExplode, VectorScaleShift, VectorToArray}
 import org.apache.spark.sql.functions.{col, typedLit, unwrap_udt, wrap_udt}
-import org.apache.spark.sql.types.{ArrayType, DoubleType, StructField, StructType, UserDefinedType}
+import org.apache.spark.sql.types.{ArrayType, DoubleType, FloatType, StructField, StructType, UserDefinedType}
 
 class FunctionsSuite extends MLTest {
 
@@ -92,15 +92,14 @@ class FunctionsSuite extends MLTest {
       (null, null, 0)
     ).toDF("vec", "oldVec", "label")
 
-    for ((colName, valType) <- Seq(
-        ("vec", "null"), ("oldVec", "null"), ("label", "java.lang.Integer"))) {
-      val thrown1 = intercept[SparkException] {
-        df2.select(vector_to_array(col(colName))).count()
+    for (colName <- Seq("vec", "oldVec")) {
+      val thrown1 = intercept[IllegalArgumentException] {
+        df2.select(vector_to_array(col(colName))).collect()
       }
-      assert(thrown1.getCause.getMessage.contains(
+      assert(thrown1.getMessage.contains(
         "function vector_to_array requires a non-null input argument and input type must be " +
         "`org.apache.spark.ml.linalg.Vector` or `org.apache.spark.mllib.linalg.Vector`, " +
-        s"but got ${valType}"))
+        "but got null"))
     }
 
     val df3 = Seq(
@@ -120,8 +119,9 @@ class FunctionsSuite extends MLTest {
     assert(result3 === expected3)
 
     // Check data types are correct
-    assert(dfArrayFloat.schema.simpleString ===
-      "struct<UDF(vec):array<float>,UDF(oldVec):array<float>>")
+    assert(dfArrayFloat.schema.map(_.dataType).toSeq ===
+      Seq.fill(2)(ArrayType(FloatType, containsNull = false)))
+    assert(dfArrayFloat.schema.forall(!_.nullable))
 
     val thrown2 = intercept[AnalysisException] {
       df3.select(
@@ -129,6 +129,35 @@ class FunctionsSuite extends MLTest {
     }
     assert(thrown2.getMessage.contains(
       "Unsupported dtype: \"float16\". Valid values: float64, float32."))
+  }
+
+  test("vector_to_array uses a Catalyst expression with unwrapped vector inputs") {
+    val df = Seq(
+      (Vectors.dense(1.0, 2.5), OldVectors.dense(1.0, 2.5)),
+      (Vectors.sparse(3, Seq((1, 2.5))), OldVectors.sparse(3, Seq((1, 2.5)))),
+      (Vectors.dense(Array.emptyDoubleArray), OldVectors.dense(Array.emptyDoubleArray)))
+      .toDF("vec", "oldVec")
+    val expected = Seq(Seq(1.0, 2.5), Seq(0.0, 2.5, 0.0), Seq.empty[Double])
+
+    for (dtype <- Seq("float64", "float32"); name <- Seq("vec", "oldVec")) {
+      val converted = df.select(vector_to_array(col(name), dtype))
+      val expectedRows = if (dtype == "float32") {
+        expected.map(values => Row(values.map(_.toFloat)))
+      } else {
+        expected.map(Row(_))
+      }
+      checkAnswer(converted, expectedRows)
+      val expressions = converted.queryExecution.analyzed.expressions.flatMap(_.collect {
+        case v: VectorToArray => v
+      })
+      assert(expressions.size === 1)
+      assert(expressions.head.child.isInstanceOf[UnwrapUDT])
+    }
+
+    val error = intercept[AnalysisException] {
+      df.select(vector_to_array(typedLit(1)))
+    }
+    assert(error.getCondition === "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
   }
 
   test("test array_to_vector") {

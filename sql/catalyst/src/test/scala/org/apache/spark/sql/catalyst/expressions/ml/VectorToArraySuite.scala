@@ -18,8 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.ml
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow}
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, ExpressionEvalHelper, GenericInternalRow, Literal, UnsafeArrayData, UnwrapUDT}
 import org.apache.spark.sql.types._
 
@@ -58,18 +57,6 @@ class VectorToArraySuite extends SparkFunSuite with ExpressionEvalHelper {
         VectorToArray(BoundReference(0, vectorSqlType, nullable = true), elementType),
         result,
         InternalRow(vector))
-    }
-  }
-
-  test("vector to array can be built through the internal function registry") {
-    val vector = Literal(dense(1.1, 2.5), vectorSqlType)
-    for (elementType <- Seq(DoubleType, FloatType);
-        schema <- Seq(elementType.sql, elementType.json)) {
-      val expression = FunctionRegistry.internal.lookupFunction(
-        FunctionIdentifier("ml_vector_to_array"), Seq(vector, Literal(schema)))
-      assert(expression === VectorToArray(vector, elementType))
-      val expected = if (elementType == FloatType) Seq(1.1f, 2.5f) else Seq(1.1, 2.5)
-      checkEvaluation(expression, expected)
     }
   }
 
