@@ -18,24 +18,19 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.LogKeys.CONFIG
-import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.V1CommandUtils.supportsV1Command
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils, ClusterBySpec, HiveTableRelation}
-import org.apache.spark.sql.catalyst.expressions.{Alias, AliasHelper, Attribute}
-import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
+import org.apache.spark.sql.catalyst.catalog.{ClusterBySpec, HiveTableRelation}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, CharVarcharUtils, ResolveDefaultColumns => DefaultCols, WriteDistributionAndOrdering}
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, CharVarcharUtils, ResolveDefaultColumns => DefaultCols}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, LookupCatalog, SupportsNamespaces, V1Table, ViewCatalog, WriteDistributionMode}
-import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder, Transform}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, LookupCatalog, SupportsNamespaces, V1Table, ViewCatalog}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
-import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
+import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.metricview.logical.CreateMetricView
 import org.apache.spark.sql.types.{DataType, MetadataBuilder, StringType, StructField, StructType}
@@ -48,7 +43,8 @@ import org.apache.spark.util.SparkStringUtils
  * again, which may lead to inconsistent behavior if the current database is changed in the middle.
  */
 class ResolveSessionCatalog(val catalogManager: CatalogManager)
-  extends Rule[LogicalPlan] with LookupCatalog with AliasHelper {
+  extends Rule[LogicalPlan] with LookupCatalog {
+  import CreateTableHelper._
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import org.apache.spark.sql.connector.catalog.CatalogV2Util._
   import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
@@ -269,37 +265,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     // For CREATE TABLE [AS SELECT], we should use the v1 command if the catalog is resolved to the
     // session catalog and the table provider is not v2.
-    case c @ CreateTable(ResolvedV1CommandIdentifier(ident), _, _, tableSpec: TableSpec, _, _, _)
-        if c.resolved && c.columns.forall(_.isDefaultValueTypeCoerced) =>
-      val (storageFormat, provider) = getStorageFormatAndProvider(
-        c.tableSpec.provider, tableSpec.options, c.tableSpec.location, c.tableSpec.serde,
-        ctas = false)
-      if (!isV2Provider(provider)) {
-        if (tableSpec.constraints.nonEmpty) {
-          throw QueryCompilationErrors.unsupportedTableOperationError(
-            ident, "CONSTRAINT")
-        }
-        failIfWriteDistributionOrOrdering(
-          ident, "CREATE TABLE", c.writeDistributionMode, c.writeOrdering)
-        // For V1 CREATE TABLE command, the default value expression is hidden in the
-        // StructField metadata, and won't be constant folded by the optimizer. Here we
-        // manually constant fold it, as exist default needs to be a constant.
-        val fields = c.columns.map { col =>
-          col.defaultValue.map { defaultValue =>
-            val existsDefaultSQL = constantFoldDefaultValue(
-              defaultValue, col.name, col.dataType, "CREATE TABLE")
-            // toV1Column already sets CURRENT_DEFAULT, so just update EXISTS_DEFAULT
-            val field = col.toV1Column
-            val newMetadata = new MetadataBuilder().withMetadata(field.metadata)
-              .putString(DefaultCols.EXISTS_DEFAULT_COLUMN_METADATA_KEY, existsDefaultSQL).build()
-            field.copy(metadata = newMetadata)
-          }.getOrElse(col.toV1Column)
-        }
-        constructV1TableCmd(None, c.tableSpec, ident, StructType(fields), c.partitioning,
-          c.ignoreIfExists, storageFormat, provider)
-      } else {
-        c
-      }
+    case c: CreateTable =>
+      CreateTableHelper.lowerCreateTable(c)
 
     case c @ CreateTableAsSelect(
         ResolvedV1CommandIdentifier(ident), _, _, tableSpec: TableSpec, writeOptions, _, _, _, _) =>
@@ -328,14 +295,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     // For REPLACE TABLE [AS SELECT], we should fail if the catalog is resolved to the
     // session catalog and the table provider is not v2.
-    case c @ ReplaceTable(ResolvedV1CommandIdentifier(ident), _, _, _, _, _, _) if c.resolved =>
-      val provider = c.tableSpec.provider.getOrElse(conf.defaultDataSourceName)
-      if (!isV2Provider(provider)) {
-        throw QueryCompilationErrors.unsupportedTableOperationError(
-          ident, "REPLACE TABLE")
-      } else {
-        c
-      }
+    case c: ReplaceTable =>
+      CreateTableHelper.lowerReplaceTable(c)
 
     case c @ ReplaceTableAsSelect(ResolvedV1CommandIdentifier(ident), _, _, _, _, _, _, _, _) =>
       val provider = c.tableSpec.provider.getOrElse(conf.defaultDataSourceName)
@@ -561,25 +522,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case AlterViewSchemaBinding(ResolvedViewIdentifier(ident), viewSchemaMode) =>
       AlterViewSchemaBindingCommand(ident, viewSchemaMode)
 
-    // The final `_, _, _` are CreateView.isAnalyzed, referredTempFunctions and
-    // referredTempVariablesUnderIdentifier. We drop them all: CreateViewCommand is a separate
-    // AnalysisOnlyCommand and gets its own markAsAnalyzed pass from HandleSpecialCommand after
-    // this rewrite.
-    case CreateView(CreateViewInSessionCatalog(ident), userSpecifiedColumns, comment,
-        collation, properties, originalText, query, allowExisting, replace, viewSchemaMode,
-        _, _, _) =>
-      CreateViewCommand(
-        name = ident,
-        userSpecifiedColumns = userSpecifiedColumns,
-        comment = comment,
-        collation = collation,
-        properties = properties,
-        originalText = originalText,
-        plan = query,
-        allowExisting = allowExisting,
-        replace = replace,
-        viewType = PersistedView,
-        viewSchemaMode = viewSchemaMode)
+    case createView: CreateView =>
+      ViewCommandHelper.rewriteCreateView(createView)
 
     // CREATE VIEW ... WITH METRICS on the session catalog -> V1 runnable command. Non-session
     // v2 catalogs leave [[CreateMetricView]] in place for `DataSourceV2Strategy` to dispatch
@@ -707,150 +651,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       throw QueryCompilationErrors.missingCatalogCreateFunctionAbilityError(catalog)
   }
 
-  /** Rejects a write distribution or ordering, which a v1 table cannot record. */
-  private def failIfWriteDistributionOrOrdering(
-      ident: TableIdentifier,
-      operation: String,
-      writeDistributionMode: WriteDistributionMode,
-      writeOrdering: Seq[V2SortOrder]): Unit = {
-    if (WriteDistributionAndOrdering.isRequested(writeDistributionMode, writeOrdering)) {
-      throw QueryCompilationErrors.unsupportedTableOperationError(
-        ident, s"$operation ... ${WriteDistributionAndOrdering.CLAUSES}")
-    }
-  }
-
-  private def constructV1TableCmd(
-      query: Option[LogicalPlan],
-      tableSpec: TableSpecBase,
-      ident: TableIdentifier,
-      tableSchema: StructType,
-      partitioning: Seq[Transform],
-      ignoreIfExists: Boolean,
-      storageFormat: CatalogStorageFormat,
-      provider: String): CreateTableV1 = {
-    val tableDesc = buildCatalogTable(
-      ident, tableSchema, partitioning, tableSpec.properties, provider, tableSpec.location,
-      tableSpec.comment, tableSpec.collation, storageFormat, tableSpec.external)
-    val mode = if (ignoreIfExists) SaveMode.Ignore else SaveMode.ErrorIfExists
-    CreateTableV1(tableDesc, mode, query)
-  }
-
-  private def buildStorageFormatFromSerdeInfo(
-      location: Option[String],
-      maybeSerdeInfo: Option[SerdeInfo]): CatalogStorageFormat = {
-    HiveSerDe.buildStorageFormat(
-      location,
-      maybeSerdeInfo,
-      si => QueryCompilationErrors.invalidFileFormatForStoredAsError(si))
-  }
-
-  private def getStorageFormatAndProvider(
-      provider: Option[String],
-      options: Map[String, String],
-      location: Option[String],
-      maybeSerdeInfo: Option[SerdeInfo],
-      ctas: Boolean): (CatalogStorageFormat, String) = {
-    val nonHiveStorageFormat = CatalogStorageFormat.empty.copy(
-      locationUri = location.map(CatalogUtils.stringToURI),
-      properties = options)
-    val defaultHiveStorage = HiveSerDe.getDefaultStorage(conf).copy(
-      locationUri = location.map(CatalogUtils.stringToURI),
-      properties = options)
-    val tableProvider = DataSourceV2Utils.createTableProvider(
-      provider, maybeSerdeInfo.isDefined, ctas, conf)
-
-    if (provider.isDefined) {
-      // The parser guarantees that USING and STORED AS/ROW FORMAT won't co-exist.
-      if (maybeSerdeInfo.isDefined) {
-        throw SparkException.internalError(
-          s"Cannot create table with both USING ${provider.get} and " +
-            s"${maybeSerdeInfo.get.describe}")
-      }
-      (nonHiveStorageFormat, tableProvider)
-    } else if (maybeSerdeInfo.isDefined) {
-      val serdeInfo = maybeSerdeInfo.get
-      SerdeInfo.checkSerdePropMerging(serdeInfo.serdeProperties, defaultHiveStorage.properties)
-      val storageFormat = if (serdeInfo.storedAs.isDefined) {
-        // If `STORED AS fileFormat` is used, infer inputFormat, outputFormat and serde from it.
-        HiveSerDe.sourceToSerDe(serdeInfo.storedAs.get) match {
-          case Some(hiveSerde) =>
-            defaultHiveStorage.copy(
-              inputFormat = hiveSerde.inputFormat.orElse(defaultHiveStorage.inputFormat),
-              outputFormat = hiveSerde.outputFormat.orElse(defaultHiveStorage.outputFormat),
-              // User specified serde takes precedence over the one inferred from file format.
-              serde = serdeInfo.serde.orElse(hiveSerde.serde).orElse(defaultHiveStorage.serde),
-              properties = serdeInfo.serdeProperties ++ defaultHiveStorage.properties)
-          case _ => throw QueryCompilationErrors.invalidFileFormatForStoredAsError(serdeInfo)
-        }
-      } else {
-        defaultHiveStorage.copy(
-          inputFormat =
-            serdeInfo.formatClasses.map(_.input).orElse(defaultHiveStorage.inputFormat),
-          outputFormat =
-            serdeInfo.formatClasses.map(_.output).orElse(defaultHiveStorage.outputFormat),
-          serde = serdeInfo.serde.orElse(defaultHiveStorage.serde),
-          properties = serdeInfo.serdeProperties ++ defaultHiveStorage.properties)
-      }
-      (storageFormat, tableProvider)
-    } else {
-      // If neither USING nor STORED AS/ROW FORMAT is specified, we create native data source
-      // tables if:
-      //   1. `LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT` is false, or
-      //   2. It's a CTAS and `conf.convertCTAS` is true.
-      if (!DataSourceV2Utils.createsHiveTableByDefault(ctas, conf)) {
-        (nonHiveStorageFormat, tableProvider)
-      } else {
-        logWarning(log"A Hive serde table will be created as there is no table provider " +
-          log"specified. You can set " +
-          log"${MDC(CONFIG, SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT.key)} to false so that " +
-          log"native data source table will be created instead.")
-        (defaultHiveStorage, tableProvider)
-      }
-    }
-  }
-
-  private def buildCatalogTable(
-      table: TableIdentifier,
-      schema: StructType,
-      partitioning: Seq[Transform],
-      properties: Map[String, String],
-      provider: String,
-      location: Option[String],
-      comment: Option[String],
-      collation: Option[String],
-      storageFormat: CatalogStorageFormat,
-      external: Boolean): CatalogTable = {
-    val tableType = if (external || location.isDefined) {
-      CatalogTableType.EXTERNAL
-    } else {
-      CatalogTableType.MANAGED
-    }
-    val (partitionColumns, maybeBucketSpec, maybeClusterBySpec) = partitioning.convertTransforms
-
-    CatalogTable(
-      identifier = table,
-      tableType = tableType,
-      storage = storageFormat,
-      schema = schema,
-      provider = Some(provider),
-      partitionColumnNames = partitionColumns,
-      bucketSpec = maybeBucketSpec,
-      properties = properties ++
-        maybeClusterBySpec.map(
-          clusterBySpec => ClusterBySpec.toProperty(schema, clusterBySpec, conf.resolver)),
-      comment = comment,
-      collation = collation
-    )
-  }
-
-  private object CreateViewInSessionCatalog
-    extends ResolvedIdentifierInSessionCatalog("CREATE", "VIEW")
   private object CreateFunctionInSessionCatalog
     extends ResolvedIdentifierInSessionCatalog("CREATE", "FUNCTION")
-
-  private def isV2Provider(provider: String): Boolean = {
-    DataSourceV2Utils.isV2Provider(provider, conf)
-  }
 
   /**
    * Validates and constant-folds a column default value expression for V1 tables.
@@ -867,28 +669,6 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       DefaultCols.CURRENT_DEFAULT_COLUMN_METADATA_KEY, defaultValue.originalSQL,
       Some(defaultValue.child))
     builder.putString(DefaultCols.EXISTS_DEFAULT_COLUMN_METADATA_KEY, existsDefaultSQL)
-  }
-
-  /**
-   * Validates and constant-folds a column default value expression for V1 tables.
-   * Returns the SQL string of the constant-folded expression for EXISTS_DEFAULT metadata.
-   */
-  private def constantFoldDefaultValue(
-      defaultValue: DefaultValueExpression,
-      colName: String,
-      colType: DataType,
-      statementType: String): String = {
-    validateDefaultValueExpr(defaultValue, statementType, colName, Some(colType))
-    val fakePlan = Project(Seq(Alias(defaultValue.child, colName)()), OneRowRelation())
-    val optimizedPlan = ConstantFolding(DefaultColumnOptimizer.FinishAnalysis(fakePlan))
-    val constantFolded = optimizedPlan.collectFirst {
-      case Project(Seq(expr), OneRowRelation()) => trimAliases(expr)
-    }.get
-    if (!constantFolded.foldable) {
-      throw QueryCompilationErrors.defaultValueNotConstantError(statementType, colName,
-        defaultValue.originalSQL)
-    }
-    constantFolded.sql
   }
 
   // True when the ALTER COLUMN specs only change comments (set or drop, no type / nullability /

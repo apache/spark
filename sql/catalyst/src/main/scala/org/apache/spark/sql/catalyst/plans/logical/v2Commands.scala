@@ -577,7 +577,7 @@ trait V2CreateTableAsSelectPlan
     withNameAndQuery(newName = name, newQuery = WithCTE(query, cteDefs))
   }
 
-  override lazy val resolved: Boolean = childrenResolved && {
+  override lazy val resolved: Boolean = childrenResolved && expressions.forall(_.resolved) && {
     // the table schema is created from the query schema, so the only resolution needed is to check
     // that the columns referenced by the table's partitioning exist in the query schema
     val references = partitioning.flatMap(_.references).toSet

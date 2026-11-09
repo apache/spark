@@ -42,18 +42,23 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     permissions:
       actions: write
+      contents: read
     steps:
+      - name: Checkout Spark repository
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: dev
       - name: Scala 2.13 Build
         if: >-
           github.event.schedule == '0 11 */4 * *' ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'scala213' || inputs.target == 'all'))
         run: |
-          gh workflow run build_scala213.yml --repo ${{ github.repository }} --ref branch-3.5
+          ./dev/dispatch-if-changed.sh build_scala213.yml branch-3.5
       - name: Python 3.9 Build
         if: >-
           github.event.schedule == '0 11 */4 * *' ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'python_3.9' || inputs.target == 'all'))
         run: |
-          gh workflow run build_python_3.9.yml --repo ${{ github.repository }} --ref branch-3.5
+          ./dev/dispatch-if-changed.sh build_python_3.9.yml branch-3.5
