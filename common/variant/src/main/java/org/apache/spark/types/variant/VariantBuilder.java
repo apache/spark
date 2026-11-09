@@ -237,10 +237,10 @@ public class VariantBuilder {
    *       data size, {@code is_large} only for more than 255 elements, and the reserved bits 5 to
    *       7 clear.</li>
    *   <li>Integer: the smallest of INT1, INT2, INT4 and INT8 that holds the value.</li>
-   *   <li>Decimal: trailing zeros stripped and a negative scale raised to 0. An integral decimal
-   *       that fits in a signed 64-bit integer is stored as an integer instead. Otherwise the
-   *       smallest of DECIMAL4 (precision and scale at most 9), DECIMAL8 (at most 18) and
-   *       DECIMAL16 that holds the value.</li>
+   *   <li>Decimal: trailing zeros stripped, and a scale that stripping made negative (for example
+   *       1E+20 for 10^20) set back to 0. An integral decimal that fits in a signed 64-bit integer
+   *       is stored as an integer instead. Otherwise the smallest of DECIMAL4 (precision and scale
+   *       at most 9), DECIMAL8 (at most 18) and DECIMAL16 that holds the value.</li>
    *   <li>Float and double: -0.0 is stored as 0.0 and NaN as the canonical NaN bit pattern of
    *       {@link Float#floatToIntBits} and {@link Double#doubleToLongBits}. The type is kept, so
    *       a float and a double are never identical.</li>
@@ -264,11 +264,12 @@ public class VariantBuilder {
   // Check whether `v` already satisfies every rule listed in `canonicalize`. Return false at the
   // first non-canonical encoding. Malformed bytes that the check can reject from what it has
   // already read return false, and the rebuild then decides whether they fail. This includes a
-  // container whose declared data runs past the value, which the rebuild accepts when every child
-  // it reaches is in bounds. Malformed bytes that the check has to decode throw instead, for
-  // example `MALFORMED_VARIANT` for an unreadable metadata table, a truncated container size field
-  // or offset list, or a decimal whose precision or scale is out of range, and
-  // `UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT` for an unknown type ID. When the check throws,
+  // container whose declared data runs past the value and a child whose encoding runs past its
+  // container's declared data: the rebuild accepts both when every child it reaches is in bounds,
+  // and re-encodes each child from its own header. Malformed bytes that the check has to decode
+  // throw instead, for example `MALFORMED_VARIANT` for an unreadable metadata table, a truncated
+  // container size field or offset list, or a decimal whose precision or scale is out of range,
+  // and `UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT` for an unknown type ID. When the check throws,
   // `canonicalize` fails with that error. Returning false does not establish validity.
   static boolean isCanonical(Variant v) {
     if (v.pos != 0) {

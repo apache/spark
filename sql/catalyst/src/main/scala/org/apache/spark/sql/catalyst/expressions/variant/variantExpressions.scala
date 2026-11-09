@@ -2407,6 +2407,14 @@ case class IsValidVariant(child: Expression) extends UnaryExpression
     copy(child = newChild)
 }
 
+/**
+ * Internal expression. It returns the canonical encoding of a variant, so that values which are
+ * equal under the variant equality rules have identical bytes. It is not registered as a SQL
+ * function; it is meant to be inserted before operators that compare variants bytewise, such as
+ * GROUP BY and DISTINCT. Already canonical inputs are returned unchanged. The rebuild can exceed
+ * the variant size limit for an input that itself fits, for example when container offsets share
+ * one payload, and then fails with `VARIANT_CONSTRUCTOR_SIZE_LIMIT`.
+ */
 case class CanonicalizeVariant(child: Expression)
     extends UnaryExpression with ExpectsInputTypes {
   override def nullIntolerant: Boolean = true

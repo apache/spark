@@ -332,6 +332,13 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
     intercept[VariantSizeLimitException] { VariantBuilder.canonicalize(input) }
   }
 
+  test("array elements stored out of order or sharing a payload are rewritten in element order") {
+    val outOfOrder = bytes(arrayHeader(false, 1), 2, 2, 0, 4) ++ integer(2) ++ integer(1)
+    checkKeyless(outOfOrder, array(Seq(integer(1), integer(2))))
+    val shared = bytes(arrayHeader(false, 1), 2, 0, 0, 2) ++ integer(7)
+    checkKeyless(shared, array(Seq(integer(7), integer(7))))
+  }
+
   test("container count and payload widths change at 255 and 256") {
     Seq((255, false, 1, 1), (256, true, 1, 2), (257, true, 2, 2)).foreach {
       case (count, largeSize, idWidth, offsetWidth) =>
@@ -345,6 +352,16 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
         val elements = Seq.fill(count)(nullValue)
         checkKeyless(array(elements, 4, largeSize = true), array(elements, offsetWidth, largeSize))
     }
+  }
+
+  test("metadata offset width follows the key count when it exceeds the key bytes") {
+    val keys = Array.empty[Byte] +: (1 to 255).map(byte => Array(byte.toByte))
+    val fields = keys.indices.map(index => index -> nullValue)
+    val expectedMetadata = metadata(keys, 2)
+    val expectedObject = obj(fields, 1, 2, largeSize = true)
+    check(new Variant(obj(fields, 4, 4, largeSize = true), metadata(keys, 4)),
+      expectedObject, expectedMetadata)
+    check(new Variant(expectedObject, expectedMetadata), expectedObject, expectedMetadata)
   }
 
   test("object ID width follows the largest referenced global ID") {
@@ -686,13 +703,17 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
     checkError("UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT") { VariantBuilder.doCanonicalize(unknown) }
   }
 
-  test("containers whose declared data runs past the value are rebuilt from their children") {
+  test("containers whose declared data size disagrees with their children are rebuilt") {
     val overLongArray = bytes(arrayHeader(false, 1), 1, 0, 100) ++ integer(1)
     val overLongObject = bytes(objectHeader(false, 1, 1), 1, 0, 0, 100) ++ integer(1)
+    val shortObject = bytes(objectHeader(false, 1, 1), 1, 0, 0, 1) ++ integer(1)
     checkKeyless(overLongArray, array(Seq(integer(1))))
     check(new Variant(overLongObject, dictionary("a")), obj(Seq(0 -> integer(1))), dictionary("a"))
+    check(new Variant(shortObject, dictionary("a")), obj(Seq(0 -> integer(1))), dictionary("a"))
     checkKeyless(array(Seq(overLongArray)), array(Seq(array(Seq(integer(1))))))
     check(new Variant(array(Seq(overLongObject)), dictionary("a")),
+      array(Seq(obj(Seq(0 -> integer(1))))), dictionary("a"))
+    check(new Variant(array(Seq(shortObject)), dictionary("a")),
       array(Seq(obj(Seq(0 -> integer(1))))), dictionary("a"))
   }
 
