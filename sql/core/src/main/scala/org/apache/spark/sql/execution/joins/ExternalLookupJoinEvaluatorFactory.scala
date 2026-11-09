@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 import scala.collection.mutable
 
 import com.google.common.base.Ticker
-import com.google.common.cache.{Cache, CacheBuilder}
+import com.google.common.cache.{Cache, CacheBuilder, Weigher}
 
 import org.apache.spark.{PartitionEvaluator, PartitionEvaluatorFactory, SparkException,
   SparkIllegalStateException, TaskContext}
@@ -85,6 +85,7 @@ class ExternalLookupJoinEvaluatorFactory(
     oneKeyPerBatch: Boolean,
     maxBatchBytes: Long,
     cacheOptions: ExternalLookupCacheOptions,
+    cacheTicker: Ticker,
     metrics: ExternalLookupJoinMetrics,
     readerMetrics: ExternalLookupReaderMetrics)
   extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
@@ -112,7 +113,7 @@ class ExternalLookupJoinEvaluatorFactory(
     private val resultRows = new LookupResultRows
     private val transforms = new LookupTransforms(partitionIndex)
     private val joinOutput = new JoinOutput(partitionIndex)
-    private val cache = if (cacheOptions.enabled) Some(new LookupCache) else None
+    private var cache = if (cacheOptions.enabled) Some(new LookupCache) else None
     private var batch: Iterator[InternalRow] = Iterator.empty
     private var inputExhausted = false
 
@@ -136,12 +137,17 @@ class ExternalLookupJoinEvaluatorFactory(
       while (!batch.hasNext && !inputExhausted) {
         val next = readBatch()
         if (next.rows.nonEmpty) {
-          batch = new BatchJoinIterator(
-            next, parameters, resultRows, transforms, joinOutput, cache, reader)
+          batch = new BatchJoinIterator(next, parameters, resultRows, transforms, joinOutput,
+            cache, inputRemains = () => !inputExhausted, reader = reader)
         }
         inputExhausted = !hasInput
       }
-      if (inputExhausted && !batch.hasNext) reader.close()
+      // No later batch reads the cache, so neither it nor the drained batch is kept.
+      if (inputExhausted && !batch.hasNext) {
+        batch = Iterator.empty
+        cache = None
+        reader.close()
+      }
     }
 
     private lazy val toUnsafe = UnsafeProjection.create(streamOutput, streamOutput)
@@ -249,7 +255,7 @@ class ExternalLookupJoinEvaluatorFactory(
   private case class KeyEntry(requestRow: UnsafeRow, rowIndexes: mutable.ArrayBuffer[Int])
 
   /** The stream rows that share a key, and the cached lookup rows that they join. */
-  private case class CachedKey(lookupRows: Array[InternalRow], rowIndexes: mutable.ArrayBuffer[Int])
+  private case class CachedKey(lookupRows: Array[UnsafeRow], rowIndexes: mutable.ArrayBuffer[Int])
 
   /**
    * The stream rows of a batch, with one entry for each distinct request row that can match, in
@@ -278,6 +284,7 @@ class ExternalLookupJoinEvaluatorFactory(
       transforms: LookupTransforms,
       joinOutput: JoinOutput,
       cache: Option[LookupCache],
+      inputRemains: () => Boolean,
       reader: LookupReader) extends Iterator[InternalRow] {
     private val rows = batch.rows
     metrics.inputRows += rows.length
@@ -310,7 +317,12 @@ class ExternalLookupJoinEvaluatorFactory(
       }
     }
 
-    private val cacheWriter = cache.map(new CacheWriter(_, keyEntries.map(_.requestRow)))
+    // Only a later batch of the partition reads what this one caches, so the last batch caches
+    // nothing. The partition knows whether input remains once the request is sent, before its
+    // results are read.
+    private lazy val cacheWriter = if (!inputRemains()) None else {
+      cache.map(new CacheWriter(_, keyEntries.map(_.requestRow)))
+    }
 
     // No connector request, and no reader, when no key can match.
     private var cursor: ExternalLookupResultCursor =
@@ -459,54 +471,76 @@ class ExternalLookupJoinEvaluatorFactory(
 
   /**
    * The lookup results by key, within a task, per input partition (a task that reads several input
-   * partitions, e.g. after coalesce, has one cache per partition). Beyond `maxEntries` keys, the
-   * least recently used entry is evicted; an entry expires once it is older than the TTL.
+   * partitions, e.g. after coalesce, has one cache per partition). Once its entries take more than
+   * `maxBytes`, the least recently used ones are evicted; an entry expires once it is older than
+   * the TTL, by `cacheTicker`. An entry takes the bytes of its key and of its rows, with the
+   * objects that hold each row, plus a fixed overhead, so that a key without a result counts too.
+   * Its keys and rows are the batches' own copies, which are never changed.
    */
   private class LookupCache {
-    // One segment, so that eviction is exactly least recently used.
-    private val entries: Cache[UnsafeRow, Array[InternalRow]] = {
+    // One segment, so that eviction is exactly least recently used, and bounded by `maxBytes`.
+    private val entries: Cache[UnsafeRow, Array[UnsafeRow]] = {
       val builder = CacheBuilder.newBuilder()
         .concurrencyLevel(1)
-        .maximumSize(cacheOptions.maxEntries)
-        .ticker(new Ticker {
-          override def read(): Long = ExternalLookupJoinExec.cacheClock.nanoTime()
+        .maximumWeight(cacheOptions.maxBytes)
+        .weigher(new Weigher[UnsafeRow, Array[UnsafeRow]] {
+          override def weigh(key: UnsafeRow, rows: Array[UnsafeRow]): Int = {
+            val bytes = ExternalLookupJoinEvaluatorFactory.CACHE_ENTRY_OVERHEAD_BYTES +
+              key.getSizeInBytes +
+              rows.iterator.map(ExternalLookupJoinEvaluatorFactory.cachedBytes).sum
+            math.min(bytes, Int.MaxValue).toInt
+          }
         })
+        .ticker(cacheTicker)
       val expiring = if (cacheOptions.ttlMillis > 0) {
         builder.expireAfterWrite(cacheOptions.ttlMillis, TimeUnit.MILLISECONDS)
       } else {
         builder
       }
-      expiring.build[UnsafeRow, Array[InternalRow]]()
+      expiring.build[UnsafeRow, Array[UnsafeRow]]()
     }
 
-    def get(key: UnsafeRow): Option[Array[InternalRow]] = Option(entries.getIfPresent(key))
+    def get(key: UnsafeRow): Option[Array[UnsafeRow]] = Option(entries.getIfPresent(key))
 
-    def put(key: UnsafeRow, values: Array[InternalRow]): Unit = entries.put(key.copy(), values)
+    def put(key: UnsafeRow, values: Array[UnsafeRow]): Unit = entries.put(key, values)
   }
 
   /**
    * Collects the result rows of one request by key, and caches them once the cursor is done. It
    * receives only the rows that satisfy the selected lookup predicates, so the cache never holds a
-   * row that Spark's check dropped. A key with more than `maxRowsPerKey` result rows is not cached.
-   * The rows are the batch's own copies, which are never changed.
+   * row that Spark's check dropped. A key whose rows take more than a
+   * [[ExternalLookupJoinEvaluatorFactory.CACHE_KEY_SHARE]]th of `maxBytes` is not cached, so that
+   * one large result cannot evict most of the cache, and the request holds at most `maxBytes` of
+   * rows for the cache, which could keep no more; a key whose rows would pass that is not cached
+   * either. Such a key is still joined in full. The rows are the batch's own copies, which are
+   * never changed.
    */
   private class CacheWriter(cache: LookupCache, keys: Array[UnsafeRow]) {
-    private val resultsByKey = mutable.HashMap.from(
-      keys.map(_ -> mutable.ArrayBuffer.empty[InternalRow]))
+    private class KeyResults(val rows: mutable.ArrayBuffer[UnsafeRow], var bytes: Long)
+    private val maxKeyBytes =
+      cacheOptions.maxBytes / ExternalLookupJoinEvaluatorFactory.CACHE_KEY_SHARE
+    private val resultsByKey =
+      mutable.HashMap.from(keys.map(_ -> new KeyResults(mutable.ArrayBuffer.empty, 0L)))
     private val uncacheable = mutable.HashSet.empty[UnsafeRow]
+    private var bufferedBytes = 0L
 
-    def add(key: UnsafeRow, lookupRow: InternalRow): Unit = if (!uncacheable.contains(key)) {
+    def add(key: UnsafeRow, lookupRow: UnsafeRow): Unit = if (!uncacheable.contains(key)) {
       val results = resultsByKey(key)
-      if (results.length < cacheOptions.maxRowsPerKey) {
-        results += lookupRow
-      } else {
+      val rowBytes = ExternalLookupJoinEvaluatorFactory.cachedBytes(lookupRow)
+      if (results.bytes + rowBytes > maxKeyBytes ||
+          bufferedBytes + rowBytes > cacheOptions.maxBytes) {
         uncacheable += key
-        results.clear()
+        bufferedBytes -= results.bytes
+        results.rows.clear()
+      } else {
+        results.rows += lookupRow
+        results.bytes += rowBytes
+        bufferedBytes += rowBytes
       }
     }
 
     def write(): Unit = keys.foreach { key =>
-      if (!uncacheable.contains(key)) cache.put(key, resultsByKey(key).toArray)
+      if (!uncacheable.contains(key)) cache.put(key, resultsByKey(key).rows.toArray)
     }
   }
 
@@ -671,7 +705,7 @@ class ExternalLookupJoinEvaluatorFactory(
       case Right(predicate) => predicate.initialize(partitionIndex)
     }
 
-    def apply(resultRow: InternalRow): Option[InternalRow] =
+    def apply(resultRow: UnsafeRow): Option[UnsafeRow] =
       stages.foldLeft(Option(resultRow)) {
         case (Some(row), Left(projection)) => Some(projection(row))
         case (Some(row), Right(predicate)) if predicate.eval(row) => Some(row)
@@ -816,6 +850,25 @@ class ExternalLookupJoinEvaluatorFactory(
         if (reader != null) reader.close())
     }
   }
+}
+
+private object ExternalLookupJoinEvaluatorFactory {
+  /** The bytes that a cache entry takes besides its key and rows, as an estimate. */
+  val CACHE_ENTRY_OVERHEAD_BYTES = 64L
+
+  /**
+   * The bytes that a cached row takes besides its data, on a 64-bit JVM with compressed object
+   * pointers: the 40 bytes of the `UnsafeRow` object (a 12-byte header, its five fields and the
+   * padding to 8 bytes), the 16-byte header of the array that holds its data, and its 4-byte
+   * reference in the array of the entry's rows.
+   */
+  val CACHE_ROW_OVERHEAD_BYTES = 60L
+
+  /** The bytes that a cached row takes on the heap. */
+  def cachedBytes(row: UnsafeRow): Long = row.getSizeInBytes + CACHE_ROW_OVERHEAD_BYTES
+
+  /** The share of the cache, as a divisor of its bytes, that the rows of one key may take. */
+  val CACHE_KEY_SHARE = 16
 }
 
 /**

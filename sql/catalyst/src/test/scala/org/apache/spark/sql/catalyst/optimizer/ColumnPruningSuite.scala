@@ -47,7 +47,7 @@ class ColumnPruningSuite extends PlanTest {
     val Seq(lookupKey, value, _) = lookup.output
     val condition = Some(streamId === lookupKey)
     val noCache =
-      ExternalLookupCacheOptions(enabled = false, maxEntries = 1, ttlMillis = 0, maxRowsPerKey = 1)
+      ExternalLookupCacheOptions(enabled = false, maxBytes = 1, ttlMillis = 0)
     val join = ExternalLookupJoin(stream, lookup, Inner, condition, noCache, lookup.output)
 
     val optimized = Optimize.execute(Project(Seq(label, value), join))
@@ -64,7 +64,7 @@ class ColumnPruningSuite extends PlanTest {
     val lookupKey = lookup.output.head
     val condition = Some(streamId === lookupKey)
     val noCache =
-      ExternalLookupCacheOptions(enabled = false, maxEntries = 1, ttlMillis = 0, maxRowsPerKey = 1)
+      ExternalLookupCacheOptions(enabled = false, maxBytes = 1, ttlMillis = 0)
     Seq(LeftSemi, LeftAnti).foreach { joinType =>
       val join = ExternalLookupJoin(stream, lookup, joinType, condition, noCache, lookup.output)
       val correctAnswer = ExternalLookupJoin(

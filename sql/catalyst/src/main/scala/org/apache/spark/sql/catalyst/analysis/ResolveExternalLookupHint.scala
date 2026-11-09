@@ -22,13 +22,12 @@ import java.util.Locale
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
-import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, StringLiteral}
-import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupCacheOptions,
-  ExternalLookupHint, LogicalPlan, SubqueryAlias, UnresolvedHint, UnresolvedWith, View}
+import org.apache.spark.sql.catalyst.expressions.{Expression, StringLiteral}
+import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupHint,
+  ExternalLookupHintCacheOptions, LogicalPlan, SubqueryAlias, UnresolvedHint, UnresolvedWith, View}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_HINT
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
 /**
@@ -38,19 +37,17 @@ import org.apache.spark.util.Utils
  *    strategy hints, a hint without relation names marks the plan it is attached to, and a hint
  *    with relation names marks each named relation.
  *  - A cache option is a string of the form `key=value`, such as `'cache_ttl=5s'`. It overrides a
- *    `spark.sql.join.externalLookup.cache.*` configuration for the joins that the hint marks.
+ *    `spark.sql.join.externalLookup.cache.*` configuration for the joins that the hint marks. The
+ *    marker keeps only the options that the hint sets.
  */
 object ResolveExternalLookupHint extends Rule[LogicalPlan] with QueryErrorsBase {
   private val HINT_NAME = "EXTERNAL_LOOKUP"
   private val CACHE_ENABLED_OPTION = "cache_enabled"
-  private val CACHE_MAX_ENTRIES_OPTION = "cache_max_entries"
+  private val CACHE_MAX_BYTES_OPTION = "cache_max_bytes"
   private val CACHE_TTL_OPTION = "cache_ttl"
-  private val CACHE_MAX_ROWS_PER_KEY_OPTION = "cache_max_rows_per_key"
-  private val SUPPORTED_OPTIONS = Set(
-    CACHE_ENABLED_OPTION,
-    CACHE_MAX_ENTRIES_OPTION,
-    CACHE_TTL_OPTION,
-    CACHE_MAX_ROWS_PER_KEY_OPTION)
+  private val SUPPORTED_OPTIONS =
+    Set(CACHE_ENABLED_OPTION, CACHE_MAX_BYTES_OPTION, CACHE_TTL_OPTION)
+  private val POSITIVE_SIZE = "a positive size, such as 64k, 16m, or 1g"
   private val NON_NEGATIVE_DURATION = "a non-negative duration, such as 500ms, 5s, or 10m"
 
   override def apply(plan: LogicalPlan): LogicalPlan =
@@ -62,7 +59,7 @@ object ResolveExternalLookupHint extends Rule[LogicalPlan] with QueryErrorsBase 
 
   private def resolveHint(parameters: Seq[Expression], child: LogicalPlan): LogicalPlan = {
     val relationNames = mutable.ArrayBuffer.empty[Seq[String]]
-    var cacheOptions = defaultCacheOptions
+    var cacheOptions = ExternalLookupHintCacheOptions()
     val seenOptions = mutable.HashSet.empty[String]
     // The Dataset API, PySpark and Spark Connect pass a relation name as a string, as they do for
     // join strategy hints. A relation whose name contains `=` is named with an identifier.
@@ -74,7 +71,6 @@ object ResolveExternalLookupHint extends Rule[LogicalPlan] with QueryErrorsBase 
       }
     parameters.foreach {
       case StringLiteral(value) => addString(value)
-      case Literal(value: String, _) => addString(value)
       case attr: UnresolvedAttribute =>
         relationNames += attr.nameParts
       case other =>
@@ -117,58 +113,48 @@ object ResolveExternalLookupHint extends Rule[LogicalPlan] with QueryErrorsBase 
     }
   }
 
-  private[analysis] def defaultCacheOptions: ExternalLookupCacheOptions = {
-    val conf = SQLConf.get
-    ExternalLookupCacheOptions(
-      enabled = conf.getConf(SQLConf.JOIN_EXTERNAL_LOOKUP_CACHE_ENABLED),
-      maxEntries = conf.getConf(SQLConf.JOIN_EXTERNAL_LOOKUP_CACHE_MAX_ENTRIES),
-      ttlMillis = conf.getConf(SQLConf.JOIN_EXTERNAL_LOOKUP_CACHE_TTL),
-      maxRowsPerKey = conf.getConf(SQLConf.JOIN_EXTERNAL_LOOKUP_CACHE_MAX_ROWS_PER_KEY))
-  }
-
   private def parseOption(
       option: String,
-      cacheOptions: ExternalLookupCacheOptions,
-      seenOptions: mutable.Set[String]): ExternalLookupCacheOptions = {
+      cacheOptions: ExternalLookupHintCacheOptions,
+      seenOptions: mutable.Set[String]): ExternalLookupHintCacheOptions = {
     val separator = option.indexOf('=')
     if (separator <= 0 || separator == option.length - 1) {
-      throw QueryCompilationErrors.invalidExternalLookupOptionError(option, "INVALID_FORMAT")
+      throw QueryCompilationErrors.invalidExternalLookupOptionError(option, "INVALID_OPTION_FORMAT")
     }
     val name = option.substring(0, separator).trim.toLowerCase(Locale.ROOT)
     val value = option.substring(separator + 1).trim
     if (!SUPPORTED_OPTIONS.contains(name)) {
       throw QueryCompilationErrors.invalidExternalLookupOptionError(
         name,
-        "UNSUPPORTED",
+        "UNSUPPORTED_OPTION",
         Map("supportedOptions" -> SUPPORTED_OPTIONS.toSeq.sorted.map(toDSOption).mkString(", ")))
     }
     if (!seenOptions.add(name)) {
-      throw QueryCompilationErrors.invalidExternalLookupOptionError(name, "DUPLICATE")
+      throw QueryCompilationErrors.invalidExternalLookupOptionError(name, "DUPLICATE_OPTION")
     }
 
     name match {
       case CACHE_ENABLED_OPTION =>
         value.toLowerCase(Locale.ROOT) match {
-          case "true" => cacheOptions.copy(enabled = true)
-          case "false" => cacheOptions.copy(enabled = false)
+          case "true" => cacheOptions.copy(enabled = Some(true))
+          case "false" => cacheOptions.copy(enabled = Some(false))
           case _ => invalidOptionValue(CACHE_ENABLED_OPTION, "true or false")
         }
-      case CACHE_MAX_ENTRIES_OPTION =>
-        cacheOptions.copy(maxEntries = parsePositiveInt(CACHE_MAX_ENTRIES_OPTION, value))
+      case CACHE_MAX_BYTES_OPTION =>
+        cacheOptions.copy(maxBytes = Some(parsePositiveSize(CACHE_MAX_BYTES_OPTION, value)))
       case CACHE_TTL_OPTION =>
-        cacheOptions.copy(ttlMillis = parseNonNegativeDurationMillis(CACHE_TTL_OPTION, value))
-      case CACHE_MAX_ROWS_PER_KEY_OPTION =>
-        cacheOptions.copy(maxRowsPerKey = parsePositiveInt(CACHE_MAX_ROWS_PER_KEY_OPTION, value))
+        cacheOptions.copy(
+          ttlMillis = Some(parseNonNegativeDurationMillis(CACHE_TTL_OPTION, value)))
     }
   }
 
-  private def parsePositiveInt(optionName: String, value: String): Int = {
+  private def parsePositiveSize(optionName: String, value: String): Long = {
     val parsed = try {
-      value.toInt
+      Utils.byteStringAsBytes(value)
     } catch {
-      case NonFatal(_) => invalidOptionValue(optionName, "a positive integer")
+      case NonFatal(_) => invalidOptionValue(optionName, POSITIVE_SIZE)
     }
-    if (parsed <= 0) invalidOptionValue(optionName, "a positive integer")
+    if (parsed <= 0) invalidOptionValue(optionName, POSITIVE_SIZE)
     parsed
   }
 
@@ -184,6 +170,6 @@ object ResolveExternalLookupHint extends Rule[LogicalPlan] with QueryErrorsBase 
 
   private def invalidOptionValue(optionName: String, expected: String): Nothing = {
     throw QueryCompilationErrors.invalidExternalLookupOptionError(
-      optionName, "INVALID_VALUE", Map("expected" -> expected))
+      optionName, "INVALID_OPTION_VALUE", Map("expected" -> expected))
   }
 }

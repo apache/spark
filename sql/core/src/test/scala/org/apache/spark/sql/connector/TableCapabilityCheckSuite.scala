@@ -87,7 +87,7 @@ class TableCapabilityCheckSuite extends AnalysisTest with SharedSparkSession {
     val lookupOnly = DataSourceV2Relation.create(
       CapabilityTable(EXTERNAL_LOOKUP), None, None, emptyMap)
     val noCache =
-      ExternalLookupCacheOptions(enabled = false, maxEntries = 1, ttlMillis = 0, maxRowsPerKey = 1)
+      ExternalLookupCacheOptions(enabled = false, maxBytes = 1, ttlMillis = 0)
     TableCapabilityCheck.apply(ExternalLookupJoin(
       left, lookupOnly, Inner, Some(Literal(true)), noCache, lookupOnly.output))
 

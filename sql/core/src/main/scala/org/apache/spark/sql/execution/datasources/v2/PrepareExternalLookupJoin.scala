@@ -276,8 +276,9 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
       nonNull(externalLookup.createReaderFactory(), "ExternalLookup.createReaderFactory()")
     val selectsRange = ExternalLookupJoinShapes.oneParameterRowPerRequest(
       selectedPredicates.map(_.parameter), selectedPredicates.map(_.comparison))
-    // At present, Spark caches nothing for a join that selects a range comparison: range values,
-    // such as event times, rarely repeat, so cached entries would rarely be used.
+    // At present, Spark caches nothing for a join that selects a range comparison whose parameter
+    // reads the stream: such values, as event times are, rarely repeat, so cached entries would
+    // rarely be used.
     val cacheOptions =
       if (selectsRange) join.cacheOptions.copy(enabled = false) else join.cacheOptions
 

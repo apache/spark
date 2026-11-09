@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.joins
 
+import com.google.common.base.Ticker
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, AttributeSeq,
@@ -33,7 +35,7 @@ import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.datasources.v2.SupportsCustomDriverMetrics
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.util.{Clock, SystemClock, Utils}
+import org.apache.spark.util.Utils
 
 /**
  * Executes synchronous, parameterized external lookup joins without a shuffle. Each task joins
@@ -53,7 +55,9 @@ case class ExternalLookupJoinExec(
     readerFactory: ExternalLookupReaderFactory,
     maxParameterRowsPerRequest: Int,
     cacheOptions: ExternalLookupCacheOptions,
-    child: SparkPlan) extends UnaryExecNode with SupportsCustomDriverMetrics with PredicateHelper {
+    child: SparkPlan,
+    cacheTicker: Ticker = ExternalLookupJoinExec.SystemCacheTicker)
+  extends UnaryExecNode with SupportsCustomDriverMetrics with PredicateHelper {
 
   // The connector's value rows follow the read schema, which `lookupInput` describes, and the
   // lookup-side stages turn them into rows of `transformedLookup`. The lookup columns keep their
@@ -175,6 +179,7 @@ case class ExternalLookupJoinExec(
       ExternalLookupJoinShapes.oneParameterRowPerRequest(lookupParameters, lookupKeyComparisons),
       conf.getConf(SQLConf.JOIN_EXTERNAL_LOOKUP_MAX_BATCH_BYTES),
       cacheOptions,
+      cacheTicker,
       ExternalLookupJoinMetrics(
         outputRows = longMetric("numOutputRows"),
         inputRows = longMetric("numInputRows"),
@@ -222,8 +227,10 @@ case class ExternalLookupJoinExec(
 }
 
 object ExternalLookupJoinExec {
-  /** The clock of the cache TTL; tests replace it. */
-  @volatile private[sql] var cacheClock: Clock = new SystemClock()
+  /** The clock of the cache TTL in production. It is sent to the tasks with the join. */
+  private[sql] object SystemCacheTicker extends Ticker with Serializable {
+    override def read(): Long = System.nanoTime()
+  }
 
   /**
    * Spark's cap on the stream rows of one request, whatever the connector allows, and so on its
