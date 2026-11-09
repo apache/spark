@@ -133,10 +133,13 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
     "SELECT p.s, b.lo FROM str_partial_bounds b JOIN str_partial_points p ON p.s > b.lo",
     "SELECT p.s, b.lo FROM str_partial_points p JOIN str_partial_bounds b ON p.s <= b.lo",
     "SELECT p.s, b.lo FROM str_partial_bounds b JOIN str_partial_points p ON p.s >= b.lo",
+    // FLOAT keys route through the same DoublePrefixComparator bridge as DOUBLE, building
+    // a LongPointIndex; -0.0F/0.0F and NaN rows pin that build and probe agree on the
+    // widened-to-double encoding (see setupFloatPartialViews).
+    "SELECT p.f, b.lo FROM flt_partial_points p JOIN flt_partial_bounds b ON p.f < b.lo",
     // Boolean, date, and timestamp keys each map to the long family differently
-    // (0/1, int, long); the boolean fixture includes a null point. The three
-    // standalone tests that used to cover these are gone - this pair runs
-    // every query under both codegen modes.
+    // (0/1, int, long); the boolean fixture includes a null point. These three
+    // queries are covered, under both codegen modes, by this pair of tests.
     "SELECT p.p, r.lo, r.hi FROM bool_points p JOIN bool_ranges r ON p.p >= r.lo AND p.p <= r.hi",
     "SELECT p.d, r.lo, r.hi FROM dt_points p JOIN dt_ranges r ON p.d BETWEEN r.lo AND r.hi",
     "SELECT p.t, r.lo, r.hi FROM ts_points p JOIN ts_ranges r ON p.t BETWEEN r.lo AND r.hi")
@@ -222,17 +225,25 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
    */
   private def setupDoubleIntervalViews(): Unit = {
     // An unsuffixed literal like `1.0` resolves to DECIMAL, not DOUBLE (only `1.0D` or a
-    // cast does), and DECIMAL(2, 1) maps to LongIntervalIndex, defeating the point of this
-    // view. The `D` suffix keeps these columns on the boxed IntervalIndex path.
+    // cast does), and DECIMAL(2, 1) maps to LongIntervalIndex too, defeating the point of
+    // this view. The `D` suffix keeps these columns typed DOUBLE, which routes here through
+    // `RangeIndex.longKey`'s `DoublePrefixComparator` bridge rather than DECIMAL's unscaled
+    // long. -0.0D/0.0D and NaN rows pin that build and probe agree on the long encoding of
+    // those special values; `<` is false for any NaN pair under real SQL comparison, so they
+    // add no matches in either the range join or the nested-loop baseline it is checked
+    // against, but a prefix mismatch between the two conversions would still surface as a
+    // missed match on the finite rows sharing a tree path with them.
     sql(
       """
         |CREATE OR REPLACE TEMP VIEW dbl_ranges_a(lo, hi) AS VALUES
-        |  (-1.0D, 0.0D), (0.0D, 1.0D), (0.0D, 2.0D), (1.0D, 5.0D)
+        |  (-1.0D, 0.0D), (0.0D, 1.0D), (0.0D, 2.0D), (1.0D, 5.0D),
+        |  (-0.0D, 0.0D), (DOUBLE('NaN'), DOUBLE('NaN'))
         |""".stripMargin)
     sql(
       """
         |CREATE OR REPLACE TEMP VIEW dbl_ranges_b(lo, hi) AS VALUES
-        |  (-2.0D, -1.0D), (-4.0D, -2.0D), (1.0D, 3.0D), (5.0D, 7.0D)
+        |  (-2.0D, -1.0D), (-4.0D, -2.0D), (1.0D, 3.0D), (5.0D, 7.0D),
+        |  (0.0D, 0.0D), (DOUBLE('NaN'), DOUBLE('NaN'))
         |""".stripMargin)
     assert(sql("SELECT lo, hi FROM dbl_ranges_a").schema.fields.forall(_.dataType == DoubleType))
     assert(sql("SELECT lo, hi FROM dbl_ranges_b").schema.fields.forall(_.dataType == DoubleType))
@@ -310,6 +321,20 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
       """
         |CREATE OR REPLACE TEMP VIEW str_partial_bounds(lo) AS VALUES
         |  ('b'), ('n')
+        |""".stripMargin)
+  }
+
+  private def setupFloatPartialViews(): Unit = {
+    sql(
+      """
+        |CREATE OR REPLACE TEMP VIEW flt_partial_points(f) AS VALUES
+        |  (CAST(0.5 AS FLOAT)), (CAST(1.0 AS FLOAT)), (CAST(4.0 AS FLOAT)),
+        |  (CAST(-0.0 AS FLOAT)), (FLOAT('NaN'))
+        |""".stripMargin)
+    sql(
+      """
+        |CREATE OR REPLACE TEMP VIEW flt_partial_bounds(lo) AS VALUES
+        |  (CAST(1.0 AS FLOAT)), (CAST(0.0 AS FLOAT))
         |""".stripMargin)
   }
 
@@ -436,9 +461,10 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
   test("a hint that resolves no broadcast side still allows a by-size range join") {
     // MERGE does not apply to a non-equi join (no equi-join keys to sort-merge on), so
     // it resolves no side for either a hinted range join or a hinted nested loop join.
-    // Falling through to `createNonEquiJoin()` without first retrying the by-size range
-    // join would plan a nested loop join here even though both sides are well within
-    // the broadcast threshold, same as the unhinted query.
+    // Without `getNonEquiJoinBuildSide`'s `case None => withoutHint`, which retries the
+    // by-size choice when a hint resolves no broadcast side, this would plan a nested
+    // loop join here even though both sides are well within the broadcast threshold,
+    // same as the unhinted query.
     setupIpLookupViews()
     val unhinted = sql(
       s"SELECT s.id, l.zip_id FROM signin_ip s JOIN ip_lookup l ON $pointCond")
@@ -462,6 +488,22 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
         s"SELECT s.id, l.zip_id FROM signin_ip s LEFT JOIN ip_lookup l ON $pointCond")
       assert(findRangeJoin(df.queryExecution.executedPlan).isEmpty)
       assert(findBroadcastNestedLoopJoin(df.queryExecution.executedPlan).size == 1)
+    }
+  }
+
+  test("right join keeps its unconfirmed build-left side a nested loop join") {
+    // The RIGHT JOIN counterpart of the test above, reaching the build-left arm of
+    // sideBroadcastQualified: the last resort builds the left side for a right outer
+    // join, and that arm is the only check that does not upgrade it to a range join
+    // over a relation no hint or size test confirmed small.
+    setupIpLookupViews()
+    withRangeJoin(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val df = sql(
+        s"SELECT s.id, l.zip_id FROM signin_ip s RIGHT JOIN ip_lookup l ON $pointCond")
+      assert(findRangeJoin(df.queryExecution.executedPlan).isEmpty)
+      val nested = findBroadcastNestedLoopJoin(df.queryExecution.executedPlan)
+      assert(nested.size == 1)
+      assert(nested.head.buildSide == BuildLeft)
     }
   }
 
@@ -671,6 +713,7 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
     setupStringIntervalViews()
     setupDoubleIntervalViews()
     setupPartialRangeViews()
+    setupFloatPartialViews()
     setupDateAndTimestampViews()
     setupBooleanViews()
     probeCoverageQueries.foreach { query =>
@@ -696,6 +739,7 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
     setupStringIntervalViews()
     setupDoubleIntervalViews()
     setupPartialRangeViews()
+    setupFloatPartialViews()
     setupDateAndTimestampViews()
     setupBooleanViews()
     probeCoverageQueries.foreach { query =>

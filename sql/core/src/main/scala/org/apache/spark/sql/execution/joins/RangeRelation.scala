@@ -240,20 +240,23 @@ private[joins] object RowSlice {
 // ===== Boxed-key indexes ====================================================
 //
 // Keys are the boxed values each build key expression evaluates to, compared
-// through `BoxedKeyOrdering`. Floating point, strings, binary, and decimals wider
-// than 18 digits stay here: these types have no order-preserving
-// single-long form, which is the property that routes a key type to the
-// long indexes below (`RangeIndex.longKey`).
+// through `BoxedKeyOrdering`. Strings, binary, and decimals wider than 18
+// digits stay here: these types have no order-preserving single-long form,
+// which is the property that routes a key type to the long indexes below
+// (`RangeIndex.longKey`). Floating point does have one (`DoublePrefixComparator`)
+// and routes there instead.
 
 /**
  * Augmented interval tree of build-side intervals. Lows and highs sit in
  * parallel arrays sorted by low bound, with a row array in the same order
  * feeding the scan path and `maxHighIdx(mid)` indexing the maximum high
  * bound in the span rooted at mid. Each key and row object is owned once:
- * the tree holds one reference per value plus the single row array. Java
- * serialization keeps these aliases; Kryo's reference resolver does not
- * track primitive wrappers, so a key shared by `lows` and `highs`, such as
- * the one key of a degenerate build, can deserialize as two objects.
+ * the tree holds one reference per value plus the single row array. Both
+ * Java and Kryo serialization keep these aliases, since the boxed family's
+ * key types (string, binary, wide decimal) are reference types Kryo tracks
+ * by identity; only a primitive wrapper would deserialize as two objects
+ * when shared by `lows` and `highs`, and those types route to the long
+ * indexes below instead.
  * Subtrees whose max high is below the probe window, or whose low starts
  * after it, are pruned during search, and a window covering every interval
  * skips the walk entirely.
@@ -735,9 +738,11 @@ private[joins] object PointIndex {
 // itself touches no Spark types once built: the tree walk and the binary searches
 // compare raw longs, and generated probe code passes long keys without boxing.
 // The row payload still does - `rows: Array[InternalRow]` and the serialized
-// `_keyType: DataType` are retained alongside the long arrays. Fixed width alone
-// is not the routed property: floating point is fixed-width but stays boxed,
-// while compact decimals route here as unscaled longs.
+// `_keyType: DataType` are retained alongside the long arrays. The routed
+// property is an order-preserving long encoding (`RangeIndex.longKey`), not
+// fixed width: floating point routes here through `DoublePrefixComparator`
+// and compact decimals as their unscaled value, while variable-length keys
+// (string, binary) and decimals too wide for a long stay boxed.
 // `RangeRelationBroadcastMode` picks between the two families once, from the
 // build keys' data types.
 
@@ -923,13 +928,23 @@ private[joins] object LongIntervalIndex {
     }
   }
 
+  /**
+   * Sort staging for `apply`: `Tuple3` is never specialized, so staging rows as
+   * `(Long, Long, InternalRow)` would box both converted keys beside each
+   * tuple. The holder keeps them raw from the build boundary on, and the sort
+   * comparator reads the primitive fields without boxing. `Arrays.sort` with a
+   * comparator is stable, so rows with equal lows keep input order, matching
+   * the tuple staging it replaces.
+   */
+  private final class Staged(val lo: Long, val hi: Long, val row: InternalRow)
+
   def apply(
       keyType: DataType,
       buildKeys: Seq[Expression],
       rows: Iterator[InternalRow],
       sizeHint: Option[Long]): LongIntervalIndex = {
     val toLongs: Seq[Any => Long] = buildKeys.map(k => RangeIndex.requiredLongKey(k.dataType).value)
-    val valid = new ArrayBuffer[(Long, Long, InternalRow)](RangeIndex.initialCapacity(sizeHint))
+    val valid = new ArrayBuffer[LongIntervalIndex.Staged](RangeIndex.initialCapacity(sizeHint))
     val lowExpr = buildKeys.head
     val highExpr = if (buildKeys.length == 1) null else buildKeys(1)
 
@@ -946,21 +961,21 @@ private[joins] object LongIntervalIndex {
           lo = hi
           hi = t
         }
-        valid += ((lo, hi, r.copy()))
+        valid += new LongIntervalIndex.Staged(lo, hi, r.copy())
       }
     }
 
     val staged = valid.toArray
-    java.util.Arrays.sort(staged, Ordering.by[(Long, Long, InternalRow), Long](_._1))
+    java.util.Arrays.sort(staged, (a: Staged, b: Staged) => java.lang.Long.compare(a.lo, b.lo))
     val length = staged.length
     val lows = new Array[Long](length)
     val highs = new Array[Long](length)
     val rowArr = new Array[InternalRow](length)
     var i = 0
     while (i < length) {
-      lows(i) = staged(i)._1
-      highs(i) = staged(i)._2
-      rowArr(i) = staged(i)._3
+      lows(i) = staged(i).lo
+      highs(i) = staged(i).hi
+      rowArr(i) = staged(i).row
       i += 1
     }
 
@@ -1155,6 +1170,16 @@ private[joins] class LongPointIndex private (
 
 private[joins] object LongPointIndex {
 
+  /**
+   * Sort staging for `apply`: `Tuple2` is only specialized when both type
+   * arguments are primitive, so staging rows as `(Long, InternalRow)` boxes
+   * every converted key. The holder keeps it raw from the build boundary on,
+   * and the sort comparator reads the primitive field without boxing.
+   * `Arrays.sort` with a comparator is stable, so rows with equal keys keep
+   * input order, matching the tuple staging it replaces.
+   */
+  private final class Staged(val key: Long, val row: InternalRow)
+
   def apply(
       keyType: DataType,
       buildKeys: Seq[Expression],
@@ -1162,26 +1187,26 @@ private[joins] object LongPointIndex {
       sizeHint: Option[Long]): LongPointIndex = {
     require(buildKeys.length == 1, "A long point index expects one build key.")
     val toLong = RangeIndex.requiredLongKey(buildKeys.head.dataType).value
-    val valid = new ArrayBuffer[(Long, InternalRow)](RangeIndex.initialCapacity(sizeHint))
+    val valid = new ArrayBuffer[LongPointIndex.Staged](RangeIndex.initialCapacity(sizeHint))
     val keyExpr = buildKeys.head
 
     while (rows.hasNext) {
       val r = rows.next()
       val rawKey = keyExpr.eval(r)
       if (rawKey != null) {
-        valid += ((toLong(rawKey), r.copy()))
+        valid += new LongPointIndex.Staged(toLong(rawKey), r.copy())
       }
     }
 
     val staged = valid.toArray
-    java.util.Arrays.sort(staged, Ordering.by[(Long, InternalRow), Long](_._1))
+    java.util.Arrays.sort(staged, (a: Staged, b: Staged) => java.lang.Long.compare(a.key, b.key))
     val length = staged.length
     val keys = new Array[Long](length)
     val rowArr = new Array[InternalRow](length)
     var i = 0
     while (i < length) {
-      keys(i) = staged(i)._1
-      rowArr(i) = staged(i)._2
+      keys(i) = staged(i).key
+      rowArr(i) = staged(i).row
       i += 1
     }
     new LongPointIndex(keyType, keys, rowArr)
@@ -1202,8 +1227,9 @@ private[joins] object LongPointIndex {
  * by hand. The generated path never notices a new case or a stale name at
  * compile time; a mismatch surfaces only as a Janino compile failure at
  * query-run time. RangeJoinSuite's codegen point-scan tests cover the long
- * point-index methods (int keys); RangeJoinSQLSuite's double and string
- * partial-range queries are what catch a stale boxed `PointIndex` methodName.
+ * point-index methods (int keys); RangeJoinSQLSuite's wide-decimal and string
+ * partial-range queries are what catch a stale boxed `PointIndex` methodName,
+ * since DOUBLE keys build a `LongPointIndex` instead.
  */
 private[joins] sealed abstract class PointScan(val methodName: String)
 

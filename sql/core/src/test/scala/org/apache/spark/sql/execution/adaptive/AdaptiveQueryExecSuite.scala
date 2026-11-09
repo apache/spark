@@ -5446,6 +5446,33 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("coalesce shuffle partitions under a broadcast range join over a union") {
+    // A range join does not need compatible child partitioning, so its streamed side's
+    // shuffle stages are still coalesced when the streamed side is a union of a shuffled
+    // aggregate and a branch that is not a query stage. Without the range join's case in
+    // childrenNeedCompatiblePartitioning, the whole subtree would fall to `case _ =>
+    // Seq.empty` and no shuffle would be coalesced.
+    Seq(true, false).foreach { expectCoalesce =>
+      val minPartitionSize = if (expectCoalesce) "64MB" else "1B"
+      withSQLConf(
+        SQLConf.BROADCAST_RANGE_JOIN_ENABLED.key -> "true",
+        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "64MB",
+        SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_SIZE.key -> minPartitionSize) {
+        val (_, adaptivePlan) = runAdaptiveAndVerifyResult(
+          "SELECT * FROM ((SELECT value v, max(key) k FROM testData GROUP BY value) " +
+            "UNION ALL (SELECT 'x' v, id k FROM range(10))) t " +
+            "JOIN (SELECT id AS a FROM range(1)) u ON t.k > u.a")
+        assert(collect(adaptivePlan) {
+          case j: BroadcastRangeJoinExec => j
+        }.size == 1, adaptivePlan)
+        val coalescedReads = collect(adaptivePlan) {
+          case read: AQEShuffleReadExec if read.isCoalescedRead => read
+        }
+        assert(coalescedReads.nonEmpty == expectCoalesce, adaptivePlan)
+      }
+    }
+  }
+
   test("SPARK-49979: AQE hang forever when collecting twice on a failed AQE plan") {
     val func: Long => Boolean = (i : Long) => {
       throw new Exception("SPARK-49979")

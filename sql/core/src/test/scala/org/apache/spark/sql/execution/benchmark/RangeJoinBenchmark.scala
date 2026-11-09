@@ -58,7 +58,9 @@ import org.apache.spark.sql.types.StringType
  * stretches, so the walk also prunes whole subtrees; see the comment above
  * `staggerBuild` for those counts.
  * Long and double keys run at 5%, 10%, 25%, 50%, and 90% overlap. Tiny builds
- * of 8, 16, 32, and 64 ranges measure the small-build all-rows probe path.
+ * of 8 and 16 ranges measure the small-build linear scan; the 32- and 64-range
+ * builds are disjoint and just past that cutoff, so they measure the tree walk
+ * instead.
  *
  * To run this benchmark:
  * {{{
@@ -162,9 +164,8 @@ object RangeJoinBenchmark extends SqlBasedBenchmark {
   private lazy val fullPoints: DataFrame = cached(spark.range(fullProbeRows).select(
     (col("id") % (fullBuildRows.toLong * width)).as("p")))
 
-  // Sweep the whole broadcast budget for cache behavior: the walk touches
-  // three long arrays far beyond any cache, and the sort and copy dominate
-  // the build side.
+  // A single large, disjoint build, where the one-time sort and copy cost
+  // dominates the build side.
   private val largeBuildRows = 1000000
   private val largeProbeRows = 10000
   private lazy val largeRanges: DataFrame = cached(spark.range(largeBuildRows).select(

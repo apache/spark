@@ -223,6 +223,15 @@ class RangeRelationSuite extends SparkFunSuite {
   }
 
   test("interval tree returns each overlapping row once") {
+    // Padding far outside every probe window below (and outside any padded
+    // scenario's own core), so the padded builds exceed SMALL_BUILD_OVERLAP_ROWS
+    // and these multiplicity checks run against OverlapIterator's tree walk,
+    // not the tiny-build linear scan - without the padding rows ever being a
+    // candidate, so expected answers are unchanged.
+    val cutoff = RangeIndex.SMALL_BUILD_OVERLAP_ROWS
+    def padded(spans: Seq[(Any, Any, InternalRow)]): Seq[(Any, Any, InternalRow)] =
+      spans ++ (0 until cutoff).map(i => span(-1000000 - i, -1000000 - i + 1, -1000 - i))
+
     // Spans arrive out of low order: [10, 20] then [0, 5].
     val unsorted = buildIntervals(Seq(span(10, 20, 0), span(0, 5, 1)))
     assert(probeIds(unsorted, 3, 3) == List(1))
@@ -234,11 +243,13 @@ class RangeRelationSuite extends SparkFunSuite {
     assert(probeIds(spanning, 25, 25) == List(0))
     assert(probeIds(spanning, 150, 150) == List(1))
 
-    val duplicated = buildIntervals(Seq(span(0, 100, 0), span(0, 100, 1)))
+    val duplicated = buildIntervals(padded(Seq(span(0, 100, 0), span(0, 100, 1))))
+    assert(duplicated.overlapping(50, 50).isInstanceOf[OverlapIterator])
     assert(probeIds(duplicated, 50, 50).sorted == List(0, 1))
 
-    val nested = buildIntervals(Seq(
-      span(0, 100, 0), span(10, 20, 1), span(10, 50, 2), span(90, 110, 3)))
+    val nested = buildIntervals(padded(Seq(
+      span(0, 100, 0), span(10, 20, 1), span(10, 50, 2), span(90, 110, 3))))
+    assert(nested.overlapping(10, 10).isInstanceOf[OverlapIterator])
     def assertOnce(low: Int, expected: Set[Int]): Unit = {
       val actual = probeIds(nested, low, low)
       assert(actual.toSet == expected, s"probe $low -> $actual")
@@ -263,7 +274,8 @@ class RangeRelationSuite extends SparkFunSuite {
 
     // At an interior endpoint, the range that ends and the one that starts
     // are each a candidate once.
-    val chained = buildIntervals(Seq(span(0, 1, 0), span(1, 2, 1), span(2, 3, 2)))
+    val chained = buildIntervals(padded(Seq(span(0, 1, 0), span(1, 2, 1), span(2, 3, 2))))
+    assert(chained.overlapping(1, 1).isInstanceOf[OverlapIterator])
     assert(probeIds(chained, 0, 0) == List(0))
     assert(probeIds(chained, 1, 1).sorted == List(0, 1))
     assert(probeIds(chained, 2, 2).sorted == List(1, 2))
@@ -271,7 +283,8 @@ class RangeRelationSuite extends SparkFunSuite {
 
     // A probe whose endpoints are reversed is the closed window between them.
     // [10, 25] meets [0, 30], [15, 40], and the point at 15.
-    val inverted = buildIntervals(Seq(span(0, 30, 0), span(15, 40, 1), span(15, 15, 2)))
+    val inverted = buildIntervals(padded(Seq(span(0, 30, 0), span(15, 40, 1), span(15, 15, 2))))
+    assert(inverted.overlapping(25, 10).isInstanceOf[OverlapIterator])
     assert(probeIds(inverted, 25, 10).sorted == List(0, 1, 2))
     assert(probeIds(inverted, 10, 20).sorted == List(0, 1, 2))
   }
@@ -733,10 +746,11 @@ class RangeRelationSuite extends SparkFunSuite {
   }
 
   test("restored interval indexes answer windows that need the walk") {
-    // The round-trip fixtures above place every probe inside a common core, so
-    // the restored index answers from the row slice without reading the tree
-    // state. These intervals are disjoint: each probe must walk maxima, lows,
-    // and highs on the restored index, under every serializer.
+    // The round-trip fixtures above build at most two intervals, so they answer
+    // through the linear scan below SMALL_BUILD_OVERLAP_ROWS without reading the
+    // tree state. These intervals are disjoint and sized above that cutoff: each
+    // probe must walk maxima, lows, and highs on the restored index, under every
+    // serializer.
     val serializers = Seq(
       "Java" -> new org.apache.spark.serializer.JavaSerializer(
         new org.apache.spark.SparkConf()).newInstance(),
