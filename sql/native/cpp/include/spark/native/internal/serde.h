@@ -46,33 +46,6 @@ concept Serializable =
       json.template get<T>();
     };
 
-template <typename T>
-arrow::Result<T> FromJson(const nlohmann::json& json) {
-  try {
-    return json.get<T>();
-  } catch (const std::exception& error) {
-    return arrow::Status::Invalid("cannot decode a native value: ", error.what());
-  } catch (...) {
-    return arrow::Status::Invalid("cannot decode a native value");
-  }
-}
-
-/// Parses an envelope of a value that the SDK serialized, and checks its version.
-inline arrow::Result<nlohmann::json> Unwrap(std::string_view bytes) {
-  nlohmann::json envelope = nlohmann::json::parse(bytes, nullptr, /*allow_exceptions=*/false);
-  if (envelope.is_discarded() || !envelope.is_object()) {
-    return arrow::Status::Invalid("cannot decode a native value: it is not a JSON object");
-  }
-  auto version = envelope.find("version");
-  if (version == envelope.end() || !version->is_number_integer()) {
-    return arrow::Status::Invalid("cannot decode a native value without a version");
-  }
-  if (*version != kStateVersion) {
-    return arrow::Status::Invalid("unsupported native state version: ", version->dump());
-  }
-  return envelope;
-}
-
 /// Serializes a factory, a partition, or a commit message.
 template <typename T>
 arrow::Result<std::string> Encode(const T& value) {
@@ -84,14 +57,32 @@ arrow::Result<std::string> Encode(const T& value) {
   });
 }
 
+/// Parses an envelope of a value that the SDK serialized, checks its version, and deserializes
+/// its value.
 template <typename T>
 arrow::Result<T> Decode(std::string_view bytes) {
-  ARROW_ASSIGN_OR_RAISE(nlohmann::json envelope, Unwrap(bytes));
+  nlohmann::json envelope = nlohmann::json::parse(bytes, nullptr, /*allow_exceptions=*/false);
+  if (envelope.is_discarded() || !envelope.is_object()) {
+    return arrow::Status::Invalid("cannot decode a native value: it is not a JSON object");
+  }
+  auto version = envelope.find("version");
+  if (version == envelope.end() || !version->is_number_integer()) {
+    return arrow::Status::Invalid("cannot decode a native value without a version");
+  }
+  if (*version != kStateVersion) {
+    return arrow::Status::Invalid("unsupported native state version: ", version->dump());
+  }
   auto value = envelope.find("value");
   if (value == envelope.end()) {
     return arrow::Status::Invalid("cannot decode a native value without a value");
   }
-  return FromJson<T>(*value);
+  try {
+    return value->get<T>();
+  } catch (const std::exception& error) {
+    return arrow::Status::Invalid("cannot decode a native value: ", error.what());
+  } catch (...) {
+    return arrow::Status::Invalid("cannot decode a native value");
+  }
 }
 
 /// Offsets are compact JSON on a single line, which Spark stores in the checkpoint as they are,
