@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NamedRelation}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide, JoinSelectionHelper, NormalizeFloatingNumbers}
+import org.apache.spark.sql.catalyst.optimizer.{BuildRight, BuildSide, JoinSelectionHelper, NormalizeFloatingNumbers}
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -367,75 +367,14 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       //   3. Pick broadcast nested loop join as the final solution. It may OOM but we don't have
       //      other choice. It broadcasts the smaller side for inner and full joins, broadcasts the
       //      left side for right join, and broadcasts right side for left join.
-      case logical.Join(left, right, joinType, condition, hint) =>
+      case j @ logical.Join(left, right, joinType, condition, hint) =>
         checkHintNonEquiJoin(hint)
-        val desiredBuildSide = if (joinType.isInstanceOf[InnerLike] || joinType == FullOuter) {
-          getSmallerSide(left, right)
-        } else {
-          // For perf reasons, `BroadcastNestedLoopJoinExec` prefers to broadcast left side if
-          // it's a right join, and broadcast right side if it's a left join.
-          // TODO: revisit it. If left side is much smaller than the right side, it may be better
-          // to broadcast the left side even if it's a left join.
-          if (canBuildBroadcastLeft(joinType)) BuildLeft else BuildRight
-        }
-
-        def createBroadcastNLJoin(onlyLookingAtHint: Boolean) = {
-          val buildLeft = if (onlyLookingAtHint) {
-            hintToBroadcastLeft(hint)
-          } else {
-            canBroadcastBySize(left, conf) && !hintToNotBroadcastAndReplicateLeft(hint)
-          }
-
-          val buildRight = if (onlyLookingAtHint) {
-            hintToBroadcastRight(hint)
-          } else {
-            canBroadcastBySize(right, conf) && !hintToNotBroadcastAndReplicateRight(hint)
-          }
-
-          val maybeBuildSide = if (buildLeft && buildRight) {
-            Some(desiredBuildSide)
-          } else if (buildLeft) {
-            Some(BuildLeft)
-          } else if (buildRight) {
-            Some(BuildRight)
-          } else {
-            None
-          }
-
-          maybeBuildSide.map { buildSide =>
+        getNonEquiJoinBuildSide(j, conf) match {
+          case Some(buildSide) =>
             Seq(joins.BroadcastNestedLoopJoinExec(
               planLater(left), planLater(right), buildSide, joinType, condition))
-          }
-        }
-
-        def createCartesianProduct() = {
-          if (joinType.isInstanceOf[InnerLike] && !hintToNotBroadcastAndReplicate(hint)) {
-            Some(Seq(joins.CartesianProductExec(planLater(left), planLater(right), condition)))
-          } else {
-            None
-          }
-        }
-
-        def createJoinWithoutHint() = {
-          createBroadcastNLJoin(false)
-            .orElse(createCartesianProduct())
-            .getOrElse {
-              // This join could be very slow or OOM
-              // Build the desired side unless the join requires a particular build side
-              // (e.g. NO_BROADCAST_AND_REPLICATION hint)
-              val requiredBuildSide = getBroadcastNestedLoopJoinBuildSide(hint, joinType)
-              val buildSide = requiredBuildSide.getOrElse(desiredBuildSide)
-              Seq(joins.BroadcastNestedLoopJoinExec(
-                planLater(left), planLater(right), buildSide, joinType, condition))
-            }
-        }
-
-        if (hint.isEmpty) {
-          createJoinWithoutHint()
-        } else {
-          createBroadcastNLJoin(true)
-            .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
-            .getOrElse(createJoinWithoutHint())
+          case None =>
+            Seq(joins.CartesianProductExec(planLater(left), planLater(right), condition))
         }
 
       // --- Cases where this strategy does not apply ---------------------------------------------

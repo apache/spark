@@ -27,7 +27,7 @@ import org.apache.spark.internal.LogKeys.EXPR
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedPersistentView, ResolvedTable, ResolvedTempView}
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, BloomFilterMightContain, Cast, DynamicPruning, DynamicPruningSubquery, Expression, InSet, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, AttributeSet, BloomFilterMightContain, Cast, DynamicPruning, DynamicPruningSubquery, Expression, InSet, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -48,6 +48,8 @@ import org.apache.spark.sql.execution.{FilterExec, InSubqueryExec, LeafExecNode,
 import org.apache.spark.sql.execution.command.{CommandUtils, MetricViewHelper}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelationWithTable, PushableColumnAndNestedColumn, StorageFilterPlanning}
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
+import org.apache.spark.sql.execution.streaming.runtime.StreamingV2ScanPushDown
+import org.apache.spark.sql.execution.streaming.runtime.StreamingV2ScanPushDown.ScanOfStream
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.metricview.logical.CreateMetricView
@@ -266,17 +268,19 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         StorageFilterPlanning.skipCheckedRows(filtersAbove, storageFilters, checked),
         batchExec, !batchExec.supportsColumnar) :: Nil
 
-    case PhysicalOperation(p, f, r: StreamingDataSourceV2ScanRelation)
+    // StreamingV2ScanPushDown takes the columns that each scan reads with the same match.
+    case ScanOfStream(p, f, r: StreamingDataSourceV2ScanRelation)
       if r.startOffset.isDefined && r.endOffset.isDefined =>
 
       val microBatchStream = r.stream.asInstanceOf[MicroBatchStream]
+      val output = DataSourceV2Strategy.streamingScanOutput(r, p, f)
       val scanExec = MicroBatchScanExec(
-        r.output, r.scan, microBatchStream, r.startOffset.get, r.endOffset.get)
+        output, r.scan, microBatchStream, r.startOffset.get, r.endOffset.get)
 
       // Add a Project here to make sure we produce unsafe rows.
       DataSourceV2Strategy.withProjectAndFilter(p, f, scanExec, !scanExec.supportsColumnar) :: Nil
 
-    case PhysicalOperation(p, f, r: StreamingDataSourceV2ScanRelation)
+    case ScanOfStream(p, f, r: StreamingDataSourceV2ScanRelation)
       if r.startOffset.isDefined && r.endOffset.isEmpty =>
 
         val scanExec = if (r.relation.realTimeModeDuration.isDefined) {
@@ -288,7 +292,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           }
           val microBatchStream = r.stream.asInstanceOf[MicroBatchStream]
           new RealTimeStreamScanExec(
-            r.output,
+            DataSourceV2Strategy.streamingScanOutput(r, p, f),
             r.scan,
             microBatchStream,
             r.startOffset.get,
@@ -296,7 +300,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           )
         } else {
           val continuousStream = r.stream.asInstanceOf[ContinuousStream]
-          val s = ContinuousScanExec(r.output, r.scan, continuousStream, r.startOffset.get)
+          val s = ContinuousScanExec(DataSourceV2Strategy.streamingScanOutput(r, p, f), r.scan,
+            continuousStream, r.startOffset.get)
           // initialize partitions
           s.inputPartitions
           s
@@ -1141,6 +1146,30 @@ private[sql] object DataSourceV2Strategy extends Logging {
     } else {
       withFilter
     }
+  }
+
+  /**
+   * Returns the output of the scan node of a streaming relation: the columns that its scan reads,
+   * in the order of its read schema. The projections and the filters over the relation, which the
+   * scan node is planned with, must read no column of the relation that the scan does not read,
+   * if it was built to read fewer columns than the relation outputs (see
+   * `StreamingV2ScanPushDown`).
+   */
+  private def streamingScanOutput(
+      relation: StreamingDataSourceV2ScanRelation,
+      project: Seq[NamedExpression],
+      filters: Seq[Expression]): Seq[AttributeReference] = relation.scanOutput match {
+    case Some(scanOutput) =>
+      val missing = AttributeSet((project ++ filters).flatMap(_.references)) -- scanOutput
+      if (missing.nonEmpty) {
+        throw QueryExecutionErrors.streamingScanMissingColumnsError(
+          StreamingV2ScanPushDown.sourceName(
+            relation.relation.table, relation.catalog, relation.identifier),
+          relation.output.filter(missing.contains).map(_.name))
+      }
+      scanOutput
+    case None =>
+      relation.output
   }
 }
 

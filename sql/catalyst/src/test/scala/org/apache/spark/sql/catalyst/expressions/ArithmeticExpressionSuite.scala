@@ -156,6 +156,20 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     }
   }
 
+  test("SPARK-45438: UnaryMinus and Abs keep every digit of a 38-digit decimal") {
+    Seq("12345678901234567890123456789012345.67", "-99999999999999999999999999999999999999")
+      .foreach { s =>
+        val value = new java.math.BigDecimal(s)
+        val input = Literal(Decimal(value, 38, value.scale), DecimalType(38, value.scale))
+        Seq("true", "false").foreach { ansi =>
+          withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+            checkEvaluation(UnaryMinus(input), Decimal(value.negate(), 38, value.scale))
+            checkEvaluation(Abs(input), Decimal(value.abs(), 38, value.scale))
+          }
+        }
+      }
+  }
+
   test("- (Minus)") {
     testNumericDataTypes { convert =>
       val left = Literal(convert(1))
@@ -773,6 +787,20 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(IntegralDivide(
         Literal(Decimal("99999999999999999999999999999999999999")), Literal(Decimal(0.00001))),
         null)
+    }
+  }
+
+  test("SPARK-61050: decimal Remainder, Pmod and IntegralDivide with a 40- or 76-digit quotient") {
+    val left = Literal(Decimal(BigDecimal("9" * 38)), DecimalType(38, 0))
+    Seq(("0.07", 2, "0.02"), ("7E-38", 38, "2E-38")).foreach { case (divisor, scale, rem) =>
+      val right = Literal(Decimal(BigDecimal(divisor), scale, scale), DecimalType(scale, scale))
+      Seq(EvalMode.LEGACY, EvalMode.ANSI).foreach { mode =>
+        checkEvaluation(Remainder(left, right, mode), Decimal(BigDecimal(rem), scale, scale))
+        checkEvaluation(Pmod(left, right, mode), Decimal(BigDecimal(rem), scale, scale))
+      }
+      checkEvaluation(IntegralDivide(left, right, EvalMode.LEGACY), null)
+      checkExceptionInExpression[SparkArithmeticException](
+        IntegralDivide(left, right, EvalMode.ANSI), "NUMERIC_VALUE_OUT_OF_RANGE")
     }
   }
 
