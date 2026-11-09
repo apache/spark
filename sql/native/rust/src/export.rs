@@ -46,6 +46,11 @@ use crate::{
 /// symbol is `spark_ds_init`; sources implement the safe Rust traits and do not handle
 /// C pointers. The library must be built with `panic = "unwind"`, so that the SDK can
 /// report a panic as an error.
+///
+/// The macro exports one type per library. A library with several data sources chooses the
+/// source to create by [`CreateInfo::name`](crate::CreateInfo::name), and since the associated
+/// types are shared, wraps the types of their operations in enums whose variants delegate to
+/// the types of each source.
 #[macro_export]
 macro_rules! export_data_source {
     ($source:ty $(,)?) => {

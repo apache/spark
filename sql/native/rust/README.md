@@ -173,7 +173,9 @@ error without one.
 A library that implements several data sources is installed or listed in its
 package under each of their names. Spark passes the name in `CreateInfo::name`, so
 one exported `DataSource` can choose the source to create; the macro exports a
-single Rust type per library.
+single Rust type per library. Its four associated types are shared by all of its sources:
+when they have different scan builders, factories, partitions, offsets, or messages, the
+library wraps them in enums whose variants delegate to the types of each source.
 
 The implementation separates public connector traits, driver handle state in
 `bridge.rs`, Arrow ownership in `stream.rs`, the writers in `write.rs`, C bindings in
@@ -273,7 +275,8 @@ Task `commit()` returns a typed, serde-serializable message, the `Message` of th
 `BatchWrite`. Driver `commit` receives a `CommitInfo` with one winning message per partition,
 at the position of its partition; driver `abort` receives an `AbortInfo` whose messages are
 `Option<Message>`, with `None` for a partition whose message did not arrive or cannot be
-decoded, so a corrupted message cannot prevent cleanup. A failed task or driver commit leaves the same object available for abort.
+decoded, so a corrupted message cannot prevent cleanup. A failed task or driver commit leaves
+the same object available for abort.
 A task commit whose message cannot be serialized counts as failed, so `abort` can
 follow a `commit` that returned a message. Spark calls each method at most once, never
 writes after a failure or a commit, and never aborts a successful commit, as the header
@@ -352,7 +355,8 @@ Streaming writes reuse the task writers of batch writes. Spark creates a `Stream
 for each micro-batch, from a `StreamingWriteInfo` with the ID of the query, which stays the
 same across restarts. It follows the lifecycle of a `BatchWrite`; the SDK passes the epoch ID
 of the micro-batch to `commit` and `abort` in `StreamingCommitInfo` and `StreamingAbortInfo`,
-and gives it to the task writers in `WriterContext::epoch_id`. Spark may commit an epoch again after a restart, with a new
+and gives it to the task writers in `WriterContext::epoch_id`. Spark may commit an epoch
+again after a restart, with a new
 write, so a write must skip an epoch that is already committed: the query ID and the epoch
 ID identify the output of a micro-batch. A restarted query may also abort an epoch that an
 earlier run committed, so an abort removes only what its own task writers wrote. The
@@ -422,8 +426,9 @@ add it to `ScanBuilder`, with a default that uses no domain, so existing connect
 
 ## Build and test without Spark
 
-Use Rust 1.85 or newer (as required by Arrow 58) and a C compiler. The C integration
-test uses `dlopen` and pthreads on Linux or macOS. From this directory:
+Use Rust 1.85 or newer, the `rust-version` of the workspace, which Arrow 58 requires, and a
+C compiler. The C integration test uses `dlopen` and pthreads on Linux or macOS. From this
+directory:
 
 ```bash
 cargo test --workspace --locked
