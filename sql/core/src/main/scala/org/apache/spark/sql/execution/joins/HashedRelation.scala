@@ -458,7 +458,9 @@ private[joins] object UnsafeHashedRelation {
 
   /**
    * The size of the first data page of the map. Later pages double in size until they add up to
-   * the page size, and then all pages have the page size.
+   * the page size, and then all pages have the page size. If the page size leaves room for the
+   * header of an on-heap page, so does each growing page, and these sizes include that header (see
+   * `TaskMemoryManager.growingPageHeaderBytes`).
    *
    * Otherwise `BytesToBytesMap` rounds its first page up to the page size (`spark.buffer.pageSize`
    * or a default of up to 64 MiB), so even a few rows reserve a full page. A task that keeps many

@@ -189,7 +189,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
   /**
    * The size of the next data page plus {@link #pageHeaderBytes} while the map grows. It starts at
-   * {@link #initialPageSizeBytes} and doubles with every new page, up to {@link #pageSizeBytes}.
+   * {@link #initialPageSizeBytes} and doubles with every new page, up to {@link #pageSizeBytes}
+   * plus {@link #pageHeaderBytes}.
    */
   private long nextPageSizeBytes;
 
@@ -1134,7 +1135,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
       return false;
     }
     requestedDataPagesBytes += size + pageHeaderBytes;
-    nextPageSizeBytes = Math.min(pageSizeBytes, nextPageSizeBytes * 2);
+    nextPageSizeBytes = Math.min(pageSizeBytes + pageHeaderBytes, nextPageSizeBytes * 2);
     currentPage = page;
     dataPages.add(currentPage);
     UnsafeAlignedOffset.putSize(currentPage.getBaseObject(), currentPage.getBaseOffset(), 0);
