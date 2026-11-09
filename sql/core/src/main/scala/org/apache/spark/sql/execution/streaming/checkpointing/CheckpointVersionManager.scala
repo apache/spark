@@ -66,10 +66,13 @@ object CheckpointVersionManager extends Logging {
    *  - the configured version (via [[SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION]])
    *
    * @param sparkSessionForStream the cloned `SparkSession` for the streaming query
+   * @param sourceEvolutionEnabled whether the query tracks its sources by name
    */
-  private def getOffsetLogVersion(sparkSessionForStream: SparkSession): Int = {
+  private def getOffsetLogVersion(
+      sparkSessionForStream: SparkSession,
+      sourceEvolutionEnabled: Boolean): Int = {
     val currentDefaultVersion = getCurrentVersion().offsetLogVersion
-    val minRequiredVersion = getMinRequiredOffsetLogVersion(sparkSessionForStream)
+    val minRequiredVersion = getMinRequiredOffsetLogVersion(sourceEvolutionEnabled)
     val configuredVersion = sparkSessionForStream.sessionState.conf.streamingOffsetLogFormatVersion
     val result = List[Int](currentDefaultVersion, minRequiredVersion, configuredVersion).max
     logInfo(s"Retrieved offset log writer version=$result")
@@ -77,12 +80,12 @@ object CheckpointVersionManager extends Logging {
   }
 
   /**
-   * Minimum offset log format version required by the features enabled on this session. Streaming
+   * Minimum offset log format version required by the features enabled for the query. Streaming
    * source evolution relies on the OffsetMap (sourceId -> offset) format, which is only available
    * in [[OffsetSeqLog.VERSION_2]].
    */
-  private def getMinRequiredOffsetLogVersion(sparkSessionForStream: SparkSession): Int = {
-    if (sparkSessionForStream.sessionState.conf.enableStreamingSourceEvolution) {
+  private def getMinRequiredOffsetLogVersion(sourceEvolutionEnabled: Boolean): Int = {
+    if (sourceEvolutionEnabled) {
       OffsetSeqLog.VERSION_2
     } else {
       OffsetSeqLog.VERSION_1
@@ -97,19 +100,6 @@ object CheckpointVersionManager extends Logging {
       offsetLogFormatVersion: Int): Unit = {
     sparkSessionForStream.conf.set(
       SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key, offsetLogFormatVersion)
-  }
-
-  /**
-   * Returns the format version for the given log type. Reads any feature-driven minimums from the
-   * `sparkSessionForStream` config, which must be initialized before calling.
-   */
-  def getFormatVersionFromSession(
-      sparkSessionForStream: SparkSession,
-      logType: CheckpointLogType): Int = {
-    logType match {
-      case OffsetLogType => getOffsetLogVersion(sparkSessionForStream)
-      case CommitLogType => getCommitLogVersion(sparkSessionForStream)
-    }
   }
 
   /**
@@ -136,7 +126,7 @@ object CheckpointVersionManager extends Logging {
       latestCommittedBatch: Option[(Long, CommitMetadataBase)]): Int = {
     latestCommittedBatch match {
       case Some((_, commitMetadata)) => commitMetadata.version
-      case None => getFormatVersionFromSession(sparkSessionForStream, CommitLogType)
+      case None => getCommitLogVersion(sparkSessionForStream)
     }
   }
 
@@ -144,13 +134,17 @@ object CheckpointVersionManager extends Logging {
    * Determines the offset log format version for this query run. For existing queries, reads from
    * the last written offset log entry. For new queries, delegates to the session config (honoring
    * any feature-driven minimums).
+   *
+   * @param sourceEvolutionEnabled whether this run tracks its sources by name, as decided by the
+   *                               caller
    */
   def resolveOffsetLogVersion(
       sparkSessionForStream: SparkSession,
-      latestStartedBatch: Option[(Long, OffsetSeqBase)]): Int = {
+      latestStartedBatch: Option[(Long, OffsetSeqBase)],
+      sourceEvolutionEnabled: Boolean): Int = {
     latestStartedBatch match {
       case Some((_, offsetSeq)) => offsetSeq.version
-      case None => getFormatVersionFromSession(sparkSessionForStream, OffsetLogType)
+      case None => getOffsetLogVersion(sparkSessionForStream, sourceEvolutionEnabled)
     }
   }
 

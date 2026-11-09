@@ -200,13 +200,29 @@ class MicroBatchExecution(
 
   /**
    * Cached result of the first `offsetLog.getLatest()` call. Reused by both
-   * `logicalPlan` (to determine `enforceNamed`) and `initializeExecution` (to seed
+   * `logicalPlan` (to determine `enforceNamedInCheckpoint`) and `initializeExecution` (to seed
    * `latestStartedBatch`). This avoids a redundant `ListStatus` on the checkpoint's
    * `offsets/` directory during stream startup. Safe to cache: between construction
    * and `initializeExecution`, nothing else writes the offset log on the query thread.
    */
   private lazy val initialLatestOffsetSeq: Option[(Long, OffsetSeqBase)] =
     offsetLog.getLatest()
+
+  /** Whether the last written offset log entry tracks sources by name, if there is one. */
+  private lazy val enforceNamedInCheckpoint: Option[Boolean] =
+    initialLatestOffsetSeq.flatMap { case (_, offsetSeq) =>
+      offsetSeq.metadataOpt.flatMap { metadata =>
+        OffsetSeqMetadata.readValueOpt(metadata, SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION)
+          .map(_.toBoolean)
+      }
+    }
+
+  /**
+   * Whether this run tracks sources by name (source evolution), decided once per run: the
+   * checkpoint's recorded tracking wins, and a new query takes the session config.
+   */
+  private lazy val enforceNamed: Boolean = enforceNamedInCheckpoint.getOrElse(
+    sparkSessionForStream.sessionState.conf.enableStreamingSourceEvolution)
 
   override lazy val logicalPlan: LogicalPlan = {
     assert(queryExecutionThread eq Thread.currentThread,
@@ -227,17 +243,9 @@ class MicroBatchExecution(
     val disabledSources =
       Utils.stringToSeq(sparkSession.sessionState.conf.disabledV2StreamingMicroBatchReaders)
 
-    // Read the source evolution enforcement from the last written offset log entry. If no entries
-    // are found, use the session config value.
-    val enforceNamedInCheckpoint = initialLatestOffsetSeq.flatMap { case (_, offsetSeq) =>
-      offsetSeq.metadataOpt.flatMap { metadata =>
-        OffsetSeqMetadata.readValueOpt(metadata, SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION)
-          .map(_.toBoolean)
-      }
-    }
-    val enforceNamed = enforceNamedInCheckpoint.getOrElse(
-      sparkSessionForStream.sessionState.conf.enableStreamingSourceEvolution)
-    checkSourceNames(enforceNamed, enforceNamedInCheckpoint)
+    checkSourceNames()
+    // Every offset log entry records the decision from the query's session.
+    sparkSessionForStream.conf.set(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key, enforceNamed)
 
     // SPARK-57489: dropDuplicates / dropDuplicatesWithinWatermark resolve their keys with the
     // deterministic order by default, but streaming deduplication binds state-store keys by
@@ -470,9 +478,7 @@ class MicroBatchExecution(
    * Rejects source names that do not fit the source tracking of this run. Runs before any source is
    * created, so that a rejected run leaves nothing behind in the checkpoint.
    */
-  private def checkSourceNames(
-      enforceNamed: Boolean,
-      enforceNamedInCheckpoint: Option[Boolean]): Unit = {
+  private def checkSourceNames(): Unit = {
     val sources = StreamingSourceIdentifyingName.collectSources(analyzedPlan)
     val namedSources = sources.map(_._2).filter(_.nameOpt.isDefined)
     val unnamedSources = sources.zipWithIndex.collect {
@@ -636,7 +642,7 @@ class MicroBatchExecution(
       assert(lastCommittedBatchId == -1L)
     }
     val offsetLogFormatVersion = CheckpointVersionManager.resolveOffsetLogVersion(
-      sparkSessionForStream, latestStartedBatch)
+      sparkSessionForStream, latestStartedBatch, enforceNamed)
 
     // Persist the resolved offset log format version on the streaming session.
     CheckpointVersionManager.setFormatVersion(
