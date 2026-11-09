@@ -1699,6 +1699,16 @@ class DataFrameSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-61254: LogicalRDD constraints should not reference the origin Dataset columns") {
+    val df = spark.range(16).as("t").where($"t.id" > 5)
+    // The optimizer removes the root alias, so the constraint `t.id > 5` differs from the
+    // optimized output `id` only in qualifier.
+    val cp = df.select($"id".as("id")).localCheckpoint()
+    checkAnswer(
+      df.join(cp, df("id") === cp("id") + 1, "right_outer").where(cp("id") > 0),
+      (6L to 14L).map(i => Row(i + 1, i)) :+ Row(null, 15L))
+  }
+
   test("SPARK-10656: completely support special chars") {
     val df = Seq(1 -> "a").toDF("i_$.a", "d^'a.")
     checkAnswer(df.select(df("*")), Row(1, "a"))

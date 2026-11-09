@@ -648,6 +648,14 @@ WITH RECURSIVE tmp(x) AS (
 )
 SELECT * FROM rcte;
 
+-- Recursive CTE with a filter on a subquery alias that LIMIT keeps on top of the recursion
+WITH RECURSIVE r(k, lvl) AS (
+    SELECT id, 0 FROM range(5)
+    UNION ALL
+    SELECT * FROM (SELECT k, lvl + 1 AS lvl FROM r LIMIT 100) t WHERE t.lvl < 3
+)
+SELECT count(*), max(lvl) FROM r;
+
 SET spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation=100;
 
 -- Recursive CTE with multiple of the same reference in the anchor, which get referenced as different variables in subsequent iterations.
