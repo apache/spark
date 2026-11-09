@@ -34,8 +34,8 @@ import org.apache.spark.util.TransientBestEffortLazyVal
  * Both read paths start from one listing of the file index and split and pack the files they
  * keep through `filePartitions`, so `partitions`, `planInputPartitions()` and
  * `planInputPartitionsWithRuntimeFilters` are final here. A scan that reports a partitioning or an
- * ordering should not mix this in. The scan records nothing about what each call returned, so Spark
- * gives it no group filter in a group-based row-level operation.
+ * ordering should not mix this in. Spark gives it no group filter in a row-level operation, see
+ * `RowLevelOperationRuntimeGroupFiltering`.
  */
 trait RuntimePartitionPruningFileScan extends FileScan with SupportsRuntimeCatalystFiltering {
 

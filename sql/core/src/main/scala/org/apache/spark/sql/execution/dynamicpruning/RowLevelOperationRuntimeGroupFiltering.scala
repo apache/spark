@@ -53,12 +53,9 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transformDownWithPruning(
       _.containsAnyPattern(REPLACE_DATA, WRITE_DELTA)) {
-    // A built-in file scan does not record the groups each call returned, which a write that
-    // replaces the groups it read relies on.
     case GroupBasedRowLevelOperation(replaceData, _, Some(cond),
         r: DataSourceV2ScanRelation)
-        if canInjectGroupFilters(cond, r) &&
-          !r.scan.isInstanceOf[RuntimePartitionPruningFileScan] =>
+        if canInjectGroupFilters(cond, r) =>
       injectGroupFilters(replaceData, cond, r.scan, r.declaredRuntimeFilterAttrs)
 
     case DeltaBasedRowLevelOperation(writeDelta, _, Some(cond),
@@ -72,7 +69,12 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
       scanRelation: DataSourceV2ScanRelation): Boolean = {
     conf.runtimeRowLevelOperationGroupFilterEnabled &&
       cond != TrueLiteral &&
-      scanRelation.runtimeFilterAttrs.nonEmpty
+      scanRelation.runtimeFilterAttrs.nonEmpty &&
+      // A built-in file scan gets no group filter. It does not record the groups each call
+      // returned, which a group-based write relies on. The group filter's IN is never true on a
+      // directory with a null partition value, so the scan's pruning would drop it, and a
+      // delta-based write would miss the matching rows there.
+      !scanRelation.scan.isInstanceOf[RuntimePartitionPruningFileScan]
   }
 
   private def injectGroupFilters(

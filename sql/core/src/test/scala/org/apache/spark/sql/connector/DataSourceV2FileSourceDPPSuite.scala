@@ -24,24 +24,25 @@ import org.apache.logging.log4j.Level
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.ProjectingInternalRow
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, DynamicPruningExpression, DynamicPruningSubquery, EqualTo, Expression, GreaterThanOrEqual, In, Literal, Not}
-import org.apache.spark.sql.catalyst.planning.GroupBasedRowLevelOperation
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, ReplaceData}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, DynamicPruningExpression, DynamicPruningSubquery, EqualTo, EvalMode, Expression, GreaterThanOrEqual, In, Literal, Not}
+import org.apache.spark.sql.catalyst.planning.{DeltaBasedRowLevelOperation, GroupBasedRowLevelOperation}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, ReplaceData, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.ReplaceDataProjections
+import org.apache.spark.sql.catalyst.util.{ReplaceDataProjections, WriteDeltaProjections}
 import org.apache.spark.sql.connector.catalog.{Column, InMemoryTableCatalog, SupportsRowLevelOperations, Table, TableCapability}
+import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
 import org.apache.spark.sql.connector.read.{InputPartition, ScanBuilder}
-import org.apache.spark.sql.connector.write.{LogicalWriteInfo, RowLevelOperation, RowLevelOperationBuilder, RowLevelOperationInfo, RowLevelOperationTable, WriteBuilder}
+import org.apache.spark.sql.connector.write.{DeltaWriteBuilder, LogicalWriteInfo, RowLevelOperation, RowLevelOperationBuilder, RowLevelOperationInfo, RowLevelOperationTable, SupportsDelta, WriteBuilder}
 import org.apache.spark.sql.execution.{FilterExec, ScalarSubquery}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.datasources.{FilePartition, InMemoryFileIndex, PartitionDirectory}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, FileScan, PushDownUtils, RuntimePartitionPruningFileScan}
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.execution.datasources.v2.text.TextScan
-import org.apache.spark.sql.execution.dynamicpruning.RowLevelOperationRuntimeGroupFiltering
+import org.apache.spark.sql.execution.dynamicpruning.{PartitionPruning, RowLevelOperationRuntimeGroupFiltering}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, LongType}
+import org.apache.spark.sql.types.{IntegerType, LongType, StringType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
@@ -338,6 +339,87 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
             s"expected the scalar subquery filter on the scan, got $scalarFilters")
           assert(readDirs(scalar) === Seq("7", "abc"))
         }
+      }
+    }
+  }
+
+  test("several runtime filters on one file scan prune it together") {
+    // A DPP filter on p2 and a scalar subquery filter on p3 reach the same scan, which keeps only
+    // the directories that satisfy both.
+    withDppV2Conf {
+      withTempDir { dir =>
+        writeFactAndDim(dir)
+        val tPath = new File(dir, "t").getCanonicalPath
+        spark.range(100).selectExpr("id", "id % 5 AS p2", "id % 3 AS p3")
+          .write.format("parquet").partitionBy("p2", "p3").save(tPath)
+        spark.read.format("parquet").schema("id long, p2 int, p3 int").load(tPath)
+          .createOrReplaceTempView("t")
+        val df = sql(
+          """SELECT t.id FROM t JOIN dim d ON t.p2 = d.dim_id
+            |WHERE d.dim_val = 2 AND t.p3 = (SELECT max(dim_id) FROM dim WHERE dim_val = 1)
+            |""".stripMargin)
+        checkAnswer(df, (0 until 100).filter(i => i % 5 == 2 && i % 3 == 1).map(i => Row(i)))
+        val scan = factScanOf(df)
+        assert(scan.runtimeFilters.exists(_.isInstanceOf[DynamicPruningExpression]) &&
+          scan.runtimeFilters.exists(_.exists(_.isInstanceOf[ScalarSubquery])),
+          s"expected a DPP and a scalar subquery filter, got ${scan.runtimeFilters}")
+        val dirs = scan.filteredPartitions.flatten.flatMap(_.asInstanceOf[FilePartition].files
+          .map(f => (f.partitionValues.getInt(0), f.partitionValues.getInt(1)))).distinct
+        assert(dirs === Seq((2, 1)))
+      }
+      // A directory that one filter fails on and another filter prunes is dropped and not counted
+      // as a failure.
+      withTempDir { dir =>
+        val strPath = new File(dir, "fact_str").getCanonicalPath
+        spark.range(10).selectExpr("id",
+          "CASE id WHEN 3 THEN 'abc' WHEN 4 THEN 'xyz' ELSE CAST(id AS STRING) END AS part")
+          .write.format("parquet").partitionBy("part").save(strPath)
+        spark.read.format("parquet").schema("id long, part string").load(strPath)
+          .createOrReplaceTempView("fact_str")
+        val df = sql("SELECT f.id, f.part FROM fact_str f")
+        df.collect()
+        val scan = fileScanOf(df)
+        val part = AttributeReference("part", StringType)()
+        val failsOnLetters = EqualTo(Cast(part, LongType, None, EvalMode.ANSI), Literal(7L))
+        val prunesXyz = Not(EqualTo(part, Literal("xyz")))
+        var planned = Array.empty[InputPartition]
+        val logAppender = new LogAppender("runtime filter evaluation failure")
+        withLogAppender(logAppender, Seq(classOf[ParquetScan].getName), Some(Level.WARN)) {
+          // failsOnLetters goes first, so it fails on 'xyz' before prunesXyz prunes it; in the
+          // other order 'xyz' would be pruned without a failure.
+          planned = scan.planInputPartitionsWithRuntimeFilters(Array(failsOnLetters, prunesXyz))
+        }
+        assert(planned.toSeq.flatMap(_.asInstanceOf[FilePartition].files
+          .map(_.partitionValues.getString(0))).distinct.sorted === Seq("7", "abc"))
+        assert(logAppender.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(
+          "on which a runtime filter could not be evaluated: 1.")),
+          s"expected a warning, got ${logAppender.loggingEvents.map(_.getMessage)}")
+      }
+    }
+  }
+
+  test("a runtime filter that is true for a null partition value keeps that directory") {
+    // A directory's null partition value binds as null, not as its type's default.
+    withDppV2Conf {
+      withTempDir { dir =>
+        writeFactAndDim(dir)
+        val nullPath = new File(dir, "fact_null").getCanonicalPath
+        spark.range(10)
+          .selectExpr("id", "CASE WHEN id = 3 THEN NULL ELSE CAST(id AS INT) END AS part")
+          .write.format("parquet").partitionBy("part").save(nullPath)
+        spark.read.format("parquet").schema("id long, part int").load(nullPath)
+          .createOrReplaceTempView("fact_null")
+        // The subquery returns null, so only the null directory satisfies the filter.
+        val df = sql(
+          """SELECT f.id FROM fact_null f
+            |WHERE f.part <=> (SELECT max(dim_id) FROM dim WHERE dim_val > 100)""".stripMargin)
+        checkAnswer(df, Row(3))
+        val scan = factScanOf(df)
+        assert(scan.runtimeFilters.exists(_.exists(_.isInstanceOf[ScalarSubquery])),
+          s"expected the scalar subquery filter on the scan, got ${scan.runtimeFilters}")
+        val values = scan.filteredPartitions.flatten.flatMap(_.asInstanceOf[FilePartition].files
+          .map(f => Option.when(!f.partitionValues.isNullAt(0))(f.partitionValues.getInt(0))))
+        assert(values.distinct === Seq(None))
       }
     }
   }
@@ -771,9 +853,10 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
             sql("CREATE TABLE dpp_mem.dim_mem (k BIGINT, dp INT) PARTITIONED BY (dp)")
             sql("INSERT INTO dpp_mem.dim_mem VALUES " +
               (0 until 10).map(k => s"($k, ${k % 4})").mkString(", "))
-            val df = sql(
+            val query =
               """SELECT f.id FROM fact f JOIN dpp_mem.dim_mem d
-                |ON f.part = d.k WHERE d.dp IN (1, 3)""".stripMargin)
+                |ON f.part = d.k WHERE d.dp IN (1, 3)""".stripMargin
+            val df = sql(query)
             val optimized = df.queryExecution.optimizedPlan
             val dimRelation = optimized.collectFirst {
               case r: DataSourceV2ScanRelation if r.output.exists(_.name == "k") => r
@@ -785,6 +868,19 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
             val numOutputRows = factScanOf(df).metrics("numOutputRows").value
             assert(numOutputRows == 50,
               s"expected the fact scan to read the 5 odd partitions, got $numOutputRows rows")
+            // A dimension scan with a row-selecting pushdown, such as a limit, may return other
+            // rows when a DPP subquery reads it again, so its pushed filters do not count.
+            val withoutDpp = withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false") {
+              sql(query).queryExecution.optimizedPlan
+            }
+            Seq(true, false).foreach { rowWise =>
+              val plan = PartitionPruning(withoutDpp.transform {
+                case r: DataSourceV2ScanRelation if r.output.exists(_.name == "k") =>
+                  r.copy(onlyRowWisePushdowns = rowWise)
+              })
+              assert(collectDppFilters(plan).nonEmpty === rowWise,
+                s"onlyRowWisePushdowns = $rowWise: expected DPP $rowWise, got\n$plan")
+            }
           }
         }
       }
@@ -823,33 +919,45 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
     }
   }
 
-  test("no group filter for a group-based row-level operation over a built-in file scan") {
+  test("no group filter for a row-level operation over a built-in file scan") {
     // A built-in file scan does not record which groups its runtime-filtered read returned, which
-    // a group-based write needs in order to replace only those groups.
+    // a group-based write needs in order to replace only those groups. The group filter's IN is
+    // never true on a directory with a null partition value, so the scan's pruning would drop it,
+    // while a delta-based write needs the matching rows there.
     withDppV2Conf {
       withTempDir { dir =>
         writeFactAndDim(dir)
         val read = sql("SELECT * FROM fact").queryExecution.optimizedPlan.collectFirst {
           case r: DataSourceV2ScanRelation => r
         }.getOrElse(fail("expected a DataSourceV2ScanRelation"))
-        val rowLevelTable = RowLevelOperationTable(
-          new RowLevelOperationOnlyTable(read.relation.table), new DeleteOnlyOperation)
-        val rowLevelRead = read.copy(relation = read.relation.copy(table = rowLevelTable))
-        assert(rowLevelRead.runtimeFilterAttrs.nonEmpty)
-        val idAttr = rowLevelRead.output.find(_.name == "id").getOrElse(fail("expected id"))
-        val cond = EqualTo(idAttr, Literal(5L))
-        val replaceData = ReplaceData(rowLevelRead.relation, cond, Filter(Not(cond), rowLevelRead),
-          read.relation, ReplaceDataProjections(
-            ProjectingInternalRow(read.schema, read.output.indices), None),
-          groupFilterCondition = Some(cond))
-        // The rule's pattern matches this plan, so only the guard for a built-in file scan keeps
-        // it from injecting a group filter.
-        assert(GroupBasedRowLevelOperation.unapply(replaceData).exists(_._4 eq rowLevelRead))
         val noOptimization = new Rule[LogicalPlan] {
           override def apply(plan: LogicalPlan): LogicalPlan = plan
         }
-        val filtered = new RowLevelOperationRuntimeGroupFiltering(noOptimization)(replaceData)
-        assert(filtered === replaceData, s"expected no group filter, got:\n$filtered")
+        Seq[RowLevelOperation](new DeleteOnlyOperation, new DeleteOnlyDeltaOperation).foreach {
+          operation =>
+            val rowLevelTable = RowLevelOperationTable(
+              new RowLevelOperationOnlyTable(read.relation.table), operation)
+            val rowLevelRead = read.copy(relation = read.relation.copy(table = rowLevelTable))
+            assert(rowLevelRead.runtimeFilterAttrs.nonEmpty)
+            val idAttr = rowLevelRead.output.find(_.name == "id").getOrElse(fail("expected id"))
+            val cond = EqualTo(idAttr, Literal(5L))
+            val query = Filter(Not(cond), rowLevelRead)
+            val projection = ProjectingInternalRow(read.schema, read.output.indices)
+            val write = operation match {
+              case _: SupportsDelta =>
+                WriteDelta(rowLevelRead.relation, cond, query, read.relation,
+                  WriteDeltaProjections(None, projection, None), groupFilterCondition = Some(cond))
+              case _ =>
+                ReplaceData(rowLevelRead.relation, cond, query, read.relation,
+                  ReplaceDataProjections(projection, None), groupFilterCondition = Some(cond))
+            }
+            // The rule's patterns match this plan, so only the guard for a built-in file scan
+            // keeps it from injecting a group filter.
+            assert(GroupBasedRowLevelOperation.unapply(write).exists(_._4 eq rowLevelRead) ||
+              DeltaBasedRowLevelOperation.unapply(write).exists(_._4 eq rowLevelRead))
+            val filtered = new RowLevelOperationRuntimeGroupFiltering(noOptimization)(write)
+            assert(filtered === write, s"expected no group filter, got:\n$filtered")
+        }
       }
     }
   }
@@ -892,6 +1000,15 @@ private class DeleteOnlyOperation extends RowLevelOperation {
     throw new UnsupportedOperationException("not read in this test")
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder =
     throw new UnsupportedOperationException("not written in this test")
+}
+
+private class DeleteOnlyDeltaOperation extends SupportsDelta {
+  override def command(): RowLevelOperation.Command = RowLevelOperation.Command.DELETE
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
+    throw new UnsupportedOperationException("not read in this test")
+  override def newWriteBuilder(info: LogicalWriteInfo): DeltaWriteBuilder =
+    throw new UnsupportedOperationException("not written in this test")
+  override def rowId(): Array[NamedReference] = Array(FieldReference.column("id"))
 }
 
 class DataSourceV2FileSourceDPPSuiteAEOff extends DataSourceV2FileSourceDPPSuiteBase

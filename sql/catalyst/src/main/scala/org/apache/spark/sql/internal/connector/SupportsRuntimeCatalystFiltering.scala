@@ -42,9 +42,11 @@ trait SupportsRuntimeCatalystFiltering extends Scan {
   /**
    * Returns attributes this scan can be filtered by at runtime.
    *
-   * Spark will call [[planInputPartitionsWithRuntimeFilters]] if it can derive a runtime filter
-   * for any of these attributes. Each reference must resolve against the scan relation output
-   * when Spark builds it. Attributes pruned out of [[Scan.readSchema]] fail to resolve.
+   * Spark hands the runtime filters it derives for any of these attributes to
+   * [[planInputPartitionsWithRuntimeFilters]]. A scan whose classes do not declare that method gets
+   * them through the deprecated [[filter]] instead (see [[filter]]). Each reference must resolve
+   * against the scan relation output when Spark builds it. Attributes pruned out of
+   * [[Scan.readSchema]] fail to resolve.
    *
    * The scan may prune conservatively and return rows that fail a runtime filter: the join a
    * dynamic partition pruning filter was derived from drops them, a row-level operation evaluates
@@ -88,14 +90,15 @@ trait SupportsRuntimeCatalystFiltering extends Scan {
    * would without them.
    *
    * Spark calls this method at execution time for every scan node that has runtime filters, with
-   * the ones that survive screening. The array may be empty, which applies no runtime filter. The
-   * partitions it returns replace the ones that scan node would otherwise have read. Spark may also
-   * call `Batch.planInputPartitions()` on the same scan, so neither method may assume it is the
-   * only one used. One scan instance can back several scan nodes (e.g. the two branches of a
-   * group-based UPDATE), each with its own runtime filters, so an implementation must derive its
-   * result from the given expressions alone and must not carry state over from a previous call. A
-   * group-based scan whose write replaces the groups that were read records what each call
-   * returned; a scan node without runtime filters reads what `planInputPartitions()` returns.
+   * the ones that survive screening, unless the scan's classes do not declare it (see [[filter]]).
+   * The array may be empty, which applies no runtime filter. The partitions it returns replace the
+   * ones that scan node would otherwise have read. Spark may also call
+   * `Batch.planInputPartitions()` on the same scan, so neither method may assume it is the only one
+   * used. One scan instance can back several scan nodes (e.g. the two branches of a group-based
+   * UPDATE), each with its own runtime filters, so an implementation must derive its result from
+   * the given expressions alone and must not carry state over from a previous call. A group-based
+   * scan whose write replaces the groups that were read records what each call returned; a scan
+   * node without runtime filters reads what `planInputPartitions()` returns.
    *
    * Spark currently tracks runtime-filter eligibility by root attribute. If [[filterAttributes]]
    * returns a nested reference, an expression may access another nested field under the same root.
@@ -122,12 +125,15 @@ trait SupportsRuntimeCatalystFiltering extends Scan {
   }
 
   /**
-   * Filters this scan with runtime Catalyst expressions, the method Spark 4.3 called. A scan that
-   * implements only this keeps working through the default of
-   * [[planInputPartitionsWithRuntimeFilters]]; a new scan implements that method instead. A Scala
-   * scan compiled against this version should implement that method as well: Spark cannot tell such
-   * a scan from a new one, so it plans the scan again when screening removes every runtime filter,
-   * where Spark 4.3 read the partitions it had planned.
+   * Filters this scan with runtime Catalyst expressions, the method Spark 4.3 called. A scan whose
+   * classes do not declare [[planInputPartitionsWithRuntimeFilters]], such as one built against
+   * Spark 4.3 or a Java class that overrides only this, still gets its screened runtime filters
+   * here, as in Spark 4.3, and reads the partitions it planned when screening removes every runtime
+   * filter, provided the classes named in its public method signatures can be loaded. A Scala scan
+   * compiled against this version gets a forwarder for that method, so Spark takes it for a new
+   * scan and calls the default, which calls this method when a filter survives screening but plans
+   * the scan again when screening removes every runtime filter. Such a scan should implement
+   * [[planInputPartitionsWithRuntimeFilters]], as a new scan does.
    */
   @deprecated("Implement planInputPartitionsWithRuntimeFilters instead", "4.4.0")
   def filter(expressions: Array[Expression]): Unit =
