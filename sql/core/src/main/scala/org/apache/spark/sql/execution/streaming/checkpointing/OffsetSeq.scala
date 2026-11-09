@@ -209,7 +209,8 @@ object OffsetSeqMetadata extends Logging {
     DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER,
     ALLOW_EXCEPT_ON_STREAMING_DATAFRAME,
     REGEX_PATTERN_COST_ESTIMATE_VERSION,
-    AVOID_DOUBLE_FILTER_EVAL
+    AVOID_DOUBLE_FILTER_EVAL,
+    AVOID_DOUBLE_FILTER_EVAL_FOR_PYTHON_UDF
   )
 
   /**
@@ -283,7 +284,8 @@ object OffsetSeqMetadata extends Logging {
     STATEFUL_OPERATOR_ALWAYS_NULLABLE_OUTPUT.key -> "false",
     DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER.key -> "false",
     ALLOW_EXCEPT_ON_STREAMING_DATAFRAME.key -> "true",
-    REGEX_PATTERN_COST_ESTIMATE_VERSION.key -> "0"
+    REGEX_PATTERN_COST_ESTIMATE_VERSION.key -> "0",
+    AVOID_DOUBLE_FILTER_EVAL_FOR_PYTHON_UDF.key -> "false"
   )
 
   /**
@@ -341,6 +343,22 @@ object OffsetSeqMetadata extends Logging {
       numPartitions: Int): OffsetSeqMetadataV2 = {
     val conf = metadata.conf.updated(SHUFFLE_PARTITIONS.key, numPartitions.toString)
     metadata.copy(conf = conf)
+  }
+
+  /**
+   * Sets the values of the metadata in `conf`, as `setSessionConf` does, without logging them: for
+   * a copy of the configuration of a query, which `setSessionConf` sets with them later.
+   */
+  def setConfWithoutLogging(metadata: OffsetSeqMetadataBase, conf: SQLConf): Unit = {
+    val keys = relevantSQLConfs.map(entry => entry.key -> entry.key) ++
+      rebindSQLConfsOffsetLogToSession.map { case (inOffsetLog, inSession) =>
+        inOffsetLog.key -> inSession.key
+      }
+    keys.foreach { case (keyInOffsetLog, keyInSession) =>
+      metadata.conf.get(keyInOffsetLog)
+        .orElse(defaultValueForMissingConf(metadata, keyInOffsetLog))
+        .foreach(conf.setConfString(keyInSession, _))
+    }
   }
 
   /** Set the SparkSession configuration with the values in the metadata */

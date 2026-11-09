@@ -18,12 +18,13 @@
 package org.apache.spark.sql.connect.ml
 
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.connect.proto
 import org.apache.spark.ml.{Model, Transformer}
 import org.apache.spark.ml.feature.{RFormula, RFormulaModel, RFormulaModelTestHelper, VectorAssembler}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable}
+import org.apache.spark.ml.util.{DefaultParamsWritable, MLReadable, MLReader}
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.connect.SparkConnectTestUtils
 import org.apache.spark.sql.types.StructType
@@ -40,7 +41,25 @@ class UnregisteredModel(override val uid: String)
   override def copy(extra: ParamMap): UnregisteredModel = defaultCopy(extra)
 }
 
-object UnregisteredModel extends DefaultParamsReadable[UnregisteredModel]
+object UnregisteredModel extends MLReadable[UnregisteredModel] {
+
+  val readCalls = new AtomicInteger()
+
+  override def read: MLReader[UnregisteredModel] = {
+    readCalls.incrementAndGet()
+    new MLReader[UnregisteredModel] {
+      override def load(path: String): UnregisteredModel = {
+        // Read metadata directly so DefaultParamsReader's allowlist check cannot mask a regression.
+        val uid = sparkSession.read
+          .json(new File(path, "metadata").getAbsolutePath)
+          .select("uid")
+          .head()
+          .getString(0)
+        new UnregisteredModel(uid)
+      }
+    }
+  }
+}
 
 class MLClassLoadingSuite extends MLHelper {
 
@@ -116,20 +135,24 @@ class MLClassLoadingSuite extends MLHelper {
     withSavedModel(stage) { path =>
       val nestedPath = new File(path, s"pipelineModel/stages/0_${stage.uid}").getAbsolutePath
       MLHandler.currentSessionHolder.remove()
+      val readCallsBefore = UnregisteredModel.readCalls.get()
       val model = UnregisteredModel.load(nestedPath)
       assert(model.uid == stage.uid)
+      assert(UnregisteredModel.readCalls.get() == readCallsBefore + 1)
       val transformers = MLUtils.loadOperators(classOf[Transformer])
       assert(!transformers.contains(classOf[UnregisteredModel].getName))
     }
   }
 
-  test("reject an RFormulaModel with a non-allowlisted nested stage") {
+  test("reject a non-allowlisted nested stage before invoking its reader") {
     withSavedModel(new UnregisteredModel("stageFixture")) { path =>
+      val readCallsBefore = UnregisteredModel.readCalls.get()
       val error = intercept[MlUnsupportedException] {
         readModel(path)
       }
       assert(error.getMessage.contains(classOf[UnregisteredModel].getName))
       assert(error.getMessage.contains("not in the allowlist"))
+      assert(UnregisteredModel.readCalls.get() == readCallsBefore)
     }
   }
 }
