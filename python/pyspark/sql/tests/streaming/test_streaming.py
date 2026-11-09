@@ -333,11 +333,17 @@ class StreamingTestsMixin:
         )
         try:
             self.assertTrue(q.isActive)
-            try:
+            with self.assertRaises(PySparkTypeError) as pe:
                 q.awaitTermination("hello")
-                self.fail("Expected a type exception")
-            except TypeError:
-                pass
+            self.check_error(
+                pe.exception,
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "timeout",
+                    "expected_type": "int or float",
+                    "arg_type": "str",
+                },
+            )
             now = time.time()
             # test should take at least 2 seconds
             res = q.awaitTermination(2.6)
@@ -420,11 +426,17 @@ class StreamingTestsMixin:
         )
         try:
             self.assertTrue(q.isActive)
-            try:
+            with self.assertRaises(PySparkTypeError) as pe:
                 self.spark.streams.awaitAnyTermination("hello")
-                self.fail("Expected a type exception")
-            except TypeError:
-                pass
+            self.check_error(
+                pe.exception,
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "timeout",
+                    "expected_type": "int or float",
+                    "arg_type": "str",
+                },
+            )
             now = time.time()
             # test should take at least 2 seconds
             res = self.spark.streams.awaitAnyTermination(2.6)
