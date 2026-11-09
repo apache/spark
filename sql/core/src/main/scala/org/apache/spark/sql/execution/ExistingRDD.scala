@@ -205,11 +205,29 @@ object LogicalRDD extends Logging {
 
     val (stats, constraints) = rewriteStatsAndConstraints(logicalPlan, optimizedPlan)
 
+    // The executed plan can output other attributes than `logicalPlan.output`, e.g. when
+    // `RemoveRedundantAliases` removes a same-name root alias. So map its partitioning and ordering
+    // onto `logicalPlan.output` by position, and drop a partitioning that still refers to other
+    // attributes, e.g. the input attributes of `SerializeFromObjectExec`.
+    val toOutput = AttributeMap(executedPlan.output.zip(logicalPlan.output))
+    def remap[E <: Expression](e: E): E =
+      e.transform { case a: Attribute => toOutput.getOrElse(a, a) }.asInstanceOf[E]
+    val partitioning = firstLeafPartitioning(executedPlan.outputPartitioning) match {
+      case p: Expression =>
+        val remapped = remap(p)
+        if (remapped.references.subsetOf(AttributeSet(logicalPlan.output))) {
+          remapped
+        } else {
+          UnknownPartitioning(p.numPartitions)
+        }
+      case p => p
+    }
+
     LogicalRDD(
       originDataset.logicalPlan.output,
       rdd,
-      firstLeafPartitioning(executedPlan.outputPartitioning),
-      executedPlan.outputOrdering,
+      partitioning,
+      executedPlan.outputOrdering.map(remap),
       isStreaming,
       None
     )(originDataset.sparkSession, stats, constraints, fromCheckpoint)
