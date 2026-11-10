@@ -776,6 +776,7 @@ class Analyzer(
       new ResolveFetchCursor(catalogManager) ::
       new ResolveCursors() ::
       ExtractWindowExpressions ::
+      ResolveDeferredHaving ::
       GlobalAggregates ::
       ResolveAggregateFunctions ::
       ResolveQualify ::
@@ -1049,7 +1050,7 @@ class Analyzer(
 
       val windowOutputSet = AttributeSet(
         aggregate.aggregateExpressions.zip(newChild.output).collect {
-          case (expr, output) if expr.containsPattern(WINDOW_EXPRESSION) => output
+          case (expr, output) if expr.exists(_.isInstanceOf[WindowExpression]) => output
         })
       val filter = Filter(newCond, newChild)
       val canDeferHaving =
@@ -5108,6 +5109,7 @@ private[analysis] case class DeferredHaving(
     child: LogicalPlan) extends OrderPreservingUnaryNode {
   /** Preserves the child output while HAVING placement is deferred. */
   override def output: Seq[Attribute] = child.output
+  override lazy val resolved: Boolean = false
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_HAVING)
 
   /** Rebuilds the marker after its child is transformed. */
@@ -5116,20 +5118,36 @@ private[analysis] case class DeferredHaving(
 }
 
 /**
- * Rule that handles resolved `UnresolvedHaving` and `DeferredHaving` nodes. It's placed outside the
- * main batch to avoid conflicts with other rules that resolve `UnresolvedHaving` in that batch.
+ * Places a deferred grouping-analytics HAVING immediately after window extraction.
+ */
+object ResolveDeferredHaving extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    plan.resolveOperatorsWithPruning(_.containsPattern(UNRESOLVED_HAVING), ruleId) {
+      case DeferredHaving(condition, child) if condition.resolved && child.resolved =>
+        ResolveUnresolvedHaving.placeFilterBeforeWindow(condition, child)
+    }
+  }
+}
+
+/**
+ * Rule that handles resolved `UnresolvedHaving` nodes. It's placed outside the main batch to avoid
+ * conflicts with other rules that resolve `UnresolvedHaving` in that batch.
  */
 object ResolveUnresolvedHaving extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsWithPruning(_.containsPattern(UNRESOLVED_HAVING), ruleId) {
       case u @ UnresolvedHaving(havingCondition, child)
         if havingCondition.resolved && child.resolved =>
-        val filter = Filter(condition = havingCondition, child = child)
-        insertFilterBeforeWindow(filter).getOrElse(filter)
-      case d @ DeferredHaving(condition, child) if d.resolved =>
-        val filter = Filter(condition = condition, child = child)
-        insertFilterBeforeWindow(filter).getOrElse(filter)
+        placeFilterBeforeWindow(havingCondition, child)
     }
+  }
+
+  /** Places a resolved HAVING filter according to the configured window-chain behavior. */
+  private[analysis] def placeFilterBeforeWindow(
+      condition: Expression,
+      child: LogicalPlan): LogicalPlan = {
+    val filter = Filter(condition = condition, child = child)
+    insertFilterBeforeWindow(filter).getOrElse(filter)
   }
 
   /**
