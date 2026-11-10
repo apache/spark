@@ -41,7 +41,8 @@ import org.apache.spark.sql.execution.{CollectLimitExec, CollectTailExec, DoNotC
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.sql.util.CloseableIterator
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * Handle ExecutePlanRequest where the operation to handle is of `Plan` type.
@@ -114,7 +115,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       maxBatchSize: Long,
       timeZoneId: String,
       errorOnDuplicatedFieldNames: Boolean,
-      largeVarTypes: Boolean): Iterator[InternalRow] => Iterator[Batch] = { rows =>
+      largeVarTypes: Boolean): Iterator[InternalRow] => CloseableIterator[Batch] = { rows =>
     val batches = ArrowConverters.toBatchWithSchemaIterator(
       rows,
       schema,
@@ -123,7 +124,11 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       timeZoneId,
       errorOnDuplicatedFieldNames,
       largeVarTypes)
-    batches.map(b => b -> batches.rowCountInLastBatch)
+    new CloseableIterator[Batch] {
+      override def hasNext: Boolean = batches.hasNext
+      override def next(): Batch = batches.next() -> batches.rowCountInLastBatch
+      override def close(): Unit = batches.close()
+    }
   }
 
   def processAsArrowBatches(
@@ -204,22 +209,28 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       }
       numSent += 1
     }
+    // On the driver, no task completion listener closes the converter, so close it here in case
+    // the conversion or sending fails, e.g. when the execution is interrupted.
+    def sendLocalRows(rows: Iterator[InternalRow]): Unit = {
+      val batches = converter(rows)
+      Utils.tryWithSafeFinally {
+        var offset = 0L
+        batches.foreach { case (bytes, count) =>
+          sendBatch(bytes, count, offset)
+          offset += count
+        }
+      } {
+        batches.close()
+      }
+    }
     def sendCollectedRows(rows: Array[InternalRow]): Unit = {
       executePlan.eventsManager.postFinished(Some(rows.length))
-      var offset = 0L
-      converter(rows.iterator).foreach { case (bytes, count) =>
-        sendBatch(bytes, count, offset)
-        offset += count
-      }
+      sendLocalRows(rows.iterator)
     }
     dataframe.queryExecution.executedPlan match {
       case LocalTableScanExec(_, rows, _, _) =>
         executePlan.eventsManager.postFinished(Some(rows.length))
-        var offset = 0L
-        converter(rows.iterator).foreach { case (bytes, count) =>
-          sendBatch(bytes, count, offset)
-          offset += count
-        }
+        sendLocalRows(rows.iterator)
       case collectLimit: CollectLimitExec =>
         SQLExecution.withNewExecutionId(dataframe.queryExecution, Some("collectLimitArrow")) {
           sendCollectedRows(collectLimit.executeCollect())

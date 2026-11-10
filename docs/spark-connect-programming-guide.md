@@ -84,7 +84,7 @@ libraryDependencies += "org.apache.spark" %% "spark-connect-client-jvm" % "{{sit
 When `spark-sql` is also on the classpath, `SparkSession.builder()` builds a Spark Classic session
 and ignores `remote()`, unless `spark.api.mode` is set to `connect`.
 
-On JDK 17 and later, start the JVM with `--add-opens=java.base/java.nio=ALL-UNNAMED`. Arrow, which
+Start the JVM with `--add-opens=java.base/java.nio=ALL-UNNAMED`. Arrow, which
 the client uses for results, requires it; without it, the first `createDataFrame` or `collect`
 fails with `sun.misc.Unsafe or java.nio.DirectByteBuffer.<init>(long, int) not available`.
 `spark-submit` and `spark-shell --remote` add the option automatically.
@@ -130,7 +130,7 @@ one server running across runs, see
 
 ### From a Spark distribution
 
-[Download Spark](https://spark.apache.org/downloads.html) (Java 17 or later is required) and run:
+[Download Spark](https://spark.apache.org/downloads.html) (Java 21 or later is required) and run:
 
 ```bash
 ./sbin/start-connect-server.sh

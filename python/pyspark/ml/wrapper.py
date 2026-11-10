@@ -66,10 +66,9 @@ class JavaWrapper:
         try:
             from pyspark.core.context import SparkContext
 
-            if SparkContext._active_spark_context and self._java_obj is not None:
-                SparkContext._active_spark_context._gateway.detach(  # type: ignore[union-attr]
-                    self._java_obj
-                )
+            sc = SparkContext._active_spark_context
+            if sc is not None and sc._gateway is not None and self._java_obj is not None:
+                sc._gateway.detach(self._java_obj)
         except Exception:
             pass
 

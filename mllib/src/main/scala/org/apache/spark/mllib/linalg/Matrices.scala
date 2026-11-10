@@ -621,7 +621,7 @@ class SparseMatrix @Since("1.3.0") (
     case _ => false
   }
 
-  override def hashCode(): Int = asBreeze.hashCode
+  override def hashCode(): Int = asML.hashCode
 
   private[mllib] def asBreeze: BM[Double] = {
      if (!isTransposed) {

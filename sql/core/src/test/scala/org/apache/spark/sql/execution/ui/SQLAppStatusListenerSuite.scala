@@ -49,7 +49,7 @@ import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, Par
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, Write, WriteBuilder}
 import org.apache.spark.sql.execution.{LeafExecNode, QueryExecution, SparkPlanInfo, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
-import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, PlannedScan}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
@@ -836,7 +836,8 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     val statusStore = spark.sharedState.statusStore
 
     val schema = new StructType().add("i", "int").add("j", "int")
-    val physicalPlan = BatchScanExec(toAttributes(schema), new CustomMetricScanBuilder(), Seq.empty,
+    val physicalPlan = BatchScanExec(toAttributes(schema),
+      new PlannedScan(new CustomMetricScanBuilder()), Seq.empty,
       table = new TestLocalScanTable("fake"))
     val dummyQueryExecution = new QueryExecution(spark, LocalRelation()) {
       override lazy val sparkPlan = physicalPlan
@@ -864,8 +865,9 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     val statusStore = spark.sharedState.statusStore
 
     val schema = new StructType().add("i", "int").add("j", "int")
-    val physicalPlan = BatchScanExec(toAttributes(schema), new CustomDriverMetricScanBuilder(),
-      Seq.empty, table = new TestLocalScanTable("fake"))
+    val physicalPlan = BatchScanExec(toAttributes(schema),
+      new PlannedScan(new CustomDriverMetricScanBuilder()), Seq.empty,
+      table = new TestLocalScanTable("fake"))
     val dummyQueryExecution = new QueryExecution(spark, LocalRelation()) {
       override lazy val sparkPlan = physicalPlan
       override lazy val executedPlan = physicalPlan

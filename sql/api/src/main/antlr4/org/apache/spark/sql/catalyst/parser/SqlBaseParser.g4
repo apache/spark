@@ -61,6 +61,11 @@ options { tokenVocab = SqlBaseLexer; }
   public boolean single_character_pipe_operator_enabled = true;
 
   /**
+   * When true, the FILE data type is recognized and supported.
+   */
+  public boolean file_type_enabled = false;
+
+  /**
    * Checks if the next token after PIPE can start an operator pipe right side.
    * This disambiguates between bitwise OR (|) in expressions and pipe operator (|) in queries.
    * Used to maintain backwards compatibility when allowing both | and |> as pipe operators.
@@ -871,6 +876,8 @@ createTableClauses
      skewSpec |
      clusterBySpec |
      bucketSpec |
+     writeDistributionSpec |
+     writeOrderingSpec |
      rowFormat |
      createFileFormat |
      locationSpec |
@@ -1589,6 +1596,24 @@ transformArgument
     | constant
     ;
 
+writeDistributionSpec
+    : DISTRIBUTED BY PARTITION
+    ;
+
+writeOrderingSpec
+    : LOCALLY? ORDERED BY writeOrder
+    | UNORDERED
+    ;
+
+writeOrder
+    : fields+=writeOrderField (COMMA fields+=writeOrderField)*
+    | LEFT_PAREN fields+=writeOrderField (COMMA fields+=writeOrderField)* RIGHT_PAREN
+    ;
+
+writeOrderField
+    : transform direction=(ASC | DESC)? (NULLS nullOrder=(FIRST | LAST))?
+    ;
+
 expression
     : booleanExpression
     ;
@@ -1944,6 +1969,7 @@ nonTrivialPrimitiveType
     | TIME (LEFT_PAREN precision=integerValue RIGHT_PAREN)? (withoutTimeZone)?
     | GEOGRAPHY LEFT_PAREN (srid=integerValue | any=ANY) RIGHT_PAREN
     | GEOMETRY LEFT_PAREN (srid=integerValue | any=ANY) RIGHT_PAREN
+    | {file_type_enabled}? FILE (fileTypeMode=EXTERNAL)?
     ;
 
 trivialPrimitiveType
@@ -2496,6 +2522,7 @@ ansiNonReserved
     | DIRECTORY
     | DISTANCE
     | DISTRIBUTE
+    | DISTRIBUTED
     | DIV
     | DO
     | DOUBLE
@@ -2519,6 +2546,7 @@ ansiNonReserved
     | EXTERNAL
     | EXTRACT
     | FIELDS
+    | FILE
     | FILEFORMAT
     | FIRST
     | FLOAT
@@ -2583,6 +2611,7 @@ ansiNonReserved
     | LIST
     | LOAD
     | LOCAL
+    | LOCALLY
     | LOCATION
     | LOCK
     | LOCKS
@@ -2626,6 +2655,7 @@ ansiNonReserved
     | OPEN
     | OPTION
     | OPTIONS
+    | ORDERED
     | ORDINALITY
     | OUT
     | OUTPUTFORMAT
@@ -2751,6 +2781,7 @@ ansiNonReserved
     | UNIFORM
     | UNLOCK
     | UNNEST
+    | UNORDERED
     | UNPIVOT
     | UNSET
     | UNTIL
@@ -2932,6 +2963,7 @@ nonReserved
     | DISTANCE
     | DISTINCT
     | DISTRIBUTE
+    | DISTRIBUTED
     | DIV
     | DO
     | DOUBLE
@@ -2962,6 +2994,7 @@ nonReserved
     | FETCH
     | FILTER
     | FIELDS
+    | FILE
     | FILEFORMAT
     | FIRST
     | FLOAT
@@ -3037,6 +3070,7 @@ nonReserved
     | LIST
     | LOAD
     | LOCAL
+    | LOCALLY
     | LOCALTIME
     | LOCATION
     | LOCK
@@ -3087,6 +3121,7 @@ nonReserved
     | OPTIONS
     | OR
     | ORDER
+    | ORDERED
     | ORDINALITY
     | OUT
     | OUTER
@@ -3226,6 +3261,7 @@ nonReserved
     | UNKNOWN
     | UNLOCK
     | UNNEST
+    | UNORDERED
     | UNPIVOT
     | UNSET
     | UNTIL

@@ -311,10 +311,10 @@ class ResolverGuard(
         checkExpression(asOfJoin.asOfCondition)
       }
       .orElse {
-        checkExpression(asOfJoin.orderExpression)
+        asOfJoin.orderExpression.flatMap(checkExpression)
       }
       .orElse {
-        asOfJoin.toleranceAssertion match {
+        asOfJoin.tolerance match {
           case Some(expression) => checkExpression(expression)
           case None => None
         }

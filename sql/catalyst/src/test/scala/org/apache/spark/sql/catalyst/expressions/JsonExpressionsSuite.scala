@@ -1122,4 +1122,20 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       "JSON_OBJECT_NULL_KEY")
   }
 
+  test("a JSON schema argument cannot bring in the FILE type when it is disabled") {
+    val schema = Literal(
+      """{"type":"struct","fields":[{"name":"f","type":"file","nullable":true,"metadata":{}}]}""")
+    withSQLConf(SQLConf.FILE_TYPE_ENABLED.key -> "false") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          ExprUtils.evalTypeExpr(schema)
+        },
+        condition = "UNSUPPORTED_FILE_TYPE",
+        parameters = Map.empty)
+    }
+    withSQLConf(SQLConf.FILE_TYPE_ENABLED.key -> "true") {
+      assert(ExprUtils.evalTypeExpr(schema) ===
+        StructType(StructField("f", FileType.external) :: Nil))
+    }
+  }
 }

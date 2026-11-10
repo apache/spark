@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SpecificInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorsUtils, StatePartitionKeyExtractorFactory, StreamingAggregationStateManager}
 import org.apache.spark.sql.streaming.StreamTest
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder, StructField, StructType}
 
 class StreamingAggregationStateManagerSuite extends StreamTest {
   // ============================ fields and method for test data ============================
@@ -124,6 +126,41 @@ class StreamingAggregationStateManagerSuite extends StreamTest {
 
     // state manager should return row which is same as input row regardless of format version
     assert(inputRow === stateManager.get(memoryStateStore, keyRow))
+  }
+
+  StreamingAggregationStateManager.supportedVersions.foreach { version =>
+    test(s"StateManager v$version - eviction iterator removes a row only on next") {
+      val watermarkMetadata = new MetadataBuilder()
+        .putLong(EventTimeWatermark.delayKey, 10)
+        .build()
+      val schema = new StructType()
+        .add(StructField("eventTime", LongType, nullable = false, metadata = watermarkMetadata))
+        .add(StructField("value", IntegerType, nullable = false))
+      val attributes = toAttributes(schema)
+      val stateManager = StreamingAggregationStateManager.createStateManager(
+        keyExpressions = Seq(attributes.head),
+        inputRowAttributes = attributes,
+        stateFormatVersion = version)
+      val store = new MemoryStateStore()
+      val inputRow = UnsafeProjection.create(schema)(InternalRow(1000L, 1))
+      val key = stateManager.getKey(inputRow).copy()
+      stateManager.put(store, inputRow)
+
+      val evictionIterator = stateManager.evictionIterator(store, Some(1L))
+      assert(evictionIterator.numRowsReadDuringEvictionSoFar === 0)
+      assert(evictionIterator.numRowsRemovedSoFar === 0)
+
+      assert(evictionIterator.hasNext)
+      assert(evictionIterator.hasNext)
+      assert(evictionIterator.numRowsReadDuringEvictionSoFar === 1)
+      assert(evictionIterator.numRowsRemovedSoFar === 0)
+      assert(store.get(key) !== null)
+
+      assert(evictionIterator.next().value === inputRow)
+      assert(evictionIterator.numRowsRemovedSoFar === 1)
+      assert(store.get(key) === null)
+      assert(!evictionIterator.hasNext)
+    }
   }
 
   // ============================ Partition Key Extraction Tests ============================

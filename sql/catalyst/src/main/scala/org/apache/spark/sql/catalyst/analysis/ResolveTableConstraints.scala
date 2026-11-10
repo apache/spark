@@ -18,17 +18,26 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{And, CheckInvariant, EqualNullSafe, Expression, V2ExpressionUtils}
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, V2WriteCommand, WriteDelta}
+import org.apache.spark.sql.catalyst.expressions.{And, Cast, CheckInvariant, EqualNullSafe, Expression, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, RowLevelWrite, V2WriteCommand, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
-import org.apache.spark.sql.catalyst.util.GeneratedColumn
+import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMAND, LAMBDA_VARIABLE}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, GeneratedColumn, StoredExpressionText}
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.catalog.{CatalogManager, GenerationExpression}
 import org.apache.spark.sql.connector.catalog.constraints.Check
 import org.apache.spark.sql.connector.write.RowLevelOperation
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 
-class ResolveTableConstraints(val catalogManager: CatalogManager) extends Rule[LogicalPlan] {
+/**
+ * @param analyze Analyzes a plan under the active SQLConf. The check of a generated column goes
+ *                through it, so that the settings its stored text is read under cover its analysis
+ *                without applying to the query of the write.
+ */
+class ResolveTableConstraints(
+    val catalogManager: CatalogManager,
+    analyze: LogicalPlan => LogicalPlan) extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     _.containsPattern(COMMAND), ruleId) {
@@ -76,7 +85,8 @@ class ResolveTableConstraints(val catalogManager: CatalogManager) extends Rule[L
   private def buildCatalystExpression(c: Check): Expression = {
     Option(c.predicate())
       .flatMap(V2ExpressionUtils.toCatalyst)
-      .getOrElse(catalogManager.v1SessionCatalog.parser.parseExpression(c.predicateSql()))
+      .getOrElse(StoredExpressionFunctions.qualifyBuiltinFunctions(
+        catalogManager.v1SessionCatalog.parser.parseExpression(c.predicateSql())))
   }
 
   /**
@@ -92,6 +102,13 @@ class ResolveTableConstraints(val catalogManager: CatalogManager) extends Rule[L
       return Seq.empty
     }
 
+    // A DELETE writes no new generated value, so the rows it carries have nothing to check.
+    v2Write match {
+      case w: RowLevelWrite if w.operation.command() == RowLevelOperation.Command.DELETE =>
+        return Seq.empty
+      case _ =>
+    }
+
     val resolver = catalogManager.v1SessionCatalog.conf.resolver
     val autoFilledGenCols = r.output
       .filter(GeneratedColumn.isAutoFilledGeneratedColumn)
@@ -103,34 +120,62 @@ class ResolveTableConstraints(val catalogManager: CatalogManager) extends Rule[L
       Option(col.columnGenerationExpression())
         .filter(_ => !autoFilledGenCols.exists(n => resolver(n, col.name)))
         .map { genExpr =>
-          val catalystExpr = buildGenerationCatalystExpression(genExpr)
+          val catalystExpr = buildGenerationCatalystExpression(r, col.name, genExpr)
           val colRef = UnresolvedAttribute.quoted(col.name)
           val columnExtractors = Seq(col.name -> colRef)
           val genExprSql = Option(genExpr.getSql()).getOrElse(catalystExpr.sql)
-          CheckInvariant(
-            EqualNullSafe(colRef, catalystExpr),
+          // Compare with the value an auto-fill stores, which store assignment casts to the column
+          // type. Otherwise, the comparison can cast the provided value to the expression type.
+          val colType = CharVarcharUtils.replaceCharVarcharWithString(col.dataType())
+          def check(expr: Expression): Expression = CheckInvariant(
+            EqualNullSafe(
+              colRef, Cast(expr, colType, Option(conf.sessionLocalTimeZone), ansiEnabled = true)),
             columnExtractors,
             "Generated Column",
             s"${col.name} <=> $genExprSql")
+          // Analyze the check under the settings an auto-filled value is analyzed under, so that a
+          // row Spark auto-filled passes it when a later write carries it.
+          StoredExpressionText.analyze(
+            check(catalystExpr),
+            check(Option(genExpr.getSql).map(StoredExpressionText.parseWithSessionAnsi)
+              .getOrElse(catalystExpr)),
+            v2Write.query.output,
+            analyze)
         }
     }.toSeq
   }
 
   /**
-   * Convert a V2 GenerationExpression to a Catalyst expression.
-   * Try the V2 expression first, fall back to parsing the SQL string.
+   * Convert a V2 GenerationExpression to a Catalyst expression. Read the SQL string first, as an
+   * auto-filled value does, and fall back to the V2 expression.
    */
-  private def buildGenerationCatalystExpression(genExpr: GenerationExpression): Expression = {
-    Option(genExpr.getExpression)
-      .flatMap(V2ExpressionUtils.toCatalyst)
-      .getOrElse(catalogManager.v1SessionCatalog.parser.parseExpression(genExpr.getSql))
+  private def buildGenerationCatalystExpression(
+      r: DataSourceV2Relation,
+      colName: String,
+      genExpr: GenerationExpression): Expression = {
+    Option(genExpr.getSql)
+      .map(StoredExpressionText.parse)
+      .orElse(Option(genExpr.getExpression).flatMap(V2ExpressionUtils.toCatalyst))
+      .getOrElse {
+        val operation = s"a value for the generated column ${toSQLId(colName)}, because " +
+          s"Spark cannot convert its expression ${genExpr.getExpression}"
+        // A relation of a TableProvider has no catalog and no identifier.
+        throw ((r.catalog, r.identifier) match {
+          case (Some(catalog), Some(ident)) =>
+            QueryCompilationErrors.unsupportedTableOperationError(catalog, ident, operation)
+          case _ => QueryCompilationErrors.unsupportedTableOperationError(r.table, operation)
+        })
+      }
   }
 
   private def buildColumnExtractors(
       expr: Expression,
       columnExtractors: mutable.Map[String, Expression]): Unit = {
     expr match {
-      case u: UnresolvedExtractValue =>
+      // An extraction that refers to a lambda variable, such as `x[0]` in
+      // `forall(a, x -> x[0] > 0)`, cannot be an extractor: the lambda variable does not resolve
+      // outside its lambda function.
+      case u: UnresolvedExtractValue if !u.containsPattern(LAMBDA_VARIABLE) =>
         // When extracting a value from a Map or Array type, we display only the specific extracted
         // value rather than the entire Map or Array structure for clarity and readability.
         columnExtractors(u.sql) = u

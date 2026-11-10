@@ -110,6 +110,11 @@ public final class OffHeapColumnVector extends WritableColumnVector {
     super.close();
   }
 
+  @Override
+  public boolean isFree() {
+    return nulls == 0 && data == 0 && lengthData == 0 && offsetData == 0;
+  }
+
   //
   // APIs dealing with nulls
   //
@@ -699,7 +704,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   }
 
   @Override
-  public OffHeapColumnVector reserveNewColumn(int capacity, DataType type) {
+  protected OffHeapColumnVector reserveNewInternalColumn(int capacity, DataType type) {
     return new OffHeapColumnVector(capacity, type);
   }
 }

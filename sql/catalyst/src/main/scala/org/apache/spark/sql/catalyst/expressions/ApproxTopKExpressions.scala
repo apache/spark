@@ -108,12 +108,16 @@ case class ApproxTopKEstimate(state: Expression, k: Expression)
     // null check
     ApproxTopK.checkExpressionNotNull(k, "k")
     // eval
+    val kVal = right.eval(input).asInstanceOf[Int]
+    // Validate `k` before short-circuiting on a NULL state, so that an invalid `k` is
+    // rejected regardless of whether the sketch happens to be NULL.
+    ApproxTopK.checkK(kVal)
     val stateEval = left.eval(input)
-    val kEval = right.eval(input)
+    if (stateEval == null) {
+      return null
+    }
     val dataSketchBytes = stateEval.asInstanceOf[InternalRow].getBinary(0)
     val maxItemsTrackedVal = stateEval.asInstanceOf[InternalRow].getInt(1)
-    val kVal = kEval.asInstanceOf[Int]
-    ApproxTopK.checkK(kVal)
     ApproxTopK.checkMaxItemsTracked(maxItemsTrackedVal, kVal)
     val sketchItemType = ApproxTopK.withCollationOf(
       ApproxTopK.DDLToDataType(stateEval.asInstanceOf[InternalRow].getUTF8String(3).toString),
@@ -127,7 +131,11 @@ case class ApproxTopKEstimate(state: Expression, k: Expression)
   override protected def withNewChildrenInternal(newState: Expression, newK: Expression)
   : Expression = copy(state = newState, k = newK)
 
-  override def nullable: Boolean = false
+  // The sketch state is an ordinary nullable input column: `approx_top_k_estimate(NULL, k)`
+  // returns NULL rather than failing, so the result is nullable exactly when the state is.
+  // A sketch produced by `approx_top_k_accumulate` is non-nullable, so the common case is
+  // unchanged.
+  override def nullable: Boolean = state.nullable
 
   override def prettyName: String =
     getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("approx_top_k_estimate")

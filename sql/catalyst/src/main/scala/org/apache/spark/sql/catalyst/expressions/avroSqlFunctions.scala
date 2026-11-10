@@ -58,6 +58,17 @@ import org.apache.spark.util.Utils
     is undefined: it may fail or return arbitrary result.
     To deserialize the data with a compatible and evolved schema, the expected Avro schema can be
     set via the corresponding option.
+    CHAR/VARCHAR come from the spark.sql.catalyst.type property on Avro string fields,
+    and for map keys from spark.sql.catalyst.mapKey.type on the Avro map schema
+    (both written by Spark's Avro writer). Assignment is accepted when CHAR/VARCHAR are
+    first-class (spark.sql.charVarchar.standardSemantics.enabled or
+    spark.sql.preserveCharVarcharTypeInfo). Then STRING values are assigned (CHAR padded).
+    Overflow is a malformed record: FAILFAST fails with EXCEED_LIMIT_LENGTH as the cause;
+    PERMISSIVE returns a struct with every field NULL (NULL for a non-struct schema).
+    When CHAR/VARCHAR are not first-class, CHAR/VARCHAR in the Avro schema are read as
+    STRING without padding or length checks. Avro ENUM symbols are not assigned.
+    CHAR/VARCHAR map-key length checks require
+    spark.sql.charVarchar.standardSemantics.enabled and do not pad or trim.
   """,
   group = "avro_funcs",
   since = "4.0.0"
@@ -191,6 +202,10 @@ case class FromAvro(
        [true]
       > SELECT _FUNC_(s) IS NULL FROM (SELECT NULL AS s);
        [true]
+  """,
+  note = """
+    `_FUNC_` serializes the current string content. It does not pad CHAR values or trim
+    VARCHAR values.
   """,
   group = "avro_funcs",
   since = "4.0.0"

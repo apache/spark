@@ -154,6 +154,33 @@ class MatricesSuite extends SparkMLFunSuite {
     assert(dmx.hashCode === dmx.toSparse.hashCode)
   }
 
+  test("SPARK-60491: Matrix.hashCode depends on the shape and the positions of the entries") {
+    val values = Array(1.0, 2.0, 3.0, 4.0, 5.0, 6.0)
+    // The same values in different shapes.
+    val reshaped = Seq(new DenseMatrix(2, 3, values), new DenseMatrix(3, 2, values),
+      new DenseMatrix(1, 6, values))
+    // Zero matrices in different shapes.
+    val zeros = Seq(DenseMatrix.zeros(2, 3), DenseMatrix.zeros(3, 2), DenseMatrix.zeros(1, 6))
+    // The same values at different positions.
+    val moved = Seq(Array(1.0, 0.0, 2.0), Array(1.0, 2.0, 0.0), Array(0.0, 1.0, 2.0))
+      .map(v => new DenseMatrix(3, 1, v))
+    // All 4 x 4 permutation matrices.
+    val permutations = (0 until 4).permutations.map { rows =>
+      val v = new Array[Double](16)
+      rows.zipWithIndex.foreach { case (i, j) => v(i + 4 * j) = 1.0 }
+      new DenseMatrix(4, 4, v)
+    }.toSeq
+    Seq(reshaped, zeros, moved, permutations).foreach { matrices =>
+      assert(matrices.map(_.hashCode).distinct.length === matrices.length)
+      matrices.foreach { m =>
+        Seq(m.toDenseRowMajor, m.toSparseColMajor, m.toSparseRowMajor).foreach { other =>
+          assert(other === m)
+          assert(other.hashCode === m.hashCode)
+        }
+      }
+    }
+  }
+
   test("matrix indexing and updating") {
     val m = 3
     val n = 2

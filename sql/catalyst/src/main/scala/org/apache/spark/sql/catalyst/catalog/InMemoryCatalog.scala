@@ -441,13 +441,15 @@ class InMemoryCatalog(
       ignoreIfExists: Boolean): Unit = synchronized {
     requireTableExists(db, table)
     val existingParts = catalog(db).tables(table).partitions
-    val parts = toCatalogPartitionSpec(newParts)
+    val allParts = toCatalogPartitionSpec(newParts)
     if (!ignoreIfExists) {
-      val dupSpecs = parts.collect { case p if existingParts.contains(p.spec) => p.spec }
+      val dupSpecs = allParts.collect { case p if existingParts.contains(p.spec) => p.spec }
       if (dupSpecs.nonEmpty) {
         throw new PartitionsAlreadyExistException(db = db, table = table, specs = dupSpecs)
       }
     }
+    // Keep existing partitions untouched, as the Hive metastore does with `ifNotExists`.
+    val parts = allParts.filterNot(p => existingParts.contains(p.spec))
 
     val tableMeta = getTable(db, table)
     val partitionColumnNames = tableMeta.partitionColumnNames

@@ -379,7 +379,7 @@ Using the `sbt` build system as an example, we add the following dependencies to
 libraryDependencies += "org.apache.spark" %% "spark-connect-client-jvm" % "{{site.SPARK_VERSION_SHORT}}"
 ```
 
-Depend on `spark-connect-client-jvm` only, and on JDK 17 and later start the JVM with
+Depend on `spark-connect-client-jvm` only, and start the JVM with
 `--add-opens=java.base/java.nio=ALL-UNNAMED`;
 [Scala dependency](spark-connect-programming-guide.html#scala-dependency) explains both.
 

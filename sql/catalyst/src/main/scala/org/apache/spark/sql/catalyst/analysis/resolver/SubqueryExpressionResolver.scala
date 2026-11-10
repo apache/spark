@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.{
 }
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * [[SubqueryExpressionResolver]] resolves specific [[SubqueryExpression]]s, such as
@@ -54,6 +55,9 @@ class SubqueryExpressionResolver(expressionResolver: ExpressionResolver, resolve
    */
   def resolveScalarSubquery(unresolvedScalarSubquery: ScalarSubquery): Expression = {
     traversals.current.parentOperator match {
+      case _: UnresolvedInlineTable
+          if conf.getConf(SQLConf.INLINE_TABLE_NON_FOLDABLE_EXPRESSIONS_ENABLED) =>
+        throw new ExplicitlyUnsupportedResolverFeature("scalar subqueries in VALUES lists")
       case unresolvedInlineTable: UnresolvedInlineTable =>
         throw QueryCompilationErrors.inlineTableContainsScalarSubquery(unresolvedInlineTable)
       case _ =>
