@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, NoSuchFunctionEx
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.analysis.resolver.ExplicitlyUnsupportedResolverFeature
 import org.apache.spark.sql.catalyst.expressions.{
+  Alias,
   ApplyFunctionExpression,
   Cast,
   Collate,
@@ -384,6 +385,32 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
       Seq(inner), Seq(false), Seq(false), JsonConstructorNullBehavior.Absent, StringType)
     assert(quoted.sql ==
       "JSON_ARRAY(CAST(JSON_ARRAY(1 RETURNING STRING) AS STRING) RETURNING STRING)")
+  }
+
+  test("SPARK-59243: SQL of a spliced aliased child drops the alias") {
+    val inner = JsonArray(
+      Seq(Literal(1)), Seq(false), Seq(false), JsonConstructorNullBehavior.Absent, StringType)
+    val aliased = JsonArray(
+      Seq(Alias(inner, "x")()), Seq(true), Seq(false), JsonConstructorNullBehavior.Absent,
+      StringType)
+    assert(aliased.sql == "JSON_ARRAY(JSON_ARRAY(1 RETURNING STRING) RETURNING STRING)")
+    checkAnswer(sql(s"SELECT ${aliased.sql}"), Row("[[1]]"))
+    val literal = JsonArray(
+      Seq(Alias(Literal("[1]"), "x")()), Seq(true), Seq(true), JsonConstructorNullBehavior.Absent,
+      StringType)
+    assert(literal.sql == "JSON_ARRAY('[1]' FORMAT JSON)")
+    val collated = JsonArray(
+      Seq(Collate(Alias(inner, "x")(), ResolvedCollation("UTF8_LCASE"))), Seq(true), Seq(false),
+      JsonConstructorNullBehavior.Absent, StringType)
+    assert(collated.sql ==
+      "JSON_ARRAY(collate(JSON_ARRAY(1 RETURNING STRING), UTF8_LCASE) FORMAT JSON)")
+    // The column name drops the alias too; a user cast still quotes and keeps it.
+    val df = spark.range(1).select(call_function("json_array", expr("json_array(1)").as("x")))
+    assert(df.columns.toSeq == Seq("JSON_ARRAY(JSON_ARRAY(1))"))
+    checkAnswer(
+      spark.range(1).select(
+        call_function("json_array", expr("CAST(json_array(1) AS STRING)").as("x"))),
+      Row("""["[1]"]"""))
   }
 
   test("emitted SQL reparses and evaluates with raw-vs-quoted semantics preserved") {
