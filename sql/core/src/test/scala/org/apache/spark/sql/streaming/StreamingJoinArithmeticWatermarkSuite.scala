@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.streaming
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
 import org.apache.spark.sql.functions._
@@ -59,5 +59,29 @@ class StreamingJoinArithmeticWatermarkSuite extends StreamTest {
           CheckNewAnswer(Row(1, 5L, 100L)))
       }
     }
+  }
+
+  // The negative term's cutoff falls as the watermark rises, so it cannot finalize left rows,
+  // and the constant-only conjunct does not count as a bound either. Analysis rejects the plan
+  // before any state format is used.
+  test("left outer join cannot finalize with a negative opposite watermark term") {
+    val leftInput = MemoryStream[(Int, Long)]
+    val rightInput = MemoryStream[(Int, Long)]
+    val left = leftInput.toDF().toDF("leftKey", "time")
+      .select($"leftKey", timestamp_seconds($"time").as("leftTime"))
+    val right = rightInput.toDF().toDF("rightKey", "time")
+      .select($"rightKey", timestamp_seconds($"time").as("rightTime"))
+      .withWatermark("rightTime", "0 seconds")
+    val condition = expr("leftKey = rightKey AND " +
+      "CAST(leftTime AS LONG) > 100 - CAST(rightTime AS LONG) AND CAST(leftTime AS LONG) > 10")
+    val joined = left.join(right, condition, "left_outer")
+      .select($"leftKey", $"leftTime".cast("long"), $"rightTime".cast("long"))
+
+    val error = intercept[AnalysisException] {
+      testStream(joined)(
+        AddData(leftInput, (1, 60L)),
+        CheckNewAnswer())
+    }
+    assert(error.getMessage.contains("a watermark on the right input and a time constraint"))
   }
 }
