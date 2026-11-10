@@ -4250,6 +4250,23 @@ object SQLConf {
       .checkValue(v => v >= 0 && v <= 6, "Supported versions are 0 through 6")
       .createWithDefault(6)
 
+  val STREAMING_JOIN_CHECK_FINALIZATION_ENABLED =
+    buildConf("spark.sql.streaming.join.checkFinalization.enabled")
+      .internal()
+      .doc("When true, a stream-stream left outer, right outer, full outer or left semi join " +
+        "fails analysis unless the watermarks and time constraints let Spark finalize the " +
+        "rows of each input whose unmatched rows it outputs or whose state it must bound for " +
+        "a semi join: such an input needs a bound derived from the other input's watermark. " +
+        "When false, Spark logs a warning instead and runs the query. Unmatched rows are " +
+        "still finalized only with that bound, so such a query keeps the input's state " +
+        "without bound, and an outer join never outputs the rows that the bound would " +
+        "finalize. Before Spark 4.4, a weaker check that ignored the direction of each " +
+        "watermark admitted some of these joins.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val STREAMING_SESSION_WINDOW_MERGE_SESSIONS_IN_LOCAL_PARTITION =
     buildConf("spark.sql.streaming.sessionWindow.merge.sessions.in.local.partition")
       .doc("When true, streaming session window sorts and merge sessions in local partition " +
@@ -9576,6 +9593,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def statefulOperatorCorrectnessCheckEnabled: Boolean =
     getConf(STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED)
+
+  def streamingJoinCheckFinalizationEnabled: Boolean =
+    getConf(STREAMING_JOIN_CHECK_FINALIZATION_ENABLED)
 
   def fileStreamSinkMetadataIgnored: Boolean = getConf(FILESTREAM_SINK_METADATA_IGNORED)
 

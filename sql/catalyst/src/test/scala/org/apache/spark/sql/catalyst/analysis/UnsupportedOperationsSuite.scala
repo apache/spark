@@ -17,22 +17,24 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import java.time.Duration
+import java.time.{Duration, Period}
 import java.util.Locale
+
+import org.apache.logging.log4j.Level
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Literal, MonotonicallyIncreasingID, NamedExpression, TimestampAddInterval}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Literal, MonotonicallyIncreasingID, NamedExpression, TimestampAddInterval, TimestampAddYMInterval}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StatefulProcessor, TimeMode, TimerValues}
-import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder, StructType, TimestampType}
+import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder, StructType, TimestampType, YearMonthIntervalType}
 
 /** A dummy command for testing unsupported operations. */
 case class DummyCommand() extends LeafCommand
@@ -617,16 +619,35 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
         Seq("requires a watermark on the right input"))
     }
 
-    // Whole days are added in the session time zone, where a day can be 23 or 25 hours.
-    Seq("UTC" -> true, "America/Los_Angeles" -> false).foreach { case (zone, supported) =>
-      val dayShift = TimestampAddInterval(rightTime, Literal(Duration.ofDays(1)), Some(zone))
-      val plan = left.join(right, joinType = LeftOuter, condition = Some(leftTime === dayShift))
-      val name = s"LeftOuter with a key shifted by one day in $zone"
-      if (supported) {
-        assertSupportedInStreamingPlan(name, plan, OutputMode.Append())
-      } else {
-        assertNotSupportedInStreamingPlan(name, plan, OutputMode.Append(),
-          Seq("requires a watermark on the right input"))
+    // Whole days are added in the session time zone, where a day can be 23 or 25 hours, and
+    // months vary in length. A shift that never moves a time backward still bounds the key, in
+    // every time zone; one that can move a time backward does not.
+    for {
+      zone <- Seq("UTC", "America/Los_Angeles")
+      (name, interval, supported) <- Seq(
+        ("one day", Literal(Duration.ofDays(1)), true),
+        ("minus one day", Literal(Duration.ofDays(-1)), false),
+        ("one month", Literal(Period.ofMonths(1)), true),
+        ("minus one month", Literal(Period.ofMonths(-1)), false))
+    } {
+      val shifted = interval.dataType match {
+        case _: YearMonthIntervalType => TimestampAddYMInterval(rightTime, interval, Some(zone))
+        case _ => TimestampAddInterval(rightTime, interval, Some(zone))
+      }
+      Seq(LeftOuter, LeftSemi, FullOuter).foreach { joinType =>
+        val plan = left.join(right, joinType = joinType, condition = Some(leftTime === shifted))
+        val testName = s"$joinType with a key shifted by $name in $zone"
+        if (supported) {
+          assertSupportedInStreamingPlan(testName, plan, OutputMode.Append())
+        } else {
+          val requirement = if (joinType == FullOuter) {
+            "watermarks on both inputs"
+          } else {
+            "a watermark on the right input"
+          }
+          assertNotSupportedInStreamingPlan(testName, plan, OutputMode.Append(),
+            Seq(s"requires $requirement"))
+        }
       }
     }
 
@@ -634,6 +655,67 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     assertNotSupportedInStreamingPlan("LeftOuter with a key truncated from the right event time",
       left.join(right, joinType = LeftOuter,
         condition = Some(leftTime === rightTime.cast(LongType).cast(TimestampType))),
+      OutputMode.Append(), Seq("requires a watermark on the right input"))
+  }
+
+  // Disabling the finalization check turns the admission failure into a warning.
+  Seq(LeftOuter, LeftSemi).foreach { joinType =>
+    val leftTime = AttributeReference("leftTime", TimestampType)().withMetadata(watermarkMetadata)
+    val rightTime = AttributeReference("rightTime", TimestampType)()
+    val plan = new TestStreamingRelation(leftTime).join(new TestStreamingRelation(rightTime),
+      joinType = joinType, condition = Some(leftTime === rightTime))
+    val checkConf = SQLConf.STREAMING_JOIN_CHECK_FINALIZATION_ENABLED.key
+    assertNotSupportedInStreamingPlan(s"$joinType without a right watermark",
+      plan, OutputMode.Append(), Seq("requires a watermark on the right input", checkConf))
+    assertSupportedInStreamingPlan(s"$joinType without a right watermark and $checkConf=false",
+      plan, OutputMode.Append(), checkConf -> "false")
+
+    test(s"$joinType without a right watermark logs a warning when $checkConf=false") {
+      val appender = new LogAppender("finalization check")
+      withLogAppender(appender, level = Some(Level.WARN)) {
+        withSQLConf(checkConf -> "false") {
+          UnsupportedOperationChecker.checkForStreaming(wrapInStreaming(plan), OutputMode.Append())
+        }
+      }
+      assert(appender.loggingEvents.exists(_.getMessage.getFormattedMessage
+        .contains("requires a watermark on the right input")))
+    }
+  }
+
+  {
+    val rightTime = AttributeReference("rightTime", TimestampType)()
+      .withMetadata(watermarkMetadata)
+    val unwatermarkedTime = AttributeReference("leftTime", TimestampType)()
+    val right = new TestStreamingRelation(rightTime)
+
+    // A range bound that counts a local day as 24 hours, or reads a truncated time as exact, can
+    // put the cutoff above a row that can still match. Only an input with its own watermark keeps
+    // such a bound, so an outer join of an input without one cannot finalize its rows.
+    for {
+      watermarked <- Seq(false, true)
+      zone <- Seq("UTC", "America/Los_Angeles")
+    } {
+      val leftTime = if (watermarked) {
+        unwatermarkedTime.withMetadata(watermarkMetadata)
+      } else {
+        unwatermarkedTime
+      }
+      val left = new TestStreamingRelation(leftTime)
+      val dayLater = TimestampAddInterval(leftTime, Literal(Duration.ofDays(1)), Some(zone))
+      val inputs = if (watermarked) "both inputs watermarked" else "only the right watermarked"
+      val plan = left.join(right, joinType = LeftOuter,
+        condition = Some(rightTime >= leftTime && rightTime <= dayLater))
+      val name = s"LeftOuter with a one-day range in $zone, $inputs"
+      if (watermarked || zone == "UTC") {
+        assertSupportedInStreamingPlan(name, plan, OutputMode.Append())
+      } else {
+        assertNotSupportedInStreamingPlan(name, plan, OutputMode.Append(),
+          Seq("requires a watermark on the right input"))
+      }
+    }
+    assertNotSupportedInStreamingPlan("LeftOuter with a range over a truncating cast",
+      new TestStreamingRelation(unwatermarkedTime).join(right, joinType = LeftOuter,
+        condition = Some(unwatermarkedTime.cast(LongType) >= rightTime.cast(LongType) + 5L)),
       OutputMode.Append(), Seq("requires a watermark on the right input"))
   }
 

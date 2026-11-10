@@ -1299,8 +1299,12 @@ regarding watermark delays and whether data will be dropped or not.
 
 Unmatched output and state removal use the same cutoff, derived from the opposite input's
 watermark and the time constraint. In the example above, the `clickTime` watermark finalizes
-impressions; no watermark on `impressionTime` is needed for this. Full outer joins require
-watermarks and time constraints in both directions to finalize both sides.
+impressions; no watermark on `impressionTime` is needed for this. Without that watermark, the
+time constraint must have an exact length: whole days in a session time zone with daylight saving
+time, where a day can last 23 or 25 hours, or a truncating cast such as
+`CAST(impressionTime AS BIGINT)`, do not finalize impressions, and an outer join that relies on
+them fails analysis. Full outer joins require watermarks and time constraints in both directions
+to finalize both sides.
 
 ###### Caveats
 There are a few important characteristics to note regarding how the outer results are generated.
@@ -1397,7 +1401,8 @@ regarding watermark delays and whether data will be dropped or not.
     <td style="vertical-align: middle;">Inner</td>
     <td style="vertical-align: middle;">
       Supported, optionally specify watermark on both sides +
-      time constraints for state cleanup
+      time constraints for state cleanup. A stateful operator after the join makes progress only
+      when the state of the input whose event time it uses is cleaned up.
     </td>
   </tr>
   <tr>
@@ -1405,7 +1410,8 @@ regarding watermark delays and whether data will be dropped or not.
     <td style="vertical-align: middle;">
       Conditionally supported, requires a watermark on the right and a time constraint that
       limits how late a right row can match a left row. A watermark on the left and a reverse
-      time constraint also allow right-side state cleanup.
+      time constraint also allow right-side state cleanup, which a stateful operator after the
+      join needs to make progress when it uses the right event time.
     </td>
   </tr>
   <tr>
@@ -1413,7 +1419,8 @@ regarding watermark delays and whether data will be dropped or not.
     <td style="vertical-align: middle;">
       Conditionally supported, requires a watermark on the left and a time constraint that
       limits how late a left row can match a right row. A watermark on the right and a reverse
-      time constraint also allow left-side state cleanup.
+      time constraint also allow left-side state cleanup, which a stateful operator after the
+      join needs to make progress when it uses the left event time.
     </td>
   </tr>
   <tr>
@@ -1445,11 +1452,14 @@ Additional details on supported joins:
 - Joins can be cascaded, that is, you can do `df1.join(df2, ...).join(df3, ...).join(df4, ....)`.
 
 - For stream-stream outer and semi joins, the time constraint that finalizes an input's rows must
-  bound a timestamp column of that input by the other input's event time, through an equality key
-  or a range condition. A bound that uses only constants, such as `leftTime > 10`, a numeric
-  column, such as `n > CAST(rightTime AS BIGINT)`, or a sum that a later row of the other input can
-  always satisfy, such as `CAST(leftTime AS BIGINT) + CAST(rightTime AS BIGINT) > 100`, does not
-  qualify.
+  bound that input by the other input's event time, either through an equality key on that event
+  time or its time window, or through a range condition on a timestamp column of the input. A
+  bound that uses only constants, such as `CAST(leftTime AS BIGINT) > 10`, or a sum that a later
+  row of the other input can always satisfy, such as
+  `CAST(leftTime AS BIGINT) + CAST(rightTime AS BIGINT) > 100`, does not qualify, and neither
+  does a range condition on a column of another type: a numeric column, such as
+  `n > CAST(rightTime AS BIGINT)`, a DATE or TIMESTAMP_NTZ column, or a time window, such as
+  `leftWindow > rightWindow`.
 
 - As of Spark 2.4, you can use joins only when the query is in Append output mode. Other output modes are not yet supported.
 

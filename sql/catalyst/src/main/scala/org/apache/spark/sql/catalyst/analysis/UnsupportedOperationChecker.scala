@@ -718,7 +718,8 @@ object UnsupportedOperationChecker extends Logging {
       val eventTime = otherInput.output.find(_.metadata.contains(EventTimeWatermark.delayKey))
       StreamingJoinHelper.getStateKeyWatermarkOrdinal(otherKeys, otherInput.output).isDefined ||
         StreamingJoinHelper.getStateValueWatermark(stateInput.outputSet,
-          AttributeSet(eventTime.toSeq), join.condition, Some(1000000)).isDefined
+          AttributeSet(eventTime.toSeq), join.condition, Some(1000000),
+          exactForUnwatermarkedColumns = true).isDefined
     }
 
     val leftCanEvict = canEvictState(join.left, join.right, rightKeys)
@@ -738,13 +739,36 @@ object UnsupportedOperationChecker extends Logging {
         case RightOuter => "a watermark on the left input and a time constraint"
         case _ => "a watermark on the right input and a time constraint"
       }
-      throwError(
+      // The join holds back its output watermark for an input whose state is unbounded.
+      val downstreamRequirement = join.joinType match {
+        case LeftOuter => Some(("right", "left"))
+        case RightOuter => Some(("left", "right"))
+        case _ => None
+      }
+      val downstreamNote = downstreamRequirement.map { case (eventTimeInput, boundingInput) =>
+        s" A stateful operator after the join that uses the $eventTimeInput input's event time " +
+          s"also needs a watermark on the $boundingInput input and a reverse time constraint; " +
+          "otherwise the join holds back its output watermark and that operator stops " +
+          "emitting results."
+      }.getOrElse("")
+      val checkConf = SQLConf.STREAMING_JOIN_CHECK_FINALIZATION_ENABLED.key
+      val message =
         s"Stream-stream ${join.joinType} join between two streaming DataFrame/Datasets " +
           s"is not supported: it requires $requirement " +
           "that allow unmatched state to be finalized. " +
           "The time constraint may be equality on event time or a time range condition. " +
+          "A time range condition must bound a TIMESTAMP column of the finalized input by " +
+          "the other input's event time. " +
           "When upgrading an existing query, correct its watermarks and time constraints, " +
-          "then use a new checkpoint and replay the input, reconciling prior sink output.")(join)
+          "then use a new checkpoint and replay the input, reconciling prior sink output." +
+          downstreamNote +
+          s" To run the query anyway, set $checkConf to false; the query then keeps that " +
+          "state without bound, and an outer join never outputs those unmatched rows."
+      if (SQLConf.get.streamingJoinCheckFinalizationEnabled) {
+        throwError(message)(join)
+      } else {
+        logWarning(log"${MDC(ANALYSIS_ERROR, message)};\n${MDC(QUERY_PLAN, join)}")
+      }
     }
   }
 }
