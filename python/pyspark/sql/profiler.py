@@ -103,9 +103,10 @@ class _ProfileResultsParamV2(AccumulatorParam["ProfileResultsV2"]):
     AccumulatorParam for profilers.
     """
 
-    # Guards in-place merges into a results dict that other threads may read or clear, e.g.
-    # the driver's accumulator server thread merging while a user calls spark.profile.clear().
-    # It is a class attribute so it is not pickled with the param.
+    # Guards a results dict that the driver's accumulator server thread merges into while other
+    # threads read or clear it. The DAGScheduler blocks until that thread acknowledges, so keep
+    # holds short, and never call into the JVM or wait on a Spark job while holding it.
+    # A class attribute, so it is not pickled with the param.
     lock = RLock()
 
     @staticmethod
