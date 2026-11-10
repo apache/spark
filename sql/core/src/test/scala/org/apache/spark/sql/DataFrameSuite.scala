@@ -3032,6 +3032,30 @@ class DataFrameSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-61354: ConstantPropagation keeps the rows a non-deterministic condition sees") {
+    withTempPath { dir =>
+      spark.range(0, 100, 1, 1).select($"id", $"id" % 3 as "a").write.parquet(dir.getCanonicalPath)
+      val df = spark.read.parquet(dir.getCanonicalPath)
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        // `rand(10)` runs on every row, as in `df.where(rand(10) < 0.5)`. The multiplication can
+        // overflow, so it keeps `a`; with `a` = 1 it is `id > 0`.
+        val expected = df.where(rand(10) < 0.5).collect()
+          .filter(row => row.getLong(1) == 1 && row.getLong(0) > 0)
+        assert(expected.nonEmpty)
+        checkAnswer(
+          df.where(rand(10) < 0.5 && $"id" * $"a" > 0 && $"a" === 1),
+          expected.toSeq)
+      }
+      // `rand(10)` runs on the rows with `a > 0`, which does not take the constant of `a = 1`.
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+        val expected = df.where($"a" > 0).where(rand(10) < 0.5).collect()
+          .filter(row => row.getLong(1) == 1)
+        assert(expected.nonEmpty)
+        checkAnswer(df.where($"a" > 0 && rand(10) < 0.5 && $"a" === 1), expected.toSeq)
+      }
+    }
+  }
+
   test("SPARK-60985: an inferred filter does not raise an error the query does not raise") {
     withTempPath { dir =>
       // On (0, 6), neither `x = y` nor `10 / y` fails, whichever is evaluated first. On

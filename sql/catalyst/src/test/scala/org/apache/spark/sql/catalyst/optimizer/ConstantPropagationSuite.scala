@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DoubleType, StringType}
+import org.apache.spark.sql.types.{DoubleType, IntegerType, StringType}
 
 /**
  * Unit tests for constant propagation in expressions.
@@ -48,6 +48,17 @@ class ConstantPropagationSuite extends PlanTest {
   private val columnB = $"b"
   private val columnC = $"c"
   private val columnD = $"d"
+
+  /** Checks that `plan` optimizes to `expected` with the conjuncts in the same order. */
+  private def checkInOrder(plan: LogicalPlan, expected: LogicalPlan): Unit = {
+    val optimized = Optimize.execute(plan)
+    comparePlans(optimized, expected)
+    def conjuncts(p: LogicalPlan): Seq[String] = p match {
+      case Filter(condition, _) => splitConjunctivePredicates(condition).map(_.sql)
+      case other => fail(s"Not a Filter: $other")
+    }
+    assert(conjuncts(optimized) == conjuncts(expected))
+  }
 
   test("basic test") {
     val query = testRelation
@@ -225,7 +236,7 @@ class ConstantPropagationSuite extends PlanTest {
       // zero on such a row with `c` = 0, where `c - b` is not 0.
       val notConstant =
         testRelation.where(divide(columnC - columnB) > Literal(0.0) && columnB === 0).analyze
-      comparePlans(Optimize.execute(notConstant), notConstant)
+      checkInOrder(notConstant, notConstant)
 
       // It can become constant, but keeps the attribute if it fails: no row may reach it.
       val failsToFold = testRelation.where(columnB === 0 && columnA > divide(columnB)).analyze
@@ -240,19 +251,17 @@ class ConstantPropagationSuite extends PlanTest {
         Optimize.execute(testRelation.where(columnB === 2 && divide(columnC) > columnB).analyze),
         testRelation.where(columnB === 2 && divide(columnC) > Literal(2.0)).analyze)
 
-      // The guard `b <> 0` becomes TRUE, so the equality goes ahead of the conjunct that keeps `b`.
-      val guarded = Optimize.execute(testRelation
-        .where(columnB =!= 0 && divide(columnC - columnB) > Literal(0.0) && columnB === 5).analyze)
-      comparePlans(guarded,
-        testRelation.where(columnB === 5 && divide(columnC - columnB) > Literal(0.0)).analyze)
-      val Filter(guardedCondition, _) = guarded
-      assert(splitConjunctivePredicates(guardedCondition).head.sql == "(b = 5)")
+      // With `b` replaced, the guard `b <> 0` would become TRUE, and the conjunct that keeps `b`
+      // would divide by zero on a row with `b` = 0 and `c` = 0.
+      val guarded = testRelation
+        .where(columnB =!= 0 && divide(columnC - columnB) > Literal(0.0) && columnB === 5).analyze
+      checkInOrder(guarded, guarded)
 
       // The condition of an IF decides whether the branch that can fail runs.
       val conditional = testRelation
         .where(If(columnC > columnB, Literal(true), divide(columnC) > Literal(0.0)) &&
           columnB === 0).analyze
-      comparePlans(Optimize.execute(conditional), conditional)
+      checkInOrder(conditional, conditional)
     }
   }
 
@@ -260,30 +269,177 @@ class ConstantPropagationSuite extends PlanTest {
       "that can fail") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       def divide(e: Expression): Expression = Divide(Literal(10.0), e.cast(DoubleType))
-      def first(plan: LogicalPlan): String = plan match {
-        case Filter(condition, _) => splitConjunctivePredicates(condition).head.sql
-      }
 
       // `a < 3` and `a > 3` decide whether the division runs. With `a` replaced, it would run on a
-      // row with `a` = 1 and `c` = 0. The conjunct keeps `a`, so the equality goes first.
+      // row with `a` = 1 and `c` = 0.
       val nested = testRelation.where(
         (columnA < 3 || (columnA > 3 && divide(columnC) > Literal(1.0))) && columnA === 5).analyze
-      val optimizedNested = Optimize.execute(nested)
-      comparePlans(optimizedNested, nested)
-      assert(first(optimizedNested) == "(a = 5)")
+      checkInOrder(nested, nested)
 
       // With `k` replaced, the map lookup can be NULL on a row with another `k`.
       val maps = LocalRelation($"k".string, Symbol("m").map(StringType, DoubleType), $"x".int)
       val inComparison = maps.where(Coalesce(Seq(GetMapValue($"m", $"k"), divide($"x"))) >
         Literal(0.0) && $"k" === "a").analyze
-      comparePlans(Optimize.execute(inComparison), inComparison)
+      checkInOrder(inComparison, inComparison)
+    }
+  }
 
-      // A conjunct guards the ones after it as well. It is rewritten, and the equality goes first.
-      val conjunct = Optimize.execute(testRelation
-        .where(columnA > 0 && divide(columnC) > Literal(0.0) && columnA === 1).analyze)
-      comparePlans(conjunct,
+  test("SPARK-61354: Keep the written order of the conjuncts") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      def divide(e: Expression): Expression = Divide(Literal(10.0), e.cast(DoubleType))
+
+      // A conjunct guards the ones after it as well. With `a` replaced, `a > 0` would become TRUE,
+      // and the division would run on a row with `a` = 0 and `c` = 0.
+      val conjunct =
+        testRelation.where(columnA > 0 && divide(columnC) > Literal(0.0) && columnA === 1).analyze
+      checkInOrder(conjunct, conjunct)
+
+      // A conjunct takes the constants of the equalities before it, which hold on the rows that
+      // reach it where `a` is not NULL.
+      checkInOrder(
+        testRelation.where(columnA === 1 && divide(columnC) > Literal(0.0) && columnA > 0).analyze,
         testRelation.where(columnA === 1 && divide(columnC) > Literal(0.0)).analyze)
-      assert(first(conjunct) == "(a = 1)")
+
+      // It takes the constant of an equality after it if the conjuncts in between can be evaluated
+      // unconditionally.
+      checkInOrder(
+        testRelation.where(divide(columnC) > Literal(0.0) && columnA > 0 && columnC > columnA &&
+          columnA === 1).analyze,
+        testRelation.where(divide(columnC) > Literal(0.0) && columnC > 1 && columnA === 1).analyze)
+
+      // Also if one of them can fail only before it is rewritten, in one pass of the rule.
+      val rewritable = testRelation.where(columnA > 0 && columnC > divide(columnB) &&
+        columnB === 2 && columnA === 1).analyze
+      checkInOrder(
+        rewritable,
+        testRelation.where(columnC > Literal(5.0) && columnB === 2 && columnA === 1).analyze)
+      val Filter(propagatedOnce, _) = ConstantPropagation(rewritable)
+      assert(splitConjunctivePredicates(propagatedOnce).head.sql == "(1 > 0)")
+
+      // `a > 0` does not take the constant of `a = 1` after the division, but `b > 0` takes the one
+      // of `b = 2`.
+      checkInOrder(
+        testRelation.where(columnA > 0 && columnB > 0 && columnB === 2 &&
+          divide(columnC) > Literal(0.0) && columnA === 1).analyze,
+        testRelation.where(columnA > 0 && columnB === 2 && divide(columnC) > Literal(0.0) &&
+          columnA === 1).analyze)
+
+      // An equality identical to the propagated one counts as it, also as one before a conjunct.
+      // In one pass of the rule, as the other rules drop the copy.
+      comparePlans(
+        ConstantPropagation(testRelation.where(columnA > 0 && columnA === 1 &&
+          divide(columnC) > Literal(0.0) && columnA === 1).analyze),
+        testRelation.where(Literal(1) > 0 && columnA === 1 && divide(columnC) > Literal(0.0) &&
+          columnA === 1).analyze)
+      comparePlans(
+        ConstantPropagation(testRelation.where(columnA === 1 && columnC > columnA &&
+          Rand(10) < Literal(0.5) && columnA === 1).analyze),
+        testRelation.where(columnA === 1 && columnC > 1 && Rand(10) < Literal(0.5) &&
+          columnA === 1).analyze)
+
+      // A conjunct with a subquery also keeps the ones before it from taking the constants of the
+      // equalities after it.
+      val withSubquery = testRelation.where(columnA > 0 &&
+        ScalarSubquery(testRelation.groupBy()(max(columnB)).analyze) > 0 && columnA === 1).analyze
+      checkInOrder(withSubquery, withSubquery)
+
+      // Also in a nested `AND`, and in an `AND` under an `OR`.
+      val nested =
+        testRelation.where(columnA > 0 && (divide(columnC) > Literal(0.0) && columnA === 1)).analyze
+      checkInOrder(nested, nested)
+      // The shape of the `AND` is kept.
+      val Filter(rightNested, _) = ConstantPropagation(
+        testRelation.where(columnA > 0 && (columnC > columnA && columnA === 1)).analyze)
+      val Filter(expectedRightNested, _) =
+        testRelation.where(Literal(1) > 0 && (columnC > 1 && columnA === 1)).analyze
+      assert(rightNested.fastEquals(expectedRightNested))
+      val inOr = testRelation
+        .where((columnA > 0 && divide(columnC) > Literal(0.0) && columnA === 1) || columnB > 0)
+        .analyze
+      comparePlans(Optimize.execute(inOr), inOr)
+      // Also for an `EqualNullSafe` and with the literal on the left.
+      val nullSafe =
+        testRelation.where(columnA > 0 && divide(columnC) > Literal(0.0) && (columnA <=> 1)).analyze
+      checkInOrder(nullSafe, nullSafe)
+      checkInOrder(
+        testRelation.where(columnC > columnA && Literal(1) === columnA).analyze,
+        testRelation.where(columnC > 1 && Literal(1) === columnA).analyze)
+      // An `EqualNullSafe` before a conjunct also gives its constant across one that can fail.
+      checkInOrder(
+        testRelation.where((columnA <=> 1) && divide(columnC) > Literal(0.0) && columnA > 0)
+          .analyze,
+        testRelation.where((columnA <=> 1) && divide(columnC) > Literal(0.0)).analyze)
+      val literalLeft = testRelation
+        .where(columnA > 0 && divide(columnC) > Literal(0.0) && Literal(1) === columnA).analyze
+      checkInOrder(literalLeft, literalLeft)
+      // Under a `NOT`, too.
+      val negated = testRelation
+        .where(Not(columnD > 0 && divide(columnC) > Literal(0.0) && columnD === 1)).analyze
+      comparePlans(ConstantPropagation(negated), negated)
+
+      // A conjunct that is FALSE with the constants of all the equalities still makes the
+      // condition FALSE, also across a conjunct that can fail, as no row passes it.
+      Seq[(Expression, Expression)](
+        (columnA === 1 && divide(columnC) > Literal(0.0) && columnA === 2, Literal(false)),
+        (columnA > columnB && divide(columnC) > Literal(0.0) && columnA === 1 && columnB === 2,
+          Literal(false)),
+        (columnB > 0 && columnA > 5 && divide(columnC) > Literal(0.0) && columnA === 1,
+          Literal(false)),
+        ((columnA === 1 && divide(columnC) > Literal(0.0) && columnA === 2) || columnB > 0,
+          columnB > 0)
+      ).foreach { case (condition, expected) =>
+        comparePlans(
+          Optimize.execute(testRelation.where(condition).analyze),
+          testRelation.where(expected).analyze)
+      }
+      // Also under a `NOT`, where the attributes are not nullable, so the equalities are not NULL.
+      comparePlans(
+        ConstantPropagation(testRelation
+          .where(Not(columnD === 1 && divide(columnC) > Literal(0.0) && columnD === 2)).analyze),
+        testRelation.where(Not(Literal(false))).analyze)
+      // There, a conjunct that is NULL with the constants does not make the condition FALSE.
+      val nullInt = Literal(null, IntegerType)
+      comparePlans(
+        ConstantPropagation(testRelation.where(Not(columnD === 1 &&
+          divide(columnC) > Literal(0.0) && columnD > nullInt)).analyze),
+        testRelation.where(Not(columnD === 1 && divide(columnC) > Literal(0.0) &&
+          Literal(1) > nullInt)).analyze)
+      // An `EqualTo` with a NULL literal is NULL on every row, so its literal is not propagated.
+      Seq(
+        Not(columnD === nullInt && divide(columnC) > Literal(0.0) && (columnD + 0 <=> 5)),
+        Not(nullInt === columnD && divide(columnC) > Literal(0.0) && (columnD + 0 <=> 5)),
+        columnA === nullInt && columnA > 5 && divide(columnC) > Literal(0.0)
+      ).foreach { condition =>
+        val withNull = testRelation.where(condition).analyze
+        comparePlans(ConstantPropagation(withNull), withNull)
+      }
+      // An `EqualNullSafe` with one is TRUE exactly where the attribute is NULL, so it is.
+      comparePlans(
+        Optimize.execute(testRelation.where((columnA <=> nullInt) && (columnA + 0 <=> 5)).analyze),
+        testRelation.where(Literal(false)).analyze)
+    }
+
+    // A non-deterministic conjunct also keeps the ones before it from taking the constants of the
+    // equalities after it, as it would see other rows. In either mode.
+    Seq(true, false).foreach { ansi =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
+        val nonDeterministic =
+          testRelation.where(columnA > 0 && Rand(10) < Literal(0.5) && columnA === 1).analyze
+        checkInOrder(nonDeterministic, nonDeterministic)
+        checkInOrder(
+          testRelation.where(columnA === 1 && Rand(10) < Literal(0.5) && columnA > 0).analyze,
+          testRelation.where(columnA === 1 && Rand(10) < Literal(0.5)).analyze)
+        // Only the last of two equalities over `a` is propagated, so the first one does not take
+        // its constant across the non-deterministic conjunct either.
+        val twice = testRelation
+          .where(columnA === 1 && Rand(10) < Literal(0.5) && Literal(1) === columnA).analyze
+        assert(ConstantPropagation(twice).fastEquals(twice))
+        // Nor does a conjunct after the first one take the constant of the last one, as it is not
+        // the same equality.
+        val otherForm = testRelation.where(Literal(1) === columnA && columnA > 0 &&
+          Rand(10) < Literal(0.5) && columnA === 1).analyze
+        assert(ConstantPropagation(otherForm).fastEquals(otherForm))
+      }
     }
   }
 
@@ -295,12 +451,11 @@ class ConstantPropagationSuite extends PlanTest {
         testRelation.where(columnA > Add(columnC, columnB, legacy) && columnB === 2).analyze),
       testRelation.where(columnA > Add(columnC, Literal(2), legacy) && columnB === 2).analyze)
 
-    // In ANSI mode it can overflow, so it keeps `b`, and the equality goes first.
+    // In ANSI mode it can overflow, so it keeps `b`.
     val ansi = NumericEvalContext(EvalMode.ANSI)
-    comparePlans(
-      Optimize.execute(
-        testRelation.where(columnA > Add(columnC, columnB, ansi) && columnB === 2).analyze),
-      testRelation.where(columnB === 2 && columnA > Add(columnC, columnB, ansi)).analyze)
+    val overflows = testRelation.where(columnA > Add(columnC, columnB, ansi) && columnB === 2)
+      .analyze
+    checkInOrder(overflows, overflows)
 
     // Also under a `COLLATE`.
     val strings = LocalRelation($"s".string, $"n".int)

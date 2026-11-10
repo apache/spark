@@ -137,9 +137,10 @@ object ConstantFolding extends Rule[LogicalPlan] {
  * }}}
  *
  * Approach used:
- * - Populate a mapping of attribute => constant value by looking at all the equals predicates
- * - Using this mapping, replace occurrence of the attributes with the corresponding constant values
- *   in the AND node.
+ * - Populate a mapping of attribute => constant value from the equality predicates, except an
+ *   `EqualTo` with a NULL literal. If several equalities share an attribute, the last one is used.
+ * - Using this mapping, replace the attributes in the conjuncts of the AND node, keeping their
+ *   written order, as described in [[replaceConstants]].
  */
 object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
@@ -156,10 +157,10 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
   /**
    * Traverse a condition as a tree and replace attributes with constant values.
    * - On matching [[And]], recursively traverse each children and get propagated mappings.
-   *   If the current node is not child of another [[And]], replace all occurrences of the
-   *   attributes with the corresponding constant values.
+   *   If the current node is not child of another [[And]], replace the attributes with the
+   *   corresponding constant values as described in [[replaceConstants]].
    * - If a child of [[And]] is [[EqualTo]] or [[EqualNullSafe]], propagate the mapping
-   *   of attribute => constant.
+   *   of attribute => constant, except for an [[EqualTo]] with a NULL literal.
    * - On matching [[Or]] or [[Not]], recursively traverse each children, propagate empty mapping.
    * - Otherwise, stop traversal and propagate empty mapping.
    * @param condition condition to be traversed
@@ -176,11 +177,14 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
     condition match {
       case _ if !condition.containsAllPatterns(LITERAL, BINARY_COMPARISON) =>
         (None, AttributeMap.empty)
+      // An `EqualTo` with a NULL literal is NULL on every row, so its literal is not the value of
+      // the attribute on any row. An `EqualNullSafe` with one is TRUE exactly where the attribute
+      // is NULL.
       case e @ EqualTo(left: AttributeReference, right: Literal)
-        if safeToReplace(left, nullIsFalse) =>
+        if safeToReplace(left, nullIsFalse) && right.value != null =>
         (None, AttributeMap(Map(left -> (right, e))))
       case e @ EqualTo(left: Literal, right: AttributeReference)
-        if safeToReplace(right, nullIsFalse) =>
+        if safeToReplace(right, nullIsFalse) && left.value != null =>
         (None, AttributeMap(Map(right -> (left, e))))
       case e @ EqualNullSafe(left: AttributeReference, right: Literal)
         if safeToReplace(left, nullIsFalse) =>
@@ -195,9 +199,8 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
           traverse(a.right, replaceChildren = false, nullIsFalse)
         val equalityPredicates = equalityPredicatesLeft ++ equalityPredicatesRight
         val newSelf = if (equalityPredicates.nonEmpty && replaceChildren) {
-          val unreplaced = And(newLeft.getOrElse(a.left), newRight.getOrElse(a.right))
-          Some(moveEqualitiesFirst(
-            unreplaced, replaceConstants(unreplaced, equalityPredicates), equalityPredicates))
+          Some(replaceConstants(
+            And(newLeft.getOrElse(a.left), newRight.getOrElse(a.right)), equalityPredicates))
         } else {
           if (newLeft.isDefined || newRight.isDefined) {
             Some(And(newLeft.getOrElse(a.left), newRight.getOrElse(a.right)))
@@ -241,18 +244,105 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
    * condition cannot raise, an expression that can fail keeps its attributes, unless all of them
    * are replaced and the result evaluates without an error. For the same reason, an operand of an
    * AND, OR, COALESCE or IN in a conjunct is rewritten only if no operand after it can fail, as it
-   * decides whether they run, e.g. `y < 3` in `(y < 3 OR 10 / x > 1) AND y = 5`. The conjuncts of
-   * `condition` itself are rewritten regardless, and [[moveEqualitiesFirst]] orders them.
+   * decides whether they run, e.g. `y < 3` in `(y < 3 OR 10 / x > 1) AND y = 5`.
+   *
+   * A conjunct decides whether the ones after it run as well, but the conjuncts are rewritten by
+   * the rules below instead. The conjuncts keep their written order: moving an equality ahead of a
+   * non-deterministic conjunct changes the rows that one sees, and a later rule can turn an
+   * equality into an expression that can fail, e.g. by pushing it through a projection that defines
+   * its attribute with a cast, which would then run on rows that the conjuncts written before it
+   * drop. Whether a conjunct can fail is judged on it as it is when this rule runs, and an equality
+   * in between is not checked (SPARK-61437). A conjunct takes the constants of the equalities
+   * before it, which hold on the rows that reach it where they are not NULL. It takes the constant
+   * of an equality after it only if every conjunct in between, as rewritten, can be evaluated
+   * unconditionally ([[ExprUtils.canEvaluateUnconditionally]]), which rejects e.g. an expression
+   * that can fail or is non-deterministic: not into `y > 0` in `y > 0 AND 10 / x > 0 AND y = 1` or
+   * `y > 0 AND rand() < 0.5 AND y = 1`, nor into `d <> 0` in `d <> 0 AND n / d > 1 AND d = 5`, with
+   * the divisions in ANSI mode. Of several equalities over the same attribute, only the last
+   * one is propagated, together with any earlier one identical to it; the others are rewritten
+   * like the other conjuncts.
+   *
+   * On a row where the attribute of an `EqualTo` is NULL, the equality is NULL, so the row still
+   * reaches the conjuncts after it. There, a conjunct rewritten with its constant, before or after
+   * it, can still decide whether a later conjunct runs, e.g. `coalesce(y, 0) > 0` in
+   * `(y = 1 AND coalesce(y, 0) > 0 AND 10 / x > 0) OR z > 0` or in
+   * `(coalesce(y, 0) > 0 AND y = 1 AND 10 / x > 0) OR z > 0`, or `y > w` in
+   * `(y = 1 AND y > w AND rand() < 0.5) OR z > 0`, which can be FALSE instead of NULL there once
+   * rewritten. A condition that becomes FALSE below can be NULL there, too. Without whole-stage
+   * codegen, or under an OR, the conjuncts of a filter are evaluated this way; with it, a filter
+   * drops a row at the first conjunct that is NULL (SPARK-61438).
+   *
+   * If a conjunct other than the propagated equalities is FALSE with the constants of all of them,
+   * e.g. `y = 1` in `y = 1 AND 10 / x > 0 AND y = 2`, where `y = 2` is propagated, the condition
+   * becomes FALSE, as a row that passes the equalities fails that conjunct, so none passes the
+   * condition. This also holds under a NOT, where the attributes are not nullable and an `EqualTo`
+   * with a NULL literal is not propagated, so the equalities are never NULL.
    */
   private def replaceConstants(
       condition: Expression,
       equalityPredicates: AttributeMap[(Literal, BinaryComparison)]): Expression = {
-    val constantsMap = AttributeMap(equalityPredicates.map { case (attr, (lit, _)) => attr -> lit })
     val predicates = equalityPredicates.values.map(_._2).toSet
+    val attributeOf: Map[Expression, Attribute] = equalityPredicates
+      .map { case (attr, (_, predicate)) => (predicate: Expression) -> attr }.toMap
+    val constants =
+      AttributeMap(equalityPredicates.map { case (attr, (lit, _)) => attr -> lit })
+    val conjuncts = splitConjunctivePredicates(condition)
+    // `replaceInConjunct` keeps the propagated equalities, which do not fold.
+    val isContradiction = conjuncts.exists { conjunct =>
+      fold(replaceInConjunct(conjunct, constants, _ => true, predicates)).contains(FalseLiteral)
+    }
+    if (isContradiction) {
+      FalseLiteral
+    } else {
+      val equalityAttributes = conjuncts.map(attributeOf.get)
+      // The position of the first conjunct that is the propagated equality over each attribute,
+      // or a copy of it. Another equality over the attribute, e.g. `1 = a` for `a = 1`, is not.
+      val firstEquality = equalityAttributes.zipWithIndex
+        .collect { case (Some(attr), i) => attr.exprId -> i }
+        .groupMapReduce(_._1)(_._2)(math.min)
+      // `equalitiesAfter` holds the attributes of the equalities after the conjunct with only
+      // conjuncts that can be evaluated unconditionally in between.
+      val (newConjuncts, _) = conjuncts.lazyZip(equalityAttributes).lazyZip(conjuncts.indices)
+        .foldRight((List.empty[Expression], Set.empty[ExprId])) {
+          case ((conjunct, Some(attr), _), (laterConjuncts, equalitiesAfter)) =>
+            (conjunct :: laterConjuncts, equalitiesAfter + attr.exprId)
+          case ((conjunct, None, i), (laterConjuncts, equalitiesAfter)) =>
+            def canTake(attr: Attribute): Boolean =
+              firstEquality.get(attr.exprId).exists(_ < i) || equalitiesAfter.contains(attr.exprId)
+            val newConjunct = replaceInConjunct(conjunct, constants, canTake, predicates)
+            val newEqualitiesAfter = if (ExprUtils.canEvaluateUnconditionally(newConjunct)) {
+              equalitiesAfter
+            } else {
+              Set.empty[ExprId]
+            }
+            (newConjunct :: laterConjuncts, newEqualitiesAfter)
+        }
+      val newConjunctsIterator = newConjuncts.iterator
+      def rebuild(e: Expression): Expression = e match {
+        case a @ And(left, right) =>
+          val newLeft = rebuild(left)
+          val newRight = rebuild(right)
+          if ((newLeft eq left) && (newRight eq right)) a else And(newLeft, newRight)
+        case _ => newConjunctsIterator.next()
+      }
+      rebuild(condition)
+    }
+  }
+
+  /**
+   * Replaces the attributes that `canTake` accepts with their values in `constantsMap` in the
+   * comparisons of `conjunct`, one of the conjuncts of the condition rather than an `And` of them,
+   * as described in [[replaceConstants]]. The equalities in `predicates` are kept.
+   */
+  private def replaceInConjunct(
+      conjunct: Expression,
+      constantsMap: AttributeMap[Literal],
+      canTake: Attribute => Boolean,
+      predicates: Set[BinaryComparison]): Expression = {
     def replaceInComparison(b: BinaryComparison): Expression = {
       lazy val collationSafeReplacement = isSameCollationAttrRefComparison(b)
-      def canReplace(a: Attribute): Boolean =
-        constantsMap.contains(a) && (isBinaryStable(a.dataType) || collationSafeReplacement)
+      def canReplace(a: Attribute): Boolean = constantsMap.contains(a) && canTake(a) &&
+        (isBinaryStable(a.dataType) || collationSafeReplacement)
       def replace(e: Expression): Expression = e match {
         case a: AttributeReference if canReplace(a) => constantsMap(a)
         case _: And | _: Or | _: Coalesce | _: In => replaceOperands(e, replace)
@@ -273,11 +363,7 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
       case _: InSubquery | _: ListQuery | _: Exists => e.mapChildren(replaceInCondition)
       case _ => e
     }
-    def replaceInConjuncts(e: Expression): Expression = e match {
-      case a: And => a.mapChildren(replaceInConjuncts)
-      case _ => replaceInCondition(e)
-    }
-    replaceInConjuncts(condition)
+    replaceInCondition(conjunct)
   }
 
   /**
@@ -304,38 +390,6 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
       }
     } else {
       None
-    }
-  }
-
-  /**
-   * Moves the equalities ahead of the other conjuncts of `condition`, the rewritten `original`, if
-   * one that can fail still refers to a propagated attribute. Such a conjunct also runs on rows
-   * where an equality does not hold, with the value of the row, while a guard over the same
-   * attribute may be folded away, e.g. `n / d > 1` for `d <> 0 AND n / d > 1 AND d = 5`. The
-   * same holds for a conjunct that can fail after one that is rewritten, as that one decides
-   * whether it runs, e.g. `10 / x > 0` for `y > 0 AND 10 / x > 0 AND y = 1`. An equality between
-   * an attribute and a literal cannot fail, so running it first raises no error.
-   */
-  private def moveEqualitiesFirst(
-      original: Expression,
-      condition: Expression,
-      equalityPredicates: AttributeMap[(Literal, BinaryComparison)]): Expression = {
-    val predicates = equalityPredicates.values.map(_._2).toSet[Expression]
-    val propagated = AttributeSet(equalityPredicates.keys)
-    val conjuncts = splitConjunctivePredicates(condition)
-    val (equalities, others) = conjuncts.partition(predicates.contains)
-    val reordered = equalities ++ others
-    val keepsFailable = others.exists { c =>
-      c.references.intersect(propagated).nonEmpty && !ExprUtils.canEvaluateUnconditionally(c)
-    }
-    val firstRewritten = splitConjunctivePredicates(original).zip(conjuncts)
-      .indexWhere { case (before, after) => !before.fastEquals(after) }
-    val unmasksFailable = firstRewritten >= 0 &&
-      conjuncts.drop(firstRewritten + 1).exists(!ExprUtils.canEvaluateUnconditionally(_))
-    if ((keepsFailable || unmasksFailable) && reordered != conjuncts) {
-      reordered.reduce(And)
-    } else {
-      condition
     }
   }
 
