@@ -17,6 +17,7 @@
 
 import inspect
 import os
+import pstats
 import sys
 import tempfile
 import threading
@@ -859,6 +860,33 @@ class UDFProfiler2Tests(UDFProfiler2TestsMixin, ReusedSQLTestCase):
         self.assertTrue(merging.is_set(), "The merge did not reach the pause")
         self.assertFalse(thread.is_alive())
         self.assertEqual({}, self.spark._profiler_collector._profile_results)
+
+    def test_show_perf_during_accumulator_merge(self):
+        # Merges mutate the stats in place. Merge a new function midway through show().
+        accumulator = self.spark._profiler_collector._accumulator
+
+        def stats(name):
+            st = pstats.Stats()
+            st.stream = None
+            st.stats = {("udf.py", 1, name): (1, 1, 0.1, 0.1, {})}
+            return st
+
+        accumulator += {"id": {"perf": stats("f")}}
+        func_std_string = pstats.func_std_string
+        merged = False
+
+        def func_std_string_with_merge(func):
+            nonlocal merged
+            if not merged:
+                merged = True
+                accumulator.add({"id": {"perf": stats("g")}})
+            return func_std_string(func)
+
+        with mock.patch("pstats.func_std_string", func_std_string_with_merge):
+            with self.trap_stdout() as io:
+                self.spark.profile.show(type="perf")
+        self.assertIn("Profile of id", io.getvalue())
+        self.assertEqual(2, len(self.profile_results["id"].stats))
 
 
 if __name__ == "__main__":

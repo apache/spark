@@ -364,9 +364,11 @@ class ProfilerCollector(ABC):
 
     @property
     def _perf_profile_results(self) -> Dict[Union[int, str], pstats.Stats]:
+        # Return copies, since merges mutate the stats in place while callers sort, print and
+        # dump them outside the lock.
         with self._lock:
             return {
-                result_id: result["perf"]
+                result_id: pstats.Stats().add(result["perf"])
                 for result_id, result in self._profile_results.items()
                 if result.get("perf", None) is not None
             }
