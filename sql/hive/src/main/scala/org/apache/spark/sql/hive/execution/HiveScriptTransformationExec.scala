@@ -64,7 +64,6 @@ private[hive] case class HiveScriptTransformationExec(
       outputSoi: StructObjectInspector,
       hadoopConf: Configuration): Iterator[InternalRow] = {
     new Iterator[InternalRow] with HiveInspectors {
-      private var completed = false
       val scriptOutputStream = new DataInputStream(inputStream)
 
       val scriptOutputReader =
@@ -78,7 +77,7 @@ private[hive] case class HiveScriptTransformationExec(
       lazy val unwrappers = outputSoi.getAllStructFieldRefs.asScala.map(unwrapperFor)
 
       override def hasNext: Boolean = {
-        if (completed) {
+        if (writerThread.outputReadToEnd) {
           return false
         }
         try {
@@ -89,7 +88,6 @@ private[hive] case class HiveScriptTransformationExec(
               if (scriptOutputReader.next(scriptOutputWritable) <= 0) {
                 checkFailureAndPropagate(writerThread, null, proc, stderrBuffer)
                 writerThread.outputReadToEnd = true
-                completed = true
                 return false
               }
             } else {
@@ -103,7 +101,6 @@ private[hive] case class HiveScriptTransformationExec(
                   // being terminated. So explicitly waiting for the process to be done.
                   checkFailureAndPropagate(writerThread, null, proc, stderrBuffer)
                   writerThread.outputReadToEnd = true
-                  completed = true
                   return false
               }
             }
