@@ -281,7 +281,11 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     NativeStreamWriters.register("query", first)
     NativeStreamWriters.register("other query", other)
     assert(released.isEmpty)
+    // Closed before the query creates its next stream writer.
+    NativeStreamWriters.closePrevious("query")
+    assert(released == Seq(1L))
     NativeStreamWriters.register("query", second)
+    NativeStreamWriters.closePrevious("new query")
     assert(released == Seq(1L))
     second.close()
     other.close()

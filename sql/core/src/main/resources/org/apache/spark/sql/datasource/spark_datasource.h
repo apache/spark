@@ -120,9 +120,10 @@
  *   identify the output of a micro-batch, also when other queries write to the same destination. A
  *   micro-batch streaming query creates a new stream writer for each micro-batch, and Spark closes
  *   it once it committed or aborted the micro-batch, as for a batch write. A stream writer that
- *   Spark neither commits nor aborts is closed when the query creates its next one, or, since Spark
- *   is not told when a streaming query stops, once the writer is no longer referenced. Streaming
- *   writes are micro-batch only: a query with continuous processing fails before create_writer.
+ *   Spark neither commits nor aborts is closed before the query calls create_writer for its next
+ *   one, or, since Spark is not told when a streaming query stops, once the writer is no longer
+ *   referenced. Streaming writes are micro-batch only: a query with continuous processing fails
+ *   before create_writer.
  *
  * Conventions
  * -----------
@@ -137,10 +138,11 @@
  *   NULL handle as an error. Spark releases each handle exactly once, with the close function of
  *   its kind: close, close_reader, close_stream_reader, close_writer or close_data_writer, and no
  *   other function releases a handle. A handle is not always released right after its last use: a
- *   batch reader whose partitions are never planned, and a stream writer that is neither committed
- *   nor aborted, may only be released once they are no longer referenced (see Lifecycle above). A
- *   reader or writer handle must not depend on the data source handle it was created from, because
- *   Spark closes the data source handle right after creating it.
+ *   batch reader whose partitions are never planned may only be released once it is no longer
+ *   referenced, and a stream writer that is neither committed nor aborted before the query
+ *   creates its next one or once it is no longer referenced (see Lifecycle above). A reader or
+ *   writer handle must not depend on the data source handle it was created from, because Spark
+ *   closes the data source handle right after creating it.
  * - Order of the calls. After a function on a handle fails, Spark calls no other function on the
  *   handle than its close function, except that it aborts a writer whose commit failed and a data
  *   writer whose write or commit failed. It does not abort a writer or a data writer whose commit

@@ -182,9 +182,9 @@ Spark calls the functions of the table as follows:
   already committed. A restarted query may also abort such an epoch, so an abort only removes what
   the data writers of its own writer wrote. A micro-batch streaming query creates a new stream
   writer for each micro-batch, and Spark closes it with `close_writer` once it committed or aborted
-  the micro-batch. A stream writer that Spark neither commits nor aborts is closed when the query
-  creates its next one, or, because Spark is not told when a streaming query stops, once it is no
-  longer referenced.
+  the micro-batch. A stream writer that Spark neither commits nor aborts is closed before the
+  query creates its next one, or, because Spark is not told when a streaming query stops, once it
+  is no longer referenced.
 
 The library defines the format of the partitions, of the state of its readers and writers, and of
 the commit messages, which Spark sends to the executors and back as byte arrays. The library
