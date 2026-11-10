@@ -310,12 +310,13 @@ class ExternalLookupJoinEvaluatorFactory(
         case None => true
       }
     }
-    cachedKeys.foreach { cached =>
-      cached.rowIndexes.foreach { index =>
-        cached.lookupRows.foreach(joinMatch(index, _))
-        finish(index)
+    // The cache hits are joined as the output is read, before the connector's rows: one cached row
+    // at a time, with every stream row of its key, so that their output rows do not pile up while
+    // the batch is built. A key's stream rows are finished after its last cached row.
+    private val cacheHits: Iterator[(CachedKey, Option[UnsafeRow])] =
+      cachedKeys.iterator.flatMap { cached =>
+        (cached.lookupRows.iterator.map(Some(_)) ++ Iterator.single(None)).map(cached -> _)
       }
-    }
 
     // Only a later batch of the partition reads what this one caches, so the last batch caches
     // nothing. The partition knows whether input remains once the request is sent, before its
@@ -330,10 +331,12 @@ class ExternalLookupJoinEvaluatorFactory(
       else connectorCall(reader.lookup(keyEntries.map(_.requestRow)))
 
     // A semi or anti join decides a stream row at its first match. Once every requested row has
-    // matched, no later result row can change the output, so the join reads no further.
+    // matched, no later result row can change the output, so the join reads no further, unless it
+    // fills the cache, which keeps only complete results for later batches.
     private var undecidedRows = keyEntries.iterator.map(_.rowIndexes.length).sum
 
-    private def decided: Boolean = joinOutput.answeredByFirstMatch && undecidedRows == 0
+    private def decided: Boolean =
+      joinOutput.answeredByFirstMatch && undecidedRows == 0 && cacheWriter.isEmpty
 
     override def hasNext: Boolean = {
       tryFillPending()
@@ -350,6 +353,12 @@ class ExternalLookupJoinEvaluatorFactory(
     /** Reads more only when nothing is buffered; safe to call repeatedly. */
     private def tryFillPending(): Unit = {
       try {
+        while (pending.isEmpty && cacheHits.hasNext) {
+          cacheHits.next() match {
+            case (cached, Some(lookupRow)) => cached.rowIndexes.foreach(joinMatch(_, lookupRow))
+            case (cached, None) => cached.rowIndexes.foreach(finish)
+          }
+        }
         while (pending.isEmpty && !decided && advanceCursor()) {
           reader.resultRowRead()
           // The join checks for a close() before each connector call, so it makes none after it
@@ -474,7 +483,8 @@ class ExternalLookupJoinEvaluatorFactory(
    * partitions, e.g. after coalesce, has one cache per partition). Once its entries take more than
    * `maxBytes`, the least recently used ones are evicted; an entry expires once it is older than
    * the TTL, by `cacheTicker`. An entry takes the bytes of its key and of its rows, with the
-   * objects that hold each row, plus a fixed overhead, so that a key without a result counts too.
+   * objects that hold each row, and of the objects that hold the entry and its key, so that a key
+   * without a result counts too.
    * Its keys and rows are the batches' own copies, which are never changed.
    */
   private class LookupCache {
@@ -853,8 +863,15 @@ class ExternalLookupJoinEvaluatorFactory(
 }
 
 private object ExternalLookupJoinEvaluatorFactory {
-  /** The bytes that a cache entry takes besides its key and rows, as an estimate. */
-  val CACHE_ENTRY_OVERHEAD_BYTES = 64L
+  /**
+   * The bytes that a cache entry takes besides its key's data and its rows, on a 64-bit JVM with
+   * compressed object pointers: Guava's entry with its links in the access and write orders (64
+   * bytes, or 48 without a TTL), the reference that holds the value and its weight (24), the
+   * entry's slot in the hash table and the table's spare room (8), the key's `UnsafeRow` object
+   * (40) and the 16-byte header of its data array, and the 16-byte header of the array of the
+   * entry's rows.
+   */
+  val CACHE_ENTRY_OVERHEAD_BYTES = 168L
 
   /**
    * The bytes that a cached row takes besides its data, on a 64-bit JVM with compressed object

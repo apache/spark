@@ -48,7 +48,8 @@ object ResolveExternalLookupHint extends Rule[LogicalPlan] with QueryErrorsBase 
   private val SUPPORTED_OPTIONS =
     Set(CACHE_ENABLED_OPTION, CACHE_MAX_BYTES_OPTION, CACHE_TTL_OPTION)
   private val POSITIVE_SIZE = "a positive size, such as 64k, 16m, or 1g"
-  private val NON_NEGATIVE_DURATION = "a non-negative duration, such as 500ms, 5s, or 10m"
+  private val NON_NEGATIVE_DURATION =
+    "a non-negative duration, such as 500ms, 5s, or 10m; a number without a unit is in milliseconds"
 
   override def apply(plan: LogicalPlan): LogicalPlan =
     plan.resolveOperatorsUpWithPruning(_.containsPattern(UNRESOLVED_HINT), ruleId) {

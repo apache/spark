@@ -2594,9 +2594,10 @@ object SQLConf {
   val JOIN_EXTERNAL_LOOKUP_CACHE_TTL =
     buildConf("spark.sql.join.externalLookup.cache.ttl")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
-      .doc("Time-to-live of a cached external lookup join result. A value of 0 disables " +
-        "expiration. It can be overridden per join with the EXTERNAL_LOOKUP hint option " +
-        "'cache_ttl'.")
+      .doc("Time-to-live of a cached external lookup join result, such as 30s or 10m, counted " +
+        "from when the result is cached, not from its last use. A number without a unit is in " +
+        "milliseconds. A value of 0 disables expiration. It can be overridden per join with the " +
+        "EXTERNAL_LOOKUP hint option 'cache_ttl'.")
       .version("4.4.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(_ >= 0, "External lookup join cache TTL must be non-negative")
