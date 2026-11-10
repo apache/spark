@@ -308,7 +308,13 @@ impl JsonWrite {
 
         // This single rename is the commit point. No existing data is deleted,
         // including during truncate. No fallible work follows publication.
-        fs::rename(&self.temporary_manifest, self.root.join("manifest.json"))?;
+        if let Err(error) = fs::rename(&self.temporary_manifest, self.root.join("manifest.json")) {
+            // A rename that reports an error, for example on a network filesystem that loses
+            // the reply, may still have taken effect, and then the new manifest lists the
+            // objects. Abort and Drop keep them: unlisted objects are invisible to readers.
+            self.sealed = false;
+            return Err(error.into());
+        }
         self.committed = true;
         self.lock.take();
         Ok(())

@@ -397,9 +397,11 @@ fn decode_offset<T: DeserializeOwned>(json: &str) -> Result<T> {
 /// The state of a reader or a writer, the partitions and the commit messages are MessagePack
 /// in a versioned envelope. MessagePack is self-describing, and the SDK writes structs as maps
 /// with the names of their fields, so the serde attributes that need them, such as `untagged`,
-/// `flatten` and `default`, work; byte vectors are compact, and floats, including NaN and the
-/// infinities, round-trip as they are. These values never outlive the application, and the same
-/// build of the library reads them, so the format is an implementation detail; see the README.
+/// `flatten` and `default`, work, and floats, including NaN and the infinities, round-trip as
+/// they are. A `Vec<u8>` stays a sequence: serde buffers the values of `untagged` and `flatten`
+/// before deserializing them, and its buffer cannot read MessagePack binary as a sequence.
+/// These values never outlive the application, and the same build of the library reads them,
+/// so the format is an implementation detail; see the README.
 #[derive(Serialize, Deserialize)]
 struct Envelope<T> {
     version: u32,
@@ -408,9 +410,7 @@ struct Envelope<T> {
 
 pub(crate) fn encode<T: Serialize>(value: &T) -> Result<Vec<u8>> {
     let mut bytes = Vec::new();
-    let mut serializer = rmp_serde::Serializer::new(&mut bytes)
-        .with_struct_map()
-        .with_bytes(rmp_serde::config::BytesMode::ForceAll);
+    let mut serializer = rmp_serde::Serializer::new(&mut bytes).with_struct_map();
     Envelope {
         version: STATE_VERSION,
         value,
@@ -898,7 +898,7 @@ mod tests {
         #[serde(untagged)]
         enum Split {
             Rows { first: i64 },
-            Files { paths: Vec<String> },
+            Files { paths: Vec<String>, footer: Vec<u8> },
         }
 
         #[derive(Serialize, Deserialize, Debug, PartialEq)]
@@ -906,6 +906,7 @@ mod tests {
             min: f64,
             #[serde(default, skip_serializing_if = "Option::is_none")]
             max: Option<f64>,
+            sketch: Vec<u8>,
         }
 
         #[derive(Serialize, Deserialize, Debug, PartialEq)]
@@ -918,23 +919,22 @@ mod tests {
 
         let partition = Partition {
             footer: (0..=255).collect(),
+            // Serde buffers the values of untagged enums and flattened fields.
             split: Split::Files {
                 paths: vec!["a".into()],
+                footer: vec![1, 2],
             },
             statistics: Statistics {
                 min: f64::NEG_INFINITY,
                 max: Some(f64::NAN),
+                sketch: vec![255, 0],
             },
         };
-        let bytes = encode(&partition).unwrap();
-        // The 256 bytes are a bin16 value of 256 bytes, not a sequence of 256 integers, half
-        // of which would take two bytes each.
-        assert!(bytes.windows(3).any(|marker| marker == [0xc5, 0x01, 0x00]));
-        assert!(bytes.len() < 256 + 128, "{}", bytes.len());
-        let decoded: Partition = decode(&bytes).unwrap();
+        let decoded: Partition = decode(&encode(&partition).unwrap()).unwrap();
         assert_eq!(decoded.footer, partition.footer);
         assert_eq!(decoded.split, partition.split);
         assert_eq!(decoded.statistics.min, f64::NEG_INFINITY);
         assert!(decoded.statistics.max.unwrap().is_nan());
+        assert_eq!(decoded.statistics.sketch, partition.statistics.sketch);
     }
 }

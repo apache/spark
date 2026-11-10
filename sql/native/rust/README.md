@@ -106,7 +106,7 @@ added there would be a breaking change of the SDK, which its 0.x version allows.
 The factory and partition types implement `Serialize` and `Deserialize`, as the commit
 messages of writes do. The SDK encodes them with serde in MessagePack, a self-describing binary
 format in which structs are maps with the names of their fields, so the serde attributes that
-need them, such as `untagged`, `flatten` and `default`, work; byte vectors are compact, and
+need them, such as `untagged`, `flatten` and `default`, work, including on byte vectors, and
 floats, including NaN and the infinities, round-trip as they are. Offsets are JSON instead,
 since Spark stores them as text: see [Streaming reads and writes](#streaming-reads-and-writes).
 Connections, pointers, and open readers remain in their creating process.
