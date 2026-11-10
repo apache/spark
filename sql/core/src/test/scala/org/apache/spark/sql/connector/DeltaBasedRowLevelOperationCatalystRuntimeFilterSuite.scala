@@ -18,9 +18,13 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.expressions.DynamicPruning
+import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 
 class DeltaBasedRowLevelOperationCatalystRuntimeFilterSuite
   extends RowLevelOperationCatalystRuntimeFilterSuiteBase {
+
+  import testImplicits._
 
   override protected def extraTableProps: java.util.Map[String, String] = {
     val props = super.extraTableProps
@@ -46,5 +50,28 @@ class DeltaBasedRowLevelOperationCatalystRuntimeFilterSuite
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(2, 2, 150, "software") :: Row(3, 3, 120, "hr") :: Nil)
+  }
+
+  test("SPARK-60863: delete prunes by a scalar subquery condition on the group key") {
+    withTempView("src") {
+      createAndInitTable("pk INT NOT NULL, id INT, salary INT, dep STRING",
+        """{ "pk": 1, "id": 1, "salary": 300, "dep": "hr" }
+          |{ "pk": 2, "id": 2, "salary": 150, "dep": "software" }
+          |{ "pk": 3, "id": 3, "salary": 120, "dep": "hr" }
+          |""".stripMargin)
+      Seq("hr").toDF("d").createOrReplaceTempView("src")
+
+      // a delta-based delete writes only the rows it reads, so its condition can prune the scan
+      val executedPlan = executeAndKeepPlan {
+        sql(s"DELETE FROM $tableNameAsString WHERE dep = (SELECT max(d) FROM src)")
+      }
+      val Seq(batchScan) = collect(executedPlan) { case s: BatchScanExec => s }
+      assert(batchScan.runtimeFilters.exists(!_.isInstanceOf[DynamicPruning]),
+        s"expected the condition among the runtime filters, got ${batchScan.runtimeFilters}")
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(2, 2, 150, "software") :: Nil)
+    }
   }
 }

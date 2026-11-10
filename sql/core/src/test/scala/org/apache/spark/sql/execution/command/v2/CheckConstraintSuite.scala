@@ -21,17 +21,19 @@ import test.org.apache.spark.sql.connector.catalog.functions.JavaAverage
 import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen.JavaStrLenStaticMagic
 
 import org.apache.spark.SparkRuntimeException
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, MapTypeBufferAgg, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.catalyst.util.AttributeNameParser
 import org.apache.spark.sql.catalyst.util.QuotingUtils.quoteNameParts
-import org.apache.spark.sql.connector.{StrLen, StrLenDefault, StrLenMagic}
+import org.apache.spark.sql.connector.{ConstantStringOfAnyArity, StrLen, StrLenDefault, StrLenMagic}
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryCatalog, Table, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.catalog.constraints.{Check, Constraint}
 import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.execution.command.DDLCommandTestUtils
+import org.apache.spark.sql.functions.udaf
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.metricview.serde.{AssetSource, Column, DimensionExpression, MeasureExpression, MetricView, MetricViewFactory}
 import org.apache.spark.sql.types.{DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -187,6 +189,20 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     }
   }
 
+  test("SPARK-60823: Alter table add check constraint on a path") {
+    withTempPath { dir =>
+      spark.range(1).write.parquet(dir.getCanonicalPath)
+      val path = s"parquet.`${dir.getCanonicalPath}`"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $path ADD CONSTRAINT c1 CHECK (id > 0)")
+        },
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relationName" -> s"`parquet`.`${dir.getCanonicalPath}`"),
+        context = ExpectedContext(fragment = path))
+    }
+  }
+
   private def getCheckConstraint(table: Table): Check = {
     assert(table.constraints.length == 1)
     assert(table.constraints.head.isInstanceOf[Check])
@@ -295,11 +311,59 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     }
   }
 
-  test("SPARK-60777: Check constraint cannot call a V2 aggregate function") {
+  test("SPARK-60800: Check constraint cannot call an aggregate or window function") {
+    def checkRejected(call: String): Unit = {
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        sql(s"CREATE TABLE $t (id INT) $defaultUsing")
+        val cond = s"$call > 0"
+        Seq(
+          s"CREATE TABLE ${t}_2 (id INT, CONSTRAINT c1 CHECK ($cond)) $defaultUsing",
+          s"REPLACE TABLE $t (id INT, CONSTRAINT c1 CHECK ($cond)) $defaultUsing"
+        ).foreach { query =>
+          checkError(
+            exception = intercept[AnalysisException](sql(query)),
+            condition = "AGGREGATE_OR_WINDOW_FUNCTION_IN_CHECK_CONSTRAINT",
+            sqlState = "42621",
+            parameters = Map("checkCondition" -> cond),
+            context = ExpectedContext(fragment = call))
+        }
+      }
+    }
+
+    checkRejected("max(id)")
+    // These are aggregate functions, but not an `AggregateExpression`.
+    checkRejected("grouping(id)")
+    checkRejected("grouping_id()")
+    checkRejected("row_number() OVER (ORDER BY id)")
+    // `row_number()` has no `WindowExpression`, and `abs(id)` is not a `WindowFunction`.
+    checkRejected("row_number()")
+    checkRejected("abs(id) OVER ()")
+    // A user-defined aggregate function fails in the same way as a built-in one.
+    withUserDefinedFunction("tmp_agg" -> true) {
+      spark.udf.register("tmp_agg", udaf(MapTypeBufferAgg))
+      checkRejected("tmp_agg(id)")
+    }
     withV2Function("avg", new JavaAverage) {
-      // ALTER TABLE keeps failing with the error for an aggregate in a filter.
-      val call = s"fun_$catalog.ns.avg(CAST(id AS DOUBLE))"
-      checkUserDefinedFunctionRejected(s"$call > 0", call, "`davg`", inAlter = false)
+      checkRejected(s"fun_$catalog.ns.avg(CAST(id AS DOUBLE))")
+    }
+  }
+
+  test("SPARK-60821: Check constraint cannot call a generator function") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT) $defaultUsing")
+      val call = "explode(array(id))"
+      val cond = s"$call IS NOT NULL"
+      Seq(
+        s"CREATE TABLE ${t}_2 (id INT, CONSTRAINT c1 CHECK ($cond)) $defaultUsing",
+        s"REPLACE TABLE $t (id INT, CONSTRAINT c1 CHECK ($cond)) $defaultUsing"
+      ).foreach { query =>
+        checkError(
+          exception = intercept[AnalysisException](sql(query)),
+          condition = "GENERATOR_IN_CHECK_CONSTRAINT",
+          sqlState = "42621",
+          parameters = Map("checkCondition" -> cond),
+          context = ExpectedContext(fragment = call))
+      }
     }
   }
 
@@ -364,6 +428,35 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     }
   }
 
+  test("SPARK-59243: Nested JSON constructors of a check constraint are not shadowed") {
+    Seq(
+      "json_array" -> """json_array(json_array(s)) <> '[["bad"]]'""",
+      "json_object" -> """json_object('a', json_object('b', s)) <> '{"a":{"b":"bad"}}'"""
+    ).foreach { case (name, cond) =>
+      withV2Function(name, ConstantStringOfAnyArity("OK")) {
+        withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+          sql(s"CREATE TABLE $t (id INT, s STRING) $defaultUsing")
+          sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK ($cond)")
+          withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+            sql(s"SET PATH = fun_$catalog.ns, system.builtin")
+            try {
+              // The path does shadow the nested calls outside of the constraint.
+              checkAnswer(sql(s"SELECT $cond FROM VALUES ('bad') AS t(s)"), Row(true))
+              sql(s"INSERT INTO $t VALUES (1, 'good')")
+              val e = intercept[SparkRuntimeException] {
+                sql(s"INSERT INTO $t VALUES (2, 'bad')")
+              }
+              assert(e.getCondition == "CHECK_CONSTRAINT_VIOLATION", s"for $cond")
+              checkAnswer(spark.table(t), Row(1, "good"))
+            } finally {
+              sql("SET PATH = DEFAULT_PATH")
+            }
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-60777: Check constraint calling built-in functions is enforced") {
     Seq(
       "exists(a, x -> upper(CAST(x AS STRING)) = '2')",
@@ -380,6 +473,19 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         assert(error.getCondition == "CHECK_CONSTRAINT_VIOLATION", cond)
         checkAnswer(spark.table(t).select("id"), Row(1))
       }
+    }
+  }
+
+  test("SPARK-60856: Check constraint with a subscript of a lambda variable") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT, a ARRAY<ARRAY<INT>>, " +
+        s"CONSTRAINT c1 CHECK (forall(a, x -> x[0] > 0))) $defaultUsing")
+      sql(s"INSERT INTO $t VALUES (1, array(array(1)))")
+      val error = intercept[SparkRuntimeException] {
+        sql(s"INSERT INTO $t VALUES (2, array(array(-1)))")
+      }
+      assert(error.getCondition == "CHECK_CONSTRAINT_VIOLATION")
+      checkAnswer(spark.table(t), Row(1, Seq(Seq(1))))
     }
   }
 
@@ -491,6 +597,19 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     }
   }
 
+  test("SPARK-60824: Alter table add check constraint that always holds") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT NOT NULL, data STRING) $defaultUsing")
+      sql(s"INSERT INTO $t VALUES (1, 'a')")
+      // The optimizer replaces the scan that validates the existing rows with an empty relation.
+      sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK (id IS NOT NULL)")
+      val table = loadTable(nonPartitionCatalog, "ns", "tbl")
+      assert(table.validatedVersion() == "1")
+      assert(getCheckConstraint(table).toDDL ==
+        "CONSTRAINT c1 CHECK (id IS NOT NULL) ENFORCED NORELY")
+    }
+  }
+
   test("Alter table add new check constraint with nested column") {
     withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
       sql(s"CREATE TABLE $t (id INT, s STRUCT<num INT, str STRING>) $defaultUsing")
@@ -595,6 +714,52 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
           parameters = Map("constraintName" -> "abc",
             "oldConstraint" -> "CONSTRAINT abc CHECK (id > 0) ENFORCED NORELY")
         )
+      }
+    }
+  }
+
+  private def checkAddToViewError(view: String, viewName: String): Unit = {
+    val query = s"ALTER TABLE $view ADD CONSTRAINT c1 CHECK (id > 0)"
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(query)
+      },
+      condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+      sqlState = "42809",
+      parameters = Map("viewName" -> viewName, "operation" -> "ALTER TABLE ... ADD CONSTRAINT"),
+      context = ExpectedContext(fragment = query, start = 0, stop = query.length - 1))
+  }
+
+  test("SPARK-60822: Check constraint cannot be added to a view") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT) $defaultUsing")
+      sql(s"INSERT INTO $t VALUES (-1), (10)")
+      withTempView("tv") {
+        withView("v") {
+          // A view that hides the violating row of its table, and one that no table backs.
+          sql(s"CREATE TEMPORARY VIEW tv AS SELECT * FROM $t WHERE id > 5")
+          sql("CREATE VIEW v AS SELECT id FROM range(3)")
+          checkAddToViewError("tv", "`tv`")
+          checkAddToViewError("v", "`spark_catalog`.`default`.`v`")
+        }
+      }
+      assert(loadTable(nonPartitionCatalog, "ns", "tbl").constraints.isEmpty)
+    }
+  }
+
+  test("SPARK-60822: Check constraint cannot be added to a metric view") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT) $defaultUsing")
+      val yaml = MetricViewFactory.toYAML(MetricView(
+        "0.1",
+        AssetSource(t),
+        None,
+        Seq(
+          Column("id", DimensionExpression("id"), 0),
+          Column("cnt", MeasureExpression("count(1)"), 1))))
+      withView("mv") {
+        sql(s"CREATE VIEW mv WITH METRICS LANGUAGE YAML AS $$$$\n$yaml\n$$$$")
+        checkAddToViewError("mv", "`spark_catalog`.`default`.`mv`")
       }
     }
   }

@@ -18,7 +18,6 @@
 import itertools
 import os
 import re
-import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
@@ -62,6 +61,8 @@ ignored_file_patterns = (
     "/dev/requirements.txt",
     "/dev/spark_merge_footer.py",
     "/dev/spark-test-image/lint/Dockerfile",
+    # Always run by the precondition job in build_and_test.yml.
+    "/dev/sparktestsupport/tests/",
     "/dev/structured_logging_style.py",
     "/ui-test/package-lock.json",
     "/ui-test/package.json",
@@ -86,10 +87,6 @@ def is_ignored_file(filename: str) -> bool:
     A trailing slash ignores a directory subtree:
     >>> is_ignored_file("dev/create-release/spark-rm/Dockerfile")
     True
-
-    Non-matches fall through:
-    >>> is_ignored_file("xasfZyaml")
-    False
     """
     path = PurePath("/") / filename
     for pattern in ignored_file_patterns:
@@ -223,13 +220,6 @@ class Module(object):
         :param test_tags A set of tags that will be excluded when running unit tests if the module
             is not explicitly changed.
         :param should_run_r_tests: If true, changes in this module will trigger all R tests.
-
-        Duplicate names are rejected and not registered:
-
-        >>> Module("core", [], [])
-        Traceback (most recent call last):
-            ...
-        ValueError: module name 'core' is already in use
 
         A plain string is not a sequence of goals:
 
@@ -1997,17 +1987,6 @@ def transitive_dependencies(module: Module) -> set[Module]:
 
     >>> sorted(dependency.name for dependency in transitive_dependencies(unsafe))
     ['config', 'tags', 'utils', 'utils-java']
-
-    Every `pyspark-*` module must depend on `pyspark-base`:
-
-    >>> [
-    ...     module.name
-    ...     for module in all_modules
-    ...     if module.name.startswith("pyspark-")
-    ...     and module is not pyspark_base
-    ...     and pyspark_base not in transitive_dependencies(module)
-    ... ]
-    []
     """
     seen = set()
     pending = list(module.dependencies)
@@ -2018,15 +1997,3 @@ def transitive_dependencies(module: Module) -> set[Module]:
         seen.add(dependency)
         pending.extend(dependency.dependencies)
     return seen
-
-
-def _test():
-    import doctest
-
-    failure_count = doctest.testmod()[0]
-    if failure_count:
-        sys.exit(-1)
-
-
-if __name__ == "__main__":
-    _test()

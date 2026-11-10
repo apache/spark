@@ -222,6 +222,22 @@ _tie_returns_first_operand = LooseVersion(np.__version__) >= LooseVersion("2.3.0
 
 # Every branch returns one of the operands, so without a cast the result keeps their
 # common type: an integral pair stays exact past 2^53 and the dtype matches NumPy's.
+def _maximum_func(c1: Column, c2: Column) -> Column:
+    return (
+        F.when(c1.isNull() | F.isnan(c1.cast("double")), c1)
+        .when(c2.isNull() | F.isnan(c2.cast("double")), c2)
+        .otherwise(F.greatest(c1, c2))
+    )
+
+
+def _minimum_func(c1: Column, c2: Column) -> Column:
+    return (
+        F.when(c1.isNull() | F.isnan(c1.cast("double")), c1)
+        .when(c2.isNull() | F.isnan(c2.cast("double")), c2)
+        .otherwise(F.least(c1, c2))
+    )
+
+
 def _fmax_func(c1: Column, c2: Column) -> Column:
     tie = c1 if _tie_returns_first_operand else c2
     return (
@@ -279,8 +295,8 @@ binary_np_spark_mappings = {
         (c1.cast(BooleanType()) | c2.cast(BooleanType()))
         & (~(c1.cast(BooleanType())) | ~(c2.cast(BooleanType())))
     ),
-    "maximum": F.greatest,
-    "minimum": F.least,
+    "maximum": _maximum_func,
+    "minimum": _minimum_func,
     "nextafter": pandas_udf(  # type: ignore[call-overload]
         lambda s1, s2: np.nextafter(s1, s2), DoubleType()
     ),

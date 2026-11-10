@@ -51,8 +51,9 @@ private[sql] object ArrowCompressionUtils {
       zstdCompressionLevel: Int): CompressionCodec = {
     codecName match {
       case "none" => NoCompressionCodec.INSTANCE
-      case "zstd" => new BoundedZstdCompressionCodec(zstdCompressionLevel)
-      case "lz4" => new Lz4CompressionCodec()
+      case "zstd" =>
+        new BoundedZstdCompressionCodec(zstdCompressionLevel) with UncompressedEmptyBuffers
+      case "lz4" => new Lz4CompressionCodec with UncompressedEmptyBuffers
       case other =>
         throw SparkException.internalError(
           s"Unsupported Arrow compression codec: $other. Supported values: none, zstd, lz4")
@@ -144,6 +145,31 @@ private object BoundedZstdCompressionCodec {
   // A smaller saving does not pay for another allocation, copy and release, which a small batch,
   // e.g. a group of a grouped Python UDF, would do for each of its buffers.
   val MIN_SHRINK_SAVING_BYTES = 4 * 1024
+}
+
+/**
+ * A [[CompressionCodec]] mixin that gives an empty buffer the `-1` (stored uncompressed) length
+ * prefix. arrow-java up to 19.0 writes a `0` prefix and no compressed data, so Arrow C++ (and
+ * PyArrow) decompresses a zero-byte body, which LZ4 rejects with "Lz4 compressed input contains
+ * less than one frame". Remove once on Arrow 20.0.0 (apache/arrow-java#1248).
+ */
+private[sql] trait UncompressedEmptyBuffers extends CompressionCodec {
+
+  abstract override def compress(
+      allocator: BufferAllocator,
+      uncompressedBuffer: ArrowBuf): ArrowBuf = {
+    if (uncompressedBuffer.writerIndex() == 0L) {
+      val compressedBuffer = allocator.buffer(CompressionUtil.SIZE_OF_UNCOMPRESSED_LENGTH)
+      compressedBuffer.setLong(0, CompressionUtil.NO_COMPRESSION_LENGTH)
+      compressedBuffer.writerIndex(CompressionUtil.SIZE_OF_UNCOMPRESSED_LENGTH)
+      // Like `super.compress`, release the input only on success. TrackingCompressionCodec relies
+      // on this to release it on failure.
+      uncompressedBuffer.close()
+      compressedBuffer
+    } else {
+      super.compress(allocator, uncompressedBuffer)
+    }
+  }
 }
 
 /**

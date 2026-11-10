@@ -385,16 +385,7 @@ def run_python_packaging_tests():
 def run_shell_script_tests(
     test_modules: Sequence[modules.Module], stage: modules.TestStage
 ) -> None:
-    """
-    Run the selected shell script goals for the given stage.
-
-    All declared scripts must exist and be executable before the build:
-
-    >>> from sparktestsupport.shellutils import is_exe
-    >>> [str(g.path) for m in modules.all_modules for g in m.shell_script_test_goals
-    ...  if not is_exe(os.path.join(SPARK_HOME, g.path))]
-    []
-    """
+    """Run the selected shell script goals for the given stage."""
     shell_script_test_goals = determine_shell_script_test_goals(test_modules, stage)
 
     for test_goal in shell_script_test_goals:
@@ -684,18 +675,10 @@ def main():
 
 
 def _test():
-    import doctest
+    import unittest
 
-    import sparktestsupport.modules
-    import sparktestsupport.utils
-
-    test_results = (
-        doctest.testmod(sparktestsupport.modules),
-        doctest.testmod(sparktestsupport.utils),
-        doctest.testmod(),
-    )
-    failure_count = sum([num_failures for (num_failures, num_tests) in test_results])
-    if failure_count:
+    tests = unittest.defaultTestLoader.discover("sparktestsupport.tests")
+    if not unittest.TextTestRunner().run(tests).wasSuccessful():
         sys.exit(-1)
 
 

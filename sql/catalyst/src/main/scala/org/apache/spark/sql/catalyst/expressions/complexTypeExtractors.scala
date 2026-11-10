@@ -555,10 +555,18 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
     while (i < len) {
       // putIfAbsent preserves first-match semantics for maps with duplicate keys (allowed at
       // the physical level by [[ArrayBasedMapData]]), matching the linear scan path.
-      hm.putIfAbsent(keys.get(i, keyType), i)
+      hm.putIfAbsent(normalizeFloatingPointKey(keys.get(i, keyType)), i)
       i += 1
     }
     hm
+  }
+
+  // SQL equality treats both signs of zero as equal; boxed Float/Double equality does not.
+  // Normalize stored and lookup keys so hashing agrees with the linear SQL comparison.
+  private def normalizeFloatingPointKey(key: Any): Any = key match {
+    case value: Float if value == 0.0f => 0.0f
+    case value: Double if value == 0.0d => 0.0d
+    case _ => key
   }
 
   /**
@@ -598,22 +606,26 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
     case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
       val l = v.asInstanceOf[Long]
       (l ^ (l >>> 32)).toInt
-    case FloatType => java.lang.Float.floatToIntBits(v.asInstanceOf[Float])
+    case FloatType =>
+      java.lang.Float.floatToIntBits(normalizeFloatingPointKey(v).asInstanceOf[Float])
     case DoubleType =>
-      val l = java.lang.Double.doubleToLongBits(v.asInstanceOf[Double])
+      val l = java.lang.Double.doubleToLongBits(normalizeFloatingPointKey(v).asInstanceOf[Double])
       (l ^ (l >>> 32)).toInt
     case _ => v.hashCode()
   }
 
+  // Signed-zero normalization must match hashKeyOnDriver so generated probes start in the
+  // same bucket as SQL-equal keys, regardless of their zero sign.
   /** Java-side hash expression over the primitive/object `v`. Mirrors [[hashKeyOnDriver]]. */
   private def genHash(v: String, keyType: DataType): String = keyType match {
     case BooleanType => s"($v ? 1 : 0)"
     case ByteType | ShortType | IntegerType | DateType | _: YearMonthIntervalType => s"$v"
     case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
       s"(int)($v ^ ($v >>> 32))"
-    case FloatType => s"Float.floatToIntBits($v)"
+    case FloatType => s"($v == 0.0f ? 0 : Float.floatToIntBits($v))"
     case DoubleType =>
-      s"(int)(Double.doubleToLongBits($v) ^ (Double.doubleToLongBits($v) >>> 32))"
+      s"($v == 0.0d ? 0 : " +
+        s"(int)(Double.doubleToLongBits($v) ^ (Double.doubleToLongBits($v) >>> 32)))"
     case _ => s"$v.hashCode()"
   }
 
@@ -743,7 +755,7 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
         ordinal: Any,
         keyType: DataType,
         ordering: Ordering[Any]): Any = {
-      val idx = index.getOrDefault(ordinal, -1)
+      val idx = index.getOrDefault(normalizeFloatingPointKey(ordinal), -1)
       if (idx == -1 || values.isNullAt(idx)) null else values.get(idx, dataType)
     }
 

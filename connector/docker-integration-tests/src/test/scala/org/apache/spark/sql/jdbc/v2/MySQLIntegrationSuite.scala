@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.jdbc.v2
 
-import java.sql.{Connection, SQLFeatureNotSupportedException}
+import java.sql.{Connection, Date, SQLFeatureNotSupportedException}
 
-import org.apache.spark.{SparkConf, SparkSQLFeatureNotSupportedException}
+import org.apache.spark.{SparkConf, SparkException, SparkSQLFeatureNotSupportedException}
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.MySQLDatabaseOnDocker
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
@@ -322,6 +323,70 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
 
     checkFilterPushed(df, pushed = false)
     checkAnswer(df, Seq(Row("alex"), Row("jen")))
+  }
+
+  test("SPARK-61032: TopN over a pushed GROUP BY expression") {
+    val emp = s"$catalogName.employee"
+
+    // MySQL rejects these sort keys under ONLY_FULL_GROUP_BY.
+    val rejected = Seq(
+      s"SELECT dept + 1, COUNT(*) FROM $emp GROUP BY dept + 1 ORDER BY (dept + 1) * 2 DESC LIMIT 2"
+        -> Seq(Row(7, 1L), Row(3, 2L)),
+      s"SELECT dept + 1, COUNT(*) FROM $emp GROUP BY dept + 1 ORDER BY dept + 1 DESC NULLS FIRST " +
+        "LIMIT 2" -> Seq(Row(7, 1L), Row(3, 2L)),
+      s"SELECT dept + 1, COUNT(*) FROM $emp GROUP BY dept + 1 ORDER BY (dept + 1) * 2 " +
+        "LIMIT 1 OFFSET 1" -> Seq(Row(3, 2L)),
+      // An alias shadowing the column expands into this form, e.g.
+      // SELECT date_add(date1, 1) AS date1 ... ORDER BY date_add(date1, 1).
+      s"SELECT date_add(date1, 1), COUNT(*) FROM $catalogName.datetime " +
+        "GROUP BY date_add(date1, 1) ORDER BY date_add(date_add(date1, 1), 1) DESC LIMIT 2"
+        -> Seq(Row(Date.valueOf("2022-05-20"), 1L), Row(Date.valueOf("2022-05-19"), 1L)))
+    val accepted = Seq(
+      s"SELECT dept + 1, COUNT(*) FROM $emp GROUP BY dept + 1 ORDER BY dept + 1 LIMIT 2"
+        -> Seq(Row(2, 2L), Row(3, 2L)),
+      s"SELECT dept + 1, COUNT(*) FROM $emp GROUP BY dept + 1 ORDER BY dept + 1 DESC LIMIT 2"
+        -> Seq(Row(7, 1L), Row(3, 2L)),
+      s"SELECT month(date1), COUNT(*) FROM $catalogName.datetime GROUP BY month(date1) " +
+        "ORDER BY month(date1) LIMIT 1" -> Seq(Row(1, 1L)),
+      s"SELECT dept + 1, COUNT(*) FROM $emp GROUP BY dept + 1 ORDER BY COUNT(*) ASC NULLS LAST " +
+        "LIMIT 1" -> Seq(Row(7, 1L)),
+      s"SELECT dept, COUNT(*) FROM $emp GROUP BY dept ORDER BY dept * 2 DESC NULLS FIRST LIMIT 2"
+        -> Seq(Row(6, 1L), Row(2, 2L)),
+      s"SELECT dept FROM $emp ORDER BY dept * 2 DESC NULLS FIRST LIMIT 2" -> Seq(Row(6), Row(2)))
+
+    Seq(false, true).foreach { legacy =>
+      // Arithmetic is pushed only in ANSI mode.
+      withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> "true",
+          SQLConf.LEGACY_MYSQL_TOP_N_OVER_GROUP_BY_EXPR_ENABLED.key -> legacy.toString) {
+        rejected.foreach { case (query, expected) =>
+          val df = sql(query)
+          checkAggregateRemoved(df)
+          if (legacy) {
+            // Legacy mode pushes the sort, so MySQL rejects it.
+            checkSortRemoved(df)
+            checkError(
+              exception = intercept[SparkException](df.collect()),
+              condition = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_QUERY_EXECUTION",
+              sqlState = Some("42000"),
+              parameters = Map(
+                "jdbcQuery" -> ".*ORDER BY.*",
+                "externalEngineSqlState" -> "42000",
+                "externalEngineError" -> "(?is).*only_full_group_by.*"),
+              matchPVals = true)
+          } else {
+            checkSortRemoved(df, pushed = false)
+            checkAnswer(df, expected)
+          }
+        }
+        accepted.foreach { case (query, expected) =>
+          val df = sql(query)
+          checkAggregateRemoved(df)
+          checkSortRemoved(df)
+          checkAnswer(df, expected)
+        }
+      }
+    }
   }
 }
 
