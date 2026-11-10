@@ -28,6 +28,8 @@ import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, LeftOuter, 
 import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupJoin, Join, JoinHint,
   LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.streaming.WriteToStream
+import org.apache.spark.sql.catalyst.trees.TreePattern.{DATA_SOURCE_V2_RELATION,
+  LOOKUP_ONLY_RELATION}
 import org.apache.spark.sql.connector.catalog.{Table, TableCapability}
 import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, EXTERNAL_LOOKUP}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation,
@@ -76,6 +78,19 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
           assert(FormExternalLookupJoin(lookupJoin) == lookupJoin)
         case other => fail(s"Expected an external lookup join: $other")
       }
+    }
+  }
+
+  test("the relation of a lookup-only table carries the lookup-only pattern") {
+    Seq(lookupOnly, tableWith(EXTERNAL_LOOKUP)).foreach { relation =>
+      assert(relation.containsAllPatterns(DATA_SOURCE_V2_RELATION, LOOKUP_ONLY_RELATION))
+      assert(innerJoinOnId(relation).containsPattern(LOOKUP_ONLY_RELATION))
+    }
+    Seq(tableWith(BATCH_READ, EXTERNAL_LOOKUP), tableWith(BATCH_READ), tableWith()).foreach {
+      relation =>
+        assert(relation.containsPattern(DATA_SOURCE_V2_RELATION))
+        assert(relation.containsPattern(LOOKUP_ONLY_RELATION) === false)
+        assert(innerJoinOnId(relation).containsPattern(LOOKUP_ONLY_RELATION) === false)
     }
   }
 

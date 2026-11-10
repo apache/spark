@@ -100,7 +100,7 @@ case class PreparedExternalLookupJoin(
   }
 
   // Connector descriptions may contain secrets, so the scan and the reader factory are not shown.
-  // The physical node renders a redacted description of them.
+  // The physical node renders the scan's redacted description, and nothing of the reader factory.
   override protected def stringArgs: Iterator[Any] =
     Iterator(joinType, lookupParameters, residualCondition, child)
 
