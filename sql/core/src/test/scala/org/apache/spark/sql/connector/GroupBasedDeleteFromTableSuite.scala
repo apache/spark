@@ -151,6 +151,27 @@ class GroupBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
     }
   }
 
+  test("SPARK-60878: delete with a NOT EXISTS subquery on the group key") {
+    withTempView("kept_dep") {
+      createAndInitTable("id INT, salary INT, dep STRING",
+        """{ "id": 1, "salary": 300, "dep": 'hr' }
+          |{ "id": 2, "salary": 150, "dep": 'software' }
+          |{ "id": 3, "salary": 120, "dep": 'hr' }
+          |""".stripMargin)
+
+      Seq("hr").toDF("d").createOrReplaceTempView("kept_dep")
+
+      sql(s"DELETE FROM $tableNameAsString t " +
+        "WHERE NOT EXISTS (SELECT 1 FROM kept_dep WHERE d = t.dep)")
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(1, 300, "hr") :: Row(3, 120, "hr") :: Nil)
+
+      checkReplacedPartitions(Seq("software"))
+    }
+  }
+
   test("delete runtime group filtering (DPP enabled)") {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
       checkDeleteRuntimeGroupFiltering()

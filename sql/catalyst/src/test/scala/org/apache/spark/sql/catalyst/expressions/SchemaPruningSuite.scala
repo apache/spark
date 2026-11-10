@@ -134,6 +134,22 @@ class SchemaPruningSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("SPARK-60979: prefer the exact name when field names differ only by case") {
+    withSQLConf(CASE_SENSITIVE.key -> "false") {
+      // top-level fields
+      testPrunedSchema(
+        StructType.fromDDL("pk INT NOT NULL, salary INT NOT NULL, SALARY STRING"),
+        Seq(StructField("SALARY", StringType)),
+        StructType.fromDDL("pk INT NOT NULL, salary INT NOT NULL, SALARY STRING"))
+
+      // nested fields
+      testPrunedSchema(
+        StructType.fromDDL("s struct<a: INT NOT NULL, A: STRING, b: INT>"),
+        Seq(StructField("s", StructType.fromDDL("A STRING"))),
+        StructType.fromDDL("s struct<A: STRING>"))
+    }
+  }
+
   test("SPARK-35232: getRootFields/pruneDataSchema should retain attribute metadata") {
     val metadata = new MetadataBuilder().putString("foo", "bar").build()
     val attr = AttributeReference("my_attr", IntegerType, metadata = metadata)()

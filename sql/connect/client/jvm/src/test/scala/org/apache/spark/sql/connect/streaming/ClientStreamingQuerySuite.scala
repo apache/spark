@@ -770,6 +770,19 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
   }
 
   // Tests for DataStreamReader.name() method
+  test("stream reader table source name is serialized") {
+    Seq(None, Some("orders_source")).foreach { sourceName =>
+      val reader = spark.readStream.option("maxFilesPerTrigger", "1")
+      sourceName.foreach(reader.name)
+      val read = reader.table("db.orders").plan.getRoot.getRead
+      assert(read.getIsStreaming)
+      assert(read.getNamedTable.getUnparsedIdentifier == "db.orders")
+      assert(read.getNamedTable.getOptionsMap.get("maxFilesPerTrigger") == "1")
+      assert(read.getNamedTable.hasSourceName == sourceName.isDefined)
+      sourceName.foreach(name => assert(read.getNamedTable.getSourceName == name))
+    }
+  }
+
   testWithSourceEvolution("stream reader name() with valid source names") {
     Seq("mySource", "my_source", "MySource123", "_private", "source_123_test", "123source")
       .foreach { name =>

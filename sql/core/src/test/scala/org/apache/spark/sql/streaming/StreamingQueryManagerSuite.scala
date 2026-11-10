@@ -37,6 +37,7 @@ import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2ScanRe
 import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, OffsetSeq, OffsetSeqLog,
   OffsetSeqMetadata, OffsetSeqMetadataV2}
 import org.apache.spark.sql.execution.streaming.runtime._
+import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.BlockingSource
 import org.apache.spark.tags.SlowSQLTest
@@ -271,6 +272,34 @@ class StreamingQueryManagerSuite extends StreamTest {
       }
 
       assert(checkpointRoot.listFiles().count(_.isDirectory) === 1)
+    }
+  }
+
+  test("SPARK-60885: avoidDoubleFilterEval is read from the offset log") {
+    val key = SQLConf.AVOID_DOUBLE_FILTER_EVAL.key
+    val left = MemoryStream[(Int, Int)]
+    val right = MemoryStream[(Int, Int)]
+    val expensive = udf((value: Int) => value)
+    // With the conf on, the filter stays above the join and the left state also keeps the rows
+    // failing it. Turning it off would push the filter under the join, so those rows would join.
+    val df = left.toDF().toDF("key", "leftValue")
+      .join(right.toDF().toDF("key", "rightValue"), "key")
+      .select($"key", expensive($"leftValue").as("result"), $"rightValue")
+      .where($"result" > 0)
+
+    withTempDir { dir =>
+      withSQLConf(key -> "true", SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+        testStream(df)(
+          StartStream(checkpointLocation = dir.getCanonicalPath),
+          AddData(left, (1, -1), (2, 10)),
+          CheckNewAnswer(),
+          StopStream,
+          StartStream(
+            checkpointLocation = dir.getCanonicalPath,
+            additionalConfs = Map(key -> "false")),
+          AddData(right, (1, 100), (2, 200)),
+          CheckNewAnswer((2, 10, 200)))
+      }
     }
   }
 
