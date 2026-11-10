@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.csv
 
-import scala.jdk.CollectionConverters._
-
 import org.apache.hadoop.fs.FileStatus
 
 import org.apache.spark.sql.SparkSession
@@ -42,7 +40,7 @@ case class CSVTable(
 
   override def inferSchema(files: Seq[FileStatus]): Option[StructType] = {
     val parsedOptions = new CSVOptions(
-      options.asCaseSensitiveMap.asScala.toMap,
+      schemaInferenceOptions,
       columnPruning = sparkSession.sessionState.conf.csvColumnPruning,
       sparkSession.sessionState.conf.sessionLocalTimeZone)
 

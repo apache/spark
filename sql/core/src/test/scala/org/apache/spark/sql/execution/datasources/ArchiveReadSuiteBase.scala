@@ -433,7 +433,8 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
         val optionSets = if (inferenceSamplesOneFile) {
           Seq(
             Map("archivePathFilter" -> "keep/*"),
-            Map("archivePathFilter" -> "keep/*", "mergeSchema" -> "true"))
+            Map("archivePathFilter" -> "keep/*", "mergeSchema" -> "true"),
+            Map("archivepathfilter" -> "keep/*", "mergeSchema" -> "true"))
         } else {
           Seq(Map("archivePathFilter" -> "keep/*"))
         }

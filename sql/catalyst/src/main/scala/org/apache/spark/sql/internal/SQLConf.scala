@@ -7997,6 +7997,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_LOWERCASE_DATA_SOURCE_OPTIONS_IN_HADOOP_CONF =
+    buildConf("spark.sql.legacy.lowercaseDataSourceOptionsInHadoopConf")
+      .internal()
+      .doc("When true, data source options wrapped in a CaseInsensitiveMap or passed to " +
+        "Data Source V2 schema inference are merged into Hadoop Configuration with lowercased " +
+        "keys, which is the behavior in Spark 4.3 and earlier. When false (the default), the " +
+        "original key casing is preserved.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_UNPIVOT_USE_FIRST_VALUE_NESTED_NULLABILITY =
     buildConf("spark.sql.legacy.unpivot.useFirstValueNestedNullability")
       .internal()

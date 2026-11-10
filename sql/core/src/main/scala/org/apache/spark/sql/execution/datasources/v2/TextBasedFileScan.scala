@@ -25,17 +25,26 @@ import org.apache.hadoop.io.compress.CompressionCodecFactory
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.FileSourceOptions
 import org.apache.spark.sql.catalyst.util.CompressionCodecs
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
 abstract class TextBasedFileScan(
     sparkSession: SparkSession,
     options: CaseInsensitiveStringMap) extends FileScan {
-  private def newHadoopConf(): Configuration =
-    sparkSession.sessionState.newHadoopConfWithOptions(options.asCaseSensitiveMap.asScala.toMap)
+  private def newHadoopConfWithScanOptions(
+      legacyLowercaseKeys: Boolean = false): Configuration = {
+    val map = if (legacyLowercaseKeys) {
+      options.asScala.toMap
+    } else {
+      options.asCaseSensitiveMap.asScala.toMap
+    }
+    sparkSession.sessionState.newHadoopConfWithOptions(map)
+  }
 
   @transient private lazy val codecFactory: CompressionCodecFactory =
-    new CompressionCodecFactory(newHadoopConf())
+    new CompressionCodecFactory(newHadoopConfWithScanOptions(
+      conf.getConf(SQLConf.LEGACY_LOWERCASE_DATA_SOURCE_OPTIONS_IN_HADOOP_CONF)))
 
   // The splittability of the `decompression` read option's codec, or `None` when it is absent.
   @transient private lazy val decompressionCodecSplittable: Option[Boolean] =
@@ -56,7 +65,7 @@ abstract class TextBasedFileScan(
    * extension (see [[CompressionCodecs.setReadCodecConfiguration]]).
    */
   protected def newReadHadoopConf(): Configuration = {
-    val hadoopConf = newHadoopConf()
+    val hadoopConf = newHadoopConfWithScanOptions()
     CompressionCodecs.setReadCodecConfiguration(
       hadoopConf, new FileSourceOptions(options.asScala.toMap).decompressionCodec)
     hadoopConf

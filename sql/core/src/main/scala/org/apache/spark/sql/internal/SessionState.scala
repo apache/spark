@@ -120,7 +120,10 @@ private[sql] class SessionState(
 
   def newHadoopConfWithOptions(options: Map[String, String]): Configuration = {
     val hadoopConf = newHadoopConf()
-    DataSourceUtils.mergeOptionsIntoHadoopConf(options, hadoopConf)
+    DataSourceUtils.mergeOptionsIntoHadoopConf(
+      options,
+      hadoopConf,
+      conf.getConf(SQLConf.LEGACY_LOWERCASE_DATA_SOURCE_OPTIONS_IN_HADOOP_CONF))
     hadoopConf
   }
 

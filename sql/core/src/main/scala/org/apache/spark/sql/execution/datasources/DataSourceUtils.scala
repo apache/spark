@@ -50,15 +50,27 @@ object DataSourceUtils extends PredicateHelper {
 
   /**
    * Merges data source options into a Hadoop configuration. Keys "path" and "paths" are excluded.
-   * Callers are expected to pass a map that preserves the original key casing; an unmodified
-   * [[CaseInsensitiveMap]] is also unwrapped to its `originalMap` as a safeguard.
+   * Data Source V2 callers pass a map with original key casing (`asCaseSensitiveMap`), while
+   * Data Source V1 callers pass a [[CaseInsensitiveMap]] that is unwrapped to `originalMap` here
+   * unless `legacyLowercaseKeys` is enabled. When `originalMap` contains multiple spellings of
+   * the same key that differ only in case, only the entry matching the case-insensitive lookup is
+   * set so the Hadoop configuration agrees with `CaseInsensitiveMap.get`.
    */
   def mergeOptionsIntoHadoopConf(
-      options: Map[String, String], conf: Configuration): Unit = {
-    // Hadoop Configuration is case-sensitive. Callers should pass a map with the original keys,
-    // and we also unwrap CaseInsensitiveMap here since its iterator yields lowercased keys.
-    val rawOptions = options match {
-      case ci: CaseInsensitiveMap[String @unchecked] => ci.originalMap
+      options: Map[String, String],
+      conf: Configuration,
+      legacyLowercaseKeys: Boolean = false): Unit = {
+    val rawOptions: Iterable[(String, String)] = options match {
+      case ci: CaseInsensitiveMap[String @unchecked] if !legacyLowercaseKeys =>
+        if (ci.originalMap.size == ci.keyLowerCasedMap.size) {
+          ci.originalMap
+        } else {
+          // Deduplicate case-colliding keys in originalMap, keeping the last spelling per
+          // lowercased key to match keyLowerCasedMap.
+          ci.originalMap.foldLeft(Map.empty[String, (String, String)]) { case (acc, (k, v)) =>
+            acc.updated(k.toLowerCase(Locale.ROOT), (k, v))
+          }.values
+        }
       case other => other
     }
     rawOptions.foreach { case (k, v) =>

@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.json
 
-import scala.jdk.CollectionConverters._
-
 import org.apache.hadoop.fs.FileStatus
 
 import org.apache.spark.sql.SparkSession
@@ -42,7 +40,7 @@ case class JsonTable(
 
   override def inferSchema(files: Seq[FileStatus]): Option[StructType] = {
     val parsedOptions = new JSONOptionsInRead(
-      options.asCaseSensitiveMap.asScala.toMap,
+      schemaInferenceOptions,
       sparkSession.sessionState.conf.sessionLocalTimeZone,
       sparkSession.sessionState.conf.columnNameOfCorruptRecord)
     JsonDataSource(parsedOptions).inferSchema(

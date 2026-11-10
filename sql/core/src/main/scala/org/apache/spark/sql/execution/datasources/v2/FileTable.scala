@@ -32,6 +32,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.streaming.runtime.MetadataLogFileIndex
 import org.apache.spark.sql.execution.streaming.sinks.FileStreamSink
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.util.SchemaUtils
@@ -58,25 +59,36 @@ abstract class FileTable(
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
+  protected lazy val caseSensitiveOptions: Map[String, String] =
+    options.asCaseSensitiveMap.asScala.toMap
+
+  protected def schemaInferenceOptions: Map[String, String] =
+    if (sparkSession.sessionState.conf.getConf(
+        SQLConf.LEGACY_LOWERCASE_DATA_SOURCE_OPTIONS_IN_HADOOP_CONF)) {
+      options.asScala.toMap
+    } else {
+      caseSensitiveOptions
+    }
+
   lazy val fileIndex: PartitioningAwareFileIndex = {
-    val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
     // Hadoop Configurations are case sensitive.
-    val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
+    val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveOptions)
     if (FileStreamSink.hasMetadata(paths, hadoopConf, sparkSession.sessionState.conf)) {
       // We are reading from the results of a streaming query. We will load files from
       // the metadata log instead of listing them using HDFS APIs.
       new MetadataLogFileIndex(sparkSession, new Path(paths.head),
-        caseSensitiveMap, userSpecifiedSchema)
+        schemaInferenceOptions, userSpecifiedSchema)
     } else {
       // This is a non-streaming file based datasource.
       val ignoredPathSegmentRegex =
-        new FileSourceOptions(caseSensitiveMap).ignoredPathSegmentRegexPattern
+        new FileSourceOptions(caseSensitiveOptions).ignoredPathSegmentRegexPattern
       val rootPathsSpecified = DataSource.checkAndGlobPathIfNecessary(paths, hadoopConf,
         checkEmptyGlobPath = true, checkFilesExist = true, enableGlobbing = globPaths,
         ignoredPathSegmentRegex = ignoredPathSegmentRegex)
       val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
       new InMemoryFileIndex(
-        sparkSession, rootPathsSpecified, caseSensitiveMap, userSpecifiedSchema, fileStatusCache)
+        sparkSession, rootPathsSpecified, caseSensitiveOptions, userSpecifiedSchema,
+        fileStatusCache)
     }
   }
 
@@ -147,7 +159,7 @@ abstract class FileTable(
    * set still answers for the read that is running.
    */
   private def hasStrictFileReads: Boolean =
-    new FileSourceOptions(options.asCaseSensitiveMap.asScala.toMap).hasStrictFileReads
+    new FileSourceOptions(caseSensitiveOptions).hasStrictFileReads
 
   /**
    * When possible, this method should return the schema of the given `files`.  When the format
