@@ -92,12 +92,6 @@ class _ProfileResultsParam(AccumulatorParam[Optional["ProfileResults"]]):
 ProfileResultsParam = _ProfileResultsParam()
 
 
-# Guards the profile results map on the driver. The accumulator server thread merges worker
-# updates via _ProfileResultsParamV2.addInPlace while user threads read or clear the same dict
-# through AccumulatorProfilerCollector. It is module-level so the param stays picklable.
-_profile_results_lock = RLock()
-
-
 # _ProfileResultsParam uses (perf, memory) tuple which is very difficult
 # to extend. However, this is shared code between the server and the client
 # for spark connect. In order to gradually migrate to dict implementation,
@@ -109,13 +103,20 @@ class _ProfileResultsParamV2(AccumulatorParam["ProfileResultsV2"]):
     AccumulatorParam for profilers.
     """
 
+    # Guards in-place merges into a results dict that other threads may read or clear, e.g.
+    # the driver's accumulator server thread merging while a user calls spark.profile.clear().
+    # It is a class attribute so it is not pickled with the param.
+    lock = RLock()
+
     @staticmethod
     def zero(value: "ProfileResultsV2") -> "ProfileResultsV2":
         return {}
 
-    @staticmethod
-    def addInPlace(value1: "ProfileResultsV2", value2: "ProfileResultsV2") -> "ProfileResultsV2":
-        with _profile_results_lock:
+    @classmethod
+    def addInPlace(
+        cls, value1: "ProfileResultsV2", value2: "ProfileResultsV2"
+    ) -> "ProfileResultsV2":
+        with cls.lock:
             for key, result in value2.items():
                 if key not in value1:
                     value1[key] = result
@@ -576,8 +577,6 @@ class ProfilerCollector(ABC):
 class AccumulatorProfilerCollector(ProfilerCollector):
     def __init__(self) -> None:
         super().__init__()
-        # Share the lock with the accumulator merge, which mutates the same dict.
-        self._lock = _profile_results_lock
 
         if SpecialAccumulatorIds.SQL_UDF_PROFIER_V2 in _accumulatorRegistry:
             self._accumulator = _accumulatorRegistry[SpecialAccumulatorIds.SQL_UDF_PROFIER_V2]
@@ -585,6 +584,8 @@ class AccumulatorProfilerCollector(ProfilerCollector):
             self._accumulator = Accumulator(
                 SpecialAccumulatorIds.SQL_UDF_PROFIER_V2, {}, ProfileResultsParamV2
             )
+        # Share the lock with the accumulator merge, which mutates the same dict.
+        self._lock = ProfileResultsParamV2.lock
 
     @property
     def _profile_results(self) -> "ProfileResultsV2":
