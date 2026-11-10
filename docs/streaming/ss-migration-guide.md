@@ -31,10 +31,26 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   them on both sides. Some previously accepted queries now fail if these requirements are not
   met. Update their watermarks and join conditions using the
   [join support table](apis-on-dataframes-and-datasets.html#support-matrix-for-joins-in-streaming-queries).
+  A stateful operator after such a join that uses the other input's event time also needs that
+  input bounded: for example, a left outer join followed by an append-mode aggregation over the
+  right event time also needs a watermark on the left input and a time condition that limits
+  how late a matching left row can arrive. Without them, the join holds back its output
+  watermark and the aggregation stops emitting results.
+
+- Since Spark 4.4, you can set `spark.sql.streaming.join.checkFinalization.enabled` to `false`
+  to run a stream-stream outer or left semi join that fails the requirement above. Spark then
+  logs a warning instead of failing the query. The corrected state eviction cannot be turned
+  off: such a query keeps the state of the input that lacks a bound for the life of the query,
+  and an outer join never outputs that input's unmatched rows. Because the corrected eviction
+  changes results and cannot be turned off, these stream-stream join corrections are made in
+  Spark 4.4.0 and are not backported to earlier releases.
 
 - Spark 4.4 corrects cases where stream-stream equality joins could discard rows before their
-  matches arrived or output unmatched rows too early. Queries with a watermark on only one
-  input may now keep more rows in memory or on disk.
+  matches arrived or output unmatched rows too early. Such joins with a watermark on only one
+  input now keep the watermarked input's rows for the life of the query, because the other input
+  has no watermark that bounds them, and hold back the join's output watermark, so a stateful
+  operator after the join stops emitting results. Add a watermark on the other input to bound
+  those rows.
 
 - Spark 4.4 holds back the output watermark of a stream-stream join when retained state can
   still emit old event times. Downstream stateful operators may retain more state, take longer
@@ -52,9 +68,8 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   input's event time by the other's with constant intervals, such as
   `rightTime BETWEEN leftTime AND leftTime + INTERVAL 1 HOUR`. It rejects other joins with
   watermarks, for example when the time condition uses another column, bounds only one input,
-  or adds whole days in a time zone with daylight saving time. Spark cannot verify that their
-  saved rows can be reused safely after the correction, even if the query did not previously
-  produce incorrect results.
+  or adds whole days. Spark cannot verify that their saved rows can be reused safely after the
+  correction, even if the query did not previously produce incorrect results.
 
   Before upgrading, check that the input history needed to rebuild the join is still available.
   If the checkpoint is rejected, start with a new checkpoint and replay that input. Account for

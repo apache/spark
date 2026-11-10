@@ -804,8 +804,7 @@ class IncrementalExecution(
         planWithStateOpId.foreach {
           case j: StreamingSymmetricHashJoinExec
               if !StreamingSymmetricHashJoinHelper.isWatermarkCheckpointCompatible(
-                j.left.output, j.right.output, j.leftKeys, j.rightKeys,
-                j.stateFormatVersion, j.condition.full) =>
+                j.left.output, j.right.output, j.leftKeys, j.rightKeys, j.condition.full) =>
             // Name the side of each equality key; both inputs often use the same column names.
             val keyConditions = j.leftKeys.zip(j.rightKeys).map { case (left, right) =>
               s"left.${left.sql} = right.${right.sql}"

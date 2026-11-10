@@ -118,7 +118,7 @@ class StreamingJoinHelperSuite extends AnalysisTest {
     }
   }
 
-  test("equality key watermark with a day-sized shift needs a fixed-offset time zone") {
+  test("equality key watermark with whole days or months does not depend on the time zone") {
     val metadata = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000).build()
     val eventTime = AttributeReference("eventTime", TimestampType, metadata = metadata)()
 
@@ -132,40 +132,55 @@ class StreamingJoinHelperSuite extends AnalysisTest {
         DummyLeafNode())
       SimpleAnalyzer.execute(plan).asInstanceOf[Filter].condition.asInstanceOf[EqualTo].left
     }
-    def watermark(key: Expression): Option[Long] =
-      StreamingJoinHelper.getStateKeyWatermark(Seq(key), Seq(eventTime), 0, Some(10000L))
+    // The key cutoff, the event-time bound from the key, and the key ordinal.
+    def bounds(key: Expression): (Option[Long], Option[Long], Option[Int]) = (
+      StreamingJoinHelper.getStateKeyWatermark(Seq(key), Seq(eventTime), 0, Some(10000L)),
+      StreamingJoinHelper.getEventTimeWatermarkFromKey(Seq(key), Seq(eventTime), 0, 10000L),
+      StreamingJoinHelper.getStateKeyWatermarkOrdinal(Seq(key), Seq(eventTime)))
+    val forward = (Some(10000L), None, Some(0))
+    val unbounded = (None, None, None)
 
-    // Spark adds whole days in the session time zone, where a day can be 23 or 25 hours.
-    val day = 86400000L
+    // Spark adds whole days in the session time zone, where a day can be 23 or 25 hours, and
+    // months vary in length. A shift that never moves a time backward keeps the unshifted
+    // cutoff and gives no event-time bound. Any other such shift gives no bound.
     Seq(
-      ("eventTime + INTERVAL 1 DAY", Some(10000L + day - 1)),
-      ("eventTime - INTERVAL 36 HOURS", Some(10000L - day * 3 / 2 - 1))).foreach {
-      case (keyStr, utcWatermark) =>
-        Seq("UTC" -> utcWatermark, "America/Los_Angeles" -> None).foreach {
-          case (zone, expected) =>
-            withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zone) {
-              withClue(s"$keyStr $zone") {
-                assert(watermark(resolve(keyStr)) === expected)
-              }
-            }
+      "eventTime + INTERVAL 1 DAY" -> forward,
+      "eventTime + INTERVAL 1 MONTH" -> forward,
+      "eventTime + INTERVAL 1 YEAR" -> forward,
+      "eventTime - INTERVAL 1 DAY" -> unbounded,
+      "eventTime - INTERVAL 1 MONTH" -> unbounded,
+      "eventTime - INTERVAL 36 HOURS" -> unbounded).foreach { case (keyStr, expected) =>
+      Seq("UTC", "America/Los_Angeles").foreach { zone =>
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zone) {
+          withClue(s"$keyStr $zone") {
+            assert(bounds(resolve(keyStr)) === expected)
+          }
         }
+      }
     }
 
-    // A calendar interval counts its days the same way; its microseconds are always exact.
+    // A calendar interval counts its days and months the same way; its microseconds are exact.
+    val day = 86400000L
     Seq(
-      (new CalendarInterval(0, 1, 0), "UTC", Some(10000L + day - 1)),
-      (new CalendarInterval(0, 1, 0), "America/Los_Angeles", None),
-      (new CalendarInterval(0, 0, 2000000L), "America/Los_Angeles", Some(11999L))).foreach {
-      case (interval, zone, expected) =>
-        withClue(s"$interval $zone") {
-          assert(watermark(
-            TimestampAddInterval(eventTime, Literal(interval), Some(zone))) === expected)
+      new CalendarInterval(0, 1, 0) -> forward,
+      new CalendarInterval(1, 0, 0) -> forward,
+      new CalendarInterval(1, -1, 0) -> unbounded,
+      new CalendarInterval(0, -1, 0) -> unbounded,
+      new CalendarInterval(0, 0, 2000000L) -> ((Some(11999L), Some(7999L), Some(0))),
+      new CalendarInterval(0, 0, 2 * day * 1000L) ->
+        ((Some(10000L + 2 * day - 1), Some(10000L - 2 * day - 1), Some(0)))).foreach {
+      case (interval, expected) =>
+        Seq("UTC", "America/Los_Angeles").foreach { zone =>
+          withClue(s"$interval $zone") {
+            assert(bounds(
+              TimestampAddInterval(eventTime, Literal(interval), Some(zone))) === expected)
+          }
         }
     }
 
     // The smallest day-time interval is many days long, although its absolute value overflows.
-    assert(watermark(TimestampAddInterval(eventTime,
-      Literal(Long.MinValue, DayTimeIntervalType()), Some("America/Los_Angeles"))) === None)
+    assert(bounds(TimestampAddInterval(eventTime,
+      Literal(Long.MinValue, DayTimeIntervalType()), Some("UTC"))) === unbounded)
   }
 
   test("extract watermark from time condition") {

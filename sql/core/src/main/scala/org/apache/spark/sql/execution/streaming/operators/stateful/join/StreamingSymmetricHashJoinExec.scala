@@ -414,13 +414,15 @@ case class StreamingSymmetricHashJoinExec(
         condition.leftSideOnly, postJoinFilter, stateWatermarkPredicates.left, partitionId,
         checkpointIds.left.keyToNumValues, checkpointIds.left.keyWithIndexToValue,
         skippedNullValueCount, joinStateManagerStoreGenerator,
-        StreamingJoinHelper.getStateKeyWatermarkOrdinal(rightKeys, right.output)),
+        getStateKeyOrdinalForLookup(
+          left.output, leftKeys, right.output, rightKeys, stateWatermarkPredicates.left)),
       new OneSideHashJoiner(
         RightSide, right.output, rightKeys, rightInputIter,
         condition.rightSideOnly, postJoinFilter, stateWatermarkPredicates.right, partitionId,
         checkpointIds.right.keyToNumValues, checkpointIds.right.keyWithIndexToValue,
         skippedNullValueCount, joinStateManagerStoreGenerator,
-        StreamingJoinHelper.getStateKeyWatermarkOrdinal(leftKeys, left.output)))
+        getStateKeyOrdinalForLookup(
+          right.output, rightKeys, left.output, leftKeys, stateWatermarkPredicates.right)))
 
     //  Join one side input using the other side's buffered/state rows. Here is how it is done.
     //
@@ -754,11 +756,11 @@ case class StreamingSymmetricHashJoinExec(
     private[this] val scanRangeOffsets: Option[(Long, Long)] = {
       // A row on this side probes the other side's state for the window
       //   [thisEventTime + lowerOffset, thisEventTime + upperOffset]
-      // on the other side's event time. In V4, a side that evicts by key indexes the selected
-      // equality key, and a lookup there uses the key's exact timestamp and ignores the window.
-      // Any other side indexes the column its own value-eviction predicate constrains, or its
-      // event-time column if it has no such predicate. The window can then only select rows from
-      // an index on the event-time column.
+      // on the other side's event time. In V4, a side whose state manager has a key ordinal (see
+      // getStateKeyOrdinalForLookup) indexes that equality key, and a lookup there uses the key's
+      // exact timestamp and ignores the window. Any other side indexes the column its own
+      // value-eviction predicate constrains, or its event-time column if it has no such
+      // predicate. The window can then only select rows from an index on the event-time column.
       //
       // So a range scan requires both of the following:
       // - isV4TimeIntervalJoin: V4 state, and this side evicts by value. Each side chooses key

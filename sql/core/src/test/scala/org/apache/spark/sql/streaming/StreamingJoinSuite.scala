@@ -315,6 +315,41 @@ abstract class StreamingJoinSuite
     (leftInput, rightInput, select)
   }
 
+  /**
+   * Joins inputs of two times (a, b) each on `la = ra AND lb = rb`, with a watermark on the given
+   * time of each input. A negative second gives a NULL time. Each side's state is evicted on the
+   * key that the other input's watermark bounds: with watermarks on la and rb, the left state is
+   * evicted on lb and the right state on ra.
+   */
+  protected def setupJoinWithNullableKeys(
+      joinType: String,
+      leftWatermark: Option[String],
+      rightWatermark: Option[String])
+    : (MemoryStream[(Int, Int)], MemoryStream[(Int, Int)], DataFrame) = {
+
+    val leftInput = MemoryStream[(Int, Int)]
+    val rightInput = MemoryStream[(Int, Int)]
+
+    def withTimes(
+        input: MemoryStream[(Int, Int)],
+        side: String,
+        watermark: Option[String]): DataFrame = {
+      val times = input.toDF().toDF("a", "b").select(Seq("a", "b").map { time =>
+        when(col(time) >= 0, timestamp_seconds(col(time))) as s"$side$time"
+      }: _*)
+      watermark.fold(times)(time => times.withWatermark(s"$side$time", "0 seconds"))
+    }
+
+    val joined = withTimes(leftInput, "l", leftWatermark).join(
+      withTimes(rightInput, "r", rightWatermark),
+      expr("la = ra AND lb = rb"),
+      joinType)
+
+    val select = joined.select(Seq("la", "lb", "ra", "rb").map(col(_).cast("int")): _*)
+
+    (leftInput, rightInput, select)
+  }
+
   protected def setupSelfJoin(joinType: String)
     : (MemoryStream[(Int, Long)], DataFrame) = {
 
@@ -2157,6 +2192,46 @@ abstract class StreamingOuterJoinBase extends StreamingJoinSuite {
     }
   }
 
+  Seq("left_outer", "right_outer").foreach { joinType =>
+    val name = joinType.replace('_', '-')
+    val leftOuter = joinType == "left_outer"
+    // The preserved row has a NULL in the key its state is evicted on: lb on the left, which
+    // the rb watermark bounds, or ra on the right, which the la watermark bounds.
+    val (nullLeft, nullRight, nullRow) = if (leftOuter) {
+      (Seq((50, -1)), Seq.empty[(Int, Int)], Row(50, null, null, null))
+    } else {
+      (Seq.empty[(Int, Int)], Seq((-1, 50)), Row(null, null, null, 50))
+    }
+
+    Seq(true, false).foreach { bothWatermarks =>
+      // With one watermark, only the input that is not preserved has it.
+      val (leftWatermark, rightWatermark) = if (bothWatermarks) {
+        (Some("a"), Some("b"))
+      } else if (leftOuter) {
+        (None, Some("b"))
+      } else {
+        (Some("a"), None)
+      }
+      test(s"$name: a row whose eviction key is null is emitted on arrival, " +
+          s"both watermarks=$bothWatermarks") {
+        val (leftInput, rightInput, joined) =
+          setupJoinWithNullableKeys(joinType, leftWatermark, rightWatermark)
+        withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
+          testStream(joined)(
+            MultiAddData(leftInput, nullLeft :+ ((60, 60)): _*)(
+              rightInput, nullRight :+ ((60, 60)): _*),
+            CheckNewAnswer(Row(60, 60, 60, 60), nullRow),
+            assertNumStateRows(total = 2, updated = 2),
+            MultiAddData(leftInput, (200, 200))(rightInput, (200, 200)),
+            CheckNewAnswer(Row(200, 200, 200, 200)),
+            MultiAddData(leftInput, (300, 300))(rightInput, (300, 300)),
+            CheckNewAnswer(Row(300, 300, 300, 300))
+          )
+        }
+      }
+    }
+  }
+
   test("SPARK-38684: outer join works correctly even if processing input rows and " +
     "evicting state rows for same grouping key happens in the same micro-batch") {
 
@@ -2320,6 +2395,32 @@ abstract class StreamingFullOuterJoinBase extends StreamingJoinSuite {
         CheckNewAnswer(Row(210, 210, 210, 210), Row(60, 100, null, null),
           Row(70, 100, null, null), Row(null, null, 80, 50), Row(null, null, 70, 50))
       )
+    }
+  }
+
+  Seq(true, false).foreach { crossedKeys =>
+    test(s"full outer join emits a row whose eviction key is null on arrival, " +
+        s"crossed keys=$crossedKeys") {
+      // With crossed keys the left state is evicted on lb and the right state on ra. Otherwise
+      // each side is evicted on its own event time, lb and rb.
+      val (leftInput, rightInput, joined) = setupJoinWithNullableKeys(
+        "full_outer", Some(if (crossedKeys) "a" else "b"), Some("b"))
+      val (nullRight, nullRightRow) = if (crossedKeys) {
+        ((-1, 51), Row(null, null, null, 51))
+      } else {
+        ((51, -1), Row(null, null, 51, null))
+      }
+      withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
+        testStream(joined)(
+          MultiAddData(leftInput, (50, -1), (60, 60))(rightInput, nullRight, (60, 60)),
+          CheckNewAnswer(Row(60, 60, 60, 60), Row(50, null, null, null), nullRightRow),
+          assertNumStateRows(total = 2, updated = 2),
+          MultiAddData(leftInput, (200, 200))(rightInput, (200, 200)),
+          CheckNewAnswer(Row(200, 200, 200, 200)),
+          MultiAddData(leftInput, (300, 300))(rightInput, (300, 300)),
+          CheckNewAnswer(Row(300, 300, 300, 300))
+        )
+      }
     }
   }
 

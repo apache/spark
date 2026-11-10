@@ -1397,7 +1397,8 @@ regarding watermark delays and whether data will be dropped or not.
     <td style="vertical-align: middle;">Inner</td>
     <td style="vertical-align: middle;">
       Supported, optionally specify watermark on both sides +
-      time constraints for state cleanup
+      time constraints for state cleanup. A stateful operator after the join makes progress only
+      when the state of the input whose event time it uses is cleaned up.
     </td>
   </tr>
   <tr>
@@ -1405,7 +1406,8 @@ regarding watermark delays and whether data will be dropped or not.
     <td style="vertical-align: middle;">
       Conditionally supported, requires a watermark on the right and a time constraint that
       limits how late a right row can match a left row. A watermark on the left and a reverse
-      time constraint also allow right-side state cleanup.
+      time constraint also allow right-side state cleanup, which a stateful operator after the
+      join needs to make progress when it uses the right event time.
     </td>
   </tr>
   <tr>
@@ -1413,7 +1415,8 @@ regarding watermark delays and whether data will be dropped or not.
     <td style="vertical-align: middle;">
       Conditionally supported, requires a watermark on the left and a time constraint that
       limits how late a left row can match a right row. A watermark on the right and a reverse
-      time constraint also allow left-side state cleanup.
+      time constraint also allow left-side state cleanup, which a stateful operator after the
+      join needs to make progress when it uses the left event time.
     </td>
   </tr>
   <tr>

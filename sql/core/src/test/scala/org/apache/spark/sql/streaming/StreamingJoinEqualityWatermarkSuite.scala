@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.streaming
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinExec
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.{JoinStateKeyWatermarkPredicate, JoinStateValueWatermarkPredicate}
-import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamExecution}
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -105,6 +105,17 @@ class StreamingJoinEqualityWatermarkSuite extends StreamTest {
     }
   }
 
+  private def joinExec(query: StreamExecution): StreamingSymmetricHashJoinExec =
+    query.lastExecution.executedPlan.collectFirst {
+      case j: StreamingSymmetricHashJoinExec => j
+    }.get
+
+  /** Where the V4 eviction scan of the left key predicate starts in the last batch. */
+  private def leftPreviousScanBound(query: StreamExecution): Option[Long] =
+    joinExec(query).stateWatermarkPredicates.left.collect {
+      case p: JoinStateKeyWatermarkPredicate => p.prevStateWatermark
+    }.get
+
   for {
     version <- Seq(2, 3, 4)
     offset <- Seq(10, -10)
@@ -130,25 +141,56 @@ class StreamingJoinEqualityWatermarkSuite extends StreamTest {
           MultiAddData(leftInput, (1, 100 + offset), (2, 90 + offset), (3, 145 + offset))(
             rightInput, (9, 50)),
           CheckNewAnswer(),
+          // The first batch has no previous eviction to start the V4 scan after.
+          Execute { query => assert(leftPreviousScanBound(query).isEmpty) },
           AddData(rightInput, (1, 100)),
           CheckNewAnswer(Row(1, 100 + offset, 1, 100)),
           MultiAddData(leftInput, (9, 300))(rightInput, (9, 150)),
-          // At watermark 90, a future right row can still have time 90.
+          // At watermark 90, the left key cutoff is (90 + offset) s less the 1 ms the solver
+          // subtracts for >=, so (2, 90 + offset) stays in state for one more batch.
           CheckNewAnswer(),
-          AddData(rightInput, (9, 151)),
-          // At watermark 140, the left key cutoff is 140 + offset.
-          CheckNewAnswer(Row(2, 90 + offset, null, null)),
+          // (4, 95) passes late filtering at 90 s. For offset 10 it is below the previous
+          // cutoff, 99.999 s, so the V4 scan must start after 90 s, not after that cutoff.
+          MultiAddData(leftInput, (4, 95))(rightInput, (9, 151)),
+          // At watermark 140, the left key cutoff is (140 + offset) s less 1 ms.
+          CheckNewAnswer(Row(2, 90 + offset, null, null), Row(4, 95, null, null)),
           Execute { query =>
-            val join = query.lastExecution.executedPlan.collectFirst {
-              case j: StreamingSymmetricHashJoinExec => j
-            }.get
+            val shiftedLateCutoff = 90000L + offset * 1000L - 1
+            assert(leftPreviousScanBound(query) === Some(math.min(shiftedLateCutoff, 90000L)))
             // Retained left rows are above 140 + offset, retained right rows above 140 - offset.
-            assert(join.produceOutputWatermark(140000L).contains(129999L))
+            assert(joinExec(query).produceOutputWatermark(140000L).contains(129999L))
           },
           // Right time 145 is above watermark 140, so (3, 145 + offset) must still be in state.
           AddData(rightInput, (3, 145)),
           CheckNewAnswer(Row(3, 145 + offset, 3, 145)))
       }
+    }
+  }
+
+  test("shifted key eviction scans from the start in legacy mode") {
+    withSQLConf(
+      SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> "4",
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false",
+      SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> "false") {
+      val leftInput = MemoryStream[(Int, Int)]
+      val rightInput = MemoryStream[(Int, Int)]
+      val left = leftInput.toDF().toDF("lk", "lt")
+        .select($"lk", timestamp_seconds($"lt").as("lt"))
+        .withWatermark("lt", "10 seconds")
+      val right = rightInput.toDF().toDF("rk", "rt")
+        .select($"rk", timestamp_seconds($"rt").as("rt"))
+        .withWatermark("rt", "10 seconds")
+      val joined = left.join(right, expr("lk = rk AND lt = rt + INTERVAL 10 SECONDS"), "left_outer")
+        .select($"lk", $"lt".cast("int"), $"rk", $"rt".cast("int"))
+      testStream(joined)(
+        MultiAddData(leftInput, (1, 95), (8, 300))(rightInput, (9, 100)),
+        CheckNewAnswer(),
+        AddData(rightInput, (9, 120)),
+        // Legacy mode filters late rows and evicts at the same watermark, so it gives no earlier
+        // cutoff to start the V4 scan after.
+        CheckNewAnswer(Row(1, 95, null, null)),
+        Execute { query => assert(leftPreviousScanBound(query).isEmpty) })
     }
   }
 
@@ -271,6 +313,48 @@ class StreamingJoinEqualityWatermarkSuite extends StreamTest {
           CheckNewAnswer(),
           AddData(rightInput, (1, rightTime)),
           CheckNewAnswer(Row(1, 1)))
+      }
+    }
+  }
+
+  // A V4 input whose key is not its own event time is stored at the key timestamp only when the
+  // opposite key bounds that key. A restart may change the session time zone, which the offset
+  // log does not keep, so that choice must not depend on it: otherwise rows stored before the
+  // restart are looked up at another timestamp and no longer match.
+  for {
+    (shift, keyOffset) <- Seq(("+ INTERVAL 1 DAY", 86400000L), ("- INTERVAL 1 DAY", -86400000L))
+    (firstZone, secondZone) <- Seq(("America/Los_Angeles", "UTC"), ("UTC", "America/Los_Angeles"))
+  } {
+    test(s"V4 keeps matching k = rt $shift after a restart from $firstZone to $secondZone") {
+      val leftInput = MemoryStream[(Int, Long)]
+      val rightInput = MemoryStream[(Int, Long)]
+      def joined(zone: String): DataFrame = {
+        var df: DataFrame = null
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zone) {
+          val left = leftInput.toDF().toDF("lk", "ms")
+            .select($"lk", timestamp_millis($"ms").as("k"))
+          val right = rightInput.toDF().toDF("rk", "ms")
+            .select($"rk", timestamp_millis($"ms").as("rt"))
+            .withWatermark("rt", "0 seconds")
+          df = left.join(right, expr(s"lk = rk AND k = rt $shift")).select($"lk", $"rk")
+        }
+        df
+      }
+      // 2024-01-15T00:00Z. January has no daylight saving change, so a day is 24 hours in both
+      // zones.
+      val rightTime = 1705276800000L
+      def run(zone: String, checkpoint: String)(actions: StreamAction*): Unit =
+        withSQLConf(
+          SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> "4",
+          SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+          SQLConf.SESSION_LOCAL_TIMEZONE.key -> zone) {
+          testStream(joined(zone))(StartStream(checkpointLocation = checkpoint) +: actions: _*)
+        }
+      withTempDir { dir =>
+        val checkpoint = dir.getCanonicalPath
+        run(firstZone, checkpoint)(
+          AddData(leftInput, (1, rightTime + keyOffset)), CheckNewAnswer(), StopStream)
+        run(secondZone, checkpoint)(AddData(rightInput, (1, rightTime)), CheckNewAnswer(Row(1, 1)))
       }
     }
   }
