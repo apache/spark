@@ -38,13 +38,8 @@ import org.apache.spark.util.ThreadUtils
  */
 private[spark] trait ShuffleOutputTrackerMaster {
   /**
-   * Register a shuffle so its outputs can be tracked. `jobId` is used by the streaming tracker.
-   *
-   * `isReliablyStored` is honored only by the `MapOutputTrackerMaster`, which persists it and skips
-   * reliably-stored shuffles on executor/worker loss. The streaming tracker ignores it: a pipelined
-   * shuffle is never registered with the `MapOutputTracker` and its output is located and
-   * invalidated through the streaming task-location registry, not via map-status cleanup, so the
-   * loss handling this flag guards does not apply.
+   * Register a shuffle so its outputs can be tracked. `jobId` is used only by the streaming
+   * tracker, `isReliablyStored` only by the `MapOutputTrackerMaster`.
    */
   def registerShuffle(
       shuffleId: Int,

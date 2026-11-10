@@ -1224,9 +1224,7 @@ private[spark] class TaskSetManager(
     // producer's set; this guard also covers a PARTIALLY-complete producer losing an executor on
     // decommission.
 
-    // The tracker's stored value already folds the app-global flag and the per-shuffle handle
-    // together at registration (see DAGScheduler.createShuffleMapStage), and a shuffle map task set
-    // always has its shuffle registered before it is submitted. Read it as the single source.
+    // Per-shuffle reliability, resolved at registration (handle value, else the global flag).
     val reliablyStored = taskSet.shuffleId.exists(sched.mapOutputTracker.isReliablyStored)
     val maybeShuffleMapOutputLoss = isShuffleMapTasks && !taskSet.isPipelined &&
       !reliablyStored &&

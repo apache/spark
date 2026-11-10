@@ -158,15 +158,13 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     assert(tracker.getNumAvailableOutputs(0) === 0)
     assert(tracker.getNumAvailableOutputs(1) === 1)
 
-    // Losing an executor when only reliably-stored shuffles remain removes nothing, so the
-    // epoch must not bump (a bump would needlessly invalidate every executor's cached statuses).
+    // Only reliable output on the lost executor: nothing removed, so no epoch bump.
     tracker.unregisterShuffle(0)
     val epochBeforeNoOp = tracker.getEpoch
     tracker.removeOutputsOnExecutor("a", respectReliablyStored = true)
     assert(tracker.getEpoch === epochBeforeNoOp)
 
-    // Unconditional cleanup (respectReliablyStored = false): even the reliably-stored shuffle's
-    // output is removed, and because something was removed the epoch bumps.
+    // respectReliablyStored = false removes the reliable output too, and bumps the epoch.
     val epochBeforeRemoval = tracker.getEpoch
     tracker.removeOutputsOnExecutor("a", respectReliablyStored = false)
     assert(tracker.getNumAvailableOutputs(1) === 0)
@@ -206,9 +204,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
       new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, pushConf))
 
     val size = MapStatus.compressSize(1000L)
-    // Reliably-stored shuffle whose map output lives off-executor, but which also has a host-local
-    // push-merge result on the same host. Losing the host must keep the reliable map output while
-    // still dropping the merge result, whose merged chunks physically lived on that host.
+    // Host loss keeps the reliable map output but drops the host's merge result.
     tracker.registerShuffle(0, 1, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES,
       isReliablyStored = true)
     tracker.registerMapOutput(0, 0, MapStatus(BlockManagerId("a", "hostA", 1000), Array(size), 5))
@@ -242,8 +238,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     tracker.registerMapOutput(0, 0, MapStatus(BlockManagerId("a", "hostA", 1000), Array(size), 5))
     tracker.registerMapOutput(1, 0, MapStatus(BlockManagerId("a", "hostA", 1000), Array(size), 6))
 
-    // A cleanup that drops the local shuffle while preserving the reliable one changed metadata,
-    // so the epoch must advance even though a reliable shuffle was preserved.
+    // Removing the local output changed metadata, so the epoch advances.
     val epochBefore = tracker.getEpoch
     tracker.removeOutputsOnExecutor("a", respectReliablyStored = true)
     assert(tracker.getNumAvailableOutputs(0) === 0)
@@ -266,9 +261,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
       isReliablyStored = true)
     tracker.registerMapOutput(0, 0, MapStatus(BlockManagerId("b", "hostB", 1000), Array(size), 5))
 
-    // Nothing on "a" was preserved (the reliable output is elsewhere), so this ordinary no-op loss
-    // must still advance the epoch. Target-scoped preservation, not shuffle-level classification,
-    // is what keeps the fence: a whole-shuffle "reliable" verdict here would wrongly suppress it.
+    // Nothing was kept on "a", so this no-op loss still advances the epoch.
     val epochBefore = tracker.getEpoch
     tracker.removeOutputsOnExecutor("a", respectReliablyStored = true)
     assert(tracker.getNumAvailableOutputs(0) === 1)
@@ -293,8 +286,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     tracker.registerMapOutput(0, 0, MapStatus(BlockManagerId("a", "hostA", 1000), Array(size), 5))
     tracker.registerMapOutput(1, 0, MapStatus(BlockManagerId("a", "hostA", 1000), Array(size), 6))
 
-    // A bypass-only cleanup for the failed reliable shuffle must clear only shuffle 0; the
-    // co-located local shuffle 1's (possibly recomputed) output must survive.
+    // The bypass clears only shuffle 0; co-located shuffle 1 survives.
     tracker.removeOutputsOnExecutor("a", respectReliablyStored = true, Some(0),
       restrictToFailedShuffle = true)
     assert(tracker.getNumAvailableOutputs(0) === 0)
