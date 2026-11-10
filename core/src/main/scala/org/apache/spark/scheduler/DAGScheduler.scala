@@ -4205,8 +4205,7 @@ private[spark] class DAGScheduler(
           // external shuffle service, an ExecutorLost would NOT clean these, so this is the only
           // proactive channel). Safe for the pipelined shuffle itself: it registers no map outputs
           // in the tracker, so this can only strip regular/durable outputs.
-          val failedMapShuffleId = if (mapIndex != -1) Some(shuffleId) else None
-          unregisterOutputsOnFetchFailedExecutor(bmAddress, task, failedMapShuffleId)
+          unregisterOutputsOnFetchFailedExecutor(bmAddress, task, shuffleId, mapIndex)
           abortStage(failedStage,
             s"A pipelined group member failed with a fetch failure: $failureMessage", None)
         } else {
@@ -4342,9 +4341,7 @@ private[spark] class DAGScheduler(
           }
 
           // TODO: mark the executor as failed only if there were lots of fetch failures on it
-          // A merged-chunk failure (mapIndex == -1) says nothing about the reliable map output.
-          val failedMapShuffleId = if (mapIndex != -1) Some(shuffleId) else None
-          unregisterOutputsOnFetchFailedExecutor(bmAddress, task, failedMapShuffleId)
+          unregisterOutputsOnFetchFailedExecutor(bmAddress, task, shuffleId, mapIndex)
         }
 
       case failure: TaskFailedReason if task.isBarrier =>
@@ -4877,14 +4874,14 @@ private[spark] class DAGScheduler(
     // if the cluster manager explicitly tells us that the entire worker was lost, then
     // we know to unregister shuffle output.  (Note that "worker" specifically refers to the process
     // from a Standalone cluster, where the shuffle service lives in the Worker.)
-    // Skip it if nothing is removable: the global flag is on, every registered shuffle is reliably
-    // stored, and no host was lost under push-based shuffle (its merge results must go).
+    // Skip it if nothing is removable: the global flag is on, no host was lost under push-based
+    // shuffle (its merge results must go), and every registered shuffle is reliably stored. The
+    // cheap checks run first so the shuffle registry is walked only when it decides the outcome.
     // TODO: that host pass still bumps the epoch when the host held nothing.
-    val nothingRemovable = sc.shuffleDriverComponents.supportsReliableStorage() &&
-      !mapOutputTracker.hasUnreliablyStoredShuffle &&
-      (workerHost.isEmpty || !pushBasedShuffleEnabled)
-    val fileLost = !nothingRemovable &&
-      (workerHost.isDefined || !env.blockManager.externalShuffleServiceEnabled)
+    val fileLost = (workerHost.isDefined || !env.blockManager.externalShuffleServiceEnabled) &&
+      !(sc.shuffleDriverComponents.supportsReliableStorage() &&
+        (workerHost.isEmpty || !pushBasedShuffleEnabled) &&
+        !mapOutputTracker.hasUnreliablyStoredShuffle)
     removeExecutorAndUnregisterOutputs(
       execId = execId,
       fileLost = fileLost,
@@ -4903,14 +4900,19 @@ private[spark] class DAGScheduler(
    * `bmAddress` is null. Safe for a pipelined shuffle: it registers no map outputs in the tracker,
    * so this can only strip regular/durable outputs.
    *
-   * `failedShuffleId`: on a map-output FetchFailed, the shuffle to clean even if reliably stored.
+   * The failed shuffle is cleaned even if reliably stored, except on a merged-chunk failure at
+   * the push merger (`mapIndex == -1`), which says nothing about the reliable map output.
    */
   private def unregisterOutputsOnFetchFailedExecutor(
       bmAddress: BlockManagerId,
       task: Task[_],
-      failedShuffleId: Option[Int]): Unit = {
+      shuffleId: Int,
+      mapIndex: Int): Unit = {
     // TODO: mark the executor as failed only if there were lots of fetch failures on it
     if (bmAddress != null) {
+      val isMergedChunkFailure = mapIndex == -1 &&
+        bmAddress.executorId == BlockManagerId.SHUFFLE_MERGER_IDENTIFIER
+      val failedShuffleId = if (isMergedChunkFailure) None else Some(shuffleId)
       val externalShuffleServiceEnabled = env.blockManager.externalShuffleServiceEnabled
       val isHostDecommissioned = taskScheduler
         .getExecutorDecommissionState(bmAddress.executorId)
@@ -4954,6 +4956,8 @@ private[spark] class DAGScheduler(
    *   with the executor; this happens if the executor serves its own blocks (i.e., we're not
    *   using an external shuffle service), the entire Standalone worker is lost, or a FetchFailed
    *   occurred (in which case we presume all shuffle data related to this executor to be lost).
+   *   When `respectReliablyStored` is also true, reliably stored map output is kept and only the
+   *   rest is treated as lost, except the failed shuffle on a map-output FetchFailed.
    * @param hostToUnregisterOutputs (optional) executor host if we're unregistering all the
    *   outputs on the host
    * @param maybeEpoch (optional) the epoch during which the failure was caught (this prevents
@@ -4993,8 +4997,9 @@ private[spark] class DAGScheduler(
       clearCacheLocs()
     }
     if (fileLost) {
-      // A FetchFailed for a reliable shuffle may pass a rejecting executor fence once per epoch:
-      // executor loss kept that shuffle, so it must still be cleaned when proven gone.
+      // A FetchFailed for a reliable shuffle may pass a rejecting executor fence once per epoch.
+      // The cleanup that set the fence (an executor loss, or another shuffle's FetchFailed) kept
+      // that shuffle, so it must still be cleaned when proven gone.
       val passesExecutorFence = ignoreShuffleFileLostEpoch ||
         !shuffleFileLostEpoch.contains(execId) ||
         shuffleFileLostEpoch(execId) < currentEpoch

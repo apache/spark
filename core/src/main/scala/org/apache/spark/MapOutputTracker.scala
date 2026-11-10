@@ -1161,13 +1161,16 @@ private[spark] class MapOutputTrackerMaster(
       "restrictToFailedShuffle requires a failedShuffleId to restrict to")
     var metadataChanged = false
     var preservedReliable = false
-    shuffleStatuses.foreach { case (shuffleId, status) =>
-      if (!restrictToFailedShuffle || failedShuffleId.contains(shuffleId)) {
-        val respect = respectReliablyStored && !failedShuffleId.contains(shuffleId)
-        val result = remove(status, respect)
-        if (result.metadataChanged) metadataChanged = true
-        if (result.mapPreservedReliable) preservedReliable = true
-      }
+    val targets = if (restrictToFailedShuffle) {
+      failedShuffleId.flatMap(id => shuffleStatuses.get(id).map(id -> _)).iterator
+    } else {
+      shuffleStatuses.iterator
+    }
+    targets.foreach { case (shuffleId, status) =>
+      val respect = respectReliablyStored && !failedShuffleId.contains(shuffleId)
+      val result = remove(status, respect)
+      if (result.metadataChanged) metadataChanged = true
+      if (result.mapPreservedReliable) preservedReliable = true
     }
     CleanupOutcome(metadataChanged, preservedReliable)
   }
