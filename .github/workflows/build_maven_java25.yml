@@ -21,7 +21,7 @@ name: "Build / Maven (Scala 2.13, JDK 25)"
 
 on:
   schedule:
-    - cron: '0 14 */2 * *'
+    - cron: '17 6 3-31/3 * *'
   workflow_dispatch:
 
 jobs:
