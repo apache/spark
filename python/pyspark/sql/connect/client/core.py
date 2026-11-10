@@ -87,7 +87,6 @@ from pyspark.sql.connect.client.retries import (
     RetryPolicy,
 )
 from pyspark.sql.connect.conversion import (
-    proto_to_remote_cached_dataframe,
     proto_to_storage_level,
     storage_level_to_proto,
 )
@@ -1378,7 +1377,7 @@ class SparkConnectClient(object):
                 if descriptor.type == descriptor.TYPE_MESSAGE:
                     if allowed_recursion_depth == 0:
                         p2.ClearField(field_name)
-                    elif descriptor.label == descriptor.LABEL_REPEATED:
+                    elif descriptor.is_repeated:
                         p2.ClearField(field_name)
                         getattr(p2, field_name).extend(
                             [self._truncate(v, allowed_recursion_depth - 1) for v in value]
@@ -1389,14 +1388,14 @@ class SparkConnectClient(object):
                         )
 
                 elif descriptor.type == descriptor.TYPE_STRING:
-                    if descriptor.label == descriptor.LABEL_REPEATED:
+                    if descriptor.is_repeated:
                         p2.ClearField(field_name)
                         getattr(p2, field_name).extend([truncate_str(v) for v in value])
                     else:
                         setattr(p2, field_name, truncate_str(value))
 
                 elif descriptor.type == descriptor.TYPE_BYTES:
-                    if descriptor.label == descriptor.LABEL_REPEATED:
+                    if descriptor.is_repeated:
                         p2.ClearField(field_name)
                         getattr(p2, field_name).extend([truncate_bytes(v) for v in value])
                     else:
@@ -1922,9 +1921,7 @@ class SparkConnectClient(object):
                 yield {"create_resource_profile_command_result": profile_id}
             if b.HasField("checkpoint_command_result"):
                 yield {
-                    "checkpoint_command_result": proto_to_remote_cached_dataframe(
-                        b.checkpoint_command_result.relation
-                    )
+                    "checkpoint_command_result": (b.checkpoint_command_result.relation.relation_id)
                 }
             if b.HasField("ml_command_result"):
                 yield {"ml_command_result": b.ml_command_result}

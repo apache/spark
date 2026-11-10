@@ -655,7 +655,7 @@ case class StateStoreCustomTimingMetric(name: String, desc: String) extends Stat
     SQLMetrics.createTimingMetric(sparkContext, desc)
 }
 
-trait StateStoreInstanceMetric {
+trait StateStoreInstanceMetric extends Serializable {
   def metricPrefix: String
   def descPrefix: String
   def partitionId: Option[Int]
@@ -680,6 +680,23 @@ trait StateStoreInstanceMetric {
    * the original metric value is at its initial value.
    */
   def combine(originalMetric: SQLMetric, value: Long): Long
+
+  /**
+   * Defines how to merge metric values from different task attempts or executors for the same
+   * state store instance (e.g. speculative execution, retries, or multiple stores within the
+   * same task).
+   *
+   * By default, this delegates to [[combine(SQLMetric, Long)]] to preserve the contract for
+   * existing custom StateStoreInstanceMetric implementations. Subclasses may override this
+   * method to provide a direct primitive-value combination without allocating a SQLMetric.
+   */
+  def combine(originalValue: Long, value: Long): Long = {
+    val metric = new SQLMetric("instanceMetric", math.min(initValue, 0L))
+    if (originalValue != initValue) {
+      metric.set(originalValue)
+    }
+    combine(metric, value)
+  }
 
   def name: String = {
     assert(partitionId.isDefined, "Partition ID must be defined for instance metric name")
@@ -724,7 +741,15 @@ case class StateStoreSnapshotLastUploadInstanceMetric(
     } else {
       // Use max to grab the most recent snapshot version across all executors
       // of the same store instance
-      Math.max(originalMetric.value, value)
+      combine(originalMetric.value, value)
+    }
+  }
+
+  override def combine(originalValue: Long, value: Long): Long = {
+    if (originalValue == initValue) {
+      value
+    } else {
+      Math.max(originalValue, value)
     }
   }
 

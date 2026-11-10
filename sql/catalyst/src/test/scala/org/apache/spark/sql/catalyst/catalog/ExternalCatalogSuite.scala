@@ -372,6 +372,17 @@ abstract class ExternalCatalogSuite extends SparkFunSuite {
     catalog.createPartitions("db2", "tbl2", Seq(part1), ignoreIfExists = true)
   }
 
+  test("create partitions with ignoreIfExists does not alter existing partitions") {
+    val catalog = newBasicCatalog()
+    val oldLocation = catalog.getPartition("db2", "tbl2", part1.spec).location
+    val newLocation = newUriForPartition(Seq("a=1", "b=2"))
+    val newPart1 = part1.copy(storage = storageFormat.copy(locationUri = Some(newLocation)))
+    val newPart = CatalogTablePartition(Map("a" -> "7", "b" -> "8"), storageFormat)
+    catalog.createPartitions("db2", "tbl2", Seq(newPart1, newPart), ignoreIfExists = true)
+    assert(catalog.getPartition("db2", "tbl2", part1.spec).location == oldLocation)
+    assert(catalog.getPartitionOption("db2", "tbl2", newPart.spec).isDefined)
+  }
+
   test("create partitions without location") {
     val catalog = newBasicCatalog()
     val table = CatalogTable(

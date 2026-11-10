@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
 
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.analysis.{BindParameters, CTESubstitution, ExpressionWithUnresolvedIdentifier, NameParameterizedQuery, PlanWithUnresolvedIdentifier, UnresolvedInsertTarget, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{BindParameters, CTESubstitution, ExpressionWithUnresolvedIdentifier, NameParameterizedQuery, PlanWithUnresolvedIdentifier, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{CacheTableAsSelect, CTEInChildren, InsertIntoStatement, Limit, ReplaceTableAsSelect, UnresolvedInsert, WithCTE}
@@ -2566,11 +2566,11 @@ class ParametersSuite extends SharedSparkSession {
     }
   }
 
-  // The unresolved binary node exposes the target to analyzer traversal and keeps CTE definitions
-  // on the input query.
+  // The temporary binary node exposes only a dynamic target to analyzer traversal and keeps CTE
+  // definitions on the input query.
   test("SPARK-46625: WITH ... INSERT INTO IDENTIFIER(:p) REPLACE WHERE ... parser") {
     // Use a non-literal-string expression so `withIdentClause` produces
-    // `PlanWithUnresolvedIdentifier` rather than short-circuiting to `UnresolvedInsertTarget`.
+    // `PlanWithUnresolvedIdentifier` rather than short-circuiting to a static target.
     val parsedPlan = spark.sessionState.sqlParser.parsePlan(
       """WITH transformation AS (SELECT 99 AS a)
         |INSERT INTO IDENTIFIER('some' || '_table') REPLACE WHERE a = 10
@@ -2594,12 +2594,15 @@ class ParametersSuite extends SharedSparkSession {
     }
   }
 
-  test("parsed INSERT targets use an unresolved binary plan") {
+  test("dynamic INSERT targets use a temporary binary plan") {
     val regularInsert = spark.sessionState.sqlParser
       .parsePlan("INSERT INTO target_table SELECT 1")
-      .asInstanceOf[UnresolvedInsert]
-    assert(regularInsert.table.isInstanceOf[UnresolvedInsertTarget])
-    assert(regularInsert.children === Seq(regularInsert.table, regularInsert.query))
+    assert(regularInsert.isInstanceOf[InsertIntoStatement])
+
+    // A literal IDENTIFIER is a static target, so it parses to the same plan as a bare name.
+    val literalIdentifierInsert = spark.sessionState.sqlParser
+      .parsePlan("INSERT INTO IDENTIFIER('target_table') SELECT 1")
+    assert(literalIdentifierInsert === regularInsert)
 
     val identifierInsert = spark.sessionState.sqlParser
       .parsePlan("INSERT INTO IDENTIFIER(lower('TESTCAT.NS.TARGET_TABLE')) SELECT 1")

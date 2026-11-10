@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.PrimitiveIterator;
 import java.util.Set;
+import java.util.function.Function;
 
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.column.page.PageReadStore;
@@ -35,17 +36,23 @@ import org.apache.parquet.hadoop.metadata.BlockMetaData;
 import org.apache.parquet.hadoop.metadata.ColumnPath;
 import org.apache.parquet.internal.filter2.columnindex.ColumnIndexStore.MissingOffsetIndexException;
 
+import org.apache.spark.TaskContext;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.memory.MemoryConsumer;
 import org.apache.spark.memory.MemoryMode;
+import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.sql.catalyst.expressions.BasePredicate;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.execution.datasources.FileFormat;
+import org.apache.spark.sql.execution.metric.SQLMetric;
 import org.apache.spark.sql.execution.vectorized.OffHeapColumnVector;
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
+import org.apache.spark.sql.internal.SQLConf;
+import org.apache.spark.sql.internal.connector.StorageFilterErrors;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.DecimalType;
@@ -83,6 +90,9 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
  * <p>A spliced key slot holds a different vector in each batch, and {@link #nextBatch()} frees the
  * previous one. A caller must fetch {@code batch.column(i)} again after every {@code nextBatch()}.
  *
+ * <p>The survivor buffer is accounted to the task's execution memory, the key values only on heap,
+ * see {@link SurvivorMemory}.
+ *
  * <p>When the scan has the column {@code FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME}, this
  * reader fills it. A batch never spans two row groups, so one value covers each batch. It is true
  * where the filter was applied, whose rows are then exactly the survivors, and false where it was
@@ -99,10 +109,10 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
 
   /**
    * What one buffered variable-length value costs, as a multiple of its own bytes. The byte child
-   * holds a null byte per byte, and {@link WritableColumnVector#reserve} doubles it when it grows.
-   * It over-counts on purpose, since nothing can spill this buffer. That holds at the default
-   * growth. A {@code hugeVectorReserveRatio} above 2 makes it under-count past
-   * {@code hugeVectorThreshold}, which is off by default.
+   * holds a null byte per byte, and {@link WritableColumnVector#reserve} doubles it when it grows,
+   * so this is the most the value takes on heap, and what the task's memory manager is asked for.
+   * That holds at the default growth. A {@code hugeVectorReserveRatio} above 2 makes it
+   * under-count past {@code hugeVectorThreshold}, which is off by default.
    */
   private static final long VARIABLE_LENGTH_BYTES_FACTOR = 4L;
 
@@ -117,6 +127,13 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
    * `WritableColumnVector.DEFAULT_ARRAY_LENGTH`.
    */
   private static final int DEFAULT_CHILD_BYTES_PER_ROW = 4;
+
+  /**
+   * The most the survivor buffer reserves beyond what it holds, see
+   * {@link #reserveSurvivorMemory}. The task's memory manager may spill other consumers, or evict
+   * cached blocks, to grant a request in full, so an ask past what is free can cost them that much.
+   */
+  private static final long SURVIVOR_MEMORY_STEP_BYTES = 1L << 20;
 
   /**
    * The filter this reader applies. {@link #keyColumns} is null for a file it is not applied to row
@@ -183,15 +200,18 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
   private WritableColumnVector checkedVector;
 
   /**
-   * Splicing state. {@link #survivorBatches} holds one array of survivor vectors per batch to emit,
-   * indexed like {@link #keyColumns}, and {@link #currentKeyAccumulators} the array still filling.
-   * Together they hold every survivor of one row group, outside any MemoryConsumer.
+   * Splicing state. {@link #survivorBatches} holds one {@link SurvivorBatch} per batch to emit, and
+   * {@link #currentKeyAccumulators} the vectors still filling, indexed like {@link #keyColumns}.
+   * Together they hold the survivors of one row group not yet emitted.
    */
-  private final ArrayDeque<WritableColumnVector[]> survivorBatches = new ArrayDeque<>();
+  private final ArrayDeque<SurvivorBatch> survivorBatches = new ArrayDeque<>();
+  /** What the batches in {@link #survivorBatches} are charged together. */
+  private long queuedKeyCharge;
   /** The survivor vectors still filling, or null when there are none. */
   private WritableColumnVector[] currentKeyAccumulators;
-  /** Row count of {@link #currentKeyAccumulators}. */
+  /** Row count and charge of {@link #currentKeyAccumulators}. */
   private int currentKeyAccumulatorRowCount;
+  private long currentKeyAccumulatorCharge;
   /**
    * The survivor vectors the current batch is built on. The next batch frees them, or
    * {@link #close()} when no next batch comes.
@@ -201,6 +221,25 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
   private ColumnVector[] persistentBatchColumns;
   /** The array the emitted batch is built over, whose key slots each batch rewrites. */
   private ColumnVector[] spliceBatchColumns;
+
+  /** What the survivor ranges of the row group being read or emitted cost to hold. */
+  private long rangeCharge;
+  /**
+   * The survivor buffer's account with the task's memory manager, or null without one, or for a
+   * file the filter is not applied to row by row.
+   */
+  private SurvivorMemory survivorMemory;
+  /**
+   * What {@link #survivorMemory} holds. Only this reader changes it, so it is kept here rather
+   * than read off the consumer's atomic counter per survivor.
+   */
+  private long reservedBytes;
+  /**
+   * What the budget gave splicing up for in the row group being loaded, or null. Phase 1 leaves it
+   * for {@link #loadNextRowGroup} to record once phase 2 keeps the filter, so a row group counts
+   * once.
+   */
+  private BudgetGiveUp splicingGiveUp;
 
   public LateMaterializationParquetRecordReader(
       ZoneId convertTz,
@@ -241,11 +280,17 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
         }
       } finally {
         try {
+          // So `abandonSplicing()` releases everything at once.
+          rangeCharge = 0L;
           closeSplicingState();
         } finally {
-          if (checkedVector != null) {
-            checkedVector.close();
-            checkedVector = null;
+          try {
+            if (checkedVector != null) {
+              checkedVector.close();
+              checkedVector = null;
+            }
+          } finally {
+            releaseSurvivorMemoryTo(0L);
           }
         }
       }
@@ -337,17 +382,21 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
   public boolean nextBatch() throws IOException {
     closeAll(publishedKeyVectors);
     publishedKeyVectors = null;
+    trimSurvivorMemory();
     if (!super.nextBatch()) return false;
     if (keyColumns != null) {
       if (spliceCurrentRowGroup) {
-        publishedKeyVectors = survivorBatches.pollFirst();
-        if (publishedKeyVectors == null) {
+        SurvivorBatch next = survivorBatches.pollFirst();
+        if (next == null) {
           // Unreachable, since the queue holds exactly the survivors the emit loop counts. Without
           // this check the key slots would show stale values.
           throw ParquetStorageFilter.internalError(String.format(
               "Storage-filter survivor queue of row group %d in %s ran out with %d rows still "
                   + "to emit", nextBlockIndex - 1, fileReader.getFile(), columnarBatch.numRows()));
         }
+        publishedKeyVectors = next.vectors();
+        // Still reserved, until a later trim, the next row group's load, or close() releases it.
+        queuedKeyCharge -= next.charge();
       }
       for (int k = 0; k < keyColumns.length; k++) {
         int slot = keyColumns[k].batchSlot();
@@ -445,6 +494,12 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
     }
     keyFixedBytesPerRow = fixedBytesPerRow;
     keyOnlyColumns = Arrays.stream(keys).map(KeyColumn::descriptor).toList();
+    // A test's task can have no memory manager.
+    TaskContext context = TaskContext.get();
+    TaskMemoryManager taskMemoryManager = context == null ? null : context.taskMemoryManager();
+    if (taskMemoryManager != null) {
+      survivorMemory = new SurvivorMemory(taskMemoryManager);
+    }
     // Last, since a non-null `keyColumns` is what says the filter is applied to this file.
     keyColumns = keys;
   }
@@ -460,12 +515,14 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
     // assignment comes only after the next row group's phase 1, whose budget does not count them.
     closeDataPages();
     releaseRowGroupReaders();
+    rangeCharge = 0L;
+    releaseSurvivorMemoryTo(heldCharge());
     StorageFilterMetrics m = storageFilter.metrics();
     List<BlockMetaData> blocks = fileReader.getRowGroups();
     while (nextBlockIndex < blocks.size()) {
       // A plain read checks for a task kill after every batch, and this loop can pass any number
       // of row groups without emitting one.
-      ParquetStorageFilter.throwIfKilled();
+      StorageFilterErrors.throwIfKilled();
       int blockIdx = nextBlockIndex++;
       long blockRowCount = blocks.get(blockIdx).getRowCount();
 
@@ -500,7 +557,10 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
       // Null means phase 1 gave the filter up, and phase 2 then reads every row the pushed filter
       // kept.
       boolean filterGivenUp = survivors == null;
-      if (filterGivenUp) abandonSplicing();
+      if (filterGivenUp) abandonFilter();
+      // Phase 1 may have reserved up to a step past what it buffered, which phase 2's reads should
+      // not keep from other consumers.
+      releaseSurvivorMemoryTo(heldCharge());
       RowRanges finalRanges = filterGivenUp ? pushedFilterRanges : survivors;
       long finalRowCount = filterGivenUp ? baselineRows : survivors.rowCount();
       // The byte metrics' baseline, the non-key bytes a plain read asks for over the rows the
@@ -525,22 +585,23 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
       } catch (MissingOffsetIndexException e) {
         // Parquet turns any IOException reading an offset index into this, a kill's interrupt
         // included, which must not be taken for a missing index.
-        ParquetStorageFilter.throwIfKilled();
+        StorageFilterErrors.throwIfKilled();
         if (reportedMessages.add(OFFSET_INDEX_UNREADABLE)) {
           // The message only, since parquet has logged the stack trace.
           LOG.warn(OFFSET_INDEX_UNREADABLE, MDC.of(LogKeys.PATH, fileReader.getFile()),
               MDC.of(LogKeys.REASON, e.getMessage()));
         }
         filterGivenUp = true;
-        abandonSplicing();
+        abandonFilter();
         finalRanges = pushedFilterRanges;
         finalRowCount = baselineRows;
         fileReader.setRequestedSchema(requestedColumns);
         dataPages = fileReader.readFilteredRowGroup(blockIdx, finalRanges);
       }
       requireRowCount(dataPages, finalRowCount, blockIdx);
-      // A row group whose filter was given up reports nothing (see `StorageFilterMetrics`).
+      // A row group whose filter was given up counts no saving, nor a splicing give-up.
       if (!filterGivenUp) {
+        if (splicingGiveUp != null) recordBudgetGiveUp(splicingGiveUp);
         // Over the columns phase 2 read, the key columns included once splicing is given up. A
         // spliced row group that pruned nothing read exactly the baseline.
         long phase2Bytes = spliceCurrentRowGroup && finalRowCount == baselineRows
@@ -640,7 +701,7 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
    * <p>Returns null when the filter is given up for this row group:
    * <ul>
    *   <li>at the first survivor of a row group that cannot be read in part;</li>
-   *   <li>when the surviving ranges pass the budget;</li>
+   *   <li>when the surviving ranges pass the budget, or the task's memory manager denies them;</li>
    *   <li>on an error decoding the key pages or applying the filter.</li>
    * </ul>
    */
@@ -663,16 +724,15 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
 
     PrimitiveIterator.OfLong rowIndexIter = pushedFilterRanges.iterator();
     RowRanges.Builder finalRangesBuilder = RowRanges.builder();
-    // The budget weighs both the bytes buffered for splicing and the survivors' ranges.
-    long splicedBytes = 0L;
-    long rangeBytes = 0L;
     long previousSurvivor = -2L;
+    // The budget weighs both the key values buffered for splicing and the survivors' ranges.
     long cap = storageFilter.maxSplicedRowGroupBytes();
+    splicingGiveUp = null;
     // Out of the loop, since resolving it is a volatile read.
     BasePredicate predicate = storageFilter.preparedPredicate();
     while (remaining > 0) {
       // Per chunk, since this decodes a whole row group before its first batch.
-      ParquetStorageFilter.throwIfKilled();
+      StorageFilterErrors.throwIfKilled();
       int num = (int) Math.min((long) capacity, remaining);
       try {
         for (int i = 0; i < keyScratchVectors.length; i++) {
@@ -712,12 +772,12 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
           return null;
         }
         finalRangesBuilder.addSelectedRow(blockRow);
-        if (blockRow != previousSurvivor + 1) rangeBytes += ROW_RANGE_BYTES;
+        if (blockRow != previousSurvivor + 1) rangeCharge += ROW_RANGE_BYTES;
         previousSurvivor = blockRow;
         if (spliceCurrentRowGroup) {
           try {
             if (currentKeyAccumulators == null) allocateKeyAccumulators();
-            splicedBytes += appendSurvivorRowToAccumulators(r);
+            appendSurvivorRowToAccumulators(r);
           } catch (RuntimeException e) {
             // The buffer is optional, so failing to fill it gives splicing up, not the filter. That
             // covers a vector that cannot grow, and a key value the predicate did not read on this
@@ -727,15 +787,32 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
             // where a plain read fails.
             reportOnce(e, SPLICING_GIVEN_UP_ON_ERROR);
             abandonSplicing();
-            splicedBytes = 0L;
           }
         }
-        if (splicedBytes + rangeBytes > cap) {
-          // The buffer goes first, which is a no-op once splicing is given up.
-          abandonSplicing();
-          splicedBytes = 0L;
+        if (bufferedKeyCharge() + rangeCharge > cap) {
+          // The buffer goes first.
+          if (spliceCurrentRowGroup) {
+            splicingGiveUp = BudgetGiveUp.SPLICING_ON_CAP;
+            abandonSplicing();
+          }
           // The ranges would be thrown away, so stop.
-          if (rangeBytes > cap) return null;
+          if (rangeCharge > cap) {
+            recordBudgetGiveUp(BudgetGiveUp.FILTER_ON_CAP);
+            return null;
+          }
+        }
+        // A reservation the task's memory manager denies is handled as passing the cap is. With no
+        // key values in it, giving splicing up frees nothing, so the ranges are denied too.
+        long held = heldCharge();
+        boolean denied = !reserveSurvivorMemory(held);
+        if (denied && held > rangeCharge) {
+          splicingGiveUp = BudgetGiveUp.SPLICING_ON_MEMORY;
+          abandonSplicing();
+          denied = !reserveSurvivorMemory(heldCharge());
+        }
+        if (denied) {
+          recordBudgetGiveUp(BudgetGiveUp.FILTER_ON_MEMORY);
+          return null;
         }
       }
       remaining -= num;
@@ -797,10 +874,9 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
 
   /**
    * Appends row {@code srcRow} of every key column to the accumulators, which the caller has
-   * allocated, and hands them to the queue once they are full. Returns the bytes the row added,
-   * which the caller weighs against its budget.
+   * allocated, adds its bytes to their charge, and hands them to the queue once they are full.
    */
-  private long appendSurvivorRowToAccumulators(int srcRow) {
+  private void appendSurvivorRowToAccumulators(int srcRow) {
     long charged = 0L;
     final int dstRow = currentKeyAccumulatorRowCount;
     final WritableColumnVector[] accs = currentKeyAccumulators;
@@ -820,16 +896,19 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
         }
       }
     }
+    currentKeyAccumulatorCharge += keyFixedBytesPerRow + charged;
     currentKeyAccumulatorRowCount = dstRow + 1;
     if (currentKeyAccumulatorRowCount == capacity) pushAccumulators();
-    return keyFixedBytesPerRow + charged;
   }
 
   /** Hands the accumulators to the queue the emit path takes its batches from. */
   private void pushAccumulators() {
-    survivorBatches.addLast(currentKeyAccumulators);
+    survivorBatches.addLast(
+        new SurvivorBatch(currentKeyAccumulators, currentKeyAccumulatorCharge));
+    queuedKeyCharge += currentKeyAccumulatorCharge;
     currentKeyAccumulators = null;
     currentKeyAccumulatorRowCount = 0;
+    currentKeyAccumulatorCharge = 0L;
   }
 
   /** Releases the pages phase 2 read for the row group just emitted, if any. */
@@ -867,14 +946,36 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
           + "because buffering a surviving key value raised an error. The storage filter is still "
           + "applied";
 
+  private static final String SPLICING_GIVEN_UP_ON_CAP =
+      "Reading the key columns of a row group of {} a second time rather than buffering them, "
+          + "because the buffer would pass "
+          + SQLConf.PARQUET_STORAGE_FILTER_PUSHDOWN_MAX_SPLICED_ROW_GROUP_BYTES().key()
+          + ". The storage filter is still applied";
+
+  private static final String SPLICING_GIVEN_UP_ON_MEMORY =
+      "Reading the key columns of a row group of {} a second time rather than buffering them, "
+          + "because the task's memory manager denied the memory to buffer them. The storage "
+          + "filter is still applied";
+
+  private static final String ROW_GROUP_GIVEN_UP_ON_CAP =
+      "Reading a row group of {} without the storage filter, because its surviving row ranges "
+          + "alone would pass "
+          + SQLConf.PARQUET_STORAGE_FILTER_PUSHDOWN_MAX_SPLICED_ROW_GROUP_BYTES().key()
+          + ". The filter is still applied above the scan, so the answer is unchanged";
+
+  private static final String ROW_GROUP_GIVEN_UP_ON_MEMORY =
+      "Reading a row group of {} without the storage filter, because the task's memory manager "
+          + "denied the memory to hold its surviving row ranges. The filter is still applied "
+          + "above the scan, so the answer is unchanged";
+
   /**
    * Gives the filter up on an error, after rethrowing a task kill or a fatal error the reader must
-   * not absorb, see {@code ParquetStorageFilter.rethrowIfMustPropagate}. Every catch of
+   * not absorb, see {@code StorageFilterErrors.rethrowIfMustPropagate}. Every catch of
    * {@code Throwable} that gives the filter up goes through here. {@code fromRead} says the error
    * came from decoding the key pages.
    */
   private void giveUpOnError(Throwable t, String message, boolean fromRead) {
-    ParquetStorageFilter.rethrowIfMustPropagate(t, fromRead);
+    StorageFilterErrors.rethrowIfMustPropagate(t, fromRead);
     reportOnce(t, message);
   }
 
@@ -888,18 +989,42 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
   }
 
   /**
+   * Counts a row group the survivor budget limited, under the last thing it gave up, so each row
+   * group counts once. The first of each kind per split is logged, at INFO rather than WARN, since
+   * that is the budget doing its job rather than an error.
+   */
+  private void recordBudgetGiveUp(BudgetGiveUp giveUp) {
+    giveUp.counter.apply(storageFilter.metrics()).add(1L);
+    if (reportedMessages.add(giveUp.message)) {
+      LOG.info(giveUp.message, MDC.of(LogKeys.PATH, fileReader.getFile()));
+    }
+  }
+
+  /**
    * Gives up splicing for the row group being evaluated and frees its buffered survivors. Phase 2
    * then reads every projected column, so the rows are unaffected.
    */
   private void abandonSplicing() {
-    for (WritableColumnVector[] batch : survivorBatches) {
-      closeAll(batch);
+    for (SurvivorBatch batch : survivorBatches) {
+      closeAll(batch.vectors());
     }
     survivorBatches.clear();
+    queuedKeyCharge = 0L;
     closeAll(currentKeyAccumulators);
     currentKeyAccumulators = null;
     currentKeyAccumulatorRowCount = 0;
+    currentKeyAccumulatorCharge = 0L;
     spliceCurrentRowGroup = false;
+    releaseSurvivorMemoryTo(heldCharge());
+  }
+
+  /**
+   * Frees everything the survivor buffer holds for a row group whose filter is given up, its
+   * ranges included, since phase 2 then reads every row the pushed filter kept.
+   */
+  private void abandonFilter() {
+    rangeCharge = 0L;
+    abandonSplicing();
   }
 
   /** Closes every survivor vector this reader still holds, the published ones included. */
@@ -912,11 +1037,117 @@ public class LateMaterializationParquetRecordReader extends VectorizedParquetRec
     }
   }
 
+  /** The bytes of key values buffered for splicing, which the cap weighs even off heap. */
+  private long bufferedKeyCharge() {
+    return queuedKeyCharge + currentKeyAccumulatorCharge;
+  }
+
+  /** The accounted bytes the survivor buffer holds, see {@link SurvivorMemory}. */
+  private long heldCharge() {
+    return MEMORY_MODE == MemoryMode.ON_HEAP ? rangeCharge + bufferedKeyCharge() : rangeCharge;
+  }
+
+  /**
+   * Grows the reservation to cover {@code held} bytes, which the caller has kept within the cap.
+   * It asks for at least what it already holds, up to {@link #SURVIVOR_MEMORY_STEP_BYTES} and the
+   * cap, so a growing buffer asks only a few times and the reservation never passes the cap. False
+   * when it is denied.
+   */
+  private boolean reserveSurvivorMemory(long held) {
+    if (survivorMemory == null) return true;
+    long missing = held - reservedBytes;
+    if (missing <= 0) return true;
+    long headroom = storageFilter.maxSplicedRowGroupBytes() - reservedBytes;
+    long ask = Math.max(missing,
+        Math.min(Math.min(reservedBytes, SURVIVOR_MEMORY_STEP_BYTES), headroom));
+    long granted;
+    try {
+      granted = survivorMemory.acquireMemory(ask);
+    } catch (Exception | InternalError e) {
+      // Another consumer's spill and the eviction of cached blocks run inside, so this can raise
+      // anything, see `ParquetStorageFilter.memoryReservationFailed`. Any other `Error`, such as
+      // the `SparkOutOfMemoryError` of a failed spill, goes out as it is, since `FileScanRDD`
+      // cannot take it for a corrupt file.
+      throw ParquetStorageFilter.memoryReservationFailed(e);
+    }
+    if (granted < missing) {
+      if (granted > 0) survivorMemory.freeMemory(granted);
+      return false;
+    }
+    reservedBytes += granted;
+    return true;
+  }
+
+  /** Shrinks the reservation to {@code held} bytes. */
+  private void releaseSurvivorMemoryTo(long held) {
+    long excess = reservedBytes - held;
+    if (excess <= 0) return;
+    survivorMemory.freeMemory(excess);
+    reservedBytes = held;
+  }
+
+  /**
+   * Shrinks the reservation to what the buffer holds once that is a step less, so emitting a row
+   * group releases its memory a few times rather than per batch. Each release takes the memory
+   * manager's lock and wakes every task waiting on it. The rest goes when the next row group loads.
+   */
+  private void trimSurvivorMemory() {
+    long held = heldCharge();
+    if (reservedBytes - held >= SURVIVOR_MEMORY_STEP_BYTES) releaseSurvivorMemoryTo(held);
+  }
+
   /** Closes every non-null vector of {@code vectors}, which may itself be null. */
   private static void closeAll(ColumnVector[] vectors) {
     if (vectors == null) return;
     for (ColumnVector v : vectors) {
       if (v != null) v.close();
+    }
+  }
+
+  /**
+   * The survivor buffer's account with the task's memory manager, so other consumers see what it
+   * holds. The charge grows per row, while survivor vectors are allocated a batch at a time, so up
+   * to a batch per key column is held beyond it. A spill frees nothing. The buffer is bounded by
+   * {@code maxSplicedRowGroupBytes} and drains as its batches are emitted, and freeing it would
+   * have the rest of the row group read its key pages again, which the memory manager does not see
+   * either. A denied reservation is handled where it is made, as passing that bound is. ON_HEAP
+   * whatever the reader's memory mode, since off-heap vectors allocate native memory outside the
+   * Tungsten off-heap pool. With them only the row ranges, which are always on heap, are
+   * accounted. The task's memory manager keeps every consumer until the task ends, so a task holds
+   * one per file it reserved for.
+   */
+  private static final class SurvivorMemory extends MemoryConsumer {
+    SurvivorMemory(TaskMemoryManager taskMemoryManager) {
+      super(taskMemoryManager, MemoryMode.ON_HEAP);
+    }
+
+    @Override
+    public long spill(long size, MemoryConsumer trigger) {
+      return 0L;
+    }
+  }
+
+  /** One batch's survivor vectors, indexed like {@link #keyColumns}, and what they are charged. */
+  private record SurvivorBatch(WritableColumnVector[] vectors, long charge) {}
+
+  /**
+   * What the survivor budget gave up for a row group and the limit that made it, with the metric
+   * that counts it and the message logged for it.
+   */
+  private enum BudgetGiveUp {
+    SPLICING_ON_CAP(StorageFilterMetrics::rowGroupsSplicingGivenUpByCap, SPLICING_GIVEN_UP_ON_CAP),
+    SPLICING_ON_MEMORY(
+        StorageFilterMetrics::rowGroupsSplicingGivenUpByMemory, SPLICING_GIVEN_UP_ON_MEMORY),
+    FILTER_ON_CAP(StorageFilterMetrics::rowGroupsFilterGivenUpByCap, ROW_GROUP_GIVEN_UP_ON_CAP),
+    FILTER_ON_MEMORY(
+        StorageFilterMetrics::rowGroupsFilterGivenUpByMemory, ROW_GROUP_GIVEN_UP_ON_MEMORY);
+
+    final Function<StorageFilterMetrics, SQLMetric> counter;
+    final String message;
+
+    BudgetGiveUp(Function<StorageFilterMetrics, SQLMetric> counter, String message) {
+      this.counter = counter;
+      this.message = message;
     }
   }
 

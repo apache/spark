@@ -1314,6 +1314,8 @@ package object config {
       SparkContext.VALID_LOG_LEVELS.mkString(","))
     .createOptional
 
+  private[spark] val SPARK_LOG_LEVEL_PREFIX = "spark.log.level."
+
   private[spark] val FILES_MAX_PARTITION_BYTES = ConfigBuilder("spark.files.maxPartitionBytes")
     .doc("The maximum number of bytes to pack into a single partition when reading files.")
     .version("2.1.0")
@@ -1989,7 +1991,7 @@ package object config {
     ConfigBuilder("spark.shuffle.streaming.writerConnectionTimeout")
       .doc("Maximum time a streaming shuffle writer waits for each reader to connect. " +
         "Set to -1 to wait indefinitely.")
-      .version("4.4.0")
+      .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(
@@ -2426,6 +2428,9 @@ package object config {
         "cost because of excessive JNI call overhead")
       .version("2.3.0")
       .bytesConf(ByteUnit.BYTE)
+      .checkValue(v => v > 0 && v <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH,
+        s"The buffer size must be positive and less than or equal to" +
+          s" ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
       .createWithDefaultString("32k")
 
   private[spark] val IO_COMPRESSION_ZSTD_BUFFERPOOL_ENABLED =
@@ -3082,7 +3087,8 @@ package object config {
         "of the built-in defaults, such as maven central. " +
         "For spark.jars.packages, additional repositories from spark.jars.repositories will " +
         "also be included. " +
-        "Client-resolved Spark Connect Ivy URIs do not use this setting. " +
+        "Client-resolved Spark Connect Ivy URIs use this setting only when the settings file is " +
+        "readable on the client. " +
         "The spark-submit --repositories option applies to submission-time resolution. " +
         "Useful for allowing Spark to resolve artifacts from behind a firewall " +
         "e.g. via an in-house artifact server like Artifactory. " +

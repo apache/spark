@@ -4718,6 +4718,35 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     }
   }
 
+  test("SPARK-60943: Don't eliminate a cast from DECIMAL(19, 0) to BIGINT which can overflow") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable("dt") {
+        sql("create table dt using parquet as select 9999999999999999999BD as d")
+        val msg = intercept[SparkArithmeticException] {
+          sql("select cast(cast(d as bigint) as double) from dt").collect()
+        }.getMessage
+        assert(msg.contains("[CAST_OVERFLOW]"))
+      }
+    }
+  }
+
+  test("SPARK-60943: Don't unwrap a comparison on a cast from DECIMAL(19, 0) to BIGINT") {
+    withTable("dt") {
+      sql("create table dt using parquet as select 9999999999999999999BD as d")
+      Seq("true", "false").foreach { ansi =>
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+          checkAnswer(sql("select try_cast(d as bigint) is not null from dt"), Row(false))
+          val query = sql("select d from dt where cast(d as bigint) > 0")
+          if (ansi == "true") {
+            intercept[SparkArithmeticException](query.collect())
+          } else {
+            checkAnswer(query, Seq.empty)
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-40903: Don't reorder Add for canonicalize if it is decimal type") {
     val tableName = "decimalTable"
     withTable(tableName) {
@@ -4965,18 +4994,21 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
   }
 
   test("SPARK-49659: Unsupported scalar subqueries in VALUES") {
-    checkError(
-      exception = intercept[AnalysisException](
-        sql("SELECT * FROM VALUES ((SELECT 1) + (SELECT 2))")
-      ),
-      condition = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.SCALAR_SUBQUERY_IN_VALUES",
-      parameters = Map(),
-      context = ExpectedContext(
-        fragment = "VALUES ((SELECT 1) + (SELECT 2))",
-        start = 14,
-        stop = 45
+    withSQLConf(SQLConf.INLINE_TABLE_NON_FOLDABLE_EXPRESSIONS_ENABLED.key -> "false") {
+      checkError(
+        exception = intercept[AnalysisException](
+          sql("SELECT * FROM VALUES ((SELECT 1) + (SELECT 2))")
+        ),
+        condition = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.SCALAR_SUBQUERY_IN_VALUES",
+        parameters = Map(),
+        context = ExpectedContext(
+          fragment = "VALUES ((SELECT 1) + (SELECT 2))",
+          start = 14,
+          stop = 45
+        )
       )
-    )
+    }
+    checkAnswer(sql("SELECT * FROM VALUES ((SELECT 1) + (SELECT 2))"), Row(3))
   }
 
   test("SPARK-49743: OptimizeCsvJsonExpr does not change schema when pruning struct") {

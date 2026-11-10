@@ -34,6 +34,24 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
   // visible for testing
   private[sql] val CHAR_VARCHAR_TYPE_STRING_METADATA_KEY = "__CHAR_VARCHAR_TYPE_STRING"
 
+  /** JVM method name used by [[addPaddingForScan]] when read-side CHAR padding is on. */
+  private[sql] val READ_SIDE_PADDING = "readSidePadding"
+
+  /** JVM method name used by [[addPaddingForScan]] under standard CHAR/VARCHAR semantics. */
+  private[sql] val CHAR_TYPE_READ_SIDE_CHECK = "charTypeReadSideCheck"
+
+  private[sql] val VARCHAR_TYPE_READ_SIDE_CHECK = "varcharTypeReadSideCheck"
+
+  /**
+   * V2 function name for CHAR read-side padding. Distinct from SQL `RPAD` so connectors that
+   * already allowlist `RPAD` for explicit `rpad()` do not inherit CHAR-scan rewrite. Emitted
+   * only for equality, null-safe equality, inequality, or IN against a string of the CHAR
+   * length. JDBC may compile it as the column only when the remote compares CHAR
+   * blank-padded (see `JdbcDialect.isSupportedFunction`) and stored values never exceed
+   * that length.
+   */
+  private[sql] val V2_CHAR_READ_SIDE_PADDING = "CHAR_READ_SIDE_PADDING"
+
   /**
    * Like [[hasCharVarchar]], but also inspects [[UserDefinedType]] storage types.
    * Python/Arrow host checks must match PySpark `_has_type`, which unwraps UDTs.
@@ -364,11 +382,11 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
         processStringForCharVarchar(
           attr,
           dt,
-          charFuncName = Some("charTypeReadSideCheck"),
-          varcharFuncName = Some("varcharTypeReadSideCheck"))
+          charFuncName = Some(CHAR_TYPE_READ_SIDE_CHECK),
+          varcharFuncName = Some(VARCHAR_TYPE_READ_SIDE_CHECK))
       } else {
         processStringForCharVarchar(
-          attr, dt, charFuncName = Some("readSidePadding"), varcharFuncName = None)
+          attr, dt, charFuncName = Some(READ_SIDE_PADDING), varcharFuncName = None)
       }
     }.getOrElse(attr)
   }

@@ -26,15 +26,15 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Histogram, HistogramBin, Project}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
-import org.apache.spark.sql.catalyst.trees.TreePattern
+import org.apache.spark.sql.catalyst.trees.{TreeNodeTag, TreePattern}
 import org.apache.spark.sql.catalyst.util.FieldMetadataUtils.FIELD_ID_METADATA_KEY
 import org.apache.spark.sql.catalyst.util.INTERNAL_METADATA_KEYS
-import org.apache.spark.sql.connector.catalog.{Column, Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.{Column, MetadataColumn, SupportsMetadataColumns, Table, TableCapability}
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
 import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics}
 import org.apache.spark.sql.connector.read.colstats.ColumnStatistics
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, IntegerType, MetadataBuilder, StringType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
@@ -722,6 +722,30 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
     // ... but the column ID is preserved.
     assert(field.id.contains("1"))
     assert(field.metadata.contains(FIELD_ID_METADATA_KEY))
+  }
+
+  test("withMetadataColumns preserves tags") {
+    val table = new Table with SupportsMetadataColumns {
+      override def name(): String = "t"
+      override def columns(): Array[Column] = Array(Column.create("id", IntegerType))
+      override def metadataColumns(): Array[MetadataColumn] =
+        Array(new MetadataColumn {
+          override def name(): String = "index"
+          override def dataType(): DataType = IntegerType
+          override def isNullable(): Boolean = false
+        })
+      override def capabilities(): util.Set[TableCapability] =
+        util.Set.of[TableCapability]()
+    }
+    val relation =
+      DataSourceV2Relation.create(table, None, None, CaseInsensitiveStringMap.empty())
+    val tag = TreeNodeTag[Unit]("metadata-columns-test")
+    relation.setTagValue(tag, ())
+
+    val relationWithMetadata = relation.withMetadataColumns()
+
+    assert(relationWithMetadata ne relation)
+    assert(relationWithMetadata.getTagValue(tag).contains(()))
   }
 
   test("nodePatterns declare the DSv2 relation identity tree patterns") {

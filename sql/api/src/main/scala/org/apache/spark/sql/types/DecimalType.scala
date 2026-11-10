@@ -84,6 +84,10 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
   private[sql] def isTighterThan(other: DataType): Boolean = other match {
     case dt: DecimalType =>
       (precision - scale) <= (dt.precision - dt.scale) && scale <= dt.scale
+    // `DecimalType.forType(LongType)` is DECIMAL(20, 0), but a DECIMAL(19, 0) value can overflow a
+    // long as well, e.g. 9999999999999999999 > Long.MaxValue.
+    case LongType =>
+      precision <= Decimal.MAX_LONG_DIGITS && scale == 0
     case dt: IntegralType =>
       val integerAsDecimal = DecimalType.forType(dt)
       assert(integerAsDecimal.scale == 0)
