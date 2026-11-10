@@ -42,8 +42,7 @@ abstract class ShuffleHandle(val shuffleId: Int) extends Serializable {
    *
    * Executor retirement only partly consults this value: `SparkContext.executorHoldSupported` and
    * the `ExecutorAllocationManager` `reliableShuffleStorage` argument read only the global flag,
-   * while `SparkContext.holdExecutors` refuses when an active shuffle is not reliably stored.
-   * TODO(SPARK-59806): make dynamic allocation's shuffle tracking honor the per-shuffle value.
+   * while `SparkContext.holdExecutors` and dynamic allocation's shuffle tracking use this value.
    */
   def reliablyStored: Optional[java.lang.Boolean] = Optional.empty()
 }
