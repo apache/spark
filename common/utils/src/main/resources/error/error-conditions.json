@@ -2960,7 +2960,7 @@
       },
       "MISSING_JOIN_CONDITION" : {
         "message" : [
-          "The join has no join condition, and predicate pushdown moved none into it from a later `WHERE` clause or filter. Compare a lookup column with a stream-side value in the join, such as in its `ON` clause or the condition argument of `join()`, or in a `WHERE` clause above an inner join."
+          "The join has no condition from which Spark can plan a lookup. Compare a lookup column with a stream-side value in the join, such as in its `ON` clause or the condition argument of `join()`, or in a `WHERE` clause above an inner join."
         ]
       },
       "NO_LOOKUP_CANDIDATE" : {
@@ -2970,7 +2970,7 @@
       },
       "NO_LOOKUP_PREDICATE" : {
         "message" : [
-          "The data source of table <table> did not select any of the lookup predicates that Spark offered from the join condition."
+          "The data source of table <table> did not select any of the lookup predicates that Spark offered from the join condition and the lookup-side filters."
         ]
       },
       "SCAN_BUILDER" : {

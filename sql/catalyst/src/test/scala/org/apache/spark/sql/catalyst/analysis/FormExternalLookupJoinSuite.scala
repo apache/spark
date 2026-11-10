@@ -229,6 +229,19 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
     }
   }
 
+  test("a cross join over a lookup-only table forms an inner lookup join") {
+    // As for an ordinary join, where a cross join is an inner one, predicate pushdown can then
+    // move a key into it from a filter above.
+    Seq(stream.join(lookupOnly, Cross), stream.join(lookupOnly, Cross, Some(idsEqual))).foreach {
+      plan =>
+        val analyzed = analyze(plan)
+        CheckExternalLookupJoin(analyzed)
+        val formed = FormExternalLookupJoin(analyzed).asInstanceOf[ExternalLookupJoin]
+        assert(formed.joinType === Inner)
+        assert(formed.condition === analyzed.asInstanceOf[Join].condition)
+    }
+  }
+
   test("validation and conversion reject a lookup-only join with the same reason") {
     Seq(
       // Only a stream-static join, with the lookup-only table on the right side.
@@ -238,9 +251,6 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
         Map.empty[String, String]),
       (stream.join(lookupOnly, RightOuter, Some(idsEqual)), "JOIN_TYPE",
         joinType("RIGHT OUTER")),
-      // A cross join fails with its join type, with or without a later filter.
-      (stream.join(lookupOnly, Cross), "JOIN_TYPE", joinType("CROSS")),
-      (stream.join(lookupOnly, Cross).where(idsEqual), "JOIN_TYPE", joinType("CROSS")),
       // No join strategy hint applies to an external lookup join; sort merge is named MERGE.
       (stream.hint("broadcast").join(lookupOnly, Inner, Some(idsEqual)),
         "CONFLICTING_JOIN_STRATEGY", Map("strategy" -> "BROADCAST")),
