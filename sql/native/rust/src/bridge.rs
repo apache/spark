@@ -407,15 +407,15 @@ struct Envelope<T> {
 }
 
 pub(crate) fn encode<T: Serialize>(value: &T) -> Result<Vec<u8>> {
-    encode_envelope(STATE_VERSION, value)
-}
-
-fn encode_envelope<T: Serialize>(version: u32, value: &T) -> Result<Vec<u8>> {
     let mut bytes = Vec::new();
     let mut serializer = rmp_serde::Serializer::new(&mut bytes)
         .with_struct_map()
         .with_bytes(rmp_serde::config::BytesMode::ForceAll);
-    Envelope { version, value }.serialize(&mut serializer)?;
+    Envelope {
+        version: STATE_VERSION,
+        value,
+    }
+    .serialize(&mut serializer)?;
     Ok(bytes)
 }
 
@@ -880,7 +880,11 @@ mod tests {
 
     #[test]
     fn rejects_a_different_wire_version() {
-        let other = encode_envelope(STATE_VERSION + 1, &42_u64).unwrap();
+        let other = rmp_serde::to_vec_named(&Envelope {
+            version: STATE_VERSION + 1,
+            value: 42_u64,
+        })
+        .unwrap();
         let error = decode::<u64>(&other).unwrap_err();
         assert!(error
             .to_string()
