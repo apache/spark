@@ -1560,11 +1560,14 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case p @ Project(_, u: Union) =>
       if (!u.outputSet.subsetOf(p.references)) {
         val firstChild = u.children.head
-        val newOutput = prunedChild(firstChild, p.references).output
+        // Compute these once, not per column of each child: `output` may create new attributes
+        // on each call (e.g. a `Project` with aliases), and a `Seq` lookup is linear.
+        val firstChildOutput = firstChild.output.toIndexedSeq
+        val newOutputSet = AttributeSet(prunedChild(firstChild, p.references).output)
         // pruning the columns of all children based on the pruned first child.
         val newChildren = u.children.map { p =>
           val selected = p.output.zipWithIndex.filter { case (a, i) =>
-            newOutput.contains(firstChild.output(i))
+            newOutputSet.contains(firstChildOutput(i))
           }.map(_._1)
           Project(selected, p)
         }
