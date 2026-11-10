@@ -664,18 +664,10 @@ def main():
 
 
 def _test():
-    import doctest
+    import unittest
 
-    import sparktestsupport.modules
-    import sparktestsupport.utils
-
-    test_results = (
-        doctest.testmod(sparktestsupport.modules),
-        doctest.testmod(sparktestsupport.utils),
-        doctest.testmod(),
-    )
-    failure_count = sum([num_failures for (num_failures, num_tests) in test_results])
-    if failure_count:
+    tests = unittest.defaultTestLoader.discover("sparktestsupport.tests")
+    if not unittest.TextTestRunner().run(tests).wasSuccessful():
         sys.exit(-1)
 
 
