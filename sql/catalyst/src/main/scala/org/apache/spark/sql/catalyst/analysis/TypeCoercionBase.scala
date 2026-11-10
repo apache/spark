@@ -80,7 +80,8 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
    */
   object ProcedureArgumentCoercion extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case c @ Call(ResolvedProcedure(_, _, procedure: BoundProcedure), args, _) if c.resolved =>
+      case c @ Call(ResolvedProcedure(_, _, procedure: BoundProcedure), args, _, _)
+          if c.resolved && c.bound =>
         val expectedDataTypes = procedure.parameters.map(_.dataType)
         val coercedArgs = args.zip(expectedDataTypes).map {
           case (arg, expectedType) => implicitCast(arg, expectedType).getOrElse(arg)

@@ -40,7 +40,7 @@ class InvokeProcedures(session: SparkSession) extends Rule[LogicalPlan] {
   private def invokeProcedures(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case c: Call if c.resolved && c.bound && c.execute && c.checkArgTypes().isSuccess =>
       session.sessionState.optimizer.execute(c) match {
-        case Call(ResolvedProcedure(_, _, procedure: BoundProcedure), args, _) =>
+        case Call(ResolvedProcedure(_, _, procedure: BoundProcedure), args, _, _) =>
           invoke(procedure, args, c)
         case _ =>
           throw SparkException.internalError("Unexpected plan for optimized CALL statement")

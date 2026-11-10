@@ -2368,27 +2368,27 @@ case class CloseCursor(cursor: Expression) extends LeafCommand
 
 /**
  * The logical plan of the CALL statement.
+ *
+ * @param bound whether `BindProcedures` has bound the procedure and rearranged the arguments to
+ *              match its parameters. This can't be derived from the procedure type, as a
+ *              procedure may implement both `UnboundProcedure` and `BoundProcedure`.
  */
 case class Call(
     procedure: LogicalPlan,
     args: Seq[Expression],
-    execute: Boolean = true)
+    execute: Boolean = true,
+    bound: Boolean = false)
   extends UnaryNode with ExecutableDuringAnalysis {
 
   override def output: Seq[Attribute] = Nil
 
   override def child: LogicalPlan = procedure
 
-  def bound: Boolean = procedure match {
-    case ResolvedProcedure(_, _, _: BoundProcedure) => true
-    case _ => false
-  }
-
   def checkArgTypes(): TypeCheckResult = {
     require(resolved && bound, "can check arg types only after resolution and binding")
 
     val params = procedure match {
-      case ResolvedProcedure(_, _, bound: BoundProcedure) => bound.parameters
+      case ResolvedProcedure(_, _, boundProcedure: BoundProcedure) => boundProcedure.parameters
     }
     require(args.length == params.length, "number of args and params must match after binding")
 

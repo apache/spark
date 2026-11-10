@@ -2648,14 +2648,15 @@ class Analyzer(
    */
   object BindProcedures extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case Call(ResolvedProcedure(catalog, ident, unbound: UnboundProcedure), args, execute)
-          if args.forall(_.resolved) =>
+      case c @ Call(ResolvedProcedure(catalog, ident, unbound: UnboundProcedure), args, execute, _)
+          if !c.bound && args.forall(_.resolved) =>
         val inputType = extractInputType(args)
-        val bound = unbound.bind(inputType)
-        validateParameterModes(bound)
+        val boundProcedure = unbound.bind(inputType)
+        validateParameterModes(boundProcedure)
         val rearrangedArgs =
-          NamedParametersSupport.defaultRearrange(bound, args, SQLConf.get.resolver)
-        Call(ResolvedProcedure(catalog, ident, bound), rearrangedArgs, execute)
+          NamedParametersSupport.defaultRearrange(boundProcedure, args, SQLConf.get.resolver)
+        Call(
+          ResolvedProcedure(catalog, ident, boundProcedure), rearrangedArgs, execute, bound = true)
     }
 
     private def extractInputType(args: Seq[Expression]): StructType = {

@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.connector
 
+import java.sql.Timestamp
 import java.util.Collections
+import java.util.concurrent.atomic.AtomicInteger
 
 import org.scalatest.BeforeAndAfter
 
@@ -511,6 +513,45 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
     checkAnswer(sql("CALL cat.ns.simple_sum(in2 => 4, in1 => 6)"), Row(10) :: Nil)
   }
 
+  test("SPARK-61506: simple procedure with a late-resolving argument") {
+    // `ResolveBinaryArithmetic` resolves the timestamp subtraction after `BindProcedures` in the
+    // same analyzer iteration.
+    catalog.createProcedure(Identifier.of(Array("ns"), "simple_ts"), SimpleTimestampProcedure)
+    val tsExpr = "TIMESTAMP '2026-01-02 00:00:00' - INTERVAL '1' DAY"
+    val expected = Timestamp.valueOf("2026-01-01 00:00:00")
+    checkAnswer(sql(s"CALL cat.ns.simple_ts($tsExpr)"), Row(expected, "none") :: Nil)
+    checkAnswer(
+      sql(s"CALL cat.ns.simple_ts(label => 'x', ts => $tsExpr)"),
+      Row(expected, "x") :: Nil)
+    checkError(
+      exception = intercept[AnalysisException](
+        sql(s"CALL cat.ns.simple_ts($tsExpr, 'x', 1)")
+      ),
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "functionName" -> toSQLId("simple_ts"),
+        "expectedNum" -> "[1, 2]",
+        "actualNum" -> "3",
+        "docroot" -> SPARK_DOC_ROOT))
+  }
+
+  test("SPARK-61506: procedure that is both unbound and bound is used only after binding") {
+    val binds = new AtomicInteger()
+    catalog.createProcedure(
+      Identifier.of(Array("ns"), "rebinding_ts"),
+      new RebindingTimestampProcedure(binds, isBound = false))
+    checkAnswer(
+      sql("CALL cat.ns.rebinding_ts(TIMESTAMP '2026-01-02 00:00:00' - INTERVAL '1' DAY, 'x')"),
+      Row(Timestamp.valueOf("2026-01-01 00:00:00"), "x") :: Nil)
+    assert(binds.get() == 1)
+    // EXPLAIN does not run the procedure, so the `Call` stays in the plan for later iterations.
+    val explain =
+      sql("EXPLAIN CALL cat.ns.rebinding_ts(label => 'x', ts => TIMESTAMP '2026-01-01')")
+        .head().getString(0)
+    assert(binds.get() == 2)
+    assert(explain.contains("Call cat.ns.rebinding_ts(2026-01-01 00:00:00, x)"), explain)
+  }
+
   test("SPARK-51780: Implement DESC PROCEDURE") {
     catalog.createProcedure(Identifier.of(Array("ns"), "foo"), SimpleSum)
     catalog.createProcedure(Identifier.of(Array("ns", "db"), "abc"), UnboundLongSum)
@@ -972,6 +1013,45 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
     override def name: String = "simple_sum"
 
     override def description: String = "simple sum integers"
+  }
+
+  abstract class TimestampProcedure extends BoundProcedure {
+    override def description: String = "returns a timestamp and an optional label"
+
+    override def isDeterministic: Boolean = true
+
+    override def parameters: Array[ProcedureParameter] = Array(
+      ProcedureParameter.in("ts", DataTypes.TimestampType).build(),
+      ProcedureParameter.in("label", DataTypes.StringType).defaultValue("'none'").build())
+
+    def outputType: StructType = new StructType()
+      .add("ts", DataTypes.TimestampType)
+      .add("label", DataTypes.StringType)
+
+    override def call(input: InternalRow): java.util.Iterator[Scan] = {
+      val result = Result(outputType, Array(InternalRow(input.getLong(0), input.getUTF8String(1))))
+      Collections.singleton[Scan](result).iterator()
+    }
+  }
+
+  object SimpleTimestampProcedure extends TimestampProcedure with SimpleProcedure {
+    override def name: String = "simple_ts"
+  }
+
+  class RebindingTimestampProcedure(binds: AtomicInteger, isBound: Boolean)
+    extends TimestampProcedure with UnboundProcedure {
+
+    override def name: String = "rebinding_ts"
+
+    override def bind(inputType: StructType): BoundProcedure = {
+      binds.incrementAndGet()
+      new RebindingTimestampProcedure(binds, isBound = true)
+    }
+
+    override def call(input: InternalRow): java.util.Iterator[Scan] = {
+      assert(isBound, "only the procedure returned by bind can be called")
+      super.call(input)
+    }
   }
 
   object SimpleZeroParameterProcedure extends SimpleProcedure {
