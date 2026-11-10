@@ -6330,6 +6330,41 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val STREAMING_V2_FILTER_PUSHDOWN_ENABLED =
+    buildConf("spark.sql.streaming.v2FilterPushdown.enabled")
+      .doc("When true, the scan of a Data Source V2 streaming source whose table has the " +
+        "capability STREAMING_FILTER_PUSHDOWN gets the filters that the streaming query applies " +
+        "to all the rows that it reads from the source, which Spark takes from the plan of the " +
+        "query optimized when the query starts, as it does for batch scans: Spark optimizes the " +
+        "query once more when it starts, as it optimizes each micro-batch, but without the rules " +
+        "that infer filters. A scan builder whose filters may fail on some rows, as a cast does " +
+        "with ANSI, gets the filters that the query applies before any other filter, in their " +
+        "order, and then those that cannot fail that it applies wherever they are. The filters " +
+        "on columns of floating types, of strings of a collation that is not binary, or of " +
+        "structs, arrays or user-defined types with such values are not pushed down. The query " +
+        "still applies the filters after the scan, and each micro-batch checks that its plan " +
+        "applies them to all the rows that it reads from the source before it reads them. " +
+        "Otherwise, as when the optimizer of a micro-batch rewrites a pushed filter in a way " +
+        "that Spark cannot follow, the micro-batch fails with STREAMING_SCAN_FILTERS_CHANGED, " +
+        "and so do the next ones: restart the query with this configuration set to false to " +
+        "read the source with no filter. When false, the scan gets no filter.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
+  val STREAMING_V2_SCAN_PUSHDOWN_FAIL_ON_ERROR =
+    buildConf("spark.sql.streaming.v2ScanPushDown.failOnOptimizationError")
+      .internal()
+      .doc("When true, a failure of the optimization of a streaming query when it starts, which " +
+        "finds what the scans of its Data Source V2 sources read, fails the query. When false, " +
+        "the scans of its sources read all their columns with no filter instead, with a " +
+        "warning. It is true in the tests of Spark.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(Utils.isTesting)
+
   val DISABLE_MAP_KEY_NORMALIZATION =
     buildConf("spark.sql.legacy.disableMapKeyNormalization")
       .internal()
@@ -7580,6 +7615,18 @@ object SQLConf {
     .stringConf
     .toSequence
     .createWithDefault(Nil)
+
+  val NATIVE_DATA_SOURCE_FILTER_PUSHDOWN_ENABLED =
+    buildConf("spark.sql.dataSource.native.filterPushdown.enabled")
+      .doc("When true, Spark passes to native data sources the domains of the columns that the " +
+        "filters of a batch scan constrain, the values that these columns can have in the rows " +
+        "that match, so that a data source can skip data. Spark evaluates the filters after " +
+        "reading anyway, so turning it off only makes a data source read more data, for example " +
+        "to check whether a data source skips data that it must read.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
 
   val CSV_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.csv.filterPushdown.enabled")
     .doc("When true, enable filter pushdown to CSV datasource.")
@@ -10349,6 +10396,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def streamingV2ColumnPruningEnabled: Boolean = getConf(STREAMING_V2_COLUMN_PRUNING_ENABLED)
 
+  def streamingV2FilterPushdownEnabled: Boolean = getConf(STREAMING_V2_FILTER_PUSHDOWN_ENABLED)
+
   def fastFailFileFormatOutput: Boolean = getConf(FASTFAIL_ON_FILEFORMAT_OUTPUT)
 
   def concatBinaryAsString: Boolean = getConf(CONCAT_BINARY_AS_STRING)
@@ -10467,6 +10516,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def pythonFilterPushDown: Boolean = getConf(PYTHON_FILTER_PUSHDOWN_ENABLED)
 
   def pythonLimitPushDown: Boolean = getConf(PYTHON_LIMIT_PUSHDOWN_ENABLED)
+
+  def nativeDataSourceFilterPushdownEnabled: Boolean =
+    getConf(NATIVE_DATA_SOURCE_FILTER_PUSHDOWN_ENABLED)
 
   def csvFilterPushDown: Boolean = getConf(CSV_FILTER_PUSHDOWN_ENABLED)
 

@@ -1640,32 +1640,59 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
       Row(1, "x") :: Row(2, "y") :: Nil)
   }
 
-  test("cursor scan: a NOT NULL left ON key never matches a NULL right ON key") {
-    // The left keys are NOT NULL and the right keys nullable. The NULL right key sorts first, so
-    // it must compare below every left key. Read as 0, it would match key 0 and end the group of
-    // key -1 before its row. As a STRING key, it would be a null string to compare.
-    checkCursorScan(
-      sql(
-        """
-          |SELECT t.k, q.tag
-          |FROM VALUES (-1, 10), (0, 10) AS t(k, ts)
-          |LEFT ASOF JOIN VALUES (CAST(NULL AS INT), 1, 'null key'), (-1, 2, 'minus one')
-          |  AS q(k, ts, tag)
-          |  MATCH_CONDITION (t.ts >= q.ts)
-          |  ON t.k = q.k
-          |""".stripMargin),
-      Row(-1, "minus one") :: Row(0, null) :: Nil)
-    checkCursorScan(
-      sql(
-        """
-          |SELECT t.k, q.tag
-          |FROM VALUES ('a', 10), ('b', 10) AS t(k, ts)
-          |LEFT ASOF JOIN VALUES (CAST(NULL AS STRING), 1, 'null key'), ('a', 2, 'a key')
-          |  AS q(k, ts, tag)
-          |  MATCH_CONDITION (t.ts >= q.ts)
-          |  ON t.k = q.k
-          |""".stripMargin),
-      Row("a", "a key") :: Row("b", null) :: Nil)
+  // Queries with NOT NULL left ON keys against nullable right ON keys that hold a NULL. The NULL
+  // right key sorts first, so it must compare below every left key. Read as its empty value, it
+  // would match left key 0 and end the group of key -1 before its row, or fail to compare.
+  private val notNullLeftKeyQueries: Map[String, (String, Seq[Row])] = Map(
+    "INT" -> (
+      """
+        |SELECT t.k, q.tag
+        |FROM VALUES (-1, 10), (0, 10) AS t(k, ts)
+        |LEFT ASOF JOIN VALUES (CAST(NULL AS INT), 1, 'null key'), (-1, 2, 'minus one')
+        |  AS q(k, ts, tag)
+        |  MATCH_CONDITION (t.ts >= q.ts)
+        |  ON t.k = q.k
+        |""".stripMargin,
+      Row(-1, "minus one") :: Row(0, null) :: Nil),
+    "STRING" -> (
+      """
+        |SELECT t.k, q.tag
+        |FROM VALUES ('a', 10), ('b', 10) AS t(k, ts)
+        |LEFT ASOF JOIN VALUES (CAST(NULL AS STRING), 1, 'null key'), ('a', 2, 'a key')
+        |  AS q(k, ts, tag)
+        |  MATCH_CONDITION (t.ts >= q.ts)
+        |  ON t.k = q.k
+        |""".stripMargin,
+      Row("a", "a key") :: Row("b", null) :: Nil),
+    // Literals, not CASTs: a CAST can return NULL, so it would not make the left key NOT NULL.
+    "DECIMAL" -> (
+      """
+        |SELECT CAST(t.k AS INT), q.tag
+        |FROM VALUES (-1.00BD, 10), (0.00BD, 10) AS t(k, ts)
+        |LEFT ASOF JOIN VALUES
+        |  (CAST(NULL AS DECIMAL(3, 2)), 1, 'null key'), (-1.00BD, 2, 'minus one')
+        |  AS q(k, ts, tag)
+        |  MATCH_CONDITION (t.ts >= q.ts)
+        |  ON t.k = q.k
+        |""".stripMargin,
+      Row(-1, "minus one") :: Row(0, null) :: Nil),
+    // Only the second ON key is NULL on the right. Read as 0, the row 'null b' would join the
+    // group of (1, 0), and a forward join would pick it first.
+    "second of two ON keys" -> (
+      """
+        |SELECT t.a, q.tag
+        |FROM VALUES (1, 0, 0) AS t(a, b, ts)
+        |ASOF JOIN VALUES (1, CAST(NULL AS INT), 1, 'null b'), (1, 0, 2, 'b zero')
+        |  AS q(a, b, ts, tag)
+        |  MATCH_CONDITION (t.ts <= q.ts)
+        |  ON t.a = q.a AND t.b = q.b
+        |""".stripMargin,
+      Row(1, "b zero") :: Nil))
+
+  gridTest("cursor scan: a NOT NULL left ON key never matches a NULL right ON key")(
+    notNullLeftKeyQueries.keys.toSeq.sorted) { keyShape =>
+    val (query, expected) = notNullLeftKeyQueries(keyShape)
+    checkCursorScan(sql(query), expected)
   }
 
   test("a LIMIT in the join's codegen stage stops the join early") {
@@ -1950,13 +1977,13 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
       .add("ts", IntegerType)
     val rightSchema = new StructType().add("k", IntegerType).add("ts", IntegerType)
       .add("tag", StringType)
-    // Seed 1 marks the left ON key NOT NULL and gives it no NULLs, against the right side's NULL
+    // Seed 4 marks the left ON key NOT NULL and gives it no NULLs, against the right side's NULL
     // ON key, so a key compare that drops the NULL check for a NOT NULL left key shows up.
     val leftSchemaNotNullKey = new StructType().add("id", IntegerType)
       .add("k", IntegerType, nullable = false).add("ts", IntegerType)
-    (1 to 3).foreach { seed =>
+    (1 to 4).foreach { seed =>
       val random = new Random(seed)
-      val leftKeyNotNull = seed == 1
+      val leftKeyNotNull = seed == 4
       def orNull(value: Int): Any = if (random.nextInt(10) == 0) null else value
       def tag(): String =
         if (random.nextInt(8) == 0) null else random.alphanumeric.take(random.nextInt(40)).mkString

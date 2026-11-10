@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.joins
 
+import java.io.Closeable
 import java.math.{BigDecimal => JavaBigDecimal}
 
 import org.apache.spark.{SparkException, TaskContext}
@@ -777,8 +778,6 @@ private[joins] class SortMergeAsOfJoinScanner(
     rightDone = true
   }
 
-  // TODO(SPARK-61248): Close the group's iterator in these scans. An early return keeps the
-  // unread spill files of a spilled group open until the task ends.
   /** Finds the best right row in the current group for `leftRow`, or null if none passes. */
   private def findBestInGroup(leftRow: InternalRow): InternalRow = direction match {
     case Backward => findLastBackward(leftRow)
@@ -796,6 +795,17 @@ private[joins] class SortMergeAsOfJoinScanner(
    */
   private def retainMatch(rightRow: UnsafeRow, needsCopy: Boolean): UnsafeRow = {
     if (needsCopy) rightRow.copy() else rightRow
+  }
+
+  /**
+   * Closes a right-group iterator, which the scans below often leave before its end. Once the
+   * group has spilled, the iterator holds a reader open on every spill file until it ends or is
+   * closed, so an unclosed one per left row would keep them all open until the task ends. A kept
+   * match is already a copy then, so closing the iterator does not change it.
+   */
+  private def closeIterator(iter: Iterator[UnsafeRow]): Unit = iter match {
+    case closeable: Closeable => closeable.close()
+    case _ =>
   }
 
   /** Whether `cond` is TRUE on the current joined row. FALSE and NULL both fail. */
@@ -820,22 +830,26 @@ private[joins] class SortMergeAsOfJoinScanner(
     var asOfSeen = false
 
     joinedRow.withLeft(leftRow)
-    while (iter.hasNext) {
-      val rightRow = iter.next()
-      joinedRow.withRight(rightRow)
+    try {
+      while (iter.hasNext) {
+        val rightRow = iter.next()
+        joinedRow.withRight(rightRow)
 
-      if (holds(boundAsOfCond)) {
-        asOfSeen = true
-        if (residualHolds) {
-          // Last match wins (closest right.t to left.t)
-          bestMatch = retainMatch(rightRow, needsCopy)
+        if (holds(boundAsOfCond)) {
+          asOfSeen = true
+          if (residualHolds) {
+            // Last match wins (closest right.t to left.t)
+            bestMatch = retainMatch(rightRow, needsCopy)
+          }
+        } else if (asOfSeen) {
+          // At or past left.t, so no later row passes the as-of condition.
+          return bestMatch
         }
-      } else if (asOfSeen) {
-        // At or past left.t, so no later row passes the as-of condition.
-        return bestMatch
       }
+      bestMatch
+    } finally {
+      closeIterator(iter)
     }
-    bestMatch
   }
 
   /**
@@ -849,21 +863,25 @@ private[joins] class SortMergeAsOfJoinScanner(
     var asOfSeen = false
 
     joinedRow.withLeft(leftRow)
-    while (iter.hasNext) {
-      val rightRow = iter.next()
-      joinedRow.withRight(rightRow)
+    try {
+      while (iter.hasNext) {
+        val rightRow = iter.next()
+        joinedRow.withRight(rightRow)
 
-      if (holds(boundAsOfCond)) {
-        asOfSeen = true
-        if (residualHolds) {
-          return retainMatch(rightRow, needsCopy)
+        if (holds(boundAsOfCond)) {
+          asOfSeen = true
+          if (residualHolds) {
+            return retainMatch(rightRow, needsCopy)
+          }
+        } else if (asOfSeen) {
+          // Past the tolerance bound, so no later row passes the as-of condition.
+          return null
         }
-      } else if (asOfSeen) {
-        // Past the tolerance bound, so no later row passes the as-of condition.
-        return null
       }
+      null
+    } finally {
+      closeIterator(iter)
     }
-    null
   }
 
   /**
@@ -963,33 +981,37 @@ private[joins] class SortMergeAsOfJoinScanner(
     val needsCopy = rightGroupBuffer.isSpillBacked
 
     joinedRow.withLeft(leftRow)
-    while (iter.hasNext) {
-      val rightRow = iter.next()
-      joinedRow.withRight(rightRow)
+    try {
+      while (iter.hasNext) {
+        val rightRow = iter.next()
+        joinedRow.withRight(rightRow)
 
-      if (holds(boundAsOfCond) && residualHolds) {
-        val rightKey = rightKeyExpr.eval(rightRow)
-        if (rightKey != null) {
-          if (keyOrdering.lt(rightKey, leftKey)) {
-            // Keep the first eligible row at each key so equal-distance ties stay stable.
-            if (bestBefore == null || keyOrdering.lt(bestBeforeKey, rightKey)) {
-              bestBefore = retainMatch(rightRow, needsCopy)
-              bestBeforeKey = InternalRow.copyValue(rightKey)
+        if (holds(boundAsOfCond) && residualHolds) {
+          val rightKey = rightKeyExpr.eval(rightRow)
+          if (rightKey != null) {
+            if (keyOrdering.lt(rightKey, leftKey)) {
+              // Keep the first eligible row at each key so equal-distance ties stay stable.
+              if (bestBefore == null || keyOrdering.lt(bestBeforeKey, rightKey)) {
+                bestBefore = retainMatch(rightRow, needsCopy)
+                bestBeforeKey = InternalRow.copyValue(rightKey)
+              }
+            } else if (keyOrdering.equiv(rightKey, leftKey)) {
+              // An exact match is the nearest row, even for an infinite key (Inf - Inf is NaN).
+              return retainMatch(rightRow, needsCopy)
+            } else if (bestBefore == null ||
+                isAfterCloser(bestBeforeKey, leftKey, rightKey, leftKeyExpr.dataType)) {
+              return retainMatch(rightRow, needsCopy)
+            } else {
+              return bestBefore
             }
-          } else if (keyOrdering.equiv(rightKey, leftKey)) {
-            // An exact match is the nearest row, even for an infinite key (Inf - Inf is NaN).
-            return retainMatch(rightRow, needsCopy)
-          } else if (bestBefore == null ||
-              isAfterCloser(bestBeforeKey, leftKey, rightKey, leftKeyExpr.dataType)) {
-            return retainMatch(rightRow, needsCopy)
-          } else {
-            return bestBefore
           }
         }
       }
-    }
 
-    bestBefore
+      bestBefore
+    } finally {
+      closeIterator(iter)
+    }
   }
 
   /** The exact value of a nearest key, or None for a NaN or infinite floating-point key. */

@@ -2122,13 +2122,17 @@ class SortMergeAsOfJoinSuite extends QueryTest
         StructField("k", IntegerType) ::
           StructField("ts", IntegerType) ::
           StructField("tag", StringType) :: Nil))
-    checkAnswerCodegenOffAndOn(
-      left.joinAsOf(
-        right, left.col("ts"), right.col("ts"), usingColumns = Seq("k"),
-        joinType = "leftouter", tolerance = null,
-        allowExactMatches = true, direction = "nearest")
-        .select(left.col("k"), right.col("tag")),
-      Row(-1, "minus one") :: Row(0, null) :: Nil)
+    // One partition: with several, the NULL right row could land apart from the left rows and
+    // never be compared.
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      checkAnswerCodegenOffAndOn(
+        left.joinAsOf(
+          right, left.col("ts"), right.col("ts"), usingColumns = Seq("k"),
+          joinType = "leftouter", tolerance = null,
+          allowExactMatches = true, direction = "nearest")
+          .select(left.col("k"), right.col("tag")),
+        Row(-1, "minus one") :: Row(0, null) :: Nil)
+    }
   }
 
   test("null-safe equi-key (<=>) in ON matches null keys, unlike EqualTo") {

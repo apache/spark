@@ -359,6 +359,62 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
       s"Expected the union of both array rows, got $collectedArrays")
   }
 
+  test("SPARK-61232: UnionExec whole-stage codegen fails when a child output repeats an ExprId") {
+    // `SELECT p, p, w` leaves two output positions with one ExprId, and `r` is a union, so for
+    // `p2`'s rows its second position holds `r` while its first holds `q`. A union child reading
+    // its output by ExprId would take the first position for both: the second union output
+    // column would hold the first column's value, and the generated row would declare that
+    // value's variable twice, which Janino rejects.
+    //
+    // The analyzer normally replaces a repeated output column with a fresh ExprId
+    // (`DeduplicateUnionChildOutput`); these confs keep it so the physical union sees it.
+    withSQLConf(
+      SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> "false",
+      SQLConf.ENFORCE_TYPE_COERCION_BEFORE_UNION_DEDUPLICATION.key -> "false",
+      SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+      def build(): DataFrame = {
+        val p1 = spark.range(1000)
+          .selectExpr("id p", "id w").select(col("p"), col("p"), col("w"))
+        val p2 = spark.range(1000, 11000).selectExpr("id q", "id % 1000 r", "id w2")
+        // `u` does not line up with `r`'s partitioning, so the union is plain and fuses
+        // through its query stages.
+        val x = spark.range(1000)
+          .selectExpr("id x", "id c", "id u").repartition(col("u"))
+        val r = p1.union(p2).repartition(p1.col("p"))
+        x.union(r)
+      }
+      val fused = build()
+      val answer = fused.collect().toSeq
+      // The bug needs the union that fuses over query stages to read a child whose output
+      // repeats an ExprId. The analyzer can drop that shape, so assert it survived rather than
+      // letting the test go vacuous. The check is on the InputAdapter child: the inner union
+      // below `r` repeats an ExprId too, but it has no InputAdapter child, so it cannot satisfy
+      // the guard on its own.
+      val fusedUnionExecs = fusedUnions(fused)
+      assert(
+        fusedUnionExecs.exists(_.children.exists { c =>
+          c.isInstanceOf[InputAdapter] &&
+            c.output.map(_.exprId).distinct.size < c.output.size
+        }),
+        s"expected the fused union's staged child to repeat an ExprId:\n" +
+          fused.queryExecution.executedPlan)
+      // Without AQE the nested union below `r` keeps this union out of codegen; AQE turns the
+      // children into query stages, and that is the shape the fused union consumes.
+      assert(fusedUnionExecs.exists(_.children.exists(_.isInstanceOf[InputAdapter])),
+        s"expected the outer union to fuse over its query stages:\n" +
+          fused.queryExecution.executedPlan)
+      assert(answer.length == 12000)
+      // The fused path must agree with the interpreted one, which concatenates child rows as
+      // they are and so keeps each union output column at its own position.
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+        checkAnswer(build(), answer)
+      }
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Correctness: N children, empty partitions, mixed partition counts
   // ---------------------------------------------------------------------------
