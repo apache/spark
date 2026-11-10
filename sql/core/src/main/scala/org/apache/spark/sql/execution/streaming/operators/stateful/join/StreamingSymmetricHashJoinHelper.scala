@@ -23,7 +23,7 @@ import org.apache.spark.{Partition, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{RDD, ZippedPartitionsBaseRDD, ZippedPartitionsPartition}
 import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, BoundReference, Expression, NamedExpression, PredicateHelper, TimeWindow}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, Between, BinaryComparison, BoundReference, Expression, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, NamedExpression, PredicateHelper, TimeWindow}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, WatermarkSupport}
@@ -320,20 +320,22 @@ object StreamingSymmetricHashJoinHelper extends Logging {
   /**
    * Conservatively prove that older state can use the current watermark semantics. Without
    * watermarks there is no affected state. Otherwise each side must have exactly one event-time
-   * column, and its own event time must be the sole watermarked equality key at the same ordinal.
-   * This excludes range bounds and retained event times with no eviction bound. It also excludes
-   * a key computed from the event time by a constant, which older versions evicted at the
-   * unshifted watermark. V4 additionally requires the selected equality key timestamp to be
-   * provably non-null, because old V4 indexed null selected key timestamps and timestamp
-   * eviction does not recheck the key predicate. A non-null window() key qualifies: its end is
-   * computed from a non-null event time.
+   * column, and either its own event time must be the sole watermarked equality key at the same
+   * ordinal, or the join must be a two-sided time-interval join on the event times (see
+   * [[isOwnEventTimeIntervalJoin]]). This excludes other range bounds and retained event times
+   * with no eviction bound. It also excludes a key computed from the event time by a constant,
+   * which older versions evicted at the unshifted watermark. For the equality key, V4
+   * additionally requires the selected equality key timestamp to be provably non-null, because
+   * old V4 indexed null selected key timestamps and timestamp eviction does not recheck the key
+   * predicate. A non-null window() key qualifies: its end is computed from a non-null event time.
    */
   private[sql] def isWatermarkCheckpointCompatible(
       leftAttributes: Seq[Attribute],
       rightAttributes: Seq[Attribute],
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression],
-      stateFormatVersion: Int): Boolean = {
+      stateFormatVersion: Int,
+      condition: Option[Expression]): Boolean = {
     val leftEventTime = leftAttributes.filter(_.metadata.contains(delayKey))
     val rightEventTime = rightAttributes.filter(_.metadata.contains(delayKey))
 
@@ -366,9 +368,67 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       val selectedKeysAreNonNull = stateFormatVersion < 4 || alignedOwnEventTimeKeys &&
         !selectedKeyTimestampCanBeNull(leftEventTime.head) &&
         !selectedKeyTimestampCanBeNull(rightEventTime.head)
-      alignedOwnEventTimeKeys && selectedKeysAreNonNull
+      alignedOwnEventTimeKeys && selectedKeysAreNonNull ||
+        isOwnEventTimeIntervalJoin(leftAttributes, rightAttributes, leftKeys, rightKeys,
+          condition, leftEventTime.head, rightEventTime.head)
     } else {
       false
+    }
+  }
+
+  /**
+   * Whether every ordering conjunct compares the two inputs' event times, each shifted only by
+   * exact constant intervals, and both event times get a range bound. Older versions solved
+   * every column of an input but then found bounds only in the same conjuncts, so they derived
+   * the same value predicates, scan starts, V4 index columns and output watermark. Old V4 stored
+   * a null event time at timestamp 0 under the row's own key; both versions scan that entry the
+   * same way. No equality key may use an event time: older versions evicted such keys at the
+   * unshifted watermark.
+   */
+  private def isOwnEventTimeIntervalJoin(
+      leftAttributes: Seq[Attribute],
+      rightAttributes: Seq[Attribute],
+      leftKeys: Seq[Expression],
+      rightKeys: Seq[Expression],
+      condition: Option[Expression],
+      leftEventTime: Attribute,
+      rightEventTime: Attribute): Boolean = {
+    def conjuncts(e: Expression): Seq[Expression] = e match {
+      case And(left, right) => conjuncts(left) ++ conjuncts(right)
+      case other => Seq(other)
+    }
+    def eventTimeOf(e: Expression): Option[Attribute] =
+      Seq(leftEventTime, rightEventTime).find(StreamingJoinHelper.isIntervalShift(e, _))
+    def comparesInputs(a: Expression, b: Expression): Boolean =
+      (eventTimeOf(a), eventTimeOf(b)) match {
+        case (Some(x), Some(y)) => !x.semanticEquals(y)
+        case _ => false
+      }
+    // The solver reads bounds only from these conjunct shapes; other conjuncts give no bound in
+    // either version.
+    val conditionIsInterval = condition.toSeq.flatMap(conjuncts).forall {
+      case c @ (_: LessThan | _: LessThanOrEqual | _: GreaterThan | _: GreaterThanOrEqual) =>
+        val comparison = c.asInstanceOf[BinaryComparison]
+        comparesInputs(comparison.left, comparison.right)
+      case Between(input, lower, upper, _) =>
+        comparesInputs(input, lower) && comparesInputs(input, upper)
+      case _ => true
+    }
+    val keysUseEventTime = (leftKeys ++ rightKeys).exists(
+      _.references.exists(_.metadata.contains(delayKey)))
+    def boundsEventTime(
+        predicate: Option[JoinStateWatermarkPredicate], eventTime: Attribute): Boolean = {
+      predicate.exists {
+        case JoinStateValueWatermarkPredicate(e, _, _) => e.references.contains(eventTime)
+        case _ => false
+      }
+    }
+    !keysUseEventTime && conditionIsInterval && {
+      // The cutoffs are the watermark plus constants, so any watermark shows whether they exist.
+      val predicates = getStateWatermarkPredicates(leftAttributes, rightAttributes, leftKeys,
+        rightKeys, condition, Some(1000000L), None, useFirstEventTimeColumn = false)
+      boundsEventTime(predicates.left, leftEventTime) &&
+        boundsEventTime(predicates.right, rightEventTime)
     }
   }
 

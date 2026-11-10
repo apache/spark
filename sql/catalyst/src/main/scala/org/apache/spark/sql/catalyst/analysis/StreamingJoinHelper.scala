@@ -118,11 +118,12 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
     }
 
   /**
-   * Whether the expression is the event time plus or minus constant intervals. Other functions
-   * and casts from other types are not accepted: a truncation such as
-   * CAST(CAST(rightTime AS BIGINT) AS TIMESTAMP) can map a later event time below the watermark.
+   * Whether the expression is the event time plus or minus constant intervals that the join's
+   * interval arithmetic evaluates exactly. Other functions and casts from other types are not
+   * accepted: a truncation such as CAST(CAST(rightTime AS BIGINT) AS TIMESTAMP) can map a later
+   * event time below the watermark.
    */
-  private def isIntervalShift(expr: Expression, eventTime: Attribute): Boolean = {
+  private[sql] def isIntervalShift(expr: Expression, eventTime: Attribute): Boolean = {
     // Spark adds the whole days of an interval in the session time zone, where a day can be 23
     // or 25 hours across a daylight saving change, but the solver counts a day as 24 hours.
     // Accept whole days only in a fixed-offset time zone.
@@ -308,6 +309,13 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
           Multiply(Literal(eventWatermark.get.toDouble), Literal(1000.0))
       }
     }.reduceLeft(Add(_, _))
+
+    // Callers can pass only the constrained column and the opposite event time, so a term on any
+    // other column passes the occurrence check above. Its value is unknown here.
+    if (exprWithWatermarkSubstituted.references.nonEmpty) {
+      logDebug(s"Failed to extract state constraint: unresolved $exprWithWatermarkSubstituted")
+      return None
+    }
 
     // Calculate the constraint value
     logInfo(log"Final expression to evaluate " +
